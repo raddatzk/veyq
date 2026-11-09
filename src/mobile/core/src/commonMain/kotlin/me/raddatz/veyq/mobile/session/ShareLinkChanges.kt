@@ -5,6 +5,7 @@ import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import me.raddatz.veyq.mobile.api.apis.SharingApi
+import me.raddatz.veyq.mobile.api.models.ReactivateShareRequest
 import me.raddatz.veyq.mobile.api.models.ReissueShareRequest
 import me.raddatz.veyq.mobile.api.models.ShareRole
 import me.raddatz.veyq.mobile.api.models.ShareSummary
@@ -18,14 +19,15 @@ import me.raddatz.veyq.mobile.crypto.unb64
 import me.raddatz.veyq.mobile.crypto.utf8
 
 /**
- * A member's own link changed after its mint (the web's `manageShares.ts` `updateShare`, `remintShare`, `deleteShare`;
- * ADR 0036, 0037, 0075, 0114): edited in place — its label, password, end and role, `K_share` and the address kept —,
- * renewed — a new id and a fresh `K_share` carrying its label, note, password and end, the old link closed in the same
- * server transaction —, or deleted once it is off. A link that closes (renewed while open, or deleted while open) has the
- * node below it re-keyed on this device ([NodeRekey]), since the old `K_share` opened the node's key.
+ * A member's own link changed after its mint (the web's `manageShares.ts` `updateShare`, `remintShare`, `reactivateShare`,
+ * `deleteShare`; ADR 0036, 0037, 0075, 0114): edited in place — its label, password, end and role, `K_share` and the
+ * address kept —, renewed — a new id and a fresh `K_share` carrying its label, note, password and end, the old link
+ * closed in the same server transaction —, switched on again — its address kept, what the close cleared sealed anew under
+ * its `K_share` —, or deleted once it is off. A link that closes (renewed while open, or deleted while open) has the node
+ * below it re-keyed on this device ([NodeRekey]), since the old `K_share` opened the node's key.
  *
- * Moving a past end into the future (the web's reopen by date) and switching a link on again are not offered here: renewing
- * gives a closed link a working address again.
+ * Moving a past end into the future (the web's reopen by date) is not offered here: renewing gives such a link a working
+ * address again.
  */
 object ShareLinkChanges {
     enum class Outcome {
@@ -40,6 +42,8 @@ object ShareLinkChanges {
         GONE,
         /** Done; the re-key of what the closed link opened is left to a member's web device. */
         DONE_REKEY_PENDING,
+        /** A departed member may hold it (`409 reissue_required`, ADR 0075): it comes back only renewed. */
+        REISSUE_REQUIRED,
         BUSY,
         FAILED,
     }
@@ -183,6 +187,84 @@ object ShareLinkChanges {
         } finally {
             kShare.fill(0)
         }
+    }
+
+    /**
+     * Switches link [shareId] on [nodeId] of [scopeId] on again (`reactivateShare`), its address kept and the caller its new
+     * owner (cr-0104: any member takes over a link that is off). A switch-off is a close: the server cleared the link's key
+     * and the node was re-keyed since (ADR 0114 decision 7), so the reopen carries the node's CURRENT key under the link's
+     * `K_share` — a drop box's link the public half of the node's current drop key instead — and its current name, at the
+     * node's own epoch, read anew when a re-key replaced it meanwhile. `K_share` comes from the recovery copy: a link with
+     * none, or one a departed member may hold, is refused (renew it).
+     */
+    @Throws(Exception::class)
+    suspend fun reactivate(
+        tenant: TenantSession, scopeId: String, nodeId: String, shareId: String, waitsMs: List<Long> = NodeEpochWrite.REKEY_WAITS_MS,
+    ): Changed {
+        val account = tenant.account
+        val suite = account.suite
+        val joins = JoinRecords(suite)
+        val first = row(tenant, nodeId, shareId) ?: return Changed(Outcome.GONE)
+        if (first.enabled) return Changed(Outcome.DONE)
+        if (first.reissueRequired) return Changed(Outcome.REISSUE_REQUIRED)
+        val (scopeKey, scopeEpoch) = tenant.scopeKey(scopeId) ?: return Changed(Outcome.FAILED)
+        var listed: ShareSummary = first
+        var node = tenant.trees()[scopeId]?.firstOrNull { it.id == nodeId } ?: return Changed(Outcome.FAILED)
+        var code: String? = null
+        val result = NodeEpochWrite.run(
+            waitsMs = waitsMs,
+            belowFloor = { node.scopeEpoch < scopeEpoch },
+            reread = {
+                tenant.forgetTree()
+                node = tenant.trees()[scopeId]?.firstOrNull { it.id == nodeId } ?: return@run false
+                // a rotation re-wraps the recovery copy's value key: the copy as listed now
+                listed = row(tenant, nodeId, shareId) ?: return@run false
+                true
+            },
+            attempt = {
+                val kShare = ShareLinks.recover(suite, joins, listed, scopeId, nodeId, scopeKey, scopeEpoch)
+                    ?: return@run NodeEpochWrite.Answer.OTHER to 403
+                val request = try {
+                    val writeOnly = listed.role == ShareRole.WRITE_ONLY
+                    val dropPublic = if (!writeOnly) null else {
+                        val sealed = node.sealedDropPrivateKey ?: return@run NodeEpochWrite.Answer.OTHER to 409
+                        val seed = suite.deserializeDropKey(suite.open(Context("drop-private-key", "scopeId" to scopeId, "nodeId" to nodeId), node.key, unb64(sealed)))
+                        try {
+                            b64(suite.seal(Context("drop-public-key"), kShare, suite.serializeHybridPublic(suite.dropKeyPublic(seed))))
+                        } finally {
+                            seed.fill(0)
+                        }
+                    }
+                    ReactivateShareRequest(
+                        nodeEpoch = node.epoch,
+                        wrap = if (writeOnly) null else b64(suite.seal(Context("share-key"), kShare, node.key)),
+                        sealedDropPublicKey = dropPublic,
+                        sealedName = b64(suite.sealField(Context("share-memory-name"), kShare, utf8(node.name))),
+                    )
+                } finally {
+                    kShare.fill(0)
+                }
+                val r = account.respond { SharingApi(tenant.base, account.http).reactivateShare(shareId, request) }
+                code = if (r.success) null else codeOf(runCatching { r.response.bodyAsText() }.getOrDefault(""))
+                val answer = when {
+                    r.success -> NodeEpochWrite.Answer.DONE
+                    r.status == 409 && code == "node_rekey_pending" -> NodeEpochWrite.Answer.REKEY_PENDING
+                    r.status == 409 && code == "stale_epoch" -> NodeEpochWrite.Answer.STALE_EPOCH
+                    else -> NodeEpochWrite.Answer.OTHER
+                }
+                answer to r.status
+            },
+        )
+        if (result == NodeEpochWrite.Result.Busy) return Changed(Outcome.BUSY)
+        val status = (result as? NodeEpochWrite.Result.Answered)?.value ?: return Changed(Outcome.FAILED)
+        return Changed(
+            when {
+                status in 200..299 -> Outcome.DONE
+                code == "reissue_required" -> Outcome.REISSUE_REQUIRED
+                status == 403 -> Outcome.NOT_ALLOWED
+                else -> refusal(status, "\"code\":\"$code\"")
+            },
+        )
     }
 
     /** Deletes link [shareId] for good (`deleteShare`, a tombstone); one that was still open has the node below re-keyed. */

@@ -148,6 +148,14 @@ struct ShareSheet: View {
         await load()
     }
 
+    private func reactivate(_ link: ShareLinks.Link) async {
+        busy = link.shareId
+        let r = await model.reactivateLink(ref, shareId: link.shareId)
+        busy = nil
+        notice = r.outcome == .done ? nil : Self.changed(r.outcome)
+        await load()
+    }
+
     private func delete(_ link: ShareLinks.Link) async {
         busy = link.shareId
         let r = await model.deleteLink(ref, shareId: link.shareId)
@@ -163,6 +171,7 @@ struct ShareSheet: View {
         case .passwordLost: String(localized: "Its password cannot be read here any more, so it cannot be renewed without losing it.")
         case .gone: String(localized: "This link was already renewed or deleted — the list now shows the current links.")
         case .rules: String(localized: "This space now requires a password or an end date on every link. Add what is missing and try again.")
+        case .reissueRequired: String(localized: "This link cannot be switched back on: someone who has left this space may still hold it. Renew it instead.")
         default: String(localized: "That didn’t work — please try again.")
         }
     }
@@ -183,11 +192,13 @@ struct ShareSheet: View {
                 } else if let links {
                     ForEach(links, id: \.shareId) { link in
                         // the web's rules: edit an own open link whose copy opens, renew an own or switched-off one, switch
-                        // off an own one that is on, delete a switched-off one the server lets go (`FolderShareDialog`)
+                        // off an own one that is on, switch one on again that is off and safe to (any member: it becomes
+                        // theirs), delete a switched-off one the server lets go (`FolderShareDialog`, `DropBoxShareDialog`)
                         let canEdit = !dropBox && link.mine && link.enabled && link.url != nil
                         let canRenew = !dropBox && (link.mine || !link.enabled)
                         let canSwitchOff = link.enabled && link.mine
                         let canDelete = !link.enabled && link.deletable
+                        let canReactivate = !link.enabled && !link.reissueRequired
                         LinkRow(link: link, words: words, busy: busy == link.shareId)
                             // Apple's HIG: a row's actions as swipe actions and its context menu, as Mail's
                             .swipeActions(edge: .trailing) {
@@ -199,6 +210,9 @@ struct ShareSheet: View {
                                 }
                             }
                             .swipeActions(edge: .leading) {
+                                if canReactivate {
+                                    Button("Switch On Again", systemImage: "power") { Task { await reactivate(link) } }.tint(Role.accent)
+                                }
                                 if canRenew { Button("Renew link", systemImage: "arrow.clockwise") { renewing = link }.tint(Role.accent) }
                             }
                             .contextMenu {
@@ -207,6 +221,7 @@ struct ShareSheet: View {
                                     ShareLink(item: url) { Label("Share…", systemImage: "square.and.arrow.up") }
                                 }
                                 if canEdit { Button("Edit", systemImage: "pencil") { editing = link } }
+                                if canReactivate { Button("Switch On Again", systemImage: "power") { Task { await reactivate(link) } } }
                                 if canRenew { Button("Renew link", systemImage: "arrow.clockwise") { renewing = link } }
                                 if canSwitchOff {
                                     Button("Revoke", systemImage: "nosign", role: .destructive) { Task { await switchOff(link) } }

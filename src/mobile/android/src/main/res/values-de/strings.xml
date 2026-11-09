@@ -444,6 +444,8 @@
     <string name="report_not_found">Etwas von dem, was du ausgewählt hast, ist nicht mehr da. Lade die Seite neu.</string>
     <string name="share_edit">Bearbeiten</string>
     <string name="share_save">Speichern</string>
+    <string name="share_reactivate">Wieder einschalten</string>
+    <string name="share_reissue_hint">Dieser Link lässt sich nicht wieder einschalten: Jemand, der diesen Bereich verlassen hat, könnte ihn noch haben. Erneuere ihn stattdessen.</string>
     <string name="share_renew">Link erneuern</string>
     <string name="share_renew_confirm">Dadurch entsteht ein neuer Link, und der alte wird gelöscht. Gib den neuen Link weiter.</string>
     <string name="share_delete">Link löschen</string>

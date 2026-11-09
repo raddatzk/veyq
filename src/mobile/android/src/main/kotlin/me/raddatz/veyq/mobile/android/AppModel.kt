@@ -563,6 +563,13 @@ class AppModel(app: Application) : AndroidViewModel(app) {
         return r
     }
 
+    /** Switches link [shareId] on [ref] on again, its address kept (`ShareLinkChanges.reactivate`). */
+    suspend fun reactivateLink(ref: me.raddatz.veyq.mobile.navigation.NodeAt, shareId: String): me.raddatz.veyq.mobile.session.ShareLinkChanges.Changed {
+        val failed = me.raddatz.veyq.mobile.session.ShareLinkChanges.Changed(me.raddatz.veyq.mobile.session.ShareLinkChanges.Outcome.FAILED)
+        val t = tenantSession ?: return failed
+        return runCatching { me.raddatz.veyq.mobile.session.ShareLinkChanges.reactivate(t, ref.scopeId, ref.nodeId, shareId) }.getOrDefault(failed)
+    }
+
     /** Deletes link [shareId] on [ref] for good. */
     suspend fun deleteLink(ref: me.raddatz.veyq.mobile.navigation.NodeAt, shareId: String): me.raddatz.veyq.mobile.session.ShareLinkChanges.Changed {
         val failed = me.raddatz.veyq.mobile.session.ShareLinkChanges.Changed(me.raddatz.veyq.mobile.session.ShareLinkChanges.Outcome.FAILED)

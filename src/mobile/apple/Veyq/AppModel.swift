@@ -620,6 +620,15 @@ final class AppModel {
     }
 
     /// Renews link `shareId` on `ref`: a new address carrying its settings, the old one closed and the node re-keyed.
+    /// Switches link `shareId` on `ref` on again, its address kept (`ShareLinkChanges.reactivate`).
+    func reactivateLink(_ ref: NodeAt, shareId: String) async -> ShareLinkChanges.Changed {
+        let failed = ShareLinkChanges.Changed(outcome: .failed, url: nil)
+        guard let t = tenantSession else { return failed }
+        return (try? await ShareLinkChanges.shared.reactivate(
+            tenant: t, scopeId: ref.scopeId, nodeId: ref.nodeId, shareId: shareId, waitsMs: NodeEpochWrite.shared.REKEY_WAITS_MS
+        )) ?? failed
+    }
+
     func renewLink(_ ref: NodeAt, shareId: String) async -> ShareLinkChanges.Changed {
         let failed = ShareLinkChanges.Changed(outcome: .failed, url: nil)
         guard let t = tenantSession else { return failed }

@@ -446,6 +446,8 @@
     <string name="report_not_found">Some of what you selected is not here any more. Reload the page.</string>
     <string name="share_edit">Edit</string>
     <string name="share_save">Save</string>
+    <string name="share_reactivate">Switch on again</string>
+    <string name="share_reissue_hint">This link cannot be switched back on: someone who has left this space may still hold it. Renew it instead.</string>
     <string name="share_renew">Renew link</string>
     <string name="share_renew_confirm">This makes a new link and deletes the old one. Hand out the new link.</string>
     <string name="share_delete">Delete link</string>

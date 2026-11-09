@@ -125,6 +125,7 @@ internal fun ShareSheet(ref: me.raddatz.veyq.mobile.navigation.NodeAt, model: Ap
             me.raddatz.veyq.mobile.session.ShareLinkChanges.Outcome.PASSWORD_LOST -> context.getString(R.string.share_password_lost)
             me.raddatz.veyq.mobile.session.ShareLinkChanges.Outcome.GONE -> context.getString(R.string.share_gone)
             me.raddatz.veyq.mobile.session.ShareLinkChanges.Outcome.RULES -> context.getString(R.string.share_requirement_refused)
+            me.raddatz.veyq.mobile.session.ShareLinkChanges.Outcome.REISSUE_REQUIRED -> context.getString(R.string.share_reissue_hint)
             else -> context.getString(R.string.share_failed)
         }
     }
@@ -192,10 +193,22 @@ internal fun ShareSheet(ref: me.raddatz.veyq.mobile.navigation.NodeAt, model: Ap
                                 LinkRow(
                                     link, words, busy = busy == link.shareId,
                                     // the web's rules: edit an own open link whose copy opens, renew an own or switched-off one,
-                                    // delete a switched-off one the server lets go (`FolderShareDialog`)
+                                    // switch one on again that is off and safe to (any member: it becomes theirs), delete a
+                                    // switched-off one the server lets go (`FolderShareDialog`, `DropBoxShareDialog`)
                                     onEdit = if (!dropBox && link.mine && link.enabled && link.url != null) ({ editing = link }) else null,
                                     onRenew = if (!dropBox && (link.mine || !link.enabled)) ({ renewing = link }) else null,
                                     onDelete = if (!link.enabled && link.deletable) ({ deleting = link }) else null,
+                                    onReactivate = if (!link.enabled && !link.reissueRequired) {
+                                        {
+                                            busy = link.shareId
+                                            scope.launch {
+                                                val r = model.reactivateLink(ref, link.shareId)
+                                                busy = null
+                                                notice = changedText(r.outcome)
+                                                load()
+                                            }
+                                        }
+                                    } else null,
                                     onSwitchOff = if (link.enabled && link.mine) {
                                     {
                                         busy = link.shareId
@@ -266,6 +279,7 @@ internal fun ShareSheet(ref: me.raddatz.veyq.mobile.navigation.NodeAt, model: Ap
 private fun LinkRow(
     link: ShareLinks.Link, words: ShareWords, busy: Boolean, onSwitchOff: (() -> Unit)?,
     onEdit: (() -> Unit)? = null, onRenew: (() -> Unit)? = null, onDelete: (() -> Unit)? = null,
+    onReactivate: (() -> Unit)? = null,
 ) {
     val palette = LocalPalette.current
     val context = LocalContext.current
@@ -299,13 +313,14 @@ private fun LinkRow(
         // an open link goes to another app through the system's share sheet (Android's Sharesheet), first in the menu
         val share = if (url != null && link.enabled) ({ sendText(context, url) }) else null
         if (busy) CircularProgressIndicator(Modifier.padding(12.dp).width(20.dp))
-        else if (share != null || onEdit != null || onRenew != null || onSwitchOff != null || onDelete != null) {
+        else if (share != null || onEdit != null || onRenew != null || onReactivate != null || onSwitchOff != null || onDelete != null) {
             var menu by remember { mutableStateOf(false) }
             Box {
                 IconButton(onClick = { menu = true }) { Icon(Icons.Outlined.MoreVert, stringResource(R.string.node_more)) }
                 androidx.compose.material3.DropdownMenu(menu, { menu = false }) {
                     share?.let { a -> androidx.compose.material3.DropdownMenuItem(text = { Text(stringResource(R.string.share_send)) }, onClick = { menu = false; a() }) }
                     onEdit?.let { a -> androidx.compose.material3.DropdownMenuItem(text = { Text(stringResource(R.string.share_edit)) }, onClick = { menu = false; a() }) }
+                    onReactivate?.let { a -> androidx.compose.material3.DropdownMenuItem(text = { Text(stringResource(R.string.share_reactivate)) }, onClick = { menu = false; a() }) }
                     onRenew?.let { a -> androidx.compose.material3.DropdownMenuItem(text = { Text(stringResource(R.string.share_renew)) }, onClick = { menu = false; a() }) }
                     onSwitchOff?.let { a ->
                         androidx.compose.material3.DropdownMenuItem(text = { Text(stringResource(R.string.share_switch_off), color = role(palette.danger)) }, onClick = { menu = false; a() })

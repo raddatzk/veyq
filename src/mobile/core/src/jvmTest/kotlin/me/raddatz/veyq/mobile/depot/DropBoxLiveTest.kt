@@ -38,7 +38,7 @@ class DropBoxLiveTest {
      * `VEYQ_LIVE_LINKS_OUT` for a web guest to drop through. `VEYQ_LIVE_DROPBOX_REKEY="<root folder>/<that folder>"` then
      * mints a READ link on the folder and switches it off: the whole subtree is re-keyed on this device — the drop box's drop
      * key replaced, its link's public half and every guest's K_up sealed anew, each guest's folder kept under its K_up —, so
-     * nothing of it is due after, and a fresh session reads every guest's file; the same old link then still takes files
+     * nothing of the folder is due after, and a fresh session reads every guest's file; the same old link then still takes files
      * (drop through it again, and `VEYQ_LIVE_DROPBOX` reads the new folder too).
      */
     @Test
@@ -73,8 +73,12 @@ class DropBoxLiveTest {
                 for (r in tenant.account.call { rekeyApi.listRekeyNodes(folder.scopeId) }.nodes.filter { it.due }) println("    due: ${r.id} ${r.kind} parent=${r.parentId} ownerOnly=${r.ownerOnly} identity=${r.shareIdentityId} drop=${r.sealedDropPrivateKey != null}")
             }
             assertEquals(me.raddatz.veyq.mobile.session.ShareLinks.Closed.CLOSED, closed, "the subtree was not re-keyed whole")
-            val due = tenant.account.call { rekeyApi.listRekeyNodes(folder.scopeId) }.nodes.filter { it.due }.map { it.id }
-            assertEquals(emptyList(), due, "a node of the space is still due")
+            // the folder's subtree, not the space: a node elsewhere may stay due for another device
+            val rows = tenant.account.call { rekeyApi.listRekeyNodes(folder.scopeId) }.nodes
+            val parentOf = rows.associate { it.id to it.parentId }
+            fun under(id: String?): Boolean = id != null && (id == folder.nodeId || under(parentOf[id]))
+            val due = rows.filter { it.due && under(it.id) }.map { it.id }
+            assertEquals(emptyList(), due, "a node of the folder is still due")
             // a fresh session opens every guest's folder and file through the NEW drop key
             val fresh = tenant.account.open(tenant.tenant)
             val after = DropBoxes.folders(fresh, box.scopeId, box.nodeId)
@@ -89,6 +93,44 @@ class DropBoxLiveTest {
             }
             println("[$spec] the folder's link switched off: its subtree re-keyed whole, the drop box's guests kept (${after.size} folders)")
         }
+    }
+
+    /**
+     * Links switched on again (the web's `reactivateShare`): `VEYQ_LIVE_LINK_REACTIVATE=<root folder>` makes a folder there
+     * ("App reopen <n>") with a READ link and a drop box in it ("Box") with its link, switches both off — the folder's close
+     * re-keys it, the drop box's re-keys nothing — and on again: each listed on, at its old address, which goes to
+     * `VEYQ_LIVE_LINKS_OUT` (the folder's first), for the web's guest page — the folder's opens it, the drop box's takes files.
+     */
+    @Test
+    fun aSwitchedOffLinkComesBack() = runTest(timeout = 5.minutes) {
+        val rootName = System.getenv("VEYQ_LIVE_LINK_REACTIVATE") ?: return@runTest
+        val tenant = signIn() ?: return@runTest
+        val links = me.raddatz.veyq.mobile.session.ShareLinks
+        val changes = me.raddatz.veyq.mobile.session.ShareLinkChanges
+        val parent = tenant.nodes().first { it.kind == "FOLDER" && it.parentId == null && it.name == rootName }
+        val name = "App reopen ${System.currentTimeMillis() % 100_000}"
+        val folder = (me.raddatz.veyq.mobile.session.FolderCreate.create(tenant, parent.scopeId, parent.nodeId, name) as me.raddatz.veyq.mobile.session.NodeCreate.Result.Done).created.nodeId
+        val read = links.mint(tenant, parent.scopeId, folder, links.READ, "reopened", "", null)
+        val box = DropBoxes.create(tenant, parent.scopeId, folder, "Box", "", null)
+        assertEquals(DropBoxes.Outcome.CREATED, box.outcome)
+        val urls = mutableListOf<String>()
+        for ((nodeId, url) in listOf(folder to read.url!!, box.nodeId!! to box.url!!)) {
+            val id = url.substringAfter("/s/").substringBefore('#')
+            val writeOnly = nodeId != folder
+            assertEquals(
+                me.raddatz.veyq.mobile.session.ShareLinks.Closed.CLOSED,
+                links.switchOff(tenant, parent.scopeId, nodeId, id, me.raddatz.veyq.mobile.AppKinds.rekeys, me.raddatz.veyq.mobile.AppKinds::tokenInput) { java.util.UUID.randomUUID().toString() },
+            )
+            assertEquals(false, links.list(tenant, parent.scopeId, nodeId, writeOnly)!!.single { it.shareId == id }.enabled)
+            val back = changes.reactivate(tenant, parent.scopeId, nodeId, id)
+            assertEquals(me.raddatz.veyq.mobile.session.ShareLinkChanges.Outcome.DONE, back.outcome)
+            val listed = links.list(tenant.account.open(tenant.tenant), parent.scopeId, nodeId, writeOnly)!!.single { it.shareId == id }
+            assertTrue(listed.enabled, "switched on again")
+            assertEquals(url, listed.url, "the same address")
+            urls += url
+        }
+        System.getenv("VEYQ_LIVE_LINKS_OUT")?.let { File(it).writeText(urls.joinToString("\n") + "\n") }
+        println("[$rootName] \"$name\": its READ link and its drop box's link switched off and on again: $urls")
     }
 
     /**

@@ -248,7 +248,13 @@ implementation exists but what holds it to the first.
   — refused where the password no longer opens here — and the old address is gone, so the node is re-keyed as for a
   switch-off; a delete takes only a switched-off link the server lets go (each measured live by `PotLiveTest`: an edited
   link keeps its address, a renewed one opens its Pot on the web's guest page as a contributor and the old one nothing,
-  2026-11-09). A node is reported to its server's moderators
+  2026-11-09). A switched-off link is switched on again as the web's `reactivateShare` does, by any member (it becomes
+  theirs), its address kept: what the close cleared is sealed anew under its `K_share` from the recovery copy — the node's
+  current key, a drop box's link the public half of its current drop key — with the node's current name at its own
+  epoch; a link a departed member may hold (`reissue_required`) only renews (measured 2026-11-09 by `DropBoxLiveTest`: a
+  folder's READ link and a drop box's link switched off and on again at their old addresses, the web's guest page then
+  opening the folder and a guest dropping through the drop box's, which the member reads to the SHA-256; the same from
+  Android's share sheet). A node is reported to its server's moderators
   (`session/NodeReport.kt`, the web's `core/report/`; ADR 0093, a legal duty, so offered wherever the server publishes
   a moderation key): whole — the node's key and its name's and meta's field keys — or by its name alone, each share
   under the report's fresh `K_report`, that key and the reason sealed to the epoch's public half and the contact apart;
@@ -346,7 +352,7 @@ implementation exists but what holds it to the first.
   `NodeMoveTest`); in a guest's folder the header narrows as the web's `nodeRights`/`folderRights` do (no link, rename,
   cover or folder delete, `NodeHeader.inIdentityFolder`) and the level has no "New" (measured 2026-11-09: a guest's folder
   moved out on Android, the web then listing it as an ordinary folder whose file opens, the drop box one person fewer).
-  Not built yet: reactivating a switched-off drop box link, the space's top level's "Add files only", a file's copy and its place in a folder's download (both
+  Not built yet: the space's top level's "Add files only", a file's copy and its place in a folder's download (both
   left out and said), a folder upload, the uploader on a file's page.
 - **One header for every node, drawn by core** (the web's `NodePage` + `NodeHeader`, ADR 0110 decision 10; owner
   2026-11-09): what a node's header offers and where is core's `navigation/NodeHeader.kt` — core's actions around the
