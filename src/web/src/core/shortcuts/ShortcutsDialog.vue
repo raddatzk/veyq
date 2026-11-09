@@ -20,6 +20,13 @@ import { CORE_SHORTCUTS, shortcutsOpen, typingInto, type ShortcutGroup } from '.
 const { t } = useI18n()
 const { isSwitchedOff } = useCapabilities()
 
+/** The intro's words before and after the drawn `?` key (`shortcuts.intro`, its `{key}`): each language places it. */
+const KEY_MARK = '\u0000'
+const intro = computed(() => {
+  const [before = '', after = ''] = t('shortcuts.intro', { key: KEY_MARK }).split(KEY_MARK)
+  return [before, after] as const
+})
+
 const groups = computed<readonly ShortcutGroup[]>(() => [
   ...CORE_SHORTCUTS,
   ...registry.shortcuts().filter((s) => !isSwitchedOff(s.application)).flatMap((s) => s.groups),
@@ -52,6 +59,8 @@ onBeforeUnmount(() => {
 
 <template>
   <VeyqDialog v-model:visible="shortcutsOpen" :header="t('shortcuts.title')" class="shortcuts-dialog" data-testid="shortcuts-dialog">
+    <!-- how the overview is reached, said first: a member who pressed ? by chance learns why it opened (owner 2026-11-09) -->
+    <p class="shortcuts-intro" data-testid="shortcuts-intro">{{ intro[0] }}<ShortcutKeys :keys="[['?']]" />{{ intro[1] }}</p>
     <section v-for="group in groups" :key="group.title" class="shortcuts-group">
       <h3 class="shortcuts-group__title">{{ t(group.title) }}</h3>
       <dl class="shortcuts-group__list">
@@ -65,6 +74,14 @@ onBeforeUnmount(() => {
 </template>
 
 <style scoped>
+.shortcuts-intro {
+  margin: 0 0 1.25rem;
+  color: var(--app-muted);
+}
+.shortcuts-intro :deep(.shortcut-keys) {
+  margin: 0 0.3rem;
+  vertical-align: baseline;
+}
 .shortcuts-group + .shortcuts-group {
   margin-top: 1.25rem;
 }
@@ -80,7 +97,8 @@ onBeforeUnmount(() => {
 }
 .shortcuts-entry {
   display: grid;
-  grid-template-columns: minmax(7.5rem, 11rem) 1fr;
+  /* wide enough for a Mac's two fn chords on one line ("fn+← or fn+→"), measured in the browser pass */
+  grid-template-columns: minmax(7.5rem, 13rem) 1fr;
   align-items: baseline;
   gap: 0.75rem;
 }

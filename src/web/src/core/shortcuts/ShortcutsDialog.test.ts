@@ -110,6 +110,19 @@ describe('ShortcutsDialog: ? opens it', () => {
     w.unmount()
   })
 
+  // owner 2026-11-09: a member who pressed ? by chance should learn how the overview opened
+  it('says first that ? opens it, the key drawn in the sentence', async () => {
+    const w = mountDialog()
+    press(document.body)
+    await flushPromises()
+    const intro = document.querySelector('[data-testid="shortcuts-intro"]')
+    expect(intro).not.toBeNull()
+    expect(intro!.querySelector('kbd')?.textContent).toBe('?')
+    expect(intro!.textContent?.replace(/\s+/g, ' ').trim()).toBe(t('shortcuts.intro', { key: '?' }).replace(/\s+/g, ' ').trim())
+    expect(intro!.textContent).not.toContain('\u0000')
+    w.unmount()
+  })
+
   it('is no shortcut with Ctrl or ⌘ held', async () => {
     const w = mountDialog()
     for (const mod of [{ ctrlKey: true }, { metaKey: true }]) {
