@@ -6,7 +6,7 @@ import kotlin.test.assertEquals
 
 /** A directory's plan as the web's `planFolderUpload` makes it: what is made, named how, and how much it weighs. */
 class FolderUploadTest {
-    private fun e(path: String, size: Long = 1) = FolderUpload.Entry(path, size, "text/plain", null) { _, n -> ByteArray(n) }
+    private fun e(path: String, size: Long = 1) = FolderUpload.Entry(path, me.raddatz.veyq.mobile.blob.UploadSource.of(path, size, "text/plain", null) { _, n -> ByteArray(n) })
 
     private fun shape(d: FolderUpload.Dir): String =
         d.name + "[" + (d.dirs.map { shape(it) } + d.files.map { it.first }).joinToString(",") + "]"

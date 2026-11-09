@@ -122,16 +122,24 @@ class DepotLiveTest {
             "Docs/PLAN.TXT" to "PLAN".encodeToByteArray(), "Docs/Deep/big.bin" to big,
         )
         val entries = files.map { (path, bytes) ->
-            FolderUpload.Entry(path, bytes.size.toLong(), "application/octet-stream", 1_700_000_000_000L) { from, n -> bytes.copyOfRange(from.toInt(), from.toInt() + n) }
+            FolderUpload.Entry(path, me.raddatz.veyq.mobile.blob.UploadSource.of(path.substringAfterLast('/'), bytes.size.toLong(), "application/octet-stream", 1_700_000_000_000L) { from, n ->
+                bytes.copyOfRange(from.toInt(), from.toInt() + n)
+            })
         }
         val names = mutableListOf<String>()
+        // the folders made here, the files sent by the app's upload queue, as the apps run it
+        val queue = me.raddatz.veyq.mobile.blob.UploadQueue()
         repeat(2) {
-            val r = FolderUpload.upload(tenant, parent.scopeId, parent.nodeId, "App up", entries, AppKinds::tokenInput)
-            assertEquals(FolderUpload.Outcome.DONE, r.outcome, "${r.failedFolders} ${r.failedFiles}")
-            assertEquals(4, r.uploaded)
+            val r = FolderUpload.prepare(tenant, parent.scopeId, parent.nodeId, "App up", entries, AppKinds::tokenInput)
+            assertEquals(FolderUpload.Outcome.READY, r.outcome, "${r.failedFolders}")
+            assertEquals(4, r.jobs.size)
+            val finished = kotlinx.coroutines.CompletableDeferred<me.raddatz.veyq.mobile.blob.UploadQueue.Batch>()
+            queue.enqueue(r.jobs, r.name, null, null) { finished.complete(it) }
+            val batch = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Default.limitedParallelism(1)) { kotlinx.coroutines.withTimeout(120_000) { finished.await() } }
+            assertTrue(batch.items.all { it.status == me.raddatz.veyq.mobile.blob.UploadQueue.Status.DONE }, batch.items.joinToString { "${it.name}: ${it.status} ${it.error}" })
             names += r.name
         }
-        assertEquals("App up (2)", names[1], "the second goes beside the first")
+        assertTrue(names[1] != names[0] && names[1].startsWith("App up ("), "the second goes beside the first: $names")
         val fresh = account.open(tenant.tenant)
         val nodes = fresh.nodes()
         val top = nodes.first { it.parentId == parent.nodeId && it.name == names[0] && it.kind == "FOLDER" }
@@ -192,9 +200,9 @@ class DepotLiveTest {
         assertTrue(set.success, "the quota was not set: ${set.status}")
         try {
             assertEquals(bytes, me.raddatz.veyq.mobile.session.StorageFit.noRoomForCopy(tenant, folder.scopeId, folder.nodeId, kinds))
-            val entries = listOf(FolderUpload.Entry("a.txt", 5, "text/plain", null) { _, n -> ByteArray(n) })
+            val entries = listOf(FolderUpload.Entry("a.txt", me.raddatz.veyq.mobile.blob.UploadSource.of("a.txt", 5, "text/plain", null) { _, n -> ByteArray(n) }))
             val before = tenant.nodes().count { it.parentId == parent.nodeId }
-            val r = FolderUpload.upload(tenant, parent.scopeId, parent.nodeId, "App nofit", entries, AppKinds::tokenInput)
+            val r = FolderUpload.prepare(tenant, parent.scopeId, parent.nodeId, "App nofit", entries, AppKinds::tokenInput)
             assertEquals(FolderUpload.Outcome.NO_ROOM, r.outcome)
             assertEquals(before, account.open(tenant.tenant).nodes().count { it.parentId == parent.nodeId }, "nothing is written")
             println("[$spec] with a quota of one byte: its copy of $bytes bytes and a folder upload are said not to fit")

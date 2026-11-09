@@ -6,75 +6,53 @@ import kotlinx.cinterop.usePinned
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import me.raddatz.veyq.mobile.AppKinds
+import me.raddatz.veyq.mobile.blob.FileUploadSource
 import me.raddatz.veyq.mobile.session.TenantSession
 import platform.Foundation.NSData
+import platform.Foundation.NSURL
 import platform.Foundation.create
-import platform.posix.SEEK_SET
 import platform.posix.fclose
 import platform.posix.fopen
-import platform.posix.fread
-import platform.posix.fseeko
 import platform.posix.fwrite
 import platform.posix.remove
 
 /**
- * Depot's files for the Apple app: what Swift cannot hand core itself (a suspending reader), done here over a path — an
- * upload reads the picked file at any offset a frame at a time, a download writes the plaintext to a file as it is read,
- * a view reads the frames it needs. Nothing is held whole but what a view shows.
+ * Depot's files for the Apple app: what Swift cannot hand core itself (a suspending reader), done here over a file — an
+ * upload job reads the picked file at any offset a frame at a time ([FileUploadSource]), a download writes the plaintext
+ * to a file as it is read, a view reads the frames it needs. Nothing is held whole but what a view shows.
  */
 @OptIn(ExperimentalForeignApi::class)
 object AppleDepot {
     private fun ByteArray.toNSData(): NSData = if (isEmpty()) NSData() else usePinned { NSData.create(bytes = it.addressOf(0), length = size.toULong()) }
 
-    /** Runs [use] over a reader of the file at [path] (the plaintext from an offset, a frame long at most). */
-    private suspend fun <T> reading(path: String, use: suspend (suspend (Long, Int) -> ByteArray) -> T): T {
-        val file = fopen(path, "rb") ?: throw IllegalStateException("cannot read $path")
-        try {
-            return use { from, length ->
-                if (fseeko(file, from, SEEK_SET) != 0) throw IllegalStateException("cannot seek $path")
-                val buf = ByteArray(length)
-                if (length == 0) return@use buf
-                val n = buf.usePinned { fread(it.addressOf(0), 1u, length.toULong(), file) }.toInt()
-                buf.copyOf(n)
-            }
-        } finally {
-            fclose(file)
-        }
-    }
-
-    /** Uploads the file at [path] as a new file [name] under [parentId] (`DepotFiles.upload`). */
-    @Throws(Exception::class)
-    suspend fun upload(
-        tenant: TenantSession, scopeId: String, parentId: String?, path: String, name: String, size: Long, type: String, modifiedAt: Long?,
-    ): DepotFiles.Uploaded = withContext(Dispatchers.Default) {
-        reading(path) { read -> DepotFiles.upload(tenant, scopeId, parentId, name, size, type, modifiedAt, AppKinds::tokenInput, read) }
-    }
+    /** The picked file at [url] uploaded as a new file under [parentId] of [scopeId]: a job for the upload queue. */
+    fun uploadJob(
+        tenant: TenantSession, scopeId: String, parentId: String?, url: NSURL, name: String, size: Long, type: String, modifiedAt: Long?,
+    ): DepotFiles.UploadJob = DepotFiles.UploadJob(tenant, scopeId, parentId, FileUploadSource(url, null, name, size, type, modifiedAt), AppKinds::tokenInput)
 
     /** One file of a picked directory: its path below the directory, where it lies on the device, and its facts. */
     class FolderFile(val relativePath: String, val path: String, val size: Long, val type: String, val modifiedAt: Long?)
 
     /**
-     * Depot's "Upload folder…": the directory named [rootName] whose [files] Swift listed, uploaded under [parentId]
-     * (`FolderUpload`), each file opened for each frame the upload asks; [onFile] is told each file as it starts.
+     * Depot's "Upload folder…": the folders of the directory at [root] (named [rootName]) whose [files] Swift listed made
+     * under [parentId] (`FolderUpload.prepare`), its files handed back as jobs for the upload queue, each read inside the
+     * directory's security scope.
      */
     @Throws(Exception::class)
-    suspend fun uploadFolder(
-        tenant: TenantSession, scopeId: String, parentId: String?, rootName: String, files: List<FolderFile>,
-        onFile: (name: String, done: Int, total: Int) -> Unit,
+    suspend fun prepareFolder(
+        tenant: TenantSession, scopeId: String, parentId: String?, root: NSURL, rootName: String, files: List<FolderFile>,
     ): FolderUpload.Report = withContext(Dispatchers.Default) {
         val entries = files.map { f ->
-            FolderUpload.Entry(f.relativePath, f.size, f.type, f.modifiedAt) { from, length -> reading(f.path) { read -> read(from, length) } }
+            val name = f.relativePath.substringAfterLast('/')
+            FolderUpload.Entry(f.relativePath, FileUploadSource(NSURL.fileURLWithPath(f.path), root, name, f.size, f.type, f.modifiedAt))
         }
-        FolderUpload.upload(tenant, scopeId, parentId, rootName, entries, AppKinds::tokenInput, onFile)
+        FolderUpload.prepare(tenant, scopeId, parentId, rootName, entries, AppKinds::tokenInput)
     }
 
-    /** Replaces [file]'s content with the file at [path] over [expectedBlobId] (`DepotFiles.replace`). */
-    @Throws(Exception::class)
-    suspend fun replace(
-        tenant: TenantSession, file: DepotFiles.File, path: String, name: String, size: Long, type: String, modifiedAt: Long?, expectedBlobId: String?,
-    ): DepotFiles.Uploaded = withContext(Dispatchers.Default) {
-        reading(path) { read -> DepotFiles.replace(tenant, file, size, type, name, modifiedAt, expectedBlobId, read) }
-    }
+    /** [file]'s content replaced with the picked file at [url] over [expectedBlobId]: a job for the upload queue. */
+    fun replaceJob(
+        tenant: TenantSession, file: DepotFiles.File, url: NSURL, name: String, size: Long, type: String, modifiedAt: Long?, expectedBlobId: String?,
+    ): DepotFiles.ReplaceJob = DepotFiles.ReplaceJob(tenant, file, FileUploadSource(url, null, name, size, type, modifiedAt), expectedBlobId, name)
 
     /** Writes [file]'s content to [path] as it is read; false (and nothing left at [path]) when it did not finish. */
     @Throws(Exception::class)

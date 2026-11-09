@@ -167,9 +167,9 @@ class ApplicationBlobs(private val tenant: TenantSession) {
      */
     internal suspend fun reserveAndPump(
         scopeId: String, node: OpenNode, role: String, bytes: ByteArray, type: String, name: String?, modifiedAt: Long?,
-    ): Pair<String, Plan> = reserveAndPumpFrames(scopeId, node, role, bytes.size.toLong(), type, name, modifiedAt) { from, length ->
+    ): Pair<String, Plan> = reserveAndPumpFrames(scopeId, node, role, bytes.size.toLong(), type, name, modifiedAt, read = { from, length ->
         bytes.copyOfRange(from.toInt(), (from + length).toInt())
-    }
+    })
 
     /**
      * [reserveAndPump] over a source of [size] bytes read a frame at a time ([read]: the plaintext from an offset, at most a
@@ -177,8 +177,8 @@ class ApplicationBlobs(private val tenant: TenantSession) {
      */
     internal suspend fun reserveAndPumpFrames(
         scopeId: String, node: OpenNode, role: String, size: Long, type: String, name: String?, modifiedAt: Long?,
-        read: suspend (from: Long, length: Int) -> ByteArray,
-    ): Pair<String, Plan> = reserveAndPumpAll(scopeId, node.id, node.key, listOf(Outgoing(role, size, type, name, modifiedAt, null, read))).single()
+        read: suspend (from: Long, length: Int) -> ByteArray, sent: (Long) -> Unit = {},
+    ): Pair<String, Plan> = reserveAndPumpAll(scopeId, node.id, node.key, listOf(Outgoing(role, size, type, name, modifiedAt, null, read)), sent).single()
 
     /** One blob an upload sends: its role, its plaintext's size and bytes (a frame at a time), and what its meta seals. */
     internal class Outgoing(
@@ -190,9 +190,12 @@ class ApplicationBlobs(private val tenant: TenantSession) {
      * [blobs] of the record [ownerId] (a node; a medium, whose original and tiers are one record), each sealed under a
      * fresh `K_blob` wrapped under [wrapKey] bound to [ownerId] and its role, reserved in ONE start request (the web's
      * `startBlobUploads`) and pumped one after another; their upload ids and plans, in order. Throws [UploadRefused] with
-     * the first item's refusal (`quota_exceeded` refuses them all).
+     * the first item's refusal (`quota_exceeded` refuses them all). [sent] is told the plaintext bytes sent so far, over
+     * all of them, after each frame.
      */
-    internal suspend fun reserveAndPumpAll(scopeId: String, ownerId: String, wrapKey: ByteArray, blobs: List<Outgoing>): List<Pair<String, Plan>> {
+    internal suspend fun reserveAndPumpAll(
+        scopeId: String, ownerId: String, wrapKey: ByteArray, blobs: List<Outgoing>, sent: (Long) -> Unit = {},
+    ): List<Pair<String, Plan>> {
         val keys = blobs.map { account.primitives.randomBytes(32) }
         val items = blobs.mapIndexed { i, b ->
             val blobId = NodeCreate.uuid(account)
@@ -209,10 +212,13 @@ class ApplicationBlobs(private val tenant: TenantSession) {
         val results = started.body().results
         if (results.size != items.size) throw UploadRefused("start_mismatch")
         results.firstNotNullOfOrNull { it.error }?.let { throw UploadRefused(it) }
+        var before = 0L
         return blobs.mapIndexed { i, b ->
             val res = results[i]
             val uploadId = res.uploadId ?: throw UploadRefused("no upload id")
-            pump(scopeId, uploadId, keys[i], items[i].chunkCount, b.size, res.presignedPuts, b.read)
+            val base = before
+            pump(scopeId, uploadId, keys[i], items[i].chunkCount, b.size, res.presignedPuts, b.read) { sent(base + it) }
+            before += b.size
             uploadId to Plan(items[i].blobId, items[i].chunkCount, items[i].byteSize, items[i].wrappedBlobKey, ownerId)
         }
     }
@@ -220,7 +226,7 @@ class ApplicationBlobs(private val tenant: TenantSession) {
     /** Seals and PUTs the frames of one reserved upload, signing each window as it is reached (and once more on a 403). */
     private suspend fun pump(
         scopeId: String, uploadId: String, key: ByteArray, count: Int, size: Long, first: List<PresignedUrl>?,
-        read: suspend (from: Long, length: Int) -> ByteArray,
+        read: suspend (from: Long, length: Int) -> ByteArray, sent: (Long) -> Unit,
     ) {
         val signed = HashMap<Int, String>()
         fun keep(urls: List<PresignedUrl>?) = urls.orEmpty().forEach { signed[it.index] = it.url }
@@ -245,6 +251,7 @@ class ApplicationBlobs(private val tenant: TenantSession) {
                 status = account.putToStore(signed.getValue(i), suite.sealFrame(key, i, count, chunk))
             }
             if (status !in 200..299) throw UploadRefused("chunk_put_failed:$status")
+            sent(from + length)
         }
     }
 

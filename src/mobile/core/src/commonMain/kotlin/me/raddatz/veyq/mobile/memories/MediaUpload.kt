@@ -9,7 +9,12 @@ import me.raddatz.veyq.mobile.api.memories.models.MediaBatchRequest
 import me.raddatz.veyq.mobile.api.memories.models.MediaDerivativeKind
 import me.raddatz.veyq.mobile.api.memories.models.MediaDerivativeUpload
 import me.raddatz.veyq.mobile.api.memories.models.MediaRequestItem
+import kotlinx.coroutines.suspendCancellableCoroutine
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import me.raddatz.veyq.mobile.blob.ApplicationBlobs
+import me.raddatz.veyq.mobile.blob.UploadQueue
+import me.raddatz.veyq.mobile.blob.UploadSource
 import me.raddatz.veyq.mobile.crypto.V1
 import me.raddatz.veyq.mobile.crypto.b64url
 import me.raddatz.veyq.mobile.export.Sha256
@@ -28,12 +33,11 @@ import me.raddatz.veyq.mobile.session.TenantSession
  * platform derived them ([Derived]), the `THUMBNAIL` and the `PREVIEW` JPEG — each under its own `K_blob` wrapped bound
  * to the medium and its role (`blob-key` with `ownerId` the medium's id), reserved in one start request, sent frame by
  * frame direct to the store, and attached by one `media-batch` completion. At the node's epoch ([NodeEpochWrite]): a
- * re-keyed node is pulled forward and its key read again, and the whole medium is sealed again under it. The job is
- * tried twice, as the web's queue tries it ([ATTEMPTS]): every attempt mints its ids and keys anew; a quota or an
- * application switched off is never tried again.
+ * re-keyed node is pulled forward and its key read again, and the whole medium is sealed again under it. An app runs it
+ * as a [Job] of its upload queue ([UploadQueue], the web's `uploadQueue.ts`), which retries a failure once — every run
+ * mints its ids and keys anew — and never a quota or an application switched off.
  */
 object MediaUpload {
-    const val ATTEMPTS = 2
     const val SNIFF_BYTES = 1024
 
     /** What a platform hands over of a picked file: its bytes at any offset, its given type, name and modification time. */
@@ -50,29 +54,105 @@ object MediaUpload {
 
     class Result(val outcome: Outcome, val mediaId: String? = null, val code: String? = null)
 
-    /** Uploads [original] with [derived] into node [nodeId] of [scopeId]; [now] bounds a video's capture time. */
-    @Throws(Exception::class)
-    suspend fun upload(tenant: TenantSession, scopeId: String, nodeId: String, original: Original, derived: Derived, now: Long): Result {
+    /**
+     * A platform's tiers of a picked photo or video (the web's `mediaDeriver.ts`): Android's `ImageDecoder` and
+     * `MediaMetadataRetriever`, Apple's ImageIO and AVFoundation. It calls [done] once, on any thread, with what it
+     * derived — [Derived]'s nulls where the original does not decode there.
+     */
+    interface Deriver {
+        fun derive(source: UploadSource, type: String, done: (Derived) -> Unit)
+    }
+
+    /** What the device works out before anything is sent: no key, no request (the job's on-device stage). */
+    private class Prepared(val type: String, val sha256: String, val derived: Derived, val metaTier: JsonObject?, val exif: JsonObject?)
+
+    /** The type of [original] and its bytes' head, then its SHA-256 and metadata, with the tiers from [derive]. */
+    private suspend fun prepare(original: Original, now: Long, derive: suspend (type: String) -> Derived): Prepared {
         val head = original.source.read(0, minOf(original.source.size, SNIFF_BYTES.toLong()).toInt())
         val type = typeOf(original.type, original.name, head)
+        val derived = derive(type)
         val sha256 = sha256(original.source)
         val read = MediaMetadata.read(original.source, type, now)
         // a video's size is the one its header names (the web's probe), else the platform's; a photo's is its decode's
         val probed = if (type.startsWith("video/")) runCatching { VideoHeader.size(original.source) }.getOrNull()?.let { it.width to it.height } else null
         val size = probed ?: if (derived.width != null && derived.height != null) derived.width to derived.height else null
         val metaTier = MediaMetadata.metaTier(size?.first, size?.second, read, original.modifiedAt)
-        var last = Result(Outcome.FAILED)
-        repeat(ATTEMPTS) {
-            last = once(tenant, scopeId, nodeId, original, type, sha256, derived, metaTier, read.exif)
-            if (last.outcome != Outcome.FAILED) return last
+        return Prepared(type, sha256, derived, metaTier, read.exif)
+    }
+
+    /**
+     * Uploads [original] with [derived] into node [nodeId] of [scopeId], once; [now] bounds a video's capture time,
+     * [progress] is told the fraction sent.
+     */
+    @Throws(Exception::class)
+    suspend fun upload(
+        tenant: TenantSession, scopeId: String, nodeId: String, original: Original, derived: Derived, now: Long,
+        progress: (Double) -> Unit = {},
+    ): Result = once(tenant, scopeId, nodeId, original, prepare(original, now) { derived }, progress)
+
+    /**
+     * One picked [source] added to Memory or chapter [nodeId] of [scopeId] as a job of the app's upload queue: its tiers
+     * ([deriver]), digest and metadata are its on-device stage, prepared ahead while the job before it is on the wire and
+     * kept for a retry; [mediaId] is the medium it added. A quota fails it with [UploadQueue.QUOTA_EXCEEDED], Memories
+     * switched off with [UploadQueue.APPLICATION_OFF]; [now] is the clock a video's capture time is bounded by.
+     */
+    class Job(
+        private val tenant: TenantSession, val scopeId: String, val nodeId: String, private val source: UploadSource,
+        private val deriver: Deriver, private val now: () -> Long,
+    ) : UploadQueue.Job {
+        override val name get() = source.name
+        override val sizeBytes get() = source.size
+        override val prepares get() = true
+
+        /** The medium this job added, once it is done. */
+        var mediaId: String? = null
+            private set
+
+        private val lock = Mutex()
+        private var prepared: Prepared? = null
+
+        private val original get() = Original(source.bytes(), source.type, source.name, source.modifiedAt)
+
+        override suspend fun prepare() {
+            ready()
         }
-        return last
+
+        private suspend fun ready(): Prepared = lock.withLock {
+            prepared ?: try {
+                prepare(original, now()) { type -> suspendCancellableCoroutine { c -> deriver.derive(source, type) { c.resume(it) { _, _, _ -> } } } }
+            } finally {
+                source.close()
+            }.also { prepared = it }
+        }
+
+        override suspend fun run(progress: (Double) -> Unit) {
+            val p = ready()
+            val r = try {
+                once(tenant, scopeId, nodeId, original, p, progress)
+            } finally {
+                source.close()
+            }
+            when (r.outcome) {
+                Outcome.DONE -> {
+                    mediaId = r.mediaId
+                    prepared = null // what it prepared is sent: its tiers need not stay in memory
+                }
+                Outcome.NO_ROOM -> throw UploadQueue.Failed(UploadQueue.QUOTA_EXCEEDED)
+                Outcome.SWITCHED_OFF -> throw UploadQueue.Failed(UploadQueue.APPLICATION_OFF)
+                Outcome.BUSY -> throw UploadQueue.Failed("node_rekey_pending")
+                Outcome.FAILED -> throw UploadQueue.Failed(r.code ?: "failed")
+            }
+        }
     }
 
     private suspend fun once(
-        tenant: TenantSession, scopeId: String, nodeId: String, original: Original, type: String, sha256: String,
-        derived: Derived, metaTier: JsonObject?, exif: JsonObject?,
+        tenant: TenantSession, scopeId: String, nodeId: String, original: Original, prepared: Prepared, progress: (Double) -> Unit,
     ): Result {
+        val type = prepared.type
+        val sha256 = prepared.sha256
+        val derived = prepared.derived
+        val metaTier = prepared.metaTier
+        val exif = prepared.exif
         val (_, scopeEpoch) = tenant.scopeKey(scopeId) ?: return Result(Outcome.FAILED, code = "scope_unreadable")
         var node: OpenNode = tenant.node(scopeId, nodeId) ?: return Result(Outcome.FAILED, code = "node_unreadable")
         val suite = tenant.account.suite
@@ -87,7 +167,7 @@ object MediaUpload {
             attempt = {
                 val n = node
                 val code = try {
-                    ended = attach(tenant, suite, scopeId, n, original, type, sha256, derived, metaTier, exif)
+                    ended = attach(tenant, suite, scopeId, n, original, type, sha256, derived, metaTier, exif, progress)
                     null
                 } catch (e: ApplicationBlobs.UploadRefused) {
                     when (e.code) {
@@ -115,7 +195,7 @@ object MediaUpload {
     /** One medium sealed under [node]'s key, sent and completed; throws [ApplicationBlobs.UploadRefused] with a refusal's code. */
     private suspend fun attach(
         tenant: TenantSession, suite: V1, scopeId: String, node: OpenNode, original: Original, type: String, sha256: String,
-        derived: Derived, metaTier: JsonObject?, exif: JsonObject?,
+        derived: Derived, metaTier: JsonObject?, exif: JsonObject?, progress: (Double) -> Unit,
     ): Result {
         val mediaId = NodeCreate.uuid(tenant.account)
         val wrappedMeta = metaTier?.let { MediaMetadata.sealMeta(suite, node.key, scopeId, mediaId, it) }
@@ -131,7 +211,9 @@ object MediaUpload {
                 bytes.copyOfRange(from.toInt(), (from + length).toInt())
             }
         }
-        val sent = ApplicationBlobs(tenant).reserveAndPumpAll(scopeId, mediaId, node.key, blobs)
+        val total = blobs.sumOf { it.size }.coerceAtLeast(1).toDouble()
+        progress(0.0)
+        val sent = ApplicationBlobs(tenant).reserveAndPumpAll(scopeId, mediaId, node.key, blobs) { progress(it / total) }
         val item = MediaRequestItem(
             mediaId = mediaId, nodeId = node.id, nodeEpoch = node.epoch, originalUploadId = sent[0].first,
             derivatives = tiers.mapIndexed { i, (role, _) ->

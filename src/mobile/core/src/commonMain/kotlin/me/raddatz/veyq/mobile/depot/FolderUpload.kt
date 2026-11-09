@@ -1,5 +1,6 @@
 package me.raddatz.veyq.mobile.depot
 
+import me.raddatz.veyq.mobile.blob.UploadSource
 import me.raddatz.veyq.mobile.crypto.nfc
 import me.raddatz.veyq.mobile.export.ArchiveName
 import me.raddatz.veyq.mobile.session.FolderCreate
@@ -14,12 +15,15 @@ import me.raddatz.veyq.mobile.session.TenantSession
  * the files' bytes fit its storage (`checkTenantStorageFit`, advisory: a check that does not answer lets the upload go on,
  * the upload's own `quota_exceeded` decides). The top folder takes the directory's name numbered past the level's siblings
  * (`Name (2)`, never merged into an existing folder), then every folder is made depth first — one that cannot be made is
- * said with everything in it left out — and then the files are uploaded one after another, each tried twice but a refusal
- * for room. Nothing is rolled back: what went up stays.
+ * said with everything in it left out — and every file becomes one job for the app's upload queue
+ * ([DepotFiles.UploadJob]), which uploads them one after another and retries each once but a refusal for room. Nothing
+ * is rolled back: what went up stays.
  */
 object FolderUpload {
-    /** One file of the directory: its path below the directory (`/`-separated), size, type, modified time, and its bytes. */
-    class Entry(val path: String, val size: Long, val type: String, val modifiedAt: Long?, val read: suspend (from: Long, length: Int) -> ByteArray)
+    /** One file of the directory: its path below the directory (`/`-separated) and the file itself. */
+    class Entry(val path: String, val source: UploadSource) {
+        val size get() = source.size
+    }
 
     /** A directory of the plan: its name as it will be made, its subdirectories and its files (each its name and entry). */
     class Dir(val name: String, val dirs: List<Dir>, val files: List<Pair<String, Entry>>)
@@ -27,16 +31,14 @@ object FolderUpload {
     class Plan(val root: Dir, val files: Int, val bytes: Long)
 
     enum class Outcome {
-        /** Every folder made and every file uploaded. */
-        DONE,
-        /** The top folder is made, but a folder or a file of it was not ([Report.failedFolders], [Report.failedFiles]). */
-        PARTIAL,
         /** The tenant has no room for it ([Report.bytes]): nothing was written. */
         NO_ROOM,
         /** The top folder could not be made: nothing of it was uploaded. */
         ROOT_FAILED,
         /** The directory holds no file. */
         NOTHING,
+        /** The folders are made: the files are [Report.jobs], for the upload queue. */
+        READY,
     }
 
     class Report(
@@ -44,11 +46,10 @@ object FolderUpload {
         val name: String,
         val bytes: Long = 0,
         val rootId: String? = null,
-        val uploaded: Int = 0,
         /** The folders not made, as `root/sub/…`: nothing in them went up. */
         val failedFolders: List<String> = emptyList(),
-        /** The files not uploaded, by name, with why. */
-        val failedFiles: List<Pair<String, DepotFiles.Outcome>> = emptyList(),
+        /** One job per file whose folder was made, in the order the web queues them. */
+        val jobs: List<DepotFiles.UploadJob> = emptyList(),
     )
 
     const val ROOT_TRIES = 20
@@ -96,13 +97,13 @@ object FolderUpload {
     }
 
     /**
-     * Uploads [entries] of the directory named [rootName] under [parentId] (null: the space's top) of [scopeId]; [onFile] is
-     * told each file as it starts (its name, how many went before, of how many).
+     * Makes the folders of the directory named [rootName] ([entries]) under [parentId] (null: the space's top) of [scopeId]
+     * and hands back its files as upload jobs ([Report.jobs]): the queue sends them.
      */
     @Throws(Exception::class)
-    suspend fun upload(
+    suspend fun prepare(
         tenant: TenantSession, scopeId: String, parentId: String?, rootName: String, entries: List<Entry>,
-        tokenInput: (String, String) -> String?, onFile: (name: String, done: Int, total: Int) -> Unit = { _, _, _ -> },
+        tokenInput: (String, String) -> String?,
     ): Report {
         val plan = plan(rootName, entries, tokenInput)
         if (plan.files == 0) return Report(Outcome.NOTHING, rootName)
@@ -124,10 +125,10 @@ object FolderUpload {
         val top = rootId ?: return Report(Outcome.ROOT_FAILED, name, plan.bytes)
 
         // every folder depth first, each folder's files queued before its subfolders are made (`createFolders`)
-        val jobs = ArrayList<Triple<String, String, Entry>>()
+        val jobs = ArrayList<DepotFiles.UploadJob>()
         val failedFolders = ArrayList<String>()
         suspend fun make(dir: Dir, id: String, path: String) {
-            dir.files.forEach { (n, e) -> jobs += Triple(id, n, e) }
+            dir.files.forEach { (n, e) -> jobs += DepotFiles.UploadJob(tenant, scopeId, id, e.source, tokenInput, n) }
             for (sub in dir.dirs) {
                 val made = runCatching { FolderCreate.create(tenant, scopeId, id, sub.name) }.getOrNull()
                 if (made is NodeCreate.Result.Done) make(sub, made.created.nodeId, "$path/${sub.name}")
@@ -135,24 +136,7 @@ object FolderUpload {
             }
         }
         make(plan.root, top, name)
-
-        // the files one after another, each tried twice but a refusal for room (the web's queue, `MAX_ATTEMPTS`)
-        val failedFiles = ArrayList<Pair<String, DepotFiles.Outcome>>()
-        var uploaded = 0
-        for ((i, job) in jobs.withIndex()) {
-            val (folderId, fileName, e) = job
-            onFile(fileName, i, jobs.size)
-            var outcome = DepotFiles.Outcome.FAILED
-            for (attempt in 1..2) {
-                outcome = runCatching {
-                    DepotFiles.upload(tenant, scopeId, folderId, fileName, e.size, e.type, e.modifiedAt, tokenInput, e.read).outcome
-                }.getOrDefault(DepotFiles.Outcome.FAILED)
-                if (outcome == DepotFiles.Outcome.DONE || outcome == DepotFiles.Outcome.NO_ROOM) break
-            }
-            if (outcome == DepotFiles.Outcome.DONE) uploaded++ else failedFiles += fileName to outcome
-        }
         tenant.forgetTree()
-        val whole = failedFolders.isEmpty() && failedFiles.isEmpty()
-        return Report(if (whole) Outcome.DONE else Outcome.PARTIAL, name, plan.bytes, top, uploaded, failedFolders, failedFiles)
+        return Report(Outcome.READY, name, plan.bytes, top, failedFolders = failedFolders, jobs = jobs)
     }
 }

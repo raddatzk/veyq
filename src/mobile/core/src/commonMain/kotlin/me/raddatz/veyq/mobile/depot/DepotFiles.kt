@@ -1,5 +1,8 @@
 package me.raddatz.veyq.mobile.depot
 
+import me.raddatz.veyq.mobile.blob.UploadQueue
+import me.raddatz.veyq.mobile.blob.UploadSource
+
 import io.ktor.client.statement.bodyAsText
 import me.raddatz.veyq.mobile.api.depot.apis.FilesApi
 import me.raddatz.veyq.mobile.session.NodeCreate
@@ -97,6 +100,96 @@ object DepotFiles {
 
     class Uploaded(val outcome: Outcome, val nodeId: String? = null, val existing: String? = null, val currentBlobId: String? = null)
 
+    /** The codes a Depot job fails with in the upload queue, beyond core's ([UploadQueue.QUOTA_EXCEEDED]). */
+    object Codes {
+        /** A file of the name is here ([UploadJob.existing]): the person replaces it or picks another name. */
+        const val EXISTS = "file_exists"
+        /** A sibling of another kind holds the name. */
+        const val NAME_TAKEN = "name_taken"
+        /** The file's content changed since it was read ([ReplaceJob.currentBlobId]). */
+        const val STALE = "stale_file"
+        const val BUSY = "node_rekey_pending"
+        const val FAILED = "upload_failed"
+        internal val FINAL = setOf(EXISTS, NAME_TAKEN, STALE)
+    }
+
+    private fun failure(u: Uploaded): String? = when (u.outcome) {
+        Outcome.DONE -> null
+        Outcome.TAKEN_BY_OTHER -> Codes.NAME_TAKEN
+        Outcome.EXISTS -> Codes.EXISTS
+        Outcome.STALE -> Codes.STALE
+        Outcome.BUSY -> Codes.BUSY
+        Outcome.NO_ROOM -> UploadQueue.QUOTA_EXCEEDED
+        Outcome.FAILED -> Codes.FAILED
+    }
+
+    /**
+     * One picked [source] uploaded as a new file under [parentId] (null: the space's top) of [scopeId] as a job of the app's
+     * upload queue (the web's `fileUploadJob`), named [name] (a folder upload's planned name; else the file's own). A name a
+     * file of the level holds fails it final with [Codes.EXISTS] and that file in [existing], to offer its replace.
+     */
+    class UploadJob(
+        private val tenant: TenantSession, val scopeId: String, val parentId: String?, private val source: UploadSource,
+        private val tokenInput: (String, String) -> String?, override val name: String = source.name,
+    ) : UploadQueue.Job {
+        override val sizeBytes get() = source.size
+
+        /** The file a name collision found here. */
+        var existing: String? = null
+            private set
+
+        /** The file this job created, once it is done. */
+        var nodeId: String? = null
+            private set
+
+        /** What it uploaded: to replace [existing] with, after a collision. */
+        val picked: UploadSource get() = source
+
+        override suspend fun run(progress: (Double) -> Unit) {
+            val r = try {
+                upload(tenant, scopeId, parentId, name, source.size, source.type ?: OCTET, source.modifiedAt, tokenInput, source::read, progress)
+            } finally {
+                source.close()
+            }
+            existing = r.existing
+            nodeId = r.nodeId
+            failure(r)?.let { throw UploadQueue.Failed(it) }
+        }
+
+        override fun isFinal(code: String) = code in Codes.FINAL
+    }
+
+    /**
+     * [file]'s content replaced with [source] over [expectedBlobId] as a job of the upload queue; content someone replaced
+     * meanwhile fails it final with [Codes.STALE] and theirs in [currentBlobId], to offer "Replace anyway".
+     */
+    class ReplaceJob(
+        private val tenant: TenantSession, val file: File, private val source: UploadSource, val expectedBlobId: String?,
+        override val name: String,
+    ) : UploadQueue.Job {
+        override val sizeBytes get() = source.size
+
+        /** The content that is there now, after a refusal as stale. */
+        var currentBlobId: String? = null
+            private set
+
+        val picked: UploadSource get() = source
+
+        override suspend fun run(progress: (Double) -> Unit) {
+            val r = try {
+                replace(tenant, file, source.size, source.type ?: OCTET, source.name, source.modifiedAt, expectedBlobId, source::read, progress)
+            } finally {
+                source.close()
+            }
+            currentBlobId = r.currentBlobId
+            failure(r)?.let { throw UploadQueue.Failed(it) }
+        }
+
+        override fun isFinal(code: String) = code in Codes.FINAL
+    }
+
+    private const val OCTET = "application/octet-stream"
+
     /**
      * The sibling of [parentId] (null: the space's top) a new file named [name] would collide with (the web's
      * `collidingSibling`): the name folded as a file's, each sibling's as its own kind's ([tokenInput]); null where none does.
@@ -117,6 +210,7 @@ object DepotFiles {
     suspend fun upload(
         tenant: TenantSession, scopeId: String, parentId: String?, name: String, size: Long, type: String, modifiedAt: Long?,
         tokenInput: (String, String) -> String?, read: suspend (from: Long, length: Int) -> ByteArray,
+        progress: (Double) -> Unit = {},
     ): Uploaded {
         val n = name.trim()
         collision(tenant, scopeId, parentId, n, tokenInput)?.let { other ->
@@ -127,7 +221,7 @@ object DepotFiles {
             is NodeCreate.Result.Refused -> return Uploaded(if (r.reason == NodeCreate.Reason.NAME_TAKEN) Outcome.TAKEN_BY_OTHER else Outcome.FAILED)
         }
         tenant.forgetTree()
-        val done = attach(tenant, scopeId, created.nodeId, size, type, n, modifiedAt, null, read)
+        val done = attach(tenant, scopeId, created.nodeId, size, type, n, modifiedAt, null, read, progress)
         if (done.outcome != Outcome.DONE) abandon(tenant, scopeId, parentId, created.nodeId)
         return done
     }
@@ -139,13 +233,13 @@ object DepotFiles {
     @Throws(Exception::class)
     suspend fun replace(
         tenant: TenantSession, file: File, size: Long, type: String, name: String?, modifiedAt: Long?, expectedBlobId: String?,
-        read: suspend (from: Long, length: Int) -> ByteArray,
-    ): Uploaded = attach(tenant, file.scopeId, file.nodeId, size, type, name, modifiedAt, expectedBlobId, read)
+        read: suspend (from: Long, length: Int) -> ByteArray, progress: (Double) -> Unit = {},
+    ): Uploaded = attach(tenant, file.scopeId, file.nodeId, size, type, name, modifiedAt, expectedBlobId, read, progress)
 
     /** One content upload and its attachment at the node's epoch ([NodeEpochWrite]: a new key epoch seals all again). */
     private suspend fun attach(
         tenant: TenantSession, scopeId: String, nodeId: String, size: Long, type: String, name: String?, modifiedAt: Long?,
-        expectedBlobId: String?, read: suspend (from: Long, length: Int) -> ByteArray,
+        expectedBlobId: String?, read: suspend (from: Long, length: Int) -> ByteArray, progress: (Double) -> Unit,
     ): Uploaded {
         val (_, scopeEpoch) = tenant.scopeKey(scopeId) ?: return Uploaded(Outcome.FAILED)
         var node: OpenNode? = tenant.node(scopeId, nodeId) ?: return Uploaded(Outcome.FAILED)
@@ -161,7 +255,10 @@ object DepotFiles {
             attempt = {
                 val n = node!!
                 val code = try {
-                    val (uploadId, plan) = ApplicationBlobs(tenant).reserveAndPumpFrames(scopeId, n, ROLE, size, type, name, modifiedAt, read)
+                    progress(0.0)
+                    val (uploadId, plan) = ApplicationBlobs(tenant).reserveAndPumpFrames(scopeId, n, ROLE, size, type, name, modifiedAt, read) {
+                        progress(it.toDouble() / size.coerceAtLeast(1))
+                    }
                     val r = tenant.account.respond {
                         FilesApi(tenant.base, tenant.account.http).completeFile(
                             scopeId, nodeId,
