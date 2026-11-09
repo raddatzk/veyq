@@ -99,6 +99,17 @@ internal fun FileScreen(ref: ObjectRef, model: AppModel) {
                 file.modifiedAt?.let { stringResource(R.string.depot_modified, java.text.DateFormat.getDateTimeInstance(java.text.DateFormat.MEDIUM, java.text.DateFormat.SHORT).format(java.util.Date(it))) },
             )
             Text(facts.joinToString(" · "), style = MaterialTheme.typography.bodySmall, color = role(palette.muted))
+            // who uploaded it (Depot's header fact): a member by name, one who left, a guest by the name it gave itself
+            var uploader by remember(file.blobId, file.uploaderKey) { mutableStateOf<me.raddatz.veyq.mobile.depot.Uploaders.Uploader?>(null) }
+            LaunchedEffect(file.blobId, file.uploaderKey) { uploader = model.uploader(file) }
+            uploader?.let { u ->
+                val who = when (u.kind) {
+                    me.raddatz.veyq.mobile.depot.Uploaders.Kind.MEMBER -> u.name.orEmpty()
+                    me.raddatz.veyq.mobile.depot.Uploaders.Kind.FORMER -> stringResource(R.string.people_former_member)
+                    me.raddatz.veyq.mobile.depot.Uploaders.Kind.GUEST -> u.name?.let { stringResource(R.string.depot_guest_name, it) } ?: stringResource(R.string.depot_a_guest)
+                }
+                Text(stringResource(R.string.depot_uploaded_by, who), style = MaterialTheme.typography.bodySmall, color = role(palette.muted))
+            }
         }
         Box(Modifier.fillMaxWidth().weight(1f), contentAlignment = Alignment.TopCenter) {
             when {

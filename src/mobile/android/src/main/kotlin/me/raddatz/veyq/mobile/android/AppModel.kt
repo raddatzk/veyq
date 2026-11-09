@@ -766,6 +766,12 @@ class AppModel(app: Application) : AndroidViewModel(app) {
     suspend fun createDropBox(folder: me.raddatz.veyq.mobile.navigation.NodeAt, name: String, password: String, expiresAt: String?): me.raddatz.veyq.mobile.depot.DropBoxes.Created =
         createDropBox(folder.scopeId, folder.nodeId, name, password, expiresAt)
 
+    /** Who uploaded [file]'s content (Depot's `uploaderOf`); null where nobody is to be named. */
+    suspend fun uploader(file: me.raddatz.veyq.mobile.depot.DepotFiles.File): me.raddatz.veyq.mobile.depot.Uploaders.Uploader? {
+        val t = tenantSession ?: return null
+        return runCatching { me.raddatz.veyq.mobile.depot.Uploaders.of(t, file) }.getOrNull()
+    }
+
     /** "Add files only" at [parentId] of [scopeId] (null: the space's top level, the web's level share): a drop box there with its first link. */
     suspend fun createDropBox(scopeId: String, parentId: String?, name: String, password: String, expiresAt: String?): me.raddatz.veyq.mobile.depot.DropBoxes.Created {
         val t = tenantSession ?: return me.raddatz.veyq.mobile.depot.DropBoxes.Created(me.raddatz.veyq.mobile.depot.DropBoxes.Outcome.FAILED)

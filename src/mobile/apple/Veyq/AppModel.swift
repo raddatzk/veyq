@@ -875,6 +875,18 @@ final class AppModel {
     }
 
     /// What a file's page shows (core's `FileView`): its first frame read and decided by its bytes, then what that needs.
+    /// Who uploaded `f`'s content (Depot's `uploaderOf`), as its page names it; nil where nobody is to be named.
+    func uploaderText(_ f: DepotFiles.File) async -> String? {
+        guard let t = tenantSession, let u = try? await Uploaders.shared.of(tenant: t, file: f) else { return nil }
+        let who: String
+        switch u.kind {
+        case .member: who = u.name ?? ""
+        case .former: who = String(localized: "former member")
+        default: who = u.name.map { String(localized: "\($0) (guest)") } ?? String(localized: "a guest")
+        }
+        return String(localized: "Uploaded by \(who)")
+    }
+
     func fileView(_ f: DepotFiles.File, nodeName: String) async -> FileShown {
         guard let t = tenantSession, let v = try? await AppleDepot.shared.view(tenant: t, file: f, nodeName: nodeName) else { return .failed }
         let d = v.decision

@@ -22,6 +22,7 @@ struct FileScreen: View {
     @Bindable var model: AppModel
     let ref: ObjectRef
     @State private var shown: FileShown = .loading
+    @State private var uploader: String?
 
     private var file: DepotFiles.File? { model.files[ref.nodeId] }
 
@@ -29,6 +30,8 @@ struct FileScreen: View {
         VStack(alignment: .leading, spacing: 12) {
             if let file, file.hasContent {
                 Text(model.fileFacts(file)).font(.footnote).foregroundStyle(Role.muted)
+                // who uploaded it (Depot's header fact): a member by name, one who left, a guest by the name it gave itself
+                if let uploader { Text(uploader).font(.footnote).foregroundStyle(Role.muted) }
             }
             Group {
                 if let file, !file.hasContent {
@@ -59,6 +62,7 @@ struct FileScreen: View {
         .navigationTitle(ref.name)
         .task(id: file?.blobId) {
             guard let file, file.hasContent else { return }
+            uploader = await model.uploaderText(file)
             shown = await model.fileView(file, nodeName: ref.name)
         }
         .onDisappear { Self.clean(shown) }

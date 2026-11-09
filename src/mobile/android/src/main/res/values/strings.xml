@@ -319,6 +319,9 @@
     <string name="move_refused_scope_deleting">This space is being deleted; nothing can be moved.</string>
     <string name="move_refused_failed">Moving didn’t work. Please try again.</string>
     <!-- A Pot's guest links (the web's expenses.share and sharing). -->
+    <string name="depot_uploaded_by">Uploaded by %1$s</string>
+    <string name="depot_guest_name">%1$s (guest)</string>
+    <string name="depot_a_guest">a guest</string>
     <string name="depot_not_uploaded">Not uploaded yet</string>
     <string name="depot_modified">Modified %1$s</string>
     <string name="depot_upload">Upload files</string>

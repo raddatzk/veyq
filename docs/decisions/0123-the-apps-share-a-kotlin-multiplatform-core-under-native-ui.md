@@ -367,7 +367,11 @@ implementation exists but what holds it to the first.
   holding a drop box with two guests' folders and a moved-out guest's folder, four files in all, downloaded and copied by
   `FolderLiveTest` with every file of the copy at its place to the original's SHA-256, the web importing that archive and
   reading the copy, the drop box there an ordinary folder; a file copied from Android's file page as "guest-b.txt (2)", which
-  the web opens). Not built yet: a folder upload, the uploader on a file's page.
+  the web opens). A file's page names who uploaded its content as the web's `uploader.ts` does (`depot/Uploaders.kt`): a
+  member of its space by name, one who left as a former member, a link's guest by the guest's folder it lies in, marked as
+  a guest's, else "a guest" (measured 2026-11-09 on Android against the web's page: "Kevin Raddatz", "Clara (guest)" in a
+  drop box, "a guest" in a guest's folder moved out). Not built yet: a folder upload, a READ_WRITE guest's own sealed name
+  as an uploader (said as "a guest").
 - **One header for every node, drawn by core** (the web's `NodePage` + `NodeHeader`, ADR 0110 decision 10; owner
   2026-11-09): what a node's header offers and where is core's `navigation/NodeHeader.kt` — core's actions around the
   application's (the heart before them, the copy beside the move, cover, download and report after), the kind's
