@@ -385,4 +385,7 @@
     <string name="share_password_keep">•••••••• (unverändert)</string>
     <string name="share_password_lost">Sein Passwort lässt sich hier nicht mehr lesen, darum kann er nicht erneuert werden, ohne es zu verlieren.</string>
     <string name="share_gone">Dieser Link wurde bereits erneuert oder gelöscht — die Liste zeigt jetzt die aktuellen Links.</string>
+    <string name="node_download">Herunterladen</string>
+    <string name="download_done">„%1$s“ ist heruntergeladen.</string>
+    <string name="download_failed">„%1$s“ konnte nicht heruntergeladen werden. Bitte versuche es noch einmal.</string>
 </resources>

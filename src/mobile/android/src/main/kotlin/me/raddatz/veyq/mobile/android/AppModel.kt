@@ -744,6 +744,22 @@ class AppModel(app: Application) : AndroidViewModel(app) {
         potSession?.let { runCatching { it.rateFor(currency, java.time.LocalDate.now().toString()) }.getOrNull() }
 
     /** A receipt of the open Pot opened to its bytes, or null (blocked, or it did not read). */
+    /**
+     * Downloads the open Pot [ref] into [out] as the web's ZIP (uc.platform.export-import, ADR 0082): its settings, people and
+     * live entries, each receipt, and a CSV of the entries. False when it did not complete; [out] is closed either way.
+     */
+    suspend fun downloadPot(ref: ObjectRef, out: java.io.OutputStream): Boolean = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+        val session = potSession?.takeIf { _pot.value?.ref == ref }
+        val deleted = getApplication<Application>().getString(R.string.pot_deleted_person)
+        val done = session != null && runCatching {
+            out.buffered(1 shl 16).let { b ->
+                me.raddatz.veyq.mobile.expenses.PotExport.download(session, deleted, System.currentTimeMillis()) { b.write(it) }.also { b.flush() }
+            } != null
+        }.getOrDefault(false)
+        runCatching { out.close() }
+        done
+    }
+
     suspend fun openReceipt(receiptId: String): ByteArray? = potSession?.let { runCatching { it.openReceipt(receiptId) }.getOrNull() }
 
     /** The receipts the last save left out for want of room (the entry was saved). */

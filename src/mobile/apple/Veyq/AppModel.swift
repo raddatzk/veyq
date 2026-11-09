@@ -878,6 +878,19 @@ final class AppModel {
     }
 
     /// A receipt of the open Pot opened to its bytes, or nil (blocked, or it did not read).
+    /// Downloads the open Pot `ref` as the web's ZIP (uc.platform.export-import, ADR 0082) into a file of its own in the
+    /// temporary directory, named as the web names it, for the system's save sheet; nil when it did not complete.
+    func downloadPot(_ ref: ObjectRef) async -> URL? {
+        guard let session = potSession, pot?.ref == ref else { return nil }
+        let dir = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
+        guard (try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)) != nil else { return nil }
+        let url = dir.appendingPathComponent(NodeExport.shared.fileName(name: ref.name))
+        let written = try? await FileDownloads.shared.pot(
+            session: session, deletedName: String(localized: "deleted person"), nowMs: Int64(Date().timeIntervalSince1970 * 1000), path: url.path
+        )
+        return written == nil ? nil : url
+    }
+
     func openReceipt(_ receiptId: String) async -> Data? {
         guard let session = potSession else { return nil }
         return (try? await AppleSessions.shared.openReceipt(pot: session, receiptId: receiptId)) ?? nil

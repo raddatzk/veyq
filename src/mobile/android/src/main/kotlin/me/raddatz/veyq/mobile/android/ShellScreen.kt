@@ -651,6 +651,21 @@ private fun PotHeaderActions(open: ObjectRef, model: AppModel, snackbar: android
         me.raddatz.veyq.mobile.session.NodeTrash.Deleted.SCOPE_DELETING to stringResource(R.string.delete_refused_scope_deleting),
         me.raddatz.veyq.mobile.session.NodeTrash.Deleted.FAILED to stringResource(R.string.delete_refused_failed),
     )
+    // The download goes where the person picks (the system's "create document"), streamed there as it is written.
+    val downloadFailed = stringResource(R.string.download_failed, open.name)
+    val downloaded = stringResource(R.string.download_done, open.name)
+    val saveTo = androidx.activity.compose.rememberLauncherForActivityResult(
+        androidx.activity.result.contract.ActivityResultContracts.CreateDocument("application/zip"),
+    ) { uri ->
+        if (uri == null) return@rememberLauncherForActivityResult
+        scope.launch {
+            val out = runCatching { context.contentResolver.openOutputStream(uri) }.getOrNull()
+            val ok = out != null && model.downloadPot(open, out)
+            // a half archive is no download: the document goes again
+            if (!ok) runCatching { android.provider.DocumentsContract.deleteDocument(context.contentResolver, uri) }
+            snackbar.showSnackbar(if (ok) downloaded else downloadFailed)
+        }
+    }
     // The heart turns at once (the web's optimistic toggle) and turns back when the write did not land.
     var pinned by androidx.compose.runtime.remember(open) { androidx.compose.runtime.mutableStateOf(model.isFavorite(open)) }
     NodeHeaderActions(
@@ -677,6 +692,7 @@ private fun PotHeaderActions(open: ObjectRef, model: AppModel, snackbar: android
             problem
         },
         onMove = { moving = true },
+        onDownload = { saveTo.launch(me.raddatz.veyq.mobile.export.NodeExport.fileName(open.name)) },
         onReport = if (reportOffered) ({ reporting = true }) else null,
         onDelete = {
             scope.launch {

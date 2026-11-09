@@ -16,6 +16,21 @@ struct PotHeaderActions: View {
     @State private var moving = false
     @State private var sharing = false
     @State private var reporting = false
+    @State private var downloading = false
+    @State private var downloaded: URL?
+
+    /// The web's ZIP of the Pot, written to a temporary file, then offered to the system's save sheet.
+    private func download() async {
+        downloading = true
+        let url = await model.downloadPot(ref)
+        downloading = false
+        if let url { downloaded = url } else { failed = String(localized: "“\(ref.name)” could not be downloaded. Please try again.") }
+    }
+
+    private func cleanUpDownload() {
+        if let url = downloaded { try? FileManager.default.removeItem(at: url.deletingLastPathComponent()) }
+        downloaded = nil
+    }
 
     var body: some View {
         HStack {
@@ -42,6 +57,8 @@ struct PotHeaderActions: View {
                 // The rename first, the delete last and destructive (`splitRowActions`).
                 Button("Rename", systemImage: "pencil") { newName = ref.name; renameProblem = nil; renaming = true }
                 Button("Move to…", systemImage: "folder") { moving = true }
+                Button("Download", systemImage: "arrow.down.circle") { Task { await download() } }
+                    .disabled(downloading)
                 // the menu-only group, after a separator: report, then delete (`splitRowActions`)
                 Divider()
                 if model.reportOffered {
@@ -49,7 +66,7 @@ struct PotHeaderActions: View {
                 }
                 Button("Delete Pot", systemImage: "trash", role: .destructive) { asking = true }
             } label: {
-                Image(systemName: "ellipsis.circle")
+                if downloading { ProgressView() } else { Image(systemName: "ellipsis.circle") }
             }
             .accessibilityLabel("More")
         }
@@ -57,6 +74,10 @@ struct PotHeaderActions: View {
         .sheet(isPresented: $moving) { NodeMoveSheet(model: model, ref: ref) }
         .sheet(isPresented: $sharing) { PotShareSheet(model: model, ref: ref) }
         .sheet(isPresented: $reporting) { ReportSheet(model: model, ref: ref) }
+        // The system's save sheet takes the written file where the person picks; the temporary copy goes either way.
+        .fileMover(isPresented: Binding(get: { downloaded != nil }, set: { if !$0 { cleanUpDownload() } }), file: downloaded) { _ in
+            cleanUpDownload()
+        }
         .alert("Delete Pot", isPresented: $asking) {
             Button("Delete", role: .destructive) { Task { await model.trash(ref) } }
             Button("Cancel", role: .cancel) {}

@@ -387,4 +387,7 @@
     <string name="share_password_keep">•••••••• (unchanged)</string>
     <string name="share_password_lost">Its password cannot be read here any more, so it cannot be renewed without losing it.</string>
     <string name="share_gone">This link was already renewed or deleted — the list now shows the current links.</string>
+    <string name="node_download">Download</string>
+    <string name="download_done">“%1$s” is downloaded.</string>
+    <string name="download_failed">“%1$s” could not be downloaded. Please try again.</string>
 </resources>

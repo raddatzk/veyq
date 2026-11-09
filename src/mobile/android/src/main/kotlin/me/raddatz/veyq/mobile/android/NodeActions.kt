@@ -43,6 +43,8 @@ internal fun NodeHeaderActions(
     onMove: (() -> Unit)? = null,
     /** Report (menu-only, before the delete: the web's menu-only group); null: not offered. */
     onReport: (() -> Unit)? = null,
+    /** "Download" (the web's ZIP of the node), after the move; null: not offered. */
+    onDownload: (() -> Unit)? = null,
 ) {
     var menu by remember { mutableStateOf(false) }
     var asking by remember { mutableStateOf(false) }
@@ -54,7 +56,7 @@ internal fun NodeHeaderActions(
             else Icon(Icons.Outlined.FavoriteBorder, stringResource(R.string.node_favorite))
         }
     }
-    if (canRename || canDelete || onMove != null || onReport != null) {
+    if (canRename || canDelete || onMove != null || onReport != null || onDownload != null) {
         IconButton(onClick = { menu = true }) { Icon(Icons.Outlined.MoreVert, stringResource(R.string.node_more)) }
         DropdownMenu(menu, { menu = false }) {
             // The rename first, the delete last and in the danger role (`splitRowActions`).
@@ -70,6 +72,13 @@ internal fun NodeHeaderActions(
                 onClick = {
                     menu = false
                     onMove()
+                },
+            )
+            if (onDownload != null) DropdownMenuItem(
+                text = { Text(stringResource(R.string.node_download)) },
+                onClick = {
+                    menu = false
+                    onDownload()
                 },
             )
             if (onReport != null) DropdownMenuItem(
