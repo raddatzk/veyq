@@ -310,6 +310,41 @@ private struct LinkRow: View {
     }
 }
 
+/// The share of a space's top level (the web's `LevelView` `share(null, …)`): no link roots there, so it offers "Add files
+/// only" alone — a drop box at the top, named as typed, with its first link (Depot's `folderUploadShare`), shown once.
+struct TopLevelUploadSheet: View {
+    let model: AppModel
+    let scopeId: String
+    @Environment(\.dismiss) private var dismiss
+    @State private var fresh: String?
+
+    var body: some View {
+        NavigationStack {
+            Group {
+                if let fresh {
+                    FreshLinkView(url: fresh) { dismiss() }
+                } else {
+                    NewLinkForm(rules: model.linkRules(), words: ShareWords.of("FOLDER"), uploadOnly: true, onCancel: { dismiss() }) { _, label, password, expiresAt in
+                        let made = await model.createDropBox(scopeId: scopeId, parentId: nil, name: label, password: password ?? "", expiresAt: expiresAt)
+                        switch made.outcome {
+                        case .created:
+                            fresh = made.url
+                            return nil
+                        case .nameTaken: return String(localized: "Something with a similar name already exists here.")
+                        case .linkFailed: return String(localized: "The drop box is made, but its link was not. Open the drop box to make one.")
+                        default: return String(localized: "That didn’t work — please try again.")
+                        }
+                    }
+                }
+            }
+            .navigationTitle("Add files only")
+            #if os(iOS)
+            .navigationBarTitleDisplayMode(.inline)
+            #endif
+        }
+    }
+}
+
 /// The link just minted, shown once: copied, or handed to another app.
 private struct FreshLinkView: View {
     let url: String
@@ -343,6 +378,8 @@ private struct NewLinkForm: View {
     var writeOnly = false
     /// A folder's third role, "Add files only" (Depot's `folderUploadShare`): it makes a drop box with the name typed.
     var uploadOffered = false
+    /// That role alone (the space's top level, where no link roots): no role to pick.
+    var uploadOnly = false
     let onCancel: () -> Void
     /// role, label, password (nil: untouched, blank: none), end; answers why not, or nil once done.
     let onCreate: (String, String, String?, String?) async -> String?
@@ -368,7 +405,7 @@ private struct NewLinkForm: View {
     var body: some View {
         Form {
             Section {
-                if !writeOnly {
+                if !writeOnly && !uploadOnly {
                     Picker("Role", selection: $role) {
                         Text("View only").tag(ShareLinks.shared.READ)
                         if rules.contribute { Text(words.contributor).tag(ShareLinks.shared.READ_WRITE) }
@@ -430,7 +467,7 @@ private struct NewLinkForm: View {
             }
         }
         .onAppear {
-            if writeOnly { role = ShareLinks.shared.WRITE_ONLY }
+            if writeOnly || uploadOnly { role = ShareLinks.shared.WRITE_ONLY }
             if let editing {
                 role = editing.role
                 label = editing.label

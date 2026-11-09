@@ -334,6 +334,34 @@ private fun LinkRow(
     }
 }
 
+/**
+ * The share of a space's top level (the web's `LevelView` `share(null, …)`): no link roots there, so it offers "Add files
+ * only" alone — a drop box at the top, named as typed, with its first link (Depot's `folderUploadShare`), shown once.
+ */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+internal fun TopLevelUploadSheet(scopeId: String, model: AppModel, onClose: () -> Unit) {
+    val context = LocalContext.current
+    var fresh by remember { mutableStateOf<String?>(null) }
+    ModalBottomSheet(onDismissRequest = onClose, sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)) {
+        Column(Modifier.padding(horizontal = 20.dp).padding(bottom = 24.dp).verticalScroll(rememberScrollState())) {
+            Text(stringResource(R.string.share_role_uploader), style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+            Spacer(Modifier.padding(8.dp))
+            val made = fresh
+            if (made != null) FreshLink(made, onClose)
+            else NewLinkForm(model.linkRules(), shareWords("FOLDER"), onCancel = onClose, uploadOnly = true) { _, label, password, expiresAt ->
+                val r = model.createDropBox(scopeId, null, label, password.orEmpty(), expiresAt)
+                when (r.outcome) {
+                    me.raddatz.veyq.mobile.depot.DropBoxes.Outcome.CREATED -> { fresh = r.url; null }
+                    me.raddatz.veyq.mobile.depot.DropBoxes.Outcome.NAME_TAKEN -> context.getString(R.string.node_slug_taken)
+                    me.raddatz.veyq.mobile.depot.DropBoxes.Outcome.LINK_FAILED -> context.getString(R.string.dropbox_link_failed)
+                    else -> context.getString(R.string.share_failed)
+                }
+            }
+        }
+    }
+}
+
 /** The link just minted, shown once: copied, or handed to another app. */
 @Composable
 private fun FreshLink(url: String, onDone: () -> Unit) {
@@ -364,6 +392,8 @@ private fun NewLinkForm(
     writeOnly: Boolean = false,
     /** A folder's third role, "Add files only" (Depot's `folderUploadShare`): it makes a drop box with the name typed. */
     uploadOffered: Boolean = false,
+    /** That role alone (the space's top level, where no link roots): no role to pick. */
+    uploadOnly: Boolean = false,
     /** The link an edit changes (its settings fill the form; a password left blank stays as it is); null mints a new one. */
     editing: ShareLinks.Link? = null,
     /** role, label, password (null: untouched, blank: none), end; answers why not, or null once done. */
@@ -371,7 +401,7 @@ private fun NewLinkForm(
 ) {
     val palette = LocalPalette.current
     val scope = rememberCoroutineScope()
-    var role by remember { mutableStateOf(if (writeOnly) ShareLinks.WRITE_ONLY else editing?.role ?: ShareLinks.READ) }
+    var role by remember { mutableStateOf(if (writeOnly || uploadOnly) ShareLinks.WRITE_ONLY else editing?.role ?: ShareLinks.READ) }
     var label by remember { mutableStateOf(editing?.label.orEmpty()) }
     val hadPassword = editing?.passwordRequired == true
     var withPassword by remember { mutableStateOf(rules.passwordRequired || hadPassword) }
@@ -384,7 +414,7 @@ private fun NewLinkForm(
     var problem by remember { mutableStateOf<String?>(null) }
     var saving by remember { mutableStateOf(false) }
 
-    if (!writeOnly) Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+    if (!writeOnly && !uploadOnly) Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
         FilterChip(selected = role == ShareLinks.READ, onClick = { role = ShareLinks.READ }, label = { Text(stringResource(R.string.share_role_viewer)) })
         if (rules.contribute) FilterChip(
             selected = role == ShareLinks.READ_WRITE, onClick = { role = ShareLinks.READ_WRITE },

@@ -218,6 +218,8 @@ struct Bar: View {
 
     /// The space whose trash is open.
     @State private var trashOf: TrashOf?
+    /// The space whose top level's "Add files only" share is open.
+    @State private var uploadShareOf: TrashOf?
 
     var body: some View {
         TabView(selection: selection) {
@@ -231,6 +233,7 @@ struct Bar: View {
             }
         }
         .sheet(item: $trashOf) { SpaceTrashSheet(model: model, scopeId: $0.scopeId) }
+        .sheet(item: $uploadShareOf) { TopLevelUploadSheet(model: model, scopeId: $0.scopeId) }
         // what the model says once (an upload's refusal, its "Replace anyway")
         .alert(model.notice?.text ?? "", isPresented: Binding(get: { model.notice != nil }, set: { if !$0 { model.notice = nil } }), presenting: model.notice) { n in
             if let action = n.action, let run = n.run {
@@ -291,9 +294,16 @@ struct Bar: View {
             if let ref = model.shell.openObject, let contribution = KindPage.of(ref.kind)?.header(ref.at, model) {
                 NodeHeaderActions(model: model, node: ref.at, contribution: contribution).id(ref.nodeId)
             } else if model.shell.openObject == nil, model.shell.application == nil, !model.shell.searching, let space = model.shell.space {
-                // The space's trash, from its Home (the web's level toolbar): every application's nodes.
-                Button { trashOf = TrashOf(scopeId: space) } label: { Image(systemName: "trash") }
-                    .accessibilityLabel("Trash")
+                HStack {
+                    // the top level is no link's root: its share offers "Add files only" alone (the web's level share)
+                    if model.shell.folderAt(scopeId: space) == nil, model.linkRules().on, model.linkRules().dropBox {
+                        Button { uploadShareOf = TrashOf(scopeId: space) } label: { Image(systemName: "square.and.arrow.up") }
+                            .accessibilityLabel("Add files only")
+                    }
+                    // The space's trash, from its Home (the web's level toolbar): every application's nodes.
+                    Button { trashOf = TrashOf(scopeId: space) } label: { Image(systemName: "trash") }
+                        .accessibilityLabel("Trash")
+                }
             }
         }
     }

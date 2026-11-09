@@ -814,8 +814,13 @@ final class AppModel {
     /// "Add files only" on folder `folder`: a drop box named `name` in it with its first link (`DropBoxes.create`); the lists
     /// are read anew.
     func createDropBox(_ folder: NodeAt, name: String, password: String, expiresAt: String?) async -> DropBoxes.Created {
+        await createDropBox(scopeId: folder.scopeId, parentId: folder.nodeId, name: name, password: password, expiresAt: expiresAt)
+    }
+
+    /// "Add files only" at `parentId` of `scopeId` (nil: the space's top level, the web's level share).
+    func createDropBox(scopeId: String, parentId: String?, name: String, password: String, expiresAt: String?) async -> DropBoxes.Created {
         guard let t = tenantSession else { return DropBoxes.Created(outcome: .failed, nodeId: nil, url: nil, minted: nil) }
-        let r = (try? await DropBoxes.shared.create(tenant: t, scopeId: folder.scopeId, parentId: folder.nodeId, name: name, password: password, expiresAt: expiresAt))
+        let r = (try? await DropBoxes.shared.create(tenant: t, scopeId: scopeId, parentId: parentId, name: name, password: password, expiresAt: expiresAt))
             ?? DropBoxes.Created(outcome: .failed, nodeId: nil, url: nil, minted: nil)
         await refreshLists(t)
         return r

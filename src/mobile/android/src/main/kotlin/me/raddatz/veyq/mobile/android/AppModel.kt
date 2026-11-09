@@ -772,9 +772,13 @@ class AppModel(app: Application) : AndroidViewModel(app) {
      * "Add files only" on folder [folder]: a drop box named [name] in it with its first link (`DropBoxes.create`); the lists
      * are read anew.
      */
-    suspend fun createDropBox(folder: me.raddatz.veyq.mobile.navigation.NodeAt, name: String, password: String, expiresAt: String?): me.raddatz.veyq.mobile.depot.DropBoxes.Created {
+    suspend fun createDropBox(folder: me.raddatz.veyq.mobile.navigation.NodeAt, name: String, password: String, expiresAt: String?): me.raddatz.veyq.mobile.depot.DropBoxes.Created =
+        createDropBox(folder.scopeId, folder.nodeId, name, password, expiresAt)
+
+    /** "Add files only" at [parentId] of [scopeId] (null: the space's top level, the web's level share): a drop box there with its first link. */
+    suspend fun createDropBox(scopeId: String, parentId: String?, name: String, password: String, expiresAt: String?): me.raddatz.veyq.mobile.depot.DropBoxes.Created {
         val t = tenantSession ?: return me.raddatz.veyq.mobile.depot.DropBoxes.Created(me.raddatz.veyq.mobile.depot.DropBoxes.Outcome.FAILED)
-        val r = runCatching { me.raddatz.veyq.mobile.depot.DropBoxes.create(t, folder.scopeId, folder.nodeId, name, password, expiresAt) }
+        val r = runCatching { me.raddatz.veyq.mobile.depot.DropBoxes.create(t, scopeId, parentId, name, password, expiresAt) }
             .getOrDefault(me.raddatz.veyq.mobile.depot.DropBoxes.Created(me.raddatz.veyq.mobile.depot.DropBoxes.Outcome.FAILED))
         refreshLists(t)
         return r

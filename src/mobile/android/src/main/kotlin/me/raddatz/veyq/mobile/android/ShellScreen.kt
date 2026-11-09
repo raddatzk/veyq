@@ -113,6 +113,7 @@ fun ShellScreen(s: Screen.Signed, model: AppModel) {
     val palette = LocalPalette.current
     /** The space whose trash is open. */
     var trashOf by remember { mutableStateOf<String?>(null) }
+    var uploadShareAt by remember { mutableStateOf<String?>(null) }
     fun closeDrawerThen(f: () -> Unit) { f(); scope.launch { drawer.close() } }
 
     // what the model says (an upload's refusal, its "Replace anyway"): one snackbar each
@@ -205,6 +206,11 @@ fun ShellScreen(s: Screen.Signed, model: AppModel) {
                             // The space's trash, from its Home (the web's level toolbar): every application's nodes.
                             val open = shell.openObject
                             if (open == null && shell.application == null && !shell.searching && space != null) {
+                                // the top level is no link's root: its share offers "Add files only" alone (the web's level share)
+                                val rules = model.linkRules()
+                                if (shell.folder == null && rules.on && rules.dropBox) {
+                                    IconButton(onClick = { uploadShareAt = space }) { Icon(Icons.Outlined.Share, stringResource(R.string.share_role_uploader)) }
+                                }
                                 IconButton(onClick = { trashOf = space }) { Icon(Icons.Outlined.Delete, stringResource(R.string.trash_title)) }
                             }
                         },
@@ -276,6 +282,7 @@ fun ShellScreen(s: Screen.Signed, model: AppModel) {
             }
         }
         trashOf?.let { SpaceTrashSheet(it, model) { trashOf = null } }
+        uploadShareAt?.let { TopLevelUploadSheet(it, model) { uploadShareAt = null } }
     }
     }
 }

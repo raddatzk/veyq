@@ -352,7 +352,9 @@ implementation exists but what holds it to the first.
   `NodeMoveTest`); in a guest's folder the header narrows as the web's `nodeRights`/`folderRights` do (no link, rename,
   cover or folder delete, `NodeHeader.inIdentityFolder`) and the level has no "New" (measured 2026-11-09: a guest's folder
   moved out on Android, the web then listing it as an ordinary folder whose file opens, the drop box one person fewer).
-  Not built yet: the space's top level's "Add files only", a file's copy and its place in a folder's download (both
+  The space's top level, no link's root, offers "Add files only" alone through a share in its bar (the web's level share): a
+  drop box at the top with its first link (measured 2026-11-09: made so on Android, a web guest dropping through it and
+  the web's member page opening their folder). Not built yet: a file's copy and its place in a folder's download (both
   left out and said), a folder upload, the uploader on a file's page.
 - **One header for every node, drawn by core** (the web's `NodePage` + `NodeHeader`, ADR 0110 decision 10; owner
   2026-11-09): what a node's header offers and where is core's `navigation/NodeHeader.kt` — core's actions around the
