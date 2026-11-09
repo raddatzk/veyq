@@ -254,31 +254,41 @@ class ApplicationBlobs(private val tenant: TenantSession) {
     internal suspend fun framesTo(
         scopeId: String, blobId: String, chunkCount: Int, key: ByteArray, first: Int = 0, until: Int = chunkCount,
         sink: suspend (ByteArray) -> Unit,
-    ) {
-        val b = object { val blobId = blobId; val chunkCount = chunkCount }
-        var urls = presignGets(scopeId, b.blobId)
-        var resigned = 0
-        for (i in first until minOf(until, b.chunkCount)) {
-            var tries = 0
-            var backoff = 250L
-            while (true) {
-                val (status, frame) = account.getFromStore(urls[i])
-                if (frame != null) {
-                    sink(suite.openFrame(key, i, b.chunkCount, frame))
-                    break
+    ) = FrameSource(scopeId, blobId, chunkCount, key).read(first, until, sink)
+
+    /**
+     * A blob's frames read by index under [key], as often as asked (a player seeking through a video): its presigned GETs are
+     * signed once and kept, and signed again when the store refuses one (they lapse). A network failure, a 5xx, 408 or 429
+     * is tried again (at most 4 times, backing off); a 403 signs again (twice per read at most).
+     */
+    internal inner class FrameSource(private val scopeId: String, private val blobId: String, val chunkCount: Int, private val key: ByteArray) {
+        private var urls: List<String>? = null
+
+        suspend fun read(first: Int, until: Int, sink: suspend (ByteArray) -> Unit) {
+            var resigned = 0
+            for (i in first until minOf(until, chunkCount)) {
+                var tries = 0
+                var backoff = 250L
+                while (true) {
+                    val signed = urls ?: presignGets(scopeId, blobId).also { urls = it }
+                    val (status, frame) = account.getFromStore(signed[i])
+                    if (frame != null) {
+                        sink(suite.openFrame(key, i, chunkCount, frame))
+                        break
+                    }
+                    if (status == 403 && resigned < 2) {
+                        resigned++
+                        urls = null
+                        continue
+                    }
+                    if ((status == 0 || status >= 500 || status == 408 || status == 429) && tries < 4) {
+                        tries++
+                        delay(backoff)
+                        backoff = minOf(backoff * 2, 4_000)
+                        continue
+                    }
+                    throw UploadRefused("chunk_get_failed:$status")
                 }
-                if (status == 403 && resigned < 2) {
-                    resigned++
-                    urls = presignGets(scopeId, b.blobId)
-                    continue
-                }
-                if ((status == 0 || status >= 500 || status == 408 || status == 429) && tries < 4) {
-                    tries++
-                    delay(backoff)
-                    backoff = minOf(backoff * 2, 4_000)
-                    continue
-                }
-                throw UploadRefused("chunk_get_failed:$status")
             }
         }
     }

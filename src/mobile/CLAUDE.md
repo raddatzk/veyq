@@ -35,7 +35,7 @@ A Gradle build of its own, run through its own wrapper.
   `Money.kt` changes only with the case that pins it; so does one of `expenses/PotWrites.kt` and `LedgerCheck.kt`
   (`PotWritesTest`, over real seals), of `EntryForm.kt` (`EntryFormTest`, over the vectors), of `ExchangeRates.kt` (`ExchangeRatesTest`), of `Receipts.kt` and core's `blob/Sniff.kt` (`ReceiptsTest`), of `PotShare.kt` (`PotShareTest`), of core's `session/LivePoll.kt` (`LivePollTest`, on virtual time), of core's `session/MemberAvatars.kt` (`MemberAvatarsTest`) and `session/ShareNames.kt` (`ShareNamesTest`), of `PotView.kt`'s people, balances and entries (`PotViewPeopleTest`, `PotViewEntriesTest`), of core's `session/NodeEpochWrite.kt` and `session/NodeMetaWrite.kt` (`NodeEpochWriteTest`, `NodeMetaWriteTest`), of
   core's `session/NodeMove.kt` browser rules, a guest's folder's included (`NodeMoveTest`), of `navigation/NodeHeader.kt`'s plan and
-  its narrowing in a guest's folder (`NodeHeaderTest`), of core's `session/CoverFrame.kt` (`CoverFrameTest`), of core's `export/NodeExport.kt` archive (`FolderExportTest`, `ZipTest`) and its streamed `export/Sha256.kt` (`Sha256Test`), of Depot's `depot/FolderUpload.kt` plan (`FolderUploadTest`), of Memories' `memories/MemoryMedia.kt` listed tier and order (`MemoryMediaTest`), of Depot's `depot/FileView.kt` and core's
+  its narrowing in a guest's folder (`NodeHeaderTest`), of core's `session/CoverFrame.kt` (`CoverFrameTest`), of core's `export/NodeExport.kt` archive (`FolderExportTest`, `ZipTest`) and its streamed `export/Sha256.kt` (`Sha256Test`), of Depot's `depot/FolderUpload.kt` plan (`FolderUploadTest`), of Memories' `memories/MemoryMedia.kt` listed tier and order (`MemoryMediaTest`) and `memories/MediaDetails.kt` (`MediaDetailsTest`), of core's `blob/RangeReader.kt` (`RangeReaderTest`), of Depot's `depot/FileView.kt` and core's
   `blob/Sniff.kt` and `blob/DownloadName.kt` (`FileViewTest`), and of core's `session/NodeRekey.kt` frontier and what it
   leaves to another device (`NodeRekeyRulesTest`).
 - `VEYQ_LIVE=http://veyq.localhost:8080 ./gradlew :core:jvmTest :core:macosArm64Test --tests '*LiveSignInTest*'` —
@@ -105,7 +105,9 @@ A Gradle build of its own, run through its own wrapper.
   most 600) holds it first, for an app's copy dialog. A run stopped by force leaves the one byte set: the next run takes a
   quota of exactly one byte for its own leftover and clears it.
   `VEYQ_LIVE_MEMORY=<memory name>` (`--tests '*MemoryLiveTest*'`) reads that Memory's gallery the web filled — every row's
-  listed tier and original meta, each tile and preview (a JPEG where the web derived one) with its size and SHA-256 —;
+  listed tier and original meta, each tile and preview (a JPEG where the web derived one) with its size and SHA-256, its
+  details with the EXIF tier, and its original read whole and through the range reader backwards in uneven pieces, the
+  same bytes (a video longer than one frame proves the reader: `ffmpeg` makes one, the web's gallery uploads it) —;
   `*` lists every Memory and chapter with its count instead.
   `VEYQ_LIVE_DROPBOX="<root folder>/<drop box>"` (`--tests '*DropBoxLiveTest*'`) opens a drop box the web made
   and its guests filled (the web's folder share dialog, "Add files only", then its link in a private window), lists each
@@ -192,6 +194,10 @@ first in each of its scrolls — `LocalNodeHero.current(inset)` (Android) / `Nod
   one: written in the `@MainActor` model it is inferred main-actor isolated, and Swift 6 traps on the first call from
   elsewhere (`_dispatch_assert_queue_fail`, measured 2026-11-09: the re-key's rekey id). Mark it `@Sendable` and reach
   nothing of the model in it (`AppModel.tokenInputFor` is `nonisolated static` for that).
+- A `SurfaceView` inside a Compose `Dialog` got no surface (measured 2026-11-09, the lightbox's video: the player stayed
+  unprepared, black): draw a player there into a `TextureView`.
+- A value a sheet shows that its presenter loads after the sheet opened did not reach it on iOS (measured 2026-11-09, the
+  lightbox's uploader): the sheet loads what it shows itself, in its own `.task`.
 - The Simulator tool's tap does not reliably flip a SwiftUI `Toggle`: a short swipe across it does (measured
   2026-11-09, the report's good-faith switch). A Compose radio or checkbox row is tapped as the row only once the row
   is `selectable`/`toggleable` (`ReportSheet`): a bare control's label takes no tap, for a person either.

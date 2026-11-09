@@ -14,6 +14,9 @@ object DownloadName {
         "application/pdf" to "pdf", "video/mp4" to "mp4", "video/quicktime" to "mov", "video/webm" to "webm", "video/x-matroska" to "mkv",
     )
 
+    /** The extension core names for [type], or null for one it does not name. */
+    fun extensionOf(type: String?): String? = MIME_TO_EXT[type.orEmpty()]
+
     fun of(type: String?, fallback: String, vararg names: String?): String {
         val base = names.firstNotNullOfOrNull { it?.trim()?.takeIf { n -> n.isNotEmpty() } } ?: fallback
         val ext = MIME_TO_EXT[type.orEmpty()] ?: return base

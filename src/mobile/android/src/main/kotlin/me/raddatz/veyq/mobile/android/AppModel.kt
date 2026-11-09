@@ -881,6 +881,30 @@ class AppModel(app: Application) : AndroidViewModel(app) {
         return picture
     }
 
+    /** [item]'s heavy EXIF tier (`MediaDetails.exif`); null where none was sealed or it could not be read. */
+    suspend fun mediaExif(item: me.raddatz.veyq.mobile.memories.MemoryMedia.Item): me.raddatz.veyq.mobile.memories.MediaDetails.Exif? {
+        val t = tenantSession ?: return null
+        return runCatching { kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) { me.raddatz.veyq.mobile.memories.MediaDetails.exif(t, item) } }.getOrNull()
+    }
+
+    /** Who added each of [items], by owner key (`MediaDetails.uploaders`); empty where it could not be read. */
+    suspend fun mediaUploaders(scopeId: String, items: List<me.raddatz.veyq.mobile.memories.MemoryMedia.Item>): Map<String, me.raddatz.veyq.mobile.memories.MediaDetails.Uploader> {
+        val t = tenantSession ?: return emptyMap()
+        return runCatching { kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) { me.raddatz.veyq.mobile.memories.MediaDetails.uploaders(t, scopeId, items) } }.getOrDefault(emptyMap())
+    }
+
+    /** [item]'s original streamed into [out] a frame at a time; false where it did not read through. */
+    suspend fun downloadMedium(item: me.raddatz.veyq.mobile.memories.MemoryMedia.Item, out: java.io.OutputStream): Boolean {
+        val t = tenantSession ?: return false
+        return kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+            runCatching { me.raddatz.veyq.mobile.memories.MemoryMedia.stream(t, item, item.original) { out.write(it) } }.getOrDefault(false)
+        }
+    }
+
+    /** [item]'s original read at any offset, for a player (`MemoryMedia.reader`); null where it does not open here. */
+    fun mediaReader(item: me.raddatz.veyq.mobile.memories.MemoryMedia.Item): me.raddatz.veyq.mobile.blob.RangeReader? =
+        tenantSession?.let { me.raddatz.veyq.mobile.memories.MemoryMedia.reader(it, item, item.original) }
+
     /** Drop box [nodeId]'s guests' folders with their files (`DropBoxes.folders`); null when they could not be read. */
     suspend fun dropBoxFolders(scopeId: String, nodeId: String): List<me.raddatz.veyq.mobile.depot.DropBoxes.GuestFolder>? {
         val t = tenantSession ?: return null

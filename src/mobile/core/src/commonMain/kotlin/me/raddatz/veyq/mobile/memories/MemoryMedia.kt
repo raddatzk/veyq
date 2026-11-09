@@ -8,6 +8,7 @@ import me.raddatz.veyq.mobile.api.memories.apis.MediaApi
 import me.raddatz.veyq.mobile.api.memories.models.MediaDerivativeKind
 import me.raddatz.veyq.mobile.api.memories.models.MediaSummary
 import me.raddatz.veyq.mobile.blob.ApplicationBlobs
+import me.raddatz.veyq.mobile.blob.RangeReader
 import me.raddatz.veyq.mobile.crypto.BlobMeta
 import me.raddatz.veyq.mobile.crypto.Context
 import me.raddatz.veyq.mobile.crypto.V1
@@ -180,6 +181,17 @@ object MemoryMedia {
         val suite = tenant.account.suite
         val key = openBlobKey(suite, item.scopeId, item.mediaId, item.key, blob, roleOf(item, blob)) ?: return null
         return ApplicationBlobs(tenant).frames(item.scopeId, blob.blobId, blob.chunkCount, key)
+    }
+
+    /**
+     * [blob] read at any offset (a video played as it is read, never held whole): null where its key does not open or it is
+     * blocked. One reader per playback; it keeps the blob's presigned reads and its last frames.
+     */
+    fun reader(tenant: TenantSession, item: Item, blob: Blob): RangeReader? {
+        if (item.blocked) return null
+        val key = openBlobKey(tenant.account.suite, item.scopeId, item.mediaId, item.key, blob, roleOf(item, blob)) ?: return null
+        val source = ApplicationBlobs(tenant).FrameSource(item.scopeId, blob.blobId, blob.chunkCount, key)
+        return RangeReader(blob.size, blob.chunkCount) { first, until, sink -> source.read(first, until, sink) }
     }
 
     /** [blob]'s plaintext handed to [sink] a frame at a time (a download, a video), frames [first] to [until] (exclusive). */

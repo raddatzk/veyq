@@ -695,6 +695,37 @@ final class AppModel {
         return image
     }
 
+    /// `item`'s heavy EXIF tier (`MediaDetails.exif`); nil where none was sealed or it could not be read.
+    func mediaExif(_ item: MemoryMedia.Item) async -> MediaDetails.Exif? {
+        guard let t = tenantSession else { return nil }
+        return try? await MediaDetails.shared.exif(tenant: t, item: item)
+    }
+
+    /// Who added each of `items`, by owner key (`MediaDetails.uploaders`); empty where it could not be read.
+    func mediaUploaders(scopeId: String, items: [MemoryMedia.Item]) async -> [String: MediaDetails.Uploader] {
+        guard let t = tenantSession else { return [:] }
+        return (try? await MediaDetails.shared.uploaders(tenant: t, scopeId: scopeId, items: items)) ?? [:]
+    }
+
+    /// `item`'s original written to a temporary file under `name`, for the system's save sheet; nil where it did not read.
+    func downloadMedium(_ item: MemoryMedia.Item, name: String) async -> URL? {
+        guard let t = tenantSession else { return nil }
+        let dir = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
+        guard (try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)) != nil else { return nil }
+        let url = dir.appendingPathComponent(name)
+        guard (try? await AppleMemories.shared.download(tenant: t, item: item, path: url.path))?.boolValue == true else {
+            try? FileManager.default.removeItem(at: dir)
+            return nil
+        }
+        return url
+    }
+
+    /// `item`'s original read at any offset, for a player (`MemoryMedia.reader`); nil where it does not open here.
+    func mediaReader(_ item: MemoryMedia.Item) -> RangeReader? {
+        guard let t = tenantSession else { return nil }
+        return MemoryMedia.shared.reader(tenant: t, item: item, blob: item.original)
+    }
+
     func scopeNodes(_ scopeId: String) async -> [NodeRef] {
         guard let t = tenantSession else { return [] }
         return ((try? await t.nodes()) ?? []).filter { $0.scopeId == scopeId }

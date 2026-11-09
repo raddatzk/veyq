@@ -518,4 +518,47 @@
         <item quantity="one">%1$d Objekt</item>
         <item quantity="other">%1$d Objekte</item>
     </plurals>
+    <!-- Memories' lightbox: its details (the web's media.* lightbox keys), the download and a video. -->
+    <string name="memory_item_position">%1$d von %2$d</string>
+    <string name="memory_details">Details</string>
+    <string name="memory_close">Schließen</string>
+    <string name="memory_no_detail">Keine Details für dieses Objekt.</string>
+    <string name="memory_download">Original herunterladen</string>
+    <string name="memory_play">Video abspielen</string>
+    <string name="memory_video_failed">Das Video konnte nicht abgespielt werden.</string>
+    <string name="memory_blocked">Dieses Objekt wurde vom Betreiber gesperrt.</string>
+    <string name="memory_field_captured">Aufgenommen</string>
+    <string name="memory_field_file_name">Datei</string>
+    <string name="memory_field_file_size">Größe</string>
+    <string name="memory_field_file_format">Format</string>
+    <string name="memory_field_camera">Kamera</string>
+    <string name="memory_field_lens">Objektiv</string>
+    <string name="memory_field_focal_length">Brennweite</string>
+    <string name="memory_field_focal_length_35">Kleinbild-Äquivalent</string>
+    <string name="memory_field_aperture">Blende</string>
+    <string name="memory_field_exposure">Belichtung</string>
+    <string name="memory_field_exposure_compensation">Belichtungskorrektur</string>
+    <string name="memory_field_iso">ISO</string>
+    <string name="memory_field_flash">Blitz</string>
+    <string name="memory_field_dimensions">Abmessungen</string>
+    <string name="memory_field_title">Titel</string>
+    <string name="memory_field_description">Beschreibung</string>
+    <string name="memory_field_rating">Bewertung</string>
+    <string name="memory_field_software">Software</string>
+    <string name="memory_field_artist">Urheber</string>
+    <string name="memory_field_copyright">Copyright</string>
+    <string name="memory_field_altitude">Höhe</string>
+    <string name="memory_field_direction">Blickrichtung</string>
+    <string name="memory_field_gps_accuracy">Positionsgenauigkeit</string>
+    <string name="memory_field_status">Status</string>
+    <string name="memory_field_place">Ort</string>
+    <string name="memory_field_location">Position</string>
+    <string name="memory_field_uploaded_by">Hinzugefügt von</string>
+    <string name="memory_flash_fired">Ausgelöst</string>
+    <string name="memory_flash_not_fired">Nicht ausgelöst</string>
+    <string name="memory_direction_true">%1$d° (geografisch Nord)</string>
+    <string name="memory_direction_magnetic">%1$d° (magnetisch Nord)</string>
+    <string name="memory_corrected">Korrigiert</string>
+    <string name="memory_uploader_former">Ehemaliges Mitglied</string>
+    <string name="memory_uploader_guest">Ein Gast</string>
 </resources>

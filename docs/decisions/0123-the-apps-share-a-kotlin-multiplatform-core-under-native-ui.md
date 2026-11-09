@@ -400,8 +400,22 @@ implementation exists but what holds it to the first.
   the previews with each medium's name and capture time (measured 2026-11-09: `MemoryMediaTest` — a correction ignored turns
   it red —; `MemoryLiveTest` reading a Memory the web filled with three JPEGs with EXIF time and GPS, a PNG and an MP4 — each
   tile and preview the JPEG the web derived, each time with its source; the same gallery and lightbox on Android and iOS).
-  Not built yet: the live poll, video playback, the original's download and zoom, EXIF, the upload, edits (date, place,
-  participants, capture-time correction, trash), item marks, buckets, the map, sharing, the re-key, export and copy.
+  The lightbox's bar (Material's top app bar, iOS's toolbar) closes, names the place in the gallery, opens the details
+  and saves the original where the person picks (Android's "create document", iOS's save sheet), streamed frame by frame.
+  The details are the web's panel (`memories/MediaDetails.kt`, `MediaDetailsTest`): the capture time and the file's facts
+  from the listing, the camera's from the heavy EXIF tier (`media-exif`, read when the details open), who added it (a
+  member by name, a former member, a guest — a guest's own name is the buckets', not read yet), place and position; a
+  value that reads the same in every language is spelled in core, a date, a size, the flash and the direction by each app.
+  A video plays as it is read, never decrypted whole nor written anywhere (the web's range playback, ADR 0047): core's
+  `blob/RangeReader.kt` (`RangeReaderTest`) serves any byte range from the frames that hold it, reading ahead and holding
+  the last few, over `ApplicationBlobs.FrameSource`, which keeps a blob's presigned reads and signs again when one lapses;
+  Android's `MediaPlayer` reads it through a `MediaDataSource` into a `TextureView` (a `SurfaceView` got no surface inside
+  the lightbox's dialog, measured 2026-11-09), iOS's `AVPlayer` through an `AVAssetResourceLoaderDelegate`, each with the
+  platform's own controls (measured 2026-11-09: `MemoryLiveTest` reading a 25-frame MP4 the web uploaded backwards in
+  uneven ranges to the byte; on both platforms the video played, sought forward into frames not read yet and back, and
+  a downloaded original matched the uploaded file's SHA-256).
+  Not built yet: the live poll, zoom, the slideshow, the upload, edits (date, place, participants, capture-time
+  correction, trash), item marks, buckets, the map, sharing, the re-key, export and copy.
 - **One header for every node, drawn by core** (the web's `NodePage` + `NodeHeader`, ADR 0110 decision 10; owner
   2026-11-09): what a node's header offers and where is core's `navigation/NodeHeader.kt` — core's actions around the
   application's (the heart before them, the copy beside the move, cover, download and report after), the kind's

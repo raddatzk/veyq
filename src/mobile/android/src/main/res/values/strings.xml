@@ -520,4 +520,47 @@
         <item quantity="one">%1$d item</item>
         <item quantity="other">%1$d items</item>
     </plurals>
+    <!-- Memories' lightbox: its details (the web's media.* lightbox keys), the download and a video. -->
+    <string name="memory_item_position">%1$d of %2$d</string>
+    <string name="memory_details">Details</string>
+    <string name="memory_close">Close</string>
+    <string name="memory_no_detail">No details for this item.</string>
+    <string name="memory_download">Download original</string>
+    <string name="memory_play">Play video</string>
+    <string name="memory_video_failed">The video couldn’t be played.</string>
+    <string name="memory_blocked">This item was blocked by the operator.</string>
+    <string name="memory_field_captured">Taken</string>
+    <string name="memory_field_file_name">File</string>
+    <string name="memory_field_file_size">Size</string>
+    <string name="memory_field_file_format">Format</string>
+    <string name="memory_field_camera">Camera</string>
+    <string name="memory_field_lens">Lens</string>
+    <string name="memory_field_focal_length">Focal length</string>
+    <string name="memory_field_focal_length_35">Equivalent</string>
+    <string name="memory_field_aperture">Aperture</string>
+    <string name="memory_field_exposure">Exposure</string>
+    <string name="memory_field_exposure_compensation">Exposure compensation</string>
+    <string name="memory_field_iso">ISO</string>
+    <string name="memory_field_flash">Flash</string>
+    <string name="memory_field_dimensions">Dimensions</string>
+    <string name="memory_field_title">Title</string>
+    <string name="memory_field_description">Description</string>
+    <string name="memory_field_rating">Rating</string>
+    <string name="memory_field_software">Software</string>
+    <string name="memory_field_artist">Author</string>
+    <string name="memory_field_copyright">Copyright</string>
+    <string name="memory_field_altitude">Altitude</string>
+    <string name="memory_field_direction">Direction</string>
+    <string name="memory_field_gps_accuracy">Position accuracy</string>
+    <string name="memory_field_status">Status</string>
+    <string name="memory_field_place">Place</string>
+    <string name="memory_field_location">Location</string>
+    <string name="memory_field_uploaded_by">Added by</string>
+    <string name="memory_flash_fired">Fired</string>
+    <string name="memory_flash_not_fired">Did not fire</string>
+    <string name="memory_direction_true">%1$d° (true north)</string>
+    <string name="memory_direction_magnetic">%1$d° (magnetic north)</string>
+    <string name="memory_corrected">Corrected</string>
+    <string name="memory_uploader_former">Former member</string>
+    <string name="memory_uploader_guest">A guest</string>
 </resources>

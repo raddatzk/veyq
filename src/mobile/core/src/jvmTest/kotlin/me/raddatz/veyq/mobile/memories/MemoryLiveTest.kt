@@ -16,7 +16,9 @@ import kotlin.time.Duration.Companion.minutes
  * A Memory the web made and filled, read on a running dev instance (`VEYQ_LIVE`): `VEYQ_LIVE_MEMORY=<memory name>` lists
  * its gallery (a guest's rows through the drop key's `K_up` too), opens every row's listed tier and original meta, and
  * reads each grid tile and preview, checking each is the JPEG the web derived (or, for a medium without tiers, its
- * original); each tile's size and SHA-256 are printed, to hold against the web's.
+ * original); each tile's size and SHA-256 are printed, to hold against the web's. Each row's details are read with its
+ * heavy EXIF tier and printed; each original is read whole and through the range reader in uneven pieces from the end
+ * back, and the two must be the same bytes (a video's playback reads it so).
  */
 class MemoryLiveTest {
     @Test
@@ -55,6 +57,22 @@ class MemoryLiveTest {
                     "at ${m?.effectiveCapturedAt} (${m?.capturedAtSource}), gps ${m?.gpsLat},${m?.gpsLng} ${m?.placeName ?: ""}; " +
                     "tile ${grid?.size} B $sha, preview ${preview?.size} B",
             )
+            val exif = MediaDetails.exif(tenant, item)
+            println("      details: " + MediaDetails.rows(item, exif).joinToString("; ") { "${it.field}=${it.value.ifEmpty { it.number.toString() }}" })
+            val whole = MemoryMedia.read(tenant, item, item.original)!!
+            val reader = MemoryMedia.reader(tenant, item, item.original)!!
+            assertTrue(reader.size == whole.size.toLong(), "${item.mediaId}: the reader's size is not the original's")
+            val pieced = ByteArray(whole.size)
+            var end = whole.size
+            var step = 70_001
+            while (end > 0) {
+                val from = maxOf(0, end - step)
+                reader.read(from.toLong(), end - from).copyInto(pieced, from)
+                end = from
+                step = step * 3 / 2
+            }
+            assertTrue(pieced.contentEquals(whole), "${item.mediaId}: the range reader's bytes are not the original's")
+            println("      download as ${MediaDetails.downloadName(item, name, gallery.items.indexOf(item))}, ranges read back to the byte")
         }
     }
 }
