@@ -41,6 +41,18 @@ object AppKinds {
     /** What a tenant session re-keys and folds with (`TenantSession.rekeyRules`). */
     val rules = NodeRekey.Rules(rekeys, ::tokenInput)
 
+    /**
+     * A kind's header priority (the web's `header.order` of its descriptor, `NodeHeader.plan`): the ids listed first, in
+     * this order. A kind not listed has none: core's merge order alone.
+     */
+    fun headerOrder(kind: String): List<String> = when (kind) {
+        FOLDER, DROPBOX, PotSession.KIND -> listOf("favorite", "share", "download", "move", "copy")
+        FILE -> listOf("favorite", "download", "share", "replace", "move", "copy")
+        MEMORY, CHAPTER -> listOf("favorite", "upload", "share", "download", "banner", "move", "copy")
+        SHARE_BOOKMARK -> listOf("open-own-page", "favorite", "move")
+        else -> emptyList()
+    }
+
     private const val FOLDER = "FOLDER"
     private const val FILE = "FILE"
     private const val DROPBOX = "DEPOT_DROPBOX"
