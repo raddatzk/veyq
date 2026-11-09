@@ -95,7 +95,7 @@ object ShareLinkChanges {
      */
     @Throws(Exception::class)
     suspend fun renew(
-        tenant: TenantSession, scopeId: String, nodeId: String, shareId: String, content: NodeRekey.ContentRekey?,
+        tenant: TenantSession, scopeId: String, nodeId: String, shareId: String, kinds: NodeRekey.Kinds,
         tokenInput: (kind: String, name: String) -> String?, uuid: () -> String, nowMs: Long,
         waitsMs: List<Long> = NodeEpochWrite.REKEY_WAITS_MS,
     ): Changed {
@@ -178,8 +178,8 @@ object ShareLinkChanges {
             }
             val url = ShareLinks.url(tenant.base, newId, kShare)
             if (!wasOpen) return Changed(Outcome.DONE, url)
-            val rekeyed = runCatching { NodeRekey.rekey(tenant, scopeId, nodeId, content, tokenInput, uuid) }.getOrDefault(NodeRekey.Outcome.FAILED)
-            return Changed(if (rekeyed == NodeRekey.Outcome.REKEYED || rekeyed == NodeRekey.Outcome.NOT_DUE) Outcome.DONE else Outcome.DONE_REKEY_PENDING, url)
+            val rekeyed = runCatching { NodeRekey.rekeyPath(tenant, scopeId, listOf(nodeId), subtree = true, kinds, tokenInput, uuid).outcome }.getOrDefault(NodeRekey.Outcome.FAILED)
+            return Changed(if (rekeyed == NodeRekey.Outcome.DONE) Outcome.DONE else Outcome.DONE_REKEY_PENDING, url)
         } finally {
             kShare.fill(0)
         }
@@ -188,7 +188,7 @@ object ShareLinkChanges {
     /** Deletes link [shareId] for good (`deleteShare`, a tombstone); one that was still open has the node below re-keyed. */
     @Throws(Exception::class)
     suspend fun delete(
-        tenant: TenantSession, scopeId: String, nodeId: String, shareId: String, content: NodeRekey.ContentRekey?,
+        tenant: TenantSession, scopeId: String, nodeId: String, shareId: String, kinds: NodeRekey.Kinds,
         tokenInput: (kind: String, name: String) -> String?, uuid: () -> String, nowMs: Long,
     ): Changed {
         val s = row(tenant, nodeId, shareId) ?: return Changed(Outcome.GONE)
@@ -197,8 +197,8 @@ object ShareLinkChanges {
         val r = tenant.account.respond { SharingApi(tenant.base, tenant.account.http).deleteShare(shareId) }
         if (!r.success) return Changed(if (r.status == 404) Outcome.GONE else Outcome.FAILED)
         if (!wasOpen) return Changed(Outcome.DONE)
-        val rekeyed = runCatching { NodeRekey.rekey(tenant, scopeId, nodeId, content, tokenInput, uuid) }.getOrDefault(NodeRekey.Outcome.FAILED)
-        return Changed(if (rekeyed == NodeRekey.Outcome.REKEYED || rekeyed == NodeRekey.Outcome.NOT_DUE) Outcome.DONE else Outcome.DONE_REKEY_PENDING)
+        val rekeyed = runCatching { NodeRekey.rekeyPath(tenant, scopeId, listOf(nodeId), subtree = true, kinds, tokenInput, uuid).outcome }.getOrDefault(NodeRekey.Outcome.FAILED)
+        return Changed(if (rekeyed == NodeRekey.Outcome.DONE) Outcome.DONE else Outcome.DONE_REKEY_PENDING)
     }
 
     private fun refusal(status: Int, body: String): Outcome {

@@ -111,11 +111,14 @@ class ApplicationBlobs(private val tenant: TenantSession) {
     suspend fun upload(
         scopeId: String, node: () -> OpenNode, reread: suspend () -> Boolean, belowFloor: () -> Boolean,
         id: String, ownerId: String, role: String, bytes: ByteArray, type: String, name: String?, modifiedAt: Long?,
+        /** A member's upload pulls the node's path forward where it lags ([NodeEpochWrite.run]'s `pull`). */
+        pull: (suspend () -> Boolean)? = null,
     ): Listed {
         var done: Listed? = null
         val result = NodeEpochWrite.run(
             belowFloor = belowFloor,
             reread = reread,
+            pull = pull,
             attempt = {
                 val code = try {
                     done = uploadOnce(scopeId, node(), id, ownerId, role, bytes, type, name, modifiedAt)

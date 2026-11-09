@@ -157,9 +157,10 @@ implementation exists but what holds it to the first.
   a batch sealed on what is held under the client's rules (`expenses/PotWrites.kt`, the web's `sealPotWrites` and
   `eraseParticipant`; `PotWritesTest`), sent at the Pot's epoch through core's `session/NodeEpochWrite.kt` (the device
   floor, `node_rekey_pending`, `stale_epoch`; `NodeEpochWriteTest`), and every read checked for a revision dropped or
-  altered (`expenses/LedgerCheck.kt`, the web's `checkLedger`, its notice above the Pot; a live Pot checks complete). This
-  app drives no re-key, so where the web's member pulls a Pot's path forward (ADR 0111 decision 11) it waits, as the web's
-  guest does; and it re-opens no scope rotated after the tenant was read, so a Pot re-keyed past that read is not found
+  altered (`expenses/LedgerCheck.kt`, the web's `checkLedger`, its notice above the Pot; a live Pot checks complete). Where
+  a write meets its path left due (ADR 0111 decision 11), a member's app pulls that path forward as the web's member does —
+  `NodeRekey.pull`, top-down, once a write, then the write again — and waits, as the web's guest does, only where it
+  cannot (`NodeEpochWriteTest`); and it re-opens no scope rotated after the tenant was read, so a Pot re-keyed past that read is not found
   again and the write is refused until the app reads the tenant anew. An entry's receipts are added, opened and taken off
   as the web's editor does (`expenses/Receipts.kt`, the web's `receipts.ts`: images and PDFs up to 10 MiB, 100 an entry,
   a receipt the save no longer names dropped; `ReceiptsTest`), each one an application blob of the Pot through core's
@@ -218,16 +219,24 @@ implementation exists but what holds it to the first.
   and the recovery copy anew; each row's label and address are rebuilt from its recovery copy at the dialog's own node
   (`v1.json#share_write_token` held by the conformance suite; a link minted in each app opens on the web's guest page,
   and the web's dialog lists the app's links by their labels, measured 2026-11-09; the recovery copy's binding killed by
-  a mutation). A link is switched off from the app as on the web — `revokeShare`, then the node it is rooted at re-keyed
-  on this device (`session/NodeRekey.kt`, the web's `rekeyNode`): a fresh key, its attachment and application blobs and
-  core's cover re-wrapped with `K_blob` kept, each open link rooted there wrapped anew (one whose recovery copy opens
-  for no one named by its digest, so the commit closes it), a link guest's name sealed anew, the kind's own content
-  through its hook (Expenses' `expenses/PotRekey.kt`: every revision's `K_rev`), staged and committed at the scope's
-  current epoch. Only what this client fully holds is re-keyed — a node with no child, no drop key, a parent not due;
-  anything else stays due for a member's web device, and the app says so (a Pot's re-key with an entry and a receipt,
-  the other link still opening it on the web's guest page and the closed one nothing, measured live by `PotLiveTest`;
-  a revision key sealed under the old key killed by it; the web opens a Pot the iOS app re-keyed, receipt included,
-  2026-11-09). A link is edited in place, renewed and deleted as on the web (`session/ShareLinkChanges.kt`, the web's
+  a mutation). A link is switched off from the app as on the web — `revokeShare`, then the subtree it is rooted at
+  re-keyed on this device (`session/NodeRekey.kt`, the web's `rekeyNode` over ADR 0114's frontier: top-down, each node
+  once its parent is no longer due): per node a fresh key, its children's entries wrapped anew (name, slug token through
+  the kind's fold, content key), its attachment and application blobs and core's cover re-wrapped with `K_blob` kept,
+  each open link rooted there wrapped anew (one whose recovery copy opens for no one named by its digest, so the commit
+  closes it), a link guest's name sealed anew, the kind's own content through its hook, staged and committed at the
+  scope's current epoch. The kinds and their hooks are the app's composition root's (`AppKinds`, the web's registry):
+  Expenses' `expenses/PotRekey.kt` (every revision's `K_rev`); a folder, a file, a Depot drop box and a bookmark need
+  none. The run resumes from the server's marks: an app closed mid-run leaves the rest due, and a member's device that
+  opens the tenant finishes, in the background, what it can of every scope it is served as re-keying (`NodeRekey.resume`).
+  What this client does not fully hold — a Memory or a Chapter (Memories is not in the app yet), a node with a drop key,
+  an identity folder, a node only an owner may re-key — is left due for a device that does, and the app says so (a
+  Pot's re-key with an entry and a receipt, the other link still opening it on the web's guest page and the closed one
+  nothing, measured live by `PotLiveTest`; a revision key sealed under the old key killed by it; the web opens a Pot the
+  iOS app re-keyed, receipt included; a close of a folder with a Pot and a folder holding a Pot below re-keys all four,
+  and one interrupted after its root is finished by `resume`, measured by `SubtreeRekeyLiveTest` with the web opening
+  both Pots after it — `subtree = false` turns it red; each app, started over a close left half done, finished it in the
+  background, measured on Android and iOS, 2026-11-09). A link is edited in place, renewed and deleted as on the web (`session/ShareLinkChanges.kt`, the web's
   `editShare`/`reissueShare`/`deleteShare`): an edit reseals its label and keeps its address, role, end and password
   (blank removes it, untouched keeps it); a renew mints a fresh `K_share` and id carrying label, note, password and end
   — refused where the password no longer opens here — and the old address is gone, so the node is re-keyed as for a

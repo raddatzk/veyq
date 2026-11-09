@@ -10,7 +10,9 @@ import kotlin.test.assertEquals
  * how long, and that every attempt after a refusal re-reads first.
  */
 class NodeEpochWriteTest {
-    private class Run(answers: List<Answer>, var floorBelow: List<Boolean> = emptyList(), val rereadOk: Boolean = true) {
+    private class Run(
+        answers: List<Answer>, var floorBelow: List<Boolean> = emptyList(), val rereadOk: Boolean = true, val pulls: Boolean? = null,
+    ) {
         private val queue = ArrayDeque(answers)
         val log = mutableListOf<String>()
 
@@ -20,6 +22,7 @@ class NodeEpochWriteTest {
             reread = { log += "reread"; rereadOk },
             attempt = { log += "send"; queue.removeFirst() to log.count { it == "send" } },
             sleep = { log += "wait $it" },
+            pull = pulls?.let { ok -> { log += "pull"; ok } },
         )
     }
 
@@ -76,5 +79,33 @@ class NodeEpochWriteTest {
     @Test
     fun aNodeTheReReadNoLongerFindsIsGone() = runBlocking {
         assertEquals(NodeEpochWrite.Result.Gone, Run(listOf(Answer.STALE_EPOCH), rereadOk = false).go())
+    }
+
+    @Test
+    fun aMembersWritePullsItsPathForwardOnceThenTriesAgainAtOnce() = runBlocking {
+        val run = Run(listOf(Answer.REKEY_PENDING, Answer.DONE), pulls = true)
+        assertEquals(NodeEpochWrite.Result.Answered(2), run.go())
+        assertEquals(listOf("send", "pull", "reread", "send"), run.log, "a pull that re-keyed the path is followed by the write, not a wait")
+    }
+
+    @Test
+    fun aPullThatCannotReKeyFallsBackToTheWaits() = runBlocking {
+        val run = Run(listOf(Answer.REKEY_PENDING, Answer.DONE), pulls = false)
+        assertEquals(NodeEpochWrite.Result.Answered(2), run.go())
+        assertEquals(listOf("send", "pull", "wait 1", "reread", "send"), run.log)
+    }
+
+    @Test
+    fun aSecondLagAfterAPullWaits() = runBlocking {
+        val run = Run(listOf(Answer.REKEY_PENDING, Answer.REKEY_PENDING, Answer.DONE), pulls = true)
+        assertEquals(NodeEpochWrite.Result.Answered(3), run.go())
+        assertEquals(listOf("send", "pull", "reread", "send", "wait 1", "reread", "send"), run.log, "the path is pulled once per write")
+    }
+
+    @Test
+    fun aNodeBelowTheFloorIsPulledForwardToo() = runBlocking {
+        val run = Run(listOf(Answer.DONE), floorBelow = listOf(true, false), pulls = true)
+        assertEquals(NodeEpochWrite.Result.Answered(1), run.go())
+        assertEquals(listOf("floor", "pull", "reread", "send"), run.log)
     }
 }

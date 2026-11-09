@@ -312,7 +312,7 @@ class PotLiveTest {
             assertEquals(me.raddatz.veyq.mobile.session.ShareLinks.Outcome.CREATED, b.outcome, b.refusal)
             val aId = a.url!!.substringAfter("/s/").substringBefore('#')
             val fold = { kind: String, n: String -> if (kind == PotSession.KIND) PotCreate.tokenInput(n) else null }
-            val closed = links.switchOff(tenant, scopeId, nodeId, aId, PotRekey.content, fold) { java.util.UUID.randomUUID().toString() }
+            val closed = links.switchOff(tenant, scopeId, nodeId, aId, me.raddatz.veyq.mobile.AppKinds.rekeys, fold) { java.util.UUID.randomUUID().toString() }
             assertEquals(me.raddatz.veyq.mobile.session.ShareLinks.Closed.CLOSED, closed)
             val fresh = account.open(tenant.tenant)
             val again = PotSession.open(fresh, scopeId, nodeId)!!
@@ -451,7 +451,7 @@ class PotLiveTest {
             assertEquals(links.READ_WRITE, afterEdit.role)
             assertTrue(!afterEdit.passwordRequired && afterEdit.expiresAt != null)
             assertEquals(a.url, afterEdit.url)
-            val renewed = changes.renew(tenant, scopeId, nodeId, aId, PotRekey.content, fold, uuid, now())
+            val renewed = changes.renew(tenant, scopeId, nodeId, aId, me.raddatz.veyq.mobile.AppKinds.rekeys, fold, uuid, now())
             assertEquals(ok, renewed.outcome)
             val listed = links.list(account.open(tenant.tenant), scopeId, nodeId)!!
             assertTrue(listed.none { it.shareId == aId }, "the renewed link is still listed")
@@ -463,12 +463,12 @@ class PotLiveTest {
             assertEquals(listOf("Kept across a renew"), PotSession.open(fresh, scopeId, nodeId)!!.ledger!!.entries.map { (it.content as? Expense)?.title }, "the entry does not open after the renew's re-key")
             val b = links.mint(tenant, scopeId, nodeId, links.READ, "B", "b-link-password-1", null)
             val bId = b.url!!.substringAfter("/s/").substringBefore('#')
-            val bRenewed = changes.renew(tenant, scopeId, nodeId, bId, PotRekey.content, fold, uuid, now())
+            val bRenewed = changes.renew(tenant, scopeId, nodeId, bId, me.raddatz.veyq.mobile.AppKinds.rekeys, fold, uuid, now())
             assertEquals(ok, bRenewed.outcome)
             val bNew = links.list(tenant, scopeId, nodeId)!!.single { it.url == bRenewed.url }
             assertTrue(bNew.passwordRequired && bNew.label == "B", "B's password or label was not carried")
-            assertEquals(me.raddatz.veyq.mobile.session.ShareLinks.Closed.CLOSED, links.switchOff(tenant, scopeId, nodeId, bNew.shareId, PotRekey.content, fold, uuid))
-            assertEquals(ok, changes.delete(tenant, scopeId, nodeId, bNew.shareId, PotRekey.content, fold, uuid, now()).outcome)
+            assertEquals(me.raddatz.veyq.mobile.session.ShareLinks.Closed.CLOSED, links.switchOff(tenant, scopeId, nodeId, bNew.shareId, me.raddatz.veyq.mobile.AppKinds.rekeys, fold, uuid))
+            assertEquals(ok, changes.delete(tenant, scopeId, nodeId, bNew.shareId, me.raddatz.veyq.mobile.AppKinds.rekeys, fold, uuid, now()).outcome)
             assertTrue(links.list(tenant, scopeId, nodeId)!!.none { it.shareId == bNew.shareId }, "the deleted link is still listed")
             System.getenv("VEYQ_LIVE_LINKS_OUT")?.let { File(it).writeText(a.url + "\n" + renewed.url) }
             println("[$folderName] \"$name\": A edited in place and renewed, B's password carried, B switched off and deleted")

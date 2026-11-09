@@ -4,8 +4,8 @@ import kotlinx.coroutines.delay
 
 /**
  * A write that states a node's epoch (ADR 0109 point 6), core's for every application, a port of `writeAtNodeEpoch` in
- * `src/web/src/shared/rekeyRetry.ts` for a writer that pulls no re-key forward — this app drives no re-key, so it waits
- * as the web's guest does:
+ * `src/web/src/shared/rekeyRetry.ts`: a member's write first pulls its own path forward ([run]'s `pull`, the node and its
+ * lagging ancestors re-keyed on this device), and waits as the web's guest does where it cannot:
  *  - **below the floor** (layer 2): the node's key was minted under a scope epoch below the one this device holds — a
  *    node not re-keyed since a rotation, or an operator serving its old wrap. Nothing is sealed under it; wait, re-read.
  *  - **`409 node_rekey_pending`**: the scope was rotated and this node is not re-keyed yet. Wait ([waitsMs], shared with
@@ -37,24 +37,34 @@ object NodeEpochWrite {
         reread: suspend () -> Boolean,
         attempt: suspend () -> Pair<Answer, T>,
         sleep: suspend (Long) -> Unit = { delay(it) },
+        /** A member's write pulls its own path forward (the web's `pullRekeyPath`): re-keys the written node and its lagging
+         *  ancestors on this device, true when it did — then the write is tried again at once; false, or a second lag, waits. */
+        pull: (suspend () -> Boolean)? = null,
     ): Result<T> {
         var waited = 0
         var staleRetried = false
+        var pulled = false
         var first = true
+        // the first lag pulls the path forward where the caller can; every later one waits
+        suspend fun lagged(): Boolean {
+            if (!pulled && pull != null) {
+                pulled = true
+                if (pull()) return true
+            }
+            if (waited >= waitsMs.size) return false
+            sleep(waitsMs[waited++])
+            return true
+        }
         while (true) {
             if (!first && !reread()) return Result.Gone
             first = false
             if (belowFloor()) {
-                if (waited >= waitsMs.size) return Result.Busy
-                sleep(waitsMs[waited++])
+                if (!lagged()) return Result.Busy
                 continue
             }
             val (answer, value) = attempt()
             when (answer) {
-                Answer.REKEY_PENDING -> {
-                    if (waited >= waitsMs.size) return Result.Busy
-                    sleep(waitsMs[waited++])
-                }
+                Answer.REKEY_PENDING -> if (!lagged()) return Result.Busy
                 Answer.STALE_EPOCH -> {
                     if (staleRetried) return Result.StaleAgain
                     staleRetried = true

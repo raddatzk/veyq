@@ -692,6 +692,18 @@ class TenantSession internal constructor(
      */
     internal fun scopeEpoch(scopeId: String): Int? = scopes.firstOrNull { it.summary.id == scopeId }?.summary?.grantedEpoch
 
+    /** How this app re-keys and folds each kind (its composition root's), for a write that pulls its path forward and for
+     *  the background run that finishes a scope's re-key ([NodeRekey.pull], [NodeRekey.resume]); null: neither runs. */
+    var rekeyRules: NodeRekey.Rules? = null
+
+    /** Whether this account owns [scopeId] (an owner re-keys every node, a member all but the owner-only ones). */
+    internal fun isScopeOwner(scopeId: String): Boolean =
+        scopes.firstOrNull { it.summary.id == scopeId }?.summary?.role == me.raddatz.veyq.mobile.api.models.ScopeSummary.Role.OWNER
+
+    /** The open scopes the server served as re-keying (a node of theirs is due, ADR 0114 decision 4), as this session read
+     *  them: what a member's device continues in the background (ADR 0111 decision 11). */
+    val rekeyingScopes: List<String> get() = scopes.filter { it.summary.rekeying == true }.map { it.summary.id }
+
     /** The scope key this device holds [scopeId] at, with its epoch; null for a scope not open. */
     internal fun scopeKey(scopeId: String): Pair<ByteArray, Int>? =
         scopes.firstOrNull { it.summary.id == scopeId }?.let { it.key to it.summary.grantedEpoch }

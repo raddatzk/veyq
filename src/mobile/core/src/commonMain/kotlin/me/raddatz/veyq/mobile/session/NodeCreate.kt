@@ -60,6 +60,8 @@ object NodeCreate {
         var created: Created? = null
         val result = NodeEpochWrite.run(
             waitsMs = waitsMs,
+            // a parent that lags is pulled forward first: the new node's entry is sealed under its key
+            pull = { parentId?.let { NodeRekey.pull(tenant, scopeId, listOf(it)) } ?: false },
             belowFloor = { parent?.let { it.scopeEpoch < scopeEpoch } ?: false },
             reread = {
                 tenant.forgetTree()

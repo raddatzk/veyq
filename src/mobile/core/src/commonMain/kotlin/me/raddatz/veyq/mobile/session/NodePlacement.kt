@@ -60,6 +60,7 @@ internal object NodePlacement {
             var placed = false
             val result = NodeEpochWrite.run(
                 waitsMs = waitsMs,
+                pull = { NodeRekey.pull(tenant, scopeId, listOfNotNull(nodeId, parent?.id)) },
                 // never seal under a key from before the space's last rotation, nor re-wrap one: the parent's (at the root
                 // the scope key, held at the floor) and the node's own
                 belowFloor = { (parent?.scopeEpoch ?: scopeEpoch) < scopeEpoch || node!!.scopeEpoch < scopeEpoch },

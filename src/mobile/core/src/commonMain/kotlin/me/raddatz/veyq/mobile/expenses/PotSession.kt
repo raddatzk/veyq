@@ -18,6 +18,7 @@ import me.raddatz.veyq.mobile.api.infrastructure.HttpResponse
 import me.raddatz.veyq.mobile.session.LivePoll
 import me.raddatz.veyq.mobile.session.NodeEpochWrite
 import me.raddatz.veyq.mobile.session.NodeMetaWrite
+import me.raddatz.veyq.mobile.session.NodeRekey
 import me.raddatz.veyq.mobile.session.OpenNode
 import me.raddatz.veyq.mobile.session.Person
 import me.raddatz.veyq.mobile.session.SignInFailure
@@ -206,6 +207,7 @@ class PotSession private constructor(private val tenant: TenantSession, private 
                 waitsMs = rekeyWaitsMs,
                 belowFloor = { node.scopeEpoch < (tenant.scopeEpoch(node.scopeId) ?: Int.MAX_VALUE) },
                 reread = ::reopen,
+                pull = { NodeRekey.pull(tenant, node.scopeId, listOf(node.id)) },
                 attempt = {
                     val send = prepare(node)
                     val r = account.respond { send() }
@@ -312,6 +314,7 @@ class PotSession private constructor(private val tenant: TenantSession, private 
                 blobs.upload(
                     node.scopeId, { node }, ::reopen, { node.scopeEpoch < (tenant.scopeEpoch(node.scopeId) ?: Int.MAX_VALUE) },
                     r.id, id, Receipts.ROLE, r.bytes, r.type, r.name, r.modifiedAt,
+                    pull = { NodeRekey.pull(tenant, node.scopeId, listOf(node.id)) },
                 )
                 uploaded += r.id
             } catch (e: ApplicationBlobs.UploadRefused) {
@@ -337,6 +340,7 @@ class PotSession private constructor(private val tenant: TenantSession, private 
         blobs.upload(
             node.scopeId, { node }, ::reopen, { node.scopeEpoch < (tenant.scopeEpoch(node.scopeId) ?: Int.MAX_VALUE) },
             receiptId, entryId, Receipts.ROLE, bytes, type, name, modifiedAt,
+            pull = { NodeRekey.pull(tenant, node.scopeId, listOf(node.id)) },
         )
     }
 
@@ -436,6 +440,7 @@ class PotSession private constructor(private val tenant: TenantSession, private 
                 waitsMs = rekeyWaitsMs,
                 belowFloor = { node.scopeEpoch < (tenant.scopeEpoch(node.scopeId) ?: Int.MAX_VALUE) },
                 reread = ::reopen,
+                pull = { NodeRekey.pull(tenant, node.scopeId, listOf(node.id)) },
                 attempt = {
                     val n = node
                     val r = NodeMetaWrite.write(
