@@ -54,7 +54,10 @@ state them:
   CR adds work per keystroke (the month predicate) and per drawn row (the bold mapping), so it first wins room back, as
   a sixth item: matching becomes incremental where the query only grew (narrow the previous matches instead of
   scanning every document), and the folded name and place of a document are computed once at build, not per
-  keystroke. Then the volume search measurement runs again WITH this CR's other items in (`scripts/measure_volume.py
+  keystroke. And a group is ranked only as far as it is drawn: the field shows 8 per group (`SearchField.vue`
+  `GROUP_PAGE`), while `groups.ts` sorts EVERY match of every group on each keystroke - with a one-letter query that
+  is thousands of documents. Select the top N of a group (N = what is shown, grown by "show more") instead of a full
+  sort; the count for "show more" stays exact. Measure which of the three moves wins most and say so. Then the volume search measurement runs again WITH this CR's other items in (`scripts/measure_volume.py
   search`, photos stage included, own instance, at any load with `uptime` recorded): the typing bound must hold in
   every reading of two runs, and the retrospective states the remaining margin.
 
