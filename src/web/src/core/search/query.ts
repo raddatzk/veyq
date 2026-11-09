@@ -142,12 +142,17 @@ export function satisfies(doc: SearchDocument, chip: SearchChip): boolean {
 /** The ranks of a text match, best first. */
 export const Rank = { exact: 0, prefix: 1, wordStart: 2, inside: 3, place: 4 } as const
 
-/** How `doc` matches the folded text `t`, or null when it does not; an empty text matches every document at the best rank. */
-export function textRank(doc: SearchDocument, t: string): number | null {
+/** The words of the folded text `t`, split once per query: {@link matchAll} asks every document with them, and a split per
+ *  document was a regular expression and an array for each of 17,000 documents on every keystroke (cr-search-photos-of-every-space). */
+const wordsOf = (t: string): string[] => t.split(/\s+/).filter(Boolean)
+
+/** How `doc` matches the folded text `t` (its `words`, when the caller split them already), or null when it does not; an
+ *  empty text matches every document at the best rank. */
+export function textRank(doc: SearchDocument, t: string, words: readonly string[] = wordsOf(t)): number | null {
   if (!t) return Rank.exact
-  let best = nameRank(doc.foldedName, t)
+  let best = nameRank(doc.foldedName, t, words)
   for (const alias of doc.foldedAliases) {
-    const rank = nameRank(alias, t)
+    const rank = nameRank(alias, t, words)
     if (rank !== null && (best === null || rank < best)) best = rank
   }
   if (best !== null) return best
@@ -155,15 +160,14 @@ export function textRank(doc: SearchDocument, t: string): number | null {
   return null
 }
 
-/** How the folded name `name` matches the folded text `t`, or null. */
-function nameRank(name: string, t: string): number | null {
+/** How the folded name `name` matches the folded text `t` (split into `words`), or null. */
+function nameRank(name: string, t: string, words: readonly string[]): number | null {
+  // Most documents do not hold the text at all (a photo's IMG_… for "K"): one search answers them, not four.
+  if (!name.includes(t)) return words.length > 1 && words.every((w) => name.includes(w)) ? Rank.inside : null
   if (name === t) return Rank.exact
   if (name.startsWith(t)) return Rank.prefix
   if (wordPrefix(name, t)) return Rank.wordStart
-  if (name.includes(t)) return Rank.inside
-  const words = t.split(/\s+/).filter(Boolean)
-  if (words.length > 1 && words.every((w) => name.includes(w))) return Rank.inside
-  return null
+  return Rank.inside
 }
 
 /** A document that matched, with its rank. */
@@ -178,9 +182,10 @@ export function matchAll(docs: readonly SearchDocument[], query: SearchQuery): M
   if (!t && query.chips.length === 0) return []
   const out: Match[] = []
   const chips = query.chips
+  const words = wordsOf(t)
   for (const doc of docs) {
     if (chips.length > 0 && !chips.every((c) => satisfies(doc, c))) continue
-    const rank = textRank(doc, t)
+    const rank = textRank(doc, t, words)
     if (rank !== null) out.push({ doc, rank })
   }
   return out
