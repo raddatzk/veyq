@@ -209,16 +209,8 @@ private struct EntriesList: View {
             }
         }
         .scrollContentBackground(.hidden)
-        // The view's primary action in the navigation bar (Apple's HIG: iOS has no floating action button; Notes, Reminders
-        // and Mail put "new" in a bar), beside the Pot's heart, share and menu; the web's and Android's green button is theirs.
-        .toolbar {
-            if view.canWrite && !view.people.isEmpty {
-                ToolbarItem(placement: .primaryAction) {
-                    Button(action: onAdd) { Image(systemName: "plus") }
-                        .accessibilityLabel("Add entry")
-                }
-            }
-        }
+        // beside the Pot's heart, share and menu
+        .createAction("Add entry", shown: view.canWrite && !view.people.isEmpty, action: onAdd)
     }
 
     private func subtitle(_ e: PotView.EntryRow) -> String {

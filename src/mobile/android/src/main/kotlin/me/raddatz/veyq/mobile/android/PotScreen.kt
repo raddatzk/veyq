@@ -26,7 +26,6 @@ import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExposedDropdownMenuBox
 import androidx.compose.material3.ExposedDropdownMenuDefaults
-import androidx.compose.material3.ExtendedFloatingActionButton
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -161,13 +160,9 @@ private fun Entries(view: PotView, state: AppModel.PotState, model: AppModel) {
     var editing by remember { mutableStateOf<Pair<String, PotView.Editing>?>(null) }
     var viewing by remember { mutableStateOf<PotView.EntryRow?>(null) }
     val palette = LocalPalette.current
-    val list = androidx.compose.foundation.lazy.rememberLazyListState()
-    // Material 3's extended FAB collapses to its icon on scroll: its label only while the list is at its very top (not the
-    // samples' first-item test, which a short Pot never leaves); the list's bottom padding keeps the last row clear of it.
-    val fabExpanded by remember { androidx.compose.runtime.derivedStateOf { !list.canScrollBackward } }
-    Box(Modifier.fillMaxSize()) {
+    CreateAction(stringResource(R.string.pot_add), shown = view.canWrite && view.people.isNotEmpty(), onClick = { adding = true }) { list, bottom ->
         if (view.entries.isEmpty()) Note(stringResource(if (view.canWrite) R.string.pot_no_entries else R.string.pot_no_entries_readonly))
-        LazyColumn(Modifier.fillMaxSize(), state = list, contentPadding = androidx.compose.foundation.layout.PaddingValues(bottom = 96.dp)) {
+        LazyColumn(Modifier.fillMaxSize(), state = list, contentPadding = androidx.compose.foundation.layout.PaddingValues(bottom = bottom)) {
             items(view.entries, key = { it.id }) { e ->
                 // Every viewer opens an entry: a writer to edit it, a reader to read it (one dialog, inbox #401).
                 Row(
@@ -217,19 +212,6 @@ private fun Entries(view: PotView, state: AppModel.PotState, model: AppModel) {
                     HorizontalDivider(color = role(palette.line))
                 }
             }
-        }
-        if (view.canWrite && view.people.isNotEmpty()) {
-            // Creating is the web's green role (`--app-primary`).
-            ExtendedFloatingActionButton(
-                onClick = { adding = true },
-                // collapsed, the icon alone names the button for a screen reader
-                icon = { Icon(Icons.Outlined.Add, if (fabExpanded) null else stringResource(R.string.pot_add)) },
-                text = { Text(stringResource(R.string.pot_add)) },
-                expanded = fabExpanded,
-                containerColor = role(palette.primary),
-                contentColor = role(palette.onFill),
-                modifier = Modifier.align(Alignment.BottomEnd).padding(16.dp),
-            )
         }
     }
     if (adding) EntryEditor(view, state, model, null) { adding = false }

@@ -92,6 +92,14 @@ A Gradle build of its own, run through its own wrapper.
   `-sdk iphonesimulator`) — the Apple app compiles. On a fresh checkout run `./gradlew :core:assembleVeyqCoreDebugXCFramework`
   once first: Xcode looks for the framework before the project's own pre-build step can make it.
 
+## Each platform's guidelines
+
+Apple's HIG and Material 3 win over a look shared with the web ([ADR 0123](../../docs/decisions/0123-the-apps-share-a-kotlin-multiplatform-core-under-native-ui.md)
+decision 9): before building a control, ask what the platform's own apps do, and do that. A view's creating action is
+`CreateAction(…)` (Android, `CreateAction.kt`) and `.createAction(…)` (Apple, `CreateAction.swift`), never a
+floating button built by hand; `scripts/validate_mobile_platform_guidelines.py` holds that. Row actions: an overflow menu on Android, swipe actions and a context
+menu on iOS.
+
 ## Traps
 
 - The Apple primitives are libsodium 1.0.22 through cinterop (`core/sodium/`): `build_libsodium.py` builds the three

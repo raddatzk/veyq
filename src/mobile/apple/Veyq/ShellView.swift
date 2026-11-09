@@ -477,15 +477,7 @@ struct ExpensesList: View {
     var body: some View {
         ArrangedListView(list: model.applicationList(.expenses), onOpen: model.open)
             .navigationTitle(Names.application(.expenses))
-            // The view's primary action in the navigation bar (Apple's HIG: no floating action button on iOS).
-            .toolbar {
-                if !model.spaces.isEmpty {
-                    ToolbarItem(placement: .primaryAction) {
-                        Button { creating = true } label: { Image(systemName: "plus") }
-                            .accessibilityLabel("New pot")
-                    }
-                }
-            }
+            .createAction("New pot", shown: !model.spaces.isEmpty) { creating = true }
             .sheet(isPresented: $creating) { PotCreateSheet(model: model) }
     }
 }

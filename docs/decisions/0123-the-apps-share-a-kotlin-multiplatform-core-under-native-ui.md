@@ -111,6 +111,17 @@ implementation exists but what holds it to the first.
    ([ADR 0058](0058-revoke-never-takes-key-material.md)). iOS keeps Keychain items when an app is deleted: a first start
    after an installation removes them.
 
+9. **Each platform's guidelines win over a uniform look** (owner 2026-11-09: Apple's Human Interface Guidelines and
+   Material 3 as far as they go; decision 7's theme is the colours, not the layout). Where the web, Android and Apple
+   would do one thing differently, each app does it its platform's way. A view's one creating action ("Add entry",
+   "New pot") is Material 3's extended floating action button on Android, collapsing to its icon on scroll over a
+   list that keeps its last row clear, and on iOS and macOS a "+" in the navigation bar's primary place, as Notes and
+   Mail have it — iOS has no floating action button. A row's actions are an overflow menu on Android and swipe actions
+   plus a context menu on iOS. Each platform builds the creating action in one place, `CreateAction(…)` on Android and
+   `.createAction(…)` on Apple, and `scripts/validate_mobile_platform_guidelines.py` refuses one built anywhere else,
+   or a button floated over an Apple view's bottom (bought by the Pot's and Expenses' floating capsules on iOS, each
+   found by eye, 2026-11-09).
+
 ## Consequences
 
 - **Built of the applications: Expenses' open Pot** — its entries, overview and settings as the web's Pot shows them,

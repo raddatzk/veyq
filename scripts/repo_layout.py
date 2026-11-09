@@ -29,6 +29,11 @@ BACKEND = SRC / "backend"
 WEB = SRC / "web"
 ADMIN_WEB = SRC / "admin-web"
 CRYPTO = SRC / "packages/crypto"
+# The veyq app (ADR 0123): a Gradle build of its own, with the Android app's sources and the Apple app's. Not in
+# `SURFACES`: no release ships it yet, and no predecessor's tree is read for it.
+MOBILE = SRC / "mobile"
+MOBILE_ANDROID = MOBILE / "android"
+MOBILE_APPLE = MOBILE / "apple"
 # Every surface, for the guards that iterate them.
 SURFACES = (BACKEND, WEB, ADMIN_WEB, CRYPTO)
 # Where a tree from before stage 2 carries each surface (repository-relative): the upgrade proof builds a predecessor

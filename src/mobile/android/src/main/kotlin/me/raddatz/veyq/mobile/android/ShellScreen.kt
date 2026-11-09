@@ -76,7 +76,6 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
-import androidx.compose.material3.ExtendedFloatingActionButton
 import androidx.compose.material.icons.outlined.Add
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -482,22 +481,8 @@ private fun ObjectItems(refs: List<ObjectRef>, open: ObjectRef?, onOpen: (Object
 @Composable
 private fun ExpensesList(s: Screen.Signed, model: AppModel) {
     var creating by remember { mutableStateOf(false) }
-    val list = androidx.compose.foundation.lazy.rememberLazyListState()
-    // Material 3's extended FAB collapses to its icon on scroll (as a Pot's Add entry), the list's padding keeps the last row clear.
-    val fabExpanded by remember { androidx.compose.runtime.derivedStateOf { !list.canScrollBackward } }
-    Box(Modifier.fillMaxSize()) {
-        ArrangedListScreen(s.applicationList(ApplicationId.EXPENSES), onOpen = model::open, state = list, bottom = if (s.spaces.isNotEmpty()) 96.dp else 0.dp)
-        if (s.spaces.isNotEmpty()) {
-            ExtendedFloatingActionButton(
-                onClick = { creating = true },
-                icon = { Icon(Icons.Outlined.Add, if (fabExpanded) null else stringResource(R.string.create_pot)) },
-                text = { Text(stringResource(R.string.create_pot)) },
-                expanded = fabExpanded,
-                containerColor = role(LocalPalette.current.primary),
-                contentColor = role(LocalPalette.current.onFill),
-                modifier = Modifier.align(Alignment.BottomEnd).padding(16.dp),
-            )
-        }
+    CreateAction(stringResource(R.string.create_pot), shown = s.spaces.isNotEmpty(), onClick = { creating = true }) { list, bottom ->
+        ArrangedListScreen(s.applicationList(ApplicationId.EXPENSES), onOpen = model::open, state = list, bottom = bottom)
     }
     if (creating) PotCreateSheet(s, model) { creating = false }
 }
