@@ -67,7 +67,8 @@ A Gradle build of its own, run through its own wrapper.
   with a password and an end on that Pot and reads both back listed (they stay); `VEYQ_LIVE_LINKS_OUT=<file>` writes the
   first one's address there, for the web's guest page (a dev link names the backend's port, 8080: open it on Vite's). `VEYQ_LIVE_LINK_OFF=<root folder name>` creates a Pot there with an entry, a receipt and links A and B, switches A off
   — the Pot re-keyed on this device — and checks a fresh session reads the entry and the receipt and writes there at
-  once; with `VEYQ_LIVE_LINKS_OUT` both addresses go to that file, for the web's guest page (A opens nothing, B the Pot). `VEYQ_LIVE_RENAME=<pot name>` renames a fresh Pot twice, checks its
+  once; with `VEYQ_LIVE_LINKS_OUT` both addresses go to that file, for the web's guest page (A opens nothing, B the Pot). `VEYQ_LIVE_REPORT=<pot name>` reports a fresh Pot beside it — its three keys open here, the server answers with a
+  receipt — and trashes it; each run leaves an open report for the dev moderators, so run it once, not in a loop. `VEYQ_LIVE_RENAME=<pot name>` renames a fresh Pot twice, checks its
   names taken and a sibling's refused, and trashes it; `VEYQ_LIVE_RENAME_TARGET="<from>|<to>"` renames the root Pot
   `<from>` (created when there is none) and prints what the re-seal of its links did — with a link the web minted on it,
   that link's guest page then shows `<to>`. Gradle does not count an environment variable as an
@@ -123,6 +124,9 @@ A Gradle build of its own, run through its own wrapper.
   one: written in the `@MainActor` model it is inferred main-actor isolated, and Swift 6 traps on the first call from
   elsewhere (`_dispatch_assert_queue_fail`, measured 2026-11-09: the re-key's rekey id). Mark it `@Sendable` and reach
   nothing of the model in it (`AppModel.tokenInputFor` is `nonisolated static` for that).
+- The Simulator tool's tap does not reliably flip a SwiftUI `Toggle`: a short swipe across it does (measured
+  2026-11-09, the report's good-faith switch). A Compose radio or checkbox row is tapped as the row only once the row
+  is `selectable`/`toggleable` (`ReportSheet`): a bare control's label takes no tap, for a person either.
 - Every file of `apple/Veyq/` but `VeyqApp.swift` and `DevLogin.swift` is also compiled into the share extension, which
   builds with `APPLICATION_EXTENSION_API_ONLY`: no `UIApplication.shared` or other API an extension may not use there,
   and nothing the app alone may do (moving or removing what it keeps) without `AppModel.inExtension` guarding it.

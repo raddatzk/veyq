@@ -15,6 +15,7 @@ struct PotHeaderActions: View {
     @State private var renameProblem: String?
     @State private var moving = false
     @State private var sharing = false
+    @State private var reporting = false
 
     var body: some View {
         HStack {
@@ -41,6 +42,11 @@ struct PotHeaderActions: View {
                 // The rename first, the delete last and destructive (`splitRowActions`).
                 Button("Rename", systemImage: "pencil") { newName = ref.name; renameProblem = nil; renaming = true }
                 Button("Move to…", systemImage: "folder") { moving = true }
+                // the menu-only group, after a separator: report, then delete (`splitRowActions`)
+                Divider()
+                if model.reportOffered {
+                    Button("Report", systemImage: "flag") { reporting = true }
+                }
                 Button("Delete Pot", systemImage: "trash", role: .destructive) { asking = true }
             } label: {
                 Image(systemName: "ellipsis.circle")
@@ -50,6 +56,7 @@ struct PotHeaderActions: View {
         .onAppear { pinned = model.isFavorite(ref) }
         .sheet(isPresented: $moving) { NodeMoveSheet(model: model, ref: ref) }
         .sheet(isPresented: $sharing) { PotShareSheet(model: model, ref: ref) }
+        .sheet(isPresented: $reporting) { ReportSheet(model: model, ref: ref) }
         .alert("Delete Pot", isPresented: $asking) {
             Button("Delete", role: .destructive) { Task { await model.trash(ref) } }
             Button("Cancel", role: .cancel) {}

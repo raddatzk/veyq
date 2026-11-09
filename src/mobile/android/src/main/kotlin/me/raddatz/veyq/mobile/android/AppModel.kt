@@ -331,6 +331,7 @@ class AppModel(app: Application) : AndroidViewModel(app) {
         val t = account.open(tenant)
         tenantSession = t
         _pot.value = null
+        readReportOffered()
         raw = Raw(t.spaces(), t.nodes(), t.favorites(), t.applicationsOff())
         readRowDetails(t)
         syncAvatars(t)
@@ -450,6 +451,30 @@ class AppModel(app: Application) : AndroidViewModel(app) {
         "FOLDER" -> me.raddatz.veyq.mobile.crypto.Naming.slugify(name)
         else -> null
     }
+
+    // ---- a report (core's NodeReport) ----
+
+    private val _reportOffered = MutableStateFlow(false)
+    /** Whether the tenant's server takes reports (it publishes a moderation key): Report is offered only then. */
+    val reportOffered: StateFlow<Boolean> = _reportOffered.asStateFlow()
+
+    /** Asks the server once per tenant whether it takes reports. */
+    fun readReportOffered() {
+        val t = tenantSession ?: return
+        viewModelScope.launch {
+            _reportOffered.value = runCatching { me.raddatz.veyq.mobile.session.NodeReport.published(t) != null }.getOrDefault(false)
+        }
+    }
+
+    /** Reports [ref] to the moderators: whole or by its name, in [category] for [reason], [contact] optional. */
+    suspend fun report(ref: ObjectRef, scope: me.raddatz.veyq.mobile.session.NodeReport.Scope, category: String, reason: String, contact: String): me.raddatz.veyq.mobile.session.NodeReport.Sent {
+        val failed = me.raddatz.veyq.mobile.session.NodeReport.Sent(me.raddatz.veyq.mobile.session.NodeReport.Outcome.FAILED)
+        val t = tenantSession ?: return failed
+        return runCatching { me.raddatz.veyq.mobile.session.NodeReport.report(t, ref.scopeId, ref.nodeId, scope, category, reason, contact) }.getOrDefault(failed)
+    }
+
+    /** The server's privacy notice at [anchor] (`privacyLink`): the page every place that takes personal data points to. */
+    fun privacyLink(anchor: String): String = "${tenantSession?.origin.orEmpty()}/privacy#$anchor"
 
     // ---- guest links (core's ShareLinks) ----
 

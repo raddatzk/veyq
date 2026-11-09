@@ -216,7 +216,15 @@ implementation exists but what holds it to the first.
   anything else stays due for a member's web device, and the app says so (a Pot's re-key with an entry and a receipt,
   the other link still opening it on the web's guest page and the closed one nothing, measured live by `PotLiveTest`;
   a revision key sealed under the old key killed by it; the web opens a Pot the iOS app re-keyed, receipt included,
-  2026-11-09). Renewing, editing and deleting a link are not built. Cover, copy, download and report are not built.
+  2026-11-09). Renewing, editing and deleting a link are not built. A node is reported to its server's moderators
+  (`session/NodeReport.kt`, the web's `core/report/`; ADR 0093, a legal duty, so offered wherever the server publishes
+  a moderation key): whole — the node's key and its name's and meta's field keys — or by its name alone, each share
+  under the report's fresh `K_report`, that key and the reason sealed to the epoch's public half and the contact apart;
+  the web's form with its required reason and good-faith confirmation and the privacy notice's passage beside the
+  contact (GDPR Art. 13). The encodings are `crypto/Report.kt`, held to `v1.json#report_bundle`, and the field key a
+  report hands over is `V1.fieldKeyOf`, held to every `#field_seal`'s; the server took a report from the live test and
+  from each app (2026-11-09); that a moderator opens one is not measured here — the moderation surface wants the
+  password and the Secret Key typed. Cover, copy and download are not built.
 - **Not built yet:** every other write (another kind's node), the
   other applications' views behind the bar, a CI job for the apps. The grant check is held by `GrantTrustTest` against a server the test plays — each refusal killed by
   a mutation of the rule it pins, but for three a second rule also holds (a pending or self-naming signer, and a cycle

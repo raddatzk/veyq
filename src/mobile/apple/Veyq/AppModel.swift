@@ -354,6 +354,8 @@ final class AppModel {
         let t = try await AppleSessions.shared.open(account: account, tenant: tenant)
         tenantSession = t
         pot = nil
+        reportOffered = false
+        Task { await readReportOffered() }
         rawSpaces = try await t.spaces()
         rawNodes = try await t.nodes()
         rawFavorites = try await t.favorites()
@@ -523,6 +525,29 @@ final class AppModel {
     }
 
     func dismissTrashNotice(_ id: UUID) { if trashNotice?.id == id { trashNotice = nil } }
+
+    // MARK: A report (core's NodeReport)
+
+    /// Whether the tenant's server takes reports (it publishes a moderation key): Report is offered only then.
+    private(set) var reportOffered = false
+
+    /// Asks the server once per tenant whether it takes reports.
+    func readReportOffered() async {
+        guard let t = tenantSession else { return }
+        reportOffered = ((try? await NodeReport.shared.published(tenant: t)) ?? nil) != nil
+    }
+
+    /// Reports `ref` to the moderators: whole or by its name, in `category` for `reason`, `contact` optional.
+    func report(_ ref: ObjectRef, scope: NodeReport.Scope, category: String, reason: String, contact: String) async -> NodeReport.Sent {
+        let failed = NodeReport.Sent(outcome: .failed, reference: nil, receivedAt: nil)
+        guard let t = tenantSession else { return failed }
+        return (try? await NodeReport.shared.report(
+            tenant: t, scopeId: ref.scopeId, nodeId: ref.nodeId, scope: scope, category: category, reason: reason, contact: contact
+        )) ?? failed
+    }
+
+    /// The server's privacy notice at `anchor` (`privacyLink`): the page every place that takes personal data points to.
+    func privacyLink(_ anchor: String) -> String { "\(tenantSession?.origin ?? "")/privacy#\(anchor)" }
 
     // MARK: Guest links (core's ShareLinks)
 

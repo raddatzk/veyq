@@ -347,4 +347,35 @@
     <string name="share_failed">That didn’t work — please try again.</string>
     <string name="share_switch_off">Revoke</string>
     <string name="share_closed_rekeying">The link is switched off. What is below it gets a new lock, so the old link opens nothing that comes later either.</string>
+    <!-- A report to the moderators (the web's report.*, ADR 0093). -->
+    <string name="report_action">Report</string>
+    <string name="report_title">Report</string>
+    <string name="report_intro">Tell the people who run this server about something illegal or against the terms. Only its moderators can read your report. Nobody else learns of it, the person who shared it included.</string>
+    <string name="report_scope">What do you report?</string>
+    <string name="report_scope_whole">It and everything in it</string>
+    <string name="report_scope_name">Only its name</string>
+    <string name="report_scope_whole_hint">The moderators can open it and everything it holds.</string>
+    <string name="report_scope_name_hint">The moderators can open its name and nothing else: not what it holds, not its other details.</string>
+    <string name="report_category">What is it?</string>
+    <string name="report_cat_csam">Child sexual abuse material</string>
+    <string name="report_cat_terror">Terrorist content</string>
+    <string name="report_cat_threat">A threat to someone’s life or safety</string>
+    <string name="report_cat_illegal">Other illegal content</string>
+    <string name="report_cat_terms">A breach of the terms</string>
+    <string name="report_csam_note">You do not need to give your name for this. The moderators act on your report without it.</string>
+    <string name="report_reason">Why are you reporting it?</string>
+    <string name="report_reason_hint">Say what is illegal or against the terms, and why. Required.</string>
+    <string name="report_good_faith">I confirm that what I say here is accurate and complete to the best of my knowledge.</string>
+    <string name="report_contact">Your email address (optional)</string>
+    <string name="report_contact_hint">For a receipt now and the decision later. The server mails the receipt and keeps the address only in a form the moderators alone can read.</string>
+    <string name="report_privacy">How your contact is kept, and for how long</string>
+    <string name="report_send">Send report</string>
+    <string name="report_sent">Your report was received.</string>
+    <string name="report_receipt">Reference %1$s, received %2$s. Keep it if you want to refer to this report.</string>
+    <string name="report_close">Close</string>
+    <string name="report_failed">The report could not be sent. Try again.</string>
+    <string name="report_too_many_open">You have too many reports that are still open. Wait until some of them are decided.</string>
+    <string name="report_rate_limited">Too many reports in a short time. Try again later.</string>
+    <string name="report_unavailable">Some of what you selected cannot be read here any more, so it cannot be reported. Reload the page.</string>
+    <string name="report_not_found">Some of what you selected is not here any more. Reload the page.</string>
 </resources>

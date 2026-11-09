@@ -627,6 +627,9 @@ private fun PotHeaderActions(open: ObjectRef, model: AppModel, snackbar: android
     val context = androidx.compose.ui.platform.LocalContext.current
     var moving by androidx.compose.runtime.remember(open) { androidx.compose.runtime.mutableStateOf(false) }
     var sharing by androidx.compose.runtime.remember(open) { androidx.compose.runtime.mutableStateOf(false) }
+    var reporting by androidx.compose.runtime.remember(open) { androidx.compose.runtime.mutableStateOf(false) }
+    if (reporting) ReportSheet(open, model) { reporting = false }
+    val reportOffered by model.reportOffered.collectAsStateWithLifecycle()
     if (sharing) PotShareSheet(open, model) { sharing = false }
     // The Pot's links (core's share action, a header button as the web's): offered where the tenant has links on.
     if (model.linkRules().on) androidx.compose.material3.IconButton(onClick = { sharing = true }) {
@@ -679,6 +682,7 @@ private fun PotHeaderActions(open: ObjectRef, model: AppModel, snackbar: android
             problem
         },
         onMove = { moving = true },
+        onReport = if (reportOffered) ({ reporting = true }) else null,
         onDelete = {
             scope.launch {
                 val (deleted, before) = model.trash(open)

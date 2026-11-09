@@ -345,4 +345,35 @@
     <string name="share_failed">Das hat nicht geklappt — bitte erneut versuchen.</string>
     <string name="share_switch_off">Widerrufen</string>
     <string name="share_closed_rekeying">Der Link ist abgeschaltet. Was darunter liegt, bekommt ein neues Schloss, damit der alte Link auch künftig nichts mehr öffnet.</string>
+    <!-- Eine Meldung an die Moderation (report.* des Webs, ADR 0093). -->
+    <string name="report_action">Melden</string>
+    <string name="report_title">Melden</string>
+    <string name="report_intro">Sag den Leuten, die diesen Server betreiben, Bescheid, wenn etwas rechtswidrig ist oder gegen die Nutzungsbedingungen verstößt. Nur die Moderation kann deine Meldung lesen. Sonst erfährt niemand davon, auch nicht die Person, die es geteilt hat.</string>
+    <string name="report_scope">Was meldest du?</string>
+    <string name="report_scope_whole">Es und alles darin</string>
+    <string name="report_scope_name">Nur seinen Namen</string>
+    <string name="report_scope_whole_hint">Die Moderation kann es und alles darin öffnen.</string>
+    <string name="report_scope_name_hint">Die Moderation kann seinen Namen öffnen und sonst nichts: nicht, was darin ist, und nicht seine übrigen Angaben.</string>
+    <string name="report_category">Worum geht es?</string>
+    <string name="report_cat_csam">Darstellung sexuellen Missbrauchs von Kindern</string>
+    <string name="report_cat_terror">Terroristische Inhalte</string>
+    <string name="report_cat_threat">Eine Gefahr für Leben oder Sicherheit</string>
+    <string name="report_cat_illegal">Andere rechtswidrige Inhalte</string>
+    <string name="report_cat_terms">Ein Verstoß gegen die Nutzungsbedingungen</string>
+    <string name="report_csam_note">Dafür musst du deinen Namen nicht angeben. Die Moderation handelt auch ohne ihn.</string>
+    <string name="report_reason">Warum meldest du es?</string>
+    <string name="report_reason_hint">Beschreibe, was rechtswidrig ist oder gegen die Nutzungsbedingungen verstößt, und warum. Pflichtfeld.</string>
+    <string name="report_good_faith">Ich bestätige, dass meine Angaben nach bestem Wissen richtig und vollständig sind.</string>
+    <string name="report_contact">Deine E-Mail-Adresse (optional)</string>
+    <string name="report_contact_hint">Für eine Eingangsbestätigung jetzt und die Entscheidung später. Der Server verschickt die Bestätigung und bewahrt die Adresse nur so auf, dass allein die Moderation sie lesen kann.</string>
+    <string name="report_privacy">Wie dein Kontakt aufbewahrt wird, und wie lange</string>
+    <string name="report_send">Meldung senden</string>
+    <string name="report_sent">Deine Meldung ist eingegangen.</string>
+    <string name="report_receipt">Aktenzeichen %1$s, eingegangen am %2$s. Bewahre es auf, wenn du dich auf diese Meldung beziehen willst.</string>
+    <string name="report_close">Schließen</string>
+    <string name="report_failed">Die Meldung konnte nicht gesendet werden. Versuch es noch einmal.</string>
+    <string name="report_too_many_open">Du hast zu viele Meldungen, über die noch nicht entschieden ist. Warte, bis einige entschieden sind.</string>
+    <string name="report_rate_limited">Zu viele Meldungen in kurzer Zeit. Versuch es später noch einmal.</string>
+    <string name="report_unavailable">Etwas von dem, was du ausgewählt hast, lässt sich hier nicht mehr lesen und darum nicht melden. Lade die Seite neu.</string>
+    <string name="report_not_found">Etwas von dem, was du ausgewählt hast, ist nicht mehr da. Lade die Seite neu.</string>
 </resources>
