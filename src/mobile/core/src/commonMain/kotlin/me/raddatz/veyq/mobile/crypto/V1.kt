@@ -209,6 +209,40 @@ class V1(val p: Primitives) {
         return IdentityPublic(kem, sign)
     }
 
+    // ---- a drop box's key pair (`v1.ts` generateDropKey…, `core/sharing/dropKey.ts`, `v1.json#drop_key`) ----
+
+    /** A fresh drop key: a 32-byte X-Wing seed, which is also the secret [openAs] takes (`xwingKey(seed)`). */
+    fun generateDropKey(): ByteArray = p.randomBytes(32)
+
+    /** The drop key's public half, derived from its seed (a drop box stores only the private half). */
+    fun dropKeyPublic(seed: ByteArray): ByteArray = xwingKey(seed).publicKey
+
+    /** lp(seed): the plaintext of a `drop-private-key` seal. */
+    fun serializeDropKey(seed: ByteArray): ByteArray {
+        require(seed.size == 32) { "drop key: malformed" }
+        return lp(seed)
+    }
+
+    /** The seed back from [serializeDropKey]'s form, read strictly: exactly one field of 32 bytes, nothing after it. */
+    fun deserializeDropKey(b: ByteArray): ByteArray {
+        val (seed) = splitLp(b, 1)
+        require(seed.size == 32) { "drop key: malformed" }
+        return seed
+    }
+
+    /** lp(pk): the plaintext of a `drop-public-key` seal. */
+    fun serializeHybridPublic(publicKey: ByteArray): ByteArray {
+        require(publicKey.size == 1216) { "hybrid public key: malformed" }
+        return lp(publicKey)
+    }
+
+    /** The public key back from [serializeHybridPublic]'s form: exactly one field of 1216 bytes, nothing after it. */
+    fun deserializeHybridPublic(b: ByteArray): ByteArray {
+        val (pk) = splitLp(b, 1)
+        require(pk.size == 1216) { "hybrid public key: malformed" }
+        return pk
+    }
+
     fun identityPublic(priv: IdentityPrivate): IdentityPublic = IdentityPublic(xwingKey(priv.kemSeed).publicKey, p.ed25519Public(priv.signSeed))
 
     /**

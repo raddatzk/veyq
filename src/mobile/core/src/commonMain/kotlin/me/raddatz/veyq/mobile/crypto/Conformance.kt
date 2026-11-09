@@ -80,6 +80,31 @@ class Conformance(private val p: Primitives, vectorsJson: String) {
             eqHex(encodeContext(Purposes.SEAL, keyCtx), key.str("context_bytes"))
             eqHex(suite.seal(keyCtx, node.hex("plaintext"), key.hex("plaintext"), key.hex("nonce")), key.str("blob"))
         }
+        val dk = v.obj("drop_key")
+        check("drop_key") {
+            // the codec's bytes, the public half from the seed, and both seals at their nonces
+            val seed = dk.hex("seed")
+            eqHex(suite.serializeDropKey(seed), dk.str("serialized"))
+            eqHex(suite.dropKeyPublic(seed), dk.str("publicKey"))
+            eqHex(suite.serializeHybridPublic(suite.dropKeyPublic(seed)), dk.str("serializedPublic"))
+            eqHex(suite.deserializeDropKey(dk.hex("serialized")), dk.str("seed"))
+            eqHex(suite.deserializeHybridPublic(dk.hex("serializedPublic")), dk.str("publicKey"))
+            val priv = dk.obj("sealedPrivate")
+            val privCtx = context("drop-private-key", Purposes.SEAL, priv.obj("context"))
+            eqHex(suite.seal(privCtx, priv.hex("kek"), priv.hex("plaintext"), priv.hex("nonce")), priv.str("blob"))
+            eqHex(suite.deserializeDropKey(suite.open(privCtx, priv.hex("kek"), priv.hex("blob"))), dk.str("seed"))
+            val pub = dk.obj("sealedPublic")
+            val pubCtx = context("drop-public-key", Purposes.SEAL, pub.obj("context"))
+            eqHex(suite.seal(pubCtx, pub.hex("kek"), pub.hex("plaintext"), pub.hex("nonce")), pub.str("blob"))
+            eqHex(suite.deserializeHybridPublic(suite.open(pubCtx, pub.hex("kek"), pub.hex("blob"))), dk.str("publicKey"))
+            // the step into a guest's folder: the identity key sealed to this public half opens under this seed
+            val up = v.obj("seal").obj("asym").obj("upload-identity-key")
+            eqHex(suite.openAs(context("upload-identity-key", Purposes.SEAL_TO, up.obj("context")), suite.xwingKey(seed), up.hex("blob")), up.str("plaintext"))
+            // strict reads: trailing bytes and a short field are refused
+            for (bad in listOf(dk.hex("serialized") + byteArrayOf(0), dk.hex("serialized").copyOfRange(0, 35))) {
+                if (runCatching { suite.deserializeDropKey(bad) }.isSuccess) fail("a malformed drop key read")
+            }
+        }
         val meta = v.obj("seal").obj("sym").obj("blob-meta")
         check("blob-meta plaintext is the layout's") {
             val opened = BlobMeta.decode(meta.hex("plaintext")) ?: fail("no meta")
