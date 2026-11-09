@@ -83,7 +83,10 @@ is [ADR 0016](../../../decisions/0016-geocoding-provider-neutrality.md). This us
   set the point by hand (`fixed`); a map the user never moved sets **no** point - saving then stores a name-only
   place as below, never the view the editor opened on (inbox #834: an untouched editor pinned the Memory at the
   world view's centre). A stored `fixed` point equal to that opening view's centre is read as no point, and the
-  next save drops it. **Without one** (A4) they type a **name** (`manual`) → a valid **name-only**
+  next save drops it.
+  While no point is set, the editor's centre pin is drawn greyed out, with the hint to move the map to set the
+  position; the first move by the member draws it as a set point (owner, 2026-11-09: a full pin under "Name only"
+  read as a point that was not there). **Without one** (A4) they type a **name** (`manual`) → a valid **name-only**
   location (`derivedMode: 'auto'`, no `derived`): shown in the detail, the profile's rows and an export, but **not**
   on any map (no coordinate) until a geotagged photo gives it the medoid.
 - **E4 — reverse-lookup off or unreachable:** the name field falls back to **manual typing** — no external
