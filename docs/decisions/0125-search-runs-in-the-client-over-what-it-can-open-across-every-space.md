@@ -1,6 +1,6 @@
 # ADR 0125 — Search runs in the client over what it can open, across every space
 - Status: Accepted
-- Built: partly (not built: decision 8)
+- Built: partly (not built: decisions 8, 9)
 - Date: 2026-11-08
 - Model: [uc.platform.search](../features/platform/use-cases/uc.platform.search.md)
 
@@ -81,6 +81,7 @@ The load model is a household. The volume pre-check's largest tree is 5,000 node
    [ADR 0093](0093-a-report-opens-one-window-for-the-moderator-and-a-hold-copies-never-blocks.md) untouched, which
    holds while a share has "no directory, no search".
 8. **Later stages, decided here so the first stage is shaped for them:**
+   (decision 9 follows them; it was decided after the first stage was built)
    - **(a) The photos of every space.** A paged, scope-wide listing of the listed tier for members, with each node's
      items revision carried in the tree so the client knows which listings moved. It is not built.
    - **(b) Full text over the journal.** This is designed inside the journal's refinement (inbox #18): whether a client
@@ -89,6 +90,25 @@ The load model is a household. The volume pre-check's largest tree is 5,000 node
    - **(c) Semantic search.** Deferred. Embeddings in the browser need WebAssembly or WebGPU, the CSP grants no
      `'wasm-unsafe-eval'` ([CSP](../crosscutting/cc.security.csp.md)), and a model is tens of MB. Its natural home is
      the native apps.
+9. **People and settings are results too, each in a group of its own after the spaces' groups: People, then
+   Settings.** (Owner, 2026-11-09.)
+   - **People:**
+     - A person result is a member of this tenant, named as the directory names them: the real name under the
+       tenant key, else the username.
+     - Choosing one opens their profile page ([ADR 0083](0083-memory-participants-are-a-sealed-list-in-the-memorys-metadata.md)).
+     - A person stays a chip as well. Typing "Oma" offers her as a chip (filtering Memories she takes part in) and
+       lists her as a person result. The two are different answers to the same word.
+     - The roster the client already reads is the source. Nothing new is fetched or sent.
+   - **Settings:**
+     - A settings result is a section of the settings page, matched by its label in the UI's language.
+     - The search offers exactly the sections the settings rail offers this member at this moment. Owner-only,
+       moderator-only and capability-gated sections stay hidden where the rail hides them, so the rail and the search
+       read one list with one set of gates.
+     - Choosing one opens that section.
+     - The entries are the client's own words, so they tell the server nothing.
+   - **Why groups of their own:** a person or a settings section lives in no space, so the spaces' grouping
+     (decision 5) has no place for them. Their fixed position after content keeps a query's content results where
+     they were.
 
 ## Consequences
 

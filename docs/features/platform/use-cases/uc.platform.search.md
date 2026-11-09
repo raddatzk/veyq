@@ -3,7 +3,7 @@
 - **ID:** uc.platform.search
 - **Status:** built (web; browser pass 2026-11-09), the first stage of [ADR 0125](../../../decisions/0125-search-runs-in-the-client-over-what-it-can-open-across-every-space.md): names and Memory
   meta across every space, plus the media of the open Memory. Decision 8 (the photos of every space, journal full text,
-  semantic search) is not built.
+  semantic search) is not built, nor decision 9 (people and settings as results, `changes/cr-search-people-and-settings.md`).
 - **Primary actor:** A member whose keys are unlocked.
 - **Goal:** Find a folder, a Memory, a Chapter, a file or a photo by its name, date, place, people or kind, in any
   space the member belongs to in the tenant they are in, without the server learning what was searched.
@@ -28,6 +28,8 @@
    - Each application adds the fields of its own kinds through the registry. Memories adds a Memory's date range, its
      place name and its participants' names. For the open Memory it adds one document per photo and video of its
      already-opened listing, with capture time and place.
+   - Core adds one document per member of this tenant (the directory's name), and one per settings section the
+     settings rail offers this member now, with the rail's own gates and label (ADR 0125 decision 9).
 4. **Type the query.** The member types. Each token that reads as a known facet is offered as a chip: a year, a member's name (person), a place a document carries, a space's name, a kind's word. Choosing a suggestion
    turns the token into a chip; the rest stays text.
 5. **Match.**
@@ -37,9 +39,11 @@
      place match.
 6. **Show the results in groups,** each ranked within itself: the open node's - headed by its name, *In “Rom 2024”*,
    holding what its page contributed and the nodes below it (when a node's page is open, not a folder) -, **In this
-   space**, **Other spaces** (each result naming its space and its path). An empty group is not shown.
+   space**, **Other spaces** (each result naming its space and its path), then **People** and **Settings**. An empty group is not
+   shown.
 7. **Open a result.** The member chooses one. A node opens where it lives, switching the active space when it lies in
-   another. A photo opens in the open Memory's lightbox.
+   another. A photo opens in the open Memory's lightbox. A person opens their profile page. A settings
+   section opens on the settings page.
 
 ## Alternate / exception flows
 
