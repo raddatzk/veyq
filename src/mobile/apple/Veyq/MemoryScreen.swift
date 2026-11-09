@@ -1,4 +1,5 @@
 import AVKit
+import PhotosUI
 import SwiftUI
 import UniformTypeIdentifiers
 import VeyqCore
@@ -13,6 +14,9 @@ struct MemoryScreen: View {
     @State private var failed = false
     @State private var chapters: [NodeRef] = []
     @State private var open: LightboxStart?
+    @State private var pickingPhotos = false
+    @State private var photos: [PhotosPickerItem] = []
+    @State private var pickingFiles = false
 
     private var items: [MemoryMedia.Item] { gallery?.items ?? [] }
 
@@ -49,8 +53,31 @@ struct MemoryScreen: View {
             }
         }
         .navigationTitle(ref.name)
-        // read again whenever the lists are
-        .task(id: model.rowDetails.count) {
+        // photos and videos come from the photo library or from files
+        .createMenu("Add Photos", shown: model.uploading == nil) {
+            Button { pickingPhotos = true } label: { Label("Photo Library", systemImage: "photo.on.rectangle") }
+            Button { pickingFiles = true } label: { Label("Files", systemImage: "folder") }
+        }
+        .photosPicker(isPresented: $pickingPhotos, selection: $photos, matching: .any(of: [.images, .videos]), preferredItemEncoding: .current)
+        .onChange(of: photos) {
+            let picked = photos
+            photos = []
+            guard !picked.isEmpty else { return }
+            Task {
+                var urls: [URL] = []
+                for item in picked {
+                    if let file = try? await item.loadTransferable(type: PickedMedia.self) { urls.append(file.url) }
+                }
+                await model.uploadMedia(scopeId: ref.scopeId, nodeId: ref.nodeId, urls: urls, fromPhotos: true)
+                for url in urls { try? FileManager.default.removeItem(at: url.deletingLastPathComponent()) }
+            }
+        }
+        .background(EmptyView().fileImporter(isPresented: $pickingFiles, allowedContentTypes: [.image, .movie], allowsMultipleSelection: true) { result in
+            guard case .success(let urls) = result, !urls.isEmpty else { return }
+            Task { await model.uploadMedia(scopeId: ref.scopeId, nodeId: ref.nodeId, urls: urls, fromPhotos: false) }
+        })
+        // read again whenever the lists are, and when a medium of this device is in
+        .task(id: "\(model.rowDetails.count)/\(model.galleryRevision)") {
             if let read = await model.memoryGallery(scopeId: ref.scopeId, nodeId: ref.nodeId) { gallery = read; failed = false } else { failed = true }
             chapters = ref.kind == "MEMORY"
                 ? await model.scopeNodes(ref.scopeId).filter { $0.parentId == ref.nodeId && $0.kind == "CHAPTER" }
@@ -61,6 +88,25 @@ struct MemoryScreen: View {
         #else
         .sheet(item: $open) { start in Lightbox(model: model, items: items, memoryName: ref.name, index: start.index).frame(minWidth: 640, minHeight: 480) }
         #endif
+    }
+}
+
+/// A photo or video the Photos picker handed over, copied to a folder of its own in the app's temporary directory (the
+/// picker's own file is gone once the transfer returns); the uploader removes the folder.
+private struct PickedMedia: Transferable {
+    let url: URL
+
+    static var transferRepresentation: some TransferRepresentation {
+        FileRepresentation(importedContentType: .movie) { try copy($0.file) }
+        FileRepresentation(importedContentType: .image) { try copy($0.file) }
+    }
+
+    private static func copy(_ file: URL) throws -> PickedMedia {
+        let dir = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        let copy = dir.appendingPathComponent(file.lastPathComponent)
+        try FileManager.default.copyItem(at: file, to: copy)
+        return PickedMedia(url: copy)
     }
 }
 

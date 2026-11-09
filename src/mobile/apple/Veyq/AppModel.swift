@@ -720,6 +720,48 @@ final class AppModel {
         return url
     }
 
+    /// Moves each time a medium this device uploaded is in (a gallery on screen reads itself again).
+    private(set) var galleryRevision = 0
+
+    /// Adds the picked photos and videos (`urls`; `fromPhotos`: copies the Photos picker handed over, whose own dates are
+    /// no capture time) to Memory or chapter `nodeId` (`MediaUpload`), one after another, each one's tiers derived here
+    /// (`MediaTiers`); the shell shows which is on its way. A quota or an application switched off stops the rest and is
+    /// said once; what else did not go up is said.
+    func uploadMedia(scopeId: String, nodeId: String, urls: [URL], fromPhotos: Bool) async {
+        guard let t = tenantSession else { return }
+        var failed: [String] = []
+        for (i, url) in urls.enumerated() {
+            let scoped = url.startAccessingSecurityScopedResource()
+            defer { if scoped { url.stopAccessingSecurityScopedResource() } }
+            guard let p = Picked(url) else { continue }
+            uploading = urls.count > 1 ? "\(p.name) (\(i + 1)/\(urls.count))" : p.name
+            let type = MediaUpload.shared.typeOf(given: p.type, name: p.name, head: KotlinByteArray(size: 0))
+            let tiers = await MediaTiers.derive(p.url, type: type)
+            let r = try? await AppleMemories.shared.upload(
+                tenant: t, scopeId: scopeId, nodeId: nodeId, path: p.url.path, type: p.type, name: p.name,
+                modifiedAt: fromPhotos ? nil : p.modifiedAt.map { KotlinLong(value: $0) },
+                preview: tiers.preview, thumbnail: tiers.thumbnail,
+                width: tiers.width.map { KotlinInt(value: Int32($0)) }, height: tiers.height.map { KotlinInt(value: Int32($0)) },
+                now: Int64(Date().timeIntervalSince1970 * 1000)
+            )
+            switch r?.outcome {
+            case .done: galleryRevision += 1
+            case .noRoom:
+                uploading = nil
+                notice = Notice(text: String(localized: "“\(p.name)” could not be added: there is no room left in this space’s storage."))
+                return
+            case .switchedOff:
+                uploading = nil
+                notice = Notice(text: String(localized: "Memories is switched off here, so nothing can be added."))
+                return
+            default: failed.append(p.name)
+            }
+        }
+        uploading = nil
+        await refreshLists(t)
+        if !failed.isEmpty { notice = Notice(text: String(localized: "Could not add: \(failed.joined(separator: ", ")). Please try again.")) }
+    }
+
     /// `item`'s original read at any offset, for a player (`MemoryMedia.reader`); nil where it does not open here.
     func mediaReader(_ item: MemoryMedia.Item) -> RangeReader? {
         guard let t = tenantSession else { return nil }

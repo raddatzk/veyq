@@ -430,7 +430,11 @@ implementation exists but what holds it to the first.
   (measured 2026-11-09: a photo stored landscape with orientation 6 went up 3000×4000 with its tiers upright, a clip with
   a quarter-turn matrix 720×1280 with its container time; the web shows both so). The picker zeroes a photo's position
   and renames it (`src/mobile/CLAUDE.md` § Traps): an Android upload carries no position unless the app is given full
-  media access, which is the owner's to decide.
+  media access, which is the owner's to decide. The Apple app's "+" menu picks from the photo library (`PhotosPicker`, the
+  original's encoding kept) or from files, derives the tiers with ImageIO (the orientation applied) and a video's poster
+  with `AVAssetImageGenerator` (its track's transform applied), and core reads the picked file at any offset as it seals
+  it (measured 2026-11-09: the same photo and clip went up from the iOS Simulator under their own names, the photo with
+  its position and altitude, the photos picker offering "with location" by default).
   Not built yet: the live poll, zoom, the slideshow, edits (date, place, participants, capture-time correction, trash),
   item marks, buckets, the map, sharing, the re-key, export and copy.
 - **One header for every node, drawn by core** (the web's `NodePage` + `NodeHeader`, ADR 0110 decision 10; owner
