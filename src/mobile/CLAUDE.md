@@ -71,7 +71,9 @@ A Gradle build of its own, run through its own wrapper.
   renews it (the Pot re-keyed, a fresh session still reads the entry) and renews, switches off and deletes a second;
   `VEYQ_LIVE_LINKS_OUT` gets the first one's old and new address (old opens nothing, new the Pot). `VEYQ_LIVE_EXPORT=<pot name>` downloads that Pot as the web's ZIP and reads it back (every payload's SHA-256 against
   the manifest, an entry each, a CSV line each); `VEYQ_LIVE_EXPORT_OUT=<file>` keeps it there, for the web's import (at a
-  level: New, Upload files, the archive — the web offers its import). `VEYQ_LIVE_REPORT=<pot name>` reports a fresh Pot beside it — its three keys open here, the server answers with a
+  level: New, Upload files, the archive — the web offers its import). `VEYQ_LIVE_COPY=<pot name>` copies that Pot beside itself (the next free name), checks a fresh session reads the same
+  live entries, the same balances person by person and every receipt to the byte, and trashes the copy.
+  `VEYQ_LIVE_REPORT=<pot name>` reports a fresh Pot beside it — its three keys open here, the server answers with a
   receipt — and trashes it; each run leaves an open report for the dev moderators, so run it once, not in a loop. `VEYQ_LIVE_RENAME=<pot name>` renames a fresh Pot twice, checks its
   names taken and a sibling's refused, and trashes it; `VEYQ_LIVE_RENAME_TARGET="<from>|<to>"` renames the root Pot
   `<from>` (created when there is none) and prints what the re-seal of its links did — with a link the web minted on it,
@@ -131,7 +133,9 @@ menu on iOS.
   none, an `.onChange` runs once a row. Presentations of a section go on the `Form` (`ReceiptPresenters`).
 - A Kotlin name exported to Swift must not be one of NSObject's: an enum entry `SELF` becomes the class property `self`,
   which overrides `+[NSObject self]`, and the class's first use recurses until the stack overflows (measured 2026-11-09:
-  `NodeMove.Block.SELF`, now `ITSELF`). Avoid `self`, `description`, `hash`, `class`, `copy`, `init`, `new` as names.
+  `NodeMove.Block.SELF`, now `ITSELF`). Avoid `self`, `description`, `hash`, `class`, `copy`, `init`, `new` as names, and
+  a method name that STARTS with `copy`, `new`, `alloc` or `init`: Objective-C's ownership rule makes Kotlin export it as
+  `doCopyTo(…)` (measured 2026-11-09: `PotCopy.copyTo`, now `duplicate`).
 - A Swift closure handed to core is called on core's threads (after a request answered, Ktor's), never only on the main
   one: written in the `@MainActor` model it is inferred main-actor isolated, and Swift 6 traps on the first call from
   elsewhere (`_dispatch_assert_queue_fail`, measured 2026-11-09: the re-key's rekey id). Mark it `@Sendable` and reach

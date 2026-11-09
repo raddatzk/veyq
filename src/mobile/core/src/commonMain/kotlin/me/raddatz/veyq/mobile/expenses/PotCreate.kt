@@ -40,13 +40,15 @@ object PotCreate {
     /**
      * Creates a Pot named [name] in [scopeId] under [parentId] (null: the space's root) with [base], and its [people] in
      * the order given (each joins a millisecond after the one before: the join order is the order they were added in).
+     * [categories] are the Pot's own beside the default set (a copy carries the original's).
      */
     @Throws(Exception::class)
     suspend fun create(
         tenant: TenantSession, scopeId: String, parentId: String?, name: String, base: Ledger.BaseCurrency, people: List<NewPerson>,
+        categories: List<Pair<String, String>> = emptyList(),
     ): Result {
         val n = name.trim()
-        val meta = runCatching { PotMeta(base, emptyList()).toJson() }.getOrNull() ?: return Result(Outcome.INVALID)
+        val meta = runCatching { PotMeta(base, categories).toJson() }.getOrNull() ?: return Result(Outcome.INVALID)
         if (n.isEmpty() || people.any { RevisionFormat.codePoints(it.name) !in 1..100 }) return Result(Outcome.INVALID)
         if (people.mapNotNull { it.userId }.let { it.size != it.toSet().size }) return Result(Outcome.INVALID)
         val suite = tenant.account.suite

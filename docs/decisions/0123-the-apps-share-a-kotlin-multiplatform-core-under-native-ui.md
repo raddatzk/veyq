@@ -246,7 +246,13 @@ implementation exists but what holds it to the first.
   `core/export/`, the names held to its `archiveName` cases) around Expenses' content (`expenses/PotExport.kt`, the web's
   `exportPot` and its CSV), streamed where the person picks it — Android's create-document, Apple's save sheet over a
   temporary file — never held whole (the web's import takes a Pot the app downloaded, receipts and entries alike, and the
-  JDK's reader the writer's ZIP64 records, measured 2026-11-09). Cover and copy are not built.
+  JDK's reader the writer's ZIP64 records, measured 2026-11-09). A Pot is copied to a place in its space (ADR 0082 decision
+  11, uc.platform.copy-node; core's move browser, where a copy may also go where its original is): `expenses/PotCopy.kt`
+  replays what a download carries — settings and own categories, people, each live entry's current revision, its receipts —
+  under ids minted anew with every reference mapped, a receipt uploaded before the batch that lists it, the name numbered past
+  a sibling's, and a copy that fails part way trashed (a copy each app made opens on the web, entries and receipts alike,
+  measured 2026-11-09). The web asks the tenant's storage before it copies (`checkTenantStorageFit`); the app does not yet, so
+  a copy past the quota fails at its first receipt and is trashed. The cover is not built.
 - **Not built yet:** every other write (another kind's node), the
   other applications' views behind the bar, a CI job for the apps. The grant check is held by `GrantTrustTest` against a server the test plays — each refusal killed by
   a mutation of the rule it pins, but for three a second rule also holds (a pending or self-naming signer, and a cycle

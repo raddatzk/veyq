@@ -61,10 +61,11 @@ object NodeMove {
         tree.filter { it.parentId == at && (it.kind == FOLDER || allows.allows(moved.kind, it.kind)) }
             .map { Place(it, within(tree, moved, it.nodeId)) }
 
-    /** Why [moved] cannot be moved to [at] (null: the scope root), or null where it can. */
-    fun hereBlock(tree: List<NodeRef>, moved: NodeRef, at: String?, allows: PlacementAllows): Block? {
+    /** Why [moved] cannot be moved — or, with [copy], copied — to [at] (null: the scope root), or null where it can. A copy
+     *  may go where its original is (it takes the next free name there, the web's `moveHereBlockOf(…, 'copy')`). */
+    fun hereBlock(tree: List<NodeRef>, moved: NodeRef, at: String?, allows: PlacementAllows, copy: Boolean = false): Block? {
         if (at != null) within(tree, moved, at)?.let { return it }
-        if (moved.parentId == at) return Block.CURRENT
+        if (!copy && moved.parentId == at) return Block.CURRENT
         val kind = at?.let { a -> tree.firstOrNull { it.nodeId == a }?.kind ?: return Block.KIND }
         return if (allows.allows(moved.kind, kind)) null else Block.KIND
     }

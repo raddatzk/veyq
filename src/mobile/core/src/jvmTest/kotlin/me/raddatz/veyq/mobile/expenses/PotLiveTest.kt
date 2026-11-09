@@ -326,6 +326,30 @@ class PotLiveTest {
             System.getenv("VEYQ_LIVE_LINKS_OUT")?.let { File(it).writeText(a.url + "\n" + b.url) }
             println("[$folderName] \"$name\": link A switched off and the Pot re-keyed; entry, receipt and a new write open; B stays on")
         }
+        System.getenv("VEYQ_LIVE_COPY")?.let { potName ->
+            // The Pot copied beside itself: a new Pot under the next free name whose fresh session reads the same live entries
+            // with the same balances person by person, and every copied receipt to the byte; then trashed.
+            val ref = pots.first { it.name == potName }
+            val source = PotSession.open(tenant, ref.scopeId, ref.nodeId)!!
+            val parent = tenant.node(ref.scopeId, ref.nodeId)?.parentId
+            val copied = PotCopy.duplicate(source, tenant, ref.scopeId, parent, "Deleted people") { java.util.UUID.randomUUID().toString() }
+            assertEquals(PotCopy.Outcome.COPIED, copied.outcome)
+            val copy = PotSession.open(account.open(tenant.tenant), ref.scopeId, copied.nodeId!!)!!
+            val a = source.ledger!!; val b = copy.ledger!!
+            val titles = { l: Ledger.Pot -> l.entries.filter { it.status == Ledger.Status.LIVE }.map { (it.content as? Expense)?.title ?: (it.content as? Refund)?.title ?: "transfer" }.sorted() }
+            assertEquals(titles(a), titles(b))
+            val byName = { l: Ledger.Pot -> l.participants.filter { !it.erased }.associate { it.name to l.balances[it.id].toString() } }
+            assertEquals(byName(a), byName(b))
+            assertEquals(source.meta!!.base, copy.meta!!.base)
+            copy.readReceipts()
+            val kept = a.entries.filter { it.status == Ledger.Status.LIVE }.flatMap { it.content!!.receipts }
+                .mapNotNull { r -> source.receipts.firstOrNull { it.receiptId == r && !it.dropped && !it.blocked } }
+            assertEquals(kept.size, copy.receipts.count { !it.dropped })
+            assertEquals(kept.map { source.openReceipt(it.receiptId)!!.toList().hashCode() }.sorted(),
+                copy.receipts.filter { !it.dropped }.map { copy.openReceipt(it.receiptId)!!.toList().hashCode() }.sorted())
+            assertEquals(me.raddatz.veyq.mobile.session.NodeTrash.Deleted.TRASHED, me.raddatz.veyq.mobile.session.NodeTrash.delete(tenant, ref.scopeId, copied.nodeId!!))
+            println("[$potName] copied as \"${copied.name}\": ${b.entries.size} entries, ${kept.size} receipts, balances equal; trashed")
+        }
         System.getenv("VEYQ_LIVE_EXPORT")?.let { potName ->
             // The Pot downloaded as the web's ZIP: the JDK reads it, the manifest names every payload by its SHA-256, the
             // content carries every live entry and the CSV a line each. With VEYQ_LIVE_EXPORT_OUT the archive is saved there,

@@ -39,6 +39,14 @@ class NodeMoveTest {
     }
 
     @Test
+    fun aCopyMayGoWhereItsOriginalIsButNeverIntoItselfOrAMemory() {
+        val pot = ref("pot-a")
+        assertNull(NodeMove.hereBlock(tree, pot, "2026", allows, copy = true))
+        assertEquals(NodeMove.Block.KIND, NodeMove.hereBlock(tree, pot, "memory-x", allows, copy = true))
+        assertEquals(NodeMove.Block.ITSELF, NodeMove.hereBlock(tree, ref("trips"), "trips", allows, copy = true))
+    }
+
+    @Test
     fun aFolderGoesNeitherIntoItselfNorBelowItself() {
         val trips = ref("trips")
         assertEquals(NodeMove.Block.ITSELF, NodeMove.hereBlock(tree, trips, "trips", allows))

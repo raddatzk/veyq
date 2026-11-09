@@ -331,6 +331,15 @@ class PotSession private constructor(private val tenant: TenantSession, private 
     private val blobs = ApplicationBlobs(tenant)
     private var receiptsTag: String? = null
 
+    /** Uploads [bytes] as receipt [receiptId] of entry [entryId], which a write then lists (a copy's receipts, written ahead
+     *  of the batch holding their entry). Throws `ApplicationBlobs.UploadRefused` with the server's code. */
+    internal suspend fun uploadReceipt(entryId: String, receiptId: String, bytes: ByteArray, type: String, name: String?, modifiedAt: Long?) {
+        blobs.upload(
+            node.scopeId, { node }, ::reopen, { node.scopeEpoch < (tenant.scopeEpoch(node.scopeId) ?: Int.MAX_VALUE) },
+            receiptId, entryId, Receipts.ROLE, bytes, type, name, modifiedAt,
+        )
+    }
+
     /** Every receipt the Pot holds, each with its sealed name and type where they opened, dropped ones included. */
     var receipts: List<Receipts.Receipt> = emptyList()
         private set
