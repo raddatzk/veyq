@@ -167,10 +167,18 @@ object AppleSessions {
     @Throws(Exception::class)
     suspend fun openCover(tenant: TenantSession, nodeId: String): NSData? = NodeCover.openNode(tenant, nodeId)?.toNSData()
 
-    /** Sets [jpeg] (the device's cover JPEG) as the cover of node [nodeId] in [scopeId] (core's `NodeCover.set`). */
+    /** Sets [jpeg] (the device's cover JPEG) as the cover of node [nodeId] in [scopeId], framed by [crop] (`NodeCover.set`). */
     @Throws(Exception::class)
-    suspend fun setCover(tenant: TenantSession, scopeId: String, nodeId: String, jpeg: NSData): NodeCover.Outcome =
-        NodeCover.set(tenant, scopeId, nodeId, jpeg.toByteArray())
+    suspend fun setCover(tenant: TenantSession, scopeId: String, nodeId: String, jpeg: NSData, crop: NodeCover.Crop): NodeCover.Outcome =
+        NodeCover.set(tenant, scopeId, nodeId, jpeg.toByteArray(), crop)
+
+    /** A cover opened here for Swift: its image's bytes and its crop. */
+    class FramedCover(val data: NSData, val crop: NodeCover.Crop)
+
+    /** The cover of node [nodeId] with its crop (core's `NodeCover.openFramed`), or null. */
+    @Throws(Exception::class)
+    suspend fun openFramedCover(tenant: TenantSession, nodeId: String): FramedCover? =
+        NodeCover.openFramed(tenant, nodeId)?.let { FramedCover(it.bytes.toNSData(), it.crop) }
 
     @Throws(Exception::class)
     suspend fun openReceipt(pot: me.raddatz.veyq.mobile.expenses.PotSession, receiptId: String): NSData? =

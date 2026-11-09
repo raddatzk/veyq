@@ -92,6 +92,28 @@ object NodeCover {
             runCatching { read(NodeMetaWrite.openForWrite(tenant.account.suite, n.scopeId, n.id, n.key, n.wrappedMeta)) }.getOrNull()?.let { n.id to it.blobId }
         }.toMap()
 
+    /**
+     * Which node names which cover, and how it is framed: a key of its blob AND its crop, by node id — so a list's picture is
+     * opened once and again when the cover or only its crop changed.
+     */
+    suspend fun framed(tenant: TenantSession): Map<String, String> =
+        tenant.trees().values.flatten().mapNotNull { n ->
+            runCatching { read(NodeMetaWrite.openForWrite(tenant.account.suite, n.scopeId, n.id, n.key, n.wrappedMeta)) }.getOrNull()
+                ?.let { n.id to "${it.blobId}@${it.crop.x},${it.crop.y},${it.crop.width},${it.crop.height}" }
+        }.toMap()
+
+    /** A cover opened here: its image's bytes and where its frame sits on it. */
+    class Opened(val bytes: ByteArray, val crop: Crop)
+
+    /** The cover of node [nodeId] wherever the tenant's trees hold it, with its crop, or null. */
+    @Throws(Exception::class)
+    suspend fun openFramed(tenant: TenantSession, nodeId: String): Opened? {
+        val node = tenant.trees().values.flatten().firstOrNull { it.id == nodeId } ?: return null
+        val meta = runCatching { NodeMetaWrite.openForWrite(tenant.account.suite, node.scopeId, node.id, node.key, node.wrappedMeta) }.getOrNull() ?: return null
+        val crop = read(meta)?.crop ?: return null
+        return open(tenant, node)?.let { Opened(it, crop) }
+    }
+
     /** The cover of node [nodeId] wherever the tenant's trees hold it, or null. */
     @Throws(Exception::class)
     suspend fun openNode(tenant: TenantSession, nodeId: String): ByteArray? =
@@ -127,6 +149,22 @@ object NodeCover {
             }
         }
     }
+
+    /**
+     * Moves the crop of node [nodeId]'s cover to [crop], the image kept (the web's `keep` intent: a plain meta write, the
+     * cover's blob untouched). Nothing to write where the node has no cover.
+     */
+    @Throws(Exception::class)
+    suspend fun recrop(tenant: TenantSession, scopeId: String, nodeId: String, crop: Crop): Outcome =
+        write(tenant, scopeId, nodeId) { node, current ->
+            val cover = current[FIELD] as? JsonObject ?: return@write null
+            if (read(current) == null) return@write null
+            JsonObject(current + (FIELD to JsonObject(cover + ("crop" to cropJson(crop))))) to { wrapped: String, revision: Long ->
+                tenant.account.respond { ContentApi(tenant.base, tenant.account.http).updateNode(
+                    scopeId, nodeId, me.raddatz.veyq.mobile.api.models.UpdateNodeRequest(wrappedMeta = wrapped, metaRevision = revision, nodeEpoch = node.epoch),
+                ) }
+            }
+        }
 
     /** Removes the cover of node [nodeId]: its blob freed and the field dropped in one request. */
     @Throws(Exception::class)
