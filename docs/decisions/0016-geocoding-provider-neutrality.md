@@ -44,6 +44,15 @@ Considered and rejected:
   The fairness worry it answered — a member who sees the map's names without exposing their own coordinate — is
   bounded already: such a member has no map and sees resolved names as text only.
 - **Forward autocomplete.** Not needed by the coordinate-first flow.
+- **Hiding resolved names from a member whose map services are off** (owner's argument, 2026-11-09): member A accepted
+  that a provider may log their IP to resolve "Rome"; member B, who declined, reads the name for free - like copying
+  someone's homework, unfair to A. Rejected, for two reasons. **The law:** a consent is free only if declining costs
+  the service and nothing else (GDPR Art. 7(4), recital 42); a member who loses the place names of their family's
+  shared Memories by declining is pressed to consent. That is our reading, not a reviewed answer, and the safe side is
+  cheap: show the name. **The sharing:** A did not resolve the name for themself alone but wrote it into a SHARED
+  Memory; a private Memory was open to them. What A shares is a contribution to the space, as a photo A uploads is -
+  B reading it costs A nothing further and asks no provider. The free-riding stays bounded as decided: B gets no map
+  and no lookup of their own.
 
 ## Decision
 
@@ -83,8 +92,13 @@ provider.**
     tile or geocoding request leaves, and the consent prompt stands where the map was. What is already sealed —
     resolved names, positions — is not touched.
   - A **non-consenting** member's device makes **no external request** — no tiles (no map) and no geocode; they see
-    already-resolved names only as **text**. Declining costs the map and nothing else: no membership, no other
-    function.
+    already-resolved names only as **text**, and they **name a place by hand**: their place editor is the name field
+    of a server without a map, with the map's place offering to turn the map services on - never a dialog whose only
+    ways out are *Cancel* or *Turn on* (found by lane L1, 2026-11-09). Declining costs the map and nothing else: no
+    membership, no other function.
+  - **Worded as a setting, not as a cookie banner** (owner, 2026-11-09): the member's choice reads *Map services: on /
+    off* (de *Kartendienste: an / aus*), off until turned on, and turning it on names the hosts and what they receive,
+    as above. In law it stays a consent (GDPR Art. 4(11), 7); the wording only says plainly what it switches.
   - A **space owner enabling** maps for a space is the owner's wish and **never binds members**: each member is
     *notified* and consents on their own device (or is already covered by their consent). Not built.
 - **Tenant language for shared names.** A resolved name is sealed into the shared `wrappedMeta`

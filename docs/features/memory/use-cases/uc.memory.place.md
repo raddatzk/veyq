@@ -69,6 +69,12 @@ is [ADR 0016](../../../decisions/0016-geocoding-provider-neutrality.md). This us
   follows), no further tile or geocoding request leaves, and the consent prompt stands where the map was; in the open
   place editor the name field stays, with what was framed and resolved so far. Nothing stored is touched: resolved
   names and positions stay in the Memories.
+- **A6 — map services off on a server with a map** ([ADR 0016](../../../decisions/0016-geocoding-provider-neutrality.md)):
+  the chip opens the editor as A4 does - the name field, typed (`manual`), the position the medoid or a pin set
+  earlier - and where the map would stand it offers to turn the map services on (naming the hosts, A5). Turning them
+  on there shows the map in the same editor, the typed name kept; leaving them off saves the typed place. No dialog
+  stands between the member and the name field. The settings and the map call the switch *Map services* (de
+  *Kartendienste*), on or off.
 
 - **E1 — vault locked / Memory not open:** without the node's `K_node` the `wrappedMeta` can't be unsealed → the
   place is unavailable until unlock + open.
