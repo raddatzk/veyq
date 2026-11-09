@@ -330,7 +330,10 @@ class AppModel(app: Application) : AndroidViewModel(app) {
 
     private suspend fun show(account: VeyqAccount, tenant: TenantRef) {
         val t = account.open(tenant)
+        // a member's write pulls its path forward, and the scopes served as re-keying are finished in the background
+        t.rekeyRules = me.raddatz.veyq.mobile.AppKinds.rules
         tenantSession = t
+        resumeRekeys(t)
         _pot.value = null
         readReportOffered()
         raw = Raw(t.spaces(), t.nodes(), t.favorites(), t.applicationsOff())
@@ -455,14 +458,10 @@ class AppModel(app: Application) : AndroidViewModel(app) {
     }
 
     /**
-     * How a kind folds a name to its slug token's input: each application's answer (`registry.tokenInputFor`), a folder's
-     * the platform's (`slugify`, no route segment). Null for a kind the app does not know: nothing is placed under it.
+     * How a kind folds a name to its slug token's input: the composition root's answer (`AppKinds`, the web's
+     * `registry.tokenInputFor`). Null for a kind the app does not know: nothing is placed under it.
      */
-    private fun tokenInputFor(kind: String, name: String): String? = when (kind) {
-        PotSession.KIND -> PotCreate.tokenInput(name)
-        "FOLDER" -> me.raddatz.veyq.mobile.crypto.Naming.slugify(name)
-        else -> null
-    }
+    private fun tokenInputFor(kind: String, name: String): String? = me.raddatz.veyq.mobile.AppKinds.tokenInput(kind, name)
 
     // ---- a report (core's NodeReport) ----
 
@@ -513,9 +512,8 @@ class AppModel(app: Application) : AndroidViewModel(app) {
      */
     suspend fun switchOffLink(ref: ObjectRef, shareId: String): me.raddatz.veyq.mobile.session.ShareLinks.Closed {
         val t = tenantSession ?: return me.raddatz.veyq.mobile.session.ShareLinks.Closed.FAILED
-        val content = if (ref.kind == PotSession.KIND) me.raddatz.veyq.mobile.expenses.PotRekey.content else null
         val r = runCatching {
-            me.raddatz.veyq.mobile.session.ShareLinks.switchOff(t, ref.scopeId, ref.nodeId, shareId, content, ::tokenInputFor) { java.util.UUID.randomUUID().toString() }
+            me.raddatz.veyq.mobile.session.ShareLinks.switchOff(t, ref.scopeId, ref.nodeId, shareId, me.raddatz.veyq.mobile.AppKinds.rekeys, ::tokenInputFor) { java.util.UUID.randomUUID().toString() }
         }.getOrDefault(me.raddatz.veyq.mobile.session.ShareLinks.Closed.FAILED)
         val session = potSession
         if (_pot.value?.ref == ref && session != null) {
@@ -525,7 +523,18 @@ class AppModel(app: Application) : AndroidViewModel(app) {
         return r
     }
 
-    private fun rekeyHook(ref: ObjectRef) = if (ref.kind == PotSession.KIND) me.raddatz.veyq.mobile.expenses.PotRekey.content else null
+    /**
+     * Finishes, in the background, the re-key of every scope [t] was served as re-keying (ADR 0114 decision 9: a link's
+     * close or a rotation another device began, or this one left when it closed): what this device can, top-down; the
+     * lists are read anew after it. A run that cannot finish leaves the marks for the next start or another device.
+     */
+    private fun resumeRekeys(t: me.raddatz.veyq.mobile.session.TenantSession) {
+        if (t.rekeyingScopes.isEmpty()) return
+        viewModelScope.launch {
+            val ran = runCatching { me.raddatz.veyq.mobile.session.NodeRekey.resume(t) }.getOrDefault(emptyMap())
+            if (ran.isNotEmpty() && tenantSession === t) refreshLists(t)
+        }
+    }
 
     /** Edits one of this member's open links on [ref] in place: label, password (null untouched, blank removed), end, role. */
     suspend fun editLink(ref: ObjectRef, shareId: String, edit: me.raddatz.veyq.mobile.session.ShareLinkChanges.Edit): me.raddatz.veyq.mobile.session.ShareLinkChanges.Changed {
@@ -539,7 +548,7 @@ class AppModel(app: Application) : AndroidViewModel(app) {
         val failed = me.raddatz.veyq.mobile.session.ShareLinkChanges.Changed(me.raddatz.veyq.mobile.session.ShareLinkChanges.Outcome.FAILED)
         val t = tenantSession ?: return failed
         val r = runCatching {
-            me.raddatz.veyq.mobile.session.ShareLinkChanges.renew(t, ref.scopeId, ref.nodeId, shareId, rekeyHook(ref), ::tokenInputFor, { java.util.UUID.randomUUID().toString() }, System.currentTimeMillis())
+            me.raddatz.veyq.mobile.session.ShareLinkChanges.renew(t, ref.scopeId, ref.nodeId, shareId, me.raddatz.veyq.mobile.AppKinds.rekeys, ::tokenInputFor, { java.util.UUID.randomUUID().toString() }, System.currentTimeMillis())
         }.getOrDefault(failed)
         potRekeyed(ref)
         return r
@@ -550,7 +559,7 @@ class AppModel(app: Application) : AndroidViewModel(app) {
         val failed = me.raddatz.veyq.mobile.session.ShareLinkChanges.Changed(me.raddatz.veyq.mobile.session.ShareLinkChanges.Outcome.FAILED)
         val t = tenantSession ?: return failed
         val r = runCatching {
-            me.raddatz.veyq.mobile.session.ShareLinkChanges.delete(t, ref.scopeId, ref.nodeId, shareId, rekeyHook(ref), ::tokenInputFor, { java.util.UUID.randomUUID().toString() }, System.currentTimeMillis())
+            me.raddatz.veyq.mobile.session.ShareLinkChanges.delete(t, ref.scopeId, ref.nodeId, shareId, me.raddatz.veyq.mobile.AppKinds.rekeys, ::tokenInputFor, { java.util.UUID.randomUUID().toString() }, System.currentTimeMillis())
         }.getOrDefault(failed)
         potRekeyed(ref)
         return r

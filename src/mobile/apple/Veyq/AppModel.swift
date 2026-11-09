@@ -353,7 +353,10 @@ final class AppModel {
 
     private func show(_ account: VeyqAccount, _ tenant: TenantRef) async throws {
         let t = try await AppleSessions.shared.open(account: account, tenant: tenant)
+        // a member's write pulls its path forward, and the scopes served as re-keying are finished in the background
+        t.rekeyRules = AppKinds.shared.rules
         tenantSession = t
+        resumeRekeys(t)
         pot = nil
         reportOffered = false
         Task { await readReportOffered() }
@@ -581,9 +584,8 @@ final class AppModel {
     /// its revisions); an open Pot is read anew under its new key.
     func switchOffLink(_ ref: ObjectRef, shareId: String) async -> ShareLinks.Closed {
         guard let t = tenantSession else { return .failed }
-        let content: NodeRekeyContentRekey? = ref.kind == PotSession.companion.KIND ? PotRekey.shared.content : nil
         let r = (try? await ShareLinks.shared.switchOff(
-            tenant: t, scopeId: ref.scopeId, nodeId: ref.nodeId, shareId: shareId, content: content,
+            tenant: t, scopeId: ref.scopeId, nodeId: ref.nodeId, shareId: shareId, kinds: AppKinds.shared.rekeys,
             tokenInput: { @Sendable kind, name in AppModel.tokenInputFor(kind: kind, name: name) },
             uuid: { @Sendable in UUID().uuidString.lowercased() }
         )) ?? .failed
@@ -594,8 +596,15 @@ final class AppModel {
         return r
     }
 
-    private func rekeyHook(_ ref: ObjectRef) -> NodeRekeyContentRekey? {
-        ref.kind == PotSession.companion.KIND ? PotRekey.shared.content : nil
+    /// Finishes, in the background, the re-key of every scope `t` was served as re-keying (ADR 0114 decision 9: a link's close
+    /// or a rotation another device began, or this one left when it closed): what this device can, top-down; the lists are
+    /// read anew after it. A run that cannot finish leaves the marks for the next start or another device.
+    private func resumeRekeys(_ t: TenantSession) {
+        guard !t.rekeyingScopes.isEmpty else { return }
+        Task {
+            let ran = (try? await NodeRekey.shared.resume(tenant: t)) ?? [:]
+            if !ran.isEmpty, tenantSession === t { await refreshLists(t) }
+        }
     }
 
     /// Edits one of this member's open links on `ref` in place: label, password (nil untouched, blank removed), end, role.
@@ -612,7 +621,7 @@ final class AppModel {
         let failed = ShareLinkChanges.Changed(outcome: .failed, url: nil)
         guard let t = tenantSession else { return failed }
         let r = (try? await ShareLinkChanges.shared.renew(
-            tenant: t, scopeId: ref.scopeId, nodeId: ref.nodeId, shareId: shareId, content: rekeyHook(ref),
+            tenant: t, scopeId: ref.scopeId, nodeId: ref.nodeId, shareId: shareId, kinds: AppKinds.shared.rekeys,
             tokenInput: { @Sendable kind, name in AppModel.tokenInputFor(kind: kind, name: name) },
             uuid: { @Sendable in UUID().uuidString.lowercased() }, nowMs: Int64(Date().timeIntervalSince1970 * 1000),
             waitsMs: NodeEpochWrite.shared.REKEY_WAITS_MS
@@ -626,7 +635,7 @@ final class AppModel {
         let failed = ShareLinkChanges.Changed(outcome: .failed, url: nil)
         guard let t = tenantSession else { return failed }
         let r = (try? await ShareLinkChanges.shared.delete(
-            tenant: t, scopeId: ref.scopeId, nodeId: ref.nodeId, shareId: shareId, content: rekeyHook(ref),
+            tenant: t, scopeId: ref.scopeId, nodeId: ref.nodeId, shareId: shareId, kinds: AppKinds.shared.rekeys,
             tokenInput: { @Sendable kind, name in AppModel.tokenInputFor(kind: kind, name: name) },
             uuid: { @Sendable in UUID().uuidString.lowercased() }, nowMs: Int64(Date().timeIntervalSince1970 * 1000)
         )) ?? failed
@@ -734,15 +743,11 @@ final class AppModel {
         }
     }
 
-    /// How a kind folds a name to its slug token's input: each application's answer (`registry.tokenInputFor`), a folder's the
-    /// platform's (`slugify`, no route segment). Nil for a kind the app does not know: nothing is placed under it.
+    /// How a kind folds a name to its slug token's input: the composition root's answer (`AppKinds`, the web's
+    /// `registry.tokenInputFor`). Nil for a kind the app does not know: nothing is placed under it.
     /// Free of the main actor: core calls it from its own threads, after a request answered (a re-key, a placement).
     nonisolated static func tokenInputFor(kind: String, name: String) -> String? {
-        switch kind {
-        case PotSession.companion.KIND: PotCreate.shared.tokenInput(name: name)
-        case "FOLDER": Naming.shared.slugify(name: name)
-        default: nil
-        }
+        AppKinds.shared.tokenInput(kind: kind, name: name)
     }
 
     // MARK: The space's trash (core's NodeTrash)
