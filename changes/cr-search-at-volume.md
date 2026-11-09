@@ -84,4 +84,64 @@ needs a contract, is handed back as a question instead.
 
 ## Retrospective
 
-(filled by the implementer)
+### How it was measured
+
+- **Instance.** The harness's own (`measure_volume.py … boot`, project `veyq-vol-11090922`, images built from this branch
+  at `13814429a`), never `infra` or `veyq-search`. Seeded with `seed tree --target 5000` (the group "Volume tree", the
+  tree stage's shape), the new `seed spread --target 1000` (the tenant's space and the owner's personal space, 1,000
+  nodes each, every Memory sealed with a date range and a place, names like "Kevelaer 2012 (000-0)") and
+  `seed members --target 445`. So 7,000 nodes over three spaces plus 445 members. **My choice:** the largest space at
+  the stage's full 5,000 and the two others on top, rather than 5,000 split three ways — a single space's build is what
+  a task bound meets, so the larger space is the conservative reading.
+- **The leg.** `tests/e2e/measure/search.ts` (`search.config.ts`), driven by
+  `/usr/bin/python3 scripts/measure_volume.py --instance I search --runs 2 --throttles 1,4 --max-load 1000 --active
+  tenant|group`. Per run a fresh device signs in; `--active group` then enters the 5,000-node group by its fragment.
+  First focus (the build): long tasks from the click until the "Searching N spaces…" line is gone and every other
+  space's tree has answered, the build's wall time, the JS heap after a forced GC before and after. Typing: "K", "e",
+  "v", Enter (takes the highlighted place chip "Kevelaer"), Backspace (removes it); per step the long tasks from the
+  keystroke until the list stopped changing for 300 ms, and the Event Timing entries. Second focus: every API response
+  with its status, and the strings the page decoded. The driver's verdict is `search-verdict.json` beside the readings
+  in `.run/measurements/<time>-search-<active>/`.
+- **Quantity 3's detector, bitten.** `TextDecoder.prototype.decode` is counted from an init script: a tree's names are
+  opened as `decoder.decode(v1.openField(…))` (`core/node/tree.ts`), so a tree that is opened decodes once per node.
+  The first focus is the bite: it must count at least one decode per node the search opens itself — it counted 6,389
+  for the 6,000 nodes of group + personal (tenant on screen) and 2,388 for the 2,000 of tenant + personal (group on
+  screen), in every run.
+- **Two landings.** The CR names no space on screen. The tenant's (where sign-in lands) makes the search open the
+  5,000-node space itself; the group's makes the index build the 5,000-node space from the tree on screen
+  (`followActive`), a different code path. Both were measured, and both decide.
+- **The load rule (coordinator, 2026-11-09).** The owner works on this machine, so it is seldom quiet: the 1-minute
+  load stayed 6–25 the whole session, never ≤ 3 (the harness's old `--max-load 3` waited 25 minutes in vain). So every
+  run was taken at the load there was, with `uptime` recorded at both ends of each invocation (`quiet-start.json`,
+  `quiet-end.json`), and judged like this: **a bound that holds under load passes** — load only makes the numbers worse,
+  so a pass under load is conservative; **a bound that fails under load gets one re-run**, ideally at a lower load, and
+  fails if it fails again; **after a fix, both runs of the re-measurement must hold**, each with its load reported.
+
+### Phase 1 — the unchanged search (image `veyq-vol-search:local`)
+
+| Invocation, load (1-min, start→end) | landing | build wall ×1 / ×4 | longest build task ×1 / ×4 | longest typing task ×4 | heap after build |
+|---|---|---|---|---|---|
+| A 10:21, 8.6→8.0 | tenant | 859, 680 / 2,675, 2,651 ms | 488, 385 / **1,652, 1,636** ms | 65, 90 ms | +4.1 MB |
+| A 10:22, 8.0→10.1 | group | 548, 416 / 1,919, 1,892 ms | 209, 158 / **828, 829** ms | **260**, 69 ms | +3.7 MB |
+| B 10:24, 10.0→10.4 (re-run) | tenant | 645, 852 / 3,089, 4,050 ms | 372, 497 / **2,020, 2,631** ms | 88, 95 ms | +4.1 MB |
+| B 10:25, 10.4→14.2 (re-run) | group | 507, 508 / 2,796, 3,576 ms | 204, 202 / **1,007, 1,640** ms | 81, **150** ms | +3.7, +0.9 MB |
+
+Typing at ×1 had no long task at all (no task over 50 ms) in any run; at ×4 the longest typing task was always the
+first keystroke ("K"), whose Event Timing duration was 88–320 ms.
+
+- **Bound 2 failed**, in both landings and both invocations, 4–13× over its 200 ms (and over 200 ms even unthrottled in
+  the tenant landing). The long-animation-frame attribution named one task per space: the space the search opened
+  (`openTree` + `nodeDocuments` in one go: 1.6–2.6 s for the 5,000-node group), and the active space's documents built
+  synchronously in the watcher (`followActive`: 0.8–1.6 s for the 5,000-node group on screen, 0.2–0.3 s for the
+  tenant's 1,000).
+- **Bound 1 failed in the group landing** (260 ms, then 150 ms in the re-run) and held in the tenant landing (65–95 ms).
+  A CPU profile of the typing at ×4 (`search --profile`, a diagnosis run, no reading) put about a third of the "K"
+  task in `searchGroups` — `matchAll` over ~7,500 documents, the reactive chip array read once per document, the sort
+  of ~840 matches with the collator — and the rest in Vue's render of the list.
+- **Quantity 3 holds for the index, with one finding beside it.** In every run of every invocation, phase 2's
+  included, the second focus read each space the search opens itself exactly once, as `304`, and the index decoded
+  nothing. The focus as a whole decoded 2 strings every time: the group's name ("Volume tree") and the device register
+  document — the settings sections' `load()` (`features/settings/sections.ts`: `listMyGroups` opens every group's grant
+  and name, `refusedDocuments` opens the two account documents), which `SearchField.onFocus` calls on every focus. That
+  is a cost per group per focus outside `core/search/`; recorded here, not fixed (no bound covers it).
+- **Quantity 4**, the index's heap: +4.1 MB with the group opened by the search, +3.7 MB with it on screen.
