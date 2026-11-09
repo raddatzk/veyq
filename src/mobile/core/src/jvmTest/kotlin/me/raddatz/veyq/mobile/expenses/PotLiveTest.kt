@@ -350,6 +350,26 @@ class PotLiveTest {
             assertEquals(me.raddatz.veyq.mobile.session.NodeTrash.Deleted.TRASHED, me.raddatz.veyq.mobile.session.NodeTrash.delete(tenant, ref.scopeId, copied.nodeId!!))
             println("[$potName] copied as \"${copied.name}\": ${b.entries.size} entries, ${kept.size} receipts, balances equal; trashed")
         }
+        System.getenv("VEYQ_LIVE_COVER")?.let { potName ->
+            // A JPEG set as the Pot's cover: a fresh session opens it to the byte and its meta names it; with
+            // VEYQ_LIVE_COVER_KEEP the cover stays, for the web's header and rows, else it is removed again and opens nothing.
+            val ref = pots.first { it.name == potName }
+            val image = java.awt.image.BufferedImage(320, 180, java.awt.image.BufferedImage.TYPE_INT_RGB).apply {
+                createGraphics().run { color = java.awt.Color(0x4f, 0x46, 0xe5); fillRect(0, 0, 320, 180); color = java.awt.Color.WHITE; fillOval(110, 40, 100, 100); dispose() }
+            }
+            val jpeg = java.io.ByteArrayOutputStream().also { javax.imageio.ImageIO.write(image, "jpg", it) }.toByteArray()
+            val cover = me.raddatz.veyq.mobile.session.NodeCover
+            assertEquals(me.raddatz.veyq.mobile.session.NodeCover.Outcome.DONE, cover.set(tenant, ref.scopeId, ref.nodeId, jpeg, me.raddatz.veyq.mobile.session.NodeCover.Crop(0.0, 0.0, 1.0, 1.0)))
+            val fresh = account.open(tenant.tenant)
+            val opened = cover.open(fresh, fresh.node(ref.scopeId, ref.nodeId)!!)
+            assertTrue(opened != null && opened.contentEquals(jpeg), "the cover does not open to the bytes set")
+            if (System.getenv("VEYQ_LIVE_COVER_KEEP") == null) {
+                assertEquals(me.raddatz.veyq.mobile.session.NodeCover.Outcome.DONE, cover.remove(tenant, ref.scopeId, ref.nodeId))
+                val again = account.open(tenant.tenant)
+                assertEquals(null, cover.open(again, again.node(ref.scopeId, ref.nodeId)!!))
+            }
+            println("[$potName] a ${jpeg.size}-byte cover set and opened by a fresh session; ${if (System.getenv("VEYQ_LIVE_COVER_KEEP") == null) "removed" else "kept"}")
+        }
         System.getenv("VEYQ_LIVE_EXPORT")?.let { potName ->
             // The Pot downloaded as the web's ZIP: the JDK reads it, the manifest names every payload by its SHA-256, the
             // content carries every live entry and the CSV a line each. With VEYQ_LIVE_EXPORT_OUT the archive is saved there,

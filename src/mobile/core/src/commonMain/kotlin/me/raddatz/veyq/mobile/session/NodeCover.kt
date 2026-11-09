@@ -1,0 +1,162 @@
+package me.raddatz.veyq.mobile.session
+
+import io.ktor.client.statement.bodyAsText
+import kotlinx.serialization.json.JsonElement
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.doubleOrNull
+import kotlinx.serialization.json.jsonPrimitive
+import kotlinx.serialization.json.longOrNull
+import kotlinx.serialization.json.put
+import me.raddatz.veyq.mobile.api.apis.ContentApi
+import me.raddatz.veyq.mobile.api.infrastructure.HttpResponse
+import me.raddatz.veyq.mobile.api.models.RemoveNodeCoverRequest
+import me.raddatz.veyq.mobile.api.models.SetNodeCoverRequest
+import me.raddatz.veyq.mobile.blob.ApplicationBlobs
+
+/**
+ * A node's cover (core's `core/node/cover/`, ADR 0110 decision 11, uc.platform.node-cover): one image its owner uploads as the
+ * node's own `COVER` blob, named by the `cover` field of the node's sealed meta in the web's shape —
+ * `{source: {kind: 'upload', ref: {blobId, chunkCount, byteSize, wrappedBlobKey, ownerId, role}}, crop: {x, y, width, height}}`
+ * — the crop a normalised 0..1 rectangle of the image (the full frame: a centred fit). Setting one is ONE request that
+ * attaches the upload and writes the meta (`setNodeCover`, compared against the blob the meta being replaced named); removing
+ * one frees the blob in the same way (`removeNodeCover`); a moved crop is a plain meta write. Every write is revision-checked
+ * ([NodeMetaWrite]), the meta's other fields kept. The image the app uploads is the device's one JPEG of the picked picture
+ * (the web's `COVER_SPEC`: long edge 2048, quality 0.85), made by the platform.
+ */
+object NodeCover {
+    const val ROLE = "COVER"
+    const val FIELD = "cover"
+
+    data class Crop(val x: Double, val y: Double, val width: Double, val height: Double) {
+        companion object {
+            val FULL = Crop(0.0, 0.0, 1.0, 1.0)
+        }
+    }
+
+    /** A node's cover as its meta names it: the blob, and where the frame sits on the image. */
+    class Read(val blobId: String, val chunkCount: Int, val byteSize: Long, val wrappedBlobKey: String, val crop: Crop)
+
+    enum class Outcome { DONE, STALE, BUSY, REFUSED, FAILED }
+
+    private fun num(e: JsonElement?): Double? = (e as? JsonPrimitive)?.takeIf { !it.isString }?.doubleOrNull?.takeIf { it.isFinite() }
+
+    /** The web's `normalizeCoverCrop`: a missing or broken crop is the full frame, a rectangle held inside the image. */
+    fun crop(raw: JsonElement?): Crop {
+        val c = raw as? JsonObject ?: return Crop.FULL
+        val width = num(c["width"])?.takeIf { it > 0 }?.coerceIn(0.0, 1.0) ?: 1.0
+        val height = num(c["height"])?.takeIf { it > 0 }?.coerceIn(0.0, 1.0) ?: 1.0
+        val x = (num(c["x"]) ?: 0.0).coerceIn(0.0, 1.0 - width)
+        val y = (num(c["y"]) ?: 0.0).coerceIn(0.0, 1.0 - height)
+        return Crop(x, y, width, height)
+    }
+
+    /** The web's `readCover` for an uploaded cover: null when the meta names none (or none this app can draw). */
+    fun read(meta: JsonObject): Read? {
+        val c = meta[FIELD] as? JsonObject ?: return null
+        val source = c["source"] as? JsonObject ?: return null
+        if ((source["kind"] as? JsonPrimitive)?.content != "upload") return null
+        val ref = source["ref"] as? JsonObject ?: return null
+        val blobId = (ref["blobId"] as? JsonPrimitive)?.takeIf { it.isString }?.content?.takeIf { it.isNotEmpty() } ?: return null
+        val key = (ref["wrappedBlobKey"] as? JsonPrimitive)?.takeIf { it.isString }?.content?.takeIf { it.isNotEmpty() } ?: return null
+        val count = (ref["chunkCount"] as? JsonPrimitive)?.longOrNull ?: return null
+        val size = (ref["byteSize"] as? JsonPrimitive)?.longOrNull ?: return null
+        return Read(blobId, count.toInt(), size, key, crop(c["crop"]))
+    }
+
+    /** The blob a meta's cover names, or null (the web's `uploadBlobIdOf`). */
+    fun blobIdOf(meta: JsonObject): String? = read(meta)?.blobId
+
+    /** The `cover` value of an uploaded cover, in the web's key order (`uploadedCover`). */
+    fun uploaded(plan: ApplicationBlobs.Plan, crop: Crop = Crop.FULL): JsonObject = buildJsonObject {
+        put("source", buildJsonObject {
+            put("kind", "upload")
+            put("ref", buildJsonObject {
+                put("blobId", plan.blobId); put("chunkCount", plan.chunkCount); put("byteSize", plan.byteSize)
+                put("wrappedBlobKey", plan.wrappedBlobKey); put("ownerId", plan.ownerId); put("role", ROLE)
+            })
+        })
+        put("crop", cropJson(crop))
+    }
+
+    private fun cropJson(c: Crop) = buildJsonObject {
+        fun n(v: Double): JsonPrimitive = if (v == kotlin.math.floor(v) && kotlin.math.abs(v) < 1e15) JsonPrimitive(v.toLong()) else JsonPrimitive(v)
+        put("x", n(c.x)); put("y", n(c.y)); put("width", n(c.width)); put("height", n(c.height))
+    }
+
+    /** The cover of [node], if its meta names one: its image's bytes (the JPEG the uploader made), opened here. */
+    @Throws(Exception::class)
+    suspend fun open(tenant: TenantSession, node: OpenNode): ByteArray? {
+        val meta = runCatching { NodeMetaWrite.openForWrite(tenant.account.suite, node.scopeId, node.id, node.key, node.wrappedMeta) }.getOrNull() ?: return null
+        val c = read(meta) ?: return null
+        val blobs = ApplicationBlobs(tenant)
+        val key = blobs.openKey(node.scopeId, node, c.blobId, ROLE, c.wrappedBlobKey) ?: return null
+        return runCatching { blobs.frames(node.scopeId, c.blobId, c.chunkCount, key) }.getOrNull()
+    }
+
+    /** Sets [jpeg] as the cover of node [nodeId] with [crop]: uploaded, then attached and the meta written in one request. */
+    @Throws(Exception::class)
+    suspend fun set(tenant: TenantSession, scopeId: String, nodeId: String, jpeg: ByteArray, crop: Crop = Crop.FULL): Outcome {
+        // uploaded once per node epoch: a stale revision rebuilds only the meta, a new epoch (a new key) the upload too
+        var uploaded: Triple<Int, String, ApplicationBlobs.Plan>? = null
+        return write(tenant, scopeId, nodeId) { node, current ->
+            val up = uploaded?.takeIf { it.first == node.epoch }
+                ?: ApplicationBlobs(tenant).reserveAndPump(scopeId, node, ROLE, jpeg, "image/jpeg", null, null)
+                    .let { (id, plan) -> Triple(node.epoch, id, plan) }.also { uploaded = it }
+            val uploadId = up.second
+            val plan = up.third
+            val old = blobIdOf(current)
+            JsonObject(current + (FIELD to uploaded(plan, crop))) to { wrapped: String, revision: Long ->
+                tenant.account.respond { ContentApi(tenant.base, tenant.account.http).setNodeCover(
+                    scopeId, nodeId,
+                    SetNodeCoverRequest(nodeEpoch = node.epoch, wrappedMeta = wrapped, metaRevision = revision, uploadId = uploadId, expectedBlobId = old),
+                ) }
+            }
+        }
+    }
+
+    /** Removes the cover of node [nodeId]: its blob freed and the field dropped in one request. */
+    @Throws(Exception::class)
+    suspend fun remove(tenant: TenantSession, scopeId: String, nodeId: String): Outcome =
+        write(tenant, scopeId, nodeId) { node, current ->
+            val old = blobIdOf(current) ?: return@write null
+            JsonObject(current - FIELD) to { wrapped: String, revision: Long ->
+                tenant.account.respond { ContentApi(tenant.base, tenant.account.http).removeNodeCover(
+                    scopeId, nodeId, RemoveNodeCoverRequest(nodeEpoch = node.epoch, blobId = old, wrappedMeta = wrapped, metaRevision = revision),
+                ) }
+            }
+        }
+
+    /**
+     * One cover write at the node's epoch: [prepare] builds, from the meta as last read, the meta to write and the request
+     * that writes it (null: nothing to write). A stale revision re-reads the node and prepares again (a cover the server
+     * holds otherwise is `cover_stale`, [Outcome.STALE]: nothing was written, the upload is freed).
+     */
+    private suspend fun write(
+        tenant: TenantSession, scopeId: String, nodeId: String,
+        prepare: suspend (OpenNode, JsonObject) -> Pair<JsonObject, suspend (String, Long) -> HttpResponse<*>>?,
+    ): Outcome {
+        repeat(3) {
+            tenant.forgetTree()
+            val node = tenant.node(scopeId, nodeId) ?: return Outcome.FAILED
+            val current = runCatching { NodeMetaWrite.openForWrite(tenant.account.suite, scopeId, nodeId, node.key, node.wrappedMeta) }
+                .getOrElse { return Outcome.FAILED }
+            val (meta, send) = prepare(node, current) ?: return Outcome.DONE
+            val wrapped = NodeMetaWrite.seal(tenant.account.suite, scopeId, nodeId, node.key, meta)
+            val r = send(wrapped, node.metaRevision)
+            if (r.success) return Outcome.DONE
+            val body = runCatching { r.response.bodyAsText() }.getOrDefault("")
+            val code = runCatching {
+                (kotlinx.serialization.json.Json.parseToJsonElement(body) as? JsonObject)?.get("code")?.jsonPrimitive?.content
+            }.getOrNull()
+            when {
+                code == "cover_stale" -> return Outcome.STALE
+                NodeMetaWrite.staleOf(body) != null || code == "stale_epoch" -> return@repeat
+                code == "node_rekey_pending" -> return Outcome.BUSY
+                else -> return Outcome.REFUSED
+            }
+        }
+        return Outcome.STALE
+    }
+}

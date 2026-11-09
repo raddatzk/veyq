@@ -142,6 +142,29 @@ class ApplicationBlobs(private val tenant: TenantSession) {
     private suspend fun uploadOnce(
         scopeId: String, node: OpenNode, id: String, ownerId: String, role: String, bytes: ByteArray, type: String, name: String?, modifiedAt: Long?,
     ): Listed {
+        val (uploadId, plan) = reserveAndPump(scopeId, node, role, bytes, type, name, modifiedAt)
+        val blobId = plan.blobId
+        val r = account.respond {
+            appApi.completeApplicationBlob(scopeId, node.id, ApplicationBlobCompleteRequest(node.epoch, id, ownerId, role, uploadId))
+        }
+        if (!r.success) throw UploadRefused(codeOf(r.response.bodyAsText()) ?: "complete ${r.status}")
+        val blob = r.body()
+        // The server echoes the ids it stored: anything else is an id substituted under the seals.
+        if (blob.blobId != blobId || blob.id != id) throw UploadRefused("id_substituted")
+        return listed(blob)
+    }
+
+    /** One blob as its upload planned it: what a cover's sealed meta names (`coverModel.ts`'s `ref`). */
+    class Plan(val blobId: String, val chunkCount: Int, val byteSize: Long, val wrappedBlobKey: String, val ownerId: String)
+
+    /**
+     * Seals [bytes] as a new blob of [node] in [role] under a fresh `K_blob` (wrapped under the node's key, its meta sealed)
+     * and uploads it direct-to-store, frame by frame: the web's `planBlob` and `reserveAndPump`. The upload is OPEN after:
+     * whatever attaches it (an application's completion, a cover's `setNodeCover`) names its upload id.
+     */
+    internal suspend fun reserveAndPump(
+        scopeId: String, node: OpenNode, role: String, bytes: ByteArray, type: String, name: String?, modifiedAt: Long?,
+    ): Pair<String, Plan> {
         val key = account.primitives.randomBytes(32)
         val blobId = NodeCreate.uuid(account)
         val count = V1.chunkCount(bytes.size.toLong())
@@ -178,14 +201,7 @@ class ApplicationBlobs(private val tenant: TenantSession) {
             }
             if (status !in 200..299) throw UploadRefused("chunk_put_failed:$status")
         }
-        val r = account.respond {
-            appApi.completeApplicationBlob(scopeId, node.id, ApplicationBlobCompleteRequest(node.epoch, id, ownerId, role, uploadId))
-        }
-        if (!r.success) throw UploadRefused(codeOf(r.response.bodyAsText()) ?: "complete ${r.status}")
-        val blob = r.body()
-        // The server echoes the ids it stored: anything else is an id substituted under the seals.
-        if (blob.blobId != blobId || blob.id != id) throw UploadRefused("id_substituted")
-        return listed(blob)
+        return uploadId to Plan(blobId, count, item.byteSize, item.wrappedBlobKey, node.id)
     }
 
     /**
@@ -194,6 +210,17 @@ class ApplicationBlobs(private val tenant: TenantSession) {
      */
     suspend fun download(scopeId: String, node: OpenNode, b: Listed): ByteArray {
         val key = keyOf(scopeId, node, b) ?: throw UploadRefused("key_unreadable")
+        return frames(scopeId, b.blobId, b.chunkCount, key)
+    }
+
+    /** The key of blob [blobId] in [role] of [node], from its wrap, or null when it does not open there (not this blob's). */
+    internal fun openKey(scopeId: String, node: OpenNode, blobId: String, role: String, wrappedBlobKey: String): ByteArray? = runCatching {
+        suite.open(keyContext(scopeId, node.id, blobId, role), node.key, unb64(wrappedBlobKey))
+    }.getOrNull()
+
+    /** A blob's plaintext under [key], its [chunkCount] frames read through presigned GETs and opened in place. */
+    internal suspend fun frames(scopeId: String, blobId: String, chunkCount: Int, key: ByteArray): ByteArray {
+        val b = object { val blobId = blobId; val chunkCount = chunkCount }
         var urls = presignGets(scopeId, b.blobId)
         var resigned = 0
         val out = ArrayList<ByteArray>(b.chunkCount)
