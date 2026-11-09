@@ -2,114 +2,162 @@ import PhotosUI
 import SwiftUI
 import VeyqCore
 
-/// Core's actions on an open Pot's header (the web's `coreNodeActions.ts` and `standardNodeActions`, ADR 0110): the heart as
-/// a button, first, while the space's pin set is loaded; the rest in one "more" menu, the delete last and destructive, asked
-/// first in its kind's words. The heart turns at once and turns back when the write did not land.
-struct PotHeaderActions: View {
+/// What a kind's page hands core's header (the web's `contributeNodeHeader`, its rights function and the page's doors): a
+/// subtitle under the name, the application's narrowing of core's rights, its doors (a copy, a download — absent: not
+/// offered) and actions of its own. Core builds the rest, the same for every kind (`NodeHeaderActions`).
+struct HeaderContribution {
+    /// The line under the node's name (a Pot's currency); nil: none.
+    var subtitle: String?
+    /// Whether the application lets this node's cover change here (a Pot of a switched-off Expenses: no).
+    var cover = true
+    /// The delete's title and question in the kind's words (`deleteTitle`, `deleteQuestion.ts`).
+    let deleteTitle: String
+    let deleteQuestion: String
+    /// The copy door: copies to the folder chosen (nil: the space's top; then its name), answers why not, or nil once copied.
+    var copy: ((String?, String) async -> String?)?
+    /// The download door: writes the node's ZIP to a temporary file, its URL once whole.
+    var download: (() async -> URL?)?
+    /// The application's own actions, merged into core's plan where the kind's order puts them.
+    var actions: [OwnAction] = []
+}
+
+/// An action of the application's own on its node's header.
+struct OwnAction {
+    let id: String
+    let label: String
+    let systemImage: String
+    var slot: NodeHeader.Slot = .any
+    let run: () -> Void
+}
+
+/// A kind's page as the app registers it (the web's `KindRegistration` of `app.kind`): what core's header reads of the kind
+/// (it brings a share sheet, it takes a cover), what the kind's page contributes to that header (nil while the page cannot
+/// tell yet) and the page's body under it (nil: not built; a folder's is core's level). Core draws the header for every
+/// kind, never an application.
+struct KindPage {
+    let shareable: Bool
+    let takesCover: Bool
+    let header: @MainActor (NodeAt, AppModel) -> HeaderContribution?
+    /// The body of an object of the kind on its bar tab (`key`).
+    var body: (@MainActor (ObjectRef, String, AppModel) -> AnyView)?
+
+    /// The pages this build registers, by kind: core's folder and each application's kinds (the composition root).
+    static func of(_ kind: String) -> KindPage? {
+        switch kind {
+        case "FOLDER": folder
+        case PotSession.companion.KIND: pot
+        default: nil
+        }
+    }
+
+    private static let folder = KindPage(shareable: true, takesCover: true, header: { node, _ in
+        HeaderContribution(
+            deleteTitle: String(localized: "Delete Folder"),
+            deleteQuestion: String(localized: "“\(node.name)” and everything in it go to the trash.")
+        )
+    })
+
+    /// Expenses' Pot: its currency under its name, its cover and copy while Expenses is on, its ZIP.
+    private static let pot = KindPage(shareable: true, takesCover: true, header: { node, model in
+        guard let state = model.pot, state.ref.nodeId == node.nodeId, let view = state.view else { return nil }
+        // a cover and a copy write: offered where Expenses is on (the web's `canCopy`, `expensesRights`)
+        let writable = view.canWrite
+        let ref = state.ref
+        return HeaderContribution(
+            subtitle: view.currency.map { String(localized: "In \($0)") },
+            cover: writable,
+            deleteTitle: String(localized: "Delete Pot"),
+            deleteQuestion: String(localized: "“\(node.name)” and all its entries go to the trash."),
+            copy: writable ? { to, toName in
+                switch await model.copyPot(node, to: to, toName: toName) {
+                case .copied: nil
+                case .nameTaken: String(localized: "There is no free name for the copy there. Rename it first, or choose another place.")
+                case .nothingToCopy: String(localized: "Nothing here can be copied by this version of veyq.")
+                case .busy: NodeMoveSheet.problemText(.busy)
+                case .blocked, .refused: NodeMoveSheet.problemText(.notAllowed)
+                default: String(localized: "The copy did not go through. Nothing was left behind; please try again.")
+                }
+            } : nil,
+            download: { await model.downloadPot(ref) }
+        )
+    }, body: { ref, key, model in AnyView(PotScreen(model: model, ref: ref, tab: key)) })
+}
+
+/// Core's header actions on a node of any kind (the web's `NodeHeader` with `coreNodeActions.ts` and `standardNodeActions`,
+/// ADR 0110): core's `NodeHeader.plan` decides what is offered and where, from the node's rights, the kind's order
+/// (`AppKinds.headerOrder`) and the contribution; up to `maxButtons` are toolbar buttons, the rest one "More" menu whose last
+/// section holds the move, the copy, the report and the delete — the delete last and destructive, asked first. Every dialog
+/// behind an action is core's one: the share sheet, the move and copy browser, the cover sheet, the rename, the report, the
+/// delete.
+struct NodeHeaderActions: View {
     @Bindable var model: AppModel
-    let ref: ObjectRef
+    let node: NodeAt
+    let contribution: HeaderContribution
+    /// How many actions are toolbar buttons: a level's bar keeps its room for its title (0: one "More" menu).
+    var maxButtons: Int32 = 2
     @State private var pinned: Bool?
+    @State private var dialog: String?
     @State private var asking = false
-    @State private var failed: String?
     @State private var renaming = false
     @State private var newName = ""
     @State private var renameProblem: String?
-    @State private var moving = false
-    @State private var copying = false
-    @State private var pickingCover = false
-    @State private var coverItem: PhotosPickerItem?
-    @State private var sharing = false
-    @State private var reporting = false
+    @State private var failed: String?
     @State private var downloading = false
     @State private var downloaded: URL?
 
-    /// The web's ZIP of the Pot, written to a temporary file, then offered to the system's save sheet.
-    private func download() async {
-        downloading = true
-        let url = await model.downloadPot(ref)
-        downloading = false
-        if let url { downloaded = url } else { failed = String(localized: "“\(ref.name)” could not be downloaded. Please try again.") }
-    }
-
-    private func cleanUpDownload() {
-        if let url = downloaded { try? FileManager.default.removeItem(at: url.deletingLastPathComponent()) }
-        downloaded = nil
+    private var plan: NodeHeader.Plan {
+        let page = KindPage.of(node.kind)
+        let rights = NodeHeader.Rights(
+            favorite: pinned != nil,
+            share: page?.shareable == true && model.linkRules().on,
+            rename: true,
+            move: true,
+            cover: page?.takesCover == true && contribution.cover,
+            copy: contribution.copy != nil,
+            download: contribution.download != nil,
+            report: model.reportOffered,
+            delete: true
+        )
+        return NodeHeader.shared.plan(
+            rights: rights, order: AppKinds.shared.headerOrder(kind: node.kind), maxButtons: maxButtons,
+            own: contribution.actions.map { NodeHeader.Action(id: $0.id, slot: $0.slot) }
+        )
     }
 
     var body: some View {
+        let plan = plan
         HStack {
-            if let pinned {
-                Button {
-                    self.pinned = !pinned
-                    Task {
-                        if await !model.toggleFavorite(ref.at) {
-                            self.pinned = model.isFavorite(ref.at)
-                            failed = String(localized: "The favorite could not be saved. Try again.")
-                        }
+            ForEach(plan.buttons, id: \.self) { id in
+                Button { run(id) } label: { label(id) }
+                    .labelStyle(.iconOnly)
+            }
+            if plan.hasMenu {
+                Menu {
+                    ForEach(plan.menu, id: \.self) { id in Button { run(id) } label: { label(id) } }
+                    if !plan.menu.isEmpty, !plan.last.isEmpty { Divider() }
+                    ForEach(plan.last, id: \.self) { id in
+                        Button(role: id == NodeHeader.shared.DELETE ? .destructive : nil) { run(id) } label: { label(id) }
                     }
                 } label: {
-                    Image(systemName: pinned ? "heart.fill" : "heart").foregroundStyle(pinned ? Role.favorite : Role.text)
-                }
-                .accessibilityLabel(pinned ? "Remove favorite" : "Favorite")
-            }
-            // The Pot's links (core's share action, a header button as the web's): offered where the tenant has links on.
-            if model.linkRules().on {
-                Button { sharing = true } label: { Image(systemName: "square.and.arrow.up") }
-                    .accessibilityLabel("Share this Pot")
-            }
-            Menu {
-                // The rename first, the delete last and destructive (`splitRowActions`).
-                Button("Rename", systemImage: "pencil") { newName = ref.name; renameProblem = nil; renaming = true }
-                Button("Move to…", systemImage: "folder") { moving = true }
-                // a copy writes a new Pot: offered where Expenses is on (the web's `canCopy`)
-                if model.pot?.view?.canWrite == true {
-                    // core's cover action: the picture from the system's photo picker, made the cover on this device
-                    let has = model.covers[ref.nodeId] != nil
-                    Button(has ? "Change Cover…" : "Set Cover…", systemImage: "photo") { pickingCover = true }
-                    if has {
-                        Button("Remove Cover", systemImage: "minus.circle") {
-                            Task { if await !model.removeCover(ref.at) { failed = String(localized: "The cover could not be saved. Please try again.") } }
-                        }
-                    }
-                    Button("Copy to…", systemImage: "doc.on.doc") { copying = true }
-                }
-                Button("Download", systemImage: "arrow.down.circle") { Task { await download() } }
-                    .disabled(downloading)
-                // the menu-only group, after a separator: report, then delete (`splitRowActions`)
-                Divider()
-                if model.reportOffered {
-                    Button("Report", systemImage: "flag") { reporting = true }
-                }
-                Button("Delete Pot", systemImage: "trash", role: .destructive) { asking = true }
-            } label: {
-                if downloading { ProgressView() } else { Label("More", systemImage: "ellipsis.circle") }
-            }
-        }
-        .onAppear { pinned = model.isFavorite(ref.at) }
-        .sheet(isPresented: $moving) { NodeMoveSheet(model: model, ref: ref.at) }
-        .sheet(isPresented: $copying) { NodeMoveSheet(model: model, ref: ref.at, copy: true) }
-        .photosPicker(isPresented: $pickingCover, selection: $coverItem, matching: .images)
-        .onChange(of: coverItem) { _, item in
-            guard let item else { return }
-            coverItem = nil
-            Task {
-                guard let data = try? await item.loadTransferable(type: Data.self), await model.setCover(ref.at, data: data) else {
-                    failed = String(localized: "The cover could not be saved. Please try again.")
-                    return
+                    if downloading { ProgressView() } else { Label("More", systemImage: "ellipsis.circle") }
                 }
             }
         }
-        .sheet(isPresented: $sharing) { ShareSheet(model: model, ref: ref.at) }
-        .sheet(isPresented: $reporting) { ReportSheet(model: model, ref: ref.at) }
+        .onAppear { pinned = model.isFavorite(node) }
+        .sheet(isPresented: shown(NodeHeader.shared.SHARE)) { ShareSheet(model: model, ref: node) }
+        .sheet(isPresented: shown(NodeHeader.shared.REPORT)) { ReportSheet(model: model, ref: node) }
+        .sheet(isPresented: shown(NodeHeader.shared.COVER)) { CoverSheet(model: model, node: node) }
+        .sheet(isPresented: shown(NodeHeader.shared.MOVE)) { NodeMoveSheet(model: model, ref: node) }
+        .sheet(isPresented: shown(NodeHeader.shared.COPY)) { NodeMoveSheet(model: model, ref: node, copy: contribution.copy) }
         // The system's save sheet takes the written file where the person picks; the temporary copy goes either way.
         .fileMover(isPresented: Binding(get: { downloaded != nil }, set: { if !$0 { cleanUpDownload() } }), file: downloaded) { _ in
             cleanUpDownload()
         }
-        .alert("Delete Pot", isPresented: $asking) {
-            Button("Delete", role: .destructive) { Task { await model.trash(ref.at) } }
+        .alert(contribution.deleteTitle, isPresented: $asking) {
+            Button("Delete", role: .destructive) { Task { await model.trash(node) } }
             Button("Cancel", role: .cancel) {}
         } message: {
-            Text("“\(ref.name)” and all its entries go to the trash.")
+            Text(contribution.deleteQuestion)
         }
         // Core's name dialog (`FolderNameDialog`): the name as it is, trimmed on save; a refusal says why and asks again.
         .alert("Rename", isPresented: $renaming) {
@@ -117,7 +165,7 @@ struct PotHeaderActions: View {
             Button("Save") {
                 let name = newName
                 Task {
-                    let (problem, linksFailed) = await model.rename(ref.at, to: name)
+                    let (problem, linksFailed) = await model.rename(node, to: name)
                     if let problem {
                         renameProblem = problem
                         renaming = true
@@ -135,108 +183,143 @@ struct PotHeaderActions: View {
             Button("OK", role: .cancel) {}
         }
     }
+
+    /// A sheet's presentation: on while `dialog` is `id`.
+    private func shown(_ id: String) -> Binding<Bool> {
+        Binding(get: { dialog == id }, set: { if !$0, dialog == id { dialog = nil } })
+    }
+
+    private func run(_ id: String) {
+        switch id {
+        case NodeHeader.shared.FAVORITE:
+            guard let pinned else { return }
+            self.pinned = !pinned
+            Task {
+                if await !model.toggleFavorite(node) {
+                    self.pinned = model.isFavorite(node)
+                    failed = String(localized: "The favorite could not be saved. Try again.")
+                }
+            }
+        case NodeHeader.shared.RENAME:
+            newName = node.name
+            renameProblem = nil
+            renaming = true
+        case NodeHeader.shared.DELETE:
+            asking = true
+        case NodeHeader.shared.DOWNLOAD:
+            Task { await download() }
+        default:
+            if let own = contribution.actions.first(where: { $0.id == id }) { own.run() } else { dialog = id }
+        }
+    }
+
+    @ViewBuilder private func label(_ id: String) -> some View {
+        switch id {
+        case NodeHeader.shared.FAVORITE:
+            Label(pinned == true ? "Remove from Favorites" : "Add to Favorites", systemImage: pinned == true ? "heart.fill" : "heart")
+                .foregroundStyle(pinned == true ? Role.favorite : Role.text)
+        case NodeHeader.shared.SHARE: Label(ShareWords.of(node.kind).title, systemImage: "square.and.arrow.up")
+        case NodeHeader.shared.RENAME: Label("Rename", systemImage: "pencil")
+        case NodeHeader.shared.MOVE: Label("Move to…", systemImage: "folder")
+        case NodeHeader.shared.COPY: Label("Copy to…", systemImage: "doc.on.doc")
+        case NodeHeader.shared.COVER: Label(model.covers[node.nodeId] != nil ? "Change Cover…" : "Set Cover…", systemImage: "photo")
+        case NodeHeader.shared.DOWNLOAD: Label("Download", systemImage: "arrow.down.circle")
+        case NodeHeader.shared.REPORT: Label("Report", systemImage: "flag")
+        case NodeHeader.shared.DELETE: Label(contribution.deleteTitle, systemImage: "trash")
+        default:
+            if let own = contribution.actions.first(where: { $0.id == id }) { Label(own.label, systemImage: own.systemImage) }
+        }
+    }
+
+    /// The node's ZIP, written to a temporary file, then offered to the system's save sheet.
+    private func download() async {
+        guard let door = contribution.download else { return }
+        downloading = true
+        let url = await door()
+        downloading = false
+        if let url { downloaded = url } else { failed = String(localized: "“\(node.name)” could not be downloaded. Please try again.") }
+    }
+
+    private func cleanUpDownload() {
+        if let url = downloaded { try? FileManager.default.removeItem(at: url.deletingLastPathComponent()) }
+        downloaded = nil
+    }
+}
+
+/// Core's cover dialog (the web's `CoverDialog`): the node's cover as it shows, 16:9, and the one place it is chosen, changed
+/// and removed — a picture from the system's photo picker, made the cover on this device; Remove where there is one.
+struct CoverSheet: View {
+    @Bindable var model: AppModel
+    let node: NodeAt
+    @Environment(\.dismiss) private var dismiss
+    @State private var item: PhotosPickerItem?
+    @State private var saving = false
+    @State private var problem: String?
+
+    var body: some View {
+        NavigationStack {
+            Form {
+                Section {
+                    ZStack {
+                        Role.surface
+                        if let cover = model.covers[node.nodeId]?.image {
+                            Image(decorative: cover, scale: 1).resizable().scaledToFill()
+                        } else {
+                            Image(systemName: Names.kindSymbol(node.kind)).font(.largeTitle).foregroundStyle(Role.muted)
+                        }
+                    }
+                    .aspectRatio(16 / 9, contentMode: .fit)
+                    .clipShape(RoundedRectangle(cornerRadius: Radius.card, style: .continuous))
+                    .listRowInsets(EdgeInsets())
+                } footer: {
+                    Text("Choose a picture as the cover.")
+                }
+                Section {
+                    PhotosPicker(selection: $item, matching: .images) {
+                        Label("Choose a Picture", systemImage: "photo.on.rectangle")
+                    }
+                    .disabled(saving)
+                    if model.covers[node.nodeId] != nil {
+                        Button("Remove Cover", systemImage: "trash", role: .destructive) { Task { await remove() } }
+                            .disabled(saving)
+                    }
+                }
+                if saving { ProgressView() }
+                if let problem { Text(problem).foregroundStyle(Role.danger) }
+            }
+            .navigationTitle("Cover")
+            #if os(iOS)
+            .navigationBarTitleDisplayMode(.inline)
+            #endif
+            .toolbar { ToolbarItem(placement: .cancellationAction) { Button("Cancel") { dismiss() }.disabled(saving) } }
+        }
+        .onChange(of: item) { _, picked in
+            guard let picked else { return }
+            item = nil
+            Task { await set(picked) }
+        }
+    }
+
+    private func set(_ picked: PhotosPickerItem) async {
+        saving = true
+        problem = nil
+        let ok: Bool
+        if let data = try? await picked.loadTransferable(type: Data.self) { ok = await model.setCover(node, data: data) } else { ok = false }
+        saving = false
+        if ok { dismiss() } else { problem = String(localized: "The cover could not be saved. Please try again.") }
+    }
+
+    private func remove() async {
+        saving = true
+        problem = nil
+        let ok = await model.removeCover(node)
+        saving = false
+        if ok { dismiss() } else { problem = String(localized: "The cover could not be saved. Please try again.") }
+    }
 }
 
 /// What a delete into the trash says, at the bottom of the shell: "“x” moved to the trash." with its Undo for as long as the
 /// web offers it (`TRASH_UNDO_MS`, 6 s), or a refusal; it goes by itself.
-/// A folder's core actions on Home (the web's level header: `standardNodeActions` and `coreNodeActions` for a folder), in one
-/// "more" menu so a level's bar keeps room for its title: share, the heart, then rename, move, its cover, report and delete.
-/// Its download and copy are not offered yet.
-struct FolderHeaderActions: View {
-    @Bindable var model: AppModel
-    let folder: NodeAt
-    @State private var pinned: Bool?
-    @State private var asking = false
-    @State private var failed: String?
-    @State private var renaming = false
-    @State private var newName = ""
-    @State private var renameProblem: String?
-    @State private var moving = false
-    @State private var pickingCover = false
-    @State private var coverItem: PhotosPickerItem?
-    @State private var reporting = false
-    @State private var sharing = false
-
-    var body: some View {
-        // One "more" menu, Share and the heart its first entries (as Files' folder menu): a level's bar keeps room for its title.
-        Menu {
-                // The folder's links (core's share action, `nodeRights.share`): offered where the tenant has links on. The
-                // app reaches no guest's identity folder (they live in drop boxes, which it does not open yet).
-                if model.linkRules().on {
-                    Button("Share…", systemImage: "square.and.arrow.up") { sharing = true }
-                }
-                if let pinned {
-                    Button(pinned ? "Remove from Favorites" : "Add to Favorites", systemImage: pinned ? "heart.slash" : "heart") {
-                        self.pinned = !pinned
-                        Task {
-                            if await !model.toggleFavorite(folder) {
-                                self.pinned = model.isFavorite(folder)
-                                failed = String(localized: "The favorite could not be saved. Try again.")
-                            }
-                        }
-                    }
-                }
-                Button("Rename", systemImage: "pencil") { newName = folder.name; renameProblem = nil; renaming = true }
-                Button("Move to…", systemImage: "folder") { moving = true }
-                let has = model.covers[folder.nodeId] != nil
-                Button(has ? "Change Cover…" : "Set Cover…", systemImage: "photo") { pickingCover = true }
-                if has {
-                    Button("Remove Cover", systemImage: "minus.circle") {
-                        Task { if await !model.removeCover(folder) { failed = String(localized: "The cover could not be saved. Please try again.") } }
-                    }
-                }
-                Divider()
-                if model.reportOffered {
-                    Button("Report", systemImage: "flag") { reporting = true }
-                }
-                Button("Delete Folder", systemImage: "trash", role: .destructive) { asking = true }
-        } label: {
-            Label("More", systemImage: "ellipsis.circle")
-        }
-        .onAppear { pinned = model.isFavorite(folder) }
-        .sheet(isPresented: $moving) { NodeMoveSheet(model: model, ref: folder) }
-        .photosPicker(isPresented: $pickingCover, selection: $coverItem, matching: .images)
-        .onChange(of: coverItem) { _, item in
-            guard let item else { return }
-            coverItem = nil
-            Task {
-                guard let data = try? await item.loadTransferable(type: Data.self), await model.setCover(folder, data: data) else {
-                    failed = String(localized: "The cover could not be saved. Please try again.")
-                    return
-                }
-            }
-        }
-        .sheet(isPresented: $reporting) { ReportSheet(model: model, ref: folder) }
-        .sheet(isPresented: $sharing) { ShareSheet(model: model, ref: folder) }
-        .alert("Delete Folder", isPresented: $asking) {
-            Button("Delete", role: .destructive) { Task { await model.trash(folder) } }
-            Button("Cancel", role: .cancel) {}
-        } message: {
-            Text("“\(folder.name)” and everything in it go to the trash.")
-        }
-        .alert("Rename", isPresented: $renaming) {
-            TextField("Name", text: $newName)
-            Button("Save") {
-                let name = newName
-                Task {
-                    let (problem, _) = await model.rename(folder, to: name)
-                    if let problem {
-                        renameProblem = problem
-                        renaming = true
-                    }
-                }
-            }
-            .disabled(newName.trimmingCharacters(in: .whitespaces).isEmpty)
-            Button("Cancel", role: .cancel) {}
-        } message: {
-            if let renameProblem { Text(renameProblem) }
-        }
-        .alert(failed ?? "", isPresented: Binding(get: { failed != nil }, set: { if !$0 { failed = nil } })) {
-            Button("OK", role: .cancel) {}
-        }
-    }
-}
-
 struct TrashNotice: View {
     @Bindable var model: AppModel
 

@@ -409,6 +409,9 @@
     <string name="copy_failed">Die Kopie ist nicht gelungen. Es blieb nichts zurück; bitte versuche es noch einmal.</string>
     <string name="copy_name_taken">Dort ist kein freier Name für die Kopie mehr. Benenne sie zuerst um oder wähle einen anderen Ort.</string>
     <string name="copy_nothing">Hier kann diese Version von veyq nichts kopieren.</string>
+    <string name="cover_title">Cover</string>
+    <string name="cover_hint">Wähle ein Bild als Cover.</string>
+    <string name="cover_choose">Bild auswählen</string>
     <string name="cover_set">Titelbild festlegen</string>
     <string name="cover_change">Titelbild ändern</string>
     <string name="cover_remove">Titelbild entfernen</string>

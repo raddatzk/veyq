@@ -241,10 +241,11 @@ struct Bar: View {
                 Button(action: onMenu) { Image(systemName: "line.3.horizontal") }
             }
         }
-        // An open Pot's core actions: the heart and "Delete Pot" (core's, on every node page; here the one kind built).
+        // An open object's header: core's actions for every kind (the web's `NodePage` + `NodeHeader`), with what its kind's
+        // page contributes.
         ToolbarItem(placement: .primaryAction) {
-            if let ref = model.shell.openObject, ref.kind == "EXPENSES_POT", model.pot?.ref == ref, model.pot?.view != nil {
-                PotHeaderActions(model: model, ref: ref).id(ref.nodeId)
+            if let ref = model.shell.openObject, let contribution = KindPage.of(ref.kind)?.header(ref.at, model) {
+                NodeHeaderActions(model: model, node: ref.at, contribution: contribution).id(ref.nodeId)
             } else if model.shell.openObject == nil, model.shell.application == nil, !model.shell.searching, let space = model.shell.space {
                 // The space's trash, from its Home (the web's level toolbar): every application's nodes.
                 Button { trashOf = TrashOf(scopeId: space) } label: { Image(systemName: "trash") }
@@ -254,8 +255,8 @@ struct Bar: View {
     }
 
     @ViewBuilder private func content(_ key: String) -> some View {
-        if let ref = model.shell.openObject, ref.kind == "EXPENSES_POT" {
-            PotScreen(model: model, ref: ref, tab: key)
+        if let ref = model.shell.openObject, let body = KindPage.of(ref.kind)?.body {
+            body(ref, key, model)
         } else if let ref = model.shell.openObject {
             ObjectPlaceholder(ref: ref, tab: key)
         } else if let app = model.shell.application, app == .expenses {
@@ -327,8 +328,11 @@ struct HomeView: View {
         // the level's "New" (the web's menu): a folder here, or a Pot here
         // a folder Home shows: core's actions on it, as the web's level header has them
         .toolbar {
-            if let space = model.shell.space, let folder = model.shell.folderAt(scopeId: space) {
-                ToolbarItem(placement: .primaryAction) { FolderHeaderActions(model: model, folder: folder).id(folder.nodeId) }
+            // one "More" menu (as Files' folder menu): a level's bar keeps its room for its title
+            if let space = model.shell.space, let folder = model.shell.folderAt(scopeId: space), let contribution = KindPage.of(folder.kind)?.header(folder, model) {
+                ToolbarItem(placement: .primaryAction) {
+                    NodeHeaderActions(model: model, node: folder, contribution: contribution, maxButtons: 0).id(folder.nodeId)
+                }
             }
         }
         .createMenu("New", shown: model.shell.space != nil) {

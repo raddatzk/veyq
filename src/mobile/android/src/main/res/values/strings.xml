@@ -411,6 +411,9 @@
     <string name="copy_failed">The copy did not go through. Nothing was left behind; please try again.</string>
     <string name="copy_name_taken">There is no free name for the copy there. Rename it first, or choose another place.</string>
     <string name="copy_nothing">Nothing here can be copied by this version of veyq.</string>
+    <string name="cover_title">Cover</string>
+    <string name="cover_hint">Choose a picture as the cover.</string>
+    <string name="cover_choose">Choose a picture</string>
     <string name="cover_set">Set cover</string>
     <string name="cover_change">Change cover</string>
     <string name="cover_remove">Remove cover</string>

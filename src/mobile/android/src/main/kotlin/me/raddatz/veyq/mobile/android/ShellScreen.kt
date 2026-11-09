@@ -140,14 +140,18 @@ fun ShellScreen(s: Screen.Signed, model: AppModel) {
             topBar = {
                 Column {
                 if (!shell.searching) {
+                    // The node on screen — an open object, or the folder Home shows — headed by core for every kind (the
+                    // web's `NodePage` + `NodeHeader`): its name, what its kind's page contributes, core's actions.
+                    val space = shell.space
+                    val headed = shell.openObject?.at
+                        ?: if (shell.application == null && space != null) shell.folderAt(space) else null
+                    val contribution = headed?.let { KindPages.of(it.kind)?.header?.invoke(it, model) }
                     TopAppBar(
                         title = {
                             when {
                                 shell.openObject != null -> Column {
                                     Text(shell.openObject!!.name, fontWeight = androidx.compose.ui.text.font.FontWeight.Bold)
-                                    // An open Pot says its currency under its name (the web's header subtitle).
-                                    val currency = potState?.takeIf { it.ref == shell.openObject }?.view?.currency
-                                    if (currency != null) Text(stringResource(R.string.pot_in_currency, currency), style = MaterialTheme.typography.bodySmall, color = role(LocalPalette.current.muted))
+                                    contribution?.subtitle?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = role(LocalPalette.current.muted)) }
                                 }
                                 shell.application != null -> Text(appName(shell.application!!), fontWeight = androidx.compose.ui.text.font.FontWeight.Bold)
                                 shell.folder != null -> Text(shell.folder!!.name, fontWeight = androidx.compose.ui.text.font.FontWeight.Bold)
@@ -156,16 +160,11 @@ fun ShellScreen(s: Screen.Signed, model: AppModel) {
                         },
                         colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.background),
                         actions = {
-                            val open = shell.openObject
-                            if (open != null && open.kind == "EXPENSES_POT" && potState?.ref == open && potState?.view != null) {
-                                PotHeaderActions(open, model, snackbar, scope, spaceName(s.spaces.firstOrNull { it.scopeId == open.scopeId }))
-                            }
-                            // A folder Home shows: core's actions on it, as the web's level header has them.
-                            val space = shell.space
-                            if (open == null && shell.application == null && !shell.searching && space != null) {
-                                shell.folderAt(space)?.let { FolderHeaderActions(it, model, snackbar, scope, spaceName(s.spaces.firstOrNull { sp -> sp.scopeId == space })) }
+                            if (headed != null && contribution != null) {
+                                NodeHeaderActions(headed, contribution, model, snackbar, scope, spaceName(s.spaces.firstOrNull { it.scopeId == headed.scopeId }))
                             }
                             // The space's trash, from its Home (the web's level toolbar): every application's nodes.
+                            val open = shell.openObject
                             if (open == null && shell.application == null && !shell.searching && space != null) {
                                 IconButton(onClick = { trashOf = space }) { Icon(Icons.Outlined.Delete, stringResource(R.string.trash_title)) }
                             }
@@ -213,8 +212,8 @@ fun ShellScreen(s: Screen.Signed, model: AppModel) {
             Box(Modifier.padding(padding).fillMaxSize()) {
                 when {
                     shell.searching -> SearchScreen(s.objects, onOpen = model::open, onClose = { model.search(false) })
-                    shell.openObject?.kind == "EXPENSES_POT" -> PotScreen(shell.openObject!!, shell.selectedTab, model)
-                    shell.openObject != null -> ObjectScreen(shell.openObject!!, shell.selectedTab)
+                    shell.openObject != null -> KindPages.of(shell.openObject!!.kind)?.body?.invoke(shell.openObject!!, shell.selectedTab, model)
+                        ?: ObjectScreen(shell.openObject!!, shell.selectedTab)
                     shell.application == null -> HomeScreen(s, model, onEnter = model::enter, onOpen = model::open, onFilter = model::filter)
                     shell.application == ApplicationId.EXPENSES -> ExpensesList(s, model)
                     else -> ArrangedListScreen(s.applicationList(shell.application!!), onOpen = model::open)
@@ -695,217 +694,8 @@ private fun tabLabel(tab: BarTab): String = stringResource(
 /** What each object's row says beside its name, by node id (`AppModel.rowDetails`). */
 internal val LocalRowDetails = androidx.compose.runtime.compositionLocalOf<Map<String, List<String>>> { emptyMap() }
 
-/** An open Pot's core actions (`NodeHeaderActions`): the heart and "Delete Pot", whose trash offers an undo for 6 s. */
-@Composable
-private fun PotHeaderActions(open: ObjectRef, model: AppModel, snackbar: androidx.compose.material3.SnackbarHostState, scope: kotlinx.coroutines.CoroutineScope, rootName: String) {
-    val context = androidx.compose.ui.platform.LocalContext.current
-    var moving by androidx.compose.runtime.remember(open) { androidx.compose.runtime.mutableStateOf(false) }
-    var sharing by androidx.compose.runtime.remember(open) { androidx.compose.runtime.mutableStateOf(false) }
-    var reporting by androidx.compose.runtime.remember(open) { androidx.compose.runtime.mutableStateOf(false) }
-    if (reporting) ReportSheet(open.at, model) { reporting = false }
-    val reportOffered by model.reportOffered.collectAsStateWithLifecycle()
-    if (sharing) ShareSheet(open.at, model) { sharing = false }
-    // The Pot's links (core's share action, a header button as the web's): offered where the tenant has links on.
-    if (model.linkRules().on) androidx.compose.material3.IconButton(onClick = { sharing = true }) {
-        androidx.compose.material3.Icon(androidx.compose.material.icons.Icons.Outlined.Share, stringResource(R.string.share_title))
-    }
-    var copying by androidx.compose.runtime.remember(open) { androidx.compose.runtime.mutableStateOf(false) }
-    // the system's photo picker (no permission: it hands over the one picture chosen)
-    val pickCover = androidx.activity.compose.rememberLauncherForActivityResult(
-        androidx.activity.result.contract.ActivityResultContracts.PickVisualMedia(),
-    ) { uri ->
-        if (uri != null) scope.launch { if (!model.setCover(open.at, uri)) snackbar.showSnackbar(context.getString(R.string.cover_failed)) }
-    }
-    val canCopy = model.pot.collectAsStateWithLifecycle().value?.view?.canWrite == true
-    if (copying) {
-        NodeMoveSheet(open.at, rootName, model, onMoved = { to, _ ->
-            scope.launch { snackbar.showSnackbar(context.getString(R.string.copy_done, open.name, to)) }
-        }, onClose = { copying = false }, copy = { to ->
-            val r = model.copyPot(open, to)
-            when (r.outcome) {
-                me.raddatz.veyq.mobile.expenses.PotCopy.Outcome.COPIED -> null
-                me.raddatz.veyq.mobile.expenses.PotCopy.Outcome.NAME_TAKEN -> context.getString(R.string.copy_name_taken)
-                me.raddatz.veyq.mobile.expenses.PotCopy.Outcome.NOTHING_TO_COPY -> context.getString(R.string.copy_nothing)
-                me.raddatz.veyq.mobile.expenses.PotCopy.Outcome.BUSY -> context.getString(R.string.move_refused_rekey_pending)
-                me.raddatz.veyq.mobile.expenses.PotCopy.Outcome.BLOCKED, me.raddatz.veyq.mobile.expenses.PotCopy.Outcome.REFUSED ->
-                    context.getString(R.string.move_refused_illegal_structure)
-                me.raddatz.veyq.mobile.expenses.PotCopy.Outcome.FAILED -> context.getString(R.string.copy_failed)
-            }
-        })
-    }
-    if (moving) {
-        val movedText = { to: String -> context.getString(R.string.move_moved, open.name, to) }
-        NodeMoveSheet(open.at, rootName, model, onMoved = { to, from ->
-            scope.launch {
-                // The web's undo: the node moved back the same way, to where it was.
-                val answer = snackbar.showSnackbar(movedText(to), actionLabel = context.getString(R.string.trash_undo), duration = androidx.compose.material3.SnackbarDuration.Long)
-                if (answer == androidx.compose.material3.SnackbarResult.ActionPerformed &&
-                    model.move(open.at, from).outcome != me.raddatz.veyq.mobile.session.NodeMove.Outcome.MOVED
-                ) snackbar.showSnackbar(context.getString(R.string.move_undo_failed, open.name))
-            }
-        }) { moving = false }
-    }
-    val favoriteFailed = stringResource(R.string.node_favorite_failed)
-    val moved = stringResource(R.string.trash_moved, open.name)
-    val undo = stringResource(R.string.trash_undo)
-    val undoFailed = stringResource(R.string.trash_undo_failed, open.name)
-    val refusals = mapOf(
-        me.raddatz.veyq.mobile.session.NodeTrash.Deleted.GONE to stringResource(R.string.delete_refused_gone),
-        me.raddatz.veyq.mobile.session.NodeTrash.Deleted.SCOPE_DELETING to stringResource(R.string.delete_refused_scope_deleting),
-        me.raddatz.veyq.mobile.session.NodeTrash.Deleted.FAILED to stringResource(R.string.delete_refused_failed),
-    )
-    // The download goes where the person picks (the system's "create document"), streamed there as it is written.
-    val downloadFailed = stringResource(R.string.download_failed, open.name)
-    val downloaded = stringResource(R.string.download_done, open.name)
-    val saveTo = androidx.activity.compose.rememberLauncherForActivityResult(
-        androidx.activity.result.contract.ActivityResultContracts.CreateDocument("application/zip"),
-    ) { uri ->
-        if (uri == null) return@rememberLauncherForActivityResult
-        scope.launch {
-            val out = runCatching { context.contentResolver.openOutputStream(uri) }.getOrNull()
-            val ok = out != null && model.downloadPot(open, out)
-            // a half archive is no download: the document goes again
-            if (!ok) runCatching { android.provider.DocumentsContract.deleteDocument(context.contentResolver, uri) }
-            snackbar.showSnackbar(if (ok) downloaded else downloadFailed)
-        }
-    }
-    // The heart turns at once (the web's optimistic toggle) and turns back when the write did not land.
-    var pinned by androidx.compose.runtime.remember(open) { androidx.compose.runtime.mutableStateOf(model.isFavorite(open.at)) }
-    NodeHeaderActions(
-        open.name,
-        pinned = pinned,
-        canRename = true,
-        canDelete = true,
-        deleteTitle = stringResource(R.string.pot_delete),
-        deleteQuestion = stringResource(R.string.pot_delete_confirm, open.name),
-        onPin = {
-            pinned = pinned?.not()
-            scope.launch {
-                if (!model.toggleFavorite(open.at)) {
-                    pinned = model.isFavorite(open.at)
-                    snackbar.showSnackbar(favoriteFailed)
-                }
-            }
-        },
-        onRename = { name ->
-            val r = model.rename(open.at, name)
-            val problem = renameProblem(context, r)
-            // Renamed; a link that kept the old name is said (the rename stands).
-            if (problem == null && r.links?.failed?.isNotEmpty() == true) scope.launch { snackbar.showSnackbar(context.getString(R.string.share_name_reseal_failed)) }
-            problem
-        },
-        onMove = { moving = true },
-        onCover = if (canCopy) ({ pickCover.launch(androidx.activity.result.PickVisualMediaRequest(androidx.activity.result.contract.ActivityResultContracts.PickVisualMedia.ImageOnly)) }) else null,
-        hasCover = model.covers.collectAsStateWithLifecycle().value.containsKey(open.nodeId),
-        onRemoveCover = if (canCopy) ({ scope.launch { if (!model.removeCover(open.at)) snackbar.showSnackbar(context.getString(R.string.cover_failed)) } }) else null,
-        onCopy = if (canCopy) ({ copying = true }) else null,
-        onDownload = { saveTo.launch(me.raddatz.veyq.mobile.export.NodeExport.fileName(open.name)) },
-        onReport = if (reportOffered) ({ reporting = true }) else null,
-        onDelete = {
-            scope.launch {
-                val (deleted, before) = model.trash(open.at)
-                if (deleted != me.raddatz.veyq.mobile.session.NodeTrash.Deleted.TRASHED) {
-                    snackbar.showSnackbar(refusals.getValue(deleted))
-                    return@launch
-                }
-                // The undo stays offered as long as the web's (`TRASH_UNDO_MS`); it restores the node as it was.
-                val answer = kotlinx.coroutines.withTimeoutOrNull(6_000) {
-                    snackbar.showSnackbar(moved, actionLabel = undo, duration = androidx.compose.material3.SnackbarDuration.Indefinite)
-                }
-                if (answer == androidx.compose.material3.SnackbarResult.ActionPerformed && (before == null || !model.restore(before))) {
-                    snackbar.showSnackbar(undoFailed)
-                }
-            }
-        },
-    )
-}
-
-/**
- * A folder's core actions on Home (the web's level header: `standardNodeActions` and `coreNodeActions` for a folder): its
- * links (a bar action, as a Pot's), the heart, then rename, move, its cover, report and delete — what holds for a node of
- * any kind. Its download and copy are not offered yet.
- */
-@Composable
-private fun FolderHeaderActions(folder: me.raddatz.veyq.mobile.navigation.NodeAt, model: AppModel, snackbar: androidx.compose.material3.SnackbarHostState, scope: kotlinx.coroutines.CoroutineScope, rootName: String) {
-    val context = androidx.compose.ui.platform.LocalContext.current
-    var moving by androidx.compose.runtime.remember(folder.nodeId) { androidx.compose.runtime.mutableStateOf(false) }
-    var reporting by androidx.compose.runtime.remember(folder.nodeId) { androidx.compose.runtime.mutableStateOf(false) }
-    val reportOffered by model.reportOffered.collectAsStateWithLifecycle()
-    if (reporting) ReportSheet(folder, model) { reporting = false }
-    var sharing by androidx.compose.runtime.remember(folder.nodeId) { androidx.compose.runtime.mutableStateOf(false) }
-    if (sharing) ShareSheet(folder, model) { sharing = false }
-    // The folder's links (core's share action, `nodeRights.share`): offered where the tenant has links on. The app reaches
-    // no guest's identity folder (they live in drop boxes, which it does not open yet), where none is.
-    if (model.linkRules().on) androidx.compose.material3.IconButton(onClick = { sharing = true }) {
-        androidx.compose.material3.Icon(androidx.compose.material.icons.Icons.Outlined.Share, stringResource(R.string.share_folder_title))
-    }
-    if (moving) {
-        NodeMoveSheet(folder, rootName, model, onMoved = { to, from ->
-            scope.launch {
-                val answer = snackbar.showSnackbar(context.getString(R.string.move_moved, folder.name, to), actionLabel = context.getString(R.string.trash_undo), duration = androidx.compose.material3.SnackbarDuration.Long)
-                if (answer == androidx.compose.material3.SnackbarResult.ActionPerformed &&
-                    model.move(folder, from).outcome != me.raddatz.veyq.mobile.session.NodeMove.Outcome.MOVED
-                ) snackbar.showSnackbar(context.getString(R.string.move_undo_failed, folder.name))
-            }
-        }) { moving = false }
-    }
-    val pickCover = androidx.activity.compose.rememberLauncherForActivityResult(
-        androidx.activity.result.contract.ActivityResultContracts.PickVisualMedia(),
-    ) { uri ->
-        if (uri != null) scope.launch { if (!model.setCover(folder, uri)) snackbar.showSnackbar(context.getString(R.string.cover_failed)) }
-    }
-    val favoriteFailed = stringResource(R.string.node_favorite_failed)
-    val trashed = stringResource(R.string.trash_moved, folder.name)
-    val undo = stringResource(R.string.trash_undo)
-    val undoFailed = stringResource(R.string.trash_undo_failed, folder.name)
-    val refusals = mapOf(
-        me.raddatz.veyq.mobile.session.NodeTrash.Deleted.GONE to stringResource(R.string.delete_refused_gone),
-        me.raddatz.veyq.mobile.session.NodeTrash.Deleted.SCOPE_DELETING to stringResource(R.string.delete_refused_scope_deleting),
-        me.raddatz.veyq.mobile.session.NodeTrash.Deleted.FAILED to stringResource(R.string.delete_refused_failed),
-    )
-    var pinned by androidx.compose.runtime.remember(folder.nodeId) { androidx.compose.runtime.mutableStateOf(model.isFavorite(folder)) }
-    NodeHeaderActions(
-        folder.name,
-        pinned = pinned,
-        canRename = true,
-        canDelete = true,
-        deleteTitle = stringResource(R.string.folder_delete),
-        deleteQuestion = stringResource(R.string.folder_delete_confirm, folder.name),
-        onPin = {
-            pinned = pinned?.not()
-            scope.launch {
-                if (!model.toggleFavorite(folder)) {
-                    pinned = model.isFavorite(folder)
-                    snackbar.showSnackbar(favoriteFailed)
-                }
-            }
-        },
-        onRename = { name -> renameProblem(context, model.rename(folder, name)) },
-        onMove = { moving = true },
-        onCover = { pickCover.launch(androidx.activity.result.PickVisualMediaRequest(androidx.activity.result.contract.ActivityResultContracts.PickVisualMedia.ImageOnly)) },
-        hasCover = model.covers.collectAsStateWithLifecycle().value.containsKey(folder.nodeId),
-        onRemoveCover = { scope.launch { if (!model.removeCover(folder)) snackbar.showSnackbar(context.getString(R.string.cover_failed)) } },
-        onReport = if (reportOffered) ({ reporting = true }) else null,
-        onDelete = {
-            scope.launch {
-                val (deleted, before) = model.trash(folder)
-                if (deleted != me.raddatz.veyq.mobile.session.NodeTrash.Deleted.TRASHED) {
-                    snackbar.showSnackbar(refusals.getValue(deleted))
-                    return@launch
-                }
-                val answer = kotlinx.coroutines.withTimeoutOrNull(6_000) {
-                    snackbar.showSnackbar(trashed, actionLabel = undo, duration = androidx.compose.material3.SnackbarDuration.Indefinite)
-                }
-                if (answer == androidx.compose.material3.SnackbarResult.ActionPerformed && (before == null || !model.restore(before))) {
-                    snackbar.showSnackbar(undoFailed)
-                }
-            }
-        },
-    )
-}
-
 /** Why a rename did not land, in core's words (`nodeNameErrorText`); null once renamed. */
-private fun renameProblem(context: android.content.Context, r: me.raddatz.veyq.mobile.session.NodeRename.Result): String? = when (r.outcome) {
+internal fun renameProblem(context: android.content.Context, r: me.raddatz.veyq.mobile.session.NodeRename.Result): String? = when (r.outcome) {
     me.raddatz.veyq.mobile.session.NodeRename.Outcome.RENAMED -> null
     me.raddatz.veyq.mobile.session.NodeRename.Outcome.NAME_TAKEN -> r.taken?.let { sibling ->
         // the colliding sibling's noun with its article: its kind's `nounWithArticle`, else "an item"

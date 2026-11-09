@@ -113,6 +113,12 @@ decision 9): before building a control, ask what the platform's own apps do, and
 floating button built by hand; `scripts/validate_mobile_platform_guidelines.py` holds that. Row actions: an overflow menu on Android, swipe actions and a context
 menu on iOS.
 
+A node's header is core's, for every kind (ADR 0123, the web's `NodePage` + `NodeHeader`): core's `navigation/NodeHeader.kt`
+plans it (`NodeHeaderTest`), each app's `NodeHeaderActions` draws it and owns every dialog behind it, and a kind only
+registers its page — `KindPages` (Android) / `KindPage` (Apple): it brings a share sheet, takes a cover, contributes a
+subtitle, its rights narrowing, its copy and download doors and own actions, and draws its body. A new kind registers
+there and its header order in `AppKinds.headerOrder`; it never builds header actions of its own.
+
 ## Traps
 
 - The Apple primitives are libsodium 1.0.22 through cinterop (`core/sodium/`): `build_libsodium.py` builds the three

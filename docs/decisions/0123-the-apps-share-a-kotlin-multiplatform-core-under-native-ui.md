@@ -266,7 +266,8 @@ implementation exists but what holds it to the first.
   measured 2026-11-09). The web asks the tenant's storage before it copies (`checkTenantStorageFit`); the app does not yet, so
   a copy past the quota fails at its first receipt and is trashed. A node's cover is core's (`session/NodeCover.kt`, the
   web's `core/node/cover/`): the `cover` field of its sealed meta in the web's shape, its image the node's `COVER` blob,
-  attached with the meta in one `setNodeCover` and freed with `removeNodeCover`; a Pot's header menu sets, changes and
+  attached with the meta in one `setNodeCover` and freed with `removeNodeCover`; core's one cover sheet (the web's
+  `CoverDialog`: the cover as it shows, 16:9, the picture chosen, changed and removed in one place) sets, changes and
   removes it from the platform's photo picker (no library permission), the device making the web's cover JPEG (long edge
   2048, quality 0.85), and its rows show it in place of the kind's tile (the web draws a cover the app set, and the iOS app one
   Android set, measured 2026-11-09). The crop editor is not built — a cover the app sets is the whole picture, a
@@ -275,7 +276,17 @@ implementation exists but what holds it to the first.
   Home): a folder there (`session/FolderCreate.kt`, its name refused where a sibling folds the same) or a Pot there. A
   folder Home shows has core's actions as the web's level header does — favorite, rename, move, cover, report, delete with
   its undo (`navigation/NodeAt`, the node any of them takes, whatever its kind) — and Home's path is read anew from the tree
-  where the folder shown was renamed or moved (`Shell.at`); a folder's links, download and copy are not built.
+  where the folder shown was renamed or moved (`Shell.at`); a folder's download and copy are not built.
+- **One header for every node, drawn by core** (the web's `NodePage` + `NodeHeader`, ADR 0110 decision 10; owner
+  2026-11-09): what a node's header offers and where is core's `navigation/NodeHeader.kt` — core's actions around the
+  application's (the heart before them, the copy beside the move, cover, download and report after), the kind's
+  priority (`AppKinds.headerOrder`, the web descriptor's `header.order`), the move, copy, report and delete never
+  buttons and the delete last, the rename and the cover menu entries (no rename in place, no tapped visual); each app
+  draws that plan in its platform's way — as many icon buttons as its bar gives (Android two, iOS two on a page and none
+  at a folder's level, whose title keeps the room), the rest one "more" menu — and owns every dialog behind it once
+  (`NodeHeaderActions`). A kind's page only contributes (`KindPage`, the web's `KindRegistration`: it brings a share sheet,
+  it takes a cover, a subtitle, its rights narrowing, its copy and download doors, actions of its own) and draws its body
+  (`NodeHeaderTest`, each rule a case; the heart moved after the application's actions turns three red).
 - **Not built yet:** every other write (another kind's node), the
   other applications' views behind the bar, a CI job for the apps. The grant check is held by `GrantTrustTest` against a server the test plays — each refusal killed by
   a mutation of the rule it pins, but for three a second rule also holds (a pending or self-naming signer, and a cycle
