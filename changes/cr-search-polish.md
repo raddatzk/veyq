@@ -49,6 +49,15 @@ state them:
   again only where the rail itself would reload: a membership or role change it already watches), as a fifth item of
   this CR; a test counts the reads over two focuses.
 
+- **The typing margin is nearly gone** (`cr-search-photos-of-every-space` retrospective): with 10,000 photos indexed,
+  the longest keystroke task at 4x throttle measured 57-99 ms against the 100 ms bound of `cr-search-at-volume`. This
+  CR adds work per keystroke (the month predicate) and per drawn row (the bold mapping), so it first wins room back, as
+  a sixth item: matching becomes incremental where the query only grew (narrow the previous matches instead of
+  scanning every document), and the folded name and place of a document are computed once at build, not per
+  keystroke. Then the volume search measurement runs again WITH this CR's other items in (`scripts/measure_volume.py
+  search`, photos stage included, own instance, at any load with `uptime` recorded): the typing bound must hold in
+  every reading of two runs, and the retrospective states the remaining margin.
+
 ## Phases
 
 Single phase (web only).
