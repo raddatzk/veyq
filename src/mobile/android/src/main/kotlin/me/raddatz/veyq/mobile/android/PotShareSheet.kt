@@ -246,12 +246,15 @@ private fun LinkRow(
         }
         // The row's other actions in one overflow menu (Material 3); switching off is at once, as the web does: the Pot gets a
         // new key, so the link opens nothing any more. Renew and delete ask first.
+        // an open link goes to another app through the system's share sheet (Android's Sharesheet), first in the menu
+        val share = if (url != null && link.enabled) ({ sendText(context, url) }) else null
         if (busy) CircularProgressIndicator(Modifier.padding(12.dp).width(20.dp))
-        else if (onEdit != null || onRenew != null || onSwitchOff != null || onDelete != null) {
+        else if (share != null || onEdit != null || onRenew != null || onSwitchOff != null || onDelete != null) {
             var menu by remember { mutableStateOf(false) }
             Box {
                 IconButton(onClick = { menu = true }) { Icon(Icons.Outlined.MoreVert, stringResource(R.string.node_more)) }
                 androidx.compose.material3.DropdownMenu(menu, { menu = false }) {
+                    share?.let { a -> androidx.compose.material3.DropdownMenuItem(text = { Text(stringResource(R.string.share_send)) }, onClick = { menu = false; a() }) }
                     onEdit?.let { a -> androidx.compose.material3.DropdownMenuItem(text = { Text(stringResource(R.string.share_edit)) }, onClick = { menu = false; a() }) }
                     onRenew?.let { a -> androidx.compose.material3.DropdownMenuItem(text = { Text(stringResource(R.string.share_renew)) }, onClick = { menu = false; a() }) }
                     onSwitchOff?.let { a ->
@@ -276,10 +279,7 @@ private fun FreshLink(url: String, onDone: () -> Unit) {
     OutlinedTextField(url, {}, readOnly = true, singleLine = true, modifier = Modifier.fillMaxWidth())
     Row(Modifier.fillMaxWidth().padding(top = 8.dp), horizontalArrangement = Arrangement.End) {
         TextButton(onClick = onDone) { Text(stringResource(R.string.share_done)) }
-        TextButton(onClick = {
-            val send = android.content.Intent(android.content.Intent.ACTION_SEND).setType("text/plain").putExtra(android.content.Intent.EXTRA_TEXT, url)
-            context.startActivity(android.content.Intent.createChooser(send, null))
-        }) { Text(stringResource(R.string.share_send)) }
+        TextButton(onClick = { sendText(context, url) }) { Text(stringResource(R.string.share_send)) }
         Button(onClick = { copy(context, url); android.widget.Toast.makeText(context, copied, android.widget.Toast.LENGTH_SHORT).show() }) {
             Text(stringResource(R.string.share_copy))
         }
@@ -426,3 +426,9 @@ private fun copy(context: android.content.Context, text: String) {
 private fun day(instant: String): String = runCatching {
     DateTimeFormatter.ofLocalizedDate(FormatStyle.MEDIUM).format(Instant.parse(instant).atZone(ZoneId.systemDefault()).toLocalDate())
 }.getOrDefault(instant.take(10))
+
+/** [text] handed to another app through the system's share sheet (a link to send in a chat or a mail). */
+private fun sendText(context: android.content.Context, text: String) {
+    val send = android.content.Intent(android.content.Intent.ACTION_SEND).setType("text/plain").putExtra(android.content.Intent.EXTRA_TEXT, text)
+    context.startActivity(android.content.Intent.createChooser(send, null))
+}

@@ -129,6 +129,10 @@ struct PotShareSheet: View {
                                 if canRenew { Button("Renew link", systemImage: "arrow.clockwise") { renewing = link }.tint(Role.accent) }
                             }
                             .contextMenu {
+                                // an open link goes to another app through the system's share sheet, first (as Safari's links)
+                                if link.enabled, let url = link.url.flatMap(URL.init(string:)) {
+                                    ShareLink(item: url) { Label("Share…", systemImage: "square.and.arrow.up") }
+                                }
                                 if canEdit { Button("Edit", systemImage: "pencil") { editing = link } }
                                 if canRenew { Button("Renew link", systemImage: "arrow.clockwise") { renewing = link } }
                                 if canSwitchOff {
