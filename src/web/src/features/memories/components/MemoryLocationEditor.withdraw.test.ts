@@ -1,5 +1,5 @@
 // @vitest-environment happy-dom
-// The place editor's "Turn map off" (uc.memory.place A5), with the REAL `MemoryMap` over a fake Leaflet: the withdrawal
+// The place editor's "Turn map services off" (uc.memory.place A5), with the REAL `MemoryMap` over a fake Leaflet: the withdrawal
 // removes the map, makes no further tile layer, lets the pending (debounced) lookup ask no geocoder, and puts the consent prompt where
 // the map was; turning it back on there brings the map back.
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
@@ -101,7 +101,7 @@ describe('MemoryLocationEditor — turning the map off', () => {
     expect(w.find('.memory-location-name input, .memory-location-name-field').exists()).toBe(true) // still a name field
     expect(leaflet.calls.tileLayers).toBe(1)
 
-    await w.get('.map-consent-prompt button').trigger('click') // "Enable maps" there
+    await w.get('.map-consent-prompt button').trigger('click') // "Turn map services on" there
     await flushPromises()
     expect(localStorage.getItem('veyq:maps-consent')).not.toBeNull()
     expect(w.find('.memory-map').exists()).toBe(true)

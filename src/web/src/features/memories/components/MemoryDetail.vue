@@ -82,7 +82,6 @@ import MemoryBanner from '../banner/MemoryBanner.vue'
 import BannerDialog from '../banner/BannerDialog.vue'
 import { useMemoryBanner } from '../banner/useMemoryBanner'
 import { useBannerEditor } from '../banner/useBannerEditor'
-import MapConsentRenewal from './MapConsentRenewal.vue'
 import type { ScopeKey } from '../../spaces/epochs'
 
 const props = defineProps<{
@@ -414,14 +413,12 @@ watch(lightboxIndex, (i) => {
 // settle points below. Props are passed as getters so the composable stays reactive to them.
 const {
   locationEditorOpen,
-  consentDialogOpen,
   storedLocation,
   gpsPoints,
   medoid,
   locationLabel,
   locationResolved,
   openLocationEditor,
-  enableMaps,
   onLocationSave,
   reconcileAutoLocation,
 } = useMemoryLocation({
@@ -1040,21 +1037,6 @@ watch(
       @save="onLocationSave"
       @close="locationEditorOpen = false"
     />
-
-    <VeyqDialog
-      :visible="consentDialogOpen"
-      :header="t('memory.place.consentTitle')"
-      class="memory-location-consent"
-      :style="{ width: 'min(28rem, 92vw)' }"
-      @update:visible="consentDialogOpen = false"
-    >
-      <p>{{ t('memory.place.consentBody') }}</p>
-      <MapConsentRenewal />
-      <div class="veyq-dialog-action-row">
-        <VeyqButton :label="t('common.cancel')" icon="times" variant="secondary" appearance="outlined" @click="consentDialogOpen = false" />
-        <VeyqButton :label="t('memory.place.consentEnable')" icon="map" @click="enableMaps" />
-      </div>
-    </VeyqDialog>
 
     <!-- Confirm the irreversible purge (cr-0111): permanently deletes the trashed media NOW (bypasses the 30-day retention). -->
     <VeyqDialog

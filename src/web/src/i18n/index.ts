@@ -242,14 +242,15 @@ const en = {
     appearance: 'Appearance and language',
     appearanceTitle: 'Appearance and language',
     appearanceSub: 'How this app looks and speaks on this device.',
-    // Map and place names (uc.memory.place A5): this browser's one consent, given and withdrawn here or at a map.
-    maps: 'Map and place names',
+    // Map services (uc.memory.place A5, A6): this browser's one consent, turned on and off here or at a map, worded as a
+    // setting (ADR 0016). The section's old name stays among its search words.
+    maps: 'Map services',
     mapsSub: 'Whether this browser loads maps and looks up the names of places.',
     mapsTiles: 'Map',
     mapsPlaces: 'Place names',
     mapsNone: 'none configured',
     mapsReceive: 'The map service receives the part of the map you view, the place-name service the point of a place, and both this device’s IP address.',
-    mapsSwitch: 'Load maps and place names in this browser',
+    mapsSwitch: 'Map services in this browser',
     mapsSwitchHint: 'Off stops every map and every lookup at once. Place names already looked up stay with your Memories.',
     mapsNotOffered: 'This server shows no maps, so there is nothing to consent to.',
     mapsGivenFor: 'Your consent was given for other services and holds only for them: the map from {tiles}, place names from {places}. Switch it on to agree to the ones above.',
@@ -260,7 +261,7 @@ const en = {
     // Other words the search finds each section by (`features/settings/sections.ts`), comma-separated; never shown.
     words: {
       appearance: 'theme, dark mode, light mode, language, colours, colors',
-      maps: 'map, places, location, consent',
+      maps: 'map and place names, map, place names, places, location, consent',
       sessions: 'devices, sign out, log out, sessions',
       password: 'password, passphrase, sign-in',
       pairing: 'new device, phone, QR code',
@@ -2438,13 +2439,13 @@ const de: typeof en = {
     appearance: 'Darstellung und Sprache',
     appearanceTitle: 'Darstellung und Sprache',
     appearanceSub: 'Wie diese App auf diesem Gerät aussieht und spricht.',
-    maps: 'Karte und Ortsnamen',
+    maps: 'Kartendienste',
     mapsSub: 'Ob dieser Browser Karten lädt und die Namen von Orten nachschlägt.',
     mapsTiles: 'Karte',
     mapsPlaces: 'Ortsnamen',
     mapsNone: 'nicht eingerichtet',
     mapsReceive: 'Der Kartendienst erhält den Kartenausschnitt, den du ansiehst, der Dienst für Ortsnamen den Punkt eines Orts, und beide die IP-Adresse dieses Geräts.',
-    mapsSwitch: 'Karten und Ortsnamen in diesem Browser laden',
+    mapsSwitch: 'Kartendienste in diesem Browser',
     mapsSwitchHint: 'Aus beendet sofort jede Karte und jedes Nachschlagen. Schon nachgeschlagene Ortsnamen bleiben in deinen Erinnerungen.',
     mapsNotOffered: 'Dieser Server zeigt keine Karten, also gibt es nichts, dem du zustimmen könntest.',
     mapsGivenFor: 'Deine Zustimmung galt anderen Diensten und gilt nur für sie: für die Karte {tiles}, für Ortsnamen {places}. Schalte sie ein, um den Diensten oben zuzustimmen.',
@@ -2454,7 +2455,7 @@ const de: typeof en = {
     password: 'Passwort ändern',
     words: {
       appearance: 'Design, Dunkelmodus, Hellmodus, Sprache, Farben',
-      maps: 'Karte, Orte, Standort, Zustimmung',
+      maps: 'Karte und Ortsnamen, Karte, Ortsnamen, Orte, Standort, Zustimmung',
       sessions: 'Geräte, abmelden, Sitzungen',
       password: 'Kennwort, Passwort, Anmeldung',
       pairing: 'neues Gerät, Handy, QR-Code',

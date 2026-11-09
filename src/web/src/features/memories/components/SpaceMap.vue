@@ -251,7 +251,7 @@ onMounted(() => {
 })
 
 // The map container is `v-if`-gated on `showMap`; when it flips on (consent granted / first pin) mount Leaflet on
-// the freshly-rendered element, and tear it down when it flips off (consent withdrawn — the map's own "Turn map off",
+// the freshly-rendered element, and tear it down when it flips off (consent withdrawn — the map's own "Turn map services off",
 // the settings, another tab — or pins emptied): `map.remove()` drops the tile layer, so no further tile is requested.
 watch(showMap, async (on) => {
   if (on) {

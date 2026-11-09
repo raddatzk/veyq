@@ -96,15 +96,19 @@ const en = {
       remove: 'Remove location',
       autoOptIn: 'Determine location automatically',
       autoOptInHint: 'from where your photos were taken',
-      consentTitle: 'Enable maps for locations?',
+      // The offer where a map would stand while the map services are off (uc.memory.place A6): worded as a setting, not
+      // as a cookie banner (ADR 0016); it still says what the services receive and names the hosts.
+      consentTitle: 'Map services are off',
       consentBody:
-        'To show a map and name places, the map loads from a map service and the framed point goes to a service for place names — both outside this server, straight from your device, with its IP address. You can turn this off again at any time, on the map or in Settings.',
-      consentEnable: 'Enable maps',
+        'Turned on, the map loads from a map service and the framed point goes to a service for place names — both outside this server, straight from your device, with its IP address. You can turn them off again at any time, on the map or in Settings.',
+      consentHosts: 'The map from {tiles}, place names from {places}.',
+      consentHostsTiles: 'The map from {tiles}.',
+      consentEnable: 'Turn map services on',
       // A stored consent that named other hosts (or none, before hosts were recorded) is asked again, naming the new ones.
       consentRenewTiles: 'Agree again for the service this server uses now: the map from {tiles}.',
       consentRenewBoth: 'Agree again for the services this server uses now: the map from {tiles}, place names from {places}.',
       // On every map, beside the attribution: withdraws the consent at once (GDPR Art. 7(3), uc.memory.place A5).
-      mapOff: 'Turn map off',
+      mapOff: 'Turn map services off',
       mapsNotOffered: 'This server shows no maps.',
       nameOnly: 'Name only — no position',
     },
@@ -387,13 +391,15 @@ const de: typeof en = {
       remove: 'Ort entfernen',
       autoOptIn: 'Ort automatisch ermitteln',
       autoOptInHint: 'aus dem Standort deiner Fotos',
-      consentTitle: 'Karten für Orte aktivieren?',
+      consentTitle: 'Kartendienste sind aus',
       consentBody:
-        'Um eine Karte zu zeigen und Orte zu benennen, wird die Karte von einem Kartendienst geladen und der eingerahmte Punkt an einen Dienst für Ortsnamen gesendet – beide außerhalb dieses Servers, direkt von deinem Gerät, mit dessen IP-Adresse. Du kannst das jederzeit wieder ausschalten, auf der Karte oder in den Einstellungen.',
-      consentEnable: 'Karten aktivieren',
+        'Eingeschaltet wird die Karte von einem Kartendienst geladen und der eingerahmte Punkt an einen Dienst für Ortsnamen gesendet – beide außerhalb dieses Servers, direkt von deinem Gerät, mit dessen IP-Adresse. Du kannst sie jederzeit wieder ausschalten, auf der Karte oder in den Einstellungen.',
+      consentHosts: 'Die Karte von {tiles}, Ortsnamen von {places}.',
+      consentHostsTiles: 'Die Karte von {tiles}.',
+      consentEnable: 'Kartendienste einschalten',
       consentRenewTiles: 'Stimme erneut zu, für den Dienst, den dieser Server jetzt nutzt: die Karte von {tiles}.',
       consentRenewBoth: 'Stimme erneut zu, für die Dienste, die dieser Server jetzt nutzt: die Karte von {tiles}, Ortsnamen von {places}.',
-      mapOff: 'Karte ausschalten',
+      mapOff: 'Kartendienste ausschalten',
       mapsNotOffered: 'Dieser Server zeigt keine Karten.',
       nameOnly: 'Nur ein Name – ohne Position',
     },

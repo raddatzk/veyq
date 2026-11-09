@@ -2,7 +2,7 @@
 // A thin Leaflet slippy-map wrapper honoring the ADR 0018 tile seam: a raster `TileLayer` from a
 // provider-neutral, **third-party** tile URL (client-direct — never the veyq backend/operator), with mandatory
 // attribution. It is presentation only — no crypto, no consent logic (the parent gates it behind `mapsAvailable`), except
-// that it carries the map's "Turn map off" (`MapOffButton`, uc.memory.place A5): withdrawing flips `mapsAvailable`, the
+// that it carries the map's "Turn map services off" (`MapOffButton`, uc.memory.place A5): withdrawing flips `mapsAvailable`, the
 // parent unmounts this component and `onBeforeUnmount` removes the Leaflet map with its tile layer.
 //
 // Interaction is **frame-based** (cr-0069): the user pans/zooms to frame a spot; the map reports its centre+zoom

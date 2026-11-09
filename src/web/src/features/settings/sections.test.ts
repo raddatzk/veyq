@@ -19,6 +19,9 @@ import { ScopeKind } from '../../api/generated/scopes'
 import { capabilityState } from '../../shared/state/capabilities'
 import { CORE_DEVICE_LINKING } from '../platform/capabilities'
 import { realI18n } from '../../test/i18n'
+import { i18n } from '../../i18n'
+import { settingsDocuments } from '../../core/search/peopleAndSettings'
+import { textRank } from '../../core/search/query'
 
 type Tenants = Awaited<ReturnType<typeof listMyTenants>>
 const role = (r: 'OWNER' | 'MEMBER') => [{ tenantId: 't-1', role: r }] as unknown as Tenants
@@ -117,5 +120,29 @@ describe('the settings sections and their gates', () => {
     expect(byId.get('terms')).toBe('tenant')
     expect(byId.get('group-g-1')).toBe('groups')
     expect(byId.has('group-g-2')).toBe(false) // a group the caller only belongs to has nothing to manage here
+  })
+})
+
+// uc.memory.place A6: the section is "Map services" now (de "Kartendienste"); its old name stays among its search words, so
+// what a member learned to type still finds it. Asserted through the search's own documents and rank.
+describe('the map services section in the settings search', () => {
+  const mapsDocument = (api: Awaited<ReturnType<typeof sections>>) =>
+    settingsDocuments(api.offered.value, () => {}).find((d) => d.id === 'maps')!
+  const finds = (doc: ReturnType<typeof mapsDocument>, text: string) => textRank(doc, text.toLocaleLowerCase()) !== null
+
+  it('is found by its old words in German, "Karte" among them; control: a word it does not carry finds nothing', async () => {
+    const api = await sections()
+    i18n.global.locale.value = 'de'
+    await flushPromises()
+    const doc = mapsDocument(api)
+    expect(doc.name).toBe('Kartendienste')
+    for (const text of ['Karte', 'Karte und Ortsnamen', 'Ortsnamen', 'Zustimmung']) expect(finds(doc, text), text).toBe(true)
+    expect(finds(doc, 'Kennwort')).toBe(false)
+  })
+
+  it('is found by its old name in English', async () => {
+    const doc = mapsDocument(await sections())
+    expect(doc.name).toBe('Map services')
+    for (const text of ['map and place names', 'place names', 'consent']) expect(finds(doc, text), text).toBe(true)
   })
 })

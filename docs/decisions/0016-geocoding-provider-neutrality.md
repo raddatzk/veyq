@@ -76,8 +76,8 @@ provider.**
   - **One consent per browser**, applied in every space. It is device-local
     ([ADR 0022](0022-settings-information-architecture.md)): the server holds no consent state, and a consent given
     on one device does not reach another.
-  - **Given in context or in settings.** The place editor or a map asks before the first request; the member may
-    also turn it on under Settings → *Map and place names*, which names the tile and geocoder hosts this server
+  - **Given in context or in settings.** The place editor or a map offers it where the map would stand, before the first request; the member may
+    also turn it on under Settings → *Map services*, which names the tile and geocoder hosts this server
     configured and what each receives.
   - **The consent names its recipients, and a new one is asked again** (GDPR Art. 4(11) and 7: a consent is informed
     only about the recipients it named). The consent records the tile host and the geocoder host it was given for, and
@@ -87,7 +87,7 @@ provider.**
     before hosts were, which names none, is asked once more. The settings show the hosts an earlier consent named
     where they differ from the current ones.
   - **Withdrawn in settings or at the map, at once.** The same settings switch turns it off, and every map carries a
-    *Turn map off* control beside its attribution — so withdrawing is as easy as giving, and a share guest, who has
+    *Turn map services off* control beside its attribution — so withdrawing is as easy as giving, and a share guest, who has
     no settings, withdraws there too. A withdrawal takes effect immediately: every open map is torn down, no further
     tile or geocoding request leaves, and the consent prompt stands where the map was. What is already sealed —
     resolved names, positions — is not touched.

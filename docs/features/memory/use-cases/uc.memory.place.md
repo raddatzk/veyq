@@ -57,13 +57,13 @@ is [ADR 0016](../../../decisions/0016-geocoding-provider-neutrality.md). This us
   it the medoid. Renaming a geocoded place there makes it `manual`; saving it untouched keeps its anchor.
 - **A5 — give or withdraw the map consent, in settings or at the map** ([ADR 0016](../../../decisions/0016-geocoding-provider-neutrality.md),
   GDPR Art. 7(3)): the one consent per browser covers the tiles and the geocoder in every space. Under Settings →
-  *Map and place names* the member sees whether it is on, the tile host and the geocoder host this server configured
+  *Map services* the member sees whether it is on, the tile host and the geocoder host this server configured
   ("none configured" for one that is absent; with no tile service there is nothing to consent to and no switch), and
   what they receive — the part of the map in view or a place's coordinate, plus the device's IP address; a switch turns
   it on or off. The consent names the hosts it was given for and holds only for them: when the Server Owner configures a
   new tile host, or a new or changed geocoder host, the next map shows the prompt again, naming the new host, and nothing
   is requested from it until the member agrees — a removed geocoder asks nothing, a consent stored before hosts were
-  recorded is asked once more, and the settings name the hosts an earlier consent covered. On every map — a level's, a person's, the place editor's, the photo panel's — *Turn map off* beside the
+  recorded is asked once more, and the settings name the hosts an earlier consent covered. On every map — a level's, a person's, the place editor's, the photo panel's — *Turn map services off* beside the
   attribution withdraws it too, the same control for a member and a share guest (who has no settings). A withdrawal
   acts at once: the stored flag is removed, every open map unmounts with its tile layer (another tab of the browser
   follows), no further tile or geocoding request leaves, and the consent prompt stands where the map was; in the open

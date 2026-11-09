@@ -763,25 +763,27 @@ seed('rome', async (w) => {
   await thumbnailsDecoded(page, 6)
 })
 
-shot('memories-maps-consent', async (w) => {
+shot('memories-map-services-off', async (w) => {
   const { page } = w.owner
   await home(w, page)
   await open(w, page, names(w).rome)
   await headerAction(w, page, w.t('Set location', 'Ort festlegen'))
-  const d = dialog(page, w.t('Enable maps for locations?', 'Karten für Orte aktivieren?'))
-  await capture(w, 'memories-maps-consent', d)
-  // The map's tiles and place names are answered here, never fetched: the dialog works, and nothing leaves the run.
+  // The map services are off (a new browser's default): the place editor is the name field, with the offer to turn them
+  // on where the map would stand (uc.memory.place A6).
+  const place = dialog(page, w.t('Location', 'Ort'))
+  await expect(place.getByRole('button', { name: w.t('Turn map services on', 'Kartendienste einschalten'), exact: true })).toBeVisible()
+  await capture(w, 'memories-map-services-off', place)
+  // The map's tiles and place names are answered here, never fetched: the offer works, and nothing leaves the run.
   await page.context().route('https://tile.openstreetmap.org/**', async (route) => route.fulfill({ contentType: 'image/png', body: await paleTile(page) }))
   await page.context().route('https://nominatim.openstreetmap.org/**', (route) =>
     route.fulfill({ contentType: 'application/json', headers: { 'access-control-allow-origin': '*' }, body: '{}' }))
-  await d.getByRole('button', { name: w.t('Enable maps', 'Karten aktivieren') }).click()
-  // Name the place, so the Memory's page shows it (memories-memory-page): the photos carry where they were taken.
-  const place = dialog(page, w.t('Location', 'Ort'))
+  // Name the place, so the Memory's page shows it (memories-memory-page), then turn the map services on in the editor: the
+  // typed name stays, and the photos carry where they were taken.
   try {
-    await expect(place).toBeVisible({ timeout: 10_000 })
     const name = place.getByRole('textbox', { name: 'Name' })
-    if (!(await name.isVisible())) await place.getByRole('button', { name: /own name|eigenen Namen/i }).click()
     await name.fill(w.t('Rome', 'Rom'))
+    await place.getByRole('button', { name: w.t('Turn map services on', 'Kartendienste einschalten'), exact: true }).click()
+    await expect(place.locator('.leaflet-container')).toBeVisible({ timeout: 10_000 })
     await place.getByRole('button', { name: w.t('Save', 'Speichern'), exact: true }).click({ timeout: 10_000 })
     await expect(place).toBeHidden({ timeout: 30_000 })
   } catch (error) {

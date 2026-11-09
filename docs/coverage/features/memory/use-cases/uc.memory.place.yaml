@@ -7,7 +7,8 @@ title: Curate a Memory's place — one sealed, named location
 # position = the MEDOID of the media GPS, reverse-only opt-in geocoding (client-direct, Nominatim reference, ADR
 # 0016), and a per-folder-subtree "Karte" view plotting every located Memory/Chapter from listNodes without loading
 # media (cr-0071). On a server without the map (memories.map off) the editor is a name field: a typed name, the
-# medoid or no position at all - a place that is a name only (inbox #458). The consent is one per browser, given and
+# medoid or no position at all - a place that is a name only (inbox #458); on a server with a map, a member whose map
+# services are off gets the same name field, with the offer to turn them on (A6). The consent is one per browser, given and
 # withdrawn in settings or at the map (A5); a space owner's enabling notice (ADR 0016, not built) + a blind gazetteer
 # remain prose gaps (inbox #47), not unref'd criteria.
 acceptanceCriteria:
@@ -74,6 +75,15 @@ acceptanceCriteria:
           - src/features/memories/spaceMap.test.ts
           - src/features/memories/components/PersonMemories.test.ts
           - src/features/memories/exportImport.test.ts
+  - id: map-services-off-names-by-hand
+    text: On a server WITH a map, a member whose map services are off (this browser's consent not given, or withdrawn) names a place by hand (ADR 0016, A6). The location chip opens the editor at once - no dialog before it -, the name field of a server without a map, and where the map would stand the offer to turn the map services on, naming the tile and geocoder hosts and what they receive; a typed name is saved `manual` at the medoid, and nothing is turned on. While they are off the editor draws no map and asks no geocoder (control - the same editor with them on draws the map and asks the geocoder). Turned on there, the map is drawn in the same editor and a typed name is kept (with none typed, the map names the place as on an opening with the map). The settings section, the offer and the map's control call the choice "Map services" / "Kartendienste", on or off; the section is still found in the settings search by its old words ("Karte", "Karte und Ortsnamen"). Client-only, so web refs alone.
+    coverage:
+      web:
+        unit:
+          - src/features/memories/components/MemoryDetail.test.ts
+          - src/features/memories/components/MemoryLocationEditor.mapServicesOff.test.ts
+          - src/features/settings/MapsPanel.test.ts
+          - src/features/settings/sections.test.ts
   - id: tenant-map-via-listnodes
     text: A "Karte" browse view mode shows every located Memory/Chapter in the current folder's subtree (the whole space at the scope root) as a clickable pin, read from each node's sealed `location` via listNodes (unsealed client-side with its own K_node, no media load, no locations endpoint — a location endpoint would leak coordinates to the operator). On the map ⟺ a coordinate; a location ⟺ a name; a pending auto place and a place that is a name only (no `derived`) are not pinned; a pin click opens that Memory. Each pin shows the node's explicit `cover` (uc.memory.cover, cr-0072) cropped by the shared display formula — no cover ⇒ the placeholder (retiring the cr-0071 nearest-media stopgap). Map tiles are a separate opt-in/self-host seam (ADR 0018), reused from the editor. (cr-0071; per-folder-subtree, more contextual than always space-wide.)
     coverage:
@@ -85,14 +95,14 @@ acceptanceCriteria:
           - src/features/memories/levelRows.test.ts
           - src/core/node/ViewModeToggle.test.ts
   - id: consent-in-settings
-    text: Settings → Personal → Map and place names shows this browser's one consent to the map tiles and the reverse geocoder (device-local, no server state) - whether it is on, the tile host and the geocoder host this server configured ("none configured" for an absent one), and what they receive (the part of the map in view or a place's coordinate, plus the device's IP address) - and a switch that gives it (the flag is stored, the map is available) or withdraws it at once (the flag is removed, `mapsAvailable` and `geocodingAvailable` turn false). With no tile service there is nothing to consent to and no switch is offered, except to withdraw a consent still stored.
+    text: Settings → Personal → Map services shows this browser's one consent to the map tiles and the reverse geocoder (device-local, no server state) - whether it is on, the tile host and the geocoder host this server configured ("none configured" for an absent one), and what they receive (the part of the map in view or a place's coordinate, plus the device's IP address) - and a switch that gives it (the flag is stored, the map is available) or withdraws it at once (the flag is removed, `mapsAvailable` and `geocodingAvailable` turn false). With no tile service there is nothing to consent to and no switch is offered, except to withdraw a consent still stored.
     coverage:
       web:
         unit:
           - src/features/settings/MapsPanel.test.ts
           - src/shared/state/useMapConfig.test.ts
   - id: withdraw-at-the-map
-    text: Every map that loads tiles - a level's and a person's map, the place editor's, the photo panel's - carries "Turn map off" beside its attribution, the same control for a member and a share guest (who has no settings, and whose withdrawal calls no authenticated client). A withdrawal takes effect immediately - the stored flag is removed, the open map is removed with its tile layer and no further tile layer is made, a pending geocoding lookup asks nothing, another tab of the browser follows through the storage event - and the consent prompt stands where the map was (in the place editor above the name field, which keeps what was framed and resolved); enabling it there brings the map back. Nothing stored is touched.
+    text: Every map that loads tiles - a level's and a person's map, the place editor's, the photo panel's - carries "Turn map services off" beside its attribution, the same control for a member and a share guest (who has no settings, and whose withdrawal calls no authenticated client). A withdrawal takes effect immediately - the stored flag is removed, the open map is removed with its tile layer and no further tile layer is made, a pending geocoding lookup asks nothing, another tab of the browser follows through the storage event - and the offer to turn the map services on stands where the map was (in the place editor above the name field, which keeps what was framed and resolved); turning them on there brings the map back. Nothing stored is touched.
     coverage:
       web:
         unit:

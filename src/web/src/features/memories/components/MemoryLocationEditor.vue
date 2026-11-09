@@ -7,15 +7,17 @@
 // you pick the granularity (Straße…Land) or type your own; position and name are separate levers. A quiet
 // "Ort entfernen" clears it. Crypto/consent live in the parent; this is presentation + the geocode call.
 //
-// **Without the map** (`memories.map` off, or its consent not given — inbox #458, ADR 0088 § The register) the
-// editor is a name field only: no map, no pin, no geocoder. The position is the medoid of the photos' GPS (`auto`), a
-// pin set earlier on a map (kept as it is), or absent — a place that is a name only, which the map views skip. The
-// name is always typed here, even where the geocoder is on: the one consent it rides on is asked only with the map.
+// **Without the map** (`memories.map` off — inbox #458, ADR 0088 § The register — or the member's map services off,
+// uc.memory.place A6) the editor is a name field only: no map, no pin, no geocoder. The position is the medoid of the
+// photos' GPS (`auto`), a pin set earlier on a map (kept as it is), or absent — a place that is a name only, which the
+// map views skip. The name is always typed here, even where the geocoder is on: the one consent it rides on is given
+// only with the map. Where the server offers a map, the offer to turn the map services on (`MapConsentPrompt`, naming
+// the hosts) stands where the map would be; turning them on there draws the map in this editor and keeps the typed name.
 //
-// **Withdrawn while open** (the map's "Turn map off", uc.memory.place A5): the map unmounts at once, no further tile or
-// geocoder request leaves, and the consent prompt stands where the map was; the editor goes on as the name field, keeping
-// what was framed and resolved so far, and turning the map back on there brings it back.
-import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
+// **Withdrawn while open** (the map's "Turn map services off", uc.memory.place A5): the map unmounts at once, no further
+// tile or geocoder request leaves, and the offer stands where the map was; the editor goes on as the name field, keeping
+// what was framed and resolved so far, and turning the map services back on there brings the map back.
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import VeyqButton from '../../../shared/ui/VeyqButton.vue'
 import VeyqDialog from '../../../shared/ui/VeyqDialog.vue'
@@ -43,8 +45,8 @@ const DEFAULT_ZOOM = 13
 const WORLD: LatLng = { lat: 20, lng: 0 }
 
 const hasMedoid = computed(() => Boolean(props.medoid))
-// The map is drawn only where the server serves one and the user consented (the parent opens no editor otherwise,
-// except on a server without the map): no tile and no geocoder request leaves the device without both.
+// The map is drawn only where the server serves one and the member turned the map services on: no tile and no geocoder
+// request leaves the device without both. Without them the editor is the name field (uc.memory.place A4, A6).
 const withMap = computed(() => mapsAvailable.value)
 const canGeocode = computed(() => withMap.value && geocodingAvailable.value)
 // A Memory with photo GPS defaults to `auto` (follows photos); one without can only place a `fixed` point on the
@@ -158,7 +160,9 @@ function remove() {
   emit('close')
 }
 
-onMounted(() => {
+/** Frame the map and resolve the current place's names — when the editor opens with the map, and when the map services
+ *  are turned on in it. */
+function frameAndResolve() {
   if (!withMap.value) return // no map: no framing, no name to resolve
   if (derivedMode.value === 'auto' && props.medoid) {
     if (props.points && props.points.length > 1) mapRef.value?.fitPoints(props.points) // frame the whole spread
@@ -166,6 +170,19 @@ onMounted(() => {
   } else if (derived.value) {
     void resolveLevels(derived.value.lat, derived.value.lng)
   }
+}
+onMounted(frameAndResolve)
+
+// The map services turned on in the open editor (its offer, or Settings in another tab): the map is drawn here and the
+// editor goes on as if it had opened with it - except that a name already typed stays the member's (`manual`). With no
+// name yet the map may name the place; with no position yet the place is the framed point (`fixed`), as on an opening
+// with the map. Turned off again, the editor keeps what it has (the withdrawal above).
+watch(withMap, async (on) => {
+  if (!on) return
+  if (!name.value.trim() && canGeocode.value) nameSource.value = 'geocoded'
+  if (derivedMode.value === 'auto' && !props.medoid && !derived.value) derivedMode.value = 'fixed'
+  await nextTick() // the map mounts with this render; framing needs its instance
+  frameAndResolve()
 })
 onBeforeUnmount(() => {
   if (geocodeTimer) clearTimeout(geocodeTimer)

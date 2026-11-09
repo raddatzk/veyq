@@ -6,10 +6,9 @@
 //
 //  - in the shared space, the Memory "Gletscherwanderung" with two photos (Munich, 15 July 2021; Lisbon, 3 May 2022 - the
 //    fixtures' EXIF), so its date range spans both years, the owner a participant ("I was there", the create dialog's
-//    default) and its place NAMED BY HAND: the tenant owner switches Maps off for the space (Settings → Capabilities), so
-//    the place editor is the name field alone, as on a server without a map (uc.memory.place A4) - a hermetic run cannot
-//    reach the tile host the instance names (`src/egress.ts`), and the consent dialog offers no editor without it. Maps is
-//    switched back on at once, and again in `afterAll` if the test died in between;
+//    default) and its place NAMED BY HAND: the member's map services are off (a new browser's default), so the place
+//    editor is the name field, with the offer to turn them on where the map would stand (uc.memory.place A6) - no map, no
+//    request to the tile host the instance names, which a hermetic run cannot reach (`src/egress.ts`);
 //  - beside it "Gletscherwanderung ohne Begleitung", no photo, no place, nobody listed: what every chip must leave out;
 //  - "Lissabonreise" with the Lisbon photo, in the shared space and, imported, in the personal space: the owner downloads
 //    it as a ZIP, and the copy carries a place for the photo. A photo's place is otherwise only ever reverse-geocoded (the
@@ -25,7 +24,7 @@
 // one; choosing a result there switches the space. Every value typed is a canary (recordTyped): the names, the places,
 // and every query - the search sends none of them anywhere, so the sweep must find none. The year and month typed travel
 // inside a longer query, which is the canary. Labels are src/web/'s own (src/web/src/i18n/index.ts, the Memories catalog
-// src/web/src/features/memories/i18n.ts, en; the capability's words contracts/platform/capabilities.json).
+// src/web/src/features/memories/i18n.ts, en).
 //
 // That a share page has no search field is driven with the gallery filter's guest (memories/gallery-filter.spec.ts),
 // which opens one link for both.
@@ -40,13 +39,6 @@ import { toast } from '../../../src/toast'
 import { readZip, writeZip } from '../../../src/zip'
 
 test.describe.configure({ mode: 'serial' })
-
-interface Entry {
-  title: { en: string }
-  whenOff: { en: string }
-}
-const CATALOG = fileURLToPath(new URL('../../../../../contracts/platform/capabilities.json', import.meta.url))
-const MAPS = (JSON.parse(readFileSync(CATALOG, 'utf8')) as { capabilities: Record<string, Entry> }).capabilities['memories.map']!
 
 // 48°8' N 11°34' E, taken 2021-07-15 18:04:05 / 38°42' N 9°8' W, taken 2022-05-03 10:20:30 (their EXIF; export-import.spec.ts)
 const MUNICH = readFileSync(fileURLToPath(new URL('../../../../../src/web/src/features/memories/__fixtures__/exif-sample.jpg', import.meta.url)))
@@ -67,7 +59,6 @@ const north = `Kältekammer Nord ${stamp}` // collates before ...
 const south = `Kältekammer Süd ${stamp}` // ... this one; both start with "Kältekammer "
 
 let member: Device
-let mapsOff = false
 /** The owner as the directory names them (their first and last name, Your profile) and their first name alone. */
 let owner: { display: string; first: string }
 
@@ -151,28 +142,6 @@ async function upload(page: Page, photos: { name: string; bytes: Buffer }[]): Pr
   await expect(page.getByText(count, { exact: true })).toBeVisible({ timeout: 60_000 })
 }
 
-// --- Maps, the tenant's switch -------------------------------------------------------------------------------------------
-
-const mapsRow = (page: Page): Locator => page.locator('li.capability[data-id="memories.map"]')
-
-/** Maps switched off for the space by its owner: the confirmation shows the catalog's `whenOff` word for word. */
-async function switchMapsOff(page: Page): Promise<void> {
-  await openSettings(page, 'Capabilities')
-  await mapsRow(page).getByRole('button', { name: 'Switch off', exact: true }).click({ timeout: 60_000 })
-  const confirm = page.getByRole('dialog', { name: `Switch off “${MAPS.title.en}”?` })
-  await expect(confirm.getByText(MAPS.whenOff.en, { exact: true })).toBeVisible()
-  mapsOff = true
-  await confirm.getByRole('button', { name: 'Switch off', exact: true }).click()
-  await expect(mapsRow(page).getByRole('button', { name: 'Switch on', exact: true })).toBeVisible()
-}
-
-async function switchMapsOn(page: Page): Promise<void> {
-  await openSettings(page, 'Capabilities')
-  await mapsRow(page).getByRole('button', { name: 'Switch on', exact: true }).click({ timeout: 60_000 })
-  await expect(mapsRow(page).getByRole('button', { name: 'Switch off', exact: true })).toBeVisible()
-  mapsOff = false
-}
-
 // --- a download, rewritten ----------------------------------------------------------------------------------------------
 
 const MANIFEST = '.veyq/manifest.json'
@@ -214,8 +183,6 @@ test.beforeAll(async ({ browser }) => {
 test.afterEach(() => member?.confinement.assertConfined())
 
 test.afterAll(async () => {
-  // A test that died with Maps off leaves it off for every later spec of the space: switched back on here.
-  if (member && mapsOff) await switchMapsOn(member.page).catch(() => undefined)
   await member?.context.close()
 })
 
@@ -308,27 +275,24 @@ test(
 )
 
 test(
-  'a place named by hand with the map switched off is a place chip that finds the Memory from another space',
+  'a place named by hand with the map services off is a place chip that finds the Memory from another space',
   { tag: ['@uc.platform.search:chips-and-text', '@uc.platform.search:memories-contributes-through-the-registry'] },
   async () => {
     const { page } = member
-    await switchMapsOff(page)
-    try {
-      // A new document reads the switch: the place editor is the name field alone - no map, no consent to ask for.
-      await openShared(page)
-      await openRow(page, glacier)
-      await page.getByRole('button', { name: 'Set location', exact: true }).click({ timeout: 60_000 })
-      const editor = page.getByRole('dialog', { name: 'Location' })
-      await expect(editor.getByRole('textbox', { name: 'Name' })).toBeVisible()
-      await expect(editor.locator('.leaflet-container')).toHaveCount(0)
-      await editor.getByRole('textbox', { name: 'Name' }).fill(recordTyped(glacierPlace))
-      await editor.getByRole('button', { name: 'Save', exact: true }).click()
-      await expect(editor).toBeHidden()
-      await expect(page.getByRole('button', { name: 'Edit location', exact: true })).toBeVisible({ timeout: 60_000 })
-      await expect(page.locator('header.veyq-node-header')).toContainText(glacierPlace)
-    } finally {
-      await switchMapsOn(page)
-    }
+    // The member's map services are off (this browser never turned them on): the place editor opens at once as the name
+    // field, the offer to turn them on where the map would stand - no map, so no tile is asked for (uc.memory.place A6).
+    await openShared(page)
+    await openRow(page, glacier)
+    await page.getByRole('button', { name: 'Set location', exact: true }).click({ timeout: 60_000 })
+    const editor = page.getByRole('dialog', { name: 'Location' })
+    await expect(editor.getByRole('textbox', { name: 'Name' })).toBeVisible()
+    await expect(editor.getByRole('button', { name: 'Turn map services on', exact: true })).toBeVisible()
+    await expect(editor.locator('.leaflet-container')).toHaveCount(0)
+    await editor.getByRole('textbox', { name: 'Name' }).fill(recordTyped(glacierPlace))
+    await editor.getByRole('button', { name: 'Save', exact: true }).click()
+    await expect(editor).toBeHidden()
+    await expect(page.getByRole('button', { name: 'Edit location', exact: true })).toBeVisible({ timeout: 60_000 })
+    await expect(page.locator('header.veyq-node-header')).toContainText(glacierPlace)
 
     await openPersonal(page)
     await search(page, 'Konkordiaplatz')
