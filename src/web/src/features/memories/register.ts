@@ -25,6 +25,7 @@ import MemoryShareBody from './components/MemoryShareBody.vue'
 import PersonMemories from './components/PersonMemories.vue'
 import MediumReview from './components/MediumReview.vue'
 import { memoriesLifecycle } from './lifecycle'
+import { memorySearch } from './search'
 import { stageItemMarksRekey } from './itemFavorites'
 import { memoryRights } from './rights'
 import { targetOf } from '../../core/access'
@@ -80,13 +81,15 @@ export function registerMemories(registry: Registry): void {
     allowed: (ctx: LevelActionContext) => memoryRights(ctx.access, targetOf(ctx.tree, ctx.folder)).createMemory,
     enabled: (ctx: LevelActionContext) => ctx.epochs !== null,
   }
+  // Core's search (ADR 0125 decision 6): each kind's noun is its kind chip's word; its facets - the date range, the place, who
+  // was there - come from its sealed meta; its page contributes the open Memory's photos and videos (`search.ts`).
   app.kind(MEMORY_KIND, {
     ...memories, importContent: importMemoryContent(MEMORY_KIND), rekeyContent: rekeyMemoryContent, createEntry: newMemory, deleteTitle: 'memory.deleteMemoryTitle', nounWithArticle: 'memory.aMemory',
-    placement: { root: true, parents: [FOLDER_KIND] },
+    placement: { root: true, parents: [FOLDER_KIND] }, search: memorySearch('memory.kindMemory'),
   })
   app.kind(CHAPTER_KIND, {
     ...memories, importContent: importMemoryContent(CHAPTER_KIND), rekeyContent: rekeyMemoryContent, deleteTitle: 'memory.deleteChapterTitle', nounWithArticle: 'memory.aChapter',
-    placement: { root: false, parents: [MEMORY_KIND] },
+    placement: { root: false, parents: [MEMORY_KIND] }, search: memorySearch('memory.kindChapter'),
   })
   // Its nodes' URLs carry the application's segment: a Memory `rom` in `reisen` is `#reisen/memories/rom`, its chapters
   // extend that (`…/rom/tag-1`). The slug is reserved in the unprefixed namespace: a folder called "Memories" is

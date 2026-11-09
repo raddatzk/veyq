@@ -203,6 +203,19 @@ export function useMediaGalleryLive(ctx: MediaGalleryLiveCtx) {
     lightboxItems.value = sortedItems.value.slice()
     lightboxIndex.value = index
   }
+  /** Open the lightbox on the medium `mediaId` (a search result, ADR 0125): in the gallery's order, or - where a mark filter
+   *  hides it - over every listed medium, so the result opens whatever the gallery shows. False when it is not listed. */
+  function openLightboxOn(mediaId: string): boolean {
+    const at = sortedItems.value.findIndex((it) => it.mediaId === mediaId)
+    if (at >= 0) {
+      openLightboxAt(at)
+      return true
+    }
+    const all = items.value.findIndex((it) => it.mediaId === mediaId)
+    if (all < 0) return false
+    openBucketLightbox({ items: items.value, index: all })
+    return true
+  }
   /** Open the lightbox on a bucket-scoped list the organizer hands up (so prev/next stays within the picked bucket). */
   function openBucketLightbox(payload: { items: MediaItem[]; index: number }) {
     lightboxItems.value = payload.items.slice()
@@ -406,6 +419,7 @@ export function useMediaGalleryLive(ctx: MediaGalleryLiveCtx) {
     lightboxItems,
     lightboxIndex,
     openLightboxAt,
+    openLightboxOn,
     openBucketLightbox,
     onDeleteFromLightbox,
     onCapturedAtUpdated,

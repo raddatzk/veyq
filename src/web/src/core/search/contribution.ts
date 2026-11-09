@@ -23,21 +23,22 @@ type Builder = () => SearchContribution | null
 /** The one contribution in force: the page's (one detail on screen; the last caller wins). Read by the search. */
 const current = shallowRef<Builder | null>(null)
 
-const sinkKey: InjectionKey<boolean> = Symbol('veyq.searchContributions')
+/** Whether the details below may contribute; exported for a test harness that stands in for the member's page. */
+export const searchContributionsKey: InjectionKey<boolean> = Symbol('veyq.searchContributions')
 
 /** The member's space page: the details below it may contribute. */
 export function provideSearchContributions(): void {
-  provide(sinkKey, true)
+  provide(searchContributionsKey, true)
 }
 
 /** A region below the member's page whose details contribute nothing (a bookmark's share shown in place, ADR 0121). */
 export function provideNoSearchContributions(): void {
-  provide(sinkKey, false)
+  provide(searchContributionsKey, false)
 }
 
 /** A detail: contribute `build` for as long as the caller is mounted. Called in setup. */
 export function contributeSearchDocuments(build: Builder): void {
-  if (!inject(sinkKey, false)) return
+  if (!inject(searchContributionsKey, false)) return
   current.value = build
   onBeforeUnmount(() => {
     if (current.value === build) current.value = null

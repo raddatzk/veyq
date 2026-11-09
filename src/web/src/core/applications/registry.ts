@@ -325,6 +325,10 @@ export interface KindSearch {
   /** The kinds of the documents the kind's page contributes for its node (Memories: a photo, a video): each one's word for a
    *  kind chip and its icon in a result row. */
   documents?: readonly SearchDocumentKind[]
+  /** The i18n key, of the application's own namespace, of one sentence the search says before and instead of results: what
+   *  of the kind is searched only in part (Memories: photos only in the open Memory, uc.platform.search A2). Shown once
+   *  however many kinds name the same key. */
+  note?: string
 }
 
 /** A contributed document kind (`KindSearch.documents`). */

@@ -59,6 +59,8 @@ import { useUploaderNames } from '../useUploaderNames'
 import MemoryCard from './MemoryCard.vue'
 import { standardNodeActions, standardNodeRename, type NodeHeaderAction, type NodeHeaderFact } from '../../../core/node/nodeHeader'
 import { contributeNodeHeader } from '../../../core/node/nodeHeaderContribution'
+import { contributeSearchDocuments } from '../../../core/search/contribution'
+import { mediaDocuments } from '../search'
 import ViewModeToggle from '../../../core/node/ViewModeToggle.vue'
 import { GRID_VIEW, LIST_VIEW } from '../../../core/node/levelViews'
 import VeyqDialog from '../../../shared/ui/VeyqDialog.vue'
@@ -257,6 +259,7 @@ const {
   lightboxItems,
   lightboxIndex,
   openLightboxAt,
+  openLightboxOn,
   openBucketLightbox,
   onDeleteFromLightbox,
   onCapturedAtUpdated,
@@ -426,6 +429,26 @@ contributeNodeHeader(() => ({
     },
   },
 }))
+
+// Core's search (ADR 0125 decision 6): the photos and videos of the gallery's opened listing, as documents of this node, for
+// as long as this page is on screen - a no-op on a guest's page, which provides no search. Opening one opens the lightbox
+// here; the documents are built only when the search reads them.
+contributeSearchDocuments(() =>
+  props.memoryKey
+    ? {
+        scopeId: props.scopeId,
+        nodeId: props.node.id,
+        documents: mediaDocuments({
+          scopeId: props.scopeId, key: props.memoryKey, items: items.value,
+          unnamed: (video) => t(video ? 'memory.search.video' : 'memory.search.photo'),
+          open: (mediaId) => {
+            activeTab.value = 'gallery'
+            openLightboxOn(mediaId)
+          },
+        }),
+      }
+    : null,
+)
 
 /** The reconcile settle point `useMediaGalleryLive` calls after each list refresh: auto-date first, then
  *  auto-location (which reads the date-reconciled wrappedMeta patched in place → read-modify-write safe). Both WRITE the
