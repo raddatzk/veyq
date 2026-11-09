@@ -60,6 +60,7 @@ import MemoryCard from './MemoryCard.vue'
 import { standardNodeActions, standardNodeRename, type NodeHeaderAction, type NodeHeaderFact } from '../../../core/node/nodeHeader'
 import { contributeNodeHeader } from '../../../core/node/nodeHeaderContribution'
 import { contributeSearchDocuments } from '../../../core/search/contribution'
+import { searchOpenRequest, takeOpenRequest } from '../../../core/search/openRequest'
 import { mediaDocuments } from '../search'
 import ViewModeToggle from '../../../core/node/ViewModeToggle.vue'
 import { GRID_VIEW, LIST_VIEW } from '../../../core/node/levelViews'
@@ -448,6 +449,20 @@ contributeSearchDocuments(() =>
         }),
       }
     : null,
+)
+
+// A photo the search found from elsewhere (ADR 0125 decision 8a): the search navigated here and asked for it in core's
+// open request; it opens in the lightbox once the gallery holds it, and a request the read gallery cannot answer (the
+// medium gone meanwhile) is dropped. A guest's page never receives one (a guest has no search).
+watch(
+  [searchOpenRequest, items, status] as const,
+  () => {
+    const want = takeOpenRequest(props.scopeId, props.node.id, (id) => items.value.some((it) => it.mediaId === id), status.value !== 'loading')
+    if (!want) return
+    activeTab.value = 'gallery'
+    openLightboxOn(want)
+  },
+  { immediate: true },
 )
 
 /** The reconcile settle point `useMediaGalleryLive` calls after each list refresh: auto-date first, then

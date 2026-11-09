@@ -17,18 +17,28 @@
 // without a fetch of the search's own (uc A1) - under the key `activeSpace` owns (never zeroed here). Its build starts
 // first, in slices like the others'; the other spaces follow.
 //
-// **Nothing persists.** No storage of any kind is written, no endpoint is added, the query never leaves this module's
-// callers. A build that a sign-out overtook is abandoned (`generation`, as `participantIndex` does); {@link resetSearchIndex}
-// (called by `activeSpace.clearActiveSpace`) drops every document.
+// **An application's objects of every space** (ADR 0125 decision 8a): after a space's nodes, each application's
+// `ApplicationSearch.scopeDocuments` is asked for the objects inside them (Memories: every photo and video) - for every space
+// on every walk, the active one included, since an object's change moves no tree revision (a tree `304` would hide it). The
+// hook reads its own listing by its own tag; only when that moved does it ask for the space's node keys (`keys()`), which a
+// walk whose tree moved holds already and one whose tree did not opens then. Every node key it was handed is zeroed when it
+// returns, the scope key with the walk's (never the active space's, which `activeSpace` owns). A failing hook is a space not
+// searched, as a tree that does not open is.
+//
+// **Nothing persists.** No storage of any kind is written, and the query never leaves this module's callers. A build that a
+// sign-out overtook is abandoned (`generation`, as `participantIndex` does; `aborter` stops an application's fetch);
+// {@link resetSearchIndex} (called by `activeSpace.clearActiveSpace`) drops every document.
 import { effectScope, reactive, watch, type EffectScope } from 'vue'
-import { listMyScopes, listMyTenants, openListedScope } from '../../features/spaces/scopes'
-import { zeroScopeKey } from '../../features/spaces/epochs'
+import { listMyScopes, listMyTenants, openListedScope, type OpenedScope } from '../../features/spaces/scopes'
+import { zeroScopeKey, type ScopeKey } from '../../features/spaces/epochs'
 import { ScopeKind, type ScopeSummary } from '../../api/generated/scopes'
 import { activeEpochKeys, activeSpace } from '../../app/activeSpace'
+import { registry } from '../applications/registry'
+import { keyResolver, type KeyResolver } from '../node/keyResolver'
 import { fetchTree, openTreeSteps, type TreeNode } from '../node/tree'
 import { shownTreeTag, treeStore } from '../node/treeStore'
-import { nodeDocumentSteps, type NodeDocument } from './documents'
-import type { SearchDocument } from './model'
+import { nodeDocumentSteps, scopeDocumentSteps, type NodeDocument } from './documents'
+import type { ScopeDocument, SearchDocument } from './model'
 
 /** A space as the search names it. */
 export interface SearchScope {
@@ -65,7 +75,18 @@ export const searchState = reactive({
   revision: 0,
 })
 
+/** One application's objects of one space: the tag its hook answered and what it found, as it found it and as documents. */
+interface ObjectsEntry {
+  tag: string | null
+  objects: Map<string, ScopeDocument>
+  documents: SearchDocument[]
+}
+
 const entries = new Map<string, Entry>()
+/** By space, then by application. Kept apart from {@link entries}: the active space's entry is rebuilt from the tree on
+ *  screen without asking any application. */
+const objectEntries = new Map<string, Map<string, ObjectsEntry>>()
+let aborter = new AbortController()
 let generation = 0
 let refreshing: Promise<void> | null = null
 let following: EffectScope | null = null
@@ -169,6 +190,7 @@ async function walk(): Promise<void> {
       if (e instanceof Abandoned) throw e
       // Nothing could be listed: no space but the one on screen is searched, and none is pretended to be.
       for (const id of [...entries.keys()]) if (!servedByTree(id)) entries.delete(id)
+      for (const id of [...objectEntries.keys()]) if (!servedByTree(id)) objectEntries.delete(id)
       searchState.listFailed = true
       searchState.loading = []
       bump()
@@ -177,6 +199,7 @@ async function walk(): Promise<void> {
     searchState.listFailed = false
     const listed = new Set(scopes.map((s) => s.id))
     for (const id of [...entries.keys()]) if (!listed.has(id)) entries.delete(id)
+    for (const id of [...objectEntries.keys()]) if (!listed.has(id)) objectEntries.delete(id)
     // The active space first (uc step 2), then the rest as listed.
     const ordered = [...scopes].sort((a, b) => Number(b.id === activeSpace.scopeId) - Number(a.id === activeSpace.scopeId))
     searchState.scopes = ordered.map((s) => scopeOf(s, entries.get(s.id)?.scope.name))
@@ -187,6 +210,16 @@ async function walk(): Promise<void> {
     for (const s of ordered) {
       if (servedByTree(s.id)) {
         followActive()
+        if (!searchState.loading.includes(s.id)) searchState.loading = [s.id, ...searchState.loading]
+        try {
+          await readActiveObjects(s.id, alive)
+        } catch (e) {
+          if (e instanceof Abandoned) throw e
+          objectEntries.delete(s.id)
+          searchState.failed = [...searchState.failed, scopeOf(s, indexedScope(s.id)?.name)]
+        }
+        searchState.loading = searchState.loading.filter((id) => id !== s.id)
+        bump()
         continue
       }
       try {
@@ -195,6 +228,7 @@ async function walk(): Promise<void> {
         if (e instanceof Abandoned) throw e
         const known = indexedScope(s.id)?.name
         entries.delete(s.id)
+        objectEntries.delete(s.id)
         searchState.failed = [...searchState.failed, scopeOf(s, known)]
       }
       searchState.loading = searchState.loading.filter((id) => id !== s.id)
@@ -211,20 +245,85 @@ async function readSpace(s: ScopeSummary, alive: () => void): Promise<void> {
   const tag = prev && prev.nameSeal === nameSeal ? prev.etag : null
   const read = await fetchTree(s.id, tag)
   alive()
-  if (!read) {
-    if (!prev) throw new Error('tree_unchanged_without_entry')
-    return // 304: the tree is the one the entry was read at
+  if (!read && !prev) throw new Error('tree_unchanged_without_entry')
+  // The scope key, opened when the tree moved or an application asks for the node keys, and zeroed however this ends.
+  const held: { scope: OpenedScope | null } = { scope: null }
+  const open = async (): Promise<ScopeKey> => {
+    held.scope ??= await openListedScope(s)
+    if (!held.scope) throw new Error('scope_not_openable')
+    return held.scope.epochs
   }
-  const opened = await openListedScope(s)
-  if (!opened) throw new Error('scope_not_openable')
   try {
-    alive()
-    const nodes = await inSlices(openTreeSteps(s.id, opened.epochs, read.rows), alive)
-    const documents = await inSlices(nodeDocumentSteps(s.id, opened.epochs, nodes, prev?.documents), alive)
-    entries.set(s.id, { scope: scopeOf(s, opened.name ?? null), etag: read.etag, nameSeal, nodes, documents })
-    searchState.scopes = searchState.scopes.map((x) => (x.id === s.id ? scopeOf(s, opened.name ?? null) : x))
+    let nodes = prev?.nodes ?? []
+    if (read) {
+      const epochs = await open()
+      alive()
+      nodes = await inSlices(openTreeSteps(s.id, epochs, read.rows), alive)
+      const documents = await inSlices(nodeDocumentSteps(s.id, epochs, nodes, prev?.documents), alive)
+      const name = held.scope?.name ?? null
+      entries.set(s.id, { scope: scopeOf(s, name), etag: read.etag, nameSeal, nodes, documents })
+      searchState.scopes = searchState.scopes.map((x) => (x.id === s.id ? scopeOf(s, name) : x))
+    } // else 304: the tree is the one the entry was read at
+    await readObjects(s.id, nodes, open, alive)
   } finally {
-    zeroScopeKey(opened.epochs)
+    if (held.scope) zeroScopeKey(held.scope.epochs)
+  }
+}
+
+/** The active space's objects: its nodes are the tree on screen, its scope key `activeSpace`'s (never zeroed here). */
+async function readActiveObjects(scopeId: string, alive: () => void): Promise<void> {
+  const nodes = treeStore.nodes
+  await readObjects(scopeId, nodes, async () => {
+    const epochs = activeEpochKeys()
+    if (!epochs || activeSpace.scopeId !== scopeId) throw new Abandoned()
+    return epochs
+  }, alive)
+}
+
+/**
+ * Ask every application for its objects of one space (see the header): `nodes` is the space's opened tree, `open` the scope
+ * key when an application asks for node keys. The node keys are opened by one resolver over the tree and zeroed - every one
+ * of them - once the application's hook has returned, whatever it did.
+ */
+async function readObjects(scopeId: string, nodes: readonly TreeNode[], open: () => Promise<ScopeKey>, alive: () => void): Promise<void> {
+  const byId = new Map(nodes.map((n) => [n.id, n]))
+  for (const { application, search } of registry.searches()) {
+    const prev = objectEntries.get(scopeId)?.get(application)
+    let resolver: KeyResolver | null = null
+    try {
+      const answer = await search.scopeDocuments({
+        scopeId,
+        tag: prev?.tag ?? null,
+        previous: prev?.objects ?? new Map(),
+        signal: aborter.signal,
+        slices: (steps) => inSlices(steps, alive),
+        keys: async () => {
+          if (!resolver) {
+            const epochs = await open()
+            alive()
+            resolver = keyResolver(scopeId, epochs, nodes)
+          }
+          const r = resolver
+          return (nodeId) => {
+            const node = byId.get(nodeId)
+            return node ? r.keyOf(node) : null
+          }
+        },
+      })
+      alive()
+      // Unchanged: the documents stand, their paths included - Memories' tag follows the tree revision, so a rename is a
+      // new answer (ADR 0125 decision 8a).
+      if (answer === null) {
+        if (!prev) throw new Error('objects_unchanged_without_entry')
+        continue
+      }
+      const documents = await inSlices(scopeDocumentSteps(scopeId, answer.documents, byId), alive)
+      let byApp = objectEntries.get(scopeId)
+      if (!byApp) objectEntries.set(scopeId, (byApp = new Map()))
+      byApp.set(application, { tag: answer.tag, objects: new Map(answer.documents.map((d) => [d.id, d])), documents })
+    } finally {
+      ;(resolver as KeyResolver | null)?.zero()
+    }
   }
 }
 
@@ -261,25 +360,33 @@ async function inSlices<T>(steps: Generator<void, T, void>, alive: () => void): 
 export function indexedDocuments(): readonly SearchDocument[] {
   const revision = searchState.revision
   if (flat?.revision !== revision) {
-    flat = { revision, docs: [...entries.values()].flatMap((e) => [...e.documents.values()].map((d) => d.doc)) }
+    const docs = [...entries.values()].flatMap((e) => [...e.documents.values()].map((d) => d.doc))
+    for (const byApp of objectEntries.values()) for (const o of byApp.values()) for (const d of o.documents) docs.push(d)
+    flat = { revision, docs }
   }
   return flat.docs
 }
 
-/** A space's opened tree (names only, no keys) as the index holds it, or null. */
+/** A space's opened tree (names only, no keys) as the index holds it, or null (reactive on `searchState.revision`: a field
+ *  mounted before the index was built - a reload on a Memory's page - must see the tree once it is). */
 export function indexedTree(scopeId: string): readonly TreeNode[] | null {
+  void searchState.revision
   return entries.get(scopeId)?.nodes ?? null
 }
 
 /** The space the index knows by `scopeId`, or null. */
 export function indexedScope(scopeId: string): SearchScope | null {
+  void searchState.revision
   return entries.get(scopeId)?.scope ?? searchState.scopes.find((s) => s.id === scopeId) ?? null
 }
 
 /** Drop every document (sign-out, re-lock): a build in flight is abandoned, and nothing follows the tree any more. */
 export function resetSearchIndex(): void {
   generation++
+  aborter.abort()
+  aborter = new AbortController()
   entries.clear()
+  objectEntries.clear()
   flat = null
   tenantName = null
   refreshing = null

@@ -25,7 +25,8 @@ import { realI18n } from '../../../test/i18n'
 import { treeNode, memberMemoryRights } from '../../../test/models'
 import { MEMORY_KIND } from '../kinds'
 import { searchContribution, searchContributionsKey } from '../../../core/search/contribution'
-import { memorySearchFacets, PHOTO_DOCUMENT } from '../search'
+import { memoriesSearch, memorySearchFacets, PHOTO_DOCUMENT } from '../search'
+import { requestOpenItem, searchOpenRequest } from '../../../core/search/openRequest'
 import { registry } from '../../../core/applications/registry'
 import { CHAPTER_KIND } from '../kinds'
 
@@ -76,8 +77,13 @@ describe('Memories in the registry', () => {
       const d = registry.kind(kind)
       expect(d.supported && d.search?.label).toBe(label)
       expect(d.supported && d.search?.facets).toBe(memorySearchFacets)
-      expect(d.supported && d.search?.note).toBe('memory.search.note')
+      // every photo of every space is searched (ADR 0125 decision 8a): no note of a part searched only in the open Memory
+      expect(d.supported && d.search && 'note' in d.search).toBe(false)
     }
+  })
+
+  it('adds every photo and video of every space to the search', () => {
+    expect(registry.searches()).toContainEqual({ application: 'memories', search: memoriesSearch })
   })
 })
 
@@ -105,6 +111,50 @@ describe('the open Memory\'s media in the search', () => {
     searchContribution()!.documents[0].open()
     await flushPromises()
     expect(w.findComponent(MediaLightbox).exists()).toBe(true)
+  })
+
+  it('makes no document of a blocked medium', async () => {
+    const store = galleryFakeStore()
+    fakeApi(mediaApi, store.api)
+    fakeApi(blobApi, store.blob)
+    vi.stubGlobal('fetch', store.fetchStub)
+    vi.mocked(readExifTags).mockResolvedValue({ DateTimeOriginal: TAKEN })
+    const key = v1.randomBytes(32)
+    await addMedia(SCOPE_ID, NODE_ID, key, { blob: new Blob([new Uint8Array(8).fill(1) as BlobPart]), mediaType: 'image/jpeg', name: 'IMG_0001.jpg' }, deriver())
+    const list = store.api.listNodeMedia.getMockImplementation()!
+    store.api.listNodeMedia.mockImplementation(async (r) => {
+      const page = await list(r)
+      return { ...page, media: page.media.map((m) => ({ ...m, blockedByOperator: true })) }
+    })
+    mountDetail(key)
+    await flushPromises()
+    await flushPromises()
+    expect(searchContribution()?.documents).toEqual([])
+  })
+
+  it('opens a medium the search found from elsewhere once the gallery holds it, and drops the request then', async () => {
+    const key = await galleryWithOnePhoto()
+    const mediaId = (await mediaApi().listNodeMedia({ scopeId: SCOPE_ID, nodeId: NODE_ID })).media[0].mediaId
+    requestOpenItem({ scopeId: SCOPE_ID, nodeId: NODE_ID, itemId: mediaId })
+    const w = mountDetail(key)
+    await flushPromises()
+    await flushPromises()
+    expect(w.findComponent(MediaLightbox).exists()).toBe(true)
+    expect(searchOpenRequest.value).toBeNull()
+  })
+
+  it('leaves a request for another Memory alone, and drops one for itself it cannot answer once read', async () => {
+    const key = await galleryWithOnePhoto()
+    requestOpenItem({ scopeId: SCOPE_ID, nodeId: 'another-memory', itemId: 'm-1' })
+    const w = mountDetail(key)
+    await flushPromises()
+    await flushPromises()
+    expect(w.findComponent(MediaLightbox).exists()).toBe(false)
+    expect(searchOpenRequest.value).toEqual({ scopeId: SCOPE_ID, nodeId: 'another-memory', itemId: 'm-1' })
+    requestOpenItem({ scopeId: SCOPE_ID, nodeId: NODE_ID, itemId: 'gone' })
+    await flushPromises()
+    expect(w.findComponent(MediaLightbox).exists()).toBe(false)
+    expect(searchOpenRequest.value).toBeNull()
   })
 
   it('contributes nothing without the member\'s page around it (a guest\'s page)', async () => {

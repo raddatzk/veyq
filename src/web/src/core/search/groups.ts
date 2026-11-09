@@ -46,6 +46,8 @@ export function descendantsOf(tree: readonly TreeNode[], nodeId: string): Set<st
 /**
  * The matches of `query` in `docs`, grouped (see the header). A contributed document counts only for the node it was
  * contributed for, and only while that node is the one open in the active space: a page left behind contributes nothing.
+ * An object a space's search found (a photo of any Memory, `searchIndex.ts`) goes where its node goes: the open node's
+ * group when its node is the open one or below it, else this space or the other spaces.
  * A person and a settings section are no content: with any chip set - a filter over content - neither group is shown.
  */
 export function searchGroups(docs: readonly SearchDocument[], query: SearchQuery, ctx: SearchContext, collator: Intl.Collator): SearchGroup[] {
@@ -61,7 +63,7 @@ export function searchGroups(docs: readonly SearchDocument[], query: SearchQuery
     } else if (d.open) {
       if (ctx.openNodeId && d.scopeId === ctx.activeScopeId && d.nodeId === ctx.openNodeId) groups.open.push(m)
     } else if (d.scopeId !== ctx.activeScopeId) groups.other.push(m)
-    else if (below.has(d.id)) groups.open.push(m)
+    else if (below.has(d.id) || (d.id !== d.nodeId && (d.nodeId === ctx.openNodeId || below.has(d.nodeId)))) groups.open.push(m)
     else groups.space.push(m)
   }
   const order = byRank(collator)

@@ -10,7 +10,7 @@ import { registry } from '../applications/registry'
 import { keyResolver } from '../node/keyResolver'
 import { runThrough, type TreeNode } from '../node/tree'
 import type { ScopeKey } from '../../features/spaces/epochs'
-import { searchDocument, type SearchDocument, type SearchFacets } from './model'
+import { searchDocument, type ScopeDocument, type SearchDocument, type SearchFacets } from './model'
 
 /** A node's document and the seal its facets were read from (what the next walk compares). */
 export interface NodeDocument {
@@ -76,8 +76,30 @@ function facetsOf(
   }
 }
 
+/**
+ * The documents of an application's objects in one space (`ApplicationSearch.scopeDocuments`, ADR 0125 decision 8a), one
+ * object per step: where each lives is its node's path and the node's own name (a photo's Memory). An object whose node is
+ * not in the space's tree is left out - the walk could not have opened it.
+ */
+export function* scopeDocumentSteps(
+  scopeId: string, objects: readonly ScopeDocument[], byId: ReadonlyMap<string, TreeNode>,
+): Generator<void, SearchDocument[], void> {
+  const out: SearchDocument[] = []
+  const paths = new Map<string, string[]>()
+  for (const o of objects) {
+    const node = byId.get(o.nodeId)
+    if (node) {
+      let path = paths.get(node.id)
+      if (!path) paths.set(node.id, (path = [...pathOf(node, byId), node.name]))
+      out.push(searchDocument({ scopeId, kind: o.kind, id: o.id, nodeId: o.nodeId, revision: o.revision, name: o.name, path, facets: o.facets, icon: o.icon }))
+    }
+    yield
+  }
+  return out
+}
+
 /** The names above `node`, outermost first (a cycle a tampered tree could hold ends the walk). */
-function pathOf(node: TreeNode, byId: ReadonlyMap<string, TreeNode>): string[] {
+export function pathOf(node: TreeNode, byId: ReadonlyMap<string, TreeNode>): string[] {
   const names: string[] = []
   const seen = new Set<string>([node.id])
   let cur = node.parentId ? byId.get(node.parentId) : undefined

@@ -143,7 +143,7 @@ import { slugify } from '../../shared/naming'
 import type { VeyqIconName } from '../../shared/ui/icons'
 import type { ExportContentHook, ImportContentHook } from '../export/hooks'
 import type { ManifestContent } from '../export/manifest'
-import type { SearchFacets } from '../search/model'
+import type { ScopeDocument, SearchFacets } from '../search/model'
 
 // The platform's own share dialog for a FOLDER (uc.sharing.share-public-viewer:folder-share-root), FOLDER's
 // `shareDialog` since P4c. LAZY for a reason: the dialog's module graph reaches this registry again (measured:
@@ -322,13 +322,9 @@ export interface KindSearch {
    * no facets. Omitted: none.
    */
   facets?(ctx: SearchFacetContext): SearchFacets
-  /** The kinds of the documents the kind's page contributes for its node (Memories: a photo, a video): each one's word for a
-   *  kind chip and its icon in a result row. */
+  /** The kinds of the documents the kind's page contributes for its node, and its application's search of a space finds in
+   *  such a node (Memories: a photo, a video): each one's word for a kind chip and its icon in a result row. */
   documents?: readonly SearchDocumentKind[]
-  /** The i18n key, of the application's own namespace, of one sentence the search says before and instead of results: what
-   *  of the kind is searched only in part (Memories: photos only in the open Memory, uc.platform.search A2). Shown once
-   *  however many kinds name the same key. */
-  note?: string
 }
 
 /** A contributed document kind (`KindSearch.documents`). */
@@ -338,6 +334,45 @@ export interface SearchDocumentKind {
   /** The i18n key of its noun, of the application's own namespace. */
   label: string
   icon: VeyqIconName
+}
+
+/**
+ * What an application adds to the search of a whole space (ADR 0125 decision 8a; `ApplicationRegistrar.search`): the objects
+ * of its own inside the space's nodes - Memories' photos and videos of every Memory. Core asks it once per space per walk.
+ */
+export interface ApplicationSearch {
+  /**
+   * The space's objects, or null when nothing moved since the answer `ctx.tag` names (a `304`): core keeps that answer's
+   * documents. Core calls it while it walks the space and zeroes every key `ctx.keys()` opened once it has returned; the
+   * hook keeps none, and what it returns is plaintext the search holds in memory only. A throw is a space not searched.
+   */
+  scopeDocuments(ctx: ScopeDocumentsContext): Promise<ScopeDocumentsAnswer | null>
+}
+
+/** What `ApplicationSearch.scopeDocuments` answers: its tag (what the next walk hands back as `ctx.tag`) and its objects. */
+export interface ScopeDocumentsAnswer {
+  tag: string | null
+  documents: readonly ScopeDocument[]
+}
+
+/** What `ApplicationSearch.scopeDocuments` is handed for one space. */
+export interface ScopeDocumentsContext {
+  scopeId: string
+  /** The tag of the hook's last answer for this space, or null (the first walk, or after a failure). */
+  tag: string | null
+  /** The hook's last documents for this space, by id: one at an unchanged `revision` is kept, not opened again. */
+  previous: ReadonlyMap<string, ScopeDocument>
+  /**
+   * The space's node keys, opened on the first call (a walk whose tree did not move opens them only now, so an answer that
+   * opens nothing costs no key) and valid until the hook returns: a node's content key, or null for a node not in the
+   * space's tree or whose chain does not open. Never kept.
+   */
+  keys(): Promise<(nodeId: string) => Uint8Array | null>
+  /** Run `steps` in core's slices (at most `SLICE_MS` of the main thread at a time), so a space of thousands of objects
+   *  never holds the page; rejects when the walk is abandoned between two. */
+  slices<T>(steps: Generator<void, T, void>): Promise<T>
+  /** Aborted when the index is reset (a sign-out, a re-lock): stop fetching. */
+  signal: AbortSignal
 }
 
 /** What a kind's `search.facets` is handed: the node and, for that call only, its key and its parent's (the scope key at the
@@ -633,6 +668,9 @@ export interface ApplicationRegistrar {
   /** Claim the review of a reported item (props `ItemReviewProps`): what a moderator sees of an application's record.
    *  The same component twice throws. */
   itemReview(component: Component): void
+  /** Add the application's objects to the search of every space (ADR 0125 decision 8a, {@link ApplicationSearch}): Memories'
+   *  photos and videos. Throws on a second one. */
+  search(search: ApplicationSearch): void
 }
 
 export interface Registry {
@@ -658,6 +696,8 @@ export interface Registry {
   personSections(): readonly Component[]
   /** The item reviews claimed, in registration order — each draws only the items that are its application's. */
   itemReviews(): readonly Component[]
+  /** Every application's part in the search of a whole space, in registration order. */
+  searches(): readonly { application: string; search: ApplicationSearch }[]
   /** Run every application's `onScopeReset`. */
   scopeReset(): void
   /** Run every application's `onScopeEntered`, in registration order; rejects with the first failure after all ran. */
@@ -749,6 +789,7 @@ export function createRegistry(): Registry {
   let uploadShare: FolderUploadShareRegistration | null = null
   const personSections: Component[] = []
   const itemReviews: Component[] = []
+  const searches = new Map<string, ApplicationSearch>()
   // application id → its route slug, or null for the application with no segment.
   const routes = new Map<string, string | null>()
   const slugs = new Set<string>()
@@ -840,6 +881,11 @@ export function createRegistry(): Registry {
         if (itemReviews.includes(component)) throw new Error('this item review is already claimed')
         itemReviews.push(component)
       },
+      search(search: ApplicationSearch) {
+        if (searches.has(id)) throw new Error(`the search of ${id} is already registered`)
+        if (typeof search?.scopeDocuments !== 'function') throw new Error(`application ${id} registered no scopeDocuments hook`)
+        searches.set(id, search)
+      },
     })
   }
   return {
@@ -855,6 +901,7 @@ export function createRegistry(): Registry {
     folderUploadShare: () => uploadShare,
     personSections: () => [...personSections],
     itemReviews: () => [...itemReviews],
+    searches: () => [...searches].map(([application, search]) => ({ application, search })),
     scopeReset() {
       // Synchronous on purpose: callers (enterScope, clearActiveSpace) rely on the state being gone on return.
       for (const h of lifecycles.values()) h.onScopeReset?.()

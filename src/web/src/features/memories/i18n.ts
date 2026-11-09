@@ -12,11 +12,10 @@ const en = {
     // The noun that leads a row's meta line in the unified level list (inbox #407): "Memory · 1 Jun – 30 Jun 2024".
     kindMemory: 'Memory',
     kindChapter: 'Chapter',
-    // Core's search (ADR 0125): the words of the documents the open Memory contributes, and what the field says of them.
+    // Core's search (ADR 0125): the words of a photo's and a video's documents (a medium whose original carries no name).
     search: {
       photo: 'Photo',
       video: 'Video',
-      note: 'Photos and videos are searched in the open Memory only.',
     },
     create: 'New Memory',
     createMemoryTitle: 'Create a Memory',
@@ -302,7 +301,6 @@ const de: typeof en = {
     search: {
       photo: 'Foto',
       video: 'Video',
-      note: 'Fotos und Videos werden nur in der geöffneten Erinnerung durchsucht.',
     },
     create: 'Neue Erinnerung',
     createMemoryTitle: 'Erinnerung anlegen',

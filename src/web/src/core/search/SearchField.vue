@@ -13,10 +13,11 @@
 //
 // **Opening a result.** A node opens through the navigation the sidebar uses - a push of its fragment, which enters its
 // space when it lies in another (`SpaceView` re-enters on a new scope token); a contributed document opens itself (a photo
-// in the open Memory's lightbox); a person opens their profile page in the tenant space, and a settings section opens on
-// the settings page by a push, which keeps the active space as the profile menu's Settings entry does (a hard navigation
-// would reset it). The field says what it searched: the spaces still loading, those it could not search, and
-// - before and instead of results - what is searched, with each application's note on what it searches only in part.
+// in the open Memory's lightbox); an object a space's search found (a photo of another Memory) opens its node the same way
+// and leaves the page a request to open it (`openRequest.ts`); a person opens their profile page in the tenant space, and a
+// settings section opens on the settings page by a push, which keeps the active space as the profile menu's Settings entry
+// does (a hard navigation would reset it). The field says what it searched: the spaces still loading, those it could not
+// search, and - before and instead of results - what is searched.
 import { computed, onBeforeUnmount, ref, toRaw, useTemplateRef, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRoute, useRouter } from 'vue-router'
@@ -33,6 +34,7 @@ import { loadTenantPeople, tenantPeopleNow } from '../people/directory'
 import PersonAvatar from '../people/PersonAvatar.vue'
 import { useSettingsSections } from '../../features/settings/sections'
 import { searchContribution } from './contribution'
+import { requestOpenItem } from './openRequest'
 import { PERSON_DOCUMENT, searchDocument, yearsOf, type SearchDocument } from './model'
 import { chipKey, suggestChips, type ChipSuggestion, type SearchChip } from './query'
 import { SEARCH_GROUPS, searchGroups, type SearchGroupId } from './groups'
@@ -99,7 +101,15 @@ const contributed = computed<SearchDocument[]>(() => {
   const path = node ? [...pathOf(node.id, tree), node.name] : []
   return c.documents.map((d) => searchDocument({ ...d, scopeId: c.scopeId, nodeId: c.nodeId, path }))
 })
-const content = computed(() => [...indexedDocuments(), ...contributed.value])
+/** The page's own documents win over the same object a space's search found (ADR 0125 decision 8a): the open Memory's
+ *  photo is the gallery's, which it opens in place. */
+const content = computed(() => {
+  const own = contributed.value
+  const indexed = indexedDocuments()
+  if (!own.length) return [...indexed]
+  const mine = new Set(own.map((d) => `${d.scopeId}:${d.id}`))
+  return [...indexed.filter((d) => d.id === d.nodeId || !mine.has(`${d.scopeId}:${d.id}`)), ...own]
+})
 /** The members and the settings sections (ADR 0125 decision 9): documents of no space, each opening itself. */
 const elsewhere = computed<SearchDocument[]>(() => [
   ...personDocuments(people.value, (userId) => void router.push({ name: 'home', hash: personHash(userId) })),
@@ -127,10 +137,9 @@ function spaceLabel(scope: SearchScope | null): string {
   if (scope?.kind === ScopeKind.Tenant) return t('shell.shared')
   return t('shell.groups')
 }
-/** Each kind's word with the kinds it names (a word two kinds share is one chip), and each application's note. */
+/** Each kind's word with the kinds it names (a word two kinds share is one chip). */
 const kindWords = computed(() => {
   const byLabel = new Map<string, Set<string>>()
-  const notes = new Set<string>()
   const icons = new Map<string, VeyqIconName>()
   const add = (label: string, kind: string) => byLabel.set(t(label), (byLabel.get(t(label)) ?? new Set()).add(kind))
   for (const kind of registry.kinds()) {
@@ -141,9 +150,8 @@ const kindWords = computed(() => {
       add(doc.label, doc.kind)
       icons.set(doc.kind, doc.icon)
     }
-    if (d.search.note) notes.add(d.search.note)
   }
-  return { kinds: [...byLabel].map(([label, kinds]) => ({ label, kinds: [...kinds] })), notes: [...notes], icons }
+  return { kinds: [...byLabel].map(([label, kinds]) => ({ label, kinds: [...kinds] })), icons }
 })
 function iconOf(doc: SearchDocument): VeyqIconName {
   if (doc.icon) return doc.icon
@@ -209,16 +217,15 @@ const resultGroups = computed<VeyqTagOptionGroup<ResultOption>[]>(() =>
   }),
 )
 
-/** What a row says under the name: its own line (a person's handle, a section's heading), where it lives (and in which
- *  space, for another space's), or a photo's day. */
+/** What a row says under the name: its own line (a person's handle, a section's heading), or where it lives (and in which
+ *  space, for another space's) - a photo's day after it; a photo of the open Memory says only its day. */
 function secondLine(option: ResultOption): string {
   const doc = option.doc!
   if (doc.subtitle !== undefined) return doc.subtitle
-  if (doc.facets.capturedAt !== undefined) return dayFormat.value.format(doc.facets.capturedAt)
-  const path = doc.path.join(' / ')
-  if (option.group !== 'other') return path
-  const space = spaceLabel(indexedScope(doc.scopeId))
-  return path ? `${space} · ${path}` : space
+  const day = doc.facets.capturedAt !== undefined ? dayFormat.value.format(doc.facets.capturedAt) : ''
+  const path = doc.open ? '' : doc.path.join(' / ')
+  const where = option.group !== 'other' ? path : [spaceLabel(indexedScope(doc.scopeId)), path].filter(Boolean).join(' · ')
+  return [where, day].filter(Boolean).join(' · ')
 }
 /** The values of the chips in force a row carries (its years, its place, the person), shown beside it. */
 function matchedValues(doc: SearchDocument): string[] {
@@ -250,7 +257,9 @@ function choose(option: ResultOption) {
   }
   const tree = indexedTree(doc.scopeId)
   if (!tree) return
-  void router.push({ name: 'home', hash: hashForNode([...tree], doc.id, tokenOf(doc.scopeId)) })
+  // An object a space's search found opens its node's page, which opens the object once it holds it (`openRequest.ts`).
+  if (doc.id !== doc.nodeId) requestOpenItem({ scopeId: doc.scopeId, nodeId: doc.nodeId, itemId: doc.id })
+  void router.push({ name: 'home', hash: hashForNode([...tree], doc.nodeId, tokenOf(doc.scopeId)) })
 }
 /** The fragment's scope token of a space: the one on screen keeps the address it was reached by. */
 function tokenOf(scopeId: string): string {
@@ -314,7 +323,6 @@ const notSearched = computed(() => searchState.failed.map((s) => spaceLabel(s)).
       <template v-if="!groups.length && !suggestions.length && loadingCount === 0">
         <span v-if="asked" class="veyq-search__empty">{{ t('shell.search.empty') }}</span>
         <span class="veyq-search__hint">{{ t('shell.search.hint') }}</span>
-        <span v-for="note in kindWords.notes" :key="note" class="veyq-search__hint">{{ t(note) }}</span>
       </template>
     </template>
   </VeyqTagsInput>

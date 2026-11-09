@@ -19,7 +19,7 @@ vi.mock('../node/treeStore', async () => {
 })
 
 import * as v1 from '@veyq/crypto/v1'
-import { nextTick } from 'vue'
+import { computed, nextTick } from 'vue'
 import { fetchTree, openTree, sealName, wrapContentKey, type TreeNode } from '../node/tree'
 import { listMyScopes, listMyTenants, openListedScope } from '../../features/spaces/scopes'
 import { zeroScopeKey, type ScopeKey } from '../../features/spaces/epochs'
@@ -32,10 +32,11 @@ import { ScopeKind } from '../../api/generated/scopes'
 import type { NodeSummary } from '../../api/generated/content'
 import type { MyTenant } from '../../api/generated/scopes'
 import { openedScope, scopeSummary } from '../../test/models'
-import { testKind } from '../../test/testApplication'
+import { testApp, testKind } from '../../test/testApplication'
 import { nothingOfItsOwnToRekey } from '../node/rekey/hooks'
 import { indexedDocuments, indexedScope, indexedTree, refreshSearchIndex, resetSearchIndex, searchState, SLICE_MS } from './searchIndex'
-import type { SearchFacetContext } from '../applications/registry'
+import type { ApplicationSearch, ScopeDocumentsContext, SearchFacetContext } from '../applications/registry'
+import type { ScopeDocument } from './model'
 
 const id = (n: number) => `00000000-0000-4000-8000-${String(n).padStart(12, '0')}`
 const TENANT = id(101)
@@ -50,6 +51,15 @@ const facets = vi.fn((ctx: SearchFacetContext) => {
   return meta.place ? { places: [meta.place] } : {}
 })
 testKind(registry, { kind: SEARCHABLE, icon: 'file', rekeyContent: nothingOfItsOwnToRekey, search: { label: 'test.searchable', facets } })
+
+// An application's objects of every space (ADR 0125 decision 8a): by default it finds nothing and asks for no key.
+const objectsHook = vi.fn<ApplicationSearch['scopeDocuments']>()
+const nothingFound: ApplicationSearch['scopeDocuments'] = async () => ({ tag: 'T0', documents: [] })
+testApp(registry, 'objects-test').search({ scopeDocuments: (ctx) => objectsHook(ctx) })
+/** A photo-like object of node `nodeId`. */
+const photo = (oid: string, nodeId: string, name: string, revision = '1'): ScopeDocument => ({
+  kind: 'test.photo', id: oid, nodeId, revision, name, facets: { capturedAt: Date.UTC(2024, 4, 3), places: ['Roma'] },
+})
 
 const keys = new Map<string, Uint8Array>()
 /** A scope's sealed rows: a root folder holding one node of the searchable kind per name (with its place sealed in its meta). */
@@ -87,6 +97,7 @@ beforeEach(async () => {
   const real = await vi.importActual<typeof import('../../features/spaces/epochs')>('../../features/spaces/epochs')
   mocked.zeroScopeKey.mockImplementation(real.zeroScopeKey)
   resetSearchIndex()
+  objectsHook.mockImplementation(nothingFound)
   seen.length = 0
   handedOut.length = 0
   for (const s of [TENANT, GROUP, PERSONAL]) keys.set(s, v1.randomBytes(32))
@@ -439,5 +450,123 @@ describe('a space is built in slices (cr-search-at-volume)', () => {
       expect(seen[0].nodeKey.every((b) => b === 0)).toBe(true)
       expect(keys.get(GROUP)!.some((b) => b !== 0)).toBe(true)
     })
+  })
+})
+
+describe('a reader that asked before the build (a field mounted on a reload)', () => {
+  it('sees the tree and the space once they are built: both reads follow the index', async () => {
+    const tree = computed(() => indexedTree(TENANT)?.length ?? 0)
+    const scope = computed(() => indexedScope(TENANT)?.name ?? null)
+    expect(tree.value).toBe(0)
+    expect(scope.value).toBeNull()
+    await refreshSearchIndex()
+    expect(tree.value).toBeGreaterThan(0)
+    expect(scope.value).toBe('Familie Raddatz')
+  })
+})
+
+describe("an application's objects of every space (ADR 0125 decision 8a)", () => {
+  it('asks the application while the node keys are open, zeroes them after, and files each object under its node', async () => {
+    const held: Uint8Array[] = []
+    objectsHook.mockImplementation(async (ctx: ScopeDocumentsContext) => {
+      if (ctx.scopeId !== TENANT) return nothingFound(ctx)
+      const keyOf = await ctx.keys()
+      const key = keyOf(id(1))!
+      expect(key.some((b) => b !== 0)).toBe(true) // open while the hook runs
+      held.push(key)
+      expect(keyOf('no-such-node')).toBeNull()
+      return { tag: 'T1', documents: [photo(id(901), id(1), 'strand.jpg')] }
+    })
+    await refreshSearchIndex()
+    const doc = indexedDocuments().find((d) => d.id === id(901))!
+    expect(doc).toMatchObject({ scopeId: TENANT, nodeId: id(1), name: 'strand.jpg', path: ['Trips', 'Rome 2024'], foldedPlaces: ['roma'] })
+    expect(held).toHaveLength(1)
+    expect(held[0].every((b) => b === 0)).toBe(true) // zeroed once the hook returned
+    for (const k of handedOut) expect(k.key.every((b) => b === 0)).toBe(true)
+  })
+
+  it("keeps the documents on the application's 304, opening no key when the tree did not move either", async () => {
+    objectsHook.mockImplementation(async (ctx) => (ctx.scopeId === TENANT ? { tag: 'T1', documents: [photo(id(901), id(1), 'strand.jpg')] } : nothingFound(ctx)))
+    await refreshSearchIndex()
+    mocked.fetchTree.mockResolvedValue(null)
+    mocked.openListedScope.mockClear()
+    const tags: (string | null)[] = []
+    objectsHook.mockImplementation(async (ctx) => {
+      tags.push(ctx.tag)
+      return null
+    })
+    await refreshSearchIndex()
+    expect(tags).toEqual(['T1', 'T0', 'T0'])
+    expect(mocked.openListedScope).not.toHaveBeenCalled()
+    expect(names(TENANT)).toContain('strand.jpg')
+  })
+
+  it('asks the application on a tree 304 too, and opens the scope key only when it asks for the node keys', async () => {
+    await refreshSearchIndex()
+    mocked.fetchTree.mockResolvedValue(null)
+    handedOut.length = 0
+    objectsHook.mockImplementation(async (ctx) => {
+      if (ctx.scopeId !== TENANT) return null
+      const keyOf = await ctx.keys()
+      expect(keyOf(id(1))).not.toBeNull()
+      return { tag: 'T2', documents: [photo(id(902), id(1), 'neu.jpg')] }
+    })
+    await refreshSearchIndex()
+    expect(names(TENANT)).toContain('neu.jpg')
+    expect(handedOut).toHaveLength(1) // the tenant's, for the hook; the two others opened nothing
+    expect(handedOut[0].key.every((b) => b === 0)).toBe(true)
+  })
+
+  it('hands the previous answer back, so an object at its revision is kept', async () => {
+    const first = photo(id(901), id(1), 'strand.jpg')
+    objectsHook.mockImplementation(async (ctx) => (ctx.scopeId === TENANT ? { tag: 'T1', documents: [first] } : nothingFound(ctx)))
+    await refreshSearchIndex()
+    let previous: ReadonlyMap<string, ScopeDocument> | null = null
+    objectsHook.mockImplementation(async (ctx) => {
+      if (ctx.scopeId === TENANT) previous = ctx.previous
+      return null
+    })
+    await refreshSearchIndex()
+    expect(previous!.get(id(901))).toEqual(first)
+  })
+
+  it('drops a space whose objects cannot be read and names it as not searched', async () => {
+    objectsHook.mockImplementation(async (ctx) => {
+      if (ctx.scopeId === GROUP) throw new Error('offline')
+      return nothingFound(ctx)
+    })
+    await refreshSearchIndex()
+    expect(names(GROUP)).toEqual([])
+    expect(searchState.failed.map((s) => s.id)).toEqual([GROUP])
+    expect(names(TENANT)).toContain('Rome 2024')
+  })
+
+  it('asks for the active space too, under the key the page owns, which it never zeroes', async () => {
+    const activeKey = (): ScopeKey => ({ epoch: 0, key: keys.get(TENANT)! })
+    mocked.activeEpochKeys.mockReturnValue(activeKey())
+    Object.assign(activeSpace, { scopeId: TENANT, kind: ScopeKind.Tenant, status: 'ready' })
+    Object.assign(treeStore, { nodes: openTree(TENANT, activeKey(), rows(TENANT, 'Trips', [{ id: id(1), name: 'Rome 2024' }])), loaded: true })
+    let nodeKey: Uint8Array | null = null
+    objectsHook.mockImplementation(async (ctx) => {
+      if (ctx.scopeId !== TENANT) return nothingFound(ctx)
+      nodeKey = (await ctx.keys())(id(1))
+      return { tag: 'T1', documents: [photo(id(901), id(1), 'strand.jpg')] }
+    })
+    await refreshSearchIndex()
+    await vi.waitFor(() => expect(names(TENANT)).toContain('strand.jpg'))
+    expect(nodeKey!.every((b) => b === 0)).toBe(true)
+    expect(keys.get(TENANT)!.some((b) => b !== 0)).toBe(true)
+  })
+
+  it("drops every object on a reset, and aborts the application's fetch in flight", async () => {
+    let signal: AbortSignal | null = null
+    objectsHook.mockImplementation(async (ctx) => {
+      signal = ctx.signal
+      return { tag: 'T1', documents: ctx.scopeId === TENANT ? [photo(id(901), id(1), 'strand.jpg')] : [] }
+    })
+    await refreshSearchIndex()
+    resetSearchIndex()
+    expect(signal!.aborted).toBe(true)
+    expect(indexedDocuments()).toEqual([])
   })
 })

@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 // The shell's search field (uc.platform.search) over a stubbed index and the REAL registry (Memories registered, so its
-// kind words and its note are the real ones): the first focus asks for the index, a suggestion becomes a chip and Backspace
+// kind words are the real ones): the first focus asks for the index, a suggestion becomes a chip and Backspace
 // takes it away, the results come in their groups with where they live, choosing one opens it, and the field says what it
 // searched when it found nothing; the tenant's members and the settings sections the rail offers are results of their own
 // (ADR 0125 decision 9), and Depot's and Expenses' kinds have their word. Driven by the key events the layer's combobox
@@ -47,6 +47,9 @@ import { realI18n, t } from '../../test/i18n'
 import { treeNode } from '../../test/models'
 import { FOLDER_KIND, SHARE_BOOKMARK_KIND } from '../node/kind'
 import { ScopeKind } from '../../api/generated/scopes'
+import { defineComponent, h, provide } from 'vue'
+import { contributeSearchDocuments, searchContributionsKey } from './contribution'
+import { searchOpenRequest } from './openRequest'
 
 const ANNA = 'aaaaaaaa-0000-4000-8000-000000000001'
 const KEVIN = 'kkkkkkkk-0000-4000-8000-000000000002'
@@ -122,12 +125,10 @@ beforeEach(() => {
 })
 
 describe('the search field', () => {
-  it('asks for the index on focus and says what it searches, with each application\'s note', async () => {
+  it('asks for the index on focus and says what it searches - every photo too, so no note of what it searches in part', async () => {
     await mountField()
     expect(refreshSearchIndex).toHaveBeenCalled()
-    expect(status()).toContain(t('shell.search.hint'))
-    expect(status()).toContain(t('memory.search.note'))
-    expect(status()).not.toContain(t('shell.search.empty'))
+    expect(status()).toBe(t('shell.search.hint'))
   })
 
   it('shows the results in their groups, another space\'s with its space and path', async () => {
@@ -193,6 +194,70 @@ describe('the search field', () => {
     expect(push).toHaveBeenCalledWith({ name: 'home', hash: '#@G1/memories/rome-garden' })
   })
 
+  describe('a photo of every space (ADR 0125 decision 8a)', () => {
+    const TAKEN = Date.UTC(2023, 6, 14, 12)
+    const strand = () => doc({ id: 'p1', scopeId: 'G1', nodeId: 'garden', kind: 'memories.photo', name: 'strand.jpg', path: ['Rome garden'], facets: { capturedAt: TAKEN, places: ['Roma'] } })
+    beforeEach(() => vi.mocked(indexedDocuments).mockReturnValue([...indexedDocuments(), strand()]))
+    afterEach(() => {
+      searchOpenRequest.value = null
+    })
+
+    it('is found by a place chip, with its space, its Memory and its day in the second line', async () => {
+      await mountField()
+      await type('roma')
+      expect(rows()[0]).toBe(`Roma ${t('shell.search.chipPlace')}`)
+      await press('Enter')
+      expect(chips()).toEqual(['Roma'])
+      const row = rows().find((r) => r.startsWith('strand.jpg'))!
+      expect(row).toContain('Family group · Rome garden · ')
+      expect(row.endsWith('Roma')).toBe(true)
+    })
+
+    it('is found by a year chip, by its capture year', async () => {
+      await mountField()
+      await type('2023')
+      await press('Enter')
+      expect(chips()).toEqual(['2023'])
+      expect(rows().some((r) => r.startsWith('strand.jpg') && r.endsWith('2023'))).toBe(true)
+    })
+
+    it('opens its Memory through the navigation and asks that page to open it', async () => {
+      await mountField()
+      await type('strand')
+      await press('Enter')
+      expect(push).toHaveBeenCalledWith({ name: 'home', hash: '#@G1/memories/rome-garden' })
+      expect(searchOpenRequest.value).toEqual({ scopeId: 'G1', nodeId: 'garden', itemId: 'p1' })
+    })
+
+    it('gives way to the open Memory\'s own document of the same medium, which opens in place', async () => {
+      setBreadcrumb([{ id: null, name: 'Familie', hash: '' }, { id: 'rome', name: 'Rome 2024', hash: '#trips/memories/rome-2024' }])
+      const opened = vi.fn()
+      vi.mocked(indexedDocuments).mockReturnValue([
+        doc({ id: 'rome', name: 'Rome 2024', path: ['Trips'] }),
+        doc({ id: 'p2', nodeId: 'rome', kind: 'memories.photo', name: 'IMG_7.jpg', path: ['Trips', 'Rome 2024'], facets: { capturedAt: TAKEN } }),
+      ])
+      const Page = defineComponent({
+        setup() {
+          contributeSearchDocuments(() => ({
+            scopeId: 'S1', nodeId: 'rome',
+            documents: [{ kind: 'memories.photo', id: 'p2', revision: '0:b', name: 'IMG_7.jpg', facets: { capturedAt: TAKEN }, open: opened }],
+          }))
+          return () => h('div')
+        },
+      })
+      const host = mount(defineComponent({ setup: () => (provide(searchContributionsKey, true), () => h(Page)) }))
+      mounted.push(host)
+      await mountField()
+      await type('img_7')
+      expect(rows().filter((r) => r.startsWith('IMG_7.jpg'))).toHaveLength(1)
+      expect(headings()).toEqual([t('shell.search.groupOpen', { name: 'Rome 2024' })])
+      await press('Enter')
+      expect(opened).toHaveBeenCalled()
+      expect(push).not.toHaveBeenCalled()
+      expect(searchOpenRequest.value).toBeNull()
+    })
+  })
+
   it('keeps the address of the space on screen for a node of it', async () => {
     await mountField()
     await type('rome 2')
@@ -205,7 +270,7 @@ describe('the search field', () => {
     await type('zzz')
     expect(rows()).toEqual([])
     expect(status()).toContain(t('shell.search.empty'))
-    expect(status()).toContain(t('memory.search.note'))
+    expect(status()).toBe(`${t('shell.search.empty')}${t('shell.search.hint')}`) // nothing else: no note of a part not searched
   })
 
   it('names the spaces it is still reading and those it could not search', async () => {

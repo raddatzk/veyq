@@ -25,7 +25,7 @@ import MemoryShareBody from './components/MemoryShareBody.vue'
 import PersonMemories from './components/PersonMemories.vue'
 import MediumReview from './components/MediumReview.vue'
 import { memoriesLifecycle } from './lifecycle'
-import { memorySearch } from './search'
+import { memoriesSearch, memorySearch } from './search'
 import { stageItemMarksRekey } from './itemFavorites'
 import { memoryRights } from './rights'
 import { targetOf } from '../../core/access'
@@ -104,6 +104,8 @@ export function registerMemories(registry: Registry): void {
   app.personSection(PersonMemories)
   // A reported medium's review (uc.moderation.review-a-case A5): a medium is Memories' record, core cannot draw it.
   app.itemReview(MediumReview)
+  // Core's search of every space (ADR 0125 decision 8a): every photo and video of every Memory, read by the space's listing.
+  app.search(memoriesSearch)
   app.lifecycle(memoriesLifecycle)
   // the item marks' value keys are wrapped under the scope key: a rotation re-wraps them through this, never
   // rewriting a set (ADR 0115 decision 2)

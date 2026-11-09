@@ -73,6 +73,23 @@ export interface ContributedDocument {
   open: () => void
 }
 
+/**
+ * What an application finds in a whole space (`ApplicationRegistrar.search`, ADR 0125 decision 8a): an object of its own
+ * inside a node - Memories' photo or video - as the application knows it. Core makes the document of it: where it lives is
+ * its node's path in the space's tree, and choosing it opens that node's page with the object (`openRequest.ts`).
+ */
+export interface ScopeDocument {
+  kind: string
+  id: string
+  /** The node the object belongs to (a medium's Memory or chapter). */
+  nodeId: string
+  /** The seals it was read from: a document at an unchanged revision is kept, not opened again. */
+  revision: string
+  name: string
+  facets: SearchFacets
+  icon?: VeyqIconName
+}
+
 /** Core's one way to make a document, so its folded fields are always there. */
 export function searchDocument(d: Omit<SearchDocument, 'foldedName' | 'foldedPlaces' | 'foldedAliases'>): SearchDocument {
   return { ...d, foldedName: fold(d.name), foldedPlaces: (d.facets.places ?? []).map(fold), foldedAliases: (d.aliases ?? []).map(fold) }
