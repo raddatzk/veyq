@@ -561,4 +561,8 @@
     <string name="memory_corrected">Korrigiert</string>
     <string name="memory_uploader_former">Ehemaliges Mitglied</string>
     <string name="memory_uploader_guest">Ein Gast</string>
+    <string name="memory_add">Fotos hinzufügen</string>
+    <string name="memory_upload_failed">Konnte nicht hinzugefügt werden: %1$s. Bitte versuche es erneut.</string>
+    <string name="memory_upload_no_room">„%1$s“ konnte nicht hinzugefügt werden: Im Speicher dieses Bereichs ist kein Platz mehr.</string>
+    <string name="memory_upload_switched_off">Erinnerungen ist hier abgeschaltet, deshalb kann nichts dazukommen.</string>
 </resources>

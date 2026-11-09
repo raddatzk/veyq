@@ -905,6 +905,56 @@ class AppModel(app: Application) : AndroidViewModel(app) {
     fun mediaReader(item: me.raddatz.veyq.mobile.memories.MemoryMedia.Item): me.raddatz.veyq.mobile.blob.RangeReader? =
         tenantSession?.let { me.raddatz.veyq.mobile.memories.MemoryMedia.reader(it, item, item.original) }
 
+    private val _galleryRevision = MutableStateFlow(0)
+
+    /** Moves each time a medium this device uploaded is in (a gallery on screen reads itself again). */
+    val galleryRevision: StateFlow<Int> = _galleryRevision.asStateFlow()
+
+    /**
+     * Adds the photos and videos the system's picker granted ([uris]) to Memory or chapter [nodeId] (`MediaUpload`), one
+     * after another: each one's tiers derived here ([MediaDerive]), its bytes read at any offset; the shell shows which is
+     * on its way. A quota or an application switched off stops the rest and is said once; what else did not go up is said.
+     */
+    fun uploadMedia(scopeId: String, nodeId: String, uris: List<android.net.Uri>) {
+        viewModelScope.launch {
+            val app = getApplication<Application>()
+            val t = tenantSession ?: return@launch
+            val failed = ArrayList<String>()
+            for ((i, uri) in uris.withIndex()) {
+                val p = picked(uri) ?: continue
+                _uploading.value = if (uris.size > 1) "${p.name} (${i + 1}/${uris.size})" else p.name
+                val r = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+                    runCatching {
+                        val type = me.raddatz.veyq.mobile.memories.MediaUpload.typeOf(p.type, p.name, ByteArray(0)).takeIf { it != "application/octet-stream" } ?: p.type
+                        val derived = MediaDerive.of(app, p.uri, type) ?: me.raddatz.veyq.mobile.memories.MediaUpload.Derived(null, null, null, null)
+                        withSource(p) { read ->
+                            me.raddatz.veyq.mobile.memories.MediaUpload.upload(
+                                t, scopeId, nodeId,
+                                me.raddatz.veyq.mobile.memories.MediaUpload.Original(me.raddatz.veyq.mobile.media.ByteSource(p.size, read), p.type, p.name, p.modifiedAt),
+                                derived, System.currentTimeMillis(),
+                            )
+                        }
+                    }.getOrElse { me.raddatz.veyq.mobile.memories.MediaUpload.Result(me.raddatz.veyq.mobile.memories.MediaUpload.Outcome.FAILED) }
+                }
+                when (r.outcome) {
+                    me.raddatz.veyq.mobile.memories.MediaUpload.Outcome.DONE -> _galleryRevision.value += 1
+                    me.raddatz.veyq.mobile.memories.MediaUpload.Outcome.NO_ROOM -> {
+                        notify(Notice(app.getString(R.string.memory_upload_no_room, p.name)))
+                        break
+                    }
+                    me.raddatz.veyq.mobile.memories.MediaUpload.Outcome.SWITCHED_OFF -> {
+                        notify(Notice(app.getString(R.string.memory_upload_switched_off)))
+                        break
+                    }
+                    else -> failed += p.name
+                }
+            }
+            _uploading.value = null
+            if (failed.isNotEmpty()) notify(Notice(app.getString(R.string.memory_upload_failed, failed.joinToString(", "))))
+            refreshLists(t)
+        }
+    }
+
     /** Drop box [nodeId]'s guests' folders with their files (`DropBoxes.folders`); null when they could not be read. */
     suspend fun dropBoxFolders(scopeId: String, nodeId: String): List<me.raddatz.veyq.mobile.depot.DropBoxes.GuestFolder>? {
         val t = tenantSession ?: return null

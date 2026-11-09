@@ -200,6 +200,10 @@ first in each of its scrolls — `LocalNodeHero.current(inset)` (Android) / `Nod
   nothing of the model in it (`AppModel.tokenInputFor` is `nonisolated static` for that).
 - A `SurfaceView` inside a Compose `Dialog` got no surface (measured 2026-11-09, the lightbox's video: the player stayed
   unprepared, black): draw a player there into a `TextureView`.
+- Android's photo picker hands a photo over with its GPS zeroed and under a name of its own (`34.jpg`, measured
+  2026-11-09: the bytes the same size, the position 0/0, which the reader drops). `ACCESS_MEDIA_LOCATION` with
+  `setRequireOriginal` would keep the position, but Android asks for it with its full photos-and-videos dialog, and its
+  "limited access" grants nothing: an app keeps a picked photo's place only with full media access — the owner's call.
 - A value a sheet shows that its presenter loads after the sheet opened did not reach it on iOS (measured 2026-11-09, the
   lightbox's uploader): the sheet loads what it shows itself, in its own `.task`.
 - The Simulator tool's tap does not reliably flip a SwiftUI `Toggle`: a short swipe across it does (measured

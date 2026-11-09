@@ -63,5 +63,34 @@ fun CreateAction(
     }
 }
 
+/**
+ * [CreateAction] over a lazy grid (a gallery): the same extended button, collapsed once the grid scrolled ([LazyGridState]'s
+ * canScrollBackward), its clearance handed to the grid's content padding.
+ */
+@Composable
+fun CreateGridAction(
+    label: String,
+    shown: Boolean,
+    onClick: () -> Unit,
+    content: @Composable (grid: androidx.compose.foundation.lazy.grid.LazyGridState, bottom: Dp) -> Unit,
+) {
+    val grid = androidx.compose.foundation.lazy.grid.rememberLazyGridState()
+    val expanded by remember { derivedStateOf { !grid.canScrollBackward } }
+    val palette = LocalPalette.current
+    Box(Modifier.fillMaxSize()) {
+        content(grid, if (shown) CLEARANCE else 0.dp)
+        if (shown) Box(Modifier.align(Alignment.BottomEnd).padding(16.dp)) {
+            ExtendedFloatingActionButton(
+                onClick = onClick,
+                icon = { Icon(Icons.Outlined.Add, if (expanded) null else label) },
+                text = { Text(label) },
+                expanded = expanded,
+                containerColor = role(palette.primary),
+                contentColor = role(palette.onFill),
+            )
+        }
+    }
+}
+
 /** The room below a list's last row: the button's 56dp, its 16dp margin, and a row's breath. */
 private val CLEARANCE = 96.dp

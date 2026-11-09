@@ -424,7 +424,13 @@ implementation exists but what holds it to the first.
   epoch, the job tried twice; the platform only derives the tiers (measured 2026-11-09: `MediaMetadataFixtureTest` holds
   the readers to the web's own fixtures and expectations — a HEIC whose `Exif` item is not found turns it red —;
   `MemoryUploadLiveTest` uploaded the web's fixture photo and dated clip, and the web's lightbox showed the camera,
-  exposure, position, title and rating of the one and the container time of the other).
+  exposure, position, title and rating of the one and the container time of the other). Android picks with the system's
+  photo picker (several photos and videos) behind Material's extended button over the gallery and derives the tiers with
+  `ImageDecoder` (the EXIF orientation applied) and a video's poster with `MediaMetadataRetriever`, turned as shown
+  (measured 2026-11-09: a photo stored landscape with orientation 6 went up 3000×4000 with its tiers upright, a clip with
+  a quarter-turn matrix 720×1280 with its container time; the web shows both so). The picker zeroes a photo's position
+  and renames it (`src/mobile/CLAUDE.md` § Traps): an Android upload carries no position unless the app is given full
+  media access, which is the owner's to decide.
   Not built yet: the live poll, zoom, the slideshow, edits (date, place, participants, capture-time correction, trash),
   item marks, buckets, the map, sharing, the re-key, export and copy.
 - **One header for every node, drawn by core** (the web's `NodePage` + `NodeHeader`, ADR 0110 decision 10; owner

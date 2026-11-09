@@ -1,6 +1,7 @@
 package me.raddatz.veyq.mobile.android
 
 import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.Image
@@ -9,6 +10,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -83,11 +85,13 @@ import me.raddatz.veyq.mobile.navigation.ObjectRef
 internal fun MemoryScreen(ref: ObjectRef, model: AppModel) {
     val palette = LocalPalette.current
     val details by model.rowDetails.collectAsStateWithLifecycle()
+    val uploaded by model.galleryRevision.collectAsStateWithLifecycle()
+    val uploading by model.uploading.collectAsStateWithLifecycle()
     // read again whenever the lists are
     var gallery by remember { mutableStateOf<MemoryMedia.Gallery?>(null) }
     var failed by remember { mutableStateOf(false) }
     var chapters by remember { mutableStateOf<List<NodeRef>>(emptyList()) }
-    LaunchedEffect(ref.nodeId, details) {
+    LaunchedEffect(ref.nodeId, details, uploaded) {
         val read = model.memoryGallery(ref.scopeId, ref.nodeId)
         if (read == null) failed = true else { gallery = read; failed = false }
         chapters = if (ref.kind == "MEMORY") model.scopeNodes(ref.scopeId).filter { it.parentId == ref.nodeId && it.kind == "CHAPTER" } else emptyList()
@@ -95,7 +99,18 @@ internal fun MemoryScreen(ref: ObjectRef, model: AppModel) {
     var open by remember { mutableStateOf<Int?>(null) }
     val hero = LocalNodeHero.current
     val items = gallery?.items
-    LazyVerticalGrid(GridCells.Adaptive(112.dp), Modifier.fillMaxSize(), horizontalArrangement = Arrangement.spacedBy(2.dp), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+    // the system's photo picker: photos and videos, several at once
+    val pick = rememberLauncherForActivityResult(ActivityResultContracts.PickMultipleVisualMedia()) { uris ->
+        if (uris.isNotEmpty()) model.uploadMedia(ref.scopeId, ref.nodeId, uris)
+    }
+    // (the picker hands a photo over with its location zeroed: Android keeps it only for an app with full media access)
+    CreateGridAction(stringResource(R.string.memory_add), shown = uploading == null, onClick = {
+        pick.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageAndVideo))
+    }) { grid, bottom ->
+    LazyVerticalGrid(
+        GridCells.Adaptive(112.dp), Modifier.fillMaxSize(), state = grid, contentPadding = PaddingValues(bottom = bottom),
+        horizontalArrangement = Arrangement.spacedBy(2.dp), verticalArrangement = Arrangement.spacedBy(2.dp),
+    ) {
         item(key = "hero", span = { GridItemSpan(maxLineSpan) }) { hero(16.dp) }
         if (chapters.isNotEmpty()) {
             item(key = "chapters", span = { GridItemSpan(maxLineSpan) }) {
@@ -132,6 +147,7 @@ internal fun MemoryScreen(ref: ObjectRef, model: AppModel) {
                 }
             }
         }
+    }
     }
     val at = open
     if (at != null && items != null) Lightbox(items, at, ref.name, model) { open = null }

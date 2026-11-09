@@ -563,4 +563,8 @@
     <string name="memory_corrected">Corrected</string>
     <string name="memory_uploader_former">Former member</string>
     <string name="memory_uploader_guest">A guest</string>
+    <string name="memory_add">Add photos</string>
+    <string name="memory_upload_failed">Could not add: %1$s. Please try again.</string>
+    <string name="memory_upload_no_room">“%1$s” could not be added: there is no room left in this space’s storage.</string>
+    <string name="memory_upload_switched_off">Memories is switched off here, so nothing can be added.</string>
 </resources>
