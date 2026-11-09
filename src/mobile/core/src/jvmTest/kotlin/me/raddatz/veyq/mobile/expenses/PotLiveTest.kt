@@ -338,6 +338,59 @@ class PotLiveTest {
             assertEquals(me.raddatz.veyq.mobile.session.NodeTrash.Deleted.TRASHED, me.raddatz.veyq.mobile.session.NodeTrash.delete(tenant, scopeId, nodeId))
             println("[$potName] a fresh Pot reported: reference ${sent.reference}, received ${sent.receivedAt}")
         }
+        System.getenv("VEYQ_LIVE_LINK_CHANGES")?.let { folderName ->
+            // A fresh Pot in the root folder [folderName] with an entry. Link A is edited in place (label, password removed,
+            // role, end) and keeps its address; then renewed: a new address, the old one gone, the settings carried, and the
+            // Pot re-keyed — a fresh session still reads the entry. Link B's password is carried by its renew; B is then
+            // switched off and deleted. A's old and new addresses go to VEYQ_LIVE_LINKS_OUT for the web's guest page.
+            val links = me.raddatz.veyq.mobile.session.ShareLinks
+            val changes = me.raddatz.veyq.mobile.session.ShareLinkChanges
+            val ok = me.raddatz.veyq.mobile.session.ShareLinkChanges.Outcome.DONE
+            val now = { System.currentTimeMillis() }
+            val uuid = { java.util.UUID.randomUUID().toString() }
+            val fold = { kind: String, n: String -> if (kind == PotSession.KIND) PotCreate.tokenInput(n) else null }
+            val folder = tenant.nodes().first { it.kind == "FOLDER" && it.parentId == null && it.name == folderName }
+            val scopeId = folder.scopeId
+            val name = "App link changes ${System.currentTimeMillis() % 100_000}"
+            val nodeId = PotCreate.create(tenant, scopeId, folder.nodeId, name, Ledger.BaseCurrency("EUR", 2), listOf(PotCreate.NewPerson.name("Ana"))).nodeId!!
+            tenant.forgetTree()
+            val pot = PotSession.open(tenant, scopeId, nodeId)!!
+            val form = PotView(pot).blankForm(java.time.LocalDate.now().toString())!!
+                .copy(title = "Kept across a renew", payers = listOf(EntryForm.Payer(pot.ledger!!.participants.first().id, "5")))
+            assertEquals(PotSession.WriteOutcome.WRITTEN, pot.saveEntry(pot.newId(), form, null))
+            val end = java.time.Instant.now().plus(java.time.Duration.ofDays(5)).toString()
+            val a = links.mint(tenant, scopeId, nodeId, links.READ, "A", "a-link-password-1", end)
+            assertEquals(me.raddatz.veyq.mobile.session.ShareLinks.Outcome.CREATED, a.outcome, a.refusal)
+            val aId = a.url!!.substringAfter("/s/").substringBefore('#')
+            val edited = changes.edit(tenant, scopeId, nodeId, aId, me.raddatz.veyq.mobile.session.ShareLinkChanges.Edit("A edited", "", end, links.READ_WRITE), now())
+            assertEquals(ok, edited.outcome)
+            val afterEdit = links.list(tenant, scopeId, nodeId)!!.single { it.shareId == aId }
+            assertEquals("A edited", afterEdit.label)
+            assertEquals(links.READ_WRITE, afterEdit.role)
+            assertTrue(!afterEdit.passwordRequired && afterEdit.expiresAt != null)
+            assertEquals(a.url, afterEdit.url)
+            val renewed = changes.renew(tenant, scopeId, nodeId, aId, PotRekey.content, fold, uuid, now())
+            assertEquals(ok, renewed.outcome)
+            val listed = links.list(account.open(tenant.tenant), scopeId, nodeId)!!
+            assertTrue(listed.none { it.shareId == aId }, "the renewed link is still listed")
+            val aNew = listed.single { it.url == renewed.url }
+            assertEquals("A edited", aNew.label)
+            assertEquals(links.READ_WRITE, aNew.role)
+            assertTrue(!aNew.passwordRequired && aNew.expiresAt != null && aNew.enabled)
+            val fresh = account.open(tenant.tenant)
+            assertEquals(listOf("Kept across a renew"), PotSession.open(fresh, scopeId, nodeId)!!.ledger!!.entries.map { (it.content as? Expense)?.title }, "the entry does not open after the renew's re-key")
+            val b = links.mint(tenant, scopeId, nodeId, links.READ, "B", "b-link-password-1", null)
+            val bId = b.url!!.substringAfter("/s/").substringBefore('#')
+            val bRenewed = changes.renew(tenant, scopeId, nodeId, bId, PotRekey.content, fold, uuid, now())
+            assertEquals(ok, bRenewed.outcome)
+            val bNew = links.list(tenant, scopeId, nodeId)!!.single { it.url == bRenewed.url }
+            assertTrue(bNew.passwordRequired && bNew.label == "B", "B's password or label was not carried")
+            assertEquals(me.raddatz.veyq.mobile.session.ShareLinks.Closed.CLOSED, links.switchOff(tenant, scopeId, nodeId, bNew.shareId, PotRekey.content, fold, uuid))
+            assertEquals(ok, changes.delete(tenant, scopeId, nodeId, bNew.shareId, PotRekey.content, fold, uuid, now()).outcome)
+            assertTrue(links.list(tenant, scopeId, nodeId)!!.none { it.shareId == bNew.shareId }, "the deleted link is still listed")
+            System.getenv("VEYQ_LIVE_LINKS_OUT")?.let { File(it).writeText(a.url + "\n" + renewed.url) }
+            println("[$folderName] \"$name\": A edited in place and renewed, B's password carried, B switched off and deleted")
+        }
         System.getenv("VEYQ_LIVE_RENAME")?.let { potName ->
             // A fresh Pot renamed (read back by a fresh session), its old name free and its new one taken, a sibling's name
             // refused before anything is sent, then trashed (it stays in the trash).

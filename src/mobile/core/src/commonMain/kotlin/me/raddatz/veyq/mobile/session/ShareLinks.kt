@@ -66,6 +66,8 @@ object ShareLinks {
         val reissueRequired: Boolean,
         /** Guests are stopped by a rule (a capability switched off, an expiry cap). */
         val stopped: Boolean,
+        /** The server lets this member delete it for good. */
+        val deletable: Boolean,
     )
 
     /** A link's address: the tenant's origin, its id, `K_share` in the fragment (base64url, no padding). */
@@ -94,6 +96,7 @@ object ShareLinks {
                     expiresAt = s.expiresAt, label = label, hasNote = s.sealedNote != null, passwordRequired = s.passwordRequired == true,
                     url = kShare?.let { url(tenant.base, s.shareId, it) }, reissueRequired = s.reissueRequired == true,
                     stopped = !s.guestStops.isNullOrEmpty(),
+                    deletable = s.deletable == true,
                 )
             } finally {
                 kShare?.fill(0)
@@ -101,7 +104,7 @@ object ShareLinks {
         }
     }
 
-    private fun recover(
+    internal fun recover(
         suite: me.raddatz.veyq.mobile.crypto.V1, joins: JoinRecords, s: ShareSummary, scopeId: String, nodeId: String,
         scopeKey: ByteArray, scopeEpoch: Int,
     ): ByteArray? {

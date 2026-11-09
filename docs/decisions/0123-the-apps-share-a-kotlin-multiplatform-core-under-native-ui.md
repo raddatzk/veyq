@@ -216,7 +216,13 @@ implementation exists but what holds it to the first.
   anything else stays due for a member's web device, and the app says so (a Pot's re-key with an entry and a receipt,
   the other link still opening it on the web's guest page and the closed one nothing, measured live by `PotLiveTest`;
   a revision key sealed under the old key killed by it; the web opens a Pot the iOS app re-keyed, receipt included,
-  2026-11-09). Renewing, editing and deleting a link are not built. A node is reported to its server's moderators
+  2026-11-09). A link is edited in place, renewed and deleted as on the web (`session/ShareLinkChanges.kt`, the web's
+  `editShare`/`reissueShare`/`deleteShare`): an edit reseals its label and keeps its address, role, end and password
+  (blank removes it, untouched keeps it); a renew mints a fresh `K_share` and id carrying label, note, password and end
+  — refused where the password no longer opens here — and the old address is gone, so the node is re-keyed as for a
+  switch-off; a delete takes only a switched-off link the server lets go (each measured live by `PotLiveTest`: an edited
+  link keeps its address, a renewed one opens its Pot on the web's guest page as a contributor and the old one nothing,
+  2026-11-09). A node is reported to its server's moderators
   (`session/NodeReport.kt`, the web's `core/report/`; ADR 0093, a legal duty, so offered wherever the server publishes
   a moderation key): whole — the node's key and its name's and meta's field keys — or by its name alone, each share
   under the report's fresh `K_report`, that key and the reason sealed to the epoch's public half and the contact apart;
