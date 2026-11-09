@@ -120,6 +120,16 @@ class V1(val p: Primitives) {
     fun slugToken(entryKey: ByteArray, parentSlot: String, slug: String): ByteArray =
         p.hmacSha256(p.hkdfSha256(entryKey, ByteArray(0), utf8("veyq/v1/slug-token:$parentSlot"), 32), utf8(slug))
 
+    /**
+     * A link's write proof (ADR 0076, `shareWriteToken`): HKDF-SHA256(K_share, empty salt, "veyq/v1/share-write:" + shareId,
+     * 32). The share stores only its SHA-256 (`writeVerifier`); a guest presents it as `X-Share-Write`.
+     */
+    fun shareWriteToken(kShare: ByteArray, shareId: String): ByteArray =
+        p.hkdfSha256(kShare, ByteArray(0), utf8("veyq/v1/share-write:$shareId"), 32)
+
+    /** A link's password token (cr-0118, `sharesPwToken`): Argon2id(utf8(password), salt) at the pinned profile (t 3, 32 MiB, p 1). */
+    fun sharePasswordToken(password: String, salt: ByteArray): ByteArray = p.argon2id(utf8(password), salt, 3, 32768, 1, 32)
+
     /** The field envelope (ADR 0093 § 9): 0x03 ‖ salt(16) ‖ nonce(12) ‖ aead, under HKDF(K_parent, salt, purpose). */
     fun sealField(
         context: Context, parentKey: ByteArray, plaintext: ByteArray,

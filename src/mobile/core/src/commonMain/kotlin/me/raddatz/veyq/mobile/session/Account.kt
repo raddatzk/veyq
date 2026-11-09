@@ -239,7 +239,7 @@ class VeyqAccount private constructor(
         others.forEach { openOne(it, view) }
         val people = if (tenantScope == null || members == null) emptyMap()
         else People.of(JoinRecords(suite), tenant.tenantId, tenantScope.key, tenantScope.summary.grantedEpoch.toLong(), members)
-        return TenantSession(this, tenant, base, open, off, closed, people, services)
+        return TenantSession(this, tenant, base, open, off, closed, people, services, ShareLinks.Rules.of(capabilities))
     }
 
     /** A grant of a scope key to this account itself, as a scope's birth posts it (ADR 0028 decision 6), all base64. */
@@ -648,6 +648,8 @@ class TenantSession internal constructor(
     /** The tenant's external services by capability id, each its configured address (`serviceUrl`): only while the
      *  tenant's set has the capability on; empty when the set did not read, so nothing is fetched then. */
     private val services: Map<String, String> = emptyMap(),
+    /** The tenant's guest links as its capability set has them ([ShareLinks.Rules.UNKNOWN] when it did not read). */
+    val linkRules: ShareLinks.Rules = ShareLinks.Rules.UNKNOWN,
 ) : Library {
     /** The address the tenant configured for external service [capabilityId], or null: off, or not read. */
     fun serviceUrl(capabilityId: String): String? = services[capabilityId]

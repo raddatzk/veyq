@@ -45,6 +45,7 @@ class Conformance(private val p: Primitives, vectorsJson: String) {
         joinRecords()
         valueKeys()
         slugs()
+        shareWrite()
         blobs()
         return failures.toList()
     }
@@ -82,6 +83,17 @@ class Conformance(private val p: Primitives, vectorsJson: String) {
         check("blob-meta plaintext is the layout's") {
             val opened = BlobMeta.decode(meta.hex("plaintext")) ?: fail("no meta")
             eqHex(BlobMeta.encode(opened.type, opened.name, opened.modifiedAt), meta.str("plaintext"))
+        }
+    }
+
+    /** `#share_write_token`: the token and its verifier, and a token bound to its link (another id, another token). */
+    private fun shareWrite() {
+        val w = v.obj("share_write_token")
+        check("share_write_token") {
+            val token = suite.shareWriteToken(w.hex("kShare"), w.str("shareId"))
+            eqHex(token, w.str("token"))
+            eqHex(suite.p.sha256(token), w.str("verifier"))
+            eqHex(suite.shareWriteToken(w.hex("kShare"), w.str("other_share_id")), w.str("other_token"))
         }
     }
 

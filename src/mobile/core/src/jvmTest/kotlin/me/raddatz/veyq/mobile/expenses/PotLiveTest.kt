@@ -261,6 +261,30 @@ class PotLiveTest {
             assertEquals(me.raddatz.veyq.mobile.session.NodeTrash.Deleted.TRASHED, me.raddatz.veyq.mobile.session.NodeTrash.delete(tenant, scopeId, nodeId))
             println("[$folderName] \"$name\" moved in and out, opened there each time; a move to its place and onto its name refused")
         }
+        System.getenv("VEYQ_LIVE_LINKS")?.let { potName ->
+            // Two links on a Pot: a READ link with a label, listed newest first under that label with the very address the
+            // mint handed out (its recovery copy opens), and a READ_WRITE link with a password and an end, listed as such.
+            // The first link's address goes to VEYQ_LIVE_LINKS_OUT, for the web's guest page to open. Both links stay.
+            val links = me.raddatz.veyq.mobile.session.ShareLinks
+            val ref = pots.first { it.name == potName }
+            val n = System.currentTimeMillis() % 100_000
+            val read = links.mint(tenant, ref.scopeId, ref.nodeId, links.READ, "App link $n", "", null)
+            assertEquals(me.raddatz.veyq.mobile.session.ShareLinks.Outcome.CREATED, read.outcome, read.refusal)
+            val end = java.time.Instant.now().plus(java.time.Duration.ofDays(3)).toString()
+            val guarded = links.mint(tenant, ref.scopeId, ref.nodeId, links.READ_WRITE, "", "app-link-password-$n", end)
+            assertEquals(me.raddatz.veyq.mobile.session.ShareLinks.Outcome.CREATED, guarded.outcome, guarded.refusal)
+            val listed = links.list(account.open(tenant.tenant), ref.scopeId, ref.nodeId)!!
+            val first = listed.single { it.label == "App link $n" }
+            assertEquals(read.url, first.url)
+            assertEquals(links.READ, first.role)
+            assertTrue(first.mine && first.enabled && !first.passwordRequired && first.expiresAt == null)
+            val second = listed.single { it.url == guarded.url }
+            assertEquals(links.READ_WRITE, second.role)
+            assertTrue(second.passwordRequired && second.expiresAt != null && second.label.isEmpty())
+            assertTrue(listed.indexOf(second) < listed.indexOf(first), "not newest first")
+            System.getenv("VEYQ_LIVE_LINKS_OUT")?.let { File(it).writeText(read.url!!) }
+            println("[$potName] READ link \"App link $n\" and a READ_WRITE link with a password and an end minted and listed")
+        }
         System.getenv("VEYQ_LIVE_RENAME")?.let { potName ->
             // A fresh Pot renamed (read back by a fresh session), its old name free and its new one taken, a sibling's name
             // refused before anything is sent, then trashed (it stays in the trash).
