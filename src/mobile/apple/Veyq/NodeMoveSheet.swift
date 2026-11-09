@@ -20,6 +20,8 @@ struct NodeMoveSheet: View {
     @State private var at: String?
     @State private var moving = false
     @State private var problem: String?
+    /// A copy the tenant has no room for, said before anything is written (the web's `CopyNodesDialog` storage check).
+    @State private var noRoom: String?
     /// Moving a guest's folder out ends it (the web's `endsIdentity`): asked first, there is no way back.
     @State private var confirming = false
 
@@ -65,7 +67,10 @@ struct NodeMoveSheet: View {
                         ForEach(read?.losses ?? [], id: \.self) { Text($0) }
                     }
                     .font(.footnote).foregroundStyle(Role.muted)
-                    .task { read = await notes?() }
+                    .task {
+                        read = await notes?()
+                        noRoom = await model.copyNoRoom(ref)
+                    }
                     if let left = read?.leftOut, !left.isEmpty {
                         Section("Left out, because this version cannot copy them:") {
                             ForEach(left, id: \.self) { Text($0) }
@@ -111,7 +116,7 @@ struct NodeMoveSheet: View {
                     }
                 }
                 Section {
-                    if let problem {
+                    if let problem = problem ?? noRoom {
                         Text(problem).font(.caption).foregroundStyle(Role.danger)
                     } else if let block {
                         Text(Self.hereText(block, copying: copying)).font(.caption).foregroundStyle(Role.muted)
@@ -125,7 +130,7 @@ struct NodeMoveSheet: View {
                     } label: {
                         HStack { Spacer(); if moving { ProgressView() } else { Text(copying ? "Copy here" : "Move here").fontWeight(.semibold) }; Spacer() }
                     }
-                    .disabled(block != nil || moving)
+                    .disabled(block != nil || moving || noRoom != nil)
                 }
             }
             .alert("Move a guest’s folder out of the drop box?", isPresented: $confirming) {

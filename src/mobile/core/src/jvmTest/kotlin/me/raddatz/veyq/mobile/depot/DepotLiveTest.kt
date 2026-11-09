@@ -149,4 +149,61 @@ class DepotLiveTest {
         assertEquals(sha(big), sha(bytes(child(child(docs.nodeId, "Deep").nodeId, "big.bin").nodeId)))
         println("[$rootName] uploaded \"${names[0]}\" and \"${names[1]}\": every folder and file where planned, to the byte")
     }
+
+    /**
+     * The storage check before a copy and a folder upload (`StorageFit`): `VEYQ_LIVE_STORAGE_FIT="<root folder>/<folder>"`
+     * (a folder holding files) sets the tenant a quota of one byte for the run — the seeded principal is the Server Owner —
+     * and checks the folder's copy is said not to fit with its bytes and a folder upload there is refused before anything is
+     * written; the tenant's quota as it was is put back however the run ends (`VEYQ_LIVE_STORAGE_FIT_HOLD_S=<s>`, at most 600,
+     * holds it first, for a UI pass; a quota of exactly one byte is taken for this test's own, left by a run stopped by force).
+     */
+    @Test
+    fun aCopyOrAFolderUploadThatDoesNotFitIsSaidFirst() = runTest(timeout = 15.minutes) {
+        val origin = System.getenv("VEYQ_LIVE") ?: return@runTest
+        val spec = System.getenv("VEYQ_LIVE_STORAGE_FIT") ?: return@runTest
+        val env = File(System.getProperty("veyq.repoRoot"), ".run/.env").readLines()
+            .mapNotNull { l -> l.substringBefore('=', "").takeIf { it.isNotBlank() }?.let { it.trim() to l.substringAfter('=').trim().trim('"', '\'') } }
+            .toMap()
+        val account = VeyqAccount.signIn(
+            BouncyCastlePrimitives, origin, env.getValue("VEYQ_EMAIL"), env.getValue("VEYQ_PASSWORD"), env.getValue("VEYQ_SECRET_KEY"),
+            testDevice(BouncyCastlePrimitives),
+        ) { block -> HttpClient(OkHttp, block) }
+        val tenant = account.open(account.defaultTenant!!)
+        val (rootName, folderName) = spec.split('/', limit = 2)
+        val nodes = tenant.nodes()
+        val parent = nodes.first { it.kind == "FOLDER" && it.parentId == null && it.name == rootName }
+        val folder = nodes.first { it.kind == "FOLDER" && it.parentId == parent.nodeId && it.name == folderName }
+        val kinds = AppKinds.exports("Deleted people")
+        // the quota is the Server Owner's, answered on the admin listener only (`VEYQ_ADMIN_BASE`, a dev instance's 127.0.0.1:8090)
+        val api = me.raddatz.veyq.mobile.api.apis.TenantsApi(System.getenv("VEYQ_ADMIN_BASE") ?: "http://127.0.0.1:8090", tenant.account.http)
+        // the quota the tenant had, put back after; one of exactly one byte is this test's own left by a run stopped by force
+        val prior = tenant.account.call { api.getTenantStorage(tenant.tenant.tenantId) }.quotaBytes?.takeIf { it != 1L }
+        suspend fun restore() = kotlinx.coroutines.withContext(kotlinx.coroutines.NonCancellable) {
+            tenant.account.respond {
+                if (prior == null) api.clearTenantStorageQuota(tenant.tenant.tenantId)
+                else api.setTenantStorageQuota(tenant.tenant.tenantId, me.raddatz.veyq.mobile.api.models.TenantStorageQuotaUpdate(prior))
+            }
+        }
+        restore()
+        val bytes = me.raddatz.veyq.mobile.session.StorageFit.bytesOfCopy(tenant, folder.scopeId, folder.nodeId, kinds)!!
+        assertTrue(bytes > 0, "the folder holds no file to weigh")
+        if (prior == null) assertEquals(null, me.raddatz.veyq.mobile.session.StorageFit.noRoomForCopy(tenant, folder.scopeId, folder.nodeId, kinds), "it fits without a quota")
+        val set = tenant.account.respond { api.setTenantStorageQuota(tenant.tenant.tenantId, me.raddatz.veyq.mobile.api.models.TenantStorageQuotaUpdate(1L)) }
+        assertTrue(set.success, "the quota was not set: ${set.status}")
+        try {
+            assertEquals(bytes, me.raddatz.veyq.mobile.session.StorageFit.noRoomForCopy(tenant, folder.scopeId, folder.nodeId, kinds))
+            val entries = listOf(FolderUpload.Entry("a.txt", 5, "text/plain", null) { _, n -> ByteArray(n) })
+            val before = tenant.nodes().count { it.parentId == parent.nodeId }
+            val r = FolderUpload.upload(tenant, parent.scopeId, parent.nodeId, "App nofit", entries, AppKinds::tokenInput)
+            assertEquals(FolderUpload.Outcome.NO_ROOM, r.outcome)
+            assertEquals(before, account.open(tenant.tenant).nodes().count { it.parentId == parent.nodeId }, "nothing is written")
+            println("[$spec] with a quota of one byte: its copy of $bytes bytes and a folder upload are said not to fit")
+            // `VEYQ_LIVE_STORAGE_FIT_HOLD_S=<s>` keeps the quota that long, for an app's copy dialog to say so
+            System.getenv("VEYQ_LIVE_STORAGE_FIT_HOLD_S")?.toLongOrNull()?.let { s ->
+                kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) { Thread.sleep(minOf(s, 600) * 1000) }
+            }
+        } finally {
+            restore()
+        }
+    }
 }

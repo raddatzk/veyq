@@ -272,8 +272,7 @@ implementation exists but what holds it to the first.
   replays what a download carries — settings and own categories, people, each live entry's current revision, its receipts —
   under ids minted anew with every reference mapped, a receipt uploaded before the batch that lists it, the name numbered past
   a sibling's, and a copy that fails part way trashed (a copy each app made opens on the web, entries and receipts alike,
-  measured 2026-11-09). The web asks the tenant's storage before it copies (`checkTenantStorageFit`); the app does not yet, so
-  a copy past the quota fails at its first receipt and is trashed. A node's cover is core's (`session/NodeCover.kt`, the
+  measured 2026-11-09). The tenant's storage is asked before a copy, as for a folder's (below). A node's cover is core's (`session/NodeCover.kt`, the
   web's `core/node/cover/`): the `cover` field of its sealed meta in the web's shape, its image the node's `COVER` blob,
   attached with the meta in one `setNodeCover` and freed with `removeNodeCover`; core's one cover sheet (the web's
   `CoverDialog`: the cover as it shows, 16:9, the picture chosen, changed and removed in one place) sets, changes and
@@ -306,8 +305,12 @@ implementation exists but what holds it to the first.
   Measured 2026-11-09: `FolderExportTest` (the layout and the manifest; an empty folder's children turn it red); a folder of
   a Pot with a receipt and a folder holding a Pot, downloaded by `FolderLiveTest` and imported by the web's upload screen,
   the Pot there opening with its entry; the same folder copied by `FolderLiveTest` and from Android's header, every Pot of the
-  copy reading as the original's (a copy that skips what is under a folder turns it red). The web's storage check before a
-  copy (`checkTenantStorageFit`) is not made here yet.
+  copy reading as the original's (a copy that skips what is under a folder turns it red). The web's storage check before any
+  copy (`checkTenantStorageFit`) is made as the folder upload's (`session/StorageFit.kt`): the copy's bytes are its walk's
+  payloads as the build exports them, and where they do not fit the copy dialog says so with their size and offers no
+  "Copy here" (measured 2026-11-09 with the tenant's quota set to one byte for the run on the admin listener: `DepotLiveTest`
+  finding a folder's copy of 600 013 bytes and a folder upload refused before anything was written, Android's copy dialog
+  saying "600 kB" and iOS's "593 bytes" for a file, each with its button off; the quota put back after).
 - **Depot's files** (the web's `features/depot/`, `docs/apps/depot.md`; the application's package `depot/`): a file is core's
   `FILE` node and its content one core attachment in its `FILE_CONTENT` slot, its type, uploaded name and modified time the
   blob's sealed meta, its size the blob's less a frame's overhead each (`DepotFiles`, over the generated `api.depot`). Rows
@@ -381,7 +384,7 @@ implementation exists but what holds it to the first.
   clash and a file of three frames twice, the second as "App up (2)", every file read back to the byte and the web listing
   it; a directory picked on Android uploaded whole, which the web lists). Not built yet: a READ_WRITE guest's own sealed name
   as an uploader (said as "a guest"); an unpacked download picked as a folder is uploaded as one (the app imports no
-  download yet); the storage check before a copy.
+  download yet).
 - **One header for every node, drawn by core** (the web's `NodePage` + `NodeHeader`, ADR 0110 decision 10; owner
   2026-11-09): what a node's header offers and where is core's `navigation/NodeHeader.kt` — core's actions around the
   application's (the heart before them, the copy beside the move, cover, download and report after), the kind's

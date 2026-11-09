@@ -470,6 +470,7 @@
     <string name="copy_title">„%1$s“ kopieren</string>
     <string name="copy_hint">Öffne den Ort, an den die Kopie soll, und wähle „Hierher kopieren“.</string>
     <string name="copy_submit">Hierher kopieren</string>
+    <string name="copy_no_room">Für diese Kopie ist nicht genug Speicherplatz frei (%1$s). Schaffe Platz oder frag, wer deinen Bereich betreibt.</string>
     <string name="copy_losses">Was nicht mitkommt:</string>
     <string name="copy_loss_always">Freigaben, Favoriten, der Papierkorb und die ursprünglichen Hochladezeiten. Die Kopie gehört dir.</string>
     <string name="copy_loss_pot">Den Verlauf jedes Eintrags und die gelöschten Einträge: Eine Kopie beginnt jeden Eintrag mit seiner aktuellen Fassung.</string>

@@ -1,7 +1,5 @@
 package me.raddatz.veyq.mobile.depot
 
-import me.raddatz.veyq.mobile.api.apis.TenantsApi
-import me.raddatz.veyq.mobile.api.models.TenantStorageFitRequest
 import me.raddatz.veyq.mobile.crypto.nfc
 import me.raddatz.veyq.mobile.export.ArchiveName
 import me.raddatz.veyq.mobile.session.FolderCreate
@@ -108,7 +106,7 @@ object FolderUpload {
     ): Report {
         val plan = plan(rootName, entries, tokenInput)
         if (plan.files == 0) return Report(Outcome.NOTHING, rootName)
-        if (plan.bytes > 0 && fits(tenant, plan.bytes) == false) return Report(Outcome.NO_ROOM, plan.root.name, plan.bytes)
+        if (me.raddatz.veyq.mobile.session.StorageFit.fits(tenant, plan.bytes) == false) return Report(Outcome.NO_ROOM, plan.root.name, plan.bytes)
 
         // the top: the directory's name, numbered past the level's siblings by slug, never merged into one of them
         val siblings = tenant.trees()[scopeId].orEmpty().filter { it.parentId == parentId }.mapNotNull { tokenInput(it.kind, it.name) }
@@ -157,9 +155,4 @@ object FolderUpload {
         val whole = failedFolders.isEmpty() && failedFiles.isEmpty()
         return Report(if (whole) Outcome.DONE else Outcome.PARTIAL, name, plan.bytes, top, uploaded, failedFolders, failedFiles)
     }
-
-    /** Whether [bytes] more fit the tenant's storage; null where the check did not answer (it never blocks then). */
-    private suspend fun fits(tenant: TenantSession, bytes: Long): Boolean? = runCatching {
-        tenant.account.call { TenantsApi(tenant.base, tenant.account.http).checkTenantStorageFit(tenant.tenant.tenantId, TenantStorageFitRequest(bytes)) }.fits
-    }.getOrNull()
 }

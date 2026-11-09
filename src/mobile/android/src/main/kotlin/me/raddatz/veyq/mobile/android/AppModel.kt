@@ -1312,6 +1312,16 @@ class AppModel(app: Application) : AndroidViewModel(app) {
      * Copies folder [ref] with everything under it to [to] (null: the space's top) in its space (core's `SubtreeCopy`): a new
      * folder tree under fresh keys, each Pot by Expenses' copy; the lists are read anew. Why not, or null once copied.
      */
+    /** Why a copy of [ref] cannot go: the tenant has no room for its bytes (`StorageFit.noRoomForCopy`); null where it fits. */
+    suspend fun copyNoRoom(ref: me.raddatz.veyq.mobile.navigation.NodeAt): String? {
+        val app = getApplication<Application>()
+        val t = tenantSession ?: return null
+        val bytes = runCatching {
+            me.raddatz.veyq.mobile.session.StorageFit.noRoomForCopy(t, ref.scopeId, ref.nodeId, me.raddatz.veyq.mobile.AppKinds.exports(app.getString(R.string.pot_deleted_person)))
+        }.getOrNull() ?: return null
+        return app.getString(R.string.copy_no_room, android.text.format.Formatter.formatShortFileSize(app, bytes))
+    }
+
     suspend fun copyFolder(ref: me.raddatz.veyq.mobile.navigation.NodeAt, to: String?): String? {
         val app = getApplication<Application>()
         val t = tenantSession ?: return app.getString(R.string.copy_failed)

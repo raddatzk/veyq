@@ -1349,6 +1349,16 @@ final class AppModel {
     /// Copies folder `ref` with everything under it to `to` (nil: the space's top) in its space (core's `SubtreeCopy`): a new
     /// folder tree under fresh keys, each Pot by Expenses' copy; the lists are read anew and the shell says where it went.
     /// Why not, or nil once copied.
+    /// Why a copy of `ref` cannot go: the tenant has no room for its bytes (`StorageFit.noRoomForCopy`); nil where it fits.
+    func copyNoRoom(_ ref: NodeAt) async -> String? {
+        guard let t = tenantSession,
+              let bytes = try? await StorageFit.shared.noRoomForCopy(
+                tenant: t, scopeId: ref.scopeId, nodeId: ref.nodeId, kinds: AppKinds.shared.exports(deletedName: String(localized: "deleted person"))
+              ) else { return nil }
+        let size = ByteCountFormatter.string(fromByteCount: bytes.int64Value, countStyle: .file)
+        return String(localized: "There is not enough storage space for this copy (\(size)). Free some space, or ask whoever runs your space.")
+    }
+
     func copyFolder(_ ref: NodeAt, to: String?, toName: String) async -> String? {
         guard let t = tenantSession else { return String(localized: "The copy did not go through. Nothing was left behind; please try again.") }
         let r = try? await SubtreeCopy.shared.duplicate(

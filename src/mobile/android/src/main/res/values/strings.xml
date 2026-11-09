@@ -472,6 +472,7 @@
     <string name="copy_title">Copy “%1$s”</string>
     <string name="copy_hint">Open the place the copy should go to and choose “Copy here”.</string>
     <string name="copy_submit">Copy here</string>
+    <string name="copy_no_room">There is not enough storage space for this copy (%1$s). Free some space, or ask whoever runs your space.</string>
     <string name="copy_losses">What does not come along:</string>
     <string name="copy_loss_always">Shares, favourites, the trash and the original upload times. You become the owner of the copy.</string>
     <string name="copy_loss_pot">The history of each entry and the deleted entries: a copy starts every entry at its current version.</string>

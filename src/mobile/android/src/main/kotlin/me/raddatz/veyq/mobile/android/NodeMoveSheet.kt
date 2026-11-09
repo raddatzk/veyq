@@ -61,6 +61,9 @@ internal fun NodeMoveSheet(
 ) {
     var read by remember { mutableStateOf<CopyNotes?>(null) }
     LaunchedEffect(ref, notes) { read = notes?.invoke() }
+    // a copy the tenant has no room for is said before anything is written (the web's `CopyNodesDialog` storage check)
+    var noRoom by remember { mutableStateOf<String?>(null) }
+    LaunchedEffect(ref, copy != null) { if (copy != null) noRoom = model.copyNoRoom(ref) }
     val palette = LocalPalette.current
     val scope = rememberCoroutineScope()
     var tree by remember { mutableStateOf<List<NodeRef>?>(null) }
@@ -138,8 +141,8 @@ internal fun NodeMoveSheet(
                 }
             }
             val block = NodeMove.hereBlock(nodes, moved, at, model.placement, copy = copy != null)
-            val shown = problem ?: block?.let { stringResource(hereText(it, copy != null)) }
-            shown?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = role(if (problem != null) palette.danger else palette.muted), modifier = Modifier.padding(top = 10.dp)) }
+            val shown = problem ?: noRoom ?: block?.let { stringResource(hereText(it, copy != null)) }
+            shown?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = role(if (problem != null || noRoom != null) palette.danger else palette.muted), modifier = Modifier.padding(top = 10.dp)) }
             val send = {
                 moving = true
                 problem = null
@@ -174,7 +177,7 @@ internal fun NodeMoveSheet(
                 TextButton(onClick = onClose, enabled = !moving) { Text(stringResource(R.string.trash_cancel)) }
                 Button(
                     onClick = { if (copy == null && NodeMove.endsIdentity(moved)) confirming = true else send() },
-                    enabled = block == null && !moving,
+                    enabled = block == null && !moving && noRoom == null,
                 ) { Text(stringResource(if (copy != null) R.string.copy_submit else R.string.move_submit)) }
             }
             if (confirming) {
