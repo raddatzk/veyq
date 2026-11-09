@@ -29,21 +29,26 @@ import me.raddatz.veyq.mobile.crypto.utf8
 object ShareLinks {
     const val READ = "READ"
     const val READ_WRITE = "READ_WRITE"
+    /** A drop box's link (ADR 0080): its guests add files, each into a folder of their own, and see nothing else. */
+    const val WRITE_ONLY = "WRITE_ONLY"
 
     /**
      * The tenant's links as its capability set has them (`core.public-shares` and its children, `linkRules.ts`): whether
-     * links are offered at all ([on]) and with guests who add ([contribute]), a password required, the most days a link may
-     * last. A set that did not read is [UNKNOWN]: everything offered, the server decides.
+     * links are offered at all ([on]), with guests who add ([contribute]), as drop boxes ([dropBox]), a password required, the
+     * most days a link may last. A set that did not read is [UNKNOWN]: everything offered, the server decides.
      */
-    class Rules(val on: Boolean, val contribute: Boolean, val passwordRequired: Boolean, val maxDays: Int?) {
+    class Rules(val on: Boolean, val contribute: Boolean, val passwordRequired: Boolean, val maxDays: Int?, val dropBox: Boolean) {
         companion object {
-            val UNKNOWN = Rules(on = true, contribute = true, passwordRequired = false, maxDays = null)
+            val UNKNOWN = Rules(on = true, contribute = true, passwordRequired = false, maxDays = null, dropBox = true)
 
             fun of(capabilities: List<me.raddatz.veyq.mobile.api.models.Capability>?): Rules {
                 if (capabilities == null) return UNKNOWN
                 val links = capabilities.firstOrNull { it.id == "core.public-shares" }
-                    ?: return Rules(on = false, contribute = false, passwordRequired = false, maxDays = null)
-                return Rules(true, capabilities.any { it.id == "core.public-shares.contribute" }, links.linkPassword == true, links.linkMaxDays)
+                    ?: return Rules(on = false, contribute = false, passwordRequired = false, maxDays = null, dropBox = false)
+                return Rules(
+                    true, capabilities.any { it.id == "core.public-shares.contribute" }, links.linkPassword == true, links.linkMaxDays,
+                    capabilities.any { it.id == "core.public-shares.drop-box" },
+                )
             }
         }
     }
@@ -74,18 +79,19 @@ object ShareLinks {
     fun url(origin: String, shareId: String, kShare: ByteArray): String = "${origin.trimEnd('/')}/s/$shareId#k=${b64url(kShare)}"
 
     /**
-     * The READ and READ_WRITE links on node [nodeId] of [scopeId], newest first; null when they do not list. Each row is
-     * opened at the address of THIS node (never the row's claim): its label and link rebuilt from the recovery copy.
+     * The READ and READ_WRITE links on node [nodeId] of [scopeId] — or, with [writeOnly], a drop box's WRITE_ONLY links —,
+     * newest first; null when they do not list. Each row is opened at the address of THIS node (never the row's claim): its
+     * label and link rebuilt from the recovery copy.
      */
     @Throws(Exception::class)
-    suspend fun list(tenant: TenantSession, scopeId: String, nodeId: String): List<Link>? {
+    suspend fun list(tenant: TenantSession, scopeId: String, nodeId: String, writeOnly: Boolean = false): List<Link>? {
         val account = tenant.account
         val suite = account.suite
         val (scopeKey, scopeEpoch) = tenant.scopeKey(scopeId) ?: return null
         val r = runCatching { account.respond { SharingApi(tenant.base, account.http).listShares(nodeId) } }.getOrNull() ?: return null
         if (!r.success) return null
         val joins = JoinRecords(suite)
-        return r.body().filter { it.role != ShareRole.WRITE_ONLY }.sortedByDescending { it.createdAt }.map { s ->
+        return r.body().filter { (it.role == ShareRole.WRITE_ONLY) == writeOnly }.sortedByDescending { it.createdAt }.map { s ->
             val kShare = recover(suite, joins, s, scopeId, nodeId, scopeKey, scopeEpoch)
             try {
                 val label = kShare?.let { k ->
@@ -146,7 +152,8 @@ object ShareLinks {
         tenant: TenantSession, scopeId: String, nodeId: String, role: String, label: String, password: String, expiresAt: String?,
         waitsMs: List<Long> = NodeEpochWrite.REKEY_WAITS_MS,
     ): Minted {
-        if (role != READ && role != READ_WRITE) return Minted(Outcome.NOT_ALLOWED)
+        if (role != READ && role != READ_WRITE && role != WRITE_ONLY) return Minted(Outcome.NOT_ALLOWED)
+        val writeOnly = role == WRITE_ONLY
         val account = tenant.account
         val suite = account.suite
         val joins = JoinRecords(suite)
@@ -176,13 +183,31 @@ object ShareLinks {
                 },
                 attempt = {
                     val recovery = Context("share-key-recovery", "scopeId" to scopeId, "nodeId" to nodeId, "shareId" to shareId, "epoch" to scopeEpoch.toLong())
+                    // a drop box's link: its guests seal to the drop key's public half (the node's own key pair, made by its first
+                    // link and reused by every later one: `dropKeysForShare`), and hold no key to the node itself (no wrap)
+                    val drop = if (!writeOnly) null else {
+                        val existing = node.sealedDropPrivateKey?.let {
+                            suite.deserializeDropKey(suite.open(Context("drop-private-key", "scopeId" to scopeId, "nodeId" to nodeId), node.key, unb64(it)))
+                        }
+                        val seed = existing ?: suite.generateDropKey()
+                        val public = b64(suite.seal(Context("drop-public-key"), kShare, suite.serializeHybridPublic(suite.dropKeyPublic(seed))))
+                        val private = if (existing != null) null else {
+                            b64(suite.seal(Context("drop-private-key", "scopeId" to scopeId, "nodeId" to nodeId), node.key, suite.serializeDropKey(seed)))
+                        }
+                        seed.fill(0)
+                        public to private
+                    }
                     val valueKey = suite.p.randomBytes(32)
                     val request = try {
                         CreateShareRequest(
                             nodeEpoch = node.epoch,
                             shareId = shareId,
                             nodeId = nodeId,
-                            role = if (role == READ) ShareRole.READ else ShareRole.READ_WRITE,
+                            role = when (role) {
+                                READ -> ShareRole.READ
+                                READ_WRITE -> ShareRole.READ_WRITE
+                                else -> ShareRole.WRITE_ONLY
+                            },
                             sealedName = b64(suite.sealField(Context("share-memory-name"), kShare, utf8(node.name))),
                             sealedShareKey = b64(suite.seal(recovery, valueKey, kShare)),
                             wrappedRecoveryValueKey = b64(
@@ -190,9 +215,9 @@ object ShareLinks {
                             ),
                             sealedShareKeyEpoch = scopeEpoch,
                             writeVerifier = writeVerifier,
-                            wrap = b64(suite.seal(Context("share-key"), kShare, node.key)),
-                            sealedDropPublicKey = null,
-                            sealedDropPrivateKey = null,
+                            wrap = if (writeOnly) null else b64(suite.seal(Context("share-key"), kShare, node.key)),
+                            sealedDropPublicKey = drop?.first,
+                            sealedDropPrivateKey = drop?.second,
                             expiresAt = expiresAt,
                             sealedNote = null,
                             sealedShareName = sealedShareName,
@@ -212,6 +237,8 @@ object ShareLinks {
                         r.success -> NodeEpochWrite.Answer.DONE
                         r.status == 409 && code == "node_rekey_pending" -> NodeEpochWrite.Answer.REKEY_PENDING
                         r.status == 409 && code == "stale_epoch" -> NodeEpochWrite.Answer.STALE_EPOCH
+                        // another member set the drop key first, or it went: read the node again and use what it holds now
+                        r.status == 409 && (code == "drop_key_exists" || code == "drop_key_missing") -> NodeEpochWrite.Answer.STALE_EPOCH
                         else -> NodeEpochWrite.Answer.OTHER
                     }
                     answer to r.status
@@ -254,8 +281,12 @@ object ShareLinks {
         tokenInput: (kind: String, name: String) -> String?, uuid: () -> String,
     ): Closed {
         val account = tenant.account
+        // a drop box's link opens no key (its guests only seal to the drop key): its close re-keys nothing (`rekeyAfterClose`)
+        val writeOnly = runCatching { account.call { SharingApi(tenant.base, account.http).listShares(nodeId) } }.getOrNull()
+            ?.firstOrNull { it.shareId == shareId }?.role == ShareRole.WRITE_ONLY
         val r = runCatching { account.respond { SharingApi(tenant.base, account.http).revokeShare(shareId) } }.getOrNull() ?: return Closed.FAILED
         if (!r.success) return Closed.FAILED
+        if (writeOnly) return Closed.CLOSED
         val rekeyed = runCatching { NodeRekey.rekeyPath(tenant, scopeId, listOf(nodeId), subtree = true, kinds, tokenInput, uuid).outcome }.getOrDefault(NodeRekey.Outcome.FAILED)
         return if (rekeyed == NodeRekey.Outcome.DONE) Closed.CLOSED else Closed.CLOSED_REKEY_PENDING
     }

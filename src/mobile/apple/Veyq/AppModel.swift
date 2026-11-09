@@ -567,7 +567,7 @@ final class AppModel {
     /// The READ and READ_WRITE links on `ref`, newest first; nil when they do not list.
     func shareLinks(_ ref: NodeAt) async -> [ShareLinks.Link]? {
         guard let t = tenantSession else { return nil }
-        return try? await ShareLinks.shared.list(tenant: t, scopeId: ref.scopeId, nodeId: ref.nodeId)
+        return try? await ShareLinks.shared.list(tenant: t, scopeId: ref.scopeId, nodeId: ref.nodeId, writeOnly: ref.kind == DepotFiles.shared.DROPBOX)
     }
 
     /// Mints a `role` link on `ref`; on success its address, to hand out once.
