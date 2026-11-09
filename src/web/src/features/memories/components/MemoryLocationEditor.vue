@@ -9,7 +9,8 @@
 //
 // **A map the member never moved sets no point** (uc.memory.place E3, inbox #834). Without photo GPS and without a stored
 // point the map opens on the world view (`WORLD_VIEW`); only a frame the member produced (`user`, MemoryMap) sets the
-// position. Saved untouched, the place is a name only (`auto`, no `derived`), never the view the editor opened on.
+// position. Saved untouched, the place is a name only (`auto`, no `derived`), never the view the editor opened on. While
+// no point is set the centre pin is greyed out, with the hint to move the map; the first move draws it as a set point.
 //
 // **Without the map** (`memories.map` off — inbox #458, ADR 0088 § The register — or the member's map services off,
 // uc.memory.place A6) the editor is a name field only: no map, no pin, no geocoder. The position is the medoid of the
@@ -70,6 +71,9 @@ const levelOptions = computed(() => levels.value.map((l) => ({ label: l.name, va
 const anchorPoint = computed<LatLng | null>(() =>
   derivedMode.value === 'fixed' ? derived.value : withMap.value ? props.medoid : (props.medoid ?? derived.value),
 )
+// The one answer to "is a point set": the pill's *Name only*, the greyed centre pin and its hint all read it (E3). With
+// no medoid it turns true only at the first frame the member produced (`onFrame`), so it is the move signal itself.
+const pointSet = computed(() => Boolean(anchorPoint.value))
 // A name is enough, with the map or without: a place the member set no point for is a name only (uc.memory.place E3).
 const canSave = computed(() => Boolean(name.value.trim()))
 
@@ -209,10 +213,12 @@ onBeforeUnmount(() => {
           :marker="null"
           :dots="points"
           crosshair
+          :crosshair-unset="!pointSet"
           @frame="onFrame"
         />
+        <p v-if="!pointSet" class="memory-location-hint">{{ t('memory.place.moveToSet') }}</p>
         <div class="memory-location-pill">
-          <template v-if="!anchorPoint">
+          <template v-if="!pointSet">
             <VeyqIcon name="tag" /> {{ t('memory.place.nameOnly') }}
           </template>
           <template v-else-if="derivedMode === 'auto'">
@@ -297,6 +303,25 @@ onBeforeUnmount(() => {
   border: 1px solid var(--app-line);
   color: var(--app-text);
   font-size: 0.82rem;
+}
+/* Right under the greyed centre pin's tip, while no point is set (E3): says what sets one. It lets the map's drag through. */
+.memory-location-hint {
+  position: absolute;
+  top: calc(50% + 8px);
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 500;
+  width: max-content; /* shrink-to-fit would stop at the half the `left: 50%` leaves and wrap a short line */
+  max-width: calc(100% - 24px);
+  margin: 0;
+  padding: 0.22rem 0.6rem;
+  border-radius: 20px;
+  background: var(--app-surface);
+  border: 1px solid var(--app-line);
+  color: var(--app-text);
+  font-size: 0.8rem;
+  text-align: center;
+  pointer-events: none;
 }
 .memory-location-follow {
   border: 0;

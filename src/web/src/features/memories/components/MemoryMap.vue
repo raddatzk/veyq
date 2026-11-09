@@ -26,6 +26,9 @@ const props = defineProps<{
   zoom: number
   marker?: LatLng | null // a static data-derived pin (the medoid of an `auto` place); no marker for `fixed`
   crosshair?: boolean // show a centre crosshair — the framed point that is the `fixed` position
+  // Draw the crosshair greyed out: the framed point is no position yet (uc.memory.place E3). The parent passes its own
+  // "no point set" answer, the one its pill reads - never a second notion of whether the member moved the map.
+  crosshairUnset?: boolean
   dots?: LatLng[] // faint context markers (the Memory's photo GPS) — "your photos are here"
 }>()
 // `user` marks a frame the MEMBER produced - a pan or a zoom by hand - vs the opening view and every programmatic move
@@ -128,7 +131,7 @@ defineExpose({
   <div class="memory-map-wrap">
     <div ref="el" class="memory-map" role="application" />
     <!-- centre crosshair: the framed point (the `fixed` position + the naming anchor) -->
-    <VeyqIcon v-if="crosshair" name="map-marker" class="memory-map-crosshair" />
+    <VeyqIcon v-if="crosshair" name="map-marker" class="memory-map-crosshair" :class="{ 'is-unset': crosshairUnset }" />
     <MapOffButton />
   </div>
 </template>
@@ -154,6 +157,19 @@ defineExpose({
   filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.45));
   pointer-events: none;
   z-index: 500;
+}
+/* No point set yet (uc.memory.place E3): the pin is greyed out until the member moves the map. Tokens only, so the dark
+   mode follows `:root.veyq-dark`'s twins with no rule of its own; a greyed pin marks an inactive state, like a disabled
+   control, and is not held to 3:1. */
+.memory-map-crosshair.is-unset {
+  color: var(--app-muted);
+  opacity: 0.6;
+  filter: drop-shadow(0 1px 1px rgba(0, 0, 0, 0.25));
+}
+@media (prefers-reduced-motion: no-preference) {
+  .memory-map-crosshair {
+    transition: color 0.2s ease, opacity 0.2s ease;
+  }
 }
 :deep(.veyq-map-pin) {
   color: var(--app-primary);

@@ -168,3 +168,51 @@ describe('MemoryLocationEditor — a map the member never moved sets no point', 
     expect(saved(w)).toMatchObject({ derivedMode: 'fixed', derived: ROME })
   })
 })
+
+// The centre pin follows the same answer (E3, owner 2026-11-09): greyed out with the hint while no point is set, drawn as a
+// set point from the member's first move on, and never greyed where the editor opens with a point.
+describe('MemoryLocationEditor — the centre pin is greyed out until the member moves the map', () => {
+  const pin = (w: ReturnType<typeof mountEditor>) => w.get('.memory-map-crosshair')
+  const hint = (w: ReturnType<typeof mountEditor>) => w.find('.memory-location-hint')
+
+  it('with no point set, the pin is greyed and the hint says to move the map', async () => {
+    const w = mountEditor()
+    await flushPromises()
+    expect(pin(w).classes()).toContain('is-unset')
+    expect(hint(w).exists()).toBe(true)
+    expect(hint(w).text()).toBe(t('memory.place.moveToSet'))
+    expect(w.get('.memory-location-pill').text()).toContain(t('memory.place.nameOnly'))
+  })
+
+  it('a move the member did not make leaves it greyed; their first move draws it as a set point', async () => {
+    const w = mountEditor()
+    await flushPromises()
+    leaflet.moveTo(ROME.lat, ROME.lng) // not the member's: still no point
+    await flushPromises()
+    expect(pin(w).classes()).toContain('is-unset')
+    expect(hint(w).exists()).toBe(true)
+
+    touchMap(w)
+    leaflet.moveTo(ROME.lat + 1, ROME.lng)
+    await flushPromises()
+    expect(pin(w).classes()).not.toContain('is-unset')
+    expect(hint(w).exists()).toBe(false)
+    expect(w.get('.memory-location-pill').text(), 'the pill switched with it').toContain(t('memory.place.customPlace'))
+  })
+
+  it('with a medoid, or a point stored by hand, the pin is never greyed', async () => {
+    const withMedoid = mountEditor(null, MEDOID)
+    await flushPromises()
+    expect(pin(withMedoid).classes()).not.toContain('is-unset')
+    expect(hint(withMedoid).exists()).toBe(false)
+    touchMap(withMedoid)
+    leaflet.moveTo(ROME.lat, ROME.lng)
+    await flushPromises()
+    expect(pin(withMedoid).classes()).not.toContain('is-unset')
+
+    const stored = mountEditor({ name: 'Roma', nameSource: 'manual', derivedMode: 'fixed', derived: ROME })
+    await flushPromises()
+    expect(pin(stored).classes()).not.toContain('is-unset')
+    expect(hint(stored).exists()).toBe(false)
+  })
+})

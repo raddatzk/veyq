@@ -1,7 +1,7 @@
 ---
 id: cr-place-pin-greyed-until-moved
 title: The place editor's centre pin is greyed out until the member moves the map
-status: planned
+status: done
 satisfies: [uc.memory.place]
 adrs: ["0016", "0018"]
 invariants:
@@ -51,4 +51,39 @@ Single phase (web).
 
 ## Retrospective
 
-(filled by the implementer)
+Implemented 2026-11-09 in the worktree `search-design`, on `8dcfc1393`, in one commit.
+
+**What was built.**
+- **One signal.** The editor's `pointSet` (`Boolean(anchorPoint)`) is the one answer to "is a point set": the pill's
+  *Name only*, the greyed pin and the hint all read it. With no medoid it turns true only at the first frame the member
+  produced (`onFrame`'s `user` guard from the previous CR), so no second notion of "moved" exists.
+- **The pin.** `MemoryMap` takes `crosshairUnset`; the crosshair then carries `is-unset` - `--app-muted` at 0.6 opacity
+  with a lighter shadow, a 0.2 s colour/opacity transition only under `prefers-reduced-motion: no-preference`. The
+  rule sits beside the crosshair's own rule in `MemoryMap.vue`'s scoped style, not in `memories.css`: the crosshair's
+  whole look already lives there, and a global rule for a scoped element would tie with it on specificity and win by
+  load order. Tokens only, so no dark twin.
+- **The hint.** *Move the map to set the position* / *Karte verschieben, um die Position zu setzen*
+  (`memory.place.moveToSet`), a chip right under the pin's tip, styled as the pill (`--app-text` on `--app-surface`,
+  a pair the contrast guard already holds), `pointer-events: none` so a drag starting on it moves the map. The wording is
+  the CR's default - an owner question.
+- **Docs.** Coverage `untouched-map-sets-no-point` extended (same refs). The Use page EN+DE, step 2: without such photos
+  the pin is greyed out, move the map.
+
+**Tests and bites.** Three cases in `MemoryLocationEditor.untouchedMap.test.ts` (no point: greyed + hint + *Name only*;
+a move that is not the member's leaves it greyed, their first move draws it set, drops the hint, flips the pill; a
+medoid - also after a move - and a stored point: never greyed). Bites on copies (`*.bite1.*`, deleted after): the pin
+always drawn normally - the first two red; always greyed - the last two red.
+
+**Browser pass** (Vite 8189, `?devlogin`, profile `profile-p21`, German; tiles a blank PNG, the geocoder `{}`, all else
+aborted in the browser - 14 outside requests, all to `tile.openstreetmap.org` / `nominatim.openstreetmap.org`, none left).
+*Roma 2024* (a name only), light and dark: before a drag the crosshair is `is-unset` (light `rgb(102,112,133)`, dark
+`rgb(154,167,181)`, opacity 0.6), the hint shows, the pill reads *Nur ein Name*; after a mouse drag the accent colour at
+opacity 1, no hint, *Eigener Ort*. Cancelled, nothing saved. Shots `p21-{light,dark}-{before,after}.png`.
+
+**What went wrong.**
+- The hint wrapped to two lines in the first shot: an absolutely placed box at `left: 50%` shrinks to fit the half that
+  is left. `width: max-content` with a `max-width` fixed it. A shot at the first pass caught it; no unit test can.
+- One of four pass runs timed out reading the pin after the dark drag; three re-runs were green and it did not reproduce.
+- `pnpm run check` was red only in the parallel implementer's in-progress search files (lint stops the chain), so its
+  steps ran one by one on this change.
+- On dark the greyed pin over a light tile is faint; the hint carries the meaning. An owner may want it darker.

@@ -111,6 +111,8 @@ const en = {
       mapOff: 'Turn map services off',
       mapsNotOffered: 'This server shows no maps.',
       nameOnly: 'Name only — no position',
+      // Under the greyed centre pin while no point is set (uc.memory.place E3).
+      moveToSet: 'Move the map to set the position',
     },
     map: {
       empty: 'No places yet',
@@ -402,6 +404,7 @@ const de: typeof en = {
       mapOff: 'Kartendienste ausschalten',
       mapsNotOffered: 'Dieser Server zeigt keine Karten.',
       nameOnly: 'Nur ein Name – ohne Position',
+      moveToSet: 'Karte verschieben, um die Position zu setzen',
     },
     map: {
       empty: 'Noch keine Orte',
