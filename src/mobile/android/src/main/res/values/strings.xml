@@ -390,4 +390,7 @@
     <string name="node_download">Download</string>
     <string name="download_done">“%1$s” is downloaded.</string>
     <string name="download_failed">“%1$s” could not be downloaded. Please try again.</string>
+    <string name="receipts_save_gallery">Save to gallery</string>
+    <string name="receipts_saved_gallery">Saved to the gallery.</string>
+    <string name="receipts_not_saved_gallery">The picture could not be saved to the gallery.</string>
 </resources>

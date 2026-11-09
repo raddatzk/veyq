@@ -59,6 +59,8 @@ targets:
         ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME: veyq-accent
         INFOPLIST_KEY_UISupportedInterfaceOrientations: "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight"
         INFOPLIST_KEY_LSApplicationCategoryType: public.app-category.productivity
+        # A receipt's picture saved to Photos from the share sheet ("Save Image"): adding only, the library is never read.
+        INFOPLIST_KEY_NSPhotoLibraryAddUsageDescription: "veyq saves the picture you chose to your photos."
         ENABLE_USER_SCRIPT_SANDBOXING: NO
         LOCALIZATION_PREFERS_STRING_CATALOGS: YES
         SWIFT_EMIT_LOC_STRINGS: YES

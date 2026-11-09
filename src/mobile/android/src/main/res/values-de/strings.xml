@@ -388,4 +388,7 @@
     <string name="node_download">Herunterladen</string>
     <string name="download_done">„%1$s“ ist heruntergeladen.</string>
     <string name="download_failed">„%1$s“ konnte nicht heruntergeladen werden. Bitte versuche es noch einmal.</string>
+    <string name="receipts_save_gallery">In Galerie speichern</string>
+    <string name="receipts_saved_gallery">In der Galerie gespeichert.</string>
+    <string name="receipts_not_saved_gallery">Das Bild konnte nicht in der Galerie gespeichert werden.</string>
 </resources>

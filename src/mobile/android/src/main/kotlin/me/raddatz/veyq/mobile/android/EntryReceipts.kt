@@ -41,6 +41,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import me.raddatz.veyq.mobile.expenses.EntryForm
 import me.raddatz.veyq.mobile.expenses.PotSession
@@ -126,6 +127,9 @@ private fun ReceiptViewer(view: PotView, model: AppModel, receiptId: String, onC
         if (b == null) failed = true else bytes = b
     }
     val name = Receipts.downloadName(receipt?.name, receipt?.type)
+    val scope = androidx.compose.runtime.rememberCoroutineScope()
+    val savedToGallery = stringResource(R.string.receipts_saved_gallery)
+    val notSaved = stringResource(R.string.receipts_not_saved_gallery)
     val save = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/octet-stream")) { uri ->
         val b = bytes
         if (uri != null && b != null) runCatching { context.contentResolver.openOutputStream(uri)?.use { it.write(b) } }
@@ -150,7 +154,20 @@ private fun ReceiptViewer(view: PotView, model: AppModel, receiptId: String, onC
             }
         },
         confirmButton = { TextButton(onClick = onClose) { Text(stringResource(R.string.receipts_close)) } },
-        dismissButton = { if (bytes != null) TextButton(onClick = { save.launch(name) }) { Text(stringResource(R.string.receipts_save)) } },
+        dismissButton = {
+            val b = bytes
+            if (b != null) Row {
+                // a picture (as its bytes say) also goes straight to the device's gallery
+                val picture = me.raddatz.veyq.mobile.blob.Sniff.image(b)
+                if (picture != null) TextButton(onClick = {
+                    scope.launch {
+                        val ok = saveToGallery(context, b, name, picture.mime)
+                        android.widget.Toast.makeText(context, if (ok) savedToGallery else notSaved, android.widget.Toast.LENGTH_SHORT).show()
+                    }
+                }) { Text(stringResource(R.string.receipts_save_gallery)) }
+                TextButton(onClick = { save.launch(name) }) { Text(stringResource(R.string.receipts_save)) }
+            }
+        },
     )
 }
 
@@ -192,4 +209,27 @@ private fun PdfPages(context: Context, bytes: ByteArray) {
         p.isEmpty() -> Text(stringResource(R.string.receipts_download_only))
         else -> p.forEach { Image(it.asImageBitmap(), null, Modifier.fillMaxWidth(), contentScale = ContentScale.FillWidth) }
     }
+}
+
+/**
+ * A picture saved to the device's gallery (Pictures/veyq) through the media store: no permission on the API levels the app
+ * runs on, and pending until every byte is written, so the gallery never shows half a picture. False when it did not land.
+ */
+private suspend fun saveToGallery(context: Context, bytes: ByteArray, name: String, mime: String): Boolean = withContext(Dispatchers.IO) {
+    val resolver = context.contentResolver
+    val values = android.content.ContentValues().apply {
+        put(android.provider.MediaStore.Images.Media.DISPLAY_NAME, name)
+        put(android.provider.MediaStore.Images.Media.MIME_TYPE, mime)
+        put(android.provider.MediaStore.Images.Media.RELATIVE_PATH, android.os.Environment.DIRECTORY_PICTURES + "/veyq")
+        put(android.provider.MediaStore.Images.Media.IS_PENDING, 1)
+    }
+    val uri = resolver.insert(android.provider.MediaStore.Images.Media.getContentUri(android.provider.MediaStore.VOLUME_EXTERNAL_PRIMARY), values)
+        ?: return@withContext false
+    val written = runCatching { resolver.openOutputStream(uri)?.use { it.write(bytes) } != null }.getOrDefault(false)
+    if (!written) {
+        resolver.delete(uri, null, null)
+        return@withContext false
+    }
+    resolver.update(uri, android.content.ContentValues().apply { put(android.provider.MediaStore.Images.Media.IS_PENDING, 0) }, null, null)
+    true
 }

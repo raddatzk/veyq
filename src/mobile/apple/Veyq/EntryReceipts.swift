@@ -1,3 +1,4 @@
+import ImageIO
 import PDFKit
 import PhotosUI
 import SwiftUI
@@ -142,7 +143,10 @@ struct ReceiptViewer: View {
                 ToolbarItem(placement: .cancellationAction) { Button("Close") { dismiss() } }
                 if let data {
                     ToolbarItem(placement: .primaryAction) {
-                        ShareLink(item: ReceiptFile(data: data, name: name), preview: SharePreview(name)) { Label("Save a copy", systemImage: "square.and.arrow.up") }
+                        // offered as what its bytes are, so a picture's share sheet has "Save Image" to Photos
+                        ShareLink(item: ReceiptFile(data: data, name: name, type: Self.contentType(data)), preview: SharePreview(name)) {
+                            Label("Save a copy", systemImage: "square.and.arrow.up")
+                        }
                     }
                 }
             }
@@ -150,6 +154,15 @@ struct ReceiptViewer: View {
         .task(id: receiptId) {
             if let d = await model.openReceipt(receiptId) { data = d } else { failed = true }
         }
+    }
+
+    /// What a receipt's bytes are, read from the bytes alone (ImageIO), never from its sealed type: a peer's statement.
+    private static func contentType(_ data: Data) -> UTType {
+        if let source = CGImageSourceCreateWithData(data as CFData, nil), let id = CGImageSourceGetType(source) as String?,
+           let type = UTType(id), type.conforms(to: .image) {
+            return type
+        }
+        return AppleSessions.shared.receiptKind(data: data) == .pdf ? .pdf : .data
     }
 
     private var downloadOnly: some View {
@@ -169,10 +182,19 @@ struct ReceiptViewer: View {
 struct ReceiptFile: Transferable {
     let data: Data
     let name: String
+    /// What the bytes are; an image's is what lets the share sheet save it to Photos.
+    var type: UTType = .data
 
     static var transferRepresentation: some TransferRepresentation {
         DataRepresentation(exportedContentType: .data) { $0.data }
             .suggestedFileName { $0.name }
+        // the same bytes as the image (or PDF) they are, for the targets that take only that
+        DataRepresentation(exportedContentType: .image) { $0.data }
+            .suggestedFileName { $0.name }
+            .exportingCondition { $0.type.conforms(to: .image) }
+        DataRepresentation(exportedContentType: .pdf) { $0.data }
+            .suggestedFileName { $0.name }
+            .exportingCondition { $0.type == .pdf }
     }
 }
 
