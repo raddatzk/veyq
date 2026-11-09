@@ -205,6 +205,9 @@ struct Bar: View {
         )
     }
 
+    /// The space whose trash is open.
+    @State private var trashOf: TrashOf?
+
     var body: some View {
         TabView(selection: selection) {
             ForEach(tabs, id: \.self) { key in
@@ -216,6 +219,7 @@ struct Bar: View {
                 NavigationStack { SearchList(model: model).modifier(Picking(model: model)).toolbar { toolbar } }
             }
         }
+        .sheet(item: $trashOf) { SpaceTrashSheet(model: model, scopeId: $0.scopeId) }
     }
 
     @ToolbarContentBuilder private var toolbar: some ToolbarContent {
@@ -230,6 +234,10 @@ struct Bar: View {
         ToolbarItem(placement: .primaryAction) {
             if let ref = model.shell.openObject, ref.kind == "EXPENSES_POT", model.pot?.ref == ref, model.pot?.view != nil {
                 PotHeaderActions(model: model, ref: ref).id(ref.nodeId)
+            } else if model.shell.openObject == nil, model.shell.application == nil, !model.shell.searching, let space = model.shell.space {
+                // The space's trash, from its Home (the web's level toolbar): every application's nodes.
+                Button { trashOf = TrashOf(scopeId: space) } label: { Image(systemName: "trash") }
+                    .accessibilityLabel("Trash")
             }
         }
     }
@@ -362,6 +370,12 @@ struct ObjectRow: View {
 extension EnvironmentValues {
     /// Whether the shell is picking a place for what another app shared (ADR 0124).
     @Entry var picking = false
+}
+
+/// A space whose trash is open.
+struct TrashOf: Identifiable {
+    let scopeId: String
+    var id: String { scopeId }
 }
 
 /// Picking a place for what another app shared (ADR 0124): its banner below a page's navigation bar, which an inset on

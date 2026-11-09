@@ -537,8 +537,42 @@ final class AppModel {
     }
 
     /// How a kind folds a name to its slug token's input: each application's answer (`registry.tokenInputFor`).
+    /// How a kind folds a name to its slug token's input: each application's answer (`registry.tokenInputFor`), a folder's the
+    /// platform's (`slugify`, no route segment). Nil for a kind the app does not know: nothing is placed under it.
     private func tokenInputFor(kind: String, name: String) -> String? {
-        kind == PotSession.companion.KIND ? PotCreate.shared.tokenInput(name: name) : nil
+        switch kind {
+        case PotSession.companion.KIND: PotCreate.shared.tokenInput(name: name)
+        case "FOLDER": Naming.shared.slugify(name: name)
+        default: nil
+        }
+    }
+
+    // MARK: The space's trash (core's NodeTrash)
+
+    /// The trash of `scopeId` (the root of each deleted subtree); nil when it could not be read.
+    func trashOf(_ scopeId: String) async -> [NodeTrash.Trashed]? {
+        guard let t = tenantSession else { return nil }
+        return try? await NodeTrash.shared.list(tenant: t, scopeId: scopeId)
+    }
+
+    /// Whether the app can bring `row` back: its kind's fold of a name is known here.
+    func canRestore(_ row: NodeTrash.Trashed) -> Bool { tokenInputFor(kind: row.kind, name: row.name) != nil }
+
+    /// Brings `row` back from the trash, under `newName` after its own was taken; the lists are read anew.
+    func restoreFromTrash(_ row: NodeTrash.Trashed, newName: String?) async -> NodeTrash.Restored {
+        guard let t = tenantSession,
+              let token = tokenInputFor(kind: row.kind, name: newName?.trimmingCharacters(in: .whitespaces) ?? row.name) else { return .refused }
+        let r = (try? await NodeTrash.shared.restoreFromTrash(
+            tenant: t, node: row, tokenInput: token, newName: newName, waitsMs: NodeEpochWrite.shared.REKEY_WAITS_MS
+        )) ?? .refused
+        await refreshLists(t)
+        return r
+    }
+
+    /// Erases `row` and everything under it now: irreversible.
+    func purge(_ row: NodeTrash.Trashed) async -> NodeTrash.Purged {
+        guard let t = tenantSession else { return .failed }
+        return (try? await NodeTrash.shared.purge(tenant: t, scopeId: row.scopeId, nodeId: row.id)) ?? .failed
     }
 
     // MARK: An open Pot (Expenses)

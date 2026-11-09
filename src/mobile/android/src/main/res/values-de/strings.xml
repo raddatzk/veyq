@@ -274,4 +274,20 @@
         <item quantity="one">%d Datei wurde ausgelassen: nur Bilder und PDFs bis 10 MB.</item>
         <item quantity="other">%d Dateien wurden ausgelassen: nur Bilder und PDFs bis 10 MB.</item>
     </plurals>
+    <!-- Der Papierkorb des Bereichs (node.trash des Webs). -->
+    <string name="trash_title">Papierkorb</string>
+    <string name="trash_hint">Gelöschte Einträge warten hier — mit allem, was darin ist — bis zum angezeigten Datum. Stellst du etwas wieder her, kommt es vollständig zurück.</string>
+    <string name="trash_empty">Der Papierkorb ist leer.</string>
+    <string name="trash_load_failed">Der Papierkorb konnte nicht geöffnet werden. Bitte erneut versuchen.</string>
+    <string name="trash_restore">Wiederherstellen</string>
+    <string name="trash_restore_failed">Konnte nicht wiederhergestellt werden. Bitte erneut versuchen.</string>
+    <string name="trash_name_taken">Hier gibt es bereits etwas mit ähnlichem Namen.</string>
+    <string name="trash_deleted_on">Gelöscht am %1$s</string>
+    <string name="trash_purge_on">endgültig entfernt am %1$s</string>
+    <string name="trash_retry_name">Neuer Name</string>
+    <string name="trash_cancel">Abbrechen</string>
+    <string name="trash_purge">Endgültig löschen</string>
+    <string name="trash_purge_confirm_title">Endgültig löschen?</string>
+    <string name="trash_purge_confirm">„%1$s“ wird mit allem, was darin ist, jetzt endgültig gelöscht. Das lässt sich nicht rückgängig machen.</string>
+    <string name="trash_purge_failed">Konnte nicht endgültig gelöscht werden. Bitte erneut versuchen.</string>
 </resources>

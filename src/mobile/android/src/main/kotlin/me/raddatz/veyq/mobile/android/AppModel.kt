@@ -441,10 +441,41 @@ class AppModel(app: Application) : AndroidViewModel(app) {
         return r
     }
 
-    /** How a kind folds a name to its slug token's input: each application's answer (`registry.tokenInputFor`). */
+    /**
+     * How a kind folds a name to its slug token's input: each application's answer (`registry.tokenInputFor`), a folder's
+     * the platform's (`slugify`, no route segment). Null for a kind the app does not know: nothing is placed under it.
+     */
     private fun tokenInputFor(kind: String, name: String): String? = when (kind) {
         PotSession.KIND -> PotCreate.tokenInput(name)
+        "FOLDER" -> me.raddatz.veyq.mobile.crypto.Naming.slugify(name)
         else -> null
+    }
+
+    // ---- the space's trash (core's NodeTrash) ----
+
+    /** The trash of [scopeId] (the root of each deleted subtree); null when it could not be read. */
+    suspend fun trash(scopeId: String): List<me.raddatz.veyq.mobile.session.NodeTrash.Trashed>? {
+        val t = tenantSession ?: return null
+        return runCatching { me.raddatz.veyq.mobile.session.NodeTrash.list(t, scopeId) }.getOrNull()
+    }
+
+    /** Whether the app can bring [row] back: its kind's fold of a name is known here. */
+    fun canRestore(row: me.raddatz.veyq.mobile.session.NodeTrash.Trashed): Boolean = tokenInputFor(row.kind, row.name) != null
+
+    /** Brings [row] back from the trash, under [newName] after its own was taken; the lists are read anew. */
+    suspend fun restoreFromTrash(row: me.raddatz.veyq.mobile.session.NodeTrash.Trashed, newName: String? = null): me.raddatz.veyq.mobile.session.NodeTrash.Restored {
+        val refused = me.raddatz.veyq.mobile.session.NodeTrash.Restored.REFUSED
+        val t = tenantSession ?: return refused
+        val token = tokenInputFor(row.kind, newName?.trim() ?: row.name) ?: return refused
+        val r = runCatching { me.raddatz.veyq.mobile.session.NodeTrash.restoreFromTrash(t, row, token, newName) }.getOrDefault(refused)
+        refreshLists(t)
+        return r
+    }
+
+    /** Erases [row] and everything under it now: irreversible. */
+    suspend fun purge(row: me.raddatz.veyq.mobile.session.NodeTrash.Trashed): me.raddatz.veyq.mobile.session.NodeTrash.Purged {
+        val t = tenantSession ?: return me.raddatz.veyq.mobile.session.NodeTrash.Purged.FAILED
+        return runCatching { me.raddatz.veyq.mobile.session.NodeTrash.purge(t, row.scopeId, row.id) }.getOrDefault(me.raddatz.veyq.mobile.session.NodeTrash.Purged.FAILED)
     }
 
     // ---- an open Pot (Expenses) ----

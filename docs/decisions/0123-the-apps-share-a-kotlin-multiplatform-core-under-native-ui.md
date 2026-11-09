@@ -191,7 +191,11 @@ implementation exists but what holds it to the first.
   web words it; then the name sealed anew into every open link rooted at it (`session/ShareNames.kt`, the web's
   `resealShareNames`: `K_share` from its recovery copy under the scope key; `ShareNamesTest`, each binding killed by a
   mutation) — a link the web minted shows its guests the name the app gave (measured 2026-11-08). Core's API client now
-  carries the sharing spec. Move, share, cover, copy, download and report are not built.
+  carries the sharing spec. The space's trash opens from its Home (the web's `SpaceTrashDialog.vue`): the root of each
+  deleted subtree, its name opened under its live parent's key; a restore whose name something took meanwhile goes
+  through under a new one, sealed in the same request as the token derived from it; "Delete forever" purges it now,
+  after the question that names it (`NodeTrash.list`, `restoreFromTrash`, `purge`; measured live by `PotLiveTest`, the
+  name's binding killed by a mutation). Move, share, cover, copy, download and report are not built.
 - **Not built yet:** every other write (another kind's node), the
   other applications' views behind the bar, a CI job for the apps. The grant check is held by `GrantTrustTest` against a server the test plays — each refusal killed by
   a mutation of the rule it pins, but for three a second rule also holds (a pending or self-naming signer, and a cycle

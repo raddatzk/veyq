@@ -33,6 +33,7 @@ import androidx.compose.material.icons.outlined.Person
 import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material.icons.outlined.AccountBalanceWallet
 import androidx.compose.material.icons.outlined.BarChart
+import androidx.compose.material.icons.outlined.Delete
 import androidx.compose.material.icons.outlined.Folder
 import androidx.compose.material.icons.outlined.Inbox
 import androidx.compose.material.icons.outlined.InsertDriveFile
@@ -110,6 +111,8 @@ fun ShellScreen(s: Screen.Signed, model: AppModel) {
     val avatars by model.avatars.collectAsStateWithLifecycle()
     val incoming by model.incoming.collectAsStateWithLifecycle()
     val palette = LocalPalette.current
+    /** The space whose trash is open. */
+    var trashOf by remember { mutableStateOf<String?>(null) }
     fun closeDrawerThen(f: () -> Unit) { f(); scope.launch { drawer.close() } }
 
     BackHandler(enabled = shell.searching || shell.canGoBack) {
@@ -154,6 +157,11 @@ fun ShellScreen(s: Screen.Signed, model: AppModel) {
                             val open = shell.openObject
                             if (open != null && open.kind == "EXPENSES_POT" && potState?.ref == open && potState?.view != null) {
                                 PotHeaderActions(open, model, snackbar, scope)
+                            }
+                            // The space's trash, from its Home (the web's level toolbar): every application's nodes.
+                            val space = shell.space
+                            if (open == null && shell.application == null && !shell.searching && space != null) {
+                                IconButton(onClick = { trashOf = space }) { Icon(Icons.Outlined.Delete, stringResource(R.string.trash_title)) }
                             }
                         },
                         navigationIcon = {
@@ -208,6 +216,7 @@ fun ShellScreen(s: Screen.Signed, model: AppModel) {
                 if (s.switching) androidx.compose.material3.LinearProgressIndicator(Modifier.fillMaxWidth())
             }
         }
+        trashOf?.let { SpaceTrashSheet(it, model) { trashOf = null } }
     }
     }
 }
@@ -577,7 +586,7 @@ private fun appIcon(app: ApplicationId): ImageVector = when (app) {
 }
 
 /** Each kind's motif as the web registers it: MEMORY images, FILE file, DEPOT_DROPBOX inbox, POT wallet, FOLDER folder. */
-private fun kindIcon(kind: String): ImageVector = when (kind) {
+internal fun kindIcon(kind: String): ImageVector = when (kind) {
     "MEMORY", "CHAPTER" -> Icons.Outlined.PhotoLibrary
     "FILE" -> Icons.Outlined.InsertDriveFile
     "DEPOT_DROPBOX" -> Icons.Outlined.Inbox

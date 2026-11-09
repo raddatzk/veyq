@@ -276,4 +276,20 @@
         <item quantity="one">%d file was left out: only images and PDFs up to 10 MB.</item>
         <item quantity="other">%d files were left out: only images and PDFs up to 10 MB.</item>
     </plurals>
+    <!-- The space's trash (the web's node.trash). -->
+    <string name="trash_title">Trash</string>
+    <string name="trash_hint">Deleted items wait here — with everything inside them — until the date shown. Restore one and it comes back complete.</string>
+    <string name="trash_empty">The trash is empty.</string>
+    <string name="trash_load_failed">Could not open the trash. Please try again.</string>
+    <string name="trash_restore">Restore</string>
+    <string name="trash_restore_failed">Could not restore this. Please try again.</string>
+    <string name="trash_name_taken">Something with a similar name already exists here.</string>
+    <string name="trash_deleted_on">Deleted %1$s</string>
+    <string name="trash_purge_on">removed for good on %1$s</string>
+    <string name="trash_retry_name">New name</string>
+    <string name="trash_cancel">Cancel</string>
+    <string name="trash_purge">Delete forever</string>
+    <string name="trash_purge_confirm_title">Delete forever?</string>
+    <string name="trash_purge_confirm">“%1$s” and everything inside it will be permanently deleted now. This cannot be undone.</string>
+    <string name="trash_purge_failed">Could not delete this for good. Please try again.</string>
 </resources>

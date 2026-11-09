@@ -58,7 +58,9 @@ A Gradle build of its own, run through its own wrapper.
   when it opens). `VEYQ_LIVE_AVATARS=1` syncs the tenant's profile pictures and checks a second sync asks nothing; a
   picture to open is set on the web's Settings > Your profile. `VEYQ_LIVE_NODE_ACTIONS=<pot name>` pins and unpins the
   Pot (each read back by a fresh session), and creates a Pot ("App trash <n>") that it trashes, restores under its name
-  and trashes again — it stays in the space's trash. `VEYQ_LIVE_RENAME=<pot name>` renames a fresh Pot twice, checks its
+  and trashes again — it stays in the space's trash. `VEYQ_LIVE_TRASH=<pot name>` trashes a fresh Pot ("App trash view
+  <n>"), reads it in the trash by name, restores it past a Pot of its name under "… restored" and purges it (the Pot
+  of the old name stays trashed). `VEYQ_LIVE_RENAME=<pot name>` renames a fresh Pot twice, checks its
   names taken and a sibling's refused, and trashes it; `VEYQ_LIVE_RENAME_TARGET="<from>|<to>"` renames the root Pot
   `<from>` (created when there is none) and prints what the re-seal of its links did — with a link the web minted on it,
   that link's guest page then shows `<to>`. Gradle does not count an environment variable as an
