@@ -161,9 +161,13 @@ private fun Entries(view: PotView, state: AppModel.PotState, model: AppModel) {
     var editing by remember { mutableStateOf<Pair<String, PotView.Editing>?>(null) }
     var viewing by remember { mutableStateOf<PotView.EntryRow?>(null) }
     val palette = LocalPalette.current
+    val list = androidx.compose.foundation.lazy.rememberLazyListState()
+    // Material 3's extended FAB collapses to its icon on scroll: its label only while the list is at its very top (not the
+    // samples' first-item test, which a short Pot never leaves); the list's bottom padding keeps the last row clear of it.
+    val fabExpanded by remember { androidx.compose.runtime.derivedStateOf { !list.canScrollBackward } }
     Box(Modifier.fillMaxSize()) {
         if (view.entries.isEmpty()) Note(stringResource(if (view.canWrite) R.string.pot_no_entries else R.string.pot_no_entries_readonly))
-        LazyColumn(Modifier.fillMaxSize(), contentPadding = androidx.compose.foundation.layout.PaddingValues(bottom = 96.dp)) {
+        LazyColumn(Modifier.fillMaxSize(), state = list, contentPadding = androidx.compose.foundation.layout.PaddingValues(bottom = 96.dp)) {
             items(view.entries, key = { it.id }) { e ->
                 // Every viewer opens an entry: a writer to edit it, a reader to read it (one dialog, inbox #401).
                 Row(
@@ -218,8 +222,10 @@ private fun Entries(view: PotView, state: AppModel.PotState, model: AppModel) {
             // Creating is the web's green role (`--app-primary`).
             ExtendedFloatingActionButton(
                 onClick = { adding = true },
-                icon = { Icon(Icons.Outlined.Add, null) },
+                // collapsed, the icon alone names the button for a screen reader
+                icon = { Icon(Icons.Outlined.Add, if (fabExpanded) null else stringResource(R.string.pot_add)) },
                 text = { Text(stringResource(R.string.pot_add)) },
+                expanded = fabExpanded,
                 containerColor = role(palette.primary),
                 contentColor = role(palette.onFill),
                 modifier = Modifier.align(Alignment.BottomEnd).padding(16.dp),

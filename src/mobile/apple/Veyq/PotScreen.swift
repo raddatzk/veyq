@@ -209,18 +209,14 @@ private struct EntriesList: View {
             }
         }
         .scrollContentBackground(.hidden)
-        // Room below the last row for the floating button, so no row ends under it (Android's 96 dp).
-        .contentMargins(.bottom, view.canWrite && !view.people.isEmpty ? 88 : 0, for: .scrollContent)
-        .overlay(alignment: .bottomTrailing) {
+        // The view's primary action in the navigation bar (Apple's HIG: iOS has no floating action button; Notes, Reminders
+        // and Mail put "new" in a bar), beside the Pot's heart, share and menu; the web's and Android's green button is theirs.
+        .toolbar {
             if view.canWrite && !view.people.isEmpty {
-                // Creating is the web's green role (`--app-primary`).
-                Button(action: onAdd) { Label("Add entry", systemImage: "plus") }
-                    .buttonStyle(.borderedProminent)
-                    .buttonBorderShape(.capsule)
-                    .controlSize(.large)
-                    .tint(Role.primary)
-                    .foregroundStyle(Role.onFill)
-                    .padding()
+                ToolbarItem(placement: .primaryAction) {
+                    Button(action: onAdd) { Image(systemName: "plus") }
+                        .accessibilityLabel("Add entry")
+                }
             }
         }
     }
