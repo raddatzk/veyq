@@ -46,6 +46,7 @@ class Conformance(private val p: Primitives, vectorsJson: String) {
         valueKeys()
         slugs()
         shareWrite()
+        reportBundle()
         blobs()
         return failures.toList()
     }
@@ -83,6 +84,32 @@ class Conformance(private val p: Primitives, vectorsJson: String) {
         check("blob-meta plaintext is the layout's") {
             val opened = BlobMeta.decode(meta.hex("plaintext")) ?: fail("no meta")
             eqHex(BlobMeta.encode(opened.type, opened.name, opened.modifiedAt), meta.str("plaintext"))
+        }
+    }
+
+    /** `#report_bundle`: a report share's keys, the report's body (NFC, padded) and the contact, byte for byte. */
+    private fun reportBundle() {
+        val b = v.obj("report_bundle")
+        for ((i, el) in b["keys"]!!.jsonArray.withIndex()) {
+            val o = el.jsonObject
+            check("report_bundle keys $i") {
+                val keys = o["entries"]!!.jsonArray.map { e ->
+                    val x = e.jsonObject
+                    Report.Key(x.str("role"), (x["ref"] as? JsonPrimitive)?.takeIf { it.isString }?.content, x.hex("key"))
+                }
+                eqHex(Report.encodeKeys(keys), o.str("encoded"))
+            }
+        }
+        val body = b.obj("body")
+        check("report_bundle body") { eqHex(Report.encodeBody(body.hex("report_key"), body.str("reason"), body.str("context")), body.str("encoded")) }
+        val contact = b.obj("contact")
+        check("report_bundle contact") { eqHex(Report.encodeContact(contact.str("contact")), contact.str("encoded")) }
+        for ((purpose, el) in v.obj("field_seal")) {
+            if (el !is JsonObject) continue
+            val c = el.jsonObject
+            check("field key of $purpose's envelope") {
+                eqHex(suite.fieldKeyOf(context(purpose, Purposes.FIELD, c.obj("context")), c.hex("parent_key"), c.hex("envelope")), c.str("field_key"))
+            }
         }
     }
 

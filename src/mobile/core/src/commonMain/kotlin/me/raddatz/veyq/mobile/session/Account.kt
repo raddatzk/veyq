@@ -660,6 +660,9 @@ class TenantSession internal constructor(
 
     fun applicationsOff(): Set<String> = applicationsOff
 
+    /** The tenant's origin: where its pages live (a link's address, the privacy notice). */
+    val origin: String get() = base
+
     /** The members' profile pictures, synced from [people]'s revisions (`MemberAvatars`). */
     val avatars: MemberAvatars by lazy { MemberAvatars(this) }
 

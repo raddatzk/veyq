@@ -27,7 +27,7 @@ plugins {
 // The API client is generated from contracts/api, never written by hand (CLAUDE.md: API-first). Core's specs only, the
 // ones a member's app calls; an application's specs join with that application's screens.
 val contracts = rootDir.resolve("../../contracts/api").canonicalFile
-val coreSpecs = listOf("setup", "auth", "account", "scopes", "content", "favorites", "tenants", "blob", "sharing")
+val coreSpecs = listOf("setup", "auth", "account", "scopes", "content", "favorites", "tenants", "blob", "sharing", "moderation")
 
 /** An application's spec, generated into packages of its own (`api.<application>`), so its models never meet core's. */
 val applicationSpecs = listOf("expenses/expenses")

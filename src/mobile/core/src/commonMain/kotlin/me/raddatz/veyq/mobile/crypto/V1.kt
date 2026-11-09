@@ -130,6 +130,17 @@ class V1(val p: Primitives) {
     /** A link's password token (cr-0118, `sharesPwToken`): Argon2id(utf8(password), salt) at the pinned profile (t 3, 32 MiB, p 1). */
     fun sharePasswordToken(password: String, salt: ByteArray): ByteArray = p.argon2id(utf8(password), salt, 3, 32768, 1, 32)
 
+    /**
+     * The key one field envelope was sealed under (`fieldKeyOf`): derived from [parentKey] and the envelope's own salt, and
+     * returned only once the envelope opens under it at [context] — the key a report hands over, which opens this envelope
+     * and nothing else under [parentKey].
+     */
+    fun fieldKeyOf(context: Context, parentKey: ByteArray, envelope: ByteArray): ByteArray {
+        if (envelope.size < 17 || envelope[0] != 0x03.toByte()) throw OpenRefused(context.purpose)
+        openField(context, parentKey, envelope)
+        return fieldKey(parentKey, envelope.copyOfRange(1, 17), context.purpose)
+    }
+
     /** The field envelope (ADR 0093 § 9): 0x03 ‖ salt(16) ‖ nonce(12) ‖ aead, under HKDF(K_parent, salt, purpose). */
     fun sealField(
         context: Context, parentKey: ByteArray, plaintext: ByteArray,

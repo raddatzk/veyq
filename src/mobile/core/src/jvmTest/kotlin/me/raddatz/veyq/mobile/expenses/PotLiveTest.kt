@@ -321,6 +321,23 @@ class PotLiveTest {
             System.getenv("VEYQ_LIVE_LINKS_OUT")?.let { File(it).writeText(a.url + "\n" + b.url) }
             println("[$folderName] \"$name\": link A switched off and the Pot re-keyed; entry, receipt and a new write open; B stays on")
         }
+        System.getenv("VEYQ_LIVE_REPORT")?.let { potName ->
+            // A fresh Pot beside [potName] reported (it stays, trashed, and the report stays open for the dev moderators): its
+            // own key, its name's and its meta's field keys all open here under the contexts a report names them by, the name
+            // alone is one key, and the server takes the report with a receipt.
+            val report = me.raddatz.veyq.mobile.session.NodeReport
+            val scopeId = pots.first { it.name == potName }.scopeId
+            val nodeId = PotCreate.create(tenant, scopeId, null, "App report ${System.currentTimeMillis() % 100_000}", Ledger.BaseCurrency("EUR", 2), emptyList()).nodeId!!
+            tenant.forgetTree()
+            val node = tenant.trees()[scopeId]!!.single { it.id == nodeId }
+            assertEquals(listOf("NODE", "NODE_NAME", "NODE_META"), report.keysOf(tenant, scopeId, node, me.raddatz.veyq.mobile.session.NodeReport.Scope.WHOLE)!!.map { it.role })
+            assertEquals(listOf("NODE_NAME"), report.keysOf(tenant, scopeId, node, me.raddatz.veyq.mobile.session.NodeReport.Scope.NAME)!!.map { it.role })
+            assertTrue(report.published(tenant) != null, "the dev instance publishes no moderation key")
+            val sent = report.report(tenant, scopeId, nodeId, me.raddatz.veyq.mobile.session.NodeReport.Scope.WHOLE, "TERMS_BREACH", "App check: a report sent by the app's live test.", "")
+            assertEquals(me.raddatz.veyq.mobile.session.NodeReport.Outcome.SENT, sent.outcome)
+            assertEquals(me.raddatz.veyq.mobile.session.NodeTrash.Deleted.TRASHED, me.raddatz.veyq.mobile.session.NodeTrash.delete(tenant, scopeId, nodeId))
+            println("[$potName] a fresh Pot reported: reference ${sent.reference}, received ${sent.receivedAt}")
+        }
         System.getenv("VEYQ_LIVE_RENAME")?.let { potName ->
             // A fresh Pot renamed (read back by a fresh session), its old name free and its new one taken, a sibling's name
             // refused before anything is sent, then trashed (it stays in the trash).
