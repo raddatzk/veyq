@@ -129,14 +129,7 @@ struct ReportSheet: View {
         error = nil
         let r = await model.report(ref, scope: whole ? .whole : .name, category: category, reason: reason, contact: contact)
         sending = false
-        switch r.outcome {
-        case .sent: sent = r
-        case .tooManyOpen: error = String(localized: "You have too many reports that are still open. Wait until some of them are decided.")
-        case .rateLimited: error = String(localized: "Too many reports in a short time. Try again later.")
-        case .unavailable: error = String(localized: "Some of what you selected cannot be read here any more, so it cannot be reported. Reload the page.")
-        case .notFound: error = String(localized: "Some of what you selected is not here any more. Reload the page.")
-        default: error = String(localized: "The report could not be sent. Try again.")
-        }
+        if r.outcome == .sent { sent = r } else { error = Notices.shared.reportRefused(outcome: r.outcome).map { say($0) } }
     }
 
     private static func time(_ instant: String?) -> String {

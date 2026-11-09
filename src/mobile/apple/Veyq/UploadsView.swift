@@ -119,15 +119,5 @@ private struct UploadRow: View {
         }
     }
 
-    private var status: String {
-        switch item.status {
-        case .queued: String(localized: "Queued")
-        case .preparing: String(localized: "Preparing…")
-        case .uploading: String(localized: "Uploading…")
-        case .done: String(localized: "Done")
-        case .failed: model.uploadProblem(item) ?? String(localized: "Failed")
-        case .cancelled: String(localized: "Cancelled")
-        default: ""
-        }
-    }
+    private var status: String { say(Notices.shared.uploadStatus(item: item)) }
 }

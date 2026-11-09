@@ -146,14 +146,7 @@ private fun potHeader(node: NodeAt, model: AppModel): HeaderContribution? {
         copyNotes = { CopyNotes(copyLosses(context, PotSession.KIND)) },
         copy = if (writable) { to ->
             val r = model.copyPot(ref, to)
-            when (r.outcome) {
-                PotCopy.Outcome.COPIED -> null
-                PotCopy.Outcome.NAME_TAKEN -> context.getString(R.string.copy_name_taken)
-                PotCopy.Outcome.NOTHING_TO_COPY -> context.getString(R.string.copy_nothing)
-                PotCopy.Outcome.BUSY -> context.getString(R.string.move_refused_rekey_pending)
-                PotCopy.Outcome.BLOCKED, PotCopy.Outcome.REFUSED -> context.getString(R.string.move_refused_illegal_structure)
-                PotCopy.Outcome.FAILED -> context.getString(R.string.copy_failed)
-            }
+            me.raddatz.veyq.mobile.words.Notices.potCopyRefused(r.outcome)?.let { context.text(it) }
         } else null,
         download = { out -> if (model.downloadPot(ref, out)) emptyList() else null },
     )

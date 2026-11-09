@@ -8,6 +8,9 @@ options:
     iOS: "26.0"
     macOS: "26.0"
   createIntermediateGroups: true
+  # The words' String Catalogs exist before Xcode plans a first build, which reads a catalog's languages before any
+  # script runs; each target's pre-build script keeps its own current (ADR 0127 decision 3).
+  preGenCommand: python3 ../words/generate_words.py --apple-strings build/generated/app/Words.xcstrings && python3 ../words/generate_words.py --apple-strings build/generated/share/Words.xcstrings
 settings:
   base:
     SWIFT_VERSION: "6.0"
@@ -25,6 +28,10 @@ targets:
     sources:
       - path: Veyq
         excludes: [Info.plist, "*.entitlements"]
+      # Every word the app shows, generated before the build from src/mobile/words/words.json (ADR 0127 decision 3).
+      - path: build/generated/app/Words.xcstrings
+        optional: true
+        buildPhase: resources
     dependencies:
       # The share extension (ADR 0126), embedded in the iOS app only.
       - target: VeyqShare
@@ -43,6 +50,12 @@ targets:
         script: |
           # The web's colour roles, its brand mark and the app icon into the asset catalog (ADR 0123 decision 7).
           python3 "$SRCROOT/../theme/generate_theme.py" --apple-assets "$SRCROOT/Veyq/Assets.xcassets"
+      - name: Generate the words
+        basedOnDependencyAnalysis: false
+        outputFiles: ["$(SRCROOT)/build/generated/app/Words.xcstrings"]
+        script: |
+          # The catalog's English and German as the String Catalog `Words` (ADR 0127 decision 3).
+          python3 "$SRCROOT/../words/generate_words.py" --apple-strings "$SRCROOT/build/generated/app/Words.xcstrings"
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: me.raddatz.veyq
@@ -76,6 +89,9 @@ targets:
         excludes: [Info.plist, "*.entitlements", VeyqApp.swift, DevLogin.swift]
       - path: VeyqShare
         excludes: [Info.plist, "*.entitlements"]
+      - path: build/generated/share/Words.xcstrings
+        optional: true
+        buildPhase: resources
     preBuildScripts:
       - name: Build VeyqCore
         basedOnDependencyAnalysis: false
@@ -86,6 +102,12 @@ targets:
         basedOnDependencyAnalysis: false
         script: |
           python3 "$SRCROOT/../theme/generate_theme.py" --apple-assets "$SRCROOT/Veyq/Assets.xcassets"
+      - name: Generate the words
+        basedOnDependencyAnalysis: false
+        outputFiles: ["$(SRCROOT)/build/generated/share/Words.xcstrings"]
+        script: |
+          # The catalog's English and German as the String Catalog `Words` (ADR 0127 decision 3).
+          python3 "$SRCROOT/../words/generate_words.py" --apple-strings "$SRCROOT/build/generated/share/Words.xcstrings"
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: me.raddatz.veyq.share

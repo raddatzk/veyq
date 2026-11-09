@@ -118,17 +118,7 @@ internal fun ShareSheet(ref: me.raddatz.veyq.mobile.navigation.NodeAt, model: Ap
     var editing by remember { mutableStateOf<ShareLinks.Link?>(null) }
     var renewing by remember { mutableStateOf<ShareLinks.Link?>(null) }
     var deleting by remember { mutableStateOf<ShareLinks.Link?>(null) }
-    val changedText = { o: me.raddatz.veyq.mobile.session.ShareLinkChanges.Outcome ->
-        when (o) {
-            me.raddatz.veyq.mobile.session.ShareLinkChanges.Outcome.DONE -> null
-            me.raddatz.veyq.mobile.session.ShareLinkChanges.Outcome.DONE_REKEY_PENDING -> context.getString(R.string.share_closed_rekeying)
-            me.raddatz.veyq.mobile.session.ShareLinkChanges.Outcome.PASSWORD_LOST -> context.getString(R.string.share_password_lost)
-            me.raddatz.veyq.mobile.session.ShareLinkChanges.Outcome.GONE -> context.getString(R.string.share_gone)
-            me.raddatz.veyq.mobile.session.ShareLinkChanges.Outcome.RULES -> context.getString(R.string.share_requirement_refused)
-            me.raddatz.veyq.mobile.session.ShareLinkChanges.Outcome.REISSUE_REQUIRED -> context.getString(R.string.share_reissue_hint)
-            else -> context.getString(R.string.share_failed)
-        }
-    }
+    val changedText = { o: me.raddatz.veyq.mobile.session.ShareLinkChanges.Outcome -> me.raddatz.veyq.mobile.words.Notices.linkChanged(o)?.let { context.text(it) } }
     suspend fun load() {
         val read = model.shareLinks(ref)
         if (read == null) failed = true else { links = read; failed = false }
@@ -167,9 +157,7 @@ internal fun ShareSheet(ref: me.raddatz.veyq.mobile.navigation.NodeAt, model: Ap
                                 fresh = made.url
                                 null
                             }
-                            me.raddatz.veyq.mobile.depot.DropBoxes.Outcome.NAME_TAKEN -> context.getString(R.string.node_slug_taken)
-                            me.raddatz.veyq.mobile.depot.DropBoxes.Outcome.LINK_FAILED -> context.getString(R.string.dropbox_link_failed)
-                            else -> context.getString(R.string.share_failed)
+                            else -> me.raddatz.veyq.mobile.words.Notices.dropBoxRefused(made.outcome)?.let { context.text(it) }
                         }
                     }
                     val minted = model.mintLink(ref, if (dropBox) ShareLinks.WRITE_ONLY else role, if (dropBox) "" else label, password.orEmpty(), expiresAt)
@@ -178,7 +166,7 @@ internal fun ShareSheet(ref: me.raddatz.veyq.mobile.navigation.NodeAt, model: Ap
                         fresh = minted.url
                         scope.launch { load() }
                         null
-                    } else context.getString(mintProblem(minted.outcome))
+                    } else context.text(me.raddatz.veyq.mobile.words.Notices.linkRefused(minted.outcome) ?: me.raddatz.veyq.mobile.words.Notice(me.raddatz.veyq.mobile.words.Msg.SHARE_FAILED))
                 }
                 else -> {
                     if (rules.on) Button(onClick = { creating = true }, modifier = Modifier.fillMaxWidth()) { Text(stringResource(R.string.share_new)) }
@@ -353,9 +341,7 @@ internal fun TopLevelUploadSheet(scopeId: String, model: AppModel, onClose: () -
                 val r = model.createDropBox(scopeId, null, label, password.orEmpty(), expiresAt)
                 when (r.outcome) {
                     me.raddatz.veyq.mobile.depot.DropBoxes.Outcome.CREATED -> { fresh = r.url; null }
-                    me.raddatz.veyq.mobile.depot.DropBoxes.Outcome.NAME_TAKEN -> context.getString(R.string.node_slug_taken)
-                    me.raddatz.veyq.mobile.depot.DropBoxes.Outcome.LINK_FAILED -> context.getString(R.string.dropbox_link_failed)
-                    else -> context.getString(R.string.share_failed)
+                    else -> me.raddatz.veyq.mobile.words.Notices.dropBoxRefused(r.outcome)?.let { context.text(it) }
                 }
             }
         }
@@ -530,13 +516,6 @@ private fun roleWord(role: String, words: ShareWords): Int = when (role) {
     else -> words.contributor
 }
 
-private fun mintProblem(outcome: ShareLinks.Outcome): Int = when (outcome) {
-    ShareLinks.Outcome.PASSWORD_REQUIRED, ShareLinks.Outcome.EXPIRY_REJECTED -> R.string.share_requirement_refused
-    ShareLinks.Outcome.NOT_ALLOWED -> R.string.share_not_allowed
-    ShareLinks.Outcome.SCOPE_DELETING -> R.string.delete_refused_scope_deleting
-    ShareLinks.Outcome.BUSY -> R.string.move_refused_rekey_pending
-    else -> R.string.share_failed
-}
 
 private fun copy(context: android.content.Context, text: String) {
     val clipboard = context.getSystemService(android.content.ClipboardManager::class.java)

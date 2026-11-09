@@ -130,15 +130,7 @@ internal fun ReportSheet(ref: me.raddatz.veyq.mobile.navigation.NodeAt, model: A
                         scope.launch {
                             val r = model.report(ref, if (whole) NodeReport.Scope.WHOLE else NodeReport.Scope.NAME, cat, reason, contact)
                             sending = false
-                            if (r.outcome == NodeReport.Outcome.SENT) sent = r else error = context.getString(
-                                when (r.outcome) {
-                                    NodeReport.Outcome.TOO_MANY_OPEN -> R.string.report_too_many_open
-                                    NodeReport.Outcome.RATE_LIMITED -> R.string.report_rate_limited
-                                    NodeReport.Outcome.UNAVAILABLE -> R.string.report_unavailable
-                                    NodeReport.Outcome.NOT_FOUND -> R.string.report_not_found
-                                    else -> R.string.report_failed
-                                },
-                            )
+                            if (r.outcome == NodeReport.Outcome.SENT) sent = r else error = me.raddatz.veyq.mobile.words.Notices.reportRefused(r.outcome)?.let { context.text(it) }
                         }
                     },
                     enabled = !sending && category != null && reason.isNotBlank() && goodFaith,

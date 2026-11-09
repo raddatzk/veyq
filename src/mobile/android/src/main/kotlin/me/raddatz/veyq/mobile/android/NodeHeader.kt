@@ -244,23 +244,16 @@ internal fun NodeHeaderActions(
 private fun trash(node: NodeAt, model: AppModel, snackbar: SnackbarHostState, scope: CoroutineScope, context: android.content.Context) {
     scope.launch {
         val (deleted, before) = model.trash(node)
+        val said = context.text(me.raddatz.veyq.mobile.words.Notices.trashed(deleted, node.name))
         if (deleted != NodeTrash.Deleted.TRASHED) {
-            snackbar.showSnackbar(
-                context.getString(
-                    when (deleted) {
-                        NodeTrash.Deleted.GONE -> R.string.delete_refused_gone
-                        NodeTrash.Deleted.SCOPE_DELETING -> R.string.delete_refused_scope_deleting
-                        else -> R.string.delete_refused_failed
-                    },
-                ),
-            )
+            snackbar.showSnackbar(said)
             return@launch
         }
         val answer = kotlinx.coroutines.withTimeoutOrNull(6_000) {
-            snackbar.showSnackbar(context.getString(R.string.trash_moved, node.name), actionLabel = context.getString(R.string.trash_undo), duration = SnackbarDuration.Indefinite)
+            snackbar.showSnackbar(said, actionLabel = context.getString(R.string.trash_undo), duration = SnackbarDuration.Indefinite)
         }
         if (answer == SnackbarResult.ActionPerformed && (before == null || !model.restore(before))) {
-            snackbar.showSnackbar(context.getString(R.string.trash_undo_failed, node.name))
+            snackbar.showSnackbar(context.text(me.raddatz.veyq.mobile.words.Notices.trashUndoFailed(node.name)))
         }
     }
 }

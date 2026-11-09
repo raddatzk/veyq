@@ -151,14 +151,7 @@ struct KindPage {
             deleteTitle: String(localized: "Delete Pot"),
             deleteQuestion: String(localized: "“\(node.name)” and all its entries go to the trash."),
             copy: writable ? { to, toName in
-                switch await model.copyPot(node, to: to, toName: toName) {
-                case .copied: nil
-                case .nameTaken: String(localized: "There is no free name for the copy there. Rename it first, or choose another place.")
-                case .nothingToCopy: String(localized: "Nothing here can be copied by this version of veyq.")
-                case .busy: NodeMoveSheet.problemText(.busy)
-                case .blocked, .refused: NodeMoveSheet.problemText(.notAllowed)
-                default: String(localized: "The copy did not go through. Nothing was left behind; please try again.")
-                }
+                Notices.shared.potCopyRefused(outcome: await model.copyPot(node, to: to, toName: toName)).map { say($0) }
             } : nil,
             copyNotes: { CopyNotes(losses: copyLosses(PotSession.companion.KIND)) },
             download: { await model.downloadPot(ref).map { Downloaded(url: $0) } }

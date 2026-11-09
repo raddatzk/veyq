@@ -755,13 +755,13 @@ class AppModel(app: Application) : AndroidViewModel(app) {
                 job is me.raddatz.veyq.mobile.depot.DepotFiles.UploadJob && item.error == me.raddatz.veyq.mobile.depot.DepotFiles.Codes.EXISTS -> {
                     val existing = job.existing ?: return@launch
                     uploads.remove(item.id)
-                    notify(Notice(app.getString(R.string.depot_replace_confirm, item.name), app.getString(R.string.depot_replace_title)) {
+                    notify(Notice(app.text(me.raddatz.veyq.mobile.words.Notices.replaceOffered(item.name)), app.getString(R.string.depot_replace_title)) {
                         replace(existing, job.picked, _files.value[existing]?.blobId)
                     })
                 }
                 job is me.raddatz.veyq.mobile.depot.DepotFiles.ReplaceJob && item.error == me.raddatz.veyq.mobile.depot.DepotFiles.Codes.STALE -> {
                     uploads.remove(item.id)
-                    notify(Notice(app.getString(R.string.depot_error_stale_file, item.name), app.getString(R.string.depot_replace_anyway)) {
+                    notify(Notice(app.text(me.raddatz.veyq.mobile.words.Notices.replaceStale(item.name)), app.getString(R.string.depot_replace_anyway)) {
                         replace(job.file.nodeId, job.picked, job.currentBlobId)
                     })
                 }
@@ -796,16 +796,9 @@ class AppModel(app: Application) : AndroidViewModel(app) {
             _preparing.value = null
             refreshLists(t)
             val r = report ?: return@launch notify(Notice(app.getString(R.string.share_failed)))
-            val size = android.text.format.Formatter.formatShortFileSize(app, r.bytes)
-            when (r.outcome) {
-                me.raddatz.veyq.mobile.depot.FolderUpload.Outcome.NO_ROOM -> notify(Notice(app.getString(R.string.depot_folder_no_room, r.name, size)))
-                me.raddatz.veyq.mobile.depot.FolderUpload.Outcome.ROOT_FAILED -> notify(Notice(app.getString(R.string.depot_folder_failed, r.name)))
-                me.raddatz.veyq.mobile.depot.FolderUpload.Outcome.READY -> {
-                    if (r.failedFolders.isNotEmpty()) notify(Notice(r.failedFolders.joinToString("\n") { app.getString(R.string.depot_folder_part_failed, it) }))
-                    uploads.enqueue(r.jobs, r.name, r.rootId, ::depotSettled, null)
-                }
-                me.raddatz.veyq.mobile.depot.FolderUpload.Outcome.NOTHING -> {}
-            }
+            val said = me.raddatz.veyq.mobile.words.Notices.folderUpload(r)
+            if (said.isNotEmpty()) notify(Notice(said.joinToString("\n") { app.text(it) }))
+            if (r.outcome == me.raddatz.veyq.mobile.depot.FolderUpload.Outcome.READY) uploads.enqueue(r.jobs, r.name, r.rootId, ::depotSettled, null)
         }
     }
 
@@ -1118,17 +1111,8 @@ class AppModel(app: Application) : AndroidViewModel(app) {
     fun source(p: Picked): me.raddatz.veyq.mobile.blob.UploadSource = ContentSource(getApplication<Application>().contentResolver, p.uri, p.name, p.size, p.type, p.modifiedAt)
 
     /** Why [item] did not go up, in its application's words (the tray's line under it); null while it may still. */
-    fun uploadProblem(item: me.raddatz.veyq.mobile.blob.UploadQueue.Item): String? {
-        if (item.status != me.raddatz.veyq.mobile.blob.UploadQueue.Status.FAILED) return null
-        val app = getApplication<Application>()
-        return when (item.error) {
-            me.raddatz.veyq.mobile.blob.UploadQueue.QUOTA_EXCEEDED -> app.getString(R.string.upload_no_space)
-            me.raddatz.veyq.mobile.blob.UploadQueue.APPLICATION_OFF -> app.getString(R.string.upload_switched_off)
-            me.raddatz.veyq.mobile.depot.DepotFiles.Codes.NAME_TAKEN -> app.getString(R.string.upload_name_taken)
-            me.raddatz.veyq.mobile.depot.DepotFiles.Codes.BUSY -> app.getString(R.string.move_refused_rekey_pending)
-            else -> app.getString(R.string.upload_status_failed)
-        }
-    }
+    fun uploadProblem(item: me.raddatz.veyq.mobile.blob.UploadQueue.Item): String? =
+        me.raddatz.veyq.mobile.words.Notices.uploadProblem(item)?.let { getApplication<Application>().text(it) }
 
     /** Each listed node's cover as a small picture of its framed part, by node id (core's covers, uc.platform.node-cover):
      *  opened once per blob and crop (the pair's key), dropped when the node names another or none. */
@@ -1237,10 +1221,8 @@ class AppModel(app: Application) : AndroidViewModel(app) {
         refreshLists(t)
         return when (r) {
             is me.raddatz.veyq.mobile.session.NodeCreate.Result.Done -> null
-            is me.raddatz.veyq.mobile.session.NodeCreate.Result.Refused ->
-                if (r.reason == me.raddatz.veyq.mobile.session.NodeCreate.Reason.NAME_TAKEN) getApplication<Application>().getString(R.string.folder_name_taken)
-                else getApplication<Application>().getString(R.string.folder_failed)
-            null -> getApplication<Application>().getString(R.string.folder_failed)
+            is me.raddatz.veyq.mobile.session.NodeCreate.Result.Refused -> getApplication<Application>().text(me.raddatz.veyq.mobile.words.Notices.folderRefused(r.reason))
+            null -> getApplication<Application>().text(me.raddatz.veyq.mobile.words.Notices.folderRefused(null))
         }
     }
 
@@ -1451,12 +1433,7 @@ class AppModel(app: Application) : AndroidViewModel(app) {
             me.raddatz.veyq.mobile.export.SubtreeCopy.duplicate(t, ref.scopeId, ref.nodeId, to, me.raddatz.veyq.mobile.AppKinds.copies(deleted) { java.util.UUID.randomUUID().toString() })
         }.getOrNull()
         refreshLists(t)
-        return when (r?.outcome) {
-            me.raddatz.veyq.mobile.export.SubtreeCopy.Outcome.COPIED -> null
-            me.raddatz.veyq.mobile.export.SubtreeCopy.Outcome.NAME_TAKEN -> app.getString(R.string.copy_name_taken)
-            me.raddatz.veyq.mobile.export.SubtreeCopy.Outcome.NOTHING_TO_COPY -> app.getString(R.string.copy_nothing)
-            else -> app.getString(R.string.copy_failed_rolled_back)
-        }
+        return me.raddatz.veyq.mobile.words.Notices.subtreeCopyRefused(r?.outcome)?.let { app.text(it) }
     }
 
     suspend fun openReceipt(receiptId: String): ByteArray? = potSession?.let { runCatching { it.openReceipt(receiptId) }.getOrNull() }

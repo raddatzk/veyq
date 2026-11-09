@@ -97,15 +97,12 @@ struct ShareSheet: View {
                         if role == ShareLinks.shared.WRITE_ONLY && !dropBox {
                             // "Add files only" on a folder: a drop box named so, here, with its first link (`createDropBoxWithLink`)
                             let made = await model.createDropBox(ref, name: label, password: password ?? "", expiresAt: expiresAt)
-                            switch made.outcome {
-                            case .created:
+                            if made.outcome == .created {
                                 creating = false
                                 fresh = made.url
                                 return nil
-                            case .nameTaken: return String(localized: "Something with a similar name already exists here.")
-                            case .linkFailed: return String(localized: "The drop box is made, but its link was not. Open the drop box to make one.")
-                            default: return String(localized: "That didn’t work — please try again.")
                             }
+                            return Notices.shared.dropBoxRefused(outcome: made.outcome).map { say($0) }
                         }
                         let minted = await model.mintLink(ref, role: dropBox ? ShareLinks.shared.WRITE_ONLY : role, label: dropBox ? "" : label, password: password ?? "", expiresAt: expiresAt)
                         guard minted.outcome == .created, let url = minted.url else { return Self.problem(minted.outcome) }
@@ -165,15 +162,7 @@ struct ShareSheet: View {
     }
 
     private static func changed(_ outcome: ShareLinkChanges.Outcome) -> String {
-        switch outcome {
-        case .doneRekeyPending:
-            String(localized: "The link is switched off. What is below it gets a new lock, so the old link opens nothing that comes later either.")
-        case .passwordLost: String(localized: "Its password cannot be read here any more, so it cannot be renewed without losing it.")
-        case .gone: String(localized: "This link was already renewed or deleted — the list now shows the current links.")
-        case .rules: String(localized: "This space now requires a password or an end date on every link. Add what is missing and try again.")
-        case .reissueRequired: String(localized: "This link cannot be switched back on: someone who has left this space may still hold it. Renew it instead.")
-        default: String(localized: "That didn’t work — please try again.")
-        }
+        say(Notices.shared.linkChanged(outcome: outcome) ?? Notices.shared.of(msg: .shareFailed))
     }
 
     private var list: some View {
@@ -255,14 +244,7 @@ struct ShareSheet: View {
     }
 
     private static func problem(_ outcome: ShareLinks.Outcome) -> String {
-        switch outcome {
-        case .passwordRequired, .expiryRejected:
-            String(localized: "This space now requires a password or an end date on every link. Add what is missing and try again.")
-        case .notAllowed: String(localized: "Links are switched off here.")
-        case .scopeDeleting: String(localized: "This space is being deleted.")
-        case .busy: String(localized: "The space’s new lock is still going in. Try again in a moment.")
-        default: String(localized: "That didn’t work — please try again.")
-        }
+        say(Notices.shared.linkRefused(outcome: outcome) ?? Notices.shared.of(msg: .shareFailed))
     }
 }
 
@@ -326,14 +308,11 @@ struct TopLevelUploadSheet: View {
                 } else {
                     NewLinkForm(rules: model.linkRules(), words: ShareWords.of("FOLDER"), uploadOnly: true, onCancel: { dismiss() }) { _, label, password, expiresAt in
                         let made = await model.createDropBox(scopeId: scopeId, parentId: nil, name: label, password: password ?? "", expiresAt: expiresAt)
-                        switch made.outcome {
-                        case .created:
+                        if made.outcome == .created {
                             fresh = made.url
                             return nil
-                        case .nameTaken: return String(localized: "Something with a similar name already exists here.")
-                        case .linkFailed: return String(localized: "The drop box is made, but its link was not. Open the drop box to make one.")
-                        default: return String(localized: "That didn’t work — please try again.")
                         }
+                        return Notices.shared.dropBoxRefused(outcome: made.outcome).map { say($0) }
                     }
                 }
             }

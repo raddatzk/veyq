@@ -171,15 +171,7 @@ struct NodeMoveSheet: View {
 
     /// Why a move did not go through, in the web's words (`node.move.refused.*`).
     static func problemText(_ outcome: NodeMove.Outcome) -> String {
-        switch outcome {
-        case .nameTaken: String(localized: "Something with this name already exists there. Rename it first, or choose another place.")
-        case .notAllowed, .blocked: String(localized: "It can’t be placed there: that place doesn’t take this kind of item.")
-        case .gone: String(localized: "It, or the place you chose, is no longer there.")
-        case .conflict: String(localized: "Someone else moved or renamed it at the same time. The view has been reloaded — please try again.")
-        case .scopeDeleting: String(localized: "This space is being deleted; nothing can be moved.")
-        case .busy: String(localized: "The space’s new lock is still going in. Try again in a moment.")
-        default: String(localized: "Moving didn’t work. Please try again.")
-        }
+        say(Notices.shared.moveRefused(outcome: outcome) ?? Notices.shared.of(msg: .moveRefusedFailed))
     }
 }
 

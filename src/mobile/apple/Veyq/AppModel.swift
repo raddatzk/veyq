@@ -510,12 +510,7 @@ final class AppModel {
         if deleted == .trashed || deleted == .gone, let i = shell.path.firstIndex(where: { $0.nodeId == ref.nodeId }) {
             shell = shell.at(tree: await scopeNodes(ref.scopeId), folderId: i > 0 ? shell.path[i - 1].nodeId : nil)
         }
-        switch deleted {
-        case .trashed: trashNotice = TrashNotice(message: String(localized: "“\(ref.name)” moved to the trash."), node: before ?? nil)
-        case .gone: trashNotice = TrashNotice(message: String(localized: "It is no longer there."), node: nil)
-        case .scopeDeleting: trashNotice = TrashNotice(message: String(localized: "This space is being deleted."), node: nil)
-        default: trashNotice = TrashNotice(message: String(localized: "Deleting didn’t work. Please try again."), node: nil)
-        }
+        trashNotice = TrashNotice(message: say(Notices.shared.trashed(outcome: deleted, name: ref.name)), node: deleted == .trashed ? (before ?? nil) : nil)
     }
 
     /// The Undo of the last delete: the node back from the trash under its name, as it was.
@@ -828,16 +823,7 @@ final class AppModel {
                 shell = shell.goBack().open(ref: renamed)
             }
             return (nil, !(r.links?.failed.isEmpty ?? true))
-        case .nameTaken:
-            if let sibling = r.taken {
-                // the colliding sibling's noun with its article: its kind's `nounWithArticle`, else "an item"
-                let kind = sibling.kind == "EXPENSES_POT" ? String(localized: "a Pot") : String(localized: "an item")
-                return (String(localized: "There is already \(kind) named “\(sibling.name)” here. Choose another name."), false)
-            }
-            return (String(localized: "Something with a similar name already exists here."), false)
-        case .notAllowed: return (String(localized: "That isn’t allowed here."), false)
-        case .busy: return (String(localized: "The pot’s key is being renewed. Try again in a moment."), false)
-        default: return (String(localized: "That didn’t work. Please try again."), false)
+        default: return (Notices.shared.renameRefused(r: r).map { say($0) }, false)
         }
     }
 
@@ -1121,7 +1107,7 @@ final class AppModel {
             uploads.remove(id: item.id)
             let picked = job.picked
             notice = Notice(
-                text: String(localized: "Replace “\(item.name)”? A file with this name is already here: its content is replaced by the file you picked. The old content cannot be restored: there is no version history."),
+                text: say(Notices.shared.replaceOffered(name: item.name)),
                 action: String(localized: "Replace File")
             ) { [weak self] in self?.replace(existing, source: picked, expected: self?.files[existing]?.blobId) }
         } else if let job = item.job as? DepotFiles.ReplaceJob, item.error == DepotFiles.Codes.shared.STALE {
@@ -1130,7 +1116,7 @@ final class AppModel {
             let current = job.currentBlobId
             let nodeId = job.file.nodeId
             notice = Notice(
-                text: String(localized: "“\(item.name)” was not uploaded: someone else replaced this file in the meantime. Replace it anyway, or look at theirs first."),
+                text: say(Notices.shared.replaceStale(name: item.name)),
                 action: String(localized: "Replace anyway")
             ) { [weak self] in self?.replace(nodeId, source: picked, expected: current) }
         }
@@ -1157,17 +1143,9 @@ final class AppModel {
         preparing = nil
         await refreshLists(t)
         guard let report else { notice = Notice(text: String(localized: "That didn’t work — please try again.")); return }
-        let size = ByteCountFormatter.string(fromByteCount: report.bytes, countStyle: .file)
-        switch report.outcome {
-        case .noRoom: notice = Notice(text: String(localized: "“\(report.name)” was not uploaded: there is not enough storage space for it (\(size)). Free some space, or ask whoever runs your space."))
-        case .rootFailed: notice = Notice(text: String(localized: "“\(report.name)” could not be created, so nothing of it was uploaded."))
-        case .ready:
-            if !report.failedFolders.isEmpty {
-                notice = Notice(text: report.failedFolders.map { String(localized: "The folder “\($0)” could not be created, so nothing in it was uploaded.") }.joined(separator: "\n"))
-            }
-            enqueueDepot(report.jobs, label: report.name, key: report.rootId)
-        default: break
-        }
+        let said = Notices.shared.folderUpload(r: report)
+        if !said.isEmpty { notice = Notice(text: said.map { say($0) }.joined(separator: "\n")) }
+        if report.outcome == .ready { enqueueDepot(report.jobs, label: report.name, key: report.rootId) }
     }
 
     /// The files below the directory at `url` (hidden ones included, as the web's directory input holds them), each by its
@@ -1203,14 +1181,7 @@ final class AppModel {
 
     /// Why `item` did not go up, in its application's words (the uploads list's line under it); nil while it may still.
     func uploadProblem(_ item: UploadQueue.Item) -> String? {
-        guard item.status == .failed else { return nil }
-        switch item.error {
-        case UploadQueue.companion.QUOTA_EXCEEDED: return String(localized: "No space left. Items in a trash still take up space until they are removed for good.")
-        case UploadQueue.companion.APPLICATION_OFF: return String(localized: "This application is switched off here.")
-        case DepotFiles.Codes.shared.NAME_TAKEN: return String(localized: "A folder, Memory or file with a similar name already exists here.")
-        case DepotFiles.Codes.shared.BUSY: return String(localized: "The space’s key is being renewed. Try again in a moment.")
-        default: return String(localized: "Failed")
-        }
+        Notices.shared.uploadProblem(item: item).map { say($0) }
     }
 
     /// Each listed node's cover as a small picture of its framed part, by node id, with the key it was opened under — its
@@ -1490,9 +1461,7 @@ final class AppModel {
         case .copied:
             trashNotice = TrashNotice(message: String(localized: "“\(ref.name)” is copied to “\(toName)”."), node: nil, moveBack: nil)
             return nil
-        case .nameTaken: return String(localized: "There is no free name for the copy there. Rename it first, or choose another place.")
-        case .nothingToCopy: return String(localized: "Nothing here can be copied by this version of veyq.")
-        default: return String(localized: "The copy did not go through. What it made was moved to the trash; please try again.")
+        default: return Notices.shared.subtreeCopyRefused(outcome: r?.outcome).map { say($0) }
         }
     }
 

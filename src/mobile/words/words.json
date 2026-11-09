@@ -1,0 +1,2254 @@
+{
+  "app_name": {
+    "en": "veyq",
+    "untranslated": true
+  },
+  "drawer_open": {
+    "en": "Open menu",
+    "de": "Menü öffnen"
+  },
+  "drawer_new": {
+    "en": "New",
+    "de": "Neu"
+  },
+  "drawer_favorites": {
+    "en": "Favorites",
+    "de": "Favoriten"
+  },
+  "drawer_recent": {
+    "en": "Recent",
+    "de": "Zuletzt"
+  },
+  "drawer_applications": {
+    "en": "Applications",
+    "de": "Anwendungen"
+  },
+  "drawer_spaces": {
+    "en": "Spaces",
+    "de": "Spaces"
+  },
+  "drawer_settings": {
+    "en": "Settings",
+    "de": "Einstellungen"
+  },
+  "drawer_sign_out": {
+    "en": "Sign out",
+    "de": "Abmelden"
+  },
+  "drawer_nothing_yet": {
+    "en": "Nothing yet",
+    "de": "Noch nichts"
+  },
+  "app_memories": {
+    "en": "Memories",
+    "de": "Erinnerungen"
+  },
+  "app_depot": {
+    "en": "Depot",
+    "de": "Depot"
+  },
+  "app_expenses": {
+    "en": "Expenses",
+    "de": "Ausgaben"
+  },
+  "tab_memories_all": {
+    "en": "Memories",
+    "de": "Erinnerungen"
+  },
+  "tab_memories_map": {
+    "en": "Map",
+    "de": "Karte"
+  },
+  "tab_depot_files": {
+    "en": "Files",
+    "de": "Dateien"
+  },
+  "tab_expenses_entries": {
+    "en": "Entries",
+    "de": "Einträge"
+  },
+  "tab_expenses_overview": {
+    "en": "Overview",
+    "de": "Übersicht"
+  },
+  "tab_expenses_settings": {
+    "en": "Settings",
+    "de": "Einstellungen"
+  },
+  "tab_search": {
+    "en": "Search",
+    "de": "Suche"
+  },
+  "search_hint": {
+    "en": "Search names",
+    "de": "Namen suchen"
+  },
+  "search_close": {
+    "en": "Close search",
+    "de": "Suche schließen"
+  },
+  "back": {
+    "en": "Back",
+    "de": "Zurück"
+  },
+  "list_empty": {
+    "en": "Nothing here yet",
+    "de": "Hier ist noch nichts"
+  },
+  "not_built": {
+    "en": "This view is not built in the app yet.",
+    "de": "Diese Ansicht ist in der App noch nicht gebaut."
+  },
+  "signin_title": {
+    "en": "Sign in",
+    "de": "Anmelden"
+  },
+  "signin_server": {
+    "en": "Server",
+    "de": "Server"
+  },
+  "signin_email": {
+    "en": "Email",
+    "de": "E-Mail"
+  },
+  "signin_password": {
+    "en": "Password",
+    "de": "Passwort"
+  },
+  "signin_secret_key": {
+    "en": "Secret Key",
+    "de": "Secret Key"
+  },
+  "signin_submit": {
+    "en": "Sign in",
+    "de": "Anmelden"
+  },
+  "signin_working": {
+    "en": "Signing in…",
+    "de": "Anmeldung läuft…"
+  },
+  "signin_error_unreachable": {
+    "en": "The server could not be reached.",
+    "de": "Der Server ist nicht erreichbar."
+  },
+  "signin_error_incompatible": {
+    "en": "This server runs a version this app does not speak.",
+    "de": "Dieser Server läuft in einer Version, die diese App nicht spricht."
+  },
+  "signin_error_credentials": {
+    "en": "Email or password is not right.",
+    "de": "E-Mail oder Passwort stimmen nicht."
+  },
+  "signin_error_secret_key": {
+    "en": "The Secret Key is not right.",
+    "de": "Der Secret Key stimmt nicht."
+  },
+  "signin_error_no_tenant": {
+    "en": "This server has no space at this address.",
+    "de": "Unter dieser Adresse gibt es auf dem Server keinen Bereich."
+  },
+  "signin_error_other": {
+    "en": "Signing in did not work.",
+    "de": "Die Anmeldung hat nicht geklappt."
+  },
+  "drawer_home": {
+    "en": "Home",
+    "de": "Home"
+  },
+  "drawer_sign_out_of": {
+    "en": "Sign out of {1}",
+    "de": "Von {1} abmelden"
+  },
+  "space_switch": {
+    "en": "Switch space",
+    "de": "Space wechseln"
+  },
+  "space_personal": {
+    "en": "Personal",
+    "de": "Persönlich"
+  },
+  "space_group": {
+    "en": "Group",
+    "de": "Gruppe"
+  },
+  "filter_all": {
+    "en": "All",
+    "de": "Alle"
+  },
+  "switcher_open": {
+    "en": "Switch tenant or server",
+    "de": "Tenant oder Server wechseln"
+  },
+  "switcher_add_server": {
+    "en": "Add server",
+    "de": "Server hinzufügen"
+  },
+  "tab_depot_dropbox": {
+    "en": "Drop box",
+    "de": "Briefkasten"
+  },
+  "tab_depot_file": {
+    "en": "File",
+    "de": "Datei"
+  },
+  "signin_cancel": {
+    "en": "Cancel",
+    "de": "Abbrechen"
+  },
+  "signin_add_title": {
+    "en": "Add a server",
+    "de": "Server hinzufügen"
+  },
+  "switcher_manage": {
+    "en": "Manage servers",
+    "de": "Server verwalten"
+  },
+  "manage_title": {
+    "en": "Servers",
+    "de": "Server"
+  },
+  "manage_current": {
+    "en": "Shown now",
+    "de": "Gerade angezeigt"
+  },
+  "manage_sign_out": {
+    "en": "Sign out of this server",
+    "de": "Von diesem Server abmelden"
+  },
+  "manage_hint": {
+    "en": "Hidden tenants and spaces stay on the server and are only left out on this device.",
+    "de": "Ausgeblendete Tenants und Spaces bleiben auf dem Server und werden nur auf diesem Gerät weggelassen."
+  },
+  "manage_trusted_password": {
+    "en": "This device opens with your password.",
+    "de": "Dieses Gerät öffnet mit deinem Passwort."
+  },
+  "manage_trusted_remembered": {
+    "en": "You stay signed in on this device.",
+    "de": "Auf diesem Gerät bleibst du angemeldet."
+  },
+  "manage_forget_device": {
+    "en": "Stop trusting this device",
+    "de": "Diesem Gerät nicht mehr vertrauen"
+  },
+  "signin_remember": {
+    "en": "Stay signed in",
+    "de": "Angemeldet bleiben"
+  },
+  "signin_remember_hint": {
+    "en": "Opens with your fingerprint, face or the device code. Anyone who can unlock this phone can open your content. Off, the app asks for your password, never again for the Secret Key.",
+    "de": "Öffnet mit Fingerabdruck, Gesicht oder dem Gerätecode. Wer dieses Handy entsperren kann, kann deine Inhalte öffnen. Aus fragt die App nach deinem Passwort, aber nie wieder nach dem Secret Key."
+  },
+  "signin_error_device_not_trusted": {
+    "en": "This device is no longer trusted with this account. Sign in with your Secret Key.",
+    "de": "Dieses Gerät ist für dieses Konto nicht mehr vertraut. Melde dich mit deinem Secret Key an."
+  },
+  "signin_error_session_ended": {
+    "en": "You were signed out. Please sign in again.",
+    "de": "Du wurdest abgemeldet. Bitte melde dich erneut an."
+  },
+  "starting": {
+    "en": "Opening…",
+    "de": "Wird geöffnet…"
+  },
+  "unlock_title": {
+    "en": "Welcome back",
+    "de": "Willkommen zurück"
+  },
+  "unlock_password_hint": {
+    "en": "This device is trusted: your password is enough.",
+    "de": "Dieses Gerät ist vertraut: Dein Passwort genügt."
+  },
+  "unlock_remembered_hint": {
+    "en": "Confirm it is you to open your spaces.",
+    "de": "Bestätige, dass du es bist, um deine Spaces zu öffnen."
+  },
+  "unlock_submit": {
+    "en": "Unlock",
+    "de": "Entsperren"
+  },
+  "unlock_other": {
+    "en": "Use another account",
+    "de": "Anderes Konto verwenden"
+  },
+  "unlock_prompt_title": {
+    "en": "Unlock veyq",
+    "de": "veyq entsperren"
+  },
+  "unlock_prompt_subtitle": {
+    "en": "Confirm it is you",
+    "de": "Bestätige, dass du es bist"
+  },
+  "pot_loading": {
+    "en": "Loading the pot…",
+    "de": "Kasse wird geladen…"
+  },
+  "pot_no_entries": {
+    "en": "No entries yet. Add the first one.",
+    "de": "Noch keine Einträge. Füge den ersten hinzu."
+  },
+  "pot_add": {
+    "en": "Add entry",
+    "de": "Eintrag hinzufügen"
+  },
+  "pot_expense_by": {
+    "en": "Expense by {1}",
+    "de": "Ausgabe von {1}"
+  },
+  "pot_refund_to": {
+    "en": "Refund to {1}",
+    "de": "Erstattung an {1}"
+  },
+  "pot_transfer": {
+    "en": "Transfer",
+    "de": "Überweisung"
+  },
+  "pot_invalid": {
+    "en": "invalid",
+    "de": "ungültig"
+  },
+  "pot_unreadable": {
+    "en": "unreadable",
+    "de": "nicht lesbar"
+  },
+  "pot_edited": {
+    "en": "edited",
+    "de": "bearbeitet"
+  },
+  "pot_deleted_person": {
+    "en": "deleted person",
+    "de": "gelöschte Person"
+  },
+  "pot_balances": {
+    "en": "Balances",
+    "de": "Salden"
+  },
+  "pot_paid_consumed": {
+    "en": "paid {1} · consumed {2}",
+    "de": "bezahlt {1} · verbraucht {2}"
+  },
+  "pot_is_owed": {
+    "en": "is owed {1}",
+    "de": "bekommt {1}"
+  },
+  "pot_owes": {
+    "en": "owes {1}",
+    "de": "schuldet {1}"
+  },
+  "pot_settled": {
+    "en": "settled",
+    "de": "ausgeglichen"
+  },
+  "pot_sent": {
+    "en": "transferred {1}",
+    "de": "überwiesen {1}"
+  },
+  "pot_received": {
+    "en": "received {1}",
+    "de": "erhalten {1}"
+  },
+  "pot_in_currency": {
+    "en": "In {1}",
+    "de": "In {1}"
+  },
+  "pot_settle_up": {
+    "en": "Settle up",
+    "de": "Ausgleichen"
+  },
+  "pot_pays": {
+    "en": "{1} pays {2}",
+    "de": "{1} zahlt an {2}"
+  },
+  "pot_by_category": {
+    "en": "By category",
+    "de": "Nach Kategorie"
+  },
+  "pot_total": {
+    "en": "Total",
+    "de": "Summe"
+  },
+  "pot_base_currency": {
+    "en": "Base currency",
+    "de": "Basiswährung"
+  },
+  "pot_people": {
+    "en": "People",
+    "de": "Personen"
+  },
+  "pot_own_categories": {
+    "en": "Own categories",
+    "de": "Eigene Kategorien"
+  },
+  "pot_ledger_missing": {
+    "en": "Changes to these entries are missing, so the balances may be wrong:",
+    "de": "Änderungen an diesen Einträgen fehlen, die Salden können also falsch sein:"
+  },
+  "pot_ledger_unknown_entry": {
+    "en": "An entry this pot no longer shows",
+    "de": "Ein Eintrag, den diese Kasse nicht mehr zeigt"
+  },
+  "entry_title": {
+    "en": "Title",
+    "de": "Titel"
+  },
+  "entry_amount": {
+    "en": "Amount",
+    "de": "Betrag"
+  },
+  "entry_paid_by": {
+    "en": "Paid by",
+    "de": "Bezahlt von"
+  },
+  "entry_category": {
+    "en": "Category",
+    "de": "Kategorie"
+  },
+  "entry_save": {
+    "en": "Save",
+    "de": "Speichern"
+  },
+  "entry_cancel": {
+    "en": "Cancel",
+    "de": "Abbrechen"
+  },
+  "entry_stale": {
+    "en": "Someone else changed the pot meanwhile. It was read again; save once more.",
+    "de": "Jemand anderes hat die Kasse inzwischen geändert. Sie wurde neu gelesen; speichere noch einmal."
+  },
+  "cat_food": {
+    "en": "Food & drink",
+    "de": "Essen & Trinken"
+  },
+  "cat_groceries": {
+    "en": "Groceries",
+    "de": "Einkäufe"
+  },
+  "cat_accommodation": {
+    "en": "Accommodation",
+    "de": "Unterkunft"
+  },
+  "cat_transport": {
+    "en": "Transport",
+    "de": "Transport"
+  },
+  "cat_leisure": {
+    "en": "Leisure",
+    "de": "Freizeit"
+  },
+  "cat_household": {
+    "en": "Household",
+    "de": "Haushalt"
+  },
+  "cat_other": {
+    "en": "Other",
+    "de": "Sonstiges"
+  },
+  "cat_unknown": {
+    "en": "Unknown category",
+    "de": "Unbekannte Kategorie"
+  },
+  "people_name": {
+    "en": "Name",
+    "de": "Name"
+  },
+  "people_add": {
+    "en": "Add person",
+    "de": "Person hinzufügen"
+  },
+  "people_rename": {
+    "en": "Rename {1}",
+    "de": "{1} umbenennen"
+  },
+  "people_inactive": {
+    "en": "deactivated",
+    "de": "deaktiviert"
+  },
+  "people_activate": {
+    "en": "Activate",
+    "de": "Aktivieren"
+  },
+  "people_deactivate": {
+    "en": "Deactivate",
+    "de": "Deaktivieren"
+  },
+  "people_delete": {
+    "en": "Delete {1}",
+    "de": "{1} löschen"
+  },
+  "people_delete_accept": {
+    "en": "Delete",
+    "de": "Löschen"
+  },
+  "people_delete_confirm": {
+    "en": "Their name is erased. Entries show them as “deleted people”. This can’t be undone.",
+    "de": "Der Name wird gelöscht. Einträge zeigen die Person als „gelöschte Personen“. Das lässt sich nicht rückgängig machen."
+  },
+  "people_remove": {
+    "en": "Remove {1}",
+    "de": "{1} entfernen"
+  },
+  "people_remove_accept": {
+    "en": "Remove",
+    "de": "Entfernen"
+  },
+  "people_remove_confirm": {
+    "en": "No entry names them, so they disappear from the pot. This can’t be undone.",
+    "de": "Kein Eintrag nennt die Person, sie verschwindet also aus der Kasse. Das lässt sich nicht rückgängig machen."
+  },
+  "people_settle_first": {
+    "en": "A person can be deactivated or deleted once their balance is settled.",
+    "de": "Eine Person lässt sich deaktivieren oder löschen, sobald ihr Saldo ausgeglichen ist."
+  },
+  "people_choose_member": {
+    "en": "A member of this space",
+    "de": "Ein Mitglied dieses Bereichs"
+  },
+  "people_add_member": {
+    "en": "Add member",
+    "de": "Mitglied hinzufügen"
+  },
+  "people_former_member": {
+    "en": "former member",
+    "de": "ehemaliges Mitglied"
+  },
+  "people_invalid": {
+    "en": "Check the name: 1 to 100 characters.",
+    "de": "Prüfe den Namen: 1 bis 100 Zeichen."
+  },
+  "people_failed": {
+    "en": "The change was not saved. Please try again.",
+    "de": "Die Änderung wurde nicht gespeichert. Bitte versuche es erneut."
+  },
+  "pot_busy": {
+    "en": "The pot’s key is being renewed. Try again in a moment.",
+    "de": "Der Schlüssel der Kasse wird gerade erneuert. Versuche es gleich noch einmal."
+  },
+  "pot_blocked": {
+    "en": "The operator blocked this pot.",
+    "de": "Der Betreiber hat diese Kasse gesperrt."
+  },
+  "people_deleted_summary": {
+    "en": {
+      "one": "One deleted person.",
+      "other": "{1:int} deleted people."
+    },
+    "de": {
+      "one": "Eine gelöschte Person.",
+      "other": "{1:int} gelöschte Personen."
+    }
+  },
+  "settings_missing": {
+    "en": "This pot has no base currency yet. Pick one to record entries.",
+    "de": "Diese Kasse hat noch keine Basiswährung. Wähle eine, um Einträge zu erfassen."
+  },
+  "settings_missing_read_only": {
+    "en": "This pot has no base currency yet, so it shows no entries.",
+    "de": "Diese Kasse hat noch keine Basiswährung und zeigt deshalb keine Einträge."
+  },
+  "settings_currency_fixed": {
+    "en": "Fixed: the pot holds entries.",
+    "de": "Steht fest: Die Kasse hat Einträge."
+  },
+  "settings_currency_hint": {
+    "en": "Every balance is in this currency. It is fixed once the first entry is saved.",
+    "de": "Alle Salden sind in dieser Währung. Sie steht fest, sobald der erste Eintrag gespeichert ist."
+  },
+  "settings_categories_hint": {
+    "en": "Added here, they can be picked for every entry of this pot. They can be renamed, not removed.",
+    "de": "Hier hinzugefügt, lassen sie sich für jeden Eintrag dieser Kasse wählen. Sie lassen sich umbenennen, nicht entfernen."
+  },
+  "settings_category_name": {
+    "en": "Category name",
+    "de": "Name der Kategorie"
+  },
+  "settings_add_category": {
+    "en": "Add category",
+    "de": "Kategorie hinzufügen"
+  },
+  "settings_rename_category": {
+    "en": "Rename {1}",
+    "de": "{1} umbenennen"
+  },
+  "create_pot": {
+    "en": "New pot",
+    "de": "Neue Kasse"
+  },
+  "create_pot_name": {
+    "en": "Name",
+    "de": "Name"
+  },
+  "create_pot_space": {
+    "en": "Space",
+    "de": "Bereich"
+  },
+  "create_pot_create": {
+    "en": "Create",
+    "de": "Erstellen"
+  },
+  "create_pot_name_taken": {
+    "en": "There is already a pot with this name here.",
+    "de": "Hier gibt es schon eine Kasse mit diesem Namen."
+  },
+  "create_pot_people_failed": {
+    "en": "The pot was created, its people were not. Add them in its settings.",
+    "de": "Die Kasse wurde erstellt, ihre Personen nicht. Füge sie in ihren Einstellungen hinzu."
+  },
+  "create_pot_invalid": {
+    "en": "Check the name and the people: 1 to 100 characters each.",
+    "de": "Prüfe den Namen und die Personen: je 1 bis 100 Zeichen."
+  },
+  "create_pot_failed": {
+    "en": "The pot was not created. Please try again.",
+    "de": "Die Kasse wurde nicht erstellt. Bitte versuche es erneut."
+  },
+  "ed_new_title": {
+    "en": "Add entry",
+    "de": "Eintrag hinzufügen"
+  },
+  "ed_edit_title": {
+    "en": "Edit entry",
+    "de": "Eintrag bearbeiten"
+  },
+  "ed_view_title": {
+    "en": "Entry",
+    "de": "Eintrag"
+  },
+  "ed_invalid": {
+    "en": "This entry does not add up, so it counts nowhere. Saving it corrected counts it again.",
+    "de": "Dieser Eintrag geht nicht auf und zählt deshalb nirgends. Korrigiert gespeichert zählt er wieder."
+  },
+  "pot_no_entries_readonly": {
+    "en": "No entries yet.",
+    "de": "Noch keine Einträge."
+  },
+  "ed_expense": {
+    "en": "Expense",
+    "de": "Ausgabe"
+  },
+  "ed_refund": {
+    "en": "Refund",
+    "de": "Erstattung"
+  },
+  "ed_note": {
+    "en": "Note (optional)",
+    "de": "Notiz (optional)"
+  },
+  "ed_date": {
+    "en": "Date",
+    "de": "Datum"
+  },
+  "ed_currency": {
+    "en": "Currency",
+    "de": "Währung"
+  },
+  "ed_rate": {
+    "en": "Rate: 1 {1} in {2}",
+    "de": "Kurs: 1 {1} in {2}"
+  },
+  "ed_rate_hint": {
+    "en": "The entry keeps this rate; a later rate never changes it.",
+    "de": "Der Eintrag behält diesen Kurs; ein späterer Kurs ändert ihn nie."
+  },
+  "ed_from": {
+    "en": "From",
+    "de": "Von"
+  },
+  "ed_to": {
+    "en": "To",
+    "de": "An"
+  },
+  "ed_received_by": {
+    "en": "Received by",
+    "de": "Erhalten von"
+  },
+  "ed_person": {
+    "en": "Person",
+    "de": "Person"
+  },
+  "ed_remove_payer": {
+    "en": "Remove {1}",
+    "de": "{1} entfernen"
+  },
+  "ed_add_payer": {
+    "en": "Add a payer",
+    "de": "Weitere Person hat bezahlt"
+  },
+  "ed_item": {
+    "en": "Item",
+    "de": "Posten"
+  },
+  "ed_remove_item": {
+    "en": "Remove item",
+    "de": "Posten entfernen"
+  },
+  "ed_add_item": {
+    "en": "Add item",
+    "de": "Posten hinzufügen"
+  },
+  "ed_whole": {
+    "en": "The whole amount",
+    "de": "Der ganze Betrag"
+  },
+  "ed_rest": {
+    "en": "The rest",
+    "de": "Rest"
+  },
+  "ed_split_only": {
+    "en": "Only {1}",
+    "de": "Nur {1}"
+  },
+  "ed_adjust": {
+    "en": "Adjust",
+    "de": "Anpassen"
+  },
+  "ed_by_shares": {
+    "en": "Shares",
+    "de": "Anteile"
+  },
+  "ed_by_percent": {
+    "en": "Percent",
+    "de": "Prozent"
+  },
+  "ed_by_amount": {
+    "en": "Amount",
+    "de": "Betrag"
+  },
+  "ed_percent_total": {
+    "en": "The percents add up to {1} %%, not 100 %%.",
+    "de": "Die Prozente ergeben {1} %% statt 100 %%."
+  },
+  "ed_amounts_total": {
+    "en": "The amounts add up to {1}, not {2}.",
+    "de": "Die Beträge ergeben {1} statt {2}."
+  },
+  "ed_everyone_equally": {
+    "en": "Split equally among all",
+    "de": "Auf alle gleich verteilen"
+  },
+  "ed_shares_in": {
+    "en": "Shares in {1}",
+    "de": "Anteile in {1}"
+  },
+  "ed_paid_column": {
+    "en": "paid",
+    "de": "bezahlt"
+  },
+  "ed_received_column": {
+    "en": "received",
+    "de": "erhalten"
+  },
+  "ed_stale": {
+    "en": "Someone else changed this entry. Here is their version; save again to put yours on top.",
+    "de": "Jemand anderes hat diesen Eintrag geändert. Hier ist die neue Fassung; speichere erneut, um deine darüberzulegen."
+  },
+  "ed_blocked": {
+    "en": "Blocked by the operator: this pot or entry takes no changes. Nothing was saved.",
+    "de": "Von der Betreiberseite gesperrt: Diese Kasse oder dieser Eintrag nimmt keine Änderungen an. Nichts wurde gespeichert."
+  },
+  "ed_save_failed": {
+    "en": "The change was not saved. Please try again.",
+    "de": "Die Änderung wurde nicht gespeichert. Bitte versuche es erneut."
+  },
+  "problem_title": {
+    "en": "Give the entry a title.",
+    "de": "Gib dem Eintrag einen Titel."
+  },
+  "problem_date": {
+    "en": "Pick a date.",
+    "de": "Wähle ein Datum."
+  },
+  "problem_amount": {
+    "en": "Type an amount greater than zero, with no more decimals than the currency has.",
+    "de": "Gib einen Betrag über null ein, mit nicht mehr Nachkommastellen, als die Währung hat."
+  },
+  "problem_rate": {
+    "en": "Type the rate as a number greater than zero.",
+    "de": "Gib den Kurs als Zahl über null ein."
+  },
+  "problem_payers": {
+    "en": "Say who paid, and how much each.",
+    "de": "Gib an, wer wie viel bezahlt hat."
+  },
+  "problem_split": {
+    "en": "Say who shares the rest.",
+    "de": "Gib an, wer sich den Rest teilt."
+  },
+  "problem_split_shares": {
+    "en": "Shares are whole numbers from 1.",
+    "de": "Anteile sind ganze Zahlen ab 1."
+  },
+  "problem_split_percents": {
+    "en": "Type each percent above zero, with at most two decimals.",
+    "de": "Gib jeden Prozentwert über null an, mit höchstens zwei Nachkommastellen."
+  },
+  "problem_split_amounts": {
+    "en": "Type each amount above zero, with no more decimals than the currency has.",
+    "de": "Gib jeden Betrag über null an, mit nicht mehr Nachkommastellen, als die Währung hat."
+  },
+  "problem_items": {
+    "en": "Give every item a name, an amount and its people.",
+    "de": "Gib jedem Posten einen Namen, einen Betrag und seine Personen."
+  },
+  "problem_transfer": {
+    "en": "Pick two different people.",
+    "de": "Wähle zwei verschiedene Personen."
+  },
+  "problem_payers_unbalanced": {
+    "en": "What the payers paid does not add up to the amount.",
+    "de": "Was bezahlt wurde, ergibt nicht den Betrag."
+  },
+  "problem_receivers_unbalanced": {
+    "en": "What was received does not add up to the amount.",
+    "de": "Was erhalten wurde, ergibt nicht den Betrag."
+  },
+  "problem_items_above_total": {
+    "en": "The items add up to more than the amount.",
+    "de": "Die Posten ergeben mehr als den Betrag."
+  },
+  "problem_rest_unallocated": {
+    "en": "The rest is shared by no one.",
+    "de": "Der Rest ist niemandem zugeteilt."
+  },
+  "problem_percent_unbalanced": {
+    "en": "The percents of a split do not add up to 100 %%.",
+    "de": "Die Prozente einer Aufteilung ergeben nicht 100 %%."
+  },
+  "problem_amounts_unbalanced": {
+    "en": "The amounts of a split do not add up to what it splits.",
+    "de": "Die Beträge einer Aufteilung ergeben nicht, was sie aufteilt."
+  },
+  "problem_named_twice": {
+    "en": "Someone is named twice.",
+    "de": "Eine Person ist doppelt genannt."
+  },
+  "problem_unknown_participant": {
+    "en": "The entry names someone who is not in this pot.",
+    "de": "Der Eintrag nennt jemanden, der nicht in dieser Kasse ist."
+  },
+  "ed_split_everyone": {
+    "en": {
+      "one": "Only one person",
+      "other": "All {1:int} people, equally"
+    },
+    "de": {
+      "one": "Nur eine Person",
+      "other": "Alle {1:int} Personen zu gleichen Teilen"
+    }
+  },
+  "history_show": {
+    "en": "History",
+    "de": "Verlauf"
+  },
+  "history_hide": {
+    "en": "Hide history",
+    "de": "Verlauf ausblenden"
+  },
+  "history_deleted": {
+    "en": "Deleted",
+    "de": "Gelöscht"
+  },
+  "history_other": {
+    "en": "Changed",
+    "de": "Geändert"
+  },
+  "history_unreadable": {
+    "en": "A version this pot cannot read",
+    "de": "Eine Fassung, die diese Kasse nicht lesen kann"
+  },
+  "history_unknown_writer": {
+    "en": "Someone",
+    "de": "Jemand"
+  },
+  "entries_deleted_title": {
+    "en": "Deleted entries",
+    "de": "Gelöschte Einträge"
+  },
+  "entries_deleted_badge": {
+    "en": "deleted",
+    "de": "gelöscht"
+  },
+  "entry_delete": {
+    "en": "Delete",
+    "de": "Löschen"
+  },
+  "entry_restore": {
+    "en": "Restore",
+    "de": "Wiederherstellen"
+  },
+  "entry_deleted_hint": {
+    "en": "This entry is deleted and counts nowhere. Restoring it counts it again.",
+    "de": "Dieser Eintrag ist gelöscht und zählt nirgends. Wiederhergestellt zählt er wieder."
+  },
+  "entry_restorable_until": {
+    "en": "It can be restored until {1}; then its receipts are erased.",
+    "de": "Er kann bis {1} wiederhergestellt werden; dann werden seine Belege gelöscht."
+  },
+  "entry_not_restorable": {
+    "en": "Its receipts are erased, so it can no longer be restored.",
+    "de": "Seine Belege sind gelöscht, darum kann er nicht mehr wiederhergestellt werden."
+  },
+  "balances_record": {
+    "en": "Record",
+    "de": "Eintragen"
+  },
+  "balances_record_all": {
+    "en": "Record all",
+    "de": "Alle eintragen"
+  },
+  "ed_rate_loading": {
+    "en": "Fetching the day’s rate…",
+    "de": "Der Kurs des Tages wird geladen …"
+  },
+  "ed_rate_filled": {
+    "en": "Computed from the ECB’s euro reference rates of {1}.",
+    "de": "Berechnet aus den Euro-Referenzkursen der EZB vom {1}."
+  },
+  "ed_rate_missing": {
+    "en": "No rate found for {1}: type it.",
+    "de": "Kein Kurs für {1} gefunden: Trag ihn selbst ein."
+  },
+  "receipts_title": {
+    "en": "Receipts",
+    "de": "Belege"
+  },
+  "receipts_none": {
+    "en": "No receipts.",
+    "de": "Keine Belege."
+  },
+  "receipts_add": {
+    "en": "Add receipt",
+    "de": "Beleg hinzufügen"
+  },
+  "receipts_remove": {
+    "en": "Remove receipt",
+    "de": "Beleg entfernen"
+  },
+  "receipts_refused": {
+    "en": "Only images and PDFs up to 10 MB, at most 100 per entry.",
+    "de": "Nur Bilder und PDFs bis 10 MB, höchstens 100 je Eintrag."
+  },
+  "receipts_close": {
+    "en": "Close",
+    "de": "Schließen"
+  },
+  "receipts_save": {
+    "en": "Save a copy",
+    "de": "Kopie speichern"
+  },
+  "receipts_unreadable": {
+    "en": "This receipt could not be opened.",
+    "de": "Dieser Beleg ließ sich nicht öffnen."
+  },
+  "receipts_download_only": {
+    "en": "This file cannot be shown here; save a copy to open it.",
+    "de": "Diese Datei lässt sich hier nicht anzeigen; speichere eine Kopie, um sie zu öffnen."
+  },
+  "receipts_no_room": {
+    "en": "Saved without {1}: the space’s storage is full.",
+    "de": "Ohne {1} gespeichert: Der Speicher des Bereichs ist voll."
+  },
+  "node_favorite": {
+    "en": "Favorite",
+    "de": "Favorit"
+  },
+  "node_unfavorite": {
+    "en": "Remove favorite",
+    "de": "Favorit entfernen"
+  },
+  "node_favorite_failed": {
+    "en": "The favorite could not be saved. Try again.",
+    "de": "Der Favorit konnte nicht gespeichert werden. Versuche es noch einmal."
+  },
+  "node_more": {
+    "en": "More",
+    "de": "Mehr"
+  },
+  "pot_delete": {
+    "en": "Delete Pot",
+    "de": "Kasse löschen"
+  },
+  "pot_delete_confirm": {
+    "en": "“{1}” and all its entries go to the trash.",
+    "de": "„{1}“ und alle ihre Einträge kommen in den Papierkorb."
+  },
+  "trash_moved": {
+    "en": "“{1}” moved to the trash.",
+    "de": "„{1}“ liegt jetzt im Papierkorb."
+  },
+  "trash_undo": {
+    "en": "Undo",
+    "de": "Rückgängig"
+  },
+  "trash_undo_failed": {
+    "en": "“{1}” could not be restored. You can restore it from the trash.",
+    "de": "„{1}“ konnte nicht wiederhergestellt werden. Du kannst es aus dem Papierkorb wiederherstellen."
+  },
+  "delete_refused_gone": {
+    "en": "It is no longer there.",
+    "de": "Es ist nicht mehr da."
+  },
+  "delete_refused_scope_deleting": {
+    "en": "This space is being deleted.",
+    "de": "Dieser Bereich wird gelöscht."
+  },
+  "delete_refused_failed": {
+    "en": "Deleting didn’t work. Please try again.",
+    "de": "Das Löschen hat nicht geklappt. Bitte versuche es erneut."
+  },
+  "node_rename": {
+    "en": "Rename",
+    "de": "Umbenennen"
+  },
+  "node_name": {
+    "en": "Name",
+    "de": "Name"
+  },
+  "pot_a": {
+    "en": "a Pot",
+    "de": "eine Kasse"
+  },
+  "node_an_item": {
+    "en": "an item",
+    "de": "einen Eintrag"
+  },
+  "node_name_taken_by": {
+    "en": "There is already {1} named “{2}” here. Choose another name.",
+    "de": "Hier gibt es schon {1} namens „{2}“. Wähle einen anderen Namen."
+  },
+  "node_slug_taken": {
+    "en": "Something with a similar name already exists here.",
+    "de": "Hier gibt es bereits etwas mit ähnlichem Namen."
+  },
+  "node_illegal_structure": {
+    "en": "That isn’t allowed here.",
+    "de": "Das ist hier nicht erlaubt."
+  },
+  "node_save_failed": {
+    "en": "That didn’t work. Please try again.",
+    "de": "Das hat nicht geklappt. Bitte versuche es erneut."
+  },
+  "share_name_reseal_failed": {
+    "en": "Renamed. Some links to it could not be updated and still show the old name to their guests.",
+    "de": "Umbenannt. Einige Links darauf konnten nicht aktualisiert werden und zeigen ihren Gästen noch den alten Namen."
+  },
+  "share_nothing": {
+    "en": "Nothing shared can go here: only images and PDFs up to 10 MB.",
+    "de": "Nichts davon kann hier abgelegt werden: nur Bilder und PDFs bis 10 MB."
+  },
+  "share_pick": {
+    "en": {
+      "one": "Choose a Pot for this file",
+      "other": "Choose a Pot for these {1:int} files"
+    },
+    "de": {
+      "one": "Wähle eine Kasse für diese Datei",
+      "other": "Wähle eine Kasse für diese {1:int} Dateien"
+    }
+  },
+  "share_refused": {
+    "en": {
+      "one": "{1:int} file was left out: only images and PDFs up to 10 MB.",
+      "other": "{1:int} files were left out: only images and PDFs up to 10 MB."
+    },
+    "de": {
+      "one": "{1:int} Datei wurde ausgelassen: nur Bilder und PDFs bis 10 MB.",
+      "other": "{1:int} Dateien wurden ausgelassen: nur Bilder und PDFs bis 10 MB."
+    }
+  },
+  "trash_title": {
+    "note": "The space's trash (the web's node.trash).",
+    "en": "Trash",
+    "de": "Papierkorb"
+  },
+  "trash_hint": {
+    "en": "Deleted items wait here — with everything inside them — until the date shown. Restore one and it comes back complete.",
+    "de": "Gelöschte Einträge warten hier — mit allem, was darin ist — bis zum angezeigten Datum. Stellst du etwas wieder her, kommt es vollständig zurück."
+  },
+  "trash_empty": {
+    "en": "The trash is empty.",
+    "de": "Der Papierkorb ist leer."
+  },
+  "trash_load_failed": {
+    "en": "Could not open the trash. Please try again.",
+    "de": "Der Papierkorb konnte nicht geöffnet werden. Bitte erneut versuchen."
+  },
+  "trash_restore": {
+    "en": "Restore",
+    "de": "Wiederherstellen"
+  },
+  "trash_restore_failed": {
+    "en": "Could not restore this. Please try again.",
+    "de": "Konnte nicht wiederhergestellt werden. Bitte erneut versuchen."
+  },
+  "trash_name_taken": {
+    "en": "Something with a similar name already exists here.",
+    "de": "Hier gibt es bereits etwas mit ähnlichem Namen."
+  },
+  "trash_deleted_on": {
+    "en": "Deleted {1}",
+    "de": "Gelöscht am {1}"
+  },
+  "trash_purge_on": {
+    "en": "removed for good on {1}",
+    "de": "endgültig entfernt am {1}"
+  },
+  "trash_retry_name": {
+    "en": "New name",
+    "de": "Neuer Name"
+  },
+  "trash_cancel": {
+    "en": "Cancel",
+    "de": "Abbrechen"
+  },
+  "trash_purge": {
+    "en": "Delete forever",
+    "de": "Endgültig löschen"
+  },
+  "trash_purge_confirm_title": {
+    "en": "Delete forever?",
+    "de": "Endgültig löschen?"
+  },
+  "trash_purge_confirm": {
+    "en": "“{1}” and everything inside it will be permanently deleted now. This cannot be undone.",
+    "de": "„{1}“ wird mit allem, was darin ist, jetzt endgültig gelöscht. Das lässt sich nicht rückgängig machen."
+  },
+  "trash_purge_failed": {
+    "en": "Could not delete this for good. Please try again.",
+    "de": "Konnte nicht endgültig gelöscht werden. Bitte erneut versuchen."
+  },
+  "node_move": {
+    "note": "A move (the web's node.move).",
+    "en": "Move to…",
+    "de": "Verschieben nach …"
+  },
+  "move_title": {
+    "en": "Move “{1}”",
+    "de": "„{1}“ verschieben"
+  },
+  "move_hint": {
+    "en": "Open the place it should go to and choose “Move here”. Everything inside it moves along and stays readable.",
+    "de": "Öffne den Ort, an den es soll, und wähle „Hierher verschieben“. Alles darin wird mitverschoben und bleibt lesbar."
+  },
+  "move_empty": {
+    "en": "No place here can take “{1}”.",
+    "de": "Hier gibt es keinen Ort, der „{1}“ aufnehmen kann."
+  },
+  "move_submit": {
+    "en": "Move here",
+    "de": "Hierher verschieben"
+  },
+  "move_blocked_self": {
+    "en": "the item itself",
+    "de": "das Element selbst"
+  },
+  "move_blocked_inside": {
+    "en": "inside the item",
+    "de": "im Element"
+  },
+  "move_here_self": {
+    "en": "It can’t be moved into itself.",
+    "de": "Es kann nicht in sich selbst verschoben werden."
+  },
+  "move_here_inside": {
+    "en": "It can’t be moved into something inside it.",
+    "de": "Es kann nicht in etwas verschoben werden, das darin liegt."
+  },
+  "move_here_current": {
+    "en": "It is already here.",
+    "de": "Es ist schon hier."
+  },
+  "move_here_kind": {
+    "en": "This place can’t hold it.",
+    "de": "Dieser Ort kann es nicht aufnehmen."
+  },
+  "move_here_identity": {
+    "en": "Nothing can be moved into a guest’s folder.",
+    "de": "In den Ordner einer Person lässt sich nichts verschieben."
+  },
+  "copy_here_identity": {
+    "en": "Nothing can be copied into a guest’s folder.",
+    "de": "In den Ordner einer Person lässt sich nichts kopieren."
+  },
+  "move_identity_title": {
+    "en": "Move a guest’s folder out of the drop box?",
+    "de": "Ordner aus dem Briefkasten verschieben?"
+  },
+  "move_identity_confirm": {
+    "en": "“{1}” becomes an ordinary folder: the guest who sent it can no longer add anything to it, and it cannot be moved back into the drop box. Everything in it stays readable for you.",
+    "de": "„{1}“ wird ein gewöhnlicher Ordner: Die Person, die ihn eingeworfen hat, kann nichts mehr hinzufügen, und er lässt sich nicht zurück in den Briefkasten verschieben. Alles darin bleibt für dich lesbar."
+  },
+  "move_identity_accept": {
+    "en": "Move out",
+    "de": "Herausverschieben"
+  },
+  "move_moved": {
+    "en": "“{1}” moved to “{2}”.",
+    "de": "„{1}“ nach „{2}“ verschoben."
+  },
+  "move_undo_failed": {
+    "en": "“{1}” could not be moved back. Please move it yourself.",
+    "de": "„{1}“ konnte nicht zurückverschoben werden. Bitte verschiebe es selbst."
+  },
+  "move_refused_slug_taken": {
+    "en": "Something with this name already exists there. Rename it first, or choose another place.",
+    "de": "Dort gibt es bereits etwas mit diesem Namen. Benenne es zuerst um oder wähle einen anderen Ort."
+  },
+  "move_refused_illegal_structure": {
+    "en": "It can’t be placed there: that place doesn’t take this kind of item.",
+    "de": "Dort kann es nicht hin: Dieser Ort nimmt so etwas nicht auf."
+  },
+  "move_refused_stale_placement": {
+    "en": "Someone else moved or renamed it at the same time. The view has been reloaded — please try again.",
+    "de": "Jemand anderes hat es gleichzeitig verschoben oder umbenannt. Die Ansicht wurde neu geladen – bitte versuche es erneut."
+  },
+  "move_refused_rekey_pending": {
+    "en": "The space’s new lock is still going in. Try again in a moment.",
+    "de": "Das neue Schloss des Bereichs wird noch eingebaut. Versuch es gleich noch einmal."
+  },
+  "move_refused_gone": {
+    "en": "It, or the place you chose, is no longer there.",
+    "de": "Es oder der gewählte Ort ist nicht mehr da."
+  },
+  "move_refused_scope_deleting": {
+    "en": "This space is being deleted; nothing can be moved.",
+    "de": "Dieser Bereich wird gelöscht; nichts kann verschoben werden."
+  },
+  "move_refused_failed": {
+    "en": "Moving didn’t work. Please try again.",
+    "de": "Das Verschieben hat nicht geklappt. Bitte versuche es erneut."
+  },
+  "depot_uploaded_by": {
+    "note": "A Pot's guest links (the web's expenses.share and sharing).",
+    "en": "Uploaded by {1}",
+    "de": "Hochgeladen von {1}"
+  },
+  "depot_guest_name": {
+    "en": "{1} (guest)",
+    "de": "{1} (Gast)"
+  },
+  "depot_a_guest": {
+    "en": "a guest",
+    "de": "einem Gast"
+  },
+  "depot_not_uploaded": {
+    "en": "Not uploaded yet",
+    "de": "Noch nicht hochgeladen"
+  },
+  "depot_modified": {
+    "en": "Modified {1}",
+    "de": "Geändert {1}"
+  },
+  "depot_upload": {
+    "en": "Upload files",
+    "de": "Dateien hochladen"
+  },
+  "depot_upload_folder": {
+    "en": "Upload folder…",
+    "de": "Ordner hochladen…"
+  },
+  "depot_folder_no_room": {
+    "en": "“{1}” was not uploaded: there is not enough storage space for it ({2}). Free some space, or ask whoever runs your space.",
+    "de": "„{1}“ wurde nicht hochgeladen: Dafür ist nicht genug Speicherplatz vorhanden ({2}). Gib Platz frei oder frage die Person, die deinen Bereich betreibt."
+  },
+  "depot_folder_failed": {
+    "en": "“{1}” could not be created, so nothing of it was uploaded.",
+    "de": "„{1}“ konnte nicht angelegt werden, deshalb wurde nichts davon hochgeladen."
+  },
+  "depot_folder_part_failed": {
+    "en": "The folder “{1}” could not be created, so nothing in it was uploaded.",
+    "de": "Der Ordner „{1}“ konnte nicht angelegt werden, deshalb wurde nichts darin hochgeladen."
+  },
+  "depot_uploading": {
+    "en": "Uploading “{1}”…",
+    "de": "„{1}“ wird hochgeladen…"
+  },
+  "depot_replace": {
+    "en": "Replace…",
+    "de": "Ersetzen…"
+  },
+  "depot_upload_into": {
+    "en": "Upload…",
+    "de": "Hochladen…"
+  },
+  "depot_replace_title": {
+    "en": "Replace file",
+    "de": "Datei ersetzen"
+  },
+  "depot_replace_confirm": {
+    "en": "Replace “{1}”? A file with this name is already here: its content is replaced by the file you picked. The old content cannot be restored: there is no version history.",
+    "de": "„{1}“ ersetzen? Eine Datei mit diesem Namen liegt schon hier: Ihr Inhalt wird durch die gewählte Datei ersetzt. Der alte Inhalt lässt sich nicht wiederherstellen: Es gibt keinen Versionsverlauf."
+  },
+  "depot_replace_anyway": {
+    "en": "Replace anyway",
+    "de": "Trotzdem ersetzen"
+  },
+  "depot_error_slug_taken": {
+    "en": "“{1}” was not uploaded: a folder, Memory or file with a similar name already exists here.",
+    "de": "„{1}“ wurde nicht hochgeladen: Hier gibt es schon einen Ordner, eine Erinnerung oder eine Datei mit ähnlichem Namen."
+  },
+  "depot_error_stale_file": {
+    "en": "“{1}” was not uploaded: someone else replaced this file in the meantime. Replace it anyway, or look at theirs first.",
+    "de": "„{1}“ wurde nicht hochgeladen: Jemand anderes hat diese Datei inzwischen ersetzt. Ersetze sie trotzdem oder sieh dir zuerst die andere an."
+  },
+  "depot_error_quota": {
+    "en": "“{1}” was not uploaded: there is no space left. Deleted files only free space once the trash is emptied.",
+    "de": "„{1}“ wurde nicht hochgeladen: Es ist kein Speicherplatz mehr frei. Gelöschte Dateien geben erst Platz frei, wenn der Papierkorb geleert ist."
+  },
+  "depot_error_failed": {
+    "en": "“{1}” could not be uploaded.",
+    "de": "„{1}“ konnte nicht hochgeladen werden."
+  },
+  "share_role_uploader": {
+    "en": "Add files only",
+    "de": "Nur Dateien hinzufügen"
+  },
+  "share_upload_name": {
+    "en": "Name — guests with the link see it",
+    "de": "Name — Gäste mit dem Link sehen ihn"
+  },
+  "dropbox_upload_hint": {
+    "en": "Creates a drop box with this name here. Anyone with the link can send you files: each person gets a folder of their own, and nobody sees the drop box or what others sent. You manage its links on the drop box.",
+    "de": "Legt hier einen Briefkasten mit diesem Namen an. Wer den Link hat, kann dir Dateien schicken: Jede Person bekommt einen eigenen Ordner, und niemand sieht den Briefkasten oder was andere geschickt haben. Seine Links verwaltest du am Briefkasten."
+  },
+  "dropbox_share_title": {
+    "en": "Drop box links",
+    "de": "Links zum Briefkasten"
+  },
+  "dropbox_share_hint": {
+    "en": "Anyone with a link can add files. Nobody with it sees the drop box or what others added.",
+    "de": "Wer einen Link hat, kann Dateien einwerfen. Den Briefkasten und was andere eingeworfen haben, sieht damit niemand."
+  },
+  "dropbox_share_delete_confirm": {
+    "en": "Delete this link for good? Nobody can send files with it any more. What guests already sent stays in the drop box.",
+    "de": "Diesen Link endgültig löschen? Niemand kann damit noch Dateien einwerfen. Was Gäste schon eingeworfen haben, bleibt im Briefkasten."
+  },
+  "dropbox_link_failed": {
+    "en": "The drop box is made, but its link was not. Open the drop box to make one.",
+    "de": "Der Briefkasten ist angelegt, sein Link aber nicht. Öffne den Briefkasten, um einen zu erstellen."
+  },
+  "dropbox_people_none": {
+    "en": "Nobody yet",
+    "de": "Noch niemand"
+  },
+  "dropbox_people": {
+    "en": {
+      "one": "1 person",
+      "other": "{1:int} people"
+    },
+    "de": {
+      "one": "1 Person",
+      "other": "{1:int} Personen"
+    }
+  },
+  "dropbox_guest_files": {
+    "en": {
+      "one": "{1:int} file",
+      "other": "{1:int} files"
+    },
+    "de": {
+      "one": "{1:int} Datei",
+      "other": "{1:int} Dateien"
+    }
+  },
+  "dropbox_empty": {
+    "en": "Nobody has dropped anything yet. Share a link to collect files.",
+    "de": "Noch hat niemand etwas eingeworfen. Teile einen Link, um Dateien einzusammeln."
+  },
+  "dropbox_hint": {
+    "en": "Open a file to download or delete it. To remove everything someone sent, delete their folder; to keep it as an ordinary folder, move it out.",
+    "de": "Öffne eine Datei, um sie herunterzuladen oder zu löschen. Um alles zu entfernen, was jemand eingeworfen hat, lösche den Ordner der Person; um ihn als gewöhnlichen Ordner zu behalten, verschiebe ihn heraus."
+  },
+  "dropbox_delete": {
+    "en": "Delete drop box",
+    "de": "Briefkasten löschen"
+  },
+  "dropbox_delete_confirm": {
+    "en": "“{1}” moves to the trash with every guest’s folder in it, and its links take no files while it is there. You can restore it from the trash until it is removed for good.",
+    "de": "„{1}“ kommt mit den Ordnern aller Gäste in den Papierkorb, und seine Links nehmen dort keine Dateien an. Dort lässt er sich wiederherstellen, bis er endgültig entfernt wird."
+  },
+  "dropbox_move_folder": {
+    "en": "Move {1} out…",
+    "de": "{1} herausverschieben …"
+  },
+  "dropbox_delete_folder": {
+    "en": "Delete {1}",
+    "de": "{1} löschen"
+  },
+  "dropbox_delete_folder_confirm": {
+    "en": "“{1}” and everything in it move to the trash. You can restore it from there until it is removed for good.",
+    "de": "„{1}“ und alles darin kommen in den Papierkorb. Dort lässt sich alles wiederherstellen, bis es endgültig entfernt wird."
+  },
+  "file_send": {
+    "en": "Send a copy…",
+    "de": "Kopie senden…"
+  },
+  "file_send_title": {
+    "en": "Send a copy",
+    "de": "Kopie senden"
+  },
+  "file_send_notice": {
+    "en": "This sends a decrypted copy of “{1}” to the app you pick. There veyq no longer protects it: that app, and wherever it syncs or forwards it, can read it.",
+    "de": "Damit geht eine entschlüsselte Kopie von „{1}“ an die App, die du wählst. Dort schützt veyq sie nicht mehr: Diese App und alles, wohin sie synchronisiert oder weiterleitet, kann sie lesen."
+  },
+  "file_send_confirm": {
+    "en": "Send a copy",
+    "de": "Kopie senden"
+  },
+  "file_delete": {
+    "en": "Delete file",
+    "de": "Datei löschen"
+  },
+  "file_delete_confirm": {
+    "en": "“{1}” goes to the trash.",
+    "de": "„{1}“ kommt in den Papierkorb."
+  },
+  "file_type_unknown": {
+    "en": "Unknown",
+    "de": "Unbekannt"
+  },
+  "file_opening": {
+    "en": "Opening the file…",
+    "de": "Die Datei wird geöffnet…"
+  },
+  "file_open_failed": {
+    "en": "The file could not be opened. Please try again.",
+    "de": "Die Datei konnte nicht geöffnet werden. Bitte versuche es erneut."
+  },
+  "file_too_large": {
+    "en": "This file is too large to show here. You can download it.",
+    "de": "Diese Datei ist zu groß, um sie hier anzuzeigen. Du kannst sie herunterladen."
+  },
+  "file_empty": {
+    "en": "This file is empty.",
+    "de": "Diese Datei ist leer."
+  },
+  "file_unsupported": {
+    "en": "This file cannot be shown here. You can download it.",
+    "de": "Diese Datei kann hier nicht angezeigt werden. Du kannst sie herunterladen."
+  },
+  "file_text_truncated": {
+    "en": "Showing only the first megabyte. Download the file to read all of it.",
+    "de": "Angezeigt wird nur das erste Megabyte. Lade die Datei herunter, um alles zu lesen."
+  },
+  "share_file_title": {
+    "en": "Share this file",
+    "de": "Diese Datei teilen"
+  },
+  "share_file_intro": {
+    "en": "Create a link anyone can open in a browser — no account, no install. It shows only this one file, and you can switch it off anytime.",
+    "de": "Erstelle einen Link, den jede:r im Browser öffnen kann — ohne Konto, ohne Installation. Er zeigt nur diese eine Datei, und du kannst ihn jederzeit abschalten."
+  },
+  "share_file_role_contributor": {
+    "en": "View + contribute",
+    "de": "Ansehen + mitwirken"
+  },
+  "share_file_role_viewer_hint": {
+    "en": "Anyone with the link can see this file and download it, read-only.",
+    "de": "Wer den Link hat, kann diese Datei ansehen und herunterladen — schreibgeschützt."
+  },
+  "share_file_role_contributor_hint": {
+    "en": "Anyone with the link can see and download this file and replace its content — the old content cannot be restored: there is no version history.",
+    "de": "Wer den Link hat, kann diese Datei ansehen, herunterladen und ihren Inhalt ersetzen — der alte Inhalt lässt sich nicht wiederherstellen: Es gibt keinen Versionsverlauf."
+  },
+  "share_file_delete_confirm": {
+    "en": "Delete this link for good? It can never be switched on or renewed again. Content guests replaced stays in this file.",
+    "de": "Diesen Link endgültig löschen? Er lässt sich danach nie wieder einschalten oder erneuern. Inhalt, den Gäste ersetzt haben, bleibt in dieser Datei."
+  },
+  "share_folder_title": {
+    "en": "Share this folder",
+    "de": "Diesen Ordner teilen"
+  },
+  "share_folder_intro": {
+    "en": "Create a link anyone can open in a browser — no account, no install. It shows this folder and everything in it, and you can switch it off anytime.",
+    "de": "Erstelle einen Link, den jede:r im Browser öffnen kann — ohne Konto, ohne Installation. Er zeigt diesen Ordner mit allem, was darin liegt, und du kannst ihn jederzeit abschalten."
+  },
+  "share_folder_role_contributor": {
+    "en": "View + add files",
+    "de": "Ansehen + Dateien hinzufügen"
+  },
+  "share_folder_role_viewer_hint": {
+    "en": "Anyone with the link can look at this folder and everything in it, read-only.",
+    "de": "Wer den Link hat, kann diesen Ordner mit allem darin ansehen — schreibgeschützt."
+  },
+  "share_folder_role_contributor_hint": {
+    "en": "Anyone with the link can look, add folders and content, move things inside this folder, and upload files — also over any file already in it, yours included. A replaced file cannot be brought back: there is no version history.",
+    "de": "Wer den Link hat, kann ansehen, Ordner und Inhalte hinzufügen, darin verschieben und Dateien hochladen — auch über jede Datei, die schon darin liegt, deine eingeschlossen. Eine ersetzte Datei lässt sich nicht zurückholen: Es gibt keinen Versionsverlauf."
+  },
+  "share_folder_delete_confirm": {
+    "en": "Delete this link for good? It can never be switched on or renewed again. What guests added stays in this folder.",
+    "de": "Diesen Link endgültig löschen? Er lässt sich danach nie wieder einschalten oder erneuern. Was Gäste angelegt haben, bleibt in diesem Ordner."
+  },
+  "share_title": {
+    "en": "Share this Pot",
+    "de": "Diese Kasse teilen"
+  },
+  "share_intro": {
+    "en": "Create a link anyone can open in a browser — no account, no install. It shows only this Pot, and you can switch it off anytime.",
+    "de": "Erstelle einen Link, den jede:r im Browser öffnen kann — ohne Konto, ohne Installation. Er zeigt nur diese Kasse, und du kannst ihn jederzeit abschalten."
+  },
+  "share_new": {
+    "en": "New link",
+    "de": "Neuer Link"
+  },
+  "share_create": {
+    "en": "Create link",
+    "de": "Link erstellen"
+  },
+  "share_load_failed": {
+    "en": "Your links could not be loaded.",
+    "de": "Deine Links konnten nicht geladen werden."
+  },
+  "share_role_viewer": {
+    "en": "View only",
+    "de": "Nur ansehen"
+  },
+  "share_role_contributor": {
+    "en": "View + contribute",
+    "de": "Ansehen + mitwirken"
+  },
+  "share_role_viewer_hint": {
+    "en": "Anyone with the link sees the entries, balances and overview, read-only.",
+    "de": "Wer den Link hat, sieht die Einträge, Salden und den Überblick — schreibgeschützt."
+  },
+  "share_role_contributor_hint": {
+    "en": "Anyone with the link can also add, change and delete entries, and add and rename people.",
+    "de": "Wer den Link hat, kann außerdem Einträge hinzufügen, ändern und löschen sowie Personen hinzufügen und umbenennen."
+  },
+  "share_label": {
+    "en": "Optional label (only you see it)",
+    "de": "Optionaler Name (nur du siehst ihn)"
+  },
+  "share_password_section": {
+    "en": "Password protection",
+    "de": "Passwortschutz"
+  },
+  "share_password_hint": {
+    "en": "Open the share only with a password ({1:int}+ characters).",
+    "de": "Freigabe nur mit Passwort ab {1:int} Zeichen öffnen."
+  },
+  "share_password_by_rule": {
+    "en": "This space requires a password on every link ({1:int}+ characters).",
+    "de": "Dieser Bereich verlangt für jeden Link ein Passwort (ab {1:int} Zeichen)."
+  },
+  "share_password_short": {
+    "en": "At least {1:int} characters.",
+    "de": "Mindestens {1:int} Zeichen."
+  },
+  "share_expiry_section": {
+    "en": "Expiry date",
+    "de": "Ablaufdatum"
+  },
+  "share_expiry_hint": {
+    "en": "The link stops working after this date.",
+    "de": "Der Link funktioniert nach diesem Datum nicht mehr."
+  },
+  "share_expiry_by_rule": {
+    "en": "This space requires every link to end within {1:int} days of the day it is made.",
+    "de": "Dieser Bereich verlangt, dass jeder Link spätestens {1:int} Tage nach dem Tag endet, an dem er angelegt wird."
+  },
+  "share_created": {
+    "en": "Created {1}",
+    "de": "Erstellt am {1}"
+  },
+  "share_expires": {
+    "en": "Expires {1}",
+    "de": "Läuft ab am {1}"
+  },
+  "share_password_badge": {
+    "en": "Password",
+    "de": "Passwort"
+  },
+  "share_switched_off": {
+    "en": "Switched off",
+    "de": "Abgeschaltet"
+  },
+  "share_by_member": {
+    "en": "By another member",
+    "de": "Von einem anderen Mitglied"
+  },
+  "share_stopped": {
+    "en": "Guests can’t open it",
+    "de": "Gäste können ihn nicht öffnen"
+  },
+  "share_copy": {
+    "en": "Copy link",
+    "de": "Link kopieren"
+  },
+  "share_copied": {
+    "en": "Copied",
+    "de": "Kopiert"
+  },
+  "share_send": {
+    "en": "Share",
+    "de": "Teilen"
+  },
+  "share_done": {
+    "en": "Done",
+    "de": "Fertig"
+  },
+  "share_ready": {
+    "en": "Your link is ready — copy it:",
+    "de": "Dein Link ist bereit — kopiere ihn:"
+  },
+  "share_requirement_refused": {
+    "en": "This space now requires a password or an end date on every link. Add what is missing and try again.",
+    "de": "Dieser Bereich verlangt jetzt für jeden Link ein Passwort oder ein Enddatum. Ergänze, was fehlt, und versuche es erneut."
+  },
+  "share_not_allowed": {
+    "en": "Links are switched off here.",
+    "de": "Links sind hier ausgeschaltet."
+  },
+  "share_failed": {
+    "en": "That didn’t work — please try again.",
+    "de": "Das hat nicht geklappt — bitte erneut versuchen."
+  },
+  "share_switch_off": {
+    "en": "Revoke",
+    "de": "Widerrufen"
+  },
+  "share_closed_rekeying": {
+    "en": "The link is switched off. What is below it gets a new lock, so the old link opens nothing that comes later either.",
+    "de": "Der Link ist abgeschaltet. Was darunter liegt, bekommt ein neues Schloss, damit der alte Link auch künftig nichts mehr öffnet."
+  },
+  "report_action": {
+    "note": "A report to the moderators (the web's report.*, ADR 0093).",
+    "en": "Report",
+    "de": "Melden"
+  },
+  "report_title": {
+    "en": "Report",
+    "de": "Melden"
+  },
+  "report_intro": {
+    "en": "Tell the people who run this server about something illegal or against the terms. Only its moderators can read your report. Nobody else learns of it, the person who shared it included.",
+    "de": "Sag den Leuten, die diesen Server betreiben, Bescheid, wenn etwas rechtswidrig ist oder gegen die Nutzungsbedingungen verstößt. Nur die Moderation kann deine Meldung lesen. Sonst erfährt niemand davon, auch nicht die Person, die es geteilt hat."
+  },
+  "report_scope": {
+    "en": "What do you report?",
+    "de": "Was meldest du?"
+  },
+  "report_scope_whole": {
+    "en": "It and everything in it",
+    "de": "Es und alles darin"
+  },
+  "report_scope_name": {
+    "en": "Only its name",
+    "de": "Nur seinen Namen"
+  },
+  "report_scope_whole_hint": {
+    "en": "The moderators can open it and everything it holds.",
+    "de": "Die Moderation kann es und alles darin öffnen."
+  },
+  "report_scope_name_hint": {
+    "en": "The moderators can open its name and nothing else: not what it holds, not its other details.",
+    "de": "Die Moderation kann seinen Namen öffnen und sonst nichts: nicht, was darin ist, und nicht seine übrigen Angaben."
+  },
+  "report_category": {
+    "en": "What is it?",
+    "de": "Worum geht es?"
+  },
+  "report_cat_csam": {
+    "en": "Child sexual abuse material",
+    "de": "Darstellung sexuellen Missbrauchs von Kindern"
+  },
+  "report_cat_terror": {
+    "en": "Terrorist content",
+    "de": "Terroristische Inhalte"
+  },
+  "report_cat_threat": {
+    "en": "A threat to someone’s life or safety",
+    "de": "Eine Gefahr für Leben oder Sicherheit"
+  },
+  "report_cat_illegal": {
+    "en": "Other illegal content",
+    "de": "Andere rechtswidrige Inhalte"
+  },
+  "report_cat_terms": {
+    "en": "A breach of the terms",
+    "de": "Ein Verstoß gegen die Nutzungsbedingungen"
+  },
+  "report_csam_note": {
+    "en": "You do not need to give your name for this. The moderators act on your report without it.",
+    "de": "Dafür musst du deinen Namen nicht angeben. Die Moderation handelt auch ohne ihn."
+  },
+  "report_reason": {
+    "en": "Why are you reporting it?",
+    "de": "Warum meldest du es?"
+  },
+  "report_reason_hint": {
+    "en": "Say what is illegal or against the terms, and why. Required.",
+    "de": "Beschreibe, was rechtswidrig ist oder gegen die Nutzungsbedingungen verstößt, und warum. Pflichtfeld."
+  },
+  "report_good_faith": {
+    "en": "I confirm that what I say here is accurate and complete to the best of my knowledge.",
+    "de": "Ich bestätige, dass meine Angaben nach bestem Wissen richtig und vollständig sind."
+  },
+  "report_contact": {
+    "en": "Your email address (optional)",
+    "de": "Deine E-Mail-Adresse (optional)"
+  },
+  "report_contact_hint": {
+    "en": "For a receipt now and the decision later. The server mails the receipt and keeps the address only in a form the moderators alone can read.",
+    "de": "Für eine Eingangsbestätigung jetzt und die Entscheidung später. Der Server verschickt die Bestätigung und bewahrt die Adresse nur so auf, dass allein die Moderation sie lesen kann."
+  },
+  "report_privacy": {
+    "en": "How your contact is kept, and for how long",
+    "de": "Wie dein Kontakt aufbewahrt wird, und wie lange"
+  },
+  "report_send": {
+    "en": "Send report",
+    "de": "Meldung senden"
+  },
+  "report_sent": {
+    "en": "Your report was received.",
+    "de": "Deine Meldung ist eingegangen."
+  },
+  "report_receipt": {
+    "en": "Reference {1}, received {2}. Keep it if you want to refer to this report.",
+    "de": "Aktenzeichen {1}, eingegangen am {2}. Bewahre es auf, wenn du dich auf diese Meldung beziehen willst."
+  },
+  "report_close": {
+    "en": "Close",
+    "de": "Schließen"
+  },
+  "report_failed": {
+    "en": "The report could not be sent. Try again.",
+    "de": "Die Meldung konnte nicht gesendet werden. Versuch es noch einmal."
+  },
+  "report_too_many_open": {
+    "en": "You have too many reports that are still open. Wait until some of them are decided.",
+    "de": "Du hast zu viele Meldungen, über die noch nicht entschieden ist. Warte, bis einige entschieden sind."
+  },
+  "report_rate_limited": {
+    "en": "Too many reports in a short time. Try again later.",
+    "de": "Zu viele Meldungen in kurzer Zeit. Versuch es später noch einmal."
+  },
+  "report_unavailable": {
+    "en": "Some of what you selected cannot be read here any more, so it cannot be reported. Reload the page.",
+    "de": "Etwas von dem, was du ausgewählt hast, lässt sich hier nicht mehr lesen und darum nicht melden. Lade die Seite neu."
+  },
+  "report_not_found": {
+    "en": "Some of what you selected is not here any more. Reload the page.",
+    "de": "Etwas von dem, was du ausgewählt hast, ist nicht mehr da. Lade die Seite neu."
+  },
+  "share_edit": {
+    "en": "Edit",
+    "de": "Bearbeiten"
+  },
+  "share_save": {
+    "en": "Save",
+    "de": "Speichern"
+  },
+  "share_reactivate": {
+    "en": "Switch on again",
+    "de": "Wieder einschalten"
+  },
+  "share_reissue_hint": {
+    "en": "This link cannot be switched back on: someone who has left this space may still hold it. Renew it instead.",
+    "de": "Dieser Link lässt sich nicht wieder einschalten: Jemand, der diesen Bereich verlassen hat, könnte ihn noch haben. Erneuere ihn stattdessen."
+  },
+  "share_renew": {
+    "en": "Renew link",
+    "de": "Link erneuern"
+  },
+  "share_renew_confirm": {
+    "en": "This makes a new link and deletes the old one. Hand out the new link.",
+    "de": "Dadurch entsteht ein neuer Link, und der alte wird gelöscht. Gib den neuen Link weiter."
+  },
+  "share_delete": {
+    "en": "Delete link",
+    "de": "Link löschen"
+  },
+  "share_delete_confirm": {
+    "en": "Delete this link for good? It can never be switched on or renewed again. Entries guests wrote stay in the Pot.",
+    "de": "Diesen Link endgültig löschen? Er lässt sich danach nie wieder einschalten oder erneuern. Einträge, die Gäste geschrieben haben, bleiben in der Kasse."
+  },
+  "share_password_keep": {
+    "en": "•••••••• (unchanged)",
+    "de": "•••••••• (unverändert)"
+  },
+  "share_password_lost": {
+    "en": "Its password cannot be read here any more, so it cannot be renewed without losing it.",
+    "de": "Sein Passwort lässt sich hier nicht mehr lesen, darum kann er nicht erneuert werden, ohne es zu verlieren."
+  },
+  "share_gone": {
+    "en": "This link was already renewed or deleted — the list now shows the current links.",
+    "de": "Dieser Link wurde bereits erneuert oder gelöscht — die Liste zeigt jetzt die aktuellen Links."
+  },
+  "node_download": {
+    "en": "Download",
+    "de": "Herunterladen"
+  },
+  "download_done": {
+    "en": "“{1}” is downloaded.",
+    "de": "„{1}“ ist heruntergeladen."
+  },
+  "download_failed": {
+    "en": "“{1}” could not be downloaded. Please try again.",
+    "de": "„{1}“ konnte nicht heruntergeladen werden. Bitte versuche es noch einmal."
+  },
+  "receipts_save_gallery": {
+    "en": "Save to gallery",
+    "de": "In Galerie speichern"
+  },
+  "receipts_saved_gallery": {
+    "en": "Saved to the gallery.",
+    "de": "In der Galerie gespeichert."
+  },
+  "receipts_not_saved_gallery": {
+    "en": "The picture could not be saved to the gallery.",
+    "de": "Das Bild konnte nicht in der Galerie gespeichert werden."
+  },
+  "copy_action": {
+    "en": "Copy to…",
+    "de": "Kopieren nach …"
+  },
+  "copy_title": {
+    "en": "Copy “{1}”",
+    "de": "„{1}“ kopieren"
+  },
+  "copy_hint": {
+    "en": "Open the place the copy should go to and choose “Copy here”.",
+    "de": "Öffne den Ort, an den die Kopie soll, und wähle „Hierher kopieren“."
+  },
+  "copy_submit": {
+    "en": "Copy here",
+    "de": "Hierher kopieren"
+  },
+  "copy_no_room": {
+    "en": "There is not enough storage space for this copy ({1}). Free some space, or ask whoever runs your space.",
+    "de": "Für diese Kopie ist nicht genug Speicherplatz frei ({1}). Schaffe Platz oder frag, wer deinen Bereich betreibt."
+  },
+  "copy_losses": {
+    "en": "What does not come along:",
+    "de": "Was nicht mitkommt:"
+  },
+  "copy_loss_always": {
+    "en": "Shares, favourites, the trash and the original upload times. You become the owner of the copy.",
+    "de": "Freigaben, Favoriten, der Papierkorb und die ursprünglichen Hochladezeiten. Die Kopie gehört dir."
+  },
+  "copy_loss_pot": {
+    "en": "The history of each entry and the deleted entries: a copy starts every entry at its current version.",
+    "de": "Den Verlauf jedes Eintrags und die gelöschten Einträge: Eine Kopie beginnt jeden Eintrag mit seiner aktuellen Fassung."
+  },
+  "copy_loss_dropbox": {
+    "en": "A drop box becomes an ordinary folder, its people’s folders ordinary folders: no links, nobody can drop files into it, no cover.",
+    "de": "Ein Briefkasten wird ein gewöhnlicher Ordner, die Ordner der Personen darin gewöhnliche Ordner: keine Links, niemand kann mehr einwerfen, kein Titelbild."
+  },
+  "copy_loss_folder_cover": {
+    "en": "A folder’s cover.",
+    "de": "Das Titelbild eines Ordners."
+  },
+  "copy_left_out": {
+    "en": "Left out, because this version cannot copy them:",
+    "de": "Ausgelassen, weil diese Version sie nicht kopieren kann:"
+  },
+  "copy_failed_rolled_back": {
+    "en": "The copy did not go through. What it made was moved to the trash; please try again.",
+    "de": "Die Kopie ist nicht durchgegangen. Was sie angelegt hatte, liegt im Papierkorb; bitte versuche es noch einmal."
+  },
+  "download_left_out": {
+    "en": "Left out, because this version cannot download them: {1}",
+    "de": "Weggelassen, weil diese Version sie nicht herunterladen kann: {1}"
+  },
+  "left_out_line": {
+    "en": "“{1}”: {2}",
+    "de": "„{1}“: {2}"
+  },
+  "left_out_unsupported": {
+    "en": "not supported",
+    "de": "nicht unterstützt"
+  },
+  "left_out_nothing": {
+    "en": "nothing in it",
+    "de": "nichts darin"
+  },
+  "left_out_not_copyable": {
+    "en": "cannot be copied yet",
+    "de": "lässt sich noch nicht kopieren"
+  },
+  "copy_loss_cover": {
+    "en": "A Pot’s cover.",
+    "de": "Das Titelbild einer Kasse."
+  },
+  "copy_done": {
+    "en": "“{1}” is copied to “{2}”.",
+    "de": "„{1}“ ist nach „{2}“ kopiert."
+  },
+  "copy_failed": {
+    "en": "The copy did not go through. Nothing was left behind; please try again.",
+    "de": "Die Kopie ist nicht gelungen. Es blieb nichts zurück; bitte versuche es noch einmal."
+  },
+  "copy_name_taken": {
+    "en": "There is no free name for the copy there. Rename it first, or choose another place.",
+    "de": "Dort ist kein freier Name für die Kopie mehr. Benenne sie zuerst um oder wähle einen anderen Ort."
+  },
+  "copy_nothing": {
+    "en": "Nothing here can be copied by this version of veyq.",
+    "de": "Hier kann diese Version von veyq nichts kopieren."
+  },
+  "cover_title": {
+    "en": "Cover",
+    "de": "Cover"
+  },
+  "cover_hint": {
+    "en": "Upload an image as the cover, then drag and zoom to frame it.",
+    "de": "Lade ein Bild als Cover hoch und ziehe und zoome es dann in den Ausschnitt."
+  },
+  "cover_choose": {
+    "en": "Choose a picture",
+    "de": "Bild auswählen"
+  },
+  "cover_save": {
+    "en": "Save cover",
+    "de": "Cover speichern"
+  },
+  "cover_unreadable": {
+    "en": "This image could not be read. Try a JPEG or PNG.",
+    "de": "Dieses Bild konnte nicht gelesen werden. Versuche ein JPEG oder PNG."
+  },
+  "cover_zoom": {
+    "en": "Zoom",
+    "de": "Zoom"
+  },
+  "cover_set": {
+    "en": "Set cover",
+    "de": "Titelbild festlegen"
+  },
+  "cover_change": {
+    "en": "Change cover",
+    "de": "Titelbild ändern"
+  },
+  "cover_remove": {
+    "en": "Remove cover",
+    "de": "Titelbild entfernen"
+  },
+  "cover_failed": {
+    "en": "The cover could not be saved. Please try again.",
+    "de": "Das Titelbild konnte nicht gespeichert werden. Bitte versuche es noch einmal."
+  },
+  "create_new": {
+    "en": "New",
+    "de": "Neu"
+  },
+  "folder_new": {
+    "en": "New folder",
+    "de": "Neuer Ordner"
+  },
+  "folder_name": {
+    "en": "Name",
+    "de": "Name"
+  },
+  "folder_create": {
+    "en": "Create",
+    "de": "Anlegen"
+  },
+  "folder_name_empty": {
+    "en": "Give it a name.",
+    "de": "Gib einen Namen ein."
+  },
+  "folder_name_taken": {
+    "en": "Something with this name is already here.",
+    "de": "Hier gibt es schon etwas mit diesem Namen."
+  },
+  "folder_failed": {
+    "en": "The folder could not be created. Please try again.",
+    "de": "Der Ordner konnte nicht angelegt werden. Bitte versuche es noch einmal."
+  },
+  "folder_delete": {
+    "en": "Delete folder",
+    "de": "Ordner löschen"
+  },
+  "folder_delete_confirm": {
+    "en": "“{1}” and everything in it go to the trash.",
+    "de": "„{1}“ und alles darin kommen in den Papierkorb."
+  },
+  "memory_chapters": {
+    "en": "Chapters",
+    "de": "Kapitel"
+  },
+  "memory_gallery_failed": {
+    "en": "The gallery could not be loaded.",
+    "de": "Die Galerie konnte nicht geladen werden."
+  },
+  "memory_gallery_empty": {
+    "en": "No photos or videos yet.",
+    "de": "Noch keine Fotos oder Videos."
+  },
+  "memory_delete_memory": {
+    "en": "Delete Memory",
+    "de": "Erinnerung löschen"
+  },
+  "memory_delete_chapter": {
+    "en": "Delete chapter",
+    "de": "Kapitel löschen"
+  },
+  "memory_delete_confirm": {
+    "en": "“{1}” moves to the trash. You can restore it from there until it is removed for good.",
+    "de": "„{1}“ kommt in den Papierkorb. Dort lässt es sich wiederherstellen, bis es endgültig entfernt wird."
+  },
+  "memory_items": {
+    "en": {
+      "one": "{1:int} item",
+      "other": "{1:int} items"
+    },
+    "de": {
+      "one": "{1:int} Objekt",
+      "other": "{1:int} Objekte"
+    }
+  },
+  "memory_item_position": {
+    "note": "Memories' lightbox: its details (the web's media.* lightbox keys), the download and a video.",
+    "en": "{1:int} of {2:int}",
+    "de": "{1:int} von {2:int}"
+  },
+  "memory_details": {
+    "en": "Details",
+    "de": "Details"
+  },
+  "memory_close": {
+    "en": "Close",
+    "de": "Schließen"
+  },
+  "memory_no_detail": {
+    "en": "No details for this item.",
+    "de": "Keine Details für dieses Objekt."
+  },
+  "memory_download": {
+    "en": "Download original",
+    "de": "Original herunterladen"
+  },
+  "memory_play": {
+    "en": "Play video",
+    "de": "Video abspielen"
+  },
+  "memory_video_failed": {
+    "en": "The video couldn’t be played.",
+    "de": "Das Video konnte nicht abgespielt werden."
+  },
+  "memory_blocked": {
+    "en": "This item was blocked by the operator.",
+    "de": "Dieses Objekt wurde vom Betreiber gesperrt."
+  },
+  "memory_field_captured": {
+    "en": "Taken",
+    "de": "Aufgenommen"
+  },
+  "memory_field_file_name": {
+    "en": "File",
+    "de": "Datei"
+  },
+  "memory_field_file_size": {
+    "en": "Size",
+    "de": "Größe"
+  },
+  "memory_field_file_format": {
+    "en": "Format",
+    "de": "Format"
+  },
+  "memory_field_camera": {
+    "en": "Camera",
+    "de": "Kamera"
+  },
+  "memory_field_lens": {
+    "en": "Lens",
+    "de": "Objektiv"
+  },
+  "memory_field_focal_length": {
+    "en": "Focal length",
+    "de": "Brennweite"
+  },
+  "memory_field_focal_length_35": {
+    "en": "Equivalent",
+    "de": "Kleinbild-Äquivalent"
+  },
+  "memory_field_aperture": {
+    "en": "Aperture",
+    "de": "Blende"
+  },
+  "memory_field_exposure": {
+    "en": "Exposure",
+    "de": "Belichtung"
+  },
+  "memory_field_exposure_compensation": {
+    "en": "Exposure compensation",
+    "de": "Belichtungskorrektur"
+  },
+  "memory_field_iso": {
+    "en": "ISO",
+    "de": "ISO"
+  },
+  "memory_field_flash": {
+    "en": "Flash",
+    "de": "Blitz"
+  },
+  "memory_field_dimensions": {
+    "en": "Dimensions",
+    "de": "Abmessungen"
+  },
+  "memory_field_title": {
+    "en": "Title",
+    "de": "Titel"
+  },
+  "memory_field_description": {
+    "en": "Description",
+    "de": "Beschreibung"
+  },
+  "memory_field_rating": {
+    "en": "Rating",
+    "de": "Bewertung"
+  },
+  "memory_field_software": {
+    "en": "Software",
+    "de": "Software"
+  },
+  "memory_field_artist": {
+    "en": "Author",
+    "de": "Urheber"
+  },
+  "memory_field_copyright": {
+    "en": "Copyright",
+    "de": "Copyright"
+  },
+  "memory_field_altitude": {
+    "en": "Altitude",
+    "de": "Höhe"
+  },
+  "memory_field_direction": {
+    "en": "Direction",
+    "de": "Blickrichtung"
+  },
+  "memory_field_gps_accuracy": {
+    "en": "Position accuracy",
+    "de": "Positionsgenauigkeit"
+  },
+  "memory_field_status": {
+    "en": "Status",
+    "de": "Status"
+  },
+  "memory_field_place": {
+    "en": "Place",
+    "de": "Ort"
+  },
+  "memory_field_location": {
+    "en": "Location",
+    "de": "Position"
+  },
+  "memory_field_uploaded_by": {
+    "en": "Added by",
+    "de": "Hinzugefügt von"
+  },
+  "memory_flash_fired": {
+    "en": "Fired",
+    "de": "Ausgelöst"
+  },
+  "memory_flash_not_fired": {
+    "en": "Did not fire",
+    "de": "Nicht ausgelöst"
+  },
+  "memory_direction_true": {
+    "en": "{1:int}° (true north)",
+    "de": "{1:int}° (geografisch Nord)"
+  },
+  "memory_direction_magnetic": {
+    "en": "{1:int}° (magnetic north)",
+    "de": "{1:int}° (magnetisch Nord)"
+  },
+  "memory_corrected": {
+    "en": "Corrected",
+    "de": "Korrigiert"
+  },
+  "memory_uploader_former": {
+    "en": "Former member",
+    "de": "Ehemaliges Mitglied"
+  },
+  "memory_uploader_guest": {
+    "en": "A guest",
+    "de": "Ein Gast"
+  },
+  "memory_add": {
+    "en": "Add photos",
+    "de": "Fotos hinzufügen"
+  },
+  "memory_upload_failed": {
+    "en": "Could not add: {1}. Please try again.",
+    "de": "Konnte nicht hinzugefügt werden: {1}. Bitte versuche es erneut."
+  },
+  "memory_upload_no_room": {
+    "en": "“{1}” could not be added: there is no room left in this space’s storage.",
+    "de": "„{1}“ konnte nicht hinzugefügt werden: Im Speicher dieses Bereichs ist kein Platz mehr."
+  },
+  "memory_upload_switched_off": {
+    "en": "Memories is switched off here, so nothing can be added.",
+    "de": "Erinnerungen ist hier abgeschaltet, deshalb kann nichts dazukommen."
+  },
+  "upload_title": {
+    "note": "the shell's uploads (core's upload queue, the web's `upload.*`)",
+    "en": "Uploads",
+    "de": "Uploads"
+  },
+  "upload_active": {
+    "en": "{1:int} active",
+    "de": "{1:int} aktiv"
+  },
+  "upload_failed_count": {
+    "en": "{1:int} not uploaded",
+    "de": "{1:int} nicht hochgeladen"
+  },
+  "upload_cancel_all": {
+    "en": "Cancel all",
+    "de": "Alle abbrechen"
+  },
+  "upload_cancel": {
+    "en": "Cancel",
+    "de": "Abbrechen"
+  },
+  "upload_retry": {
+    "en": "Retry",
+    "de": "Erneut versuchen"
+  },
+  "upload_close": {
+    "en": "Close",
+    "de": "Schließen"
+  },
+  "upload_status_queued": {
+    "en": "Queued",
+    "de": "In Warteschlange"
+  },
+  "upload_status_preparing": {
+    "en": "Preparing…",
+    "de": "Wird vorbereitet …"
+  },
+  "upload_status_uploading": {
+    "en": "Uploading…",
+    "de": "Lädt hoch …"
+  },
+  "upload_status_done": {
+    "en": "Done",
+    "de": "Fertig"
+  },
+  "upload_status_failed": {
+    "en": "Failed",
+    "de": "Fehlgeschlagen"
+  },
+  "upload_status_cancelled": {
+    "en": "Cancelled",
+    "de": "Abgebrochen"
+  },
+  "upload_no_space": {
+    "en": "No space left. Items in a trash still take up space until they are removed for good.",
+    "de": "Kein Speicherplatz mehr frei. Einträge im Papierkorb belegen weiter Platz, bis sie endgültig entfernt sind."
+  },
+  "upload_switched_off": {
+    "en": "This application is switched off here.",
+    "de": "Diese Anwendung ist hier abgeschaltet."
+  },
+  "upload_name_taken": {
+    "en": "A folder, Memory or file with a similar name already exists here.",
+    "de": "Hier gibt es schon einen Ordner, eine Erinnerung oder eine Datei mit ähnlichem Namen."
+  },
+  "upload_preparing_folder": {
+    "en": "Creating the folders of “{1}”…",
+    "de": "Die Ordner von „{1}“ werden angelegt …"
+  }
+}

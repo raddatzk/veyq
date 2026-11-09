@@ -28,8 +28,41 @@ val generateThemeRes = tasks.register<GenerateThemeRes>("generateThemeRes") {
     brand.set(rootDir.resolve("../web/src/assets/brand"))
 }
 
+// Every word the app shows (ADR 0127 decision 3), generated from src/mobile/words/words.json: the resources under their
+// keys, and `Context.words(Msg, …)` for what the core raises. The app writes no word of its own.
+abstract class GenerateWords : DefaultTask() {
+    @get:InputFile abstract val script: RegularFileProperty
+    @get:InputFile abstract val catalog: RegularFileProperty
+    @get:OutputDirectory abstract val resDir: DirectoryProperty
+    @get:OutputDirectory abstract val kotlinDir: DirectoryProperty
+    @get:javax.inject.Inject abstract val exec: ExecOperations
+
+    @TaskAction
+    fun generate() {
+        exec.exec {
+            commandLine(
+                "python3", script.get().asFile.absolutePath,
+                "--android-res", resDir.get().asFile.absolutePath, "--android-kotlin", kotlinDir.get().asFile.absolutePath,
+            )
+        }
+    }
+}
+
+val generateWords = tasks.register<GenerateWords>("generateWords") {
+    group = "veyq"
+    description = "Generates the app's words from the catalog."
+    script.set(rootDir.resolve("words/generate_words.py"))
+    catalog.set(rootDir.resolve("words/words.json"))
+    resDir.set(layout.buildDirectory.dir("generated/words/res"))
+    kotlinDir.set(layout.buildDirectory.dir("generated/words/kotlin"))
+}
+
 androidComponents {
-    onVariants { variant -> variant.sources.res?.addGeneratedSourceDirectory(generateThemeRes, GenerateThemeRes::outDir) }
+    onVariants { variant ->
+        variant.sources.res?.addGeneratedSourceDirectory(generateThemeRes, GenerateThemeRes::outDir)
+        variant.sources.res?.addGeneratedSourceDirectory(generateWords, GenerateWords::resDir)
+        variant.sources.kotlin?.addGeneratedSourceDirectory(generateWords, GenerateWords::kotlinDir)
+    }
 }
 
 android {

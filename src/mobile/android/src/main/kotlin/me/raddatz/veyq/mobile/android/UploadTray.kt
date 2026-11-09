@@ -128,14 +128,7 @@ private fun UploadSheet(state: UploadQueue.State, model: AppModel, onDismiss: ()
 
 @Composable
 private fun UploadRow(item: UploadQueue.Item, model: AppModel) {
-    val status = when (item.status) {
-        UploadQueue.Status.QUEUED -> stringResource(R.string.upload_status_queued)
-        UploadQueue.Status.PREPARING -> stringResource(R.string.upload_status_preparing)
-        UploadQueue.Status.UPLOADING -> stringResource(R.string.upload_status_uploading)
-        UploadQueue.Status.DONE -> stringResource(R.string.upload_status_done)
-        UploadQueue.Status.FAILED -> model.uploadProblem(item) ?: stringResource(R.string.upload_status_failed)
-        UploadQueue.Status.CANCELLED -> stringResource(R.string.upload_status_cancelled)
-    }
+    val status = androidx.compose.ui.platform.LocalContext.current.text(me.raddatz.veyq.mobile.words.Notices.uploadStatus(item))
     ListItem(
         headlineContent = { Text(item.name, maxLines = 1, overflow = TextOverflow.Ellipsis) },
         supportingContent = {

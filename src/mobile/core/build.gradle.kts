@@ -104,6 +104,17 @@ val generateTheme = tasks.register<Exec>("generateTheme") {
     commandLine("python3", rootDir.resolve("theme/generate_theme.py").absolutePath, "--kotlin", generatedTheme.get().asFile.absolutePath)
 }
 
+// Every word the apps show, from the one catalog (ADR 0127 decision 3): the core's `Msg` keys.
+val generatedWords = layout.buildDirectory.dir("generated/words")
+val generateWords = tasks.register<Exec>("generateWords") {
+    group = "veyq"
+    description = "Generates the catalog's keys as Kotlin (src/mobile/words/generate_words.py)."
+    inputs.file(rootDir.resolve("words/generate_words.py")).withPropertyName("script")
+    inputs.file(rootDir.resolve("words/words.json")).withPropertyName("catalog")
+    outputs.dir(generatedWords)
+    commandLine("python3", rootDir.resolve("words/generate_words.py").absolutePath, "--kotlin", generatedWords.get().asFile.absolutePath)
+}
+
 // libsodium for the Apple targets, built from its pinned release tarball (core/sodium/build_libsodium.py); the script
 // skips a slice already built, so this costs nothing after the first run.
 val libsodium = rootDir.resolve("build/libsodium")
@@ -141,6 +152,7 @@ kotlin {
             kotlin.srcDir(generatedApi.map { it.dir("src/commonMain/kotlin") })
             kotlin.srcDir(generatedMajor)
             kotlin.srcDir(generatedTheme)
+            kotlin.srcDir(generatedWords)
         }
         commonMain.dependencies {
             implementation(libs.coroutines.core)
@@ -186,5 +198,5 @@ tasks.withType<org.jetbrains.kotlin.gradle.targets.native.tasks.KotlinNativeTest
     inputs.file(vectors).withPropertyName("vectors")
 }
 
-tasks.matching { it.name.startsWith("compile") || it.name.endsWith("SourcesJar") }.configureEach { dependsOn(generateApi, generateMajor, generateTheme) }
+tasks.matching { it.name.startsWith("compile") || it.name.endsWith("SourcesJar") }.configureEach { dependsOn(generateApi, generateMajor, generateTheme, generateWords) }
 tasks.matching { it.name.startsWith("cinteropSodium") }.configureEach { dependsOn(buildLibsodium) }

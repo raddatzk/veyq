@@ -767,17 +767,8 @@ private fun tabLabel(tab: BarTab, kind: String?): String = stringResource(
 internal val LocalRowDetails = androidx.compose.runtime.compositionLocalOf<Map<String, List<String>>> { emptyMap() }
 
 /** Why a rename did not land, in core's words (`nodeNameErrorText`); null once renamed. */
-internal fun renameProblem(context: android.content.Context, r: me.raddatz.veyq.mobile.session.NodeRename.Result): String? = when (r.outcome) {
-    me.raddatz.veyq.mobile.session.NodeRename.Outcome.RENAMED -> null
-    me.raddatz.veyq.mobile.session.NodeRename.Outcome.NAME_TAKEN -> r.taken?.let { sibling ->
-        // the colliding sibling's noun with its article: its kind's `nounWithArticle`, else "an item"
-        val kind = context.getString(if (sibling.kind == "EXPENSES_POT") R.string.pot_a else R.string.node_an_item)
-        context.getString(R.string.node_name_taken_by, kind, sibling.name)
-    } ?: context.getString(R.string.node_slug_taken)
-    me.raddatz.veyq.mobile.session.NodeRename.Outcome.NOT_ALLOWED -> context.getString(R.string.node_illegal_structure)
-    me.raddatz.veyq.mobile.session.NodeRename.Outcome.BUSY -> context.getString(R.string.pot_busy)
-    me.raddatz.veyq.mobile.session.NodeRename.Outcome.FAILED -> context.getString(R.string.node_save_failed)
-}
+internal fun renameProblem(context: android.content.Context, r: me.raddatz.veyq.mobile.session.NodeRename.Result): String? =
+    me.raddatz.veyq.mobile.words.Notices.renameRefused(r)?.let { context.text(it) }
 
 /** Whether the shell is picking a place for what another app shared (ADR 0126). */
 internal val LocalPicking = androidx.compose.runtime.compositionLocalOf { false }

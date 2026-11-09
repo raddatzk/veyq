@@ -202,14 +202,5 @@ private fun hereText(block: NodeMove.Block, copy: Boolean): Int = when (block) {
 }
 
 /** Why a move did not go through, in the web's words (`node.move.refused.*`). */
-internal fun moveProblem(context: android.content.Context, r: NodeMove.Result): String = context.getString(
-    when (r.outcome) {
-        NodeMove.Outcome.NAME_TAKEN -> R.string.move_refused_slug_taken
-        NodeMove.Outcome.NOT_ALLOWED, NodeMove.Outcome.BLOCKED -> R.string.move_refused_illegal_structure
-        NodeMove.Outcome.GONE -> R.string.move_refused_gone
-        NodeMove.Outcome.CONFLICT -> R.string.move_refused_stale_placement
-        NodeMove.Outcome.SCOPE_DELETING -> R.string.move_refused_scope_deleting
-        NodeMove.Outcome.BUSY -> R.string.move_refused_rekey_pending
-        else -> R.string.move_refused_failed
-    },
-)
+internal fun moveProblem(context: android.content.Context, r: NodeMove.Result): String =
+    context.text(me.raddatz.veyq.mobile.words.Notices.moveRefused(r.outcome) ?: me.raddatz.veyq.mobile.words.Notice(me.raddatz.veyq.mobile.words.Msg.MOVE_REFUSED_FAILED))
