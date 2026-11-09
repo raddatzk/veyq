@@ -229,6 +229,38 @@ class PotLiveTest {
             assertEquals(me.raddatz.veyq.mobile.session.NodeTrash.Deleted.TRASHED, trash.delete(tenant, scopeId, holder))
             println("[$potName] \"$name\" listed in the trash, restored as \"$renamed\" past a Pot of its name, purged")
         }
+        System.getenv("VEYQ_LIVE_MOVE")?.let { folderName ->
+            // A fresh Pot moved into the root folder [folderName] and back: each time a fresh session opens it there under its
+            // name and reads its content (its own key unchanged, only re-wrapped); a move to where it is is refused before
+            // sending, as is one onto a Pot of its name; the Pot and the one of its name are trashed (they stay there).
+            val move = me.raddatz.veyq.mobile.session.NodeMove
+            val fold = { kind: String, name: String -> if (kind == PotSession.KIND) PotCreate.tokenInput(name) else if (kind == "FOLDER") me.raddatz.veyq.mobile.crypto.Naming.slugify(name) else null }
+            val allows = me.raddatz.veyq.mobile.session.NodeMove.PlacementAllows { kind, parent -> kind == PotSession.KIND && (parent == null || parent == "FOLDER") }
+            val folder = tenant.objects().let { tenant.nodes() }.first { it.kind == "FOLDER" && it.parentId == null && it.name == folderName }
+            val scopeId = folder.scopeId
+            val name = "App move ${System.currentTimeMillis() % 100_000}"
+            val nodeId = PotCreate.create(tenant, scopeId, null, name, Ledger.BaseCurrency("EUR", 2), emptyList()).nodeId!!
+            tenant.forgetTree()
+            assertEquals(me.raddatz.veyq.mobile.session.NodeMove.Outcome.MOVED, move.move(tenant, scopeId, nodeId, folder.nodeId, fold, allows).outcome)
+            val there = account.open(tenant.tenant)
+            assertEquals(folder.nodeId, there.node(scopeId, nodeId)!!.parentId)
+            assertEquals(name, there.objects().single { it.nodeId == nodeId }.name)
+            assertTrue(PotSession.open(there, scopeId, nodeId) != null, "the moved Pot's content does not open")
+            assertEquals(me.raddatz.veyq.mobile.session.NodeMove.Outcome.BLOCKED, move.move(tenant, scopeId, nodeId, folder.nodeId, fold, allows).outcome)
+            assertEquals(me.raddatz.veyq.mobile.session.NodeMove.Outcome.MOVED, move.move(tenant, scopeId, nodeId, null, fold, allows).outcome)
+            val back = account.open(tenant.tenant)
+            assertEquals(null, back.node(scopeId, nodeId)!!.parentId)
+            assertTrue(PotSession.open(back, scopeId, nodeId) != null, "the Pot moved back does not open")
+            // A Pot of its name in the folder: the move is refused by name before a request is sent.
+            val holder = PotCreate.create(tenant, scopeId, folder.nodeId, name, Ledger.BaseCurrency("EUR", 2), emptyList()).nodeId!!
+            tenant.forgetTree()
+            val taken = move.move(tenant, scopeId, nodeId, folder.nodeId, fold, allows)
+            assertEquals(me.raddatz.veyq.mobile.session.NodeMove.Outcome.NAME_TAKEN, taken.outcome)
+            assertEquals(holder, taken.taken?.id)
+            assertEquals(me.raddatz.veyq.mobile.session.NodeTrash.Deleted.TRASHED, me.raddatz.veyq.mobile.session.NodeTrash.delete(tenant, scopeId, holder))
+            assertEquals(me.raddatz.veyq.mobile.session.NodeTrash.Deleted.TRASHED, me.raddatz.veyq.mobile.session.NodeTrash.delete(tenant, scopeId, nodeId))
+            println("[$folderName] \"$name\" moved in and out, opened there each time; a move to its place and onto its name refused")
+        }
         System.getenv("VEYQ_LIVE_RENAME")?.let { potName ->
             // A fresh Pot renamed (read back by a fresh session), its old name free and its new one taken, a sibling's name
             // refused before anything is sent, then trashed (it stays in the trash).
