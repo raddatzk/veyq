@@ -451,6 +451,25 @@ class AppModel(app: Application) : AndroidViewModel(app) {
         else -> null
     }
 
+    // ---- guest links (core's ShareLinks) ----
+
+    /** The tenant's link rules (its capability set): what the share dialog offers and requires. */
+    fun linkRules(): me.raddatz.veyq.mobile.session.ShareLinks.Rules =
+        tenantSession?.linkRules ?: me.raddatz.veyq.mobile.session.ShareLinks.Rules.UNKNOWN
+
+    /** The READ and READ_WRITE links on [ref], newest first; null when they do not list. */
+    suspend fun shareLinks(ref: ObjectRef): List<me.raddatz.veyq.mobile.session.ShareLinks.Link>? {
+        val t = tenantSession ?: return null
+        return runCatching { me.raddatz.veyq.mobile.session.ShareLinks.list(t, ref.scopeId, ref.nodeId) }.getOrNull()
+    }
+
+    /** Mints a [role] link on [ref]; on success its address, to hand out once. */
+    suspend fun mintLink(ref: ObjectRef, role: String, label: String, password: String, expiresAt: String?): me.raddatz.veyq.mobile.session.ShareLinks.Minted {
+        val failed = me.raddatz.veyq.mobile.session.ShareLinks.Minted(me.raddatz.veyq.mobile.session.ShareLinks.Outcome.FAILED)
+        val t = tenantSession ?: return failed
+        return runCatching { me.raddatz.veyq.mobile.session.ShareLinks.mint(t, ref.scopeId, ref.nodeId, role, label, password, expiresAt) }.getOrDefault(failed)
+    }
+
     // ---- a move (core's NodeMove) ----
 
     /**

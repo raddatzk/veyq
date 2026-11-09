@@ -14,6 +14,7 @@ struct PotHeaderActions: View {
     @State private var newName = ""
     @State private var renameProblem: String?
     @State private var moving = false
+    @State private var sharing = false
 
     var body: some View {
         HStack {
@@ -31,6 +32,11 @@ struct PotHeaderActions: View {
                 }
                 .accessibilityLabel(pinned ? "Remove favorite" : "Favorite")
             }
+            // The Pot's links (core's share action, a header button as the web's): offered where the tenant has links on.
+            if model.linkRules().on {
+                Button { sharing = true } label: { Image(systemName: "square.and.arrow.up") }
+                    .accessibilityLabel("Share this Pot")
+            }
             Menu {
                 // The rename first, the delete last and destructive (`splitRowActions`).
                 Button("Rename", systemImage: "pencil") { newName = ref.name; renameProblem = nil; renaming = true }
@@ -43,6 +49,7 @@ struct PotHeaderActions: View {
         }
         .onAppear { pinned = model.isFavorite(ref) }
         .sheet(isPresented: $moving) { NodeMoveSheet(model: model, ref: ref) }
+        .sheet(isPresented: $sharing) { PotShareSheet(model: model, ref: ref) }
         .alert("Delete Pot", isPresented: $asking) {
             Button("Delete", role: .destructive) { Task { await model.trash(ref) } }
             Button("Cancel", role: .cancel) {}

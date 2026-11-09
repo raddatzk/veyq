@@ -43,6 +43,7 @@ import androidx.compose.material.icons.outlined.Map
 import androidx.compose.material.icons.outlined.PhotoLibrary
 import androidx.compose.material.icons.outlined.Search
 import androidx.compose.material.icons.outlined.Settings
+import androidx.compose.material.icons.outlined.Share
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.DrawerValue
@@ -625,6 +626,12 @@ internal val LocalRowDetails = androidx.compose.runtime.compositionLocalOf<Map<S
 private fun PotHeaderActions(open: ObjectRef, model: AppModel, snackbar: androidx.compose.material3.SnackbarHostState, scope: kotlinx.coroutines.CoroutineScope, rootName: String) {
     val context = androidx.compose.ui.platform.LocalContext.current
     var moving by androidx.compose.runtime.remember(open) { androidx.compose.runtime.mutableStateOf(false) }
+    var sharing by androidx.compose.runtime.remember(open) { androidx.compose.runtime.mutableStateOf(false) }
+    if (sharing) PotShareSheet(open, model) { sharing = false }
+    // The Pot's links (core's share action, a header button as the web's): offered where the tenant has links on.
+    if (model.linkRules().on) androidx.compose.material3.IconButton(onClick = { sharing = true }) {
+        androidx.compose.material3.Icon(androidx.compose.material.icons.Icons.Outlined.Share, stringResource(R.string.share_title))
+    }
     if (moving) {
         val movedText = { to: String -> context.getString(R.string.move_moved, open.name, to) }
         NodeMoveSheet(open, rootName, model, onMoved = { to, from ->

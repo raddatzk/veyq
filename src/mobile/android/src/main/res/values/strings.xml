@@ -313,4 +313,36 @@
     <string name="move_refused_gone">It, or the place you chose, is no longer there.</string>
     <string name="move_refused_scope_deleting">This space is being deleted; nothing can be moved.</string>
     <string name="move_refused_failed">Moving didn’t work. Please try again.</string>
+    <!-- A Pot's guest links (the web's expenses.share and sharing). -->
+    <string name="share_title">Share this Pot</string>
+    <string name="share_intro">Create a link anyone can open in a browser — no account, no install. It shows only this Pot, and you can switch it off anytime.</string>
+    <string name="share_new">New link</string>
+    <string name="share_create">Create link</string>
+    <string name="share_load_failed">Your links could not be loaded.</string>
+    <string name="share_role_viewer">View only</string>
+    <string name="share_role_contributor">View + contribute</string>
+    <string name="share_role_viewer_hint">Anyone with the link sees the entries, balances and overview, read-only.</string>
+    <string name="share_role_contributor_hint">Anyone with the link can also add, change and delete entries, and add and rename people.</string>
+    <string name="share_label">Optional label (only you see it)</string>
+    <string name="share_password_section">Password protection</string>
+    <string name="share_password_hint">Open the share only with a password (%1$d+ characters).</string>
+    <string name="share_password_by_rule">This space requires a password on every link (%1$d+ characters).</string>
+    <string name="share_password_short">At least %1$d characters.</string>
+    <string name="share_expiry_section">Expiry date</string>
+    <string name="share_expiry_hint">The link stops working after this date.</string>
+    <string name="share_expiry_by_rule">This space requires every link to end within %1$d days of the day it is made.</string>
+    <string name="share_created">Created %1$s</string>
+    <string name="share_expires">Expires %1$s</string>
+    <string name="share_password_badge">Password</string>
+    <string name="share_switched_off">Switched off</string>
+    <string name="share_by_member">By another member</string>
+    <string name="share_stopped">Guests can’t open it</string>
+    <string name="share_copy">Copy link</string>
+    <string name="share_copied">Copied</string>
+    <string name="share_send">Share</string>
+    <string name="share_done">Done</string>
+    <string name="share_ready">Your link is ready — copy it:</string>
+    <string name="share_requirement_refused">This space now requires a password or an end date on every link. Add what is missing and try again.</string>
+    <string name="share_not_allowed">Links are switched off here.</string>
+    <string name="share_failed">That didn’t work — please try again.</string>
 </resources>

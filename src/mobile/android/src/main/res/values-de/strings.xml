@@ -311,4 +311,36 @@
     <string name="move_refused_gone">Es oder der gewählte Ort ist nicht mehr da.</string>
     <string name="move_refused_scope_deleting">Dieser Bereich wird gelöscht; nichts kann verschoben werden.</string>
     <string name="move_refused_failed">Das Verschieben hat nicht geklappt. Bitte versuche es erneut.</string>
+    <!-- Die Links einer Kasse (expenses.share und sharing des Webs). -->
+    <string name="share_title">Diese Kasse teilen</string>
+    <string name="share_intro">Erstelle einen Link, den jede:r im Browser öffnen kann — ohne Konto, ohne Installation. Er zeigt nur diese Kasse, und du kannst ihn jederzeit abschalten.</string>
+    <string name="share_new">Neuer Link</string>
+    <string name="share_create">Link erstellen</string>
+    <string name="share_load_failed">Deine Links konnten nicht geladen werden.</string>
+    <string name="share_role_viewer">Nur ansehen</string>
+    <string name="share_role_contributor">Ansehen + mitwirken</string>
+    <string name="share_role_viewer_hint">Wer den Link hat, sieht die Einträge, Salden und den Überblick — schreibgeschützt.</string>
+    <string name="share_role_contributor_hint">Wer den Link hat, kann außerdem Einträge hinzufügen, ändern und löschen sowie Personen hinzufügen und umbenennen.</string>
+    <string name="share_label">Optionaler Name (nur du siehst ihn)</string>
+    <string name="share_password_section">Passwortschutz</string>
+    <string name="share_password_hint">Freigabe nur mit Passwort ab %1$d Zeichen öffnen.</string>
+    <string name="share_password_by_rule">Dieser Bereich verlangt für jeden Link ein Passwort (ab %1$d Zeichen).</string>
+    <string name="share_password_short">Mindestens %1$d Zeichen.</string>
+    <string name="share_expiry_section">Ablaufdatum</string>
+    <string name="share_expiry_hint">Der Link funktioniert nach diesem Datum nicht mehr.</string>
+    <string name="share_expiry_by_rule">Dieser Bereich verlangt, dass jeder Link spätestens %1$d Tage nach dem Tag endet, an dem er angelegt wird.</string>
+    <string name="share_created">Erstellt am %1$s</string>
+    <string name="share_expires">Läuft ab am %1$s</string>
+    <string name="share_password_badge">Passwort</string>
+    <string name="share_switched_off">Abgeschaltet</string>
+    <string name="share_by_member">Von einem anderen Mitglied</string>
+    <string name="share_stopped">Gäste können ihn nicht öffnen</string>
+    <string name="share_copy">Link kopieren</string>
+    <string name="share_copied">Kopiert</string>
+    <string name="share_send">Teilen</string>
+    <string name="share_done">Fertig</string>
+    <string name="share_ready">Dein Link ist bereit — kopiere ihn:</string>
+    <string name="share_requirement_refused">Dieser Bereich verlangt jetzt für jeden Link ein Passwort oder ein Enddatum. Ergänze, was fehlt, und versuche es erneut.</string>
+    <string name="share_not_allowed">Links sind hier ausgeschaltet.</string>
+    <string name="share_failed">Das hat nicht geklappt — bitte erneut versuchen.</string>
 </resources>

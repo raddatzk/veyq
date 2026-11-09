@@ -524,6 +524,27 @@ final class AppModel {
 
     func dismissTrashNotice(_ id: UUID) { if trashNotice?.id == id { trashNotice = nil } }
 
+    // MARK: Guest links (core's ShareLinks)
+
+    /// The tenant's link rules (its capability set): what the share dialog offers and requires.
+    func linkRules() -> ShareLinks.Rules { tenantSession?.linkRules ?? ShareLinks.RulesCompanion.shared.UNKNOWN }
+
+    /// The READ and READ_WRITE links on `ref`, newest first; nil when they do not list.
+    func shareLinks(_ ref: ObjectRef) async -> [ShareLinks.Link]? {
+        guard let t = tenantSession else { return nil }
+        return try? await ShareLinks.shared.list(tenant: t, scopeId: ref.scopeId, nodeId: ref.nodeId)
+    }
+
+    /// Mints a `role` link on `ref`; on success its address, to hand out once.
+    func mintLink(_ ref: ObjectRef, role: String, label: String, password: String, expiresAt: String?) async -> ShareLinks.Minted {
+        let failed = ShareLinks.Minted(outcome: .failed, url: nil, refusal: nil)
+        guard let t = tenantSession else { return failed }
+        return (try? await ShareLinks.shared.mint(
+            tenant: t, scopeId: ref.scopeId, nodeId: ref.nodeId, role: role, label: label, password: password, expiresAt: expiresAt,
+            waitsMs: NodeEpochWrite.shared.REKEY_WAITS_MS
+        )) ?? failed
+    }
+
     // MARK: A move (core's NodeMove)
 
     /// Where a move's undo puts the node back.

@@ -63,7 +63,9 @@ A Gradle build of its own, run through its own wrapper.
   <n>"), reads it in the trash by name, restores it past a Pot of its name under "… restored" and purges it (the Pot
   of the old name stays trashed). `VEYQ_LIVE_MOVE=<root folder name>` moves a fresh Pot ("App move <n>") into that
   folder and back, a fresh session opening it there each time, and checks a move to its place and onto a Pot of its name
-  are refused; both Pots stay trashed. `VEYQ_LIVE_RENAME=<pot name>` renames a fresh Pot twice, checks its
+  are refused; both Pots stay trashed. `VEYQ_LIVE_LINKS=<pot name>` mints a READ link with a label and a READ_WRITE link
+  with a password and an end on that Pot and reads both back listed (they stay); `VEYQ_LIVE_LINKS_OUT=<file>` writes the
+  first one's address there, for the web's guest page (a dev link names the backend's port, 8080: open it on Vite's). `VEYQ_LIVE_RENAME=<pot name>` renames a fresh Pot twice, checks its
   names taken and a sibling's refused, and trashes it; `VEYQ_LIVE_RENAME_TARGET="<from>|<to>"` renames the root Pot
   `<from>` (created when there is none) and prints what the re-seal of its links did — with a link the web minted on it,
   that link's guest page then shows `<to>`. Gradle does not count an environment variable as an
