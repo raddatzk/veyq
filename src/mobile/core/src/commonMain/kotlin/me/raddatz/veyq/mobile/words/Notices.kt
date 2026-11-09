@@ -158,6 +158,13 @@ object Notices {
     }
 
     /** Why a new link was not made. */
+    /** What switching a link off says: nothing once closed, that its re-key is still due, or that it failed. */
+    fun linkClosed(closed: ShareLinks.Closed): Notice? = when (closed) {
+        ShareLinks.Closed.CLOSED -> null
+        ShareLinks.Closed.CLOSED_REKEY_PENDING -> Notice(Msg.SHARE_CLOSED_REKEYING)
+        ShareLinks.Closed.FAILED -> Notice(Msg.SHARE_FAILED)
+    }
+
     fun linkRefused(outcome: ShareLinks.Outcome): Notice? = when (outcome) {
         ShareLinks.Outcome.CREATED -> null
         ShareLinks.Outcome.PASSWORD_REQUIRED, ShareLinks.Outcome.EXPIRY_REJECTED -> Notice(Msg.SHARE_REQUIREMENT_REFUSED)

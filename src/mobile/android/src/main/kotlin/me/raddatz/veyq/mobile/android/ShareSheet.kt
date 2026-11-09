@@ -127,9 +127,10 @@ internal fun ShareSheet(ref: me.raddatz.veyq.mobile.navigation.NodeAt, model: Ap
                     rules, words, onCancel = { creating = false }, writeOnly = dropBox,
                     uploadOffered = ref.kind == "FOLDER" && rules.dropBox,
                 ) { role, label, password, expiresAt ->
-                    if (role == ShareLinks.WRITE_ONLY && !dropBox) {
+                    val mint = me.raddatz.veyq.mobile.session.LinkRow.mint(role, label, onDropBox = dropBox)
+                    if (mint.makesDropBox) {
                         // "Add files only" on a folder: a drop box named so, here, with its first link (`createDropBoxWithLink`)
-                        val made = model.createDropBox(ref, label, password.orEmpty(), expiresAt)
+                        val made = model.createDropBox(ref, mint.label, password.orEmpty(), expiresAt)
                         return@NewLinkForm when (made.outcome) {
                             me.raddatz.veyq.mobile.depot.DropBoxes.Outcome.CREATED -> {
                                 creating = false
@@ -139,7 +140,7 @@ internal fun ShareSheet(ref: me.raddatz.veyq.mobile.navigation.NodeAt, model: Ap
                             else -> me.raddatz.veyq.mobile.words.Notices.dropBoxRefused(made.outcome)?.let { context.text(it) }
                         }
                     }
-                    val minted = model.mintLink(ref, if (dropBox) ShareLinks.WRITE_ONLY else role, if (dropBox) "" else label, password.orEmpty(), expiresAt)
+                    val minted = model.mintLink(ref, mint.role, mint.label, password.orEmpty(), expiresAt)
                     if (minted.outcome == ShareLinks.Outcome.CREATED) {
                         creating = false
                         fresh = minted.url
@@ -157,15 +158,14 @@ internal fun ShareSheet(ref: me.raddatz.veyq.mobile.navigation.NodeAt, model: Ap
                         list == null -> CircularProgressIndicator(Modifier.padding(16.dp).align(Alignment.CenterHorizontally))
                         else -> LazyColumn(Modifier.heightIn(max = 420.dp)) {
                             items(list, key = { it.shareId }) { link ->
+                                // what this member may do with it is core's (`LinkRow`, the web's dialogs' rules)
+                                val row = me.raddatz.veyq.mobile.session.LinkRow(link, dropBox, words)
                                 LinkRow(
-                                    link, words, busy = busy == link.shareId,
-                                    // the web's rules: edit an own open link whose copy opens, renew an own or switched-off one,
-                                    // switch one on again that is off and safe to (any member: it becomes theirs), delete a
-                                    // switched-off one the server lets go (`FolderShareDialog`, `DropBoxShareDialog`)
-                                    onEdit = if (!dropBox && link.mine && link.enabled && link.url != null) ({ editing = link }) else null,
-                                    onRenew = if (!dropBox && (link.mine || !link.enabled)) ({ renewing = link }) else null,
-                                    onDelete = if (!link.enabled && link.deletable) ({ deleting = link }) else null,
-                                    onReactivate = if (!link.enabled && !link.reissueRequired) {
+                                    row, busy = busy == link.shareId,
+                                    onEdit = if (row.canEdit) ({ editing = link }) else null,
+                                    onRenew = if (row.canRenew) ({ renewing = link }) else null,
+                                    onDelete = if (row.canDelete) ({ deleting = link }) else null,
+                                    onReactivate = if (row.canReactivate) {
                                         {
                                             busy = link.shareId
                                             scope.launch {
@@ -176,17 +176,13 @@ internal fun ShareSheet(ref: me.raddatz.veyq.mobile.navigation.NodeAt, model: Ap
                                             }
                                         }
                                     } else null,
-                                    onSwitchOff = if (link.enabled && link.mine) {
+                                    onSwitchOff = if (row.canSwitchOff) {
                                     {
                                         busy = link.shareId
                                         scope.launch {
                                             val closed = model.switchOffLink(ref, link.shareId)
                                             busy = null
-                                            notice = when (closed) {
-                                                ShareLinks.Closed.CLOSED -> null
-                                                ShareLinks.Closed.CLOSED_REKEY_PENDING -> context.getString(R.string.share_closed_rekeying)
-                                                ShareLinks.Closed.FAILED -> context.getString(R.string.share_failed)
-                                            }
+                                            notice = me.raddatz.veyq.mobile.words.Notices.linkClosed(closed)?.let { context.text(it) }
                                             load()
                                         }
                                     }
@@ -244,41 +240,33 @@ internal fun ShareSheet(ref: me.raddatz.veyq.mobile.navigation.NodeAt, model: Ap
 
 @Composable
 private fun LinkRow(
-    link: ShareLinks.Link, words: ShareWords, busy: Boolean, onSwitchOff: (() -> Unit)?,
+    row: me.raddatz.veyq.mobile.session.LinkRow, busy: Boolean, onSwitchOff: (() -> Unit)?,
     onEdit: (() -> Unit)? = null, onRenew: (() -> Unit)? = null, onDelete: (() -> Unit)? = null,
     onReactivate: (() -> Unit)? = null,
 ) {
     val palette = LocalPalette.current
     val context = LocalContext.current
     val copied = stringResource(R.string.share_copied)
+    val link = row.link
     Row(Modifier.fillMaxWidth().padding(vertical = 10.dp), verticalAlignment = Alignment.CenterVertically) {
         Column(Modifier.weight(1f)) {
-            Text(
-                link.label.ifEmpty { say(words.roleWord(link.role)) },
-                fontWeight = FontWeight.SemiBold,
-            )
+            Text(piece(row.title), fontWeight = FontWeight.SemiBold)
             val dates = listOfNotNull(
                 stringResource(R.string.share_created, day(link.createdAt)),
                 link.expiresAt?.let { stringResource(R.string.share_expires, day(it)) },
             ).joinToString(" · ")
             Text(dates, style = MaterialTheme.typography.bodySmall, color = role(palette.muted))
-            val badges = listOfNotNull(
-                if (link.label.isNotEmpty()) say(words.roleWord(link.role)) else null,
-                if (link.passwordRequired) stringResource(R.string.share_password_badge) else null,
-                if (!link.enabled) stringResource(R.string.share_switched_off) else null,
-                if (!link.mine) stringResource(R.string.share_by_member) else null,
-                if (link.stopped || link.reissueRequired) stringResource(R.string.share_stopped) else null,
-            )
+            val badges = row.badges.map { say(it) }
             if (badges.isNotEmpty()) Text(badges.joinToString(" · "), style = MaterialTheme.typography.bodySmall, color = role(palette.accent))
         }
         val url = link.url
-        if (url != null && link.enabled) IconButton(onClick = { copy(context, url); android.widget.Toast.makeText(context, copied, android.widget.Toast.LENGTH_SHORT).show() }) {
+        if (url != null && row.canCopy) IconButton(onClick = { copy(context, url); android.widget.Toast.makeText(context, copied, android.widget.Toast.LENGTH_SHORT).show() }) {
             Icon(Icons.Outlined.ContentCopy, stringResource(R.string.share_copy))
         }
         // The row's other actions in one overflow menu (Material 3); switching off is at once, as the web does: the Pot gets a
         // new key, so the link opens nothing any more. Renew and delete ask first.
         // an open link goes to another app through the system's share sheet (Android's Sharesheet), first in the menu
-        val share = if (url != null && link.enabled) ({ sendText(context, url) }) else null
+        val share = if (url != null && row.canCopy) ({ sendText(context, url) }) else null
         if (busy) CircularProgressIndicator(Modifier.padding(12.dp).width(20.dp))
         else if (share != null || onEdit != null || onRenew != null || onReactivate != null || onSwitchOff != null || onDelete != null) {
             var menu by remember { mutableStateOf(false) }

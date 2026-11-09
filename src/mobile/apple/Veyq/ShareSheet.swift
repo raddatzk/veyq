@@ -42,9 +42,10 @@ struct ShareSheet: View {
                         rules: model.linkRules(), words: words, writeOnly: dropBox,
                         uploadOffered: ref.kind == "FOLDER" && model.linkRules().dropBox, onCancel: { creating = false }
                     ) { role, label, password, expiresAt in
-                        if role == ShareLinks.shared.WRITE_ONLY && !dropBox {
+                        let mint = LinkRow.companion.mint(role: role, label: label, onDropBox: dropBox)
+                        if mint.makesDropBox {
                             // "Add files only" on a folder: a drop box named so, here, with its first link (`createDropBoxWithLink`)
-                            let made = await model.createDropBox(ref, name: label, password: password ?? "", expiresAt: expiresAt)
+                            let made = await model.createDropBox(ref, name: mint.label, password: password ?? "", expiresAt: expiresAt)
                             if made.outcome == .created {
                                 creating = false
                                 fresh = made.url
@@ -52,7 +53,7 @@ struct ShareSheet: View {
                             }
                             return Notices.shared.dropBoxRefused(outcome: made.outcome).map { say(notice: $0) }
                         }
-                        let minted = await model.mintLink(ref, role: dropBox ? ShareLinks.shared.WRITE_ONLY : role, label: dropBox ? "" : label, password: password ?? "", expiresAt: expiresAt)
+                        let minted = await model.mintLink(ref, role: mint.role, label: mint.label, password: password ?? "", expiresAt: expiresAt)
                         guard minted.outcome == .created, let url = minted.url else { return Self.problem(minted.outcome) }
                         creating = false
                         fresh = url
@@ -128,15 +129,14 @@ struct ShareSheet: View {
                     Text(say(.shareLoadFailed)).foregroundStyle(Role.danger)
                 } else if let links {
                     ForEach(links, id: \.shareId) { link in
-                        // the web's rules: edit an own open link whose copy opens, renew an own or switched-off one, switch
-                        // off an own one that is on, switch one on again that is off and safe to (any member: it becomes
-                        // theirs), delete a switched-off one the server lets go (`FolderShareDialog`, `DropBoxShareDialog`)
-                        let canEdit = !dropBox && link.mine && link.enabled && link.url != nil
-                        let canRenew = !dropBox && (link.mine || !link.enabled)
-                        let canSwitchOff = link.enabled && link.mine
-                        let canDelete = !link.enabled && link.deletable
-                        let canReactivate = !link.enabled && !link.reissueRequired
-                        LinkRow(link: link, words: words, busy: busy == link.shareId)
+                        // what this member may do with it is core's (`LinkRow`, the web's dialogs' rules)
+                        let row = LinkRow(link: link, dropBox: dropBox, words: words)
+                        let canEdit = row.canEdit
+                        let canRenew = row.canRenew
+                        let canSwitchOff = row.canSwitchOff
+                        let canDelete = row.canDelete
+                        let canReactivate = row.canReactivate
+                        LinkRowView(row: row, busy: busy == link.shareId)
                             // Apple's HIG: a row's actions as swipe actions and its context menu, as Mail's
                             .swipeActions(edge: .trailing) {
                                 if canSwitchOff {
@@ -154,7 +154,7 @@ struct ShareSheet: View {
                             }
                             .contextMenu {
                                 // an open link goes to another app through the system's share sheet, first (as Safari's links)
-                                if link.enabled, let url = link.url.flatMap(URL.init(string:)) {
+                                if row.canCopy, let url = link.url.flatMap(URL.init(string:)) {
                                     ShareLink(item: url) { Label(say(.shareLinkShare), systemImage: "square.and.arrow.up") }
                                 }
                                 if canEdit { Button(say(.shareEdit), systemImage: "pencil") { editing = link } }
@@ -178,12 +178,7 @@ struct ShareSheet: View {
         busy = link.shareId
         let closed = await model.switchOffLink(ref, shareId: link.shareId)
         busy = nil
-        switch closed {
-        case .closed: notice = nil
-        case .closedRekeyPending:
-            notice = say(.shareClosedRekeying)
-        default: notice = say(.shareFailed)
-        }
+        notice = Notices.shared.linkClosed(closed: closed).map { say(notice: $0) }
         await load()
     }
 
@@ -197,32 +192,25 @@ struct ShareSheet: View {
 }
 
 /// One link: its label (else its role), when it was made and ends, its badges, and its copy where it can be rebuilt.
-private struct LinkRow: View {
-    let link: ShareLinks.Link
-    let words: ShareWords
+private struct LinkRowView: View {
+    let row: LinkRow
     let busy: Bool
     @State private var copied = false
 
-    private var roleWord: String { say(words.roleWord(role: link.role)) }
+    private var link: ShareLinks.Link { row.link }
 
     var body: some View {
         HStack {
             VStack(alignment: .leading, spacing: 3) {
-                Text(link.label.isEmpty ? roleWord : link.label).fontWeight(.semibold)
+                Text(say(piece: row.title)).fontWeight(.semibold)
                 Text([say(.shareCreated, day(link.createdAt)), link.expiresAt.map { say(.shareExpires, day($0)) }]
                     .compactMap { $0 }.joined(separator: " · "))
                     .font(.caption).foregroundStyle(Role.muted)
-                let badges = [
-                    link.label.isEmpty ? nil : roleWord,
-                    link.passwordRequired ? say(.signinPassword) : nil,
-                    link.enabled ? nil : say(.shareSwitchedOff),
-                    link.mine ? nil : say(.shareByMember),
-                    link.stopped || link.reissueRequired ? say(.shareStopped) : nil,
-                ].compactMap { $0 }
+                let badges = row.badges.map { say($0) }
                 if !badges.isEmpty { Text(badges.joined(separator: " · ")).font(.caption).foregroundStyle(Role.accent) }
             }
             Spacer()
-            if let url = link.url, link.enabled {
+            if let url = link.url, row.canCopy {
                 Button { Clipboard.copy(url); copied = true } label: {
                     Image(systemName: copied ? "checkmark" : "doc.on.doc")
                 }
