@@ -8,10 +8,10 @@ acceptanceCriteria:
       web:
         unit: [src/core/search/searchIndex.test.ts, src/core/node/keyResolver.test.ts]
   - id: chips-and-text
-    text: A token that reads as a year (a Memory matches when its date range overlaps it, a photo when captured in it), a member's name, a place a document carries, a space's name or a kind's word is offered as a chip; a document matches when it satisfies every chip and the remaining text matches its name or place, ignoring case and diacritics.
+    text: A token that reads as a year (a Memory matches when its date range overlaps it, a photo when captured in it), a member's name, a place a document carries, a space's name or a kind's word is offered as a chip; a document matches when it satisfies every chip and the remaining text matches its name or place, ignoring case and diacritics. The chip suggestions stand under a heading of their own (Filter by), above the result groups; whenever the list holds a result the first one is highlighted, also right after a chip was chosen, so Enter opens it, and a suggestion becomes a chip only when the member moves onto it - Enter on typed text never adds one.
     coverage:
       web:
-        unit: [src/core/search/query.test.ts, src/core/search/SearchField.test.ts, src/shared/text/fold.test.ts]
+        unit: [src/core/search/query.test.ts, src/core/search/SearchField.test.ts, src/shared/ui/VeyqTagsInput.test.ts, src/shared/text/fold.test.ts]
   - id: grouped-by-context
     text: Results are grouped by the open node (headed by its name, when a node's page is open - what it contributed and the nodes below it), In this space, Other spaces, ranked only within a group (an exact or prefix name match above a match inside a word, a name above a place); an empty group is not shown.
     coverage:
@@ -38,7 +38,7 @@ acceptanceCriteria:
       web:
         unit: [src/features/settings/sections.test.ts, src/core/search/SearchField.test.ts, src/core/search/groups.test.ts, src/views/SettingsHubView.test.ts]
   - id: every-kind-has-a-word
-    text: Every application's kind and the folder has a kind word, so a kind chip reaches it - Memories' Memory and Chapter, Depot's file and drop box, Expenses' Pot.
+    text: Every registered kind has a kind word, so a kind chip reaches it - Memories' Memory and Chapter, Depot's file and drop box, Expenses' Pot, and core's folder and bookmark (its word in core's catalog, as the kind is core's).
     coverage:
       web:
         unit: [src/applications.test.ts, src/core/search/SearchField.test.ts]

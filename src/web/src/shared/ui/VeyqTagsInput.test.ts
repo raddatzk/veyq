@@ -140,6 +140,50 @@ describe('VeyqTagsInput', () => {
     expect(chips()).toEqual(['Anna', 'Ben', 'Finn'])
   })
 
+  // With results under the suggestions (the shell's search): the suggestions under their heading, and the first RESULT
+  // highlighted - never a suggestion by itself; a row the member moved onto (keys or pointer) stays highlighted while the
+  // list re-renders under it.
+  it('with result groups: heads the suggestions, highlights the first result, and keeps a row the member moved onto', async () => {
+    const chosen: string[] = []
+    const groups = ref([{ key: 'g', label: 'Results', options: [{ key: 'r1', label: 'Cleopatra' }, { key: 'r2', label: 'Cleveland' }] }])
+    const Search = defineComponent({
+      setup() {
+        const query = ref('')
+        const open = ref(false)
+        return () =>
+          h(VeyqTagsInput<VeyqTag, VeyqTagOption>, {
+            tags: [],
+            options: query.value ? [{ key: 'chip:cle', label: 'Cle chip' }] : [],
+            groups: query.value ? groups.value : [],
+            optionsLabel: 'Filter by',
+            query: query.value,
+            'onUpdate:query': (q: string) => (query.value = q),
+            open: open.value,
+            'onUpdate:open': (o: boolean) => (open.value = o),
+            'aria-label': 'Search',
+            onChoose: (o: VeyqTagOption) => chosen.push(o.key),
+          })
+      },
+    })
+    mount(Search, { global: { plugins: [realI18n()] }, attachTo: document.body })
+    await flushPromises()
+    await type('cle')
+    expect([...document.body.querySelectorAll('.veyq-tags-input__group-label')].map((x) => x.textContent?.trim())).toEqual(['Filter by', 'Results'])
+    expect(highlighted()).toBe('Cleopatra')
+    // the pointer onto the suggestion: it stays highlighted when the results are handed over again
+    options()[0]!.dispatchEvent(new PointerEvent('pointermove', { bubbles: true }))
+    await flushPromises()
+    expect(highlighted()).toBe('Cle chip')
+    groups.value = [{ ...groups.value[0]! }]
+    await flushPromises()
+    expect(highlighted()).toBe('Cle chip')
+    // new text: the first result again, and Enter chooses it
+    await type('clev')
+    expect(highlighted()).toBe('Cleopatra')
+    await press('Enter')
+    expect(chosen).toEqual(['r1'])
+  })
+
   it('refuses an option whose key is a chip already (control: a new one above is added)', async () => {
     const w = await mountCaller()
     await type('ANNA')

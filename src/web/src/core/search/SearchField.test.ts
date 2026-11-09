@@ -45,7 +45,7 @@ import { searchDocument, type SearchDocument } from './model'
 import { setBreadcrumb } from '../../app/breadcrumb'
 import { realI18n, t } from '../../test/i18n'
 import { treeNode } from '../../test/models'
-import { FOLDER_KIND } from '../node/kind'
+import { FOLDER_KIND, SHARE_BOOKMARK_KIND } from '../node/kind'
 import { ScopeKind } from '../../api/generated/scopes'
 
 const ANNA = 'aaaaaaaa-0000-4000-8000-000000000001'
@@ -66,6 +66,12 @@ const rows = () => [...document.body.querySelectorAll<HTMLElement>('.veyq-tags-i
 const headings = () => [...document.body.querySelectorAll('.veyq-tags-input__group-label')].map((h) => h.textContent!.trim())
 const chips = () => [...document.body.querySelectorAll('.veyq-tags-input__tag .veyq-tags-input__label')].map((c) => c.textContent!.trim())
 const status = () => document.body.querySelector('.veyq-tags-input__status')?.textContent?.replace(/\s+/g, ' ').trim() ?? ''
+/** The highlighted row (Enter takes it), or null. */
+const highlighted = () => {
+  const o = document.body.querySelector<HTMLElement>('.veyq-tags-input__option[data-highlighted]')
+  return o ? words(o).join(' ') : null
+}
+const suggestionRows = () => [...document.body.querySelectorAll<HTMLElement>('.veyq-tags-input__suggestions .veyq-tags-input__option')].map((o) => words(o).join(' '))
 async function press(key: string) {
   field().dispatchEvent(new KeyboardEvent('keydown', { key, bubbles: true, cancelable: true }))
   await flushPromises()
@@ -76,6 +82,11 @@ async function type(text: string) {
   el.setSelectionRange(text.length, text.length)
   el.dispatchEvent(new InputEvent('input', { data: text.slice(-1), bubbles: true }))
   await flushPromises()
+}
+/** Move onto a suggestion as a member does: up from the first result to the suggestion above it, else down into the list. */
+async function moveOntoSuggestion() {
+  await press(highlighted() === null ? 'ArrowDown' : 'ArrowUp')
+  expect(suggestionRows(), 'the highlight is on a suggestion').toContain(highlighted())
 }
 /** Every field a test mounted, unmounted after it: a field left mounted would keep answering a later test's state. */
 const mounted: { unmount(): void }[] = []
@@ -141,6 +152,7 @@ describe('the search field', () => {
     await mountField()
     await type('2024')
     expect(rows()[0]).toBe(`2024 ${t('shell.search.chipYear')}`)
+    await moveOntoSuggestion()
     await press('Enter')
     expect(chips()).toEqual(['2024'])
     expect(field().value).toBe('')
@@ -153,6 +165,7 @@ describe('the search field', () => {
     await mountField()
     await type('schm')
     expect(rows()[0]).toBe(`Anna Schmidt ${t('shell.search.chipPerson')}`)
+    await moveOntoSuggestion()
     await press('Enter')
     expect(chips()).toEqual(['Anna Schmidt'])
     expect(rows()).toEqual(['Rome 2024 Trips Anna Schmidt'])
@@ -161,6 +174,7 @@ describe('the search field', () => {
   it('keeps the words a chip did not take as text', async () => {
     await mountField()
     await type('rome schm')
+    await moveOntoSuggestion()
     await press('Enter')
     expect(chips()).toEqual(['Anna Schmidt'])
     expect(field().value).toBe('rome')
@@ -225,7 +239,7 @@ describe('people and settings sections as results (ADR 0125 decision 9)', () => 
   it('finds a member by their name and by their username', async () => {
     await mountField()
     await type('anna')
-    expect(headings()).toEqual([t('shell.search.groupPeople')])
+    expect(headings()).toEqual([t('shell.search.filterBy'), t('shell.search.groupPeople')])
     expect(rows()).toContain('A Anna Schmidt ~anna') // the initial the roster has, the name, the handle
     await type('~anna')
     expect(rows()).toEqual(['A Anna Schmidt ~anna'])
@@ -235,14 +249,15 @@ describe('people and settings sections as results (ADR 0125 decision 9)', () => 
     vi.mocked(tenantPeopleNow).mockReturnValue([{ userId: 'r', username: 'romeo', realName: null, displayName: 'romeo' }])
     await mountField()
     await type('rom')
-    expect(headings()).toEqual([t('shell.search.groupSpace'), t('shell.search.groupOther'), t('shell.search.groupPeople')])
+    expect(headings()).toEqual([t('shell.search.filterBy'), t('shell.search.groupSpace'), t('shell.search.groupOther'), t('shell.search.groupPeople')])
   })
 
   it('offers a member as a chip AND lists them as a person: the chip filters, the result opens their profile', async () => {
     await mountField()
     await type('kevin')
     expect(rows()).toEqual([`kevin ${t('shell.search.chipPerson')}`, 'K kevin ~kevin'])
-    await press('ArrowDown')
+    expect(headings()).toEqual([t('shell.search.filterBy'), t('shell.search.groupPeople')])
+    expect(suggestionRows()).toEqual([`kevin ${t('shell.search.chipPerson')}`])
     await press('Enter')
     expect(push).toHaveBeenCalledWith({ name: 'home', hash: `#people/${KEVIN}` })
   })
@@ -286,6 +301,7 @@ describe('people and settings sections as results (ADR 0125 decision 9)', () => 
     await mountField()
     await type('anna')
     expect(headings()).toContain(t('shell.search.groupPeople'))
+    await moveOntoSuggestion()
     await press('Enter') // the person chip
     expect(chips()).toEqual(['Anna Schmidt'])
     expect(headings()).not.toContain(t('shell.search.groupPeople'))
@@ -300,10 +316,11 @@ describe('people and settings sections as results (ADR 0125 decision 9)', () => 
   })
 })
 
-describe('the kind words of Depot and Expenses', () => {
+describe('the kind words of Depot, Expenses and core\'s bookmark', () => {
   it.each([
     ['a Depot file', FILE_KIND, 'depot.kindFile'],
     ['a Pot', POT_KIND, 'expenses.kindPot'],
+    ['a bookmark', SHARE_BOOKMARK_KIND, 'node.bookmark.kind'],
   ])('a kind chip reaches %s', async (_what, kind, word) => {
     vi.mocked(indexedDocuments).mockReturnValue([
       doc({ id: 'k', kind, name: 'Rome thing' }),
@@ -312,8 +329,64 @@ describe('the kind words of Depot and Expenses', () => {
     await mountField()
     await type(t(word))
     expect(rows()[0]).toBe(`${t(word)} ${t('shell.search.chipKind')}`)
+    await moveOntoSuggestion()
     await press('Enter')
     expect(chips()).toEqual([t(word)])
     expect(rows()).toEqual(['Rome thing'])
+  })
+})
+
+// uc.platform.search step 4: the suggestions stand under their own heading, and Enter takes the first result - never a
+// suggestion the member did not move onto.
+describe('the suggestions\' heading and the row Enter takes', () => {
+  it('heads the chip suggestions "Filter by", above the result groups', async () => {
+    await mountField()
+    await type('2024')
+    expect(headings()).toEqual([t('shell.search.filterBy'), t('shell.search.groupSpace')])
+    expect(suggestionRows()).toEqual([`2024 ${t('shell.search.chipYear')}`])
+    expect(rows()).toEqual([`2024 ${t('shell.search.chipYear')}`, 'Rome 2024 Trips'])
+  })
+
+  it('highlights the first result right after a chip was chosen, and Enter opens it', async () => {
+    await mountField()
+    await type('2024')
+    await moveOntoSuggestion()
+    await press('Enter')
+    expect(chips()).toEqual(['2024'])
+    expect(highlighted()).toBe('Rome 2024 Trips 2024')
+    await press('Enter')
+    expect(push).toHaveBeenCalledWith({ name: 'home', hash: '#trips/memories/rome-2024' })
+  })
+
+  // The bite pair: the same word, the same list - Enter alone opens the first result; only moving onto the suggestion makes
+  // it a chip.
+  it('Enter on a typed name opens the first result and adds no chip; control: moving onto the suggestion first adds it', async () => {
+    await mountField()
+    await type('anna')
+    expect(rows()).toEqual([`Anna Schmidt ${t('shell.search.chipPerson')}`, 'A Anna Schmidt ~anna'])
+    expect(highlighted()).toBe('A Anna Schmidt ~anna')
+    await press('Enter')
+    expect(chips()).toEqual([])
+    expect(push).toHaveBeenCalledWith({ name: 'home', hash: `#people/${ANNA}` })
+    // control
+    push.mockClear()
+    await type('anna')
+    await moveOntoSuggestion()
+    await press('Enter')
+    expect(chips()).toEqual(['Anna Schmidt'])
+    expect(push).not.toHaveBeenCalled()
+  })
+
+  it('highlights no suggestion by itself: with suggestions and no result, Enter does nothing until the member moves', async () => {
+    await mountField()
+    await type('rome schm')
+    expect(suggestionRows()).toEqual([`Anna Schmidt ${t('shell.search.chipPerson')}`])
+    expect(rows()).toHaveLength(1)
+    expect(highlighted()).toBeNull()
+    await press('Enter')
+    expect(chips()).toEqual([])
+    await press('ArrowDown')
+    await press('Enter')
+    expect(chips()).toEqual(['Anna Schmidt'])
   })
 })

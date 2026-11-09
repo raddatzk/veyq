@@ -1,7 +1,7 @@
 ---
 id: cr-search-suggestions-and-keyboard
 title: Chip suggestions under their own heading, the first result highlighted, a kind word for bookmarks
-status: planned
+status: done
 satisfies: [uc.platform.search]
 adrs: ["0125", "0079"]
 invariants:
@@ -73,4 +73,48 @@ Single phase.
 
 ## Retrospective
 
-(filled by the implementer)
+Implemented 2026-11-09 in the worktree `search-design`, one phase. `pnpm run check` green in `src/web/` (measured: 539 test
+files, 6498 tests); every `scripts/validate_*.py` but `validate_guard_gaps.py` green with `/usr/bin/python3` (69 guards,
+the core-import guard among them; no validator changed).
+
+**Technical choices made (owner away; recorded here, as asked).**
+- **Reka could do it without a fork, with one lever it does not name.** `VeyqTagsInput` (only when it has `groups`) settles
+  the highlight on every Reka `highlight` event and after every change of what the list holds: the first result, or
+  nothing when there is none. Reka's `ComboboxRoot.highlightItem` puts it on the result; Reka has no call that DROPS a
+  highlight, so a suggestion Reka highlighted by itself (its first-row highlight on typing and on opening) is cleared by a
+  `pointerleave` dispatched on its list root - the event Reka drops a highlight on itself. Reka also drops it when the real
+  pointer leaves the field; the field's `leave` handler then gives it back to the first result (seen in the browser pass).
+- **"Moving onto" is tracked, not inferred:** ↑/↓/Home/End on the field (caught before Reka's handler) and a `pointermove`
+  over the list (capture) mark the member's row; it stays highlighted while the list re-renders under it (the 20 s
+  revalidation), until the text, the chips (compared by key, not array) or the list's open state change, or the row is
+  gone. So from the first result, **↑ reaches the suggestion above it**; with suggestions and no result nothing is
+  highlighted and ↓ enters the list as before. A field without `groups` (the participant and Pot pickers) is untouched:
+  first suggestion highlighted, Enter adds it.
+- **The heading** is a prop of the layer, `optionsLabel`: the suggestions are always one `ComboboxGroup`
+  (`veyq-tags-input__suggestions`, the group's existing flex/gap rules), headed only when the caller names it.
+- **The bookmark's word** reuses `node.bookmark.kind` (*Bookmark* / *Lesezeichen*), the word its level row already shows.
+- **Coverage:** `chips-and-text` extended (heading, highlight, Enter never makes a chip; `VeyqTagsInput.test.ts` added);
+  `every-kind-has-a-word` extended to core's folder and bookmark. The applications test dropped its exception.
+
+**Bites (snapshot-and-restore, `scratchpad/p10_bites.py`):** B1 no settling - 5 tests red (the bite pair, the after-chip
+highlight, the no-suggestion case, the person test, the layer test); B2 the member's move not kept - 12 red (every test
+that moves with the keys, the bite pair's control included); B3 no heading - 5 red; B4 no bookmark word - 2 red.
+
+**Browser pass** (`veyq-search` stack, German UI; seeded here: a view link of *Reisen* named *Für den Test*, kept as the
+bookmark *Reiselink* at the tenant space's top level): desktop 18 checks, phone (390 px) 11 checks, all PASS
+(`p10-pass.mjs`). Screenshots `p10-desktop-kevin`, `p10-desktop-year-chip`, `p10-desktop-bookmark-chip`,
+`p10-phone-kevin`, `p10-phone-year-chip` in the session scratchpad's `search-pass/`.
+
+**Owner questions (each with the conservative default built).**
+1. **↑ from the first result reaches the suggestions** (they sit above). Recommendation: keep; the Use page says "move
+   onto it with ↑ or ↓".
+2. **With suggestions and no result, nothing is highlighted**, so Enter on `2024` alone (no name holds it) does nothing
+   until ↓ - the CR's "typed text never silently becomes a chip", applied also where the list holds no result.
+   Recommendation: keep.
+3. Keep this CR for review or delete it: its binding lessons are in `VeyqTagsInput.vue`'s header and the coverage file.
+
+**What went wrong.** The first layer test was red on the member's move being forgotten when the caller handed the same
+chips as a new array: a watch on `keys` compared arrays by identity. Next time: a watch that means "the chips changed"
+compares by content.
+
+**Next time:** a pass script that navigates by hash reloads the page, or the field keeps the previous step's chips.

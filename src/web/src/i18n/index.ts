@@ -1521,6 +1521,8 @@ const en = {
       listFailed: 'Your other spaces could not be read, so only this space was searched.',
       hint: 'Searches names, dates, places and people in all your spaces, and finds members and settings too.',
       empty: 'Nothing found.',
+      // The heading over the chip suggestions, apart from the results: a suggestion filters, a result opens.
+      filterBy: 'Filter by',
       chipYear: 'Year',
       chipPlace: 'Place',
       chipPerson: 'Person',
@@ -3650,6 +3652,7 @@ const de: typeof en = {
       listFailed: 'Deine anderen Bereiche ließen sich nicht lesen, darum wurde nur dieser Bereich durchsucht.',
       hint: 'Durchsucht Namen, Daten, Orte und Personen in all deinen Bereichen und findet auch Mitglieder und Einstellungen.',
       empty: 'Nichts gefunden.',
+      filterBy: 'Filtern nach',
       chipYear: 'Jahr',
       chipPlace: 'Ort',
       chipPerson: 'Person',

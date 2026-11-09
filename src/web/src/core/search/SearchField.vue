@@ -1,9 +1,11 @@
 <script setup lang="ts">
 // The shell's search field (uc.platform.search, ADR 0125): one field over every space of the tenant, its chips and its
-// results in one list - the chips it offers for the typed text first, then the results grouped by where the member stands
+// results in one list - the chips it offers for the typed text first, under their own heading (*Filter by*), then the
+// results grouped by where the member stands
 // (the open node, this space, other spaces), then the tenant's members and the settings sections (ADR 0125 decision 9). The
 // model is core's (`searchIndex.ts`, `query.ts`, `groups.ts`, `peopleAndSettings.ts`); this draws it on the layer's tags
-// input and opens what is chosen.
+// input and opens what is chosen. The layer highlights the first result whenever there is one, so Enter opens it, and
+// never a suggestion by itself: a chip is chosen by moving onto it (`VeyqTagsInput`'s header).
 //
 // **The first focus builds the index, every later one revalidates it** (`refreshSearchIndex`), and while the list is open
 // the spaces are revalidated again every {@link REVALIDATE_MS} - each a `304` while nothing moved (ADR 0081). Nothing about
@@ -274,6 +276,7 @@ const notSearched = computed(() => searchState.failed.map((s) => spaceLabel(s)).
     :tags="tags"
     :options="suggestions"
     :groups="resultGroups"
+    :options-label="t('shell.search.filterBy')"
     :placeholder="t('shell.search.placeholder')"
     :aria-label="t('shell.search.label')"
     autocomplete="off"
