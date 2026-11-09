@@ -67,7 +67,7 @@ const scopes: SearchScope[] = [{ id: 'S1', kind: ScopeKind.Tenant, name: 'Famili
 const field = () => document.body.querySelector<HTMLInputElement>('input.veyq-tags-input__input')!
 /** A node's text, its parts apart (the name, where it lives, a chip's value); a name is one part, its bold match inside it. */
 const words = (n: Node): string[] =>
-  n.nodeType === 3 || (n as Element).classList?.contains('veyq-search__result-name')
+  n.nodeType === 3 || (n as Element).classList?.contains('veyq-search__result-name') || (n as Element).classList?.contains('veyq-search__result-meta')
     ? [n.textContent!.trim()].filter(Boolean)
     : [...n.childNodes].flatMap(words)
 const rows = () => [...document.body.querySelectorAll<HTMLElement>('.veyq-tags-input__option')].map((o) => words(o).join(' '))
@@ -667,16 +667,16 @@ describe('the suggestions\' heading and the entry Enter takes', () => {
       { userId: 'ken', username: 'ken', realName: 'Ken', displayName: 'Ken' },
       { userId: KEVIN, username: 'kevin', realName: 'Kevin', displayName: 'Kevin' },
     ] satisfies Person[])
-    // the two sections found by a word starting with k ("keys"), after the people
-    const keys = [`${t('settings.security')} ${t('settings.personal')}`, `${t('whoIsWho.navTitle')} ${t('settings.tenant')}`]
+    // was: the two sections found by their word "keys" followed the people for "k" and "ke"; a settings word now counts
+    // from the third character on (cr-search-visible-reasons), so neither lists them ("key" does: the next describe)
     await mountField()
     await type('k')
-    expect(rows()).toEqual(['K Ken ~ken', 'K Kevin ~kevin', ...keys])
+    expect(rows()).toEqual(['K Ken ~ken', 'K Kevin ~kevin'])
     expect(highlighted()).toBe('K Ken ~ken')
     await press('ArrowDown')
     expect(highlighted()).toBe('K Kevin ~kevin')
     await type('ke')
-    expect(rows()).toEqual([`Ken ${t('shell.search.chipPerson')}`, `Kevin ${t('shell.search.chipPerson')}`, 'K Ken ~ken', 'K Kevin ~kevin', ...keys])
+    expect(rows()).toEqual([`Ken ${t('shell.search.chipPerson')}`, `Kevin ${t('shell.search.chipPerson')}`, 'K Ken ~ken', 'K Kevin ~kevin'])
     expect(highlighted()).toBe('K Kevin ~kevin')
     await press('Enter')
     expect(push).toHaveBeenCalledWith({ name: 'home', hash: `#people/${KEVIN}` })
@@ -745,8 +745,9 @@ describe('the polish (cr-search-polish)', () => {
     }
   })
 
+  // was: the row read "<label> <heading>"; the word it was found by now follows its heading (cr-search-visible-reasons)
   it('finds the mail section by "E-Mail" for an owner, and for a member nothing - the gate holds', async () => {
-    const mail = `${t('mail.navTitle')} ${t('settings.tenant')}`
+    const mail = `${t('mail.navTitle')} ${t('settings.tenant')} · e-mail`
     vi.mocked(listMyTenants).mockResolvedValue(tenantRole('OWNER'))
     await mountField()
     await type('E-Mail')
@@ -764,10 +765,13 @@ describe('the polish (cr-search-polish)', () => {
   it('matches a section\'s words from a word\'s start only: "mtp" finds no mail section, "smtp" does', async () => {
     vi.mocked(listMyTenants).mockResolvedValue(tenantRole('OWNER'))
     await mountField()
+    // was: `not.toContain` the bare "<label> <heading>" row, which a row with its word after the heading never equals - the
+    // absence now asks for any row of the mail section
+    const mailRows = () => rows().filter((r) => r.startsWith(`${t('mail.navTitle')} `))
     await type('mtp')
-    expect(rows()).not.toContain(`${t('mail.navTitle')} ${t('settings.tenant')}`)
+    expect(mailRows()).toEqual([])
     await type('smtp')
-    expect(rows()).toContain(`${t('mail.navTitle')} ${t('settings.tenant')}`) // control
+    expect(mailRows()).toEqual([`${t('mail.navTitle')} ${t('settings.tenant')} · SMTP`]) // control
   })
 
   it('reads the settings answers once over two focuses', async () => {
@@ -858,5 +862,78 @@ describe('the queries remembered while the list is open', () => {
     await type('r')
     await type('ro')
     expect(reads - reopened).toBeGreaterThanOrEqual(base.length * 2) // control: forgotten, so scanned again
+  })
+})
+
+// cr-search-visible-reasons (owner 2026-11-09): a result never stands there for a reason the member cannot see
+describe('a reason the member can see', () => {
+  /** The row of a result whose name is `name`, or undefined. */
+  const rowOf = (name: string) =>
+    [...document.body.querySelectorAll<HTMLElement>('.veyq-tags-input__results .veyq-tags-input__option')]
+      .find((o) => o.querySelector('.veyq-search__result-name')?.textContent === name)
+  const names = () => [...document.body.querySelectorAll('.veyq-search__result-name')].map((n) => n.textContent)
+
+  /** Mounted in German: the owner's "Passwort ändern", found by its word "Kennwort". */
+  async function inGerman(run: () => Promise<void>) {
+    await mountField() // mounting resets the language to English (`realI18n`)
+    i18n.global.locale.value = 'de'
+    try {
+      await flushPromises()
+      await run()
+    } finally {
+      i18n.global.locale.value = 'en'
+    }
+  }
+
+  it('"Ke" does not list "Passwort ändern"; "Ken" lists it with "Kennwort" on its second line, "Ken" bold', async () => {
+    await inGerman(async () => {
+      await type('Ke')
+      expect(rowOf('Passwort ändern')).toBeUndefined()
+      expect(names()).toContain('kevin') // control: the list is there, the member's name matches
+      await type('Ken')
+      const row = rowOf('Passwort ändern')!
+      expect(resultRows()).toContain('Passwort ändern Persönlich · Kennwort')
+      const meta = row.querySelector('.veyq-search__result-meta')!
+      expect(meta.querySelector('strong')!.textContent).toBe('Ken')
+      expect([...meta.querySelector('strong')!.childNodes].map((n) => n.nodeType)).toEqual([Node.TEXT_NODE])
+      expect(row.querySelector('.veyq-search__result-name strong')).toBeNull() // the name did not match: nothing bold in it
+    })
+  })
+
+  it('a section whose label matches shows no word on its second line', async () => {
+    await inGerman(async () => {
+      await type('Passw') // the label "Passwort ändern" and the word "Passwort" both match: the label is the reason
+      const row = rowOf('Passwort ändern')!
+      expect(resultRows()).toContain('Passwort ändern Persönlich')
+      expect(row.querySelector('.veyq-search__result-meta strong')).toBeNull()
+      expect(row.querySelector('.veyq-search__result-name strong')!.textContent).toBe('Passw')
+    })
+  })
+
+  it('"key" lists the two sections found by "keys", the word after their heading; "ke" neither', async () => {
+    await mountField()
+    await type('ke')
+    expect(resultRows().filter((r) => r.endsWith('· keys'))).toEqual([])
+    await type('key')
+    expect(resultRows()).toEqual([
+      `${t('settings.security')} ${t('settings.personal')} · keys`, `${t('whoIsWho.navTitle')} ${t('settings.tenant')} · keys`,
+    ])
+  })
+
+  it('"K" lists word starts only; "Ke" lists a match inside a word too', async () => {
+    vi.mocked(indexedDocuments).mockReturnValue([
+      doc({ id: 'link', name: 'Reiselink' }), doc({ id: 'paket', name: 'Paket' }), doc({ id: 'kiel', name: 'Kiel' }),
+      doc({ id: 'trip', name: 'Trip', facets: { places: ['Bad Kissingen'] } }), doc({ id: 'home', name: 'Home', facets: { places: ['Parkweg'] } }),
+    ])
+    await mountField()
+    await type('K')
+    expect(names()).toEqual(expect.arrayContaining(['Kiel', 'Trip'])) // a name's and a place's word start
+    expect(names()).not.toContain('Reiselink')
+    expect(names()).not.toContain('Paket')
+    expect(names()).not.toContain('Home') // "Parkweg" holds a k inside a word only
+    await type('Ke')
+    expect(names()).toContain('Paket') // inside a word, from the second character on
+    expect(names()).not.toContain('Reiselink') // control: no "ke" in it
+    expect(names()).not.toContain('Kiel')
   })
 })

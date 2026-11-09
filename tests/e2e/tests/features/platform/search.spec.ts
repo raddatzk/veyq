@@ -385,11 +385,14 @@ test(
   async () => {
     const { page } = member
     await openShared(page)
-    // "dark mode" is one of the appearance section's own words (settings.words.appearance), never drawn: matched from a
-    // word's start. (Not "mail server", the mail section's: a canary that generic could sit in a relay's log line.)
+    // "dark mode" is one of the appearance section's own words (settings.words.appearance): matched from a word's start
+    // and from the third character, and drawn after the row's heading as the reason it is listed
+    // (cr-search-visible-reasons). (Not "mail server", the mail section's: a canary that generic could sit in a relay's
+    // log line.)
     await search(page, 'dark mode')
     const section = result(page, 'Appearance and language')
     await expect(section).toBeVisible({ timeout: 60_000 })
+    await expect(whereOf(section)).toHaveText('Personal · dark mode')
     await section.click()
     await expect(page).toHaveURL(/\/settings\/appearance$/)
     const rail = page.getByRole('navigation', { name: 'Settings' })

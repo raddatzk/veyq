@@ -65,8 +65,9 @@ export interface SearchDocument {
   readonly aliases?: readonly string[]
   /** `aliases` folded, once. */
   readonly foldedAliases: readonly string[]
-  /** Words the object is found by at a word's start only, never inside one, and never drawn (a settings section's
-   *  "E-Mail", "Kennwort"): words the member does not see must not match a stray letter. */
+  /** Words the object is found by at a word's start only, never inside one, and from the third typed character on (a
+   *  settings section's "E-Mail", "Kennwort"): a word the member does not see beside the name must not match a stray
+   *  letter, and where one is why a result is listed, its row draws it (`query.ts` `reasonKeyword`). */
   readonly keywords?: readonly string[]
   /** `keywords` folded, once. */
   readonly foldedKeywords: readonly string[]

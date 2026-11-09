@@ -370,12 +370,15 @@ here; the server is blind.
   over every document** (`satisfies`): no rule hides a kind of document while a chip is set - never add one. A node
   something lies below is an *In:* chip, matched by the ids above a document (`SearchDocument.pathIds`, built with `path`
   by `documents.ts` `placeOf`/`placeWithin`), never by a name: two nodes of one name are two chips. A section's `words` become its document's `keywords`,
-  matched from a word's start only (a hidden word must not match a stray letter) and ranked with a place match. A row's bold part is `nameParts`
+  matched from a word's start only and from the third typed character on (`MIN_KEYWORD`), ranked with a place match, and
+  drawn after the row's second line where one, not the label, is why the section is listed (`reasonKeyword`): a result
+  never stands there for a reason the member cannot see. One typed character matches word starts only (`MIN_INSIDE`). A row's bold part is `nameParts`
   (`query.ts`: the match found in the folded name, mapped back by `foldMap`), drawn as text and a `strong` - never markup.
   Per keystroke the field answers a query asked before from memory and narrows the closest shorter one's matches while
   the text grows (`createMatcher`: in memory only, forgotten when the list closes, the documents move or the field goes),
   and ranks the list only as far as it is shown (`results.ts` `firstRanked`); a new rule in `textRank` must stay
-  monotone in the text, or the narrowing drops a match (cr-search-polish).
+  monotone in the text from the length the matcher narrows from (`EVERY_RULE`, today three characters), or the narrowing
+  drops a match - a rule that starts at a longer length raises that length (cr-search-polish, cr-search-visible-reasons).
 
   **Favorites are core's (inbox #409, [ADR 0068](../../docs/decisions/0068-favorites-two-confidentiality-levels.md) §10).** The member's private pin of
   a node of ANY kind - folder, file, Memory, drop box - lives in `src/core/favorites/`: `favorites.ts` (the sealed data layer, purpose

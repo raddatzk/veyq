@@ -17,6 +17,12 @@
 // (exact, prefix, the start of a word, anywhere - in that rank; another name it carries, a person's `~username`, counts as
 // its name) or, ranked after every name match, one of its places or - from a word's start only - a word it is found by
 // (a settings section's). The order of the results is `results.ts`'s: the rank, then where the result lies, then the name.
+//
+// **A result is never listed for a reason the member cannot see** (cr-search-visible-reasons, uc.platform.search step 5):
+// one typed character matches word starts only - a match inside a word counts from {@link MIN_INSIDE} characters on, so
+// "K" lists no "Reiselink" -, and a settings section's word counts from {@link MIN_KEYWORD} on and is drawn on the row's
+// second line where it is the reason ({@link reasonKeyword}). Both rules start at a length, so the matcher narrows only
+// from a text long enough that every rule holds (`createMatcher`).
 import { fold, foldMap } from '../../shared/text/fold'
 import { monthsOf, yearsOf, type SearchDocument } from './model'
 
@@ -222,39 +228,83 @@ export function satisfies(doc: SearchDocument, chip: SearchChip): boolean {
 /** The ranks of a text match, best first; `place` is a place's match or a settings section's word's (ADR 0125 decision 5). */
 export const Rank = { exact: 0, prefix: 1, wordStart: 2, inside: 3, place: 4 } as const
 
+/** The fewest characters of the folded text a match inside a word counts from: one character matches word starts only. */
+export const MIN_INSIDE = 2
+/** The fewest characters of the folded text a settings section's word counts from ("Ke" finds no "Kennwort"). */
+export const MIN_KEYWORD = 3
+/** The length from which every rule of {@link textRank} holds, and so the shortest text the matcher narrows from. */
+const EVERY_RULE = Math.max(MIN_INSIDE, MIN_KEYWORD)
+/** The characters of the folded text `t` - code points, so a character outside the basic plane is one: every UTF-16 unit
+ *  but a trailing surrogate. No allocation - {@link textRank} asks it for every document. */
+function lengthOf(t: string): number {
+  let n = 0
+  for (let i = 0; i < t.length; i++) if ((t.charCodeAt(i) & 0xfc00) !== 0xdc00) n++
+  return n
+}
+
 /** The words of the folded text `t`, split once per query: {@link matchAll} asks every document with them, and a split per
  *  document was a regular expression and an array for each of 17,000 documents on every keystroke (cr-search-photos-of-every-space). */
 const wordsOf = (t: string): string[] => t.split(/\s+/).filter(Boolean)
 
 /** How `doc` matches the folded text `t` (its `words`, when the caller split them already), or null when it does not; an
- *  empty text matches every document at the best rank. **Every rule here must be monotone in the text** - a document a
- *  longer text matches, the shorter text it grew from matches too - since {@link createMatcher} narrows remembered matches
- *  while the text grows; a rule that matches only from some length on (a minimum for keywords, say) would drop a match. */
+ *  empty text matches every document at the best rank. **Every rule here must be monotone in the text from
+ *  {@link EVERY_RULE} characters on** - a document a longer text matches, the shorter text it grew from matches too, once
+ *  that one is that long - since {@link createMatcher} narrows remembered matches while the text grows. Below it two rules
+ *  are not (a match inside a word from {@link MIN_INSIDE}, a settings word from {@link MIN_KEYWORD}): "Ke" matches what
+ *  "K" did not, and the matcher never narrows from such a text. */
 export function textRank(doc: SearchDocument, t: string, words: readonly string[] = wordsOf(t)): number | null {
   if (!t) return Rank.exact
-  let best = nameRank(doc.foldedName, t, words)
-  for (const alias of doc.foldedAliases) {
-    const rank = nameRank(alias, t, words)
-    if (rank !== null && (best === null || rank < best)) best = rank
-  }
+  const inside = lengthOf(t) >= MIN_INSIDE
+  const best = bestNameRank(doc, t, words, inside)
   if (best !== null) return best
-  // a word the member does not see matches from a word's start only, and ranks with a place: after every name
-  for (const keyword of doc.foldedKeywords) {
-    const rank = nameRank(keyword, t, words)
-    if (rank !== null && rank < Rank.inside) return Rank.place
-  }
-  if (doc.foldedPlaces.some((p) => p.includes(t))) return Rank.place
+  // a word the member does not see matches from a word's start only and from MIN_KEYWORD on, and ranks with a place
+  if (keywordAt(doc, t, words) >= 0) return Rank.place
+  if (doc.foldedPlaces.some((p) => (inside ? p.includes(t) : wordPrefix(p, t)))) return Rank.place
   return null
 }
 
-/** How the folded name `name` matches the folded text `t` (split into `words`), or null. */
-function nameRank(name: string, t: string, words: readonly string[]): number | null {
+/** The best rank of `doc`'s name or another name it carries, or null. */
+function bestNameRank(doc: SearchDocument, t: string, words: readonly string[], inside: boolean): number | null {
+  let best = nameRank(doc.foldedName, t, words, inside)
+  for (const alias of doc.foldedAliases) {
+    const rank = nameRank(alias, t, words, inside)
+    if (rank !== null && (best === null || rank < best)) best = rank
+  }
+  return best
+}
+
+/** Which of `doc`'s settings words the folded text `t` matches - from a word's start, and only from {@link MIN_KEYWORD}
+ *  characters on -, as its index, or -1. */
+function keywordAt(doc: SearchDocument, t: string, words: readonly string[]): number {
+  if (!doc.foldedKeywords.length || lengthOf(t) < MIN_KEYWORD) return -1
+  return doc.foldedKeywords.findIndex((keyword) => {
+    const rank = nameRank(keyword, t, words, false)
+    return rank !== null && rank < Rank.inside
+  })
+}
+
+/**
+ * The settings word that is the reason `doc` matches the folded text `t`, as the section names it ("Kennwort"), or null:
+ * a word is the reason only where neither the name nor another name it carries matched. The row draws it on its second
+ * line - a result never stands there for a reason the member cannot see (uc.platform.search step 5).
+ */
+export function reasonKeyword(doc: SearchDocument, t: string): string | null {
+  if (!t || !doc.keywords?.length) return null
+  const words = wordsOf(t)
+  if (bestNameRank(doc, t, words, lengthOf(t) >= MIN_INSIDE) !== null) return null
+  const at = keywordAt(doc, t, words)
+  return at >= 0 ? doc.keywords[at] : null
+}
+
+/** How the folded name `name` matches the folded text `t` (split into `words`), or null; a match inside a word only where
+ *  `inside` allows it (the text is {@link MIN_INSIDE} characters at least). */
+function nameRank(name: string, t: string, words: readonly string[], inside: boolean): number | null {
   // Most documents do not hold the text at all (a photo's IMG_… for "K"): one search answers them, not four.
   if (!name.includes(t)) return words.length > 1 && words.every((w) => name.includes(w)) ? Rank.inside : null
   if (name === t) return Rank.exact
   if (name.startsWith(t)) return Rank.prefix
   if (wordPrefix(name, t)) return Rank.wordStart
-  return Rank.inside
+  return inside ? Rank.inside : null
 }
 
 /** A document that matched, with its rank. */
@@ -299,8 +349,11 @@ export const MATCH_HISTORY = 64
  * - **The same query again** - a "show more", or Backspace from "Kev" back to "Ke" - is the remembered answer as it was.
  * - **A query that grew** from a remembered one (the same chips, a text that starts with that one's) narrows the matches of
  *   the longest such query instead of scanning every document. That is sound because a text that grows only drops matches
- *   ({@link textRank} is monotone in the text): every word of the longer text holds a word of the shorter one, and a name,
- *   an alias, a keyword or a place that holds the longer text holds the shorter.
+ *   ({@link textRank} is monotone in the text from {@link EVERY_RULE} characters on): every word of the longer text holds a
+ *   word of the shorter one, and a name, an alias, a keyword or a place that holds the longer text holds the shorter. So
+ *   only a text that long, or an empty one (it matches every document the chips leave), is narrowed from: "K" matches word
+ *   starts only and "Ke" inside words too, "Ke" no settings word and "Ken" one - each of those scans every document
+ *   (cr-search-visible-reasons).
  * - **Anything else** - a new chip, a text no remembered one starts - scans every document.
  * Another list of documents - the index's next generation: a space rebuilt, a listing re-read, the open Memory's
  * contribution or the roster moved - forgets everything, and so does {@link Matcher.clear}, which the field calls when its
@@ -326,7 +379,9 @@ export function createMatcher(): Matcher {
       return asked.matches
     }
     let from: { t: string; matches: Match[] } | undefined
-    for (const h of history.values()) if (h.chips === chips && t.startsWith(h.t) && (!from || h.t.length > from.t.length)) from = h
+    for (const h of history.values()) {
+      if (h.chips === chips && t.startsWith(h.t) && narrowsFrom(h.t) && (!from || h.t.length > from.t.length)) from = h
+    }
     const matches = from ? matchIn(docsOf(from.matches), query.chips, t) : matchIn(docs, query.chips, t)
     history.set(key, { chips, t, matches })
     if (history.size > MATCH_HISTORY) history.delete(history.keys().next().value!)
@@ -338,6 +393,10 @@ export function createMatcher(): Matcher {
   }
   return match
 }
+
+/** Whether the matches of the folded text `t` hold every match of any text grown from it: an empty text (every document
+ *  the chips leave), or one long enough that every rule of {@link textRank} holds. */
+const narrowsFrom = (t: string): boolean => t === '' || lengthOf(t) >= EVERY_RULE
 
 function* docsOf(matches: readonly Match[]): Generator<SearchDocument> {
   for (const m of matches) yield m.doc

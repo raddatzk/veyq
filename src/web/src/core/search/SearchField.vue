@@ -17,7 +17,9 @@
 // the spaces the index lists change - a group joined, left or deleted.
 //
 // **What a row draws.** The part of a name the text matched is bold (`nameParts`: found in the folded name, drawn over
-// the name's own characters), as text nodes and a `strong` element - never markup from a string. A month chip reads its
+// the name's own characters), as text nodes and a `strong` element - never markup from a string. A settings section listed
+// for one of its words, not its label, draws that word after its second line, its matched part bold the same way
+// (`reasonKeyword`, cr-search-visible-reasons): a result never stands there for a reason the member cannot see. A month chip reads its
 // month in the UI's language. **A screen reader** hears, through a polite live region, how many results there are and a
 // chip added or removed; the suggestions are named by their heading, the results by their own name, and the field
 // stays the layer's combobox.
@@ -54,7 +56,9 @@ import { useSettingsSections } from '../../features/settings/sections'
 import { searchContribution } from './contribution'
 import { requestOpenItem } from './openRequest'
 import { PERSON_DOCUMENT, SETTINGS_DOCUMENT, searchDocument, yearsOf, type SearchDocument } from './model'
-import { chipKey, createMatcher, matchedText, nameParts, suggestChips, type ChipSuggestion, type NamePart, type SearchChip } from './query'
+import {
+  chipKey, createMatcher, matchedText, nameParts, reasonKeyword, suggestChips, type ChipSuggestion, type NamePart, type SearchChip,
+} from './query'
 import { searchResults } from './results'
 import { placeWithin } from './documents'
 import { personDocuments, settingsDocuments } from './peopleAndSettings'
@@ -321,6 +325,15 @@ function tokenOf(scopeId: string): string {
 /** The text as matched, once per keystroke: every drawn row's bold part is found with it. */
 const matched = computed(() => matchedText(text.value))
 const partsOf = (doc: SearchDocument): NamePart[] => nameParts(doc.name, matched.value)
+/** A row's second line in parts ({@link secondLine}), and - where a settings word, not the name, is why the row is listed -
+ *  that word after it with its matched part bold ("Persönlich · **Ken**nwort"): a result never stands there for a reason
+ *  the member cannot see (cr-search-visible-reasons). */
+function metaParts(option: ResultOption): NamePart[] {
+  const line = secondLine(option)
+  const word = reasonKeyword(option.doc!, matched.value)
+  if (word === null) return line ? [{ text: line, strong: false }] : []
+  return [...(line ? [{ text: `${line} · `, strong: false }] : []), ...nameParts(word, matched.value)]
+}
 
 // --- what the field says ---------------------------------------------------------------------------------------------
 const asked = computed(() => text.value.trim() !== '' || chips.value.length > 0)
@@ -397,7 +410,7 @@ const statusSaid = computed(() => loadingShown.value || !!notSearched.value || s
         <VeyqIcon v-else :name="iconOf(option.doc)" class="veyq-search__result-icon" />
         <span class="veyq-search__result-main">
           <span class="veyq-search__result-name"><template v-for="(part, i) in partsOf(option.doc)" :key="i"><strong v-if="part.strong" class="veyq-search__match">{{ part.text }}</strong><template v-else>{{ part.text }}</template></template></span>
-          <span v-if="secondLine(option)" class="veyq-search__result-meta">{{ secondLine(option) }}</span>
+          <span v-if="metaParts(option).length" class="veyq-search__result-meta"><template v-for="(part, i) in metaParts(option)" :key="i"><strong v-if="part.strong" class="veyq-search__match">{{ part.text }}</strong><template v-else>{{ part.text }}</template></template></span>
         </span>
         <span v-for="v in matchedValues(option.doc)" :key="v" class="veyq-badge muted veyq-search__result-chip">{{ v }}</span>
       </template>

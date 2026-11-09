@@ -1553,7 +1553,7 @@ div.veyq-level-item-main,
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-/* the part of a name the text matched (cr-search-polish) */
+/* the part of a name the text matched (cr-search-polish), or of the settings word a row is listed for (cr-search-visible-reasons) */
 .veyq-search__match {
   font-weight: 700;
 }

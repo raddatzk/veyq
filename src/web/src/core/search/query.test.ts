@@ -2,8 +2,8 @@ import { describe, it, expect } from 'vitest'
 import { searchDocument, type SearchDocument, type SearchFacets } from './model'
 import { searchResults } from './results'
 import {
-  chipKey, createMatcher, MATCH_HISTORY, matchAll, matchedText, nameParts, Rank, satisfies, suggestChips, textRank, type ChipSources, type SearchChip,
-  type SearchQuery,
+  chipKey, createMatcher, MATCH_HISTORY, matchAll, matchedText, nameParts, Rank, reasonKeyword, satisfies, suggestChips, textRank, type ChipSources,
+  type SearchChip, type SearchQuery,
 } from './query'
 
 let n = 0
@@ -188,6 +188,50 @@ describe('the text', () => {
   })
 })
 
+// cr-search-visible-reasons (owner 2026-11-09): a result never stands there for a reason the member cannot see
+describe('a reason the member can see', () => {
+  const password = () => doc('Passwort ändern', {}, { keywords: ['Kennwort', 'Passwort', 'Anmeldung'] })
+
+  it('one character matches word starts only - a name\'s, another name\'s, a place\'s; two match inside a word', () => {
+    expect(textRank(doc('Reiselink'), 'k')).toBeNull()
+    expect(textRank(doc('Kiel'), 'k')).toBe(Rank.prefix)
+    expect(textRank(doc('Bad Kissingen'), 'k')).toBe(Rank.wordStart)
+    expect(textRank(doc('Kevin', {}, { aliases: ['~xkev'] }), '~')).toBe(Rank.prefix) // an alias's start
+    expect(textRank(doc('Home', { places: ['Parkweg'] }), 'k')).toBeNull()
+    expect(textRank(doc('Home', { places: ['Kassel'] }), 'k')).toBe(Rank.place)
+    // two characters: inside a word counts
+    expect(textRank(doc('Paket'), 'ke')).toBe(Rank.inside)
+    expect(textRank(doc('Home', { places: ['Parkweg'] }), 'rk')).toBe(Rank.place)
+    expect(textRank(doc('Paket'), 'k')).toBeNull() // control: the same name, one character
+  })
+
+  it('counts a character outside the basic plane as one', () => {
+    expect(textRank(doc('Party 🎉🎉'), '🎉')).toBe(Rank.wordStart)
+    expect(textRank(doc('x🎉'), '🎉')).toBeNull() // one character, inside a word
+  })
+
+  it('a settings word counts from the third character on: "ke" no, "ken" yes', () => {
+    expect(textRank(password(), 'ke')).toBeNull()
+    expect(textRank(password(), 'k')).toBeNull()
+    expect(textRank(password(), 'ken')).toBe(Rank.place)
+    expect(textRank(doc('Mail', {}, { keywords: ['SMTP'] }), 'sm')).toBeNull()
+    expect(textRank(doc('Mail', {}, { keywords: ['SMTP'] }), 'smt')).toBe(Rank.place)
+  })
+
+  it('names the word that is the reason, as the section names it; none where the name matched', () => {
+    expect(reasonKeyword(password(), 'ken')).toBe('Kennwort')
+    expect(reasonKeyword(password(), 'anmel')).toBe('Anmeldung')
+    expect(reasonKeyword(password(), 'passw')).toBeNull() // the label matched: it is the reason
+    expect(reasonKeyword(password(), 'ke')).toBeNull() // nothing matched
+    expect(reasonKeyword(doc('Kennwort'), 'ken')).toBeNull() // no words at all
+    expect(reasonKeyword(password(), '')).toBeNull()
+  })
+
+  it('draws the reason with its matched part bold', () => {
+    expect(nameParts(reasonKeyword(password(), 'ken')!, 'ken')).toEqual([{ text: 'Ken', strong: true }, { text: 'nwort', strong: false }])
+  })
+})
+
 // cr-search-polish: the month chip - a month's name with a year, in the UI's language or in English
 describe('the month chip', () => {
   const names = (locale: string) => Array.from({ length: 12 }, (_, i) => new Intl.DateTimeFormat(locale, { month: 'long' }).format(new Date(2000, i, 15)))
@@ -303,16 +347,36 @@ describe('the matcher of a field', () => {
     for (const q of steps) expect(sorted(match(docs, q)), JSON.stringify(q)).toEqual(sorted(matchAll(docs, q)))
   })
 
+  // was: from "ke" to "kev"; a text of two characters is no superset any more (cr-search-visible-reasons), so from "kev"
+  // cr-search-visible-reasons: "K" matches word starts only and "Ke" inside words too, "Ke" no settings word and "Ken" one
+  it('answers "K" to "Ke" to "Ken" and back as fresh queries do - a shorter text below every rule is no superset', () => {
+    const list = [
+      ...docs, doc('Paket'), doc('Reiselink'), doc('Passwort ändern', {}, { keywords: ['Kennwort'] }), doc('Home', { places: ['Parkweg'] }),
+    ]
+    const steps = ['k', 'ke', 'ken', 'kenn', 'ken', 'ke', 'k', 'ke', 'ken', 'r', 'rk', 'rkw', 'rk']
+    const match = createMatcher()
+    for (const text of steps) {
+      const q = { chips: [], text }
+      expect(sorted(match(list, q)), text).toEqual(sorted(matchAll(list, q))) // matchAll: no memory, a whole scan
+    }
+    // the cases the boundary decides, each present: a fresh scan finds what the shorter text did not
+    expect(sorted(matchAll(list, { chips: [], text: 'ke' }))).toContain('Paket:3')
+    expect(sorted(matchAll(list, { chips: [], text: 'k' })).some((s) => s.startsWith('Paket'))).toBe(false)
+    expect(sorted(matchAll(list, { chips: [], text: 'ken' }))).toContain('Passwort ändern:4')
+    expect(sorted(matchAll(list, { chips: [], text: 'ke' })).some((s) => s.startsWith('Passwort'))).toBe(false)
+    expect(sorted(matchAll(list, { chips: [], text: 'rk' }))).toContain('Home:4')
+  })
+
   it('narrows the last matches while the text grows: a document it dropped is not asked again', () => {
     const match = createMatcher()
-    match(docs, { chips: [], text: 'ke' })
+    match(docs, { chips: [], text: 'kev' })
     // a document renamed in place under the same list is only seen by a whole scan: the narrowing never looks at it
     const img = docs.find((d) => d.name === 'IMG_0001.jpg')! as { foldedName: string }
     const before = img.foldedName
     img.foldedName = 'kevimg'
     try {
-      expect(match(docs, { chips: [], text: 'kev' }).map((m) => m.doc.name)).not.toContain('IMG_0001.jpg')
-      expect(matchAll(docs, { chips: [], text: 'kev' }).map((m) => m.doc.name)).toContain('IMG_0001.jpg') // control
+      expect(match(docs, { chips: [], text: 'kevi' }).map((m) => m.doc.name)).not.toContain('IMG_0001.jpg')
+      expect(matchAll(docs, { chips: [], text: 'kevi' }).map((m) => m.doc.name)).toContain('IMG_0001.jpg') // control
     } finally {
       img.foldedName = before
     }
@@ -350,19 +414,23 @@ describe('the matcher of a field', () => {
     return { list, reads: () => reads }
   }
 
+  // was: "ke" then "kev" narrowed from "ke"; a two-character text is no superset any more (cr-search-visible-reasons),
+  // so "kev" scans, and "kevi" narrows from it - the Backspace is the same
   it('Backspace from "kev" to "ke" reads no document: the answer for "ke" is remembered', () => {
     const { list, reads } = counted()
     const match = createMatcher()
     const ke = match(list, { chips: [], text: 'ke' })
     expect(reads()).toBe(list.length) // the first query scans every document
     const kev = match(list, { chips: [], text: 'kev' })
-    expect(reads()).toBe(list.length + ke.length) // narrowed: only what "ke" matched
+    expect(reads()).toBe(2 * list.length) // "ke" is no superset of "kev" (a settings word counts from three): scanned
+    const kevi = match(list, { chips: [], text: 'kevi' })
+    expect(reads()).toBe(2 * list.length + kev.length) // narrowed: only what "kev" matched
     const before = reads()
     expect(match(list, { chips: [], text: 'ke' })).toBe(ke) // Backspace
     expect(reads()).toBe(before)
-    // typing on narrows from the closest remembered shorter query, "kev"
-    match(list, { chips: [], text: 'kevi' })
-    expect(reads()).toBe(before + kev.length)
+    // typing on narrows from the closest remembered shorter query, "kevi"
+    match(list, { chips: [], text: 'kevin' })
+    expect(reads()).toBe(before + kevi.length)
     // control: a matcher without that memory reads every document again for "ke"
     const fresh = createMatcher()
     const at = reads()
