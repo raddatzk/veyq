@@ -83,9 +83,8 @@ async function type(text: string) {
   el.dispatchEvent(new InputEvent('input', { data: text.slice(-1), bubbles: true }))
   await flushPromises()
 }
-/** Move onto a suggestion as a member does: up from the first result to the suggestion above it, else down into the list. */
-async function moveOntoSuggestion() {
-  await press(highlighted() === null ? 'ArrowDown' : 'ArrowUp')
+/** The first entry - here a chip suggestion - is the highlighted one, so Enter takes it (uc.platform.search step 4). */
+function expectSuggestionHighlighted() {
   expect(suggestionRows(), 'the highlight is on a suggestion').toContain(highlighted())
 }
 /** Every field a test mounted, unmounted after it: a field left mounted would keep answering a later test's state. */
@@ -152,7 +151,7 @@ describe('the search field', () => {
     await mountField()
     await type('2024')
     expect(rows()[0]).toBe(`2024 ${t('shell.search.chipYear')}`)
-    await moveOntoSuggestion()
+    expectSuggestionHighlighted()
     await press('Enter')
     expect(chips()).toEqual(['2024'])
     expect(field().value).toBe('')
@@ -165,7 +164,7 @@ describe('the search field', () => {
     await mountField()
     await type('schm')
     expect(rows()[0]).toBe(`Anna Schmidt ${t('shell.search.chipPerson')}`)
-    await moveOntoSuggestion()
+    expectSuggestionHighlighted()
     await press('Enter')
     expect(chips()).toEqual(['Anna Schmidt'])
     expect(rows()).toEqual(['Rome 2024 Trips Anna Schmidt'])
@@ -174,7 +173,7 @@ describe('the search field', () => {
   it('keeps the words a chip did not take as text', async () => {
     await mountField()
     await type('rome schm')
-    await moveOntoSuggestion()
+    expectSuggestionHighlighted()
     await press('Enter')
     expect(chips()).toEqual(['Anna Schmidt'])
     expect(field().value).toBe('rome')
@@ -258,8 +257,11 @@ describe('people and settings sections as results (ADR 0125 decision 9)', () => 
     expect(rows()).toEqual([`kevin ${t('shell.search.chipPerson')}`, 'K kevin ~kevin'])
     expect(headings()).toEqual([t('shell.search.filterBy'), t('shell.search.groupPeople')])
     expect(suggestionRows()).toEqual([`kevin ${t('shell.search.chipPerson')}`])
+    await press('ArrowDown')
+    expect(highlighted()).toBe('K kevin ~kevin')
     await press('Enter')
     expect(push).toHaveBeenCalledWith({ name: 'home', hash: `#people/${KEVIN}` })
+    expect(chips()).toEqual([])
   })
 
   it('finds a section by its label and opens it on the settings page, the space on screen kept', async () => {
@@ -301,7 +303,7 @@ describe('people and settings sections as results (ADR 0125 decision 9)', () => 
     await mountField()
     await type('anna')
     expect(headings()).toContain(t('shell.search.groupPeople'))
-    await moveOntoSuggestion()
+    expectSuggestionHighlighted()
     await press('Enter') // the person chip
     expect(chips()).toEqual(['Anna Schmidt'])
     expect(headings()).not.toContain(t('shell.search.groupPeople'))
@@ -329,16 +331,17 @@ describe('the kind words of Depot, Expenses and core\'s bookmark', () => {
     await mountField()
     await type(t(word))
     expect(rows()[0]).toBe(`${t(word)} ${t('shell.search.chipKind')}`)
-    await moveOntoSuggestion()
+    expectSuggestionHighlighted()
     await press('Enter')
     expect(chips()).toEqual([t(word)])
     expect(rows()).toEqual(['Rome thing'])
   })
 })
 
-// uc.platform.search step 4: the suggestions stand under their own heading, and Enter takes the first result - never a
-// suggestion the member did not move onto.
-describe('the suggestions\' heading and the row Enter takes', () => {
+// uc.platform.search step 4 (owner 2026-11-09): the suggestions stand under their own heading; the first entry of the list is
+// highlighted, a suggestion or a result, and Enter takes it; an entry the member moved to stays highlighted while they type
+// on and it is listed (the layer's own test holds the drop-out and the pointer).
+describe('the suggestions\' heading and the entry Enter takes', () => {
   it('heads the chip suggestions "Filter by", above the result groups', async () => {
     await mountField()
     await type('2024')
@@ -347,10 +350,10 @@ describe('the suggestions\' heading and the row Enter takes', () => {
     expect(rows()).toEqual([`2024 ${t('shell.search.chipYear')}`, 'Rome 2024 Trips'])
   })
 
-  it('highlights the first result right after a chip was chosen, and Enter opens it', async () => {
+  it('highlights the first entry right after a chip was chosen, and Enter opens it', async () => {
     await mountField()
     await type('2024')
-    await moveOntoSuggestion()
+    expectSuggestionHighlighted()
     await press('Enter')
     expect(chips()).toEqual(['2024'])
     expect(highlighted()).toBe('Rome 2024 Trips 2024')
@@ -358,35 +361,53 @@ describe('the suggestions\' heading and the row Enter takes', () => {
     expect(push).toHaveBeenCalledWith({ name: 'home', hash: '#trips/memories/rome-2024' })
   })
 
-  // The bite pair: the same word, the same list - Enter alone opens the first result; only moving onto the suggestion makes
-  // it a chip.
-  it('Enter on a typed name opens the first result and adds no chip; control: moving onto the suggestion first adds it', async () => {
+  // The owner's example and its control: the same word, the same list - Enter alone takes the first entry, the person
+  // suggestion, and makes the chip; moving onto the person result first opens the profile instead.
+  it('Enter on a typed name makes the person chip, the first entry; control: ↓ onto the person result, Enter opens it', async () => {
     await mountField()
     await type('anna')
     expect(rows()).toEqual([`Anna Schmidt ${t('shell.search.chipPerson')}`, 'A Anna Schmidt ~anna'])
-    expect(highlighted()).toBe('A Anna Schmidt ~anna')
-    await press('Enter')
-    expect(chips()).toEqual([])
-    expect(push).toHaveBeenCalledWith({ name: 'home', hash: `#people/${ANNA}` })
-    // control
-    push.mockClear()
-    await type('anna')
-    await moveOntoSuggestion()
+    expect(highlighted()).toBe(`Anna Schmidt ${t('shell.search.chipPerson')}`)
     await press('Enter')
     expect(chips()).toEqual(['Anna Schmidt'])
     expect(push).not.toHaveBeenCalled()
+    // control
+    await press('Backspace')
+    expect(chips()).toEqual([])
+    await type('anna')
+    await press('ArrowDown')
+    await press('Enter')
+    expect(chips()).toEqual([])
+    expect(push).toHaveBeenCalledWith({ name: 'home', hash: `#people/${ANNA}` })
   })
 
-  it('highlights no suggestion by itself: with suggestions and no result, Enter does nothing until the member moves', async () => {
+  it('with suggestions and no result, the first suggestion is highlighted and Enter makes it a chip', async () => {
     await mountField()
     await type('rome schm')
     expect(suggestionRows()).toEqual([`Anna Schmidt ${t('shell.search.chipPerson')}`])
     expect(rows()).toHaveLength(1)
-    expect(highlighted()).toBeNull()
-    await press('Enter')
-    expect(chips()).toEqual([])
-    await press('ArrowDown')
+    expect(highlighted()).toBe(`Anna Schmidt ${t('shell.search.chipPerson')}`)
     await press('Enter')
     expect(chips()).toEqual(['Anna Schmidt'])
+  })
+
+  // The owner's example in the field: "K" lists Ken and Kevin as people (one letter offers no chip yet), ↓ moves to Kevin,
+  // and "Ke" - which adds both as chip suggestions above them - keeps Kevin highlighted.
+  it('keeps the entry the member moved to while they type on: two members sharing a prefix', async () => {
+    vi.mocked(tenantPeopleNow).mockReturnValue([
+      { userId: 'ken', username: 'ken', realName: 'Ken', displayName: 'Ken' },
+      { userId: KEVIN, username: 'kevin', realName: 'Kevin', displayName: 'Kevin' },
+    ] satisfies Person[])
+    await mountField()
+    await type('k')
+    expect(rows()).toEqual(['K Ken ~ken', 'K Kevin ~kevin'])
+    expect(highlighted()).toBe('K Ken ~ken')
+    await press('ArrowDown')
+    expect(highlighted()).toBe('K Kevin ~kevin')
+    await type('ke')
+    expect(rows()).toEqual([`Ken ${t('shell.search.chipPerson')}`, `Kevin ${t('shell.search.chipPerson')}`, 'K Ken ~ken', 'K Kevin ~kevin'])
+    expect(highlighted()).toBe('K Kevin ~kevin')
+    await press('Enter')
+    expect(push).toHaveBeenCalledWith({ name: 'home', hash: `#people/${KEVIN}` })
   })
 })

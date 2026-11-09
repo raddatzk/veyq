@@ -4,8 +4,8 @@
 // results grouped by where the member stands
 // (the open node, this space, other spaces), then the tenant's members and the settings sections (ADR 0125 decision 9). The
 // model is core's (`searchIndex.ts`, `query.ts`, `groups.ts`, `peopleAndSettings.ts`); this draws it on the layer's tags
-// input and opens what is chosen. The layer highlights the first result whenever there is one, so Enter opens it, and
-// never a suggestion by itself: a chip is chosen by moving onto it (`VeyqTagsInput`'s header).
+// input and opens what is chosen. The layer highlights the first entry, a suggestion or a result, and keeps an entry the
+// member moved to while they type on; Enter takes the highlighted one (`VeyqTagsInput`'s header).
 //
 // **The first focus builds the index, every later one revalidates it** (`refreshSearchIndex`), and while the list is open
 // the spaces are revalidated again every {@link REVALIDATE_MS} - each a `304` while nothing moved (ADR 0081). Nothing about

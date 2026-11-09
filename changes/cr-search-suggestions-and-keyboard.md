@@ -73,6 +73,9 @@ Single phase.
 
 ## Retrospective
 
+**Superseded in part:** the highlight rule below (first result, never a suggestion by itself) was replaced on 2026-11-09
+by `cr-search-sticky-highlight` (the first entry, kept where the member moved it).
+
 Implemented 2026-11-09 in the worktree `search-design`, one phase. `pnpm run check` green in `src/web/` (measured: 539 test
 files, 6498 tests); every `scripts/validate_*.py` but `validate_guard_gaps.py` green with `/usr/bin/python3` (69 guards,
 the core-import guard among them; no validator changed).

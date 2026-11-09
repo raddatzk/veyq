@@ -39,8 +39,10 @@
    (*Filter by*), apart from the results, because a person suggestion and a person result can carry the same name
    while one filters and the other opens. The first entry of the list is highlighted, a suggestion or a result, and
    **Enter** takes the highlighted one. Once the member moves the highlight (arrow keys or pointer), it stays on that
-   entry while they type on, as long as the entry is still in the list; when it drops out, the first entry is
-   highlighted again (owner, 2026-11-09).
+   entry while they type on, as long as the entry is still in the list. When it drops out, the first entry of its
+   group is highlighted, or the first entry of the list when that group is gone. The moved-to entry is still
+   remembered, and when it is listed again (e.g. after Backspace) it is highlighted again. A new move replaces it;
+   choosing an entry or closing the list forgets it (owner, 2026-11-09).
 5. **Match.**
    - A document matches when it satisfies every chip, and the remaining text matches its name or its place,
      ignoring case and diacritics.
