@@ -80,6 +80,8 @@
   tree reads of step 2 are those of entering each space.
 - **In memory only.** No index, query or result is written to IndexedDB, localStorage, Cache Storage or the server.
   No key is held for search: each tree's keys are zeroed once its documents are built.
+- **The build never blocks the page.** A space's tree is opened and indexed in slices of at most 40 ms, so a keystroke
+  or a paint gets in between, even at 5,000 nodes on a slow CPU ([ADR 0125](../../../decisions/0125-search-runs-in-the-client-over-what-it-can-open-across-every-space.md) § Consequences has the measured numbers).
 - **One source of truth.** A document is derived from an object and its revision. The index never holds a value the
   tree or the listing does not.
 - **Accessible.** The field is a combobox a screen reader can drive: the number of results is announced politely as

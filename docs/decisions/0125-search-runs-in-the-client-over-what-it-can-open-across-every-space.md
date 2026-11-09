@@ -130,8 +130,19 @@ The load model is a household. The volume pre-check's largest tree is 5,000 node
 - **The first stage does not find a photo by its own place or date unless it lies in the open Memory.** "Rome" finds the
   Memory whose place is Rome, not a photo taken in Rome inside a Memory placed elsewhere. Stage 8(a) closes this. A
   result list must not imply it searched what it did not.
-- **The cost of a first search across many spaces is one tree fetch per space.** That is the size the volume pre-check
-  measured for one space (0.84 s for the root view at 5,000 nodes on a desktop). It is paid on focus, not at sign-in.
+- **The cost of a first search across many spaces is one tree fetch per space, opened in slices.** It is paid on focus,
+  not at sign-in. Measured (cr-search-at-volume, 2026-11-09) on this Mac in desktop Chrome, on the volume harness's own
+  instance with 7,000 nodes over three spaces (one of 5,000) and 445 members, at a 1-minute load of 6–10:
+  - **The build:** 0.46–1.03 s until every space is indexed, 2.0–3.8 s at a 4× CPU throttle. Its longest main-thread
+    task is 52–73 ms, and 90–127 ms at 4×. Before the build ran in slices (`searchIndex.ts`, at most 40 ms at a time,
+    the space on screen included), one task per space held the main thread 0.8–2.6 s at 4×.
+  - **Typing** "K", "Ke", "Kev", a chip and Backspace: no long task unthrottled; the longest at 4× is 65–86 ms, the
+    first keystroke's.
+  - **A second focus with nothing changed** reads each other space as one `304`, and the index opens nothing.
+  - **The index's memory:** 3.7–4.2 MB of JS heap.
+  - The command: `scripts/measure_volume.py --instance I search --runs 2 --throttles 1,4 --active tenant|group`, after
+    `seed tree --target 5000`, `seed spread --target 1000` and `seed members --target 445`. The readings and the judging
+    rule are in the CR's retrospective. The harness is temporary, `cr-volume-measurement-cax` deletes it.
 - **A removed member's search loses that space** when its keys go, and keeps nothing they could not read before.
 - **Rejected alternatives:**
   - A persistent on-device index (decision 2).

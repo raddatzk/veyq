@@ -187,3 +187,32 @@ first keystroke ("K"), whose Event Timing duration was 88–320 ms.
   after). The longest typing task is still the first keystroke ("K", which matches ~840 names); its margin to the bound
   is 14–35 ms at ×4 on this Mac.
 - `pnpm run check` in `src/web/` green (539 files, 6,512 tests).
+
+### Phase 3 — the docs
+
+- ADR 0125 § Consequences cites the measurement (the build, typing, the second focus, the heap, the command) instead
+  of the volume pre-check's estimate, and says the build runs in slices.
+- `uc.platform.search` § Quality notes: one line, "the build never blocks the page" (the build changed shape).
+- The trust-chain guards: 69 `scripts/validate_*.py`, all green (`/usr/bin/python3`, `validate_guard_gaps.py`
+  skipped: no validator changed).
+
+### Left open, for the conversation
+
+- **Every focus of the field re-reads the settings sections** (`SearchField.onFocus` → `sections.load()`): one grant
+  open and one name per group, plus the two account documents, each time — measured as the 2 decodes of every second
+  focus above. Not the index's cost and under no bound, so not fixed here; worth an inbox row (I was given no number
+  range, so I filed none): load the sections once per space entry, or revalidate them like the trees.
+- **The first keystroke is the typing bound's closest call** (65–86 ms of 100 at ×4): about a third is `searchGroups`
+  over every document, the rest Vue's render of the list. A slower device than this Mac at ×4, or a household with
+  many more matching names, would meet it first.
+
+### Process observations
+
+- **The quiet-host rule did not fit a shared Mac.** The harness waited 25 minutes at loads of 6–25 for a 1-minute load
+  of 3 that never came; the coordinator's rule (above) replaced it. The judgment held up because both phase 1 failures
+  were far beyond what load explains (4–13× the bound, and over it unthrottled), and the fix held at the same loads.
+- **A second landing found the second long task.** Measuring only where sign-in lands (the tenant) would have fixed
+  the search's own build and missed `followActive`, which builds the space on screen synchronously; the CR's rule names
+  no landing, so both were measured.
+- **Machine hints, re-derived:** the isolation check also refuses a Bash loop whose body has a Docker `--format`
+  template, and a foreground command past ~3 minutes is moved to the background — wait with short loops or `Monitor`.
