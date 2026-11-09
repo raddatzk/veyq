@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 // The shell's search field (uc.platform.search) over a stubbed index and the REAL registry (Memories registered, so its
-// kind words are the real ones): the first focus asks for the index, a suggestion becomes a chip and Backspace
+// kind words are the real ones): the first focus asks for the index and opens nothing until a character is typed, a suggestion becomes a chip and Backspace
 // takes it away, the results come as one list after the suggestions with where each lives, choosing one opens it, and the
 // field says what it searched when it found nothing; the tenant's members and the settings sections the rail offers are
 // results too (ADR 0125 decision 9), every kind has its word - core's Person and Setting, Depot's and Expenses' -, and a
@@ -74,6 +74,13 @@ const rows = () => [...document.body.querySelectorAll<HTMLElement>('.veyq-tags-i
 const headings = () => [...document.body.querySelectorAll('.veyq-tags-input__group-label')].map((h) => h.textContent!.trim())
 const chips = () => [...document.body.querySelectorAll('.veyq-tags-input__tag .veyq-tags-input__label')].map((c) => c.textContent!.trim())
 const status = () => document.body.querySelector('.veyq-tags-input__status')?.textContent?.replace(/\s+/g, ' ').trim() ?? ''
+/** The combobox says its list is open (Reka's `aria-expanded`). */
+const listOpen = () => field().getAttribute('aria-expanded') === 'true'
+/** A panel is on screen: the list is drawn and not hidden as empty. */
+const panelShown = () => {
+  const list = document.body.querySelector<HTMLElement>('.veyq-tags-input__list')
+  return !!list && list.style.display !== 'none'
+}
 /** The highlighted row (Enter takes it), or null. */
 const highlighted = () => {
   const o = document.body.querySelector<HTMLElement>('.veyq-tags-input__option[data-highlighted]')
@@ -132,10 +139,41 @@ beforeEach(() => {
 })
 
 describe('the search field', () => {
-  it('asks for the index on focus and says what it searches - every photo too, so no note of what it searches in part', async () => {
+  // was: "asks for the index on focus and says what it searches" - the focus showed the hint in an open list; now the
+  // focus starts the index and opens nothing, and the first character opens the list (cr-search-calm-focus)
+  it('asks for the index on focus and opens nothing; the first typed character opens the list', async () => {
     await mountField()
     expect(refreshSearchIndex).toHaveBeenCalled()
-    expect(status()).toBe(t('shell.search.hint'))
+    expect(listOpen()).toBe(false)
+    expect(panelShown()).toBe(false)
+    expect(status()).toBe('')
+    await press('ArrowDown') // nothing asked: the combobox's own open on an arrow key is taken back
+    expect(listOpen()).toBe(false)
+    expect(panelShown()).toBe(false)
+    await type('r')
+    expect(listOpen()).toBe(true) // control: the same field opens on a character
+    expect(panelShown()).toBe(true)
+    expect(resultRows()).toContain('Rome 2024 Familie · Trips')
+  })
+
+  it('closes the list on Backspace to an empty field; with a chip left it stays open and follows the chip', async () => {
+    await mountField()
+    await type('r')
+    expect(listOpen()).toBe(true)
+    await type('')
+    expect(listOpen()).toBe(false)
+    expect(panelShown()).toBe(false)
+    await type('2024')
+    await press('Enter') // the year chip; the text is empty now
+    expect(chips()).toEqual(['2024'])
+    expect(listOpen()).toBe(true)
+    await type('r')
+    await type('')
+    expect(listOpen()).toBe(true) // the chip is still asked
+    expect(resultRows()).toEqual(['Rome 2024 Familie · Trips 2024'])
+    await press('Backspace') // removes the chip: nothing is asked any more
+    expect(chips()).toEqual([])
+    expect(listOpen()).toBe(false)
   })
 
   // was: the results in their groups (In this space, Other spaces) - now one list with no heading, each row saying where
@@ -295,11 +333,64 @@ describe('the search field', () => {
     expect(status()).toBe(`${t('shell.search.empty')}${t('shell.search.hint')}`) // nothing else: no note of a part not searched
   })
 
-  it('names the spaces it is still reading and those it could not search', async () => {
-    Object.assign(searchState, { loading: ['G1', 'P1'], failed: [{ id: 'X', kind: ScopeKind.Group, name: 'Old group' }] })
-    await mountField()
-    expect(status()).toContain(t('shell.search.loading', { count: 2 }, 2))
-    expect(status()).toContain(t('shell.search.notSearched', { spaces: 'Old group' }))
+  // was: the loading line showed on focus, at once - now only in an open list, after it has waited 300 ms
+  it('names the spaces it could not search at once, and those it is still reading only after 300 ms of the open list waiting', async () => {
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] })
+    try {
+      Object.assign(searchState, { loading: ['G1', 'P1'], failed: [{ id: 'X', kind: ScopeKind.Group, name: 'Old group' }] })
+      await mountField()
+      await vi.advanceTimersByTimeAsync(1000) // the focus alone starts no wait: the list is shut
+      expect(panelShown()).toBe(false)
+      await type('zzz')
+      expect(status()).toBe(t('shell.search.notSearched', { spaces: 'Old group' }))
+      await vi.advanceTimersByTimeAsync(200)
+      expect(status()).toBe(t('shell.search.notSearched', { spaces: 'Old group' })) // no loading line yet
+      await vi.advanceTimersByTimeAsync(200)
+      expect(status()).toContain(t('shell.search.loading', { count: 2 }, 2))
+      expect(status()).toContain(t('shell.search.notSearched', { spaces: 'Old group' }))
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it('shows no loading state at 200 ms and no panel at all while nothing is found yet', async () => {
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] })
+    try {
+      Object.assign(searchState, { loading: ['G1'] })
+      await mountField()
+      await type('zzz')
+      await vi.advanceTimersByTimeAsync(200)
+      expect(status()).toBe('')
+      expect(panelShown()).toBe(false)
+      await vi.advanceTimersByTimeAsync(200) // 400 ms
+      expect(status()).toBe(t('shell.search.loading', { count: 1 }, 1))
+      expect(panelShown()).toBe(true)
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it('never shows the loading state for a load done at 250 ms; the empty state follows it', async () => {
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] })
+    try {
+      Object.assign(searchState, { loading: ['G1'] })
+      await mountField()
+      await type('zzz')
+      const seen: string[] = []
+      for (let ms = 0; ms < 250; ms += 50) {
+        await vi.advanceTimersByTimeAsync(50)
+        seen.push(status())
+      }
+      searchState.loading = []
+      for (let ms = 250; ms < 1000; ms += 50) {
+        await vi.advanceTimersByTimeAsync(50)
+        seen.push(status())
+      }
+      expect(seen.filter((s) => s.includes(t('shell.search.loading', { count: 1 }, 1)))).toEqual([])
+      expect(seen.at(-1)).toBe(`${t('shell.search.empty')}${t('shell.search.hint')}`) // control: the status line is read
+    } finally {
+      vi.useRealTimers()
+    }
   })
 
   // was: a group's first 8 and more on request - now the list's first 10, 10 more on request, the count exact
@@ -445,8 +536,11 @@ describe('people and settings sections as results (ADR 0125 decision 9)', () => 
     expect(resultRows()).toEqual(['Rome 2024 Familie · Trips 2024'])
   })
 
-  it('names what it searches: members and settings too', async () => {
+  // was: the hint on focus - now in the empty result state of a typed query only (uc A2)
+  it('names what it searches when a query found nothing: members and settings too', async () => {
     await mountField()
+    expect(status()).toBe('')
+    await type('zzz')
     expect(status()).toContain(t('shell.search.hint'))
     expect(t('shell.search.hint')).toMatch(/members and settings/)
   })

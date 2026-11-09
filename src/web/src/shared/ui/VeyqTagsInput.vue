@@ -19,8 +19,10 @@
 // drawn after the suggestions with no heading of its own (`resultsLabel` is its accessible name only) - choosing one emits
 // `choose` with it and leaves the text and the list as they are, so the caller decides (it opens the result, it shows
 // more); the `result` slot draws one (`{ option }`), the `status` slot a line under them that is no option (loading,
-// nothing found). With a `status` slot the list shows even while it holds no option. `v-model:open` is the list's state,
-// `openOnFocus` opens it when the field gains focus, `listClass` is a class of the caller's on the list. The keyboard
+// nothing found). With a `status` slot the list shows even while it holds no option (a caller that has nothing to say
+// passes no slot, and an empty list shows no panel). `v-model:open` is the list's state - the combobox opens it on input
+// and on ↓/↑, never on focus (the caller may close it again: the search keeps it shut while nothing is asked) -,
+// `listClass` is a class of the caller's on the list. The keyboard
 // moves through the suggestions and the results alike (Reka's combobox). `optionsLabel` heads the suggestions (the
 // search's *Filter by*), so they do not read as results: the list has exactly two areas, the suggestions, then the results.
 //
@@ -82,7 +84,6 @@ const props = defineProps<{
   placeholder?: string
   inputId?: string
   disabled?: boolean
-  openOnFocus?: boolean
   listClass?: string
   /** The heading over the suggestions; without one they stand unheaded above the groups. */
   optionsLabel?: string
@@ -227,7 +228,6 @@ function pick(event: Event, option: O) {
     ignore-filter
     :reset-search-term-on-blur="false"
     :disabled="disabled"
-    :open-on-focus="openOnFocus"
     @highlight="onHighlight"
     @leave="settle"
   >

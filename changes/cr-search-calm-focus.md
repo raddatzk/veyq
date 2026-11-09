@@ -1,7 +1,7 @@
 ---
 id: cr-search-calm-focus
 title: A click into the search opens nothing until the member types; no flickering load state; focus colour wins over hover
-status: planned
+status: done
 satisfies: [uc.platform.search]
 adrs: ["0125"]
 invariants:
@@ -71,4 +71,88 @@ Single phase (web).
 
 ## Retrospective
 
-(filled by the implementer)
+Implemented 2026-11-09 in the worktree `search-design`, one phase (web). No backend, contract or e2e change.
+
+### What was built, and the choices made (technical choices are mine)
+
+- **One gate decides whether the list is open: something is asked** (text or a chip). `SearchField.vue` passes no
+  `open-on-focus` any more, and a watch on `[open, asked]` closes the list whenever it is open with nothing asked. So
+  whatever opened it - Reka's combobox opens on any input and on ↓/↑ - the list stays shut on a focus, on ↓ in an empty
+  field and after Backspace to an empty field with no chip; with a chip left it stays open. The gate, not the missing
+  prop, is the mechanism: bite B1a (prop back, gate kept) stays green.
+- **`openOnFocus` left the layer** (`VeyqTagsInput.vue`): the search was its only user (`rg open-on-focus` before the
+  change), so the prop was dead. The header says the combobox never opens on focus.
+- **The loading line waits 300 ms (`LOADING_DELAY_MS`) counted from the moment the list is open AND a space is loading**,
+  not from the load's start: a load that began on the focus and ends 50 ms after the first keystroke never shows, which
+  the load's own start would not guarantee. No minimum display time once shown: a line kept after the load ended would
+  say something false.
+- **No panel while there is nothing to say.** The status slot is passed only when it has words (`statusSaid`), so the
+  layer's `hide-when-empty` hides the list while it holds no entry - a typed query whose answer is still loading under
+  300 ms shows nothing rather than an empty box.
+- **The hint** ("Searches names, dates, ...") shows only with *nothing found* (uc A2), as before only after the loading
+  ended.
+- **Focus over hover** (`layer.css`): the hover rule reads `:not([data-disabled]):not([data-focused]):hover`. It was
+  `(0,3,0)` against the focus rule's `(0,2,0)`, so the hover won. The rule is the layer's, so the participant and Pot
+  pickers have it too.
+
+### Tests rewritten (none deleted) - `SearchField.test.ts`
+
+- "asks for the index on focus and says what it searches" → **asks for the index on focus and opens nothing; the first
+  typed character opens the list**: after the focus `aria-expanded` is false, no panel, no status; ↓ opens nothing; `r`
+  opens it with its result (control).
+- "names the spaces it is still reading and those it could not search" → the not-searched note at once, the loading line
+  only after 300 ms of the open list waiting (fake `setTimeout`: none at 1000 ms of focus alone, none at 200 ms after
+  typing, there at 400 ms).
+- "names what it searches: members and settings too" → the same words, now only after a query found nothing (nothing
+  before typing).
+- New: Backspace to empty closes; a chip keeps the list open through an emptied text, and removing it closes; at 200 ms
+  of loading no status and no panel, at 400 ms the line; a load done at 250 ms never showed the line (polled every 50 ms
+  to 1 s), and the empty state follows it (control).
+- "says it found nothing, and what it searched" is unchanged and green: the empty state still names what is searched.
+
+### Bites (`scratchpad/calm-bites.py`: a mutated copy beside the file plus a copy of its test, so the owner's live Vite
+never reloads a mutant; the real file byte-equal afterwards, the copies removed)
+
+- B1a `open-on-focus` back, gate kept: green (54 passed) - the gate is the mechanism.
+- B1b `open-on-focus` back, gate gone: 2 red (the focus test, the Backspace test).
+- B1c gate gone: the same 2 red.
+- B2 `LOADING_DELAY_MS = 0`: 3 red (the three loading tests, the 200 ms one among them).
+- B3 the loading line without the timer: the same 3 red.
+
+### Browser pass (`veyq-search` stack, desktop, the owner's running backend 8180 and Vite 8189)
+
+`search-pass/p18-calm-focus.mjs` (the p17 probe adapted, sampled per frame):
+
+| action | ms after it | panel | rows | height | status |
+|---|---|---|---|---|---|
+| A: a click on a fresh page, nothing typed (3 s) | 0-3000 | none | 0 | 0 | "" |
+| B: "r" typed 100 ms after the click, first index build | 0 | none | 0 | 0 | "" |
+| | 49 | shown | 6 | 356 px | "" |
+| | 76 | shown | 11 | 512 px | "" |
+| C: Backspace to empty | 19 | none | 0 | 0 | "" |
+
+The border: focused under the pointer `rgb(37, 99, 235)` = `--app-focus`; control, unfocused under the pointer
+`rgb(102, 112, 133)` = `--app-muted`. No console error. Screenshot `search-pass/p18-desktop-focus-hover-typed.png`.
+
+### Docs
+
+- Coverage: new criterion `a-calm-focus` (`SearchField.test.ts`; the border by the browser pass, happy-dom resolves no
+  hover).
+- The Use page *Search all your spaces* / *Alle deine Bereiche durchsuchen*: the list opens with the first letter, an
+  empty search names what is searched, a space still read "after a moment".
+
+### Owner questions (each with the conservative default built)
+
+1. **Results fill in during the first index build.** A first letter typed ~100 ms after the first click showed 6 rows,
+   then 11 rows 27 ms later (B above): the results of the spaces still loading arrive. Built: shown as they come - the
+   CR names the loading line, and holding results back would slow the first keystroke and hide results on every 20 s
+   revalidation (it marks every space loading). Recommendation: keep.
+2. **With chips in the field, a click into it opens nothing either**; a letter or ↓ opens the list. Recommendation: keep
+   (one rule: focus never opens).
+3. Delete this CR once read; its binding lessons are in `SearchField.vue`'s header, `VeyqTagsInput.vue`'s header, the
+   `layer.css` comment and the coverage criterion.
+
+### Process observation
+
+- A bite that edits a file the owner's live Vite serves would hot-reload each mutant into the owner's page; a mutated
+  copy beside the file, with a copy of its test, bites the same code and leaves the served module untouched.

@@ -28,7 +28,14 @@
 // and leaves the page a request to open it (`openRequest.ts`); a person opens their profile page in the tenant space, and a
 // settings section opens on the settings page by a push, which keeps the active space as the profile menu's Settings entry
 // does (a hard navigation would reset it). The field says what it searched: the spaces still loading, those it could not
-// search, and - before and instead of results - what is searched.
+// search, and - instead of results, when a query found nothing - what is searched.
+//
+// **A calm focus** (uc.platform.search step 1, cr-search-calm-focus): focusing starts the index (above) and opens
+// nothing. The list is open only while something is asked - text or a chip: the first typed character opens it, and
+// Backspace to an empty field with no chip closes it (with a chip left, the list stays and follows what remains). A
+// space still loading is said only once the list is open AND the loading has lasted {@link LOADING_DELAY_MS} since
+// then: a load shorter than that shows no state at all, so the panel does not jump through "N spaces…" lines on a
+// click. With nothing to say and nothing listed, no panel shows (the status slot is passed only with words in it).
 import { computed, onBeforeUnmount, ref, toRaw, useTemplateRef, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRoute, useRouter } from 'vue-router'
@@ -58,6 +65,8 @@ const REVALIDATE_MS = 20_000
 /** How many results the list shows at first, and how many more each "show more" adds (ADR 0125 decision 5): few rows drawn
  *  is what keeps the first keystroke's task short, which is mostly the list's render (cr-search-polish). */
 const PAGE = 10
+/** How long the open list waits on a loading space before it says so: a shorter load shows no state (see the header). */
+const LOADING_DELAY_MS = 300
 
 const props = defineProps<{ inputId?: string }>()
 /** A result was opened (the sheet around the field closes). */
@@ -323,6 +332,30 @@ const announcement = computed(() => {
 })
 const loadingCount = computed(() => searchState.loading.length)
 const notSearched = computed(() => searchState.failed.map((s) => spaceLabel(s)).join(', '))
+
+// --- a calm focus (see the header) -----------------------------------------------------------------------------------
+// The combobox opens on any input or arrow key; whatever opened it, the list stays open only while something is asked.
+watch([open, asked], ([isOpen, isAsked]) => {
+  if (isOpen && !isAsked) open.value = false
+})
+/** The open list has waited {@link LOADING_DELAY_MS} on a loading space: now it says so. */
+const loadingLong = ref(false)
+let loadingTimer: ReturnType<typeof setTimeout> | undefined
+watch(
+  () => open.value && loadingCount.value > 0,
+  (waiting) => {
+    clearTimeout(loadingTimer)
+    loadingLong.value = false
+    if (waiting) loadingTimer = setTimeout(() => (loadingLong.value = true), LOADING_DELAY_MS)
+  },
+  { immediate: true },
+)
+onBeforeUnmount(() => clearTimeout(loadingTimer))
+const loadingShown = computed(() => loadingLong.value && loadingCount.value > 0)
+/** The query found nothing and nothing is loading any more: the empty state, which names what is searched (uc A2). */
+const nothingFound = computed(() => asked.value && !found.value.total && !suggestions.value.length && loadingCount.value === 0)
+/** The status line has words: only then is the slot passed, so an empty list shows no panel. */
+const statusSaid = computed(() => loadingShown.value || !!notSearched.value || searchState.listFailed || nothingFound.value)
 </script>
 
 <template>
@@ -341,7 +374,6 @@ const notSearched = computed(() => searchState.failed.map((s) => spaceLabel(s)).
     :placeholder="t('shell.search.placeholder')"
     :aria-label="t('shell.search.label')"
     autocomplete="off"
-    open-on-focus
     @focus="onFocus"
     @add="addChip"
     @remove="removeChip"
@@ -370,12 +402,12 @@ const notSearched = computed(() => searchState.failed.map((s) => spaceLabel(s)).
         <span v-for="v in matchedValues(option.doc)" :key="v" class="veyq-badge muted veyq-search__result-chip">{{ v }}</span>
       </template>
     </template>
-    <template #status>
-      <span v-if="loadingCount > 0" class="veyq-search__loading">{{ t('shell.search.loading', { count: loadingCount }, loadingCount) }}</span>
+    <template v-if="statusSaid" #status>
+      <span v-if="loadingShown" class="veyq-search__loading">{{ t('shell.search.loading', { count: loadingCount }, loadingCount) }}</span>
       <span v-if="notSearched" class="veyq-search__failed">{{ t('shell.search.notSearched', { spaces: notSearched }) }}</span>
       <span v-if="searchState.listFailed" class="veyq-search__failed">{{ t('shell.search.listFailed') }}</span>
-      <template v-if="!found.total && !suggestions.length && loadingCount === 0">
-        <span v-if="asked" class="veyq-search__empty">{{ t('shell.search.empty') }}</span>
+      <template v-if="nothingFound">
+        <span class="veyq-search__empty">{{ t('shell.search.empty') }}</span>
         <span class="veyq-search__hint">{{ t('shell.search.hint') }}</span>
       </template>
     </template>

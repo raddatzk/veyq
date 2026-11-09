@@ -1188,7 +1188,8 @@
   transition: border-color 0.2s;
 }
 
-.veyq-tags-input:not([data-disabled]):hover {
+/* the focus colour wins over the hover: a focused field keeps it under the pointer (cr-search-calm-focus) */
+.veyq-tags-input:not([data-disabled]):not([data-focused]):hover {
   border-color: var(--app-muted);
 }
 
