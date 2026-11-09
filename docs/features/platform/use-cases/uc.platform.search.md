@@ -34,7 +34,8 @@
      from the roster the client already read, and one per settings section the settings rail offers this member now:
      the rail and the search read one list with one set of gates (`features/settings/sections.ts`), and while a gate's
      answer is out no section is offered (ADR 0125 decision 9).
-4. **Type the query.** The member types. Each token that reads as a known facet is offered as a chip: a year, a member's name (person), a place a document carries, a space's name, a kind's word. Choosing a suggestion
+4. **Type the query.** The member types. Each token that reads as a known facet is offered as a chip: a year, a month with its year ("Mai 2024",
+   "May 2024" - a Memory matches when its range overlaps the month, a photo when captured in it), a member's name (person), a place a document carries, a space's name, a kind's word. Choosing a suggestion
    turns the token into a chip; the rest stays text. The chip suggestions stand under a heading of their own
    (*Filter by*), apart from the results, because a person suggestion and a person result can carry the same name
    while one filters and the other opens. The first entry of the list is highlighted, a suggestion or a result, and
@@ -45,13 +46,14 @@
    choosing an entry or closing the list forgets it (owner, 2026-11-09).
 5. **Match.**
    - A document matches when it satisfies every chip, and the remaining text matches its name or its place,
-     ignoring case and diacritics.
+     ignoring case and diacritics. A settings section also matches by a few words of its own ("E-Mail" finds the
+     mail section, "Kennwort" the password), kept with the section in the one list the rail reads.
    - Within a group, an exact or prefix match of the name ranks above a match inside a word, and a name match above a
      place match.
 6. **Show the results in groups,** each ranked within itself: the open node's - headed by its name, *In “Rom 2024”*,
    holding what its page contributed and the nodes below it (when a node's page is open, not a folder) -, **In this
    space**, **Other spaces** (each result naming its space and its path), then **People** (each with their picture or
-   initial and `~username`) and **Settings** (each with its heading on the rail). An empty group is not shown. A chip is a
+   initial and `~username`) and **Settings** (each with its heading on the rail). The part of a name the text matched is shown in bold. An empty group is not shown. A chip is a
    filter over content: while one is set, People and Settings are not shown. A member's name offers them as a person
    chip and lists them as a person - the chip filters, the person opens their profile.
 7. **Open a result.** The member chooses one. A node opens where it lives, switching the active space when it lies in
@@ -80,6 +82,8 @@
   No key is held for search: each tree's keys are zeroed once its documents are built.
 - **One source of truth.** A document is derived from an object and its revision. The index never holds a value the
   tree or the listing does not.
+- **Accessible.** The field is a combobox a screen reader can drive: the number of results is announced politely as
+  it changes, each group is named by its heading, and adding or removing a chip is announced.
 - **Core never imports an application.** What an application contributes reaches core through the registry
   ([ADR 0079](../../../decisions/0079-veyq-is-a-platform-memories-is-its-first-application.md)).
 
