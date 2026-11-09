@@ -30,7 +30,7 @@ val contracts = rootDir.resolve("../../contracts/api").canonicalFile
 val coreSpecs = listOf("setup", "auth", "account", "scopes", "content", "favorites", "tenants", "blob", "sharing", "moderation")
 
 /** An application's spec, generated into packages of its own (`api.<application>`), so its models never meet core's. */
-val applicationSpecs = listOf("expenses/expenses", "depot/files")
+val applicationSpecs = listOf("expenses/expenses", "depot/files", "memories/media")
 val generatedApi = layout.buildDirectory.dir("generated/openapi")
 
 val generateApi = tasks.register("generateApi") {

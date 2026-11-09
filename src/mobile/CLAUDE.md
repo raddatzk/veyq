@@ -7,7 +7,8 @@ A Gradle build of its own, run through its own wrapper.
 - `core/` — the shared base: the v1 suite (`crypto/`), the generated API client (`build/generated/openapi`, from
   `contracts/api`, never edited), the session (`session/`), the navigation model (`navigation/`), and each
   application's own package (`expenses/`: the web's Expenses domain, a Pot's session and what its views show; `depot/`: Depot's files, each one
-  core attachment, and how a file's page shows it), which
+  core attachment, and how a file's page shows it; `memories/`: a Memory's gallery, each medium under the key its origin
+  fixes), which
   uses core's session and is never used by it; an application's spec is generated into `api.<application>`.
 - `android/` — the Android app (Compose). `devlogin.py` signs a debug build on a running emulator in as the seeded dev
   principal (`.run/.env`).
@@ -34,7 +35,7 @@ A Gradle build of its own, run through its own wrapper.
   `Money.kt` changes only with the case that pins it; so does one of `expenses/PotWrites.kt` and `LedgerCheck.kt`
   (`PotWritesTest`, over real seals), of `EntryForm.kt` (`EntryFormTest`, over the vectors), of `ExchangeRates.kt` (`ExchangeRatesTest`), of `Receipts.kt` and core's `blob/Sniff.kt` (`ReceiptsTest`), of `PotShare.kt` (`PotShareTest`), of core's `session/LivePoll.kt` (`LivePollTest`, on virtual time), of core's `session/MemberAvatars.kt` (`MemberAvatarsTest`) and `session/ShareNames.kt` (`ShareNamesTest`), of `PotView.kt`'s people, balances and entries (`PotViewPeopleTest`, `PotViewEntriesTest`), of core's `session/NodeEpochWrite.kt` and `session/NodeMetaWrite.kt` (`NodeEpochWriteTest`, `NodeMetaWriteTest`), of
   core's `session/NodeMove.kt` browser rules, a guest's folder's included (`NodeMoveTest`), of `navigation/NodeHeader.kt`'s plan and
-  its narrowing in a guest's folder (`NodeHeaderTest`), of core's `session/CoverFrame.kt` (`CoverFrameTest`), of core's `export/NodeExport.kt` archive (`FolderExportTest`, `ZipTest`) and its streamed `export/Sha256.kt` (`Sha256Test`), of Depot's `depot/FolderUpload.kt` plan (`FolderUploadTest`), of Depot's `depot/FileView.kt` and core's
+  its narrowing in a guest's folder (`NodeHeaderTest`), of core's `session/CoverFrame.kt` (`CoverFrameTest`), of core's `export/NodeExport.kt` archive (`FolderExportTest`, `ZipTest`) and its streamed `export/Sha256.kt` (`Sha256Test`), of Depot's `depot/FolderUpload.kt` plan (`FolderUploadTest`), of Memories' `memories/MemoryMedia.kt` listed tier and order (`MemoryMediaTest`), of Depot's `depot/FileView.kt` and core's
   `blob/Sniff.kt` and `blob/DownloadName.kt` (`FileViewTest`), and of core's `session/NodeRekey.kt` frontier and what it
   leaves to another device (`NodeRekeyRulesTest`).
 - `VEYQ_LIVE=http://veyq.localhost:8080 ./gradlew :core:jvmTest :core:macosArm64Test --tests '*LiveSignInTest*'` —
@@ -103,6 +104,9 @@ A Gradle build of its own, run through its own wrapper.
   are said not to fit, and puts the tenant's quota as it was back however it ends — `VEYQ_LIVE_STORAGE_FIT_HOLD_S=<s>` (at
   most 600) holds it first, for an app's copy dialog. A run stopped by force leaves the one byte set: the next run takes a
   quota of exactly one byte for its own leftover and clears it.
+  `VEYQ_LIVE_MEMORY=<memory name>` (`--tests '*MemoryLiveTest*'`) reads that Memory's gallery the web filled — every row's
+  listed tier and original meta, each tile and preview (a JPEG where the web derived one) with its size and SHA-256 —;
+  `*` lists every Memory and chapter with its count instead.
   `VEYQ_LIVE_DROPBOX="<root folder>/<drop box>"` (`--tests '*DropBoxLiveTest*'`) opens a drop box the web made
   and its guests filled (the web's folder share dialog, "Add files only", then its link in a private window), lists each
   guest's folder under the web's label and prints each file's SHA-256, to hold against what was dropped. `VEYQ_LIVE_DROPBOX_CREATE=<root folder>`

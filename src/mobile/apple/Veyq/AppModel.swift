@@ -676,6 +676,25 @@ final class AppModel {
     let placement = KindPlacement()
 
     /// Every node of `scopeId` this device opens: what the move browser walks.
+    /// Memory or chapter `nodeId`'s gallery (`MemoryMedia.list`); nil when it could not be read.
+    func memoryGallery(scopeId: String, nodeId: String) async -> MemoryMedia.Gallery? {
+        guard let t = tenantSession else { return nil }
+        return try? await MemoryMedia.shared.list(tenant: t, scopeId: scopeId, nodeId: nodeId)
+    }
+
+    /// Decoded tiers by blob id (a gallery asks for every tile as it scrolls past; the cache lets the system evict).
+    private let mediaPictures = NSCache<NSString, CGImageBox>()
+
+    /// `blob` of `item` read and decoded as a picture (a tile, a preview); nil where it does not read or is no picture.
+    func mediaPicture(_ item: MemoryMedia.Item, blob: MemoryMedia.Blob) async -> CGImage? {
+        if let hit = mediaPictures.object(forKey: blob.blobId as NSString) { return hit.image }
+        guard let t = tenantSession,
+              let data = try? await AppleMemories.shared.read(tenant: t, item: item, blob: blob),
+              let image = CoverImages.image(data as Data, maxPixels: 4096) else { return nil }
+        mediaPictures.setObject(CGImageBox(image), forKey: blob.blobId as NSString)
+        return image
+    }
+
     func scopeNodes(_ scopeId: String) async -> [NodeRef] {
         guard let t = tenantSession else { return [] }
         return ((try? await t.nodes()) ?? []).filter { $0.scopeId == scopeId }
@@ -1424,4 +1443,10 @@ final class AppModel {
         let host = String(t.split(separator: ":").first ?? "")
         return (host == "localhost" || host.hasSuffix(".localhost")) ? "http://\(t)" : "https://\(t)"
     }
+}
+
+/// A picture held in an `NSCache` (which takes objects).
+final class CGImageBox {
+    let image: CGImage
+    init(_ image: CGImage) { self.image = image }
 }

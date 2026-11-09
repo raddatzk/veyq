@@ -235,7 +235,7 @@ implementation exists but what holds it to the first.
   A drop box's drop key is replaced as the web's `replaceDropKey` does (a fresh key pair, each WRITE_ONLY link's public
   half and each guest's `K_up` sealed to it anew, a guest's identity folder kept under its `K_up`); drop boxes and
   identity folders are owner-only, so a member's device that is no owner leaves them due. What this client does not
-  fully hold — a Memory or a Chapter (Memories is not in the app yet), a node only an owner may re-key where it is
+  fully hold — a Memory or a Chapter (Memories' media re-key is not in the app yet), a node only an owner may re-key where it is
   none — is left due for a device that does, and the app says so (a
   Pot's re-key with an entry and a receipt, the other link still opening it on the web's guest page and the closed one
   nothing, measured live by `PotLiveTest`; a revision key sealed under the old key killed by it; the web opens a Pot the
@@ -388,6 +388,20 @@ implementation exists but what holds it to the first.
   file headed without link, rename or cover, and the bar's tab naming a drop box as one. Not built yet: a READ_WRITE guest's own sealed name
   as an uploader (said as "a guest"); an unpacked download picked as a folder is uploaded as one (the app imports no
   download yet).
+- **Memories' gallery** (the web's `features/memories/`, `docs/apps/memories.md`; the application's package `memories/`, its spec
+  `memories/media` generated into `api.memories`): a Memory's and a chapter's page lists every medium of the node
+  (`memories/MemoryMedia.kt`, the web's `media.ts` listing): each row opened under the key its origin fixes — the node's
+  key, or for a row a `WRITE_ONLY` guest added that guest's `K_up`, opened through the node's drop key (`mediaKey.ts`) —,
+  its listed tier (`media-meta`: geometry, capture time and its source, GPS, place) projected as `normalizeMediaMeta` does
+  and its original's sealed meta (type, name), ordered newest first by the effective capture time (a correction over the
+  derived one), an undated row last; each tier (`ORIGINAL`, `THUMBNAIL`, `PREVIEW`) is a blob of core's blob service whose
+  key is bound to the medium (`blob-key` with `ownerId` the medium's id, ADR 0113). Both apps draw the gallery as square
+  tiles of the thumbnail (a video marked, its poster), the chapters a Memory holds above it, and a lightbox paging through
+  the previews with each medium's name and capture time (measured 2026-11-09: `MemoryMediaTest` — a correction ignored turns
+  it red —; `MemoryLiveTest` reading a Memory the web filled with three JPEGs with EXIF time and GPS, a PNG and an MP4 — each
+  tile and preview the JPEG the web derived, each time with its source; the same gallery and lightbox on Android and iOS).
+  Not built yet: the live poll, video playback, the original's download and zoom, EXIF, the upload, edits (date, place,
+  participants, capture-time correction, trash), item marks, buckets, the map, sharing, the re-key, export and copy.
 - **One header for every node, drawn by core** (the web's `NodePage` + `NodeHeader`, ADR 0110 decision 10; owner
   2026-11-09): what a node's header offers and where is core's `navigation/NodeHeader.kt` — core's actions around the
   application's (the heart before them, the copy beside the move, cover, download and report after), the kind's

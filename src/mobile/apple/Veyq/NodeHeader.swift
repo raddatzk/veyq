@@ -79,11 +79,20 @@ struct KindPage {
         case PotSession.companion.KIND: pot
         case DepotFiles.shared.FILE: file
         case DepotFiles.shared.DROPBOX: dropBox
+        case "MEMORY", "CHAPTER": memory
         default: nil
         }
     }
 
     /// Depot's drop box: its guests' folders (`DropBoxScreen`); never renamed; its cover; its ZIP and its copy (a plain folder).
+    /// Memories' Memory and chapter: their gallery (`MemoryScreen`); their cover is core's.
+    private static let memory = KindPage(shareable: false, takesCover: true, header: { node, _ in
+        HeaderContribution(
+            deleteTitle: node.kind == "CHAPTER" ? String(localized: "Delete Chapter") : String(localized: "Delete Memory"),
+            deleteQuestion: String(localized: "“\(node.name)” moves to the trash. You can restore it from there until it is removed for good.")
+        )
+    }, body: { ref, _, model in AnyView(MemoryScreen(model: model, ref: ref)) })
+
     private static let dropBox = KindPage(shareable: true, takesCover: true, header: { node, model in
         HeaderContribution(
             rename: false,

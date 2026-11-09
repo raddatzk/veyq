@@ -508,4 +508,14 @@
     <string name="folder_failed">Der Ordner konnte nicht angelegt werden. Bitte versuche es noch einmal.</string>
     <string name="folder_delete">Ordner löschen</string>
     <string name="folder_delete_confirm">„%1$s“ und alles darin kommen in den Papierkorb.</string>
+    <string name="memory_chapters">Kapitel</string>
+    <string name="memory_gallery_failed">Die Galerie konnte nicht geladen werden.</string>
+    <string name="memory_gallery_empty">Noch keine Fotos oder Videos.</string>
+    <string name="memory_delete_memory">Erinnerung löschen</string>
+    <string name="memory_delete_chapter">Kapitel löschen</string>
+    <string name="memory_delete_confirm">„%1$s“ kommt in den Papierkorb. Dort lässt es sich wiederherstellen, bis es endgültig entfernt wird.</string>
+    <plurals name="memory_items">
+        <item quantity="one">%1$d Objekt</item>
+        <item quantity="other">%1$d Objekte</item>
+    </plurals>
 </resources>

@@ -510,4 +510,14 @@
     <string name="folder_failed">The folder could not be created. Please try again.</string>
     <string name="folder_delete">Delete folder</string>
     <string name="folder_delete_confirm">“%1$s” and everything in it go to the trash.</string>
+    <string name="memory_chapters">Chapters</string>
+    <string name="memory_gallery_failed">The gallery could not be loaded.</string>
+    <string name="memory_gallery_empty">No photos or videos yet.</string>
+    <string name="memory_delete_memory">Delete Memory</string>
+    <string name="memory_delete_chapter">Delete chapter</string>
+    <string name="memory_delete_confirm">“%1$s” moves to the trash. You can restore it from there until it is removed for good.</string>
+    <plurals name="memory_items">
+        <item quantity="one">%1$d item</item>
+        <item quantity="other">%1$d items</item>
+    </plurals>
 </resources>

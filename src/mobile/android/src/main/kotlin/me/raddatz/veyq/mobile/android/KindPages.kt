@@ -70,7 +70,16 @@ internal object KindPages {
         )
     }, body = { ref, _, model -> DropBoxScreen(ref, model) })
 
+    /** Memories' Memory and chapter: their gallery (`MemoryScreen`); their cover is core's. */
+    private val memory = KindPage(shareable = false, takesCover = true, header = { node, _ ->
+        HeaderContribution(
+            deleteTitle = stringResource(if (node.kind == "CHAPTER") R.string.memory_delete_chapter else R.string.memory_delete_memory),
+            deleteQuestion = stringResource(R.string.memory_delete_confirm, node.name),
+        )
+    }, body = { ref, _, model -> MemoryScreen(ref, model) })
+
     fun of(kind: String): KindPage? = when (kind) {
+        "MEMORY", "CHAPTER" -> memory
         me.raddatz.veyq.mobile.depot.DepotFiles.DROPBOX -> dropBox
         "FOLDER" -> folder
         PotSession.KIND -> pot

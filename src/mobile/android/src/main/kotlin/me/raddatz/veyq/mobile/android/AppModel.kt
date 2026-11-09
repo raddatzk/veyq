@@ -856,6 +856,31 @@ class AppModel(app: Application) : AndroidViewModel(app) {
         return r
     }
 
+    /** Memory or chapter [nodeId]'s gallery (`MemoryMedia.list`); null when it could not be read. */
+    suspend fun memoryGallery(scopeId: String, nodeId: String): me.raddatz.veyq.mobile.memories.MemoryMedia.Gallery? {
+        val t = tenantSession ?: return null
+        return runCatching { kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) { me.raddatz.veyq.mobile.memories.MemoryMedia.list(t, scopeId, nodeId) } }.getOrNull()
+    }
+
+    /** Decoded tiers by blob id, the most recent kept (a gallery asks for every tile as it scrolls past). */
+    private val mediaPictures = object : android.util.LruCache<String, androidx.compose.ui.graphics.ImageBitmap>(48 * 1024 * 1024) {
+        override fun sizeOf(key: String, value: androidx.compose.ui.graphics.ImageBitmap) = value.width * value.height * 4
+    }
+
+    /** [blob] of [item] read and decoded as a picture (a tile, a preview); null where it does not read or is no picture. */
+    suspend fun mediaPicture(item: me.raddatz.veyq.mobile.memories.MemoryMedia.Item, blob: me.raddatz.veyq.mobile.memories.MemoryMedia.Blob): androidx.compose.ui.graphics.ImageBitmap? {
+        mediaPictures.get(blob.blobId)?.let { return it }
+        val t = tenantSession ?: return null
+        val picture = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+            runCatching {
+                val bytes = me.raddatz.veyq.mobile.memories.MemoryMedia.read(t, item, blob) ?: return@runCatching null
+                android.graphics.BitmapFactory.decodeByteArray(bytes, 0, bytes.size)?.asImageBitmap()
+            }.getOrNull()
+        } ?: return null
+        mediaPictures.put(blob.blobId, picture)
+        return picture
+    }
+
     /** Drop box [nodeId]'s guests' folders with their files (`DropBoxes.folders`); null when they could not be read. */
     suspend fun dropBoxFolders(scopeId: String, nodeId: String): List<me.raddatz.veyq.mobile.depot.DropBoxes.GuestFolder>? {
         val t = tenantSession ?: return null
