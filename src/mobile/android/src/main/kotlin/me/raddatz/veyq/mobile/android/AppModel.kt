@@ -921,7 +921,7 @@ class AppModel(app: Application) : AndroidViewModel(app) {
             val t = tenantSession ?: return@launch
             val failed = ArrayList<String>()
             for ((i, uri) in uris.withIndex()) {
-                val p = picked(uri) ?: continue
+                val p = pickedMedium(uri) ?: continue
                 _uploading.value = if (uris.size > 1) "${p.name} (${i + 1}/${uris.size})" else p.name
                 val r = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
                     runCatching {
@@ -953,6 +953,43 @@ class AppModel(app: Application) : AndroidViewModel(app) {
             if (failed.isNotEmpty()) notify(Notice(app.getString(R.string.memory_upload_failed, failed.joinToString(", "))))
             refreshLists(t)
         }
+    }
+
+    /**
+     * A photo or video the system's picker handed over ([uri]), read as it was taken where the person gave the app full
+     * media access: the media store's own item behind it — its location kept (`setRequireOriginal`), its own name — else
+     * (no such access, only some photos allowed, an item the store does not hold) the picker's copy as it is.
+     */
+    private fun pickedMedium(uri: android.net.Uri): Picked? {
+        val picked = picked(uri) ?: return null
+        val app = getApplication<Application>()
+        fun granted(p: String) = app.checkSelfPermission(p) == android.content.pm.PackageManager.PERMISSION_GRANTED
+        val full = if (android.os.Build.VERSION.SDK_INT >= 33) granted(android.Manifest.permission.READ_MEDIA_IMAGES) && granted(android.Manifest.permission.READ_MEDIA_VIDEO)
+        else granted(android.Manifest.permission.READ_EXTERNAL_STORAGE)
+        if (!full || !granted(android.Manifest.permission.ACCESS_MEDIA_LOCATION)) return picked
+        return runCatching {
+            val id = uri.lastPathSegment?.toLongOrNull() ?: return picked
+            val video = picked.type.startsWith("video/")
+            val base = if (video) android.provider.MediaStore.Video.Media.EXTERNAL_CONTENT_URI else android.provider.MediaStore.Images.Media.EXTERNAL_CONTENT_URI
+            val item = android.content.ContentUris.withAppendedId(base, id)
+            val resolver = app.contentResolver
+            val cols = arrayOf(android.provider.MediaStore.MediaColumns.DISPLAY_NAME, android.provider.MediaStore.MediaColumns.SIZE, android.provider.MediaStore.MediaColumns.DATE_MODIFIED)
+            val listed = resolver.query(item, cols, null, null, null)?.use { c ->
+                if (!c.moveToFirst()) null
+                else Triple(c.getString(0), c.getLong(1), if (c.isNull(2)) null else c.getLong(2) * 1000)
+            } ?: return picked
+            val original = android.provider.MediaStore.setRequireOriginal(item)
+            resolver.openFileDescriptor(original, "r")?.close() ?: return picked
+            Picked(original, listed.first ?: picked.name, listed.second.takeIf { it > 0 } ?: picked.size, picked.type, listed.third ?: picked.modifiedAt)
+        }.getOrDefault(picked)
+    }
+
+    /** Whether the app asked for full media access before (once: a no is the person's, and the picker works without it). */
+    fun mediaAccessAsked(): Boolean {
+        val prefs = getApplication<Application>().getSharedPreferences("veyq.memories", android.content.Context.MODE_PRIVATE)
+        val asked = prefs.getBoolean("mediaAccessAsked", false)
+        if (!asked) prefs.edit().putBoolean("mediaAccessAsked", true).apply()
+        return asked
     }
 
     /** Drop box [nodeId]'s guests' folders with their files (`DropBoxes.folders`); null when they could not be read. */

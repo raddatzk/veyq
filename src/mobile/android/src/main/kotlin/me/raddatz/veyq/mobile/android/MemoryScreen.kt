@@ -76,6 +76,14 @@ import me.raddatz.veyq.mobile.memories.MemoryMedia
 import me.raddatz.veyq.mobile.navigation.NodeRef
 import me.raddatz.veyq.mobile.navigation.ObjectRef
 
+/** What full media access is on this Android: the photos and videos themselves, and their locations. */
+private fun mediaAccessPermissions(): Array<String> =
+    if (android.os.Build.VERSION.SDK_INT >= 33) {
+        arrayOf(android.Manifest.permission.READ_MEDIA_IMAGES, android.Manifest.permission.READ_MEDIA_VIDEO, android.Manifest.permission.ACCESS_MEDIA_LOCATION)
+    } else {
+        arrayOf(android.Manifest.permission.READ_EXTERNAL_STORAGE, android.Manifest.permission.ACCESS_MEDIA_LOCATION)
+    }
+
 /**
  * A Memory's or a chapter's page (Memories' `MemoryDetail.vue`, its gallery): the chapters a Memory holds, then every
  * medium as a square tile of its thumbnail in the grid's order (newest first by capture time), a video marked as one; a
@@ -103,9 +111,12 @@ internal fun MemoryScreen(ref: ObjectRef, model: AppModel) {
     val pick = rememberLauncherForActivityResult(ActivityResultContracts.PickMultipleVisualMedia()) { uris ->
         if (uris.isNotEmpty()) model.uploadMedia(ref.scopeId, ref.nodeId, uris)
     }
-    // (the picker hands a photo over with its location zeroed: Android keeps it only for an app with full media access)
+    fun pickMedia() = pick.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageAndVideo))
+    // the picker hands a photo over with its location zeroed and under a number: full media access keeps both, so it is
+    // asked for once, before the first pick; whatever the answer, the picker opens
+    val askAccess = rememberLauncherForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { pickMedia() }
     CreateGridAction(stringResource(R.string.memory_add), shown = uploading == null, onClick = {
-        pick.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageAndVideo))
+        if (model.mediaAccessAsked()) pickMedia() else askAccess.launch(mediaAccessPermissions())
     }) { grid, bottom ->
     LazyVerticalGrid(
         GridCells.Adaptive(112.dp), Modifier.fillMaxSize(), state = grid, contentPadding = PaddingValues(bottom = bottom),

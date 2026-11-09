@@ -429,8 +429,10 @@ implementation exists but what holds it to the first.
   `ImageDecoder` (the EXIF orientation applied) and a video's poster with `MediaMetadataRetriever`, turned as shown
   (measured 2026-11-09: a photo stored landscape with orientation 6 went up 3000×4000 with its tiers upright, a clip with
   a quarter-turn matrix 720×1280 with its container time; the web shows both so). The picker zeroes a photo's position
-  and renames it (`src/mobile/CLAUDE.md` § Traps): an Android upload carries no position unless the app is given full
-  media access, which is the owner's to decide. The Apple app's "+" menu picks from the photo library (`PhotosPicker`, the
+  and renames it (`src/mobile/CLAUDE.md` § Traps), so the app asks once, before the first pick, for full media access
+  (owner 2026-11-09): with it, the upload reads the media store's own item behind the picked one, its position and name
+  kept (measured 2026-11-09: the same photo went up as `34.jpg` without a position before and as `leuchtturm.jpg` with
+  its position and altitude after "Allow all"); without it, or with only some photos allowed, the picker's copy goes up. The Apple app's "+" menu picks from the photo library (`PhotosPicker`, the
   original's encoding kept) or from files, derives the tiers with ImageIO (the orientation applied) and a video's poster
   with `AVAssetImageGenerator` (its track's transform applied), and core reads the picked file at any offset as it seals
   it (measured 2026-11-09: the same photo and clip went up from the iOS Simulator under their own names, the photo with
