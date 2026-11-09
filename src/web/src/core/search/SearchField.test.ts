@@ -139,11 +139,18 @@ describe('the search field', () => {
   })
 
   // was: the results in their groups (In this space, Other spaces) - now one list with no heading, each row saying where
-  it('shows the results as one list with no heading, another space\'s with its space and path', async () => {
+  it('shows the results as one list with no heading, each with its space and path - the space on screen too', async () => {
     await mountField()
     await type('rome')
     expect(headings()).toEqual([])
-    expect(rows()).toEqual(['Rome 2024 Trips', 'Rome garden Family group'])
+    expect(rows()).toEqual(['Rome 2024 Familie · Trips', 'Rome garden Family group'])
+  })
+
+  // owner 2026-11-09: a node at the top level of the space on screen says its space, not nothing
+  it('names the space of a node at the top level of the space on screen', async () => {
+    await mountField()
+    await type('trips')
+    expect(resultRows()).toContain('Trips Familie')
   })
 
   // was: the open node's group headed by its name - now what lies below the open node comes first at an equal match
@@ -159,7 +166,7 @@ describe('the search field', () => {
     expect(headings()).toEqual([t('shell.search.filterBy')]) // Rome 2024 holds a chapter, so it is offered as In: too
     expect(suggestionRows()).toEqual([`Rome 2024 Familie · Trips ${t('shell.search.chipIn')}`])
     // by the name alone "Rome 2024" would come first; below the open node, "Rome day one" does
-    expect(resultRows()).toEqual(['Rome day one Trips / Rome 2024', 'Rome 2024 Trips'])
+    expect(resultRows()).toEqual(['Rome day one Familie · Trips / Rome 2024', 'Rome 2024 Familie · Trips'])
     trees.S1 = trees.S1.slice(0, 2)
   })
 
@@ -171,7 +178,7 @@ describe('the search field', () => {
     await press('Enter')
     expect(chips()).toEqual(['2024'])
     expect(field().value).toBe('')
-    expect(rows()).toEqual(['Rome 2024 Trips 2024'])
+    expect(rows()).toEqual(['Rome 2024 Familie · Trips 2024'])
     await press('Backspace')
     expect(chips()).toEqual([])
   })
@@ -183,7 +190,7 @@ describe('the search field', () => {
     expectSuggestionHighlighted()
     await press('Enter')
     expect(chips()).toEqual(['Anna Schmidt'])
-    expect(rows()).toEqual(['Rome 2024 Trips Anna Schmidt'])
+    expect(rows()).toEqual(['Rome 2024 Familie · Trips Anna Schmidt'])
   })
 
   it('keeps the words a chip did not take as text', async () => {
@@ -193,7 +200,7 @@ describe('the search field', () => {
     await press('Enter')
     expect(chips()).toEqual(['Anna Schmidt'])
     expect(field().value).toBe('rome')
-    expect(rows()).toEqual(['Rome 2024 Trips Anna Schmidt'])
+    expect(rows()).toEqual(['Rome 2024 Familie · Trips Anna Schmidt'])
   })
 
   it('offers a kind by its word (a Memory)', async () => {
@@ -301,7 +308,7 @@ describe('the search field', () => {
     await mountField()
     await type('rome')
     expect(rows()).toHaveLength(11)
-    expect(rows().slice(0, 2)).toEqual(['Rome 00', 'Rome 01'])
+    expect(rows().slice(0, 2)).toEqual(['Rome 00 Familie', 'Rome 01 Familie'])
     expect(rows().at(-1)).toBe(t('shell.search.showMore', { count: 10 }))
     expect(document.body.querySelector('[data-testid="search-announcement"]')!.textContent!.trim()).toBe(t('shell.search.announceResults', { count: 25 }, 25))
     for (let i = 0; i < 10; i++) await press('ArrowDown')
@@ -334,7 +341,7 @@ describe('people and settings sections as results (ADR 0125 decision 9)', () => 
     await mountField()
     await type('rom')
     expect(headings()).toEqual([t('shell.search.filterBy')])
-    expect(rows()).toEqual([`romeo ${t('shell.search.chipPerson')}`, 'Rome 2024 Trips', 'Rome garden Family group', 'R romeo ~romeo'])
+    expect(rows()).toEqual([`romeo ${t('shell.search.chipPerson')}`, 'Rome 2024 Familie · Trips', 'Rome garden Family group', 'R romeo ~romeo'])
   })
 
   it('offers a member as a chip AND lists them as a person: the chip filters, the result opens their profile', async () => {
@@ -394,7 +401,7 @@ describe('people and settings sections as results (ADR 0125 decision 9)', () => 
     expectSuggestionHighlighted()
     await press('Enter') // the person chip
     expect(chips()).toEqual(['Anna Schmidt'])
-    expect(rows()).toEqual(['Rome 2024 Trips Anna Schmidt'])
+    expect(rows()).toEqual(['Rome 2024 Familie · Trips Anna Schmidt'])
   })
 
   it('Kind: Person lists only people - with no text, and with text', async () => {
@@ -419,7 +426,7 @@ describe('people and settings sections as results (ADR 0125 decision 9)', () => 
       expect(chips()).toEqual(['Einstellung'])
       const found = resultRows()
       expect(found.length).toBeGreaterThan(0)
-      expect(found).not.toContain('Rome 2024 Trips')
+      expect(found).not.toContain('Rome 2024 Familie · Trips')
       expect(found.some((r) => r.includes('Anna') || r.includes('kevin'))).toBe(false)
       expect(found).toContain(`${i18n.global.t('settings.password')} ${i18n.global.t('settings.personal')}`) // in German, the locale on
     } finally {
@@ -435,7 +442,7 @@ describe('people and settings sections as results (ADR 0125 decision 9)', () => 
     await press('Enter') // the year chip, "rome" kept
     expect(chips()).toEqual(['2024'])
     expect(field().value).toBe('rome')
-    expect(resultRows()).toEqual(['Rome 2024 Trips 2024'])
+    expect(resultRows()).toEqual(['Rome 2024 Familie · Trips 2024'])
   })
 
   it('names what it searches: members and settings too', async () => {
@@ -461,7 +468,7 @@ describe('the kind words of Depot, Expenses and core\'s bookmark', () => {
     expectSuggestionHighlighted()
     await press('Enter')
     expect(chips()).toEqual([t(word)])
-    expect(rows()).toEqual(['Rome thing'])
+    expect(rows()).toEqual(['Rome thing Familie'])
   })
 })
 
@@ -473,14 +480,14 @@ describe('the In: chip', () => {
     vi.mocked(indexedDocuments).mockReturnValue([...indexedDocuments(), strand()])
     await mountField()
     await type('strand')
-    expect(rows()).toContain('strand.jpg Trips / Rome 2024') // control: listed without the chip
+    expect(rows()).toContain('strand.jpg Familie · Trips / Rome 2024') // control: listed without the chip
     await type('trip')
     expect(suggestionRows()).toEqual([`Trips Familie ${t('shell.search.chipIn')}`])
     await press('Enter')
     expect(chips()).toEqual(['Trips'])
-    expect(rows()).toEqual(['Rome 2024 Trips', 'strand.jpg Trips / Rome 2024'])
+    expect(rows()).toEqual(['Rome 2024 Familie · Trips', 'strand.jpg Familie · Trips / Rome 2024'])
     await type('strand')
-    expect(rows()).toEqual(['strand.jpg Trips / Rome 2024'])
+    expect(rows()).toEqual(['strand.jpg Familie · Trips / Rome 2024'])
   })
 
   it('offers two nodes of one name as two suggestions, each with where it lives, each narrowing to its own subtree', async () => {
@@ -501,7 +508,7 @@ describe('the In: chip', () => {
     await press('ArrowDown')
     await press('Enter')
     expect(chips()).toEqual(['Trips'])
-    expect(rows()).toEqual(['Trade fair Work / Trips'])
+    expect(rows()).toEqual(['Trade fair Familie · Work / Trips'])
   })
 })
 
@@ -515,7 +522,7 @@ describe('the suggestions\' heading and the entry Enter takes', () => {
     await type('2024')
     expect(headings()).toEqual([t('shell.search.filterBy')])
     expect(suggestionRows()).toEqual([`2024 ${t('shell.search.chipYear')}`])
-    expect(rows()).toEqual([`2024 ${t('shell.search.chipYear')}`, 'Rome 2024 Trips'])
+    expect(rows()).toEqual([`2024 ${t('shell.search.chipYear')}`, 'Rome 2024 Familie · Trips'])
   })
 
   it('highlights the first entry right after a chip was chosen, and Enter opens it', async () => {
@@ -524,7 +531,7 @@ describe('the suggestions\' heading and the entry Enter takes', () => {
     expectSuggestionHighlighted()
     await press('Enter')
     expect(chips()).toEqual(['2024'])
-    expect(highlighted()).toBe('Rome 2024 Trips 2024')
+    expect(highlighted()).toBe('Rome 2024 Familie · Trips 2024')
     await press('Enter')
     expect(push).toHaveBeenCalledWith({ name: 'home', hash: '#trips/memories/rome-2024' })
   })
@@ -627,7 +634,7 @@ describe('the polish (cr-search-polish)', () => {
     expectSuggestionHighlighted()
     await press('Enter')
     expect(chips()).toEqual(['May 2024'])
-    expect(rows()).toEqual(['Roma 2024 May 2024'])
+    expect(rows()).toEqual(['Roma 2024 Familie May 2024'])
   })
 
   it('reads the month in the UI\'s language: "Mai 2024" in German', async () => {
@@ -748,7 +755,7 @@ describe('the queries remembered while the list is open', () => {
     const before = reads
     await type('ro') // Backspace
     expect(reads).toBe(before)
-    expect(rows()).toContain('Rome 2024') // the answer is there all the same
+    expect(rows()).toContain('Rome 2024 Familie') // the answer is there all the same
     await press('Escape')
     field().focus()
     field().dispatchEvent(new FocusEvent('focus'))

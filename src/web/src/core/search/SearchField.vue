@@ -254,14 +254,15 @@ const resultOptions = computed<ResultOption[]>(() => {
 })
 
 /** What a row says under the name - where it lies, as the one list has no heading to say it: its own line (a person's
- *  handle, a section's heading), or its path (and its space before it, for another space's) - a photo's day after it; a
- *  photo of the open Memory says only its day. */
+ *  handle, a section's heading), or its space and its path - the space always, the active one too, so a node at a
+ *  space's top level still says where it lies (owner 2026-11-09) - a photo's day after it; a photo of the open Memory
+ *  says its space and its day. */
 function secondLine(option: ResultOption): string {
   const doc = option.doc!
   if (doc.subtitle !== undefined) return doc.subtitle
   const day = doc.facets.capturedAt !== undefined ? dayFormat.value.format(doc.facets.capturedAt) : ''
   const path = doc.open ? '' : doc.path.join(' / ')
-  const where = doc.scopeId === activeSpace.scopeId ? path : [spaceLabel(indexedScope(doc.scopeId)), path].filter(Boolean).join(' · ')
+  const where = [spaceLabel(indexedScope(doc.scopeId)), path].filter(Boolean).join(' · ')
   return [where, day].filter(Boolean).join(' · ')
 }
 /** The values of the chips in force a row carries (its years, its place, the person), shown beside it. */

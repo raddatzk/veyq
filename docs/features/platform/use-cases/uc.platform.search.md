@@ -65,8 +65,8 @@
    ordered by the match (step 5), then by where the result lies - below the open node (what its page contributed and
    the nodes below it, while a node's page is open, not a folder), then the active space, then the other spaces, then
    people and settings -, then by the name's collation: a strong match elsewhere comes before a weak one here. Each row
-   says where it lies: another space's result its space and path, this space's its path (a photo its Memory's path and
-   its day), a person their picture or initial and `~username`, a settings section its heading on the rail. The part of
+   says where it lies: its space and its path - the space on screen too, so a node at a space's top level still names
+   it (owner, 2026-11-09) - (a photo its Memory's path and its day), a person their picture or initial and `~username`, a settings section its heading on the rail. The part of
    a name the text matched is shown in bold. The first 10 results are shown; "show more" adds 10, and the count is
    exact. A member's name offers them as a person chip and lists them as a person - the chip filters, the person opens
    their profile.
