@@ -38,17 +38,17 @@ struct PotCreateSheet: View {
     var body: some View {
         NavigationStack {
             Form {
-                TextField("Name", text: $name)
+                TextField(say(.peopleName), text: $name)
                 if model.spaces.count > 1 {
-                    Picker("Space", selection: $scopeId) {
+                    Picker(say(.createPotSpace), selection: $scopeId) {
                         ForEach(model.spaces, id: \.scopeId) { Text(Names.spaceName($0)).tag($0.scopeId) }
                     }
                 }
                 Section {
-                    Picker("Base currency", selection: $currency) {
+                    Picker(say(.potBaseCurrency), selection: $currency) {
                         ForEach(Self.currencies, id: \.self) { Text($0).tag($0) }
                     }
-                } footer: { Text("Every balance is in this currency. It is fixed once the first entry is saved.") }
+                } footer: { Text(say(.settingsCurrencyHint)) }
                 Section {
                     ForEach(Array(people.enumerated()), id: \.offset) { _, p in
                         HStack {
@@ -56,12 +56,12 @@ struct PotCreateSheet: View {
                             Spacer()
                             Button { people.removeAll { key($0) == key(p) } } label: { Image(systemName: "xmark.circle.fill") }
                                 .buttonStyle(.borderless)
-                                .accessibilityLabel("Remove \(p.name)")
+                                .accessibilityLabel(say(.peopleRemove, p.name))
                         }
                     }
                     HStack {
-                        TextField("Name", text: $typed)
-                        Button("Add person", action: takeTyped)
+                        TextField(say(.peopleName), text: $typed)
+                        Button(say(.peopleAdd), action: takeTyped)
                             .disabled(typed.trimmingCharacters(in: .whitespaces).isEmpty)
                     }
                     ForEach(members.filter { m in !people.contains { $0.userId == m.userId } }, id: \.userId) { m in
@@ -69,17 +69,17 @@ struct PotCreateSheet: View {
                             Label(m.displayName, systemImage: "person.badge.plus")
                         }
                     }
-                } header: { Text("People") }
+                } header: { Text(say(.potPeople)) }
                 if let message = model.creatingPot.message {
                     Section { Text(Self.explain(message)).foregroundStyle(Role.danger) }
                 }
             }
             .formStyle(.grouped)
-            .navigationTitle("New pot")
+            .navigationTitle(say(.createPot))
             .toolbar {
-                ToolbarItem(placement: .cancellationAction) { Button("Cancel") { model.clearCreatingPot(); dismiss() } }
+                ToolbarItem(placement: .cancellationAction) { Button(say(.signinCancel)) { model.clearCreatingPot(); dismiss() } }
                 ToolbarItem(placement: .confirmationAction) {
-                    Button("Create") {
+                    Button(say(.createPotCreate)) {
                         takeTyped()
                         Task {
                             if await model.createPot(
@@ -100,14 +100,14 @@ struct PotCreateSheet: View {
         .tint(Role.accent)
     }
 
-    static func explain(_ outcome: String) -> LocalizedStringKey {
+    static func explain(_ outcome: String) -> String {
         switch outcome {
-        case "NAME_TAKEN": "There is already a pot with this name here."
-        case "PEOPLE_NOT_ADDED": "The pot was created, its people were not. Add them in its settings."
-        case "BUSY": "The pot’s key is being renewed. Try again in a moment."
-        case "BLOCKED": "The operator blocked this pot."
-        case "INVALID": "Check the name and the people: 1 to 100 characters each."
-        default: "The pot was not created. Please try again."
+        case "NAME_TAKEN": say(.createPotNameTaken)
+        case "PEOPLE_NOT_ADDED": say(.createPotPeopleFailed)
+        case "BUSY": say(.potBusy)
+        case "BLOCKED": say(.potBlocked)
+        case "INVALID": say(.createPotInvalid)
+        default: say(.createPotFailed)
         }
     }
 }

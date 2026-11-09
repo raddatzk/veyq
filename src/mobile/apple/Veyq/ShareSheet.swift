@@ -14,43 +14,43 @@ struct ShareWords {
     /// The words of `kind`'s share sheet: a Pot's, else core's folder words (the web's default `ShareDialogCopy`).
     static func of(_ kind: String) -> ShareWords {
         if kind == DepotFiles.shared.DROPBOX {
-            let hint = String(localized: "Creates a drop box with this name here. Anyone with the link can send you files: each person gets a folder of their own, and nobody sees the drop box or what others sent. You manage its links on the drop box.")
+            let hint = say(.dropboxUploadHint)
             return ShareWords(
-                title: String(localized: "Drop box links"),
-                intro: String(localized: "Anyone with a link can add files. Nobody with it sees the drop box or what others added."),
-                contributor: String(localized: "Add files only"),
+                title: say(.dropboxShareTitle),
+                intro: say(.dropboxShareHint),
+                contributor: say(.shareRoleUploader),
                 viewerHint: hint,
                 contributorHint: hint,
-                deleteConfirm: String(localized: "Delete this link for good? Nobody can send files with it any more. What guests already sent stays in the drop box.")
+                deleteConfirm: say(.dropboxShareDeleteConfirm)
             )
         }
         if kind == DepotFiles.shared.FILE {
             return ShareWords(
-                title: String(localized: "Share this file"),
-                intro: String(localized: "Create a link anyone can open in a browser — no account, no install. It shows only this one file, and you can switch it off anytime."),
-                contributor: String(localized: "View + contribute"),
-                viewerHint: String(localized: "Anyone with the link can see this file and download it, read-only."),
-                contributorHint: String(localized: "Anyone with the link can see and download this file and replace its content — the old content cannot be restored: there is no version history."),
-                deleteConfirm: String(localized: "Delete this link for good? It can never be switched on or renewed again. Content guests replaced stays in this file.")
+                title: say(.shareFileTitle),
+                intro: say(.shareFileIntro),
+                contributor: say(.shareFileRoleContributor),
+                viewerHint: say(.shareFileRoleViewerHint),
+                contributorHint: say(.shareFileRoleContributorHint),
+                deleteConfirm: say(.shareFileDeleteConfirm)
             )
         }
         if kind == PotSession.companion.KIND {
             return ShareWords(
-                title: String(localized: "Share this Pot"),
-                intro: String(localized: "Create a link anyone can open in a browser — no account, no install. It shows only this Pot, and you can switch it off anytime."),
-                contributor: String(localized: "View + contribute"),
-                viewerHint: String(localized: "Anyone with the link sees the entries, balances and overview, read-only."),
-                contributorHint: String(localized: "Anyone with the link can also add, change and delete entries, and add and rename people."),
-                deleteConfirm: String(localized: "Delete this link for good? It can never be switched on or renewed again. Entries guests wrote stay in the Pot.")
+                title: say(.shareTitle),
+                intro: say(.shareIntro),
+                contributor: say(.shareFileRoleContributor),
+                viewerHint: say(.shareRoleViewerHint),
+                contributorHint: say(.shareRoleContributorHint),
+                deleteConfirm: say(.shareDeleteConfirm)
             )
         }
         return ShareWords(
-            title: String(localized: "Share this folder"),
-            intro: String(localized: "Create a link anyone can open in a browser — no account, no install. It shows this folder and everything in it, and you can switch it off anytime."),
-            contributor: String(localized: "View + add files"),
-            viewerHint: String(localized: "Anyone with the link can look at this folder and everything in it, read-only."),
-            contributorHint: String(localized: "Anyone with the link can look, add folders and content, move things inside this folder, and upload files — also over any file already in it, yours included. A replaced file cannot be brought back: there is no version history."),
-            deleteConfirm: String(localized: "Delete this link for good? It can never be switched on or renewed again. What guests added stays in this folder.")
+            title: say(.shareFolderTitle),
+            intro: say(.shareFolderIntro),
+            contributor: say(.shareFolderRoleContributor),
+            viewerHint: say(.shareFolderRoleViewerHint),
+            contributorHint: say(.shareFolderRoleContributorHint),
+            deleteConfirm: say(.shareFolderDeleteConfirm)
         )
     }
 }
@@ -102,7 +102,7 @@ struct ShareSheet: View {
                                 fresh = made.url
                                 return nil
                             }
-                            return Notices.shared.dropBoxRefused(outcome: made.outcome).map { say($0) }
+                            return Notices.shared.dropBoxRefused(outcome: made.outcome).map { say(notice: $0) }
                         }
                         let minted = await model.mintLink(ref, role: dropBox ? ShareLinks.shared.WRITE_ONLY : role, label: dropBox ? "" : label, password: password ?? "", expiresAt: expiresAt)
                         guard minted.outcome == .created, let url = minted.url else { return Self.problem(minted.outcome) }
@@ -119,18 +119,18 @@ struct ShareSheet: View {
             #if os(iOS)
             .navigationBarTitleDisplayMode(.inline)
             #endif
-            .toolbar { ToolbarItem(placement: .confirmationAction) { Button("Done") { dismiss() } } }
+            .toolbar { ToolbarItem(placement: .confirmationAction) { Button(say(.shareDone)) { dismiss() } } }
         }
         .task { await load() }
-        .alert("Renew link", isPresented: Binding(get: { renewing != nil }, set: { if !$0 { renewing = nil } }), presenting: renewing) { link in
-            Button("Renew link") { Task { await renew(link) } }
-            Button("Cancel", role: .cancel) {}
+        .alert(say(.shareRenew), isPresented: Binding(get: { renewing != nil }, set: { if !$0 { renewing = nil } }), presenting: renewing) { link in
+            Button(say(.shareRenew)) { Task { await renew(link) } }
+            Button(say(.signinCancel), role: .cancel) {}
         } message: { _ in
-            Text("This makes a new link and deletes the old one. Hand out the new link.")
+            Text(say(.shareRenewConfirm))
         }
-        .alert("Delete link", isPresented: Binding(get: { deleting != nil }, set: { if !$0 { deleting = nil } }), presenting: deleting) { link in
-            Button("Delete link", role: .destructive) { Task { await delete(link) } }
-            Button("Cancel", role: .cancel) {}
+        .alert(say(.shareDelete), isPresented: Binding(get: { deleting != nil }, set: { if !$0 { deleting = nil } }), presenting: deleting) { link in
+            Button(say(.shareDelete), role: .destructive) { Task { await delete(link) } }
+            Button(say(.signinCancel), role: .cancel) {}
         } message: { _ in
             Text(words.deleteConfirm)
         }
@@ -162,7 +162,7 @@ struct ShareSheet: View {
     }
 
     private static func changed(_ outcome: ShareLinkChanges.Outcome) -> String {
-        say(Notices.shared.linkChanged(outcome: outcome) ?? Notices.shared.of(msg: .shareFailed))
+        say(notice: Notices.shared.linkChanged(outcome: outcome) ?? Notices.shared.of(msg: .shareFailed))
     }
 
     private var list: some View {
@@ -171,13 +171,13 @@ struct ShareSheet: View {
                 Text(words.intro)
                     .font(.subheadline).foregroundStyle(Role.muted)
                 if model.linkRules().on {
-                    Button("New link", systemImage: "plus") { creating = true }
+                    Button(say(.shareNew), systemImage: "plus") { creating = true }
                 }
                 if let notice { Text(notice).font(.caption).foregroundStyle(Role.muted) }
             }
             Section {
                 if failed {
-                    Text("Your links could not be loaded.").foregroundStyle(Role.danger)
+                    Text(say(.shareLoadFailed)).foregroundStyle(Role.danger)
                 } else if let links {
                     ForEach(links, id: \.shareId) { link in
                         // the web's rules: edit an own open link whose copy opens, renew an own or switched-off one, switch
@@ -192,30 +192,30 @@ struct ShareSheet: View {
                             // Apple's HIG: a row's actions as swipe actions and its context menu, as Mail's
                             .swipeActions(edge: .trailing) {
                                 if canSwitchOff {
-                                    Button("Revoke", systemImage: "nosign", role: .destructive) { Task { await switchOff(link) } }
+                                    Button(say(.shareSwitchOff), systemImage: "nosign", role: .destructive) { Task { await switchOff(link) } }
                                 }
                                 if canDelete {
-                                    Button("Delete link", systemImage: "trash", role: .destructive) { deleting = link }
+                                    Button(say(.shareDelete), systemImage: "trash", role: .destructive) { deleting = link }
                                 }
                             }
                             .swipeActions(edge: .leading) {
                                 if canReactivate {
-                                    Button("Switch On Again", systemImage: "power") { Task { await reactivate(link) } }.tint(Role.accent)
+                                    Button(say(.shareReactivate), systemImage: "power") { Task { await reactivate(link) } }.tint(Role.accent)
                                 }
-                                if canRenew { Button("Renew link", systemImage: "arrow.clockwise") { renewing = link }.tint(Role.accent) }
+                                if canRenew { Button(say(.shareRenew), systemImage: "arrow.clockwise") { renewing = link }.tint(Role.accent) }
                             }
                             .contextMenu {
                                 // an open link goes to another app through the system's share sheet, first (as Safari's links)
                                 if link.enabled, let url = link.url.flatMap(URL.init(string:)) {
-                                    ShareLink(item: url) { Label("Share…", systemImage: "square.and.arrow.up") }
+                                    ShareLink(item: url) { Label(say(.shareLinkShare), systemImage: "square.and.arrow.up") }
                                 }
-                                if canEdit { Button("Edit", systemImage: "pencil") { editing = link } }
-                                if canReactivate { Button("Switch On Again", systemImage: "power") { Task { await reactivate(link) } } }
-                                if canRenew { Button("Renew link", systemImage: "arrow.clockwise") { renewing = link } }
+                                if canEdit { Button(say(.shareEdit), systemImage: "pencil") { editing = link } }
+                                if canReactivate { Button(say(.shareReactivate), systemImage: "power") { Task { await reactivate(link) } } }
+                                if canRenew { Button(say(.shareRenew), systemImage: "arrow.clockwise") { renewing = link } }
                                 if canSwitchOff {
-                                    Button("Revoke", systemImage: "nosign", role: .destructive) { Task { await switchOff(link) } }
+                                    Button(say(.shareSwitchOff), systemImage: "nosign", role: .destructive) { Task { await switchOff(link) } }
                                 }
-                                if canDelete { Button("Delete link", systemImage: "trash", role: .destructive) { deleting = link } }
+                                if canDelete { Button(say(.shareDelete), systemImage: "trash", role: .destructive) { deleting = link } }
                             }
                     }
                 } else {
@@ -233,8 +233,8 @@ struct ShareSheet: View {
         switch closed {
         case .closed: notice = nil
         case .closedRekeyPending:
-            notice = String(localized: "The link is switched off. What is below it gets a new lock, so the old link opens nothing that comes later either.")
-        default: notice = String(localized: "That didn’t work — please try again.")
+            notice = say(.shareClosedRekeying)
+        default: notice = say(.shareFailed)
         }
         await load()
     }
@@ -244,7 +244,7 @@ struct ShareSheet: View {
     }
 
     private static func problem(_ outcome: ShareLinks.Outcome) -> String {
-        say(Notices.shared.linkRefused(outcome: outcome) ?? Notices.shared.of(msg: .shareFailed))
+        say(notice: Notices.shared.linkRefused(outcome: outcome) ?? Notices.shared.of(msg: .shareFailed))
     }
 }
 
@@ -257,8 +257,8 @@ private struct LinkRow: View {
 
     private var roleWord: String {
         switch link.role {
-        case ShareLinks.shared.READ: String(localized: "View only")
-        case ShareLinks.shared.WRITE_ONLY: String(localized: "Add files only")
+        case ShareLinks.shared.READ: say(.shareRoleViewer)
+        case ShareLinks.shared.WRITE_ONLY: say(.shareRoleUploader)
         default: words.contributor
         }
     }
@@ -267,15 +267,15 @@ private struct LinkRow: View {
         HStack {
             VStack(alignment: .leading, spacing: 3) {
                 Text(link.label.isEmpty ? roleWord : link.label).fontWeight(.semibold)
-                Text([String(localized: "Created \(day(link.createdAt))"), link.expiresAt.map { String(localized: "Expires \(day($0))") }]
+                Text([say(.shareCreated, day(link.createdAt)), link.expiresAt.map { say(.shareExpires, day($0)) }]
                     .compactMap { $0 }.joined(separator: " · "))
                     .font(.caption).foregroundStyle(Role.muted)
                 let badges = [
                     link.label.isEmpty ? nil : roleWord,
-                    link.passwordRequired ? String(localized: "Password") : nil,
-                    link.enabled ? nil : String(localized: "Switched off"),
-                    link.mine ? nil : String(localized: "By another member"),
-                    link.stopped || link.reissueRequired ? String(localized: "Guests can’t open it") : nil,
+                    link.passwordRequired ? say(.signinPassword) : nil,
+                    link.enabled ? nil : say(.shareSwitchedOff),
+                    link.mine ? nil : say(.shareByMember),
+                    link.stopped || link.reissueRequired ? say(.shareStopped) : nil,
                 ].compactMap { $0 }
                 if !badges.isEmpty { Text(badges.joined(separator: " · ")).font(.caption).foregroundStyle(Role.accent) }
             }
@@ -285,7 +285,7 @@ private struct LinkRow: View {
                     Image(systemName: copied ? "checkmark" : "doc.on.doc")
                 }
                 .buttonStyle(.borderless)
-                .accessibilityLabel("Copy link")
+                .accessibilityLabel(say(.shareCopy))
             }
             if busy { ProgressView() }
         }
@@ -312,11 +312,11 @@ struct TopLevelUploadSheet: View {
                             fresh = made.url
                             return nil
                         }
-                        return Notices.shared.dropBoxRefused(outcome: made.outcome).map { say($0) }
+                        return Notices.shared.dropBoxRefused(outcome: made.outcome).map { say(notice: $0) }
                     }
                 }
             }
-            .navigationTitle("Add files only")
+            .navigationTitle(say(.shareRoleUploader))
             #if os(iOS)
             .navigationBarTitleDisplayMode(.inline)
             #endif
@@ -332,12 +332,12 @@ private struct FreshLinkView: View {
 
     var body: some View {
         Form {
-            Section("Your link is ready — copy it:") {
+            Section(say(.shareReady)) {
                 Text(url).font(.footnote.monospaced()).textSelection(.enabled)
-                Button(copied ? "Copied" : "Copy link", systemImage: copied ? "checkmark" : "doc.on.doc") { Clipboard.copy(url); copied = true }
-                ShareLink(item: url) { Label("Share", systemImage: "square.and.arrow.up") }
+                Button(copied ? say(.shareCopied) : say(.shareCopy), systemImage: copied ? "checkmark" : "doc.on.doc") { Clipboard.copy(url); copied = true }
+                ShareLink(item: url) { Label(say(.shareSend), systemImage: "square.and.arrow.up") }
             }
-            Section { Button("Done", action: onDone) }
+            Section { Button(say(.shareDone), action: onDone) }
         }
     }
 }
@@ -385,40 +385,40 @@ private struct NewLinkForm: View {
         Form {
             Section {
                 if !writeOnly && !uploadOnly {
-                    Picker("Role", selection: $role) {
-                        Text("View only").tag(ShareLinks.shared.READ)
+                    Picker(say(.shareRole), selection: $role) {
+                        Text(say(.shareRoleViewer)).tag(ShareLinks.shared.READ)
                         if rules.contribute { Text(words.contributor).tag(ShareLinks.shared.READ_WRITE) }
-                        if uploadOffered { Text("Add files only").tag(ShareLinks.shared.WRITE_ONLY) }
+                        if uploadOffered { Text(say(.shareRoleUploader)).tag(ShareLinks.shared.WRITE_ONLY) }
                     }
                     .pickerStyle(.segmented)
                 }
                 Text(role == ShareLinks.shared.READ ? words.viewerHint
-                     : role == ShareLinks.shared.WRITE_ONLY ? String(localized: "Creates a drop box with this name here. Anyone with the link can send you files: each person gets a folder of their own, and nobody sees the drop box or what others sent. You manage its links on the drop box.")
+                     : role == ShareLinks.shared.WRITE_ONLY ? say(.dropboxUploadHint)
                      : words.contributorHint)
                     .font(.caption).foregroundStyle(Role.muted)
                 // a drop box's own links have no name; the one "Add files only" makes needs one — its guests see it
                 if !writeOnly {
-                    TextField(role == ShareLinks.shared.WRITE_ONLY ? "Name — guests with the link see it" : "Optional label (only you see it)", text: $label)
+                    TextField(role == ShareLinks.shared.WRITE_ONLY ? say(.shareUploadName) : say(.shareLabel), text: $label)
                 }
             }
             Section {
-                Toggle("Password protection", isOn: $withPassword).disabled(rules.passwordRequired)
+                Toggle(say(.sharePasswordSection), isOn: $withPassword).disabled(rules.passwordRequired)
                 if withPassword {
-                    SecureField(hadPassword ? "•••••••• (unchanged)" : "Password", text: $password)
-                    Text("At least \(passwordMin) characters.").font(.caption)
+                    SecureField(hadPassword ? say(.sharePasswordKeep) : say(.signinPassword), text: $password)
+                    Text(say(.sharePasswordShort, passwordMin)).font(.caption)
                         .foregroundStyle(!password.isEmpty && password.trimmingCharacters(in: .whitespaces).count < passwordMin ? Role.danger : Role.muted)
                 }
             } footer: {
-                if rules.passwordRequired { Text("This space requires a password on every link.") }
+                if rules.passwordRequired { Text(say(.sharePasswordRequired)) }
             }
             Section {
-                Toggle("Expiry date", isOn: $withEnd).disabled(maxDays != nil)
+                Toggle(say(.shareExpirySection), isOn: $withEnd).disabled(maxDays != nil)
                 if withEnd {
-                    DatePicker("Expires on", selection: $end, in: Calendar.current.startOfDay(for: Date())...(lastDay ?? .distantFuture), displayedComponents: .date)
+                    DatePicker(say(.shareExpiresOn), selection: $end, in: Calendar.current.startOfDay(for: Date())...(lastDay ?? .distantFuture), displayedComponents: .date)
                 }
             } footer: {
-                if let maxDays { Text("This space requires every link to end within \(maxDays) days of the day it is made.") }
-                else { Text("The link stops working after this date.") }
+                if let maxDays { Text(say(.shareExpiryByRule, maxDays)) }
+                else { Text(say(.shareExpiryHint)) }
             }
             if let problem { Section { Text(problem).foregroundStyle(Role.danger) } }
             Section {
@@ -437,12 +437,12 @@ private struct NewLinkForm: View {
                         saving = false
                     }
                 } label: {
-                    HStack { Spacer(); if saving { ProgressView() } else { Text(editing == nil ? "Create link" : "Save").fontWeight(.semibold) }; Spacer() }
+                    HStack { Spacer(); if saving { ProgressView() } else { Text(editing == nil ? say(.shareCreate) : say(.entrySave)).fontWeight(.semibold) }; Spacer() }
                 }
                 // an edit keeps the password where the field stays blank
                 .disabled(saving || (withPassword && password.trimmingCharacters(in: .whitespaces).count < passwordMin && !(hadPassword && password.isEmpty))
                           || (role == ShareLinks.shared.WRITE_ONLY && !writeOnly && label.trimmingCharacters(in: .whitespaces).isEmpty))
-                Button("Cancel", action: onCancel).disabled(saving)
+                Button(say(.signinCancel), action: onCancel).disabled(saving)
             }
         }
         .onAppear {

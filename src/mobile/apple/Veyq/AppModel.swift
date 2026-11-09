@@ -95,7 +95,7 @@ final class AppModel {
                 Shared.defaults.set(true, forKey: "veyq.installed")
             }
         }
-        return AppleSessions.shared.device(keychain: keychain, label: label, prompt: String(localized: "Open your spaces"), defaults: Shared.defaults)
+        return AppleSessions.shared.device(keychain: keychain, label: label, prompt: say(.deviceUnlockPrompt), defaults: Shared.defaults)
     }
     private var started = false
     private let recent: RecentUses
@@ -510,7 +510,7 @@ final class AppModel {
         if deleted == .trashed || deleted == .gone, let i = shell.path.firstIndex(where: { $0.nodeId == ref.nodeId }) {
             shell = shell.at(tree: await scopeNodes(ref.scopeId), folderId: i > 0 ? shell.path[i - 1].nodeId : nil)
         }
-        trashNotice = TrashNotice(message: say(Notices.shared.trashed(outcome: deleted, name: ref.name)), node: deleted == .trashed ? (before ?? nil) : nil)
+        trashNotice = TrashNotice(message: say(notice: Notices.shared.trashed(outcome: deleted, name: ref.name)), node: deleted == .trashed ? (before ?? nil) : nil)
     }
 
     /// The Undo of the last delete: the node back from the trash under its name, as it was.
@@ -518,7 +518,7 @@ final class AppModel {
         if let back = trashNotice?.moveBack {
             trashNotice = nil
             if await move(back.ref, to: back.to, toName: nil, from: nil) != .moved {
-                trashNotice = TrashNotice(message: String(localized: "“\(back.ref.name)” could not be moved back. Please move it yourself."), node: nil)
+                trashNotice = TrashNotice(message: say(.moveUndoFailed, back.ref.name), node: nil)
             }
             return
         }
@@ -531,7 +531,7 @@ final class AppModel {
         }
         await refreshLists(t)
         if !restored {
-            trashNotice = TrashNotice(message: String(localized: "“\(node.name)” could not be restored. You can restore it from the trash."), node: nil)
+            trashNotice = TrashNotice(message: say(.trashUndoFailed, node.name), node: nil)
         }
     }
 
@@ -775,7 +775,7 @@ final class AppModel {
         let outcome = r?.outcome ?? .failed
         if outcome == .moved, let toName {
             trashNotice = TrashNotice(
-                message: String(localized: "“\(ref.name)” moved to “\(toName)”."), node: nil, moveBack: MoveBack(ref: ref, to: from)
+                message: say(.moveMoved, ref.name, toName), node: nil, moveBack: MoveBack(ref: ref, to: from)
             )
         }
         return outcome
@@ -786,13 +786,13 @@ final class AppModel {
     func copyPot(_ ref: NodeAt, to: String?, toName: String) async -> PotCopy.Outcome {
         guard let t = tenantSession, let session = potSession, pot?.ref.nodeId == ref.nodeId else { return .failed }
         let r = try? await PotCopy.shared.duplicate(
-            source: session, tenant: t, scopeId: ref.scopeId, parentId: to, deletedName: String(localized: "deleted person"),
+            source: session, tenant: t, scopeId: ref.scopeId, parentId: to, deletedName: say(.potDeletedPerson),
             uuid: { @Sendable in UUID().uuidString.lowercased() }
         )
         await refreshLists(t)
         let outcome = r?.outcome ?? .failed
         if outcome == .copied {
-            trashNotice = TrashNotice(message: String(localized: "“\(ref.name)” is copied to “\(toName)”."), node: nil, moveBack: nil)
+            trashNotice = TrashNotice(message: say(.theCopyDone, ref.name, toName), node: nil, moveBack: nil)
         }
         return outcome
     }
@@ -807,13 +807,13 @@ final class AppModel {
     /// and an open page follows the node under its new name. Why it did not land, in core's words, or nil once renamed;
     /// `linksFailed` says a link kept the old name (the rename stands).
     func rename(_ ref: NodeAt, to name: String) async -> (problem: String?, linksFailed: Bool) {
-        guard let t = tenantSession else { return (String(localized: "That didn’t work. Please try again."), false) }
+        guard let t = tenantSession else { return (say(.nodeSaveFailed), false) }
         let r = try? await NodeRename.shared.rename(
             tenant: t, scopeId: ref.scopeId, nodeId: ref.nodeId, name: name,
             tokenInput: { @Sendable kind, name in AppModel.tokenInputFor(kind: kind, name: name) },
             nowMs: Int64(Date().timeIntervalSince1970 * 1000), waitsMs: NodeEpochWrite.shared.REKEY_WAITS_MS
         )
-        guard let r else { return (String(localized: "That didn’t work. Please try again."), false) }
+        guard let r else { return (say(.nodeSaveFailed), false) }
         switch r.outcome {
         case .renamed:
             await refreshLists(t)
@@ -823,7 +823,7 @@ final class AppModel {
                 shell = shell.goBack().open(ref: renamed)
             }
             return (nil, !(r.links?.failed.isEmpty ?? true))
-        default: return (Notices.shared.renameRefused(r: r).map { say($0) }, false)
+        default: return (Notices.shared.renameRefused(r: r).map { say(notice: $0) }, false)
         }
     }
 
@@ -917,18 +917,18 @@ final class AppModel {
         // a drop box's row: how many guests have a folder in it (Depot's `people`)
         for box in rawNodes where box.kind == DepotFiles.shared.DROPBOX {
             let n = rawNodes.filter { $0.parentId == box.nodeId && $0.kind == "FOLDER" }.count
-            details[box.nodeId] = [n == 0 ? String(localized: "Nobody yet") : n == 1 ? String(localized: "1 person") : String(localized: "\(n) people")]
+            details[box.nodeId] = [n == 0 ? say(.dropboxPeopleNone) : say(.dropboxPeople, n)]
         }
         rowDetails = details
     }
 
     private static func fileDetails(_ f: DepotFiles.File) -> [String] {
-        guard f.hasContent else { return [String(localized: "Not uploaded yet")] }
+        guard f.hasContent else { return [say(.depotNotUploaded)] }
         var parts: [String] = []
         if let size = f.size { parts.append(ByteCountFormatter.string(fromByteCount: size.int64Value, countStyle: .file)) }
         if let m = f.modifiedAt {
             let date = Date(timeIntervalSince1970: Double(m.int64Value) / 1000).formatted(date: .abbreviated, time: .shortened)
-            parts.append(String(localized: "Modified \(date)"))
+            parts.append(say(.depotModified, date))
         }
         return parts
     }
@@ -937,10 +937,10 @@ final class AppModel {
     func fileFacts(_ f: DepotFiles.File) -> String {
         var parts: [String] = []
         if let size = f.size { parts.append(ByteCountFormatter.string(fromByteCount: size.int64Value, countStyle: .file)) }
-        parts.append(f.type ?? String(localized: "Unknown"))
+        parts.append(f.type ?? say(.fileTypeUnknown))
         if let m = f.modifiedAt {
             let date = Date(timeIntervalSince1970: Double(m.int64Value) / 1000).formatted(date: .abbreviated, time: .shortened)
-            parts.append(String(localized: "Modified \(date)"))
+            parts.append(say(.depotModified, date))
         }
         return parts.joined(separator: " · ")
     }
@@ -952,10 +952,10 @@ final class AppModel {
         let who: String
         switch u.kind {
         case .member: who = u.name ?? ""
-        case .former: who = String(localized: "former member")
-        default: who = u.name.map { String(localized: "\($0) (guest)") } ?? String(localized: "a guest")
+        case .former: who = say(.peopleFormerMember)
+        default: who = u.name.map { say(.depotGuestName, $0) } ?? say(.depotAGuest)
         }
-        return String(localized: "Uploaded by \(who)")
+        return say(.depotUploadedBy, who)
     }
 
     func fileView(_ f: DepotFiles.File, nodeName: String) async -> FileShown {
@@ -964,7 +964,7 @@ final class AppModel {
         switch d.kind {
         case .image:
             guard let data = v.data, let image = CoverImages.image(data as Data, maxPixels: 4096) else {
-                return .message(String(localized: "This file cannot be shown here. You can download it."))
+                return .message(say(.fileUnsupported))
             }
             return .picture(image)
         case .text:
@@ -973,9 +973,9 @@ final class AppModel {
             let url = FileManager.default.temporaryDirectory.appendingPathComponent("view-\(UUID().uuidString).\(d.fileExtension ?? "bin")")
             guard (try? await AppleDepot.shared.download(tenant: t, file: f, path: url.path))?.boolValue == true else { return .failed }
             return d.kind == .pdf ? .pdf(url) : .media(url)
-        case .tooLarge: return .message(String(localized: "This file is too large to show here. You can download it."))
-        case .empty: return .message(String(localized: "This file is empty."))
-        default: return .message(String(localized: "This file cannot be shown here. You can download it."))
+        case .tooLarge: return .message(say(.fileTooLarge))
+        case .empty: return .message(say(.fileEmpty))
+        default: return .message(say(.fileUnsupported))
         }
     }
 
@@ -1107,8 +1107,8 @@ final class AppModel {
             uploads.remove(id: item.id)
             let picked = job.picked
             notice = Notice(
-                text: say(Notices.shared.replaceOffered(name: item.name)),
-                action: String(localized: "Replace File")
+                text: say(notice: Notices.shared.replaceOffered(name: item.name)),
+                action: say(.depotReplaceTitle)
             ) { [weak self] in self?.replace(existing, source: picked, expected: self?.files[existing]?.blobId) }
         } else if let job = item.job as? DepotFiles.ReplaceJob, item.error == DepotFiles.Codes.shared.STALE {
             uploads.remove(id: item.id)
@@ -1116,8 +1116,8 @@ final class AppModel {
             let current = job.currentBlobId
             let nodeId = job.file.nodeId
             notice = Notice(
-                text: say(Notices.shared.replaceStale(name: item.name)),
-                action: String(localized: "Replace anyway")
+                text: say(notice: Notices.shared.replaceStale(name: item.name)),
+                action: say(.depotReplaceAnyway)
             ) { [weak self] in self?.replace(nodeId, source: picked, expected: current) }
         }
     }
@@ -1142,9 +1142,9 @@ final class AppModel {
         )
         preparing = nil
         await refreshLists(t)
-        guard let report else { notice = Notice(text: String(localized: "That didn’t work — please try again.")); return }
+        guard let report else { notice = Notice(text: say(.shareFailed)); return }
         let said = Notices.shared.folderUpload(r: report)
-        if !said.isEmpty { notice = Notice(text: said.map { say($0) }.joined(separator: "\n")) }
+        if !said.isEmpty { notice = Notice(text: said.map { say(notice: $0) }.joined(separator: "\n")) }
         if report.outcome == .ready { enqueueDepot(report.jobs, label: report.name, key: report.rootId) }
     }
 
@@ -1181,7 +1181,7 @@ final class AppModel {
 
     /// Why `item` did not go up, in its application's words (the uploads list's line under it); nil while it may still.
     func uploadProblem(_ item: UploadQueue.Item) -> String? {
-        Notices.shared.uploadProblem(item: item).map { say($0) }
+        Notices.shared.uploadProblem(item: item).map { say(notice: $0) }
     }
 
     /// Each listed node's cover as a small picture of its framed part, by node id, with the key it was opened under — its
@@ -1242,16 +1242,16 @@ final class AppModel {
     /// Creates a folder named `name` in the space and folder on screen, core's folder (the web's `FolderNameDialog`); the
     /// lists are read anew. Why not, in the web's words, or nil once created.
     func createFolder(name: String) async -> String? {
-        guard let t = tenantSession, let scopeId = shell.space else { return String(localized: "The folder could not be created. Please try again.") }
+        guard let t = tenantSession, let scopeId = shell.space else { return say(.folderFailed) }
         let n = name.trimmingCharacters(in: .whitespacesAndNewlines)
-        if n.isEmpty { return String(localized: "Give it a name.") }
+        if n.isEmpty { return say(.folderNameEmpty) }
         let r = try? await FolderCreate.shared.create(tenant: t, scopeId: scopeId, parentId: shell.folder?.nodeId, name: n)
         await refreshLists(t)
         if r is NodeCreateResultDone { return nil }
         if let refused = r as? NodeCreateResultRefused, refused.reason == .nameTaken {
-            return String(localized: "Something with this name is already here.")
+            return say(.folderNameTaken)
         }
-        return String(localized: "The folder could not be created. Please try again.")
+        return say(.folderFailed)
     }
 
     /// What the drawer's "New" asked Home to create, until Home opens its dialog.
@@ -1399,7 +1399,7 @@ final class AppModel {
         guard (try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)) != nil else { return nil }
         let url = dir.appendingPathComponent(NodeExport.shared.fileName(name: ref.name))
         let written = try? await FileDownloads.shared.pot(
-            session: session, deletedName: String(localized: "deleted person"), nowMs: Int64(Date().timeIntervalSince1970 * 1000), path: url.path
+            session: session, deletedName: say(.potDeletedPerson), nowMs: Int64(Date().timeIntervalSince1970 * 1000), path: url.path
         )
         return written == nil ? nil : url
     }
@@ -1407,11 +1407,11 @@ final class AppModel {
     /// Why a node was left out of a download or a copy, in the web's words (`export.reason.*`, `node.copy.reason.*`).
     private static func leftOutLine(_ s: NodeExport.Skipped) -> String {
         let reason = switch s.reason {
-        case NodeExport.shared.NOTHING_TO_EXPORT: String(localized: "nothing in it")
-        case SubtreeCopy.shared.NOT_COPYABLE: String(localized: "cannot be copied yet")
-        default: String(localized: "not supported")
+        case NodeExport.shared.NOTHING_TO_EXPORT: say(.leftOutNothing)
+        case SubtreeCopy.shared.NOT_COPYABLE: say(.leftOutNotCopyable)
+        default: say(.leftOutUnsupported)
         }
-        return String(localized: "“\(s.name)”: \(reason)")
+        return say(.leftOutLine, s.name, reason)
     }
 
     /// Folder `ref` with everything under it as the web's ZIP in a temporary file (core's `NodeExport`, the kinds the
@@ -1422,7 +1422,7 @@ final class AppModel {
         guard (try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)) != nil else { return nil }
         let url = dir.appendingPathComponent(NodeExport.shared.fileName(name: ref.name))
         let skipped = try? await FileDownloads.shared.subtree(
-            tenant: t, scopeId: ref.scopeId, nodeId: ref.nodeId, kinds: AppKinds.shared.exports(deletedName: String(localized: "deleted person")),
+            tenant: t, scopeId: ref.scopeId, nodeId: ref.nodeId, kinds: AppKinds.shared.exports(deletedName: say(.potDeletedPerson)),
             appVersion: String(VeyqAccount.companion.MAJOR), nowMs: Int64(Date().timeIntervalSince1970 * 1000), path: url.path
         )
         guard let skipped else { return nil }
@@ -1444,24 +1444,24 @@ final class AppModel {
     func copyNoRoom(_ ref: NodeAt) async -> String? {
         guard let t = tenantSession,
               let bytes = try? await StorageFit.shared.noRoomForCopy(
-                tenant: t, scopeId: ref.scopeId, nodeId: ref.nodeId, kinds: AppKinds.shared.exports(deletedName: String(localized: "deleted person"))
+                tenant: t, scopeId: ref.scopeId, nodeId: ref.nodeId, kinds: AppKinds.shared.exports(deletedName: say(.potDeletedPerson))
               ) else { return nil }
         let size = ByteCountFormatter.string(fromByteCount: bytes.int64Value, countStyle: .file)
-        return String(localized: "There is not enough storage space for this copy (\(size)). Free some space, or ask whoever runs your space.")
+        return say(.theCopyNoRoom, size)
     }
 
     func copyFolder(_ ref: NodeAt, to: String?, toName: String) async -> String? {
-        guard let t = tenantSession else { return String(localized: "The copy did not go through. Nothing was left behind; please try again.") }
+        guard let t = tenantSession else { return say(.theCopyFailed) }
         let r = try? await SubtreeCopy.shared.duplicate(
             tenant: t, scopeId: ref.scopeId, rootId: ref.nodeId, parentId: to,
-            kinds: AppKinds.shared.copies(deletedName: String(localized: "deleted person"), uuid: { @Sendable in UUID().uuidString.lowercased() })
+            kinds: AppKinds.shared.copies(deletedName: say(.potDeletedPerson), uuid: { @Sendable in UUID().uuidString.lowercased() })
         )
         await refreshLists(t)
         switch r?.outcome {
         case .copied:
-            trashNotice = TrashNotice(message: String(localized: "“\(ref.name)” is copied to “\(toName)”."), node: nil, moveBack: nil)
+            trashNotice = TrashNotice(message: say(.theCopyDone, ref.name, toName), node: nil, moveBack: nil)
             return nil
-        default: return Notices.shared.subtreeCopyRefused(outcome: r?.outcome).map { say($0) }
+        default: return Notices.shared.subtreeCopyRefused(outcome: r?.outcome).map { say(notice: $0) }
         }
     }
 

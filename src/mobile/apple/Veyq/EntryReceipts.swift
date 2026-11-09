@@ -28,7 +28,7 @@ struct EntryReceipts: View {
 
     var body: some View {
         Section {
-            if kept.isEmpty && pending.isEmpty { Text("No receipts.").foregroundStyle(Role.muted) }
+            if kept.isEmpty && pending.isEmpty { Text(say(.receiptsNone)).foregroundStyle(Role.muted) }
             ForEach(kept, id: \.self) { id in
                 let r = view.receipt(receiptId: id)
                 HStack {
@@ -39,7 +39,7 @@ struct EntryReceipts: View {
                     if editable {
                         Button { kept.removeAll { $0 == id } } label: { Image(systemName: "xmark.circle.fill") }
                             .buttonStyle(.borderless)
-                            .accessibilityLabel("Remove receipt")
+                            .accessibilityLabel(say(.receiptsRemove))
                     }
                 }
             }
@@ -49,15 +49,15 @@ struct EntryReceipts: View {
                     Spacer()
                     Button { pending.removeAll { $0.id == p.id } } label: { Image(systemName: "xmark.circle.fill") }
                         .buttonStyle(.borderless)
-                        .accessibilityLabel("Remove receipt")
+                        .accessibilityLabel(say(.receiptsRemove))
                 }
             }
-            if ui.refused { Text("Only images and PDFs up to 10 MB, at most 100 per entry.").font(.caption).foregroundStyle(Role.danger) }
+            if ui.refused { Text(say(.receiptsRefused)).font(.caption).foregroundStyle(Role.danger) }
             if editable && kept.count + pending.count < Int(Receipts.shared.MAX_PER_ENTRY) {
-                PhotosPicker(selection: $ui.photos, matching: .images) { Label("Add a photo", systemImage: "photo") }
-                Button { ui.importing = true } label: { Label("Add a file", systemImage: "doc") }
+                PhotosPicker(selection: $ui.photos, matching: .images) { Label(say(.receiptsAddPhoto), systemImage: "photo") }
+                Button { ui.importing = true } label: { Label(say(.receiptsAddFile), systemImage: "doc") }
             }
-        } header: { Text("Receipts") }
+        } header: { Text(say(.receiptsTitle)) }
     }
 }
 
@@ -125,7 +125,7 @@ struct ReceiptViewer: View {
         NavigationStack {
             Group {
                 if failed {
-                    ContentUnavailableView("This receipt could not be opened.", systemImage: "exclamationmark.triangle")
+                    ContentUnavailableView(say(.receiptsUnreadable), systemImage: "exclamationmark.triangle")
                 } else if let data {
                     switch AppleSessions.shared.receiptKind(data: data) {
                     case .image:
@@ -140,12 +140,12 @@ struct ReceiptViewer: View {
             }
             .navigationTitle(name)
             .toolbar {
-                ToolbarItem(placement: .cancellationAction) { Button("Close") { dismiss() } }
+                ToolbarItem(placement: .cancellationAction) { Button(say(.receiptsClose)) { dismiss() } }
                 if let data {
                     ToolbarItem(placement: .primaryAction) {
                         // offered as what its bytes are, so a picture's share sheet has "Save Image" to Photos
                         ShareLink(item: ReceiptFile(data: data, name: name, type: Self.contentType(data)), preview: SharePreview(name)) {
-                            Label("Save a copy", systemImage: "square.and.arrow.up")
+                            Label(say(.receiptsSave), systemImage: "square.and.arrow.up")
                         }
                     }
                 }
@@ -166,7 +166,7 @@ struct ReceiptViewer: View {
     }
 
     private var downloadOnly: some View {
-        ContentUnavailableView("This file cannot be shown here", systemImage: "doc", description: Text("Save a copy to open it."))
+        ContentUnavailableView(say(.receiptsCannotShow), systemImage: "doc", description: Text(say(.receiptsSaveToOpen)))
     }
 
     private func platformImage(_ data: Data) -> Image? {

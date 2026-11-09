@@ -29,7 +29,7 @@ enum Radius {
 
 /// The web's section label (`.sidebar-section-label`): small, heavy, uppercase, muted.
 struct SectionLabel: View {
-    let title: LocalizedStringKey
+    let title: String
 
     var body: some View {
         Text(title)

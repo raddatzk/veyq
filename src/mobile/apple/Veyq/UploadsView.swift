@@ -14,8 +14,8 @@ struct UploadsButton: View {
             let items = state.batches.flatMap { $0.items }.filter { $0.status != .cancelled }
             let failed = items.filter { $0.status == .failed }.count
             Button { open = true } label: { glyph(state: state, items: items, failed: failed) }
-                .accessibilityLabel("Uploads")
-                .accessibilityValue(state.active > 0 ? String(localized: "\(state.active) active") : "")
+                .accessibilityLabel(say(.uploadTitle))
+                .accessibilityValue(state.active > 0 ? say(.uploadActive, state.active) : "")
                 .popover(isPresented: $open) {
                     UploadsList(model: model)
                         .frame(minWidth: 340, minHeight: 360)
@@ -68,23 +68,23 @@ private struct UploadsList: View {
                             Text(batch.label)
                             Spacer()
                             if batch.finished {
-                                Button("Close") { model.uploads.acknowledge(batchId: batch.id) }.font(.footnote)
+                                Button(say(.receiptsClose)) { model.uploads.acknowledge(batchId: batch.id) }.font(.footnote)
                             }
                         }
                     }
                 }
             }
-            .navigationTitle("Uploads")
+            .navigationTitle(say(.uploadTitle))
             #if os(iOS)
             .navigationBarTitleDisplayMode(.inline)
             #endif
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     if (model.uploadState?.active ?? 0) > 0 {
-                        Button("Cancel All", role: .destructive) { model.uploads.cancelAll() }
+                        Button(say(.uploadCancelAll), role: .destructive) { model.uploads.cancelAll() }
                     }
                 }
-                ToolbarItem(placement: .confirmationAction) { Button("Done") { dismiss() } }
+                ToolbarItem(placement: .confirmationAction) { Button(say(.shareDone)) { dismiss() } }
             }
             .onChange(of: model.uploadState?.batches.isEmpty ?? true) { _, empty in if empty { dismiss() } }
         }
@@ -110,14 +110,14 @@ private struct UploadRow: View {
             if item.active {
                 Button { model.uploads.cancel(id: item.id) } label: { Image(systemName: "xmark.circle.fill").foregroundStyle(.secondary) }
                     .buttonStyle(.borderless)
-                    .accessibilityLabel("Cancel")
+                    .accessibilityLabel(say(.signinCancel))
             } else if item.retryable {
                 Button { model.uploads.retry(id: item.id) } label: { Image(systemName: "arrow.clockwise") }
                     .buttonStyle(.borderless)
-                    .accessibilityLabel("Retry")
+                    .accessibilityLabel(say(.uploadRetry))
             }
         }
     }
 
-    private var status: String { say(Notices.shared.uploadStatus(item: item)) }
+    private var status: String { say(notice: Notices.shared.uploadStatus(item: item)) }
 }

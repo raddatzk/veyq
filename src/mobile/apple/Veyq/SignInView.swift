@@ -37,34 +37,34 @@ struct SignInView: View {
         Form {
             Section {
                 Brand()
-                Text(adding ? "Add a server" : "Sign in").font(.title2.bold()).foregroundStyle(Role.text)
+                Text(adding ? say(.signinAddTitle) : say(.signinTitle)).font(.title2.bold()).foregroundStyle(Role.text)
             }
             .listRowBackground(Color.clear)
             Section {
-                TextField("Server", text: $server)
+                TextField(say(.signinServer), text: $server)
                     .textContentType(.URL)
                     .autocorrectionDisabled()
                 #if os(iOS)
                     .textInputAutocapitalization(.never)
                     .keyboardType(.URL)
                 #endif
-                TextField("Email", text: $email)
+                TextField(say(.signinEmail), text: $email)
                     .textContentType(.username)
                     .autocorrectionDisabled()
                 #if os(iOS)
                     .textInputAutocapitalization(.never)
                     .keyboardType(.emailAddress)
                 #endif
-                SecureField("Password", text: $password)
+                SecureField(say(.signinPassword), text: $password)
                     .textContentType(.password)
-                SecureField("Secret Key", text: $secretKey)
+                SecureField(say(.signinSecretKey), text: $secretKey)
             }
             // Staying signed in is an explicit choice, never the default (ADR 0005 § 13): it says what it costs.
             Section {
-                Toggle(isOn: $remember) { Text("Stay signed in") }
+                Toggle(isOn: $remember) { Text(say(.signinRemember)) }
                     .disabled(working)
             } footer: {
-                Text("Opens with Face ID, Touch ID or the device passcode. Anyone who can unlock this device can open your content. Off, the app asks for your password, never again for the Secret Key.")
+                Text(say(.signinRememberHint))
             }
             if let error {
                 Section { Text(Self.message(error)).foregroundStyle(.red) }
@@ -74,7 +74,7 @@ struct SignInView: View {
                 Button {
                     onSignIn(server, email, password, secretKey, remember)
                 } label: {
-                    Group { if working { ProgressView() } else { Text("Sign in") } }.frame(maxWidth: .infinity)
+                    Group { if working { ProgressView() } else { Text(say(.signinTitle)) } }.frame(maxWidth: .infinity)
                 }
                 .buttonStyle(.borderedProminent)
                 .buttonBorderShape(.roundedRectangle(radius: Radius.control))
@@ -83,7 +83,7 @@ struct SignInView: View {
                 .foregroundStyle(Role.onFill)
                 .disabled(working)
                 if adding {
-                    Button("Cancel", action: onCancel).frame(maxWidth: .infinity).disabled(working)
+                    Button(say(.signinCancel), action: onCancel).frame(maxWidth: .infinity).disabled(working)
                 }
             }
             .listRowBackground(Color.clear)
@@ -95,16 +95,16 @@ struct SignInView: View {
         .frame(maxWidth: 520)
     }
 
-    static func message(_ reason: String) -> LocalizedStringKey {
+    static func message(_ reason: String) -> String {
         switch reason {
-        case "UNREACHABLE": "The server could not be reached."
-        case "INCOMPATIBLE": "This app cannot sign in to this server yet."
-        case "CREDENTIALS": "Email or password is not right."
-        case "SECRET_KEY": "The Secret Key is not right."
-        case "NO_TENANT": "This server has no space at this address."
-        case "DEVICE_NOT_TRUSTED": "This device is no longer trusted with this account. Sign in with your Secret Key."
-        case "SESSION_ENDED": "You were signed out. Please sign in again."
-        default: "Signing in did not work."
+        case "UNREACHABLE": say(.signinErrorUnreachable)
+        case "INCOMPATIBLE": say(.signinErrorIncompatible)
+        case "CREDENTIALS": say(.signinErrorCredentials)
+        case "SECRET_KEY": say(.signinErrorSecretKey)
+        case "NO_TENANT": say(.signinErrorNoTenant)
+        case "DEVICE_NOT_TRUSTED": say(.signinErrorDeviceNotTrusted)
+        case "SESSION_ENDED": say(.signinErrorSessionEnded)
+        default: say(.signinErrorOther)
         }
     }
 }
@@ -126,7 +126,7 @@ struct UnlockView: View {
         Form {
             Section {
                 Brand()
-                Text("Welcome back").font(.title2.bold()).foregroundStyle(Role.text)
+                Text(say(.unlockTitle)).font(.title2.bold()).foregroundStyle(Role.text)
                 VStack(alignment: .leading, spacing: 2) {
                     Text(record.email)
                     Text(URL(string: record.server)?.host() ?? record.server).font(.caption).foregroundStyle(Role.muted)
@@ -135,12 +135,12 @@ struct UnlockView: View {
             .listRowBackground(Color.clear)
             Section {
                 if !remembered {
-                    SecureField("Password", text: $password)
+                    SecureField(say(.signinPassword), text: $password)
                         .textContentType(.password)
                         .onSubmit { onUnlock(password) }
                 }
             } footer: {
-                Text(remembered ? "Confirm it is you to open your spaces." : "This device is trusted: your password is enough.")
+                Text(remembered ? say(.unlockRememberedHint) : say(.unlockPasswordHint))
             }
             if let error {
                 Section { Text(SignInView.message(error)).foregroundStyle(.red) }
@@ -149,7 +149,7 @@ struct UnlockView: View {
                 Button {
                     onUnlock(password)
                 } label: {
-                    Group { if working { ProgressView() } else { Text("Unlock") } }.frame(maxWidth: .infinity)
+                    Group { if working { ProgressView() } else { Text(say(.unlockSubmit)) } }.frame(maxWidth: .infinity)
                 }
                 .buttonStyle(.borderedProminent)
                 .buttonBorderShape(.roundedRectangle(radius: Radius.control))
@@ -157,7 +157,7 @@ struct UnlockView: View {
                 .tint(Role.primary)
                 .foregroundStyle(Role.onFill)
                 .disabled(working)
-                Button("Use another account", action: onOther).frame(maxWidth: .infinity).disabled(working)
+                Button(say(.unlockOther), action: onOther).frame(maxWidth: .infinity).disabled(working)
             }
             .listRowBackground(Color.clear)
         }

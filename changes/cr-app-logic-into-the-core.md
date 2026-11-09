@@ -24,7 +24,7 @@ observation. Windows and Linux (decisions 4 and 5) start after it, on the models
 Each slice ends green (`:core:jvmTest :core:macosArm64Test`, `:android:assembleDebug`, both Xcode builds, the guards)
 with both apps behaving as before on a device for what it touched, and commits on its own.
 
-1. **Notices as keys.** A core `Notice(key, args, action)` and one function per outcome table: trash, restore and
+1. **Done 2026-11-09.** **Notices as keys.** A core `Notice(key, args, action)` and one function per outcome table: trash, restore and
    purge, move, rename, copy (Pot, folder), create folder, folder upload, a Depot item settled (exists → replace,
    stale → replace anyway), an upload item's problem, a link minted or changed, sign-in reasons, a Pot write and a
    Pot's creation. Both apps look their words up by key (their catalogs for now; decision 3's one catalog is slice
@@ -44,7 +44,7 @@ with both apps behaving as before on a device for what it touched, and commits o
 9. **Session.** Start and resume, sign-in with the trust fallback, unlock, switching, sign-out, managed servers, the
    per-tenant reset; the platform supplies `ThisDevice` and whether it is the share extension. Last: it touches key
    material; proved by `DeviceTrustLiveTest` and both devlogin passes.
-10. **One catalog.** The words move into the core's catalog and are generated into `strings.xml` and the String
+10. **Done 2026-11-09, ahead of its turn** (slice 1 needed its keys, and the Apple app had no German). **One catalog.** The words move into the core's catalog and are generated into `strings.xml` and the String
     Catalog (decision 3); a guard holds that no platform carries a word of its own beyond the generated ones.
 
 ## Differences, settled here

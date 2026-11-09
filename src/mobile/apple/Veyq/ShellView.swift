@@ -76,29 +76,29 @@ struct DrawerList: View {
                 TenantSwitcher(model: model)
                 // the web's sidebar "New": what a level creates, opened on Home
                 Menu {
-                    Button("New Folder", systemImage: "folder.badge.plus") { model.requestNew(.folder) }
-                    Button("New Pot", systemImage: "wallet.bifold") { model.requestNew(.pot) }
+                    Button(say(.folderNew), systemImage: "folder.badge.plus") { model.requestNew(.folder) }
+                    Button(say(.createPot), systemImage: "wallet.bifold") { model.requestNew(.pot) }
                 } label: {
-                    Label("New", systemImage: "plus").frame(maxWidth: .infinity)
+                    Label(say(.drawerNew), systemImage: "plus").frame(maxWidth: .infinity)
                 }
                 .buttonStyle(.borderedProminent)
                 .tint(Role.primary)
                 .foregroundStyle(Role.onFill)
                 .buttonBorderShape(.roundedRectangle(radius: Radius.control))
-                row("Home", symbol: "house", selected: model.shell.isHome) { model.choose(nil) }
+                row(say(.drawerHome), symbol: "house", selected: model.shell.isHome) { model.choose(nil) }
             }
             .listRowBackground(Color.clear)
             .listRowSeparator(.hidden)
 
-            Section { refs(model.drawer.favorites) } header: { SectionLabel(title: "Favorites") }
-            Section { refs(model.drawer.recent) } header: { SectionLabel(title: "Recent") }
+            Section { refs(model.drawer.favorites) } header: { SectionLabel(title: say(.drawerFavorites)) }
+            Section { refs(model.drawer.recent) } header: { SectionLabel(title: say(.drawerRecent)) }
             Section {
                 ForEach(model.applications, id: \.self) { app in
                     row(Names.application(app), symbol: Names.appSymbol(app), selected: model.shell.application == app && model.shell.openObject == nil) { model.choose(app) }
                 }
-            } header: { SectionLabel(title: "Applications") }
+            } header: { SectionLabel(title: say(.drawerApplications)) }
             Section {
-                row("Settings", symbol: "gearshape", selected: false) { }
+                row(say(.drawerSettings), symbol: "gearshape", selected: false) { }
             }
         }
         .listStyle(.sidebar)
@@ -108,16 +108,16 @@ struct DrawerList: View {
 
     @ViewBuilder private func refs(_ list: [ObjectRef]) -> some View {
         if list.isEmpty {
-            Text("Nothing yet").font(.subheadline).foregroundStyle(Role.muted).listRowBackground(Color.clear)
+            Text(say(.drawerNothingYet)).font(.subheadline).foregroundStyle(Role.muted).listRowBackground(Color.clear)
         }
         ForEach(list, id: \.nodeId) { ref in
-            row(LocalizedStringKey(ref.name), symbol: Names.kindSymbol(ref.kind),
+            row(ref.name, symbol: Names.kindSymbol(ref.kind),
                 selected: model.shell.openObject?.nodeId == ref.nodeId) { model.open(ref) }
         }
     }
 
     /// A sidebar row as the web draws it: hover and selection are only the `--app-hover` fill, never bold, never a bar.
-    private func row(_ title: LocalizedStringKey, symbol: String, selected: Bool, action: @escaping () -> Void) -> some View {
+    private func row(_ title: String, symbol: String, selected: Bool, action: @escaping () -> Void) -> some View {
         Button(action: action) {
             HStack(spacing: 12) {
                 Tile(symbol: symbol)
@@ -157,7 +157,7 @@ struct TenantSwitcher: View {
                 }
             }
             Divider()
-            Button { model.openManage() } label: { Label("Manage servers", systemImage: "server.rack") }
+            Button { model.openManage() } label: { Label(say(.switcherManage), systemImage: "server.rack") }
         } label: {
             HStack(spacing: 10) {
                 TenantAvatar(name: model.tenant?.name ?? "?")
@@ -174,7 +174,7 @@ struct TenantSwitcher: View {
             .background(Role.hover, in: RoundedRectangle(cornerRadius: Radius.row, style: .continuous))
         }
         .buttonStyle(.plain)
-        .accessibilityLabel("Switch tenant or server")
+        .accessibilityLabel(say(.switcherOpen))
     }
 }
 
@@ -238,23 +238,23 @@ struct Bar: View {
         .alert(model.notice?.text ?? "", isPresented: Binding(get: { model.notice != nil }, set: { if !$0 { model.notice = nil } }), presenting: model.notice) { n in
             if let action = n.action, let run = n.run {
                 Button(action, role: .destructive) { Task { await run() } }
-                Button("Cancel", role: .cancel) {}
+                Button(say(.signinCancel), role: .cancel) {}
             } else {
-                Button("OK", role: .cancel) {}
+                Button(say(.ok), role: .cancel) {}
             }
         }
         // "Send a Copy…": what happens is said first — the copy leaves veyq decrypted —, then the system's share sheet
-        .alert("Send a Copy", isPresented: Binding(get: { model.sendingCopy != nil }, set: { if !$0 { model.sendingCopy = nil } }), presenting: model.sendingCopy) { node in
-            Button("Send a Copy") {
+        .alert(say(.fileSendTitle), isPresented: Binding(get: { model.sendingCopy != nil }, set: { if !$0 { model.sendingCopy = nil } }), presenting: model.sendingCopy) { node in
+            Button(say(.fileSendTitle)) {
                 Task {
                     if let copy = await model.copyForSending(node) { model.sentCopy = copy } else {
-                        model.notice = AppModel.Notice(text: String(localized: "“\(node.name)” could not be downloaded. Please try again."))
+                        model.notice = AppModel.Notice(text: say(.downloadFailed, node.name))
                     }
                 }
             }
-            Button("Cancel", role: .cancel) {}
+            Button(say(.signinCancel), role: .cancel) {}
         } message: { node in
-            Text("This sends a decrypted copy of “\(node.name)” to the app you pick. There veyq no longer protects it: that app, and wherever it syncs or forwards it, can read it.")
+            Text(say(.fileSendNotice, node.name))
         }
         #if os(iOS)
         .sheet(item: Binding(get: { model.sentCopy }, set: { model.sentCopy = $0 })) { copy in
@@ -271,7 +271,7 @@ struct Bar: View {
             if let name = model.preparing {
                 VStack(spacing: 4) {
                     ProgressView()
-                    Text("Creating the folders of “\(name)”…").font(.footnote).foregroundStyle(Role.muted)
+                    Text(say(.uploadPreparingFolder, name)).font(.footnote).foregroundStyle(Role.muted)
                 }
                 .padding(10)
                 .background(.regularMaterial, in: RoundedRectangle(cornerRadius: Radius.card, style: .continuous))
@@ -300,11 +300,11 @@ struct Bar: View {
                     // the top level is no link's root: its share offers "Add files only" alone (the web's level share)
                     if model.shell.folderAt(scopeId: space) == nil, model.linkRules().on, model.linkRules().dropBox {
                         Button { uploadShareOf = TrashOf(scopeId: space) } label: { Image(systemName: "square.and.arrow.up") }
-                            .accessibilityLabel("Add files only")
+                            .accessibilityLabel(say(.shareRoleUploader))
                     }
                     // The space's trash, from its Home (the web's level toolbar): every application's nodes.
                     Button { trashOf = TrashOf(scopeId: space) } label: { Image(systemName: "trash") }
-                        .accessibilityLabel("Trash")
+                        .accessibilityLabel(say(.trashTitle))
                 }
             }
         }
@@ -353,9 +353,9 @@ struct HomeView: View {
         List {
             NodeHeroRow()
             if model.filters.count > 1 {
-                Picker("Filter", selection: Binding(get: { model.shell.filter }, set: { model.setFilter($0) })) {
+                Picker(say(.filter), selection: Binding(get: { model.shell.filter }, set: { model.setFilter($0) })) {
                     ForEach(Array(model.filters.enumerated()), id: \.offset) { _, f in
-                        Text(f.map { Names.application($0) } ?? "All").tag(f)
+                        Text(f.map { Names.application($0) } ?? say(.filterAll)).tag(f)
                     }
                 }
                 .pickerStyle(.segmented)
@@ -364,7 +364,7 @@ struct HomeView: View {
             }
             let level = model.level
             if level.isEmpty {
-                Text("Nothing here yet").foregroundStyle(Role.muted).listRowBackground(Color.clear)
+                Text(say(.listEmpty)).foregroundStyle(Role.muted).listRowBackground(Color.clear)
             }
             ForEach(level, id: \.nodeId) { node in
                 if let folder = node.asFolder() {
@@ -401,11 +401,11 @@ struct HomeView: View {
             }
         }
         // nothing is created in a guest's folder (the web's `folderRights`: no "New" there)
-        .createMenu("New", shown: model.shell.space != nil && !(model.shell.space.flatMap { model.shell.folderAt(scopeId: $0) }.map { model.inIdentityFolder($0) } ?? false)) {
-            Button("New Folder", systemImage: "folder.badge.plus") { newName = ""; nameProblem = nil; naming = true }
-            Button("New Pot", systemImage: "wallet.bifold") { creatingPot = true }
-            Button("Upload Files", systemImage: "square.and.arrow.up.on.square") { pickingFiles = true }
-            Button("Upload Folder…", systemImage: "folder.badge.plus") { pickingFolder = true }
+        .createMenu(say(.drawerNew), shown: model.shell.space != nil && !(model.shell.space.flatMap { model.shell.folderAt(scopeId: $0) }.map { model.inIdentityFolder($0) } ?? false)) {
+            Button(say(.folderNew), systemImage: "folder.badge.plus") { newName = ""; nameProblem = nil; naming = true }
+            Button(say(.createPot), systemImage: "wallet.bifold") { creatingPot = true }
+            Button(say(.depotUpload), systemImage: "square.and.arrow.up.on.square") { pickingFiles = true }
+            Button(say(.depotUploadFolder), systemImage: "folder.badge.plus") { pickingFolder = true }
         }
         // Depot's "Upload files": the system's picker hands over the files chosen, uploaded here one after another
         .fileImporter(isPresented: $pickingFiles, allowedContentTypes: [.item], allowsMultipleSelection: true) { result in
@@ -418,15 +418,15 @@ struct HomeView: View {
             guard case .success(let url) = result else { return }
             Task { await model.uploadFolder(url) }
         })
-        .alert("New Folder", isPresented: $naming) {
-            TextField("Name", text: $newName)
-            Button("Create") {
+        .alert(say(.folderNew), isPresented: $naming) {
+            TextField(say(.peopleName), text: $newName)
+            Button(say(.createPotCreate)) {
                 let name = newName
                 Task {
                     if let problem = await model.createFolder(name: name) { nameProblem = problem; naming = true }
                 }
             }
-            Button("Cancel", role: .cancel) {}
+            Button(say(.signinCancel), role: .cancel) {}
         } message: {
             if let nameProblem { Text(nameProblem) }
         }
@@ -558,15 +558,15 @@ struct ShareBanner: View {
     var body: some View {
         HStack(alignment: .firstTextBaseline) {
             VStack(alignment: .leading, spacing: 2) {
-                Text(incoming.files.isEmpty ? String(localized: "Nothing shared can go here: only images and PDFs up to 10 MB.")
-                     : incoming.files.count == 1 ? String(localized: "Choose a Pot for this file") : String(localized: "Choose a Pot for these \(incoming.files.count) files"))
+                Text(incoming.files.isEmpty ? say(.shareNothing)
+                     : say(.sharePick, incoming.files.count))
                     .fontWeight(.semibold)
                 if incoming.refused > 0 {
-                    Text("\(incoming.refused) left out: only images and PDFs up to 10 MB.").font(.caption).foregroundStyle(Role.muted)
+                    Text(say(.shareRefused, incoming.refused)).font(.caption).foregroundStyle(Role.muted)
                 }
             }
             Spacer()
-            Button("Cancel", action: onCancel)
+            Button(say(.signinCancel), action: onCancel)
         }
         .padding(.horizontal, 16)
         .padding(.vertical, 10)
@@ -580,11 +580,11 @@ struct ArrangedListView: View {
 
     var body: some View {
         if list.favorites.isEmpty && list.recent.isEmpty && list.all.isEmpty {
-            ContentUnavailableView("Nothing here yet", systemImage: "tray")
+            ContentUnavailableView(say(.listEmpty), systemImage: "tray")
         } else {
             List {
-                if !list.favorites.isEmpty { Section { rows(list.favorites) } header: { SectionLabel(title: "Favorites") } }
-                if !list.recent.isEmpty { Section { rows(list.recent) } header: { SectionLabel(title: "Recent") } }
+                if !list.favorites.isEmpty { Section { rows(list.favorites) } header: { SectionLabel(title: say(.drawerFavorites)) } }
+                if !list.recent.isEmpty { Section { rows(list.recent) } header: { SectionLabel(title: say(.drawerRecent)) } }
                 if !list.all.isEmpty { Section { rows(list.all) } }
             }
             .scrollContentBackground(.hidden)
@@ -605,8 +605,8 @@ struct SearchList: View {
         List(hits, id: \.nodeId) { ref in
             ObjectRow(ref: ref) { r in model.search(false); model.open(r) }
         }
-        .searchable(text: $query, prompt: "Search names")
-        .navigationTitle("Search")
+        .searchable(text: $query, prompt: say(.searchHint))
+        .navigationTitle(say(.tabSearch))
     }
 }
 
@@ -618,7 +618,7 @@ struct ObjectPlaceholder: View {
         ContentUnavailableView {
             Label { Text(ref.name) } icon: { Tile(symbol: Names.kindSymbol(ref.kind)) }
         } description: {
-            Text("This view is not built in the app yet.")
+            Text(say(.notBuilt))
         }
         .navigationTitle(ref.name)
     }
@@ -632,19 +632,19 @@ struct ExpensesList: View {
     var body: some View {
         ArrangedListView(list: model.applicationList(.expenses), onOpen: model.open)
             .navigationTitle(Names.application(.expenses))
-            .createAction("New pot", shown: !model.spaces.isEmpty) { creating = true }
+            .createAction(say(.createPot), shown: !model.spaces.isEmpty) { creating = true }
             .sheet(isPresented: $creating) { PotCreateSheet(model: model) }
     }
 }
 
 /// The web's motifs (src/web/src/shared/ui/icons.ts) in SF Symbols: images, file, inbox, wallet, folder, link.
 enum Names {
-    static func application(_ app: ApplicationId) -> LocalizedStringKey {
+    static func application(_ app: ApplicationId) -> String {
         switch app {
-        case .memories: "Memories"
-        case .depot: "Depot"
-        case .expenses: "Expenses"
-        default: "Application"
+        case .memories: say(.appMemories)
+        case .depot: say(.appDepot)
+        case .expenses: say(.appExpenses)
+        default: say(.application)
         }
     }
 
@@ -670,9 +670,9 @@ enum Names {
 
     static func spaceName(_ space: SpaceRef?) -> String {
         switch space?.kind {
-        case nil: String(localized: "Home")
-        case "PERSONAL": String(localized: "Personal")
-        case "GROUP": String(localized: "Group")
+        case nil: say(.drawerHome)
+        case "PERSONAL": say(.spacePersonal)
+        case "GROUP": say(.spaceGroup)
         default: space!.name
         }
     }
@@ -686,15 +686,15 @@ enum Names {
     }
 
     /// A tab's name; Depot's one tab names the object open, a file or a drop box (`kind`).
-    static func tab(_ key: String, app: ApplicationId?, kind: String? = nil) -> LocalizedStringKey {
+    static func tab(_ key: String, app: ApplicationId?, kind: String? = nil) -> String {
         switch key {
-        case "memories.all": "Memories"
-        case "memories.map": "Map"
-        case "depot.file": kind == DepotFiles.shared.DROPBOX ? "Drop Box" : "File"
-        case "expenses.entries": "Entries"
-        case "expenses.overview": "Overview"
-        case "expenses.settings": "Settings"
-        default: app.map(application) ?? "Home"
+        case "memories.all": say(.appMemories)
+        case "memories.map": say(.tabMemoriesMap)
+        case "depot.file": kind == DepotFiles.shared.DROPBOX ? say(.tabDepotDropbox) : say(.tabDepotFile)
+        case "expenses.entries": say(.tabExpensesEntries)
+        case "expenses.overview": say(.tabExpensesOverview)
+        case "expenses.settings": say(.drawerSettings)
+        default: app.map(application) ?? say(.drawerHome)
         }
     }
 

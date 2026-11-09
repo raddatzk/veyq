@@ -35,17 +35,17 @@ struct FileScreen: View {
             }
             Group {
                 if let file, !file.hasContent {
-                    Text("Not uploaded yet").foregroundStyle(Role.muted)
+                    Text(say(.depotNotUploaded)).foregroundStyle(Role.muted)
                 } else {
                     switch shown {
-                    case .loading: VStack { ProgressView(); Text("Opening the file…").foregroundStyle(Role.muted) }.frame(maxWidth: .infinity)
-                    case .failed: Text("The file could not be opened. Please try again.").foregroundStyle(Role.muted)
+                    case .loading: VStack { ProgressView(); Text(say(.fileOpening)).foregroundStyle(Role.muted) }.frame(maxWidth: .infinity)
+                    case .failed: Text(say(.fileOpenFailed)).foregroundStyle(Role.muted)
                     case .message(let text): Text(text).foregroundStyle(Role.muted)
                     case .picture(let image): Image(decorative: image, scale: 1).resizable().scaledToFit()
                     case .text(let text, let truncated):
                         VStack(alignment: .leading) {
                             if truncated {
-                                Text("Showing only the first megabyte. Download the file to read all of it.").font(.footnote).foregroundStyle(Role.muted)
+                                Text(say(.fileTextTruncated)).font(.footnote).foregroundStyle(Role.muted)
                             }
                             ScrollView([.vertical, .horizontal]) {
                                 Text(text).font(.system(.footnote, design: .monospaced)).textSelection(.enabled).frame(maxWidth: .infinity, alignment: .leading)

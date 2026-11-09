@@ -50,14 +50,14 @@ struct PotScreen: View {
                     }
                 }
             } else if let state = model.pot, state.ref == ref, state.failed {
-                ContentUnavailableView("This pot did not open", systemImage: "exclamationmark.triangle")
+                ContentUnavailableView(say(.potOpenFailed), systemImage: "exclamationmark.triangle")
             } else {
                 ProgressView()
             }
         }
         .navigationTitle(ref.name)
         // An open Pot says its currency under its name (the web's header subtitle).
-        .navigationSubtitle(model.pot?.ref == ref ? model.pot?.view?.currency.map { String(localized: "In \($0)") } ?? "" : "")
+        .navigationSubtitle(model.pot?.ref == ref ? model.pot?.view?.currency.map { say(.potInCurrency, $0) } ?? "" : "")
         .task(id: ref.nodeId) { model.loadPot(ref) }
         // Live while the Pot is on screen and the app active: what another device writes shows up (core's `LivePoll`).
         .task(id: LiveKey(nodeId: ref.nodeId, loaded: model.pot?.view != nil, active: phase == .active)) {
@@ -119,20 +119,20 @@ func localDay(_ iso: String) -> String {
 
 func categoryName(_ id: String?, _ view: PotView) -> String {
     switch id {
-    case "food": String(localized: "Food & drink")
-    case "groceries": String(localized: "Groceries")
-    case "accommodation": String(localized: "Accommodation")
-    case "transport": String(localized: "Transport")
-    case "leisure": String(localized: "Leisure")
-    case "household": String(localized: "Household")
-    case "other": String(localized: "Other")
+    case "food": say(.catFood)
+    case "groceries": say(.catGroceries)
+    case "accommodation": say(.catAccommodation)
+    case "transport": say(.catTransport)
+    case "leisure": say(.catLeisure)
+    case "household": say(.catHousehold)
+    case "other": say(.catOther)
     case nil: ""
-    default: view.ownCategories.first { $0.first as String? == id }?.second as String? ?? String(localized: "Unknown category")
+    default: view.ownCategories.first { $0.first as String? == id }?.second as String? ?? say(.catUnknown)
     }
 }
 
 func personName(_ name: String?) -> String {
-    guard let name, !name.isEmpty else { return String(localized: "deleted person") }
+    guard let name, !name.isEmpty else { return say(.potDeletedPerson) }
     return name
 }
 
@@ -142,9 +142,9 @@ private struct LedgerNotice: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
-            Text("Changes to these entries are missing, so the balances may be wrong:").font(.subheadline)
+            Text(say(.potLedgerMissing)).font(.subheadline)
             ForEach(Array(view.missing.enumerated()), id: \.offset) { _, m in
-                Text("• \(Self.name(m))").font(.caption)
+                Text(verbatim: "• \(Self.name(m))").font(.caption)
             }
         }
         .foregroundStyle(Role.danger)
@@ -155,9 +155,9 @@ private struct LedgerNotice: View {
 
     static func name(_ m: PotView.Missing) -> String {
         switch m.kind {
-        case .transfer: String(localized: "Transfer")
-        case .erasedPerson: String(localized: "deleted person")
-        case .unknown: String(localized: "An entry this pot no longer shows")
+        case .transfer: say(.potTransfer)
+        case .erasedPerson: say(.potDeletedPerson)
+        case .unknown: say(.potLedgerUnknownEntry)
         default: m.name
         }
     }
@@ -173,12 +173,12 @@ private struct EntriesList: View {
         List {
             NodeHeroRow()
             if view.entries.isEmpty {
-                Text(view.canWrite ? "No entries yet. Add the first one." : "No entries yet.").foregroundStyle(Role.muted)
+                Text(view.canWrite ? say(.potNoEntries) : say(.potNoEntriesReadonly)).foregroundStyle(Role.muted)
             }
             ForEach(view.entries, id: \.id) { e in
                 HStack(alignment: .firstTextBaseline) {
                     VStack(alignment: .leading, spacing: 2) {
-                        Text(e.title ?? String(localized: "Transfer")).fontWeight(.semibold)
+                        Text(e.title ?? say(.potTransfer)).fontWeight(.semibold)
                         Text(subtitle(e)).font(.caption).foregroundStyle(Role.muted)
                         if let badge = badge(e) { Text(badge).font(.caption2).foregroundStyle(e.status == .live ? Role.muted : Role.danger) }
                     }
@@ -195,8 +195,8 @@ private struct EntriesList: View {
                     ForEach(view.deletedEntries, id: \.id) { e in
                         HStack {
                             VStack(alignment: .leading, spacing: 2) {
-                                Text(e.title ?? String(localized: "Transfer"))
-                                Text("deleted").font(.caption2)
+                                Text(e.title ?? say(.potTransfer))
+                                Text(say(.entriesDeletedBadge)).font(.caption2)
                             }
                             Spacer()
                             if let amount = e.amount { Text(money(amount.int64Value, view.currency, view.minorUnits)) }
@@ -206,12 +206,12 @@ private struct EntriesList: View {
                         .contentShape(Rectangle())
                         .onTapGesture { onOpenDeleted(e) }
                     }
-                } header: { SectionLabel(title: "Deleted entries") }
+                } header: { SectionLabel(title: say(.entriesDeletedTitle)) }
             }
         }
         .scrollContentBackground(.hidden)
         // beside the Pot's heart, share and menu
-        .createAction("Add entry", shown: view.canWrite && !view.people.isEmpty, action: onAdd)
+        .createAction(say(.potAdd), shown: view.canWrite && !view.people.isEmpty, action: onAdd)
     }
 
     private func subtitle(_ e: PotView.EntryRow) -> String {
@@ -220,8 +220,8 @@ private struct EntriesList: View {
         if let date = e.date { parts.append(localDay(date)) }
         if let category = e.category { parts.append(categoryName(category, view)) }
         switch e.kind {
-        case .expense: parts.append(String(localized: "Expense by \(who.joined(separator: ", "))"))
-        case .refund: parts.append(String(localized: "Refund to \(who.joined(separator: ", "))"))
+        case .expense: parts.append(say(.potExpenseBy, who.joined(separator: ", ")))
+        case .refund: parts.append(say(.potRefundTo, who.joined(separator: ", ")))
         case .transfer: parts.append(who.joined(separator: " → "))
         default: break
         }
@@ -231,9 +231,9 @@ private struct EntriesList: View {
 
     private func badge(_ e: PotView.EntryRow) -> String? {
         switch e.status {
-        case .invalid: String(localized: "invalid")
-        case .unreadable: String(localized: "unreadable")
-        default: e.edited ? String(localized: "edited") : nil
+        case .invalid: say(.potInvalid)
+        case .unreadable: say(.potUnreadable)
+        default: e.edited ? say(.potEdited) : nil
         }
     }
 }
@@ -249,8 +249,8 @@ private struct OverviewList: View {
 
     /// What transfers moved, where there were any: " · transferred …" or " · received …".
     private func transfers(_ p: PotView.PersonRow) -> String {
-        if p.settled > 0 { return " · " + String(localized: "transferred \(money(p.settled, view.currency, view.minorUnits))") }
-        if p.settled < 0 { return " · " + String(localized: "received \(money(-p.settled, view.currency, view.minorUnits))") }
+        if p.settled > 0 { return " · " + say(.potSent, money(p.settled, view.currency, view.minorUnits)) }
+        if p.settled < 0 { return " · " + say(.potReceived, money(-p.settled, view.currency, view.minorUnits)) }
         return ""
     }
 
@@ -263,39 +263,39 @@ private struct OverviewList: View {
                         PersonAvatar(name: personName(p.name), userId: p.userId)
                         VStack(alignment: .leading, spacing: 2) {
                             Text(personName(p.name)).fontWeight(.semibold)
-                            Text("paid \(money(p.paid, view.currency, view.minorUnits)) · consumed \(money(p.share, view.currency, view.minorUnits))" + transfers(p))
+                            Text(say(.potPaidConsumed, money(p.paid, view.currency, view.minorUnits), money(p.share, view.currency, view.minorUnits)) + transfers(p))
                                 .font(.caption).foregroundStyle(Role.muted)
                         }
                         Spacer()
                         if p.balance > 0 {
-                            Text("is owed \(money(p.balance, view.currency, view.minorUnits))").foregroundStyle(Role.primary)
+                            Text(say(.potIsOwed, money(p.balance, view.currency, view.minorUnits))).foregroundStyle(Role.primary)
                         } else if p.balance < 0 {
-                            Text("owes \(money(-p.balance, view.currency, view.minorUnits))").foregroundStyle(Role.danger)
+                            Text(say(.potOwes, money(-p.balance, view.currency, view.minorUnits))).foregroundStyle(Role.danger)
                         } else {
-                            Text("settled").foregroundStyle(Role.muted)
+                            Text(say(.potSettled)).foregroundStyle(Role.muted)
                         }
                     }
                     .listRowBackground(Role.surface)
                 }
-            } header: { SectionLabel(title: "Balances") }
+            } header: { SectionLabel(title: say(.potBalances)) }
             if !view.settleUp.isEmpty {
                 Section {
                     ForEach(Array(view.settleUp.enumerated()), id: \.offset) { _, t in
                         HStack {
-                            Text("\(personName(t.from)) pays \(personName(t.to))")
+                            Text(say(.potPays, personName(t.from), personName(t.to)))
                             Spacer()
                             Text(money(t.amount, view.currency, view.minorUnits)).fontWeight(.semibold)
                             if view.canWrite {
-                                Button("Record") { record([t]) }.buttonStyle(.borderless).disabled(model.pot?.saving == true)
+                                Button(say(.balancesRecord)) { record([t]) }.buttonStyle(.borderless).disabled(model.pot?.saving == true)
                             }
                         }
                         .listRowBackground(Role.surface)
                     }
                     if view.canWrite && view.settleUp.count > 1 {
-                        Button("Record all") { record(view.settleUp) }.disabled(model.pot?.saving == true).listRowBackground(Role.surface)
+                        Button(say(.balancesRecordAll)) { record(view.settleUp) }.disabled(model.pot?.saving == true).listRowBackground(Role.surface)
                     }
                 } header: {
-                    SectionLabel(title: "Settle up")
+                    SectionLabel(title: say(.potSettleUp))
                 } footer: {
                     if let message = model.pot?.message { Text(potRefusal(message)).foregroundStyle(Role.danger) }
                 }
@@ -306,9 +306,9 @@ private struct OverviewList: View {
                         HStack { Text(categoryName(c.id, view)); Spacer(); Text(money(c.amount, view.currency, view.minorUnits)) }
                             .listRowBackground(Role.surface)
                     }
-                    HStack { Text("Total").fontWeight(.semibold); Spacer(); Text(money(view.total, view.currency, view.minorUnits)).fontWeight(.semibold) }
+                    HStack { Text(say(.potTotal)).fontWeight(.semibold); Spacer(); Text(money(view.total, view.currency, view.minorUnits)).fontWeight(.semibold) }
                         .listRowBackground(Role.surface)
-                } header: { SectionLabel(title: "By category") }
+                } header: { SectionLabel(title: say(.potByCategory)) }
             }
         }
         .scrollContentBackground(.hidden)

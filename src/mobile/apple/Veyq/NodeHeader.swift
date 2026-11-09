@@ -40,13 +40,13 @@ struct Downloaded {
 /// What a copy of a node of `kind` leaves behind, in its kind's words (the web descriptor's `copyLosses`).
 func copyLosses(_ kind: String) -> [String] {
     switch kind {
-    case "FOLDER": [String(localized: "A folder’s cover.")]
+    case "FOLDER": [say(.theCopyLossFolderCover)]
     case PotSession.companion.KIND: [
-        String(localized: "The history of each entry and the deleted entries: a copy starts every entry at its current version."),
-        String(localized: "A Pot’s cover."),
+        say(.theCopyLossPot),
+        say(.theCopyLossCover),
     ]
     case DepotFiles.shared.DROPBOX: [
-        String(localized: "A drop box becomes an ordinary folder, its people’s folders ordinary folders: no links, nobody can drop files into it, no cover."),
+        say(.theCopyLossDropbox),
     ]
     default: []
     }
@@ -88,16 +88,16 @@ struct KindPage {
     /// Memories' Memory and chapter: their gallery (`MemoryScreen`); their cover is core's.
     private static let memory = KindPage(shareable: false, takesCover: true, header: { node, _ in
         HeaderContribution(
-            deleteTitle: node.kind == "CHAPTER" ? String(localized: "Delete Chapter") : String(localized: "Delete Memory"),
-            deleteQuestion: String(localized: "“\(node.name)” moves to the trash. You can restore it from there until it is removed for good.")
+            deleteTitle: node.kind == "CHAPTER" ? say(.memoryDeleteChapter) : say(.memoryDeleteMemory),
+            deleteQuestion: say(.memoryDeleteConfirm, node.name)
         )
     }, body: { ref, _, model in AnyView(MemoryScreen(model: model, ref: ref)) })
 
     private static let dropBox = KindPage(shareable: true, takesCover: true, header: { node, model in
         HeaderContribution(
             rename: false,
-            deleteTitle: String(localized: "Delete Drop Box"),
-            deleteQuestion: String(localized: "“\(node.name)” moves to the trash with every guest’s folder in it, and its links take no files while it is there. You can restore it from the trash until it is removed for good."),
+            deleteTitle: say(.dropboxDelete),
+            deleteQuestion: say(.dropboxDeleteConfirm, node.name),
             copy: { to, toName in await model.copyFolder(node, to: to, toName: toName) },
             copyNotes: {
                 let p = await model.copyPreview(node)
@@ -112,13 +112,13 @@ struct KindPage {
     private static let file = KindPage(shareable: true, takesCover: false, header: { node, model in
         let has = model.files[node.nodeId]?.hasContent == true
         return HeaderContribution(
-            deleteTitle: String(localized: "Delete File"),
-            deleteQuestion: String(localized: "“\(node.name)” goes to the trash."),
+            deleteTitle: say(.fileDelete),
+            deleteQuestion: say(.fileDeleteConfirm, node.name),
             // a copy is read here and uploaded again under a fresh key (the web's `importFile` for a copy)
             copy: has ? { to, toName in await model.copyFolder(node, to: to, toName: toName) } : nil,
             copyNotes: { CopyNotes(losses: []) },
             download: has ? { await model.downloadFile(node) } : nil,
-            actions: [OwnAction(id: "replace", label: has ? String(localized: "Replace…") : String(localized: "Upload…"), systemImage: "square.and.arrow.down.on.square") {
+            actions: [OwnAction(id: "replace", label: has ? say(.depotReplace) : say(.depotUploadInto), systemImage: "square.and.arrow.down.on.square") {
                 model.replacing = node.nodeId
             }] + sendAction(node, model, has)
         )
@@ -127,8 +127,8 @@ struct KindPage {
     /// Core's folder: its ZIP and its copy with everything under it the build exports and copies (`NodeExport`, `SubtreeCopy`).
     private static let folder = KindPage(shareable: true, takesCover: true, header: { node, model in
         HeaderContribution(
-            deleteTitle: String(localized: "Delete Folder"),
-            deleteQuestion: String(localized: "“\(node.name)” and everything in it go to the trash."),
+            deleteTitle: say(.folderDelete),
+            deleteQuestion: say(.folderDeleteConfirm, node.name),
             copy: { to, toName in await model.copyFolder(node, to: to, toName: toName) },
             copyNotes: {
                 let p = await model.copyPreview(node)
@@ -146,12 +146,12 @@ struct KindPage {
         let writable = view.canWrite
         let ref = state.ref
         return HeaderContribution(
-            subtitle: view.currency.map { String(localized: "In \($0)") },
+            subtitle: view.currency.map { say(.potInCurrency, $0) },
             cover: writable,
-            deleteTitle: String(localized: "Delete Pot"),
-            deleteQuestion: String(localized: "“\(node.name)” and all its entries go to the trash."),
+            deleteTitle: say(.potDelete),
+            deleteQuestion: say(.potDeleteConfirm, node.name),
             copy: writable ? { to, toName in
-                Notices.shared.potCopyRefused(outcome: await model.copyPot(node, to: to, toName: toName)).map { say($0) }
+                Notices.shared.potCopyRefused(outcome: await model.copyPot(node, to: to, toName: toName)).map { say(notice: $0) }
             } : nil,
             copyNotes: { CopyNotes(losses: copyLosses(PotSession.companion.KIND)) },
             download: { await model.downloadPot(ref).map { Downloaded(url: $0) } }
@@ -163,7 +163,7 @@ struct KindPage {
 @MainActor private func sendAction(_ node: NodeAt, _ model: AppModel, _ has: Bool) -> [OwnAction] {
     #if os(iOS)
     guard has else { return [] }
-    return [OwnAction(id: "send", label: String(localized: "Send a Copy…"), systemImage: "paperplane", slot: .menu) { model.sendingCopy = node }]
+    return [OwnAction(id: "send", label: say(.fileSend), systemImage: "paperplane", slot: .menu) { model.sendingCopy = node }]
     #else
     return []
     #endif
@@ -229,7 +229,7 @@ struct NodeHeaderActions: View {
                         Button(role: id == NodeHeader.shared.DELETE ? .destructive : nil) { run(id) } label: { label(id) }
                     }
                 } label: {
-                    if downloading { ProgressView() } else { Label("More", systemImage: "ellipsis.circle") }
+                    if downloading { ProgressView() } else { Label(say(.nodeMore), systemImage: "ellipsis.circle") }
                 }
             }
         }
@@ -244,15 +244,15 @@ struct NodeHeaderActions: View {
             cleanUpDownload()
         }
         .alert(contribution.deleteTitle, isPresented: $asking) {
-            Button("Delete", role: .destructive) { Task { await model.trash(node) } }
-            Button("Cancel", role: .cancel) {}
+            Button(say(.peopleDeleteAccept), role: .destructive) { Task { await model.trash(node) } }
+            Button(say(.signinCancel), role: .cancel) {}
         } message: {
             Text(contribution.deleteQuestion)
         }
         // Core's name dialog (`FolderNameDialog`): the name as it is, trimmed on save; a refusal says why and asks again.
-        .alert("Rename", isPresented: $renaming) {
-            TextField("Name", text: $newName)
-            Button("Save") {
+        .alert(say(.nodeRename), isPresented: $renaming) {
+            TextField(say(.peopleName), text: $newName)
+            Button(say(.entrySave)) {
                 let name = newName
                 Task {
                     let (problem, linksFailed) = await model.rename(node, to: name)
@@ -260,17 +260,17 @@ struct NodeHeaderActions: View {
                         renameProblem = problem
                         renaming = true
                     } else if linksFailed {
-                        failed = String(localized: "Renamed. Some links to it could not be updated and still show the old name to their guests.")
+                        failed = say(.shareNameResealFailed)
                     }
                 }
             }
             .disabled(newName.trimmingCharacters(in: .whitespaces).isEmpty)
-            Button("Cancel", role: .cancel) {}
+            Button(say(.signinCancel), role: .cancel) {}
         } message: {
             if let renameProblem { Text(renameProblem) }
         }
         .alert(failed ?? "", isPresented: Binding(get: { failed != nil }, set: { if !$0 { failed = nil } })) {
-            Button("OK", role: .cancel) {}
+            Button(say(.ok), role: .cancel) {}
         }
     }
 
@@ -287,7 +287,7 @@ struct NodeHeaderActions: View {
             Task {
                 if await !model.toggleFavorite(node) {
                     self.pinned = model.isFavorite(node)
-                    failed = String(localized: "The favorite could not be saved. Try again.")
+                    failed = say(.nodeFavoriteFailed)
                 }
             }
         case NodeHeader.shared.RENAME:
@@ -306,15 +306,15 @@ struct NodeHeaderActions: View {
     @ViewBuilder private func label(_ id: String) -> some View {
         switch id {
         case NodeHeader.shared.FAVORITE:
-            Label(pinned == true ? "Remove from Favorites" : "Add to Favorites", systemImage: pinned == true ? "heart.fill" : "heart")
+            Label(pinned == true ? say(.nodeUnfavorite) : say(.nodeFavorite), systemImage: pinned == true ? "heart.fill" : "heart")
                 .foregroundStyle(pinned == true ? Role.favorite : Role.text)
         case NodeHeader.shared.SHARE: Label(ShareWords.of(node.kind).title, systemImage: "square.and.arrow.up")
-        case NodeHeader.shared.RENAME: Label("Rename", systemImage: "pencil")
-        case NodeHeader.shared.MOVE: Label("Move to…", systemImage: "folder")
-        case NodeHeader.shared.COPY: Label("Copy to…", systemImage: "doc.on.doc")
-        case NodeHeader.shared.COVER: Label(model.covers[node.nodeId] != nil ? "Change Cover…" : "Set Cover…", systemImage: "photo")
-        case NodeHeader.shared.DOWNLOAD: Label("Download", systemImage: "arrow.down.circle")
-        case NodeHeader.shared.REPORT: Label("Report", systemImage: "flag")
+        case NodeHeader.shared.RENAME: Label(say(.nodeRename), systemImage: "pencil")
+        case NodeHeader.shared.MOVE: Label(say(.nodeMove), systemImage: "folder")
+        case NodeHeader.shared.COPY: Label(say(.theCopyAction), systemImage: "doc.on.doc")
+        case NodeHeader.shared.COVER: Label(model.covers[node.nodeId] != nil ? say(.coverChange) : say(.coverSet), systemImage: "photo")
+        case NodeHeader.shared.DOWNLOAD: Label(say(.nodeDownload), systemImage: "arrow.down.circle")
+        case NodeHeader.shared.REPORT: Label(say(.reportAction), systemImage: "flag")
         case NodeHeader.shared.DELETE: Label(contribution.deleteTitle, systemImage: "trash")
         default:
             if let own = contribution.actions.first(where: { $0.id == id }) { Label(own.label, systemImage: own.systemImage) }
@@ -331,7 +331,7 @@ struct NodeHeaderActions: View {
             leftOut = written.leftOut
             downloaded = written.url
         } else {
-            failed = String(localized: "“\(node.name)” could not be downloaded. Please try again.")
+            failed = say(.downloadFailed, node.name)
         }
     }
 
@@ -340,7 +340,7 @@ struct NodeHeaderActions: View {
         downloaded = nil
         // what the archive left out, said once the save sheet is gone
         if !leftOut.isEmpty {
-            failed = String(localized: "Left out, because this version cannot download them: \(leftOut.joined(separator: "; "))")
+            failed = say(.downloadLeftOut, leftOut.joined(separator: "; "))
             leftOut = []
         }
     }
@@ -393,7 +393,7 @@ struct NodeCoverHero: View {
         if canSet {
             Button { editing = true } label: { picture }
                 .buttonStyle(.plain)
-                .accessibilityLabel("Change Cover…")
+                .accessibilityLabel(say(.coverChange))
                 .sheet(isPresented: $editing) { CoverSheet(model: model, node: node) }
         } else {
             picture.accessibilityHidden(true)
@@ -440,7 +440,7 @@ struct CoverSheet: View {
                     if let frame, let pose {
                         Slider(value: Binding(get: { pose.zoom }, set: { self.pose = frame.zoom(pose: pose, factor: $0 / pose.zoom) }),
                                in: CoverFrame.companion.MIN_ZOOM...CoverFrame.companion.MAX_ZOOM) {
-                            Text("Zoom")
+                            Text(say(.coverZoom))
                         } minimumValueLabel: {
                             Image(systemName: "minus.magnifyingglass")
                         } maximumValueLabel: {
@@ -449,29 +449,29 @@ struct CoverSheet: View {
                         .disabled(saving)
                     }
                 } footer: {
-                    Text("Upload an image as the cover, then drag and zoom to frame it.")
+                    Text(say(.coverHint))
                 }
                 Section {
                     PhotosPicker(selection: $item, matching: .images) {
-                        Label("Choose an Image", systemImage: "photo.on.rectangle")
+                        Label(say(.coverChooseImage), systemImage: "photo.on.rectangle")
                     }
                     .disabled(saving)
                     if hasCover {
-                        Button("Remove Cover", systemImage: "trash", role: .destructive) { Task { await finish { await model.removeCover(node) } } }
+                        Button(say(.coverRemove), systemImage: "trash", role: .destructive) { Task { await finish { await model.removeCover(node) } } }
                             .disabled(saving)
                     }
                 }
                 if saving { ProgressView() }
                 if let problem { Text(problem).foregroundStyle(Role.danger) }
             }
-            .navigationTitle("Cover")
+            .navigationTitle(say(.coverTitle))
             #if os(iOS)
             .navigationBarTitleDisplayMode(.inline)
             #endif
             .toolbar {
-                ToolbarItem(placement: .cancellationAction) { Button("Cancel") { dismiss() }.disabled(saving) }
+                ToolbarItem(placement: .cancellationAction) { Button(say(.signinCancel)) { dismiss() }.disabled(saving) }
                 ToolbarItem(placement: .confirmationAction) {
-                    Button("Save") { Task { await save() } }.disabled(saving || frame == nil || pose == nil)
+                    Button(say(.entrySave)) { Task { await save() } }.disabled(saving || frame == nil || pose == nil)
                 }
             }
         }
@@ -490,7 +490,7 @@ struct CoverSheet: View {
             item = nil
             Task {
                 guard let data = try? await chosen.loadTransferable(type: Data.self), let picture = CoverImages.image(data, maxPixels: 2048) else {
-                    problem = String(localized: "This image could not be read. Try a JPEG or PNG.")
+                    problem = say(.coverUnreadable)
                     return
                 }
                 problem = nil
@@ -560,7 +560,7 @@ struct CoverSheet: View {
         problem = nil
         let ok = await work()
         saving = false
-        if ok { dismiss() } else { problem = String(localized: "The cover could not be saved. Please try again.") }
+        if ok { dismiss() } else { problem = say(.coverFailed) }
     }
 }
 
@@ -575,7 +575,7 @@ struct TrashNotice: View {
                 Text(notice.message).font(.subheadline).foregroundStyle(Role.text)
                 Spacer(minLength: 0)
                 if notice.node != nil || notice.moveBack != nil {
-                    Button("Undo") { Task { await model.undoTrash() } }.fontWeight(.semibold)
+                    Button(say(.trashUndo)) { Task { await model.undoTrash() } }.fontWeight(.semibold)
                 }
             }
             .padding(.horizontal, 16)

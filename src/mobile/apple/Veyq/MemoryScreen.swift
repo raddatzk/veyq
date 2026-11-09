@@ -25,7 +25,7 @@ struct MemoryScreen: View {
             VStack(alignment: .leading, spacing: 8) {
                 NodeHeroRow()
                 if !chapters.isEmpty {
-                    Text("Chapters").font(.headline).padding(.horizontal)
+                    Text(say(.memoryChapters)).font(.headline).padding(.horizontal)
                     ForEach(chapters, id: \.nodeId) { c in
                         Button {
                             if let o = c.asObject() { model.open(o) }
@@ -36,13 +36,13 @@ struct MemoryScreen: View {
                     }
                 }
                 if failed {
-                    Text("The gallery could not be loaded.").foregroundStyle(Role.danger).padding()
+                    Text(say(.memoryGalleryFailed)).foregroundStyle(Role.danger).padding()
                 } else if gallery == nil {
                     ProgressView().frame(maxWidth: .infinity).padding()
                 } else if items.isEmpty {
-                    Text("No photos or videos yet.").foregroundStyle(Role.muted).padding()
+                    Text(say(.memoryGalleryEmpty)).foregroundStyle(Role.muted).padding()
                 } else {
-                    Text(items.count == 1 ? "1 item" : "\(items.count) items").font(.footnote).foregroundStyle(Role.muted).padding(.horizontal)
+                    Text(say(.memoryItems, items.count)).font(.footnote).foregroundStyle(Role.muted).padding(.horizontal)
                     LazyVGrid(columns: [GridItem(.adaptive(minimum: 104), spacing: 2)], spacing: 2) {
                         ForEach(Array(items.enumerated()), id: \.element.mediaId) { index, item in
                             Button { open = LightboxStart(index: index) } label: { MediaTile(model: model, item: item) }
@@ -54,9 +54,9 @@ struct MemoryScreen: View {
         }
         .navigationTitle(ref.name)
         // photos and videos come from the photo library or from files
-        .createMenu("Add Photos", shown: true) {
-            Button { pickingPhotos = true } label: { Label("Photo Library", systemImage: "photo.on.rectangle") }
-            Button { pickingFiles = true } label: { Label("Files", systemImage: "folder") }
+        .createMenu(say(.memoryAdd), shown: true) {
+            Button { pickingPhotos = true } label: { Label(say(.photoLibrary), systemImage: "photo.on.rectangle") }
+            Button { pickingFiles = true } label: { Label(say(.tabDepotFiles), systemImage: "folder") }
         }
         .photosPicker(isPresented: $pickingPhotos, selection: $photos, matching: .any(of: [.images, .videos]), preferredItemEncoding: .current)
         .onChange(of: photos) {
@@ -183,7 +183,7 @@ private struct Lightbox: View {
                 .padding()
             }
             .background(Color.black.ignoresSafeArea())
-            .navigationTitle("\(index + 1) of \(items.count)")
+            .navigationTitle(say(.memoryItemPosition, index + 1, items.count))
             #if os(iOS)
             .navigationBarTitleDisplayMode(.inline)
             .toolbarBackground(.black, for: .navigationBar)
@@ -191,15 +191,15 @@ private struct Lightbox: View {
             #endif
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
-                    Button { dismiss() } label: { Label("Close", systemImage: "xmark") }
+                    Button { dismiss() } label: { Label(say(.receiptsClose), systemImage: "xmark") }
                 }
                 ToolbarItemGroup(placement: .primaryAction) {
-                    Button { details = true } label: { Label("Details", systemImage: "info.circle") }
+                    Button { details = true } label: { Label(say(.memoryDetails), systemImage: "info.circle") }
                     if let item = current, !item.blocked {
                         if downloading {
                             ProgressView()
                         } else {
-                            Button { Task { await download(item) } } label: { Label("Download Original", systemImage: "arrow.down.circle") }
+                            Button { Task { await download(item) } } label: { Label(say(.memoryDownload), systemImage: "arrow.down.circle") }
                         }
                     }
                 }
@@ -212,7 +212,7 @@ private struct Lightbox: View {
             }
             .fileMover(isPresented: Binding(get: { downloaded != nil }, set: { if !$0 { cleanUpDownload() } }), file: downloaded) { _ in }
             .alert(failed ?? "", isPresented: Binding(get: { failed != nil }, set: { if !$0 { failed = nil } })) {
-                Button("OK", role: .cancel) {}
+                Button(say(.ok), role: .cancel) {}
             }
         }
         .environment(\.colorScheme, .dark)
@@ -224,7 +224,7 @@ private struct Lightbox: View {
         downloading = true
         let url = await model.downloadMedium(item, name: name)
         downloading = false
-        if let url { downloaded = url } else { failed = String(localized: "“\(name)” could not be downloaded. Please try again.") }
+        if let url { downloaded = url } else { failed = say(.downloadFailed, name) }
     }
 
     private func cleanUpDownload() {
@@ -245,7 +245,7 @@ private struct LightboxPage: View {
     var body: some View {
         ZStack {
             if item.blocked {
-                Text("This item was blocked by the operator.").foregroundStyle(.white).padding()
+                Text(say(.memoryBlocked)).foregroundStyle(.white).padding()
             } else if playing {
                 MediaVideo(model: model, item: item)
             } else {
@@ -261,7 +261,7 @@ private struct LightboxPage: View {
                         Image(systemName: "play.circle.fill").font(.system(size: 64)).foregroundStyle(.white)
                     }
                     .buttonStyle(.plain)
-                    .accessibilityLabel("Play Video")
+                    .accessibilityLabel(say(.memoryPlay))
                 }
             }
         }
@@ -290,7 +290,7 @@ private struct MediaVideo: View {
             if let playback {
                 VideoPlayer(player: playback.player)
             } else if failed {
-                Text("The video couldn’t be played.").foregroundStyle(.white).padding()
+                Text(say(.memoryVideoFailed)).foregroundStyle(.white).padding()
             } else {
                 ProgressView().tint(.white)
             }
@@ -407,8 +407,8 @@ private struct MediaDetailsView: View {
         guard let key = item.ownerKey, let u = uploaders[key] else { return nil }
         switch u.kind {
         case .member: return u.name
-        case .former: return String(localized: "Former member")
-        default: return String(localized: "A guest")
+        case .former: return say(.memoryUploaderFormer)
+        default: return say(.memoryUploaderGuest)
         }
     }
 
@@ -419,20 +419,20 @@ private struct MediaDetailsView: View {
             let placeAt = rows.firstIndex { $0.field == .place || $0.field == .location } ?? rows.count
             List {
                 if rows.isEmpty && uploader == nil {
-                    Text("No details for this item.").foregroundStyle(Role.muted)
+                    Text(say(.memoryNoDetail)).foregroundStyle(Role.muted)
                 }
                 ForEach(Array(rows.enumerated()), id: \.offset) { i, row in
-                    if i == placeAt, let uploader { LabeledContent("Added by", value: uploader) }
+                    if i == placeAt, let uploader { LabeledContent(say(.memoryFieldUploadedBy), value: uploader) }
                     LabeledContent(Self.label(row.field), value: Self.value(row))
                 }
-                if placeAt == rows.count, let uploader { LabeledContent("Added by", value: uploader) }
+                if placeAt == rows.count, let uploader { LabeledContent(say(.memoryFieldUploadedBy), value: uploader) }
             }
-            .navigationTitle("Details")
+            .navigationTitle(say(.memoryDetails))
             #if os(iOS)
             .navigationBarTitleDisplayMode(.inline)
             #endif
             .toolbar {
-                ToolbarItem(placement: .confirmationAction) { Button("Done") { dismiss() } }
+                ToolbarItem(placement: .confirmationAction) { Button(say(.shareDone)) { dismiss() } }
             }
             .task(id: item.mediaId) {
                 uploaders = await model.mediaUploaders(scopeId: item.scopeId, items: [item])
@@ -443,32 +443,32 @@ private struct MediaDetailsView: View {
 
     private static func label(_ field: MediaDetails.Field) -> String {
         switch field {
-        case .captured: String(localized: "Taken")
-        case .fileName: String(localized: "File")
-        case .fileSize: String(localized: "Size")
-        case .fileFormat: String(localized: "Format")
-        case .camera: String(localized: "Camera")
-        case .lens: String(localized: "Lens")
-        case .focalLength: String(localized: "Focal Length")
-        case .focalLength35: String(localized: "Equivalent")
-        case .aperture: String(localized: "Aperture")
-        case .exposure: String(localized: "Exposure")
-        case .exposureCompensation: String(localized: "Exposure Compensation")
-        case .iso: String(localized: "ISO")
-        case .flash: String(localized: "Flash")
-        case .dimensions: String(localized: "Dimensions")
-        case .title: String(localized: "Title")
-        case .description_: String(localized: "Description")
-        case .rating: String(localized: "Rating")
-        case .software: String(localized: "Software")
-        case .artist: String(localized: "Author")
-        case .copyright: String(localized: "Copyright")
-        case .altitude: String(localized: "Altitude")
-        case .directionTrue, .directionMagnetic: String(localized: "Direction")
-        case .gpsAccuracy: String(localized: "Position Accuracy")
-        case .corrected: String(localized: "Status")
-        case .place: String(localized: "Place")
-        case .location: String(localized: "Location")
+        case .captured: say(.memoryFieldCaptured)
+        case .fileName: say(.tabDepotFile)
+        case .fileSize: say(.memoryFieldFileSize)
+        case .fileFormat: say(.memoryFieldFileFormat)
+        case .camera: say(.memoryFieldCamera)
+        case .lens: say(.memoryFieldLens)
+        case .focalLength: say(.memoryFieldFocalLength)
+        case .focalLength35: say(.memoryFieldFocalLength35)
+        case .aperture: say(.memoryFieldAperture)
+        case .exposure: say(.memoryFieldExposure)
+        case .exposureCompensation: say(.memoryFieldExposureCompensation)
+        case .iso: say(.memoryFieldIso)
+        case .flash: say(.memoryFieldFlash)
+        case .dimensions: say(.memoryFieldDimensions)
+        case .title: say(.entryTitle)
+        case .description_: say(.memoryFieldDescription)
+        case .rating: say(.memoryFieldRating)
+        case .software: say(.memoryFieldSoftware)
+        case .artist: say(.memoryFieldArtist)
+        case .copyright: say(.memoryFieldCopyright)
+        case .altitude: say(.memoryFieldAltitude)
+        case .directionTrue, .directionMagnetic: say(.memoryFieldDirection)
+        case .gpsAccuracy: say(.memoryFieldGpsAccuracy)
+        case .corrected: say(.memoryFieldStatus)
+        case .place: say(.memoryFieldPlace)
+        case .location: say(.memoryFieldLocation)
         default: ""
         }
     }
@@ -478,10 +478,10 @@ private struct MediaDetailsView: View {
         switch row.field {
         case .captured: return Date(timeIntervalSince1970: Double(n) / 1000).formatted(date: .abbreviated, time: .shortened)
         case .fileSize: return ByteCountFormatter.string(fromByteCount: n, countStyle: .file)
-        case .flash: return n == 1 ? String(localized: "Fired") : String(localized: "Did not fire")
-        case .directionTrue: return String(localized: "\(n)° (true north)")
-        case .directionMagnetic: return String(localized: "\(n)° (magnetic north)")
-        case .corrected: return String(localized: "Corrected")
+        case .flash: return n == 1 ? say(.memoryFlashFired) : say(.memoryFlashNotFired)
+        case .directionTrue: return say(.memoryDirectionTrue, n)
+        case .directionMagnetic: return say(.memoryDirectionMagnetic, n)
+        case .corrected: return say(.memoryCorrected)
         default: return row.value
         }
     }

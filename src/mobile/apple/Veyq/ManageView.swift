@@ -16,7 +16,7 @@ struct ManageView: View {
                             Toggle(isOn: Binding(get: { !t.hidden || t.current }, set: { model.setTenantHidden(server.account, t.tenant, !$0) })) {
                                 VStack(alignment: .leading, spacing: 2) {
                                     Text(t.tenant.name).fontWeight(.semibold)
-                                    Text(t.current ? "Shown now" : t.tenant.domain).font(.caption).foregroundStyle(Role.muted)
+                                    Text(t.current ? say(.manageCurrent) : t.tenant.domain).font(.caption).foregroundStyle(Role.muted)
                                 }
                             }
                             .disabled(t.current)
@@ -31,11 +31,11 @@ struct ManageView: View {
                             }
                         }
                         Button(role: .destructive) { model.signOut(server.account) } label: {
-                            Label("Sign out of this server", systemImage: "rectangle.portrait.and.arrow.right")
+                            Label(say(.manageSignOut), systemImage: "rectangle.portrait.and.arrow.right")
                         }
                         if server.trusted != nil {
                             Button(role: .destructive) { model.forgetDevice(server.account) } label: {
-                                Label("Stop trusting this device", systemImage: "lock.slash")
+                                Label(say(.manageForgetDevice), systemImage: "lock.slash")
                             }
                         }
                     } header: {
@@ -43,20 +43,20 @@ struct ManageView: View {
                     } footer: {
                         // How this device trusts the account; ending it means the next sign-in asks for the Secret Key.
                         if let trusted = server.trusted {
-                            Text(trusted == .deviceKey ? "You stay signed in on this device." : "This device opens with your password.")
+                            Text(trusted == .deviceKey ? say(.manageTrustedRemembered) : say(.manageTrustedPassword))
                         }
                     }
                 }
                 Section {
-                    Button { model.addServer() } label: { Label("Add server", systemImage: "plus") }
+                    Button { model.addServer() } label: { Label(say(.switcherAddServer), systemImage: "plus") }
                 } footer: {
-                    Text("Hidden tenants and spaces stay on the server and are only left out on this device.")
+                    Text(say(.manageHint))
                 }
             }
             .formStyle(.grouped)
-            .navigationTitle("Servers")
+            .navigationTitle(say(.manageTitle))
             .toolbar {
-                ToolbarItem(placement: .confirmationAction) { Button("Done") { model.managing = nil } }
+                ToolbarItem(placement: .confirmationAction) { Button(say(.shareDone)) { model.managing = nil } }
             }
         }
         .tint(Role.accent)

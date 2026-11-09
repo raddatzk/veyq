@@ -23,7 +23,9 @@ A Gradle build of its own, run through its own wrapper.
   (`:core:generateWords`), Android's resources and `Context.words` (`:android:generateWords`; the app has no
   `strings.xml` of its own) and the Apple String Catalog `Words` (the project's `preGenCommand` and pre-build step;
   `say(msg, …)`, `say(notice)`). A word is added there, never in a platform; what the core raises is a `Notice`
-  (`words/Notices.kt`). The Apple app's own literals move there screen by screen (`changes/cr-app-logic-into-the-core.md`).
+  (`words/Notices.kt`). `apple_en` / `apple_de` give a key Apple's own form (Title Case on a button or menu entry).
+  `scripts/validate_mobile_words.py` holds it: no `strings.xml`, no `String(localized:`, no English literal handed to a
+  SwiftUI view.
 - `theme/generate_theme.py` — the web's colour roles and brand mark for every platform (ADR 0123 decision 7): the
   builds run it (`:core:generateTheme`, `:android:generateThemeRes`, the Apple project's pre-build step); its output
   is never committed. A colour or the logo changes in `src/web/`, never here.
@@ -199,7 +201,8 @@ first in each of its scrolls — `LocalNodeHero.current(inset)` (Android) / `Nod
   which overrides `+[NSObject self]`, and the class's first use recurses until the stack overflows (measured 2026-11-09:
   `NodeMove.Block.SELF`, now `ITSELF`). Avoid `self`, `description`, `hash`, `class`, `copy`, `init`, `new` as names, and
   a method name that STARTS with `copy`, `new`, `alloc` or `init`: Objective-C's ownership rule makes Kotlin export it as
-  `doCopyTo(…)` (measured 2026-11-09: `PotCopy.copyTo`, now `duplicate`).
+  `doCopyTo(…)` (measured 2026-11-09: `PotCopy.copyTo`, now `duplicate`). An enum entry's Swift name takes `the` instead: the
+  catalog's `COPY_HINT` is `Msg.theCopyHint` in Swift (measured 2026-11-09).
 - A Swift closure handed to core is called on core's threads (after a request answered, Ktor's), never only on the main
   one: written in the `@MainActor` model it is inferred main-actor isolated, and Swift 6 traps on the first call from
   elsewhere (`_dispatch_assert_queue_fail`, measured 2026-11-09: the re-key's rekey id). Mark it `@Sendable` and reach

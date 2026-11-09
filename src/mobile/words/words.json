@@ -185,7 +185,8 @@
   },
   "tab_depot_dropbox": {
     "en": "Drop box",
-    "de": "Briefkasten"
+    "de": "Briefkasten",
+    "apple_en": "Drop Box"
   },
   "tab_depot_file": {
     "en": "File",
@@ -237,7 +238,9 @@
   },
   "signin_remember_hint": {
     "en": "Opens with your fingerprint, face or the device code. Anyone who can unlock this phone can open your content. Off, the app asks for your password, never again for the Secret Key.",
-    "de": "Öffnet mit Fingerabdruck, Gesicht oder dem Gerätecode. Wer dieses Handy entsperren kann, kann deine Inhalte öffnen. Aus fragt die App nach deinem Passwort, aber nie wieder nach dem Secret Key."
+    "de": "Öffnet mit Fingerabdruck, Gesicht oder dem Gerätecode. Wer dieses Handy entsperren kann, kann deine Inhalte öffnen. Aus fragt die App nach deinem Passwort, aber nie wieder nach dem Secret Key.",
+    "apple_en": "Opens with Face ID, Touch ID or the device passcode. Anyone who can unlock this device can open your content. Off, the app asks for your password, never again for the Secret Key.",
+    "apple_de": "Öffnet mit Face ID, Touch ID oder dem Gerätecode. Wer dieses Gerät entsperren kann, kann deine Inhalte öffnen. Aus fragt die App nach deinem Passwort, aber nie wieder nach dem Secret Key."
   },
   "signin_error_device_not_trusted": {
     "en": "This device is no longer trusted with this account. Sign in with your Secret Key.",
@@ -571,7 +574,8 @@
   },
   "create_pot": {
     "en": "New pot",
-    "de": "Neue Kasse"
+    "de": "Neue Kasse",
+    "apple_en": "New Pot"
   },
   "create_pot_name": {
     "en": "Name",
@@ -949,11 +953,15 @@
   },
   "node_favorite": {
     "en": "Favorite",
-    "de": "Favorit"
+    "de": "Favorit",
+    "apple_en": "Add to Favorites",
+    "apple_de": "Zu Favoriten hinzufügen"
   },
   "node_unfavorite": {
     "en": "Remove favorite",
-    "de": "Favorit entfernen"
+    "de": "Favorit entfernen",
+    "apple_en": "Remove from Favorites",
+    "apple_de": "Aus Favoriten entfernen"
   },
   "node_favorite_failed": {
     "en": "The favorite could not be saved. Try again.",
@@ -1240,11 +1248,13 @@
   },
   "depot_upload": {
     "en": "Upload files",
-    "de": "Dateien hochladen"
+    "de": "Dateien hochladen",
+    "apple_en": "Upload Files"
   },
   "depot_upload_folder": {
     "en": "Upload folder…",
-    "de": "Ordner hochladen…"
+    "de": "Ordner hochladen…",
+    "apple_en": "Upload Folder…"
   },
   "depot_folder_no_room": {
     "en": "“{1}” was not uploaded: there is not enough storage space for it ({2}). Free some space, or ask whoever runs your space.",
@@ -1272,7 +1282,8 @@
   },
   "depot_replace_title": {
     "en": "Replace file",
-    "de": "Datei ersetzen"
+    "de": "Datei ersetzen",
+    "apple_en": "Replace File"
   },
   "depot_replace_confirm": {
     "en": "Replace “{1}”? A file with this name is already here: its content is replaced by the file you picked. The old content cannot be restored: there is no version history.",
@@ -1360,7 +1371,8 @@
   },
   "dropbox_delete": {
     "en": "Delete drop box",
-    "de": "Briefkasten löschen"
+    "de": "Briefkasten löschen",
+    "apple_en": "Delete Drop Box"
   },
   "dropbox_delete_confirm": {
     "en": "“{1}” moves to the trash with every guest’s folder in it, and its links take no files while it is there. You can restore it from the trash until it is removed for good.",
@@ -1380,11 +1392,13 @@
   },
   "file_send": {
     "en": "Send a copy…",
-    "de": "Kopie senden…"
+    "de": "Kopie senden…",
+    "apple_en": "Send a Copy…"
   },
   "file_send_title": {
     "en": "Send a copy",
-    "de": "Kopie senden"
+    "de": "Kopie senden",
+    "apple_en": "Send a Copy"
   },
   "file_send_notice": {
     "en": "This sends a decrypted copy of “{1}” to the app you pick. There veyq no longer protects it: that app, and wherever it syncs or forwards it, can read it.",
@@ -1396,7 +1410,8 @@
   },
   "file_delete": {
     "en": "Delete file",
-    "de": "Datei löschen"
+    "de": "Datei löschen",
+    "apple_en": "Delete File"
   },
   "file_delete_confirm": {
     "en": "“{1}” goes to the trash.",
@@ -1741,7 +1756,8 @@
   },
   "share_reactivate": {
     "en": "Switch on again",
-    "de": "Wieder einschalten"
+    "de": "Wieder einschalten",
+    "apple_en": "Switch On Again"
   },
   "share_reissue_hint": {
     "en": "This link cannot be switched back on: someone who has left this space may still hold it. Renew it instead.",
@@ -1821,7 +1837,9 @@
   },
   "copy_losses": {
     "en": "What does not come along:",
-    "de": "Was nicht mitkommt:"
+    "de": "Was nicht mitkommt:",
+    "apple_en": "What does not come along",
+    "apple_de": "Was nicht mitkommt"
   },
   "copy_loss_always": {
     "en": "Shares, favourites, the trash and the original upload times. You become the owner of the copy.",
@@ -1913,15 +1931,18 @@
   },
   "cover_set": {
     "en": "Set cover",
-    "de": "Titelbild festlegen"
+    "de": "Titelbild festlegen",
+    "apple_en": "Set Cover…"
   },
   "cover_change": {
     "en": "Change cover",
-    "de": "Titelbild ändern"
+    "de": "Titelbild ändern",
+    "apple_en": "Change Cover…"
   },
   "cover_remove": {
     "en": "Remove cover",
-    "de": "Titelbild entfernen"
+    "de": "Titelbild entfernen",
+    "apple_en": "Remove Cover"
   },
   "cover_failed": {
     "en": "The cover could not be saved. Please try again.",
@@ -1933,7 +1954,8 @@
   },
   "folder_new": {
     "en": "New folder",
-    "de": "Neuer Ordner"
+    "de": "Neuer Ordner",
+    "apple_en": "New Folder"
   },
   "folder_name": {
     "en": "Name",
@@ -1957,7 +1979,8 @@
   },
   "folder_delete": {
     "en": "Delete folder",
-    "de": "Ordner löschen"
+    "de": "Ordner löschen",
+    "apple_en": "Delete Folder"
   },
   "folder_delete_confirm": {
     "en": "“{1}” and everything in it go to the trash.",
@@ -1981,7 +2004,8 @@
   },
   "memory_delete_chapter": {
     "en": "Delete chapter",
-    "de": "Kapitel löschen"
+    "de": "Kapitel löschen",
+    "apple_en": "Delete Chapter"
   },
   "memory_delete_confirm": {
     "en": "“{1}” moves to the trash. You can restore it from there until it is removed for good.",
@@ -2016,11 +2040,13 @@
   },
   "memory_download": {
     "en": "Download original",
-    "de": "Original herunterladen"
+    "de": "Original herunterladen",
+    "apple_en": "Download Original"
   },
   "memory_play": {
     "en": "Play video",
-    "de": "Video abspielen"
+    "de": "Video abspielen",
+    "apple_en": "Play Video"
   },
   "memory_video_failed": {
     "en": "The video couldn’t be played.",
@@ -2056,7 +2082,8 @@
   },
   "memory_field_focal_length": {
     "en": "Focal length",
-    "de": "Brennweite"
+    "de": "Brennweite",
+    "apple_en": "Focal Length"
   },
   "memory_field_focal_length_35": {
     "en": "Equivalent",
@@ -2072,7 +2099,8 @@
   },
   "memory_field_exposure_compensation": {
     "en": "Exposure compensation",
-    "de": "Belichtungskorrektur"
+    "de": "Belichtungskorrektur",
+    "apple_en": "Exposure Compensation"
   },
   "memory_field_iso": {
     "en": "ISO",
@@ -2120,7 +2148,8 @@
   },
   "memory_field_gps_accuracy": {
     "en": "Position accuracy",
-    "de": "Positionsgenauigkeit"
+    "de": "Positionsgenauigkeit",
+    "apple_en": "Position Accuracy"
   },
   "memory_field_status": {
     "en": "Status",
@@ -2168,7 +2197,8 @@
   },
   "memory_add": {
     "en": "Add photos",
-    "de": "Fotos hinzufügen"
+    "de": "Fotos hinzufügen",
+    "apple_en": "Add Photos"
   },
   "memory_upload_failed": {
     "en": "Could not add: {1}. Please try again.",
@@ -2197,7 +2227,8 @@
   },
   "upload_cancel_all": {
     "en": "Cancel all",
-    "de": "Alle abbrechen"
+    "de": "Alle abbrechen",
+    "apple_en": "Cancel All"
   },
   "upload_cancel": {
     "en": "Cancel",
@@ -2250,5 +2281,90 @@
   "upload_preparing_folder": {
     "en": "Creating the folders of “{1}”…",
     "de": "Die Ordner von „{1}“ werden angelegt …"
+  },
+  "device_unlock_prompt": {
+    "note": "the system's biometric prompt, when the app opens a remembered account",
+    "en": "Open your spaces",
+    "de": "Deine Spaces öffnen"
+  },
+  "ok": {
+    "en": "OK",
+    "de": "OK"
+  },
+  "entry_kind": {
+    "note": "an entry's kind: expense, refund or transfer",
+    "en": "Kind",
+    "de": "Art"
+  },
+  "entry_amount_total": {
+    "en": "Amount: {1}",
+    "de": "Betrag: {1}"
+  },
+  "ed_split_title": {
+    "en": "Split",
+    "de": "Aufteilung"
+  },
+  "receipts_add_photo": {
+    "en": "Add a photo",
+    "de": "Foto hinzufügen"
+  },
+  "receipts_add_file": {
+    "en": "Add a file",
+    "de": "Datei hinzufügen"
+  },
+  "receipts_cannot_show": {
+    "en": "This file cannot be shown here",
+    "de": "Diese Datei kann hier nicht angezeigt werden"
+  },
+  "receipts_save_to_open": {
+    "en": "Save a copy to open it.",
+    "de": "Speichere eine Kopie, um sie zu öffnen."
+  },
+  "photo_library": {
+    "note": "where photos and videos are picked from (the system's photo library)",
+    "en": "Photo Library",
+    "de": "Fotomediathek"
+  },
+  "cover_choose_image": {
+    "en": "Choose an Image",
+    "de": "Bild auswählen"
+  },
+  "pot_open_failed": {
+    "en": "This pot did not open",
+    "de": "Dieser Pot ließ sich nicht öffnen"
+  },
+  "share_extension_sign_in_first": {
+    "en": "Open veyq and sign in first. Then you can share to it.",
+    "de": "Öffne zuerst veyq und melde dich an. Dann kannst du dorthin teilen."
+  },
+  "share_link_share": {
+    "note": "hands a link to the system's share sheet",
+    "en": "Share…",
+    "de": "Teilen …"
+  },
+  "share_role": {
+    "en": "Role",
+    "de": "Rolle"
+  },
+  "share_password_required": {
+    "en": "This space requires a password on every link.",
+    "de": "Dieser Bereich verlangt für jeden Link ein Passwort."
+  },
+  "filter": {
+    "en": "Filter",
+    "de": "Filter"
+  },
+  "trash_row_dates": {
+    "en": "Deleted {1} · removed for good on {2}",
+    "de": "Gelöscht am {1} · endgültig entfernt am {2}"
+  },
+  "share_expires_on": {
+    "en": "Expires on",
+    "de": "Läuft ab am"
+  },
+  "application": {
+    "note": "an application the app does not know by name",
+    "en": "Application",
+    "de": "Anwendung"
   }
 }

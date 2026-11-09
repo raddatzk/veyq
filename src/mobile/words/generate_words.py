@@ -4,7 +4,8 @@
 `words.json` beside this script is the source: per key its English (`en`) and German (`de`) text — a plural is an
 object of CLDR categories (`one`, `other`) — and an optional `note` for translators. A placeholder is `{n}` (a string)
 or `{n:int}` (an integer), numbered from 1 in the order the English text gives them; every language uses the same set.
-A key without `de` is red unless it says `"untranslated": true` (a name such as `veyq`).
+A key without `de` is red unless it says `"untranslated": true` (a name such as `veyq`). `apple_en` / `apple_de` is a
+key's form on Apple where its guidelines word it otherwise (Title Case on buttons and menu entries); the same placeholders.
 
 The apps never write a word of their own: this script writes what each platform reads, and the builds run it.
 
@@ -46,7 +47,7 @@ def load() -> dict:
         if "de" not in entry and not entry.get("untranslated"):
             raise CatalogError(f"{key}: no German text (mark a name `\"untranslated\": true`)")
         shapes = {}
-        for lang in LANGS:
+        for lang in LANGS + tuple(f"apple_{l}" for l in LANGS):
             if lang not in entry:
                 continue
             v = entry[lang]
@@ -163,7 +164,8 @@ def apple_strings(words: dict, out: Path) -> None:
     for key, entry in words.items():
         locs = {}
         for lang in LANGS:
-            v = entry.get(lang)
+            # Apple's own form where its guidelines word it otherwise (Title Case on a button or menu entry)
+            v = entry.get(f"apple_{lang}", entry.get(lang))
             if v is None:
                 continue
             if isinstance(v, dict):

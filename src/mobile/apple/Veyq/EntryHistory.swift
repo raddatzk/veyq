@@ -12,12 +12,12 @@ struct EntryHistory: View {
     @State private var open = false
 
     var body: some View {
-        Button(open ? "Hide history" : "History") { open.toggle() }
+        Button(open ? say(.historyHide) : say(.historyShow)) { open.toggle() }
         if open {
             ForEach(view.history(entryId: entryId), id: \.revision) { r in
                 VStack(alignment: .leading, spacing: 2) {
                     Text(what(r))
-                    Text("\(r.writer ?? String(localized: "Someone")), \(localDateTime(r.at))").font(.caption).foregroundStyle(Role.muted)
+                    Text(verbatim: "\(r.writer ?? say(.historyUnknownWriter)), \(localDateTime(r.at))").font(.caption).foregroundStyle(Role.muted)
                 }
             }
         }
@@ -26,9 +26,9 @@ struct EntryHistory: View {
     private func what(_ r: PotView.HistoryRow) -> String {
         switch r.kind {
         case .money: [r.title, r.amount.map { money($0.int64Value, view.currency, view.minorUnits) }].compactMap { $0 }.joined(separator: " · ")
-        case .deleted: String(localized: "Deleted")
-        case .unreadable: String(localized: "A version this pot cannot read")
-        default: String(localized: "Changed")
+        case .deleted: say(.historyDeleted)
+        case .unreadable: say(.historyUnreadable)
+        default: say(.historyOther)
         }
     }
 }
@@ -49,12 +49,12 @@ struct DeletedEntrySheet: View {
             Form {
                 Section {
                     if let amount = row.amount { Text(money(amount.int64Value, view.currency, view.minorUnits)).fontWeight(.semibold) }
-                    Text("This entry is deleted and counts nowhere. Restoring it counts it again.")
+                    Text(say(.entryDeletedHint))
                     if let purge {
                         if restorable {
-                            Text("It can be restored until \(localDateTime(purge)); then its receipts are erased.")
+                            Text(say(.entryRestorableUntil, localDateTime(purge)))
                         } else {
-                            Text("Its receipts are erased, so it can no longer be restored.")
+                            Text(say(.entryNotRestorable))
                         }
                     }
                 }
@@ -62,12 +62,12 @@ struct DeletedEntrySheet: View {
                 if let message = model.pot?.message { Section { Text(potRefusal(message)).foregroundStyle(Role.danger) } }
             }
             .formStyle(.grouped)
-            .navigationTitle(row.title ?? String(localized: "Transfer"))
+            .navigationTitle(row.title ?? say(.potTransfer))
             .toolbar {
-                ToolbarItem(placement: .cancellationAction) { Button("Cancel") { model.clearPotMessage(); dismiss() } }
+                ToolbarItem(placement: .cancellationAction) { Button(say(.signinCancel)) { model.clearPotMessage(); dismiss() } }
                 if restorable {
                     ToolbarItem(placement: .confirmationAction) {
-                        Button("Restore") {
+                        Button(say(.entryRestore)) {
                             let id = row.id
                             let based = view.latestRevision(entryId: id)
                             Task { if await model.potWrite({ try await $0.restoreEntry(entryId: id, basedOn: based) }) { dismiss() } }

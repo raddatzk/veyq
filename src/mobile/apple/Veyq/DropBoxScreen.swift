@@ -18,9 +18,9 @@ struct DropBoxScreen: View {
             NodeHeroRow()
             if let folders {
                 if folders.isEmpty {
-                    Text("Nobody has dropped anything yet. Share a link to collect files.").foregroundStyle(Role.muted)
+                    Text(say(.dropboxEmpty)).foregroundStyle(Role.muted)
                 } else {
-                    Text("Open a file to download or delete it. To remove everything someone sent, delete their folder; to keep it as an ordinary folder, move it out.")
+                    Text(say(.dropboxHint))
                         .font(.footnote).foregroundStyle(Role.muted).listRowBackground(Color.clear)
                     ForEach(folders, id: \.node.id) { f in
                         Section {
@@ -40,14 +40,14 @@ struct DropBoxScreen: View {
                             HStack {
                                 VStack(alignment: .leading) {
                                     Text(f.label).font(.headline)
-                                    Text(f.files.count == 1 ? "1 file" : "\(f.files.count) files").font(.footnote).foregroundStyle(Role.muted)
+                                    Text(say(.dropboxGuestFiles, f.files.count)).font(.footnote).foregroundStyle(Role.muted)
                                 }
                                 Spacer()
                                 Menu {
-                                    Button("Move \(f.label) out…", systemImage: "folder") { movingOut = f }
-                                    Button("Delete \(f.label)", systemImage: "trash", role: .destructive) { deleting = f }
+                                    Button(say(.dropboxMoveFolder, f.label), systemImage: "folder") { movingOut = f }
+                                    Button(say(.peopleDelete, f.label), systemImage: "trash", role: .destructive) { deleting = f }
                                 } label: {
-                                    Label("More", systemImage: "ellipsis.circle").labelStyle(.iconOnly)
+                                    Label(say(.nodeMore), systemImage: "ellipsis.circle").labelStyle(.iconOnly)
                                 }
                             }
                         }
@@ -64,16 +64,16 @@ struct DropBoxScreen: View {
             NodeMoveSheet(model: model, ref: NodeAt(scopeId: m.folder.node.scopeId, nodeId: m.folder.node.id, kind: m.folder.node.kind, name: m.folder.label))
                 .onDisappear { Task { folders = await model.dropBoxFolders(scopeId: ref.scopeId, nodeId: ref.nodeId) } }
         }
-        .alert("Delete \(deleting?.label ?? "")", isPresented: Binding(get: { deleting != nil }, set: { if !$0 { deleting = nil } }), presenting: deleting) { f in
-            Button("Delete", role: .destructive) {
+        .alert(say(.dropboxDeleteFolder, deleting?.label ?? ""), isPresented: Binding(get: { deleting != nil }, set: { if !$0 { deleting = nil } }), presenting: deleting) { f in
+            Button(say(.peopleDeleteAccept), role: .destructive) {
                 Task {
                     await model.trash(NodeAt(scopeId: f.node.scopeId, nodeId: f.node.id, kind: f.node.kind, name: f.label))
                     folders = await model.dropBoxFolders(scopeId: ref.scopeId, nodeId: ref.nodeId)
                 }
             }
-            Button("Cancel", role: .cancel) {}
+            Button(say(.signinCancel), role: .cancel) {}
         } message: { f in
-            Text("“\(f.label)” and everything in it move to the trash. You can restore it from there until it is removed for good.")
+            Text(say(.dropboxDeleteFolderConfirm, f.label))
         }
     }
 }

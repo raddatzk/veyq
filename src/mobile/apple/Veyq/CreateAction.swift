@@ -8,7 +8,7 @@ extension View {
     ///
     /// The bar shows the symbol alone, so `label` names it for VoiceOver and, on the Mac, as its tooltip.
     /// - Parameter shown: whether the action is offered at all (a reader of a Pot adds nothing).
-    func createAction(_ label: LocalizedStringKey, shown: Bool = true, action: @escaping () -> Void) -> some View {
+    func createAction(_ label: String, shown: Bool = true, action: @escaping () -> Void) -> some View {
         toolbar {
             if shown {
                 ToolbarItem(placement: .primaryAction) {
@@ -22,7 +22,7 @@ extension View {
 
     /// The creating action where a level creates more than one kind (the web's "New" menu): the "+" opens a menu of
     /// `entries`, as Files' "+" does.
-    func createMenu<Entries: View>(_ label: LocalizedStringKey, shown: Bool = true, @ViewBuilder entries: @escaping () -> Entries) -> some View {
+    func createMenu<Entries: View>(_ label: String, shown: Bool = true, @ViewBuilder entries: @escaping () -> Entries) -> some View {
         toolbar {
             if shown {
                 ToolbarItem(placement: .primaryAction) {

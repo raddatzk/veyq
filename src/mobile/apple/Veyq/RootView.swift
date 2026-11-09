@@ -24,8 +24,8 @@ struct RootView: View {
             // The share extension with no account this device trusts: the app signs in (ADR 0126 decision 5).
             VStack(spacing: 16) {
                 Brand()
-                Text("Open veyq and sign in first. Then you can share to it.").multilineTextAlignment(.center).foregroundStyle(Role.text)
-                Button("Close") { model.cancelShare() }
+                Text(say(.shareExtensionSignInFirst)).multilineTextAlignment(.center).foregroundStyle(Role.text)
+                Button(say(.receiptsClose)) { model.cancelShare() }
             }
             .padding(32)
             .frame(maxWidth: .infinity, maxHeight: .infinity)

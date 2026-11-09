@@ -21,15 +21,15 @@ struct SpaceTrashSheet: View {
         NavigationStack {
             List {
                 Section {
-                    Text("Deleted items wait here — with everything inside them — until the date shown. Restore one and it comes back complete.")
+                    Text(say(.trashHint))
                         .font(.subheadline).foregroundStyle(Role.muted)
                         .listRowBackground(Color.clear)
                 }
                 if failed {
-                    Text("Could not open the trash. Please try again.").foregroundStyle(Role.danger)
+                    Text(say(.trashLoadFailed)).foregroundStyle(Role.danger)
                 } else if let rows {
                     if rows.isEmpty {
-                        Text("The trash is empty.").foregroundStyle(Role.muted)
+                        Text(say(.trashEmpty)).foregroundStyle(Role.muted)
                     } else {
                         ForEach(rows, id: \.id) { row in rowView(row) }
                     }
@@ -37,22 +37,22 @@ struct SpaceTrashSheet: View {
                     ProgressView().frame(maxWidth: .infinity)
                 }
             }
-            .navigationTitle("Trash")
+            .navigationTitle(say(.trashTitle))
             #if os(iOS)
             .navigationBarTitleDisplayMode(.inline)
             #endif
-            .toolbar { ToolbarItem(placement: .confirmationAction) { Button("Done") { dismiss() } } }
+            .toolbar { ToolbarItem(placement: .confirmationAction) { Button(say(.shareDone)) { dismiss() } } }
             .task { await load() }
             .confirmationDialog(
-                "Delete forever?",
+                say(.trashPurgeConfirmTitle),
                 isPresented: Binding(get: { purging != nil }, set: { if !$0 { purging = nil } }),
                 titleVisibility: .visible,
                 presenting: purging
             ) { row in
-                Button("Delete forever", role: .destructive) { Task { await purge(row) } }
-                Button("Cancel", role: .cancel) {}
+                Button(say(.trashPurge), role: .destructive) { Task { await purge(row) } }
+                Button(say(.signinCancel), role: .cancel) {}
             } message: { row in
-                Text("“\(row.name)” and everything inside it will be permanently deleted now. This cannot be undone.")
+                Text(say(.trashPurgeConfirm, row.name))
             }
         }
     }
@@ -60,15 +60,15 @@ struct SpaceTrashSheet: View {
     @ViewBuilder private func rowView(_ row: NodeTrash.Trashed) -> some View {
         VStack(alignment: .leading, spacing: 6) {
             Label { Text(row.name).fontWeight(.semibold) } icon: { Tile(symbol: Names.kindSymbol(row.kind)) }
-            Text("Deleted \(Self.day(row.deletedAt)) · removed for good on \(Self.day(row.purgeAfter))")
+            Text(say(.trashRowDates, Self.day(row.deletedAt), Self.day(row.purgeAfter)))
                 .font(.caption).foregroundStyle(Role.muted)
             if let e = rowError, e.id == row.id { Text(e.message).font(.caption).foregroundStyle(Role.danger) }
             if renaming == row.id {
-                TextField("New name", text: $retryName).textFieldStyle(.roundedBorder).disabled(busy == row.id)
+                TextField(say(.trashRetryName), text: $retryName).textFieldStyle(.roundedBorder).disabled(busy == row.id)
                 HStack {
                     Spacer()
-                    Button("Cancel") { renaming = nil }.disabled(busy == row.id)
-                    Button("Restore") { Task { await restore(row, newName: retryName) } }
+                    Button(say(.signinCancel)) { renaming = nil }.disabled(busy == row.id)
+                    Button(say(.entryRestore)) { Task { await restore(row, newName: retryName) } }
                         .disabled(busy == row.id || retryName.trimmingCharacters(in: .whitespaces).isEmpty)
                 }
                 .buttonStyle(.borderless)
@@ -76,9 +76,9 @@ struct SpaceTrashSheet: View {
                 HStack {
                     Spacer()
                     if model.canRestore(row) {
-                        Button("Restore") { Task { await restore(row, newName: nil) } }.disabled(busy == row.id)
+                        Button(say(.entryRestore)) { Task { await restore(row, newName: nil) } }.disabled(busy == row.id)
                     }
-                    Button("Delete forever", role: .destructive) { purging = row }.disabled(busy == row.id)
+                    Button(say(.trashPurge), role: .destructive) { purging = row }.disabled(busy == row.id)
                 }
                 .buttonStyle(.borderless)
             }
@@ -100,11 +100,11 @@ struct SpaceTrashSheet: View {
             rows?.removeAll { $0.id == row.id }
             await load() // a child whose own name an earlier delete freed stays: a root of its own now
         case .nameTaken:
-            rowError = (row.id, String(localized: "Something with a similar name already exists here."))
+            rowError = (row.id, say(.nodeSlugTaken))
             renaming = row.id
             retryName = newName ?? row.name
         default:
-            rowError = (row.id, String(localized: "Could not restore this. Please try again."))
+            rowError = (row.id, say(.trashRestoreFailed))
         }
     }
 
@@ -115,7 +115,7 @@ struct SpaceTrashSheet: View {
         switch await model.purge(row) {
         case .purged: rows?.removeAll { $0.id == row.id }
         case .gone: await load()
-        default: rowError = (row.id, String(localized: "Could not delete this for good. Please try again."))
+        default: rowError = (row.id, say(.trashPurgeFailed))
         }
     }
 

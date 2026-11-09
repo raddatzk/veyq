@@ -30,12 +30,12 @@ struct NodeMoveSheet: View {
     var body: some View {
         NavigationStack {
             content
-                .navigationTitle(copying ? "Copy “\(ref.name)”" : "Move “\(ref.name)”")
+                .navigationTitle(copying ? say(.theCopyTitle, ref.name) : say(.moveTitle, ref.name))
                 #if os(iOS)
                 .navigationBarTitleDisplayMode(.inline)
                 #endif
                 .toolbar {
-                    ToolbarItem(placement: .cancellationAction) { Button("Cancel") { dismiss() }.disabled(moving) }
+                    ToolbarItem(placement: .cancellationAction) { Button(say(.signinCancel)) { dismiss() }.disabled(moving) }
                 }
         }
         .task {
@@ -52,18 +52,18 @@ struct NodeMoveSheet: View {
             List {
                 Section {
                     if copying {
-                        Text("Open the place the copy should go to and choose “Copy here”.")
+                        Text(say(.theCopyHint))
                             .font(.subheadline).foregroundStyle(Role.muted)
                     } else {
-                        Text("Open the place it should go to and choose “Move here”. Everything inside it moves along and stays readable.")
+                        Text(say(.moveHint))
                             .font(.subheadline).foregroundStyle(Role.muted)
                     }
                 }
                 .listRowBackground(Color.clear)
                 if copying {
                     // what a copy leaves behind, in the web's words (core's, then the kind's `copyLosses`)
-                    Section("What does not come along") {
-                        Text("Shares, favourites, the trash and the original upload times. You become the owner of the copy.")
+                    Section(say(.theCopyLosses)) {
+                        Text(say(.theCopyLossAlways))
                         ForEach(read?.losses ?? [], id: \.self) { Text($0) }
                     }
                     .font(.footnote).foregroundStyle(Role.muted)
@@ -72,7 +72,7 @@ struct NodeMoveSheet: View {
                         noRoom = await model.copyNoRoom(ref)
                     }
                     if let left = read?.leftOut, !left.isEmpty {
-                        Section("Left out, because this version cannot copy them:") {
+                        Section(say(.theCopyLeftOut)) {
                             ForEach(left, id: \.self) { Text($0) }
                         }
                         .font(.footnote).foregroundStyle(Role.muted)
@@ -95,7 +95,7 @@ struct NodeMoveSheet: View {
                 }
                 Section {
                     if places.isEmpty {
-                        Text("No place here can take “\(ref.name)”.").foregroundStyle(Role.muted)
+                        Text(say(.moveEmpty, ref.name)).foregroundStyle(Role.muted)
                     }
                     ForEach(places, id: \.node.nodeId) { place in
                         Button { at = place.node.nodeId; problem = nil } label: {
@@ -103,7 +103,7 @@ struct NodeMoveSheet: View {
                                 Label { Text(place.node.name) } icon: { Tile(symbol: Names.kindSymbol(place.node.kind)) }
                                 Spacer()
                                 if let blocked = place.blocked {
-                                    Text(blocked == .inside ? "inside the item" : "the item itself").font(.caption).foregroundStyle(Role.muted)
+                                    Text(blocked == .inside ? say(.moveBlockedInside) : say(.moveBlockedSelf)).font(.caption).foregroundStyle(Role.muted)
                                 } else {
                                     Image(systemName: "chevron.right").foregroundStyle(Role.muted)
                                 }
@@ -128,16 +128,16 @@ struct NodeMoveSheet: View {
                             Task { await move(to: at, from: moved.parentId) }
                         }
                     } label: {
-                        HStack { Spacer(); if moving { ProgressView() } else { Text(copying ? "Copy here" : "Move here").fontWeight(.semibold) }; Spacer() }
+                        HStack { Spacer(); if moving { ProgressView() } else { Text(copying ? say(.theCopySubmit) : say(.moveSubmit)).fontWeight(.semibold) }; Spacer() }
                     }
                     .disabled(block != nil || moving || noRoom != nil)
                 }
             }
-            .alert("Move a guest’s folder out of the drop box?", isPresented: $confirming) {
-                Button("Move out") { Task { await move(to: at, from: moved.parentId) } }
-                Button("Cancel", role: .cancel) {}
+            .alert(say(.moveIdentityTitle), isPresented: $confirming) {
+                Button(say(.moveIdentityAccept)) { Task { await move(to: at, from: moved.parentId) } }
+                Button(say(.signinCancel), role: .cancel) {}
             } message: {
-                Text("“\(ref.name)” becomes an ordinary folder: the guest who sent it can no longer add anything to it, and it cannot be moved back into the drop box. Everything in it stays readable for you.")
+                Text(say(.moveIdentityConfirm, ref.name))
             }
         } else {
             ProgressView().frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -161,17 +161,17 @@ struct NodeMoveSheet: View {
 
     private static func hereText(_ block: NodeMove.Block, copying: Bool) -> String {
         switch block {
-        case .identityFolder: copying ? String(localized: "Nothing can be copied into a guest’s folder.") : String(localized: "Nothing can be moved into a guest’s folder.")
-        case .inside: String(localized: "It can’t be moved into something inside it.")
-        case .current: String(localized: "It is already here.")
-        case .kind: String(localized: "This place can’t hold it.")
-        default: String(localized: "It can’t be moved into itself.")
+        case .identityFolder: copying ? say(.theCopyHereIdentity) : say(.moveHereIdentity)
+        case .inside: say(.moveHereInside)
+        case .current: say(.moveHereCurrent)
+        case .kind: say(.moveHereKind)
+        default: say(.moveHereSelf)
         }
     }
 
     /// Why a move did not go through, in the web's words (`node.move.refused.*`).
     static func problemText(_ outcome: NodeMove.Outcome) -> String {
-        say(Notices.shared.moveRefused(outcome: outcome) ?? Notices.shared.of(msg: .moveRefusedFailed))
+        say(notice: Notices.shared.moveRefused(outcome: outcome) ?? Notices.shared.of(msg: .moveRefusedFailed))
     }
 }
 
