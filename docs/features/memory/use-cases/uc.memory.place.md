@@ -80,7 +80,10 @@ is [ADR 0016](../../../decisions/0016-geocoding-provider-neutrality.md). This us
   place is unavailable until unlock + open.
 - **E2 — malformed / wrong-key `wrappedMeta`:** best-effort — treated as no location; never a broken header/pin.
 - **E3 — "set location" with no photo GPS:** `derived` can't be formed. **With a map** the user moves the map to
-  set the point by hand (`fixed`). **Without one** (A4) they type a **name** (`manual`) → a valid **name-only**
+  set the point by hand (`fixed`); a map the user never moved sets **no** point - saving then stores a name-only
+  place as below, never the view the editor opened on (inbox #834: an untouched editor pinned the Memory at the
+  world view's centre). A stored `fixed` point equal to that opening view's centre is read as no point, and the
+  next save drops it. **Without one** (A4) they type a **name** (`manual`) → a valid **name-only**
   location (`derivedMode: 'auto'`, no `derived`): shown in the detail, the profile's rows and an export, but **not**
   on any map (no coordinate) until a geotagged photo gives it the medoid.
 - **E4 — reverse-lookup off or unreachable:** the name field falls back to **manual typing** — no external
