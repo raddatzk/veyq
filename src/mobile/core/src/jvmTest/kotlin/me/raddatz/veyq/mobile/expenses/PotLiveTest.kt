@@ -285,6 +285,42 @@ class PotLiveTest {
             System.getenv("VEYQ_LIVE_LINKS_OUT")?.let { File(it).writeText(read.url!!) }
             println("[$potName] READ link \"App link $n\" and a READ_WRITE link with a password and an end minted and listed")
         }
+        System.getenv("VEYQ_LIVE_LINK_OFF")?.let { folderName ->
+            // A fresh Pot in the root folder [folderName] with an entry and a receipt, and two links A and B. A is switched off:
+            // the Pot gets a new key — a fresh session opens it, its entry and the receipt's bytes, a write there goes through
+            // at once (nothing due any more) — and B is wrapped anew. A's and B's addresses go to VEYQ_LIVE_LINKS_OUT
+            // ("A\nB"), for the web's guest page: A must open nothing, B the Pot. The Pot and its links stay.
+            val links = me.raddatz.veyq.mobile.session.ShareLinks
+            val folder = tenant.nodes().first { it.kind == "FOLDER" && it.parentId == null && it.name == folderName }
+            val scopeId = folder.scopeId
+            val name = "App link off ${System.currentTimeMillis() % 100_000}"
+            val nodeId = PotCreate.create(tenant, scopeId, folder.nodeId, name, Ledger.BaseCurrency("EUR", 2), listOf(PotCreate.NewPerson.name("Ana"))).nodeId!!
+            tenant.forgetTree()
+            val pot = PotSession.open(tenant, scopeId, nodeId)!!
+            val png = byteArrayOf(0x89.toByte(), 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a) + ByteArray(5_000) { (it % 5).toByte() }
+            val receiptId = pot.newId()
+            val form = PotView(pot).blankForm(java.time.LocalDate.now().toString())!!
+                .copy(title = "Before the re-key", payers = listOf(EntryForm.Payer(pot.ledger!!.participants.first().id, "3")))
+            assertEquals(PotSession.WriteOutcome.WRITTEN, pot.saveEntry(pot.newId(), form, null, listOf(PotSession.PendingReceipt(receiptId, png, "image/png", "r.png", null))))
+            val a = links.mint(tenant, scopeId, nodeId, links.READ, "A", "", null)
+            val b = links.mint(tenant, scopeId, nodeId, links.READ, "B", "", null)
+            assertEquals(me.raddatz.veyq.mobile.session.ShareLinks.Outcome.CREATED, b.outcome, b.refusal)
+            val aId = a.url!!.substringAfter("/s/").substringBefore('#')
+            val fold = { kind: String, n: String -> if (kind == PotSession.KIND) PotCreate.tokenInput(n) else null }
+            val closed = links.switchOff(tenant, scopeId, nodeId, aId, PotRekey.content, fold) { java.util.UUID.randomUUID().toString() }
+            assertEquals(me.raddatz.veyq.mobile.session.ShareLinks.Closed.CLOSED, closed)
+            val fresh = account.open(tenant.tenant)
+            val again = PotSession.open(fresh, scopeId, nodeId)!!
+            assertEquals(listOf("Before the re-key"), again.ledger!!.entries.map { (it.content as? Expense)?.title }, "the entry does not open under the new key")
+            assertTrue(again.openReceipt(receiptId)!!.contentEquals(png), "the receipt does not open under the new key")
+            val after = PotView(again).blankForm(java.time.LocalDate.now().toString())!!
+                .copy(title = "After the re-key", payers = listOf(EntryForm.Payer(again.ledger!!.participants.first().id, "4")))
+            assertEquals(PotSession.WriteOutcome.WRITTEN, again.saveEntry(again.newId(), after, null))
+            val listed = links.list(fresh, scopeId, nodeId)!!
+            assertTrue(!listed.single { it.label == "A" }.enabled && listed.single { it.label == "B" }.enabled)
+            System.getenv("VEYQ_LIVE_LINKS_OUT")?.let { File(it).writeText(a.url + "\n" + b.url) }
+            println("[$folderName] \"$name\": link A switched off and the Pot re-keyed; entry, receipt and a new write open; B stays on")
+        }
         System.getenv("VEYQ_LIVE_RENAME")?.let { potName ->
             // A fresh Pot renamed (read back by a fresh session), its old name free and its new one taken, a sibling's name
             // refused before anything is sent, then trashed (it stays in the trash).

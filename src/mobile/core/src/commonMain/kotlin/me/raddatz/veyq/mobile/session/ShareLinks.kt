@@ -230,5 +230,30 @@ object ShareLinks {
         }
     }
 
+    enum class Closed {
+        /** Switched off, and the node below it has a new key: the link opens nothing any more, now or later. */
+        CLOSED,
+        /** Switched off; the new key is left to a member's web device ([NodeRekey.Outcome.LEFT]) — until then writes there wait. */
+        CLOSED_REKEY_PENDING,
+        FAILED,
+    }
+
+    /**
+     * Switches link [shareId] off (`revokeShare`, idempotent) and re-keys the node it is rooted at ([nodeId] of [scopeId]),
+     * since the link's `K_share` opened the node's key: until the re-key, its guests' copies are still the key everything
+     * below is sealed under (`rekeyAfterClose`, ADR 0115). [content] is the node's kind's own re-key, [tokenInput] its fold.
+     */
+    @Throws(Exception::class)
+    suspend fun switchOff(
+        tenant: TenantSession, scopeId: String, nodeId: String, shareId: String, content: NodeRekey.ContentRekey?,
+        tokenInput: (kind: String, name: String) -> String?, uuid: () -> String,
+    ): Closed {
+        val account = tenant.account
+        val r = runCatching { account.respond { SharingApi(tenant.base, account.http).revokeShare(shareId) } }.getOrNull() ?: return Closed.FAILED
+        if (!r.success) return Closed.FAILED
+        val rekeyed = runCatching { NodeRekey.rekey(tenant, scopeId, nodeId, content, tokenInput, uuid) }.getOrDefault(NodeRekey.Outcome.FAILED)
+        return if (rekeyed == NodeRekey.Outcome.REKEYED || rekeyed == NodeRekey.Outcome.NOT_DUE) Closed.CLOSED else Closed.CLOSED_REKEY_PENDING
+    }
+
     private fun codeOf(body: String): String? = runCatching { (Json.parseToJsonElement(body) as JsonObject)["code"]?.jsonPrimitive?.content }.getOrNull()
 }

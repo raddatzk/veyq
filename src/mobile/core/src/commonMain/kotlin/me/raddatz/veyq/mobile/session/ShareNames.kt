@@ -76,9 +76,15 @@ object ShareNames {
     internal fun recoverShareKey(
         suite: me.raddatz.veyq.mobile.crypto.V1, joins: JoinRecords, share: ShareSummary, copyEpoch: Int,
         scopeKey: ByteArray, scopeEpoch: Long, wrappedValueKey: String, sealedShareKey: String,
+    ): ByteArray? = recoverShareKey(suite, joins, share.scopeId, share.nodeId, share.shareId, copyEpoch, scopeKey, scopeEpoch, wrappedValueKey, sealedShareKey)
+
+    /** `K_share` from the recovery copy of link [shareId] rooted at [nodeId] of [scopeId], bound to that address. */
+    internal fun recoverShareKey(
+        suite: me.raddatz.veyq.mobile.crypto.V1, joins: JoinRecords, scopeId: String, nodeId: String, shareId: String, copyEpoch: Int,
+        scopeKey: ByteArray, scopeEpoch: Long, wrappedValueKey: String, sealedShareKey: String,
     ): ByteArray? = runCatching {
-        val context = Context("share-key-recovery", "scopeId" to share.scopeId, "nodeId" to share.nodeId, "shareId" to share.shareId, "epoch" to copyEpoch.toLong())
-        val valueKey = suite.open(joins.valueKeyContext(share.scopeId, scopeEpoch, joins.valueAddress(Purposes.SEAL, context)), scopeKey, unb64(wrappedValueKey))
+        val context = Context("share-key-recovery", "scopeId" to scopeId, "nodeId" to nodeId, "shareId" to shareId, "epoch" to copyEpoch.toLong())
+        val valueKey = suite.open(joins.valueKeyContext(scopeId, scopeEpoch, joins.valueAddress(Purposes.SEAL, context)), scopeKey, unb64(wrappedValueKey))
         try {
             suite.open(context, valueKey, unb64(sealedShareKey))
         } finally {

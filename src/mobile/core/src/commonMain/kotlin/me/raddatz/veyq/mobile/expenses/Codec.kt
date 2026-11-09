@@ -29,6 +29,16 @@ class RevisionCodec(private val suite: V1) {
     private fun bodyContext(a: RevisionAddress) =
         Context("expense-entry", "scopeId" to a.scopeId, "nodeId" to a.nodeId, "entryId" to a.entryId, "revision" to a.revision)
 
+    /** A revision's `K_rev` moved from the Pot's old key to its new one (a re-key, `rekeyPotContent`): the body is untouched. */
+    fun rewrapRevisionKey(address: RevisionAddress, oldKey: ByteArray, newKey: ByteArray, wrapped: ByteArray): ByteArray {
+        val kRev = suite.open(keyContext(address), oldKey, wrapped)
+        try {
+            return suite.seal(keyContext(address), newKey, kRev)
+        } finally {
+            kRev.fill(0)
+        }
+    }
+
     /** Seals one revision under a fresh `K_rev`, wrapped under the Pot's key; past 16 KiB throws `pad_too_large`. */
     fun seal(address: RevisionAddress, potKey: ByteArray, body: RevisionBody): SealedRevision {
         val kRev = suite.p.randomBytes(32)

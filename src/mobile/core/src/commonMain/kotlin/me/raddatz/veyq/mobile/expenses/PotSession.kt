@@ -257,6 +257,23 @@ class PotSession private constructor(private val tenant: TenantSession, private 
         return true
     }
 
+    /**
+     * The Pot was re-keyed on this device (a link to it switched off): its node taken as the tree holds it now, its new
+     * key with it, and everything held read anew under that key — under the read lock, so a live poll in flight does not
+     * interleave. False when the Pot is no longer there.
+     */
+    @Throws(Exception::class)
+    suspend fun rekeyed(): Boolean = reading.withLock {
+        tenant.forgetTree()
+        node = tenant.trees()[node.scopeId]?.firstOrNull { it.id == node.id && it.kind == KIND } ?: return@withLock false
+        meta = openMeta()
+        held.clear()
+        ledgerRevision = null
+        deleteRevision = 0
+        cursor = null
+        read()
+    }
+
     /** A receipt picked in the editor, uploaded only when the entry is saved (`EntryEditor.vue`): [id] minted at pick. */
     class PendingReceipt(val id: String, internal val bytes: ByteArray, val type: String, val name: String?, val modifiedAt: Long?) {
         val size: Long get() = bytes.size.toLong()
