@@ -71,6 +71,8 @@ internal class HeaderContribution(
     val subtitle: String? = null,
     /** Whether the application lets this node's cover change here (a Pot of a switched-off Expenses: no). */
     val cover: Boolean = true,
+    /** Whether the kind is renamed at all (a drop box never is: Depot's rights). */
+    val rename: Boolean = true,
     /** The delete's title and question in the kind's words (`deleteTitle`, `deleteQuestion.ts`). */
     val deleteTitle: String,
     val deleteQuestion: String,
@@ -119,7 +121,7 @@ internal fun NodeHeaderActions(
     val rights = Plan.Rights(
         favorite = pinned != null,
         share = KindPages.of(node.kind)?.shareable == true && model.linkRules().on,
-        rename = true,
+        rename = contribution.rename,
         move = true,
         cover = KindPages.of(node.kind)?.takesCover == true && contribution.cover,
         copy = contribution.copy != null,

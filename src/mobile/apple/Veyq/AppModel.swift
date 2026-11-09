@@ -799,6 +799,12 @@ final class AppModel {
     /// What each object's row says beside its name, by node id (an application's answer: Expenses' `PotRows`).
     private(set) var rowDetails: [String: [String]] = [:]
 
+    /// Drop box `nodeId`'s guests' folders with their files (`DropBoxes.folders`); nil when they could not be read.
+    func dropBoxFolders(scopeId: String, nodeId: String) async -> [DropBoxes.GuestFolder]? {
+        guard let t = tenantSession else { return nil }
+        return try? await DropBoxes.shared.folders(tenant: t, scopeId: scopeId, dropBoxId: nodeId)
+    }
+
     /// Every file of the tenant with its content's reference and opened meta, by node id (Depot's `DepotFiles.list`).
     private(set) var files: [String: DepotFiles.File] = [:]
 
@@ -810,6 +816,11 @@ final class AppModel {
         files = read
         var details = pots
         for (id, f) in read { details[id] = Self.fileDetails(f) }
+        // a drop box's row: how many guests have a folder in it (Depot's `people`)
+        for box in rawNodes where box.kind == DepotFiles.shared.DROPBOX {
+            let n = rawNodes.filter { $0.parentId == box.nodeId && $0.kind == "FOLDER" }.count
+            details[box.nodeId] = [n == 0 ? String(localized: "Nobody yet") : n == 1 ? String(localized: "1 person") : String(localized: "\(n) people")]
+        }
         rowDetails = details
     }
 

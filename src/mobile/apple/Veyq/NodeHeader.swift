@@ -10,6 +10,8 @@ struct HeaderContribution {
     var subtitle: String?
     /// Whether the application lets this node's cover change here (a Pot of a switched-off Expenses: no).
     var cover = true
+    /// Whether the kind is renamed at all (a drop box never is: Depot's rights).
+    var rename = true
     /// The delete's title and question in the kind's words (`deleteTitle`, `deleteQuestion.ts`).
     let deleteTitle: String
     let deleteQuestion: String
@@ -73,9 +75,19 @@ struct KindPage {
         case "FOLDER": folder
         case PotSession.companion.KIND: pot
         case DepotFiles.shared.FILE: file
+        case DepotFiles.shared.DROPBOX: dropBox
         default: nil
         }
     }
+
+    /// Depot's drop box: its guests' folders (`DropBoxScreen`); never renamed; its cover.
+    private static let dropBox = KindPage(shareable: false, takesCover: true, header: { node, _ in
+        HeaderContribution(
+            rename: false,
+            deleteTitle: String(localized: "Delete Drop Box"),
+            deleteQuestion: String(localized: "“\(node.name)” moves to the trash with every guest’s folder in it, and its links take no files while it is there. You can restore it from the trash until it is removed for good.")
+        )
+    }, body: { ref, _, model in AnyView(DropBoxScreen(model: model, ref: ref)) })
 
     /// Depot's file: its download under its own name, its replace (or first upload), its page (`FileScreen`).
     private static let file = KindPage(shareable: true, takesCover: false, header: { node, model in
@@ -171,7 +183,7 @@ struct NodeHeaderActions: View {
         let rights = NodeHeader.Rights(
             favorite: pinned != nil,
             share: page?.shareable == true && model.linkRules().on,
-            rename: true,
+            rename: contribution.rename,
             move: true,
             cover: page?.takesCover == true && contribution.cover,
             copy: contribution.copy != nil,

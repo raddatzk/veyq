@@ -688,7 +688,15 @@ class AppModel(app: Application) : AndroidViewModel(app) {
         val pots = runCatching { me.raddatz.veyq.mobile.expenses.PotRows.details(t) }.getOrDefault(emptyMap())
         val files = runCatching { me.raddatz.veyq.mobile.depot.DepotFiles.list(t) }.getOrDefault(emptyMap())
         if (tenantSession === t) _files.value = files
-        _rowDetails.value = pots + files.mapValues { (_, f) -> fileDetails(f) }
+        val app = getApplication<Application>()
+        // a drop box's row: how many guests have a folder in it (Depot's `people`)
+        val boxes = runCatching { t.nodes() }.getOrDefault(emptyList()).let { nodes ->
+            nodes.filter { it.kind == me.raddatz.veyq.mobile.depot.DepotFiles.DROPBOX }.associate { box ->
+                val n = nodes.count { it.parentId == box.nodeId && it.kind == "FOLDER" }
+                box.nodeId to listOf(if (n == 0) app.getString(R.string.dropbox_people_none) else app.resources.getQuantityString(R.plurals.dropbox_people, n, n))
+            }
+        }
+        _rowDetails.value = pots + files.mapValues { (_, f) -> fileDetails(f) } + boxes
         readCovers(t)
     }
 
@@ -749,6 +757,12 @@ class AppModel(app: Application) : AndroidViewModel(app) {
     }
 
     // ---- Depot's files (the application's `depot/`) ----
+
+    /** Drop box [nodeId]'s guests' folders with their files (`DropBoxes.folders`); null when they could not be read. */
+    suspend fun dropBoxFolders(scopeId: String, nodeId: String): List<me.raddatz.veyq.mobile.depot.DropBoxes.GuestFolder>? {
+        val t = tenantSession ?: return null
+        return runCatching { me.raddatz.veyq.mobile.depot.DropBoxes.folders(t, scopeId, nodeId) }.getOrNull()
+    }
 
     /** Every file of the tenant with its content's reference and opened meta, by node id (`DepotFiles.list`). */
     private val _files = MutableStateFlow<Map<String, me.raddatz.veyq.mobile.depot.DepotFiles.File>>(emptyMap())

@@ -318,8 +318,17 @@ implementation exists but what holds it to the first.
   decided by the bytes — that is about what the app renders safely, not about what a person may do with their file. Measured 2026-11-09: `DepotLiveTest` (a three-frame upload read back to the
   byte with its meta, a name taken answered as the file it is, a replace with a new blob, a stale replace refused); the web
   shows the app's file — its text, size, type, modified time, uploader — and an image and a PDF uploaded from Android's
-  picker open in both the web and the app. Not built yet: the drop box, a file's copy and its place in a folder's download
-  (both left out and said), a folder upload, the uploader on a file's page.
+  picker open in both the web and the app. A drop box (`DEPOT_DROPBOX`) is read as the web's member reads it: core's tree
+  opens a guest's identity folder under the guest's own key `K_up` — the drop box's private drop key opened under its key,
+  the identity key sealed to its public half opened with it (`Tree.childEntryKey`, the web's `childEntryKey`; the drop
+  key's codec and both seals pinned by `v1.json#drop_key`, which @veyq/crypto and the app's suite both meet) — and its page
+  lists the guests' folders in the order they came, a repeated name numbered ("Anna", "Anna (2)", `depot/DropBoxes.kt`),
+  each file opening its page, a folder deleted to the trash after its question; its row says how many people have a
+  folder in it, and it is never renamed. Measured 2026-11-09: a drop box the web made and two guests filled through its
+  link, every file read by `DropBoxLiveTest` to the SHA-256 the guests dropped (an entry key taken from the parent turns
+  it red), and its page in both apps. Not built yet: a drop box's links and its creation ("Add files only"), its re-key
+  (it stays due for a web device), moving a guest's folder out, a file's copy and its place in a folder's download (both
+  left out and said), a folder upload, the uploader on a file's page.
 - **One header for every node, drawn by core** (the web's `NodePage` + `NodeHeader`, ADR 0110 decision 10; owner
   2026-11-09): what a node's header offers and where is core's `navigation/NodeHeader.kt` — core's actions around the
   application's (the heart before them, the copy beside the move, cover, download and report after), the kind's

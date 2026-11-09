@@ -54,7 +54,17 @@ internal object KindPages {
         FileScreen(ref, model)
     })
 
+    /** Depot's drop box: its guests' folders (`DropBoxScreen`); never renamed; its cover. */
+    private val dropBox = KindPage(shareable = false, takesCover = true, header = { node, _ ->
+        HeaderContribution(
+            rename = false,
+            deleteTitle = stringResource(R.string.dropbox_delete),
+            deleteQuestion = stringResource(R.string.dropbox_delete_confirm, node.name),
+        )
+    }, body = { ref, _, model -> DropBoxScreen(ref, model) })
+
     fun of(kind: String): KindPage? = when (kind) {
+        me.raddatz.veyq.mobile.depot.DepotFiles.DROPBOX -> dropBox
         "FOLDER" -> folder
         PotSession.KIND -> pot
         me.raddatz.veyq.mobile.depot.DepotFiles.FILE -> file

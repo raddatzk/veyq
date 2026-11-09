@@ -327,6 +327,21 @@
     <string name="depot_error_stale_file">“%1$s” was not uploaded: someone else replaced this file in the meantime. Replace it anyway, or look at theirs first.</string>
     <string name="depot_error_quota">“%1$s” was not uploaded: there is no space left. Deleted files only free space once the trash is emptied.</string>
     <string name="depot_error_failed">“%1$s” could not be uploaded.</string>
+    <string name="dropbox_people_none">Nobody yet</string>
+    <plurals name="dropbox_people">
+        <item quantity="one">1 person</item>
+        <item quantity="other">%d people</item>
+    </plurals>
+    <plurals name="dropbox_guest_files">
+        <item quantity="one">%d file</item>
+        <item quantity="other">%d files</item>
+    </plurals>
+    <string name="dropbox_empty">Nobody has dropped anything yet. Share a link to collect files.</string>
+    <string name="dropbox_hint">Open a file to download or delete it. To remove everything someone sent, delete their folder.</string>
+    <string name="dropbox_delete">Delete drop box</string>
+    <string name="dropbox_delete_confirm">“%1$s” moves to the trash with every guest’s folder in it, and its links take no files while it is there. You can restore it from the trash until it is removed for good.</string>
+    <string name="dropbox_delete_folder">Delete %1$s</string>
+    <string name="dropbox_delete_folder_confirm">“%1$s” and everything in it move to the trash. You can restore it from there until it is removed for good.</string>
     <string name="file_send">Send a copy…</string>
     <string name="file_send_title">Send a copy</string>
     <string name="file_send_notice">This sends a decrypted copy of “%1$s” to the app you pick. There veyq no longer protects it: that app, and wherever it syncs or forwards it, can read it.</string>
