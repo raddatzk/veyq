@@ -13,6 +13,7 @@ struct PotHeaderActions: View {
     @State private var renaming = false
     @State private var newName = ""
     @State private var renameProblem: String?
+    @State private var moving = false
 
     var body: some View {
         HStack {
@@ -33,6 +34,7 @@ struct PotHeaderActions: View {
             Menu {
                 // The rename first, the delete last and destructive (`splitRowActions`).
                 Button("Rename", systemImage: "pencil") { newName = ref.name; renameProblem = nil; renaming = true }
+                Button("Move to…", systemImage: "folder") { moving = true }
                 Button("Delete Pot", systemImage: "trash", role: .destructive) { asking = true }
             } label: {
                 Image(systemName: "ellipsis.circle")
@@ -40,6 +42,7 @@ struct PotHeaderActions: View {
             .accessibilityLabel("More")
         }
         .onAppear { pinned = model.isFavorite(ref) }
+        .sheet(isPresented: $moving) { NodeMoveSheet(model: model, ref: ref) }
         .alert("Delete Pot", isPresented: $asking) {
             Button("Delete", role: .destructive) { Task { await model.trash(ref) } }
             Button("Cancel", role: .cancel) {}
@@ -82,7 +85,7 @@ struct TrashNotice: View {
             HStack(spacing: 12) {
                 Text(notice.message).font(.subheadline).foregroundStyle(Role.text)
                 Spacer(minLength: 0)
-                if notice.node != nil {
+                if notice.node != nil || notice.moveBack != nil {
                     Button("Undo") { Task { await model.undoTrash() } }.fontWeight(.semibold)
                 }
             }

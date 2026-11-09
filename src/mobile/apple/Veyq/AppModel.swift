@@ -465,6 +465,8 @@ final class AppModel {
         let id = UUID()
         let message: String
         let node: OpenNode?
+        /// A move's undo: the node moved back the same way, to where it was (the web's `moveRun` Undo).
+        var moveBack: MoveBack? = nil
     }
 
     private(set) var trashNotice: TrashNotice?
@@ -489,6 +491,13 @@ final class AppModel {
 
     /// The Undo of the last delete: the node back from the trash under its name, as it was.
     func undoTrash() async {
+        if let back = trashNotice?.moveBack {
+            trashNotice = nil
+            if await move(back.ref, to: back.to, toName: nil, from: nil) != .moved {
+                trashNotice = TrashNotice(message: String(localized: "“\(back.ref.name)” could not be moved back. Please move it yourself."), node: nil)
+            }
+            return
+        }
         guard let notice = trashNotice, let node = notice.node, let t = tenantSession else { return }
         trashNotice = nil
         var restored = false
@@ -503,6 +512,42 @@ final class AppModel {
     }
 
     func dismissTrashNotice(_ id: UUID) { if trashNotice?.id == id { trashNotice = nil } }
+
+    // MARK: A move (core's NodeMove)
+
+    /// Where a move's undo puts the node back.
+    struct MoveBack {
+        let ref: ObjectRef
+        let to: String?
+    }
+
+    /// Each kind's placement, as the move browser and the move ask it.
+    let placement = KindPlacement()
+
+    /// Every node of `scopeId` this device opens: what the move browser walks.
+    func scopeNodes(_ scopeId: String) async -> [NodeRef] {
+        guard let t = tenantSession else { return [] }
+        return ((try? await t.nodes()) ?? []).filter { $0.scopeId == scopeId }
+    }
+
+    /// Moves `ref` under `to` (nil: the space's root), its name kept; the lists are read anew. With `toName`, the bottom of
+    /// the shell says where it went and offers its undo back to `from`.
+    func move(_ ref: ObjectRef, to: String?, toName: String?, from: String?) async -> NodeMove.Outcome {
+        guard let t = tenantSession else { return .failed }
+        let r = try? await NodeMove.shared.move(
+            tenant: t, scopeId: ref.scopeId, nodeId: ref.nodeId, to: to,
+            tokenInput: { [weak self] kind, name in self?.tokenInputFor(kind: kind, name: name) },
+            allows: placement, waitsMs: NodeEpochWrite.shared.REKEY_WAITS_MS
+        )
+        await refreshLists(t)
+        let outcome = r?.outcome ?? .failed
+        if outcome == .moved, let toName {
+            trashNotice = TrashNotice(
+                message: String(localized: "“\(ref.name)” moved to “\(toName)”."), node: nil, moveBack: MoveBack(ref: ref, to: from)
+            )
+        }
+        return outcome
+    }
 
     /// Renames `ref` to `name` (core's `NodeRename`: the placement, then its open links' names); the lists are read anew
     /// and an open page follows the node under its new name. Why it did not land, in core's words, or nil once renamed;

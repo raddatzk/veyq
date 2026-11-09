@@ -39,6 +39,8 @@ internal fun NodeHeaderActions(
     /** Renames to the name typed; answers why not (the words to show), or null once it is renamed. */
     onRename: suspend (String) -> String?,
     onDelete: () -> Unit,
+    /** "Move to…" (menu-only), between the rename and the delete; null: not offered. */
+    onMove: (() -> Unit)? = null,
 ) {
     var menu by remember { mutableStateOf(false) }
     var asking by remember { mutableStateOf(false) }
@@ -50,7 +52,7 @@ internal fun NodeHeaderActions(
             else Icon(Icons.Outlined.FavoriteBorder, stringResource(R.string.node_favorite))
         }
     }
-    if (canRename || canDelete) {
+    if (canRename || canDelete || onMove != null) {
         IconButton(onClick = { menu = true }) { Icon(Icons.Outlined.MoreVert, stringResource(R.string.node_more)) }
         DropdownMenu(menu, { menu = false }) {
             // The rename first, the delete last and in the danger role (`splitRowActions`).
@@ -59,6 +61,13 @@ internal fun NodeHeaderActions(
                 onClick = {
                     menu = false
                     renaming = true
+                },
+            )
+            if (onMove != null) DropdownMenuItem(
+                text = { Text(stringResource(R.string.node_move)) },
+                onClick = {
+                    menu = false
+                    onMove()
                 },
             )
             if (canDelete) DropdownMenuItem(

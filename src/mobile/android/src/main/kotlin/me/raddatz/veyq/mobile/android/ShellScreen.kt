@@ -156,7 +156,7 @@ fun ShellScreen(s: Screen.Signed, model: AppModel) {
                         actions = {
                             val open = shell.openObject
                             if (open != null && open.kind == "EXPENSES_POT" && potState?.ref == open && potState?.view != null) {
-                                PotHeaderActions(open, model, snackbar, scope)
+                                PotHeaderActions(open, model, snackbar, scope, spaceName(s.spaces.firstOrNull { it.scopeId == open.scopeId }))
                             }
                             // The space's trash, from its Home (the web's level toolbar): every application's nodes.
                             val space = shell.space
@@ -622,12 +622,25 @@ internal val LocalRowDetails = androidx.compose.runtime.compositionLocalOf<Map<S
 
 /** An open Pot's core actions (`NodeHeaderActions`): the heart and "Delete Pot", whose trash offers an undo for 6 s. */
 @Composable
-private fun PotHeaderActions(open: ObjectRef, model: AppModel, snackbar: androidx.compose.material3.SnackbarHostState, scope: kotlinx.coroutines.CoroutineScope) {
+private fun PotHeaderActions(open: ObjectRef, model: AppModel, snackbar: androidx.compose.material3.SnackbarHostState, scope: kotlinx.coroutines.CoroutineScope, rootName: String) {
+    val context = androidx.compose.ui.platform.LocalContext.current
+    var moving by androidx.compose.runtime.remember(open) { androidx.compose.runtime.mutableStateOf(false) }
+    if (moving) {
+        val movedText = { to: String -> context.getString(R.string.move_moved, open.name, to) }
+        NodeMoveSheet(open, rootName, model, onMoved = { to, from ->
+            scope.launch {
+                // The web's undo: the node moved back the same way, to where it was.
+                val answer = snackbar.showSnackbar(movedText(to), actionLabel = context.getString(R.string.trash_undo), duration = androidx.compose.material3.SnackbarDuration.Long)
+                if (answer == androidx.compose.material3.SnackbarResult.ActionPerformed &&
+                    model.move(open, from).outcome != me.raddatz.veyq.mobile.session.NodeMove.Outcome.MOVED
+                ) snackbar.showSnackbar(context.getString(R.string.move_undo_failed, open.name))
+            }
+        }) { moving = false }
+    }
     val favoriteFailed = stringResource(R.string.node_favorite_failed)
     val moved = stringResource(R.string.trash_moved, open.name)
     val undo = stringResource(R.string.trash_undo)
     val undoFailed = stringResource(R.string.trash_undo_failed, open.name)
-    val context = androidx.compose.ui.platform.LocalContext.current
     val refusals = mapOf(
         me.raddatz.veyq.mobile.session.NodeTrash.Deleted.GONE to stringResource(R.string.delete_refused_gone),
         me.raddatz.veyq.mobile.session.NodeTrash.Deleted.SCOPE_DELETING to stringResource(R.string.delete_refused_scope_deleting),
@@ -658,6 +671,7 @@ private fun PotHeaderActions(open: ObjectRef, model: AppModel, snackbar: android
             if (problem == null && r.links?.failed?.isNotEmpty() == true) scope.launch { snackbar.showSnackbar(context.getString(R.string.share_name_reseal_failed)) }
             problem
         },
+        onMove = { moving = true },
         onDelete = {
             scope.launch {
                 val (deleted, before) = model.trash(open)

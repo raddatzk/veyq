@@ -31,7 +31,8 @@ A Gradle build of its own, run through its own wrapper.
   by `ExpensesVectorsTest` (`contracts/expenses/v1-vectors.json`, the crypto vectors' `expense-entry`) and
   `LedgerRulesTest`; `BigTest` holds `expenses/Big.kt` to `java.math.BigInteger`. A rule of `expenses/Ledger.kt` or
   `Money.kt` changes only with the case that pins it; so does one of `expenses/PotWrites.kt` and `LedgerCheck.kt`
-  (`PotWritesTest`, over real seals), of `EntryForm.kt` (`EntryFormTest`, over the vectors), of `ExchangeRates.kt` (`ExchangeRatesTest`), of `Receipts.kt` and core's `blob/Sniff.kt` (`ReceiptsTest`), of `PotShare.kt` (`PotShareTest`), of core's `session/LivePoll.kt` (`LivePollTest`, on virtual time), of core's `session/MemberAvatars.kt` (`MemberAvatarsTest`) and `session/ShareNames.kt` (`ShareNamesTest`), of `PotView.kt`'s people, balances and entries (`PotViewPeopleTest`, `PotViewEntriesTest`) and of core's `session/NodeEpochWrite.kt` and `session/NodeMetaWrite.kt` (`NodeEpochWriteTest`, `NodeMetaWriteTest`).
+  (`PotWritesTest`, over real seals), of `EntryForm.kt` (`EntryFormTest`, over the vectors), of `ExchangeRates.kt` (`ExchangeRatesTest`), of `Receipts.kt` and core's `blob/Sniff.kt` (`ReceiptsTest`), of `PotShare.kt` (`PotShareTest`), of core's `session/LivePoll.kt` (`LivePollTest`, on virtual time), of core's `session/MemberAvatars.kt` (`MemberAvatarsTest`) and `session/ShareNames.kt` (`ShareNamesTest`), of `PotView.kt`'s people, balances and entries (`PotViewPeopleTest`, `PotViewEntriesTest`), of core's `session/NodeEpochWrite.kt` and `session/NodeMetaWrite.kt` (`NodeEpochWriteTest`, `NodeMetaWriteTest`), and of
+  core's `session/NodeMove.kt` browser rules (`NodeMoveTest`).
 - `VEYQ_LIVE=http://veyq.localhost:8080 ./gradlew :core:jvmTest :core:macosArm64Test --tests '*LiveSignInTest*'` —
   signs in to a running dev instance as the seeded principal on both paths and reads its spaces, objects and
   favorites (`./gradlew backend:seed` at the repository root first). With `VEYQ_LIVE_MEMBER=1` as well,
@@ -60,7 +61,9 @@ A Gradle build of its own, run through its own wrapper.
   Pot (each read back by a fresh session), and creates a Pot ("App trash <n>") that it trashes, restores under its name
   and trashes again — it stays in the space's trash. `VEYQ_LIVE_TRASH=<pot name>` trashes a fresh Pot ("App trash view
   <n>"), reads it in the trash by name, restores it past a Pot of its name under "… restored" and purges it (the Pot
-  of the old name stays trashed). `VEYQ_LIVE_RENAME=<pot name>` renames a fresh Pot twice, checks its
+  of the old name stays trashed). `VEYQ_LIVE_MOVE=<root folder name>` moves a fresh Pot ("App move <n>") into that
+  folder and back, a fresh session opening it there each time, and checks a move to its place and onto a Pot of its name
+  are refused; both Pots stay trashed. `VEYQ_LIVE_RENAME=<pot name>` renames a fresh Pot twice, checks its
   names taken and a sibling's refused, and trashes it; `VEYQ_LIVE_RENAME_TARGET="<from>|<to>"` renames the root Pot
   `<from>` (created when there is none) and prints what the re-seal of its links did — with a link the web minted on it,
   that link's guest page then shows `<to>`. Gradle does not count an environment variable as an
@@ -109,6 +112,9 @@ A Gradle build of its own, run through its own wrapper.
   (`fetchOutside`): no bearer, no cookie, no header of the app's own.
 - SwiftUI attaches a modifier on a `Form`'s or `List`'s `Section` to every row of it: a `.sheet` there is presented by
   none, an `.onChange` runs once a row. Presentations of a section go on the `Form` (`ReceiptPresenters`).
+- A Kotlin name exported to Swift must not be one of NSObject's: an enum entry `SELF` becomes the class property `self`,
+  which overrides `+[NSObject self]`, and the class's first use recurses until the stack overflows (measured 2026-11-09:
+  `NodeMove.Block.SELF`, now `ITSELF`). Avoid `self`, `description`, `hash`, `class`, `copy`, `init`, `new` as names.
 - Every file of `apple/Veyq/` but `VeyqApp.swift` and `DevLogin.swift` is also compiled into the share extension, which
   builds with `APPLICATION_EXTENSION_API_ONLY`: no `UIApplication.shared` or other API an extension may not use there,
   and nothing the app alone may do (moving or removing what it keeps) without `AppModel.inExtension` guarding it.

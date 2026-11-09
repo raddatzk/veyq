@@ -195,7 +195,13 @@ implementation exists but what holds it to the first.
   deleted subtree, its name opened under its live parent's key; a restore whose name something took meanwhile goes
   through under a new one, sealed in the same request as the token derived from it; "Delete forever" purges it now,
   after the question that names it (`NodeTrash.list`, `restoreFromTrash`, `purge`; measured live by `PotLiveTest`, the
-  name's binding killed by a mutation). Move, share, cover, copy, download and report are not built.
+  name's binding killed by a mutation). A move within the space is core's placement under another parent
+  (`session/NodeMove.kt` over `session/NodePlacement.kt`, the one write a rename sends too; the web's `move.ts`): its own
+  key re-wrapped and its name and slug token sealed under the destination's key, through a browser that opens at the
+  node's place and lists only folders and what takes its kind (each kind's placement, the app's answer), saying why
+  "Move here" cannot be chosen; a name taken there is refused by name before sending, and the move offers the web's
+  undo (`NodeMoveTest`, each rule killed by a mutation; a Pot moved into a folder and back, opened there by a fresh
+  session each time, measured live by `PotLiveTest`). Share, cover, copy, download and report are not built.
 - **Not built yet:** every other write (another kind's node), the
   other applications' views behind the bar, a CI job for the apps. The grant check is held by `GrantTrustTest` against a server the test plays — each refusal killed by
   a mutation of the rule it pins, but for three a second rule also holds (a pending or self-naming signer, and a cycle

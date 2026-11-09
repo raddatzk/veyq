@@ -292,4 +292,25 @@
     <string name="trash_purge_confirm_title">Delete forever?</string>
     <string name="trash_purge_confirm">“%1$s” and everything inside it will be permanently deleted now. This cannot be undone.</string>
     <string name="trash_purge_failed">Could not delete this for good. Please try again.</string>
+    <!-- A move (the web's node.move). -->
+    <string name="node_move">Move to…</string>
+    <string name="move_title">Move “%1$s”</string>
+    <string name="move_hint">Open the place it should go to and choose “Move here”. Everything inside it moves along and stays readable.</string>
+    <string name="move_empty">No place here can take “%1$s”.</string>
+    <string name="move_submit">Move here</string>
+    <string name="move_blocked_self">the item itself</string>
+    <string name="move_blocked_inside">inside the item</string>
+    <string name="move_here_self">It can’t be moved into itself.</string>
+    <string name="move_here_inside">It can’t be moved into something inside it.</string>
+    <string name="move_here_current">It is already here.</string>
+    <string name="move_here_kind">This place can’t hold it.</string>
+    <string name="move_moved">“%1$s” moved to “%2$s”.</string>
+    <string name="move_undo_failed">“%1$s” could not be moved back. Please move it yourself.</string>
+    <string name="move_refused_slug_taken">Something with this name already exists there. Rename it first, or choose another place.</string>
+    <string name="move_refused_illegal_structure">It can’t be placed there: that place doesn’t take this kind of item.</string>
+    <string name="move_refused_stale_placement">Someone else moved or renamed it at the same time. The view has been reloaded — please try again.</string>
+    <string name="move_refused_rekey_pending">The space’s new lock is still going in. Try again in a moment.</string>
+    <string name="move_refused_gone">It, or the place you chose, is no longer there.</string>
+    <string name="move_refused_scope_deleting">This space is being deleted; nothing can be moved.</string>
+    <string name="move_refused_failed">Moving didn’t work. Please try again.</string>
 </resources>

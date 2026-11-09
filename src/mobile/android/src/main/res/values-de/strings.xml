@@ -290,4 +290,25 @@
     <string name="trash_purge_confirm_title">Endgültig löschen?</string>
     <string name="trash_purge_confirm">„%1$s“ wird mit allem, was darin ist, jetzt endgültig gelöscht. Das lässt sich nicht rückgängig machen.</string>
     <string name="trash_purge_failed">Konnte nicht endgültig gelöscht werden. Bitte erneut versuchen.</string>
+    <!-- Verschieben (node.move des Webs). -->
+    <string name="node_move">Verschieben nach …</string>
+    <string name="move_title">„%1$s“ verschieben</string>
+    <string name="move_hint">Öffne den Ort, an den es soll, und wähle „Hierher verschieben“. Alles darin wird mitverschoben und bleibt lesbar.</string>
+    <string name="move_empty">Hier gibt es keinen Ort, der „%1$s“ aufnehmen kann.</string>
+    <string name="move_submit">Hierher verschieben</string>
+    <string name="move_blocked_self">das Element selbst</string>
+    <string name="move_blocked_inside">im Element</string>
+    <string name="move_here_self">Es kann nicht in sich selbst verschoben werden.</string>
+    <string name="move_here_inside">Es kann nicht in etwas verschoben werden, das darin liegt.</string>
+    <string name="move_here_current">Es ist schon hier.</string>
+    <string name="move_here_kind">Dieser Ort kann es nicht aufnehmen.</string>
+    <string name="move_moved">„%1$s“ nach „%2$s“ verschoben.</string>
+    <string name="move_undo_failed">„%1$s“ konnte nicht zurückverschoben werden. Bitte verschiebe es selbst.</string>
+    <string name="move_refused_slug_taken">Dort gibt es bereits etwas mit diesem Namen. Benenne es zuerst um oder wähle einen anderen Ort.</string>
+    <string name="move_refused_illegal_structure">Dort kann es nicht hin: Dieser Ort nimmt so etwas nicht auf.</string>
+    <string name="move_refused_stale_placement">Jemand anderes hat es gleichzeitig verschoben oder umbenannt. Die Ansicht wurde neu geladen – bitte versuche es erneut.</string>
+    <string name="move_refused_rekey_pending">Das neue Schloss des Bereichs wird noch eingebaut. Versuch es gleich noch einmal.</string>
+    <string name="move_refused_gone">Es oder der gewählte Ort ist nicht mehr da.</string>
+    <string name="move_refused_scope_deleting">Dieser Bereich wird gelöscht; nichts kann verschoben werden.</string>
+    <string name="move_refused_failed">Das Verschieben hat nicht geklappt. Bitte versuche es erneut.</string>
 </resources>

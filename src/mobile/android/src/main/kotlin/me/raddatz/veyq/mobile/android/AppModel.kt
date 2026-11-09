@@ -451,6 +451,35 @@ class AppModel(app: Application) : AndroidViewModel(app) {
         else -> null
     }
 
+    // ---- a move (core's NodeMove) ----
+
+    /**
+     * Where a node of a kind may be placed (each kind's `placement`, `registry.placementAllows`): a folder, a Pot and a Memory
+     * at the space's root or in a folder, a chapter in a Memory; a kind the app does not know nowhere.
+     */
+    val placement = me.raddatz.veyq.mobile.session.NodeMove.PlacementAllows { kind, parent ->
+        when (kind) {
+            "FOLDER", PotSession.KIND, "MEMORY" -> parent == null || parent == "FOLDER"
+            "CHAPTER" -> parent == "MEMORY"
+            else -> false
+        }
+    }
+
+    /** Every node of [scopeId] this device opens: what the move browser walks. */
+    suspend fun scopeNodes(scopeId: String): List<me.raddatz.veyq.mobile.navigation.NodeRef> {
+        val t = tenantSession ?: return emptyList()
+        return runCatching { t.nodes() }.getOrDefault(emptyList()).filter { it.scopeId == scopeId }
+    }
+
+    /** Moves [ref] under [to] (null: the space's root), its name kept; the lists are read anew. */
+    suspend fun move(ref: ObjectRef, to: String?): me.raddatz.veyq.mobile.session.NodeMove.Result {
+        val t = tenantSession ?: return me.raddatz.veyq.mobile.session.NodeMove.Result(me.raddatz.veyq.mobile.session.NodeMove.Outcome.FAILED)
+        val r = runCatching { me.raddatz.veyq.mobile.session.NodeMove.move(t, ref.scopeId, ref.nodeId, to, ::tokenInputFor, placement) }
+            .getOrDefault(me.raddatz.veyq.mobile.session.NodeMove.Result(me.raddatz.veyq.mobile.session.NodeMove.Outcome.FAILED))
+        refreshLists(t)
+        return r
+    }
+
     // ---- the space's trash (core's NodeTrash) ----
 
     /** The trash of [scopeId] (the root of each deleted subtree); null when it could not be read. */
