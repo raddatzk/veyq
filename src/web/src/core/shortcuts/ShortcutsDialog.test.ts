@@ -89,6 +89,27 @@ describe('ShortcutsDialog: ? opens it', () => {
     w.unmount()
   })
 
+  // owner 2026-11-09: the large view's keys are what the overview is most read for
+  it('opens over the large view of a photo (a modal marked data-shortcuts-over); control: another dialog beside it still keeps the keyboard', async () => {
+    const w = mountDialog()
+    const large = document.createElement('div')
+    large.setAttribute('role', 'dialog')
+    large.setAttribute('aria-modal', 'true')
+    large.setAttribute('data-shortcuts-over', '')
+    document.body.append(large)
+    const other = document.createElement('div')
+    other.setAttribute('role', 'alertdialog')
+    document.body.append(other)
+    press(document.body)
+    await flushPromises()
+    expect(dialog()).toBeNull() // control: a second, unmarked dialog keeps the keyboard
+    other.remove()
+    press(document.body)
+    await flushPromises()
+    expect(dialog()).not.toBeNull()
+    w.unmount()
+  })
+
   it('is no shortcut with Ctrl or ⌘ held', async () => {
     const w = mountDialog()
     for (const mod of [{ ctrlKey: true }, { metaKey: true }]) {
@@ -140,11 +161,11 @@ describe('the modifier is named for the platform', () => {
     expect(isApplePlatform({ userAgentData: { platform: 'Android' } })).toBe(false)
   })
 
-  const render = (platform: string) => {
+  const render = (platform: string, chords: readonly (readonly string[])[] = [['/'], ['mod', 'K']]) => {
     const spy = Object.getOwnPropertyDescriptor(Navigator.prototype, 'platform')
     Object.defineProperty(navigator, 'platform', { configurable: true, get: () => platform })
     forgetPlatform()
-    const w = mount(ShortcutKeys, { props: { keys: [['/'], ['mod', 'K']] }, global: { plugins: [realI18n()] } })
+    const w = mount(ShortcutKeys, { props: { keys: chords }, global: { plugins: [realI18n()] } })
     const keys = w.findAll('kbd').map((k) => k.text())
     const text = w.text()
     w.unmount()
@@ -159,5 +180,16 @@ describe('the modifier is named for the platform', () => {
     expect(mac.text).toContain(t('shortcuts.or'))
     expect(render('Win32').keys).toEqual(['/', t('shortcuts.key.ctrl'), 'K'])
     expect(t('shortcuts.key.ctrl')).toBe('Ctrl')
+  })
+
+  // owner 2026-11-09: a Mac has no Home, PageUp or Delete key - name the keys it has
+  it('names a Mac\'s keys on a Mac: fn+arrows for Home/End/PageUp/PageDown, one ⌫ for Delete and Backspace; control: PC names elsewhere', () => {
+    expect(render('MacIntel', [['Home'], ['End']]).keys).toEqual(['fn', '←', 'fn', '→'])
+    expect(render('MacIntel', [['PageUp'], ['PageDown']]).keys).toEqual(['fn', '↑', 'fn', '↓'])
+    expect(render('MacIntel', [['Delete'], ['Backspace']]).keys).toEqual(['⌫']) // the same key there: listed once
+    expect(render('MacIntel', [['Enter']]).keys).toEqual(['↩'])
+    expect(render('MacIntel', [['Escape']]).keys).toEqual(['esc'])
+    expect(render('Win32', [['Home'], ['End']]).keys).toEqual([t('shortcuts.key.home'), t('shortcuts.key.end')])
+    expect(render('Win32', [['Delete'], ['Backspace']]).keys).toEqual([t('shortcuts.key.delete'), t('shortcuts.key.backspace')])
   })
 })

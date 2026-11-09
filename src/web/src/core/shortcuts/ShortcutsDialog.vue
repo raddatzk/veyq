@@ -28,6 +28,8 @@ const groups = computed<readonly ShortcutGroup[]>(() => [
 /** Any open dialog: the layer's (Reka's `role="dialog"`, a popover's included), an alert, or a modal of an application's
  *  own (the large view of a photo). */
 const OPEN_DIALOG = '[role="dialog"], [role="alertdialog"], [aria-modal="true"]'
+/** A modal `?` opens over, marked by its owner with `data-shortcuts-over` (Memories' large view). */
+const OVERVIEW_ALLOWED_OVER = '[data-shortcuts-over]'
 
 /** `?` opens the overview (`CORE_SHORTCUTS`' *Everywhere*). Ctrl or ⌘ with it is another shortcut, not this one; AltGr
  *  (Ctrl+Alt) is how some layouts type `?`. */
@@ -35,7 +37,9 @@ function onKeydown(event: KeyboardEvent) {
   if (event.key !== '?' || event.defaultPrevented || event.isComposing) return
   if (event.metaKey || (event.ctrlKey && !event.altKey)) return
   if (typingInto(event.target)) return
-  if (document.querySelector(OPEN_DIALOG)) return
+  // the large view of a photo is a modal but no form: its keys are what the overview is most read for, so `?` opens
+  // over it (owner 2026-11-09); any other dialog keeps the keyboard (E1)
+  if ([...document.querySelectorAll(OPEN_DIALOG)].some((d) => !d.matches(OVERVIEW_ALLOWED_OVER))) return
   event.preventDefault()
   shortcutsOpen.value = true
 }

@@ -11,13 +11,23 @@ import { commandIsApple } from './modifier'
 const props = defineProps<{ keys: readonly ShortcutChord[] }>()
 const { t } = useI18n()
 
-function name(key: string): string {
-  if (key === 'mod') return commandIsApple() ? '⌘' : t('shortcuts.key.ctrl')
-  if (NAMED_KEYS[key]) return t(`shortcuts.key.${NAMED_KEYS[key]}`)
-  return ARROW_KEYS[key] ?? key
+/** On a Mac a PC key name names a key the keyboard does not have (owner 2026-11-09): Home is fn+←, PageUp fn+↑, Delete
+ *  and Backspace are both ⌫ (the same key there; a duplicate alternative is dropped below), Enter ↩, Escape esc. */
+const MAC_KEYS: Readonly<Record<string, readonly string[]>> = {
+  Home: ['fn', '←'], End: ['fn', '→'], PageUp: ['fn', '↑'], PageDown: ['fn', '↓'],
+  Backspace: ['⌫'], Delete: ['⌫'], Enter: ['↩'], Escape: ['esc'],
 }
-const chords = computed(() => props.keys.map((chord) => chord.map(name)))
-const spoken = computed(() => props.keys.some((chord) => chord.length > 1))
+function names(key: string): readonly string[] {
+  if (key === 'mod') return [commandIsApple() ? '⌘' : t('shortcuts.key.ctrl')]
+  if (commandIsApple() && MAC_KEYS[key]) return MAC_KEYS[key]
+  if (NAMED_KEYS[key]) return [t(`shortcuts.key.${NAMED_KEYS[key]}`)]
+  return [ARROW_KEYS[key] ?? key]
+}
+const chords = computed(() => {
+  const all = props.keys.map((chord) => chord.flatMap(names))
+  return all.filter((chord, i) => all.findIndex((c) => c.join('+') === chord.join('+')) === i)
+})
+const spoken = computed(() => chords.value.some((chord) => chord.length > 1))
 </script>
 
 <template>

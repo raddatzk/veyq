@@ -15,14 +15,17 @@
    while the focus is in a text field, where it is a character.
 2. **Read it.** A dialog lists the shortcuts in groups: *Everywhere* (core's: `/` and Cmd/Ctrl+K into the search), *In
    the search* (core's), then each application's groups (Memories: *In the gallery*, *In the large view* - the lightbox, by the word the Use pages give it). Each entry
-   names its keys and what they do, in the UI's language, with the platform's modifier (⌘ on a Mac, Ctrl elsewhere).
+   names its keys and what they do, in the UI's language, with the platform's modifier (⌘ on a Mac, Ctrl elsewhere)
+   and, on a Mac, the keys a Mac has: fn+arrows for Home, End, Page up and Page down, one ⌫ for Delete and Backspace,
+   ↩ and esc (owner, 2026-11-09).
 3. **Close it.** Escape, the close button or a click beside it closes the dialog; the focus returns to where it was.
 
 ## Alternate / exception flows
 
 - **A1 — a switched-off application:** its groups are not listed. The overview reads the same registry answer as
   everything else (`applicationsOff`).
-- **E1 — a dialog is already open:** `?` does nothing; the open dialog keeps the keyboard.
+- **E1 — a dialog is already open:** `?` does nothing; the open dialog keeps the keyboard. The one exception is the
+  large view of a photo, whose keys are what the overview is most read for: `?` opens over it (owner, 2026-11-09).
 
 ## Quality notes
 

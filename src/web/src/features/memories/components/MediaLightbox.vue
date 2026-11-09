@@ -706,6 +706,7 @@ onBeforeUnmount(() => {
     class="media-lightbox"
     role="dialog"
     aria-modal="true"
+    data-shortcuts-over
     :aria-label="memoryName"
     tabindex="-1"
     @click.self="close()"
