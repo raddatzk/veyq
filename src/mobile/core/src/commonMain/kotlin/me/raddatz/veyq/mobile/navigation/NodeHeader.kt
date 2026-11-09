@@ -64,6 +64,15 @@ object NodeHeader {
         val delete: Boolean,
     )
 
+    /**
+     * [rights] narrowed for a node that is a guest's identity folder or lies in one (the web's `nodeRights`, `folderRights`
+     * and `coverRights`): no link roots there, nothing there is renamed or takes a cover, and a folder there is not deleted
+     * as a node (the drop box's page removes a guest's folder; a member deletes in it file by file). Its move stays: out of
+     * the drop box is the one placement it takes.
+     */
+    fun inIdentityFolder(rights: Rights, kind: String): Rights =
+        rights.copy(share = false, rename = false, cover = false, delete = rights.delete && kind != "FOLDER")
+
     /** The header's split: the [buttons] in order, then the menu's [menu] group and, after a separator, its [last] group. */
     data class Plan(val buttons: List<String>, val menu: List<String>, val last: List<String>) {
         /** Whether there is a "more" menu at all. */

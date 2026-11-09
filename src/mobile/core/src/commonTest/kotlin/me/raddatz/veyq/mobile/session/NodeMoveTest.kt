@@ -84,4 +84,30 @@ class NodeMoveTest {
         assertNull(NodeMove.hereBlock(cycle, n("c", null), "a", allows))
         assertEquals(2, NodeMove.trail(cycle, "a").size - 1)
     }
+
+    // a drop box with a guest's folder (and a folder in it), beside a plain folder
+    private val drop = listOf(
+        n("box", null, "DEPOT_DROPBOX"), NodeRef("s", "anna", "box", "FOLDER", "Anna", identity = true),
+        n("inner", "anna"), n("file", "anna", "FILE"), n("plain", null),
+    )
+
+    @Test
+    fun nothingGoesIntoAGuestsFolderButItGoesOut() {
+        val folder = drop.single { it.nodeId == "plain" }
+        val guest = drop.single { it.nodeId == "anna" }
+        assertEquals(NodeMove.Block.IDENTITY_FOLDER, NodeMove.hereBlock(drop, folder, "anna", allows))
+        assertEquals(NodeMove.Block.IDENTITY_FOLDER, NodeMove.hereBlock(drop, folder, "inner", allows))
+        assertEquals(NodeMove.Block.IDENTITY_FOLDER, NodeMove.hereBlock(drop, folder, "anna", allows, copy = true))
+        // a guest's folder goes out (to the root, into a plain folder), which ends it
+        assertNull(NodeMove.hereBlock(drop, guest, null, allows))
+        assertNull(NodeMove.hereBlock(drop, guest, "plain", allows))
+        kotlin.test.assertTrue(NodeMove.endsIdentity(guest))
+        kotlin.test.assertFalse(NodeMove.endsIdentity(folder))
+        // the browser never lists a guest's folder as a place, nor what lies in one
+        assertEquals(listOf("plain"), NodeMove.places(drop, folder, null, allows).map { it.node.nodeId })
+        assertEquals(emptyList(), NodeMove.places(drop, folder, "anna", allows).map { it.node.nodeId })
+        kotlin.test.assertTrue(NodeMove.inIdentityFolder(drop, "inner"))
+        kotlin.test.assertFalse(NodeMove.inIdentityFolder(drop, "box"))
+        kotlin.test.assertFalse(NodeMove.inIdentityFolder(drop, null))
+    }
 }

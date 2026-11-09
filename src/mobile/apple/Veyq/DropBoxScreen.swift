@@ -3,13 +3,15 @@ import VeyqCore
 
 /// A drop box's page for a member (Depot's `DropBoxDetail.vue`): every guest's folder in the order they came, a name more
 /// than one gave numbered as the web numbers it, with the files in it — each opens its file's page (download, delete) —
-/// and the folder's delete, asked first, into the trash (a context menu, as Files' rows have). Nobody's yet: the web's
+/// the folder's move out (core's move browser, which asks first: the folder becomes an ordinary one) and its delete, asked
+/// first, into the trash (a menu on the folder, as Files' rows have). Nobody's yet: the web's
 /// sentence pointing at its links.
 struct DropBoxScreen: View {
     @Bindable var model: AppModel
     let ref: ObjectRef
     @State private var folders: [DropBoxes.GuestFolder]?
     @State private var deleting: DropBoxes.GuestFolder?
+    @State private var movingOut: DropBoxes.GuestFolder?
 
     var body: some View {
         List {
@@ -18,7 +20,7 @@ struct DropBoxScreen: View {
                 if folders.isEmpty {
                     Text("Nobody has dropped anything yet. Share a link to collect files.").foregroundStyle(Role.muted)
                 } else {
-                    Text("Open a file to download or delete it. To remove everything someone sent, delete their folder.")
+                    Text("Open a file to download or delete it. To remove everything someone sent, delete their folder; to keep it as an ordinary folder, move it out.")
                         .font(.footnote).foregroundStyle(Role.muted).listRowBackground(Color.clear)
                     ForEach(folders, id: \.node.id) { f in
                         Section {
@@ -42,6 +44,7 @@ struct DropBoxScreen: View {
                                 }
                                 Spacer()
                                 Menu {
+                                    Button("Move \(f.label) out…", systemImage: "folder") { movingOut = f }
                                     Button("Delete \(f.label)", systemImage: "trash", role: .destructive) { deleting = f }
                                 } label: {
                                     Label("More", systemImage: "ellipsis.circle").labelStyle(.iconOnly)
@@ -57,6 +60,10 @@ struct DropBoxScreen: View {
         .navigationTitle(ref.name)
         // read again whenever the lists are
         .task(id: model.rowDetails.count) { folders = await model.dropBoxFolders(scopeId: ref.scopeId, nodeId: ref.nodeId) }
+        .sheet(item: Binding(get: { movingOut.map { MovingOut(folder: $0) } }, set: { if $0 == nil { movingOut = nil } })) { m in
+            NodeMoveSheet(model: model, ref: NodeAt(scopeId: m.folder.node.scopeId, nodeId: m.folder.node.id, kind: m.folder.node.kind, name: m.folder.label))
+                .onDisappear { Task { folders = await model.dropBoxFolders(scopeId: ref.scopeId, nodeId: ref.nodeId) } }
+        }
         .alert("Delete \(deleting?.label ?? "")", isPresented: Binding(get: { deleting != nil }, set: { if !$0 { deleting = nil } }), presenting: deleting) { f in
             Button("Delete", role: .destructive) {
                 Task {
@@ -69,4 +76,10 @@ struct DropBoxScreen: View {
             Text("“\(f.label)” and everything in it move to the trash. You can restore it from there until it is removed for good.")
         }
     }
+}
+
+/// A guest's folder the move browser is open for (a sheet's item).
+private struct MovingOut: Identifiable {
+    let folder: DropBoxes.GuestFolder
+    var id: String { folder.node.id }
 }

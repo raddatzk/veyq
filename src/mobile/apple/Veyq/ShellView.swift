@@ -387,7 +387,8 @@ struct HomeView: View {
                 }
             }
         }
-        .createMenu("New", shown: model.shell.space != nil) {
+        // nothing is created in a guest's folder (the web's `folderRights`: no "New" there)
+        .createMenu("New", shown: model.shell.space != nil && !(model.shell.space.flatMap { model.shell.folderAt(scopeId: $0) }.map { model.inIdentityFolder($0) } ?? false)) {
             Button("New Folder", systemImage: "folder.badge.plus") { newName = ""; nameProblem = nil; naming = true }
             Button("New Pot", systemImage: "wallet.bifold") { creatingPot = true }
             Button("Upload Files", systemImage: "square.and.arrow.up.on.square") { pickingFiles = true }

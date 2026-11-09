@@ -20,6 +20,8 @@ struct NodeMoveSheet: View {
     @State private var at: String?
     @State private var moving = false
     @State private var problem: String?
+    /// Moving a guest's folder out ends it (the web's `endsIdentity`): asked first, there is no way back.
+    @State private var confirming = false
 
     private var rootName: String { Names.spaceName(model.spaces.first { $0.scopeId == ref.scopeId }) }
 
@@ -112,15 +114,25 @@ struct NodeMoveSheet: View {
                     if let problem {
                         Text(problem).font(.caption).foregroundStyle(Role.danger)
                     } else if let block {
-                        Text(Self.hereText(block)).font(.caption).foregroundStyle(Role.muted)
+                        Text(Self.hereText(block, copying: copying)).font(.caption).foregroundStyle(Role.muted)
                     }
                     Button {
-                        Task { await move(to: at, from: moved.parentId) }
+                        if !copying && NodeMove.shared.endsIdentity(node: moved) {
+                            confirming = true
+                        } else {
+                            Task { await move(to: at, from: moved.parentId) }
+                        }
                     } label: {
                         HStack { Spacer(); if moving { ProgressView() } else { Text(copying ? "Copy here" : "Move here").fontWeight(.semibold) }; Spacer() }
                     }
                     .disabled(block != nil || moving)
                 }
+            }
+            .alert("Move a guest’s folder out of the drop box?", isPresented: $confirming) {
+                Button("Move out") { Task { await move(to: at, from: moved.parentId) } }
+                Button("Cancel", role: .cancel) {}
+            } message: {
+                Text("“\(ref.name)” becomes an ordinary folder: the guest who sent it can no longer add anything to it, and it cannot be moved back into the drop box. Everything in it stays readable for you.")
             }
         } else {
             ProgressView().frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -142,8 +154,9 @@ struct NodeMoveSheet: View {
         if outcome == .moved { dismiss() } else { problem = Self.problemText(outcome) }
     }
 
-    private static func hereText(_ block: NodeMove.Block) -> String {
+    private static func hereText(_ block: NodeMove.Block, copying: Bool) -> String {
         switch block {
+        case .identityFolder: copying ? String(localized: "Nothing can be copied into a guest’s folder.") : String(localized: "Nothing can be moved into a guest’s folder.")
         case .inside: String(localized: "It can’t be moved into something inside it.")
         case .current: String(localized: "It is already here.")
         case .kind: String(localized: "This place can’t hold it.")

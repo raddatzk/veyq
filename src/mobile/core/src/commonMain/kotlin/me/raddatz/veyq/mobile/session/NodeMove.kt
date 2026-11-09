@@ -25,6 +25,8 @@ object NodeMove {
         CURRENT,
         /** The place does not take the node's kind. */
         KIND,
+        /** The place is a guest's identity folder or lies in one: nothing is placed there (ADR 0080 decision 11). */
+        IDENTITY_FOLDER,
     }
 
     /** One place the browser lists at a level: a child there, and why it cannot be opened (null: it can). */
@@ -58,17 +60,34 @@ object NodeMove {
      * one, in the tree's order; the moved node itself and what lies below it are listed blocked — they cannot be opened.
      */
     fun places(tree: List<NodeRef>, moved: NodeRef, at: String?, allows: PlacementAllows): List<Place> =
-        tree.filter { it.parentId == at && (it.kind == FOLDER || allows.allows(moved.kind, it.kind)) }
+        tree.filter { it.parentId == at && (it.kind == FOLDER || allows.allows(moved.kind, it.kind)) && !inIdentityFolder(tree, it.nodeId) }
             .map { Place(it, within(tree, moved, it.nodeId)) }
 
     /** Why [moved] cannot be moved — or, with [copy], copied — to [at] (null: the scope root), or null where it can. A copy
      *  may go where its original is (it takes the next free name there, the web's `moveHereBlockOf(…, 'copy')`). */
     fun hereBlock(tree: List<NodeRef>, moved: NodeRef, at: String?, allows: PlacementAllows, copy: Boolean = false): Block? {
         if (at != null) within(tree, moved, at)?.let { return it }
+        if (inIdentityFolder(tree, at)) return Block.IDENTITY_FOLDER
         if (!copy && moved.parentId == at) return Block.CURRENT
         val kind = at?.let { a -> tree.firstOrNull { it.nodeId == a }?.kind ?: return Block.KIND }
         return if (allows.allows(moved.kind, kind)) null else Block.KIND
     }
+
+    /** Whether [id] (null: the scope root) is a guest's identity folder or lies in one (the web's `inIdentityFolder`). */
+    fun inIdentityFolder(tree: List<NodeRef>, id: String?): Boolean {
+        val byId = tree.associateBy { it.nodeId }
+        val seen = HashSet<String>()
+        var n = id?.let { byId[it] }
+        while (n != null && seen.add(n.nodeId)) {
+            if (n.identity) return true
+            n = n.parentId?.let { byId[it] }
+        }
+        return false
+    }
+
+    /** Whether moving [node] ends a guest's folder (the web's `endsIdentity`): its identity link goes with the move, the
+     *  guest adds nothing to it any more, and nothing brings it back into the drop box — asked before it is sent. */
+    fun endsIdentity(node: NodeRef): Boolean = node.identity
 
     /** Whether [id] is [moved] or lies below it (bounded: a served parent cycle stops instead of spinning). */
     private fun within(tree: List<NodeRef>, moved: NodeRef, id: String): Block? {

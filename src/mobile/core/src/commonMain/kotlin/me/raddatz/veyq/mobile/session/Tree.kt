@@ -36,7 +36,7 @@ class OpenNode(
     /** When the server created the node (ISO-8601): a drop box's guests' folders are ordered by it. */
     val createdAt: String? = null,
 ) {
-    fun asNode(): NodeRef = NodeRef(scopeId, id, parentId, kind, name)
+    fun asNode(): NodeRef = NodeRef(scopeId, id, parentId, kind, name, identity = shareIdentityId != null)
     fun asObject(): ObjectRef? = asNode().asObject()
 }
 

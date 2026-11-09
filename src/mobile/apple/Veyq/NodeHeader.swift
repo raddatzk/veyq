@@ -180,7 +180,7 @@ struct NodeHeaderActions: View {
 
     private var plan: NodeHeader.Plan {
         let page = KindPage.of(node.kind)
-        let rights = NodeHeader.Rights(
+        let granted = NodeHeader.Rights(
             favorite: pinned != nil,
             share: page?.shareable == true && model.linkRules().on,
             rename: contribution.rename,
@@ -191,6 +191,8 @@ struct NodeHeaderActions: View {
             report: model.reportOffered,
             delete: true
         )
+        // a guest's folder and what lies in it: moved out, never renamed, shared, covered or deleted as a folder
+        let rights = model.inIdentityFolder(node) ? NodeHeader.shared.inIdentityFolder(rights: granted, kind: node.kind) : granted
         return NodeHeader.shared.plan(
             rights: rights, order: AppKinds.shared.headerOrder(kind: node.kind), maxButtons: maxButtons,
             own: contribution.actions.map { NodeHeader.Action(id: $0.id, slot: $0.slot) }

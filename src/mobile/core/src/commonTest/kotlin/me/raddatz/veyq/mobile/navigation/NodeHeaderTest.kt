@@ -77,4 +77,19 @@ class NodeHeaderTest {
         val none = Rights(false, false, false, false, false, false, false, false, false)
         assertFalse(NodeHeader.plan(none, folderOrder, 2).hasMenu)
     }
+
+    @Test
+    fun aGuestsFolderIsMovedOutButNotRenamedSharedCoveredOrDeleted() {
+        val all = NodeHeader.Rights(
+            favorite = true, share = true, rename = true, move = true, cover = true, copy = true, download = true, report = true, delete = true,
+        )
+        val folder = NodeHeader.inIdentityFolder(all, "FOLDER")
+        assertEquals(
+            NodeHeader.Rights(favorite = true, share = false, rename = false, move = true, cover = false, copy = true, download = true, report = true, delete = false),
+            folder,
+        )
+        // a file in a guest's folder is deleted file by file
+        kotlin.test.assertTrue(NodeHeader.inIdentityFolder(all, "FILE").delete)
+        kotlin.test.assertFalse(NodeHeader.inIdentityFolder(all, "FILE").rename)
+    }
 }

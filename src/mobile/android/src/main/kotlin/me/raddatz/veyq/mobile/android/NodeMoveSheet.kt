@@ -67,6 +67,8 @@ internal fun NodeMoveSheet(
     var at by remember { mutableStateOf<String?>(null) }
     var moving by remember { mutableStateOf(false) }
     var problem by remember { mutableStateOf<String?>(null) }
+    // moving a guest's folder out ends it (the web's `endsIdentity`): asked first, there is no way back
+    var confirming by remember { mutableStateOf(false) }
     val context = androidx.compose.ui.platform.LocalContext.current
     LaunchedEffect(ref) {
         val read = model.scopeNodes(ref.scopeId)
@@ -136,51 +138,64 @@ internal fun NodeMoveSheet(
                 }
             }
             val block = NodeMove.hereBlock(nodes, moved, at, model.placement, copy = copy != null)
-            val shown = problem ?: block?.let { stringResource(hereText(it)) }
+            val shown = problem ?: block?.let { stringResource(hereText(it, copy != null)) }
             shown?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = role(if (problem != null) palette.danger else palette.muted), modifier = Modifier.padding(top = 10.dp)) }
+            val send = {
+                moving = true
+                problem = null
+                val to = at
+                val from = moved.parentId
+                scope.launch {
+                    val toName = to?.let { t -> nodes.firstOrNull { it.nodeId == t }?.name } ?: rootName
+                    if (copy != null) {
+                        val why = copy(to)
+                        moving = false
+                        if (why == null) {
+                            onMoved(toName, null)
+                            onClose()
+                        } else {
+                            problem = why
+                        }
+                        return@launch
+                    }
+                    val r = model.move(ref, to)
+                    moving = false
+                    if (r.outcome == NodeMove.Outcome.MOVED) {
+                        onMoved(to?.let { t -> nodes.firstOrNull { it.nodeId == t }?.name } ?: rootName, from)
+                        onClose()
+                    } else {
+                        problem = moveProblem(context, r)
+                    }
+                }
+                Unit
+                Unit
+            }
             Row(Modifier.fillMaxWidth().padding(top = 12.dp), horizontalArrangement = androidx.compose.foundation.layout.Arrangement.End) {
                 TextButton(onClick = onClose, enabled = !moving) { Text(stringResource(R.string.trash_cancel)) }
                 Button(
-                    onClick = {
-                        moving = true
-                        problem = null
-                        val to = at
-                        val from = moved.parentId
-                        scope.launch {
-                            val toName = to?.let { t -> nodes.firstOrNull { it.nodeId == t }?.name } ?: rootName
-                            if (copy != null) {
-                                val why = copy(to)
-                                moving = false
-                                if (why == null) {
-                                    onMoved(toName, null)
-                                    onClose()
-                                } else {
-                                    problem = why
-                                }
-                                return@launch
-                            }
-                            val r = model.move(ref, to)
-                            moving = false
-                            if (r.outcome == NodeMove.Outcome.MOVED) {
-                                onMoved(to?.let { t -> nodes.firstOrNull { it.nodeId == t }?.name } ?: rootName, from)
-                                onClose()
-                            } else {
-                                problem = moveProblem(context, r)
-                            }
-                        }
-                    },
+                    onClick = { if (copy == null && NodeMove.endsIdentity(moved)) confirming = true else send() },
                     enabled = block == null && !moving,
                 ) { Text(stringResource(if (copy != null) R.string.copy_submit else R.string.move_submit)) }
+            }
+            if (confirming) {
+                androidx.compose.material3.AlertDialog(
+                    onDismissRequest = { confirming = false },
+                    title = { Text(stringResource(R.string.move_identity_title)) },
+                    text = { Text(stringResource(R.string.move_identity_confirm, ref.name)) },
+                    confirmButton = { TextButton(onClick = { confirming = false; send() }) { Text(stringResource(R.string.move_identity_accept)) } },
+                    dismissButton = { TextButton(onClick = { confirming = false }) { Text(stringResource(R.string.trash_cancel)) } },
+                )
             }
         }
     }
 }
 
-private fun hereText(block: NodeMove.Block): Int = when (block) {
+private fun hereText(block: NodeMove.Block, copy: Boolean): Int = when (block) {
     NodeMove.Block.ITSELF -> R.string.move_here_self
     NodeMove.Block.INSIDE -> R.string.move_here_inside
     NodeMove.Block.CURRENT -> R.string.move_here_current
     NodeMove.Block.KIND -> R.string.move_here_kind
+    NodeMove.Block.IDENTITY_FOLDER -> if (copy) R.string.copy_here_identity else R.string.move_here_identity
 }
 
 /** Why a move did not go through, in the web's words (`node.move.refused.*`). */

@@ -392,6 +392,9 @@ class AppModel(app: Application) : AndroidViewModel(app) {
     // ---- core's actions on a node ----
 
     /** Whether [ref] is pinned; null while its space's pin set is not loaded (no heart is offered then). */
+    /** Whether [ref] is a guest's identity folder or lies in one (core's answer over the tree last read). */
+    fun inIdentityFolder(ref: me.raddatz.veyq.mobile.navigation.NodeAt): Boolean = tenantSession?.inIdentityFolder(ref.scopeId, ref.nodeId) ?: false
+
     fun isFavorite(ref: me.raddatz.veyq.mobile.navigation.NodeAt): Boolean? = tenantSession?.isFavorite(ref.scopeId, ref.nodeId)
 
     /** Pins or unpins [ref], then the lists are read anew; false when it was not stored (the heart goes back). */

@@ -10,6 +10,9 @@ data class NodeRef(
     val parentId: String?,
     val kind: String,
     val name: String,
+    /** A drop box guest's identity folder (the served `shareIdentityId`): nothing is placed into it or below it, ADR 0080
+     *  decision 11. */
+    val identity: Boolean = false,
 ) {
     val isFolder: Boolean get() = kind == FOLDER
     val application: ApplicationId? get() = applicationOf(kind)

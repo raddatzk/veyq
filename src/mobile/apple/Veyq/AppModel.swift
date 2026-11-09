@@ -461,6 +461,9 @@ final class AppModel {
     // MARK: Core's actions on a node
 
     /// Whether `ref` is pinned; nil while its space's pin set is not loaded (no heart is offered then).
+    /// Whether `ref` is a guest's identity folder or lies in one (core's answer over the tree last read).
+    func inIdentityFolder(_ ref: NodeAt) -> Bool { tenantSession?.inIdentityFolder(scopeId: ref.scopeId, nodeId: ref.nodeId) ?? false }
+
     func isFavorite(_ ref: NodeAt) -> Bool? { tenantSession?.isFavorite(scopeId: ref.scopeId, nodeId: ref.nodeId)?.boolValue }
 
     /// Pins or unpins `ref`, then the lists are read anew; false when it was not stored (the heart goes back).

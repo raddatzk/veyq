@@ -340,8 +340,13 @@ implementation exists but what holds it to the first.
   folder holding a drop box with a web guest's files re-keyed whole by the app twice, nothing left due, every guest's
   file read to its SHA-256 by a fresh session, the same old link taking two more guests' files between the runs and the
   web's member page opening all three guests' folders after (`DropBoxLiveTest`; the `K_up` left unsealed turns it red, the
-  guest's folder staying due). Not built yet: reactivating a switched-off drop box link, the space's top level's "Add
-  files only", moving a guest's folder out, a file's copy and its place in a folder's download (both
+  guest's folder staying due). A member moves a guest's folder out (the web's `endsIdentity`, ADR 0080 decision 11): the
+  drop box's page offers it per folder, core's move browser asks first (it becomes an ordinary folder, its guest adds
+  nothing more, nothing moves back), lists no guest's folder as a place and blocks one as a destination (`NodeMove`,
+  `NodeMoveTest`); in a guest's folder the header narrows as the web's `nodeRights`/`folderRights` do (no link, rename,
+  cover or folder delete, `NodeHeader.inIdentityFolder`) and the level has no "New" (measured 2026-11-09: a guest's folder
+  moved out on Android, the web then listing it as an ordinary folder whose file opens, the drop box one person fewer).
+  Not built yet: reactivating a switched-off drop box link, the space's top level's "Add files only", a file's copy and its place in a folder's download (both
   left out and said), a folder upload, the uploader on a file's page.
 - **One header for every node, drawn by core** (the web's `NodePage` + `NodeHeader`, ADR 0110 decision 10; owner
   2026-11-09): what a node's header offers and where is core's `navigation/NodeHeader.kt` — core's actions around the

@@ -43,7 +43,8 @@ import me.raddatz.veyq.mobile.navigation.ObjectRef
 /**
  * A drop box's page for a member (Depot's `DropBoxDetail.vue`): every guest's folder in the order they came, a name more
  * than one gave numbered as the web numbers it, with the files in it — each opens its file's page (download, delete) —
- * and the folder's delete, asked first, into the trash. Nobody's yet: the web's sentence pointing at its links.
+ * the folder's move out (core's move browser, which asks first: the folder becomes an ordinary one) and its delete, asked
+ * first, into the trash. Nobody's yet: the web's sentence pointing at its links.
  */
 @Composable
 internal fun DropBoxScreen(ref: ObjectRef, model: AppModel) {
@@ -54,6 +55,8 @@ internal fun DropBoxScreen(ref: ObjectRef, model: AppModel) {
     var folders by remember { mutableStateOf<List<DropBoxes.GuestFolder>?>(null) }
     LaunchedEffect(ref.nodeId, details) { folders = model.dropBoxFolders(ref.scopeId, ref.nodeId) }
     var deleting by remember { mutableStateOf<DropBoxes.GuestFolder?>(null) }
+    var movingOut by remember { mutableStateOf<DropBoxes.GuestFolder?>(null) }
+    val screen by model.screen.collectAsStateWithLifecycle()
     val hero = LocalNodeHero.current
     val list = folders
     LazyColumn(Modifier.fillMaxSize()) {
@@ -75,6 +78,10 @@ internal fun DropBoxScreen(ref: ObjectRef, model: AppModel) {
                                 IconButton(onClick = { menu = true }) { Icon(Icons.Outlined.MoreVert, stringResource(R.string.node_more)) }
                                 DropdownMenu(menu, { menu = false }) {
                                     DropdownMenuItem(
+                                        text = { Text(stringResource(R.string.dropbox_move_folder, f.label)) },
+                                        onClick = { menu = false; movingOut = f },
+                                    )
+                                    DropdownMenuItem(
                                         text = { Text(stringResource(R.string.dropbox_delete_folder, f.label), color = MaterialTheme.colorScheme.error) },
                                         onClick = { menu = false; deleting = f },
                                     )
@@ -95,6 +102,15 @@ internal fun DropBoxScreen(ref: ObjectRef, model: AppModel) {
                 }
             }
         }
+    }
+    movingOut?.let { f ->
+        val spaces = (screen as? Screen.Signed)?.spaces.orEmpty()
+        NodeMoveSheet(
+            me.raddatz.veyq.mobile.navigation.NodeAt(f.node.scopeId, f.node.id, f.node.kind, f.label),
+            spaceName(spaces.firstOrNull { it.scopeId == f.node.scopeId }), model,
+            onMoved = { _, _ -> folders = null },
+            onClose = { movingOut = null },
+        )
     }
     deleting?.let { f ->
         AlertDialog(

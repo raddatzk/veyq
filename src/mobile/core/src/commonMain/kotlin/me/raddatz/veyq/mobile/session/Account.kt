@@ -753,6 +753,11 @@ class TenantSession internal constructor(
     @Throws(Exception::class)
     suspend fun node(scopeId: String, nodeId: String): OpenNode? = trees()[scopeId]?.firstOrNull { it.id == nodeId }
 
+    /** Whether [nodeId] of [scopeId] is a guest's identity folder or lies in one, as the tree last read holds it (false before
+     *  a read): its header and its level narrow to what a member does there (`NodeHeader.inIdentityFolder`). */
+    fun inIdentityFolder(scopeId: String, nodeId: String): Boolean =
+        tree?.get(scopeId)?.let { t -> NodeMove.inIdentityFolder(t.map { it.asNode() }, nodeId) } ?: false
+
     /** Whether [nodeId] of [scopeId] is pinned; null while that scope's set is not loaded (no pin is offered then). */
     fun isFavorite(scopeId: String, nodeId: String): Boolean? = pinSets[scopeId]?.contains(nodeId)
 

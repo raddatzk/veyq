@@ -302,6 +302,11 @@
     <string name="move_here_inside">Es kann nicht in etwas verschoben werden, das darin liegt.</string>
     <string name="move_here_current">Es ist schon hier.</string>
     <string name="move_here_kind">Dieser Ort kann es nicht aufnehmen.</string>
+    <string name="move_here_identity">In den Ordner einer Person lässt sich nichts verschieben.</string>
+    <string name="copy_here_identity">In den Ordner einer Person lässt sich nichts kopieren.</string>
+    <string name="move_identity_title">Ordner aus dem Briefkasten verschieben?</string>
+    <string name="move_identity_confirm">„%1$s“ wird ein gewöhnlicher Ordner: Die Person, die ihn eingeworfen hat, kann nichts mehr hinzufügen, und er lässt sich nicht zurück in den Briefkasten verschieben. Alles darin bleibt für dich lesbar.</string>
+    <string name="move_identity_accept">Herausverschieben</string>
     <string name="move_moved">„%1$s“ nach „%2$s“ verschoben.</string>
     <string name="move_undo_failed">„%1$s“ konnte nicht zurückverschoben werden. Bitte verschiebe es selbst.</string>
     <string name="move_refused_slug_taken">Dort gibt es bereits etwas mit diesem Namen. Benenne es zuerst um oder wähle einen anderen Ort.</string>
@@ -342,9 +347,10 @@
         <item quantity="other">%d Dateien</item>
     </plurals>
     <string name="dropbox_empty">Noch hat niemand etwas eingeworfen. Teile einen Link, um Dateien einzusammeln.</string>
-    <string name="dropbox_hint">Öffne eine Datei, um sie herunterzuladen oder zu löschen. Um alles zu entfernen, was jemand eingeworfen hat, lösche den Ordner der Person.</string>
+    <string name="dropbox_hint">Öffne eine Datei, um sie herunterzuladen oder zu löschen. Um alles zu entfernen, was jemand eingeworfen hat, lösche den Ordner der Person; um ihn als gewöhnlichen Ordner zu behalten, verschiebe ihn heraus.</string>
     <string name="dropbox_delete">Briefkasten löschen</string>
     <string name="dropbox_delete_confirm">„%1$s“ kommt mit den Ordnern aller Gäste in den Papierkorb, und seine Links nehmen dort keine Dateien an. Dort lässt er sich wiederherstellen, bis er endgültig entfernt wird.</string>
+    <string name="dropbox_move_folder">%1$s herausverschieben …</string>
     <string name="dropbox_delete_folder">%1$s löschen</string>
     <string name="dropbox_delete_folder_confirm">„%1$s“ und alles darin kommen in den Papierkorb. Dort lässt sich alles wiederherstellen, bis es endgültig entfernt wird.</string>
     <string name="file_send">Kopie senden…</string>

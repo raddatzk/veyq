@@ -340,7 +340,9 @@ private fun HomeScreen(s: Screen.Signed, model: AppModel, onEnter: (me.raddatz.v
         if (uris.isNotEmpty() && space != null) model.uploadPicked(space, s.shell.folder?.nodeId, uris)
     }
     // The level's "New" (the web's menu): a folder here, a Pot here, or files uploaded here.
-    CreateAction(stringResource(R.string.create_new), shown = s.shell.space != null, onClick = {}, menu = { close ->
+    // nothing is created in a guest's folder (the web's `folderRights`: no "New" there)
+    val inGuestFolder = s.shell.space?.let { sp -> s.shell.folder?.let { f -> model.inIdentityFolder(me.raddatz.veyq.mobile.navigation.NodeAt(sp, f.nodeId, "FOLDER", f.name)) } } ?: false
+    CreateAction(stringResource(R.string.create_new), shown = s.shell.space != null && !inGuestFolder, onClick = {}, menu = { close ->
         androidx.compose.material3.DropdownMenuItem(text = { Text(stringResource(R.string.folder_new)) }, onClick = { close(); naming = true })
         androidx.compose.material3.DropdownMenuItem(text = { Text(stringResource(R.string.create_pot)) }, onClick = { close(); creatingPot = true })
         androidx.compose.material3.DropdownMenuItem(text = { Text(stringResource(R.string.depot_upload)) }, onClick = { close(); pickFiles.launch(arrayOf("*/*")) })

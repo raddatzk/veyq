@@ -304,6 +304,11 @@
     <string name="move_here_inside">It can’t be moved into something inside it.</string>
     <string name="move_here_current">It is already here.</string>
     <string name="move_here_kind">This place can’t hold it.</string>
+    <string name="move_here_identity">Nothing can be moved into a guest’s folder.</string>
+    <string name="copy_here_identity">Nothing can be copied into a guest’s folder.</string>
+    <string name="move_identity_title">Move a guest’s folder out of the drop box?</string>
+    <string name="move_identity_confirm">“%1$s” becomes an ordinary folder: the guest who sent it can no longer add anything to it, and it cannot be moved back into the drop box. Everything in it stays readable for you.</string>
+    <string name="move_identity_accept">Move out</string>
     <string name="move_moved">“%1$s” moved to “%2$s”.</string>
     <string name="move_undo_failed">“%1$s” could not be moved back. Please move it yourself.</string>
     <string name="move_refused_slug_taken">Something with this name already exists there. Rename it first, or choose another place.</string>
@@ -344,9 +349,10 @@
         <item quantity="other">%d files</item>
     </plurals>
     <string name="dropbox_empty">Nobody has dropped anything yet. Share a link to collect files.</string>
-    <string name="dropbox_hint">Open a file to download or delete it. To remove everything someone sent, delete their folder.</string>
+    <string name="dropbox_hint">Open a file to download or delete it. To remove everything someone sent, delete their folder; to keep it as an ordinary folder, move it out.</string>
     <string name="dropbox_delete">Delete drop box</string>
     <string name="dropbox_delete_confirm">“%1$s” moves to the trash with every guest’s folder in it, and its links take no files while it is there. You can restore it from the trash until it is removed for good.</string>
+    <string name="dropbox_move_folder">Move %1$s out…</string>
     <string name="dropbox_delete_folder">Delete %1$s</string>
     <string name="dropbox_delete_folder_confirm">“%1$s” and everything in it move to the trash. You can restore it from there until it is removed for good.</string>
     <string name="file_send">Send a copy…</string>

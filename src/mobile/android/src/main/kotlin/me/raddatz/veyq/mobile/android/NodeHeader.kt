@@ -118,7 +118,7 @@ internal fun NodeHeaderActions(
     var pinned by remember(node.nodeId) { mutableStateOf(model.isFavorite(node)) }
     var menu by remember { mutableStateOf(false) }
     var dialog by remember(node.nodeId) { mutableStateOf<String?>(null) }
-    val rights = Plan.Rights(
+    val granted = Plan.Rights(
         favorite = pinned != null,
         share = KindPages.of(node.kind)?.shareable == true && model.linkRules().on,
         rename = contribution.rename,
@@ -129,6 +129,7 @@ internal fun NodeHeaderActions(
         report = reportOffered,
         delete = true,
     )
+    val rights = if (model.inIdentityFolder(node)) Plan.inIdentityFolder(granted, node.kind) else granted
     val plan = Plan.plan(rights, me.raddatz.veyq.mobile.AppKinds.headerOrder(node.kind), maxButtons, contribution.actions.map { Plan.Action(it.id, it.slot) })
     val own = contribution.actions.associateBy { it.id }
 
