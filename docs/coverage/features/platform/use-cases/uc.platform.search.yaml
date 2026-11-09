@@ -76,3 +76,20 @@ acceptanceCriteria:
     coverage:
       web:
         unit: [src/core/search/searchIndex.test.ts, src/components/app/AppShell.search.test.ts, src/core/search/contribution.test.ts]
+gaps:
+  stack: >-
+    Lane L1's browser suite (`tests/e2e/tests/features/platform/search.spec.ts`; the share page's absent field with the
+    gallery filter's guest, `tests/e2e/tests/features/memories/gallery-filter.spec.ts`) drives `every-space-of-the-tenant`,
+    `chips-and-text`, `one-list-ordered-by-match-and-place`, `a-chip-is-a-predicate-over-every-document`, `in-a-node`,
+    `memories-contributes-through-the-registry`, `photos-of-every-space`, `open-a-result`, `people-are-results`,
+    `settings-are-the-rails-sections` and `nothing-leaves-or-persists` in Chromium against the release candidate's two
+    images, installed through `veyqctl` (ADR 0090), each test tagged with its criterion: a Memory of another space found
+    by its name (the match bold), a year, a month, a person and a place chip - the place named by hand with Maps switched
+    off for the space -, a photo of another space found by its place and opened in its Memory's lightbox, two In chips for
+    two Memories of one name, a member opening their profile, a settings section found by its own word, the moved
+    highlight kept while the member types on, and a share page with no search field; every query typed is a canary the
+    sweep must not find. The photo's place is one the member's import sealed from a download whose manifest names it, not
+    one typed: a photo's place is otherwise only reverse-geocoded, which a hermetic run cannot reach. Green only in local
+    runs of `scripts/run_stack_e2e.py`: the lane's CI job (`checks.yml` → `stack`) awaits the first CI run (no remote),
+    and ADR 0040 admits `stack` refs only once a run's log shows the suite executed. On that run each file becomes a ref
+    on the criteria its tests are tagged with, and this gap goes.

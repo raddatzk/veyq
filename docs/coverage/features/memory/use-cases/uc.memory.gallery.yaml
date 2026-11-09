@@ -533,7 +533,10 @@ gaps:
     `tests/e2e/tests/features/memories/video-playback.spec.ts`, `tests/e2e/tests/features/memories/gallery-keyboard.spec.ts` — the windowed grid's
     keyboard walk and its window, written with ADR 0105; `tests/e2e/tests/features/memories/memories-styles.spec.ts` —
     `lightbox-preview` as far as the lightbox's look: its buttons, its details pane wide and narrow, light and dark, read
-    as computed styles after inbox #517 moved its rules from core's `styles/media.css` into Memories' own sheet)
+    as computed styles after inbox #517 moved its rules from core's `styles/media.css` into Memories' own sheet;
+    `tests/e2e/tests/features/memories/gallery-filter.spec.ts` — `gallery-narrows-by-facts` as far as a day chip: the grid
+    narrowed to that day's two photos of three, the lightbox paging those two alone, the chip removed, and a read-only
+    link's guest with no filter field)
     drives `thumbnail-grid`, `download-stable-name` (the lightbox saves the original under its sealed name, byte for
     byte, through the Service Worker's download route, after a reload), `lightbox-video-playback` and
     `sw-range-streaming` (a WebM uploaded, reloaded, played from `/__media/<handle>`: every answer the Service Worker's
