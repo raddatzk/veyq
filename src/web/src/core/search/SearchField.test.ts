@@ -637,3 +637,27 @@ describe('the polish (cr-search-polish)', () => {
     expect(document.getElementById(input.getAttribute('aria-controls') ?? '')?.getAttribute('role')).toBe('listbox')
   })
 })
+
+// The owner's item (2026-11-09): the field remembers the queries asked while its list is open, and forgets them when it closes.
+describe('the queries remembered while the list is open', () => {
+  it('Backspace reads no document while open; after the list closed, the same query reads every document again', async () => {
+    let reads = 0
+    const base = [doc({ id: 'a', name: 'Rome 2024' }), doc({ id: 'b', name: 'Rome garden' }), doc({ id: 'c', name: 'Paris' })]
+    vi.mocked(indexedDocuments).mockReturnValue(base.map((d) => Object.defineProperty({ ...d }, 'foldedName', { get: () => (reads++, d.foldedName) }) as SearchDocument))
+    await mountField()
+    await type('ro')
+    await type('rom')
+    const before = reads
+    await type('ro') // Backspace
+    expect(reads).toBe(before)
+    expect(rows()).toContain('Rome 2024') // the answer is there all the same
+    await press('Escape')
+    field().focus()
+    field().dispatchEvent(new FocusEvent('focus'))
+    await flushPromises()
+    const reopened = reads
+    await type('r')
+    await type('ro')
+    expect(reads - reopened).toBeGreaterThanOrEqual(base.length * 2) // control: forgotten, so scanned again
+  })
+})

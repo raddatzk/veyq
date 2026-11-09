@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import { searchDocument, type SearchDocument, type SearchFacets } from './model'
 import {
-  byRank, chipKey, createMatcher, matchAll, matchedText, nameParts, Rank, satisfies, suggestChips, textRank, type ChipSources, type SearchChip,
+  byRank, chipKey, createMatcher, MATCH_HISTORY, matchAll, matchedText, nameParts, Rank, satisfies, suggestChips, textRank, type ChipSources, type SearchChip,
   type SearchQuery,
 } from './query'
 
@@ -267,7 +267,7 @@ describe('the matcher of a field', () => {
     }
   })
 
-  it('scans again for another document list, another chip, a shorter text, or after a query that asked nothing', () => {
+  it('scans again for another document list, another chip, or after a query that asked nothing', () => {
     const match = createMatcher()
     expect(match(docs, { chips: [], text: '' })).toEqual([])
     expect(match(docs, { chips: [], text: 'k' }).length).toBe(matchAll(docs, { chips: [], text: 'k' }).length)
@@ -275,11 +275,80 @@ describe('the matcher of a field', () => {
     expect(match(more, { chips: [], text: 'kev' }).map((m) => m.doc.name)).toContain('Kevin')
     expect(match(more, { chips: [year(2011)], text: 'kev' }).map((m) => m.doc.name)).toEqual(['Kevins Geburtstag'])
     expect(match(more, { chips: [], text: 'kev' }).map((m) => m.doc.name)).toContain('Kevelaer 2012')
+    // a query that grew, but without the chip a remembered one had: never narrowed from that one's matches
+    const other = createMatcher()
+    other(docs, { chips: [year(2011)], text: 'ke' })
+    expect(sorted(other(docs, { chips: [], text: 'kev' }))).toEqual(sorted(matchAll(docs, { chips: [], text: 'kev' })))
   })
 
   it('the same query again is the last answer as it was ("show more")', () => {
     const match = createMatcher()
     const first = match(docs, { chips: [], text: 'ke' })
     expect(match(docs, { chips: [], text: 'ke ' })).toBe(first)
+  })
+
+  // The owner's item (2026-11-09): the queries asked while the field is open are remembered, for one index generation.
+  /** The documents, each counting how often a match reads its name: a scan of a document is one read. */
+  function counted() {
+    let reads = 0
+    const list = docs.map((d) => {
+      const copy = { ...d }
+      Object.defineProperty(copy, 'foldedName', { get: () => (reads++, d.foldedName) })
+      return copy as SearchDocument
+    })
+    return { list, reads: () => reads }
+  }
+
+  it('Backspace from "kev" to "ke" reads no document: the answer for "ke" is remembered', () => {
+    const { list, reads } = counted()
+    const match = createMatcher()
+    const ke = match(list, { chips: [], text: 'ke' })
+    expect(reads()).toBe(list.length) // the first query scans every document
+    const kev = match(list, { chips: [], text: 'kev' })
+    expect(reads()).toBe(list.length + ke.length) // narrowed: only what "ke" matched
+    const before = reads()
+    expect(match(list, { chips: [], text: 'ke' })).toBe(ke) // Backspace
+    expect(reads()).toBe(before)
+    // typing on narrows from the closest remembered shorter query, "kev"
+    match(list, { chips: [], text: 'kevi' })
+    expect(reads()).toBe(before + kev.length)
+    // control: a matcher without that memory reads every document again for "ke"
+    const fresh = createMatcher()
+    const at = reads()
+    fresh(list, { chips: [], text: 'ke' })
+    expect(reads()).toBe(at + list.length)
+  })
+
+  it('forgets everything for the index\'s next generation (another document list), and when cleared', () => {
+    const { list, reads } = counted()
+    const match = createMatcher()
+    match(list, { chips: [], text: 'ke' })
+    // control: the same generation answers from memory
+    let at = reads()
+    match(list, { chips: [], text: 'ke' })
+    expect(reads()).toBe(at)
+    // the next generation: the same documents in a new list (a space rebuilt) - scanned again, and only the new list
+    const next = [...list]
+    at = reads()
+    match(next, { chips: [], text: 'ke' })
+    expect(reads()).toBe(at + next.length)
+    match(next, { chips: [], text: 'kev' })
+    at = reads()
+    match(next, { chips: [], text: 'ke' })
+    expect(reads()).toBe(at)
+    // cleared (the list closed, sign-out): scanned again
+    match.clear()
+    match(next, { chips: [], text: 'ke' })
+    expect(reads()).toBe(at + next.length)
+  })
+
+  it('remembers at most MATCH_HISTORY queries, the oldest asked going first', () => {
+    const { list, reads } = counted()
+    const match = createMatcher()
+    match(list, { chips: [], text: 'ke' })
+    for (let i = 0; i < MATCH_HISTORY; i++) match(list, { chips: [year(2010 + (i % 8))], text: `x${i}` })
+    const at = reads()
+    match(list, { chips: [], text: 'ke' })
+    expect(reads()).toBe(at + list.length)
   })
 })

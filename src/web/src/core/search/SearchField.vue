@@ -230,9 +230,15 @@ watch(text, (now) => {
 
 // --- the results -----------------------------------------------------------------------------------------------------
 // the chips as plain objects: the query reads them once per document, and a reactive read each time costs a keystroke
-// at volume (cr-search-at-volume); the matcher narrows the last matches while the text only grows, and each group is
-// ranked only as far as it is shown (cr-search-polish)
+// at volume (cr-search-at-volume); the matcher remembers the queries asked while the list is open and narrows them as the
+// text grows, and each group is ranked only as far as it is shown (cr-search-polish). Its memory goes when the list
+// closes, when the documents move (the index's next generation, a sign-out's reset included) and with the field.
 const matcher = createMatcher()
+watch(open, (isOpen) => {
+  if (!isOpen) matcher.clear()
+})
+watch(documents, () => matcher.clear())
+onBeforeUnmount(() => matcher.clear())
 const groups = computed(() =>
   searchGroups(documents.value, { chips: chips.value.map((c) => toRaw(c)), text: text.value }, {
     activeScopeId: activeSpace.scopeId, openNodeId: openNode.value?.id ?? null, activeTree: activeTree.value,

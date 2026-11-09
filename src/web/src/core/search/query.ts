@@ -193,7 +193,9 @@ export const Rank = { exact: 0, prefix: 1, wordStart: 2, inside: 3, place: 4 } a
 const wordsOf = (t: string): string[] => t.split(/\s+/).filter(Boolean)
 
 /** How `doc` matches the folded text `t` (its `words`, when the caller split them already), or null when it does not; an
- *  empty text matches every document at the best rank. */
+ *  empty text matches every document at the best rank. **Every rule here must be monotone in the text** - a document a
+ *  longer text matches, the shorter text it grew from matches too - since {@link createMatcher} narrows remembered matches
+ *  while the text grows; a rule that matches only from some length on (a minimum for keywords, say) would drop a match. */
 export function textRank(doc: SearchDocument, t: string, words: readonly string[] = wordsOf(t)): number | null {
   if (!t) return Rank.exact
   let best = nameRank(doc.foldedName, t, words)
@@ -246,34 +248,60 @@ function matchIn(docs: Iterable<SearchDocument>, chips: readonly SearchChip[], t
   return out
 }
 
-/** {@link matchAll} that remembers its last answer (`createMatcher`). */
-export type Matcher = (docs: readonly SearchDocument[], query: SearchQuery) => Match[]
+/** {@link matchAll} with a memory of the queries asked while a field is open (`createMatcher`). */
+export interface Matcher {
+  (docs: readonly SearchDocument[], query: SearchQuery): Match[]
+  /** Forget every remembered answer: the list closed, the index moved, the member signed out. */
+  clear(): void
+}
+
+/** How many queries a matcher remembers at most (the oldest asked goes first). */
+export const MATCH_HISTORY = 64
 
 /**
- * A {@link matchAll} for a field the member types into (cr-search-polish): it keeps its last answer, and where the query
- * only GREW - the same documents, the same chips, a text that starts with the last one - it narrows the last matches
- * instead of scanning every document. That is sound because a text that grows only drops matches: every word of the longer
- * text holds a word of the shorter one, and a name, an alias or a place that holds the longer text holds the shorter. The
- * same query again (a "show more") is answered by the last matches as they are. Anything else - a letter taken back, a chip
- * added or removed, the documents moved - scans every document again. A query that asks nothing is never remembered: its
- * empty answer is not the matches of every text.
+ * A {@link matchAll} for a field the member types into (cr-search-polish). It remembers the matches of every query asked
+ * while the field is open (the owner, 2026-11-09), by its chips and its folded text, for one list of documents:
+ * - **The same query again** - a "show more", or Backspace from "Kev" back to "Ke" - is the remembered answer as it was.
+ * - **A query that grew** from a remembered one (the same chips, a text that starts with that one's) narrows the matches of
+ *   the longest such query instead of scanning every document. That is sound because a text that grows only drops matches
+ *   ({@link textRank} is monotone in the text): every word of the longer text holds a word of the shorter one, and a name,
+ *   an alias, a keyword or a place that holds the longer text holds the shorter.
+ * - **Anything else** - a new chip, a text no remembered one starts - scans every document.
+ * Another list of documents - the index's next generation: a space rebuilt, a listing re-read, the open Memory's
+ * contribution or the roster moved - forgets everything, and so does {@link Matcher.clear}, which the field calls when its
+ * list closes and when it goes. A query that asks nothing is never remembered: its empty answer is not the matches of every
+ * text. In memory only; nothing is written anywhere.
  */
 export function createMatcher(): Matcher {
-  let last: { docs: readonly SearchDocument[]; chips: string; t: string; matches: Match[] } | null = null
-  return (docs, query) => {
+  let known: readonly SearchDocument[] | null = null
+  const history = new Map<string, { chips: string; t: string; matches: Match[] }>()
+  const match = ((docs: readonly SearchDocument[], query: SearchQuery): Match[] => {
     const t = foldedText(query)
-    const chips = query.chips.map(chipKey).sort().join('\u0000')
-    if (!t && query.chips.length === 0) {
-      last = null
-      return []
+    if (!t && query.chips.length === 0) return []
+    if (docs !== known) {
+      history.clear()
+      known = docs
     }
-    let matches: Match[]
-    if (last && last.docs === docs && last.chips === chips && t.startsWith(last.t)) {
-      matches = t === last.t ? last.matches : matchIn(docsOf(last.matches), query.chips, t)
-    } else matches = matchIn(docs, query.chips, t)
-    last = { docs, chips, t, matches }
+    const chips = query.chips.map(chipKey).sort().join('\u0000')
+    const key = `${chips}\u0001${t}`
+    const asked = history.get(key)
+    if (asked) {
+      history.delete(key) // asked again: the newest
+      history.set(key, asked)
+      return asked.matches
+    }
+    let from: { t: string; matches: Match[] } | undefined
+    for (const h of history.values()) if (h.chips === chips && t.startsWith(h.t) && (!from || h.t.length > from.t.length)) from = h
+    const matches = from ? matchIn(docsOf(from.matches), query.chips, t) : matchIn(docs, query.chips, t)
+    history.set(key, { chips, t, matches })
+    if (history.size > MATCH_HISTORY) history.delete(history.keys().next().value!)
     return matches
+  }) as Matcher
+  match.clear = () => {
+    history.clear()
+    known = null
   }
+  return match
 }
 
 function* docsOf(matches: readonly Match[]): Generator<SearchDocument> {
