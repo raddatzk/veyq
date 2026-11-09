@@ -213,7 +213,7 @@ describe('the search field', () => {
   it('names the space of a node at the top level of the space on screen', async () => {
     await mountField()
     await type('trips')
-    expect(resultRows()).toContain('Trips Familie')
+    expect(resultRows()).toContain(`Trips Familie ${t('shell.search.here')}`) // Trips is the page on screen here
   })
 
   // was: the open node's group headed by its name - now what lies below the open node comes first at an equal match
@@ -229,7 +229,7 @@ describe('the search field', () => {
     expect(headings()).toEqual([t('shell.search.filterBy'), t('shell.search.results')]) // Rome 2024 holds a chapter, so it is offered as In: too
     expect(suggestionRows()).toEqual([`Rome 2024 Familie · Trips ${t('shell.search.chipIn')}`])
     // by the name alone "Rome 2024" would come first; below the open node, "Rome day one" does
-    expect(resultRows()).toEqual(['Rome day one Familie · Trips / Rome 2024', 'Rome 2024 Familie · Trips'])
+    expect(resultRows()).toEqual(['Rome day one Familie · Trips / Rome 2024', `Rome 2024 Familie · Trips ${t('shell.search.here')}`])
     trees.S1 = trees.S1.slice(0, 2)
   })
 
@@ -275,6 +275,22 @@ describe('the search field', () => {
   it('opens a node of another space at its place there, through the navigation', async () => {
     await mountField()
     await type('garden')
+    await press('Enter')
+    expect(push).toHaveBeenCalledWith({ name: 'home', hash: '#@G1/memories/rome-garden' })
+  })
+
+  // owner 2026-11-09: choosing the page one stands on seemed to do nothing
+  it('marks the node on screen "You are here"; choosing it navigates nowhere and closes the list; control: another node navigates', async () => {
+    setBreadcrumb([{ id: null, name: 'Familie', hash: '' }, { id: 'trips', name: 'Trips', hash: '#trips/' }, { id: 'rome', name: 'Rome 2024', hash: '#trips/memories/rome-2024' }])
+    await mountField()
+    await type('rome')
+    expect(resultRows()).toContain(`Rome 2024 Familie · Trips ${t('shell.search.here')}`)
+    expect(resultRows().find((r) => r.startsWith('Rome garden'))).not.toContain(t('shell.search.here'))
+    expect(highlighted()).toMatch(/^Rome 2024/)
+    await press('Enter')
+    expect(push).not.toHaveBeenCalled()
+    expect(listOpen()).toBe(false)
+    await type('garden') // control: a node elsewhere still opens
     await press('Enter')
     expect(push).toHaveBeenCalledWith({ name: 'home', hash: '#@G1/memories/rome-garden' })
   })

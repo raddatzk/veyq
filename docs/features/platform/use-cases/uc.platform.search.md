@@ -78,7 +78,8 @@
    a name the text matched is shown in bold. The first 10 results are shown; "show more" adds 10, and the count is
    exact. A member's name offers them as a person chip and lists them as a person - the chip filters, the person opens
    their profile.
-7. **Open a result.** The member chooses one. A node opens where it lives, switching the active space when it lies in
+7. **Open a result.** The member chooses one. The node whose page is on screen is marked *You are here* (de *Du bist hier*); choosing
+   it only closes the list and brings the page's head into view (owner, 2026-11-09: choosing it seemed to do nothing). A node opens where it lives, switching the active space when it lies in
    another. A photo of the open Memory opens in its lightbox; a photo of another Memory opens that Memory (in its space)
    with the photo in the lightbox. A person opens their profile page. A settings
    section opens on the settings page, the active space kept.

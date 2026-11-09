@@ -301,6 +301,14 @@ function matchedValues(doc: SearchDocument): string[] {
   return [...new Set(out)]
 }
 
+/** The node whose page is on screen (the breadcrumb's last crumb - a folder's level too): a result of it is marked
+ *  "You are here", and choosing it only closes the list and brings the page's head into view (owner 2026-11-09: choosing
+ *  the page one stands on seemed to do nothing). */
+const hereId = computed(() => breadcrumb.trail.at(-1)?.id ?? null)
+function isHere(doc: SearchDocument): boolean {
+  return doc.scopeId === activeSpace.scopeId && doc.id === doc.nodeId && doc.nodeId === hereId.value
+}
+
 function choose(option: ResultOption) {
   if (option.more !== undefined) {
     shown.value += PAGE
@@ -310,6 +318,10 @@ function choose(option: ResultOption) {
   if (!doc) return
   open.value = false
   emit('opened')
+  if (isHere(doc)) {
+    document.querySelector('main h1, h1')?.scrollIntoView({ block: 'start', behavior: 'smooth' })
+    return
+  }
   if (doc.open) {
     doc.open()
     return
@@ -420,6 +432,7 @@ const statusSaid = computed(() => loadingShown.value || !!notSearched.value || s
           <span class="veyq-search__result-name"><template v-for="(part, i) in partsOf(option.doc)" :key="i"><strong v-if="part.strong" class="veyq-search__match">{{ part.text }}</strong><template v-else>{{ part.text }}</template></template></span>
           <span v-if="metaParts(option).length" class="veyq-search__result-meta"><template v-for="(part, i) in metaParts(option)" :key="i"><strong v-if="part.strong" class="veyq-search__match">{{ part.text }}</strong><template v-else>{{ part.text }}</template></template></span>
         </span>
+        <span v-if="isHere(option.doc)" class="veyq-badge veyq-search__result-here">{{ t('shell.search.here') }}</span>
         <span v-for="v in matchedValues(option.doc)" :key="v" class="veyq-badge muted veyq-search__result-chip">{{ v }}</span>
       </template>
     </template>
