@@ -435,7 +435,7 @@ class VeyqAccount private constructor(
                 }
                 if (!setup.success) throw SignInFailure(SignInFailure.Reason.UNREACHABLE, "setup ${setup.status}")
                 val status = setup.body()
-                if (status.version.major != MAJOR) throw SignInFailure(SignInFailure.Reason.INCOMPATIBLE, "server major ${status.version.major}, app $MAJOR")
+                if (!ClientWindow.speaks(status.version.major)) throw SignInFailure(SignInFailure.Reason.INCOMPATIBLE, "server major ${status.version.major}, app $MAJOR")
                 if ("v1" !in status.suites) throw SignInFailure(SignInFailure.Reason.INCOMPATIBLE, "no v1 suite")
                 return c
             } catch (e: Throwable) {
