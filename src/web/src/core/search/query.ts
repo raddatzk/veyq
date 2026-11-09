@@ -274,9 +274,12 @@ function bestNameRank(doc: SearchDocument, t: string, words: readonly string[], 
 }
 
 /** Which of `doc`'s settings words the folded text `t` matches - from a word's start, and only from {@link MIN_KEYWORD}
- *  characters on -, as its index, or -1. */
+ *  characters on -, as its index, or -1. A word itself shorter than that ("S3") matches when it is typed whole (owner
+ *  2026-11-09): an exact short word brings back no noise, and the matcher never narrows from so short a text
+ *  ({@link EVERY_RULE}), so the rule stays monotone where it narrows. */
 function keywordAt(doc: SearchDocument, t: string, words: readonly string[]): number {
-  if (!doc.foldedKeywords.length || lengthOf(t) < MIN_KEYWORD) return -1
+  if (!doc.foldedKeywords.length) return -1
+  if (lengthOf(t) < MIN_KEYWORD) return doc.foldedKeywords.findIndex((keyword) => keyword === t)
   return doc.foldedKeywords.findIndex((keyword) => {
     const rank = nameRank(keyword, t, words, false)
     return rank !== null && rank < Rank.inside

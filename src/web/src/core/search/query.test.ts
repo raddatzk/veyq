@@ -218,6 +218,17 @@ describe('a reason the member can see', () => {
     expect(textRank(doc('Mail', {}, { keywords: ['SMTP'] }), 'smt')).toBe(Rank.place)
   })
 
+  // owner 2026-11-09: a word shorter than three characters ("S3") is found when typed whole
+  it('a settings word shorter than three characters matches when typed whole: "s3" yes, "s" no; control: "ke" still no', () => {
+    const storage = () => doc('Speicher', {}, { keywords: ['Speicherplatz', 'Kontingent', 'S3'] })
+    expect(textRank(storage(), 's3')).toBe(Rank.place)
+    expect(reasonKeyword(storage(), 's3')).toBe('S3')
+    expect(textRank(storage(), 's')).toBe(Rank.prefix) // its name's start, not the short word
+    expect(reasonKeyword(storage(), 's')).toBeNull()
+    expect(textRank(doc('Lager', {}, { keywords: ['S3'] }), 's')).toBeNull() // a part of a short word is no match
+    expect(textRank(password(), 'ke')).toBeNull() // control: a longer word still counts from three characters only
+  })
+
   it('names the word that is the reason, as the section names it; none where the name matched', () => {
     expect(reasonKeyword(password(), 'ken')).toBe('Kennwort')
     expect(reasonKeyword(password(), 'anmel')).toBe('Anmeldung')

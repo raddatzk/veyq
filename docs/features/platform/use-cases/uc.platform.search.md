@@ -63,7 +63,8 @@
    - A document matches when it satisfies every chip, and the remaining text matches its name or its place,
      ignoring case and diacritics. A settings section also matches by a few words of its own ("E-Mail" finds the
      mail section, "Kennwort" the password), kept with the section in the one list the rail reads; such a word matches
-     from a word's start only and from the third typed character on, and where it is the reason a section is listed,
+     from a word's start only and from the third typed character on (a word itself shorter, "S3", when typed whole -
+     owner, 2026-11-09), and where it is the reason a section is listed,
      the row shows it on its second line with the matched part bold - a result never stands there for a reason the
      member cannot see (owner, 2026-11-09: "Passwort ändern" was listed for "Ke" through its hidden word "Kennwort").
    - A single typed character matches word starts only (a name's, a place's); a match inside a word counts from the
