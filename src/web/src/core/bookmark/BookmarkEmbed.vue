@@ -20,7 +20,6 @@
 import { computed, onMounted, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import VeyqIcon from '../../shared/ui/VeyqIcon.vue'
-import { EXPECTED_MAJOR } from '../../shared/state/capabilities'
 import { NO_DOORS, provideNodeHost } from '../node/nodeHost'
 import { provideNoCoreNodeActions } from '../node/coreNodeActions'
 import { provideNestedNodeHeading, provideNoNodeHeader } from '../node/nodeHeaderContribution'
@@ -28,7 +27,7 @@ import { provideNoSearchContributions } from '../search/contribution'
 import ShareGates from '../sharing/ShareGates.vue'
 import { useShareGates } from '../sharing/shareGates'
 import { apiBaseFor } from '../sharing/shareAt'
-import { embeddability, readShareInstance, type EmbedRefusal } from '../sharing/shareInstance'
+import { EMBED_MAJORS, embeddability, readShareInstance, type EmbedRefusal } from '../sharing/shareInstance'
 import { ShareRole } from '../../api/generated/sharing'
 import { openReport, useReportOffered } from '../report/report'
 import { linkReportKeys } from '../report/reportKeys'
@@ -65,7 +64,7 @@ const gates = useShareGates({
 /** The share's instance said it may be shown here; until then the page says it is opening. */
 const shown = ref(false)
 onMounted(async () => {
-  const verdict = embeddability({ embedding: true, setup: await readShareInstance(apiBase), major: EXPECTED_MAJOR })
+  const verdict = embeddability({ embedding: true, setup: await readShareInstance(apiBase), majors: EMBED_MAJORS })
   if (!verdict.embeds) {
     emit('fallback', verdict.reason)
     return
