@@ -8,12 +8,12 @@ acceptanceCriteria:
       web:
         unit: [src/core/search/searchIndex.test.ts, src/core/node/keyResolver.test.ts]
   - id: chips-and-text
-    text: A token that reads as a year (a Memory matches when its date range overlaps it, a photo when captured in it), a member's name, a place a document carries, a space's name or a kind's word is offered as a chip; a document matches when it satisfies every chip and the remaining text matches its name or place, ignoring case and diacritics. The chip suggestions stand under a heading of their own (Filter by), above the result groups; the first entry of the list is highlighted, a suggestion or a result, also right after a chip was chosen, and Enter takes it (a suggestion becomes a chip, a result opens); once the member moves the highlight (arrow keys or pointer) it stays on that entry while they type on, as long as it is listed; when it drops out the first entry of its group is highlighted (the list's first when that group is gone), and it stays remembered - listed again, it is highlighted again - until a new move replaces it or choosing an entry or closing the list forgets it; a field without results (the people pickers) keeps Reka's own highlight.
+    text: A token that reads as a year (a Memory matches when its date range overlaps it, a photo when captured in it), a month's name (three letters at least, in the UI's language or in English) followed by a year as that month (a Memory matches when its date range overlaps the month, a photo when captured in it, an undated Memory never; a month's name alone offers nothing), a member's name, a place a document carries, a space's name or a kind's word is offered as a chip; a document matches when it satisfies every chip and the remaining text matches its name or place, ignoring case and diacritics. The chip suggestions stand under a heading of their own (Filter by), above the result groups; the first entry of the list is highlighted, a suggestion or a result, also right after a chip was chosen, and Enter takes it (a suggestion becomes a chip, a result opens); once the member moves the highlight (arrow keys or pointer) it stays on that entry while they type on, as long as it is listed; when it drops out the first entry of its group is highlighted (the list's first when that group is gone), and it stays remembered - listed again, it is highlighted again - until a new move replaces it or choosing an entry or closing the list forgets it; a field without results (the people pickers) keeps Reka's own highlight. The part of a result's name the text matched is drawn bold, found in the folded name and mapped back over the name's own characters ("Straße" for "strasse", "Café" for "cafe"), as text nodes and a strong element, never as markup from a string. While the text only grows under the same chips and documents, the previous matches are narrowed instead of every document scanned.
     coverage:
       web:
-        unit: [src/core/search/query.test.ts, src/core/search/SearchField.test.ts, src/shared/ui/VeyqTagsInput.test.ts, src/shared/text/fold.test.ts]
+        unit: [src/core/search/query.test.ts, src/core/search/SearchField.test.ts, src/shared/ui/VeyqTagsInput.test.ts, src/shared/text/fold.test.ts, src/features/memories/search.test.ts]
   - id: grouped-by-context
-    text: Results are grouped by the open node (headed by its name, when a node's page is open - what it contributed and the nodes below it), In this space, Other spaces, ranked only within a group (an exact or prefix name match above a match inside a word, a name above a place); an empty group is not shown.
+    text: Results are grouped by the open node (headed by its name, when a node's page is open - what it contributed and the nodes below it), In this space, Other spaces, ranked only within a group (an exact or prefix name match above a match inside a word, a name above a place) and only as far as it is shown (its first results selected, its count exact for "show more"); an empty group is not shown.
     coverage:
       web:
         unit: [src/core/search/groups.test.ts, src/core/search/SearchField.test.ts]
@@ -47,10 +47,15 @@ acceptanceCriteria:
       web:
         unit: [src/core/search/SearchField.test.ts, src/core/search/groups.test.ts, src/core/search/query.test.ts]
   - id: settings-are-the-rails-sections
-    text: The settings sections are results in a Settings group after People, exactly those the settings rail offers this member now - one list with one set of gates, read by both (an owner-only, moderator-only or capability-gated section the rail hides is never a result; none while a gate's answer is out); choosing one opens it on the settings page with the active space kept; with any chip set, the Settings group is not shown.
+    text: The settings sections are results in a Settings group after People, exactly those the settings rail offers this member now - one list with one set of gates, read by both (an owner-only, moderator-only or capability-gated section the rail hides is never a result; none while a gate's answer is out); a section is found by its label and by a few words of its own kept in its entry of that list, matched from a word's start only ("E-Mail" lists the mail section for an owner and nothing for a member); the field reads the list's answers once, on its first focus, and again only where they move (another tenant's role, a group the index lists that the answers do not know); choosing one opens it on the settings page with the active space kept; with any chip set, the Settings group is not shown.
     coverage:
       web:
         unit: [src/features/settings/sections.test.ts, src/core/search/SearchField.test.ts, src/core/search/groups.test.ts, src/views/SettingsHubView.test.ts]
+  - id: a-screen-reader-drives-it
+    text: The field is a combobox a screen reader drives (role combobox, its expanded state, the listbox it controls); a polite live region announces the number of results as it changes and a chip added or removed; each result group is named by its heading (its aria-labelledby resolves to the heading's text).
+    coverage:
+      web:
+        unit: [src/core/search/SearchField.test.ts]
   - id: every-kind-has-a-word
     text: Every registered kind has a kind word, so a kind chip reaches it - Memories' Memory and Chapter, Depot's file and drop box, Expenses' Pot, and core's folder and bookmark (its word in core's catalog, as the kind is core's).
     coverage:

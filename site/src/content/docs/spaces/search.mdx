@@ -10,6 +10,7 @@ space and every group. On a phone, choose the magnifier at the top to open it.
 1. Click into **Search all spaces**, or press <kbd>/</kbd> or <kbd>Ctrl</kbd>+<kbd>K</kbd> (<kbd>⌘</kbd>+<kbd>K</kbd> on
    a Mac).
 2. Type part of a name: a folder, a Memory, a chapter, a file, a Pot, a bookmark, a person or a part of the settings.
+   The part of each name your words matched is shown in bold.
 3. Choose a result, or move onto it with <kbd>↑</kbd> or <kbd>↓</kbd> and press <kbd>Enter</kbd>. It opens where it
    lives, and if it is in another space, veyq switches to that space. A photo or a video opens its Memory with it shown
    large. A person opens their profile; a settings result opens that part of the settings.
@@ -25,6 +26,9 @@ highlighted again. Choose a filter's × or press <kbd>Backspace</kbd> to take it
 
 - **Year**: four digits, such as `2024`. A Memory matches when its dates touch that year, a photo when it was taken
   in it.
+- **Month**: a month's name with its year, such as `May 2024` (or in German, `Mai 2024`); the first three letters of
+  the month are enough. A Memory matches when its dates touch that month, a photo when it was taken in it. A month's
+  name without a year is read as part of a name, not as a filter.
 - **Person**: part of a member's name. It finds the Memories that list them as there. The same word also lists the
   member under **People**: choose the filter to find their Memories, or the person to open their profile.
 - **Place**: part of a place a Memory or a photo names.
@@ -38,8 +42,10 @@ highlighted again. Choose a filter's × or press <kbd>Backspace</kbd> to take it
 - **Other spaces**: everything else, each result with its space and where it lives there. A photo stands where its
   Memory stands, with its Memory and the day it was taken.
 - **People**: everyone who is a member here, found by their name or by their `~username`.
-- **Settings**: the parts of the settings, each with the heading it has there. You find exactly the ones your
-  settings offer you right now: a part only the space's owner can open is listed for its owner alone.
+- **Settings**: the parts of the settings, each with the heading it has there. Besides its name, each part is found
+  by a few words of its own: *email* or *SMTP* finds the mail settings, *password* the place to change it. You find
+  exactly the ones your settings offer you right now: a part only the space's owner can open is listed for its owner
+  alone.
 
 While a filter is set, People and Settings are not listed: a filter narrows what is in your spaces.
 
@@ -50,5 +56,8 @@ taken and its place, in all your spaces, and the members and the settings. A pho
 found.
 
 While veyq is still reading a space, the field says so; a space it could not read is named as not searched.
+
+With a screen reader, the field is a combobox: the number of results is read out as it changes, and so is a filter
+added or taken away; each group of results is named by its heading.
 
 A shared link has no search.

@@ -149,9 +149,14 @@ The load model is a household. The volume pre-check's largest tree is 5,000 node
   - **Typing** "K", "Ke", "Kev", a chip and Backspace: no long task unthrottled; the longest at 4× is 57–99 ms (bound:
     100 ms), the first keystroke's, most of it Vue's render of the list. Before a document that does not hold the text
     was answered by one search and the text's words were split once per query (`query.ts`), the photos took it to
-    70–113 ms - over the bound in two of twelve readings.
+    70–113 ms - over the bound in two of twelve readings. With cr-search-polish's items in (the month chip, the
+    settings' words, the bold part of each row; the field now narrows the matches it remembers while the text grows and
+    ranks a group only as far as it is shown), at loads of 5.3–37: 76–100 ms in two invocations, every reading holding;
+    one reading of another went to 207 ms at a load of 8, and one at 115 ms at a load of 30. The margin is the first
+    list's render, not the matching.
   - **A second focus with nothing changed** reads each other space's tree and every space's media listing as one `304`
-    each, and the index opens nothing.
+    each, and the index opens nothing; since cr-search-polish nothing else decodes either (the settings sections are read
+    once, on the first focus).
   - **The index's memory:** 7.8–8.4 MB of JS heap (3.7–4.2 MB without the photos).
   - The command: `scripts/measure_volume.py --instance I search --runs 2 --throttles 1,4 --active tenant|group`, after
     `seed tree --target 5000`, `seed spread --target 1000`, `seed members --target 445` and `seed photos --target 10000`.

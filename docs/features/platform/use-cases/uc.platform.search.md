@@ -53,7 +53,8 @@
 5. **Match.**
    - A document matches when it satisfies every chip, and the remaining text matches its name or its place,
      ignoring case and diacritics. A settings section also matches by a few words of its own ("E-Mail" finds the
-     mail section, "Kennwort" the password), kept with the section in the one list the rail reads.
+     mail section, "Kennwort" the password), kept with the section in the one list the rail reads; such a word matches
+     from a word's start only, since the member never sees it.
    - Within a group, an exact or prefix match of the name ranks above a match inside a word, and a name match above a
      place match.
 6. **Show the results in groups,** each ranked within itself: the open node's - headed by its name, *In “Rom 2024”*,

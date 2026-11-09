@@ -363,7 +363,13 @@ here; the server is blind.
   capture day, a chip of its own; never a second copy of the chip logic. After the spaces' groups come People and Settings (decision 9,
   `peopleAndSettings.ts`): the members from the directory's roster as last read (`tenantPeopleNow`), and the settings
   sections from `features/settings/sections.ts` - **the one list the rail reads too**, gates and `ready` included, so never
-  a copy of the section list in the search; a chip hides both groups.
+  a copy of the section list in the search; a chip hides both groups. A section's `words` become its document's `keywords`,
+  matched from a word's start only (a hidden word must not match a stray letter). A row's bold part is `nameParts`
+  (`query.ts`: the match found in the folded name, mapped back by `foldMap`), drawn as text and a `strong` - never markup.
+  Per keystroke the field answers a query asked before from memory and narrows the closest shorter one's matches while
+  the text grows (`createMatcher`: in memory only, forgotten when the list closes, the documents move or the field goes),
+  and ranks a group only as far as it is shown (`groups.ts` `firstRanked`); a new rule in `textRank` must stay
+  monotone in the text, or the narrowing drops a match (cr-search-polish).
 
   **Favorites are core's (inbox #409, [ADR 0068](../../docs/decisions/0068-favorites-two-confidentiality-levels.md) §10).** The member's private pin of
   a node of ANY kind - folder, file, Memory, drop box - lives in `src/core/favorites/`: `favorites.ts` (the sealed data layer, purpose
