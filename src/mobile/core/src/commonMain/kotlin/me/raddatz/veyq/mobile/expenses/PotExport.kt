@@ -43,7 +43,7 @@ object PotExport {
             val c = e.content!!
             val carried = c.receipts.mapNotNull { id ->
                 val r = listed[id]?.takeIf { it.entryId == e.id && !it.dropped && !it.blocked } ?: return@mapNotNull null
-                payloads += NodeExport.Payload(Receipts.downloadName(r.name, r.type), r.size, r.type.orEmpty(), r.modifiedAt) {
+                payloads += NodeExport.Payload.whole(Receipts.downloadName(r.name, r.type), r.size, r.type.orEmpty(), r.modifiedAt) {
                     session.openReceipt(id) ?: throw IllegalStateException("receipt $id did not open")
                 }
                 val name = r.name?.takeIf { it.isNotEmpty() && RevisionFormat.codePoints(it) <= MAX_RECEIPT_NAME }
@@ -58,7 +58,7 @@ object PotExport {
         val base = ledger.entries.associate { it.id to (it.effect?.base ?: Big.ZERO) }
         val people = ledger.participants.associate { it.id to (it.name ?: deletedName) }
         val csv = entriesCsv(entries.map { it.entry to (base[it.id] ?: Big.ZERO) }, people, meta.base.minorUnits).encodeToByteArray()
-        payloads += NodeExport.Payload("${session.name}.csv", csv.size.toLong(), "text/csv") { csv }
+        payloads += NodeExport.Payload.whole("${session.name}.csv", csv.size.toLong(), "text/csv") { csv }
         val table = payloads.size - 1
 
         return NodeExport.Content(TYPE, SCHEMA, payloads) { refs ->
@@ -102,7 +102,7 @@ object PotExport {
      */
     suspend fun download(session: PotSession, deletedName: String, nowMs: Long, sink: (ByteArray) -> Unit): NodeExport.Written? {
         val content = content(session, deletedName) ?: return null
-        return NodeExport.write(session.name, PotSession.KIND, content, VeyqAccount.MAJOR.toString(), nowMs, session::sha256, sink)
+        return NodeExport.write(session.name, PotSession.KIND, content, VeyqAccount.MAJOR.toString(), nowMs, sink)
     }
 
     /** An entry's revision without what an import writes anew (`v`, `heads`). */

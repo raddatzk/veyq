@@ -178,14 +178,9 @@ struct NodeMoveSheet: View {
     }
 }
 
-/// Each kind's placement (`registry.placementAllows`): a folder, a Pot and a Memory at the space's root or in a folder, a
-/// chapter in a Memory; a kind the app does not know nowhere.
+/// Each kind's placement (`registry.placementAllows`), core's `AppKinds.placement` as the move browser asks it.
 final class KindPlacement: NodeMovePlacementAllows {
     func allows(kind: String, parentKind: String?) -> Bool {
-        switch kind {
-        case "FOLDER", PotSession.companion.KIND, "MEMORY": parentKind == nil || parentKind == "FOLDER"
-        case "CHAPTER": parentKind == "MEMORY"
-        default: false
-        }
+        AppKinds.shared.placement.allows(kind: kind, parentKind: parentKind)
     }
 }

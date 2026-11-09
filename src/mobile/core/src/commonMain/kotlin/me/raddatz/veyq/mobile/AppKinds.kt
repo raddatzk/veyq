@@ -44,26 +44,63 @@ object AppKinds {
 
     /**
      * How the build's kinds export into a download (the web's `exportContent` hooks, `NodeExport.walk`): a Pot its ledger and
-     * receipts (`PotExport`, its erased people named [deletedName]); every other kind but a folder is left out and said.
+     * receipts (`PotExport`, its erased people named [deletedName]), a Depot file its content streamed and a drop box a
+     * directory of its guests' folders (`DepotExport`); every other kind but a folder is left out and said. One per run:
+     * Depot's files are listed once.
      */
-    fun exports(deletedName: String) = me.raddatz.veyq.mobile.export.NodeExport.Kinds(
-        exports = { it == PotSession.KIND },
-        content = { tenant, node -> PotSession.open(tenant, node.scopeId, node.id)?.let { PotExport.content(it, deletedName) } },
-    )
+    fun exports(deletedName: String): me.raddatz.veyq.mobile.export.NodeExport.Kinds {
+        val depot = me.raddatz.veyq.mobile.depot.DepotExport()
+        return me.raddatz.veyq.mobile.export.NodeExport.Kinds(
+            exports = { it == PotSession.KIND || it == FILE || it == DROPBOX },
+            content = { tenant, node ->
+                when (node.kind) {
+                    PotSession.KIND -> PotSession.open(tenant, node.scopeId, node.id)?.let { PotExport.content(it, deletedName) }
+                    FILE -> depot.file(tenant, node)
+                    DROPBOX -> me.raddatz.veyq.mobile.depot.DepotExport.dropBox()
+                    else -> null
+                }
+            },
+        )
+    }
 
     /**
-     * How the build's kinds copy under a copied folder (the web's `importContent` for a copy, `SubtreeCopy`): a Pot by
-     * Expenses' copy (`PotCopy`, its erased people named [deletedName]); every other kind but a folder is left out and said.
+     * How the build's kinds copy (the web's `importContent` for a copy, `SubtreeCopy`): a Pot by Expenses' copy (`PotCopy`,
+     * its erased people named [deletedName]; it names itself), a Depot file read here and uploaded again under a fresh key
+     * (`DepotExport.duplicate`), a drop box as a plain folder (the web's `importsAsFolder`); every other kind but a folder is
+     * left out and said. One per run: Depot's files are listed once.
      */
-    fun copies(deletedName: String, uuid: () -> String) = me.raddatz.veyq.mobile.export.SubtreeCopy.Kinds(
-        copies = { it == PotSession.KIND },
-        duplicate = { tenant, node, scopeId, parentId ->
-            PotSession.open(tenant, scopeId, node.id)?.let { source ->
-                me.raddatz.veyq.mobile.expenses.PotCopy.duplicate(source, tenant, scopeId, parentId, deletedName, uuid)
-                    .takeIf { it.outcome == me.raddatz.veyq.mobile.expenses.PotCopy.Outcome.COPIED }?.nodeId
-            }
-        },
-    )
+    fun copies(deletedName: String, uuid: () -> String): me.raddatz.veyq.mobile.export.SubtreeCopy.Kinds {
+        val depot = me.raddatz.veyq.mobile.depot.DepotExport()
+        return me.raddatz.veyq.mobile.export.SubtreeCopy.Kinds(
+            copies = { it == PotSession.KIND || it == FILE || it == DROPBOX },
+            asFolder = { it == DROPBOX },
+            duplicate = { tenant, node, scopeId, parentId, name ->
+                when (node.kind) {
+                    PotSession.KIND -> me.raddatz.veyq.mobile.export.SubtreeCopy.Made(
+                        PotSession.open(tenant, scopeId, node.id)?.let { source ->
+                            me.raddatz.veyq.mobile.expenses.PotCopy.duplicate(source, tenant, scopeId, parentId, deletedName, uuid)
+                                .takeIf { it.outcome == me.raddatz.veyq.mobile.expenses.PotCopy.Outcome.COPIED }?.nodeId
+                        },
+                    )
+                    FILE -> depot.duplicate(tenant, node, parentId, name, ::tokenInput)
+                    else -> me.raddatz.veyq.mobile.export.SubtreeCopy.Made(null)
+                }
+            },
+        )
+    }
+
+    /**
+     * Where a node of a kind may be placed (each kind's `placement`, the web's `registry.placementAllows` mirroring the
+     * backend's `NodeKindRules`): a folder, a Pot, a Memory, a Depot file and drop box and a kept link at the space's top or
+     * in a folder, a chapter in a Memory; a kind this build does not know nowhere. A hint: the server decides.
+     */
+    val placement = me.raddatz.veyq.mobile.session.NodeMove.PlacementAllows { kind, parent ->
+        when (kind) {
+            FOLDER, PotSession.KIND, MEMORY, FILE, DROPBOX, SHARE_BOOKMARK -> parent == null || parent == FOLDER
+            CHAPTER -> parent == MEMORY
+            else -> false
+        }
+    }
 
     /**
      * A kind's header priority (the web's `header.order` of its descriptor, `NodeHeader.plan`): the ids listed first, in

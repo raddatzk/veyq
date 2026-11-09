@@ -67,9 +67,6 @@ class PotSession private constructor(private val tenant: TenantSession, private 
     /** The tenant a member id of this Pot means a person in, for a download (`PotExport`). */
     internal val tenantId: String get() = tenant.tenant.tenantId
 
-    /** The suite's SHA-256, for a download's checksums. */
-    internal fun sha256(bytes: ByteArray): ByteArray = account.suite.p.sha256(bytes)
-
     /** What is held, for a pure rule over it. */
     internal fun heldRevisions(): List<HeldRevision> = held.values.toList()
 

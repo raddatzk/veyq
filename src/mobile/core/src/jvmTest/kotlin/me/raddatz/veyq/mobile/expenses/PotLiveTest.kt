@@ -380,7 +380,7 @@ class PotLiveTest {
             val out = java.io.ByteArrayOutputStream()
             val written = me.raddatz.veyq.mobile.export.NodeExport.write(
                 ref.name, ref.kind, content, me.raddatz.veyq.mobile.session.VeyqAccount.MAJOR.toString(), System.currentTimeMillis(),
-                { java.security.MessageDigest.getInstance("SHA-256").digest(it) }, { out.write(it) },
+                { out.write(it) },
             )
             val file = File(System.getenv("VEYQ_LIVE_EXPORT_OUT") ?: File.createTempFile("pot", ".zip").path).apply { writeBytes(out.toByteArray()) }
             java.util.zip.ZipFile(file).use { zip ->

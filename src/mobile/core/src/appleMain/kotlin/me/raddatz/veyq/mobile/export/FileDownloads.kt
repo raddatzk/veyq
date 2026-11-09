@@ -51,7 +51,7 @@ object FileDownloads {
         val file = fopen(path, "wb") ?: throw IllegalStateException("cannot write $path")
         var done = false
         try {
-            NodeExport.write(walked.root, appVersion, nowMs, { tenant.account.primitives.sha256(it) }) { bytes ->
+            NodeExport.write(walked.root, appVersion, nowMs) { bytes ->
                 if (bytes.isEmpty()) return@write
                 val n = bytes.usePinned { fwrite(it.addressOf(0), 1u, bytes.size.toULong(), file) }
                 if (n != bytes.size.toULong()) throw IllegalStateException("short write to $path")

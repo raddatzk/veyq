@@ -295,11 +295,14 @@ implementation exists but what holds it to the first.
   its undo (`navigation/NodeAt`, the node any of them takes, whatever its kind) — and Home's path is read anew from the tree
   where the folder shown was renamed or moved (`Shell.at`). A folder downloads and copies whole, as the web's
   `exportSubtree.ts` and `copySubtree.ts` do it: the download walks the subtree (`export/NodeExport.kt` `walk`), each folder a
-  directory without content, each kind the build exports its content (`AppKinds.exports`: a Pot), the rest left out with what
-  is under it and said after the save, and writes the directories, then the payloads, then the manifest, as the web does; the
+  directory without content, each kind the build exports its content (`AppKinds.exports`: a Pot, a Depot file, a drop box),
+  the rest left out with what is under it and said after the save, and writes the directories, then the payloads — each
+  streamed through and hashed as it passes (`export/Sha256.kt`, `Sha256Test`), never held whole — then the manifest, as the
+  web does; the
   copy (`export/SubtreeCopy.kt`) plans first — the copy dialog names what does not come along (core's line, each copied
   kind's `copyLosses`) and what is left out —, then creates top-down, the root beside its original as "name (2)" and so on, a
-  folder as core's new folder and a Pot by `PotCopy`, and moves what it made to the trash where it fails part-way.
+  folder as core's new folder and a Pot by `PotCopy`, and moves what it made to the trash where it fails part-way. Where
+  each kind may be placed — the move's and the copy's places — is `AppKinds.placement`, the web's `placementAllows`.
   Measured 2026-11-09: `FolderExportTest` (the layout and the manifest; an empty folder's children turn it red); a folder of
   a Pot with a receipt and a folder holding a Pot, downloaded by `FolderLiveTest` and imported by the web's upload screen,
   the Pot there opening with its entry; the same folder copied by `FolderLiveTest` and from Android's header, every Pot of the
@@ -354,8 +357,17 @@ implementation exists but what holds it to the first.
   moved out on Android, the web then listing it as an ordinary folder whose file opens, the drop box one person fewer).
   The space's top level, no link's root, offers "Add files only" alone through a share in its bar (the web's level share): a
   drop box at the top with its first link (measured 2026-11-09: made so on Android, a web guest dropping through it and
-  the web's member page opening their folder). Not built yet: a file's copy and its place in a folder's download (both
-  left out and said), a folder upload, the uploader on a file's page.
+  the web's member page opening their folder). A file and a drop box download and copy as the web's
+  `features/depot/exportImport.ts` does (`depot/DepotExport.kt`): a file is its content streamed frame by frame into the
+  archive at its own path (`depot.file`, no directory of its own), a drop box a directory of its guests' folders
+  (`depot.drop-box`); a file's copy is read here and uploaded again under a fresh `K_blob` (the server sees an ordinary
+  upload), a drop box's a plain folder with its guests' folders plain folders (`SubtreeCopy.Kinds.asFolder`, its loss said),
+  and a file or a drop box copies on its own too, the root numbered as a folder's (measured 2026-11-09: `FolderExportTest`
+  with a file of three frames at its own path to its SHA-256 — the payload put under a directory turns it red —; a folder
+  holding a drop box with two guests' folders and a moved-out guest's folder, four files in all, downloaded and copied by
+  `FolderLiveTest` with every file of the copy at its place to the original's SHA-256, the web importing that archive and
+  reading the copy, the drop box there an ordinary folder; a file copied from Android's file page as "guest-b.txt (2)", which
+  the web opens). Not built yet: a folder upload, the uploader on a file's page.
 - **One header for every node, drawn by core** (the web's `NodePage` + `NodeHeader`, ADR 0110 decision 10; owner
   2026-11-09): what a node's header offers and where is core's `navigation/NodeHeader.kt` — core's actions around the
   application's (the heart before them, the copy beside the move, cover, download and report after), the kind's

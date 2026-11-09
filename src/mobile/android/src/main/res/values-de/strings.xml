@@ -466,6 +466,7 @@
     <string name="copy_losses">Was nicht mitkommt:</string>
     <string name="copy_loss_always">Freigaben, Favoriten, der Papierkorb und die ursprünglichen Hochladezeiten. Die Kopie gehört dir.</string>
     <string name="copy_loss_pot">Den Verlauf jedes Eintrags und die gelöschten Einträge: Eine Kopie beginnt jeden Eintrag mit seiner aktuellen Fassung.</string>
+    <string name="copy_loss_dropbox">Ein Briefkasten wird ein gewöhnlicher Ordner, die Ordner der Personen darin gewöhnliche Ordner: keine Links, niemand kann mehr einwerfen, kein Titelbild.</string>
     <string name="copy_loss_folder_cover">Das Titelbild eines Ordners.</string>
     <string name="copy_left_out">Ausgelassen, weil diese Version sie nicht kopieren kann:</string>
     <string name="copy_failed_rolled_back">Die Kopie ist nicht durchgegangen. Was sie angelegt hatte, liegt im Papierkorb; bitte versuche es noch einmal.</string>

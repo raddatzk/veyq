@@ -45,6 +45,9 @@ func copyLosses(_ kind: String) -> [String] {
         String(localized: "The history of each entry and the deleted entries: a copy starts every entry at its current version."),
         String(localized: "A Pot’s cover."),
     ]
+    case DepotFiles.shared.DROPBOX: [
+        String(localized: "A drop box becomes an ordinary folder, its people’s folders ordinary folders: no links, nobody can drop files into it, no cover."),
+    ]
     default: []
     }
 }
@@ -80,12 +83,19 @@ struct KindPage {
         }
     }
 
-    /// Depot's drop box: its guests' folders (`DropBoxScreen`); never renamed; its cover.
-    private static let dropBox = KindPage(shareable: true, takesCover: true, header: { node, _ in
+    /// Depot's drop box: its guests' folders (`DropBoxScreen`); never renamed; its cover; its ZIP and its copy (a plain folder).
+    private static let dropBox = KindPage(shareable: true, takesCover: true, header: { node, model in
         HeaderContribution(
             rename: false,
             deleteTitle: String(localized: "Delete Drop Box"),
-            deleteQuestion: String(localized: "“\(node.name)” moves to the trash with every guest’s folder in it, and its links take no files while it is there. You can restore it from the trash until it is removed for good.")
+            deleteQuestion: String(localized: "“\(node.name)” moves to the trash with every guest’s folder in it, and its links take no files while it is there. You can restore it from the trash until it is removed for good."),
+            copy: { to, toName in await model.copyFolder(node, to: to, toName: toName) },
+            copyNotes: {
+                let p = await model.copyPreview(node)
+                var seen = Set<String>()
+                return CopyNotes(losses: p.kinds.sorted().flatMap(copyLosses).filter { seen.insert($0).inserted }, leftOut: p.leftOut)
+            },
+            download: { await model.downloadFolder(node) }
         )
     }, body: { ref, _, model in AnyView(DropBoxScreen(model: model, ref: ref)) })
 
@@ -95,6 +105,9 @@ struct KindPage {
         return HeaderContribution(
             deleteTitle: String(localized: "Delete File"),
             deleteQuestion: String(localized: "“\(node.name)” goes to the trash."),
+            // a copy is read here and uploaded again under a fresh key (the web's `importFile` for a copy)
+            copy: has ? { to, toName in await model.copyFolder(node, to: to, toName: toName) } : nil,
+            copyNotes: { CopyNotes(losses: []) },
             download: has ? { await model.downloadFile(node) } : nil,
             actions: [OwnAction(id: "replace", label: has ? String(localized: "Replace…") : String(localized: "Upload…"), systemImage: "square.and.arrow.down.on.square") {
                 model.replacing = node.nodeId

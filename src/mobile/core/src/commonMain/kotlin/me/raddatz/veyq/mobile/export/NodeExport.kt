@@ -29,18 +29,36 @@ object NodeExport {
     const val UNSUPPORTED_KIND = "unsupported_kind"
     const val NOTHING_TO_EXPORT = "nothing_to_export"
 
-    /** One file the content refers to: its name in the node's directory, its size, its type, and where its bytes come from. */
+    /**
+     * One file the content refers to: its name in the node's directory, its size, its type, and its bytes, [stream]ed into
+     * the archive piece by piece (a Depot file of any size is never held whole); [whole] for a small one read at once.
+     */
     class Payload(
         val fileName: String,
         val size: Long,
         val mediaType: String,
         val modifiedAt: Long? = null,
-        val read: suspend () -> ByteArray,
-    )
+        val stream: suspend (emit: suspend (ByteArray) -> Unit) -> Unit,
+    ) {
+        companion object {
+            /** A payload read whole (a receipt, a CSV: capped and small). */
+            fun whole(fileName: String, size: Long, mediaType: String, modifiedAt: Long? = null, read: suspend () -> ByteArray) =
+                Payload(fileName, size, mediaType, modifiedAt) { emit -> emit(read()) }
+        }
+    }
 
     /** What a kind exports of one node: its content type (`<application>.<kind>`) and schema version, its payloads, and the
-     *  content itself, built from their manifest references (`{path, size, mediaType, modifiedAt?, sha256}`, payload order). */
-    class Content(val type: String, val schema: Int, val payloads: List<Payload>, val build: (refs: List<JsonObject>) -> JsonObject)
+     *  content itself, built from their manifest references (`{path, size, mediaType, modifiedAt?, sha256}`, payload order).
+     *  [asFile]: the node IS its one payload (the web's `downloadsAsFile`, a Depot file) — written at the node's own path,
+     *  no directory of its own. */
+    class Content(
+        val type: String, val schema: Int, val payloads: List<Payload>, val asFile: Boolean = false,
+        val build: (refs: List<JsonObject>) -> JsonObject,
+    ) {
+        init {
+            require(!asFile || payloads.size == 1) { "a node that is its payload has exactly one" }
+        }
+    }
 
     /** One node of an archive: its kind, its name, what it holds (null: nothing, a folder) and the nodes under it. */
     class Entry(val kind: String, val name: String, val content: Content?, val children: List<Entry> = emptyList())
@@ -132,16 +150,15 @@ object NodeExport {
      * [sha256] is the suite's.
      */
     suspend fun write(
-        name: String, kind: String, content: Content, appVersion: String, nowMs: Long,
-        sha256: (ByteArray) -> ByteArray, sink: (ByteArray) -> Unit,
-    ): Written = write(Entry(kind, name, content), appVersion, nowMs, sha256, sink)
+        name: String, kind: String, content: Content, appVersion: String, nowMs: Long, sink: (ByteArray) -> Unit,
+    ): Written = write(Entry(kind, name, content), appVersion, nowMs, sink)
 
     /**
-     * Writes the ZIP of the tree [root] into [sink]: every directory, then each payload (read whole — the app's payloads are
-     * capped, a receipt at 10 MiB — and hashed) in walk order, then the manifest. A payload that reads to another size than
-     * it declared fails the archive (`ZipWriter.ZipFailure`).
+     * Writes the ZIP of the tree [root] into [sink]: every directory, then each payload in walk order — streamed through and
+     * hashed as it passes ([Sha256]), never held whole —, then the manifest. A payload that streams another size than it
+     * declared fails the archive (`ZipWriter.ZipFailure`).
      */
-    suspend fun write(root: Entry, appVersion: String, nowMs: Long, sha256: (ByteArray) -> ByteArray, sink: (ByteArray) -> Unit): Written {
+    suspend fun write(root: Entry, appVersion: String, nowMs: Long, sink: (ByteArray) -> Unit): Written {
         class Placed(val entry: Entry, val id: String, val path: String, val payloadPaths: List<String>, val children: List<Placed>)
         var next = 0
         fun place(e: Entry, dir: String?, taken: MutableSet<String>): Placed {
@@ -149,7 +166,7 @@ object NodeExport {
             val segment = ArchiveName.of(e.name, taken)
             val path = if (dir == null) segment else "$dir/$segment"
             val inside = mutableSetOf<String>()
-            val payloadPaths = e.content?.payloads.orEmpty().map { "$path/${ArchiveName.of(it.fileName, inside)}" }
+            val payloadPaths = if (e.content?.asFile == true) listOf(path) else e.content?.payloads.orEmpty().map { "$path/${ArchiveName.of(it.fileName, inside)}" }
             // the children's names told apart in a set of the directory's own (the web's `names`, fresh per directory)
             val names = mutableSetOf<String>()
             return Placed(e, id, path, payloadPaths, e.children.map { place(it, path, names) })
@@ -159,7 +176,7 @@ object NodeExport {
         val walk = all(tree)
 
         val zip = ZipWriter(sink, nowMs)
-        for (p in walk) zip.addDirectory(p.path)
+        for (p in walk) if (p.entry.content?.asFile != true) zip.addDirectory(p.path)
         var bytes = 0L
         var count = 0
         val refs = HashMap<String, List<JsonObject>>()
@@ -167,15 +184,16 @@ object NodeExport {
         for (p in walk) {
             val content = p.entry.content ?: continue
             refs[p.id] = content.payloads.mapIndexed { i, payload ->
-                val data = payload.read()
-                if (data.size.toLong() != payload.size) throw ZipWriter.ZipFailure("${p.payloadPaths[i]} is ${data.size} bytes, declared ${payload.size}")
-                zip.addBytes(p.payloadPaths[i], data)
-                bytes += data.size
+                val hasher = Sha256()
+                // the writer counts what passes and refuses another size than declared
+                zip.addFile(p.payloadPaths[i], payload.size) { put -> payload.stream { chunk -> hasher.update(chunk); put(chunk) } }
+                val digest = hasher.digest()
+                bytes += payload.size
                 count++
                 buildJsonObject {
                     put("path", p.payloadPaths[i]); put("size", payload.size); put("mediaType", payload.mediaType)
                     payload.modifiedAt?.let { put("modifiedAt", it) }
-                    put("sha256", sha256(data).joinToString("") { b -> (b.toInt() and 0xff).toString(16).padStart(2, '0') })
+                    put("sha256", digest.joinToString("") { b -> (b.toInt() and 0xff).toString(16).padStart(2, '0') })
                 }
             }
             val app = applicationOf(content.type)

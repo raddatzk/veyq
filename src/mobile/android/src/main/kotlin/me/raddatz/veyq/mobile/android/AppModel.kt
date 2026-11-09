@@ -595,17 +595,8 @@ class AppModel(app: Application) : AndroidViewModel(app) {
 
     // ---- a move (core's NodeMove) ----
 
-    /**
-     * Where a node of a kind may be placed (each kind's `placement`, `registry.placementAllows`): a folder, a Pot and a Memory
-     * at the space's root or in a folder, a chapter in a Memory; a kind the app does not know nowhere.
-     */
-    val placement = me.raddatz.veyq.mobile.session.NodeMove.PlacementAllows { kind, parent ->
-        when (kind) {
-            "FOLDER", PotSession.KIND, "MEMORY" -> parent == null || parent == "FOLDER"
-            "CHAPTER" -> parent == "MEMORY"
-            else -> false
-        }
-    }
+    /** Where a node of a kind may be placed: the build's kinds' placement (`AppKinds.placement`). */
+    val placement = me.raddatz.veyq.mobile.AppKinds.placement
 
     /** Every node of [scopeId] this device opens: what the move browser walks. */
     suspend fun scopeNodes(scopeId: String): List<me.raddatz.veyq.mobile.navigation.NodeRef> {
@@ -1218,7 +1209,6 @@ class AppModel(app: Application) : AndroidViewModel(app) {
             out.buffered(1 shl 16).let { b ->
                 me.raddatz.veyq.mobile.export.NodeExport.write(
                     walked.root, me.raddatz.veyq.mobile.session.VeyqAccount.MAJOR.toString(), System.currentTimeMillis(),
-                    { java.security.MessageDigest.getInstance("SHA-256").digest(it) },
                 ) { b.write(it) }
                 b.flush()
             }

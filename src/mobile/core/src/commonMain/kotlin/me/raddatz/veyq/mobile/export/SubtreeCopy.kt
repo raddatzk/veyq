@@ -8,23 +8,32 @@ import me.raddatz.veyq.mobile.session.OpenNode
 import me.raddatz.veyq.mobile.session.TenantSession
 
 /**
- * A folder and everything under it copied within its space (uc.platform.copy-node), the web's `core/export/copySubtree.ts`
+ * A node and everything under it copied within its space (uc.platform.copy-node), the web's `core/export/copySubtree.ts`
  * replayed as `importSubtree.ts` replays it: planned first — the kinds this build copies, the rest left out with what is
- * under them and said ([NodeExport.Skipped]) —, then created top-down, a folder as core's new folder and every other kind by
- * its application's copy ([Kinds.duplicate]: Expenses' `PotCopy`), each under fresh keys. The copy's root takes the original's
- * name, numbered past a sibling's (`name (2)` … `(50)`, the web's `MAX_NAME_TRIES`); what is under it keeps its names. A
- * failure part-way moves what was made to the trash (the web's rollback), so nothing half-copied stays.
+ * under them and said ([NodeExport.Skipped]) —, then created top-down, a folder as core's new folder, a kind that copies
+ * as one ([Kinds.asFolder]: Depot's drop box, the web's `importsAsFolder`) too, and every other kind by its application's
+ * copy ([Kinds.duplicate]: Expenses' `PotCopy`, Depot's file uploaded again), each under fresh keys. The copy's root takes
+ * the original's name, numbered past a sibling's (`name (2)` … `(50)`, the web's `MAX_NAME_TRIES`, a file's whole name
+ * included); what is under it keeps its names. A failure part-way moves what was made to the trash (the web's rollback),
+ * so nothing half-copied stays.
  */
 object SubtreeCopy {
     const val NOT_COPYABLE = "not_copyable"
     const val MAX_NAME_TRIES = 50
 
     /**
-     * How the build's kinds copy (the composition root's): which kinds copy ([copies]; a folder always does) and the copy
-     * of one node ([duplicate]: the original, the scope, the new parent; the new node's id, or null where it did not go
-     * through). Not `copy`: Swift would read NSObject's.
+     * How the build's kinds copy (the composition root's): which kinds copy ([copies]; a folder always does), which become a
+     * plain folder ([asFolder]), and the copy of one node ([duplicate]: the original, the scope, the new parent and the name
+     * to give it; what was made). Not `copy`: Swift would read NSObject's.
      */
-    class Kinds(val copies: (String) -> Boolean, val duplicate: suspend (TenantSession, OpenNode, String, String?) -> String?)
+    class Kinds(
+        val copies: (String) -> Boolean,
+        val duplicate: suspend (TenantSession, OpenNode, String, String?, String) -> Made,
+        val asFolder: (String) -> Boolean = { false },
+    )
+
+    /** One node's copy: its id, or none — [nameTaken] where something there already holds the name, else it failed. */
+    class Made(val nodeId: String?, val nameTaken: Boolean = false)
 
     enum class Outcome { COPIED, NOTHING_TO_COPY, NAME_TAKEN, FAILED }
 
@@ -63,16 +72,15 @@ object SubtreeCopy {
     @Throws(Exception::class)
     suspend fun duplicate(tenant: TenantSession, scopeId: String, rootId: String, parentId: String?, kinds: Kinds): Copied {
         val (planned, left) = plan(tenant, scopeId, rootId, kinds) ?: return Copied(Outcome.NOTHING_TO_COPY)
-        if (planned.node.kind != NodeRef.FOLDER) return Copied(Outcome.NOTHING_TO_COPY, leftOut = left)
-        // the root: the original's name, numbered past a sibling folder's
+        // the root: the original's name, numbered past a sibling's
         var top: String? = null
         var topName: String? = null
         for (i in 1..MAX_NAME_TRIES) {
             val name = if (i == 1) planned.node.name else "${planned.node.name} ($i)"
-            when (val r = FolderCreate.create(tenant, scopeId, parentId, name)) {
-                is NodeCreate.Result.Done -> { top = r.created.nodeId; topName = name }
-                is NodeCreate.Result.Refused -> if (r.reason == NodeCreate.Reason.NAME_TAKEN) continue else return Copied(Outcome.FAILED, leftOut = left)
-            }
+            val made = make(tenant, scopeId, planned.node, parentId, name, kinds)
+            if (made.nameTaken) continue
+            top = made.nodeId ?: return Copied(Outcome.FAILED, leftOut = left)
+            topName = name
             break
         }
         val made = top ?: return Copied(Outcome.NAME_TAKEN, leftOut = left)
@@ -90,13 +98,18 @@ object SubtreeCopy {
     /** Each of [nodes] made under [parentId], then what is under it; false at the first that did not go through. */
     private suspend fun replay(tenant: TenantSession, scopeId: String, nodes: List<Planned>, parentId: String, kinds: Kinds): Boolean {
         for (p in nodes) {
-            val made = if (p.node.kind == NodeRef.FOLDER) {
-                (FolderCreate.create(tenant, scopeId, parentId, p.node.name) as? NodeCreate.Result.Done)?.created?.nodeId
-            } else {
-                kinds.duplicate(tenant, p.node, scopeId, parentId)
-            } ?: return false
+            val made = make(tenant, scopeId, p.node, parentId, p.node.name, kinds).nodeId ?: return false
             if (!replay(tenant, scopeId, p.children, made, kinds)) return false
         }
         return true
+    }
+
+    /** One node's copy named [name] under [parentId]: a folder (or a kind copied as one) core's new folder, else its kind's. */
+    private suspend fun make(tenant: TenantSession, scopeId: String, node: OpenNode, parentId: String?, name: String, kinds: Kinds): Made {
+        if (node.kind != NodeRef.FOLDER && !kinds.asFolder(node.kind)) return kinds.duplicate(tenant, node, scopeId, parentId, name)
+        return when (val r = FolderCreate.create(tenant, scopeId, parentId, name)) {
+            is NodeCreate.Result.Done -> Made(r.created.nodeId)
+            is NodeCreate.Result.Refused -> Made(null, nameTaken = r.reason == NodeCreate.Reason.NAME_TAKEN)
+        }
     }
 }

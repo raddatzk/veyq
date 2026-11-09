@@ -468,6 +468,7 @@
     <string name="copy_losses">What does not come along:</string>
     <string name="copy_loss_always">Shares, favourites, the trash and the original upload times. You become the owner of the copy.</string>
     <string name="copy_loss_pot">The history of each entry and the deleted entries: a copy starts every entry at its current version.</string>
+    <string name="copy_loss_dropbox">A drop box becomes an ordinary folder, its people’s folders ordinary folders: no links, nobody can drop files into it, no cover.</string>
     <string name="copy_loss_folder_cover">A folder’s cover.</string>
     <string name="copy_left_out">Left out, because this version cannot copy them:</string>
     <string name="copy_failed_rolled_back">The copy did not go through. What it made was moved to the trash; please try again.</string>

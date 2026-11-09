@@ -17,13 +17,13 @@ import kotlin.test.assertTrue
 /** A folder's download as the web's `exportSubtree.ts` writes it (manifest v2, `contracts/export/veyq-subtree.schema.json`). */
 class FolderExportTest {
     private fun pot(bytes: ByteArray) = NodeExport.Content(
-        "expenses.pot", 1, listOf(NodeExport.Payload("receipt.png", bytes.size.toLong(), "image/png") { bytes }),
+        "expenses.pot", 1, listOf(NodeExport.Payload.whole("receipt.png", bytes.size.toLong(), "image/png") { bytes }),
     ) { refs -> buildJsonObject { put("receipts", kotlinx.serialization.json.JsonArray(refs)) } }
 
     private fun archive(root: NodeExport.Entry): Pair<List<String>, JsonObject> {
         val out = ByteArrayOutputStream()
         runBlocking {
-            NodeExport.write(root, "1", 0L, { java.security.MessageDigest.getInstance("SHA-256").digest(it) }) { out.write(it) }
+            NodeExport.write(root, "1", 0L) { out.write(it) }
         }
         // the central directory, in the order the entries were written (a stream reader takes no stored entry with a descriptor)
         val file = java.io.File.createTempFile("folder", ".zip").apply { deleteOnExit(); writeBytes(out.toByteArray()) }
@@ -83,5 +83,38 @@ class FolderExportTest {
     @Test
     fun namesAreReadAsAPersonReadsThem() {
         assertEquals(listOf("foto 2", "Foto 10", "zebra"), listOf("zebra", "Foto 10", "foto 2").sortedWith { a, b -> NodeExport.naturalCompare(a, b) })
+    }
+
+    @Test
+    fun aFileIsItsPayloadAtItsOwnPathStreamedAndHashed() {
+        // three frames' worth, streamed in pieces: the archive holds it at the file's own path, no directory of its own
+        val data = ByteArray(700_001) { (it * 31).toByte() }
+        val file = NodeExport.Content(
+            "depot.file", 1,
+            listOf(NodeExport.Payload("ignored.bin", data.size.toLong(), "application/pdf", 1_700_000_000_000L) { emit ->
+                var at = 0
+                while (at < data.size) { val n = minOf(262_144, data.size - at); emit(data.copyOfRange(at, at + n)); at += n }
+            }),
+            asFile = true,
+        ) { refs -> buildJsonObject { put("type", "depot.file"); put("schema", 1); put("file", refs.single()) } }
+        val box = NodeExport.Content("depot.drop-box", 1, emptyList()) { buildJsonObject { put("type", "depot.drop-box"); put("schema", 1) } }
+        val (names, m) = archive(
+            NodeExport.Entry("FOLDER", "Docs", null, listOf(
+                NodeExport.Entry("FILE", "plan.pdf", file),
+                NodeExport.Entry("DEPOT_DROPBOX", "Box", box, listOf(NodeExport.Entry("FOLDER", "Anna", null))),
+            )),
+        )
+        assertEquals(listOf("Docs/", "Docs/Box/", "Docs/Box/Anna/", "Docs/plan.pdf", NodeExport.MANIFEST_PATH), names)
+        val children = m["root"]!!.jsonObject["children"]!!.jsonArray.map { it.jsonObject }
+        val ref = children[0]["content"]!!.jsonObject["file"]!!.jsonObject
+        assertEquals("Docs/plan.pdf", children[0]["path"]!!.jsonPrimitive.content)
+        assertEquals("Docs/plan.pdf", ref["path"]!!.jsonPrimitive.content)
+        assertEquals(data.size.toLong(), ref["size"]!!.jsonPrimitive.content.toLong())
+        assertEquals("application/pdf", ref["mediaType"]!!.jsonPrimitive.content)
+        val sha = java.security.MessageDigest.getInstance("SHA-256").digest(data).joinToString("") { "%02x".format(it) }
+        assertEquals(sha, ref["sha256"]!!.jsonPrimitive.content)
+        assertEquals("depot.drop-box", children[1]["content"]!!.jsonObject["type"]!!.jsonPrimitive.content)
+        assertEquals("Docs/Box/Anna", children[1]["children"]!!.jsonArray[0].jsonObject["path"]!!.jsonPrimitive.content)
+        assertEquals(1, m["applications"]!!.jsonArray.single().jsonObject["contentSchema"]!!.jsonPrimitive.content.toInt())
     }
 }

@@ -54,12 +54,19 @@ internal object KindPages {
         FileScreen(ref, model)
     })
 
-    /** Depot's drop box: its guests' folders (`DropBoxScreen`); never renamed; its cover. */
-    private val dropBox = KindPage(shareable = true, takesCover = true, header = { node, _ ->
+    /** Depot's drop box: its guests' folders (`DropBoxScreen`); never renamed; its cover; its ZIP and its copy (a plain folder). */
+    private val dropBox = KindPage(shareable = true, takesCover = true, header = { node, model ->
+        val context = LocalContext.current
         HeaderContribution(
             rename = false,
             deleteTitle = stringResource(R.string.dropbox_delete),
             deleteQuestion = stringResource(R.string.dropbox_delete_confirm, node.name),
+            copy = { to -> model.copyFolder(node, to) },
+            copyNotes = {
+                val (kinds, left) = model.copyPreview(node)
+                CopyNotes(kinds.flatMap { copyLosses(context, it) }.distinct(), left)
+            },
+            download = { out -> model.downloadFolder(node, out) },
         )
     }, body = { ref, _, model -> DropBoxScreen(ref, model) })
 
@@ -76,6 +83,7 @@ internal object KindPages {
 private fun copyLosses(context: android.content.Context, kind: String): List<String> = when (kind) {
     "FOLDER" -> listOf(context.getString(R.string.copy_loss_folder_cover))
     PotSession.KIND -> listOf(context.getString(R.string.copy_loss_pot), context.getString(R.string.copy_loss_cover))
+    me.raddatz.veyq.mobile.depot.DepotFiles.DROPBOX -> listOf(context.getString(R.string.copy_loss_dropbox))
     else -> emptyList()
 }
 
@@ -94,6 +102,9 @@ private fun fileHeader(node: NodeAt, model: AppModel): HeaderContribution {
         deleteTitle = stringResource(R.string.file_delete),
         deleteQuestion = stringResource(R.string.file_delete_confirm, node.name),
         download = if (has) { out -> model.downloadFile(node, out) } else null,
+        // a copy is read here and uploaded again under a fresh key (the web's `importFile` for a copy)
+        copy = if (has) { to -> model.copyFolder(node, to) } else null,
+        copyNotes = { CopyNotes(emptyList()) },
         downloadName = me.raddatz.veyq.mobile.depot.DepotFiles.downloadName(f, node.name),
         downloadMime = "application/octet-stream",
         actions = listOf(
