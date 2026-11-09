@@ -1,7 +1,7 @@
 # ADR 0123 — The apps share a Kotlin Multiplatform core under a native UI per platform
 
 - Status: Accepted
-- Built: partly (not built: most writes, the applications' own screens but Expenses' open Pot)
+- Built: partly — what stands and what is open is [native-apps](../crosscutting/native-apps.md)
 - Date: 2026-11-08
 
 ## Context

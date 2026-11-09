@@ -122,6 +122,10 @@ date, [ADR 0108](../decisions/0108-expenses-a-pot-is-a-node-its-entries-are-seal
   → [ADR 0008](../decisions/0008-centralized-http-auth.md),
   [cc.security.authorization](../crosscutting/cc.security.authorization.md)
 - **`src/web/`** — Vue 3 + its own UI layer on Reka UI (ADR 0107), and **the client surface**. All content crypto runs here.
+- **`src/mobile/`** — the native apps (V2): a Kotlin Multiplatform core holding the suite (held to the same
+  vectors), the API client, the session and the applications' logic, under each platform's own UI (Compose on Android,
+  SwiftUI on Apple). → [ADR 0123](../decisions/0123-the-apps-share-a-kotlin-multiplatform-core-under-native-ui.md),
+  [native-apps](../crosscutting/native-apps.md)
 - **`contracts/`** — OpenAPI + crypto vectors. The source of truth both sides are generated from; never a
   hand-written DTO.
 
