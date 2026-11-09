@@ -24,6 +24,7 @@ import IncompatibleScreen from './IncompatibleScreen.vue'
 import FinishProfilePrompt from '../../features/account/profile/FinishProfilePrompt.vue'
 import OperatorIdentification from '../../core/operator/OperatorIdentification.vue'
 import DonationBanner from '../../core/project/DonationBanner.vue'
+import ShortcutsDialog from '../../core/shortcuts/ShortcutsDialog.vue'
 
 const route = useRoute()
 const { serverState } = useServerState()
@@ -74,6 +75,9 @@ watch(needsScope, (needs) => { if (needs) void enterScope(TENANT_SCOPE) }, { imm
         <OperatorIdentification />
       </footer>
     </div>
+    <!-- The keyboard shortcut overview (uc.platform.keyboard-shortcuts): `?` and the account menu open it; the member's
+         shell only, as a share page has none. -->
+    <ShortcutsDialog />
   </div>
   <main v-else-if="plainLayout" class="plain-shell">
     <RouterView />

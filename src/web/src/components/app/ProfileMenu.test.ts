@@ -12,6 +12,7 @@ import { signOut } from '../../features/account/login/signOut'
 import { useThemeState, setThemePreference } from '../../shared/state/useThemeState'
 import { localePreference, setLocalePreference } from '../../i18n'
 import { realI18n, t } from '../../test/i18n'
+import { shortcutsOpen } from '../../core/shortcuts/shortcuts'
 
 
 // A pass-through stub for the teleporting VeyqMenu: renders the items' top rows and, one level
@@ -99,6 +100,21 @@ describe('the shell offers exactly one door into the settings hub', () => {
     await item.trigger('click')
 
     expect(push).toHaveBeenCalledExactlyOnceWith('/settings')
+  })
+})
+
+// uc.platform.keyboard-shortcuts: besides `?`, the account menu opens the overview (`ShortcutsDialog.test.ts` drives the
+// dialog itself).
+describe('ProfileMenu keyboard shortcuts', () => {
+  it('opens the shortcut overview', async () => {
+    shortcutsOpen.value = false
+    const w = mountMenu()
+    const item = w.findAll('.menu-item').find((b) => b.text() === t('shortcuts.title'))!
+
+    await item.trigger('click')
+
+    expect(shortcutsOpen.value).toBe(true)
+    shortcutsOpen.value = false
   })
 })
 

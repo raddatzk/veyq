@@ -500,7 +500,10 @@ here; the server is blind.
   sentence in the application's words, the dialog checks the name against the level's children and never lists the new
   node's links (its own dialog does). There is no "New" entry for such a kind; Inside a guest's identity folder — the served `shareIdentityId`, core's column — no view offers any
   guest a write; `app.personSection(component)` and `app.itemReview(component)` (above, and the moderator's review of an
-  application's reported record);
+  application's reported record); `app.shortcuts(groups)` once - the keyboard shortcuts of the application's own screens
+  as `{ title, entries: [{ keys, label }] }` groups (`core/shortcuts/shortcuts.ts`), listed by core's `?` overview
+  (`core/shortcuts/ShortcutsDialog.vue`, uc.platform.keyboard-shortcuts) after core's own while the application is switched
+  on; a handler that spells a listed key points at its entry in a comment;
   `app.lifecycle(hooks)` once
   with `onScopeReset` / `onScopeEntered` and the **required** `onMasterKeyRotated` — material an application seals under the
   Master Key (Memories' item marks) is otherwise unverifiable after a rotation. There is no registry-wide rotation gate:

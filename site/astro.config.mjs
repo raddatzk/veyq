@@ -40,6 +40,7 @@ export default defineConfig({
                 'getting-started/accept-an-invitation',
                 'getting-started/emergency-kit',
                 'getting-started/sign-in',
+                'getting-started/keyboard-shortcuts',
               ],
             },
             {

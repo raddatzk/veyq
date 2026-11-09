@@ -659,6 +659,29 @@ describe('registry: person-profile sections (ADR 0083)', () => {
   })
 })
 
+describe('registry: keyboard shortcuts (uc.platform.keyboard-shortcuts)', () => {
+  it('lists each application\'s groups with its id, in registration order, and refuses a second set', () => {
+    const r = createRegistry()
+    const group = (title: string) => ({ title, entries: [{ keys: [['?']], label: `${title}.entry` }] })
+    expect(r.shortcuts()).toEqual([])
+    testApp(r).shortcuts([group('a')])
+    testApp(r, 'other').shortcuts([group('b'), group('c')])
+    expect(r.shortcuts()).toEqual([
+      { application: 'test', groups: [group('a')] },
+      { application: 'other', groups: [group('b'), group('c')] },
+    ])
+    expect(() => testApp(r).shortcuts([group('d')])).toThrow(/already registered/)
+  })
+
+  it('refuses a group without an entry and an entry without a key', () => {
+    const r = createRegistry()
+    expect(() => testApp(r).shortcuts([{ title: 'a', entries: [] }])).toThrow(/has no entry/)
+    expect(() => testApp(r).shortcuts([{ title: 'a', entries: [{ keys: [], label: 'x' }] }])).toThrow(/names no key/)
+    expect(() => testApp(r).shortcuts([{ title: 'a', entries: [{ keys: [[]], label: 'x' }] }])).toThrow(/names no key/)
+    expect(r.shortcuts(), 'a refused set registers nothing').toEqual([])
+  })
+})
+
 describe('registry: item reviews', () => {
   it('lists the claimed reviews in order and refuses the same component twice', () => {
     const r = createRegistry()

@@ -1,7 +1,9 @@
 # UC: See every keyboard shortcut
 
 - **ID:** uc.platform.keyboard-shortcuts
-- **Status:** planned (owner, 2026-11-09).
+- **Status:** built (web; browser pass 2026-11-09). Core's list is `src/web/src/core/shortcuts/shortcuts.ts`, an
+  application's arrives through `ApplicationRegistrar.shortcuts` (Memories': `features/memories/shortcuts.ts`), and the
+  overview is `core/shortcuts/ShortcutsDialog.vue`, mounted once by the app shell.
 - **Primary actor:** A member (signed in, in the app shell).
 - **Goal:** Learn which keys do what, in the app and in the place they are, without leaving the page.
 - **Preconditions:** The member is on a page of the app shell (not a share page, which has no shell).
@@ -12,7 +14,7 @@
 1. **Open the overview.** The member presses `?`, or chooses *Keyboard shortcuts* in the account menu. `?` is ignored
    while the focus is in a text field, where it is a character.
 2. **Read it.** A dialog lists the shortcuts in groups: *Everywhere* (core's: `/` and Cmd/Ctrl+K into the search), *In
-   the search* (core's), then each application's groups (Memories: *In the gallery*, *In the lightbox*). Each entry
+   the search* (core's), then each application's groups (Memories: *In the gallery*, *In the large view* - the lightbox, by the word the Use pages give it). Each entry
    names its keys and what they do, in the UI's language, with the platform's modifier (⌘ on a Mac, Ctrl elsewhere).
 3. **Close it.** Escape, the close button or a click beside it closes the dialog; the focus returns to where it was.
 
@@ -38,5 +40,6 @@ You can press `?` anywhere in veyq to see which keys do what, instead of discove
 - Feature: [Platform](../_index.md)
 - Use-cases: [uc.platform.search](uc.platform.search.md) (its keys), [uc.memory.gallery](../../memory/use-cases/uc.memory.gallery.md)
   (the grid's and the lightbox's keys)
+- End-user view (docs site): [Keyboard shortcuts](../../../../site/src/content/docs/getting-started/keyboard-shortcuts.mdx)
 - Decisions: [ADR 0079](../../../decisions/0079-veyq-is-a-platform-memories-is-its-first-application.md) (core lists what
   an application registers, never imports it)

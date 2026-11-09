@@ -10,7 +10,8 @@
 // highlight, → past the last chip returns to the text (Reka's). Backspace at the text's start removes the chip before
 // it at once (Reka's own would first only highlight it — ours, below); Backspace or Delete with a chip highlighted
 // removes that chip. ↓/↑ move through the suggestions, Enter picks the highlighted one; Enter never submits the form
-// while text is typed, and text alone is never a chip — only an option is. Escape closes the suggestions.
+// while text is typed, and text alone is never a chip — only an option is. Escape closes the suggestions. The search's
+// use of these keys is listed in the shortcut overview (`core/shortcuts/shortcuts.ts`, *In the search*).
 //
 // The `tag` slot draws before a chip's label (an avatar, say; `{ tag }`), the `option` slot a suggestion (`{ option }`),
 // the `leading` slot before the chips (a search field's magnifier).

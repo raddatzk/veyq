@@ -10,7 +10,7 @@
 // **One door per application: its registrar (owner 2026-11-01).** `registerApplication({ id, name })` names the
 // application and answers its SCOPED registrar (`ApplicationRegistrar`), through which it registers everything else:
 // `app.kind(kind, descriptor)` per node kind, `app.route(slug | null)` once, `app.lifecycle(hooks)`, `app.shareBody(rootKind,
-// body)`, `app.folderUploadShare(kind, share)`, `app.personSection(component)`, `app.itemReview(component)`. Ownership comes from the call: a kind belongs to the
+// body)`, `app.folderUploadShare(kind, share)`, `app.personSection(component)`, `app.itemReview(component)`, `app.shortcuts(groups)`. Ownership comes from the call: a kind belongs to the
 // application whose registrar registered it, so no list of its kinds exists beside the registrations, and `app.id` is the
 // one place an application's id lives on the web side (its kinds' `contentSchema.application` is read from it). There are
 // no free register functions.
@@ -127,6 +127,10 @@
 // `{ supported: false }`, which the host renders as an explicit unsupported state, never as an empty region. The kind
 // is an open string token (`core/node/kind.ts`), so no compiler checks that every kind is handled: this answer and its
 // tests (`registry.test.ts`) are what does.
+//
+// **Keyboard shortcuts (`app.shortcuts`, uc.platform.keyboard-shortcuts).** An application names the shortcuts of its own
+// screens ONCE, as groups of `{ keys, label }` (`core/shortcuts/shortcuts.ts`), its labels keys of its own namespace; core's
+// overview (`core/shortcuts/ShortcutsDialog.vue`) lists them after core's own, for an application switched on here only.
 import { nothingOfItsOwnToRekey, type RekeyContentHook, type ScopeRekeyParticipant } from '../node/rekey/hooks'
 import { defineAsyncComponent, type Component } from 'vue'
 import { FOLDER_KIND, type NodeKind } from '../node/kind'
@@ -144,6 +148,7 @@ import type { VeyqIconName } from '../../shared/ui/icons'
 import type { ExportContentHook, ImportContentHook } from '../export/hooks'
 import type { ManifestContent } from '../export/manifest'
 import type { ScopeDocument, SearchFacets } from '../search/model'
+import type { ShortcutGroup } from '../shortcuts/shortcuts'
 
 // The platform's own share dialog for a FOLDER (uc.sharing.share-public-viewer:folder-share-root), FOLDER's
 // `shareDialog` since P4c. LAZY for a reason: the dialog's module graph reaches this registry again (measured:
@@ -671,6 +676,9 @@ export interface ApplicationRegistrar {
   /** Add the application's objects to the search of every space (ADR 0125 decision 8a, {@link ApplicationSearch}): Memories'
    *  photos and videos. Throws on a second one. */
   search(search: ApplicationSearch): void
+  /** Name the keyboard shortcuts of the application's own screens, in the order the overview lists them (see the header).
+   *  Throws on a second call, on a group without an entry and on an entry without a key. */
+  shortcuts(groups: readonly ShortcutGroup[]): void
 }
 
 export interface Registry {
@@ -698,6 +706,8 @@ export interface Registry {
   itemReviews(): readonly Component[]
   /** Every application's part in the search of a whole space, in registration order. */
   searches(): readonly { application: string; search: ApplicationSearch }[]
+  /** Every application's shortcut groups, in registration order, each with the application that named them. */
+  shortcuts(): readonly { application: string; groups: readonly ShortcutGroup[] }[]
   /** Run every application's `onScopeReset`. */
   scopeReset(): void
   /** Run every application's `onScopeEntered`, in registration order; rejects with the first failure after all ran. */
@@ -790,6 +800,7 @@ export function createRegistry(): Registry {
   const personSections: Component[] = []
   const itemReviews: Component[] = []
   const searches = new Map<string, ApplicationSearch>()
+  const shortcuts = new Map<string, readonly ShortcutGroup[]>()
   // application id → its route slug, or null for the application with no segment.
   const routes = new Map<string, string | null>()
   const slugs = new Set<string>()
@@ -886,6 +897,16 @@ export function createRegistry(): Registry {
         if (typeof search?.scopeDocuments !== 'function') throw new Error(`application ${id} registered no scopeDocuments hook`)
         searches.set(id, search)
       },
+      shortcuts(groups: readonly ShortcutGroup[]) {
+        if (shortcuts.has(id)) throw new Error(`the shortcuts of ${id} are already registered`)
+        for (const g of groups) {
+          if (g.entries.length === 0) throw new Error(`the shortcut group ${g.title} of ${id} has no entry`)
+          for (const e of g.entries) {
+            if (e.keys.length === 0 || e.keys.some((chord) => chord.length === 0)) throw new Error(`the shortcut ${e.label} of ${id} names no key`)
+          }
+        }
+        shortcuts.set(id, Object.freeze(groups.map((g) => Object.freeze({ ...g, entries: Object.freeze([...g.entries]) }))))
+      },
     })
   }
   return {
@@ -902,6 +923,7 @@ export function createRegistry(): Registry {
     personSections: () => [...personSections],
     itemReviews: () => [...itemReviews],
     searches: () => [...searches].map(([application, search]) => ({ application, search })),
+    shortcuts: () => [...shortcuts].map(([application, groups]) => ({ application, groups })),
     scopeReset() {
       // Synchronous on purpose: callers (enterScope, clearActiveSpace) rely on the state being gone on return.
       for (const h of lifecycles.values()) h.onScopeReset?.()

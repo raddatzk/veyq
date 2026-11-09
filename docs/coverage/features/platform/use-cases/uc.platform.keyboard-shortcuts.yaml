@@ -1,12 +1,16 @@
 useCase: uc.platform.keyboard-shortcuts
 feature: platform
 title: See every keyboard shortcut
-status: planned
 acceptanceCriteria:
   - id: question-mark-opens-the-overview
     text: "? (outside a text field) or the account menu's Keyboard shortcuts opens a dialog listing the shortcuts in groups - core's (Everywhere, In the search) and each switched-on application's - with the platform's modifier; Escape, the close button or a click beside it closes it and the focus returns. In a text field ? is a character; with a dialog open it does nothing."
+    coverage:
+      web:
+        unit: [src/core/shortcuts/ShortcutsDialog.test.ts, src/components/app/ProfileMenu.test.ts, src/shared/ui/VeyqDialog.test.ts]
   - id: one-list-from-the-registry
     text: "The overview is built from core's own list and what each application registers through its registrar; core imports no application, and a switched-off application's groups are not listed."
+    coverage:
+      web:
+        unit: [src/core/shortcuts/ShortcutsDialog.test.ts, src/core/applications/registry.test.ts]
 gaps:
-  web: "Not built yet; cr-keyboard-shortcuts builds it, with unit tests beside the overview and the registry door."
   backend: "No backend part: the overview is client-only."

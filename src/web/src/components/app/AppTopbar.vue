@@ -25,6 +25,7 @@ import { breadcrumb } from '../../app/breadcrumb'
 import { crumbDropTarget } from '../../core/node/nodeDrag'
 import InvitationsBadge from '../../features/spaces/InvitationsBadge.vue'
 import UploadStatusMenu from '../../core/blob/UploadStatusMenu.vue'
+import { typingInto } from '../../core/shortcuts/shortcuts'
 
 const router = useRouter()
 const { t } = useI18n()
@@ -40,14 +41,14 @@ async function openSheet() {
   await nextTick()
   sheet.value?.focus()
 }
-/** `/` or Ctrl/⌘+K: to the search - never while a field, a text area or an editable region has the keys. */
+/** `/` or Ctrl/⌘+K: to the search - never while a field, a text area or an editable region has the keys. Listed in the
+ *  shortcut overview: `core/shortcuts/shortcuts.ts`, `CORE_SHORTCUTS` *Everywhere*. */
 function onShortcut(event: KeyboardEvent) {
   if (event.defaultPrevented || event.isComposing || event.altKey) return
   const slash = event.key === '/' && !event.ctrlKey && !event.metaKey
   const k = event.key.toLowerCase() === 'k' && (event.ctrlKey || event.metaKey) && !event.shiftKey
   if (!slash && !k) return
-  const target = event.target as HTMLElement | null
-  if (target && (target.closest('input, textarea, select, [contenteditable=""], [contenteditable="true"]') || target.isContentEditable)) return
+  if (typingInto(event.target)) return
   event.preventDefault()
   if (window.matchMedia?.(SHEET_QUERY).matches) void openSheet()
   else inline.value?.focus()

@@ -1,7 +1,7 @@
 ---
 id: cr-keyboard-shortcuts
 title: "? opens an overview of every keyboard shortcut, built from what core and each application register"
-status: planned
+status: done
 satisfies: [uc.platform.keyboard-shortcuts]
 adrs: ["0079"]
 invariants:
@@ -77,4 +77,31 @@ Single phase (web, site, docs).
 
 ## Retrospective
 
-(filled by the implementer)
+Implemented 2026-11-09 in the worktree `search-design`, one commit. Measured: `pnpm run check` green in `src/web/`
+(545 test files passed, 33 skipped; 6,660 tests); every `scripts/validate_*.py` but `validate_guard_gaps.py` green with
+`/usr/bin/python3` (69 run, 0 red; no validator changed); `pnpm run check` green in `site/` (211 pages, links valid).
+Browser pass on the owner's instance (`p25-shortcuts.mjs`, German UI, light and dark): `?` opens the overview with
+*Überall*, *In der Suche*, *In der Galerie*, *In der Großansicht*; Escape closes it and the focus returns; `?` in the
+search field is typed; the account menu's *Tastenkürzel* opens it, its close button closes it, the focus returns to the
+account button; no console error.
+
+### The choices (technical, mine)
+
+- **Where the list lives:** `core/shortcuts/shortcuts.ts` (types, `CORE_SHORTCUTS`, the `shortcutsOpen` state the menu and
+  the `?` key share, and `typingInto` - the text-field test, now also what `AppTopbar`'s `/` handler calls, same selector).
+  The modifier helper is `modifier.ts` (`userAgentData.platform`, else `platform`, else the user agent; cached, with
+  `forgetPlatform` for tests). `ShortcutKeys.vue` draws one entry's keys.
+- **The `?` handler sits in `ShortcutsDialog.vue`**, which `AppShell` mounts once in the member layout; "another dialog is
+  open" is `[role="dialog"], [role="alertdialog"], [aria-modal="true"]` in the document - so a popover (Reka gives it
+  `role="dialog"`) and the large view (`aria-modal`) count too. Ctrl/⌘ with `?` is ignored, AltGr (Ctrl+Alt) is not.
+- **Key names are copy:** word keys go through `shortcuts.key.*` (DE as a German PC keyboard prints them: Strg, Entf,
+  Pos1, Ende, Bild ↑/↓, Eingabe - Strg and Eingabe as the search page already wrote them). Alternatives of single keys
+  stand side by side, "or" joins them once one is a chord.
+- **The registry door validates lightly** (a second call, an empty group, an entry without a key throw) and freezes a copy.
+
+### What went wrong
+
+- **My browser-pass check assumed a non-Mac user agent** on this Mac (the headless Chrome reports `MacIntel`), so the
+  first run printed two FAILs that were the check's, not the product's. Root cause: I wrote the expectation from the
+  test's Windows case instead of the machine. Next time: a check that depends on the platform reads the platform first.
+- Otherwise nothing worth a lesson: the CR's two bites went red on the first try.
