@@ -1,3 +1,4 @@
+import PhotosUI
 import SwiftUI
 import VeyqCore
 
@@ -15,6 +16,8 @@ struct PotHeaderActions: View {
     @State private var renameProblem: String?
     @State private var moving = false
     @State private var copying = false
+    @State private var pickingCover = false
+    @State private var coverItem: PhotosPickerItem?
     @State private var sharing = false
     @State private var reporting = false
     @State private var downloading = false
@@ -60,6 +63,14 @@ struct PotHeaderActions: View {
                 Button("Move to…", systemImage: "folder") { moving = true }
                 // a copy writes a new Pot: offered where Expenses is on (the web's `canCopy`)
                 if model.pot?.view?.canWrite == true {
+                    // core's cover action: the picture from the system's photo picker, made the cover on this device
+                    let has = model.covers[ref.nodeId] != nil
+                    Button(has ? "Change Cover…" : "Set Cover…", systemImage: "photo") { pickingCover = true }
+                    if has {
+                        Button("Remove Cover", systemImage: "minus.circle") {
+                            Task { if await !model.removeCover(ref) { failed = String(localized: "The cover could not be saved. Please try again.") } }
+                        }
+                    }
                     Button("Copy to…", systemImage: "doc.on.doc") { copying = true }
                 }
                 Button("Download", systemImage: "arrow.down.circle") { Task { await download() } }
@@ -78,6 +89,17 @@ struct PotHeaderActions: View {
         .onAppear { pinned = model.isFavorite(ref) }
         .sheet(isPresented: $moving) { NodeMoveSheet(model: model, ref: ref) }
         .sheet(isPresented: $copying) { NodeMoveSheet(model: model, ref: ref, copy: true) }
+        .photosPicker(isPresented: $pickingCover, selection: $coverItem, matching: .images)
+        .onChange(of: coverItem) { _, item in
+            guard let item else { return }
+            coverItem = nil
+            Task {
+                guard let data = try? await item.loadTransferable(type: Data.self), await model.setCover(ref, data: data) else {
+                    failed = String(localized: "The cover could not be saved. Please try again.")
+                    return
+                }
+            }
+        }
         .sheet(isPresented: $sharing) { PotShareSheet(model: model, ref: ref) }
         .sheet(isPresented: $reporting) { ReportSheet(model: model, ref: ref) }
         // The system's save sheet takes the written file where the person picks; the temporary copy goes either way.

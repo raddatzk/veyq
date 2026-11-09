@@ -47,6 +47,11 @@ internal fun NodeHeaderActions(
     onDownload: (() -> Unit)? = null,
     /** "Copy to…" (menu-only, after the move: the web's `{after: 'move'}`); null: not offered. */
     onCopy: (() -> Unit)? = null,
+    /** The node's cover (core's cover action): set or change it from a picked picture; null: not offered. */
+    onCover: (() -> Unit)? = null,
+    hasCover: Boolean = false,
+    /** Removes the cover, offered while there is one; null: not offered. */
+    onRemoveCover: (() -> Unit)? = null,
 ) {
     var menu by remember { mutableStateOf(false) }
     var asking by remember { mutableStateOf(false) }
@@ -58,7 +63,7 @@ internal fun NodeHeaderActions(
             else Icon(Icons.Outlined.FavoriteBorder, stringResource(R.string.node_favorite))
         }
     }
-    if (canRename || canDelete || onMove != null || onReport != null || onDownload != null || onCopy != null) {
+    if (canRename || canDelete || onMove != null || onReport != null || onDownload != null || onCopy != null || onCover != null) {
         IconButton(onClick = { menu = true }) { Icon(Icons.Outlined.MoreVert, stringResource(R.string.node_more)) }
         DropdownMenu(menu, { menu = false }) {
             // The rename first, the delete last and in the danger role (`splitRowActions`).
@@ -74,6 +79,20 @@ internal fun NodeHeaderActions(
                 onClick = {
                     menu = false
                     onMove()
+                },
+            )
+            if (onCover != null) DropdownMenuItem(
+                text = { Text(stringResource(if (hasCover) R.string.cover_change else R.string.cover_set)) },
+                onClick = {
+                    menu = false
+                    onCover()
+                },
+            )
+            if (hasCover && onRemoveCover != null) DropdownMenuItem(
+                text = { Text(stringResource(R.string.cover_remove)) },
+                onClick = {
+                    menu = false
+                    onRemoveCover()
                 },
             )
             if (onCopy != null) DropdownMenuItem(

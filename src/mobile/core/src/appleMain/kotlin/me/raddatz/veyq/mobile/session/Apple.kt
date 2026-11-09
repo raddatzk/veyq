@@ -163,6 +163,15 @@ object AppleSessions {
         me.raddatz.veyq.mobile.expenses.PotSession.open(tenant, scopeId, nodeId)
 
     /** A receipt of [pot] opened to its bytes, as Foundation data; null when blocked or unreadable. */
+    /** The cover of node [nodeId] as the tenant's trees hold it, as the platform's data (core's `NodeCover`), or null. */
+    @Throws(Exception::class)
+    suspend fun openCover(tenant: TenantSession, nodeId: String): NSData? = NodeCover.openNode(tenant, nodeId)?.toNSData()
+
+    /** Sets [jpeg] (the device's cover JPEG) as the cover of node [nodeId] in [scopeId] (core's `NodeCover.set`). */
+    @Throws(Exception::class)
+    suspend fun setCover(tenant: TenantSession, scopeId: String, nodeId: String, jpeg: NSData): NodeCover.Outcome =
+        NodeCover.set(tenant, scopeId, nodeId, jpeg.toByteArray())
+
     @Throws(Exception::class)
     suspend fun openReceipt(pot: me.raddatz.veyq.mobile.expenses.PotSession, receiptId: String): NSData? =
         pot.openReceipt(receiptId)?.toNSData()

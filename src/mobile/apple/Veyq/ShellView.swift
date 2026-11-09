@@ -1,3 +1,4 @@
+import CoreGraphics
 import SwiftUI
 import VeyqCore
 
@@ -23,6 +24,7 @@ struct ShellView: View {
         // A delete's notice and its Undo over the whole shell: a page under a tab bar draws no overlay above it.
         .overlay(alignment: .bottom) { TrashNotice(model: model) }
         .environment(\.rowDetails, model.rowDetails)
+        .environment(\.covers, model.covers.mapValues(\.image))
         .environment(\.avatars, model.avatars)
         .environment(\.picking, model.incoming != nil)
         // An image or a PDF dragged onto the app — a screenshot's thumbnail, a photo from another app (ADR 0124 decision 9).
@@ -340,6 +342,8 @@ struct FolderTile: View {
 /// What each object's row says beside its name, by node id (`AppModel.rowDetails`).
 extension EnvironmentValues {
     @Entry var rowDetails: [String: [String]] = [:]
+    /// Each listed node's cover, by node id (`AppModel.covers`).
+    @Entry var covers: [String: CGImage] = [:]
 }
 
 /// One object as a row of the web's lists: its kind's tile, its name in bold, and the application's facts about it (a
@@ -349,6 +353,7 @@ struct ObjectRow: View {
     let onOpen: (ObjectRef) -> Void
     @Environment(\.rowDetails) private var details
     @Environment(\.picking) private var picking
+    @Environment(\.covers) private var covers
 
     /// Picking a place for what was shared: only a kind that takes it can be chosen (ADR 0124 decision 1).
     private var takes: Bool { !picking || ref.kind == PotShare.shared.KIND }
@@ -356,7 +361,14 @@ struct ObjectRow: View {
     var body: some View {
         Button { onOpen(ref) } label: {
             HStack(spacing: 12) {
-                Tile(symbol: Names.kindSymbol(ref.kind))
+                // the node's cover where it has one (core's row visual), else its kind's tile
+                if let cover = covers[ref.nodeId] {
+                    Image(decorative: cover, scale: 1).resizable().scaledToFill()
+                        .frame(width: 34, height: 34)
+                        .clipShape(RoundedRectangle(cornerRadius: Radius.row, style: .continuous))
+                } else {
+                    Tile(symbol: Names.kindSymbol(ref.kind))
+                }
                 VStack(alignment: .leading, spacing: 2) {
                     Text(ref.name).fontWeight(.bold).foregroundStyle(Role.text)
                     if let d = details[ref.nodeId], !d.isEmpty { Text(d.joined(separator: " · ")).font(.caption).foregroundStyle(Role.muted) }

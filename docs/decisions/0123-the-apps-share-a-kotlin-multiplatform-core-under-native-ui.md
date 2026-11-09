@@ -252,7 +252,13 @@ implementation exists but what holds it to the first.
   under ids minted anew with every reference mapped, a receipt uploaded before the batch that lists it, the name numbered past
   a sibling's, and a copy that fails part way trashed (a copy each app made opens on the web, entries and receipts alike,
   measured 2026-11-09). The web asks the tenant's storage before it copies (`checkTenantStorageFit`); the app does not yet, so
-  a copy past the quota fails at its first receipt and is trashed. The cover is not built.
+  a copy past the quota fails at its first receipt and is trashed. A node's cover is core's (`session/NodeCover.kt`, the
+  web's `core/node/cover/`): the `cover` field of its sealed meta in the web's shape, its image the node's `COVER` blob,
+  attached with the meta in one `setNodeCover` and freed with `removeNodeCover`; a Pot's header menu sets, changes and
+  removes it from the platform's photo picker (no library permission), the device making the web's cover JPEG (long edge
+  2048, quality 0.85), and its rows show it in place of the kind's tile (the web draws a cover the app set, and the iOS app one
+  Android set, measured 2026-11-09). The crop editor is not built — a cover the app sets is the whole picture, a
+  centred fit, and one the web cropped shows its crop on the web — nor the cover as the page header's leading visual.
 - **Not built yet:** every other write (another kind's node), the
   other applications' views behind the bar, a CI job for the apps. The grant check is held by `GrantTrustTest` against a server the test plays — each refusal killed by
   a mutation of the rule it pins, but for three a second rule also holds (a pending or self-naming signer, and a cycle

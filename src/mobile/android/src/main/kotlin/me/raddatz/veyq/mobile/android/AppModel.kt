@@ -1,5 +1,6 @@
 package me.raddatz.veyq.mobile.android
 
+import androidx.compose.ui.graphics.asImageBitmap
 import android.app.Application
 import android.content.Context
 import androidx.lifecycle.AndroidViewModel
@@ -655,6 +656,66 @@ class AppModel(app: Application) : AndroidViewModel(app) {
 
     private suspend fun readRowDetails(t: me.raddatz.veyq.mobile.session.TenantSession) {
         _rowDetails.value = runCatching { me.raddatz.veyq.mobile.expenses.PotRows.details(t) }.getOrDefault(emptyMap())
+        readCovers(t)
+    }
+
+    /** Each listed node's cover as a small picture, by node id (core's covers, uc.platform.node-cover): opened once per blob,
+     *  dropped when the node names another or none. */
+    private val _covers = MutableStateFlow<Map<String, Pair<String, androidx.compose.ui.graphics.ImageBitmap>>>(emptyMap())
+    val covers: StateFlow<Map<String, Pair<String, androidx.compose.ui.graphics.ImageBitmap>>> = _covers.asStateFlow()
+
+    private fun readCovers(t: me.raddatz.veyq.mobile.session.TenantSession) {
+        viewModelScope.launch(kotlinx.coroutines.Dispatchers.IO) {
+            val named = runCatching { me.raddatz.veyq.mobile.session.NodeCover.named(t) }.getOrDefault(emptyMap())
+            val have = _covers.value.filter { (id, c) -> named[id] == c.first }
+            val fresh = named.filter { (id, blob) -> have[id]?.first != blob }.mapNotNull { (id, blob) ->
+                val bytes = runCatching { me.raddatz.veyq.mobile.session.NodeCover.openNode(t, id) }.getOrNull() ?: return@mapNotNull null
+                thumbnail(bytes)?.let { id to (blob to it) }
+            }
+            if (tenantSession === t) _covers.value = have + fresh
+        }
+    }
+
+    /** A cover's picture decoded at a list's size: a row draws it a few dozen pixels wide. */
+    private fun thumbnail(bytes: ByteArray): androidx.compose.ui.graphics.ImageBitmap? = runCatching {
+        val bounds = android.graphics.BitmapFactory.Options().apply { inJustDecodeBounds = true }
+        android.graphics.BitmapFactory.decodeByteArray(bytes, 0, bytes.size, bounds)
+        var sample = 1
+        while (minOf(bounds.outWidth, bounds.outHeight) / (sample * 2) >= 192) sample *= 2
+        android.graphics.BitmapFactory.decodeByteArray(bytes, 0, bytes.size, android.graphics.BitmapFactory.Options().apply { inSampleSize = sample })
+    }.getOrNull()?.asImageBitmap()
+
+    /**
+     * Sets the picture at [uri] as the cover of [ref]: decoded on the device and made the web's cover JPEG (long edge 2048,
+     * quality 0.85, `COVER_SPEC`), uploaded and attached (core's `NodeCover`); false when it did not land.
+     */
+    suspend fun setCover(ref: ObjectRef, uri: android.net.Uri): Boolean = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+        val t = tenantSession ?: return@withContext false
+        val jpeg = runCatching {
+            val source = android.graphics.ImageDecoder.createSource(getApplication<Application>().contentResolver, uri)
+            val bitmap = android.graphics.ImageDecoder.decodeBitmap(source) { decoder, info, _ ->
+                val long = maxOf(info.size.width, info.size.height)
+                if (long > 2048) {
+                    val f = 2048.0 / long
+                    decoder.setTargetSize((info.size.width * f).toInt().coerceAtLeast(1), (info.size.height * f).toInt().coerceAtLeast(1))
+                }
+                decoder.allocator = android.graphics.ImageDecoder.ALLOCATOR_SOFTWARE
+            }
+            java.io.ByteArrayOutputStream().also { bitmap.compress(android.graphics.Bitmap.CompressFormat.JPEG, 85, it) }.toByteArray()
+        }.getOrNull() ?: return@withContext false
+        val done = runCatching { me.raddatz.veyq.mobile.session.NodeCover.set(t, ref.scopeId, ref.nodeId, jpeg) }
+            .getOrNull() == me.raddatz.veyq.mobile.session.NodeCover.Outcome.DONE
+        refreshLists(t)
+        done
+    }
+
+    /** Removes the cover of [ref]; false when it did not land. */
+    suspend fun removeCover(ref: ObjectRef): Boolean {
+        val t = tenantSession ?: return false
+        val done = runCatching { me.raddatz.veyq.mobile.session.NodeCover.remove(t, ref.scopeId, ref.nodeId) }
+            .getOrNull() == me.raddatz.veyq.mobile.session.NodeCover.Outcome.DONE
+        refreshLists(t)
+        return done
     }
     val pot: StateFlow<PotState?> = _pot.asStateFlow()
 

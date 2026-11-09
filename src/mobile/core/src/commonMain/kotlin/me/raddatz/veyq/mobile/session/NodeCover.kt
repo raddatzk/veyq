@@ -85,6 +85,18 @@ object NodeCover {
         put("x", n(c.x)); put("y", n(c.y)); put("width", n(c.width)); put("height", n(c.height))
     }
 
+    /** Which node of the tenant's trees names which cover blob (node id to blob id): what a list's thumbnails are keyed by,
+     *  so a client opens a cover once and again only when it changed. */
+    suspend fun named(tenant: TenantSession): Map<String, String> =
+        tenant.trees().values.flatten().mapNotNull { n ->
+            runCatching { read(NodeMetaWrite.openForWrite(tenant.account.suite, n.scopeId, n.id, n.key, n.wrappedMeta)) }.getOrNull()?.let { n.id to it.blobId }
+        }.toMap()
+
+    /** The cover of node [nodeId] wherever the tenant's trees hold it, or null. */
+    @Throws(Exception::class)
+    suspend fun openNode(tenant: TenantSession, nodeId: String): ByteArray? =
+        tenant.trees().values.flatten().firstOrNull { it.id == nodeId }?.let { open(tenant, it) }
+
     /** The cover of [node], if its meta names one: its image's bytes (the JPEG the uploader made), opened here. */
     @Throws(Exception::class)
     suspend fun open(tenant: TenantSession, node: OpenNode): ByteArray? {
@@ -145,7 +157,11 @@ object NodeCover {
             val (meta, send) = prepare(node, current) ?: return Outcome.DONE
             val wrapped = NodeMetaWrite.seal(tenant.account.suite, scopeId, nodeId, node.key, meta)
             val r = send(wrapped, node.metaRevision)
-            if (r.success) return Outcome.DONE
+            if (r.success) {
+                // the tree read before the write holds the meta it replaced: the next read takes the server's
+                tenant.forgetTree()
+                return Outcome.DONE
+            }
             val body = runCatching { r.response.bodyAsText() }.getOrDefault("")
             val code = runCatching {
                 (kotlinx.serialization.json.Json.parseToJsonElement(body) as? JsonObject)?.get("code")?.jsonPrimitive?.content

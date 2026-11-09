@@ -119,7 +119,8 @@ fun ShellScreen(s: Screen.Signed, model: AppModel) {
         if (shell.searching) model.search(false) else model.goBack()
     }
 
-    androidx.compose.runtime.CompositionLocalProvider(LocalRowDetails provides rowDetails, LocalAvatars provides avatars, LocalPicking provides (incoming != null)) {
+    val covers by model.covers.collectAsStateWithLifecycle()
+    androidx.compose.runtime.CompositionLocalProvider(LocalRowDetails provides rowDetails, LocalAvatars provides avatars, LocalPicking provides (incoming != null), LocalCovers provides covers) {
     ModalNavigationDrawer(
         drawerState = drawer,
         drawerContent = {
@@ -506,6 +507,9 @@ private fun ArrangedListScreen(
     }
 }
 
+/** Each listed node's cover, by node id (the model's), as the rows draw them. */
+private val LocalCovers = androidx.compose.runtime.staticCompositionLocalOf<Map<String, Pair<String, androidx.compose.ui.graphics.ImageBitmap>>> { emptyMap() }
+
 @Composable
 private fun ObjectRow(ref: ObjectRef, onOpen: (ObjectRef) -> Unit) {
     val details = LocalRowDetails.current[ref.nodeId].orEmpty()
@@ -515,7 +519,13 @@ private fun ObjectRow(ref: ObjectRef, onOpen: (ObjectRef) -> Unit) {
         headlineContent = { Text(ref.name, fontWeight = androidx.compose.ui.text.font.FontWeight.Bold) },
         // The application's facts about the object (a Pot: its currency), left out when it has none.
         supportingContent = details.takeIf { it.isNotEmpty() }?.let { { Text(it.joinToString(" · "), color = role(LocalPalette.current.muted)) } },
-        leadingContent = { Tile(kindIcon(ref.kind)) },
+        // the node's cover where it has one (core's row visual), else its kind's tile
+        leadingContent = {
+            val cover = LocalCovers.current[ref.nodeId]?.second
+            if (cover != null) androidx.compose.foundation.Image(
+                cover, null, Modifier.size(34.dp).clip(MaterialTheme.shapes.medium), contentScale = androidx.compose.ui.layout.ContentScale.Crop,
+            ) else Tile(kindIcon(ref.kind))
+        },
         colors = ListItemDefaults.colors(containerColor = MaterialTheme.colorScheme.background),
         modifier = Modifier.clip(MaterialTheme.shapes.medium).alpha(if (takes) 1f else 0.38f).let { if (takes) it.clickableRow { onOpen(ref) } else it },
     )
@@ -631,6 +641,12 @@ private fun PotHeaderActions(open: ObjectRef, model: AppModel, snackbar: android
         androidx.compose.material3.Icon(androidx.compose.material.icons.Icons.Outlined.Share, stringResource(R.string.share_title))
     }
     var copying by androidx.compose.runtime.remember(open) { androidx.compose.runtime.mutableStateOf(false) }
+    // the system's photo picker (no permission: it hands over the one picture chosen)
+    val pickCover = androidx.activity.compose.rememberLauncherForActivityResult(
+        androidx.activity.result.contract.ActivityResultContracts.PickVisualMedia(),
+    ) { uri ->
+        if (uri != null) scope.launch { if (!model.setCover(open, uri)) snackbar.showSnackbar(context.getString(R.string.cover_failed)) }
+    }
     val canCopy = model.pot.collectAsStateWithLifecycle().value?.view?.canWrite == true
     if (copying) {
         NodeMoveSheet(open, rootName, model, onMoved = { to, _ ->
@@ -710,6 +726,9 @@ private fun PotHeaderActions(open: ObjectRef, model: AppModel, snackbar: android
             problem
         },
         onMove = { moving = true },
+        onCover = if (canCopy) ({ pickCover.launch(androidx.activity.result.PickVisualMediaRequest(androidx.activity.result.contract.ActivityResultContracts.PickVisualMedia.ImageOnly)) }) else null,
+        hasCover = model.covers.collectAsStateWithLifecycle().value.containsKey(open.nodeId),
+        onRemoveCover = if (canCopy) ({ scope.launch { if (!model.removeCover(open)) snackbar.showSnackbar(context.getString(R.string.cover_failed)) } }) else null,
         onCopy = if (canCopy) ({ copying = true }) else null,
         onDownload = { saveTo.launch(me.raddatz.veyq.mobile.export.NodeExport.fileName(open.name)) },
         onReport = if (reportOffered) ({ reporting = true }) else null,

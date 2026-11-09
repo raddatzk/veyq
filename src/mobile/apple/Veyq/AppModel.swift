@@ -1,3 +1,4 @@
+import CoreGraphics
 import Foundation
 import Observation
 import VeyqCore
@@ -361,6 +362,7 @@ final class AppModel {
         rawFavorites = try await t.favorites()
         rawOff = t.applicationsOff()
         rowDetails = (try? await PotRows.shared.details(tenant: t)) ?? [:]
+        await readCovers(t)
         // The pictures the directory names a revision for, in the background; the letters show meanwhile.
         avatars = [:]
         Task {
@@ -470,6 +472,7 @@ final class AppModel {
         rawNodes = (try? await t.nodes()) ?? rawNodes
         rawFavorites = (try? await t.favorites()) ?? rawFavorites
         rowDetails = (try? await PotRows.shared.details(tenant: t)) ?? rowDetails
+        await readCovers(t)
         rebuild(start: false)
     }
 
@@ -778,6 +781,39 @@ final class AppModel {
     /// What each object's row says beside its name, by node id (an application's answer: Expenses' `PotRows`).
     private(set) var rowDetails: [String: [String]] = [:]
 
+    /// Each listed node's cover as a small picture, by node id, with the blob it was opened from (core's covers,
+    /// uc.platform.node-cover): opened once per blob, dropped when the node names another or none.
+    private(set) var covers: [String: (blobId: String, image: CGImage)] = [:]
+
+    private func readCovers(_ t: TenantSession) async {
+        let named = ((try? await NodeCover.shared.named(tenant: t)) ?? [:])
+        var next = covers.filter { named[$0.key] == $0.value.blobId }
+        for (nodeId, blobId) in named where next[nodeId] == nil {
+            if let data = (try? await AppleSessions.shared.openCover(tenant: t, nodeId: nodeId)) ?? nil,
+               let image = CoverImages.image(data, maxPixels: 192) {
+                next[nodeId] = (blobId, image)
+            }
+        }
+        if tenantSession === t { covers = next }
+    }
+
+    /// Sets the picture `data` as the cover of `ref`: made the web's cover JPEG on the device (long edge 2048, quality 0.85,
+    /// `COVER_SPEC`), uploaded and attached (core's `NodeCover`); false when it did not land.
+    func setCover(_ ref: ObjectRef, data: Data) async -> Bool {
+        guard let t = tenantSession, let jpeg = CoverImages.jpeg(data, maxPixels: 2048, quality: 0.85) else { return false }
+        let outcome = try? await AppleSessions.shared.setCover(tenant: t, scopeId: ref.scopeId, nodeId: ref.nodeId, jpeg: jpeg)
+        await refreshLists(t)
+        return outcome == .done
+    }
+
+    /// Removes the cover of `ref`; false when it did not land.
+    func removeCover(_ ref: ObjectRef) async -> Bool {
+        guard let t = tenantSession else { return false }
+        let outcome = try? await NodeCover.shared.remove(tenant: t, scopeId: ref.scopeId, nodeId: ref.nodeId)
+        await refreshLists(t)
+        return outcome == .done
+    }
+
     /// The members' pictures this device opened, by user id (core's `MemberAvatars`): the letter for everyone else.
     private(set) var avatars: [String: Data] = [:]
 
@@ -879,6 +915,7 @@ final class AppModel {
         rawNodes = (try? await t.nodes()) ?? rawNodes
         rawFavorites = (try? await t.favorites()) ?? rawFavorites
         rowDetails = (try? await PotRows.shared.details(tenant: t)) ?? rowDetails
+        await readCovers(t)
         rebuild(start: false)
         creatingPot = CreatingPot(message: r.outcome == .created ? nil : r.outcome.name)
         if let ref = ((try? await t.objects()) ?? []).first(where: { $0.nodeId == nodeId }) { open(ref) }
