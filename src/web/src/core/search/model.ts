@@ -12,11 +12,19 @@ export interface YearSpan {
   to: number
 }
 
+/** Calendar months as `YYYY-MM`, both ends included: a Memory dated 2024-04-30 to 2024-05-02 is `{ from: '2024-04', to: '2024-05' }`. */
+export interface MonthSpan {
+  from: string
+  to: string
+}
+
 /** What a document carries beyond its name - each one a chip's predicate (`query.ts`). Every field is optional: a fact the
  *  object does not have is left out, never a placeholder. */
 export interface SearchFacets {
   /** The years the object spans (a Memory's date range). */
   years?: YearSpan
+  /** The calendar months the object spans, `YYYY-MM`, both ends included (a Memory's date range): a month chip's. */
+  months?: MonthSpan
   /** When it was captured, epoch milliseconds (a photo): its year matches a year chip, and the result row shows the day. */
   capturedAt?: number
   /** The places it names, as named (a Memory's place, a photo's place). */
@@ -53,6 +61,11 @@ export interface SearchDocument {
   readonly aliases?: readonly string[]
   /** `aliases` folded, once. */
   readonly foldedAliases: readonly string[]
+  /** Words the object is found by at a word's start only, never inside one, and never drawn (a settings section's
+   *  "E-Mail", "Kennwort"): words the member does not see must not match a stray letter. */
+  readonly keywords?: readonly string[]
+  /** `keywords` folded, once. */
+  readonly foldedKeywords: readonly string[]
   /** A document's own second line (a person's handle, a settings section's heading); a node's is where it lives. */
   readonly subtitle?: string
 }
@@ -91,8 +104,11 @@ export interface ScopeDocument {
 }
 
 /** Core's one way to make a document, so its folded fields are always there. */
-export function searchDocument(d: Omit<SearchDocument, 'foldedName' | 'foldedPlaces' | 'foldedAliases'>): SearchDocument {
-  return { ...d, foldedName: fold(d.name), foldedPlaces: (d.facets.places ?? []).map(fold), foldedAliases: (d.aliases ?? []).map(fold) }
+export function searchDocument(d: Omit<SearchDocument, 'foldedName' | 'foldedPlaces' | 'foldedAliases' | 'foldedKeywords'>): SearchDocument {
+  return {
+    ...d, foldedName: fold(d.name), foldedPlaces: (d.facets.places ?? []).map(fold), foldedAliases: (d.aliases ?? []).map(fold),
+    foldedKeywords: (d.keywords ?? []).map(fold),
+  }
 }
 
 /** The years a document spans: its own span, else its capture year (local time, as the result row shows the day). */
@@ -102,4 +118,15 @@ export function yearsOf(doc: Pick<SearchDocument, 'facets'>): YearSpan | null {
   if (at === undefined || !Number.isFinite(at)) return null
   const year = new Date(at).getFullYear()
   return { from: year, to: year }
+}
+
+/** The months a document spans: its own span, else its capture month (local time, as {@link yearsOf}); null for an object
+ *  with neither - a Memory without a date matches no month. */
+export function monthsOf(doc: Pick<SearchDocument, 'facets'>): MonthSpan | null {
+  if (doc.facets.months) return doc.facets.months
+  const at = doc.facets.capturedAt
+  if (at === undefined || !Number.isFinite(at)) return null
+  const d = new Date(at)
+  const month = `${String(d.getFullYear()).padStart(4, '0')}-${String(d.getMonth() + 1).padStart(2, '0')}`
+  return { from: month, to: month }
 }

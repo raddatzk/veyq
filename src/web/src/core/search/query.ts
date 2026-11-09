@@ -2,19 +2,24 @@
 // document's fields, never text. Pure functions over documents; nothing here reads the network, a key or any storage.
 //
 // **Chips from the typed text.** Every tail of the text that starts at a word - "rom anna sch", "anna sch", "sch" - is read
-// against what the index knows: four digits are a year; a prefix of a word of a member's name is that person; of a place a
+// against what the index knows: four digits are a year; a month's name (its first three letters at least, in the UI's
+// language or in English) followed by four digits is that month - a month's name alone is no chip, the year is what makes
+// it a filter rather than a word of a name; a prefix of a word of a member's name is that person; of a place a
 // document carries, that place; of a space's name, that space; of a kind's word, that kind. Choosing one turns that tail
 // into the chip and the rest stays text.
 //
 // **Matching and ranking.** A document matches when it satisfies every chip and the folded remaining text matches its name
 // (exact, prefix, the start of a word, anywhere - in that rank; another name it carries, a person's `~username`, counts as
-// its name) or, ranked after every name match, one of its places. Equal ranks are ordered by the name's collation.
-import { fold } from '../../shared/text/fold'
-import { yearsOf, type SearchDocument } from './model'
+// its name, and a word it is found by, a settings section's, counts only from a word's start) or, ranked after every name
+// match, one of its places. Equal ranks are ordered by the name's collation.
+import { fold, foldMap } from '../../shared/text/fold'
+import { monthsOf, yearsOf, type SearchDocument } from './model'
 
 export type SearchChip =
   | { type: 'space'; scopeId: string; label: string }
   | { type: 'year'; year: number }
+  /** A calendar month: `month` 1-12. */
+  | { type: 'month'; year: number; month: number }
   /** `place` folded; `label` as a document names it. */
   | { type: 'place'; place: string; label: string }
   | { type: 'person'; userId: string; label: string }
@@ -33,6 +38,8 @@ export function chipKey(chip: SearchChip): string {
       return `space:${chip.scopeId}`
     case 'year':
       return `year:${chip.year}`
+    case 'month':
+      return `month:${monthOf(chip.year, chip.month)}`
     case 'place':
       return `place:${chip.place}`
     case 'person':
@@ -49,6 +56,8 @@ export interface ChipSources {
   people: readonly { userId: string; name: string }[]
   /** Each kind word with the kinds it names. */
   kinds: readonly { label: string; kinds: readonly string[] }[]
+  /** Each month's names, January first (the UI's language's and English); without them no month is offered. */
+  months?: readonly (readonly string[])[]
 }
 
 /** A chip offered for the typed text: `text` is what stays once it is chosen. */
@@ -62,6 +71,11 @@ export const MIN_TAIL = 2
 /** How many chips of one type are suggested at most. */
 export const PER_TYPE = 3
 const YEAR = /^\d{4}$/
+/** The fewest letters of a month's name a month chip is offered for ("mär", "sep"). */
+export const MIN_MONTH = 3
+
+/** A month as `YYYY-MM`, the shape `SearchFacets.months` holds. */
+export const monthOf = (year: number, month: number): string => `${String(year).padStart(4, '0')}-${String(month).padStart(2, '0')}`
 
 // `wordPrefix` and `tailsOf` are exported for a chip type an application adds over the same grammar (Memories' capture day
 // in a gallery's filter, `features/memories/galleryFilter.ts`), so the reading of the typed text is one, never a copy.
@@ -87,7 +101,7 @@ export function tailsOf(text: string): { tail: string; rest: string }[] {
 export function suggestChips(text: string, chips: readonly SearchChip[], sources: ChipSources): ChipSuggestion[] {
   const taken = new Set(chips.map(chipKey))
   const seen = new Set<string>()
-  const byType: Record<SearchChip['type'], ChipSuggestion[]> = { year: [], person: [], place: [], space: [], kind: [] }
+  const byType: Record<SearchChip['type'], ChipSuggestion[]> = { month: [], year: [], person: [], place: [], space: [], kind: [] }
   const offer = (s: ChipSuggestion) => {
     const key = chipKey(s.chip)
     if (taken.has(key) || seen.has(key) || byType[s.chip.type].length >= PER_TYPE) return
@@ -96,7 +110,17 @@ export function suggestChips(text: string, chips: readonly SearchChip[], sources
   }
   const tails = tailsOf(text)
   const last = tails.at(-1)
-  if (last && YEAR.test(last.tail)) offer({ chip: { type: 'year', year: Number(last.tail) }, text: last.rest })
+  if (last && YEAR.test(last.tail)) {
+    offer({ chip: { type: 'year', year: Number(last.tail) }, text: last.rest })
+    // the one word before the year: a month's name, or its start
+    const before = tails.at(-2)
+    const word = before ? fold(last.rest.slice(before.rest.length).trim()) : ''
+    if (before && word.length >= MIN_MONTH && !/\s/.test(word)) {
+      sources.months?.forEach((names, i) => {
+        if (names.some((n) => foldOnce(n).startsWith(word))) offer({ chip: { type: 'month', year: Number(last.tail), month: i + 1 }, text: before.rest })
+      })
+    }
+  }
   const places = placesOfCached(sources.documents)
   for (const { tail, rest } of tails) {
     const t = fold(tail)
@@ -106,10 +130,10 @@ export function suggestChips(text: string, chips: readonly SearchChip[], sources
     for (const s of sources.spaces) if (wordPrefix(foldOnce(s.label), t)) offer({ chip: { type: 'space', scopeId: s.scopeId, label: s.label }, text: rest })
     for (const k of sources.kinds) if (wordPrefix(foldOnce(k.label), t)) offer({ chip: { type: 'kind', kinds: k.kinds, label: k.label }, text: rest })
   }
-  return [...byType.year, ...byType.person, ...byType.place, ...byType.space, ...byType.kind]
+  return [...byType.month, ...byType.year, ...byType.person, ...byType.place, ...byType.space, ...byType.kind]
 }
 
-/** A name of a suggestion's source (a member, a space, a kind's word) folded once, not on every keystroke
+/** A name of a suggestion's source (a member, a space, a kind's word, a month) folded once, not on every keystroke
  *  (cr-search-polish): the names are few and stable, and a query's text is never kept here. */
 const folded = new Map<string, string>()
 function foldOnce(name: string): string {
@@ -147,6 +171,11 @@ export function satisfies(doc: SearchDocument, chip: SearchChip): boolean {
       const years = yearsOf(doc)
       return !!years && years.from <= chip.year && chip.year <= years.to
     }
+    case 'month': {
+      const months = monthsOf(doc)
+      const month = monthOf(chip.year, chip.month)
+      return !!months && months.from <= month && month <= months.to
+    }
     case 'place':
       return doc.foldedPlaces.includes(chip.place)
     case 'person':
@@ -171,6 +200,10 @@ export function textRank(doc: SearchDocument, t: string, words: readonly string[
   for (const alias of doc.foldedAliases) {
     const rank = nameRank(alias, t, words)
     if (rank !== null && (best === null || rank < best)) best = rank
+  }
+  for (const keyword of doc.foldedKeywords) {
+    const rank = nameRank(keyword, t, words)
+    if (rank !== null && rank < Rank.inside && (best === null || rank < best)) best = rank
   }
   if (best !== null) return best
   if (doc.foldedPlaces.some((p) => p.includes(t))) return Rank.place
@@ -246,6 +279,66 @@ export function createMatcher(): Matcher {
 function* docsOf(matches: readonly Match[]): Generator<SearchDocument> {
   for (const m of matches) yield m.doc
 }
+
+/** A part of a name as a result row draws it: `strong` where it matched the text. */
+export interface NamePart {
+  text: string
+  strong: boolean
+}
+
+/**
+ * Where the folded text `t` matched the folded `name`, as ranges of the FOLDED name: the whole text where the name holds it
+ * (at a word's start where it does so, else its first place), else each word of the text at its first place - the ranges
+ * {@link textRank} matched on, merged where they touch. None where the name did not match (an alias or a place did).
+ */
+export function matchedRanges(name: string, t: string): [number, number][] {
+  if (!t) return []
+  const at = (w: string): number => {
+    for (let i = name.indexOf(w); i >= 0; i = name.indexOf(w, i + 1)) if (isBoundary(name, i)) return i
+    return name.indexOf(w)
+  }
+  const whole = at(t)
+  const words = whole >= 0 ? [t] : wordsOf(t)
+  const ranges: [number, number][] = []
+  for (const w of words) {
+    const i = at(w)
+    if (i < 0) return []
+    ranges.push([i, i + w.length])
+  }
+  ranges.sort((a, b) => a[0] - b[0])
+  const merged: [number, number][] = []
+  for (const r of ranges) {
+    const prev = merged.at(-1)
+    if (prev && r[0] <= prev[1]) prev[1] = Math.max(prev[1], r[1])
+    else merged.push([r[0], r[1]])
+  }
+  return merged
+}
+
+/**
+ * `name` in parts, the parts that matched the folded text `t` marked `strong` ("**Kev**ins Geburtstag"). The match is found
+ * in the folded name and mapped back to `name`'s own characters (`foldMap`): "Straße" for "strasse" is all of "Straße",
+ * "Café" for "cafe" all of "Café". A name that does not fold character by character is one plain part.
+ */
+export function nameParts(name: string, t: string): NamePart[] {
+  const map = t ? foldMap(name) : null
+  const ranges = map ? matchedRanges(map.folded, t) : []
+  if (!map || !ranges.length) return [{ text: name, strong: false }]
+  const parts: NamePart[] = []
+  let at = 0
+  for (const [a, b] of ranges) {
+    const from = Math.max(map.start[a], at)
+    const to = map.end[b - 1]
+    if (from > at) parts.push({ text: name.slice(at, from), strong: false })
+    parts.push({ text: name.slice(from, to), strong: true })
+    at = to
+  }
+  if (at < name.length) parts.push({ text: name.slice(at), strong: false })
+  return parts
+}
+
+/** The text of a query as {@link matchAll} matches it (folded, trimmed, one space between words): what {@link nameParts} takes. */
+export const matchedText = (text: string): string => foldedText({ chips: [], text })
 
 /** Order matches within a group: rank, then the name's collation, then the id (a stable answer for equal names). */
 export function byRank(collator: Intl.Collator): (a: Match, b: Match) => number {

@@ -9,7 +9,15 @@
 //
 // **The first focus builds the index, every later one revalidates it** (`refreshSearchIndex`), and while the list is open
 // the spaces are revalidated again every {@link REVALIDATE_MS} - each a `304` while nothing moved (ADR 0081). Nothing about
-// the query leaves this component: the text, the chips and the results are local state.
+// the query leaves this component: the text, the chips and the results are local state. **The settings sections are read
+// once**, on the first focus (cr-search-polish: a read per focus opened every group's grant and two account documents), and
+// again only where the rail's answers move: the tenant's role on another tenant (`sections.ts` watches it), the groups when
+// the spaces the index lists change - a group joined, left or deleted.
+//
+// **What a row draws.** The part of a name the text matched is bold (`nameParts`: found in the folded name, drawn over
+// the name's own characters), as text nodes and a `strong` element - never markup from a string. A month chip reads its
+// month in the UI's language. **A screen reader** hears, through a polite live region, how many results there are and a
+// chip added or removed; each group is named by its heading, and the field stays the layer's combobox.
 //
 // **Opening a result.** A node opens through the navigation the sidebar uses - a push of its fragment, which enters its
 // space when it lies in another (`SpaceView` re-enters on a new scope token); a contributed document opens itself (a photo
@@ -36,7 +44,7 @@ import { useSettingsSections } from '../../features/settings/sections'
 import { searchContribution } from './contribution'
 import { requestOpenItem } from './openRequest'
 import { PERSON_DOCUMENT, searchDocument, yearsOf, type SearchDocument } from './model'
-import { chipKey, createMatcher, suggestChips, type ChipSuggestion, type SearchChip } from './query'
+import { chipKey, createMatcher, matchedText, nameParts, suggestChips, type ChipSuggestion, type NamePart, type SearchChip } from './query'
 import { SEARCH_GROUPS, searchGroups, type SearchGroupId } from './groups'
 import { personDocuments, settingsDocuments } from './peopleAndSettings'
 import { indexedDocuments, indexedScope, indexedTree, refreshSearchIndex, searchState, type SearchScope } from './searchIndex'
@@ -68,11 +76,21 @@ const field = useTemplateRef<{ focus(): void }>('field')
 /** Put the focus in the field (the shell's shortcut). */
 defineExpose({ focus: () => field.value?.focus() })
 
+/** The settings answers' one read (see the header), null until the first focus. */
+let sectionsRead: Promise<void> | null = null
 function onFocus() {
   void refreshSearchIndex().catch(() => undefined)
   void loadTenantPeople().catch(() => undefined)
-  void sections.load()
+  sectionsRead ??= sections.load()
 }
+/** The groups the index lists: one the settings answers do not know is a group joined (one they know and the index does
+ *  not, left or deleted), and the rail's Groups collection moves with it. */
+const groupIds = computed(() => searchState.scopes.filter((s) => s.kind === ScopeKind.Group).map((s) => s.id).sort().join(','))
+watch(groupIds, async (ids) => {
+  if (!sectionsRead) return
+  await sectionsRead
+  if (ids !== sections.myGroups.value.map((g) => g.scopeId).sort().join(',')) await sections.loadGroups()
+})
 
 let timer: ReturnType<typeof setInterval> | null = null
 watch(open, (isOpen) => {
@@ -162,11 +180,24 @@ const dayFormat = computed(() => new Intl.DateTimeFormat(locale.value, { dateSty
 const collator = computed(() => new Intl.Collator(locale.value, { numeric: true, sensitivity: 'base' }))
 
 // --- the chips -------------------------------------------------------------------------------------------------------
-const CHIP_ICON: Record<SearchChip['type'], VeyqIconName> = { year: 'calendar', place: 'map-marker', person: 'user', space: 'users', kind: 'tag' }
-const CHIP_WORD: Record<SearchChip['type'], string> = {
-  year: 'shell.search.chipYear', place: 'shell.search.chipPlace', person: 'shell.search.chipPerson', space: 'shell.search.chipSpace', kind: 'shell.search.chipKind',
+const CHIP_ICON: Record<SearchChip['type'], VeyqIconName> = {
+  month: 'calendar', year: 'calendar', place: 'map-marker', person: 'user', space: 'users', kind: 'tag',
 }
-const chipLabel = (c: SearchChip) => (c.type === 'year' ? String(c.year) : c.label)
+const CHIP_WORD: Record<SearchChip['type'], string> = {
+  month: 'shell.search.chipMonth', year: 'shell.search.chipYear', place: 'shell.search.chipPlace', person: 'shell.search.chipPerson',
+  space: 'shell.search.chipSpace', kind: 'shell.search.chipKind',
+}
+const monthFormat = computed(() => new Intl.DateTimeFormat(locale.value, { month: 'long', year: 'numeric' }))
+/** Each month's names, January first: in the UI's language and in English ("Mai", "May"). */
+const monthNames = computed(() => {
+  const names = [new Intl.DateTimeFormat(locale.value, { month: 'long' }), new Intl.DateTimeFormat('en', { month: 'long' })]
+  return Array.from({ length: 12 }, (_, i) => [...new Set(names.map((f) => f.format(new Date(2000, i, 15))))])
+})
+function chipLabel(c: SearchChip): string {
+  if (c.type === 'year') return String(c.year)
+  if (c.type === 'month') return monthFormat.value.format(new Date(c.year, c.month - 1, 15))
+  return c.label
+}
 
 type ChipTag = VeyqTag & { chip: SearchChip }
 type ChipOption = VeyqTagOption & { suggestion: ChipSuggestion }
@@ -179,15 +210,23 @@ const suggestions = computed<ChipOption[]>(() =>
     spaces: searchState.scopes.map((s) => ({ scopeId: s.id, label: spaceLabel(s) })),
     people: people.value.map((p) => ({ userId: p.userId, name: p.displayName })),
     kinds: kindWords.value.kinds,
+    months: monthNames.value,
   }).map((suggestion) => ({ key: `chip:${chipKey(suggestion.chip)}`, label: chipLabel(suggestion.chip), suggestion })),
 )
+/** What the live region says of the last chip added or removed, until the member types on. */
+const chipNote = ref<{ said: string; text: string } | null>(null)
 function addChip(option: ChipOption) {
   chips.value = [...chips.value, option.suggestion.chip]
   text.value = option.suggestion.text
+  chipNote.value = { said: t('shell.search.announceChipAdded', { label: option.label }), text: text.value }
 }
 function removeChip(tag: ChipTag) {
   chips.value = chips.value.filter((c) => chipKey(c) !== tag.key)
+  chipNote.value = { said: t('shell.search.announceChipRemoved', { label: tag.label }), text: text.value }
 }
+watch(text, (now) => {
+  if (chipNote.value && now !== chipNote.value.text) chipNote.value = null
+})
 
 // --- the results -----------------------------------------------------------------------------------------------------
 // the chips as plain objects: the query reads them once per document, and a reactive read each time costs a keystroke
@@ -236,7 +275,8 @@ function matchedValues(doc: SearchDocument): string[] {
     if (c.type === 'year') {
       const y = yearsOf(doc)
       if (y) out.push(y.from === y.to ? String(y.from) : `${y.from}–${y.to}`)
-    } else if (c.type === 'place') {
+    } else if (c.type === 'month') out.push(chipLabel(c))
+    else if (c.type === 'place') {
       const at = doc.foldedPlaces.indexOf(c.place)
       if (at >= 0) out.push(doc.facets.places![at])
     } else if (c.type === 'person') out.push(c.label)
@@ -272,8 +312,18 @@ function tokenOf(scopeId: string): string {
   return TENANT_SCOPE
 }
 
+/** The text as matched, once per keystroke: every drawn row's bold part is found with it. */
+const matched = computed(() => matchedText(text.value))
+const partsOf = (doc: SearchDocument): NamePart[] => nameParts(doc.name, matched.value)
+
 // --- what the field says ---------------------------------------------------------------------------------------------
 const asked = computed(() => text.value.trim() !== '' || chips.value.length > 0)
+/** The live region's words (see the header): the last chip added or removed, then how many results; nothing until asked. */
+const announcement = computed(() => {
+  if (!asked.value) return chipNote.value?.said ?? ''
+  const count = groups.value.reduce((sum, g) => sum + g.total, 0)
+  return [chipNote.value?.said, t('shell.search.announceResults', { count }, count)].filter(Boolean).join(' ')
+})
 const loadingCount = computed(() => searchState.loading.length)
 const notSearched = computed(() => searchState.failed.map((s) => spaceLabel(s)).join(', '))
 </script>
@@ -312,7 +362,7 @@ const notSearched = computed(() => searchState.failed.map((s) => spaceLabel(s)).
         <PersonAvatar v-if="option.doc.kind === PERSON_DOCUMENT" :user-id="option.doc.id" :name="option.doc.name" class="veyq-search__result-avatar" />
         <VeyqIcon v-else :name="iconOf(option.doc)" class="veyq-search__result-icon" />
         <span class="veyq-search__result-main">
-          <span class="veyq-search__result-name">{{ option.doc.name }}</span>
+          <span class="veyq-search__result-name"><template v-for="(part, i) in partsOf(option.doc)" :key="i"><strong v-if="part.strong" class="veyq-search__match">{{ part.text }}</strong><template v-else>{{ part.text }}</template></template></span>
           <span v-if="secondLine(option)" class="veyq-search__result-meta">{{ secondLine(option) }}</span>
         </span>
         <span v-for="v in matchedValues(option.doc)" :key="v" class="veyq-badge muted veyq-search__result-chip">{{ v }}</span>
@@ -328,5 +378,6 @@ const notSearched = computed(() => searchState.failed.map((s) => spaceLabel(s)).
       </template>
     </template>
   </VeyqTagsInput>
+  <span class="visually-hidden" role="status" aria-live="polite" aria-atomic="true" data-testid="search-announcement">{{ announcement }}</span>
   </div>
 </template>

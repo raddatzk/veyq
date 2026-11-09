@@ -1,7 +1,8 @@
 import { describe, it, expect } from 'vitest'
 import { searchDocument, type SearchDocument, type SearchFacets } from './model'
 import {
-  byRank, chipKey, createMatcher, matchAll, Rank, satisfies, suggestChips, textRank, type ChipSources, type SearchChip, type SearchQuery,
+  byRank, chipKey, createMatcher, matchAll, matchedText, nameParts, Rank, satisfies, suggestChips, textRank, type ChipSources, type SearchChip,
+  type SearchQuery,
 } from './query'
 
 let n = 0
@@ -133,6 +134,103 @@ describe('the text', () => {
 
   it('a query with neither text nor a chip finds nothing', () => {
     expect(matchAll([doc('Rome')], { chips: [], text: '   ' })).toEqual([])
+  })
+})
+
+// cr-search-polish: the month chip - a month's name with a year, in the UI's language or in English
+describe('the month chip', () => {
+  const names = (locale: string) => Array.from({ length: 12 }, (_, i) => new Intl.DateTimeFormat(locale, { month: 'long' }).format(new Date(2000, i, 15)))
+  const de = names('de')
+  const en = names('en')
+  const months = de.map((d, i) => [d, en[i]])
+  const withMonths = sources({ months })
+
+  it('"mai 2024" and "May 2024" offer May 2024, first - the year alone with "mai" kept as text after it', () => {
+    expect(offered('mai 2024', [], withMonths)).toEqual(['month:2024-05 | ', 'year:2024 | mai'])
+    expect(offered('May 2024', [], withMonths)).toEqual(['month:2024-05 | ', 'year:2024 | May'])
+    expect(suggestChips('Mai 2024', [], withMonths)[0].chip).toEqual({ type: 'month', year: 2024, month: 5 })
+  })
+
+  it('reads a month from its first three letters, folded, and keeps the words before it', () => {
+    expect(offered('rom mar 2024', [], withMonths)).toEqual(['month:2024-03 | rom', 'year:2024 | rom mar'])
+    expect(offered('MÄRZ 2024', [], withMonths)[0]).toBe('month:2024-03 | ')
+    expect(offered('sept 2023', [], withMonths)[0]).toBe('month:2023-09 | ')
+    // two letters are no month: "ma" could be March or May
+    expect(offered('ma 2024', [], withMonths)).toEqual(['year:2024 | ma'])
+  })
+
+  it('a month\'s name alone offers nothing: the year makes it a filter', () => {
+    expect(offered('Mai', [], withMonths)).toEqual([])
+    expect(offered('may', [], withMonths)).toEqual([])
+    // control: the same name with a year is the month
+    expect(offered('may 2024', [], withMonths)[0]).toBe('month:2024-05 | ')
+  })
+
+  it('without month names (a gallery\'s filter) no month is offered', () => {
+    expect(offered('mai 2024')).toEqual(['year:2024 | mai'])
+  })
+
+  it('holds a Memory whose months overlap it, at both edges', () => {
+    const spring = doc('Spring', { months: { from: '2024-04', to: '2024-05' } })
+    const may = { type: 'month', year: 2024, month: 5 } as const
+    expect(satisfies(spring, may)).toBe(true)
+    expect(satisfies(spring, { type: 'month', year: 2024, month: 4 })).toBe(true)
+    expect(satisfies(spring, { type: 'month', year: 2024, month: 6 })).toBe(false)
+    expect(satisfies(spring, { type: 'month', year: 2024, month: 3 })).toBe(false)
+    expect(satisfies(spring, { type: 'month', year: 2023, month: 5 })).toBe(false)
+    const newYear = doc('New year', { months: { from: '2023-12', to: '2024-01' } })
+    expect(satisfies(newYear, { type: 'month', year: 2023, month: 12 })).toBe(true)
+    expect(satisfies(newYear, { type: 'month', year: 2024, month: 1 })).toBe(true)
+    expect(satisfies(newYear, { type: 'month', year: 2024, month: 2 })).toBe(false)
+  })
+
+  it('holds a photo captured in it, local time, to the last minute of its last day', () => {
+    const may = { type: 'month', year: 2024, month: 5 } as const
+    const june = { type: 'month', year: 2024, month: 6 } as const
+    const lastOfMay = doc('IMG_1.jpg', { capturedAt: new Date(2024, 4, 31, 23, 59).getTime() })
+    const firstOfJune = doc('IMG_2.jpg', { capturedAt: new Date(2024, 5, 1, 0, 1).getTime() })
+    expect(satisfies(lastOfMay, may)).toBe(true)
+    expect(satisfies(lastOfMay, june)).toBe(false)
+    expect(satisfies(firstOfJune, june)).toBe(true)
+    expect(satisfies(firstOfJune, may)).toBe(false)
+  })
+
+  it('holds no Memory without a date', () => {
+    expect(satisfies(doc('Undated'), { type: 'month', year: 2024, month: 5 })).toBe(false)
+    expect(satisfies(doc('Only years', { years: { from: 2024, to: 2024 } }), { type: 'month', year: 2024, month: 5 })).toBe(false)
+  })
+})
+
+// cr-search-polish: the matched part of a name, found in the folded name and drawn over the name's own characters
+describe('the matched part of a name', () => {
+  const strong = (name: string, text: string) => nameParts(name, matchedText(text)).map((p) => (p.strong ? `[${p.text}]` : p.text)).join('')
+
+  it('a plain prefix', () => {
+    expect(strong('Kevins Geburtstag', 'kev')).toBe('[Kev]ins Geburtstag')
+    expect(nameParts('Kevins Geburtstag', 'kev')).toEqual([{ text: 'Kev', strong: true }, { text: 'ins Geburtstag', strong: false }])
+  })
+
+  it('"Straße" for "strasse": the folded match is mapped back over the ß', () => {
+    expect(strong('Straße', 'strasse')).toBe('[Straße]')
+    expect(strong('Straße 12', 'strasse')).toBe('[Straße] 12')
+    expect(strong('Große Straße', 'strasse')).toBe('Große [Straße]')
+    expect(strong('Straßenfest', 'stras')).toBe('[Straß]enfest')
+  })
+
+  it('"Café" for "cafe", composed and decomposed', () => {
+    expect(strong('Café Müller', 'cafe')).toBe('[Café] Müller')
+    expect(strong('Café Müller', 'cafe mu')).toBe('[Café Mü]ller')
+    expect(strong('Unser Café', 'CAFÉ')).toBe('Unser [Café]')
+  })
+
+  it('a word start before an earlier match inside a word, and each word of several', () => {
+    expect(strong('Aroma Rom', 'rom')).toBe('Aroma [Rom]')
+    expect(strong('Summer in Rome', 'rome summer')).toBe('[Summer] in [Rome]')
+  })
+
+  it('nothing bold where the name did not match, or for no text', () => {
+    expect(strong('Kevin Raddatz', '~kradd')).toBe('Kevin Raddatz')
+    expect(strong('Rome', '')).toBe('Rome')
   })
 })
 

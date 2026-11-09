@@ -1553,6 +1553,10 @@ div.veyq-level-item-main,
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+/* the part of a name the text matched (cr-search-polish) */
+.veyq-search__match {
+  font-weight: 700;
+}
 
 .veyq-search__option-kind {
   margin-inline-start: auto;

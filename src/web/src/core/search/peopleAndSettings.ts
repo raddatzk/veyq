@@ -16,14 +16,15 @@ export function personDocuments(people: readonly Person[], open: (userId: string
   )
 }
 
-/** One document per section offered now, its heading as its second line, opened by `open` with the section's id. */
+/** One document per section offered now, found by its label and by its words ("E-Mail", "Kennwort"), its heading as its
+ *  second line, opened by `open` with the section's id. */
 export function settingsDocuments(
   offered: readonly { section: SettingsSection; category: SettingsCategory }[], open: (sectionId: string) => void,
 ): SearchDocument[] {
   return offered.map(({ section, category }) =>
     searchDocument({
       scopeId: '', kind: SETTINGS_DOCUMENT, id: section.id, nodeId: section.id, revision: '', name: section.label, path: [],
-      facets: {}, subtitle: category.label, icon: section.icon, open: () => open(section.id),
+      facets: {}, keywords: section.words ?? [], subtitle: category.label, icon: section.icon, open: () => open(section.id),
     }),
   )
 }

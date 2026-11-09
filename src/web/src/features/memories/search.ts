@@ -1,7 +1,7 @@
 // What Memories adds to core's search (ADR 0125 decisions 6 and 8a, uc.platform.search step 3). Three parts, all through the
 // registry - core never imports this:
 //
-// - **A Memory's and a chapter's facets** (`KindDescriptor.search.facets`): its date range as years, its place's name and its
+// - **A Memory's and a chapter's facets** (`KindDescriptor.search.facets`): its date range as years and as months, its place's name and its
 //   participants' user ids, read from its sealed meta under the key core hands the hook for that call. Never a name of a
 //   person: core's directory names them when a chip or a row shows one.
 // - **Every photo and video of every space** (`ApplicationRegistrar.search`, {@link scopeMediaDocuments}): the space's
@@ -16,7 +16,7 @@
 // A blocked medium (a moderator's measure) becomes no document: what it shows is the operator's placeholder, not its own.
 import { unsealNodeMeta } from '../../core/node/nodeMeta'
 import type { ApplicationSearch, KindSearch, ScopeDocumentsAnswer, ScopeDocumentsContext, SearchFacetContext } from '../../core/applications/registry'
-import type { ContributedDocument, ScopeDocument, SearchFacets, YearSpan } from '../../core/search/model'
+import type { ContributedDocument, MonthSpan, ScopeDocument, SearchFacets, YearSpan } from '../../core/search/model'
 import { isHttpStatus, HttpStatus } from '../../shared/httpError'
 import { withRefresh } from '../../app/sessionRefresh'
 import { i18n } from '../../i18n'
@@ -56,13 +56,27 @@ export function yearsOfDate(date: MemoryDate | null, now: Date = new Date()): Ye
   return { from, to: Number.isFinite(to) && to >= from ? to : from }
 }
 
+/** The months a Memory's date spans (`YYYY-MM`): `from`'s to `to`'s, an ongoing one's up to this month; none without a
+ *  start day - an undated Memory matches no month chip. */
+export function monthsOfDate(date: MemoryDate | null, now: Date = new Date()): MonthSpan | null {
+  const from = date?.from?.slice(0, 7)
+  if (!from) return null
+  const thisMonth = `${String(now.getFullYear()).padStart(4, '0')}-${String(now.getMonth() + 1).padStart(2, '0')}`
+  const to = date?.to ? date.to.slice(0, 7) : date?.mode === 'ongoing' && thisMonth > from ? thisMonth : from
+  return { from, to: to >= from ? to : from }
+}
+
 /** A Memory's or a chapter's facets from its sealed meta (see the header). */
 export function memorySearchFacets(ctx: SearchFacetContext): SearchFacets {
   const meta = unsealNodeMeta(ctx.nodeKey, { scopeId: ctx.scopeId, nodeId: ctx.node.id }, ctx.node.wrappedMeta)
-  const years = yearsOfDate(normalizeDate(meta.date))
+  const date = normalizeDate(meta.date)
+  const years = yearsOfDate(date)
+  const months = monthsOfDate(date)
   const place = normalizeLocation(meta.location)?.name?.trim()
   const people = normalizeParticipants(meta.participants)
-  return { ...(years ? { years } : {}), ...(place ? { places: [place] } : {}), ...(people.length ? { people } : {}) }
+  return {
+    ...(years ? { years } : {}), ...(months ? { months } : {}), ...(place ? { places: [place] } : {}), ...(people.length ? { people } : {}),
+  }
 }
 
 /** The seals a medium's document is read from: a meta edit or a replaced original is a new document. */

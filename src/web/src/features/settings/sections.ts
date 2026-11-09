@@ -9,6 +9,11 @@
 // entry is through, no tenant is known, and a role read for no tenant says "no owner"). A failed read is an answer: the
 // section it gates is not offered.
 //
+// **Words a section is found by** (uc.platform.search, cr-search-polish): beside its label, each section names a few words in
+// its entry (`words`, from the catalogs' `settings.words.<id>`, comma-separated, in the UI's language) - "E-Mail" finds the
+// mail section, "Kennwort" the password. The search matches them from a word's start (`SearchDocument.keywords`), never
+// inside one; the rail does not show them.
+//
 // The rail mixes two axes (ADR 0022 §3): the account's sections (Persönlich, always), the scope-in-path ones (the tenant's
 // while the Tenant scope is active) and a collection (Gruppen: every group the caller owns).
 import { computed, ref, watch } from 'vue'
@@ -28,6 +33,8 @@ export interface SettingsSection {
   id: string
   label: string
   icon: VeyqIconName
+  /** Other words the search finds the section by (see the header); none for a group's section. */
+  words?: readonly string[]
 }
 
 /** One heading of the rail with the sections under it. */
@@ -48,6 +55,8 @@ export const OWNER_ONLY_SECTIONS: ReadonlySet<string> = new Set(['mail', 'storag
 export function useSettingsSections() {
   const { t } = useI18n()
   const { hasCapability } = useCapabilities()
+  /** A section's words from its catalog entry (see the header). */
+  const words = (id: string): string[] => t(`settings.words.${id}`).split(',').map((w) => w.trim()).filter(Boolean)
   // Adding a device (uc.account.onboard-device) needs the instance's `core.device-linking`: the server refuses every
   // /api/pairing/* call without it.
   const deviceLinking = computed(() => hasCapability(CORE_DEVICE_LINKING))
@@ -141,45 +150,45 @@ export function useSettingsSections() {
         label: t('settings.personal'),
         collapsible: false,
         items: [
-          { id: 'appearance', label: t('settings.appearance'), icon: 'palette' },
+          { id: 'appearance', label: t('settings.appearance'), icon: 'palette', words: words('appearance') },
           // This browser's consent to the map tiles and the place-name lookup (uc.memory.place A5): device-local like
           // appearance, so it sits beside it; always listed, since a consent must be withdrawable wherever it was given.
-          { id: 'maps', label: t('settings.maps'), icon: 'map' },
+          { id: 'maps', label: t('settings.maps'), icon: 'map', words: words('maps') },
           // Every signed-in device + the remote sign-out (uc.account.sessions), AND how this device unlocks
           // (uc.account.trust-device § Untrust) — one rubric, because both are facts about a device and the list
           // already carries a row for this one. Account-wide, not scope-bound, and gated on a session rather than
           // an unlock. The former separate "This device" section was REPLACED, not redirected (ADR 0022).
-          { id: 'sessions', label: t('settings.sessions'), icon: 'mobile' },
+          { id: 'sessions', label: t('settings.sessions'), icon: 'mobile', words: words('sessions') },
           // Change password (uc.account.change-password) sits beside sessions: it is the credential-adjacent
           // action, account-wide like sessions, gated on a session rather than an unlock (like it, and unlike
           // security below, which rewrites Master-Key-sealed material).
-          { id: 'password', label: t('settings.password'), icon: 'key' },
+          { id: 'password', label: t('settings.password'), icon: 'key', words: words('password') },
           // Adding a device (uc.account.onboard-device) sits beside the sessions it produces. The route's own
           // `requiresUnlock: true` is the gate and it is the correct one here: the granting device is unlocked by
           // premise — it seals the Master Key it is holding. Offered only where the instance links devices at all
           // (`core.device-linking`); off, its address leads back to /settings like any hidden section (`isHidden`).
-          ...(deviceLinking.value ? [{ id: 'pairing', label: t('pairing.navTitle'), icon: 'qrcode' } satisfies SettingsSection] : []),
+          ...(deviceLinking.value ? [{ id: 'pairing', label: t('pairing.navTitle'), icon: 'qrcode', words: words('pairing') } satisfies SettingsSection] : []),
           // Replacing the account's keys after a compromise (uc.account.rotate-keys). It sits below the rubric
           // whose failure it answers — a device trusted by mistake, a session that revoking cannot reach — because
           // that is the order the person arrives in. The route's `requiresUnlock: true` is the
           // right gate: the rotation rewrites Master-Key-sealed material, so a locked vault could not run it at
           // all; its OWN gate is narrower still and lives in the panel (ADR 0060 Decision 2 — a device wrap
           // opened this vault is refused before the form is offered).
-          { id: 'security', label: t('settings.security'), icon: 'shield' },
+          { id: 'security', label: t('settings.security'), icon: 'shield', words: words('security') },
           // Starting a refused trust document over (ADR 0028 Decision 7's way back) — beside key rotation and the
           // sessions, and shown ONLY while this device refuses one, so it is never a standing button next to them.
           // Every refusal notice links here; the section's confirm dialog is the one place the reset can run.
-          ...(trustRefused.value ? [{ id: 'trust-reset', label: t('trustReset.navTitle'), icon: 'history' } satisfies SettingsSection] : []),
+          ...(trustRefused.value ? [{ id: 'trust-reset', label: t('trustReset.navTitle'), icon: 'history', words: words('trust-reset') } satisfies SettingsSection] : []),
           // Per-tenant identity (username + real name) needs any tenant context (ADR 0023).
-          ...(activeSpace.tenantId ? [{ id: 'profile', label: t('profile.title'), icon: 'user' } satisfies SettingsSection] : []),
+          ...(activeSpace.tenantId ? [{ id: 'profile', label: t('profile.title'), icon: 'user', words: words('profile') } satisfies SettingsSection] : []),
           // The way into moderation, for an appointed account only. Account-wide like an appointment (the instance's, not a
           // space's); the panel only links out, because reported content is never opened beside this shell's vault.
-          ...(isAppointed.value ? [{ id: 'moderation', label: t('moderation.entry.navTitle'), icon: 'flag' } satisfies SettingsSection] : []),
+          ...(isAppointed.value ? [{ id: 'moderation', label: t('moderation.entry.navTitle'), icon: 'flag', words: words('moderation') } satisfies SettingsSection] : []),
           // Erasing the account (uc.account.erase-account, ADR 0101) — last, below everything it ends. Account-wide like
           // sessions; the hub's `requiresUnlock` gives the panel the account id and address its proof binds. The Server
           // Owner's account is never erased: the panel reads that from the server and says so (A2), as it is the only
           // place that knows.
-          { id: 'erase', label: t('erasure.navTitle'), icon: 'user-minus' },
+          { id: 'erase', label: t('erasure.navTitle'), icon: 'user-minus', words: words('erase') },
         ],
       },
     ]
@@ -187,19 +196,19 @@ export function useSettingsSections() {
     // Terms are member-readable (the editor is owner-only, cr-0114); the item is shown to every member.
     if (activeSpace.kind === ScopeKind.Tenant) {
       cats.push({ key: 'tenant', label: t('settings.tenant'), collapsible: false, items: [
-        { id: 'tenant-members', label: t('members.title'), icon: 'users' },
+        { id: 'tenant-members', label: t('members.title'), icon: 'users', words: words('tenant-members') },
         // Who's who (inbox #562): every member's key in this space - confirmed or not, verified by whom, a new identity.
         // Every member's, like Members: the records it reads are every member's, so no role changes what it shows.
-        { id: 'tenant-people', label: t('whoIsWho.navTitle'), icon: 'verified' },
-        { id: 'terms', label: t('terms.navTitle'), icon: 'file-edit' },
+        { id: 'tenant-people', label: t('whoIsWho.navTitle'), icon: 'verified', words: words('tenant-people') },
+        { id: 'terms', label: t('terms.navTitle'), icon: 'file-edit', words: words('terms') },
         // Mail settings, storage and capabilities are owner-only (their reads are owner-gated): only an owner is offered
         // them, so a member is never taken to a page that says it could not load. The panels still gate - the server
         // refuses a member either way.
         ...(isTenantOwner.value
           ? ([
-              { id: 'mail', label: t('mail.navTitle'), icon: 'envelope' },
-              { id: 'storage', label: t('storage.navTitle'), icon: 'database' },
-              { id: 'capabilities', label: t('tenantCapabilities.navTitle'), icon: 'sliders-h' },
+              { id: 'mail', label: t('mail.navTitle'), icon: 'envelope', words: words('mail') },
+              { id: 'storage', label: t('storage.navTitle'), icon: 'database', words: words('storage') },
+              { id: 'capabilities', label: t('tenantCapabilities.navTitle'), icon: 'sliders-h', words: words('capabilities') },
             ] satisfies SettingsSection[])
           : []),
       ] })

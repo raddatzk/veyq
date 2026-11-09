@@ -8,7 +8,7 @@ import * as v1 from '@veyq/crypto/v1'
 import { sealNodeMeta } from '../../core/node/nodeMeta'
 import { originalBlobMeta, unsealMeta } from './media'
 import { closeListing } from './openedListing'
-import { mediaDocuments, memorySearchFacets, PHOTO_DOCUMENT, VIDEO_DOCUMENT, yearsOfDate } from './search'
+import { mediaDocuments, memorySearchFacets, monthsOfDate, PHOTO_DOCUMENT, VIDEO_DOCUMENT, yearsOfDate } from './search'
 import { mediaItem, treeNode } from '../../test/models'
 
 const SCOPE = '00000000-0000-4000-8000-000000000101'
@@ -22,12 +22,14 @@ describe('a Memory\'s facets', () => {
       node: treeNode({ id: NODE, wrappedMeta: sealNodeMeta(key, { scopeId: SCOPE, nodeId: NODE }, { v: 1, ...meta }) }),
     })
 
-  it('reads the date range as years, the place\'s name and the participants\' ids from the sealed meta', () => {
+  it('reads the date range as years and as months, the place\'s name and the participants\' ids from the sealed meta', () => {
     expect(facetsOf({
       date: { mode: 'range', from: '2023-12-30', to: '2024-01-02' },
       location: { name: ' Rom ', nameSource: 'manual', derivedMode: 'fixed' },
       participants: { userIds: ['aaaaaaaa-0000-4000-8000-000000000001'] },
-    })).toEqual({ years: { from: 2023, to: 2024 }, places: ['Rom'], people: ['aaaaaaaa-0000-4000-8000-000000000001'] })
+    })).toEqual({
+      years: { from: 2023, to: 2024 }, months: { from: '2023-12', to: '2024-01' }, places: ['Rom'], people: ['aaaaaaaa-0000-4000-8000-000000000001'],
+    })
   })
 
   it('leaves out what the Memory does not have', () => {
@@ -55,6 +57,21 @@ describe('yearsOfDate', () => {
   it('none without a start day', () => {
     expect(yearsOfDate({ mode: 'auto' }, now)).toBeNull()
     expect(yearsOfDate(null, now)).toBeNull()
+  })
+})
+
+describe('monthsOfDate (the month chip, cr-search-polish)', () => {
+  const now = new Date(2026, 10, 8)
+  it('spans from the start day\'s month to the end day\'s, across a year\'s end', () => {
+    expect(monthsOfDate({ mode: 'single', from: '2024-05-31', to: '2024-05-31' }, now)).toEqual({ from: '2024-05', to: '2024-05' })
+    expect(monthsOfDate({ mode: 'range', from: '2023-12-30', to: '2024-01-02' }, now)).toEqual({ from: '2023-12', to: '2024-01' })
+  })
+  it('an ongoing Memory reaches this month', () => {
+    expect(monthsOfDate({ mode: 'ongoing', from: '2022-03-01' }, now)).toEqual({ from: '2022-03', to: '2026-11' })
+  })
+  it('none without a start day: an undated Memory matches no month', () => {
+    expect(monthsOfDate({ mode: 'auto' }, now)).toBeNull()
+    expect(monthsOfDate(null, now)).toBeNull()
   })
 })
 

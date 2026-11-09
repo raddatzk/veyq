@@ -44,6 +44,7 @@ import { POT_KIND } from '../../features/expenses/kinds'
 import { searchDocument, type SearchDocument } from './model'
 import { setBreadcrumb } from '../../app/breadcrumb'
 import { realI18n, t } from '../../test/i18n'
+import { i18n } from '../../i18n'
 import { treeNode } from '../../test/models'
 import { FOLDER_KIND, SHARE_BOOKMARK_KIND } from '../node/kind'
 import { ScopeKind } from '../../api/generated/scopes'
@@ -63,8 +64,11 @@ const trees: Record<string, ReturnType<typeof treeNode>[]> = {
 const scopes: SearchScope[] = [{ id: 'S1', kind: ScopeKind.Tenant, name: 'Familie' }, { id: 'G1', kind: ScopeKind.Group, name: 'Family group' }]
 
 const field = () => document.body.querySelector<HTMLInputElement>('input.veyq-tags-input__input')!
-/** A node's text, its parts apart (the name, where it lives, a chip's value). */
-const words = (n: Node): string[] => (n.nodeType === 3 ? [n.textContent!.trim()].filter(Boolean) : [...n.childNodes].flatMap(words))
+/** A node's text, its parts apart (the name, where it lives, a chip's value); a name is one part, its bold match inside it. */
+const words = (n: Node): string[] =>
+  n.nodeType === 3 || (n as Element).classList?.contains('veyq-search__result-name')
+    ? [n.textContent!.trim()].filter(Boolean)
+    : [...n.childNodes].flatMap(words)
 const rows = () => [...document.body.querySelectorAll<HTMLElement>('.veyq-tags-input__option')].map((o) => words(o).join(' '))
 const headings = () => [...document.body.querySelectorAll('.veyq-tags-input__group-label')].map((h) => h.textContent!.trim())
 const chips = () => [...document.body.querySelectorAll('.veyq-tags-input__tag .veyq-tags-input__label')].map((c) => c.textContent!.trim())
@@ -463,16 +467,173 @@ describe('the suggestions\' heading and the entry Enter takes', () => {
       { userId: 'ken', username: 'ken', realName: 'Ken', displayName: 'Ken' },
       { userId: KEVIN, username: 'kevin', realName: 'Kevin', displayName: 'Kevin' },
     ] satisfies Person[])
+    // the two sections found by a word starting with k ("keys"), after the people
+    const keys = [`${t('settings.security')} ${t('settings.personal')}`, `${t('whoIsWho.navTitle')} ${t('settings.tenant')}`]
     await mountField()
     await type('k')
-    expect(rows()).toEqual(['K Ken ~ken', 'K Kevin ~kevin'])
+    expect(rows()).toEqual(['K Ken ~ken', 'K Kevin ~kevin', ...keys])
     expect(highlighted()).toBe('K Ken ~ken')
     await press('ArrowDown')
     expect(highlighted()).toBe('K Kevin ~kevin')
     await type('ke')
-    expect(rows()).toEqual([`Ken ${t('shell.search.chipPerson')}`, `Kevin ${t('shell.search.chipPerson')}`, 'K Ken ~ken', 'K Kevin ~kevin'])
+    expect(rows()).toEqual([`Ken ${t('shell.search.chipPerson')}`, `Kevin ${t('shell.search.chipPerson')}`, 'K Ken ~ken', 'K Kevin ~kevin', ...keys])
     expect(highlighted()).toBe('K Kevin ~kevin')
     await press('Enter')
     expect(push).toHaveBeenCalledWith({ name: 'home', hash: `#people/${KEVIN}` })
+  })
+})
+
+// cr-search-polish: the matched part in bold, the month chip, the settings sections' words and read, a screen reader's view
+describe('the polish (cr-search-polish)', () => {
+  const names = () => [...document.body.querySelectorAll<HTMLElement>('.veyq-search__result-name')]
+  const announced = () => document.body.querySelector('[data-testid="search-announcement"]')?.textContent?.trim() ?? ''
+
+  it('draws the matched part of a name as a strong element with a text child, never as markup', async () => {
+    vi.mocked(indexedDocuments).mockReturnValue([
+      doc({ id: 'k', name: 'Kevins Geburtstag' }),
+      doc({ id: 'm', name: '<b>Kev</b> & co' }),
+    ])
+    await mountField()
+    await type('kev')
+    const [first, second] = names()
+    const strong = first.querySelector('strong')!
+    expect(strong.textContent).toBe('Kev')
+    expect([...strong.childNodes].map((n) => n.nodeType)).toEqual([Node.TEXT_NODE])
+    expect(first.textContent).toBe('Kevins Geburtstag')
+    // a name that reads as markup is text: no element of its own, its strong part its letters
+    expect(second.textContent).toBe('<b>Kev</b> & co')
+    expect(second.querySelector('b')).toBeNull()
+    expect(second.querySelector('strong')!.textContent).toBe('Kev')
+  })
+
+  it('draws "Straße" bold whole for "strasse"', async () => {
+    vi.mocked(indexedDocuments).mockReturnValue([doc({ id: 's', name: 'Große Straße' })])
+    await mountField()
+    await type('strasse')
+    expect(names()[0].querySelector('strong')!.textContent).toBe('Straße')
+  })
+
+  it('offers a month chip for "may 2024" and narrows to what overlaps it; "may" alone offers none', async () => {
+    vi.mocked(indexedDocuments).mockReturnValue([
+      doc({ id: 'rome', name: 'Roma 2024', facets: { years: { from: 2024, to: 2024 }, months: { from: '2024-05', to: '2024-05' } } }),
+      doc({ id: 'garden', name: 'Gartenfest', facets: { years: { from: 2024, to: 2024 }, months: { from: '2024-07', to: '2024-07' } } }),
+      doc({ id: 'undated', name: 'Undated' }),
+    ])
+    await mountField()
+    await type('may')
+    expect(suggestionRows()).toEqual([])
+    await type('may 2024')
+    expect(suggestionRows()[0]).toBe(`May 2024 ${t('shell.search.chipMonth')}`)
+    expectSuggestionHighlighted()
+    await press('Enter')
+    expect(chips()).toEqual(['May 2024'])
+    expect(rows()).toEqual(['Roma 2024 May 2024'])
+  })
+
+  it('reads the month in the UI\'s language: "Mai 2024" in German', async () => {
+    vi.mocked(indexedDocuments).mockReturnValue([
+      doc({ id: 'rome', name: 'Roma 2024', facets: { months: { from: '2024-05', to: '2024-05' } } }),
+    ])
+    await mountField()
+    i18n.global.locale.value = 'de'
+    try {
+      await type('Mai 2024')
+      expect(suggestionRows()[0]).toBe('Mai 2024 Monat')
+    } finally {
+      i18n.global.locale.value = 'en'
+    }
+  })
+
+  it('finds the mail section by "E-Mail" for an owner, and for a member nothing - the gate holds', async () => {
+    const mail = `${t('mail.navTitle')} ${t('settings.tenant')}`
+    vi.mocked(listMyTenants).mockResolvedValue(tenantRole('OWNER'))
+    await mountField()
+    await type('E-Mail')
+    expect(rows()).toContain(mail)
+    expect(t('mail.navTitle')).not.toMatch(/e-mail/i) // found by its word, not by its English label
+    mounted.splice(0).forEach((w) => w.unmount())
+    document.body.innerHTML = ''
+    vi.mocked(listMyTenants).mockResolvedValue(tenantRole('MEMBER'))
+    await mountField()
+    await type('E-Mail')
+    expect(rows()).toEqual([])
+    expect(headings()).toEqual([])
+  })
+
+  it('matches a section\'s words from a word\'s start only: "mtp" finds no mail section, "smtp" does', async () => {
+    vi.mocked(listMyTenants).mockResolvedValue(tenantRole('OWNER'))
+    await mountField()
+    await type('mtp')
+    expect(rows()).not.toContain(`${t('mail.navTitle')} ${t('settings.tenant')}`)
+    await type('smtp')
+    expect(rows()).toContain(`${t('mail.navTitle')} ${t('settings.tenant')}`) // control
+  })
+
+  it('reads the settings answers once over two focuses', async () => {
+    await mountField()
+    const focuses = vi.mocked(refreshSearchIndex).mock.calls.length
+    field().blur()
+    field().dispatchEvent(new FocusEvent('blur'))
+    field().focus()
+    field().dispatchEvent(new FocusEvent('focus'))
+    await flushPromises()
+    expect(vi.mocked(refreshSearchIndex).mock.calls.length).toBeGreaterThan(focuses) // control: the second focus happened
+    expect(listMyGroups).toHaveBeenCalledTimes(1)
+    expect(refusedDocuments).toHaveBeenCalledTimes(1)
+    expect(myAppointment).toHaveBeenCalledTimes(1)
+    expect(listMyTenants).toHaveBeenCalledTimes(1)
+  })
+
+  it('reads the groups again when the spaces the index lists gain a group the answers do not know', async () => {
+    await mountField()
+    expect(listMyGroups).toHaveBeenCalledTimes(1)
+    searchState.scopes = [...scopes, { id: 'G2', kind: ScopeKind.Group, name: 'New group' }]
+    await flushPromises()
+    expect(listMyGroups).toHaveBeenCalledTimes(2)
+    expect(listMyTenants).toHaveBeenCalledTimes(1)
+  })
+
+  it('announces the result count as it changes, politely', async () => {
+    await mountField()
+    const region = document.body.querySelector('[data-testid="search-announcement"]')!
+    expect(region.getAttribute('aria-live')).toBe('polite')
+    expect(region.getAttribute('role')).toBe('status')
+    expect(announced()).toBe('')
+    await type('rome')
+    expect(announced()).toBe(t('shell.search.announceResults', { count: 2 }, 2))
+    await type('rome g')
+    expect(announced()).toBe(t('shell.search.announceResults', { count: 1 }, 1))
+  })
+
+  it('announces a chip added, then removed', async () => {
+    await mountField()
+    await type('2024')
+    expectSuggestionHighlighted()
+    await press('Enter')
+    expect(chips()).toEqual(['2024'])
+    expect(announced()).toBe(`${t('shell.search.announceChipAdded', { label: '2024' })} ${t('shell.search.announceResults', { count: 1 }, 1)}`)
+    await press('Backspace')
+    expect(chips()).toEqual([])
+    expect(announced()).toBe(t('shell.search.announceChipRemoved', { label: '2024' }))
+    await type('r')
+    expect(announced()).not.toContain(t('shell.search.announceChipRemoved', { label: '2024' }))
+  })
+
+  it('names each group by its heading, and the field is a combobox that owns the list', async () => {
+    await mountField()
+    await type('rome')
+    const groups = [...document.body.querySelectorAll<HTMLElement>('[role="listbox"] [role="group"]')]
+    expect(groups.length).toBe(2)
+    for (const g of groups) {
+      const labelledBy = g.getAttribute('aria-labelledby') ?? ''
+      const label = labelledBy ? document.getElementById(labelledBy) : null
+      expect(label?.textContent?.trim(), `group ${g.id}`).toBeTruthy()
+      expect(headings()).toContain(label!.textContent!.trim())
+    }
+    expect(groups.map((g) => document.getElementById(g.getAttribute('aria-labelledby')!)!.textContent!.trim())).toEqual(headings())
+    const input = field()
+    expect(input.getAttribute('role')).toBe('combobox')
+    expect(input.getAttribute('aria-expanded')).toBe('true')
+    expect(document.getElementById(input.getAttribute('aria-controls') ?? '')?.getAttribute('role')).toBe('listbox')
   })
 })
