@@ -239,8 +239,8 @@ fun ShellScreen(s: Screen.Signed, model: AppModel) {
                         NavigationBarItem(
                             selected = !shell.searching && tab == shell.selectedTab,
                             onClick = { model.select(tab) },
-                            icon = { Icon(tabIcon(tab), null) },
-                            label = { Text(tabLabel(tab)) },
+                            icon = { Icon(tabIcon(tab, shell.openObject?.kind), null) },
+                            label = { Text(tabLabel(tab, shell.openObject?.kind)) },
                             colors = colors,
                         )
                     }
@@ -709,7 +709,7 @@ private fun ObjectScreen(ref: ObjectRef, tab: BarTab?) {
     Column(Modifier.fillMaxSize().padding(24.dp)) {
         Tile(kindIcon(ref.kind))
         Text(ref.name, style = MaterialTheme.typography.headlineMedium, fontWeight = androidx.compose.ui.text.font.FontWeight.Bold, modifier = Modifier.padding(top = 12.dp))
-        tab?.let { Text(tabLabel(it), style = MaterialTheme.typography.titleSmall, color = role(LocalPalette.current.muted), modifier = Modifier.padding(top = 4.dp)) }
+        tab?.let { Text(tabLabel(it, ref.kind), style = MaterialTheme.typography.titleSmall, color = role(LocalPalette.current.muted), modifier = Modifier.padding(top = 4.dp)) }
         Text(stringResource(R.string.not_built), color = role(LocalPalette.current.muted), modifier = Modifier.padding(top = 16.dp))
     }
 }
@@ -745,21 +745,22 @@ internal fun kindIcon(kind: String): ImageVector = when (kind) {
     else -> Icons.Outlined.Folder
 }
 
-private fun tabIcon(tab: BarTab): ImageVector = when (tab.key) {
+/** A tab's icon; Depot's one tab names the object open, a file or a drop box ([kind]). */
+private fun tabIcon(tab: BarTab, kind: String?): ImageVector = when (tab.key) {
     "memories.all" -> Icons.Outlined.PhotoLibrary
     "memories.map" -> Icons.Outlined.Map
     "expenses.overview" -> Icons.Outlined.BarChart
     "expenses.settings" -> Icons.Outlined.Settings
-    "depot.file" -> Icons.Outlined.InsertDriveFile
+    "depot.file" -> if (kind == me.raddatz.veyq.mobile.depot.DepotFiles.DROPBOX) Icons.Outlined.Inbox else Icons.Outlined.InsertDriveFile
     else -> Icons.AutoMirrored.Outlined.List
 }
 
 @Composable
-private fun tabLabel(tab: BarTab): String = stringResource(
+private fun tabLabel(tab: BarTab, kind: String?): String = stringResource(
     when (tab.key) {
         "memories.all" -> R.string.tab_memories_all
         "memories.map" -> R.string.tab_memories_map
-        "depot.file" -> R.string.tab_depot_file
+        "depot.file" -> if (kind == me.raddatz.veyq.mobile.depot.DepotFiles.DROPBOX) R.string.tab_depot_dropbox else R.string.tab_depot_file
         "expenses.entries" -> R.string.tab_expenses_entries
         "expenses.overview" -> R.string.tab_expenses_overview
         "expenses.settings" -> R.string.tab_expenses_settings

@@ -224,7 +224,7 @@ struct Bar: View {
     var body: some View {
         TabView(selection: selection) {
             ForEach(tabs, id: \.self) { key in
-                Tab(Names.tab(key, app: model.shell.application), systemImage: Names.tabSymbol(key, app: model.shell.application), value: key) {
+                Tab(Names.tab(key, app: model.shell.application, kind: model.shell.openObject?.kind), systemImage: Names.tabSymbol(key, app: model.shell.application, kind: model.shell.openObject?.kind), value: key) {
                     NavigationStack { content(key).modifier(Picking(model: model)).toolbar { toolbar }.background(Role.bg) }
                 }
             }
@@ -683,11 +683,12 @@ enum Names {
         }
     }
 
-    static func tab(_ key: String, app: ApplicationId?) -> LocalizedStringKey {
+    /// A tab's name; Depot's one tab names the object open, a file or a drop box (`kind`).
+    static func tab(_ key: String, app: ApplicationId?, kind: String? = nil) -> LocalizedStringKey {
         switch key {
         case "memories.all": "Memories"
         case "memories.map": "Map"
-        case "depot.file": "File"
+        case "depot.file": kind == DepotFiles.shared.DROPBOX ? "Drop Box" : "File"
         case "expenses.entries": "Entries"
         case "expenses.overview": "Overview"
         case "expenses.settings": "Settings"
@@ -695,14 +696,14 @@ enum Names {
         }
     }
 
-    static func tabSymbol(_ key: String, app: ApplicationId?) -> String {
+    static func tabSymbol(_ key: String, app: ApplicationId?, kind: String? = nil) -> String {
         switch key {
         case "memories.all": "photo.on.rectangle.angled"
         case "memories.map": "map"
         case "expenses.entries": "list.bullet"
         case "expenses.overview": "chart.bar"
         case "expenses.settings": "gearshape"
-        case "depot.file": "doc"
+        case "depot.file": kind == DepotFiles.shared.DROPBOX ? "tray" : "doc"
         default: app.map(appSymbol) ?? "house"
         }
     }

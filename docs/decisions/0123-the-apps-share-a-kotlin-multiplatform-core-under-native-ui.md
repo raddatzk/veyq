@@ -382,7 +382,10 @@ implementation exists but what holds it to the first.
   files one after another, each tried twice but a refusal for room; nothing rolled back (measured 2026-11-09:
   `FolderUploadTest` — the slug rule taken out turns it red —; `DepotLiveTest` uploading a nested directory with a case
   clash and a file of three frames twice, the second as "App up (2)", every file read back to the byte and the web listing
-  it; a directory picked on Android uploaded whole, which the web lists). Not built yet: a READ_WRITE guest's own sealed name
+  it; a directory picked on Android uploaded whole, which the web lists). Measured on iOS as well, 2026-11-09: a guest's
+  folder moved out of a drop box after its question, a drop box's link switched off and on again from its context menu, a
+  directory picked in the Files importer uploaded whole (the web listing it), the copy dialog's storage check, a guest's
+  file headed without link, rename or cover, and the bar's tab naming a drop box as one. Not built yet: a READ_WRITE guest's own sealed name
   as an uploader (said as "a guest"); an unpacked download picked as a folder is uploaded as one (the app imports no
   download yet).
 - **One header for every node, drawn by core** (the web's `NodePage` + `NodeHeader`, ADR 0110 decision 10; owner

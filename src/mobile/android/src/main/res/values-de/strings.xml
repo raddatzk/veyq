@@ -49,6 +49,7 @@
     <string name="filter_all">Alle</string>
     <string name="switcher_open">Tenant oder Server wechseln</string>
     <string name="switcher_add_server">Server hinzufügen</string>
+    <string name="tab_depot_dropbox">Briefkasten</string>
     <string name="tab_depot_file">Datei</string>
     <string name="signin_cancel">Abbrechen</string>
     <string name="signin_add_title">Server hinzufügen</string>
