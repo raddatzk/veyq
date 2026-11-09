@@ -82,8 +82,18 @@ The load model is a household. The volume pre-check's largest tree is 5,000 node
    holds while a share has "no directory, no search".
 8. **Later stages, decided here so the first stage is shaped for them:**
    (decision 9 follows them; it was decided after the first stage was built)
-   - **(a) The photos of every space.** A paged, scope-wide listing of the listed tier for members, with each node's
-     items revision carried in the tree so the client knows which listings moved. It is not built.
+   - **(a) The photos of every space** (owner, 2026-11-09: build it).
+     - **The listing:** a member's paged listing of every live medium of a scope, ordered by id. It covers the media of
+       live nodes only and carries what the client needs to open a medium's capture time, place and name: the listed
+       tier, the original's sealed blob key and blob meta, and the uploader origin.
+     - **Freshness:** the listing has an ETag of its own, derived from the items revisions of the scope's live nodes
+       and the tree revision, as the share listing derives its own. A `304` keeps the space's photo documents.
+     - **Why not the tree:** carrying the items revisions in the tree, as first sketched, was rejected. An items bump
+       does not move the tree revision, and making it move would put the scope lock on every item write, which item
+       writers deliberately do not take. So a tree `304` would hide a photo change.
+     - **Opening:** the client opens the listing while the walk of decision 3 still holds the space's node keys,
+       through an application's per-space search hook. It zeroes those keys with the rest. The open Memory's own
+       documents (decision 6) win over the same medium's document from the listing.
    - **(b) Full text over the journal.** This is designed inside the journal's refinement (inbox #18): whether a client
      reads one compacted snapshot per journal or replays updates decides its cost. It then plugs in as one more
      document kind.
