@@ -482,13 +482,17 @@ private fun ObjectItems(refs: List<ObjectRef>, open: ObjectRef?, onOpen: (Object
 @Composable
 private fun ExpensesList(s: Screen.Signed, model: AppModel) {
     var creating by remember { mutableStateOf(false) }
+    val list = androidx.compose.foundation.lazy.rememberLazyListState()
+    // Material 3's extended FAB collapses to its icon on scroll (as a Pot's Add entry), the list's padding keeps the last row clear.
+    val fabExpanded by remember { androidx.compose.runtime.derivedStateOf { !list.canScrollBackward } }
     Box(Modifier.fillMaxSize()) {
-        ArrangedListScreen(s.applicationList(ApplicationId.EXPENSES), onOpen = model::open)
+        ArrangedListScreen(s.applicationList(ApplicationId.EXPENSES), onOpen = model::open, state = list, bottom = if (s.spaces.isNotEmpty()) 96.dp else 0.dp)
         if (s.spaces.isNotEmpty()) {
             ExtendedFloatingActionButton(
                 onClick = { creating = true },
-                icon = { Icon(Icons.Outlined.Add, null) },
+                icon = { Icon(Icons.Outlined.Add, if (fabExpanded) null else stringResource(R.string.create_pot)) },
                 text = { Text(stringResource(R.string.create_pot)) },
+                expanded = fabExpanded,
                 containerColor = role(LocalPalette.current.primary),
                 contentColor = role(LocalPalette.current.onFill),
                 modifier = Modifier.align(Alignment.BottomEnd).padding(16.dp),
@@ -499,12 +503,18 @@ private fun ExpensesList(s: Screen.Signed, model: AppModel) {
 }
 
 @Composable
-private fun ArrangedListScreen(list: ArrangedList, onOpen: (ObjectRef) -> Unit) {
+private fun ArrangedListScreen(
+    list: ArrangedList,
+    onOpen: (ObjectRef) -> Unit,
+    state: androidx.compose.foundation.lazy.LazyListState = androidx.compose.foundation.lazy.rememberLazyListState(),
+    /** Room below the last row: a floating button over the list keeps it clear (Material 3). */
+    bottom: androidx.compose.ui.unit.Dp = 0.dp,
+) {
     if (list.favorites.isEmpty() && list.recent.isEmpty() && list.all.isEmpty()) {
         Empty()
         return
     }
-    LazyColumn(Modifier.fillMaxSize().padding(horizontal = 8.dp)) {
+    LazyColumn(Modifier.fillMaxSize().padding(horizontal = 8.dp), state = state, contentPadding = androidx.compose.foundation.layout.PaddingValues(bottom = bottom)) {
         group(R.string.drawer_favorites, list.favorites, onOpen)
         group(R.string.drawer_recent, list.recent, onOpen)
         group(null, list.all, onOpen)

@@ -477,16 +477,13 @@ struct ExpensesList: View {
     var body: some View {
         ArrangedListView(list: model.applicationList(.expenses), onOpen: model.open)
             .navigationTitle(Names.application(.expenses))
-            .overlay(alignment: .bottomTrailing) {
+            // The view's primary action in the navigation bar (Apple's HIG: no floating action button on iOS).
+            .toolbar {
                 if !model.spaces.isEmpty {
-                    // Creating is the web's green role (`--app-primary`).
-                    Button { creating = true } label: { Label("New pot", systemImage: "plus") }
-                        .buttonStyle(.borderedProminent)
-                        .buttonBorderShape(.capsule)
-                        .controlSize(.large)
-                        .tint(Role.primary)
-                        .foregroundStyle(Role.onFill)
-                        .padding()
+                    ToolbarItem(placement: .primaryAction) {
+                        Button { creating = true } label: { Image(systemName: "plus") }
+                            .accessibilityLabel("New pot")
+                    }
                 }
             }
             .sheet(isPresented: $creating) { PotCreateSheet(model: model) }
