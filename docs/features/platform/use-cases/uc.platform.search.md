@@ -35,7 +35,10 @@
      the rail and the search read one list with one set of gates (`features/settings/sections.ts`), and while a gate's
      answer is out no section is offered (ADR 0125 decision 9).
 4. **Type the query.** The member types. Each token that reads as a known facet is offered as a chip: a year, a member's name (person), a place a document carries, a space's name, a kind's word. Choosing a suggestion
-   turns the token into a chip; the rest stays text.
+   turns the token into a chip; the rest stays text. The chip suggestions stand under a heading of their own
+   (*Filter by*), apart from the results, because a person suggestion and a person result can carry the same name
+   while one filters and the other opens. Whenever the list holds a result, the first one is highlighted, also right
+   after a chip was chosen, so **Enter** opens it.
 5. **Match.**
    - A document matches when it satisfies every chip, and the remaining text matches its name or its place,
      ignoring case and diacritics.
