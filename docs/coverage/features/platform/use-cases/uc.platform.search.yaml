@@ -27,6 +27,21 @@ acceptanceCriteria:
     coverage:
       web:
         unit: [src/core/search/SearchField.test.ts, src/features/memories/components/MemoryDetail.search.test.ts]
+  - id: people-are-results
+    text: Every member of this tenant is a result in a People group after the spaces' groups, named as the directory names them and found by that name or by their ~username, from the roster the client already read (dropped at sign-out); choosing one opens their profile page, while the same word still offers them as a person chip; with any chip set, the People group is not shown.
+    coverage:
+      web:
+        unit: [src/core/search/SearchField.test.ts, src/core/search/groups.test.ts, src/core/search/query.test.ts]
+  - id: settings-are-the-rails-sections
+    text: The settings sections are results in a Settings group after People, exactly those the settings rail offers this member now - one list with one set of gates, read by both (an owner-only, moderator-only or capability-gated section the rail hides is never a result; none while a gate's answer is out); choosing one opens it on the settings page with the active space kept; with any chip set, the Settings group is not shown.
+    coverage:
+      web:
+        unit: [src/features/settings/sections.test.ts, src/core/search/SearchField.test.ts, src/core/search/groups.test.ts, src/views/SettingsHubView.test.ts]
+  - id: every-kind-has-a-word
+    text: Every application's kind and the folder has a kind word, so a kind chip reaches it - Memories' Memory and Chapter, Depot's file and drop box, Expenses' Pot.
+    coverage:
+      web:
+        unit: [src/applications.test.ts, src/core/search/SearchField.test.ts]
   - id: nothing-leaves-or-persists
     text: No query, document or result is sent to the server or written to IndexedDB, localStorage, sessionStorage or Cache Storage; no endpoint is added; a share view has no search field.
     coverage:

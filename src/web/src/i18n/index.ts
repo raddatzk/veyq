@@ -1504,7 +1504,7 @@ const en = {
     // language label to the theme block's wording for no reason.
     systemDefault: 'System',
     // The top bar's search (uc.platform.search, ADR 0125): one field over every space; the open node's group is named by the
-    // node, as core names no application's kind.
+    // node, as core names no application's kind; the tenant's members and the settings sections follow (decision 9).
     search: {
       label: 'Search all spaces',
       placeholder: 'Search all spaces',
@@ -1513,11 +1513,13 @@ const en = {
       groupOpen: 'In “{name}”',
       groupSpace: 'In this space',
       groupOther: 'Other spaces',
+      groupPeople: 'People',
+      groupSettings: 'Settings',
       showMore: 'Show {count} more',
       loading: 'Searching one space… | Searching {count} spaces…',
       notSearched: 'Not searched: {spaces}',
       listFailed: 'Your other spaces could not be read, so only this space was searched.',
-      hint: 'Searches names, dates, places and people in all your spaces.',
+      hint: 'Searches names, dates, places and people in all your spaces, and finds members and settings too.',
       empty: 'Nothing found.',
       chipYear: 'Year',
       chipPlace: 'Place',
@@ -3640,11 +3642,13 @@ const de: typeof en = {
       groupOpen: 'In „{name}“',
       groupSpace: 'In diesem Bereich',
       groupOther: 'Andere Bereiche',
+      groupPeople: 'Personen',
+      groupSettings: 'Einstellungen',
       showMore: '{count} weitere zeigen',
       loading: 'Ein Bereich wird durchsucht … | {count} Bereiche werden durchsucht …',
       notSearched: 'Nicht durchsucht: {spaces}',
       listFailed: 'Deine anderen Bereiche ließen sich nicht lesen, darum wurde nur dieser Bereich durchsucht.',
-      hint: 'Durchsucht Namen, Daten, Orte und Personen in all deinen Bereichen.',
+      hint: 'Durchsucht Namen, Daten, Orte und Personen in all deinen Bereichen und findet auch Mitglieder und Einstellungen.',
       empty: 'Nichts gefunden.',
       chipYear: 'Jahr',
       chipPlace: 'Ort',

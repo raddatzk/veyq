@@ -38,6 +38,7 @@ describe('registerDepot', () => {
       renameSelectionEnd: fileNameStemEnd,
       emptyInTrash: 'depot.trashEmpty',
       nounWithArticle: 'depot.aFile',
+      search: { label: 'depot.kindFile' },
       list: { rows: depotRows, tabLabel: 'depot.title', emptyText: expect.any(Function) },
       // "Upload files" takes files dropped onto the level too (core hands them over only while the entry is enabled)
       // …and so does "Upload folder…" beside it (a dropped directory, inbox #424)
@@ -90,6 +91,7 @@ describe('registerDepot', () => {
       deleteTitle: 'depot.dropBox.delete',
       deleteCopy: 'depot.dropBox.deleteConfirm',
       nounWithArticle: 'depot.dropBox.aDropBox',
+      search: { label: 'depot.dropBox.kind' },
       // one "Depot" tab with the files (owner 2026-11-04); no "New" entry and no create dialog: a drop box is a folder's
       // upload-only link (below)
       list: { rows: depotRows, tabLabel: 'depot.title' },

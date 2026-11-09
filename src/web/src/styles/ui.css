@@ -1521,7 +1521,7 @@ div.veyq-level-item-main,
 /* ── The shell's search (uc.platform.search, core/search/SearchField.vue) ───────────────────────────────────────────
    The layer's tags input with a magnifier in front, its list as wide as the field and taller than a picker's: the chips
    it offers, then the results in their groups, then what it is doing. A row: the kind's icon, the name over where it
-   lives, the matched chips' values at its end. Tokens only, so no dark twin. */
+   lives (a person: their picture, a section: its heading), the matched chips' values at its end. Tokens only, so no dark twin. */
 .veyq-search {
   min-width: 0;
 }
@@ -1563,6 +1563,13 @@ div.veyq-level-item-main,
 .veyq-search__result-icon {
   flex: none;
   color: var(--app-muted);
+}
+
+/* A person's row leads with their picture or initial (ADR 0125 decision 9), about as tall as the name over its line. */
+.veyq-avatar.veyq-search__result-avatar {
+  width: 1.75rem;
+  height: 1.75rem;
+  font-size: 0.8rem;
 }
 
 .veyq-search__result-main {

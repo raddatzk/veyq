@@ -49,7 +49,18 @@ export interface SearchDocument {
   readonly foldedName: string
   /** `facets.places` folded, once. */
   readonly foldedPlaces: readonly string[]
+  /** Other names the object is found by as by its name (a person's `~username`). */
+  readonly aliases?: readonly string[]
+  /** `aliases` folded, once. */
+  readonly foldedAliases: readonly string[]
+  /** A document's own second line (a person's handle, a settings section's heading); a node's is where it lives. */
+  readonly subtitle?: string
 }
+
+/** The kind of a member's document (ADR 0125 decision 9): a person of this tenant, opened on their profile page. */
+export const PERSON_DOCUMENT = 'person'
+/** The kind of a settings section's document (ADR 0125 decision 9): a section the settings rail offers now. */
+export const SETTINGS_DOCUMENT = 'settings'
 
 /** What an application contributes for the node on screen (`contribution.ts`): a document as the application knows it. */
 export interface ContributedDocument {
@@ -63,8 +74,8 @@ export interface ContributedDocument {
 }
 
 /** Core's one way to make a document, so its folded fields are always there. */
-export function searchDocument(d: Omit<SearchDocument, 'foldedName' | 'foldedPlaces'>): SearchDocument {
-  return { ...d, foldedName: fold(d.name), foldedPlaces: (d.facets.places ?? []).map(fold) }
+export function searchDocument(d: Omit<SearchDocument, 'foldedName' | 'foldedPlaces' | 'foldedAliases'>): SearchDocument {
+  return { ...d, foldedName: fold(d.name), foldedPlaces: (d.facets.places ?? []).map(fold), foldedAliases: (d.aliases ?? []).map(fold) }
 }
 
 /** The years a document spans: its own span, else its capture year (local time, as the result row shows the day). */

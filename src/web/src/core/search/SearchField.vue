@@ -1,8 +1,9 @@
 <script setup lang="ts">
 // The shell's search field (uc.platform.search, ADR 0125): one field over every space of the tenant, its chips and its
 // results in one list - the chips it offers for the typed text first, then the results grouped by where the member stands
-// (the open node, this space, other spaces). The model is core's (`searchIndex.ts`, `query.ts`, `groups.ts`); this draws
-// it on the layer's tags input and opens what is chosen.
+// (the open node, this space, other spaces), then the tenant's members and the settings sections (ADR 0125 decision 9). The
+// model is core's (`searchIndex.ts`, `query.ts`, `groups.ts`, `peopleAndSettings.ts`); this draws it on the layer's tags
+// input and opens what is chosen.
 //
 // **The first focus builds the index, every later one revalidates it** (`refreshSearchIndex`), and while the list is open
 // the spaces are revalidated again every {@link REVALIDATE_MS} - each a `304` while nothing moved (ADR 0081). Nothing about
@@ -10,7 +11,9 @@
 //
 // **Opening a result.** A node opens through the navigation the sidebar uses - a push of its fragment, which enters its
 // space when it lies in another (`SpaceView` re-enters on a new scope token); a contributed document opens itself (a photo
-// in the open Memory's lightbox). The field says what it searched: the spaces still loading, those it could not search, and
+// in the open Memory's lightbox); a person opens their profile page in the tenant space, and a settings section opens on
+// the settings page by a push, which keeps the active space as the profile menu's Settings entry does (a hard navigation
+// would reset it). The field says what it searched: the spaces still loading, those it could not search, and
 // - before and instead of results - what is searched, with each application's note on what it searches only in part.
 import { computed, onBeforeUnmount, ref, useTemplateRef, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
@@ -23,12 +26,15 @@ import { breadcrumb } from '../../app/breadcrumb'
 import { ScopeKind } from '../../api/generated/scopes'
 import { registry } from '../applications/registry'
 import { FOLDER_KIND } from '../node/kind'
-import { hashForNode, parseHash, TENANT_SCOPE } from '../node/location'
-import { loadTenantPeople, type Person } from '../people/directory'
+import { hashForNode, parseHash, personHash, TENANT_SCOPE } from '../node/location'
+import { loadTenantPeople, tenantPeopleNow } from '../people/directory'
+import PersonAvatar from '../people/PersonAvatar.vue'
+import { useSettingsSections } from '../../features/settings/sections'
 import { searchContribution } from './contribution'
-import { searchDocument, yearsOf, type SearchDocument } from './model'
+import { PERSON_DOCUMENT, searchDocument, yearsOf, type SearchDocument } from './model'
 import { chipKey, suggestChips, type ChipSuggestion, type SearchChip } from './query'
-import { searchGroups, type SearchGroupId } from './groups'
+import { SEARCH_GROUPS, searchGroups, type SearchGroupId } from './groups'
+import { personDocuments, settingsDocuments } from './peopleAndSettings'
 import { indexedDocuments, indexedScope, indexedTree, refreshSearchIndex, searchState, type SearchScope } from './searchIndex'
 
 /** How often an open list revalidates every space (a `304` while nothing moved). */
@@ -47,8 +53,12 @@ const router = useRouter()
 const text = ref('')
 const chips = ref<SearchChip[]>([])
 const open = ref(false)
-const shown = ref<Record<SearchGroupId, number>>({ open: GROUP_PAGE, space: GROUP_PAGE, other: GROUP_PAGE })
-const people = ref<Person[]>([])
+const firstPage = () => Object.fromEntries(SEARCH_GROUPS.map((id) => [id, GROUP_PAGE])) as Record<SearchGroupId, number>
+const shown = ref<Record<SearchGroupId, number>>(firstPage())
+/** The tenant's members as the directory last read them (none after a sign-out): the person chips and the People group. */
+const people = computed(() => tenantPeopleNow())
+/** The settings sections the rail offers now, with the rail's own gates (none until every answer is in). */
+const sections = useSettingsSections()
 const field = useTemplateRef<{ focus(): void }>('field')
 
 /** Put the focus in the field (the shell's shortcut). */
@@ -56,7 +66,8 @@ defineExpose({ focus: () => field.value?.focus() })
 
 function onFocus() {
   void refreshSearchIndex().catch(() => undefined)
-  void loadTenantPeople().then((m) => (people.value = [...m.values()]), () => undefined)
+  void loadTenantPeople().catch(() => undefined)
+  void sections.load()
 }
 
 let timer: ReturnType<typeof setInterval> | null = null
@@ -86,7 +97,13 @@ const contributed = computed<SearchDocument[]>(() => {
   const path = node ? [...pathOf(node.id, tree), node.name] : []
   return c.documents.map((d) => searchDocument({ ...d, scopeId: c.scopeId, nodeId: c.nodeId, path }))
 })
-const documents = computed(() => [...indexedDocuments(), ...contributed.value])
+const content = computed(() => [...indexedDocuments(), ...contributed.value])
+/** The members and the settings sections (ADR 0125 decision 9): documents of no space, each opening itself. */
+const elsewhere = computed<SearchDocument[]>(() => [
+  ...personDocuments(people.value, (userId) => void router.push({ name: 'home', hash: personHash(userId) })),
+  ...settingsDocuments(sections.offered.value, (id) => void router.push(`/settings/${id}`)),
+])
+const documents = computed(() => [...content.value, ...elsewhere.value])
 
 function pathOf(nodeId: string, tree: readonly { id: string; parentId: string | null; name: string }[]): string[] {
   const byId = new Map(tree.map((n) => [n.id, n]))
@@ -148,7 +165,7 @@ type ResultOption = VeyqTagOption & { doc?: SearchDocument; group: SearchGroupId
 const tags = computed<ChipTag[]>(() => chips.value.map((chip) => ({ key: chipKey(chip), label: chipLabel(chip), chip })))
 const suggestions = computed<ChipOption[]>(() =>
   suggestChips(text.value, chips.value, {
-    documents: documents.value,
+    documents: content.value,
     spaces: searchState.scopes.map((s) => ({ scopeId: s.id, label: spaceLabel(s) })),
     people: people.value.map((p) => ({ userId: p.userId, name: p.displayName })),
     kinds: kindWords.value.kinds,
@@ -168,9 +185,11 @@ const groups = computed(() =>
     activeScopeId: activeSpace.scopeId, openNodeId: openNode.value?.id ?? null, activeTree: activeTree.value,
   }, collator.value),
 )
-watch([text, chips], () => (shown.value = { open: GROUP_PAGE, space: GROUP_PAGE, other: GROUP_PAGE }))
-const heading = (id: SearchGroupId) =>
-  id === 'open' ? t('shell.search.groupOpen', { name: openNode.value?.name ?? '' }) : id === 'space' ? t('shell.search.groupSpace') : t('shell.search.groupOther')
+watch([text, chips], () => (shown.value = firstPage()))
+const HEADING: Record<Exclude<SearchGroupId, 'open'>, string> = {
+  space: 'shell.search.groupSpace', other: 'shell.search.groupOther', people: 'shell.search.groupPeople', settings: 'shell.search.groupSettings',
+}
+const heading = (id: SearchGroupId) => (id === 'open' ? t('shell.search.groupOpen', { name: openNode.value?.name ?? '' }) : t(HEADING[id]))
 const resultGroups = computed<VeyqTagOptionGroup<ResultOption>[]>(() =>
   groups.value.map((g) => {
     const visible = g.results.slice(0, shown.value[g.id])
@@ -186,9 +205,11 @@ const resultGroups = computed<VeyqTagOptionGroup<ResultOption>[]>(() =>
   }),
 )
 
-/** What a row says under the name: where it lives (and in which space, for another space's), or a photo's day. */
+/** What a row says under the name: its own line (a person's handle, a section's heading), where it lives (and in which
+ *  space, for another space's), or a photo's day. */
 function secondLine(option: ResultOption): string {
   const doc = option.doc!
+  if (doc.subtitle !== undefined) return doc.subtitle
   if (doc.facets.capturedAt !== undefined) return dayFormat.value.format(doc.facets.capturedAt)
   const path = doc.path.join(' / ')
   if (option.group !== 'other') return path
@@ -272,7 +293,8 @@ const notSearched = computed(() => searchState.failed.map((s) => spaceLabel(s)).
     <template #result="{ option }">
       <span v-if="option.more !== undefined" class="veyq-search__more">{{ option.label }}</span>
       <template v-else-if="option.doc">
-        <VeyqIcon :name="iconOf(option.doc)" class="veyq-search__result-icon" />
+        <PersonAvatar v-if="option.doc.kind === PERSON_DOCUMENT" :user-id="option.doc.id" :name="option.doc.name" class="veyq-search__result-avatar" />
+        <VeyqIcon v-else :name="iconOf(option.doc)" class="veyq-search__result-icon" />
         <span class="veyq-search__result-main">
           <span class="veyq-search__result-name">{{ option.doc.name }}</span>
           <span v-if="secondLine(option)" class="veyq-search__result-meta">{{ secondLine(option) }}</span>

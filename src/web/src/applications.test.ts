@@ -125,6 +125,17 @@ describe('composition root', () => {
     }
   })
 
+  // Core's search (ADR 0125 decision 6): a kind's word is its kind chip, so a kind without one is never reached by a chip.
+  // Every application's kind has one, and so does a folder; core's bookmark is found by its name alone.
+  it('gives every application\'s kind and the folder a kind word for the search\'s kind chip', () => {
+    const kinds = registry.kinds().filter((k) => k !== SHARE_BOOKMARK_KIND)
+    expect(kinds).toEqual(expect.arrayContaining([FOLDER_KIND, MEMORY_KIND, CHAPTER_KIND, FILE_KIND, DROPBOX_KIND, POT_KIND])) // the anchor
+    for (const kind of kinds) {
+      const d = registry.kind(kind)
+      expect(d.supported && d.search?.label, `${kind}'s word`).toMatch(/\S/)
+    }
+  })
+
   it('is write-once end to end: registering the applications a second time throws', () => {
     expect(() => registerApplications()).toThrow(/already registered/)
   })

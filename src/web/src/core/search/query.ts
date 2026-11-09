@@ -7,8 +7,8 @@
 // into the chip and the rest stays text.
 //
 // **Matching and ranking.** A document matches when it satisfies every chip and the folded remaining text matches its name
-// (exact, prefix, the start of a word, anywhere - in that rank) or, ranked after every name match, one of its places. Equal
-// ranks are ordered by the name's collation.
+// (exact, prefix, the start of a word, anywhere - in that rank; another name it carries, a person's `~username`, counts as
+// its name) or, ranked after every name match, one of its places. Equal ranks are ordered by the name's collation.
 import { fold } from '../../shared/text/fold'
 import { yearsOf, type SearchDocument } from './model'
 
@@ -137,14 +137,24 @@ export const Rank = { exact: 0, prefix: 1, wordStart: 2, inside: 3, place: 4 } a
 /** How `doc` matches the folded text `t`, or null when it does not; an empty text matches every document at the best rank. */
 export function textRank(doc: SearchDocument, t: string): number | null {
   if (!t) return Rank.exact
-  const name = doc.foldedName
+  let best: number | null = null
+  for (const name of [doc.foldedName, ...doc.foldedAliases]) {
+    const rank = nameRank(name, t)
+    if (rank !== null && (best === null || rank < best)) best = rank
+  }
+  if (best !== null) return best
+  if (doc.foldedPlaces.some((p) => p.includes(t))) return Rank.place
+  return null
+}
+
+/** How the folded name `name` matches the folded text `t`, or null. */
+function nameRank(name: string, t: string): number | null {
   if (name === t) return Rank.exact
   if (name.startsWith(t)) return Rank.prefix
   if (wordPrefix(name, t)) return Rank.wordStart
   if (name.includes(t)) return Rank.inside
   const words = t.split(/\s+/).filter(Boolean)
   if (words.length > 1 && words.every((w) => name.includes(w))) return Rank.inside
-  if (doc.foldedPlaces.some((p) => p.includes(t))) return Rank.place
   return null
 }
 

@@ -121,6 +121,14 @@ describe('the text', () => {
     expect(order).toEqual(['Rom', 'Roma A', 'Roma B', 'Trip to Rome', 'Aroma', 'Summer'])
   })
 
+  it('matches another name a document carries as its name (a person\'s ~username), at its best rank', () => {
+    const kevin = doc('Kevin Raddatz', {}, { aliases: ['~kraddatz'] })
+    expect(textRank(kevin, '~kraddatz')).toBe(Rank.exact)
+    expect(textRank(kevin, 'kradd')).toBe(Rank.wordStart)
+    expect(textRank(kevin, 'kev')).toBe(Rank.prefix) // the name still counts first
+    expect(textRank(doc('Kevin Raddatz'), '~kraddatz')).toBeNull() // control: without it, the handle finds nothing
+  })
+
   it('a query with neither text nor a chip finds nothing', () => {
     expect(matchAll([doc('Rome')], { chips: [], text: '   ' })).toEqual([])
   })

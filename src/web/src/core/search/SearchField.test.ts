@@ -2,8 +2,10 @@
 // The shell's search field (uc.platform.search) over a stubbed index and the REAL registry (Memories registered, so its
 // kind words and its note are the real ones): the first focus asks for the index, a suggestion becomes a chip and Backspace
 // takes it away, the results come in their groups with where they live, choosing one opens it, and the field says what it
-// searched when it found nothing. Driven by the key events the layer's combobox listens to.
-import { describe, it, expect, vi, beforeEach } from 'vitest'
+// searched when it found nothing; the tenant's members and the settings sections the rail offers are results of their own
+// (ADR 0125 decision 9), and Depot's and Expenses' kinds have their word. Driven by the key events the layer's combobox
+// listens to.
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 
 const push = vi.hoisted(() => vi.fn())
 vi.mock('vue-router', () => ({ useRouter: () => ({ push }), useRoute: () => ({ name: 'home', hash: '#trips/' }) }))
@@ -17,16 +19,28 @@ vi.mock('./searchIndex', async () => {
     indexedScope: vi.fn(() => null),
   }
 })
-vi.mock('../people/directory', async (orig) => ({ ...(await orig<typeof import('../people/directory')>()), loadTenantPeople: vi.fn() }))
+vi.mock('../people/directory', async (orig) => ({
+  ...(await orig<typeof import('../people/directory')>()), loadTenantPeople: vi.fn(async () => new Map()), tenantPeopleNow: vi.fn(() => []),
+}))
+// The settings list's reads (`features/settings/sections.ts`, the rail's own): its gates are answered here.
+vi.mock('../../features/spaces/scopes', () => ({ listMyGroups: vi.fn(), listMyTenants: vi.fn() }))
+vi.mock('../../features/account/trustReset/refusedDocuments', () => ({ refusedDocuments: vi.fn() }))
+vi.mock('../../features/moderation/appointment', () => ({ myAppointment: vi.fn() }))
 vi.mock('../../app/activeSpace', async (orig) => {
   const { reactive } = await import('vue')
-  return { ...(await orig<typeof import('../../app/activeSpace')>()), activeSpace: reactive({ scopeId: 'S1', status: 'ready', kind: 'TENANT', name: null }) }
+  return { ...(await orig<typeof import('../../app/activeSpace')>()), activeSpace: reactive({ scopeId: 'S1', tenantId: 't-1', status: 'ready', kind: 'TENANT', name: null }) }
 })
 
 import { mount, flushPromises } from '@vue/test-utils'
 import SearchField from './SearchField.vue'
 import { indexedDocuments, indexedScope, indexedTree, refreshSearchIndex, searchState, type SearchScope } from './searchIndex'
-import { loadTenantPeople, type Person } from '../people/directory'
+import { loadTenantPeople, tenantPeopleNow, type Person } from '../people/directory'
+import { listMyGroups, listMyTenants } from '../../features/spaces/scopes'
+import { refusedDocuments } from '../../features/account/trustReset/refusedDocuments'
+import { myAppointment } from '../../features/moderation/appointment'
+import { activeSpace } from '../../app/activeSpace'
+import { FILE_KIND } from '../../features/depot/kinds'
+import { POT_KIND } from '../../features/expenses/kinds'
 import { searchDocument, type SearchDocument } from './model'
 import { setBreadcrumb } from '../../app/breadcrumb'
 import { realI18n, t } from '../../test/i18n'
@@ -35,6 +49,8 @@ import { FOLDER_KIND } from '../node/kind'
 import { ScopeKind } from '../../api/generated/scopes'
 
 const ANNA = 'aaaaaaaa-0000-4000-8000-000000000001'
+const KEVIN = 'kkkkkkkk-0000-4000-8000-000000000002'
+const tenantRole = (role: 'OWNER' | 'MEMBER') => [{ tenantId: 't-1', role }] as unknown as Awaited<ReturnType<typeof listMyTenants>>
 const doc = (o: Partial<SearchDocument> & Pick<SearchDocument, 'id' | 'name'>): SearchDocument =>
   searchDocument({ scopeId: 'S1', kind: 'MEMORY', nodeId: o.id, revision: '0:0', path: [], facets: {}, ...o })
 const trees: Record<string, ReturnType<typeof treeNode>[]> = {
@@ -61,8 +77,12 @@ async function type(text: string) {
   el.dispatchEvent(new InputEvent('input', { data: text.slice(-1), bubbles: true }))
   await flushPromises()
 }
+/** Every field a test mounted, unmounted after it: a field left mounted would keep answering a later test's state. */
+const mounted: { unmount(): void }[] = []
+afterEach(() => mounted.splice(0).forEach((w) => w.unmount()))
 async function mountField() {
   const w = mount(SearchField, { global: { plugins: [realI18n()] }, attachTo: document.body })
+  mounted.push(w)
   field().focus()
   field().dispatchEvent(new FocusEvent('focus'))
   await flushPromises()
@@ -81,7 +101,14 @@ beforeEach(() => {
     doc({ id: 'rome', name: 'Rome 2024', path: ['Trips'], facets: { years: { from: 2024, to: 2024 }, people: [ANNA] } }),
     doc({ id: 'garden', scopeId: 'G1', name: 'Rome garden', facets: { years: { from: 2023, to: 2023 } } }),
   ])
-  vi.mocked(loadTenantPeople).mockResolvedValue(new Map<string, Person>([[ANNA, { userId: ANNA, username: 'anna', realName: 'Anna Schmidt', displayName: 'Anna Schmidt' }]]))
+  vi.mocked(tenantPeopleNow).mockReturnValue([
+    { userId: ANNA, username: 'anna', realName: 'Anna Schmidt', displayName: 'Anna Schmidt' },
+    { userId: KEVIN, username: 'kevin', realName: null, displayName: 'kevin' },
+  ] satisfies Person[])
+  vi.mocked(listMyGroups).mockResolvedValue([])
+  vi.mocked(listMyTenants).mockResolvedValue(tenantRole('MEMBER'))
+  vi.mocked(refusedDocuments).mockResolvedValue([])
+  vi.mocked(myAppointment).mockResolvedValue({ state: 'NONE', address: '', confirmation: 'NOT_SENT', awaitingKey: false })
 })
 
 describe('the search field', () => {
@@ -185,5 +212,108 @@ describe('the search field', () => {
     await press('Enter')
     expect(rows()).toHaveLength(11)
     expect(push).not.toHaveBeenCalled()
+  })
+})
+
+describe('people and settings sections as results (ADR 0125 decision 9)', () => {
+  it('asks for the roster and the settings answers on focus', async () => {
+    await mountField()
+    expect(loadTenantPeople).toHaveBeenCalled()
+    expect(listMyTenants).toHaveBeenCalled()
+  })
+
+  it('finds a member by their name and by their username', async () => {
+    await mountField()
+    await type('anna')
+    expect(headings()).toEqual([t('shell.search.groupPeople')])
+    expect(rows()).toContain('A Anna Schmidt ~anna') // the initial the roster has, the name, the handle
+    await type('~anna')
+    expect(rows()).toEqual(['A Anna Schmidt ~anna'])
+  })
+
+  it('puts the People group after every space\'s group', async () => {
+    vi.mocked(tenantPeopleNow).mockReturnValue([{ userId: 'r', username: 'romeo', realName: null, displayName: 'romeo' }])
+    await mountField()
+    await type('rom')
+    expect(headings()).toEqual([t('shell.search.groupSpace'), t('shell.search.groupOther'), t('shell.search.groupPeople')])
+  })
+
+  it('offers a member as a chip AND lists them as a person: the chip filters, the result opens their profile', async () => {
+    await mountField()
+    await type('kevin')
+    expect(rows()).toEqual([`kevin ${t('shell.search.chipPerson')}`, 'K kevin ~kevin'])
+    await press('ArrowDown')
+    await press('Enter')
+    expect(push).toHaveBeenCalledWith({ name: 'home', hash: `#people/${KEVIN}` })
+  })
+
+  it('finds a section by its label and opens it on the settings page, the space on screen kept', async () => {
+    await mountField()
+    await type(t('settings.password').slice(0, 5))
+    expect(headings()).toEqual([t('shell.search.groupSettings')])
+    expect(rows()).toEqual([`${t('settings.password')} ${t('settings.personal')}`])
+    await press('Enter')
+    expect(push).toHaveBeenCalledWith('/settings/password')
+    expect(activeSpace.scopeId).toBe('S1')
+  })
+
+  it('never offers a section the rail hides: a member finds no owner-only one; control: the owner does', async () => {
+    const storage = t('storage.navTitle')
+    await mountField()
+    await type(storage)
+    expect(rows()).not.toContain(`${storage} ${t('settings.tenant')}`)
+    mounted.splice(0).forEach((w) => w.unmount())
+    document.body.innerHTML = ''
+    vi.mocked(listMyTenants).mockResolvedValue(tenantRole('OWNER'))
+    await mountField()
+    await type(storage)
+    expect(rows()).toContain(`${storage} ${t('settings.tenant')}`)
+  })
+
+  it('offers no section while a gate\'s answer is out, and says nothing of its own meanwhile', async () => {
+    let answer: (v: ReturnType<typeof tenantRole>) => void = () => {}
+    vi.mocked(listMyTenants).mockReturnValue(new Promise((r) => { answer = r }))
+    await mountField()
+    await type(t('settings.password').slice(0, 5))
+    expect(rows()).toEqual([])
+    expect(headings()).toEqual([])
+    answer(tenantRole('MEMBER'))
+    await flushPromises()
+    expect(headings()).toEqual([t('shell.search.groupSettings')])
+  })
+
+  it('hides both groups once a chip is set: a chip filters content', async () => {
+    await mountField()
+    await type('anna')
+    expect(headings()).toContain(t('shell.search.groupPeople'))
+    await press('Enter') // the person chip
+    expect(chips()).toEqual(['Anna Schmidt'])
+    expect(headings()).not.toContain(t('shell.search.groupPeople'))
+    expect(headings()).not.toContain(t('shell.search.groupSettings'))
+    expect(rows()).toEqual(['Rome 2024 Trips Anna Schmidt'])
+  })
+
+  it('names what it searches: members and settings too', async () => {
+    await mountField()
+    expect(status()).toContain(t('shell.search.hint'))
+    expect(t('shell.search.hint')).toMatch(/members and settings/)
+  })
+})
+
+describe('the kind words of Depot and Expenses', () => {
+  it.each([
+    ['a Depot file', FILE_KIND, 'depot.kindFile'],
+    ['a Pot', POT_KIND, 'expenses.kindPot'],
+  ])('a kind chip reaches %s', async (_what, kind, word) => {
+    vi.mocked(indexedDocuments).mockReturnValue([
+      doc({ id: 'k', kind, name: 'Rome thing' }),
+      doc({ id: 'rome', name: 'Rome 2024' }),
+    ])
+    await mountField()
+    await type(t(word))
+    expect(rows()[0]).toBe(`${t(word)} ${t('shell.search.chipKind')}`)
+    await press('Enter')
+    expect(chips()).toEqual([t(word)])
+    expect(rows()).toEqual(['Rome thing'])
   })
 })

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { searchDocument, type SearchDocument } from './model'
+import { PERSON_DOCUMENT, SETTINGS_DOCUMENT, searchDocument, type SearchDocument } from './model'
 import { descendantsOf, searchGroups, type SearchContext } from './groups'
 import { treeNode } from '../../test/models'
 
@@ -7,6 +7,11 @@ const node = (id: string, name: string, scopeId = 'active') =>
   searchDocument({ scopeId, kind: 'MEMORY', id, nodeId: id, revision: '0:0', name, path: [], facets: {} })
 const photo = (id: string, name: string, nodeId: string, scopeId = 'active'): SearchDocument =>
   searchDocument({ scopeId, kind: 'memories.photo', id, nodeId, revision: '0', name, path: [], facets: {}, open: () => {} })
+
+const person = (id: string, name: string): SearchDocument =>
+  searchDocument({ scopeId: '', kind: PERSON_DOCUMENT, id, nodeId: id, revision: '', name, path: [], facets: {}, open: () => {} })
+const section = (id: string, name: string): SearchDocument =>
+  searchDocument({ scopeId: '', kind: SETTINGS_DOCUMENT, id, nodeId: id, revision: '', name, path: [], facets: {}, open: () => {} })
 
 // the active space: Trips/ → Rome (open) → Day 1 (a chapter) ; Trips/ → Paris
 const tree = [
@@ -53,6 +58,20 @@ describe('the results grouped by where the member stands', () => {
     const groups = searchGroups(extra, { chips: [], text: 'rome' }, ctx({ openNodeId: null }), collator)
     expect(groups.map((g) => g.id)).toEqual(['space', 'other'])
     expect(groups[1].results.map((d) => d.name)).toEqual(['Rome', 'Rome again'])
+  })
+
+  it('puts the members, then the settings sections, after every space\'s group (ADR 0125 decision 9)', () => {
+    const extra = [...docs, person('u1', 'Romy'), section('maps', 'Rome maps')]
+    expect(searchGroups(extra, { chips: [], text: 'rom' }, ctx(), collator).map((g) => g.id)).toEqual(['open', 'space', 'other', 'people', 'settings'])
+    expect(searchGroups(extra, { chips: [], text: 'romy' }, ctx(), collator).map((g) => g.id)).toEqual(['people']) // no empty group
+  })
+
+  it('shows neither group while a chip is set, even for a document the chip would let through', () => {
+    const extra = [person('u1', 'Romy'), section('maps', 'Rome maps'), node('rome', 'Rome')]
+    const chip = { type: 'kind', kinds: [PERSON_DOCUMENT, SETTINGS_DOCUMENT, 'MEMORY'], label: 'x' } as const
+    expect(searchGroups(extra, { chips: [chip], text: 'rom' }, ctx({ openNodeId: null }), collator).map((g) => g.id)).toEqual(['space'])
+    // control: without the chip, both are there
+    expect(searchGroups(extra, { chips: [], text: 'rom' }, ctx({ openNodeId: null }), collator).map((g) => g.id)).toEqual(['space', 'people', 'settings'])
   })
 
   it('knows what lies below a node, and survives a cycle', () => {

@@ -1,5 +1,5 @@
 // @vitest-environment happy-dom
-import { describe, it, expect, vi } from 'vitest'
+import { describe, it, expect, vi, beforeEach } from 'vitest'
 
 // The bar gives every crumb a real `href` (`router.resolve`), so the stub resolves a hash the way the hash history does.
 vi.mock('vue-router', () => ({
@@ -16,6 +16,10 @@ vi.mock('../../core/search/searchIndex', async () => {
 })
 vi.mock('../../core/people/directory', async (orig) => ({ ...(await orig<typeof import('../../core/people/directory')>()), loadTenantPeople: vi.fn(async () => new Map()) }))
 vi.mock('../../features/memories/media', () => ({ addMedia: vi.fn() }))
+// The search's settings sections (`features/settings/sections.ts`) read their gates on the field's focus.
+vi.mock('../../features/spaces/scopes', () => ({ listMyGroups: vi.fn(), listMyTenants: vi.fn() }))
+vi.mock('../../features/account/trustReset/refusedDocuments', () => ({ refusedDocuments: vi.fn() }))
+vi.mock('../../features/moderation/appointment', () => ({ myAppointment: vi.fn() }))
 
 import { mount, flushPromises } from '@vue/test-utils'
 import AppTopbar from './AppTopbar.vue'
@@ -24,6 +28,16 @@ import { realI18n, t } from '../../test/i18n'
 import { addMedia } from '../../features/memories/media'
 import { enqueueUploads, clearUploads } from '../../features/memories/uploadQueue'
 import { NODE_DRAG_TYPE, endNodeDrag, startNodeDrag } from '../../core/node/nodeDrag'
+import { listMyGroups, listMyTenants } from '../../features/spaces/scopes'
+import { refusedDocuments } from '../../features/account/trustReset/refusedDocuments'
+import { myAppointment } from '../../features/moderation/appointment'
+
+beforeEach(() => {
+  vi.mocked(listMyGroups).mockResolvedValue([])
+  vi.mocked(listMyTenants).mockResolvedValue([])
+  vi.mocked(refusedDocuments).mockResolvedValue([])
+  vi.mocked(myAppointment).mockResolvedValue({ state: 'NONE', address: '', confirmation: 'NOT_SENT', awaitingKey: false })
+})
 
 const mountTopbar = () => mount(AppTopbar, { global: { plugins: [realI18n()] } })
 
