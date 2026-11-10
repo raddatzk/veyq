@@ -430,9 +430,11 @@ object ExifReader {
         Regex("""\s$q\s*=\s*(?:"([^"]*)"|'([^']*)')""").find(packet)?.let { m ->
             return unescape(m.groupValues[1].ifEmpty { m.groupValues[2] })
         }
-        val element = Regex("""<$q(?:\s[^>]*)?>(.*?)</$q\s*>""", RegexOption.DOT_MATCHES_ALL).find(packet) ?: return null
+        // `[\s\S]`, not `.` with DOT_MATCHES_ALL: that option is not in the common stdlib, so commonMain's metadata
+        // compile failed on it while every platform compile passed. Any character, line breaks included, either way.
+        val element = Regex("""<$q(?:\s[^>]*)?>([\s\S]*?)</$q\s*>""").find(packet) ?: return null
         val inner = element.groupValues[1]
-        val items = Regex("""<rdf:li(\s[^>]*)?>(.*?)</rdf:li\s*>""", RegexOption.DOT_MATCHES_ALL).findAll(inner).toList()
+        val items = Regex("""<rdf:li(\s[^>]*)?>([\s\S]*?)</rdf:li\s*>""").findAll(inner).toList()
         if (items.isEmpty()) return if (inner.contains('<')) null else unescape(inner)
         val chosen = items.firstOrNull { it.groupValues[1].contains("\"x-default\"") || it.groupValues[1].contains("'x-default'") } ?: items.first()
         return unescape(chosen.groupValues[2])

@@ -56,11 +56,9 @@ Each was run on a throwaway edit of `src/mobile/core` that was reverted afterwar
 | S5 | The bridge: a C surface Rust calls, answers on a core thread | `@CName("veyq_call")` taking a JSON request (kotlinx.serialization), a context pointer and an answer function pointer, answering from `Dispatchers.Default`; Rust `extern "C"` declaration, `async_channel` into GTK's main loop, `glib::spawn_future_local` | the Adwaita window (`AdwToolbarView`, `AdwStatusPage`, a boxed list) under `gtk4-broadwayd` showed both answers (the `/api/setup` JSON and 8 random bytes from libsodium), seen in the browser pane at `127.0.0.1:8095`. gtk4 0.11.5, libadwaita 0.9.2 (features `v4_20`, `v1_8`), glib 0.22.10, async-channel 2.5.0; rustc 1.99.1 from Fedora 44; `cargo build --release` 47 s. |
 | S6 | What does the whole-core export cost? | `binaries.sharedLib` on `:core` itself | `libveyqcore.so` 35.6 MB, `libveyqcore_api.h` 27,971 lines: every public class as handles and function tables — the export ADR 0127 decision 5 rejects. The `:bridge` module (D4) exports only its own `@CName` functions. |
 
-Also measured, outside this CR: `./gradlew :core:compileCommonMainKotlinMetadata` is **red on the untouched branch**
-(`ExifReader.kt:433,435`: `RegexOption.DOT_MATCHES_ALL` and `findAll` do not resolve in common metadata) — no check
-runs that task today, so nothing caught it. It is not this CR's to fix (a follow-up, § Not in this CR); D1's
-`nativeMain` compiles its own metadata (`compileNativeMainKotlinMetadata`) and is not blocked by it. A phase that
-runs a task depending on the common metadata hits it — note it, don't fix it in passing.
+Also found by S1: `./gradlew :core:compileCommonMainKotlinMetadata` was red on the untouched branch (`ExifReader`'s
+XMP regexes used `RegexOption.DOT_MATCHES_ALL`, which the common stdlib lacks; no check runs that task). Fixed before
+this CR, with `XmpValueTest` pinning the multi-line reads — the task is green now and Phase 2's `:bridge` may depend on it.
 
 ## Decisions
 
@@ -303,8 +301,7 @@ ADR 0127's **Built** line (decision 4 built for this slice; decision 5's bridge 
 ADR 0123's Consequences (the Linux targets, libsodium and utf8proc slices, measured), [native-apps](../docs/crosscutting/native-apps.md)
 (the Linux row: builds, UI, layout, seen running — Broadway in Fedora 44, 2026-…; Open: the VM slice, Flatpak, AES-less
 CPUs), `src/mobile/CLAUDE.md` (`linux/` and `bridge/` in the layout, `run.py` in Prove your work, the traps: K/N's
-toolchain download, `libcrypt.so.1`, a callback pointer valid only during the call, the common-metadata red if still
-there), `infra/README.md` § The launcher (the new tasks). The published site stays as it is — no Linux app ships to
+toolchain download, `libcrypt.so.1`, a callback pointer valid only during the call), `infra/README.md` § The launcher (the new tasks). The published site stays as it is — no Linux app ships to
 users in this CR (`site/src/content/docs/security/start-here.md` already says "once they ship").
 
 **Done when:** the trust-chain guards green (`/usr/bin/python3 scripts/validate_*.py` as the `trust-chain` CI job
@@ -317,7 +314,6 @@ runs them, `validate_changes.py` among them), and every "measured" in the touche
   **Flatpak** on the GNOME runtime (with what it must carry: `libcrypt.so.1`, the CA bundle, the zoneinfo).
 - **Windows:** `mingwX64`, Ktor's WinHttp engine, the C# writer of D7, WinUI 3 — needs a Windows host.
 - Every other application's screens on Linux (Depot, Memories), uploads, writes in a Pot.
-- **The common-metadata red** in `ExifReader.kt` (§ Spikes): a small fix of its own.
 - A CI job for the apps (already open in native-apps); this CR's checks run locally.
 
 ## Owner questions
