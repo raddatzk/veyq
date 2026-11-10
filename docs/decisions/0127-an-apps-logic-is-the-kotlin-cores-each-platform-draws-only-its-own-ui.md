@@ -1,6 +1,11 @@
 # ADR 0127 — An app's logic is the Kotlin core's; each platform draws only its own UI, Windows and Linux among them
 - Status: Accepted
-- Built: partly (decisions 1 to 3 for Android and Apple: the screens' logic is the core's, the words one catalog; decisions 4 and 5 are not built)
+- Built: partly — decisions 1 to 3 for Android and Apple (the screens' logic is the core's, the words one catalog);
+  decision 4 for Linux's first slice (sign-in, the shell, Home, a Pot read only, Search), run in a Fedora 44 container
+  under GTK's Broadway backend, not yet in a desktop session or as a Flatpak; decision 5's bridge, which the Linux app
+  uses, but not its Windows half (`mingwX64`, the C# types, WinUI). Measured 2026-11-10 (`src/mobile/linux/run.py test`,
+  `bridge` and `build`, `./gradlew :bridge:jvmTest`, a browser pass): ADR 0123's Consequences, the core on Linux, the
+  bridge and the Linux app
 - Date: 2026-11-09 (decision 4 revised 2026-11-10: Linux in Rust over the native core, not on the JVM)
 - Model: [native-apps](../crosscutting/native-apps.md)
 
@@ -75,6 +80,14 @@ four times.
   "UI is never shared" stands. The repository gains Rust, for the Linux UI alone.
 - The Windows app cannot be built on the developer's Mac: its slice needs a Windows host, and the apps' CI job (still
   open) a Windows runner.
+- **The bridge carries no key, so a platform behind it does not hold the device trust as decision 1 has a platform hold
+  the secure store** (found building it, 2026-11-10). `DeviceKeys`' calls carry the Master Key to seal and the refresh
+  token to keep; forwarded to the host, both would cross the bridge. The Linux app therefore keeps no device trust yet,
+  and every start signs in. Its Secret Service is reached by the core itself — libsecret through cinterop, the key
+  never leaving the library — or the bridge's rule is revisited; never a host request that carries a key. Windows'
+  DPAPI meets the same choice.
+- The repository's Rust (`src/mobile/linux/`) is held to the no-deprecated rule by reading: cargo has no deprecation
+  gate, as the JavaScript install has.
 - What is still open per platform is [native-apps](../crosscutting/native-apps.md)' to keep.
 
 ## Alternatives considered

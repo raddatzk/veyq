@@ -16,7 +16,7 @@ Outputs (each optional; each a directory or file this script owns and rewrites w
                         own name, so `R.string.<key>` is the key.
   --android-kotlin DIR  `me/raddatz/veyq/mobile/android/Words.kt`: `Context.words(msg, args)`, a `Msg` to its resource.
   --apple-strings FILE  a String Catalog (table `Words`): the Apple app's `say(msg, args)` looks the key up there.
-  --gettext DIR         the Linux app's (CR core-as-a-native-library D10): `veyq.pot` and one `<lang>.po` per language
+  --gettext DIR         the Linux app's (ADR 0123's Consequences, the Linux app): `veyq.pot` and one `<lang>.po` per language
                         (`msgctxt` the key, `msgid` the English, `msgstr` the language's; a plural's CLDR categories
                         mapped to the language's `Plural-Forms`, a language without a known mapping refused), which the
                         app's build compiles with `msgfmt`, and `words.rs`: one function per key with typed arguments

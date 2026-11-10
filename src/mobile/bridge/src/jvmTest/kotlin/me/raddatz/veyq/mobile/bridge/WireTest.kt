@@ -49,7 +49,7 @@ import kotlin.test.assertTrue
 import kotlin.test.fail
 
 /**
- * Every registered root round-trips (CR D7, the JVM half): one value of each — of every variant of each sealed root —
+ * Every registered root round-trips (ADR 0123's Consequences, the bridge, the JVM half): one value of each — of every variant of each sealed root —
  * is written as the bridge writes it, read back and written again to the same JSON, and the JSON is held to the
  * descriptor the generator reads (every field present by its name, no other, each of its kind; a sealed value tagged
  * with one of its variants). Every variant of every sealed type the roots reach must occur in what was written: a

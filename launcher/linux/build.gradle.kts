@@ -1,4 +1,4 @@
-// `linux:*` — the veyq app on Linux (src/mobile/linux, CR core-as-a-native-library D8): every task is a verb of its
+// `linux:*` — the veyq app on Linux (src/mobile/linux, ADR 0123's Consequences, the Linux app): every task is a verb of its
 // `run.py`, which cross-compiles the core with src/mobile's own Gradle wrapper and runs cargo and the app in its Fedora
 // 44 container (Docker). No task is named `test` (infra/README.md § The launcher): the core's Linux tests are `coreTest`.
 val runPy = rootDir.resolve("src/mobile/linux/run.py")

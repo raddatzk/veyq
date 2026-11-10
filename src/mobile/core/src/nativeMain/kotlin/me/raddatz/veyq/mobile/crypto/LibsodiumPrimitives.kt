@@ -38,7 +38,7 @@ import me.raddatz.veyq.mobile.sodium.sodium_init
 /**
  * The native platforms' primitives (ADR 0123; Apple and Linux, ADR 0127): libsodium 1.0.22 through cinterop, built by
  * `core/sodium/build_libsodium.py`. Its AES-256-GCM needs the CPU's AES instructions: without them (a Raspberry Pi 4)
- * the object refuses to initialise, and so the app refuses to start (CR core-as-a-native-library, Q1).
+ * the object refuses to initialise, and so the app refuses to start (ADR 0123's Consequences, the core on Linux).
  * Every function here only moves bytes in and out of one libsodium call; what they compute is pinned by the vectors.
  */
 object LibsodiumPrimitives : Primitives {

@@ -21,7 +21,7 @@ import me.raddatz.veyq.mobile.session.TenantSession
 class PotModel(private val tenant: TenantSession, private val now: () -> Long) {
     /**
      * The open Pot's views: [view] null while it loads, [failed] when it did not open; [message] the last write's refusal.
-     * Serializable, since the native bridge sends it as it is (CR core-as-a-native-library D6).
+     * Serializable, since the native bridge sends it as it is (ADR 0123's Consequences, the bridge).
      */
     @kotlinx.serialization.Serializable
     class State(val ref: ObjectRef, val view: PotView? = null, val failed: Boolean = false, val saving: Boolean = false, val message: String? = null) {

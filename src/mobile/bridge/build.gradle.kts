@@ -1,4 +1,4 @@
-// The native bridge (ADR 0127 decision 5, CR core-as-a-native-library D6/D7): the core as one shared library,
+// The native bridge (ADR 0127 decision 5; ADR 0123's Consequences, the bridge): the core as one shared library,
 // `libveyq.so`, whose only public surface is the six C functions of `bridge.h`. It depends on `:core` as an
 // implementation dependency, so the library exports none of the core's classes — only the `@CName` functions of
 // `src/linuxMain`. The JVM target exists for the tests and for the generator of the Rust types (`generateBindings`).
@@ -55,7 +55,7 @@ val generateBindings = tasks.register<JavaExec>("generateBindings") {
 }
 
 // The header test reads the header Kotlin/Native writes beside the library it links, and the samples it writes are the
-// Rust half's input (CR D7: the generated bridge.rs deserializes what the JVM wrote).
+// Rust half's input (ADR 0123's Consequences, the bridge: the generated bridge.rs deserializes what the JVM wrote).
 tasks.named<Test>("jvmTest") {
     val linked = tasks.named("linkDebugSharedLinuxArm64")
     dependsOn(linked)

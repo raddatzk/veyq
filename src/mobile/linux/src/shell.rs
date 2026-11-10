@@ -1,4 +1,4 @@
-//! The shell (ADR 0122; CR core-as-a-native-library D9), GNOME's way: an `AdwNavigationSplitView` whose sidebar is an
+//! The shell (ADR 0122; ADR 0123's Consequences, the Linux app), GNOME's way: an `AdwNavigationSplitView` whose sidebar is an
 //! `AdwSidebar` — Home, Favorites, Recent, the applications — under a header bar whose title is the one switcher (the
 //! space shown, its tenant and server; spaces and tenants in its menu), with New beside it and Search under it (Ctrl+F),
 //! and Settings pinned at its foot. The content side shows what the core's shell says is open: Home, an application's

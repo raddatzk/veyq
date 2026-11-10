@@ -16,7 +16,7 @@ import me.raddatz.veyq.mobile.words.Piece
  * format money. Amounts are minor units of the base currency; a name is null for an erased person (the platform says
  * "deleted person").
  *
- * On the wire (the native bridge, CR core-as-a-native-library D6) a view is what it shows, [Shown]: its rows each with
+ * On the wire (the native bridge, ADR 0123's Consequences, the bridge) a view is what it shows, [Shown]: its rows each with
  * the words the core says for them. It is sent, never received — it is computed from a session, which stays here.
  */
 @Serializable(with = PotView.AsShown::class)

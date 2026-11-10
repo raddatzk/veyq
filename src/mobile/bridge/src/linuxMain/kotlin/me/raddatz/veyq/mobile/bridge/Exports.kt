@@ -19,7 +19,7 @@ import kotlin.concurrent.atomics.AtomicReference
 import kotlin.concurrent.atomics.ExperimentalAtomicApi
 import kotlin.experimental.ExperimentalNativeApi
 
-// The six C functions of bridge.h (CR core-as-a-native-library D6) — the library's whole surface. Each pointer the host
+// The six C functions of bridge.h (ADR 0123's Consequences, the bridge) — the library's whole surface. Each pointer the host
 // hands in is read before the function returns; each pointer handed to the host is valid only during that call, so the
 // host copies what it keeps. JSON is UTF-8 and NUL-terminated; the byte payload beside it is unused in this slice
 // (null, length 0) and reserved for bytes the UI shows (an avatar, a tile), which never travel as base64.

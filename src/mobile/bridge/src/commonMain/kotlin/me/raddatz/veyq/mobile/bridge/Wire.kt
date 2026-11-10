@@ -20,7 +20,7 @@ import me.raddatz.veyq.mobile.words.MsgKey
 import me.raddatz.veyq.mobile.words.Piece
 
 /**
- * What crosses the bridge (CR core-as-a-native-library D6), as kotlinx.serialization writes it: UTF-8 JSON, every field
+ * What crosses the bridge (ADR 0123's Consequences, the bridge), as kotlinx.serialization writes it: UTF-8 JSON, every field
  * present (a default too, a null as `null`), a sealed class tagged by `type` with its serial name. The host's types are
  * generated from these descriptors (`Bindings.kt`), so what is written here is what the host reads — and a call the
  * host sends with a field this side does not know is refused, never half-read.

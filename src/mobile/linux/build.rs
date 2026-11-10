@@ -1,4 +1,4 @@
-//! Reads what the app is built from but does not keep (CR core-as-a-native-library D7, D10, D11): the bridge's Rust
+//! Reads what the app is built from but does not keep (ADR 0123's Consequences, the bridge and the Linux app): the bridge's Rust
 //! types and the words' Rust and gettext catalogs and the theme, all generated under `$VEYQ_GENERATED` (run.py mounts
 //! `src/mobile/build/generated` there), and links `libveyq.so` from `$VEYQ_LIB_DIR`. Into `OUT_DIR` it writes:
 //! `bridge.rs` and `words.rs` as they are, `locale/<lang>/LC_MESSAGES/veyq.mo` (msgfmt), and `veyq.gresource`

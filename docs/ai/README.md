@@ -353,7 +353,19 @@ A refined CR nails **decisions, not keystrokes**:
 - **Spike when the shape is unclear.** The right abstraction often only emerges from N real usages (that is why
   `core/membership/MembershipStore` came out clean — 5 usages, not a guess). If refinement can't settle the
   shape from reasoning, run a time-boxed subagent spike over the surface and fold the inventory back in — don't
-  guess an abstraction into the CR.
+  guess an abstraction into the CR. **A spike's green is the green of the tasks it ran**, and its configure-time
+  warnings are part of its result: the Linux spike compiled every target and concluded the interop commonizes, while
+  the shared source sets' metadata compiles stayed red and Gradle had printed "CInterop Commonization Disabled"
+  throughout. **A fact the refine states about a library is read from the artifact the build links**, not remembered.
+  The same CR named utf8proc's Unicode version wrong (the tarball said 17.0.0, not 16.0), planned a `style-dark.css`
+  that libadwaita 1.9's binary calls deprecated, and hand-built a sidebar the library ships (`AdwSidebar`, in its `.gir`).
+- **A seam the CR designs is read against what each side of it will actually call.** The native bridge's refine
+  had the host answer every `DeviceKeys` call, and those calls carry the Master Key and a refresh token across a
+  bridge no key may cross. Its test door assumed the shell and Pot models take a door, but their constructors take a
+  concrete session. Its wire lacked the switcher's tenants and the space's name, which both apps take from core
+  functions in their own `AppModel` and not from any state. Each surfaced only when building the phase after. A
+  refine that puts an interface between two sides greps what the existing callers call through it, and what each call
+  carries.
 - **`satisfies:` decides where the acceptance criteria land — so decide it, don't inherit it.** A criterion
   that describes a *property with several triggers* belongs to a use-case of its own, not under whichever
   operation's use-case the CR happened to name; the tell that it went wrong is the same refs appearing under

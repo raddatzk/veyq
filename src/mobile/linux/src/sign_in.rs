@@ -1,4 +1,4 @@
-//! The way in (CR core-as-a-native-library Phase 4): what the core's `SessionModel.Gate` says — opening, the full
+//! The way in (ADR 0123's Consequences, the Linux app): what the core's `SessionModel.Gate` says — opening, the full
 //! sign-in with the Secret Key (every start, until the VM slice brings the Secret Service) — drawn as GNOME draws a form:
 //! a clamped boxed list of entry rows and one suggested button. The person's input goes to the core as one call; the
 //! core decides what it means and answers with the next gate.

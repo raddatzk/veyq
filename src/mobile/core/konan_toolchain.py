@@ -3,7 +3,7 @@
 A static library the core links for Linux must be compiled against the SAME old glibc Kotlin/Native links the core
 against (its gcc toolchain's sysroot: glibc 2.25 for arm64, 2.19 for x86-64): one built on a current distribution would
 pull versioned symbols the final link cannot satisfy. So libsodium's and utf8proc's Linux slices are compiled by
-Kotlin/Native's LLVM (`clang`, `llvm-ar`, `lld`) against that sysroot (CR core-as-a-native-library D2, S2).
+Kotlin/Native's LLVM (`clang`, `llvm-ar`, `lld`) against that sysroot (ADR 0123's Consequences, the core on Linux).
 
 Nothing here is spelled: the Kotlin version is the version catalog's, the distribution is the one Gradle unpacked under
 `$KONAN_DATA_DIR` (default `~/.konan`), and the LLVM and the gcc toolchain are what its `konan.properties` names

@@ -1,4 +1,4 @@
-//! What the core says, written the way this desktop writes it (CR core-as-a-native-library D10): a `Notice` by its key
+//! What the core says, written the way this desktop writes it (ADR 0123's Consequences, the Linux app): a `Notice` by its key
 //! and arguments through [words::say], a `Piece` piece by piece — a day, a size, a moment and an amount of money in the
 //! person's locale, as glibc and GLib hold it. Nothing here decides what is said; that is the core's (ADR 0127
 //! decision 1). The same as Android's `NoticeText.kt` and Apple's `say(notice)`.

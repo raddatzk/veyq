@@ -471,16 +471,134 @@ implementation exists but what holds it to the first.
   (`NodeHeaderActions`). A kind's page only contributes (`KindPage`, the web's `KindRegistration`: it brings a share sheet,
   it takes a cover, a subtitle, its rights narrowing, its copy and download doors, actions of its own) and draws its body
   (`NodeHeaderTest`, each rule a case; the heart moved after the application's actions turns three red).
+- **The core on Linux** ([ADR 0127](0127-an-apps-logic-is-the-kotlin-cores-each-platform-draws-only-its-own-ui.md)
+  decision 4, 2026-11-10). `core` gains `linuxArm64` and `linuxX64`, cross-compiled from the developer's arm64 Mac; no
+  Linux host builds it. Decision 3's libsodium (`LibsodiumPrimitives`, the `sodium` cinterop) moved from `appleMain` to
+  `nativeMain`, which Apple and Linux share, and its interop is commonized: `kotlin.mpp.enableCInteropCommonization=true`
+  in `src/mobile/gradle.properties`, without which `:core:compileNativeMainKotlinMetadata` was red ("Unresolved reference
+  'sodium'") while every per-target compile was green. `linuxMain` holds Linux's `actual`s:
+  - **libsodium for Linux** is built by `core/sodium/build_libsodium.py` from the same pinned tarball, with Kotlin/Native's own
+    clang, `llvm-ar` and `lld` against the sysroot of the gcc toolchain Kotlin/Native links the core against (glibc 2.25 for
+    arm64, 2.19 for x86-64). A container was rejected: a library built against a newer glibc carries versioned symbols
+    the final link cannot satisfy. `core/konan_toolchain.py` reads the toolchain from `konan.properties`, never from a
+    spelled path; `:core:downloadKotlinNativeDistribution` downloads it, and the C builds depend on that task.
+  - **`nfc` / `nfkd` are utf8proc's** (2.11.3, JuliaStrings, MIT, Unicode 17.0.0 as its `utf8proc_unicode_version()`
+    says), built the same way by `core/utf8proc/build_utf8proc.py` from its pinned tag tarball, reached through
+    `utf8proc_map` with the length given. `utf8proc_NFC` itself reads up to the first NUL and so cut a name at an
+    embedded U+0000 (`ArchiveNameTest` red). Rejected: ICU through cinterop (its symbols are renamed per version, so the
+    link binds one distribution's ICU, and the sysroot has no ICU headers), GLib's `g_utf8_normalize` (the core would
+    link GLib, and Windows needs another answer), and a generated Kotlin implementation (ours to maintain where a
+    maintained C library does it).
+  - **`localWallClock` is kotlinx-datetime's** (`0.8.0-0.6.x-compat`, the artifact Ktor already resolved). It gives the
+    JavaScript semantics the `expect` documents: a gap moves forward, an overlap takes the earlier offset, out-of-range
+    parts roll over. `mktime` was rejected because its gap and overlap are implementation-defined.
+  - **HTTP is Ktor's Curl engine**, libcurl linked in statically. CIO has no TLS on Kotlin/Native. CA certificates are
+    the system's. The one dynamic library it needs beyond glibc, zlib and `libresolv` is `libcrypt.so.1`.
+  - **A CPU without AES instructions is refused at start** (owner 2026-11-10): libsodium's AES-256-GCM needs them, as on
+    Apple. A Raspberry Pi 4 lacks them, and the app says so instead of starting.
+
+  Measured 2026-11-10:
+  - `python3 src/mobile/linux/run.py test` runs `:core:linkDebugTestLinuxArm64`'s binary in Fedora 44 arm64 with zero
+    failures. It covers every common test and `LibsodiumConformanceTest`, which moved to `nativeTest` and so holds every
+    libsodium target, at production cost: all 172 vector cases, the 12 normalization ones among them. It also covers
+    `NormalizationTest` over every line of Unicode 17.0.0's `NormalizationTest.txt` and `WallClockTest` in
+    Europe/Berlin.
+  - A stub `nfc`, and an AEAD off by one byte (`aWrongPrimitiveIsCaught`), each turn that run red.
+  - With `VEYQ_LIVE=http://veyq.localhost:8080` and `--tests '*LiveSignInTest*'`, it signs in on Linux as the seeded
+    principal.
+  - `:core:linkDebugTestLinuxX64` links. It does not run, since there is no x86-64 container on the developer's Mac.
+  - `./gradlew :core:jvmTest :core:macosArm64Test` stays green, unchanged.
+  - The verification metadata for the new targets was written from an empty Gradle home. That write added 90 lines of
+    parent POMs and BOMs that a warm cache never fetches.
+- **The bridge** (ADR 0127 decision 5, its Linux half; `src/mobile/bridge/`). The core reaches a platform outside the JVM
+  and Apple as one shared library, `libveyq.so`. Its whole surface is the six C functions of the hand-written
+  `bridge.h`: `veyq_init`, `veyq_call`, `veyq_watch`, `veyq_unwatch`, `veyq_reply` and `veyq_shutdown`. Kotlin/Native's
+  export of the whole core (35.6 MB, a 27,971-line header of handles and function tables) is what ADR 0127 rejects.
+  `:bridge` depends on `:core` as an implementation dependency, so it exports only its own `@CName` functions.
+  - **The calls.** A `Call` (a sealed class) is dispatched one line onto a core model; a rule found in the dispatch is
+    a defect to move into the core. A `Watched` model sends its state flow, one serialized state per change.
+  - **The host.** It answers each `HostRequest` (today the device store) through `veyq_reply`, and the asking core
+    thread blocks until then, for at most 30 s.
+  - **The wire.** Everything travels as the core's kotlinx.serialization JSON, with the bytes a UI shows travelling
+    beside it, never as base64. A pointer handed across is valid only during that call: each side copies what it
+    keeps. The screen models' states are `@Serializable` themselves, never a copy in `:bridge`. A `PotView`, which
+    holds a session, is sent as what it shows (`PotView.AsShown`, every row with the core's words) and never read back.
+    Beside the shell's state goes `ShellShown`: what both apps ask core functions for while they draw (the switcher's
+    tenants, the space's name, Home's groups, the bar's places).
+  - **No key, seal or token crosses outward.** Inward only the typed password and Secret Key do, on their way to the
+    core. So `DeviceKeys` is the bridge's own `NoDeviceKeys` and forwards nothing, because its calls carry the Master
+    Key to seal and the refresh token to keep. A host behind the bridge cannot hold the device trust until the core
+    reaches the secure store itself ([native-apps](../crosscutting/native-apps.md) § Open).
+  - **Linked with `-Wl,--exclude-libs,ALL`.** Without the flag the library defined 11,348 symbols, OpenSSL's whole API
+    among them, which a host loading its own libcrypto would bind against. With it the library defines the six and
+    Kotlin/Native's own.
+  - **The Rust types are generated.** `:bridge:generateBindings` walks the serial descriptors of the roots `:bridge`
+    registers into `bridge.rs` (serde types, `#[serde(tag = "type")]` for a sealed class). It writes the `extern "C"`
+    lines from `bridge.h` and a `reserialize` door per type. The output is never committed.
+
+  Measured 2026-11-10:
+  - `./gradlew :bridge:jvmTest` runs four checks:
+    - `DispatchTest` covers the way in, over a door the test plays.
+    - `WireTest` writes a sample of every variant of every sealed type the roots reach, reads each back and holds it
+      to its descriptor.
+    - The secret-free case is strict for everything the core sends, and is red when an exception names a field the
+      wire no longer has. Its bite was a `sealKey` field.
+    - `bridge.h` is checked against the header Kotlin/Native generates.
+  - With `VEYQ_LIVE` set, `LiveBridgeTest` holds the shell, Home's groups, `ShellShown`, Search and three seeded Pots
+    over the real core. That is the only proof of the shell's, Search's and the Pot's dispatch, because
+    `ShellModel` and `PotModel` take a concrete `TenantSession` that no played door builds (settled 2026-11-10: each
+    call is one line onto a model the core's own tests hold; a door of their own is revisited with Windows).
+  - `python3 src/mobile/linux/run.py bridge` compares `nm -D` in Fedora 44 with exactly that set (a dropped flag is
+    red). It also runs `bridge/smoke/smoke.c`, built against `bridge.h` alone, which starts the core, watches the
+    gate and answers the store from its own thread; with `VEYQ_LIVE` it signs in over the library's own libcurl.
+  - The Rust half: `run.py build`'s `cargo test` reads every sample back field for field through `reserialize`, so a
+    type the host lacks or a field it drops is red.
+- **The Linux app** (ADR 0127 decision 4; `src/mobile/linux/`). A Cargo package, a library and the app, built and run
+  in the pinned Fedora 44 `Containerfile` by `run.py`.
+  - **Crates and libraries.** gtk4-rs 0.11 and libadwaita-rs 0.9 with feature `v1_9`, since Fedora 44 carries GTK
+    4.22 and libadwaita 1.9. Each direct crate was read against the no-deprecated rule on 2026-11-10: gtk4 0.11.5,
+    libadwaita 0.9.2, glib 0.22.10, async-channel 2.5.0, serde 1.0.229 and serde_json 1.0.154, each repository
+    maintained. The transitive packages of the 77 in `Cargo.lock` were not read one by one, because cargo has no
+    deprecation gate.
+  - **Threads.** The bridge's answers arrive on core threads; `src/bridge/mod.rs` hands them to GTK's main loop
+    through an `async_channel` and touches no widget off it.
+  - **Words.** They come as gettext catalogs that `generate_words.py --gettext` writes from `words.json` (ADR 0127
+    decision 3), with `words.rs` as one function per key, and `msgfmt --check` compiles them at build time. The
+    generator refuses a language whose CLDR plural categories it cannot map.
+  - **Theme.** `generate_theme.py --gtk` writes one `style.css` that sets libadwaita's named colours from the web's
+    roles (decision 7), with the dark ones under a `prefers-color-scheme` media query, and writes the icon.
+    libadwaita 1.9 deprecates `style-dark.css` and declares no radius but the window's.
+  - **The first slice.** Every start is a sign-in. Then the shell: an `AdwNavigationSplitView` whose sidebar is
+    libadwaita's `AdwSidebar` (240–360 sp), collapsing below 600 sp to a navigation stack with the sidebar in its
+    page mode. The switcher is the sidebar header bar's title menu, and Search is a `GtkSearchBar` (Ctrl+F) whose hits
+    take the sidebar's rows. Home has its groups and filters (`AdwToggleGroup`); Favorites, Recent and an
+    application's list are there; a Pot is read only (entries, overview, people). An object the slice does not draw
+    says so with the core's `not_built`.
+  - **Money, days and sizes** are written the desktop's way: glibc's `localeconv`, `%x` and `g_format_size`.
+  - **Guards** (decision 9). The words guard holds linux-literal (no Rust literal as a widget's shown text) and
+    linux-po; the guidelines guard holds linux-block (the creating action only in `create_action.rs`) and
+    linux-floating-button. Each rule was bitten red and green on the restore.
+
+  Measured 2026-11-10:
+  - `python3 src/mobile/linux/run.py build` is green: `cargo clippy -- -D warnings`, and `cargo test` (the round
+    trip, every key's German and English, money in two locales).
+  - A browser pass ran under Broadway in Fedora 44 against the dev instance (`run.py run --devlogin`). It covered
+    1100 × 750 and 500 × 750, English and German, light and dark: sign-in, a switch of tenant and space, Home filtered,
+    a folder, a favorite, Search and its hit. A Pot's entries and overview matched what the core reads for it live
+    (`LiveBridgeTest`: Amsterdam's 5 entries, Anna owed 67.34, Ben owing it). The app's stderr held no GTK or
+    libadwaita warning.
 - **Not built yet:** every other write (another kind's node), the
   other applications' views behind the bar, a CI job for the apps. The grant check is held by `GrantTrustTest` against a server the test plays — each refusal killed by
   a mutation of the rule it pins, but for three a second rule also holds (a pending or self-naming signer, and a cycle
   of signers, end unanchored through the signer's own judgment) — and by `v1.json#key_chain`, `#identity_pin`,
   `#scope_succession`, `#invite_key`, `#join_record`, `#join_endorsement`, `#value_key`, `#slug_token` and `#name_folding` on both primitives. `src/mobile/` verifies its dependencies as `src/backend/` does
   (`gradle/verification-metadata.xml`, held by `scripts/validate_build_input_pins.py`): a new dependency or target
-  owes a `./gradlew --write-verification-metadata sha256` run over the tasks that resolve it.
+  owes a `./gradlew --write-verification-metadata sha256` run over the tasks that resolve it, from an empty Gradle home
+  (`GRADLE_USER_HOME=<empty dir>`): a warm one never fetches the parent POMs and BOMs a fresh runner does.
 - Two implementations of the suite now exist. A change to the suite changes the vectors first, and both the web's
   package and `core` must meet them; `src/mobile/`'s `./gradlew :core:jvmTest :core:macosArm64Test` is the app's half
-  of that proof — the same `Conformance` over BouncyCastle and over libsodium.
+  of that proof — the same `Conformance` over BouncyCastle and over libsodium —, and `python3 src/mobile/linux/run.py test`
+  its Linux half.
 - **No ready-made Kotlin Multiplatform library covers the Apple side** (checked 2026-11-08): cryptography-kotlin 0.6.0
   has neither ML-KEM nor Argon2id (Argon2 is an open issue there); the libsodium bindings published for Kotlin
   Multiplatform (0.9.5) ship a libsodium from before 1.0.22 and so no ML-KEM. Should one of them cover the suite's

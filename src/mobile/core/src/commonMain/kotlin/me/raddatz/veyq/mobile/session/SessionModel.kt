@@ -56,7 +56,7 @@ class SessionModel<A : Connection, T : Any>(
         suspend fun forgetDevice(account: A)
     }
 
-    /** Where the way in stands; serializable, since the native bridge sends it as it is (CR core-as-a-native-library D6). */
+    /** Where the way in stands; serializable, since the native bridge sends it as it is (ADR 0123's Consequences, the bridge). */
     @Serializable
     sealed class Gate {
         /** The remembered accounts resuming at start. */

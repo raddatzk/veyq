@@ -1,4 +1,4 @@
-//! An open Pot, read only (CR core-as-a-native-library Phase 4; ADR 0122 decision 4: Expenses' places are the open
+//! An open Pot, read only (ADR 0123's Consequences, the Linux app; ADR 0122 decision 4: Expenses' places are the open
 //! Pot's Entries, Overview and Settings, as the web's Pot has them). The Pot is a model of its own in the core
 //! (`Pot.Open`), watched while it is on screen and closed when it leaves; what each row says — its line, its badge, a
 //! balance's words and tone, who pays whom — is the core's (`PotView.Shown`). This lays it out and writes money.

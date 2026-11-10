@@ -14,7 +14,7 @@ Outputs (each optional, each a directory this script owns and rewrites whole):
   --apple-assets DIR    colour sets for every role and the mark's image set, inside an asset catalog
                         (`<DIR>/veyq-<role>.colorset`, `<DIR>/VeyqMark.imageset`), light and dark appearances, and
                         the app icon (`<DIR>/AppIcon.appiconset`: light, dark, tinted), rendered by macOS' Quick Look.
-  --gtk DIR             the Linux app's (CR core-as-a-native-library D11): `style.css`, libadwaita's own colour
+  --gtk DIR             the Linux app's (ADR 0123's Consequences, the Linux app): `style.css`, libadwaita's own colour
                         variables set from the web's roles (`GTK_ROLES`), dark under `prefers-color-scheme: dark`, and
                         the app icon `icons/scalable/apps/me.raddatz.veyq.svg` with its symbolic variant; the app bundles
                         DIR as its GResource, from whose base path libadwaita loads `style.css` itself.

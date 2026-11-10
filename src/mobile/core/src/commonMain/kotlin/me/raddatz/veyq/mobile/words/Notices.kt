@@ -109,7 +109,7 @@ class Bytes(val count: Long) {
 }
 
 /**
- * A [Msg] on the wire (the native bridge, CR core-as-a-native-library D6) as its catalog key — `words.json`'s, which
+ * A [Msg] on the wire (the native bridge, ADR 0123's Consequences, the bridge) as its catalog key — `words.json`'s, which
  * each platform's words are generated under — never as the entry's Kotlin name.
  */
 object MsgKey : KSerializer<Msg> {

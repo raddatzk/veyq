@@ -38,18 +38,19 @@ for want of room close the editor and the shell says which (the web's toast); a 
 | iPad | yes (the iOS target, no device family set) | SwiftUI | `NavigationSplitView` with its sidebar open in a regular size class; the detail is one page whose bar's places are a segmented control in its toolbar, not a tab bar, Search always the toolbar's field at its trailing end; Settings pinned at the sidebar's foot; an object chosen in the sidebar has no back (ADR 0122 decision 7); sign-in and unlock read at a form's width | the Simulator, 2026-11-10 |
 | macOS | yes (macOS 26) | SwiftUI | always the split view, as the iPad's; the sidebar 240–360 pt wide | an ad-hoc signed build, 2026-11-10 (Home, a Pot's entries and overview); without a team's signing the device trust is never enrolled; no share extension there |
 | Windows | no | — | — | — |
-| Linux | no | — | — | — |
+| Linux | the core and the bridge for arm64 and x86-64, cross-compiled on the developer's Mac; the app for arm64, in a Fedora 44 container (`src/mobile/linux/run.py build`) | GTK 4 and libadwaita in Rust, over the core as `libveyq.so` through the bridge | `AdwNavigationSplitView` with libadwaita's `AdwSidebar` (240–360 sp), collapsing below 600 sp to a navigation stack, the sidebar in its page mode; the switcher the sidebar's title menu, Search a search bar under it (Ctrl+F), Settings at its foot | Broadway in Fedora 44 arm64, drawn into a browser, 2026-11-10 (the first slice: sign-in, the shell, Home, a Pot read only, Search; 1100 × 750 and 500 × 750); no desktop session yet, so no device trust: every start signs in |
 
 Windows and Linux are wanted (owner 2026-11-09), each with its own native UI over the same core
 ([ADR 0127](../decisions/0127-an-apps-logic-is-the-kotlin-cores-each-platform-draws-only-its-own-ui.md)): Linux GTK 4 and
 libadwaita in Rust, Windows WinUI 3 in C#, both over the core as a Kotlin/Native library through one bridge (owner
-2026-11-10). On Windows that core is x64 only: Kotlin/Native has no Windows ARM64 target.
+2026-11-10). Linux's first slice is built (ADR 0123's Consequences, the core on Linux, the bridge and the Linux app);
+Windows is not. On Windows that core is x64 only: Kotlin/Native has no Windows ARM64 target.
 
 ## Built, by area
 
 "Measured" means ADR 0123 records it run against a dev instance (and, where it says so, read back by the web); "built"
 means the code is there and compiles, nothing recorded beyond. Both apps hold everything listed unless a row says
-otherwise.
+otherwise; the Linux app holds only its first slice (the Linux row above).
 
 **Account and session.** Sign-in with password and Secret Key behind the `/api/setup` major gate, each grant judged as
 the web judges it (measured, `LiveSignInTest`, `GrantTrustTest`); the device trusted with the password, staying signed
@@ -84,7 +85,23 @@ Apple's toolbar button and list — measured 2026-11-09 (the list behind Apple's
 ## Open
 
 **Platforms and form factors**
-- Windows (WinUI) and Linux (GTK/libadwaita): the apps (ADR 0127 decisions 4 and 5).
+- Windows (WinUI, ADR 0127 decision 5): `mingwX64`, Ktor's WinHttp engine, the C# writer of the bridge's types, the
+  app — on a Windows host.
+- Linux beyond its first slice:
+  - **The desktop session** (the Fedora ARM VM). Staying signed in and the device trust need the Secret Service. The
+    bridge carries no key, and `DeviceKeys`' calls carry the Master Key and the refresh token, so the host cannot
+    answer them. The core reaches the Secret Service itself (libsecret through cinterop, the key never leaving the
+    library), or the bridge's rule is revisited (ADR 0127's Consequences). Also open there: the portals (file chooser,
+    save) and drag and drop.
+  - **The Flatpak** on the GNOME runtime. It must carry GTK 4.22 and libadwaita 1.9, `libcrypt.so.1`, a CA bundle and
+    the zoneinfo.
+  - **The other screens.** Every other application's screens (Depot, Memories), uploads and a Pot's writes are not
+    built. New, "Manage servers" and Settings are there but offer nothing yet.
+  - **A CPU without AES instructions** (a Raspberry Pi 4) is refused at start (owner 2026-11-10, accepted). A software
+    AES-GCM would be a second implementation of a primitive, held to the same vectors; it is revisited if someone asks.
+  - **A foreign currency's spelling.** A currency other than the locale's own is written by its code (`EUR 1,234.56`
+    under en_US) where Android and Apple write `€1,234.56`. glibc's locale data has only the locale's own symbol.
+  - **x86-64.** The app has not been built and run on x86-64; only arm64 was.
 - A CI job for the apps.
 
 **Account**

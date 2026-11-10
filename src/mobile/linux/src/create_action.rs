@@ -1,4 +1,4 @@
-//! A view's creating action, GNOME's way (ADR 0123 decision 9; CR core-as-a-native-library D12): a "+" in the header
+//! A view's creating action, GNOME's way (ADR 0123 decision 9; ADR 0123's Consequences, the Linux app): a "+" in the header
 //! bar — or at the sidebar's top — drawn with `list-add-symbolic`, its words as tooltip and accessible label; where a
 //! level creates several kinds, the same "+" opens a menu of them. GNOME has no floating action button: nothing here
 //! or elsewhere floats a button over a view through a `gtk::Overlay` (`scripts/validate_mobile_platform_guidelines.py`

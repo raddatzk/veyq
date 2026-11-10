@@ -62,7 +62,7 @@ class ShellModel(
         fun space(shell: Shell): SpaceRef? = spaces.firstOrNull { it.scopeId == shell.space }
     }
 
-    /** Serializable, since the native bridge sends it as it is (CR core-as-a-native-library D6). */
+    /** Serializable, since the native bridge sends it as it is (ADR 0123's Consequences, the bridge). */
     @Serializable
     class State(val shell: Shell, val lists: Lists)
 

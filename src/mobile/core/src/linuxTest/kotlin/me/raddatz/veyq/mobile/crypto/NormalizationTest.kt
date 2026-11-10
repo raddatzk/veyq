@@ -10,7 +10,7 @@ import kotlin.test.assertTrue
 
 /**
  * Linux's `nfc`/`nfkd` (utf8proc) against Unicode's own NormalizationTest.txt for the version utf8proc implements,
- * fetched and pinned by `core/utf8proc/build_utf8proc.py` (CR core-as-a-native-library D3). Every line's five columns
+ * fetched and pinned by `core/utf8proc/build_utf8proc.py` (ADR 0123's Consequences, the core on Linux). Every line's five columns
  * c1..c5 must satisfy the file's invariants for the two forms the suite uses:
  * NFC: c2 == toNFC(c1) == toNFC(c2) == toNFC(c3), c4 == toNFC(c4) == toNFC(c5);
  * NFKD: c5 == toNFKD(c1..c5) — and, as the file's Part 1 requires, every other code point is its own NFC and NFKD.

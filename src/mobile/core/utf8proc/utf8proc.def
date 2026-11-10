@@ -1,4 +1,4 @@
-# utf8proc for Linux's `nfc`/`nfkd` (CR core-as-a-native-library D3): headers and the static library come from
+# utf8proc for Linux's `nfc`/`nfkd` (ADR 0123's Consequences, the core on Linux): headers and the static library come from
 # build_utf8proc.py's output, one slice per target, handed in by core/build.gradle.kts (includeDirs, -libraryPath).
 package = me.raddatz.veyq.mobile.utf8proc
 headers = utf8proc.h

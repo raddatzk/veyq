@@ -6,7 +6,7 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
 
-/** A notice on the wire (CR core-as-a-native-library D6): its key and each argument by its kind, read back the same. */
+/** A notice on the wire (ADR 0123's Consequences, the bridge): its key and each argument by its kind, read back the same. */
 class NoticeWireTest {
     private val json = Json
 

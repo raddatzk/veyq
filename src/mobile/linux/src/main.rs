@@ -1,5 +1,5 @@
 //! The veyq app on Linux: the window, the core started behind it, and the screen the core's session says — opening,
-//! the sign-in, or the shell (CR core-as-a-native-library Phase 4). Each screen draws the core's state and calls its
+//! the sign-in, or the shell (ADR 0123's Consequences, the Linux app). Each screen draws the core's state and calls its
 //! actions; nothing else.
 use std::rc::Rc;
 

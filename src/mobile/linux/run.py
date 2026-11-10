@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""The one entry point for everything Linux of the veyq app (CR core-as-a-native-library D8): it builds the Fedora 44
+"""The one entry point for everything Linux of the veyq app (ADR 0123's Consequences, the Linux app): it builds the Fedora 44
 image of `Containerfile` beside it and runs what a verb names in it. Everything Kotlin is cross-compiled on this host
 by Gradle; only running it needs Linux.
 

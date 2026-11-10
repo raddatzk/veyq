@@ -1,4 +1,4 @@
-# The Linux app's build and run environment (CR core-as-a-native-library D8): Fedora 44, whose GTK 4.22 and libadwaita
+# The Linux app's build and run environment (ADR 0123's Consequences, the Linux app): Fedora 44, whose GTK 4.22 and libadwaita
 # 1.9 the app is written against. `run.py` builds this image and runs everything Linux in it — the core's test binary,
 # the bridge's C smoke, cargo and the app under gtk4-broadwayd. Nothing is copied in: run.py mounts what a run reads.
 #

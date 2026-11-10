@@ -19,7 +19,7 @@
   `.set_title(…)`, …), `Label::new(`, `Button::with_label(`, `Toast::new(`, `SidebarItem::new(`,
   `WindowTitle::new(`, `gio::MenuItem::new(`, a menu's `.append_section(` — directly, as `Some(…)`, or as a
   `format!` whose template has letters. The words are `words::<key>(…)`, generated from the catalog with its gettext
-  catalogs (CR core-as-a-native-library D10); a literal shows the English in every language. Read with comments
+  catalogs (ADR 0123's Consequences, the Linux app); a literal shows the English in every language. Read with comments
   blanked (`rust_lexer.mask`). The guard fails when it reads no Rust source.
 - **linux-po**: no `.po` / `.pot` file under `src/mobile/linux/`: the catalogs are generated (`generate_words.py
   --gettext`) into the build directory, and a hand-written one would sit beside them until they drifted.

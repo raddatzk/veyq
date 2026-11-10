@@ -626,7 +626,9 @@ no file restates it, because a restated list drifts out of step with the one tha
 *"point at a canonical source, don't restate it"*, applied to itself. A red guard means the CR isn't done.
 (The glob sees files, not commits: CI runs it over the **committed** tree, so an *untracked* guard — or an
 untracked file a guard would have rejected — is green locally and unchecked in CI. Commit before believing a
-local green.) One guard runs on its own trigger: `validate_guard_gaps.py` tests the guards, not the commit, so
+local green. The reverse holds locally too: a guard that reads `git ls-files` does not see a new file until it is
+staged — `validate_image_pins.py` counted 26 references before the Linux app's `Containerfile` was added and 27 after,
+so its first green said nothing about the new file. Stage new files before the local run.) One guard runs on its own trigger: `validate_guard_gaps.py` tests the guards, not the commit, so
 locally it prints `SKIPPED` while nothing under `scripts/` or the trust-chain skill changed since the checkout's last
 green full run, and in CI it runs in full as `trust-chain.yml`'s `guard-gaps` job when a push or pull request
 changes those same inputs, and nightly on `main` ([ADR 0091](../docs/decisions/0091-one-pipeline-per-commit-a-release-promotes-a-tested-snapshot.md)
@@ -1604,7 +1606,12 @@ defining a symbol to another symbol is legal — bundled cleanly, printed its si
 died on its first line with `ReferenceError: production is not defined`. Nothing in `pnpm run check` would ever
 have caught it; only `node dist-cli/cli.js` did. So the "Done when" for any phase that emits a runnable
 artifact (a bundle, a binary, a container) names **running it**, never just building it — and shell quoting
-inside a JSON string is a specific place to look first, because it fails silently in exactly this way.
+inside a JSON string is a specific place to look first, because it fails silently in exactly this way. A **shared
+library** runs when a host built against its header alone has called it: the native bridge's JVM tests were green
+and `libveyq.so` linked, and only a C program in the target OS (`run.py bridge`) showed the callbacks across threads
+working — and its first `nm -D` that the library exported 11,348 symbols of what it linked in. **Generated source**
+runs when its consumer compiles it: two defects of the bridge's Rust generator (`pub` on an enum variant's fields, a
+`Box` inside a `Vec`) were invisible to every Kotlin test and red at the first `cargo build`.
 
 ### A generated pin file is written from the substrate the release builds on
 

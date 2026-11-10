@@ -20,7 +20,7 @@ import me.raddatz.veyq.mobile.utf8proc.UTF8PROC_STABLE
 import me.raddatz.veyq.mobile.utf8proc.utf8proc_map
 import platform.posix.free
 
-// Linux's libc has no normalization forms: utf8proc's (CR core-as-a-native-library D3), built by
+// Linux's libc has no normalization forms: utf8proc's (ADR 0123's Consequences, the core on Linux), built by
 // core/utf8proc/build_utf8proc.py and held to Unicode's NormalizationTest.txt by NormalizationTest. The options are
 // exactly those of utf8proc's own `utf8proc_NFC` / `utf8proc_NFKD`, but with the length given: those two read a
 // NUL-terminated string and so would end a name at an embedded U+0000, which a name may carry (ArchiveNameTest).

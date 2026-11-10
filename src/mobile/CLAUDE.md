@@ -17,18 +17,37 @@ A Gradle build of its own, run through its own wrapper.
   relaunches the installed debug app in a booted simulator, signed in as the seeded dev principal. `VeyqShare/` is the
   iOS share extension (ADR 0126), embedded in the app: it compiles every file of `Veyq/` but `VeyqApp.swift` (the
   entry point) and `DevLogin.swift`, under its own `ShareViewController`.
+- `bridge/` — the core as one shared library, `libveyq.so`, for Linux and later Windows (ADR 0127 decision 5; what was
+  built and measured is ADR 0123's Consequences, the bridge). `bridge.h` is its whole C surface, six functions written
+  by hand and held to Kotlin/Native's own header by `BridgeHeaderTest`. `commonMain` holds the wire (`Wire.kt`: the
+  `Call`s, the `HostRequest`s, what the core sends), the dispatch onto the core's models (`Bridge.kt`) and the host's
+  device store (`Host.kt`). `linuxMain/Exports.kt` holds the six `@CName` functions. `jvmMain/Bindings.kt` writes
+  `bridge.rs` (`:bridge:generateBindings`, into `build/generated/bridge`, never committed). `smoke/smoke.c` is a C
+  host built against `bridge.h` alone. A rule found in the dispatch is a defect to move into the core; a field the UI
+  does not draw, and any key, seal or token, is never part of a state the bridge sends (`SecretFreeSchemaTest`).
+- `linux/` — the Linux app (ADR 0127 decision 4): a Cargo package in Rust (gtk4-rs, libadwaita-rs), with `Cargo.lock`
+  committed and every cargo run `--locked`. `src/lib.rs` is the library: `bridge` (the safe wrapper over the six
+  functions, the host function), `words`, `said` (money, days and sizes the desktop's way), `theme`, `create_action`
+  and one module per screen (`sign_in`, `shell` with Search, `home`, `pot`; `dev_login` in a debug build only).
+  `src/main.rs` is the app. `build.rs` reads the generated bridge, words and theme from `VEYQ_GENERATED` and the
+  library from `VEYQ_LIB_DIR`, both set by `run.py`. `Containerfile` (Fedora 44 by digest) is its build and run
+  environment. `run.py` is its one entry point (§ Prove your work); `run.py lock` is the one writer of `Cargo.lock`.
+  Crates are held to the no-deprecated rule by reading each one's repository: cargo has no deprecation gate.
 
 - `words/` — every word the apps show (ADR 0127 decision 3): `words.json` (English and German, `{n}` / `{n:int}`
   placeholders, plurals by CLDR category) is the one source; `generate_words.py` writes the core's `Msg` keys
   (`:core:generateWords`), Android's resources and `Context.words` (`:android:generateWords`; the app has no
   `strings.xml` of its own) and the Apple String Catalog `Words` (the project's `preGenCommand` and pre-build step;
-  `say(msg, …)`, `say(notice)`). A word is added there, never in a platform; what the core raises is a `Notice`
-  (`words/Notices.kt`). `apple_en` / `apple_de` give a key Apple's own form (Title Case on a button or menu entry).
-  `scripts/validate_mobile_words.py` holds it: no `strings.xml`, no `String(localized:`, no English literal handed to a
-  SwiftUI view.
+  `say(msg, …)`, `say(notice)`) and the Linux app's gettext catalogs with `words.rs` (`--gettext`, which `run.py build`
+  runs; `build.rs` compiles each `.po` with `msgfmt --check`). A word is added there, never in a platform; what the
+  core raises is a `Notice` (`words/Notices.kt`). `apple_en` / `apple_de` give a key Apple's own form (Title Case on a
+  button or menu entry). `scripts/validate_mobile_words.py` holds it: no `strings.xml`, no `String(localized:`, no
+  English literal handed to a SwiftUI view or to a GTK widget's shown text, no `.po` under `linux/`. A test of the
+  words asserts a language whose words differ from the fallback: English is gettext's `msgid`, so an English-only run
+  passes over a catalog that never loaded.
 - `theme/generate_theme.py` — the web's colour roles and brand mark for every platform (ADR 0123 decision 7): the
-  builds run it (`:core:generateTheme`, `:android:generateThemeRes`, the Apple project's pre-build step); its output
-  is never committed. A colour or the logo changes in `src/web/`, never here.
+  builds run it (`:core:generateTheme`, `:android:generateThemeRes`, the Apple project's pre-build step, and `--gtk`,
+  libadwaita's `style.css` and the icon, in `run.py build`); its output is never committed. A colour or the logo changes in `src/web/`, never here.
 
 ## Prove your work
 
@@ -46,6 +65,35 @@ A Gradle build of its own, run through its own wrapper.
   its narrowing in a guest's folder (`NodeHeaderTest`), of core's `session/CoverFrame.kt` (`CoverFrameTest`), of core's `export/NodeExport.kt` archive (`FolderExportTest`, `ZipTest`) and its streamed `export/Sha256.kt` (`Sha256Test`), of Depot's `depot/FolderUpload.kt` plan (`FolderUploadTest`), of what Depot's rows and file page say (`DepotWordsTest`), of Memories' `memories/MemoryMedia.kt` listed tier and order (`MemoryMediaTest`) and `memories/MediaDetails.kt` (`MediaDetailsTest`, `MediaDetailsShownTest`), of core's `blob/RangeReader.kt` (`RangeReaderTest`), of core's `blob/UploadQueue.kt` (`UploadQueueTest`, the web's `queue.test.ts` rules on virtual time), of core's `session/LinkForm.kt` (`LinkFormTest`: the new-link form's rules) and `session/LinkRow.kt` (`LinkRowTest`: a link's row and what a member may do with it), of Expenses' `expenses/ShareInbox.kt` (`ShareInboxTest`: shared files from arrival to their Pot), of core's `navigation/ShellModel.kt` (`ShellModelTest`: the shell after a read and after a folder on Home's path changed), `navigation/TrashSheet.kt` (`TrashSheetTest`: a space's trash sheet) and `navigation/ShellWords.kt` with `AppKinds`' words (`ShellWordsTest`), of core's `session/SessionModel.kt` (`SessionModelTest`: the start, sign-in, unlock, switcher and sign-out over a door the test plays), of core's `words/Notices.kt` (`NoticesTest`: every outcome's key with as many arguments as its words take), of core's `media/ExifReader.kt` and `media/VideoHeader.kt` and Memories' `memories/MediaMetadata.kt` (`MediaMetadataFixtureTest` over the web's own fixtures, held to what the web's `readExif.fixture.test.ts` and `videoHeader.test.ts` expect; `MediaMetadataNativeTest` on the Apple path; `XmpValueTest`: its XMP reads across line breaks), of `memories/MediaUpload.kt`'s type and core's `crypto/BlobMeta.kt` digest (`MediaUploadTest`), of Depot's `depot/FileView.kt` and core's
   `blob/Sniff.kt` and `blob/DownloadName.kt` (`FileViewTest`), and of core's `session/NodeRekey.kt` frontier and what it
   leaves to another device (`NodeRekeyRulesTest`).
+- `./gradlew :bridge:jvmTest` — the bridge (ADR 0123's Consequences, the bridge):
+  - `DispatchTest` covers the way in, over a door the test plays.
+  - `WireTest` writes and reads back a sample of every variant of every sealed type the wire reaches. The samples go
+    to `build/generated/bridge/samples`, which the Rust test reads.
+  - `SecretFreeSchemaTest` checks that nothing the core sends has a field named like a key, seal, token, secret or
+    password, and that no bytes travel in JSON.
+  - `BridgeHeaderTest` holds `bridge.h` against Kotlin/Native's header.
+
+  A root or sealed variant added to the wire is in the samples by derivation. With `VEYQ_LIVE` set,
+  `--tests '*LiveBridgeTest*'` signs in through a `Call` and reads the shell, Home's groups, Search and every seeded
+  Pot over the real core. It is the only proof of the shell's, Search's and the Pot's dispatch, so a change there
+  runs it live.
+- `python3 linux/run.py <verb>` — everything Linux. From the repository root the launcher runs the same verbs as
+  `./gradlew linux:coreTest`, `linux:bridge`, `linux:build` and `linux:run`. The Kotlin is cross-compiled here by this
+  build's Gradle, and the rest runs in the Fedora 44 image (Docker). Each verb is in `run.py`'s docstring:
+  - `test [--tests <pattern>]` runs the core's Linux test binary. That is the whole common suite, the conformance over
+    libsodium, `NormalizationTest` and `WallClockTest`; any change to the suite, to `nfc`/`nfkd` or to the wall clock
+    runs it.
+  - `bridge` checks `libveyq.so`'s exports and runs the C smoke.
+  - `build` generates the bridge's Rust, the words and the theme, then runs `cargo clippy -- -D warnings`,
+    `cargo test` and `cargo build` (remembered: about 25 s after a Rust edit alone).
+  - `run [--port N] [--devlogin]` serves the app under `gtk4-broadwayd` at `http://127.0.0.1:8095`, for the browser
+    pane. `LANGUAGE=de VEYQ_LOCALE=de_DE.UTF-8` gives German, and `ADW_DEBUG_COLOR_SCHEME=prefer-dark` gives dark.
+  - `lock` writes `Cargo.lock` anew.
+
+  With `VEYQ_LIVE=http://veyq.localhost:8080`, `test --tests '*LiveSignInTest*'` and `bridge` sign in as the seeded
+  principal, and `run --devlogin` signs the debug build in through its own sign-in. The backend picks the tenant from
+  the Host, so the container keeps the origin's name: socat forwards it to the host. The principal comes from
+  `.run/.env`, which a worktree does not have: give `VEYQ_ENV_FILE=<main checkout>/.run/.env`.
 - `VEYQ_LIVE=http://veyq.localhost:8080 ./gradlew :core:jvmTest :core:macosArm64Test --tests '*LiveSignInTest*'` —
   signs in to a running dev instance as the seeded principal on both paths and reads its spaces, objects and
   favorites (`./gradlew backend:seed` at the repository root first). With `VEYQ_LIVE_MEMBER=1` as well,
@@ -136,7 +184,9 @@ A Gradle build of its own, run through its own wrapper.
   names taken and a sibling's refused, and trashes it; `VEYQ_LIVE_RENAME_TARGET="<from>|<to>"` renames the root Pot
   `<from>` (created when there is none) and prints what the re-seal of its links did — with a link the web minted on it,
   that link's guest page then shows `<to>`. Gradle does not count an environment variable as an
-  input: a run that changes only these needs `--rerun`, else the test is "up to date" and nothing runs.
+  input: a run that changes only these needs `--rerun`, else the test is "up to date" and nothing runs. `--rerun` is a
+  task option and binds to the one task before it: `./gradlew :core:jvmTest --rerun :core:macosArm64Test --rerun`
+  (measured 2026-11-10: a single trailing `--rerun` re-ran only the last task and reported the first `UP-TO-DATE`).
 - `VEYQ_LIVE=http://veyq.localhost:8080 VEYQ_SEED_TENANT="verein.localhost|Turnverein" ./gradlew :core:jvmTest --tests
   '*DevSecondTenantTest*'` — dev seeding, not a check: gives the seeded principal a second tenant (the seeder births only
   one), through the app's own suite, so the switcher has two to switch between. Skipped when it already exists.
@@ -161,7 +211,9 @@ decision 9): before building a control, ask what the platform's own apps do, and
 `CreateAction(…)` (Android, `CreateAction.kt`; with `menu` where a level creates several kinds) and `.createAction(…)` /
 `.createMenu(…)` (Apple, `CreateAction.swift`), never a
 floating button built by hand; `scripts/validate_mobile_platform_guidelines.py` holds that. Row actions: an overflow menu on Android, swipe actions and a context
-menu on iOS.
+menu on iOS. On Linux the GNOME HIG's way, as libadwaita draws it: the creating action is `create_action(…)` /
+`create_menu(…)` (`linux/src/create_action.rs`) in a header bar or the sidebar, `list-add-symbolic`, never a button
+overlaid on a view (GNOME has no floating action button); the same guard holds it.
 
 A node's header is core's, for every kind (ADR 0123, the web's `NodePage` + `NodeHeader`): core's `navigation/NodeHeader.kt`
 plans it (`NodeHeaderTest`), each app's `NodeHeaderActions` draws it and owns every dialog behind it, and a kind only
@@ -253,3 +305,41 @@ first in each of its scrolls — `LocalNodeHero.current(inset)` (Android) / `Nod
 - On iOS what the share extension needs is shared (ADR 0126): defaults go through `Shared.defaults` (the app group's
   suite), never `UserDefaults.standard`, and a Keychain item through `KeychainStore` (the entitlements' first group is the
   shared one). A value only the app reads may stay its own, but nothing the session or the device trust reads.
+- Linux's C libraries (libsodium, utf8proc) are compiled by Kotlin/Native's own toolchain. It is downloaded by
+  `:core:downloadKotlinNativeDistribution`, which `buildLibsodium` and `buildUtf8proc` depend on, and found by
+  `core/konan_toolchain.py` through `konan.properties`. It is never a container's compiler, since a library built
+  against a newer glibc carries versioned symbols the link against Kotlin/Native's old sysroot cannot satisfy.
+- `kotlin.mpp.enableCInteropCommonization=true` (`gradle.properties`) is what lets the shared native source sets see
+  the `sodium` and `utf8proc` interop. Without it every per-target compile stays green and the metadata compiles
+  (`:core:compileNativeMainKotlinMetadata`, what the IDE and `:bridge` read) are red. Gradle prints "CInterop
+  Commonization Disabled" at configure time.
+- A C string API reads to the first NUL: utf8proc's `utf8proc_NFC` cut a name at an embedded U+0000, so
+  `Nfc.linux.kt` calls `utf8proc_map` with the length.
+- `libveyq.so` needs `libcrypt.so.1` (Ktor's statically linked libcurl), which Fedora 44 has only with
+  `libxcrypt-compat`. The `Containerfile` installs it; a Flatpak runtime must carry it.
+- The bridge library is linked with `-Wl,--exclude-libs,ALL`. Without it, libcurl's, OpenSSL's, libsodium's and
+  utf8proc's symbols are exported (11,348, measured 2026-11-10), and a host that loads its own libcrypto binds to
+  ours. `run.py bridge` is red on any symbol beyond `bridge.h`'s six and Kotlin/Native's own.
+- A pointer the bridge hands to a callback is valid only during that call: the host copies what it keeps. The core
+  copies what the host hands in before it returns (`bridge.h`, `Exports.kt`). An answer or update arrives on a core
+  thread; the Rust side reaches a widget only from GTK's main loop, through `async_channel`.
+- glibc's gettext ignores `LANGUAGE` under a C locale, and C.UTF-8 is C. Under `LANG=C.UTF-8 LANGUAGE=de` every word
+  was English (measured 2026-11-10). The image carries `glibc-langpack-en`/`-de`, and `run.py` sets
+  `LANG=en_US.UTF-8`.
+- kotlinx-datetime on Linux reads the zone from `/etc/localtime`, not from `TZ`. With only `TZ` set it read UTC
+  (measured 2026-11-10). `run.py test` links the container's `/etc/localtime` to Europe/Berlin and sets `TZ` for glibc.
+- The process's locale is one for every test thread: a Rust test that sets `LC_ALL` or `LC_MONETARY` holds
+  `crate::LOCALE` while it does.
+- Money in the Linux app is glibc's locale data, which knows only the locale's own currency symbol. Any other currency
+  is written by its code (`EUR 1,234.56` under en_US), where Android and Apple write `€1,234.56` (native-apps § Open).
+- `include!` takes no inner attribute, so the generated `bridge.rs` carries none. The app's `wire` module holds the
+  lints' allowances.
+- Broadway in the browser pane takes a click only after the pointer has moved there: hover first, then click.
+  `computer type` reaches no GTK entry, but `computer key` with space-separated letters does; a password is never
+  typed, `run --devlogin` signs in. A hidden pane lags Broadway's frames, so a screenshot can show the state before the
+  last action: hover before each one, and read the state from the app's stderr first. A Broadway window keeps its own
+  size until it is maximized once; after that a viewport resize moves it across the 600 sp breakpoint live.
+- A new dependency or target owes the verification-metadata write from an empty Gradle home
+  (`GRADLE_USER_HOME=<empty dir> ./gradlew --write-verification-metadata sha256 <the tasks that resolve it>`). The
+  Linux targets' warm write missed 90 lines of parent POMs and BOMs that a fresh runner fetches. A new module that
+  resolves nothing new still runs it once, as evidence that the file stays unchanged.

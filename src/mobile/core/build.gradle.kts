@@ -129,7 +129,7 @@ val buildLibsodium = tasks.register<Exec>("buildLibsodium") {
     commandLine("python3", file("sodium/build_libsodium.py").absolutePath, libsodium.absolutePath)
 }
 
-// utf8proc for Linux's `nfc`/`nfkd` (CR core-as-a-native-library D3), from its pinned release tarball, with the Unicode
+// utf8proc for Linux's `nfc`/`nfkd` (ADR 0123's Consequences, the core on Linux), from its pinned release tarball, with the Unicode
 // NormalizationTest.txt of the version it implements (core/utf8proc/build_utf8proc.py).
 val utf8proc = rootDir.resolve("build/utf8proc")
 val buildUtf8proc = tasks.register<Exec>("buildUtf8proc") {
@@ -207,7 +207,7 @@ kotlin {
             implementation(libs.ktor.client.darwin)
         }
         linuxMain.dependencies {
-            // CIO has no TLS on Kotlin/Native; Curl is linked in statically (CR core-as-a-native-library D5).
+            // CIO has no TLS on Kotlin/Native; Curl is linked in statically (ADR 0123's Consequences, the core on Linux).
             implementation(libs.ktor.client.curl)
             implementation(libs.kotlinx.datetime)
         }

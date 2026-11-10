@@ -27,6 +27,7 @@ holds no surface's build, and no task aggregates their checks — each still pro
 | `backend:seed` | `pnpm run bootstrap:user` in `src/web/` ([§ Seeding](#seeding-the-local-dev-principal)) |
 | `backend:build` · `web:build` · `admin:build` · `site:build` | `quarkusBuild` (no tests) · `pnpm run build` in each |
 | `backend:image` · `admin:image` | `docker build` of `src/backend/Dockerfile` (the app image, web's SPA baked in) · of `src/admin-web/Dockerfile`, context the repo root as CI builds them; both tagged `local`, a tag no publish emits, so it is never one to deploy |
+| `linux:build` · `linux:run` · `linux:coreTest` · `linux:bridge` | the Linux app's `src/mobile/linux/run.py` verbs `build` · `run` · `test` · `bridge` ([`src/mobile/CLAUDE.md`](../src/mobile/CLAUDE.md) § Prove your work): the Kotlin cross-compiled by `src/mobile/`'s own Gradle wrapper, cargo and the app in its Fedora 44 image (Docker); `run` serves the app under Broadway at `http://127.0.0.1:8095` |
 
 A cold start is `infra:up` → `backend:run` → `web:run` (and `admin:run` for first-run setup) → `backend:seed`, then
 browse `veyq.localhost:8081`. `backend:run` does not start the infra on its own: a backend restart should not touch
@@ -34,8 +35,12 @@ compose. Its hot reload reaches every module of the backend (ADR 0079): a change
 `src/backend/apps/memories` or `src/backend/apps/depot` is recompiled and restarts the app on the next HTTP request — measured
 2026-10-20 through this launcher from a worktree, one source edit per module, each answered by Quarkus' "Restarting
 quarkus due to changes in …" naming that module's classes. A verb without a surface selects every surface's — `./gradlew bootstrap`, `./gradlew build`; a bare
-`./gradlew run` selects all four `run`s, which run one after another and so block on the first unless `--parallel`
-is given (`backend:run web:run --parallel` ran both, measured).
+`./gradlew run` selects all five `run`s, which run one after another and so block on the first unless `--parallel`
+is given (`backend:run web:run --parallel` ran both, measured). So **a bare `./gradlew build` also builds the Linux
+app: it starts Docker and cargo** beside the other surfaces' builds (`./gradlew -q build --dry-run` lists
+`:admin:build`, `:backend:build`, `:linux:build`, `:site:build` and `:web:build`, measured 2026-11-10) — the owner's
+decision of 2026-11-10, not a caveat; one surface's build is `<surface>:build`. A new surface's verbs are named against
+the rule above, not after its own script's: `run.py test` is `linux:coreTest`, since no task is named `test`.
 
 `./gradlew tasks --all --group veyq` lists every task with its description; without `--all`, Gradle folds the
 same verb across projects into one row (`run`, `build`, … with one surface's description), so it is no task list.

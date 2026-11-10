@@ -5,8 +5,8 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 
 /**
- * Linux's `localWallClock` against what the web's `new Date(y, m - 1, d, h, mi, s)` gives (CR core-as-a-native-library
- * D4). Each expected value was produced on 2026-11-10 by
+ * Linux's `localWallClock` against what the web's `new Date(y, m - 1, d, h, mi, s)` gives (ADR 0123's
+ * Consequences, the core on Linux). Each expected value was produced on 2026-11-10 by
  * `TZ=Europe/Berlin node -e 'console.log(new Date(y, m - 1, d, h, mi, s).getTime())'` (Node 23.11.0), so the test
  * runs in Europe/Berlin and refuses to run in any other zone rather than pass by luck. kotlinx-datetime reads the
  * device's zone from `/etc/localtime`, not from `TZ` (measured 2026-11-10: with only `TZ` set it read UTC), so
