@@ -100,15 +100,17 @@ With the server step, **`init` is the one command from an empty repository to a 
 the operator never has to know which command comes next). In one run it asks the server's questions (what a setup script asked
 before: the address, the admin user and SSH key, the age key), pins the server's host key once its fingerprint is
 confirmed against the provider's console, generates and encrypts the server half's secrets, generates Argo CD's
-read-only deploy key and shows where to enter it, writes veyq's half (TLS from Let's Encrypt's **staging** or production directory, asked; host
+read-only deploy key and enters it at the forge when the person allows (below), writes veyq's half (TLS from Let's Encrypt's **staging** or production directory, asked; host
 access, asked), commits and pushes, runs the bootstrap playbook, connects this machine (an `~/.ssh/config` host and a
 kubeconfig context, as `veyqctl connect` does at any later time), and waits until Argo CD reports the cluster's
 applications and veyq synced and healthy, ending with what is left to the person: Argo CD's first password, the
 Server Owner, the config-secret key into a password manager. **It asks before every step that changes something
 outside the repository or cannot be undone** — the host key's trust, the push, the bootstrap that runs as root,
-`veyqctl tls production` deleting the staging certificates — and shows what the step will do. Three things the person
-does outside the terminal while `init` waits, each said exactly when it is due: entering the deploy key at the forge,
-the DNS records (which `init` then checks resolve), and reading the fingerprint in the provider's console.
+`veyqctl tls production` deleting the staging certificates — and shows what the step will do. The deploy key `init`
+enters itself when the forge's own command-line tool is there and signed in (`gh` for GitHub) and the person says yes;
+otherwise it shows the key and where it goes, and waits. Two more things the person does outside the terminal while
+`init` waits, each said exactly when it is due: the DNS records (which `init` then checks resolve), and reading the
+fingerprint in the provider's console.
 
 **`init` can be run again at any point and continues where it stopped.** Every answer and every step done is written
 to a progress file the moment it is given or done — `~/.config/veyq/`, keyed by the repository, never inside it — so an
@@ -118,8 +120,9 @@ reads from the repository that they exist rather than making them again.
 
 **7. After init the repository is the operator's.** Renovate (or any updater) keeps the server half's pins current;
 `upgrade` keeps veyq's; `copier update` brings a later `veyq-server` release's structural changes in as a merge,
-verified as decision 6 verifies. Nothing requires GitHub: Argo CD reads any Git remote, and `veyqctl` calls no forge's
-API — it shows the deploy key and where to enter it, and waits.
+verified as decision 6 verifies. Nothing requires GitHub: Argo CD reads any Git remote, and `veyqctl` touches a forge
+only to enter the deploy key, only through the forge's own signed-in tool, only when asked; without one it shows the
+key and waits.
 
 ## Consequences
 
@@ -156,8 +159,8 @@ API — it shows the deploy key and where to enter it, and waits.
 - **Rejected — a wrapper script in the server repository** around the setup script, git, the playbook and the connect
   script. Cheap, and a second front door that `veyq-server` would replace; one tool that runs the whole process is the
   owner's rule, and `init` already holds half of it.
-- **Rejected — registering the deploy key through a forge's tool (`gh`).** No waiting, but it binds `init` to one
-  forge's CLI and its sign-in; entering one key on the forge's page, when `init` says so, keeps it forge-neutral.
+- **Rejected — the deploy key only ever shown, never entered.** Forge-neutral, and a trip to the forge's page in the
+  middle of the run where its signed-in tool could do it; kept as the path where there is none, or the person says no.
 - **Rejected — the progress file in the repository.** It sits beside what is committed, where a `git add` takes it.
 - **Rejected — Flux beside Argo CD now.** The repository layout differs per tool; Argo CD is what the maintainer runs
   and what `veyq-server` installs. A Flux writer is another decision.

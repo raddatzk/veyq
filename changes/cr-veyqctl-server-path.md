@@ -5,8 +5,8 @@ status: planned
 satisfies: []
 adrs: ["0126", "0096"]
 invariants:
-  - "the operator never has to know which command comes next: init runs the whole process; waiting on the person (the deploy key at the forge, DNS, the provider's console) is said exactly when due (owner 2026-11-10)"
-  - "init asks before every step that changes something outside the repository or cannot be undone: trusting the host key, pushing, the bootstrap that runs as root, deleting certificates"
+  - "the operator never has to know which command comes next: init runs the whole process; waiting on the person (DNS, the provider's console, the deploy key where no forge tool may enter it) is said exactly when due (owner 2026-11-10)"
+  - "init asks before every step that changes something outside the repository or cannot be undone: trusting the host key, entering the deploy key at the forge, pushing, the bootstrap that runs as root, deleting certificates"
   - "an interrupted run costs nothing: the same command continues where it stopped, asking nothing twice; the progress file holds no secret and lives outside the repository"
   - "nothing of veyq-server is rendered or run unless its release manifest verifies and the checked-out tree matches it"
   - "no secret value is printed, logged or written in plaintext; a value that exists in the repository is never generated again"
@@ -33,7 +33,7 @@ context, again after a rebuild) and `veyqctl tls production` (from Let's Encrypt
   making it current on request). Each lesson they carry moves with it: host keys compared by type (ssh's UpdateHostKeys),
   the push before the bootstrap (an AppProject overwritten by GitHub's older copy stalled the 2026-11-10 rebuild), a
   forward ending at the server's own address, `ClearAllForwardings` for a read while the tunnel is open.
-- Programs `init` calls on this path: `git`, `ssh`, `ssh-keyscan`, `ssh-keygen`, `age-keygen`, `sops`, `copier`,
+- Programs `init` calls on this path: `gh` (optional: the deploy key, when signed in and allowed), `git`, `ssh`, `ssh-keyscan`, `ssh-keygen`, `age-keygen`, `sops`, `copier`,
   `ansible-playbook` (+ the collections the template names), `kubectl`, `helm`, `cosign`.
 
 ## Design
@@ -47,7 +47,8 @@ veyqctl init                                    (resumable: ~/.config/veyq/init-
                         Copier renders veyq-server; .sops.yaml names the age key
                         host key scanned → "compare SHA256:… with your provider's console" → trust? [y/N]
                         admin password (hidden, or generated) and Argo CD's deploy key, encrypted
-                        "enter this deploy key at <forge URL>, read-only" → waits for Enter
+                        gh signed in: "enter Argo CD's deploy key at <owner/repo>, read-only?" [Y/n] → gh repo deploy-key add
+                        else (or no): "enter this deploy key at <forge URL>, read-only" → waits for Enter
 == 4. veyq              the questions of today's init (domains · TLS: staging or production · …) and host access [Y/n]
                         "A records for <domain> and <store> → <server IP>": checks they resolve, waits
 == 5. Commit and push   the files, the message → commit and push? [Y/n]
