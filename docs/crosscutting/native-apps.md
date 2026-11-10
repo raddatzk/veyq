@@ -92,7 +92,10 @@ Apple's toolbar button and list — measured 2026-11-09 (the list behind Apple's
     bridge carries no key, and `DeviceKeys`' calls carry the Master Key and the refresh token, so the host cannot
     answer them. The core reaches the Secret Service itself (libsecret through cinterop, the key never leaving the
     library), or the bridge's rule is revisited (ADR 0127's Consequences). Also open there: the portals (file chooser,
-    save) and drag and drop.
+    save) and drag and drop. The test VM is Fedora 45 Workstation, aarch64, in UTM (`ssh kevin@192.168.64.9`, key
+    `~/.ssh/veyq_vms_ed25519`): GTK 4.24.1, libadwaita 1.10.0, and no gnome-keyring — `org.freedesktop.secrets` is
+    answered by **oo7** (`oo7-daemon` 0.7.0 beta, GNOME's Secret Service in Rust), measured 2026-11-10 (`busctl --user
+    status org.freedesktop.secrets`, `rpm -qa`). The core is tested against oo7 there and against KWallet under Plasma.
   - **The Flatpak** on the GNOME runtime. It must carry GTK 4.22 and libadwaita 1.9, `libcrypt.so.1`, a CA bundle and
     the zoneinfo. The app's build and tests move into that runtime's SDK (`org.gnome.Sdk`), replacing the Fedora 44
     container as what the app is proved against (ADR 0127 decision 4); Fedora stays only as a test VM's system.
