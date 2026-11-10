@@ -194,6 +194,17 @@ depending on `:core` as an **implementation** dependency (so the shared library 
     which a host whose own libraries load a libcrypto would bind against. With it: 12 — the six and Kotlin/Native's
     `libveyq_symbols`, `IsInstance`, `Konan_cxa_demangle`, `__cxa_demangle`, `_init`, `_fini` (measured, `run.py bridge`).
 
+  - **Built (Phase 4): the shell sends what it shows.** Drawing the shell showed the wire short of what both apps ask
+    the core for while they draw: the switcher's servers and their tenants (`session.accounts` through
+    `Hidden.visibleTenants`, read in each app's `AppModel`), the space's name (`ShellWords.space`) and the line under it,
+    Home's groups, an application's list, the bar's places with their words, `canGoBack`, `isHome`,
+    `drawerOpensAtStart`. Without them the Rust app would have re-derived core rules or had no tenants to switch to. So
+    `Update.Shell` carries a `ShellShown` beside the state — `:bridge`'s, built one line per field from a core function
+    (as `PotView.AsShown` is core's for a Pot), `Composition` gaining the `Hidden` it needs —, `Call.ShellSelect(tab)`
+    joins (no call chose a place), and a Pot's `ShownBalance` carries its person's name as a row shows it
+    (`PotView.person`). `LiveBridgeTest` holds `ShellShown` live (the open tenant among the switcher's, Home's groups as
+    the lists'); `WireTest` and the Rust round trip hold its form.
+
 **D7 — The Rust (later C#) types are generated from the serial descriptors, by `:bridge` itself.** A JVM task
 `:bridge:generateBindings` walks the `SerialDescriptor`s of the roots `:bridge` registers (`Call`, `HostRequest`, each
 watched state, each answer) and writes **`bridge.rs`**: `serde` structs and enums with the same field names,
@@ -234,6 +245,14 @@ status and writes the date in the CR's retro). `build.rs` links `libveyq.so` fro
 **`linux/run.py`** (Python, per the repository's rule) builds the image, runs `cargo` in it with the bridge library
 and the generated sources mounted, and runs the app under `gtk4-broadwayd` with the port published on 127.0.0.1 only
 — the one entry point the launcher's tasks (`./gradlew linux:build`, `linux:run`, `linux:test`) call.
+**Built (Phase 4):** the screens are `sign_in`, `shell` (the split view, the sidebar, the switcher and Search, which
+lives in the sidebar, so there is no `search` module), `home` (Home and an application's list) and `pot`, plus `said` (a
+`Notice` and a `Piece` written the desktop's way: money from glibc's `localeconv` — the locale's own currency by its
+symbol, any other by its code, `1.234,56 €` / `EUR 1,234.56` —, a day by `%x`, a size by `g_format_size`) and, in a debug
+build only, `dev_login` (`VEYQ_DEV_SERVER`/`EMAIL`/`PASSWORD`/`SECRET_KEY`, Apple's names, signed in once through the real
+sign-in). `run.py run` gained `--devlogin` (VEYQ_LIVE's origin as the server, the env file's principal; the values reach
+`docker run` through its environment, `-e NAME` only, so the printed command holds none) and `VEYQ_LOCALE` (the app's
+`LANG`, never the host's).
 **Built (Phase 3):** the package is a library (`src/lib.rs`: `bridge`, `words`, `theme`, `create_action`, each `pub`)
 and the app (`src/main.rs`), so what the screens will use is no dead code before they exist; the hand-written `bridge`
 module is `src/bridge/mod.rs`, which keeps Phase 3's `bridge\.rs$` check about the generated file only. `build.rs`
@@ -259,6 +278,16 @@ current space, its menu lists spaces and tenants — the same model `SessionMode
 an `AdwActionRow` pinned at the sidebar's foot. Both sides of the breakpoint are part of the browser pass (§ Phase 4:
 1100 × 750 and 500 × 750). Home's groups are `AdwPreferencesGroup`-style boxed lists; a Pot's balances and entries
 the same, read-only.
+**Built (Phase 4), where it differs:** the sidebar is libadwaita 1.9's own **`AdwSidebar`** (feature `v1_9`), switched
+to its page mode by the same breakpoint, as its documentation's example does. The breakpoint stays **600sp**:
+libadwaita 1.9's own examples (`Adw-1.gir`, measured in the image) collapse at `max-width: 400sp`, but with the default
+180–280sp sidebar; this one is 240–360sp, and 240sp beside a content under 360sp is no layout. Search is a
+`GtkSearchBar` under the sidebar's header bar (Ctrl+F, and a toggle beside the switcher): while a query stands its hits
+(`Search.Query`) take the sidebar's rows, as GNOME Settings searches, and a hit opens at the top (`Shell.OpenAtTop`), as
+every sidebar row does. Home's filters and a Pot's places are `AdwToggleGroup`s (a place chosen is `Shell.Select`). New is
+`create_menu` at the header bar's start with the core's `drawerCreates` words, and — like "Manage servers" in the
+switcher's menu and Settings at the foot — offers nothing yet (its entries insensitive): creating is no part of the slice.
+An object the slice does not draw (a Memory, a file) is an `AdwStatusPage` with the core's `not_built`.
 
 **D10 — Words: a gettext catalog generated from `words.json`.** `generate_words.py --gettext <dir>` writes
 `veyq.pot` and `de.po` / `en.po` (`msgctxt` = the key, `msgid` = the English, `msgstr` = the language's), and the
@@ -313,6 +342,9 @@ apple-block refuses a bare "+"), and demands a `gtk::MenuButton` beside the `gtk
 button named in `add_overlay`'s argument or a variable the file binds to one (a `Button` or the block's
 `create_action(…)`). Twelve bites, each red with its rule's line and green on the restore, two controls green (a
 literal in a comment beside a lifetime; a `Label` overlaid), and both guards red on an empty directory.
+**Built (Phase 4):** linux-literal also reads `SidebarItem::new(`, `WindowTitle::new(`, `gio::MenuItem::new(` and a
+menu's `.append_section(` — the constructors the slice's screens hand their shown text to; each bitten (a literal in each,
+red with its line; green on the restore); `validate_guard_gaps.py` green (104 pinned cases).
 
 ## Inventory (locators — run at implement time, not counts)
 
@@ -392,6 +424,10 @@ Favorite, open a Pot and read its entries, balances and people against what the 
 name and open the hit, the language German (`LANGUAGE=de`) and English, light and dark (`ADW_DEBUG_COLOR_SCHEME`).
 Read the console (the app's stderr in the container) before believing the window. A screenshot of each width is the
 proof. `run.py build` and both guards still green.
+
+**Built (Phase 4):** the pass ran in the browser pane against the dev instance (the Retrospective says what was
+clicked). The Pot's numbers were compared against the core's own live read on the JVM (`LiveBridgeTest` with VEYQ_LIVE:
+Amsterdam 5 entries, Anna 6734, Ben −6734 minor units), not against the web's page: the web's dev server was not running.
 
 ### Phase 5 — The docs
 
@@ -538,4 +574,38 @@ Process:
   snapshot copy, assert green again after each bite — fourteen cases in under a minute, the restore itself checked.
 - `run.py build` re-run after only a Rust edit took ~25 s (Gradle up to date, cargo incremental in its volume); the first
   cold one ~50 s plus the image's 75 s for `clippy` and the langpacks.
+
+### Phase 4 (2026-11-10)
+
+The pass (Broadway in Fedora 44, the browser pane, dev instance `veyq.localhost:8080`, signed in by `run.py run
+--devlogin`): at 1100 × 750 in English and light — Home, its Depot filter, a folder entered and back, the favorite Sri
+Lanka (a Pot without entries), Expenses' list, Amsterdam's Entries, Overview (Anna is owed 67.34, Ben owes 67.34, Ben pays
+Anna, total 154.68) and Settings (EUR, two people), the switcher to Personal, to the tenant Turnverein and back, Search
+"amste" and its hit; at 500 × 750 the collapsed stack — the content's back to the sidebar in its page mode, Search there,
+Home, the Pot's Overview, the shell's back to Home; German (`LANGUAGE=de VEYQ_LOCALE=de_DE.UTF-8`) and dark
+(`ADW_DEBUG_COLOR_SCHEME=prefer-dark`) at both widths (`12,34 €`, `08.11.2026`, „bekommt 67,34 €"), the window resized
+live across the breakpoint; the sign-in form without the dev login and its error ("The server could not be reached.").
+stderr: only the session's gates and the expected "this device keeps no keys"; no GTK or libadwaita warning.
+
+Technical:
+- **A bridge proved by tests is not yet a bridge a screen can draw from.** Phase 2's round trip held every type, and
+  still the switcher had no tenants to list and the title no space's name: both apps take those from core functions in
+  their own model code, not from a state. Drawing the first screen against the wire found it at once; a review of the
+  wire against each app's `AppModel` before Phase 2 would have found it then.
+- **libadwaita 1.9 ships the sidebar GNOME wants** (`AdwSidebar`, page mode for the collapsed stack); the refine's
+  boxed-list sidebar would have been hand-built. The platform's binary and its `.gir` docs were again the source.
+- **The process's locale is one for all test threads**: the words test sets `LC_ALL`, the money test `LC_MONETARY`; both
+  now hold one lock. Money is glibc's own locale data, so a currency other than the locale's is written by its code
+  (`EUR 1,234.56` under en_US), where Android and Apple write `€1,234.56` — the one visible difference to the other apps.
+- Crates: no new crate; libadwaita's feature `v1_8` → `v1_9` changes no lock entry.
+
+Process:
+- **Broadway takes a click only after the pointer moved there**: a bare click on a row or a toggle did nothing, a hover
+  first and it worked. `computer type` reaches no GTK entry (the remembered trap holds here too); `computer key` with
+  space-separated letters does. Neither types a password: `--devlogin` signs in.
+- **A hidden browser pane lags Broadway's frames**: a screenshot showed the state before the last action until another
+  input arrived, and a transition stood half-way. A hover before each screenshot made it current — read the state from
+  stderr before believing a frame.
+- **A Broadway window keeps its own size; maximized it follows the browser.** The 500 × 750 pass needed the window
+  maximized once; after that a viewport resize moved it across the breakpoint live.
 
