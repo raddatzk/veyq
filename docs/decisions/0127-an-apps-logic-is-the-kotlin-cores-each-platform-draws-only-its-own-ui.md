@@ -1,7 +1,7 @@
 # ADR 0127 — An app's logic is the Kotlin core's; each platform draws only its own UI, Windows and Linux among them
 - Status: Accepted
-- Built: no (the line holds for the upload queue only; the rest of decision 1 is to move, decisions 4 and 5 are not built)
-- Date: 2026-11-09
+- Built: partly (decisions 1 to 3 for Android and Apple: the screens' logic is the core's, the words one catalog; decisions 4 and 5 are not built)
+- Date: 2026-11-09 (decision 4 revised 2026-11-10: Linux in Rust over the native core, not on the JVM)
 - Model: [native-apps](../crosscutting/native-apps.md)
 
 ## Context
@@ -33,7 +33,7 @@ four times.
    key-material logic is (root `CLAUDE.md`).
 
 2. **A screen's model is a core class a UI observes.** It exposes its state as a flow (a Kotlin UI collects it) and a
-   watch with a callback (Swift and the Windows bridge observe it, as `UploadQueue.watch` does), and its actions as
+   watch with a callback (Swift and the bridge of decision 5 observe it, as `UploadQueue.watch` does), and its actions as
    plain functions; it is tested in `commonTest` with no UI at all. Moving a screen keeps its behaviour: the slice that
    moves it changes no rule and is proved by the tests the rules gain, then by both apps unchanged on a device.
 
@@ -42,31 +42,37 @@ four times.
    String Catalog, Windows' `.resw`, Linux's gettext catalog —, as the theme is generated from the web's colours
    (ADR 0123 decision 7). Today's two catalogs (Android's and Apple's) are merged into it as the screens move.
 
-4. **Linux: GTK 4 and libadwaita, in Kotlin on the JVM.** The Linux app is Kotlin over the core's JVM target — the
-   suite's primitives BouncyCastle's, as on Android — and draws with GTK 4 and libadwaita through java-gi's bindings,
-   so no bridge stands between the UI and the core. It ships as a Flatpak with a runtime cut by `jlink`. Its secure
-   store is the Secret Service (libsecret). java-gi is checked against the dependency rule (maintained, vendor-neutral)
-   before its first slice; should it fail it, the fallback is Kotlin/Native `linuxX64` with GTK through cinterop.
+4. **Linux: GTK 4 and libadwaita in Rust, the core as a Kotlin/Native library** (owner 2026-11-10: no JVM in the
+   app, and the way GNOME's own apps are built). The Linux app is Rust with gtk4-rs and libadwaita-rs (both checked
+   2026-11-10: maintained, MIT, community-run — gtk-rs and GNOME's World group). The core joins as a `linuxX64` and a
+   `linuxArm64` shared library — the suite's primitives libsodium's, built from the pinned release as for Apple (ADR
+   0123 decision 3) — through the same narrow bridge as Windows (decision 5), its Rust types generated from the core's
+   models. It ships as a Flatpak on the GNOME runtime. Its secure store is the Secret Service.
 
 5. **Windows: WinUI 3 in C#, the core as a Kotlin/Native library.** The Windows app is C# on the Windows App SDK. The
    core joins as a `mingwX64` DLL — the suite's primitives libsodium's, built from the pinned release as for Apple
    (ADR 0123 decision 3), the API over Ktor's WinHttp engine — held to the same vectors by the same `Conformance`. C#
    reaches it through one narrow bridge rather than Kotlin/Native's whole C export: a call with a serialized request
    and its answer, and one callback for every model's watch, both in the core's own serialization; the C# types are
-   generated from the core's models, never written by hand. Its secure store is Windows Hello with DPAPI.
+   generated from the core's models, never written by hand. Its secure store is Windows Hello with DPAPI. **The bridge
+   is one, for Windows and Linux alike** (decision 4): its C side, its serialization and its generator are shared, each
+   UI language only adding its generated types. Kotlin/Native has no Windows ARM64 target (only `mingw_x64` in 2.4.21's
+   platform libraries, measured 2026-11-10), so the Windows app is an x64 process: native on x64 PCs, under Windows'
+   x64 emulation on an ARM one.
 
 6. **The order.** The screens move into the core first (decision 2), application by application, Android and Apple
    thinned in the same slice; then the large screens (an Android tablet and window, the iPad, macOS) are run and laid
-   out to their guidelines; then Linux, which runs in a container on the developer's Mac; then Windows, which needs a
-   Windows machine or VM. No new feature lands in an app model meanwhile: a feature built during the move is built in
+   out to their guidelines; then the bridge with Linux, which runs in a container on the developer's Mac (GTK's
+   Broadway backend draws it into a browser) and in a VM; then Windows over the same bridge, which needs a Windows
+   machine or VM. No new feature lands in an app model meanwhile: a feature built during the move is built in
    the core.
 
 ## Consequences
 
 - Four UIs over one core. Each feature costs its screen four times, but its rules once; the screen models' tests carry
   what the apps' live passes carried alone so far.
-- ADR 0123 decision 1's targets grow by `mingwX64`; the JVM target serves Linux as it serves Android. "UI is never
-  shared" stands.
+- ADR 0123 decision 1's targets grow by `mingwX64`, `linuxX64` and `linuxArm64`; the JVM target serves Android alone.
+  "UI is never shared" stands. The repository gains Rust, for the Linux UI alone.
 - The Windows app cannot be built on the developer's Mac: its slice needs a Windows host, and the apps' CI job (still
   open) a Windows runner.
 - What is still open per platform is [native-apps](../crosscutting/native-apps.md)' to keep.
@@ -82,5 +88,10 @@ four times.
 - **Windows through Kotlin/Native's whole C export, or the core on a JVM beside a C# UI.** The first exposes every
   class as handles and function tables a C# hand-maintains; the second runs a second runtime and process for a UI.
   The narrow bridge (decision 5) keeps the surface to one call and one callback.
+- **Linux on the JVM, in Kotlin through java-gi** (decision 4 as first taken, 2026-11-09). No bridge, maintained
+  bindings, one language, and a spike ran (2026-11-10: GTK 4.22 and libadwaita 1.9 from an ARM container, java-gi
+  1.0.0-RC3 on JDK 25). Replaced by the owner (2026-11-10): a Java runtime inside every Linux install, where the
+  bridge decision 5 builds anyway serves a native UI in GNOME's own way.
 - **Linux on Kotlin/Native with GTK through cinterop.** No bridge either, but GObject's signals and lifetimes written
-  by hand with no maintained bindings; kept as decision 4's fallback.
+  by hand with no maintained bindings, and Kotlin's collector beside GObject's reference counts where a lifetime goes
+  wrong.

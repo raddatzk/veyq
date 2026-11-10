@@ -42,7 +42,8 @@ for want of room close the editor and the shell says which (the web's toast); a 
 
 Windows and Linux are wanted (owner 2026-11-09), each with its own native UI over the same core
 ([ADR 0127](../decisions/0127-an-apps-logic-is-the-kotlin-cores-each-platform-draws-only-its-own-ui.md)): Linux GTK 4 and
-libadwaita in Kotlin on the JVM, Windows WinUI 3 in C# over the core as a Kotlin/Native library.
+libadwaita in Rust, Windows WinUI 3 in C#, both over the core as a Kotlin/Native library through one bridge (owner
+2026-11-10). On Windows that core is x64 only: Kotlin/Native has no Windows ARM64 target.
 
 ## Built, by area
 
