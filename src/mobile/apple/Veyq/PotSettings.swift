@@ -179,12 +179,7 @@ struct PotSettings: View {
         }
     }
 
-    private func facts(_ p: PotView.PersonEntry) -> String {
-        var parts = [p.settled ? say(.potSettled) : money(p.balance, view.currency, view.minorUnits)]
-        if !p.active { parts.append(say(.peopleInactive)) }
-        if p.standing == .former { parts.append(say(.peopleFormerMember)) }
-        return parts.joined(separator: " · ")
-    }
+    private func facts(_ p: PotView.PersonEntry) -> String { view.personFacts(p: p).map { say(piece: $0) }.joined(separator: " · ") }
 
     // MARK: Own categories
 

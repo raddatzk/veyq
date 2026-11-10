@@ -184,4 +184,22 @@ class PotViewEntriesTest {
         // a reader sees no currency picker and no categories where the Pot has none of its own
         assertFalse(reader.currencyEditable || reader.categoriesShown || reader.canAddCategory)
     }
+
+    @Test
+    fun theOverviewSaysEachBalanceWhatMadeItAndWhoPaysWhom() {
+        val v = view(people + listOf(Rev(dinner, 1, expense("Dinner", 300))))
+        fun amount(n: Long) = me.raddatz.veyq.mobile.words.Amount(n, "EUR", 2)
+        val anna = v.balances.single { it.id == this.anna }
+        val ben = v.balances.single { it.id == this.ben }
+        assertEquals(me.raddatz.veyq.mobile.words.Notice(me.raddatz.veyq.mobile.words.Msg.POT_IS_OWED, amount(150)) to PotView.Tone.OWED, v.balance(anna).let { it.notice to it.tone })
+        assertEquals(me.raddatz.veyq.mobile.words.Notice(me.raddatz.veyq.mobile.words.Msg.POT_OWES, amount(150)) to PotView.Tone.OWES, v.balance(ben).let { it.notice to it.tone })
+        assertEquals(
+            listOf(me.raddatz.veyq.mobile.words.Piece.Said(me.raddatz.veyq.mobile.words.Notice(me.raddatz.veyq.mobile.words.Msg.POT_PAID_CONSUMED, amount(300), amount(150)))),
+            v.balanceFacts(anna),
+        )
+        assertEquals(me.raddatz.veyq.mobile.words.Notice(me.raddatz.veyq.mobile.words.Msg.POT_PAYS, "Ben", "Anna"), v.pays(v.settleUp.single()))
+        assertFalse(v.canRecordAll) // one payment: its own button is enough
+        val facts = v.personFacts(v.personEntries.single { it.id == this.ben })
+        assertEquals(me.raddatz.veyq.mobile.words.Piece.Money(-150, "EUR", 2), facts.first())
+    }
 }

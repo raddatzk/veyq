@@ -219,23 +219,12 @@ private fun Overview(view: PotView, state: me.raddatz.veyq.mobile.expenses.PotMo
                 Column(Modifier.weight(1f)) {
                     Text(personName(p.name), fontWeight = FontWeight.SemiBold)
                     // What makes the balance: paid and consumed always, the transfers only where there were any.
-                    val transfers = when {
-                        p.settled > 0 -> " · " + stringResource(R.string.pot_sent, money(p.settled, view.currency, view.minorUnits))
-                        p.settled < 0 -> " · " + stringResource(R.string.pot_received, money(-p.settled, view.currency, view.minorUnits))
-                        else -> ""
-                    }
-                    Text(
-                        stringResource(R.string.pot_paid_consumed, money(p.paid, view.currency, view.minorUnits), money(p.share, view.currency, view.minorUnits)) + transfers,
-                        style = MaterialTheme.typography.bodySmall, color = role(palette.muted),
-                    )
+                    Text(view.balanceFacts(p).map { piece(it) }.joinToString(" · "), style = MaterialTheme.typography.bodySmall, color = role(palette.muted))
                 }
+                val b = view.balance(p)
                 Text(
-                    when {
-                        p.balance > 0 -> stringResource(R.string.pot_is_owed, money(p.balance, view.currency, view.minorUnits))
-                        p.balance < 0 -> stringResource(R.string.pot_owes, money(-p.balance, view.currency, view.minorUnits))
-                        else -> stringResource(R.string.pot_settled)
-                    },
-                    color = role(if (p.balance < 0) palette.danger else if (p.balance > 0) palette.primary else palette.muted),
+                    say(b.notice),
+                    color = role(when (b.tone) { PotView.Tone.OWES -> palette.danger; PotView.Tone.OWED -> palette.primary; PotView.Tone.SETTLED -> palette.muted }),
                 )
             }
         }
@@ -243,7 +232,7 @@ private fun Overview(view: PotView, state: me.raddatz.veyq.mobile.expenses.PotMo
             item { Section(stringResource(R.string.pot_settle_up)) }
             items(view.settleUp) { t ->
                 Row(Modifier.fillMaxWidth().padding(vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
-                    Text(stringResource(R.string.pot_pays, personName(t.from), personName(t.to)), Modifier.weight(1f))
+                    Text(say(view.pays(t)), Modifier.weight(1f))
                     Text(money(t.amount, view.currency, view.minorUnits), fontWeight = FontWeight.SemiBold)
                     if (view.canWrite) {
                         TextButton(onClick = { model.potWrite({ it.recordPayments(listOf(t), java.time.LocalDate.now().toString()) }) }, enabled = !state.saving) {
@@ -252,7 +241,7 @@ private fun Overview(view: PotView, state: me.raddatz.veyq.mobile.expenses.PotMo
                     }
                 }
             }
-            if (view.canWrite && view.settleUp.size > 1) {
+            if (view.canRecordAll) {
                 item {
                     TextButton(onClick = { model.potWrite({ it.recordPayments(view.settleUp, java.time.LocalDate.now().toString()) }) }, enabled = !state.saving) {
                         Text(stringResource(R.string.balances_record_all))

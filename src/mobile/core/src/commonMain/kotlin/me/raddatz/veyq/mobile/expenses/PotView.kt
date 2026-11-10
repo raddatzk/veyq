@@ -335,6 +335,43 @@ class PotView internal constructor(session: Source) {
     /** The Pot's header line under its name: its base currency ("In EUR"); none before it has one. */
     val subtitle: me.raddatz.veyq.mobile.words.Notice? get() = currency?.let { me.raddatz.veyq.mobile.words.Notice(me.raddatz.veyq.mobile.words.Msg.POT_IN_CURRENCY, it) }
 
+    private fun amount(minor: Long) = me.raddatz.veyq.mobile.words.Amount(minor, currency, minorUnits)
+
+    /** How a balance reads: owed to them (the accent), they owe (the danger), or settled (quiet). */
+    enum class Tone { OWED, OWES, SETTLED }
+
+    class Balance(val notice: me.raddatz.veyq.mobile.words.Notice, val tone: Tone)
+
+    /** A person's balance in words beside their row. */
+    fun balance(p: PersonRow): Balance = when {
+        p.balance > 0 -> Balance(me.raddatz.veyq.mobile.words.Notice(me.raddatz.veyq.mobile.words.Msg.POT_IS_OWED, amount(p.balance)), Tone.OWED)
+        p.balance < 0 -> Balance(me.raddatz.veyq.mobile.words.Notice(me.raddatz.veyq.mobile.words.Msg.POT_OWES, amount(-p.balance)), Tone.OWES)
+        else -> Balance(me.raddatz.veyq.mobile.words.Notice(me.raddatz.veyq.mobile.words.Msg.POT_SETTLED), Tone.SETTLED)
+    }
+
+    /** What makes a balance, under the person's name: paid and consumed always, what transfers moved only where any did. */
+    fun balanceFacts(p: PersonRow): List<me.raddatz.veyq.mobile.words.Piece> = listOfNotNull(
+        me.raddatz.veyq.mobile.words.Piece.Said(me.raddatz.veyq.mobile.words.Notice(me.raddatz.veyq.mobile.words.Msg.POT_PAID_CONSUMED, amount(p.paid), amount(p.share))),
+        when {
+            p.settled > 0 -> me.raddatz.veyq.mobile.words.Piece.Said(me.raddatz.veyq.mobile.words.Notice(me.raddatz.veyq.mobile.words.Msg.POT_SENT, amount(p.settled)))
+            p.settled < 0 -> me.raddatz.veyq.mobile.words.Piece.Said(me.raddatz.veyq.mobile.words.Notice(me.raddatz.veyq.mobile.words.Msg.POT_RECEIVED, amount(-p.settled)))
+            else -> null
+        },
+    )
+
+    /** A settle-up row's sentence: who pays whom. */
+    fun pays(t: SettleRow): me.raddatz.veyq.mobile.words.Notice = me.raddatz.veyq.mobile.words.Notice(me.raddatz.veyq.mobile.words.Msg.POT_PAYS, personWords(t.from), personWords(t.to))
+
+    /** "Record all" is offered past one payment, to a writer. */
+    val canRecordAll: Boolean get() = canWrite && settleUp.size > 1
+
+    /** A person's facts on the Settings tab: their balance in short, inactive, a former member. */
+    fun personFacts(p: PersonEntry): List<me.raddatz.veyq.mobile.words.Piece> = listOfNotNull(
+        if (p.settled) me.raddatz.veyq.mobile.words.Piece.Said(me.raddatz.veyq.mobile.words.Notice(me.raddatz.veyq.mobile.words.Msg.POT_SETTLED)) else me.raddatz.veyq.mobile.words.Piece.Money(p.balance, currency, minorUnits),
+        if (!p.active) me.raddatz.veyq.mobile.words.Piece.Said(me.raddatz.veyq.mobile.words.Notice(me.raddatz.veyq.mobile.words.Msg.PEOPLE_INACTIVE)) else null,
+        if (p.standing == Standing.FORMER) me.raddatz.veyq.mobile.words.Piece.Said(me.raddatz.veyq.mobile.words.Notice(me.raddatz.veyq.mobile.words.Msg.PEOPLE_FORMER_MEMBER)) else null,
+    )
+
     /** The Pot's own categories, after the defaults. */
     val ownCategories: List<Pair<String, String>> = session.meta?.categories.orEmpty()
 

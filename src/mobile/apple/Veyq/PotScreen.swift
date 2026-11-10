@@ -222,12 +222,6 @@ private struct OverviewList: View {
         Task { await model.potWrite { try await $0.recordPayments(payments: payments, date: day) } }
     }
 
-    /// What transfers moved, where there were any: " · transferred …" or " · received …".
-    private func transfers(_ p: PotView.PersonRow) -> String {
-        if p.settled > 0 { return " · " + say(.potSent, money(p.settled, view.currency, view.minorUnits)) }
-        if p.settled < 0 { return " · " + say(.potReceived, money(-p.settled, view.currency, view.minorUnits)) }
-        return ""
-    }
 
     var body: some View {
         List {
@@ -238,17 +232,12 @@ private struct OverviewList: View {
                         PersonAvatar(name: personName(p.name), userId: p.userId)
                         VStack(alignment: .leading, spacing: 2) {
                             Text(personName(p.name)).fontWeight(.semibold)
-                            Text(say(.potPaidConsumed, money(p.paid, view.currency, view.minorUnits), money(p.share, view.currency, view.minorUnits)) + transfers(p))
+                            Text(view.balanceFacts(p: p).map { say(piece: $0) }.joined(separator: " · "))
                                 .font(.caption).foregroundStyle(Role.muted)
                         }
                         Spacer()
-                        if p.balance > 0 {
-                            Text(say(.potIsOwed, money(p.balance, view.currency, view.minorUnits))).foregroundStyle(Role.primary)
-                        } else if p.balance < 0 {
-                            Text(say(.potOwes, money(-p.balance, view.currency, view.minorUnits))).foregroundStyle(Role.danger)
-                        } else {
-                            Text(say(.potSettled)).foregroundStyle(Role.muted)
-                        }
+                        let b = view.balance(p: p)
+                        Text(say(notice: b.notice)).foregroundStyle(b.tone == .owes ? Role.danger : b.tone == .owed ? Role.primary : Role.muted)
                     }
                     .listRowBackground(Role.surface)
                 }
@@ -257,7 +246,7 @@ private struct OverviewList: View {
                 Section {
                     ForEach(Array(view.settleUp.enumerated()), id: \.offset) { _, t in
                         HStack {
-                            Text(say(.potPays, personName(t.from), personName(t.to)))
+                            Text(say(notice: view.pays(t: t)))
                             Spacer()
                             Text(money(t.amount, view.currency, view.minorUnits)).fontWeight(.semibold)
                             if view.canWrite {
@@ -266,7 +255,7 @@ private struct OverviewList: View {
                         }
                         .listRowBackground(Role.surface)
                     }
-                    if view.canWrite && view.settleUp.count > 1 {
+                    if view.canRecordAll {
                         Button(say(.balancesRecordAll)) { record(view.settleUp) }.disabled(model.pot?.saving == true).listRowBackground(Role.surface)
                     }
                 } header: {

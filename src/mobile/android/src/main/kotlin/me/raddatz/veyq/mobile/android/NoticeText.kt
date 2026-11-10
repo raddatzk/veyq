@@ -5,6 +5,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import me.raddatz.veyq.mobile.words.Msg
+import me.raddatz.veyq.mobile.words.Amount
 import me.raddatz.veyq.mobile.words.Bytes
 import me.raddatz.veyq.mobile.words.Joined
 import me.raddatz.veyq.mobile.words.Moment
@@ -19,6 +20,7 @@ internal fun Context.text(n: Notice): String = words(
             is Notice -> text(it)
             is Bytes -> android.text.format.Formatter.formatShortFileSize(this, it.count)
             is Joined -> it.parts.joinToString(it.separator) { p -> if (p is Notice) text(p) else p.toString() }
+            is Amount -> money(it.amount, it.currency, it.minorUnits)
             is Moment -> java.text.DateFormat.getDateTimeInstance(java.text.DateFormat.MEDIUM, java.text.DateFormat.SHORT).format(java.util.Date(it.epochMs))
             else -> it
         }

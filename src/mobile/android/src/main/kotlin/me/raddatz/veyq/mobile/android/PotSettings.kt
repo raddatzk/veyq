@@ -155,11 +155,7 @@ private fun People(view: PotView, state: me.raddatz.veyq.mobile.expenses.PotMode
             androidx.compose.foundation.layout.Spacer(Modifier.width(12.dp))
             Column(Modifier.weight(1f)) {
                 Text(p.name, fontWeight = FontWeight.SemiBold)
-                val facts = buildList {
-                    add(if (p.settled) stringResource(R.string.pot_settled) else money(p.balance, view.currency, view.minorUnits))
-                    if (!p.active) add(stringResource(R.string.people_inactive))
-                    if (p.standing == PotView.Standing.FORMER) add(stringResource(R.string.people_former_member))
-                }
+                val facts = view.personFacts(p).map { piece(it) }
                 Text(facts.joinToString(" · "), style = MaterialTheme.typography.bodySmall, color = role(palette.muted))
             }
             if (p.renamable) {

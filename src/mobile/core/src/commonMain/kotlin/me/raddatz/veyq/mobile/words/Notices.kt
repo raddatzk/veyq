@@ -18,7 +18,7 @@ import me.raddatz.veyq.mobile.session.ShareLinks
 /**
  * What a screen says, as the catalog's key and its arguments (ADR 0127 decisions 1 and 3): each platform renders it in
  * the person's language. An argument is a `String`, an `Int`, a [Bytes] (a size the platform formats its own way),
- * a [Moment], another [Notice] (a word inside the sentence) or a [Joined] list of those.
+ * a [Moment], an [Amount], another [Notice] (a word inside the sentence) or a [Joined] list of those.
  */
 class Notice(val msg: Msg, val args: List<Any> = emptyList()) {
     constructor(msg: Msg, vararg args: Any) : this(msg, args.toList())
@@ -76,6 +76,13 @@ class Moment(val epochMs: Long) {
     override fun equals(other: Any?) = other is Moment && other.epochMs == epochMs
     override fun hashCode() = epochMs.hashCode()
     override fun toString() = "Moment($epochMs)"
+}
+
+/** An amount in a sentence, in a currency's minor units: each platform writes it as its own money reads ("12,34 €"). */
+class Amount(val amount: Long, val currency: String?, val minorUnits: Int) {
+    override fun equals(other: Any?) = other is Amount && other.amount == amount && other.currency == currency && other.minorUnits == minorUnits
+    override fun hashCode() = amount.hashCode()
+    override fun toString() = "Amount($amount $currency/$minorUnits)"
 }
 
 /** A count of bytes in a sentence: each platform writes it as its own file sizes read ("1.2 MB"). */

@@ -32,6 +32,7 @@ func say(notice: Notice) -> String {
         switch a {
         case let inner as Notice: return say(notice: inner)
         case let size as Bytes: return ByteCountFormatter.string(fromByteCount: size.count, countStyle: .file)
+        case let a as Amount: return money(a.amount, a.currency, a.minorUnits)
         case let moment as Moment: return Date(timeIntervalSince1970: Double(moment.epochMs) / 1000).formatted(date: .abbreviated, time: .shortened)
         case let joined as Joined: return joined.parts.map { ($0 as? Notice).map { say(notice: $0) } ?? "\($0)" }.joined(separator: joined.separator)
         default: return argument(a)
