@@ -2508,7 +2508,9 @@ def gitops_init(args: argparse.Namespace, host: Host, directory: Path) -> int:
 
     values = {secret: {key: make() for key, make in keys.items()} for secret, keys in SECRET_VALUES.items()}
     files: dict[str, str] = {
-        "application.yaml": application_text(name=name, argocd_namespace=args.argocd_namespace, project=args.project,
+        # The Application's name is the cluster's, never the instance's: `--name` is how this machine lists it.
+        "application.yaml": application_text(name=args.application_name, argocd_namespace=args.argocd_namespace,
+                                             project=args.project,
                                              chart=chart, digest=pins["chart"], rel=rel, repo_url=repo_url,
                                              revision=revision, namespace=namespace, values="values.yaml"),
         "values.yaml": stack_values(chosen.release, pins, domain=domain, store_domain=store_domain, garage=garage,
@@ -2846,6 +2848,8 @@ def parser() -> argparse.ArgumentParser:
     init.add_argument("--repo-url", help="GitOps: the URL Argo CD reads this repository from (default: origin)")
     init.add_argument("--revision", help="GitOps: the branch Argo CD follows (default: the checkout's)")
     init.add_argument("--project", default="default", help="GitOps: the Argo CD project (default `default`)")
+    init.add_argument("--application-name", default="veyq", help="GitOps: the Argo CD Application's name (default "
+                                                                 "veyq) — not --name, which only names it here")
     init.add_argument("--argocd-namespace", default="argocd", help="GitOps: Argo CD's namespace (default argocd)")
     init.set_defaults(func=cmd_init)
 

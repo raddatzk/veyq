@@ -58,7 +58,7 @@ What it writes:
 
 | File | What it holds |
 |---|---|
-| `application.yaml` | The Argo CD `Application`: the chart from `oci://ghcr.io/raddatzk/charts/veyq` by digest, its values and `resources/` from this repository; automated sync with self-heal, never prune |
+| `application.yaml` | The Argo CD `Application`, named `veyq` (`--application-name`; `--name` only names the instance on your machine): the chart from `oci://ghcr.io/raddatzk/charts/veyq` by digest, its values and `resources/` from this repository; automated sync with self-heal, never prune |
 | `values.yaml` | The domains, the three images by tag and digest, the Secrets' names, the gateway, TLS, and the NetworkPolicy peer (your Gateway's data-plane pods) |
 | `resources/` | The namespace (`restricted`), the backup gate's claim (never pruned or deleted by Argo CD), the Secrets, a `kustomization.yaml` |
 | `veyqctl.json` | Which release it follows (`release`: a pin, a major, or `latest`), the provider, the running release and its four pins |

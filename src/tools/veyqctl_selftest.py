@@ -1718,7 +1718,8 @@ def test_gitops_init(tmp: pathlib.Path) -> None:
           and f"targetRevision: {pin_of('1.0', 'chart')}" in application
           and "repoURL: oci://ghcr.io/raddatzk/charts/veyq" in application
           and "$values/apps/veyq/values.yaml" in application and "path: apps/veyq/resources" in application
-          and "git@example.org:ops/cluster.git" in application and "targetRevision: main" in application,
+          and "git@example.org:ops/cluster.git" in application and "targetRevision: main" in application
+          and "\n  name: veyq\n" in application and "\n  name: repo\n" not in application,
           values + application)
     check("the values name the Secrets, the gateway, ACME and the data-plane peer the operator gave",
           "existingSecret: veyq-secrets" in values and "existingSecret: veyq-config-secret-key" in values
