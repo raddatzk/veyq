@@ -1,17 +1,18 @@
 #!/usr/bin/env python3
-"""Builds utf8proc for the Linux targets `core` compiles to, as static libraries Kotlin/Native links, and fetches the
+"""Builds utf8proc for the Linux and Windows targets `core` compiles to, as static libraries Kotlin/Native links, and fetches the
 Unicode NormalizationTest.txt of the version it implements.
 
-Linux's `nfc`/`nfkd` are utf8proc's (ADR 0123's Consequences, the core on Linux): JuliaStrings' maintained, MIT-licensed C library,
-one C file plus its tables, reached from Kotlin through cinterop (`utf8proc_NFC`, `utf8proc_NFKD`). Its Linux slices are
-compiled by Kotlin/Native's own clang against the glibc it links the core against (`core/konan_toolchain.py` says why).
+Linux's and Windows' `nfc`/`nfkd` are utf8proc's (ADR 0123's Consequences, the core on Linux; ADR 0127 decision 5):
+JuliaStrings' maintained, MIT-licensed C library, one C file plus its tables, reached from Kotlin through cinterop
+(`utf8proc_map`). Its slices are compiled by Kotlin/Native's own clang against the C library it links the core against
+(`core/konan_toolchain.py` says why).
 
 Both downloads are refused unless they match the SHA-256 below:
 - the source is GitHub's tag tarball of v2.11.3 (https://github.com/JuliaStrings/utf8proc/releases/tag/v2.11.3,
   2025-12-30); the hash was taken from that tarball as downloaded on 2026-11-10 (GitHub keeps tag archives
   byte-stable). utf8proc 2.11.3 implements Unicode 17.0.0 (`utf8proc_unicode_version()`), so
 - the conformance file is Unicode's own NormalizationTest.txt for 17.0.0 (its header: `NormalizationTest-17.0.0.txt`,
-  dated 2025-06-30), hashed on the same day. `NormalizationTest` (linuxTest) checks every line of it.
+  dated 2025-06-30), hashed on the same day. `NormalizationTest` (bridgedTest) checks every line of it.
 Moving utf8proc moves both pins: the Unicode version is the one its `utf8proc_unicode_version()` returns.
 
 Usage: build_utf8proc.py <out-dir>   (the Gradle build passes src/mobile/build/utf8proc; idempotent)
@@ -62,11 +63,11 @@ def fetch(url: str, dest: Path, sha256: str) -> Path:
     return dest
 
 
-def build_linux(out: Path, name: str, tarball: Path) -> None:
+def build_konan(out: Path, name: str, tarball: Path) -> None:
     prefix = out / name
     if (prefix / "lib/libutf8proc.a").exists():
         return
-    tc = konan_toolchain.linux(name)
+    tc = konan_toolchain.for_slice(name)
     work = out / "work" / name
     shutil.rmtree(work, ignore_errors=True)
     work.mkdir(parents=True)
@@ -74,7 +75,7 @@ def build_linux(out: Path, name: str, tarball: Path) -> None:
         t.extractall(work, filter="data") if sys.version_info >= (3, 12) else t.extractall(work)
     src = work / f"utf8proc-{VERSION}"
     obj = work / "utf8proc.o"
-    # UTF8PROC_STATIC and hidden visibility: the library is linked into the core, never exported from it.
+    # UTF8PROC_STATIC (no dllexport on Windows) and hidden visibility (ELF): linked into the core, never exported from it.
     subprocess.run([str(tc.clang), "-O2", "-std=c99", "-DUTF8PROC_STATIC", "-fvisibility=hidden", *tc.cflags(),
                     "-c", str(src / "utf8proc.c"), "-o", str(obj)], check=True)
     (prefix / "lib").mkdir(parents=True, exist_ok=True)
@@ -91,8 +92,8 @@ def main() -> None:
     out = Path(sys.argv[1]).resolve()
     tarball = fetch(URL, out / f"utf8proc-{VERSION}.tar.gz", SHA256)
     test = fetch(TEST_URL, out / "NormalizationTest.txt", TEST_SHA256)
-    for name in konan_toolchain.LINUX_SLICES:
-        build_linux(out, name, tarball)
+    for name in konan_toolchain.SLICES:
+        build_konan(out, name, tarball)
         print(f"{name}: {out / name / 'lib/libutf8proc.a'}")
     print(f"Unicode {UNICODE}: {test}")
 

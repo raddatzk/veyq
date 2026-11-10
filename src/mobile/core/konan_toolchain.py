@@ -1,4 +1,4 @@
-"""Kotlin/Native's own C toolchain for a Linux target, as the C libraries the core links are built with it.
+"""Kotlin/Native's own C toolchain for a Linux or a Windows (mingw) target, as the C libraries the core links are built with it.
 
 A static library the core links for Linux must be compiled against the SAME old glibc Kotlin/Native links the core
 against (its gcc toolchain's sysroot: glibc 2.25 for arm64, 2.19 for x86-64): one built on a current distribution would
@@ -8,6 +8,10 @@ Kotlin/Native's LLVM (`clang`, `llvm-ar`, `lld`) against that sysroot (ADR 0123'
 Nothing here is spelled: the Kotlin version is the version catalog's, the distribution is the one Gradle unpacked under
 `$KONAN_DATA_DIR` (default `~/.konan`), and the LLVM and the gcc toolchain are what its `konan.properties` names
 (`llvm.<host>.user`, `toolchainDependency.<target>`). Not a guard and not a script: imported by the two build scripts.
+
+Windows (`mingw_x64`, ADR 0127 decision 5) is built the same way: Kotlin/Native's LLVM against the mingw-w64 toolchain
+it links the core against (`toolchainDependency.mingw_x64`, an msys2 distribution that is its own sysroot,
+`targetSysRoot.mingw_x64`). Kotlin/Native's LLVM carries no `llvm-ranlib`; `llvm-ar s` writes the same index.
 """
 from __future__ import annotations
 
@@ -28,6 +32,10 @@ _HOSTS = {("Darwin", "arm64"): ("macos_arm64", "macos-aarch64"), ("Darwin", "x86
 # A Linux slice of build/<library>/ -> (Kotlin/Native target, configure triple).
 LINUX_SLICES = {"linux_arm64": ("linux_arm64", "aarch64-unknown-linux-gnu"),
                 "linux_x64": ("linux_x64", "x86_64-unknown-linux-gnu")}
+# A Windows slice -> (Kotlin/Native target, configure triple: mingw-w64's, which libsodium's configure keys on).
+MINGW_SLICES = {"mingw_x64": ("mingw_x64", "x86_64-w64-mingw32")}
+# Every slice Kotlin/Native's own toolchain builds, in the order the scripts build them.
+SLICES = LINUX_SLICES | MINGW_SLICES
 
 # The Gradle task that unpacks Kotlin/Native and downloads its dependencies for every target of `core`, the Linux
 # toolchains among them (measured 2026-11-10 against an empty KONAN_DATA_DIR). `buildLibsodium` and `buildUtf8proc`
@@ -41,13 +49,26 @@ class Toolchain:
     clang: Path
     ar: Path
     sysroot: Path
-    gcc_toolchain: Path
+    gcc_toolchain: Path | None  # Linux's gcc toolchain; mingw's sysroot is its whole toolchain
+
+    @property
+    def windows(self) -> bool:
+        return self.gcc_toolchain is None
+
+    def _base(self) -> list[str]:
+        gcc = [] if self.gcc_toolchain is None else [f"--gcc-toolchain={self.gcc_toolchain}"]
+        return [f"--target={self.triple}", f"--sysroot={self.sysroot}", *gcc]
 
     def cflags(self) -> list[str]:
-        return [f"--target={self.triple}", f"--sysroot={self.sysroot}", f"--gcc-toolchain={self.gcc_toolchain}", "-fPIC"]
+        # position-independent code is ELF's question; a PE object is relocatable as it is
+        return self._base() + ([] if self.windows else ["-fPIC"])
 
     def ldflags(self) -> list[str]:
-        return [f"--target={self.triple}", f"--sysroot={self.sysroot}", f"--gcc-toolchain={self.gcc_toolchain}", "-fuse-ld=lld"]
+        return self._base() + ["-fuse-ld=lld"]
+
+    @property
+    def ranlib(self) -> str:
+        return f"{self.ar} s"  # the distribution carries no llvm-ranlib; `llvm-ar s` writes the same index
 
 
 def kotlin_version() -> str:
@@ -82,9 +103,10 @@ def _resolve(props: dict[str, str], key: str) -> str:
     return re.sub(r"\$([\w.]+)", lambda m: _resolve(props, m.group(1)), value)
 
 
-def linux(slice_name: str) -> Toolchain:
-    """The toolchain for one Linux slice; exits naming the Gradle task to run when Kotlin/Native has not downloaded it."""
-    target, triple = LINUX_SLICES[slice_name]
+def for_slice(slice_name: str) -> Toolchain:
+    """The toolchain for one slice of [SLICES]; exits naming the Gradle task to run when Kotlin/Native has not
+    downloaded it."""
+    target, triple = SLICES[slice_name]
     try:
         host, host_dir = _HOSTS[(platform.system(), platform.machine())]
     except KeyError:
@@ -98,8 +120,11 @@ def linux(slice_name: str) -> Toolchain:
     deps = data / "dependencies"
     llvm = deps / _resolve(props, f"llvm.{host}.user")
     gcc = deps / _resolve(props, f"toolchainDependency.{target}")
-    sysroot = gcc / triple / "sysroot"
-    tc = Toolchain(triple, llvm / "bin" / "clang", llvm / "bin" / "llvm-ar", sysroot, gcc)
+    if slice_name in MINGW_SLICES:
+        tc = Toolchain(triple, llvm / "bin" / "clang", llvm / "bin" / "llvm-ar",
+                       deps / _resolve(props, f"targetSysRoot.{target}"), None)
+    else:
+        tc = Toolchain(triple, llvm / "bin" / "clang", llvm / "bin" / "llvm-ar", gcc / triple / "sysroot", gcc)
     missing = [p for p in (tc.clang, tc.ar, tc.sysroot) if not p.exists()]
     if missing:
         sys.exit(f"Kotlin/Native's toolchain for {target} is not downloaded ({', '.join(map(str, missing))}): "

@@ -5,12 +5,14 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 
 /**
- * Linux's `localWallClock` against what the web's `new Date(y, m - 1, d, h, mi, s)` gives (ADR 0123's
+ * Linux's and Windows' `localWallClock` against what the web's `new Date(y, m - 1, d, h, mi, s)` gives (ADR 0123's
  * Consequences, the core on Linux). Each expected value was produced on 2026-11-10 by
  * `TZ=Europe/Berlin node -e 'console.log(new Date(y, m - 1, d, h, mi, s).getTime())'` (Node 23.11.0), so the test
  * runs in Europe/Berlin and refuses to run in any other zone rather than pass by luck. kotlinx-datetime reads the
  * device's zone from `/etc/localtime`, not from `TZ` (measured 2026-11-10: with only `TZ` set it read UTC), so
- * `run.py test` points the container's `/etc/localtime` at Europe/Berlin.
+ * `linux/run.py test` points the container's `/etc/localtime` at Europe/Berlin. On Windows it reads the system's zone
+ * and names it by its IANA id: the test VM's W. Europe Standard Time is `Europe/Berlin` (measured 2026-11-10,
+ * `windows/run.py test`).
  */
 class WallClockTest {
     private fun at(y: Int, m: Int, d: Int, h: Int, mi: Int, s: Int) = localWallClock(y, m, d, h, mi, s)

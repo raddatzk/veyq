@@ -3,7 +3,7 @@
 package me.raddatz.veyq.mobile.bridge
 
 import io.ktor.client.HttpClient
-import io.ktor.client.engine.curl.Curl
+import io.ktor.client.HttpClientConfig
 import kotlinx.cinterop.ByteVar
 import kotlinx.cinterop.COpaquePointer
 import kotlinx.cinterop.CFunction
@@ -30,6 +30,9 @@ typealias VeyqAnswer = CPointer<CFunction<(COpaquePointer?, CPointer<ByteVar>?, 
 /** `void (*)(void *ctx, uint64_t token, const char *json, const uint8_t *bytes, size_t len)`: a host request. */
 typealias VeyqHost = CPointer<CFunction<(COpaquePointer?, ULong, CPointer<ByteVar>?, CPointer<UByteVar>?, ULong) -> Unit>>
 
+/** The platform's own Ktor engine, the one thing Linux and Windows differ in here: Curl (`linuxMain`), WinHTTP (`mingwMain`). */
+internal expect fun platformHttpClient(block: HttpClientConfig<*>.() -> Unit): HttpClient
+
 private class Running(val bridge: Bridge<*, *>, val host: Host)
 
 private val running = AtomicReference<Running?>(null)
@@ -50,7 +53,7 @@ fun veyqInit(config: CPointer<ByteVar>?, host: VeyqHost?, hostCtx: COpaquePointe
     val h = Host { token, json ->
         memScoped { host.invoke(hostCtx, token.toULong(), json.cstr.ptr, null, 0u) }
     }
-    val bridge = Bridge.live(LibsodiumPrimitives, { block -> HttpClient(Curl, block) }, c, HostStore(h))
+    val bridge = Bridge.live(LibsodiumPrimitives, { block -> platformHttpClient(block) }, c, HostStore(h))
     if (!running.compareAndSet(null, Running(bridge, h))) {
         bridge.shutdown()
         return ALREADY_STARTED

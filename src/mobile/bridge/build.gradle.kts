@@ -1,7 +1,10 @@
 // The native bridge (ADR 0127 decision 5; ADR 0123's Consequences, the bridge): the core as one shared library,
 // `libveyq.so`, whose only public surface is the six C functions of `bridge.h`. It depends on `:core` as an
 // implementation dependency, so the library exports none of the core's classes — only the `@CName` functions of
-// `src/linuxMain`. The JVM target exists for the tests and for the generator of the Rust types (`generateBindings`).
+// `src/bridgedMain` (Linux and Windows, as in `:core`; each brings only its HTTP engine). The JVM target exists for the tests and for the generator of the Rust types (`generateBindings`).
+import org.jetbrains.kotlin.gradle.ExperimentalKotlinGradlePluginApi
+import org.jetbrains.kotlin.gradle.plugin.KotlinHierarchyTemplate
+
 plugins {
     alias(libs.plugins.kotlin.multiplatform)
     alias(libs.plugins.kotlin.serialization)
@@ -10,6 +13,18 @@ plugins {
 kotlin {
     jvmToolchain(21)
     jvm()
+    @OptIn(ExperimentalKotlinGradlePluginApi::class)
+    applyHierarchyTemplate(KotlinHierarchyTemplate.default) {
+        group("native") {
+            group("bridged") {
+                group("linux")
+                group("mingw")
+            }
+        }
+    }
+    // Windows (ADR 0127 decision 5) compiles here; its DLL is linked by the next phase of
+    // cr-the-windows-app-over-the-native-core, with the export gate it needs.
+    mingwX64()
     listOf(linuxArm64(), linuxX64()).forEach { target ->
         target.binaries.sharedLib {
             baseName = "veyq"
@@ -29,6 +44,9 @@ kotlin {
         }
         linuxMain.dependencies {
             implementation(libs.ktor.client.curl)
+        }
+        mingwMain.dependencies {
+            implementation(libs.ktor.client.winhttp)
         }
         jvmTest.dependencies {
             implementation(kotlin("test"))

@@ -21,7 +21,8 @@ A Gradle build of its own, run through its own wrapper.
   built and measured is ADR 0123's Consequences, the bridge). `bridge.h` is its whole C surface, six functions written
   by hand and held to Kotlin/Native's own header by `BridgeHeaderTest`. `commonMain` holds the wire (`Wire.kt`: the
   `Call`s, the `HostRequest`s, what the core sends), the dispatch onto the core's models (`Bridge.kt`) and the host's
-  device store (`Host.kt`). `linuxMain/Exports.kt` holds the six `@CName` functions. `jvmMain/Bindings.kt` writes
+  device store (`Host.kt`). `bridgedMain/Exports.kt` holds the six `@CName` functions (`bridgedMain` is what Linux and Windows
+  share, in `core` as here; each target's own set brings only its Ktor engine). `jvmMain/Bindings.kt` writes
   `bridge.rs` (`:bridge:generateBindings`, into `build/generated/bridge`, never committed). `smoke/smoke.c` is a C
   host built against `bridge.h` alone. A rule found in the dispatch is a defect to move into the core; a field the UI
   does not draw, and any key, seal or token, is never part of a state the bridge sends (`SecretFreeSchemaTest`).
