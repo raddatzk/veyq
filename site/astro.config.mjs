@@ -180,6 +180,7 @@ export default defineConfig({
             'run/new-instance',
             'run/first-run',
             'run/kubernetes',
+            'run/gitops',
             'run/configuration',
             'run/capabilities',
             'run/networking',

@@ -66,6 +66,15 @@ what prove it. Everything here runs against a mirror directory this file writes 
      the manifest on disk verified against its bundle first — refused when it was edited to match a swapped
      `veyqctl`, and when the bundle is gone.
 
+ 11. **the instance list and the GitOps target** (ADR 0126, cr-veyqctl-gitops-target) — `init --compose` installing
+     as `install` and listing the home; `--home` over `--instance` over the current one; every Compose lifecycle verb
+     refused on a GitOps instance, naming what does it there, running nothing; `init --gitops` verifying the blob,
+     three images and the chart (its tag's digest, its Chart.yaml version) and rendering BEFORE the directory exists,
+     then writing the Application, the values and resources/ per provider, the generated values never in the
+     repository (handed over 0600, or `sops encrypt` on stdin); the cluster contract naming every gap; `upgrade`
+     stopping on a major's entry, rewriting the four pins and three tags, committing its three files alone, pushing
+     only with `--push` — and refusing drift, uncommitted changes, an unverified or mis-versioned chart, a failed render
+     and a downgrade with the repository untouched; `--adopt` writing only veyqctl.json once the pins verify.
 What it cannot show: that Docker, cosign and the backup tool behave as the stand-in answers. That is the live runs' (the CR says
 which). Not a `validate_*.py`: it asserts nothing about the repository, only about the tool. Runnable locally:
 
@@ -1531,9 +1540,395 @@ def test_entry_signed(tmp: pathlib.Path) -> None:
           "does not verify" in message and bool(host.ran("verify-blob")), message)
 
 
+# ---- the GitOps target and the instance list (ADR 0126, cr-veyqctl-gitops-target) -------------------------------
+
+def pin_of(release: str, role: str) -> str:
+    """A release's stand-in digest for one of its four pins: distinct per release and role."""
+    return "sha256:" + sha(f"{role} {release}".encode())
+
+
+CLUSTER_OK = {
+    "crd applications.argoproj.io": (0, "customresourcedefinition.apiextensions.k8s.io/applications.argoproj.io\n"),
+    "crd gateways.gateway.networking.k8s.io": (0, "v1.5.1"),
+    "get gatewayclass traefik": (0, "gatewayclass.gateway.networking.k8s.io/traefik\n"),
+    "get storageclass": (0, "storageclass.storage.k8s.io/local-path\n"),
+    "crd certificates.cert-manager.io": (0, "customresourcedefinition.apiextensions.k8s.io/certificates\n"),
+    "app.kubernetes.io/name=cert-manager": (0, "v1.21.3"),
+    "get namespace": (0, "namespace/veyq\n"),
+    "get secret veyq-secrets": (0, json.dumps({k: "eA==" for k in vc.SECRET_VALUES[vc.SECRETS_SECRET]})),
+    "get secret veyq-config-secret-key": (0, json.dumps({vc.CONFIG_SECRET_KEY: "eA=="})),
+}
+
+
+class GitOpsHost(FakeHost):
+    """FakeHost plus what the GitOps target starts — git, kubectl, helm, sops, kubeseal — and the registry lookup."""
+
+    def __init__(self, *, top: pathlib.Path, cluster=None, chart_version=None, dirty=False, kubeseal=True,
+                 render_fails=False, **kwargs) -> None:
+        super().__init__(**kwargs)
+        self.top, self.dirty, self.kubeseal, self.render_fails = top, dirty, kubeseal, render_fails
+        self.cluster = dict(CLUSTER_OK, **(cluster or {}))
+        self.chart_version = chart_version  # what `helm show chart` says; None: the release the digest belongs to
+        self.charts: dict[str, str] = {}
+
+    def oci_digest(self, ref: str) -> str:
+        self.commands.append(["oci-digest", ref])
+        self.watched.append(bool(self.watch and self.watch.exists()))
+        release = ref.rsplit(":", 1)[1]
+        self.charts[pin_of(release, "chart")] = release
+        return pin_of(release, "chart")
+
+    def which(self, name):
+        return None if name == "kubeseal" and not self.kubeseal else super().which(name)
+
+    def run(self, cmd, *, check=True, stream=False, env=None, stdin=None):
+        if cmd[0] not in ("git", "kubectl", "helm", "sops", "kubeseal"):
+            return super().run(cmd, check=check, stream=stream, env=env, stdin=stdin)
+        self.commands.append(list(cmd))
+        self.watched.append(bool(self.watch and self.watch.exists()))
+        if stdin is not None:
+            self.stdins.append(stdin)
+        rc, out = self.answer(cmd)
+        if check and rc:
+            raise vc.Refused(f"`{' '.join(cmd[:4])} …` exited {rc}")
+        return subprocess.CompletedProcess(cmd, rc, out, "stand-in refusal" if rc else "")
+
+    def answer(self, cmd) -> tuple:
+        joined = " ".join(cmd)
+        if cmd[0] == "git":
+            if "--show-toplevel" in cmd:  # as git: `-C` must name a directory that exists
+                return (0, f"{self.top}\n") if pathlib.Path(cmd[2]).is_dir() else (128, "")
+            if "get-url" in cmd:
+                return 0, "git@example.org:ops/cluster.git\n"
+            if "--abbrev-ref" in cmd:
+                return 0, "main\n"
+            if "diff" in cmd:
+                return (1 if self.dirty else 0), ""
+            return 0, ""
+        if cmd[0] == "kubectl":
+            for key, answer in self.cluster.items():
+                if key in joined:
+                    return answer
+            return 0, ""
+        if cmd[0] == "helm" and cmd[1] == "show":
+            digest = cmd[3].rsplit("@", 1)[1]
+            return 0, f"apiVersion: v2\nname: veyq\nversion: {self.chart_version or self.charts.get(digest, '?')}\n"
+        if cmd[0] == "helm":
+            return (1, "") if self.render_fails else (0, "kind: Deployment\n")
+        if cmd[0] == "sops":
+            return 0, "apiVersion: v1\nkind: Secret\nstringData:\n    k: ENC[AES256_GCM,data:stand-in]\nsops:\n    age: []\n"
+        return 0, "apiVersion: bitnami.com/v1alpha1\nkind: SealedSecret\n"  # kubeseal
+
+
+def gitops_mirror(root: pathlib.Path, *releases: tuple) -> pathlib.Path:
+    """Signed releases whose manifests name all three images by digest, `tools` included."""
+    for tag, entry in releases:
+        r = tag[1:]
+
+        def with_tools(m, r=r):
+            m["images"]["tools"] = f"ghcr.io/raddatzk/veyq-tools:{r}@{pin_of(r, 'tools')}"
+        write_release(root, tag, app=f"ghcr.io/raddatzk/veyq:{r}@{pin_of(r, 'app')}",
+                      admin=f"ghcr.io/raddatzk/veyq-admin:{r}@{pin_of(r, 'admin')}", signed=True, entry=entry,
+                      manifest_edit=with_tools)
+    return root
+
+
+def gitops_signed(*releases: str, without: tuple = ()) -> set:
+    names = {"app": "ghcr.io/raddatzk/veyq", "admin": "ghcr.io/raddatzk/veyq-admin",
+             "tools": "ghcr.io/raddatzk/veyq-tools", "chart": "ghcr.io/raddatzk/charts/veyq"}
+    return {f"{names[role]}@{pin_of(r, role)}" for r in releases for role in names if (r, role) not in without}
+
+
+INIT = ["--domain", "veyq.example.org", "--gateway-class", "traefik", "--acme-email", "ops@example.org",
+        "--gateway-namespace", "traefik", "--gateway-pod-label", "app.kubernetes.io/name=traefik"]
+
+
+def tree_text(root: pathlib.Path) -> str:
+    return "\n".join(p.read_text() for p in sorted(root.rglob("*")) if p.is_file())
+
+
+def snapshot(d: pathlib.Path) -> dict:
+    return {p.name: p.read_bytes() for p in d.iterdir() if p.is_file()}
+
+
+def test_instances(tmp: pathlib.Path) -> None:
+    rc, out = run_main(["instances"], FakeHost())
+    check("instances: none listed says so and names /opt/veyq", rc == 0 and vc.DEFAULT_HOME in out, out)
+    mirror = upgrade_mirror(tmp / "inst-mirror")
+    home = tmp / "inst-compose"
+    rc, out = run_main(["--home", home, "--source", mirror, "init", "--compose", "--name", "test", "--unsigned-local",
+                        *INSTALL_SETS, "--set", "VEYQ_RELEASE=1.3"],
+                       FakeHost(local_images=all_images(), project="veyq-proof"))
+    registry = json.loads((vc.config_dir() / vc.REGISTRY_FILE).read_text())
+    check("init --compose: installs as `install` does, then lists the home as `test` and makes it current",
+          rc == 0 and registry == {"current": "test", "instances": {"test": str(home)}}
+          and (home / vc.STATE_FILE).is_file(), out[-600:])
+    rc, out = run_main(["--home", tmp / "elsewhere", "--source", mirror, "init", "--compose", "--name", "test",
+                        "--unsigned-local", *INSTALL_SETS], FakeHost(local_images=all_images()))
+    check("init: a name listed for another path is refused before anything is installed",
+          rc == 1 and "listed already" in out and not (tmp / "elsewhere").exists(), out[-400:])
+    gitops_home = tmp / "inst-gitops"
+    gitops_home.mkdir()
+    (gitops_home / vc.GITOPS_FILE).write_text("{}")
+    registry["instances"]["cluster"] = str(gitops_home)
+    vc.write_registry(registry)
+    for verb in ("start", "backup", "rollback", "self-update"):
+        argv = ["--instance", "cluster", verb] + (["/tmp/capture", "--key-from", "/tmp/k"] if verb == "rollback" else [])
+        host = FakeHost()
+        rc, out = run_main(argv, host)
+        check(f"a GitOps instance refuses `{verb}`, names what does it there, and runs nothing",
+              rc == 1 and "is Compose's" in out and vc.COMPOSE_ONLY[verb][:20] in out and not host.commands, out)
+    rc, out = run_main(["--instance", "nope", "status"], FakeHost())
+    check("--instance of no listed name is refused, naming `veyqctl instances`", rc == 1 and "instances" in out, out)
+    rc, out = run_main(["use", "nope"], FakeHost())
+    check("use: an unlisted name is refused", rc == 1 and "no instance named nope" in out, out)
+    rc, out = run_main(["use", "cluster"], FakeHost())
+    check("use: switches the current instance", rc == 0 and vc.read_registry()["current"] == "cluster", out)
+    check("the current instance is the one a command acts on, --home wins over it, --instance acts on another once",
+          vc.resolve_home(vc.parser().parse_args(["status"])) == gitops_home
+          and vc.resolve_home(vc.parser().parse_args(["--home", "/x", "status"])) == pathlib.Path("/x")
+          and vc.resolve_home(vc.parser().parse_args(["--instance", "test", "status"])) == home)
+    rc, out = run_main(["--instance", "test", "upgrade", "--push"], FakeHost())
+    check("upgrade --push on a Compose home is refused before anything runs", rc == 1 and "GitOps" in out, out)
+    rc, out = run_main(["instances"], FakeHost())
+    check("instances: each listed with its target and path, the current one marked",
+          "* cluster  gitops" in out and "  test  compose" in out, out)
+    vc.write_registry({"current": None, "instances": {}})
+
+
+def test_gitops_init(tmp: pathlib.Path) -> None:
+    mirror = gitops_mirror(tmp / "g-mirror", ("v1.0", None), ("v1.1", None), ("v2.0", "1.1"))
+    signed = gitops_signed("1.0", "1.1", "2.0")
+    top = tmp / "repo"
+    top.mkdir()  # `apps/` does not exist yet either: init finds the checkout from the nearest directory that does
+    d = top / "apps" / "veyq"
+    host = GitOpsHost(top=top, signed=signed, watch=d)
+    rc, out = run_main(["--source", mirror, "init", "--gitops", d, "--release", "1.0", *INIT, "--secrets",
+                        "external-secrets", "--secret-store", "vault"], host)
+    files = {p.relative_to(d).as_posix() for p in d.rglob("*") if p.is_file()}
+    check("init --gitops: writes the Application, the values, resources/ with ExternalSecrets, and veyqctl.json",
+          rc == 0 and files == {"application.yaml", "values.yaml", vc.GITOPS_FILE, "resources/kustomization.yaml",
+                                "resources/namespace.yaml", "resources/backup-pvc.yaml",
+                                "resources/secrets.external.yaml", "resources/config-secret-key.external.yaml"},
+          out[-800:] + str(files))
+    values, application = (d / "values.yaml").read_text(), (d / "application.yaml").read_text()
+    check("the values pin the release's three images by tag and digest, the Application its chart by digest",
+          all(pin_of("1.0", r) in values for r in ("app", "admin", "tools")) and values.count('tag: "1.0"') == 3
+          and f"targetRevision: {pin_of('1.0', 'chart')}" in application
+          and "repoURL: oci://ghcr.io/raddatzk/charts/veyq" in application
+          and "$values/apps/veyq/values.yaml" in application and "path: apps/veyq/resources" in application
+          and "git@example.org:ops/cluster.git" in application and "targetRevision: main" in application,
+          values + application)
+    check("the values name the Secrets, the gateway, ACME and the data-plane peer the operator gave",
+          "existingSecret: veyq-secrets" in values and "existingSecret: veyq-config-secret-key" in values
+          and "className: traefik" in values and "mode: per-domain" in values and "email: ops@example.org" in values
+          and "kubernetes.io/metadata.name: traefik" in values and "storeDomain: store.veyq.example.org" in values)
+    external = (d / "resources" / "secrets.external.yaml").read_text()
+    check("external-secrets: each key read from a remote key under the prefix, through the named store",
+          "key: veyq-mariadb-password" in external and "name: vault" in external
+          and "kind: ClusterSecretStore" in external and "deletionPolicy: Retain" in external, external)
+    handed = vc.config_dir() / "repo.secrets.json"
+    doc = json.loads(handed.read_text()) if handed.is_file() else {}
+    generated = [v for keys in doc.get("secrets", {}).values() for v in keys.values()]
+    check("the generated values are handed over once, 0600, outside the repository — and none is in it",
+          stat.S_IMODE(handed.stat().st_mode) == 0o600 and len(generated) == 5
+          and not any(v in tree_text(top) for v in generated)
+          and doc.get("remoteKeys", {}).get("veyq-config-secret-key") == doc["secrets"]["veyq-config-secret-key"][
+              vc.CONFIG_SECRET_KEY], str(doc)[:300])
+    key = base64_32 = doc["secrets"]["veyq-config-secret-key"][vc.CONFIG_SECRET_KEY]
+    import base64 as b64
+    check("the config-secret key is base64 of 32 bytes, the RPC secret 64 hex characters",
+          len(b64.b64decode(base64_32)) == 32
+          and len(doc["secrets"]["veyq-secrets"]["garageRpcSecret"]) == 64, key)
+    verified = [i for i, c in enumerate(host.commands) if is_cosign(c) and c[1] == "verify"]
+    renders = host.ran("helm", "template")
+    check("everything is verified and rendered before the directory exists: blob, three images, chart by its tag's "
+          "digest, Chart.yaml's version",
+          len(verified) == 4 and renders and not any(host.watched[: renders[0] + 1])
+          and host.ran("oci-digest", "ghcr.io/raddatzk/charts/veyq:1.0") and host.ran("helm", "show", "chart")
+          and min(host.ran("verify-blob")) < min(verified) < renders[0], str(host.commands[:12]))
+    meta = json.loads((d / vc.GITOPS_FILE).read_text())
+    check("veyqctl.json: the target, the selector, the provider, the chart, the running release and its four pins",
+          meta["target"] == "gitops" and meta["release"] == "1.0" and meta["secrets"] == "external-secrets"
+          and meta["running"] == "1.0" and meta["pins"] == {r: pin_of("1.0", r) for r in vc.PIN_ROLES}
+          and meta["chart"] == "ghcr.io/raddatzk/charts/veyq", str(meta))
+    check("init --gitops lists the instance under the repository's name and makes it current",
+          vc.read_registry() == {"current": "repo", "instances": {"repo": str(d.resolve())}})
+    before = tree_text(top)
+    rc, out = run_main(["--source", mirror, "init", "--gitops", d, *INIT, "--secrets", "none"], GitOpsHost(top=top, signed=signed))
+    check("a second init into the same directory is refused and changes nothing", rc == 1 and "not empty" in out
+          and tree_text(top) == before, out[-300:])
+    rc, out = run_main(["--instance", "repo", "--source", mirror, "verify"], GitOpsHost(top=top, signed=signed))
+    check("verify on a GitOps instance: manifest, three images and chart", rc == 0 and "chart" in out
+          and "nothing was written" in out, out[-400:])
+    rc, out = run_main(["--instance", "repo", "--source", mirror, "check"], GitOpsHost(top=top, signed=signed))
+    check("check on a GitOps instance: the pinned release, and the Secrets with every key",
+          rc == 0 and "pinned already" in out and "exist with every key" in out, out[-500:])
+    rc, out = run_main(["--instance", "repo", "--source", mirror, "check"], GitOpsHost(top=top, signed=signed, cluster={
+        "get secret veyq-config-secret-key": (1, "")}))
+    check("check: a Secret the provider did not create is named, exit 1", rc == 1 and "veyq-config-secret-key (missing)"
+          in out, out[-400:])
+
+    # the cluster contract, every gap at once, nothing written
+    d2 = top / "apps" / "veyq-2"
+    rc, out = run_main(["--source", mirror, "init", "--gitops", d2, "--name", "two", *INIT, "--secrets", "none"],
+                       GitOpsHost(top=top, signed=signed, cluster={
+                           "crd gateways.gateway.networking.k8s.io": (0, "v1.4.0"),
+                           "get gatewayclass traefik": (1, ""),
+                           "app.kubernetes.io/name=cert-manager": (0, "v1.20.2")}))
+    check("init: a cluster below the contract is refused naming each gap, nothing written",
+          rc == 1 and "v1.5 or later" in out and "GatewayClass traefik" in out and "cert-manager 1.21" in out
+          and not d2.exists(), out[-600:])
+    rc, out = run_main(["--source", mirror, "init", "--gitops", d2, "--name", "two", *INIT, "--secrets", "none"],
+                       GitOpsHost(top=top, signed=signed, chart_version="0.9"))
+    check("init: a chart whose Chart.yaml is another release is refused, nothing written",
+          rc == 1 and "version 0.9, not 2.0" in out and not d2.exists(), out[-400:])
+    rc, out = run_main(["--source", mirror, "init", "--gitops", d2, "--name", "two", *INIT, "--secrets", "none"],
+                       GitOpsHost(top=top, signed=gitops_signed("1.0", "1.1", "2.0", without=(("2.0", "tools"),))))
+    check("init: a tools image that does not verify is refused, nothing written",
+          rc == 1 and "tools image" in out and "does not verify" in out and not d2.exists(), out[-400:])
+
+    # sops: encrypted in the repository through the repository's creation rules; sealed-secrets needs kubeseal
+    d3 = top / "apps" / "veyq-sops"
+    host = GitOpsHost(top=top, signed=signed)
+    rc, out = run_main(["--source", mirror, "init", "--gitops", d3, "--name", "sops", *INIT, "--secrets", "sops"], host)
+    check("init --secrets sops without a .sops.yaml is refused, nothing written",
+          rc == 1 and ".sops.yaml" in out and not d3.exists(), out[-300:])
+    (top / ".sops.yaml").write_text("creation_rules: []\n")
+    host = GitOpsHost(top=top, signed=signed)
+    rc, out = run_main(["--source", mirror, "init", "--gitops", d3, "--name", "sops", *INIT, "--secrets", "sops"], host)
+    sops_runs = host.ran("sops", "encrypt")
+    check("init --secrets sops: both Secrets through `sops encrypt` on stdin, never argv; KSOPS generator; no hand-over",
+          rc == 0 and len(sops_runs) == 2 and all(b"stringData" in s for s in host.stdins)
+          and "ENC[" in (d3 / "resources" / "secrets.sops.yaml").read_text()
+          and "generators:" in (d3 / "resources" / "kustomization.yaml").read_text()
+          and not (vc.config_dir() / "sops.secrets.json").exists()
+          and "sops decrypt --extract" in out, out[-500:])
+    rc, out = run_main(["--source", mirror, "init", "--gitops", top / "apps" / "veyq-sealed", "--name", "sealed",
+                        *INIT, "--secrets", "sealed-secrets"], GitOpsHost(top=top, signed=signed, kubeseal=False))
+    check("init --secrets sealed-secrets without kubeseal is refused", rc == 1 and "kubeseal" in out, out[-300:])
+
+
+def test_gitops_upgrade(tmp: pathlib.Path) -> None:
+    mirror = tmp / "g-mirror"  # test_gitops_init's: 1.0, 1.1, 2.0 entered from 1.1
+    signed = gitops_signed("1.0", "1.1", "2.0")
+    top = tmp / "repo"
+    d = top / "apps" / "veyq"
+    meta = json.loads((d / vc.GITOPS_FILE).read_text())
+    (d / vc.GITOPS_FILE).write_text(json.dumps({**meta, "release": "latest"}))
+    host = GitOpsHost(top=top, signed=signed)
+    rc, out = run_main(["--instance", "repo", "--source", mirror, "upgrade"], host)
+    values, application = (d / "values.yaml").read_text(), (d / "application.yaml").read_text()
+    meta = json.loads((d / vc.GITOPS_FILE).read_text())
+    commits = host.ran("git", "commit")
+    check("upgrade latest from 1.0: stops on 1.1, major 2's entry, and says the next upgrade enters major 2",
+          rc == 0 and meta["running"] == "1.1" and "enters major 2" in out, out[-600:])
+    check("upgrade: the four pins and the three tags rewritten, nothing of 1.0 left; veyqctl.json records 1.1's",
+          all(pin_of("1.1", r) in values for r in ("app", "admin", "tools")) and values.count('tag: "1.1"') == 3
+          and pin_of("1.1", "chart") in application and pin_of("1.0", "chart") not in application
+          and meta["pins"] == {r: pin_of("1.1", r) for r in vc.PIN_ROLES})
+    check("upgrade: verified and rendered before any file is written, then a commit of its three files alone, no push",
+          commits and host.ran("helm", "template")[0] < commits[0]
+          and host.commands[commits[0]][-3:] == [str(d.resolve() / f) for f in ("application.yaml", "values.yaml",
+                                                                                  vc.GITOPS_FILE)]
+          and "veyq 1.1: upgraded from 1.0" in " ".join(host.commands[commits[0]])
+          and not host.ran("git", "push"), str(host.commands[-4:]))
+    host = GitOpsHost(top=top, signed=signed)
+    rc, out = run_main(["--instance", "repo", "--source", mirror, "upgrade", "--push"], host)
+    check("upgrade --push from 1.1 enters major 2 (2.0) and pushes", rc == 0 and json.loads(
+        (d / vc.GITOPS_FILE).read_text())["running"] == "2.0" and host.ran("git", "push"), out[-400:])
+    rc, out = run_main(["--instance", "repo", "--source", mirror, "upgrade"], GitOpsHost(top=top, signed=signed))
+    check("upgrade on the newest: nothing to do", rc == 0 and "nothing to do" in out, out[-200:])
+
+    # every refusal leaves the repository untouched and commits nothing
+    d4 = top / "apps" / "veyq-refusals"
+    rc, out = run_main(["--source", mirror, "init", "--gitops", d4, "--name", "refusals", "--release", "1.0", *INIT,
+                        "--secrets", "none"], GitOpsHost(top=top, signed=signed))
+    assert rc == 0, out
+    meta = json.loads((d4 / vc.GITOPS_FILE).read_text())
+    (d4 / vc.GITOPS_FILE).write_text(json.dumps({**meta, "release": "1"}))
+    before = snapshot(d4)
+    cases = [
+        ("uncommitted changes", GitOpsHost(top=top, signed=signed, dirty=True), None, "not committed"),
+        ("a chart that does not verify", GitOpsHost(top=top, signed=gitops_signed(
+            "1.0", "1.1", "2.0", without=(("1.1", "chart"),))), None, "does not verify"),
+        ("a chart of another version", GitOpsHost(top=top, signed=signed, chart_version="1.0"), None, "not 1.1"),
+        ("a render that fails", GitOpsHost(top=top, signed=signed, render_fails=True), None, "helm template"),
+        ("a digest edited by hand (drift)", GitOpsHost(top=top, signed=signed),
+         lambda: (d4 / "values.yaml").write_text((d4 / "values.yaml").read_text().replace(pin_of("1.0", "admin"),
+                                                                                          DIGEST_B)), "no longer pin"),
+    ]
+    for label, host, edit, words in cases:
+        if edit:
+            edit()
+        snap = snapshot(d4)
+        rc, out = run_main(["--instance", "refusals", "--source", mirror, "upgrade"], host)
+        check(f"upgrade refuses {label}, writes nothing and commits nothing",
+              rc == 1 and words in out and snapshot(d4) == snap and not host.ran("git", "commit"), out[-400:])
+    for name, data in before.items():
+        (d4 / name).write_bytes(data)
+    (d4 / vc.GITOPS_FILE).write_text(json.dumps({**meta, "release": "1.0", "running": "1.1"}))
+    rc, out = run_main(["--instance", "refusals", "--source", mirror, "upgrade"], GitOpsHost(top=top, signed=signed))
+    check("upgrade below the pinned release is refused (no downgrade)", rc == 1 and "below the pinned" in out, out[-300:])
+
+
+ADOPTED_VALUES = """# hand-written, as affenbande's
+domain: cloud.example.org
+image:
+  # renovate: datasource=docker depName=ghcr.io/raddatzk/veyq
+  tag: "1.0"
+  digest: {app}
+admin:
+  image:
+    tag: "1.0"
+    digest: {admin}
+backup:
+  enabled: true
+  image:
+    tag: 1.0
+    digest: {tools}
+"""
+ADOPTED_APPLICATION = """spec:
+  sources:
+    - repoURL: oci://ghcr.io/raddatzk/charts/veyq
+      # renovate: datasource=docker depName=ghcr.io/raddatzk/charts/veyq version=1.0
+      targetRevision: {chart}
+      path: .
+"""
+
+
+def test_gitops_adopt(tmp: pathlib.Path) -> None:
+    mirror, signed = tmp / "g-mirror", gitops_signed("1.0", "1.1", "2.0")
+    top = tmp / "adopted"
+    d = top / "gitops" / "apps" / "veyq"
+    d.mkdir(parents=True)
+    pins = {r: pin_of("1.0", r) for r in vc.PIN_ROLES}
+    (d / "application.yaml").write_text(ADOPTED_APPLICATION.format(**pins))
+    (d / "values.yaml").write_text(ADOPTED_VALUES.format(**{**pins, "admin": DIGEST_B}))
+    rc, out = run_main(["--source", mirror, "init", "--gitops", d, "--adopt", "--secrets", "sops"],
+                       GitOpsHost(top=top, signed=signed))
+    check("init --adopt: a file pinning what its release does not is refused, nothing written",
+          rc == 1 and "does not" in out and DIGEST_B in out and not (d / vc.GITOPS_FILE).exists(), out[-400:])
+    (d / "values.yaml").write_text(ADOPTED_VALUES.format(**pins))
+    rc, out = run_main(["--source", mirror, "init", "--gitops", d, "--adopt", "--secrets", "sops"],
+                       GitOpsHost(top=top, signed=signed))
+    meta = json.loads((d / vc.GITOPS_FILE).read_text()) if (d / vc.GITOPS_FILE).exists() else {}
+    check("init --adopt: only veyqctl.json written — running 1.0, its pins verified, the selector its major",
+          rc == 0 and meta.get("running") == "1.0" and meta.get("release") == "1" and meta.get("pins") == pins
+          and sorted(p.name for p in d.iterdir()) == ["application.yaml", "values.yaml", vc.GITOPS_FILE], out[-400:])
+    host = GitOpsHost(top=top, signed=signed)
+    rc, out = run_main(["--source", mirror, "upgrade"], host)
+    values, application = (d / "values.yaml").read_text(), (d / "application.yaml").read_text()
+    check("an adopted layout upgrades like a written one: its comments kept, the Renovate hint moved with it",
+          rc == 0 and "# hand-written, as affenbande's" in values and values.count('tag: "1.1"') == 3
+          and "version=1.1" in application and pin_of("1.1", "chart") in application, out[-400:] + values)
+
+
 def main() -> int:
     with tempfile.TemporaryDirectory(prefix="veyqctl-selftest-") as raw:
         tmp = pathlib.Path(raw)
+        # The instance list lives in the user's config: never the real one (ADR 0126 decision 2).
+        os.environ["XDG_CONFIG_HOME"] = str(tmp / "config")
         test_resolver(tmp)
         test_major_entry()
         test_manifest()
@@ -1553,6 +1948,10 @@ def main() -> int:
         test_self_update(tmp)
         test_manifest_signature(tmp)
         test_entry_signed(tmp)
+        test_instances(tmp)
+        test_gitops_init(tmp)
+        test_gitops_upgrade(tmp)
+        test_gitops_adopt(tmp)
     if failures:
         print(f"\nveyqctl self-test FAILED: {len(failures)} check(s)")
         return 1

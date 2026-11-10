@@ -220,11 +220,25 @@ there; the environment only bootstraps ([ADR 0089](../decisions/0089-instance-se
 The backend serves the web client's shell itself ([ADR 0069](../decisions/0069-backend-serves-the-web-app-shell.md)).
 Management — the instance's lifecycle on the host — is `veyqctl`'s, and neither holds the other's access.
 
-## `veyqctl` (Compose)
+## `veyqctl`
 
 One Python file, standard library only ([`src/tools/veyqctl.py`](../../src/tools/veyqctl.py), its docstring the
-command reference; [ADR 0096](../decisions/0096-veyqctl-manages-an-instance-from-immutable-releases.md)). An instance
-lives in `--home` (default `/opt/veyq`): `releases/<release>/`, `.env`, `backups/`, and the operator's
+command reference; [ADR 0096](../decisions/0096-veyqctl-manages-an-instance-from-immutable-releases.md)), managing an
+instance on either target ([ADR 0126](../decisions/0126-veyqctl-writes-a-gitops-repository-and-veyq-server-sets-up-its-cluster.md)
+decision 2). `init` creates one and lists it in `~/.config/veyq/instances.json`; `instances`, `use` and `--instance`
+pick one, `--home` names one by its path, and `/opt/veyq` is the fallback. The target is read from the instance: a
+directory holding `veyqctl.json` is a GitOps instance, anything else a Compose home.
+
+- **GitOps** (veyq's half of an Argo CD repository, the operator's page [Argo CD with veyqctl](../../site/src/content/docs/run/gitops.md)):
+  `init --gitops DIR` checks the cluster contract (decision 4), verifies the release — manifest, three images, and the
+  chart, resolved by tag at the registry, verified by its own signature, its `Chart.yaml` version read back, since the
+  manifest does not name it — renders, and only then writes the `Application`, the values, `resources/` with the Secrets
+  of the provider chosen (decision 5) and `veyqctl.json`; `--adopt` takes over a half written by hand once its pins
+  verify. `upgrade` keeps decision 5's resolution below, rewrites the pins it finds once, renders and commits its three
+  files (`--push` pushes); `check` also names drift and missing Secret keys. The Compose lifecycle verbs refuse there.
+  `scripts/veyqctl_gitops_render_check.py` renders what `init` writes with the real Helm in the `chart` job.
+
+**Compose.** An instance lives in its home (`/opt/veyq` by default): `releases/<release>/`, `.env`, `backups/`, and the operator's
 `compose.override.yml`, laid over the recipe on every command.
 
 - **Which release:** `.env`'s `VEYQ_RELEASE` — an exact release (pinned), a major (its newest release) or `latest`.
@@ -309,10 +323,9 @@ check is logged and retried with a back-off, and blocks nothing.
 - **The window of majors a client speaks** ([ADR 0085](../decisions/0085-one-major-moved-on-a-yearly-train.md)
   decision 5). The yearly train, its release order and the previous major's release branch (decisions 2, 3 and 10)
   are a procedure, written in [`infra/README.md`](../../infra/README.md) § Cutting a release, and no train has left.
-- **`veyqctl`'s GitOps target and `veyq-server`** ([ADR 0126](../decisions/0126-veyqctl-writes-a-gitops-repository-and-veyq-server-sets-up-its-cluster.md)):
-  a GitOps target, read from the instance (a user's instances listed in `~/.config/veyq/`), that writes veyq's half of an Argo CD repository (its Application, values and Secrets from a chosen
-  provider) and upgrades it by commit under ADR 0096's rules, and a repository of its own, `veyq-server`, that sets up
-  the server and cluster beneath it, rendered by Copier from a verified release. Until it is built, a cluster upgrades
-  by hand as [Verify a release](../../site/src/content/docs/run/verify-a-release.md) and the chart's values describe.
+- **`veyq-server`** ([ADR 0126](../decisions/0126-veyqctl-writes-a-gitops-repository-and-veyq-server-sets-up-its-cluster.md)
+  decision 6): a repository of its own that sets up the server and cluster beneath a GitOps instance, rendered by
+  Copier from a verified release, which `init` offers when there is no cluster. The repository exists
+  (`github.com/raddatzk/veyq-server`), empty.
 - **L3's archive holding the major entry** (ADR 0085 decision 10, inbox #461): the major entry's backup in the
   archive lane L3 restores.

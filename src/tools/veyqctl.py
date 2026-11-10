@@ -1,8 +1,11 @@
 #!/usr/bin/env python3
-"""veyqctl — install, run, upgrade and back up a veyq instance on Docker Compose from its releases (ADR 0096).
+"""veyqctl — install, run, upgrade and back up a veyq instance from its releases: on Docker Compose (ADR 0096), or as
+veyq's half of an Argo CD repository (ADR 0126).
 
-    veyqctl [--home DIR] [--source SRC] <command> …
+    veyqctl [--home DIR | --instance NAME] [--source SRC] <command> …
 
+    init [--compose | --gitops DIR] [--name N] …     create an instance, list it and make it current (GitOps: below)
+    instances | use NAME                             the instances listed in ~/.config/veyq, and which is current
     install [--set KEY=VALUE …] [--unsigned-local]   fetch the release VEYQ_RELEASE selects, verify it, write .env, up
     start | stop | status                            the stack, addressed by the project the recipe names
     logs [-f] [--tail N] [SERVICE …]                 its logs
@@ -14,6 +17,32 @@
     restore DIR --domain D (--key-from F | --without-key) [--objects-from P]   onto this instance, which holds no data
     rollback DIR --key-from F [--yes]                back to the release a capture was taken under, in place
     self-update                                      this file, replaced by the installed release's `veyqctl`
+
+**Which instance** (ADR 0126 decision 2): `--home DIR` names one by its path; else `--instance NAME` one listed in
+`~/.config/veyq/instances.json` (`$XDG_CONFIG_HOME/veyq` if set), which `init` writes and `use` switches; else the
+current one there; else `/opt/veyq` — so a host with one Compose instance needs no list, and a run under `sudo`, whose
+home differs, still finds it. The TARGET is read from the instance, never given: a directory holding `veyqctl.json` is
+a GitOps instance, anything else a Compose home. `init` asks which to create (or takes `--compose` / `--gitops DIR`).
+
+**A GitOps instance** is a directory in a checkout of the repository an Argo CD syncs: `application.yaml` (the chart by
+digest, `oci://<registry>/<owner>/charts/veyq`), `values.yaml` (the three images by tag and digest, the domains, the
+gateway, the Secrets' names), `resources/` (the namespace, the backup gate's claim, the Secrets from the provider
+chosen — `sops` encrypted through the repository's `.sops.yaml`, `external-secrets` as ExternalSecrets on a named store,
+`sealed-secrets` through `kubeseal`, or `none`) and `veyqctl.json` (the selector, the provider, the running release and
+its four pins). `init --gitops DIR` checks the cluster against what veyq's half assumes (Argo CD, Gateway API v1.5+ and
+its class, a StorageClass, cert-manager 1.21+ for the chart's ACME issuer; `--no-cluster-check` skips it), resolves and
+verifies the release — its manifest, the three images (`images.tools` too), and the chart: the manifest does not name it,
+so its tag is resolved to a digest at the registry (`Host.oci_digest`), that digest verified under the release identity,
+and its Chart.yaml version read back (`helm show chart`) — renders the chart with the values (`helm template`), and only
+then writes the directory. Every value is generated once: under `sops` encrypted into the repository, under every other
+provider handed over once in `~/.config/veyq/<name>.secrets.json` (0600, never overwritten); a directory that is not
+empty is refused, so nothing is generated twice. `init --gitops DIR --adopt` takes over a half written by hand: it writes
+only `veyqctl.json`, once the pins in its files are the ones a release verifies. `verify` and `check` work as under
+Compose (`check` also names drift — a pin the files no longer hold — and whether the Secrets exist with every key);
+`upgrade` resolves as decision 5 step 1 does, refuses drift and uncommitted changes, verifies, rewrites each pin it finds
+exactly once and the three tags, renders, then commits its three files alone (`--push` pushes). Nothing else: Argo CD
+applies the commit, and the chart's backup gate captures before the new release migrates (ADR 0098). The Compose
+lifecycle verbs refuse on a GitOps instance, each naming what does its job there.
 
 One file, Python 3.9 and the standard library only, because an operator fetches it with `curl` onto a host that
 already needs `python3` for backups: no `pip`, no virtualenv (ADR 0096 decision 2). It manages the instance's
@@ -164,7 +193,8 @@ install; and the stack lane (`scripts/run_stack_e2e.py`, ADR 0090) installs ever
 `install --unsigned-local`, its overlay as the override file — `install`, the override and `.env` from the template,
 on every run (`start`, `stop`, `upgrade`, `backup` and `restore` are not on that path).
 
-Its limits: it drives Compose only (Kubernetes upgrades with `helm upgrade`, decision 8); the source still decides
+Its limits: on Kubernetes it writes an Argo CD repository and starts nothing (ADR 0126; ADR 0096 decision 8 is replaced),
+and it sets no cluster up (ADR 0126 decision 6, not built); the source still decides
 WHICH releases exist — `releases.json` and the GitHub listing are unsigned, so a mirror can withhold a newer release or
 keep serving an older signed one (a freeze; `upgrade` refuses to go below the running release, and nothing here
 proves freshness), though it can no longer serve a forged one; `backup` and `restore` check the release's
@@ -176,6 +206,7 @@ talks to is the host's own; and an instance that was never set up has no tenant,
 from __future__ import annotations  # `str | None` below — the repo's scripts run on Python 3.9
 
 import argparse
+import base64
 import datetime
 import errno
 import hashlib
@@ -192,6 +223,7 @@ import sys
 import tempfile
 import time
 import urllib.error
+import urllib.parse
 import urllib.request
 from pathlib import Path
 from typing import Callable, NamedTuple
@@ -339,6 +371,46 @@ class Host:
         if not sys.stdin.isatty():
             return None
         return input(f"veyqctl: {prompt} [y/N]: ").strip().lower() in ("y", "yes")
+
+    def oci_digest(self, ref: str) -> str:
+        """The digest `<registry>/<repository>:<tag>` resolves to now: the registry's manifest endpoint (the OCI
+        distribution spec, so any registry), anonymously, with the bearer token a registry's 401 points at. Only a
+        lookup — what it returns is trusted after `cosign verify` of that digest, never before."""
+        name, _, tag = ref.rpartition(":")
+        registry, _, repository = name.partition("/")
+        if not (registry and repository and tag):
+            raise Refused(f"{ref} is not `<registry>/<repository>:<tag>`")
+        url = f"https://{registry}/v2/{repository}/manifests/{tag}"
+        accept = ", ".join(("application/vnd.oci.image.index.v1+json", "application/vnd.oci.image.manifest.v1+json",
+                            "application/vnd.docker.distribution.manifest.list.v2+json",
+                            "application/vnd.docker.distribution.manifest.v2+json"))
+
+        def head(token: str | None):
+            headers = {"Accept": accept, "User-Agent": "veyqctl"}
+            if token:
+                headers["Authorization"] = f"Bearer {token}"
+            request = urllib.request.Request(url, method="HEAD", headers=headers)
+            return urllib.request.urlopen(request, timeout=60, context=_tls_context())
+
+        try:
+            try:
+                response = head(None)
+            except urllib.error.HTTPError as e:
+                challenge = e.headers.get("WWW-Authenticate", "") if e.code == 401 else ""
+                params = dict(re.findall(r'(\w+)="([^"]*)"', challenge))
+                if not challenge.lower().startswith("bearer") or "realm" not in params:
+                    raise Refused(f"HEAD {url} answered {e.code}") from None
+                query = urllib.parse.urlencode({k: v for k, v in params.items() if k in ("service", "scope")})
+                answer = json.loads(_http_get(f"{params['realm']}?{query}"))
+                response = head(answer.get("token") or answer.get("access_token"))
+        except urllib.error.HTTPError as e:
+            raise Refused(f"HEAD {url} answered {e.code}") from None
+        except (urllib.error.URLError, OSError, ValueError) as e:
+            raise Refused(f"HEAD {url} failed: {e}") from None
+        digest = response.headers.get("Docker-Content-Digest", "")
+        if not re.match(r"^sha256:[0-9a-f]{64}$", digest):
+            raise Refused(f"{ref}: the registry named no sha256 digest (`Docker-Content-Digest`: {digest!r})")
+        return digest
 
 
 # ---- sources: which releases exist, a manifest, an asset -------------------------------------------------------
@@ -589,6 +661,7 @@ class Manifest(NamedTuple):
     raw: bytes = b""  # the manifest as the source served it, kept verbatim beside the release
     bundle: bytes = b""  # its signature as the source served it, verified; empty under --unsigned-local
     major_entry: str | None = None  # `majorEntry`: the previous major's release this one is entered from, or none
+    tools: str | None = None  # `images.tools`: the backup gate's image, which only Helm runs (a GitOps instance needs it)
 
 
 def parse_manifest(raw: bytes, tag: str) -> Manifest:
@@ -628,8 +701,11 @@ def parse_manifest(raw: bytes, tag: str) -> Manifest:
     missing = [a for a in REQUIRED_ASSETS if a not in assets]
     if missing:
         raise Refused(f"the manifest of {tag} lacks {', '.join(missing)}, which every release carries")
+    tools = images.get("tools")
+    if tools is not None and not (isinstance(tools, str) and tools):
+        raise Refused(f"the manifest of {tag} gives `images.tools` {tools!r}, which is no image reference")
     return Manifest(release, str(doc.get("date") or ""), images["app"], images["admin"], unscheduled, dict(assets),
-                    bytes(raw), major_entry=major_entry)
+                    bytes(raw), major_entry=major_entry, tools=tools)
 
 
 def fetch_manifest(host: Host, source: Source, chosen: Listed, unsigned_local: bool) -> Manifest:
@@ -1828,16 +1904,973 @@ def cmd_self_update(args: argparse.Namespace, host: Host) -> int:
     return 0
 
 
+# ---- instances: which one a command acts on (ADR 0126 decision 2) ----------------------------------------------
+
+GITOPS_FILE = "veyqctl.json"  # a GitOps instance's own file: target, selector, secrets provider, paths, pins
+REGISTRY_FILE = "instances.json"  # in config_dir(): the instances a user manages, and which is current
+INSTANCE_NAME = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,62}$")
+# What does a Compose verb's job on a GitOps instance, said when it refuses there.
+COMPOSE_ONLY = {
+    "install": "`init` writes a GitOps instance; `install` is Compose's",
+    "start": "Argo CD runs the workloads",
+    "stop": "Argo CD runs the workloads (switch the Application's automated sync off to stop it changing them)",
+    "status": "Argo CD shows the Application's health (`kubectl -n <namespace> get pods` the pods')",
+    "logs": "`kubectl -n <namespace> logs deploy/veyq-app`",
+    "backup": "the chart's backup gate captures before every release change, and `backup.request` asks for one "
+              "(ADR 0098)",
+    "restore": "the chart's restore Job (Run area: Backup and restore, under Helm)",
+    "rollback": "the chart's restore Job onto the previous release, pinned back (ADR 0098 decision 9)",
+    "self-update": "fetch the release's veyqctl as Verify a release says; a GitOps instance holds no release's files",
+}
+
+
+def config_dir() -> Path:
+    return Path(os.environ.get("XDG_CONFIG_HOME") or Path.home() / ".config") / "veyq"
+
+
+def check_instance_name(name: str) -> str:
+    if not INSTANCE_NAME.match(name or ""):
+        raise Refused(f"instance name {name!r}: letters, digits, '.', '_' and '-', starting with a letter or digit")
+    return name
+
+
+def read_registry() -> dict:
+    path = config_dir() / REGISTRY_FILE
+    if not path.is_file():
+        return {"current": None, "instances": {}}
+    try:
+        doc = json.loads(path.read_text())
+    except (OSError, ValueError) as e:
+        raise Refused(f"{path} cannot be read as veyqctl's list of instances: {e}") from None
+    instances = doc.get("instances") if isinstance(doc, dict) else None
+    if not isinstance(instances, dict) or not all(isinstance(k, str) and isinstance(v, str) for k, v in instances.items()):
+        raise Refused(f"{path} is not veyqctl's list of instances (`instances`: name → path)")
+    current = doc.get("current")
+    return {"current": current if current in instances else None, "instances": dict(instances)}
+
+
+def write_registry(registry: dict) -> None:
+    directory = config_dir()
+    directory.mkdir(parents=True, exist_ok=True)
+    (directory / REGISTRY_FILE).write_text(json.dumps(registry, indent=2, sort_keys=True) + "\n")
+
+
+def target_of(path: Path) -> str:
+    """The instance's target, read from the instance (ADR 0126 decision 2): its own file says GitOps; anything else —
+    a Compose home, or a home not created yet — is Compose."""
+    return "gitops" if (path / GITOPS_FILE).is_file() else "compose"
+
+
+def name_is_free(name: str, path: Path) -> None:
+    listed = read_registry()["instances"].get(check_instance_name(name))
+    if listed is not None and Path(listed) != path:
+        raise Refused(f"an instance named {name} is listed already, at {listed} — pick another with --name")
+
+
+def register(name: str, path: Path) -> None:
+    name_is_free(name, path)
+    registry = read_registry()
+    registry["instances"][name] = str(path)
+    registry["current"] = name
+    write_registry(registry)
+    say(f"instance {name} ({target_of(path)}, {path}) is listed in {config_dir() / REGISTRY_FILE} and is current")
+
+
+def resolve_home(args: argparse.Namespace) -> Path:
+    """Which instance a command acts on: `--home` (a path), else `--instance`, else the current one, else /opt/veyq."""
+    if args.home:
+        return Path(args.home)
+    registry = read_registry()
+    if args.instance:
+        listed = registry["instances"].get(args.instance)
+        if listed is None:
+            raise Refused(f"no instance named {args.instance} in {config_dir() / REGISTRY_FILE}: `veyqctl instances` "
+                          f"lists them")
+        return Path(listed)
+    if registry["current"]:
+        return Path(registry["instances"][registry["current"]])
+    return Path(DEFAULT_HOME)
+
+
+def cmd_instances(args: argparse.Namespace, host: Host) -> int:
+    registry = read_registry()
+    if not registry["instances"]:
+        say(f"no instance is listed in {config_dir() / REGISTRY_FILE}; every command acts on {DEFAULT_HOME} "
+            f"(`init` lists the instance it creates)")
+        return 0
+    for name, path in sorted(registry["instances"].items()):
+        mark = "*" if name == registry["current"] else " "
+        say(f"{mark} {name}  {target_of(Path(path))}  {path}")
+    return 0
+
+
+def cmd_use(args: argparse.Namespace, host: Host) -> int:
+    registry = read_registry()
+    if args.name not in registry["instances"]:
+        raise Refused(f"no instance named {args.name}: `veyqctl instances` lists them")
+    registry["current"] = args.name
+    write_registry(registry)
+    say(f"current instance: {args.name} ({target_of(Path(registry['instances'][args.name]))}, "
+        f"{registry['instances'][args.name]})")
+    return 0
+
+
+def cmd_init(args: argparse.Namespace, host: Host) -> int:
+    """Create an instance, list it and make it current: Compose (what `install` does) or GitOps (ADR 0126)."""
+    target = "compose" if args.compose else ("gitops" if args.gitops else None)
+    if target is None:
+        answer = (host.ask("Compose (this host) or GitOps (an Argo CD repository)", "compose") or "").strip().lower()
+        if answer not in ("compose", "gitops"):
+            raise Refused("`init` needs a target: --compose (Docker Compose on this host) or --gitops DIR (veyq's "
+                          "directory in an Argo CD repository's checkout); without a terminal, pass one")
+        target = answer
+    if target == "compose":
+        home = Path(args.home or DEFAULT_HOME)
+        name = args.name or "veyq"
+        name_is_free(name, home)
+        args.home = str(home)
+        host.workdir = home
+        result = cmd_install(args, host)
+        if result == 0:
+            register(name, home)
+        return result
+    if args.unsigned_local:
+        raise Refused("--unsigned-local is Compose's: a GitOps instance runs only what verifies (ADR 0126 decision 3)")
+    directory = args.gitops or host.ask("veyq's directory in a checkout of the repository Argo CD syncs", "apps/veyq")
+    if not directory:
+        raise Refused("`init --gitops DIR` needs the directory veyq's half goes into, inside a Git checkout")
+    return gitops_init(args, host, Path(directory).expanduser().resolve())
+
+
+# ---- the GitOps target: veyq's half of an Argo CD repository (ADR 0126 decisions 3-5 and 7) ---------------------
+
+PROVIDERS = ("sops", "external-secrets", "sealed-secrets", "none")
+SECRETS_SECRET = "veyq-secrets"  # the chart's `secrets.existingSecret`
+CONFIG_SECRET = "veyq-config-secret-key"  # the chart's `app.configSecret.existingSecret`
+CONFIG_SECRET_KEY = "config-secret.key"
+# Each Secret's keys and how a value is made — the chart's contract (values.yaml § secrets, app.configSecret). The
+# config-secret key is base64 of 32 random bytes (ADR 0050); the RPC secret exactly 64 hex characters.
+SECRET_VALUES: dict[str, dict[str, Callable[[], str]]] = {
+    SECRETS_SECRET: {
+        "mariadbPassword": lambda: secrets.token_urlsafe(30),
+        "mariadbRootPassword": lambda: secrets.token_urlsafe(30),
+        "garageRpcSecret": lambda: secrets.token_hex(32),
+        "garageAdminToken": lambda: secrets.token_urlsafe(36),
+    },
+    CONFIG_SECRET: {CONFIG_SECRET_KEY: lambda: base64.b64encode(secrets.token_bytes(32)).decode()},
+}
+PIN_ROLES = ("chart", "app", "admin", "tools")
+# values.yaml's top-level key each image digest sits under, as `init` writes it (and the chart reads it).
+VALUES_IMAGE_KEYS = {"image": "app", "admin": "admin", "backup": "tools"}
+GATEWAY_BUNDLE_MIN = (1, 5)  # the Gateway API the chart's ListenerSets need (values.yaml § gateway)
+CERT_MANAGER_MIN = (1, 21)  # the parent-ref fallback the chart's ACME issuer needs (values.yaml § gateway.tls.acme)
+HELM_API_VERSIONS = ("gateway.networking.k8s.io/v1", "gateway.networking.k8s.io/v1/GatewayClass",
+                     "cert-manager.io/v1", "cert-manager.io/v1/Issuer")
+
+
+class GitOps(NamedTuple):
+    directory: Path  # the instance: the directory holding veyqctl.json, the Application, the values, resources/
+    doc: dict        # veyqctl.json
+
+    @property
+    def application(self) -> Path:
+        return self.directory / self.doc["application"]
+
+    @property
+    def values(self) -> Path:
+        return self.directory / self.doc["values"]
+
+
+def read_gitops(directory: Path) -> GitOps:
+    path = directory / GITOPS_FILE
+    try:
+        doc = json.loads(path.read_text())
+    except (OSError, ValueError) as e:
+        raise Refused(f"{path} cannot be read: {e}") from None
+    problems = []
+    if not isinstance(doc, dict) or doc.get("target") != "gitops":
+        raise Refused(f"{path} is not a GitOps instance's file (`target`: gitops)")
+    if not SELECTOR.match(str(doc.get("release", ""))):
+        problems.append("`release` is no selector")
+    if doc.get("secrets") not in PROVIDERS:
+        problems.append(f"`secrets` is none of {', '.join(PROVIDERS)}")
+    for key in ("application", "values"):
+        if not isinstance(doc.get(key), str) or not ASSET_NAME.match(doc[key]):
+            problems.append(f"`{key}` is no file name beside it")
+    if not isinstance(doc.get("chart"), str) or not re.match(r"^[a-z0-9][a-z0-9.:-]*(/[a-z0-9._-]+)+$", doc["chart"]):
+        problems.append("`chart` is no `<registry>/<repository>`")
+    if not TAG.match(f"v{doc.get('running', '')}"):
+        problems.append("`running` is no release")
+    pins = doc.get("pins")
+    if not isinstance(pins, dict) or any(not isinstance(pins.get(r), str) or not re.match(r"^sha256:[0-9a-f]{64}$", pins[r])
+                                         for r in PIN_ROLES):
+        problems.append(f"`pins` does not give {', '.join(PIN_ROLES)} each a sha256 digest")
+    if problems:
+        raise Refused(f"{path}: " + "; ".join(problems))
+    return GitOps(directory, doc)
+
+
+def write_gitops(g: GitOps) -> None:
+    (g.directory / GITOPS_FILE).write_text(json.dumps(g.doc, indent=2) + "\n")
+
+
+def kubectl(context: str | None) -> list[str]:
+    return ["kubectl"] + (["--context", context] if context else [])
+
+
+def version_of(text: str) -> tuple[int, ...] | None:
+    m = re.search(r"v?([0-9]+)\.([0-9]+)(?:\.([0-9]+))?", text or "")
+    return tuple(int(x) for x in m.groups() if x is not None) if m else None
+
+
+def check_cluster(host: Host, context: str | None, gateway_class: str, storage_class: str, acme: bool) -> None:
+    """ADR 0126 decision 4: what veyq's half assumes of the cluster, every gap named at once, before anything is
+    written."""
+    k, missing = kubectl(context), []
+    if host.run(k + ["get", "crd", "applications.argoproj.io", "-o", "name"], check=False).returncode:
+        missing.append("Argo CD (no CRD applications.argoproj.io)")
+    bundle = host.run(k + ["get", "crd", "gateways.gateway.networking.k8s.io", "-o",
+                           r"jsonpath={.metadata.annotations.gateway\.networking\.k8s\.io/bundle-version}"], check=False)
+    found = version_of(bundle.stdout) if not bundle.returncode else None
+    if bundle.returncode:
+        missing.append("the Gateway API CRDs")
+    elif found is None or found[:2] < GATEWAY_BUNDLE_MIN:
+        missing.append(f"Gateway API v{'.'.join(map(str, GATEWAY_BUNDLE_MIN))} or later (found "
+                       f"{bundle.stdout.strip() or 'no bundle-version'})")
+    if host.run(k + ["get", "gatewayclass", gateway_class, "-o", "name"], check=False).returncode:
+        missing.append(f"the GatewayClass {gateway_class} (`kubectl get gatewayclass` lists the cluster's)")
+    classes = host.run(k + ["get", "storageclass", "-o", "name"], check=False)
+    names = [line.split("/", 1)[-1] for line in (classes.stdout or "").split()] if not classes.returncode else []
+    if not names or (storage_class and storage_class not in names):
+        missing.append(f"the StorageClass {storage_class}" if storage_class else "a StorageClass")
+    if acme:
+        if host.run(k + ["get", "crd", "certificates.cert-manager.io", "-o", "name"], check=False).returncode:
+            missing.append("cert-manager (no CRD certificates.cert-manager.io), which the chart's ACME issuer needs")
+        else:
+            label = host.run(k + ["get", "deploy", "-A", "-l", "app.kubernetes.io/name=cert-manager,"
+                                  "app.kubernetes.io/component=controller", "-o",
+                                  r"jsonpath={.items[0].metadata.labels.app\.kubernetes\.io/version}"], check=False)
+            have = version_of(label.stdout) if not label.returncode else None
+            if have is None or have[:2] < CERT_MANAGER_MIN:
+                missing.append(f"cert-manager {'.'.join(map(str, CERT_MANAGER_MIN))} or later for the chart's ACME "
+                               f"issuer (found {label.stdout.strip() or 'no version label'})")
+    if missing:
+        raise Refused("the cluster does not meet what veyq's half assumes (ADR 0126 decision 4): " + "; ".join(missing)
+                      + ". Nothing was written. (--no-cluster-check writes a repository for a cluster set up later.)")
+    say("the cluster meets veyq's contract: Argo CD, the Gateway API and its class, a StorageClass"
+        + (", cert-manager" if acme else ""))
+
+
+def chart_repository(app_ref: str) -> str:
+    """The chart beside the release's images: `<registry>/<owner>/charts/veyq` for `<registry>/<owner>/veyq` — where
+    the promotion pushes it (ADR 0064)."""
+    m = DIGEST_REF.match(app_ref)
+    if not m:
+        raise Refused(f"the app image `{app_ref}` is not pinned by digest, so no chart can be found beside it")
+    return f"{m.group('name').rsplit('/', 1)[0]}/charts/veyq"
+
+
+def cosign_verify_ref(host: Host, role: str, target: str) -> None:
+    cosign = require_cosign(host)
+    result = host.run([cosign, "verify", target, "--certificate-oidc-issuer", COSIGN_OIDC_ISSUER,
+                       "--certificate-identity-regexp", COSIGN_IDENTITY_REGEXP], check=False)
+    if result.returncode != 0:
+        raise Refused(f"the {role} {target} does not verify against the identity that releases veyq "
+                      f"({COSIGN_IDENTITY_REGEXP}): {(result.stderr or '').strip()[-800:]}\nNothing was written.")
+    say(f"{role} {target}: signature verified")
+
+
+def verify_gitops_release(host: Host, manifest: Manifest, chart: str) -> dict[str, str]:
+    """The release's four pins, each verified under the release identity (Verify a release): the manifest's three
+    images, and the chart its tag resolves to, verified by its own signature and its Chart.yaml version read back —
+    the manifest does not name the chart (cr-veyqctl-gitops-target § Decisions)."""
+    if not manifest.tools:
+        raise Refused(f"the manifest of {manifest.release} names no tools image (`images.tools`), which the chart's "
+                      f"backup gate runs — a GitOps instance installs no release without it")
+    verify_images(host, manifest, False)
+    tools = cosign_target("tools", manifest.tools)
+    cosign_verify_ref(host, "tools image", tools)
+    digest = host.oci_digest(f"{chart}:{manifest.release}")
+    cosign_verify_ref(host, "chart", f"{chart}@{digest}")
+    shown = host.run(["helm", "show", "chart", f"oci://{chart}@{digest}"], check=False)
+    version = re.search(r"(?m)^version:\s*\"?([^\"\s]+)\"?\s*$", shown.stdout or "") if not shown.returncode else None
+    if version is None or version.group(1) != manifest.release:
+        raise Refused(f"the chart {chart}@{digest}, which {chart}:{manifest.release} resolves to, is version "
+                      f"{version.group(1) if version else '(unreadable)'}, not {manifest.release}. Nothing was written.")
+    pin = lambda ref: DIGEST_REF.match(ref).group("digest")  # noqa: E731 — every ref verified above is one
+    return {"chart": digest, "app": pin(manifest.app), "admin": pin(manifest.admin), "tools": pin(manifest.tools)}
+
+
+def render(host: Host, chart: str, digest: str, namespace: str, values: Path) -> None:
+    """`helm template` of the pinned chart with these values: the check that what veyqctl wrote is the chart's input."""
+    cmd = ["helm", "template", "veyq", f"oci://{chart}@{digest}", "-n", namespace, "-f", str(values)]
+    for api in HELM_API_VERSIONS:
+        cmd += ["--api-versions", api]
+    result = host.run(cmd, check=False)
+    if result.returncode != 0:
+        raise Refused(f"`helm template` of the chart with {values.name} failed: {(result.stderr or '').strip()[-800:]}")
+    say(f"the chart renders with {values.name}")
+
+
+def git(host: Host, top: Path, *cmd: str, check: bool = True) -> subprocess.CompletedProcess:
+    return host.run(["git", "-C", str(top), *cmd], check=check)
+
+
+def repository_of(host: Host, directory: Path) -> Path:
+    probe = directory
+    while not probe.is_dir() and probe != probe.parent:  # `init` writes a directory that may not exist yet, nor its parent
+        probe = probe.parent
+    result = host.run(["git", "-C", str(probe), "rev-parse", "--show-toplevel"], check=False)
+    if result.returncode != 0 or not (result.stdout or "").strip():
+        raise Refused(f"{directory} is not inside a Git checkout: a GitOps instance is a directory of the repository "
+                      f"Argo CD syncs")
+    top = Path(result.stdout.strip()).resolve()
+    try:
+        directory.relative_to(top)
+    except ValueError:
+        raise Refused(f"{directory} is not inside its checkout {top}") from None
+    return top
+
+
+def option(args: argparse.Namespace, host: Host, attr: str, question: str, example: str, default: str = "") -> str:
+    """A flag's value, else asked at a terminal, else its default; refused when there is none."""
+    value = getattr(args, attr) or host.ask(question, example) or default
+    if not value:
+        raise Refused(f"--{attr.replace('_', '-')} is required ({question}); without a terminal, pass it")
+    return value
+
+
+def stack_values(release: str, pins: dict[str, str], *, domain: str, store_domain: str, garage: bool,
+                 gateway_class: str, tls: str, acme_email: str, tls_secret: str, peer_namespace: str,
+                 peer_label: str, provider: str) -> str:
+    label_key, _, label_value = peer_label.partition("=")
+    lines = [
+        "# veyq's chart values, written by veyqctl (ADR 0126). No secret here: the Secrets come from resources/"
+        f" ({provider}).",
+        "# Read with the chart's own values.yaml and https://veyq.app/run/kubernetes/. `veyqctl upgrade` rewrites the",
+        "# three images' tag and digest; edit anything else as the chart's values describe.",
+        f"domain: {domain}",
+    ]
+    if garage:
+        lines.append(f"storeDomain: {store_domain}")
+    lines += [
+        "",
+        "image:",
+        f'  tag: "{release}"',
+        f"  digest: {pins['app']}",
+        "admin:",
+        "  image:",
+        f'    tag: "{release}"',
+        f"    digest: {pins['admin']}",
+        "backup:",
+        "  # The backup gate captures onto resources/backup-pvc.yaml's claim before every release change (ADR 0098).",
+        "  enabled: true",
+        "  existingClaim: veyq-backup",
+        "  image:",
+        f'    tag: "{release}"',
+        f"    digest: {pins['tools']}",
+        "",
+        "app:",
+        "  configSecret:",
+        f"    existingSecret: {CONFIG_SECRET}",
+        f"    key: {CONFIG_SECRET_KEY}",
+        "secrets:",
+        f"  existingSecret: {SECRETS_SECRET}",
+        "garage:",
+        f"  enabled: {'true' if garage else 'false'}",
+        "",
+        "gateway:",
+        f"  className: {gateway_class}",
+        "  tls:",
+    ]
+    if tls == "acme":
+        lines += ["    mode: per-domain", "    acme:", "      enabled: true", f"      email: {acme_email}"]
+    elif tls == "shared":
+        lines += ["    mode: shared", f"    secretName: {tls_secret}"]
+    else:
+        lines += ["    mode: none"]
+    lines += [
+        "",
+        "# The Gateway's data-plane pods, the only peers allowed to reach the app, the store and the HTTP-01 solvers.",
+        "networkPolicy:",
+        "  enabled: true",
+        "  ingressFrom:",
+        "    - namespaceSelector:",
+        "        matchLabels:",
+        f"          kubernetes.io/metadata.name: {peer_namespace}",
+        "      podSelector:",
+        "        matchLabels:",
+        f"          {label_key}: {label_value}",
+    ]
+    return "\n".join(lines) + "\n"
+
+
+def application_text(*, name: str, argocd_namespace: str, project: str, chart: str, digest: str, rel: str,
+                     repo_url: str, revision: str, namespace: str, values: str) -> str:
+    return f"""# veyq, written by veyqctl (ADR 0126): the chart by digest, with {values} and resources/ from this repository.
+# Register it once (`kubectl apply -f` this file, or let an app of apps pick it up). `veyqctl upgrade` rewrites the
+# chart's digest below.
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: {name}
+  namespace: {argocd_namespace}
+  annotations:
+    # Diff against what the API server makes of the manifests (defaults on the Gateway, the HTTPRoutes and the
+    # StatefulSets' claim templates), or those objects stay OutOfSync.
+    argocd.argoproj.io/compare-options: ServerSideDiff=true
+spec:
+  project: {project}
+  sources:
+    - repoURL: oci://{chart}
+      targetRevision: {digest}
+      path: .
+      helm:
+        releaseName: veyq
+        valueFiles:
+          - $values/{rel}/{values}
+    - repoURL: {repo_url}
+      targetRevision: {revision}
+      path: {rel}/resources
+      ref: values
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: {namespace}
+  syncPolicy:
+    # Self-heal, never prune: Argo CD ignores helm.sh/resource-policy: keep, so an object that leaves the chart shows
+    # as "requires pruning" and is removed by hand after a look. Switch automated sync off while a restore runs.
+    automated:
+      prune: false
+      selfHeal: true
+    syncOptions:
+      - ServerSideApply=true
+"""
+
+
+def namespace_text(namespace: str) -> str:
+    return f"""apiVersion: v1
+kind: Namespace
+metadata:
+  name: {namespace}
+  annotations:
+    argocd.argoproj.io/sync-wave: "-1"
+  labels:
+    # veyq's pods pass `restricted`, so the namespace enforces it.
+    pod-security.kubernetes.io/enforce: restricted
+    pod-security.kubernetes.io/warn: restricted
+    pod-security.kubernetes.io/audit: restricted
+"""
+
+
+def backup_claim_text(namespace: str, storage_class: str, size: str) -> str:
+    klass = f"\n  storageClassName: {storage_class}" if storage_class else ""
+    return f"""# The backup gate's claim (the chart's backup.existingClaim): the way back from a failed upgrade.
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: veyq-backup
+  namespace: {namespace}
+  annotations:
+    # Never pruned or deleted by Argo CD.
+    argocd.argoproj.io/sync-options: Prune=false,Delete=false
+spec:
+  accessModes: [ReadWriteOnce]{klass}
+  resources:
+    requests:
+      storage: {size}
+"""
+
+
+def secret_text(name: str, namespace: str, values: dict[str, str]) -> str:
+    keep = "\n    argocd.argoproj.io/sync-options: Prune=false,Delete=false" if name == CONFIG_SECRET else ""
+    data = "".join(f"  {key}: {json.dumps(value)}\n" for key, value in values.items())
+    return f"""apiVersion: v1
+kind: Secret
+metadata:
+  name: {name}
+  namespace: {namespace}
+  annotations:
+    argocd.argoproj.io/sync-wave: "-1"{keep}
+type: Opaque
+stringData:
+{data}"""
+
+
+def remote_key(prefix: str, key: str) -> str:
+    return prefix + re.sub(r"(?<!^)(?=[A-Z])", "-", key).lower().replace(".", "-")
+
+
+def external_secret_text(name: str, namespace: str, store: str, store_kind: str, prefix: str) -> str:
+    data = "".join(f"    - secretKey: {key}\n      remoteRef:\n        key: {remote_key(prefix, key)}\n"
+                   for key in SECRET_VALUES[name])
+    return f"""apiVersion: external-secrets.io/v1
+kind: ExternalSecret
+metadata:
+  name: {name}
+  namespace: {namespace}
+  annotations:
+    argocd.argoproj.io/sync-wave: "-1"
+spec:
+  refreshInterval: 1h
+  secretStoreRef:
+    kind: {store_kind}
+    name: {store}
+  target:
+    name: {name}
+    creationPolicy: Owner
+    # Kept when this ExternalSecret goes: the config-secret key above all must outlive any change here.
+    deletionPolicy: Retain
+  data:
+{data}"""
+
+
+def hand_over(name: str, namespace: str, values: dict[str, dict[str, str]], remote: dict[str, str] | None) -> Path:
+    """The generated values, once, in a file only the operator can read — outside the repository, never overwritten."""
+    path = config_dir() / f"{name}.secrets.json"
+    if path.exists():
+        raise Refused(f"{path} exists: an earlier `init` handed values over there. Nothing was written — move it "
+                      f"away once its values are where they belong, then run `init` again")
+    config_dir().mkdir(parents=True, exist_ok=True)
+    doc = {"namespace": namespace, "secrets": values}
+    if remote:
+        doc["remoteKeys"] = remote
+    write_private(path, json.dumps(doc, indent=2) + "\n")
+    return path
+
+
+def gitops_init(args: argparse.Namespace, host: Host, directory: Path) -> int:
+    top = repository_of(host, directory)
+    rel = directory.relative_to(top).as_posix()
+    if rel in ("", "."):
+        raise Refused("veyq's half goes into a directory of its own inside the checkout, never its root")
+    name = args.name or top.name
+    name_is_free(name, directory)
+    if args.adopt:
+        return gitops_adopt(args, host, directory, top, name)
+    if directory.exists() and any(directory.iterdir()):
+        raise Refused(f"{directory} is not empty: `init` writes a fresh directory and never overwrites (an existing "
+                      f"veyq half is taken over with --adopt). Nothing was written.")
+    provider = option(args, host, "secrets", f"where the Secrets come from ({', '.join(PROVIDERS)})", "sops")
+    if provider not in PROVIDERS:
+        raise Refused(f"--secrets {provider}: one of {', '.join(PROVIDERS)}")
+    domain = option(args, host, "domain", "veyq's domain (cannot be changed later)", "veyq.example.org")
+    garage = not args.no_bundled_store
+    store_domain = option(args, host, "store_domain", "the bundled store's own host", f"store.{domain}",
+                          f"store.{domain}") if garage else ""
+    gateway_class = option(args, host, "gateway_class", "the GatewayClass the chart's Gateway uses", "traefik")
+    tls = args.tls or ("acme" if args.acme_email else "") or option(args, host, "tls", "TLS (acme, shared or none)",
+                                                                    "acme")
+    if tls not in ("acme", "shared", "none"):
+        raise Refused(f"--tls {tls}: acme (the chart's cert-manager issuer), shared (one Secret) or none")
+    acme_email = option(args, host, "acme_email", "the ACME account contact", "ops@example.org") if tls == "acme" else ""
+    tls_secret = option(args, host, "tls_secret", "the TLS Secret for every host", "veyq-tls") if tls == "shared" else ""
+    peer_namespace = option(args, host, "gateway_namespace", "the namespace of the Gateway's data-plane pods",
+                            "traefik")
+    peer_label = option(args, host, "gateway_pod_label", "a label the data-plane pods carry",
+                        "app.kubernetes.io/name=traefik")
+    if "=" not in peer_label:
+        raise Refused(f"--gateway-pod-label {peer_label}: `<key>=<value>`")
+    namespace = args.namespace or "veyq"
+    context = args.context
+    if not args.no_cluster_check:
+        check_cluster(host, context, gateway_class, args.storage_class or "", tls == "acme")
+    store = remote_prefix = store_kind = ""
+    if provider == "external-secrets":
+        store = option(args, host, "secret_store", "the SecretStore the ExternalSecrets read from", "vault")
+        store_kind = args.secret_store_kind
+        remote_prefix = args.remote_prefix
+    if provider == "sops" and not any((p / ".sops.yaml").is_file() for p in [directory, *directory.parents]
+                                      if p == top or top in p.parents):
+        raise Refused(f"--secrets sops needs a .sops.yaml in {top} or a directory above {directory} naming the "
+                      f"repository's keys: sops encrypts with its creation rules. Nothing was written.")
+    if provider in ("sops", "sealed-secrets"):
+        tool = "sops" if provider == "sops" else "kubeseal"
+        if not host.which(tool):
+            raise Refused(f"--secrets {provider} needs `{tool}` on PATH. Nothing was written.")
+    repo_url = args.repo_url or (git(host, top, "remote", "get-url", "origin", check=False).stdout or "").strip()
+    if not repo_url:
+        raise Refused("--repo-url is required: the URL Argo CD reads this repository from (no `origin` remote)")
+    revision = args.revision or (git(host, top, "rev-parse", "--abbrev-ref", "HEAD", check=False).stdout or "").strip()
+    if not revision or revision == "HEAD":
+        raise Refused("--revision is required: the branch Argo CD follows (the checkout is on none)")
+
+    source = open_source(args.source)
+    selector = check_selector(args.release or "latest")
+    chosen = select(source.releases(), selector, source.describe())
+    say(f"{RELEASE_KEY}={selector} takes release {chosen.release} from {source.describe()}")
+    manifest = fetch_manifest(host, source, chosen, False)
+    chart = chart_repository(manifest.app)
+    pins = verify_gitops_release(host, manifest, chart)
+
+    values = {secret: {key: make() for key, make in keys.items()} for secret, keys in SECRET_VALUES.items()}
+    files: dict[str, str] = {
+        "application.yaml": application_text(name=name, argocd_namespace=args.argocd_namespace, project=args.project,
+                                             chart=chart, digest=pins["chart"], rel=rel, repo_url=repo_url,
+                                             revision=revision, namespace=namespace, values="values.yaml"),
+        "values.yaml": stack_values(chosen.release, pins, domain=domain, store_domain=store_domain, garage=garage,
+                                    gateway_class=gateway_class, tls=tls, acme_email=acme_email, tls_secret=tls_secret,
+                                    peer_namespace=peer_namespace, peer_label=peer_label, provider=provider),
+        "resources/namespace.yaml": namespace_text(namespace),
+        "resources/backup-pvc.yaml": backup_claim_text(namespace, args.storage_class or "", args.backup_size),
+    }
+    listed = ["namespace.yaml", "backup-pvc.yaml"]
+    generators: list[str] = []
+    handed: Path | None = None
+    if provider == "sops":
+        for secret, file in ((SECRETS_SECRET, "secrets.sops.yaml"), (CONFIG_SECRET, "config-secret-key.sops.yaml")):
+            target = directory / "resources" / file
+            plain = secret_text(secret, namespace, values[secret]).encode()
+            encrypted = host.run(["sops", "encrypt", "--filename-override", str(target), "--input-type", "yaml",
+                                  "--output-type", "yaml", "/dev/stdin"], stdin=plain).stdout
+            if not encrypted or "ENC[" not in encrypted:
+                raise Refused(f"sops did not encrypt {file} (no ENC[…] in its output): check {top}/.sops.yaml's "
+                              f"creation rules. Nothing was written.")
+            files[f"resources/{file}"] = encrypted
+        files["resources/secret-generator.yaml"] = """# KSOPS: decrypts the listed SOPS files in Argo CD's repo server.
+apiVersion: viaduct.ai/v1
+kind: ksops
+metadata:
+  name: veyq-secrets
+  annotations:
+    config.kubernetes.io/function: |
+      exec:
+        path: ksops
+files:
+  - secrets.sops.yaml
+  - config-secret-key.sops.yaml
+"""
+        generators.append("secret-generator.yaml")
+    elif provider == "sealed-secrets":
+        for secret, file in ((SECRETS_SECRET, "secrets.sealed.yaml"), (CONFIG_SECRET, "config-secret-key.sealed.yaml")):
+            sealed = host.run(["kubeseal", *(["--context", context] if context else []), "--format", "yaml"],
+                              stdin=secret_text(secret, namespace, values[secret]).encode()).stdout
+            if "SealedSecret" not in (sealed or ""):
+                raise Refused(f"kubeseal returned no SealedSecret for {secret}. Nothing was written.")
+            files[f"resources/{file}"] = sealed
+            listed.append(file)
+    elif provider == "external-secrets":
+        for secret, file in ((SECRETS_SECRET, "secrets.external.yaml"),
+                             (CONFIG_SECRET, "config-secret-key.external.yaml")):
+            files[f"resources/{file}"] = external_secret_text(secret, namespace, store, store_kind, remote_prefix)
+            listed.append(file)
+    kustomization = ("# What the chart expects and does not create, written by veyqctl (ADR 0126).\n"
+                     "apiVersion: kustomize.config.k8s.io/v1beta1\nkind: Kustomization\nresources:\n"
+                     + "".join(f"  - {f}\n" for f in listed)
+                     + ("generators:\n" + "".join(f"  - {f}\n" for f in generators) if generators else ""))
+    files["resources/kustomization.yaml"] = kustomization
+    g = GitOps(directory, {"target": "gitops", "release": selector, "secrets": provider,
+                           "application": "application.yaml", "values": "values.yaml", "chart": chart,
+                           "namespace": namespace, "context": context or "", "source": args.source or "",
+                           "running": chosen.release, "pins": pins})
+
+    with tempfile.TemporaryDirectory(prefix="veyqctl-values-") as tmp:
+        staged = Path(tmp) / "values.yaml"
+        staged.write_text(files["values.yaml"])
+        render(host, chart, pins["chart"], namespace, staged)
+    if provider != "sops":
+        remote = ({remote_key(remote_prefix, k): v for keys in values.values() for k, v in keys.items()}
+                  if provider == "external-secrets" else None)
+        handed = hand_over(name, namespace, values, remote)
+    (directory / "resources").mkdir(parents=True, exist_ok=True)
+    for relative, text in files.items():
+        (directory / relative).write_text(text)
+    write_gitops(g)
+    say(f"wrote veyq's half into {directory}: {', '.join(sorted(files))} and {GITOPS_FILE} (release {chosen.release})")
+    register(name, directory)
+    if handed:
+        say(f"the generated values are in {handed} (0600), once: "
+            + ("put each under its remote key into the store `" + store + "` reads, " if provider == "external-secrets"
+               else "create the two Secrets from it in the namespace, " if provider == "none"
+               else "they are sealed into the repository; ")
+            + "then move the file off this machine")
+    say(f"KEEP THE CONFIG-SECRET KEY in a password manager as well (`{CONFIG_SECRET_KEY}` of {CONFIG_SECRET}): without "
+        f"it no backup can be read (ADR 0050)"
+        + (f" — `sops decrypt --extract '[\"stringData\"][\"{CONFIG_SECRET_KEY}\"]' "
+           f"{directory / 'resources/config-secret-key.sops.yaml'}`" if provider == "sops" else ""))
+    say(f"next: review, `git -C {top} add {rel} && git commit`, push, give Argo CD read access to {repo_url} (a deploy "
+        f"key), and register the Application once: `{' '.join(kubectl(context))} apply -f {directory / 'application.yaml'}`")
+    return 0
+
+
+def values_digests(text: str) -> dict[str, str]:
+    """The image digests under values.yaml's `image:`, `admin:` and `backup:` (the line under each block's `image`),
+    by role — what `init` writes and an adopted layout must match."""
+    found: dict[str, list[str]] = {}
+    block = None
+    for line in text.splitlines():
+        top_key = re.match(r"^([A-Za-z][A-Za-z0-9]*):", line)
+        if top_key:
+            block = VALUES_IMAGE_KEYS.get(top_key.group(1))
+            continue
+        m = re.match(r"^\s+digest:\s*(sha256:[0-9a-f]{64})\s*(#.*)?$", line)
+        if m and block:
+            found.setdefault(block, []).append(m.group(1))
+    return {role: digests[0] for role, digests in found.items() if len(digests) == 1}
+
+
+def application_pin(text: str) -> tuple[str, str]:
+    """The chart's `oci://` repository and the digest it is pinned by, each exactly once in the Application."""
+    repos = re.findall(r"(?m)^\s*-?\s*repoURL:\s*oci://(\S+)\s*$", text)
+    digests = re.findall(r"(?m)^\s*targetRevision:\s*(sha256:[0-9a-f]{64})\s*$", text)
+    if len(repos) != 1 or len(digests) != 1:
+        raise Refused(f"the Application names {len(repos)} oci:// chart source(s) and {len(digests)} digest pin(s); "
+                      f"veyqctl takes over one of each")
+    return repos[0], digests[0]
+
+
+def gitops_adopt(args: argparse.Namespace, host: Host, directory: Path, top: Path, name: str) -> int:
+    """Take over a veyq half written by hand (cr-veyqctl-gitops-target phase 4): only veyqctl.json is written, after
+    the pins in the files are those of a release that verifies — never an unverified state recorded as running."""
+    if (directory / GITOPS_FILE).exists():
+        raise Refused(f"{directory / GITOPS_FILE} exists: this instance is veyqctl's already")
+    application, values_file = args.application or "application.yaml", args.values_file or "values.yaml"
+    provider = option(args, host, "secrets", f"where the Secrets come from ({', '.join(PROVIDERS)})", "sops")
+    if provider not in PROVIDERS:
+        raise Refused(f"--secrets {provider}: one of {', '.join(PROVIDERS)}")
+    try:
+        app_text, values_text = (directory / application).read_text(), (directory / values_file).read_text()
+    except OSError as e:
+        raise Refused(f"{e}: --adopt reads the Application and the values beside each other") from None
+    chart, chart_pin = application_pin(app_text)
+    images = values_digests(values_text)
+    missing = [role for role in ("app", "admin", "tools") if role not in images]
+    if missing:
+        raise Refused(f"{values_file} gives no single digest for {', '.join(missing)} (under `image:`, `admin.image`, "
+                      f"`backup.image`)")
+    tags = set(re.findall(r'(?m)^\s+tag:\s*"?([0-9]+\.[0-9]+)"?\s*(?:#.*)?$', values_text))
+    if len(tags) != 1:
+        raise Refused(f"{values_file}'s image tags name {len(tags)} releases ({', '.join(sorted(tags)) or 'none'}), "
+                      f"not one")
+    running = tags.pop()
+    source = open_source(args.source)
+    listed = source.releases()
+    chosen = select(listed, running, source.describe())
+    manifest = fetch_manifest(host, source, chosen, False)
+    pins = verify_gitops_release(host, manifest, chart)
+    found = {"chart": chart_pin, **images}
+    differ = [f"{role} {found[role]} (release {running}: {pins[role]})" for role in PIN_ROLES if found[role] != pins[role]]
+    if differ:
+        raise Refused(f"the files pin what release {running} does not: " + "; ".join(differ)
+                      + f". Nothing was written: veyqctl records only a running release that verifies.")
+    g = GitOps(directory, {"target": "gitops", "release": check_selector(args.release or str(chosen.major)),
+                           "secrets": provider, "application": application, "values": values_file, "chart": chart,
+                           "namespace": args.namespace or "veyq", "context": args.context or "",
+                           "source": args.source or "", "running": running, "pins": pins})
+    write_gitops(g)
+    say(f"adopted {directory}: release {running}, its four pins verified; {GITOPS_FILE} written (commit it)")
+    register(name, directory)
+    return 0
+
+
+def rewrite_once(text: str, old: str, new: str, what: str) -> str:
+    count = text.count(old)
+    if count != 1:
+        raise Refused(f"{what}: {old} appears {count} times, not once — veyqctl rewrites a pin only where it finds it "
+                      f"exactly once. Nothing was changed.")
+    return text.replace(old, new)
+
+
+def rewrite_tags(text: str, old: str, new: str, what: str) -> str:
+    pattern = re.compile(rf'(?m)^(\s+tag:\s*)"?{re.escape(old)}"?(\s*(?:#.*)?)$')
+    result, count = pattern.subn(lambda m: f'{m.group(1)}"{new}"{m.group(2)}', text)
+    if count != 3:
+        raise Refused(f"{what}: {count} image tag line(s) name {old}, not the three (app, admin, tools). Nothing was "
+                      f"changed.")
+    return result
+
+
+def gitops_verify(args: argparse.Namespace, host: Host, g: GitOps) -> int:
+    source = open_source(args.source or g.doc.get("source") or None)
+    selector = check_selector(args.release or g.doc["release"])
+    chosen = select(source.releases(), selector, source.describe())
+    say(f"{RELEASE_KEY}={selector} takes release {chosen.release} from {source.describe()}")
+    verify_gitops_release(host, fetch_manifest(host, source, chosen, False), g.doc["chart"])
+    say(f"release {chosen.release}: its manifest, three images and chart verified; nothing was written")
+    return 0
+
+
+def gitops_drift(g: GitOps) -> list[str]:
+    """Where the files no longer pin what veyqctl.json records."""
+    drift = []
+    try:
+        chart, chart_pin = application_pin(g.application.read_text())
+        images = values_digests(g.values.read_text())
+    except (OSError, Refused) as e:
+        return [str(e)]
+    if chart != g.doc["chart"] or chart_pin != g.doc["pins"]["chart"]:
+        drift.append(f"{g.doc['application']} pins oci://{chart}@{chart_pin}")
+    for role in ("app", "admin", "tools"):
+        if images.get(role) != g.doc["pins"][role]:
+            drift.append(f"{g.doc['values']} pins {role} {images.get(role, '(none)')}")
+    return drift
+
+
+def gitops_check(args: argparse.Namespace, host: Host, g: GitOps) -> int:
+    source = open_source(args.source or g.doc.get("source") or None)
+    selector = check_selector(args.release or g.doc["release"])
+    listed = source.releases()
+    chosen = select(listed, selector, source.describe())
+    running = g.doc["running"]
+    current = tuple(int(x) for x in running.split("."))
+    if chosen.release == running:
+        say(f"{RELEASE_KEY}={selector}: release {running} is pinned already; `upgrade` would do nothing")
+    elif (chosen.major, chosen.minor) < current:
+        say(f"{RELEASE_KEY}={selector} selects {chosen.release}, below the pinned {running}: `upgrade` would refuse")
+    else:
+        manifest_of = manifest_reader(host, source, False)
+        target = upgrade_target(listed, current, chosen, source.describe(), lambda r: manifest_of(r).major_entry)
+        say(f"{RELEASE_KEY}={selector}: `upgrade` would take release {target.release} (pinned: {running})")
+        if target != chosen:
+            say(entry_note(selector, chosen, target, "the `upgrade` after that one"))
+    beyond = newer_major(listed, chosen)
+    if beyond:
+        say(f"a newer major exists beyond {RELEASE_KEY}={selector}: {beyond.release} — read its notes before selecting it")
+    drift = gitops_drift(g)
+    for line in drift:
+        say(f"DRIFT: {line}, not what {GITOPS_FILE} records")
+    namespace = g.doc.get("namespace") or "veyq"
+    k = kubectl(g.doc.get("context") or None)
+    if host.run(k + ["get", "namespace", namespace, "-o", "name"], check=False).returncode:
+        say(f"the cluster or the namespace {namespace} is not reachable: the Secrets were not checked")
+        return 1 if drift else 0
+    absent = []
+    for secret, keys in SECRET_VALUES.items():
+        got = host.run(k + ["-n", namespace, "get", "secret", secret, "-o", "jsonpath={.data}"], check=False)
+        try:
+            have = set(json.loads(got.stdout or "{}")) if not got.returncode else None
+        except ValueError:
+            have = None
+        if have is None:
+            absent.append(f"{secret} (missing)")
+        elif set(keys) - have:
+            absent.append(f"{secret} without {', '.join(sorted(set(keys) - have))}")
+    if absent:
+        say(f"the Secrets the chart reads are not complete ({g.doc['secrets']}): " + "; ".join(absent))
+    else:
+        say(f"the Secrets {SECRETS_SECRET} and {CONFIG_SECRET} exist with every key")
+    return 1 if drift or absent else 0
+
+
+def gitops_upgrade(args: argparse.Namespace, host: Host, g: GitOps) -> int:
+    """ADR 0126 decision 3: ADR 0096 decision 5's resolve and verify, then a commit instead of a restart."""
+    if args.unsigned_local or args.key_into or args.objects_to:
+        raise Refused("--unsigned-local, --key-into and --objects-to are Compose's: on a GitOps instance the chart's "
+                      "backup gate captures before the new release starts (ADR 0098)")
+    source = open_source(args.source or g.doc.get("source") or None)
+    selector = check_selector(g.doc["release"])
+    listed = source.releases()
+    chosen = select(listed, selector, source.describe())
+    running = g.doc["running"]
+    current = tuple(int(x) for x in running.split("."))
+    if chosen.release == running:
+        say(f"{RELEASE_KEY}={selector}: release {running} is pinned already; nothing to do")
+        return 0
+    if (chosen.major, chosen.minor) < current:
+        raise Refused(f"{RELEASE_KEY}={selector} selects {chosen.release}, below the pinned {running}: there is no "
+                      f"downgrade (going back is a restore, ADR 0098). Nothing was changed.")
+    manifest_of = manifest_reader(host, source, False)
+    target = upgrade_target(listed, current, chosen, source.describe(), lambda r: manifest_of(r).major_entry)
+    drift = gitops_drift(g)
+    if drift:
+        raise Refused("the files no longer pin what " + GITOPS_FILE + " records: " + "; ".join(drift)
+                      + ". Nothing was changed: put them back, or `init --adopt` the layout again.")
+    top = repository_of(host, g.directory)
+    paths = [str(g.application), str(g.values), str(g.directory / GITOPS_FILE)]
+    if git(host, top, "diff", "--quiet", "HEAD", "--", *paths, check=False).returncode:
+        raise Refused("the Application, the values or veyqctl.json have changes not committed: an upgrade commits "
+                      "only its own. Nothing was changed.")
+    manifest = manifest_of(target)
+    pins = verify_gitops_release(host, manifest, g.doc["chart"])
+    old = g.doc["pins"]
+    app_text = rewrite_once(g.application.read_text(), old["chart"], pins["chart"], g.doc["application"])
+    app_text = app_text.replace(f"version={running}", f"version={target.release}")  # a Renovate hint, if any
+    values_text = g.values.read_text()
+    for role in ("app", "admin", "tools"):
+        values_text = rewrite_once(values_text, old[role], pins[role], g.doc["values"])
+    values_text = rewrite_tags(values_text, running, target.release, g.doc["values"])
+    with tempfile.TemporaryDirectory(prefix="veyqctl-values-") as tmp:
+        staged = Path(tmp) / "values.yaml"
+        staged.write_text(values_text)
+        render(host, g.doc["chart"], pins["chart"], g.doc.get("namespace") or "veyq", staged)
+    g.application.write_text(app_text)
+    g.values.write_text(values_text)
+    write_gitops(g._replace(doc={**g.doc, "running": target.release, "pins": pins}))
+    git(host, top, "add", "--", *paths)
+    git(host, top, "commit", "-m", f"veyq {target.release}: upgraded from {running} by veyqctl", "--", *paths)
+    say(f"release {target.release} pinned and committed (from {running}); the chart's backup gate captures before it "
+        f"starts")
+    if target != chosen:
+        say(entry_note(selector, chosen, target, "the next `upgrade`"))
+    if args.push:
+        git(host, top, "push")
+        say("pushed: Argo CD applies it at its next sync")
+    else:
+        say(f"not pushed: `git -C {top} push` (or `upgrade --push` next time), and Argo CD applies it")
+    return 0
+
+
+GITOPS_VERBS = {"verify": gitops_verify, "check": gitops_check, "upgrade": gitops_upgrade}
+
+
 # ---- main ------------------------------------------------------------------------------------------------------
 
 def parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(prog="veyqctl", description="Install, run, upgrade and back up a veyq instance on "
                                 "Docker Compose from its releases (ADR 0096).")
-    p.add_argument("--home", default=DEFAULT_HOME, help=f"the instance's directory (default {DEFAULT_HOME})")
+    p.add_argument("--home", default=None, help=f"the instance's directory, which wins over --instance (default: the "
+                                                 f"current instance, else {DEFAULT_HOME})")
+    p.add_argument("--instance", default=None, metavar="NAME", help="act on this listed instance once, without `use`")
     p.add_argument("--source", default=None,
                    help=f"where releases come from: a directory or an http(s) URL in the mirror layout "
                         f"(default: the GitHub Releases of {UPSTREAM}, or the source the instance was installed from)")
     sub = p.add_subparsers(dest="command", required=True)
+
+    sub.add_parser("instances", help="the instances listed in ~/.config/veyq, their target and path; * is current"
+                   ).set_defaults(func=cmd_instances)
+    use = sub.add_parser("use", help="make a listed instance the current one")
+    use.add_argument("name")
+    use.set_defaults(func=cmd_use)
+
+    init = sub.add_parser("init", help="create an instance, list it and make it current: Compose (as `install`) or "
+                                       "GitOps (veyq's half of an Argo CD repository, ADR 0126)")
+    which = init.add_mutually_exclusive_group()
+    which.add_argument("--compose", action="store_true", help="Docker Compose on this host, in --home")
+    which.add_argument("--gitops", metavar="DIR", help="veyq's directory in a checkout of the repository Argo CD syncs")
+    init.add_argument("--name", help="the instance's name in the list (default: veyq; GitOps: the repository's)")
+    init.add_argument("--set", action="append", metavar="KEY=VALUE", help="Compose: a .env value (repeatable)")
+    init.add_argument("--unsigned-local", action="store_true", help="Compose: a release from a local docker build")
+    init.add_argument("--release", help="GitOps: the selector veyqctl.json keeps (default latest; --adopt: the major "
+                                        "running)")
+    init.add_argument("--adopt", action="store_true", help="GitOps: take over a veyq half written by hand — only "
+                                                          "veyqctl.json is written, once its pins verify")
+    init.add_argument("--application", help="GitOps --adopt: the Application's file name (default application.yaml)")
+    init.add_argument("--values-file", help="GitOps --adopt: the values' file name (default values.yaml)")
+    init.add_argument("--secrets", choices=PROVIDERS, help="GitOps: where the Secrets come from")
+    init.add_argument("--domain", help="GitOps: veyq's domain")
+    init.add_argument("--store-domain", help="GitOps: the bundled store's own host (default store.<domain>)")
+    init.add_argument("--no-bundled-store", action="store_true", help="GitOps: no Garage; set a store of your own in "
+                                                                     "the admin console after the install")
+    init.add_argument("--gateway-class", help="GitOps: the GatewayClass the chart's Gateway uses")
+    init.add_argument("--tls", choices=("acme", "shared", "none"), help="GitOps: the chart's TLS (acme: its "
+                                                                         "cert-manager issuer)")
+    init.add_argument("--acme-email", help="GitOps: the ACME account contact (implies --tls acme)")
+    init.add_argument("--tls-secret", help="GitOps --tls shared: the TLS Secret every host uses")
+    init.add_argument("--gateway-namespace", help="GitOps: the namespace of the Gateway's data-plane pods")
+    init.add_argument("--gateway-pod-label", help="GitOps: a KEY=VALUE label those pods carry")
+    init.add_argument("--namespace", help="GitOps: veyq's namespace (default veyq)")
+    init.add_argument("--context", help="GitOps: the kubeconfig context of the cluster (default: kubectl's current)")
+    init.add_argument("--no-cluster-check", action="store_true", help="GitOps: write for a cluster not reachable yet")
+    init.add_argument("--storage-class", help="GitOps: the backup claim's StorageClass (default: the cluster's)")
+    init.add_argument("--backup-size", default="20Gi", help="GitOps: the backup claim's size (default 20Gi)")
+    init.add_argument("--secret-store", help="GitOps --secrets external-secrets: the store's name")
+    init.add_argument("--secret-store-kind", default="ClusterSecretStore", choices=("SecretStore", "ClusterSecretStore"))
+    init.add_argument("--remote-prefix", default="veyq-", help="GitOps --secrets external-secrets: the remote keys' "
+                                                              "prefix (default veyq-)")
+    init.add_argument("--repo-url", help="GitOps: the URL Argo CD reads this repository from (default: origin)")
+    init.add_argument("--revision", help="GitOps: the branch Argo CD follows (default: the checkout's)")
+    init.add_argument("--project", default="default", help="GitOps: the Argo CD project (default `default`)")
+    init.add_argument("--argocd-namespace", default="argocd", help="GitOps: Argo CD's namespace (default argocd)")
+    init.set_defaults(func=cmd_init)
 
     install = sub.add_parser("install", help="fetch, verify and start the release VEYQ_RELEASE selects")
     install.add_argument("--set", action="append", metavar="KEY=VALUE", help="a .env value (repeatable)")
@@ -1874,6 +2907,7 @@ def parser() -> argparse.ArgumentParser:
                          help="a release produced from a local docker build: no signature is checked")
     upgrade.add_argument("--objects-to", metavar="POOL", help=f"the object pool for this run's backup, instead of "
                                                                f".env's {POOL_TARGET_KEY}")
+    upgrade.add_argument("--push", action="store_true", help="GitOps: push the upgrade's commit")
     upgrade.set_defaults(func=cmd_upgrade)
 
     backup = sub.add_parser("backup", help="capture the three legs with the running release's backup tool; `backup "
@@ -1915,8 +2949,20 @@ def main(argv: list[str] | None = None, host: Host | None = None) -> int:
     args = parser().parse_args(argv)
     set_unverified(bool(getattr(args, "unsigned_local", False)))
     host = host or Host()
-    host.workdir = Path(args.home)
     try:
+        if args.command in ("instances", "use", "init"):
+            return args.func(args, host)
+        home = resolve_home(args)
+        args.home = str(home)
+        host.workdir = home
+        if target_of(home) == "gitops":
+            if args.command in COMPOSE_ONLY:
+                raise Refused(f"`{args.command}` is Compose's, and {home} is a GitOps instance: {COMPOSE_ONLY[args.command]}")
+            if getattr(args, "unsigned_local", False):
+                raise Refused("--unsigned-local is Compose's: a GitOps instance pins only what verifies")
+            return GITOPS_VERBS[args.command](args, host, read_gitops(home))
+        if getattr(args, "push", False):
+            raise Refused(f"--push is a GitOps instance's, and {home} is a Compose home")
         return args.func(args, host)
     except Refused as e:
         say(f"REFUSED: {e}")

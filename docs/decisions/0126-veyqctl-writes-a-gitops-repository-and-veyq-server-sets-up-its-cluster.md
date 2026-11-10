@@ -1,7 +1,7 @@
 # ADR 0126 — `veyqctl` writes a GitOps repository, and `veyq-server` sets up the cluster it runs on
 
 - Status: Accepted
-- Built: no
+- Built: partly (not built: decision 6)
 - Date: 2026-11-10
 - Model: [release-and-deployment](../crosscutting/release-and-deployment.md)
 
@@ -128,3 +128,7 @@ key to register rather than calling a forge's API.
 - **Rejected — a `gitops` command group.** Explicit, but every call repeats what the instance already says.
 - **Rejected — Flux beside Argo CD now.** The repository layout differs per tool; Argo CD is what the maintainer runs
   and what `veyq-server` installs. A Flux writer is another decision.
+
+## Related
+
+- The operator's page: [Argo CD with veyqctl](../../site/src/content/docs/run/gitops.md).
