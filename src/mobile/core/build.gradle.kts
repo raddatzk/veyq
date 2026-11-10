@@ -17,8 +17,9 @@ buildscript {
 }
 
 // The base every veyq app shares (ADR 0123): the v1 crypto suite, the API client, the session and the navigation
-// model. Its targets are the JVM (which the Android app consumes, and where the conformance suite runs fastest) and
-// the Apple platforms the Apple app runs on, each packed into one XCFramework, `VeyqCore`.
+// model. Its targets are the JVM (which the Android app consumes, and where the conformance suite runs fastest), the
+// Apple platforms the Apple app runs on, each packed into one XCFramework, `VeyqCore`, and Linux on arm64 and x86-64
+// (ADR 0127 decision 4), cross-compiled from this build's host by Kotlin/Native's own toolchain.
 plugins {
     alias(libs.plugins.kotlin.multiplatform)
     alias(libs.plugins.kotlin.serialization)
@@ -115,15 +116,29 @@ val generateWords = tasks.register<Exec>("generateWords") {
     commandLine("python3", rootDir.resolve("words/generate_words.py").absolutePath, "--kotlin", generatedWords.get().asFile.absolutePath)
 }
 
-// libsodium for the Apple targets, built from its pinned release tarball (core/sodium/build_libsodium.py); the script
-// skips a slice already built, so this costs nothing after the first run.
+// libsodium for the Apple and Linux targets, built from its pinned release tarball (core/sodium/build_libsodium.py; the
+// Linux slices by Kotlin/Native's own clang against the glibc the core links, core/konan_toolchain.py); the script skips
+// a slice already built, so this costs nothing after the first run.
 val libsodium = rootDir.resolve("build/libsodium")
 val buildLibsodium = tasks.register<Exec>("buildLibsodium") {
     group = "veyq"
-    description = "Builds libsodium for macOS, iOS and the iOS simulator (arm64) into src/mobile/build/libsodium."
+    description = "Builds libsodium for macOS, iOS, the iOS simulator (arm64) and Linux (arm64, x86-64) into src/mobile/build/libsodium."
     inputs.file("sodium/build_libsodium.py").withPropertyName("script")
+    inputs.file("konan_toolchain.py").withPropertyName("toolchain")
     outputs.dir(libsodium)
     commandLine("python3", file("sodium/build_libsodium.py").absolutePath, libsodium.absolutePath)
+}
+
+// utf8proc for Linux's `nfc`/`nfkd` (CR core-as-a-native-library D3), from its pinned release tarball, with the Unicode
+// NormalizationTest.txt of the version it implements (core/utf8proc/build_utf8proc.py).
+val utf8proc = rootDir.resolve("build/utf8proc")
+val buildUtf8proc = tasks.register<Exec>("buildUtf8proc") {
+    group = "veyq"
+    description = "Builds utf8proc for Linux (arm64, x86-64) into src/mobile/build/utf8proc and fetches its NormalizationTest.txt."
+    inputs.file("utf8proc/build_utf8proc.py").withPropertyName("script")
+    inputs.file("konan_toolchain.py").withPropertyName("toolchain")
+    outputs.dir(utf8proc)
+    commandLine("python3", file("utf8proc/build_utf8proc.py").absolutePath, utf8proc.absolutePath)
 }
 
 kotlin {
@@ -144,6 +159,23 @@ kotlin {
             baseName = "VeyqCore"
             isStatic = true
             xcf.add(this)
+        }
+    }
+
+    // Linux (ADR 0127 decision 4): libsodium as on Apple — the `sodium` interop commonizes into `nativeMain` — and
+    // utf8proc for the normalization forms, which Linux's libc does not have.
+    val linuxSlices = mapOf("linuxArm64" to "linux_arm64", "linuxX64" to "linux_x64")
+    listOf(linuxArm64(), linuxX64()).forEach { target ->
+        val slice = linuxSlices.getValue(target.name)
+        target.compilations.getByName("main").cinterops.create("sodium") {
+            definitionFile.set(file("sodium/sodium.def"))
+            includeDirs(libsodium.resolve("$slice/include"))
+            extraOpts("-libraryPath", libsodium.resolve("$slice/lib").absolutePath)
+        }
+        target.compilations.getByName("main").cinterops.create("utf8proc") {
+            definitionFile.set(file("utf8proc/utf8proc.def"))
+            includeDirs(utf8proc.resolve("$slice/include"))
+            extraOpts("-libraryPath", utf8proc.resolve("$slice/lib").absolutePath)
         }
     }
 
@@ -174,6 +206,11 @@ kotlin {
         appleMain.dependencies {
             implementation(libs.ktor.client.darwin)
         }
+        linuxMain.dependencies {
+            // CIO has no TLS on Kotlin/Native; Curl is linked in statically (CR core-as-a-native-library D5).
+            implementation(libs.ktor.client.curl)
+            implementation(libs.kotlinx.datetime)
+        }
     }
 }
 
@@ -193,6 +230,7 @@ tasks.withType<org.jetbrains.kotlin.gradle.targets.native.tasks.KotlinNativeTest
     environment("VEYQ_VECTORS", vectors.absolutePath)
     environment("VEYQ_ENV_FILE", rootDir.resolve("../../.run/.env").canonicalPath)
     environment("VEYQ_REPO_ROOT", rootDir.resolve("../..").canonicalPath)
+    environment("VEYQ_NORMALIZATION_TEST", utf8proc.resolve("NormalizationTest.txt").absolutePath)
     System.getenv("VEYQ_LIVE")?.let { environment("VEYQ_LIVE", it) }
     testLogging { showStandardStreams = System.getenv("VEYQ_LIVE") != null }
     inputs.file(vectors).withPropertyName("vectors")
@@ -200,3 +238,6 @@ tasks.withType<org.jetbrains.kotlin.gradle.targets.native.tasks.KotlinNativeTest
 
 tasks.matching { it.name.startsWith("compile") || it.name.endsWith("SourcesJar") }.configureEach { dependsOn(generateApi, generateMajor, generateTheme, generateWords) }
 tasks.matching { it.name.startsWith("cinteropSodium") }.configureEach { dependsOn(buildLibsodium) }
+// The Linux slices are compiled by Kotlin/Native's own toolchain, which this task downloads (core/konan_toolchain.py).
+listOf(buildLibsodium, buildUtf8proc).forEach { it.configure { dependsOn("downloadKotlinNativeDistribution") } }
+tasks.matching { it.name.startsWith("cinteropUtf8proc") }.configureEach { dependsOn(buildUtf8proc) }

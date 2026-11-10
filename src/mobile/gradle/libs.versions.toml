@@ -11,6 +11,9 @@ coroutines = "1.11.0"
 serialization = "1.12.0"
 bouncycastle = "1.86"
 kotlincrypto-sha3 = "0.8.0"
+# The version the core already resolved through Ktor (gradle/verification-metadata.xml): Linux's `localWallClock` names it,
+# and adds no library.
+kotlinx-datetime = "0.8.0-0.6.x-compat"
 compose-bom = "2026.09.00"
 activity-compose = "1.13.0"
 lifecycle = "2.11.0"
@@ -24,10 +27,12 @@ ktor-client-content-negotiation = { module = "io.ktor:ktor-client-content-negoti
 ktor-serialization-json = { module = "io.ktor:ktor-serialization-kotlinx-json", version.ref = "ktor" }
 ktor-client-okhttp = { module = "io.ktor:ktor-client-okhttp", version.ref = "ktor" }
 ktor-client-darwin = { module = "io.ktor:ktor-client-darwin", version.ref = "ktor" }
+ktor-client-curl = { module = "io.ktor:ktor-client-curl", version.ref = "ktor" }
 ktor-client-mock = { module = "io.ktor:ktor-client-mock", version.ref = "ktor" }
 coroutines-core = { module = "org.jetbrains.kotlinx:kotlinx-coroutines-core", version.ref = "coroutines" }
 coroutines-test = { module = "org.jetbrains.kotlinx:kotlinx-coroutines-test", version.ref = "coroutines" }
 serialization-json = { module = "org.jetbrains.kotlinx:kotlinx-serialization-json", version.ref = "serialization" }
+kotlinx-datetime = { module = "org.jetbrains.kotlinx:kotlinx-datetime", version.ref = "kotlinx-datetime" }
 kotlincrypto-sha3 = { module = "org.kotlincrypto.hash:sha3", version.ref = "kotlincrypto-sha3" }
 bouncycastle = { module = "org.bouncycastle:bcprov-jdk18on", version.ref = "bouncycastle" }
 compose-bom = { module = "androidx.compose:compose-bom", version.ref = "compose-bom" }

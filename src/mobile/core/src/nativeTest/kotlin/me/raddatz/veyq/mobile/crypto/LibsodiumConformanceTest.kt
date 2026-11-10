@@ -1,21 +1,16 @@
-@file:OptIn(kotlinx.cinterop.ExperimentalForeignApi::class, kotlinx.cinterop.BetaInteropApi::class)
+@file:OptIn(kotlinx.cinterop.ExperimentalForeignApi::class)
 
 package me.raddatz.veyq.mobile.crypto
 
-import platform.Foundation.NSString
-import platform.Foundation.NSUTF8StringEncoding
-import platform.Foundation.stringWithContentsOfFile
-import platform.posix.getenv
 import kotlinx.cinterop.toKString
+import platform.posix.getenv
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
 
+/** libsodium against the v1 vectors on every libsodium target — Apple's and Linux's — through one test. */
 class LibsodiumConformanceTest {
-    private val vectors: String = run {
-        val path = getenv("VEYQ_VECTORS")?.toKString() ?: error("VEYQ_VECTORS is not set")
-        NSString.stringWithContentsOfFile(path, NSUTF8StringEncoding, null) ?: error("cannot read $path")
-    }
+    private val vectors: String = readFile(getenv("VEYQ_VECTORS")?.toKString() ?: error("VEYQ_VECTORS is not set"))
 
     @Test
     fun libsodiumMeetsTheV1Vectors() {
@@ -23,6 +18,7 @@ class LibsodiumConformanceTest {
         val failures = c.run(argonAtProductionCost = true)
         assertEquals(emptyList(), failures, failures.joinToString("\n"))
         assertTrue(c.checked > 40, "only ${c.checked} cases ran")
+        println("libsodium conformance: ${c.checked} cases")
     }
 
     /** The bite, as on the JVM: an AEAD off by one byte must turn the suite red. */
