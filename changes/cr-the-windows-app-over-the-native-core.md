@@ -136,6 +136,17 @@ MinGW `--exclude-all-symbols` or the `.def` K/N writes beside the DLL (`veyq.def
 cross-compiled for mingw on the Mac against `bridge.h` alone and run on the VM (winpthreads is in the sysroot).
 **Q2 of the Linux CR stays (a):** a second host adds no dispatch — the C# app calls the same `Bridge.kt` — so the shell's
 and the Pot's dispatch keep their live proof (`LiveBridgeTest`) and get no door.
+**Built (Phase 2):** the restriction is K/N's own `veyq.def` handed to the linker
+(`linkerOpts(outputDirectory.resolve("veyq.def").absolutePath)`): with a `.def` lld exports what it names and no longer
+exports every symbol, which it does when nothing is marked `dllexport` — and nothing is, the six included. Measured
+(`objdump -p`): without the `.def`, **185** exports (D2's `*_STATIC` defines had already removed libsodium's and
+utf8proc's from W3's 541; left were winpthreads', the unwinder's, iconv's); `--exclude-all-symbols` alone removed every
+export, the six too (a 2.1 MB DLL with no export table); the `.def` alone, from an empty output directory, exactly the
+seven. The DLL imports `ADVAPI32`, `KERNEL32`, `msvcrt`, `WINHTTP`. K/N's mingw header names its C API entry
+`veyq_symbols`, with the functions' own prefix, so `BridgeHeaderTest` drops it by name. The smoke links against an
+import library written from that `.def` with a `LIBRARY veyq.dll` line added (`lld -flavor link /lib /def:`; without the
+line the exe imports from a DLL with an empty name) and links winpthreads statically (`-static -lpthread`): `smoke.exe`
+imports only `KERNEL32`, `msvcrt` and `veyq.dll`. `smoke.c` is unchanged.
 
 **D6 — The C# types are generated beside the Rust ones.** `Bindings.kt` gains a C# writer over the same `Schema`
 walk: one file, `build/generated/bridge/Bridge.g.cs` (never committed), with
@@ -157,6 +168,26 @@ through a `DispatcherQueue` the app gives it. Callbacks are `[UnmanagedCallersOn
 pointers, with a `GCHandle` as `ctx`: per call freed after its answer, per watch kept until `veyq_shutdown`, as
 `bridge.h` asks. `Veyq.Bridge.Tests` (MSTest) reads every sample in `build/generated/bridge/samples`, deserializes it
 into its generated type and writes it back equal — the Rust test's round trip — **on the Mac and on the VM**.
+**Built (Phase 2):**
+- A field's C# property is its serial name (`pot`, `minorUnits`), with `[JsonPropertyName]` beside it; a C# keyword is
+  Pascal-cased (`ref` → `Ref`), since an `@ref` property breaks System.Text.Json's source generator (CS1525 in its
+  output, measured with SDK 10.0.301). Pascal names for every field were rejected: `Update.Pot`'s `pot` would be named
+  as its class (CS0542); the generator fails on that collision.
+- Variants are `sealed record`s nested in their `abstract record`, and every type is named from `global::` (a nested
+  `Update.Shell` hides the wire's `Shell`). Each variant is registered in `WireContext` under its own
+  `TypeInfoPropertyName` (`AnswerDone`, `HostReplyDone`): the source generator names metadata by the simple name, and
+  variants of different sealed classes share one (SYSLIB1031).
+- `bridge.h`'s typedefs are file-scoped `using unsafe` aliases of `delegate* unmanaged[Cdecl]<…>`; a `const char *` is a
+  `byte*` (the wrapper writes NUL-terminated UTF-8 and copies what arrives with `Marshal.PtrToStringUTF8`).
+- `AllowOutOfOrderMetadataProperties` is not needed: every sample reads back without it (the core writes `type` first).
+- **The hand-off to the UI thread is a `SynchronizationContext`, not a `DispatcherQueue`** — that type is WinUI's, a
+  Windows API the library must not have. `Core.CallAsync` returns a `Task` that never continues on the core's thread
+  (`RunContinuationsAsynchronously`), so awaited on the UI thread it resumes there; a watch posts each update to the
+  context it was started on. WinUI's UI thread carries its `DispatcherQueue`'s context (remembered; Phase 3 measures).
+- `Veyq.Bridge.Tests`: `RoundTripTest` over the samples (46 files, `ls build/generated/bridge/samples | wc -l`),
+  `DeviceStoreTest`, and `CoreTest` — Windows only (`[OSCondition]`), the wrapper over the real DLL as the smoke runs it
+  from C: start, a second start refused, the Session watch, `Session.Start` done, the sign-in gate, the store asked,
+  Search refused before a tenant, an ended watch silent, shutdown.
 
 **D7 — The app: WinUI 3, unpackaged, x64, self-contained.** `src/mobile/windows/Veyq` targets
 `net10.0-windows10.0.26100.0` (`win-x64`), with `WindowsPackageType=None` (MSIX is the next CR),
@@ -169,6 +200,27 @@ from nuget.org alone (`nuget.config` with package source mapping); `global.json`
 `rollForward: latestFeature` (the Mac's 10.0.301 and the VM's 10.0.404 both qualify). **The deprecation gate:**
 `run.py build` fails on any package `dotnet package list --deprecated` or `--vulnerable` names (`dotnet list package`
 on the SDK, whichever it is — measured, not remembered). .NET has the gate cargo lacks.
+**Built (Phase 2, the packages and the gate; the app is Phase 3's):**
+- MSTest is `MSTest.TestFramework` and `MSTest.TestAdapter` 4.5.2 under the Microsoft.Testing.Platform runner
+  (`global.json`'s `test.runner`, `EnableMSTestRunner`), **not the `MSTest` metapackage**: that adds
+  `Microsoft.Testing.Extensions.CodeCoverage` 18.12.0 (no licence expression in NuGet's catalog, only the placeholder
+  URL of a licence file; not read further) and `Microsoft.NET.Test.Sdk` (VSTest's host, which the runner does not
+  need) — read from the catalog entries of `mstest/4.5.2` and of each. What they pull is in the lock file: Microsoft.Testing.Platform and its MSBuild part,
+  `Extensions.Telemetry` (and `Microsoft.ApplicationInsights` 2.23.0 under it), `TrxReport.Abstractions`,
+  `TestPlatform.ObjectModel`, `MSTest.Analyzers`. Telemetry is off for every `dotnet` `run.py` runs
+  (`TESTINGPLATFORM_TELEMETRY_OPTOUT`, `DOTNET_CLI_TELEMETRY_OPTOUT`), and its words are English
+  (`DOTNET_CLI_UI_LANGUAGE`: dotnet writes UTF-8 where PowerShell reads CP850).
+- The test project lists `RuntimeIdentifiers` `win-x64`, so its lock file is one for the Mac's restore and the VM's
+  `--arch x64` run.
+- **Trap (measured):** a property that implies an SDK package makes the lock file the SDK's. `IsAotCompatible` adds
+  `Microsoft.NET.ILLink.Tasks` at the SDK's runtime version — 10.0.9 under 10.0.301, 10.0.15 under 10.0.404 — and the
+  VM's locked restore was red (NU1004). It was dropped; Phase 3's self-contained app must not set trimming or AOT
+  properties either, or the lock file has to come from one SDK.
+- The gate is `dotnet package list --deprecated` and `--vulnerable`, `--include-transitive --no-restore --format json`
+  (`dotnet package list` is the 10.0 SDK's verb; without `--no-restore` it restores on its own). It runs **on the Mac**,
+  not the VM: the registry's marks are the same from either host and the lock file is one, and the JSON is read in
+  Python. NuGet's own audit already refuses a vulnerable package at restore (NU1903 as an error under
+  `TreatWarningsAsErrors`); the gate adds the deprecated ones.
 
 The shell, to Fluent (ADR 0123 decision 9; what Windows' own apps do — Settings, Explorer, Photos):
 - **`NavigationView`** with `PaneDisplayMode="Auto"`. Its own thresholds decide the form, not Linux's 600 sp: Left from
@@ -334,7 +386,7 @@ target, written from an empty Gradle home; `windows/run.py test`. O1 is not need
   → `the library answered every step`.
 - [x] `/usr/bin/python3 scripts/validate_build_input_pins.py` green.
 
-### Phase 2 — `:bridge` on Windows, and the C# types
+### Phase 2 — `:bridge` on Windows, and the C# types — done (2026-11-10)
 
 D5's DLL, export gate and smoke; D6's writer, `Veyq.Bridge` and its tests; D7's package pins and the deprecation
 gate (they arrive with the first C# project); `BridgeHeaderTest` against both headers.
@@ -347,6 +399,29 @@ gate (they arrive with the first C# project); `BridgeHeaderTest` against both he
   field turns the round trip red.
 - The generated `Bridge.g.cs` is not tracked.
 - `python3 src/mobile/linux/run.py build` is still green (the Rust writer is untouched).
+
+**Met (2026-11-10, commit `06a3e6b3a`):**
+- [x] `./gradlew :bridge:jvmTest` → green, 16 tests, 0 failures (JUnit XML), `BridgeHeaderTest` against
+  `libveyq_api.h` and `veyq_api.h`; the C# writer's declarations held by `theGeneratedCSharpDeclaresEachFunction`.
+- [x] `/usr/bin/python3 src/mobile/windows/run.py bridge` → exit 0: `objdump -p veyq.dll: 7 exports`, the smoke on the
+  VM `the library answered every step`. Bite: the `.def` line removed from `bridge/build.gradle.kts` → exit 1,
+  `185 exports` named beyond bridge.h's; restored by snapshot (`cmp` equal) and green again.
+  `VEYQ_ENV_FILE=<main checkout>/.run/.env VEYQ_LIVE=http://veyq.localhost:8080 run.py bridge` → exit 0, `ok
+  Session.SignIn is answered Done`, `ok the shell's lists arrive with the personal space` (WinHTTP through the `-R`
+  tunnel); `F:\veyq\bridge` holds only `smoke.exe` and `veyq.dll` afterwards.
+- [x] `/usr/bin/python3 src/mobile/windows/run.py build` → exit 0: `no package is deprecated or vulnerable`; on the Mac
+  `total: 3, succeeded: 2, skipped: 1` (`CoreTest` is Windows only), on the VM (`net10.0|x64`, SDK 10.0.404) `total: 3,
+  succeeded: 3`. Bites: the writer dropping `separator` → the Mac's round trip red, `The JSON property 'separator'
+  could not be mapped to any .NET member contained in type 'Veyq.Bridge.Wire.NoticeArg+Joined'`; the deprecation gate
+  with `WindowsAzure.Storage` 9.3.3 added → `WindowsAzure.Storage 9.3.3 (deprecated)`, `Newtonsoft.Json 10.0.2
+  (vulnerable)`, red. Both restored by snapshot (`cmp` equal) and green again.
+- [x] `git ls-files src/mobile | grep -E '\.g\.cs$'` is empty: `Bridge.g.cs` is under `src/mobile/build/` (ignored);
+  each C# project's `bin/` and `obj/` are ignored (`src/mobile/.gitignore`).
+- [x] `DOCKER_CONFIG=<scratch> python3 src/mobile/linux/run.py build` → exit 0 (`cargo test`: 7 passed), `linux/run.py
+  bridge` → `the library answered every step`, `linux/run.py test` → `PASSED 176`; `./gradlew :core:jvmTest --rerun
+  :core:macosArm64Test --rerun` → 344 and 176 tests, 0 failures. `--warning-mode all` after the build-script edit: no
+  deprecation (only the existing disabled-test-task notices). No new dependency or target, so no verification-metadata
+  write.
 
 ### Phase 3 — The Windows app's ground
 
@@ -433,3 +508,22 @@ runs them, `validate_changes.py` among them), and every "measured" in the touche
 - **Process:** the empty-Gradle-home write failed first on the wrapper's own download (a read timeout), not on a
   dependency; seeding the empty home with the wrapper distribution alone keeps the write honest. Worth one line in
   `src/mobile/CLAUDE.md`'s trap with Phase 5.
+
+### Phase 2 (2026-11-10)
+
+- **The CR named the means and the measurement chose among them in one link each.** D5 listed `*_STATIC`, lld's
+  `--exclude-all-symbols` and K/N's `.def`; three links (`objdump -p` after each) showed the first already done, the
+  second wrong (it removes the six too: they were auto-exported like everything else) and the third enough alone. Worth
+  keeping: a CR that lists candidate means rather than picking one is cheap to implement when each is one measurement.
+- **Two C# naming traps the descriptor walk could not foresee were found only by compiling the generated file**: the
+  source generator's simple-name metadata (SYSLIB1031) and its unescaped `@`-keywords (CS1525), and a third one
+  (CS0542) avoided by keeping the serial names. The Rust writer had met its own (`r#ref`, `Box`); a third host language
+  will meet its own too — generate, compile, then read the errors, rather than reason about the names first.
+- **The lock file is the SDK's as well as the packages'.** An innocent analyzer property (`IsAotCompatible`) pulled an
+  SDK-versioned package and the second host's locked restore went red. The first VM run caught it; the Mac alone never
+  would have. Next time: the first locked restore of a new C# project runs on both hosts before anything else is built
+  on it.
+- **Process:** `dotnet package list` restores by itself, so the deprecation gate's first bite failed for the wrong
+  reason (NuGet's audit refused the restore before the gate looked). The bite was what showed it — the gate now reads
+  the locked graph with `--no-restore`. And the VM's dotnet writes UTF-8 where Phase 1's `run.py` reads CP850:
+  English words (`DOTNET_CLI_UI_LANGUAGE`) avoid the question for dotnet's own output.
