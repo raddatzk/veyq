@@ -56,9 +56,9 @@ internal fun UploadTray(model: AppModel) {
     val batches = state.batches
     // a batch all in is acknowledged after a moment; one with a failure waits for its close
     LaunchedEffect(batches.map { it.id to it.finished }) {
-        val clean = batches.filter { b -> b.finished && b.items.none { it.status == UploadQueue.Status.FAILED } }
-        if (clean.isNotEmpty() && state.active == 0) {
-            kotlinx.coroutines.delay(3_000)
+        val clean = state.clean
+        if (clean.isNotEmpty()) {
+            kotlinx.coroutines.delay(UploadQueue.ACKNOWLEDGE_AFTER_MS)
             clean.forEach { model.uploads.acknowledge(it.id) }
         }
     }
@@ -73,10 +73,8 @@ internal fun UploadTray(model: AppModel) {
     }
     LaunchedEffect(batches.isEmpty()) { if (batches.isEmpty()) open = false }
     if (batches.isEmpty()) return
-    val failed = batches.sumOf { b -> b.items.count { it.status == UploadQueue.Status.FAILED } }
-    val items = batches.flatMap { it.items }.filter { it.status != UploadQueue.Status.CANCELLED }
-    val total = items.sumOf { it.sizeBytes.coerceAtLeast(1) }.toDouble()
-    val progress = if (total == 0.0) 1f else (items.sumOf { it.sizeBytes.coerceAtLeast(1) * it.progress } / total).toFloat()
+    val failed = state.failed
+    val progress = state.progress.toFloat()
     Surface(tonalElevation = 2.dp, modifier = Modifier.fillMaxWidth(), onClick = { open = true }) {
         Row(Modifier.padding(horizontal = 16.dp, vertical = 10.dp), verticalAlignment = Alignment.CenterVertically) {
             when {

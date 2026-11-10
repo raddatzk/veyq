@@ -103,11 +103,32 @@ class UploadQueue(dispatcher: CoroutineDispatcher) {
     class State(val batches: List<Batch>) {
         /** How many items still wait or run. */
         val active: Int get() = batches.sumOf { b -> b.items.count { it.active } }
+
+        /** How many items failed. */
+        val failed: Int get() = batches.sumOf { b -> b.items.count { it.status == Status.FAILED } }
+
+        /** The whole's progress (0..1), each item weighted by its size (at least a byte), cancelled ones left out; 1 with none. */
+        val progress: Double
+            get() {
+                val items = batches.flatMap { it.items }.filter { it.status != Status.CANCELLED }
+                val total = items.sumOf { it.sizeBytes.coerceAtLeast(1).toDouble() }
+                return if (total == 0.0) 1.0 else items.sumOf { it.sizeBytes.coerceAtLeast(1) * it.progress } / total
+            }
+
+        /**
+         * The batches the tray acknowledges by itself, [ACKNOWLEDGE_AFTER_MS] after they are: all in and none failed, once
+         * nothing runs. One with a failure waits for the person to close it.
+         */
+        val clean: List<Batch>
+            get() = if (active > 0) emptyList() else batches.filter { b -> b.finished && b.items.none { it.status == Status.FAILED } }
     }
 
     companion object {
         /** One automatic retry on a transient failure. */
         const val MAX_ATTEMPTS = 2
+
+        /** How long a batch all in stays in the tray before it is acknowledged by itself. */
+        const val ACKNOWLEDGE_AFTER_MS = 3_000L
 
         /** The tenant or the link has no room left (ADR 0073 §6): no retry helps. */
         const val QUOTA_EXCEEDED = "quota_exceeded"

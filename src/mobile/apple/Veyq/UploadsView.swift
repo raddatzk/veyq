@@ -11,9 +11,7 @@ struct UploadsButton: View {
 
     var body: some View {
         if let state = model.uploadState, !state.batches.isEmpty {
-            let items = state.batches.flatMap { $0.items }.filter { $0.status != .cancelled }
-            let failed = items.filter { $0.status == .failed }.count
-            Button { open = true } label: { glyph(state: state, items: items, failed: failed) }
+            Button { open = true } label: { glyph(state: state, failed: Int(state.failed)) }
                 .accessibilityLabel(say(.uploadTitle))
                 .accessibilityValue(state.active > 0 ? say(.uploadActive, state.active) : "")
                 .popover(isPresented: $open) {
@@ -23,22 +21,20 @@ struct UploadsButton: View {
                 }
                 // a batch all in is acknowledged after a moment; one with a failure waits for its close
                 .task(id: state.batches.map { "\($0.id)/\($0.finished)" }.joined(separator: ",")) {
-                    let clean = state.batches.filter { b in b.finished && !b.items.contains { $0.status == .failed } }
-                    guard state.active == 0, !clean.isEmpty else { return }
-                    try? await Task.sleep(for: .seconds(3))
+                    let clean = state.clean
+                    guard !clean.isEmpty else { return }
+                    try? await Task.sleep(for: .milliseconds(UploadQueue.companion.ACKNOWLEDGE_AFTER_MS))
                     guard !Task.isCancelled else { return }
                     for b in clean { model.uploads.acknowledge(batchId: b.id) }
                 }
         }
     }
 
-    @ViewBuilder private func glyph(state: UploadQueue.State, items: [UploadQueue.Item], failed: Int) -> some View {
+    @ViewBuilder private func glyph(state: UploadQueue.State, failed: Int) -> some View {
         if state.active > 0 {
-            let total = items.reduce(0.0) { $0 + Double(max($1.sizeBytes, 1)) }
-            let done = items.reduce(0.0) { $0 + Double(max($1.sizeBytes, 1)) * $1.progress }
             ZStack {
                 Circle().stroke(Color.secondary.opacity(0.3), lineWidth: 2.5)
-                Circle().trim(from: 0, to: total > 0 ? done / total : 0)
+                Circle().trim(from: 0, to: state.progress)
                     .stroke(Color.accentColor, style: StrokeStyle(lineWidth: 2.5, lineCap: .round))
                     .rotationEffect(.degrees(-90))
                 Image(systemName: "arrow.up").font(.system(size: 10, weight: .bold))

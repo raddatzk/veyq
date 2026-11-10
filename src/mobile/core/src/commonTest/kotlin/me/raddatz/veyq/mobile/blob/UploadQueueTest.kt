@@ -229,4 +229,21 @@ class UploadQueueTest {
         advanceUntilIdle()
         assertEquals(listOf("two"), q.state.value.batches.map { it.label })
     }
+
+    @Test
+    fun the_trays_summary_counts_failures_weighs_progress_by_size_and_acknowledges_only_clean_batches_once_idle() {
+        val job = Fake("x", mutableListOf())
+        fun item(status: Status, size: Long, progress: Double) = UploadQueue.Item("i", "x", size, status, progress, null, false, 1, job)
+        val clean = UploadQueue.Batch("a", "A", null, listOf(item(Status.DONE, 100, 1.0), item(Status.CANCELLED, 900, 0.0)), finished = true)
+        val failing = UploadQueue.Batch("b", "B", null, listOf(item(Status.FAILED, 300, 0.0)), finished = true)
+        val idle = UploadQueue.State(listOf(clean, failing))
+        assertEquals(1, idle.failed)
+        // the cancelled one weighs nothing: 100 of 400 bytes in
+        assertEquals(0.25, idle.progress)
+        assertEquals(listOf("a"), idle.clean.map { it.id })
+        // while anything runs, nothing is acknowledged by itself
+        val running = UploadQueue.State(listOf(clean, UploadQueue.Batch("c", "C", null, listOf(item(Status.UPLOADING, 0, 0.5)), finished = false)))
+        assertEquals(emptyList(), running.clean)
+        assertEquals(1.0, UploadQueue.State(emptyList()).progress)
+    }
 }
