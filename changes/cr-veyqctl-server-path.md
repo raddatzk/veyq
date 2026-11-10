@@ -155,3 +155,8 @@ namespace's Certificates on confirmation and waits until every one is Ready; `--
 refused. Self-tested (each confirmation's no, the Issuer still on staging deleting nothing, nothing to do on
 production); eight mutations bite, and the render check bites the values without the server. Not measured on a real
 cluster — phase 5.
+
+Phase 6, first part (2026-11-10): the Run page *Argo CD with veyqctl* has the server path — what it needs, the one
+command, its ten steps, `veyq-setup.json` and the age key for a rebuild, `tls production` — and says what is not run on
+a real server yet. Left for after phase 5: the measured run on that page, affenbande's scripts and README retired in
+`raddatz.me`, ADR 0126 marked built.

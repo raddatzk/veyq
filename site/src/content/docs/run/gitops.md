@@ -14,8 +14,10 @@ keeps it current: the Argo CD `Application` pinning the chart by digest, the cha
 what the chart needs and does not create (the namespace, the backup gate's claim, the Secrets). Argo CD then applies
 what you push. ([ADR 0126](https://github.com/raddatzk/veyq/blob/main/docs/decisions/0126-veyqctl-writes-a-gitops-repository-and-veyq-server-sets-up-its-cluster.md).)
 
-It does not set up the cluster itself: that is [`veyq-server`](https://github.com/raddatzk/veyq-server)'s job, not
-built yet. Without it, the cluster is yours, and it must have what [Kubernetes](/run/kubernetes/) lists.
+It can set up the server and its cluster too: in an empty repository, `init` offers to, and then renders
+[`veyq-server`](https://github.com/raddatzk/veyq-server) — Ansible for the server, k3s, Argo CD, Traefik and
+cert-manager — beside veyq's half, from one command to a running instance ([From an empty repository](#from-an-empty-repository-the-server-too)).
+Without it, the cluster is yours, and it must have what [Kubernetes](/run/kubernetes/) lists.
 
 ## What you need
 
@@ -32,6 +34,62 @@ On the cluster — `init` checks this before it writes anything and names every 
 - with the chart's ACME issuer (`--tls acme`), **cert-manager 1.21 or later**.
 
 `--no-cluster-check` skips this, for a repository written before the cluster exists.
+
+## From an empty repository: the server too
+
+What you need for it: a fresh **Debian 13** server you reach as root over SSH with your key (8 GB of memory; 4 GB is
+tight), its provider's firewall open for TCP 22, 80 and 443 only, an **empty Git repository** and its clone on your
+machine, and your DNS. On your machine, besides the programs above: `ssh`, `age-keygen`, `sops`, `copier` and
+`ansible-core` 2.18 or later — `init` names whatever is missing, with Homebrew's command where `brew` is, and waits.
+`gh`, signed in, lets `init` enter Argo CD's deploy key for you; without it you enter it yourself.
+
+```sh
+cd raddatz.me            # the empty repository's clone
+veyqctl init             # gitops · set up the server too? yes
+```
+
+It asks everything first — the server's address, the admin user and the SSH key it logs in with (offered from
+`~/.ssh` and your agents, 1Password's included), the age key the repository's secrets are encrypted to (a file you
+have, or Enter for a new one in `.age/key.txt`, gitignored — `init` waits until you have put its copy into your password
+manager), Argo CD's and veyq's administration through the SSH tunnel (yes), this machine's name for the server, the
+admin user's sudo password (hidden; Enter generates one), and veyq's own questions, where TLS starts on **Let's Encrypt
+staging**. Then, each step said as it comes and every one that changes something outside the repository asked first:
+
+1. **veyq-server's newest release, verified** before Copier reads it: its manifest's signature under veyq-server's
+   release workflow, the commit it names checked out, and that tree's sha256 compared with the manifest's. Copier
+   renders it into the repository; `.copier-answers.yml` names veyq-server's public repository, for `copier update`.
+2. **The server's secrets**, once: the admin password, its salt and Argo CD's read-only deploy key, encrypted with
+   `sops` to your age key. A file that exists is never made again.
+3. **The host key**: `init` shows the server's fingerprint — compare it with your provider's console — and pins it in
+   `ansible/known_hosts` on your yes. A rebuilt server presents a new key; `init` shows both and asks again.
+4. **veyq's half** in `gitops/apps/veyq`, listed for the root Application.
+5. **The deploy key** at GitHub with `gh` on your yes, read-only; otherwise `init` shows it with the page it goes on and
+   waits.
+6. **DNS**: A records for veyq's domain and the store's host, pointing at the server (no AAAA: the cluster is IPv4 only).
+   `init` checks they resolve, and waits.
+7. **Commit and push** on your yes, then a check that the remote's `gitops/` is this checkout's — Argo CD's first sync
+   takes the remote's copy over what the bootstrap applied.
+8. **The bootstrap**, on your yes: as root it creates the admin user, switches root's and password logins off, sets the
+   host firewall and installs k3s and Argo CD. Skipped when the admin user logs in already.
+9. **Connect** this machine (what `veyqctl connect` does at any time): a block in `~/.ssh/config` — `ssh -N <name>`
+   opens the tunnel to the cluster's API, Argo CD (`https://localhost:18443`) and veyq's administration
+   (`http://localhost:18081`) — and the kubeconfig context `<name>`, never shadowing a `Host` of your own.
+10. **The wait**, through a tunnel `init` opens and closes, until Argo CD reports every application Synced and Healthy.
+    Then it says how to read Argo CD's first password and where to create the Server Owner.
+
+Every answer is in `veyq-setup.json`, committed with the rest; the age key is the one thing the repository does not
+hold. **Keep it in your password manager**: with it and the repository, `veyqctl init` sets a lost server up again — on
+a fresh one it pins the new host key on your yes, bootstraps and connects, asking nothing else.
+
+**Once everything runs on staging**, switch to production — its certificates are the browser-trusted ones:
+
+```sh
+veyqctl tls production
+```
+
+It commits the values' new directory (and `veyq-setup.json`'s answer) and pushes on your yes, waits until Argo CD has
+applied the Issuer, deletes the certificates staging issued on your yes — this cannot be undone, and until the new
+ones are issued those hosts serve none — and waits until every production certificate is Ready.
 
 ## Write the instance: `init`
 
@@ -254,5 +312,12 @@ by hand on 2026-11-10, against the published releases:
 - `upgrade` of a repository written at 0.2480 to 1.0 — major 1 entered from its entry — as one commit of the three
   files.
 
-Not yet run: an `upgrade` of a live instance that Argo CD then applies (the next release's), `--secrets external-secrets` and
+The server path's self-test drives the whole run — every confirmation's no stopping before its step, and a manifest
+that does not verify, a tree that differs, an unconfirmed host key and a remote that differs after the push each
+changing nothing outside the repository. Against the real programs, without a server: Copier rendering veyq-server from
+a checked-out commit, `sops` and `ssh-keygen` writing and reading the server's secrets, and the tree's sha256 equal to
+veyq-server's own `scripts/tree_hash.py`.
+
+Not yet run: the server path on a real server (veyq-server has no release yet), `tls production` on a real cluster, an
+`upgrade` of a live instance that Argo CD then applies (the next release's), `--secrets external-secrets` and
 `sealed-secrets` against a cluster that has them, and Flux.
