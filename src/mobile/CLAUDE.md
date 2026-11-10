@@ -17,13 +17,13 @@ A Gradle build of its own, run through its own wrapper.
   relaunches the installed debug app in a booted simulator, signed in as the seeded dev principal. `VeyqShare/` is the
   iOS share extension (ADR 0126), embedded in the app: it compiles every file of `Veyq/` but `VeyqApp.swift` (the
   entry point) and `DevLogin.swift`, under its own `ShareViewController`.
-- `bridge/` — the core as one shared library, `libveyq.so`, for Linux and later Windows (ADR 0127 decision 5; what was
-  built and measured is ADR 0123's Consequences, the bridge). `bridge.h` is its whole C surface, six functions written
+- `bridge/` — the core as one shared library, `libveyq.so` on Linux and `veyq.dll` on Windows (ADR 0127 decision 5;
+  what was built and measured is ADR 0123's Consequences, the bridge). `bridge.h` is its whole C surface, six functions written
   by hand and held to Kotlin/Native's own header by `BridgeHeaderTest`. `commonMain` holds the wire (`Wire.kt`: the
   `Call`s, the `HostRequest`s, what the core sends), the dispatch onto the core's models (`Bridge.kt`) and the host's
   device store (`Host.kt`). `bridgedMain/Exports.kt` holds the six `@CName` functions (`bridgedMain` is what Linux and Windows
   share, in `core` as here; each target's own set brings only its Ktor engine). `jvmMain/Bindings.kt` writes
-  `bridge.rs` (`:bridge:generateBindings`, into `build/generated/bridge`, never committed). `smoke/smoke.c` is a C
+  `bridge.rs` and `Bridge.g.cs` (`:bridge:generateBindings`, into `build/generated/bridge`, never committed). `smoke/smoke.c` is a C
   host built against `bridge.h` alone. A rule found in the dispatch is a defect to move into the core; a field the UI
   does not draw, and any key, seal or token, is never part of a state the bridge sends (`SecretFreeSchemaTest`).
 - `linux/` — the Linux app (ADR 0127 decision 4): a Cargo package in Rust (gtk4-rs, libadwaita-rs), with `Cargo.lock`
@@ -34,21 +34,37 @@ A Gradle build of its own, run through its own wrapper.
   library from `VEYQ_LIB_DIR`, both set by `run.py`. `Containerfile` (Fedora 44 by digest) is its build and run
   environment. `run.py` is its one entry point (§ Prove your work); `run.py lock` is the one writer of `Cargo.lock`.
   Crates are held to the no-deprecated rule by reading each one's repository: cargo has no deprecation gate.
+- `windows/` — the Windows app (ADR 0127 decision 5; ADR 0123's Consequences, the Windows app): .NET 10 projects in C#.
+  `Veyq.Bridge` (net10.0, no Windows API) is the safe wrapper over the six functions, the host's device store under
+  `%LOCALAPPDATA%\veyq\`, and the hand-off to the UI thread; `Veyq.Bridge.Tests` its round trip and the real DLL.
+  `Veyq` is the app (WinUI 3, unpackaged, self-contained, `win-x64`; its assembly `Veyq.App`): `App.xaml.cs`,
+  `MainWindow`, one class per screen (`SignInView`, `ShellView` with Search, `HomeView`, `PotPage`), `Act` (sends a
+  call, logs its answer), `Words`/`MrtWords` and `SaidNotice` (the words), `Said` (money, days and sizes the system's
+  way), `CreateAction`, `Log` (`%LOCALAPPDATA%\veyq\log.txt`), and in a debug build `DevLogin` and `DebugEnv`
+  (`VEYQ_THEME`, `VEYQ_LANGUAGE`). `Veyq.Tests` holds the words and formats against the app's `.pri`. `Veyq.Drive` is the
+  pass's driver on the Windows host (UI Automation; its steps in `Program.cs`). Packages are central and exact
+  (`Directory.Packages.props`), each project's `packages.lock.json` committed and every restore `--locked-mode`,
+  nuget.org the only source (`nuget.config`), the SDK in `global.json`. A project must set no property that implies an
+  SDK-versioned package (trimming, AOT, `IsAotCompatible`). `run.py` is its one entry point (§ Prove your work).
 
 - `words/` — every word the apps show (ADR 0127 decision 3): `words.json` (English and German, `{n}` / `{n:int}`
   placeholders, plurals by CLDR category) is the one source; `generate_words.py` writes the core's `Msg` keys
   (`:core:generateWords`), Android's resources and `Context.words` (`:android:generateWords`; the app has no
   `strings.xml` of its own) and the Apple String Catalog `Words` (the project's `preGenCommand` and pre-build step;
-  `say(msg, …)`, `say(notice)`) and the Linux app's gettext catalogs with `words.rs` (`--gettext`, which `run.py build`
-  runs; `build.rs` compiles each `.po` with `msgfmt --check`). A word is added there, never in a platform; what the
+  `say(msg, …)`, `say(notice)`), the Linux app's gettext catalogs with `words.rs` (`--gettext`, which `run.py build`
+  runs; `build.rs` compiles each `.po` with `msgfmt --check`) and the Windows app's `.resw` catalogs with `Words.g.cs`
+  (`--resw`, which `windows/run.py build` runs; a plural is one entry per CLDR category, `key#one`, and each catalog
+  names its `_language`). A word is added there, never in a platform; what the
   core raises is a `Notice` (`words/Notices.kt`). `apple_en` / `apple_de` give a key Apple's own form (Title Case on a
   button or menu entry). `scripts/validate_mobile_words.py` holds it: no `strings.xml`, no `String(localized:`, no
-  English literal handed to a SwiftUI view or to a GTK widget's shown text, no `.po` under `linux/`. A test of the
+  English literal handed to a SwiftUI view, to a GTK widget's shown text or to a WinUI control's (C# or XAML), no `.po`
+  under `linux/`, no `.resw` under `windows/`. A test of the
   words asserts a language whose words differ from the fallback: English is gettext's `msgid`, so an English-only run
   passes over a catalog that never loaded.
 - `theme/generate_theme.py` — the web's colour roles and brand mark for every platform (ADR 0123 decision 7): the
   builds run it (`:core:generateTheme`, `:android:generateThemeRes`, the Apple project's pre-build step, and `--gtk`,
-  libadwaita's `style.css` and the icon, in `run.py build`); its output is never committed. A colour or the logo changes in `src/web/`, never here.
+  libadwaita's `style.css` and the icon, in `run.py build`; `--winui`, WinUI's `Theme.xaml`, in `windows/run.py
+  build`); its output is never committed. A colour or the logo changes in `src/web/`, never here.
 
 ## Prove your work
 
@@ -72,7 +88,7 @@ A Gradle build of its own, run through its own wrapper.
     to `build/generated/bridge/samples`, which the Rust test reads.
   - `SecretFreeSchemaTest` checks that nothing the core sends has a field named like a key, seal, token, secret or
     password, and that no bytes travel in JSON.
-  - `BridgeHeaderTest` holds `bridge.h` against Kotlin/Native's header.
+  - `BridgeHeaderTest` holds `bridge.h` against Kotlin/Native's headers, Linux's and mingw's.
 
   A root or sealed variant added to the wire is in the samples by derivation. With `VEYQ_LIVE` set,
   `--tests '*LiveBridgeTest*'` signs in through a `Call` and reads the shell, Home's groups, Search and every seeded
@@ -95,6 +111,30 @@ A Gradle build of its own, run through its own wrapper.
   principal, and `run --devlogin` signs the debug build in through its own sign-in. The backend picks the tenant from
   the Host, so the container keeps the origin's name: socat forwards it to the host. The principal comes from
   `.run/.env`, which a worktree does not have: give `VEYQ_ENV_FILE=<main checkout>/.run/.env`.
+- `python3 windows/run.py <verb>` — everything Windows; from the repository root `./gradlew windows:coreTest`,
+  `windows:bridge`, `windows:build` and `windows:run`. The Kotlin is cross-compiled here; what needs Windows runs on the
+  Windows host over ssh (`VEYQ_WINDOWS_SSH`, by default the test VM of native-apps § Open), into `F:\veyq\` there,
+  where the tree goes as a tar of this working tree. Each verb is in `run.py`'s docstring:
+  - `test [--tests <pattern>]` runs the core's Windows test binary there: the common suite, the conformance over
+    libsodium, `NormalizationTest`, `WallClockTest` (the host's zone must be W. Europe Standard Time). Any change to the
+    suite, to `bridgedMain` or to a C library's build runs it.
+  - `bridge` links `veyq.dll`, holds its export table to `bridge.h`'s six and `veyq_symbols` (`objdump -p`, here) and
+    runs the C smoke there.
+  - `build` generates the C#, the words and the theme, gates every NuGet package (`dotnet package list --deprecated`
+    and `--vulnerable`, here), runs `Veyq.Bridge.Tests` here, and there builds the app and `Veyq.Drive` and runs
+    `Veyq.Bridge.Tests` and `Veyq.Tests` as x64 processes.
+  - `run [--width W --height H] [--devlogin]` builds the app, starts it in the host's logged-on session and holds the
+    tunnel to the backend until Ctrl+C (run it in the background). `VEYQ_LANGUAGE` (`en-US`, `de-DE`) and `VEYQ_THEME`
+    (`light`, `dark`) set a debug build's.
+  - `drive <step>...` prints the app's log, then runs `Veyq.Drive`'s steps (`tree`, `invoke <id>`, `select <id>`,
+    `set <id> <text>`, `key`, `size`, `maximize`, `wait`, `sleep`, `shot <name>.png`) and prints what each saw. Read the
+    log and the tree first; a `shot` (to `build/windows/shots/`) is the proof, not the probe.
+  - `register` registers the scheduled tasks `veyq-app` and `veyq-drive` once per Windows host. It is the host owner's
+    step: a persistent change on a machine.
+
+  With `VEYQ_LIVE=http://veyq.localhost:8080`, `test --tests '*LiveSignInTest*'` and `bridge` sign in over WinHTTP, and
+  `run --devlogin` signs the debug build in through its own sign-in; the principal comes from `VEYQ_ENV_FILE` as for
+  Linux. A pass starts from a state it sets (`select home`), never the one the app reopened.
 - `VEYQ_LIVE=http://veyq.localhost:8080 ./gradlew :core:jvmTest :core:macosArm64Test --tests '*LiveSignInTest*'` —
   signs in to a running dev instance as the seeded principal on both paths and reads its spaces, objects and
   favorites (`./gradlew backend:seed` at the repository root first). With `VEYQ_LIVE_MEMBER=1` as well,
@@ -214,7 +254,12 @@ decision 9): before building a control, ask what the platform's own apps do, and
 floating button built by hand; `scripts/validate_mobile_platform_guidelines.py` holds that. Row actions: an overflow menu on Android, swipe actions and a context
 menu on iOS. On Linux the GNOME HIG's way, as libadwaita draws it: the creating action is `create_action(…)` /
 `create_menu(…)` (`linux/src/create_action.rs`) in a header bar or the sidebar, `list-add-symbolic`, never a button
-overlaid on a view (GNOME has no floating action button); the same guard holds it.
+overlaid on a view (GNOME has no floating action button); the same guard holds it. On Windows Fluent's way, as
+Windows' own Settings and Explorer draw it: the creating action is New, the first command of the content's
+`CommandBar`, built only in `windows/Veyq/CreateAction.cs`, never a button laid over a view; the same guard holds it.
+WinUI's own chrome (the pane's button, back, the scroll bar) speaks the system's language whatever the app's words
+are, as on every Windows app; a built-in item that shows a word of its own (`NavigationView`'s Settings) is replaced
+by one carrying the catalog's.
 
 A node's header is core's, for every kind (ADR 0123, the web's `NodePage` + `NodeHeader`): core's `navigation/NodeHeader.kt`
 plans it (`NodeHeaderTest`), each app's `NodeHeaderActions` draws it and owns every dialog behind it, and a kind only
@@ -315,7 +360,7 @@ first in each of its scrolls — `LocalNodeHero.current(inset)` (Android) / `Nod
   (`:core:compileNativeMainKotlinMetadata`, what the IDE and `:bridge` read) are red. Gradle prints "CInterop
   Commonization Disabled" at configure time.
 - A C string API reads to the first NUL: utf8proc's `utf8proc_NFC` cut a name at an embedded U+0000, so
-  `Nfc.linux.kt` calls `utf8proc_map` with the length.
+  `Nfc.bridged.kt` calls `utf8proc_map` with the length.
 - `libveyq.so` needs `libcrypt.so.1` (Ktor's statically linked libcurl), which Fedora 44 has only with
   `libxcrypt-compat`. The `Containerfile` installs it; a Flatpak runtime must carry it.
 - The bridge library is linked with `-Wl,--exclude-libs,ALL`. Without it, libcurl's, OpenSSL's, libsodium's and
@@ -343,4 +388,52 @@ first in each of its scrolls — `LocalNodeHero.current(inset)` (Android) / `Nod
 - A new dependency or target owes the verification-metadata write from an empty Gradle home
   (`GRADLE_USER_HOME=<empty dir> ./gradlew --write-verification-metadata sha256 <the tasks that resolve it>`). The
   Linux targets' warm write missed 90 lines of parent POMs and BOMs that a fresh runner fetches. A new module that
-  resolves nothing new still runs it once, as evidence that the file stays unchanged.
+  resolves nothing new still runs it once, as evidence that the file stays unchanged. Seed that empty home with the
+  wrapper's Gradle distribution alone if its download times out: it is no dependency. After any build-script edit run
+  one task with `--warning-mode all`: the build says only "deprecated features were used" (`val bridgedMain by
+  getting` was one, for Gradle 10).
+- What Linux and Windows share is `bridgedMain` (`bridgedTest`), between `nativeMain` and `linuxMain`/`mingwMain`, in
+  `core` and `:bridge` alike: what was `linuxMain`'s (`nfc`/`nfkd`, the wall clock, `Exports.kt`) lives there, and each
+  target's own set brings only its Ktor engine. Its metadata compiles (`:core:compileBridgedMainKotlinMetadata`) are the
+  check that the interop reaches it, not the per-target compiles.
+- On mingw, libsodium's `configure` finds no `_xgetbv` under clang without `-mxsave`, so it never reads XCR0, finds no
+  AVX on any CPU and refuses AES-256-GCM at runtime — silently, until the conformance test. `build_libsodium.py` adds
+  the flag and fails unless `config.log` says the intrinsic was found (ADR 0123's Consequences, the core on Windows).
+  Kotlin/Native's LLVM has no `llvm-ranlib`: `RANLIB` is `llvm-ar s`.
+- A cinterop task packs the static library into its klib without taking it as an input: a rebuilt `libsodium.a` left
+  the old one inside, and the test binary red, until `--rerun` (measured 2026-11-10). `core/build.gradle.kts`'s
+  `libraryInput` declares each `sodium` and `utf8proc` library its interop's input; a new interop over a static library
+  does the same.
+- `veyq.dll` exports only `bridge.h`'s six and `veyq_symbols` because Kotlin/Native's own `veyq.def` is handed to the
+  linker; without it lld exports every symbol of the link (185, measured 2026-11-10), and `--exclude-all-symbols`
+  removes the six too. `run.py bridge` is red on anything else. The smoke's import library is written from that `.def`
+  with a `LIBRARY veyq.dll` line added, else the exe imports from a DLL with an empty name.
+- The app's assembly is `Veyq.App`, never `veyq`: a .NET app's own assembly is `<AssemblyName>.dll` beside its exe, and
+  as `veyq` it overwrote the core's native `veyq.dll` in the build output. The app then found no `veyq_init` and died in
+  `combase.dll` (`0xC000027B`) with nothing in its log (measured 2026-11-10).
+- A property that implies an SDK package makes the lock file the SDK's: `IsAotCompatible` added
+  `Microsoft.NET.ILLink.Tasks` at the SDK's runtime version, and the VM's locked restore under another SDK was red
+  (NU1004). The first locked restore of a new C# project runs on both hosts.
+- An ssh command on Windows runs in session 0, which has no desktop: an app started from it crashes at once
+  (`0xC000027B`, WER `80070005`). The app and `Veyq.Drive` start in the logged-on session through the scheduled tasks
+  `register` sets up. Over ssh `$env:USERDOMAIN` reads `WORKGROUP`, which maps to no SID (`0x80070534`), so `register`
+  names the account by `[Security.Principal.WindowsIdentity]::GetCurrent().Name`.
+- `run.py` sends every PowerShell script as `-EncodedCommand` (UTF-16LE, base64), so nothing is quoted through cmd.exe,
+  and reads what PowerShell prints as the console's code page, CP850 on the German VM. `dotnet` writes UTF-8 there, so
+  `run.py` sets its words English (`DOTNET_CLI_UI_LANGUAGE`).
+- Windows resolves no `*.localhost`. The Windows host reaches the Mac's dev backend through `ssh -R`, and its `hosts`
+  file maps `veyq.localhost` and every seeded tenant's name to `127.0.0.1`; the backend picks the tenant from the Host
+  header, which WinHTTP sends from the URL. A new seeded tenant needs its line there.
+- `StrFormatByteSizeEx` ignores the thread's culture (`SetThreadUILanguage` and `SetThreadLocale` changed nothing,
+  measured 2026-11-10): a size is in the user's culture only, and a test asserts it in the host's.
+- `VEYQ_THEME` sets the application's theme, not only the window's: a brush looked up in code is the application
+  theme's, and under the window's dark alone a row's caption stayed light's, dark on dark (measured 2026-11-11).
+- UI Automation, as the driver sees it: a `NavigationViewItem` has no Invoke, only SelectionItem, so a pane item is
+  chosen by its selection (`SelectionChanged`); a chosen Search hit arrives in `QuerySubmitted` as its row's content,
+  not the `ListViewItem` (both carry the hit as `Tag`); a flyout, a menu and a suggestion list are top-level windows
+  of their own, which `Veyq.Drive` searches too.
+- A width-capped column straight in a `ScrollViewer` sits off centre and clips (the Pot's amounts were cut off, measured
+  2026-11-11): a list fills the width, a capped column sits inside a stretching `Grid`. Under LeftMinimal the pane's
+  button and back lie over the content's top left, so the title takes a left inset there (`DisplayModeChanged`). Two
+  defects of this kind showed only in a screenshot, never in the tree: take each form's shot early.
+- A XAML comment may not contain `--` (WMC9997), and generated C# carries its own `#nullable enable` (CS8669).

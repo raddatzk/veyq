@@ -2,10 +2,12 @@
 - Status: Accepted
 - Built: partly — decisions 1 to 3 for Android and Apple (the screens' logic is the core's, the words one catalog);
   decision 4 for Linux's first slice (sign-in, the shell, Home, a Pot read only, Search), run in a Fedora 44 container
-  under GTK's Broadway backend, not yet in a desktop session or as a Flatpak; decision 5's bridge, which the Linux app
-  uses, but not its Windows half (`mingwX64`, the C# types, WinUI). Measured 2026-11-10 (`src/mobile/linux/run.py test`,
-  `bridge` and `build`, `./gradlew :bridge:jvmTest`, a browser pass): ADR 0123's Consequences, the core on Linux, the
-  bridge and the Linux app
+  under GTK's Broadway backend, not yet in a desktop session or as a Flatpak; decision 5 for Windows' first slice, the
+  same one: the core as a `mingwX64` DLL behind the same bridge, its C# types generated, a WinUI 3 app run unpackaged on
+  an ARM64 Windows 11 VM under x64 emulation, not yet on an x64 PC or as an MSIX. Measured 2026-11-10 and 2026-11-11
+  (`src/mobile/linux/run.py` and `src/mobile/windows/run.py`, each `test`, `bridge` and `build`, `./gradlew
+  :bridge:jvmTest`, a browser pass on Linux, a UI Automation pass on Windows): ADR 0123's Consequences, the core on
+  Linux and on Windows, the bridge, the Linux app and the Windows app
 - Date: 2026-11-09 (decision 4 revised 2026-11-10: Linux in Rust over the native core, not on the JVM)
 - Model: [native-apps](../crosscutting/native-apps.md)
 
@@ -85,16 +87,26 @@ four times.
   what the apps' live passes carried alone so far.
 - ADR 0123 decision 1's targets grow by `mingwX64`, `linuxX64` and `linuxArm64`; the JVM target serves Android alone.
   "UI is never shared" stands. The repository gains Rust, for the Linux UI alone.
-- The Windows app cannot be built on the developer's Mac: its slice needs a Windows host, and the apps' CI job (still
-  open) a Windows runner.
+- The Windows app cannot be built on the developer's Mac: everything Kotlin cross-compiles there, and the C# without a
+  Windows API builds and tests there, but the WinUI build, the core's tests and the app run on a Windows host
+  (`src/mobile/windows/run.py` drives one over ssh), and the apps' CI job (still open) needs a Windows runner.
 - **The bridge carries no key, so a platform behind it does not hold the device trust as decision 1 has a platform hold
   the secure store** (found building it, 2026-11-10). `DeviceKeys`' calls carry the Master Key to seal and the refresh
   token to keep; forwarded to the host, both would cross the bridge. The Linux app therefore keeps no device trust yet,
   and every start signs in. Its Secret Service is reached by the core itself — libsecret through cinterop, the key
   never leaving the library — or the bridge's rule is revisited; never a host request that carries a key. Windows'
-  DPAPI meets the same choice.
+  DPAPI meets the same choice, and its app keeps no device trust either.
+- **Every primitive on Windows is libsodium's, AES-256-GCM among them** (owner 2026-11-10: one source per platform, as
+  Apple's and Linux's). libsodium's AES-GCM needs AES-NI, PCLMUL and AVX. An x64 CPU without AVX, and a Windows-on-ARM
+  PC whose x64 emulation does not show AVX, are refused at start, as a CPU without AES instructions is on Linux. CNG for
+  AES-GCM alone was rejected: two sources of primitives on one platform. What looked at first like emulation lacking AVX
+  was our build's defect: libsodium's `configure` reads XCR0 on Windows x64 only through the `_xgetbv` intrinsic, which
+  clang accepts only under `-mxsave`, so without the flag no CPU had AVX, an x64 PC's neither (measured 2026-11-10; ADR
+  0123's Consequences, the core on Windows).
 - The repository's Rust (`src/mobile/linux/`) is held to the no-deprecated rule by reading: cargo has no deprecation
   gate, as the JavaScript install has.
+  The repository's C# (`src/mobile/windows/`) has one: `run.py build` is red on any NuGet package `dotnet package list`
+  calls deprecated or vulnerable, transitive ones included.
 - What is still open per platform is [native-apps](../crosscutting/native-apps.md)' to keep.
 
 ## Alternatives considered

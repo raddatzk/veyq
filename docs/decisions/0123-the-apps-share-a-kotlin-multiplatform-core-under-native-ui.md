@@ -510,8 +510,48 @@ implementation exists but what holds it to the first.
   - `./gradlew :core:jvmTest :core:macosArm64Test` stays green, unchanged.
   - The verification metadata for the new targets was written from an empty Gradle home. That write added 90 lines of
     parent POMs and BOMs that a warm cache never fetches.
-- **The bridge** (ADR 0127 decision 5, its Linux half; `src/mobile/bridge/`). The core reaches a platform outside the JVM
-  and Apple as one shared library, `libveyq.so`. Its whole surface is the six C functions of the hand-written
+- **The core on Windows** (ADR 0127 decision 5, 2026-11-10). `core` and `:bridge` gain `mingwX64`, cross-compiled from
+  the developer's Mac like Linux's targets; no Windows host builds Kotlin. What Linux and Windows share moved from
+  `linuxMain` to the intermediate source set `bridgedMain` (`bridgedTest` beside it): `nfc`/`nfkd` over utf8proc,
+  `localWallClock` over kotlinx-datetime, their tests and the live sign-in (`BridgedLiveSignInTest`, its engine a test
+  `expect`). `linuxMain` keeps only the Curl engine; `mingwMain` holds Ktor's WinHttp engine. Kotlin 2.4.21 extends the
+  default hierarchy as `applyHierarchyTemplate(KotlinHierarchyTemplate.default) { group("native") { group("bridged") {
+  group("linux"); group("mingw") } } }` (experimental, opted in; read from the plugin's sources), in `:core` and
+  `:bridge` alike, and the commonized interop reached `bridgedMain` with no further flag.
+  - **libsodium and utf8proc for mingw** are built by the same two scripts with Kotlin/Native's own clang against its
+    mingw toolchain, which `core/konan_toolchain.py` reads from `konan.properties`. That LLVM has no `llvm-ranlib`, so
+    `RANLIB` is `llvm-ar s`; libtool names the library `libsodium.lib`, copied as `libsodium.a`. Both are compiled with
+    their `*_STATIC` define, so their headers mark nothing `dllexport`.
+  - **libsodium's mingw `CFLAGS` carry `-mxsave`.** libsodium reads XCR0 only through `HAVE__XGETBV` or `HAVE_AVX_ASM`.
+    Its `configure` refuses the second for Windows x64 by design, and the first failed under clang (`'__builtin_ia32_xgetbv'
+    needs target feature xsave`), so `sodium_runtime_has_avx()` was 0 on every CPU and AES-256-GCM refused to run —
+    silently, until the conformance test. The flag only lets the compiler accept the intrinsic and emits no XSAVE of its
+    own; libsodium calls it only after CPUID said OSXSAVE. `build_libsodium.py` fails unless `config.log` says the
+    intrinsic was found (`checking if _xgetbv() is available`, then `result: yes`). Linux x86-64 does not meet the defect:
+    there `configure` assembles XGETBV itself (`checking whether we can assemble AVX opcodes... yes`, measured 2026-11-10
+    with `build_libsodium.py`'s flags).
+  - **HTTP is Ktor's WinHttp engine.** TLS is Schannel's and the CA store the system's, so the DLL carries no OpenSSL.
+    WinHTTP takes its proxy from `netsh winhttp`, not from the user's browser settings (remembered).
+  - **A CPU without AVX is refused at start** (owner 2026-11-10; ADR 0127's Consequences): an x64 CPU without it, and a
+    Windows-on-ARM PC whose x64 emulation (Prism) hides it. Prism shows AVX to an x64 app by default — measured on the
+    VM: CPUID leaf 1 AVX and OSXSAVE, `xgetbv(0)` = 7, `IsProcessorFeaturePresent(PF_AVX)` 1. That this default came
+    with Prism's October 2025 update, and that a user can hide it per app, is remembered.
+
+  Measured 2026-11-10, the binary x64 on an ARM64 Windows 11 VM under x64 emulation (no x64 PC was measured):
+  - `python3 src/mobile/windows/run.py test` runs `:core:linkDebugTestMingwX64`'s binary there with zero failures: 176
+    tests, `libsodium conformance: 172 cases`, `NormalizationTest` over all 20,034 lines, `WallClockTest` in W. Europe
+    Standard Time (kotlinx-datetime names it Europe/Berlin).
+  - A stub `nfc` turns it red (31,233 failures); an AEAD off by one byte is caught (`aWrongPrimitiveIsCaught`). Without
+    `-mxsave` the build script refuses, naming `config.log`; with that check removed as well, both conformance tests
+    fail at start (`this CPU has no AES-GCM support`).
+  - With `VEYQ_LIVE=http://veyq.localhost:8080` and `--tests '*LiveSignInTest*'` it signs in over WinHTTP and opens both
+    seeded tenants' personal scopes.
+  - `:core:compileBridgedMainKotlinMetadata`, `:core:compileNativeMainKotlinMetadata` and
+    `:bridge:compileBridgedMainKotlinMetadata` are green; `./gradlew :core:jvmTest :core:macosArm64Test` and
+    `python3 src/mobile/linux/run.py test` stay green, Linux's source sets moved.
+  - The verification metadata for the new target was written from an empty Gradle home and added 288 lines.
+- **The bridge** (ADR 0127 decision 5; `src/mobile/bridge/`). The core reaches a platform outside the JVM
+  and Apple as one shared library, `libveyq.so` on Linux and `veyq.dll` on Windows. Its whole surface is the six C functions of the hand-written
   `bridge.h`: `veyq_init`, `veyq_call`, `veyq_watch`, `veyq_unwatch`, `veyq_reply` and `veyq_shutdown`. Kotlin/Native's
   export of the whole core (35.6 MB, a 27,971-line header of handles and function tables) is what ADR 0127 rejects.
   `:bridge` depends on `:core` as an implementation dependency, so it exports only its own `@CName` functions.
@@ -547,12 +587,34 @@ implementation exists but what holds it to the first.
   - With `VEYQ_LIVE` set, `LiveBridgeTest` holds the shell, Home's groups, `ShellShown`, Search and three seeded Pots
     over the real core. That is the only proof of the shell's, Search's and the Pot's dispatch, because
     `ShellModel` and `PotModel` take a concrete `TenantSession` that no played door builds (settled 2026-11-10: each
-    call is one line onto a model the core's own tests hold; a door of their own is revisited with Windows).
+    call is one line onto a model the core's own tests hold; Windows added no door, since its app calls the same
+    `Bridge.kt`).
   - `python3 src/mobile/linux/run.py bridge` compares `nm -D` in Fedora 44 with exactly that set (a dropped flag is
     red). It also runs `bridge/smoke/smoke.c`, built against `bridge.h` alone, which starts the core, watches the
     gate and answers the store from its own thread; with `VEYQ_LIVE` it signs in over the library's own libcurl.
   - The Rust half: `run.py build`'s `cargo test` reads every sample back field for field through `reserialize`, so a
     type the host lacks or a field it drops is red.
+  - **Its Windows half** (2026-11-10): `veyq.dll`, with `bridge.h`, the wire and the dispatch unchanged. Its export
+    table is exactly the six and `veyq_symbols` because Kotlin/Native's own `veyq.def` is handed to the linker: with a
+    `.def`, lld exports what it names; without one it exports every symbol of the link, since nothing is marked
+    `dllexport`, the six included. On Windows an export does not interpose (a DLL's imports bind by module), so this is
+    hygiene, not the reason it is on Linux. The DLL imports `ADVAPI32`, `KERNEL32`, `msvcrt` and `WINHTTP` alone:
+    nothing to install. `BridgeHeaderTest` holds `bridge.h` against the mingw header too.
+  - **The C# types are generated beside the Rust ones.** `Bindings.kt` writes `Bridge.g.cs` over the same walk: a
+    `record` per class, an `abstract record` with `[JsonPolymorphic]` per sealed class (its variants nested in it, every
+    type named from `global::`), a source-generated `JsonSerializerContext` over every root, and the six functions as
+    `[LibraryImport("veyq")]`. A property is its serial name; a C# keyword is Pascal-cased, because an `@ref` property
+    breaks System.Text.Json's source generator (CS1525), and each variant is registered under its own
+    `TypeInfoPropertyName`, because the generator names metadata by the simple name (SYSLIB1031). `src/mobile/windows/
+    Veyq.Bridge` (net10.0, no Windows API) is the safe wrapper; it hands every answer to the UI thread through a
+    `SynchronizationContext`, since WinUI's `DispatcherQueue` is a Windows API.
+  - `python3 src/mobile/windows/run.py bridge` reads the export table (`objdump -p`): 7 exports. Measured 2026-11-10
+    without the `.def`: 185 (winpthreads', the unwinder's, iconv's — the `*_STATIC` defines had already removed
+    libsodium's and utf8proc's from the first link's 541), red; with lld's `--exclude-all-symbols` alone: none, the six
+    gone too. It then runs the smoke, cross-compiled for mingw against `bridge.h` alone, on the Windows host, and with
+    `VEYQ_LIVE` signs in over WinHTTP.
+  - The C# half: `run.py build`'s `Veyq.Bridge.Tests` reads every sample back on the Mac and, x64, on the Windows host
+    (a writer dropping one field is red), and its `CoreTest` drives the real DLL there as the smoke does.
 - **The Linux app** (ADR 0127 decision 4; `src/mobile/linux/`). A Cargo package, a library and the app, built and run
   in the pinned Fedora 44 `Containerfile` by `run.py`.
   - **Crates and libraries.** gtk4-rs 0.11 and libadwaita-rs 0.9 with feature `v1_9`, since Fedora 44 carries GTK
@@ -587,6 +649,51 @@ implementation exists but what holds it to the first.
     a folder, a favorite, Search and its hit. A Pot's entries and overview matched what the core reads for it live
     (`LiveBridgeTest`: Amsterdam's 5 entries, Anna owed 67.34, Ben owing it). The app's stderr held no GTK or
     libadwaita warning.
+- **The Windows app** (ADR 0127 decision 5; `src/mobile/windows/`). WinUI 3 in C# on .NET 10, `win-x64`, unpackaged
+  and self-contained, the Windows App SDK included, so its build output runs where it is copied. Built 2026-11-10/11.
+  - **Packages.** `Microsoft.WindowsAppSDK.WinUI` and `.Foundation` 2.6.5 and `Microsoft.Windows.SDK.BuildTools`, not the
+    metapackage (which pulls AI, ML, Search and Widgets); MSTest's `TestFramework` and `TestAdapter` 4.5.2 under
+    Microsoft.Testing.Platform, not the `MSTest` metapackage. Versions are central and exact (`Directory.Packages.props`),
+    the lock files committed and every restore `--locked-mode`, nuget.org the only source. The no-deprecated rule is a
+    gate here: `run.py build` is red on any package `dotnet package list --deprecated` or `--vulnerable` names,
+    transitive ones included (bitten with `WindowsAzure.Storage` 9.3.3). The .NET SDK alone builds the app — the XAML
+    compiler, makepri and the projection come from the packages; no Visual Studio, no Windows SDK installer (measured
+    2026-11-10, `dotnet build Veyq -r win-x64` on the VM, SDK 10.0.404). The self-contained runtime is the building
+    SDK's, since runtime packs are no package references and so not in the lock file.
+  - **Words.** `generate_words.py --resw` writes a `Resources.resw` per culture and `Words.g.cs`, one method per key.
+    `.resw` has no plurals, so a plural key is one entry per CLDR category (`key#one`), and each catalog names its
+    language (`_language`), whose rule picks the form. MRT Core reads `Veyq.App.pri` beside the exe.
+  - **Theme.** `generate_theme.py --winui` writes `Theme.xaml`: the web's brand roles as the accent, light and dark;
+    everything else is Fluent's. The window has a Mica backdrop and the system's light or dark. No icon yet: it is the
+    packaging's.
+  - **Money, days and sizes** are the system's: `CurrencyFormatter(code)` (any currency with its own symbol), the
+    culture's short date, and `StrFormatByteSizeEx` (Explorer's). Money follows the regional format, the words the
+    display language.
+  - **The first slice**, as Linux's but to Fluent: every start a sign-in; a `NavigationView` whose `PaneDisplayMode`
+    `Auto` decides the form by its own thresholds (Left from 1008 epx, LeftCompact from 641, LeftMinimal below), the
+    switcher its `PaneHeader` (a `DropDownButton` whose menu lists the spaces and each server's tenants), Search its
+    `AutoSuggestBox` (Ctrl+E, Ctrl+F), Home, Favorites, Recent and the applications its items, Settings a footer item;
+    New the first command of the content's `CommandBar` (`CreateAction.cs`); Home one list per group under a
+    `SelectorBar` of filters; a Pot read only (entries, overview, people); `not_built` for the rest. The screens are code
+    (`SignInView.cs`, `ShellView.cs`, `HomeView.cs`, `PotPage.cs`), each drawing the core's state and calling its actions
+    through `Act.Send`. No rule had to move into the core.
+  - **Driven by UI Automation.** `run.py` reaches the Windows host over ssh, and the app and `Veyq.Drive` start in the
+    logged-on session through two scheduled tasks. `Veyq.Drive` prints the window's UIA tree as text, drives it by
+    AutomationId (`home`, `folder:<name>`, `hit:<name>`, …: every interactive control carries one naming what it opens)
+    and takes a screenshot only as proof.
+  - **Guards** (decision 9): the words guard holds windows-literal and windows-resw, the guidelines guard windows-block
+    (the creating action only in `CreateAction.cs`) and windows-floating-button; each rule bitten red and green.
+
+  Measured 2026-11-10 and 2026-11-11, on the ARM64 VM under x64 emulation:
+  - `python3 src/mobile/windows/run.py build` is green: the gate, the round trip, and `Veyq.Tests` — every key in
+    English and German through the app's `.pri` (`1 Objekt`, `2 Objekte`), money and days in de-DE and en-US
+    (`1.234,56 €`, `€1,234.56`), sizes in the VM's de-DE (`1,50 KB`). The generator writing English into the German
+    catalog turns it red.
+  - A pass against the dev instance, driven by `run.py drive` (`run.py run --devlogin`): sign-in, a switch of space and
+    tenant, Home filtered, a folder and back, a favorite, a Pot's entries, overview and people, Search and its hit
+    opened; maximized (Left), 800 wide (LeftCompact) and 500 wide (LeftMinimal); German light and English dark; the
+    sign-in without `--devlogin`. Amsterdam's numbers matched `LiveBridgeTest` (5 entries, Anna owed 67,34 €, Ben
+    owing it). The app's log held no exception.
 - **Not built yet:** every other write (another kind's node), the
   other applications' views behind the bar, a CI job for the apps. The grant check is held by `GrantTrustTest` against a server the test plays — each refusal killed by
   a mutation of the rule it pins, but for three a second rule also holds (a pending or self-naming signer, and a cycle
@@ -594,11 +701,13 @@ implementation exists but what holds it to the first.
   `#scope_succession`, `#invite_key`, `#join_record`, `#join_endorsement`, `#value_key`, `#slug_token` and `#name_folding` on both primitives. `src/mobile/` verifies its dependencies as `src/backend/` does
   (`gradle/verification-metadata.xml`, held by `scripts/validate_build_input_pins.py`): a new dependency or target
   owes a `./gradlew --write-verification-metadata sha256` run over the tasks that resolve it, from an empty Gradle home
-  (`GRADLE_USER_HOME=<empty dir>`): a warm one never fetches the parent POMs and BOMs a fresh runner does.
+  (`GRADLE_USER_HOME=<empty dir>`): a warm one never fetches the parent POMs and BOMs a fresh runner does. The empty
+  home may be seeded with the wrapper's Gradle distribution alone, which is no dependency (its download timed out on the
+  `mingwX64` write).
 - Two implementations of the suite now exist. A change to the suite changes the vectors first, and both the web's
   package and `core` must meet them; `src/mobile/`'s `./gradlew :core:jvmTest :core:macosArm64Test` is the app's half
   of that proof — the same `Conformance` over BouncyCastle and over libsodium —, and `python3 src/mobile/linux/run.py test`
-  its Linux half.
+  and `python3 src/mobile/windows/run.py test` its Linux and Windows halves.
 - **No ready-made Kotlin Multiplatform library covers the Apple side** (checked 2026-11-08): cryptography-kotlin 0.6.0
   has neither ML-KEM nor Argon2id (Argon2 is an open issue there); the libsodium bindings published for Kotlin
   Multiplatform (0.9.5) ship a libsodium from before 1.0.22 and so no ML-KEM. Should one of them cover the suite's

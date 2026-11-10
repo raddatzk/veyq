@@ -366,6 +366,13 @@ A refined CR nails **decisions, not keystrokes**:
   functions in their own `AppModel` and not from any state. Each surfaced only when building the phase after. A
   refine that puts an interface between two sides greps what the existing callers call through it, and what each call
   carries.
+- **A standing change on a machine is an owner step done before the implementation; a question that could stop a phase
+  is its first measurement.** The Windows app's implementer could not register two scheduled tasks on the test VM (its
+  auto-mode classifier refused them as persistence, as the CR foresaw), so a phase's visible proof waited on the owner,
+  while the VM steps the owner had done before (the .NET SDK, `hosts`, power settings) cost nothing. The same CR made
+  "does WinUI build with the .NET SDK alone" a phase's first measurement and stop-and-ask; a five-file probe settled it
+  in one push. A CR that lists candidate means rather than picking one (three for the DLL's export restriction) is
+  cheap where each is one measurement.
 - **`satisfies:` decides where the acceptance criteria land — so decide it, don't inherit it.** A criterion
   that describes a *property with several triggers* belongs to a use-case of its own, not under whichever
   operation's use-case the CR happened to name; the tell that it went wrong is the same refs appearing under
