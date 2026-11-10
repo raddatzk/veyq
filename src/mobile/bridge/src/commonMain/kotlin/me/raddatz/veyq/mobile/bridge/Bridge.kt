@@ -20,11 +20,14 @@ import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 import me.raddatz.veyq.mobile.crypto.Primitives
 import me.raddatz.veyq.mobile.expenses.PotModel
+import me.raddatz.veyq.mobile.AppKinds
+import me.raddatz.veyq.mobile.navigation.ApplicationId
 import me.raddatz.veyq.mobile.navigation.Connection
 import me.raddatz.veyq.mobile.navigation.Hidden
 import me.raddatz.veyq.mobile.navigation.RecentUses
 import me.raddatz.veyq.mobile.navigation.ShellModel
 import me.raddatz.veyq.mobile.navigation.ShellWords
+import me.raddatz.veyq.mobile.navigation.TenantRef
 import me.raddatz.veyq.mobile.navigation.UseKey
 import me.raddatz.veyq.mobile.session.DeviceStore
 import me.raddatz.veyq.mobile.session.SessionModel
@@ -43,11 +46,16 @@ import kotlin.time.ExperimentalTime
  */
 internal class Composition<A : Connection, T : Any>(
     val session: SessionModel<A, T>,
+    /** What this device hides, which the switcher's tenants leave out ([ShellShown.servers]). */
+    val hidden: Hidden,
     /** The models over a tenant just opened; null where there are none (a test's tenant that is no `TenantSession`). */
     val tenant: (T) -> Tenant?,
 )
 
 internal class Tenant(val shell: ShellModel, val pot: () -> PotModel)
+
+/** The tenant open now: its models, and the account and tenant the session opened them for. */
+private class Open<A : Connection>(val models: Tenant, val account: A, val tenant: TenantRef)
 
 /**
  * The dispatch (CR D6): each [Call] is one line onto a model's own function, each [Watched] one model's state flow, and
@@ -60,7 +68,7 @@ internal class Tenant(val shell: ShellModel, val pot: () -> PotModel)
 internal class Bridge<A : Connection, T : Any>(compose: () -> Composition<A, T>) {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
     private val parts = scope.async { compose() }
-    private val tenant = MutableStateFlow<Tenant?>(null)
+    private val tenant = MutableStateFlow<Open<A>?>(null)
     private val ids = AtomicLong(0)
     private val pots = Registry<PotModel>()
     private val watches = Registry<Job>()
@@ -82,7 +90,7 @@ internal class Bridge<A : Connection, T : Any>(compose: () -> Composition<A, T>)
 
     private suspend fun dispatch(call: Call): Answer {
         val session = parts.await().session
-        val shell = tenant.value?.shell
+        val shell = tenant.value?.models?.shell
         return when (call) {
             Call.SessionStart -> opened(session.start())
             is Call.SessionSignIn -> opened(session.signIn(call.server, call.email, call.password, call.secretKey, remember = false))
@@ -102,13 +110,14 @@ internal class Bridge<A : Connection, T : Any>(compose: () -> Composition<A, T>)
             is Call.ShellEnter -> shell?.enter(call.folder).done()
             is Call.ShellFilter -> shell?.filter(call.application).done()
             Call.ShellBack -> shell?.goBack().done()
+            is Call.ShellSelect -> shell?.select(call.tab).done()
             is Call.ShellOpen -> shell?.open(call.ref).done()
             is Call.ShellOpenAtTop -> shell?.openAtTop(call.ref).done()
             is Call.ShellSearch -> shell?.search(call.on).done()
             Call.ShellRefresh -> shell?.refresh().done()
             Call.HomeGroups -> shell?.current?.let { Answer.Groups(it.lists.groups(it.shell)) } ?: noTenant
             is Call.SearchQuery -> shell?.current?.let { Answer.Hits(ShellWords.search(it.lists.objects, call.query)) } ?: noTenant
-            is Call.PotOpen -> tenant.value?.let { t ->
+            is Call.PotOpen -> tenant.value?.models?.let { t ->
                 val id = ids.incrementAndFetch()
                 val pot = t.pot()
                 pots.put(id, pot)
@@ -129,7 +138,7 @@ internal class Bridge<A : Connection, T : Any>(compose: () -> Composition<A, T>)
         if (o == null) return Answer.Done
         val t = parts.await().tenant(o.session) ?: return Answer.Done
         closeTenant()
-        tenant.value = t
+        tenant.value = Open(t, o.account, o.tenant)
         t.shell.load(openLastUsed = true)
         return Answer.Done
     }
@@ -155,8 +164,41 @@ internal class Bridge<A : Connection, T : Any>(compose: () -> Composition<A, T>)
 
     private suspend fun updates(w: Watched): Flow<Update> = when (w) {
         Watched.Session -> parts.await().session.gate.map { Update.Session(it) }
-        Watched.Shell -> tenant.flatMapLatest { it?.shell?.state ?: flowOf(null) }.map { Update.Shell(it) }
+        Watched.Shell -> {
+            val parts = parts.await()
+            tenant.flatMapLatest { open ->
+                open?.models?.shell?.state?.map { s -> Update.Shell(s, s?.let { shown(parts, open, it) }) } ?: flowOf(Update.Shell(null))
+            }
+        }
         is Watched.Pot -> (pots[w.pot]?.state ?: flowOf(null)).map { Update.Pot(w.pot, it) }
+    }
+
+    /** What the shell shows beside [s] (CR D9, [ShellShown]): each field one core function's answer. */
+    private fun shown(parts: Composition<A, T>, open: Open<A>, s: ShellModel.State): ShellShown {
+        val shell = s.shell
+        val lists = s.lists
+        val space = lists.space(shell)
+        return ShellShown(
+            tenant = open.tenant,
+            server = open.account.label,
+            connection = open.account.key,
+            servers = parts.session.accounts.map { c ->
+                ShellShown.ShownServer(c.key, c.label, parts.hidden.visibleTenants(c.key, c.tenants, if (c == open.account) open.tenant else null))
+            },
+            space = space,
+            spaceName = ShellWords.space(space),
+            switcherSubtitle = ShellWords.switcherSubtitle(space, open.tenant.name, open.account.label),
+            spaces = lists.spaces.map { ShellShown.ShownSpace(it, ShellWords.space(it)) },
+            applicationWords = ApplicationId.entries.map { ShellShown.ShownApplication(it, AppKinds.applicationWord(it)) },
+            groups = lists.groups(shell),
+            list = shell.application?.let(lists::applicationList),
+            tabs = shell.barTabs.map { ShellShown.ShownTab(it, AppKinds.tabWord(it, shell.openObject?.kind)) },
+            selectedTab = shell.selectedTab,
+            canGoBack = shell.canGoBack,
+            isHome = shell.isHome,
+            drawerOpensAtStart = shell.drawerOpensAtStart,
+            creates = AppKinds.drawerCreates.map { it.word },
+        )
     }
 
     fun unwatch(id: Long) {
@@ -186,7 +228,7 @@ internal class Bridge<A : Connection, T : Any>(compose: () -> Composition<A, T>)
                 initial = store.read(HIDDEN)?.lines()?.filter { it.isNotEmpty() }?.toSet().orEmpty(),
             )
             val device = ThisDevice(store, NoDeviceKeys, config.device, primitives)
-            Composition(SessionModel.accounts(primitives, device, client, hidden, recent)) { t ->
+            Composition(SessionModel.accounts(primitives, device, client, hidden, recent), hidden) { t ->
                 Tenant(ShellModel(t, hidden, recent, now)) { PotModel(t, now) }
             }
         }

@@ -2,6 +2,7 @@ package me.raddatz.veyq.mobile.bridge
 
 import kotlinx.coroutines.runBlocking
 import me.raddatz.veyq.mobile.navigation.ApplicationId
+import me.raddatz.veyq.mobile.navigation.BarTab
 import me.raddatz.veyq.mobile.navigation.Connection
 import me.raddatz.veyq.mobile.navigation.FolderRef
 import me.raddatz.veyq.mobile.navigation.Hidden
@@ -56,7 +57,8 @@ class DispatchTest {
     }
 
     private fun bridge() = Bridge {
-        Composition(SessionModel(Door(), Hidden({}, emptySet()), RecentUses({}, emptyList()))) { null }
+        val hidden = Hidden({}, emptySet())
+        Composition(SessionModel(Door(), hidden, RecentUses({}, emptyList())), hidden) { null }
     }
 
     @Test
@@ -95,7 +97,7 @@ class DispatchTest {
         val refused = Answer.Refused(Answer.Why.NO_TENANT_OPEN)
         listOf(
             Call.ShellChoose(ApplicationId.EXPENSES), Call.ShellSwitchSpace("s"), Call.ShellEnter(FolderRef("f", "F")), Call.ShellFilter(null),
-            Call.ShellBack, Call.ShellOpen(ref), Call.ShellOpenAtTop(ref), Call.ShellSearch(true), Call.ShellRefresh, Call.HomeGroups,
+            Call.ShellBack, Call.ShellSelect(BarTab("expenses.entries")), Call.ShellOpen(ref), Call.ShellOpenAtTop(ref), Call.ShellSearch(true), Call.ShellRefresh, Call.HomeGroups,
             Call.SearchQuery("Tr"), Call.PotOpen(ref),
         ).forEach { assertEquals(refused, b.ask(it), "$it") }
         assertEquals(Answer.Refused(Answer.Why.NO_SUCH_POT), b.ask(Call.PotRefresh(9)))

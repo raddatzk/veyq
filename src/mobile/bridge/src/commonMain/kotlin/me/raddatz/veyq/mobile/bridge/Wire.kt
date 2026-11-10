@@ -6,11 +6,18 @@ import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
 import me.raddatz.veyq.mobile.expenses.PotModel
 import me.raddatz.veyq.mobile.navigation.ApplicationId
+import me.raddatz.veyq.mobile.navigation.ArrangedList
+import me.raddatz.veyq.mobile.navigation.BarTab
 import me.raddatz.veyq.mobile.navigation.FolderRef
 import me.raddatz.veyq.mobile.navigation.Home
 import me.raddatz.veyq.mobile.navigation.ObjectRef
 import me.raddatz.veyq.mobile.navigation.ShellModel
+import me.raddatz.veyq.mobile.navigation.SpaceRef
+import me.raddatz.veyq.mobile.navigation.TenantRef
 import me.raddatz.veyq.mobile.session.SessionModel
+import me.raddatz.veyq.mobile.words.Msg
+import me.raddatz.veyq.mobile.words.MsgKey
+import me.raddatz.veyq.mobile.words.Piece
 
 /**
  * What crosses the bridge (CR core-as-a-native-library D6), as kotlinx.serialization writes it: UTF-8 JSON, every field
@@ -51,6 +58,7 @@ internal sealed class Call {
     @Serializable @SerialName("Shell.Enter") data class ShellEnter(val folder: FolderRef) : Call()
     @Serializable @SerialName("Shell.Filter") data class ShellFilter(val application: ApplicationId?) : Call()
     @Serializable @SerialName("Shell.Back") data object ShellBack : Call()
+    @Serializable @SerialName("Shell.Select") data class ShellSelect(val tab: BarTab) : Call()
     @Serializable @SerialName("Shell.Open") data class ShellOpen(val ref: ObjectRef) : Call()
     @Serializable @SerialName("Shell.OpenAtTop") data class ShellOpenAtTop(val ref: ObjectRef) : Call()
     @Serializable @SerialName("Shell.Search") data class ShellSearch(val on: Boolean) : Call()
@@ -98,11 +106,51 @@ internal sealed class Watched {
 internal sealed class Update {
     @Serializable @SerialName("Session") data class Session(val gate: SessionModel.Gate) : Update()
 
-    /** Null while no tenant is open, or its lists are not read yet. */
-    @Serializable @SerialName("Shell") data class Shell(val state: ShellModel.State?) : Update()
+    /** Null while no tenant is open, or its lists are not read yet; [shown] beside a state, null with none. */
+    @Serializable @SerialName("Shell") data class Shell(val state: ShellModel.State?, val shown: ShellShown? = null) : Update()
 
     /** Null while nothing is open in this Pot model (closed, or an id the bridge does not hold). */
     @Serializable @SerialName("Pot") data class Pot(val pot: Long, val state: PotModel.State?) : Update()
+}
+
+/**
+ * What the shell shows beside its state, each value the core's own function's answer — what the Android and Apple apps
+ * ask the core for while they draw (their `AppModel` and shell screens), so a host without Kotlin computes none of it
+ * (ADR 0127 decision 1). Built by [Bridge] one line per field; a rule found there is a defect to move into the core.
+ */
+@Serializable
+internal class ShellShown(
+    /** The tenant open now, on the server [server] (its account's label) of the connection [connection]. */
+    val tenant: TenantRef,
+    val server: String,
+    val connection: String,
+    /** The switcher's servers, each with the tenants it lists (`Hidden.visibleTenants`). */
+    val servers: List<ShownServer>,
+    /** The space Home shows (`Lists.space`), its name (`ShellWords.space`) and the line under it (`switcherSubtitle`). */
+    val space: SpaceRef?,
+    val spaceName: Piece,
+    val switcherSubtitle: String,
+    /** The tenant's spaces with their names (`ShellWords.space`). */
+    val spaces: List<ShownSpace>,
+    /** Every application's name (`AppKinds.applicationWord`), for the drawer's and Home's filters' rows. */
+    val applicationWords: List<ShownApplication>,
+    /** Home's level in its groups (`Lists.groups`). */
+    val groups: List<Home.Group>,
+    /** The chosen application's own list (`Lists.applicationList`); null on Home. */
+    val list: ArrangedList?,
+    /** The bar's places (`Shell.barTabs`, each with `AppKinds.tabWord`) and the one selected (`Shell.selectedTab`). */
+    val tabs: List<ShownTab>,
+    val selectedTab: BarTab?,
+    val canGoBack: Boolean,
+    val isHome: Boolean,
+    val drawerOpensAtStart: Boolean,
+    /** What the sidebar's New offers (`AppKinds.drawerCreates`' words). */
+    val creates: List<@Serializable(with = MsgKey::class) Msg>,
+) {
+    @Serializable class ShownServer(val connection: String, val label: String, val tenants: List<TenantRef>)
+    @Serializable class ShownSpace(val space: SpaceRef, val name: Piece)
+    @Serializable class ShownApplication(val application: ApplicationId, @Serializable(with = MsgKey::class) val word: Msg)
+    @Serializable class ShownTab(val tab: BarTab, @Serializable(with = MsgKey::class) val word: Msg)
 }
 
 /** What the core asks of the host ([veyq_init]'s host function), answered through [veyq_reply] with a [HostReply]. */

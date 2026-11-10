@@ -444,9 +444,9 @@ class PotView internal constructor(session: Source) {
     @Serializable
     class ShownEntry(val row: EntryRow, val line: List<Piece>, val badge: Badge?)
 
-    /** A balance row with its words and what makes it. */
+    /** A balance row with its person's name as a row shows it ([person]), its words and what makes it. */
     @Serializable
-    class ShownBalance(val row: PersonRow, val balance: Balance, val facts: List<Piece>)
+    class ShownBalance(val row: PersonRow, val name: Piece, val balance: Balance, val facts: List<Piece>)
 
     /** A settle-up row with its sentence. */
     @Serializable
@@ -484,7 +484,7 @@ class PotView internal constructor(session: Source) {
     fun shown(): Shown = Shown(
         name, subtitle, currency, minorUnits, ready, canWrite,
         entries.map { ShownEntry(it, line(it), badge(it)) },
-        balances.map { ShownBalance(it, balance(it), balanceFacts(it)) },
+        balances.map { ShownBalance(it, person(it.name), balance(it), balanceFacts(it)) },
         settleUp.map { ShownSettle(it, pays(it)) },
         total,
         byCategory.map { ShownCategory(it, categoryLabel(it.id)) },

@@ -32,6 +32,7 @@ import me.raddatz.veyq.mobile.navigation.ObjectRef
 import me.raddatz.veyq.mobile.navigation.Shell
 import me.raddatz.veyq.mobile.navigation.ShellModel
 import me.raddatz.veyq.mobile.navigation.SpaceRef
+import me.raddatz.veyq.mobile.navigation.TenantRef
 import me.raddatz.veyq.mobile.session.SessionModel.Gate
 import me.raddatz.veyq.mobile.session.TrustedDevice
 import me.raddatz.veyq.mobile.words.Amount
@@ -66,6 +67,17 @@ class WireTest {
         objects = listOf(ref), favorites = listOf(ref), applications = listOf(ApplicationId.MEMORIES, ApplicationId.EXPENSES),
         filters = listOf(null, ApplicationId.EXPENSES), drawer = ArrangedList(listOf(ref), emptyList(), listOf(ref)),
     )
+    private val tenant = TenantRef("t", "Turnverein", "verein.localhost")
+    private val shown = ShellShown(
+        tenant = tenant, server = "veyq.localhost:8080", connection = "veyq.localhost#user-1",
+        servers = listOf(ShellShown.ShownServer("veyq.localhost#user-1", "veyq.localhost:8080", listOf(tenant))),
+        space = lists.spaces.first(), spaceName = Piece.Said(Notice(Msg.SPACE_PERSONAL)), switcherSubtitle = "Turnverein · veyq.localhost:8080",
+        spaces = listOf(ShellShown.ShownSpace(lists.spaces.first(), Piece.Plain("Mine"))),
+        applicationWords = listOf(ShellShown.ShownApplication(ApplicationId.EXPENSES, Msg.APP_EXPENSES)),
+        groups = listOf(Home.Group(true, lists.nodes.take(1), null)), list = lists.drawer,
+        tabs = listOf(ShellShown.ShownTab(BarTab("expenses.entries"), Msg.TAB_EXPENSES_ENTRIES)), selectedTab = BarTab("expenses.entries"),
+        canGoBack = true, isHome = false, drawerOpensAtStart = false, creates = listOf(Msg.FOLDER_NEW),
+    )
     private val record = TrustedDevice("http://veyq.localhost:8080", "p@example.org", "user-1", TrustedDevice.Method.DEVICE, "wrap-1", "veyq.device.ab")
 
     /** Each root's values: every variant of a sealed root once. */
@@ -74,7 +86,7 @@ class WireTest {
         Call.serializer() to listOf(
             Call.SessionStart, Call.SessionSignIn("veyq.localhost:8080", "p@example.org", "typed", "A3-TYPED"), Call.SessionSwitchTo("veyq.localhost#user-1", "t"),
             Call.SessionSignOut("veyq.localhost#user-1"), Call.ShellChoose(null), Call.ShellSwitchSpace("scope-1"), Call.ShellEnter(folder),
-            Call.ShellFilter(ApplicationId.DEPOT), Call.ShellBack, Call.ShellOpen(ref), Call.ShellOpenAtTop(ref), Call.ShellSearch(true), Call.ShellRefresh,
+            Call.ShellFilter(ApplicationId.DEPOT), Call.ShellBack, Call.ShellSelect(BarTab("expenses.overview")), Call.ShellOpen(ref), Call.ShellOpenAtTop(ref), Call.ShellSearch(true), Call.ShellRefresh,
             Call.HomeGroups, Call.SearchQuery("lyon"), Call.PotOpen(ref), Call.PotRefresh(3), Call.PotClose(3),
         ),
         Watched.serializer() to listOf(Watched.Session, Watched.Shell, Watched.Pot(3)),
@@ -87,7 +99,7 @@ class WireTest {
         Update.serializer() to listOf(
             Update.Session(Gate.Starting), Update.Session(Gate.NeedsApp), Update.Session(Gate.SignIn(error = Msg.SIGNIN_ERROR_CREDENTIALS, server = "veyq.localhost:8080")),
             Update.Session(Gate.Unlock(record)), Update.Session(Gate.Signed("veyq.localhost#user-1", "t", switching = true)),
-            Update.Shell(ShellModel.State(shell, lists)), Update.Shell(null),
+            Update.Shell(ShellModel.State(shell, lists), shown), Update.Shell(null),
             Update.Pot(3, PotModel.State(ref, failed = false, saving = true, message = "REFUSED")), Update.Pot(4, null),
         ),
         HostRequest.serializer() to listOf(HostRequest.StoreRead("veyq.recent"), HostRequest.StoreWrite("veyq.recent", "s\tn\t1"), HostRequest.StoreRemove("veyq.recent")),
@@ -107,7 +119,7 @@ class WireTest {
             entries = listOf(PotView.ShownEntry(entry, listOf(Piece.Day("2026-11-10"), Piece.Said(n(Msg.CAT_FOOD)), Piece.Plain("Anna"),
                 Piece.Said(n(Msg.POT_EXPENSE_BY, Joined(listOf("Anna", n(Msg.POT_DELETED_PERSON)), ", "))), Piece.Money(4500, "CHF", 2), Piece.Size(2048)),
                 PotView.Badge(n(Msg.POT_EDITED), false))),
-            balances = listOf(PotView.ShownBalance(person, PotView.Balance(n(Msg.POT_IS_OWED, eur(2100)), PotView.Tone.OWED), listOf(Piece.Said(n(Msg.POT_PAID_CONSUMED, eur(4200), eur(2100)))))),
+            balances = listOf(PotView.ShownBalance(person, Piece.Plain("Anna"), PotView.Balance(n(Msg.POT_IS_OWED, eur(2100)), PotView.Tone.OWED), listOf(Piece.Said(n(Msg.POT_PAID_CONSUMED, eur(4200), eur(2100)))))),
             settleUp = listOf(PotView.ShownSettle(PotView.SettleRow("Ben", "Anna", 2100, "p2", "p1"), n(Msg.POT_PAYS, "Ben", "Anna"))),
             total = 4200,
             byCategory = listOf(PotView.ShownCategory(PotView.CategoryRow("food", null, 4200), Piece.Said(n(Msg.CAT_FOOD)))),
