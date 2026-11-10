@@ -86,21 +86,104 @@ password manager as well**, whatever the provider: without it no backup can be r
 `veyqctl` never calls a cloud provider's API, and never generates a value again — a second `init` into the same
 directory is refused.
 
-### A veyq half you wrote by hand: `--adopt`
+## A veyq half that exists already
 
-```sh
-veyqctl init --gitops <checkout>/apps/veyq --adopt --secrets sops
+`init` writes a fresh directory and refuses one that holds files. If veyq already runs from your repository, write
+`veyqctl.json` beside its files yourself; from then on `veyqctl` manages them. Never run `init` over it to "start
+again": it would generate new Secrets, and the database and every backup are bound to the ones you have.
+
+**The shape `veyqctl` manages.** The directory holds:
+
+- the Argo CD `Application`, with exactly one chart source `oci://<registry>/<owner>/charts/veyq` pinned by digest
+  (`targetRevision: sha256:…`);
+- the chart's values, pinning the three images by digest — each under its key, `image.digest`, `admin.image.digest` and
+  `backup.image.digest` — with each `tag` naming the same release.
+
+Anything else — a chart pinned by version, images by tag, an instance installed with `helm install` rather than from a
+repository, a snapshot — is brought into this shape first: [Verify a release](/run/verify-a-release/) resolves and
+verifies the four digests.
+
+**`veyqctl.json`**, beside them:
+
+```json
+{
+  "target": "gitops",
+  "release": "1",
+  "secrets": "sops",
+  "application": "application.yaml",
+  "values": "values.yaml",
+  "chart": "ghcr.io/raddatzk/charts/veyq",
+  "namespace": "veyq",
+  "context": "",
+  "running": "1.0",
+  "pins": {
+    "chart": "sha256:…",
+    "app": "sha256:…",
+    "admin": "sha256:…",
+    "tools": "sha256:…"
+  }
+}
 ```
 
-writes only `veyqctl.json` — and only once the chart digest in the `Application` and the three image digests in the
-values are exactly those of a release that verifies. Its tags name the running release; `veyqctl` records the major it
-belongs to as the selector. Your files keep their comments and layout; an upgrade rewrites only the pins.
+| Field | What it is |
+|---|---|
+| `release` | The selector `upgrade` follows: `<major>.<minor>` pinned, `<major>` its newest, `latest` the newest of all, one major per run |
+| `secrets` | Where your Secrets come from: `sops`, `external-secrets`, `sealed-secrets` or `none` — `check` looks for both of the chart's Secrets either way |
+| `application`, `values` | The two files' names, beside `veyqctl.json` |
+| `chart` | The chart's repository, without `oci://` |
+| `namespace`, `context` | Where `check` looks for the Secrets; an empty context is `kubectl`'s current one |
+| `running`, `pins` | The release your files pin, and its four digests exactly as they stand in them |
 
-It takes over this one shape and nothing else, by design: a chart pinned by version, images by tag, a release
-installed with `helm install` rather than from a repository, or a snapshot is refused, naming what differs. Bring
-the files into this shape first ([Verify a release](/run/verify-a-release/) pins by digest), or write a fresh
-instance with `init` and give its Secrets your running instance's values — never new ones: the database and every
-backup are bound to them.
+Then run `veyqctl check` (with `--home <that directory>` once; `init` is what lists an instance). It verifies that
+`pins` are the running release's as it was signed and that your files hold them, and names whatever differs.
+`upgrade` refuses to start from a release that does not verify, because what it may do next — never down, a new major
+only from its entry — stands on that release.
+
+**A pipeline that proposes upgrades.** Like Renovate, a scheduled job can run `upgrade` on a branch and open a pull
+request; merging it is the upgrade. On GitHub Actions, with the repository setting that lets Actions create pull
+requests:
+
+```yaml
+on:
+  schedule: [{ cron: "41 5 * * 1" }]
+  workflow_dispatch:
+permissions: { contents: read }
+jobs:
+  propose:
+    runs-on: ubuntu-latest
+    permissions: { contents: write, pull-requests: write }
+    env:
+      INSTANCE: apps/veyq   # the directory holding veyqctl.json
+      IDENTITY: ^https://github\.com/raddatzk/veyq/\.github/workflows/release\.yml@refs/heads/(main|release/[0-9]+\.x)$
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@v7          # pin each action by its commit
+      - uses: sigstore/cosign-installer@v4
+        with: { cosign-release: v3.1.3 }
+      - uses: azure/setup-helm@v4          # or Helm's tarball against its published sha256
+      - run: |                             # veyqctl from veyq's newest release, verified before it runs
+          tag="$(gh release view --repo raddatzk/veyq --json tagName --jq .tagName)"
+          for f in veyqctl veyqctl.bundle; do
+            curl -fsSLo "$RUNNER_TEMP/$f" "https://github.com/raddatzk/veyq/releases/download/$tag/$f"
+          done
+          cosign verify-blob --bundle "$RUNNER_TEMP/veyqctl.bundle" \
+            --certificate-oidc-issuer https://token.actions.githubusercontent.com \
+            --certificate-identity-regexp "$IDENTITY" "$RUNNER_TEMP/veyqctl"
+      - run: |
+          git config user.name veyqctl; git config user.email veyqctl@users.noreply.github.com
+          before="$(git rev-parse HEAD)"
+          git switch -c veyq/upgrade
+          python3 "$RUNNER_TEMP/veyqctl" --home "$INSTANCE" upgrade
+          [ "$(git rev-parse HEAD)" = "$before" ] && exit 0
+          release="$(jq -r .running "$INSTANCE/veyqctl.json")"
+          git branch -m "veyq/upgrade-$release"
+          git push --force-with-lease origin "veyq/upgrade-$release"
+          gh pr create --head "veyq/upgrade-$release" --title "veyq $release" \
+            --body "Read https://github.com/raddatzk/veyq/releases/tag/v$release before merging."
+```
+
+Never let it merge itself (below), and keep other updaters off these lines: a second mover is drift, which `upgrade`
+refuses.
 
 ## Which instance a command acts on
 
@@ -112,11 +195,12 @@ no command names it.
 ## Keep it current: `check`, `verify`, `upgrade`
 
 - **`veyqctl check`** — which release the next `upgrade` takes, and a newer major beyond the selector; any **drift** (a
-  pin the files no longer hold); and, with the cluster reachable, whether both Secrets exist with every key.
+  pin the files no longer hold); whether `veyqctl.json`'s pins are the running release's as it was signed; and, with
+  the cluster reachable, whether both Secrets exist with every key.
 - **`veyqctl verify`** — the selected release's manifest, three images and chart, nothing written.
 - **`veyqctl upgrade`** — under the same rules as on Compose ([Upgrade](/run/upgrade/#which-release-upgrade-takes)):
-  it never goes down, and enters a major only from the release that major names as its entry. It refuses drift and
-  uncommitted changes in its files, verifies the release, rewrites the four pins and the three tags (each found exactly
+  it never goes down, and enters a major only from the release that major names as its entry. It refuses drift,
+  uncommitted changes in its files and a running release whose pins do not verify, verifies the new release, rewrites the four pins and the three tags (each found exactly
   once, or nothing is changed), renders, and commits those three files alone. `--push` pushes; otherwise you push.
   Argo CD applies the commit, and the chart's backup gate captures the database before the new release migrates it
   ([Upgrade](/run/upgrade/), [Backup and restore](/run/backup-and-restore/#under-kubernetes)).
@@ -140,9 +224,9 @@ each refuses and names what does that job there (Argo CD, `kubectl`, the backup 
 `init` writes with the real `helm` against the chart, for every TLS choice with and without the bundled store. Run
 by hand on 2026-11-10, against the published releases:
 
-- `init --adopt` of the maintainer's existing veyq half on single-node k3s (release 1.0): every pin verified, the
-  chart's digest resolved at ghcr.io equal to the one pinned; then `verify`, `check` (both Secrets present with every
-  key) and `upgrade` (nothing to do);
+- the maintainer's existing veyq half on single-node k3s (release 1.0, its `veyqctl.json` written once beside files
+  written by hand): `check` verified its four pins as release 1.0's — the chart's digest resolved at ghcr.io equal to the
+  one pinned — and found both Secrets with every key; `verify` passed; `upgrade` had nothing to do;
 - `init` into an empty repository against that cluster: the cluster check passed, the release verified, the chart
   rendered, the files written; with `--secrets sops`, both Secrets encrypted by `sops` 3.13.3 and decrypted again;
 - `upgrade` of a repository written at 0.2480 to 1.0 — major 1 entered from its entry — as one commit of the three

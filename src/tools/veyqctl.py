@@ -36,10 +36,12 @@ so its tag is resolved to a digest at the registry (`Host.oci_digest`), that dig
 and its Chart.yaml version read back (`helm show chart`) — renders the chart with the values (`helm template`), and only
 then writes the directory. Every value is generated once: under `sops` encrypted into the repository, under every other
 provider handed over once in `~/.config/veyq/<name>.secrets.json` (0600, never overwritten); a directory that is not
-empty is refused, so nothing is generated twice. `init --gitops DIR --adopt` takes over a half written by hand: it writes
-only `veyqctl.json`, once the pins in its files are the ones a release verifies. `verify` and `check` work as under
-Compose (`check` also names drift — a pin the files no longer hold — and whether the Secrets exist with every key);
-`upgrade` resolves as decision 5 step 1 does, refuses drift and uncommitted changes, verifies, rewrites each pin it finds
+empty is refused, so nothing is generated twice — and so is a veyq half written by hand: for one, the operator writes
+`veyqctl.json` beside it (the Run page's *A veyq half that exists already*). `verify` and `check` work as under Compose;
+`check` also names drift (a pin the files no longer hold), whether the pins `veyqctl.json` records are the running
+release's as it was signed, and whether the Secrets exist with every key. `upgrade` resolves as decision 5 step 1 does,
+refuses drift, uncommitted changes and a running release whose pins do not verify — it stands on that release — then
+verifies the new one, rewrites each pin it finds
 exactly once and the three tags, renders, then commits its three files alone (`--push` pushes). Nothing else: Argo CD
 applies the commit, and the chart's backup gate captures before the new release migrates (ADR 0098). The Compose
 lifecycle verbs refuse on a GitOps instance, each naming what does its job there.
@@ -2045,6 +2047,8 @@ def cmd_init(args: argparse.Namespace, host: Host) -> int:
 # ---- the GitOps target: veyq's half of an Argo CD repository (ADR 0126 decisions 3-5 and 7) ---------------------
 
 PROVIDERS = ("sops", "external-secrets", "sealed-secrets", "none")
+# What a veyq half written by hand must look like, and its veyqctl.json: the Run page, named where `init` refuses one.
+EXISTING_HALF_DOCS = "https://veyq.app/run/gitops/#a-veyq-half-that-exists-already"
 SECRETS_SECRET = "veyq-secrets"  # the chart's `secrets.existingSecret`
 CONFIG_SECRET = "veyq-config-secret-key"  # the chart's `app.configSecret.existingSecret`
 CONFIG_SECRET_KEY = "config-secret.key"
@@ -2217,6 +2221,7 @@ def git(host: Host, top: Path, *cmd: str, check: bool = True) -> subprocess.Comp
 
 
 def repository_of(host: Host, directory: Path) -> Path:
+    directory = directory.resolve()
     probe = directory
     while not probe.is_dir() and probe != probe.parent:  # `init` writes a directory that may not exist yet, nor its parent
         probe = probe.parent
@@ -2445,11 +2450,10 @@ def gitops_init(args: argparse.Namespace, host: Host, directory: Path) -> int:
         raise Refused("veyq's half goes into a directory of its own inside the checkout, never its root")
     name = args.name or top.name
     name_is_free(name, directory)
-    if args.adopt:
-        return gitops_adopt(args, host, directory, top, name)
     if directory.exists() and any(directory.iterdir()):
-        raise Refused(f"{directory} is not empty: `init` writes a fresh directory and never overwrites (an existing "
-                      f"veyq half is taken over with --adopt). Nothing was written.")
+        raise Refused(f"{directory} holds files already: `init` writes a fresh directory and never overwrites. To have "
+                      f"veyqctl manage a veyq half that exists, write {GITOPS_FILE} beside it as "
+                      f"{EXISTING_HALF_DOCS} says, then run `veyqctl check`. Nothing was written.")
     provider = option(args, host, "secrets", f"where the Secrets come from ({', '.join(PROVIDERS)})", "sops")
     if provider not in PROVIDERS:
         raise Refused(f"--secrets {provider}: one of {', '.join(PROVIDERS)}")
@@ -2594,7 +2598,7 @@ files:
 
 def values_digests(text: str) -> dict[str, str]:
     """The image digests under values.yaml's `image:`, `admin:` and `backup:` (the line under each block's `image`),
-    by role — what `init` writes and an adopted layout must match."""
+    by role — what `init` writes, and a half written by hand must hold."""
     found: dict[str, list[str]] = {}
     block = None
     for line in text.splitlines():
@@ -2618,50 +2622,6 @@ def application_pin(text: str) -> tuple[str, str]:
     return repos[0], digests[0]
 
 
-def gitops_adopt(args: argparse.Namespace, host: Host, directory: Path, top: Path, name: str) -> int:
-    """Take over a veyq half written by hand (cr-veyqctl-gitops-target phase 4): only veyqctl.json is written, after
-    the pins in the files are those of a release that verifies — never an unverified state recorded as running."""
-    if (directory / GITOPS_FILE).exists():
-        raise Refused(f"{directory / GITOPS_FILE} exists: this instance is veyqctl's already")
-    application, values_file = args.application or "application.yaml", args.values_file or "values.yaml"
-    provider = option(args, host, "secrets", f"where the Secrets come from ({', '.join(PROVIDERS)})", "sops")
-    if provider not in PROVIDERS:
-        raise Refused(f"--secrets {provider}: one of {', '.join(PROVIDERS)}")
-    try:
-        app_text, values_text = (directory / application).read_text(), (directory / values_file).read_text()
-    except OSError as e:
-        raise Refused(f"{e}: --adopt reads the Application and the values beside each other") from None
-    chart, chart_pin = application_pin(app_text)
-    images = values_digests(values_text)
-    missing = [role for role in ("app", "admin", "tools") if role not in images]
-    if missing:
-        raise Refused(f"{values_file} gives no single digest for {', '.join(missing)} (under `image:`, `admin.image`, "
-                      f"`backup.image`)")
-    tags = set(re.findall(r'(?m)^\s+tag:\s*"?([0-9]+\.[0-9]+)"?\s*(?:#.*)?$', values_text))
-    if len(tags) != 1:
-        raise Refused(f"{values_file}'s image tags name {len(tags)} releases ({', '.join(sorted(tags)) or 'none'}), "
-                      f"not one")
-    running = tags.pop()
-    source = open_source(args.source)
-    listed = source.releases()
-    chosen = select(listed, running, source.describe())
-    manifest = fetch_manifest(host, source, chosen, False)
-    pins = verify_gitops_release(host, manifest, chart)
-    found = {"chart": chart_pin, **images}
-    differ = [f"{role} {found[role]} (release {running}: {pins[role]})" for role in PIN_ROLES if found[role] != pins[role]]
-    if differ:
-        raise Refused(f"the files pin what release {running} does not: " + "; ".join(differ)
-                      + f". Nothing was written: veyqctl records only a running release that verifies.")
-    g = GitOps(directory, {"target": "gitops", "release": check_selector(args.release or str(chosen.major)),
-                           "secrets": provider, "application": application, "values": values_file, "chart": chart,
-                           "namespace": args.namespace or "veyq", "context": args.context or "",
-                           "source": args.source or "", "running": running, "pins": pins})
-    write_gitops(g)
-    say(f"adopted {directory}: release {running}, its four pins verified; {GITOPS_FILE} written (commit it)")
-    register(name, directory)
-    return 0
-
-
 def rewrite_once(text: str, old: str, new: str, what: str) -> str:
     count = text.count(old)
     if count != 1:
@@ -2677,6 +2637,16 @@ def rewrite_tags(text: str, old: str, new: str, what: str) -> str:
         raise Refused(f"{what}: {count} image tag line(s) name {old}, not the three (app, admin, tools). Nothing was "
                       f"changed.")
     return result
+
+
+def running_differs(host: Host, source: Source, listed: list[Listed], g: GitOps) -> list[str]:
+    """Where veyqctl.json's pins are not the running release's, as it was signed: the four pins verified again under
+    the release identity and compared. `upgrade` stands on the running release (no downgrade, a major only from its
+    entry), so a veyqctl.json written by hand — or one whose `running` was edited — is checked before it is trusted."""
+    running = select(listed, g.doc["running"], source.describe())
+    pins = verify_gitops_release(host, fetch_manifest(host, source, running, False), g.doc["chart"])
+    return [f"{role} {g.doc['pins'][role]} (release {running.release}: {pins[role]})" for role in PIN_ROLES
+            if g.doc["pins"][role] != pins[role]]
 
 
 def gitops_verify(args: argparse.Namespace, host: Host, g: GitOps) -> int:
@@ -2728,6 +2698,13 @@ def gitops_check(args: argparse.Namespace, host: Host, g: GitOps) -> int:
     drift = gitops_drift(g)
     for line in drift:
         say(f"DRIFT: {line}, not what {GITOPS_FILE} records")
+    differs = running_differs(host, source, listed, g)
+    if differs:
+        say(f"NOT RELEASE {running}: {GITOPS_FILE} pins " + "; ".join(differs) + " — `upgrade` refuses until it pins "
+            f"what that release signed")
+    else:
+        say(f"the pins in {GITOPS_FILE} are release {running}'s, as it was signed")
+    drift = drift + differs
     namespace = g.doc.get("namespace") or "veyq"
     k = kubectl(g.doc.get("context") or None)
     if host.run(k + ["get", "namespace", namespace, "-o", "name"], check=False).returncode:
@@ -2773,12 +2750,17 @@ def gitops_upgrade(args: argparse.Namespace, host: Host, g: GitOps) -> int:
     drift = gitops_drift(g)
     if drift:
         raise Refused("the files no longer pin what " + GITOPS_FILE + " records: " + "; ".join(drift)
-                      + ". Nothing was changed: put them back, or `init --adopt` the layout again.")
+                      + ". Nothing was changed: put them back, or record the new ones in " + GITOPS_FILE + ".")
     top = repository_of(host, g.directory)
     paths = [str(g.application), str(g.values), str(g.directory / GITOPS_FILE)]
     if git(host, top, "diff", "--quiet", "HEAD", "--", *paths, check=False).returncode:
         raise Refused("the Application, the values or veyqctl.json have changes not committed: an upgrade commits "
                       "only its own. Nothing was changed.")
+    differs = running_differs(host, source, listed, g)
+    if differs:
+        raise Refused(f"{GITOPS_FILE} says release {running} runs, and pins what it did not sign: " + "; ".join(differs)
+                      + f". Nothing was changed: an upgrade starts from a running release that verifies "
+                      f"({EXISTING_HALF_DOCS}).")
     manifest = manifest_of(target)
     pins = verify_gitops_release(host, manifest, g.doc["chart"])
     old = g.doc["pins"]
@@ -2839,12 +2821,7 @@ def parser() -> argparse.ArgumentParser:
     init.add_argument("--name", help="the instance's name in the list (default: veyq; GitOps: the repository's)")
     init.add_argument("--set", action="append", metavar="KEY=VALUE", help="Compose: a .env value (repeatable)")
     init.add_argument("--unsigned-local", action="store_true", help="Compose: a release from a local docker build")
-    init.add_argument("--release", help="GitOps: the selector veyqctl.json keeps (default latest; --adopt: the major "
-                                        "running)")
-    init.add_argument("--adopt", action="store_true", help="GitOps: take over a veyq half written by hand — only "
-                                                          "veyqctl.json is written, once its pins verify")
-    init.add_argument("--application", help="GitOps --adopt: the Application's file name (default application.yaml)")
-    init.add_argument("--values-file", help="GitOps --adopt: the values' file name (default values.yaml)")
+    init.add_argument("--release", help="GitOps: the selector veyqctl.json keeps (default latest)")
     init.add_argument("--secrets", choices=PROVIDERS, help="GitOps: where the Secrets come from")
     init.add_argument("--domain", help="GitOps: veyq's domain")
     init.add_argument("--store-domain", help="GitOps: the bundled store's own host (default store.<domain>)")
@@ -2960,7 +2937,9 @@ def main(argv: list[str] | None = None, host: Host | None = None) -> int:
                 raise Refused(f"`{args.command}` is Compose's, and {home} is a GitOps instance: {COMPOSE_ONLY[args.command]}")
             if getattr(args, "unsigned_local", False):
                 raise Refused("--unsigned-local is Compose's: a GitOps instance pins only what verifies")
-            return GITOPS_VERBS[args.command](args, host, read_gitops(home))
+            # Resolved: git names the checkout by its real path (macOS' /var is /private/var), and every path veyqctl
+            # compares with it or hands to `git add` must be the same one.
+            return GITOPS_VERBS[args.command](args, host, read_gitops(home.resolve()))
         if getattr(args, "push", False):
             raise Refused(f"--push is a GitOps instance's, and {home} is a Compose home")
         return args.func(args, host)
