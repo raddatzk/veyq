@@ -1,7 +1,7 @@
 ---
 id: cr-core-as-a-native-library-and-the-linux-app
 title: The core as a Kotlin/Native library behind one narrow bridge, proved by the Linux app's first slice in Rust and libadwaita
-status: planned
+status: in-progress
 satisfies: []
 adrs: ["0127", "0123", "0122", "0125"]
 invariants:
@@ -82,7 +82,7 @@ naming the Gradle task to run when the toolchain is not downloaded yet. The Appl
 **Limit, stated:** libsodium's AES-256-GCM needs the CPU's AES instructions (`LibsodiumPrimitives` refuses to start
 without them, as on Apple). Every x86-64 desktop CPU of the last decade and every arm64 laptop has them (remembered); a **Raspberry Pi 4**
 (Cortex-A72 without the crypto extension) does not, and the app says so and does not start. Accepted for this slice
-(owner question Q1); native-apps' Open gets the row.
+(owner Q1, settled: accepted); native-apps' Open gets the row.
 
 **D3 — `nfc` / `nfkd` on Linux (and later Windows): utf8proc, built from a pinned release like libsodium.**
 utf8proc 2.11.3 (JuliaStrings, MIT, maintained — releases through 2025-12-30, Unicode 16.0), one C file plus its
@@ -321,7 +321,8 @@ runs them, `validate_changes.py` among them), and every "measured" in the touche
 - **Q1 — CPUs without AES (Raspberry Pi 4).** The suite's AES-GCM is libsodium's, which needs the CPU's AES
   instructions; the Linux app would not start on a Pi 4 (the web works there). Recommendation: accept for now, keep it
   on native-apps' Open list, revisit if anyone asks for it (a software AES-GCM would be a second implementation of a
-  primitive, held to the same vectors). *Answer pending.*
+  primitive, held to the same vectors). **Settled (owner 2026-11-10): accepted** — the app refuses such a CPU with a
+  message, and native-apps' Open carries the row.
 
 ## Retrospective
 
