@@ -85,7 +85,7 @@ struct PotSettings: View {
 
     @ViewBuilder private var currency: some View {
         Section {
-            if view.canChangeSettings && !view.currencyFixed {
+            if view.currencyEditable {
                 Picker(say(.potBaseCurrency), selection: Binding(
                     get: { view.currency ?? "" },
                     set: { code in
@@ -193,7 +193,7 @@ struct PotSettings: View {
     }
 
     @ViewBuilder private var categories: some View {
-        if view.canChangeSettings || !view.ownCategories.isEmpty {
+        if view.categoriesShown {
             Section {
                 ForEach(Array(view.ownCategories.enumerated()), id: \.offset) { _, c in
                     HStack {
@@ -208,7 +208,7 @@ struct PotSettings: View {
                     }
                     .listRowBackground(Role.surface)
                 }
-                if view.canChangeSettings && view.ownCategories.count < 200 {
+                if view.canAddCategory {
                     HStack {
                         TextField(say(.settingsCategoryName), text: $newCategory)
                         Button(say(.settingsAddCategory)) { write { try await $0.addCategory(name: newCategory) } then: { newCategory = "" } }

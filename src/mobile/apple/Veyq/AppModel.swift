@@ -113,14 +113,8 @@ final class AppModel {
         device = Self.makeDevice(inExtension: inExtension)
         let stored = Shared.defaults.stringArray(forKey: "veyq.recent") ?? []
         recent = RecentUses(
-            persist: { keys in
-                Shared.defaults.set(keys.map { "\($0.scopeId)\t\($0.nodeId)\t\($0.lastUsedEpochMs)" }, forKey: "veyq.recent")
-            },
-            initial: stored.compactMap { line in
-                let p = line.split(separator: "\t").map(String.init)
-                guard p.count == 3, let at = Int64(p[2]) else { return nil }
-                return UseKey(scopeId: p[0], nodeId: p[1], lastUsedEpochMs: at)
-            },
+            persist: { keys in Shared.defaults.set(keys.map { $0.encode() }, forKey: "veyq.recent") },
+            initial: stored.compactMap { UseKey.companion.decode(line: $0) },
             keep: 50
         )
         hidden = Hidden(

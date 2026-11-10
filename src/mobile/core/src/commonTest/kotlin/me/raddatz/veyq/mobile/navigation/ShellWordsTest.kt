@@ -54,4 +54,12 @@ class ShellWordsTest {
             AppKinds.lossesOfCopy(listOf("FOLDER", "EXPENSES_POT", "DEPOT_DROPBOX", "EXPENSES_POT", "FILE")),
         )
     }
+
+    @Test
+    fun a_recent_use_is_stored_as_one_line_and_a_line_that_is_none_is_dropped() {
+        val u = UseKey("s", "n", 42)
+        assertEquals(u, UseKey.decode(u.encode()))
+        kotlin.test.assertNull(UseKey.decode("s\tn"))
+        kotlin.test.assertNull(UseKey.decode("s\tn\tlater"))
+    }
 }

@@ -175,4 +175,13 @@ class PotViewEntriesTest {
         assertEquals(me.raddatz.veyq.mobile.words.Msg.REPORT_CSAM_NOTE, me.raddatz.veyq.mobile.session.NodeReport.note("CHILD_SEXUAL_ABUSE"))
         kotlin.test.assertNull(me.raddatz.veyq.mobile.session.NodeReport.note("TERMS_BREACH"))
     }
+
+    @Test
+    fun theSettingsOfferTheCurrencyAndCategoriesToWhoMayChangeThem() {
+        val writer = view(people)
+        assertTrue(writer.currencyEditable && writer.categoriesShown && writer.canAddCategory)
+        val reader = view(people, canWrite = false)
+        // a reader sees no currency picker and no categories where the Pot has none of its own
+        assertFalse(reader.currencyEditable || reader.categoriesShown || reader.canAddCategory)
+    }
 }

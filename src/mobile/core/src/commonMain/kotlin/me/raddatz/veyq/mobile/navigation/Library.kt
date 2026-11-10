@@ -55,7 +55,19 @@ interface Library {
 }
 
 /** The key a stored use names an object by: the store keeps no name, so nothing decrypted rests on the device. */
-data class UseKey(val scopeId: String, val nodeId: String, val lastUsedEpochMs: Long)
+data class UseKey(val scopeId: String, val nodeId: String, val lastUsedEpochMs: Long) {
+    /** The line a platform stores it as (`scope\tnode\tms`). */
+    fun encode(): String = "$scopeId\t$nodeId\t$lastUsedEpochMs"
+
+    companion object {
+        /** A stored line read back; null for one that is not a use. */
+        fun decode(line: String): UseKey? {
+            val p = line.split('\t')
+            if (p.size != 3) return null
+            return p[2].toLongOrNull()?.let { UseKey(p[0], p[1], it) }
+        }
+    }
+}
 
 /**
  * Recent (ADR 0122 decision 6): per install, never synced, never sent. The platform persists [UseKey]s only; the names

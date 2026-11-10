@@ -58,6 +58,15 @@ class PotView internal constructor(session: Source) {
     /** The base currency is fixed once the Pot holds any money entry, live or deleted. */
     val currencyFixed: Boolean = session.currencyFixed
 
+    /** The base currency is chosen here: by a member who may change the settings, while it is not fixed. */
+    val currencyEditable: Boolean get() = canChangeSettings && !currencyFixed
+
+    /** The categories section shows: to a member who may change them, or where the Pot has own ones to read. */
+    val categoriesShown: Boolean get() = canChangeSettings || ownCategories.isNotEmpty()
+
+    /** A category may be added: by a member who may change the settings, below the format's cap. */
+    val canAddCategory: Boolean get() = canChangeSettings && ownCategories.size < PotMeta.MAX_OWN
+
     private val receiptsById = session.receipts.associateBy { it.receiptId }
 
     /** A receipt the Pot holds, by id (its sealed name and type where they opened); null for one not (yet) listed. */

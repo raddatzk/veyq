@@ -272,8 +272,6 @@ private struct FreshLinkView: View {
     }
 }
 
-/// A link's password: at least this many characters (`FolderShareDialog`'s `PASSWORD_MIN`).
-private let passwordMin = 10
 
 /// The form of a new link: its role, an optional label, a password and an end. A rule of the tenant turns its switch on and
 /// keeps it on; the end is a day no later than the rule's last, sent as the end of that local day. `onCreate` answers why

@@ -244,7 +244,7 @@ private fun trash(node: NodeAt, model: AppModel, snackbar: SnackbarHostState, sc
             snackbar.showSnackbar(said)
             return@launch
         }
-        val answer = kotlinx.coroutines.withTimeoutOrNull(6_000) {
+        val answer = kotlinx.coroutines.withTimeoutOrNull(me.raddatz.veyq.mobile.navigation.ShellModel.TRASH_UNDO_MS) {
             snackbar.showSnackbar(said, actionLabel = context.getString(R.string.trash_undo), duration = SnackbarDuration.Indefinite)
         }
         if (answer == SnackbarResult.ActionPerformed && !model.restore(before)) {

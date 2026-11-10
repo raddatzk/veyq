@@ -1266,11 +1266,8 @@ class AppModel(app: Application) : AndroidViewModel(app) {
     }
 
     private fun persistRecent(keys: List<UseKey>) {
-        prefs.edit().putString("uses", keys.joinToString("\n") { "${it.scopeId}\t${it.nodeId}\t${it.lastUsedEpochMs}" }).apply()
+        prefs.edit().putString("uses", keys.joinToString("\n") { it.encode() }).apply()
     }
 
-    private fun loadRecent(): List<UseKey> = prefs.getString("uses", "").orEmpty().lines().mapNotNull { line ->
-        val p = line.split('\t')
-        if (p.size == 3) p[2].toLongOrNull()?.let { UseKey(p[0], p[1], it) } else null
-    }
+    private fun loadRecent(): List<UseKey> = prefs.getString("uses", "").orEmpty().lines().mapNotNull(UseKey::decode)
 }

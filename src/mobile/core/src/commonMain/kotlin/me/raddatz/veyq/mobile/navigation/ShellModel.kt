@@ -308,6 +308,9 @@ class ShellModel(
             return shell.at(tree, if (i > 0) shell.path[i - 1].nodeId else null)
         }
 
+        /** How long a trash's undo is offered (the web's `TRASH_UNDO_MS`). */
+        const val TRASH_UNDO_MS = 6_000L
+
         /** The drawer's short lists (ADR 0122): six favorites, eight recent. */
         const val DRAWER_FAVORITES = 6
         const val DRAWER_RECENT = 8

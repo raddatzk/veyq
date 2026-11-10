@@ -575,7 +575,7 @@ struct TrashNotice: View {
             .padding(.horizontal, 16)
             .padding(.bottom, 96)
             .task(id: notice.id) {
-                try? await Task.sleep(for: .seconds(6))
+                try? await Task.sleep(for: .milliseconds(ShellModel.companion.TRASH_UNDO_MS))
                 model.dismissTrashNotice(notice.id)
             }
         }

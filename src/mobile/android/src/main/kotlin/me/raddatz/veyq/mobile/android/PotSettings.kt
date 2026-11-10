@@ -77,7 +77,7 @@ internal fun minorUnitsOf(code: String): Int = me.raddatz.veyq.mobile.expenses.C
 private fun BaseCurrency(view: PotView, state: me.raddatz.veyq.mobile.expenses.PotModel.State, model: AppModel) {
     val palette = LocalPalette.current
     Section(stringResource(R.string.pot_base_currency))
-    if (!view.canChangeSettings || view.currencyFixed) {
+    if (!view.currencyEditable) {
         Text(view.currency ?: "")
         if (view.currencyFixed) Text(stringResource(R.string.settings_currency_fixed), style = MaterialTheme.typography.bodySmall, color = role(palette.muted))
         return
@@ -102,7 +102,7 @@ private fun BaseCurrency(view: PotView, state: me.raddatz.veyq.mobile.expenses.P
 /** The Pot's own categories beside the default set: added and renamed, never removed in the first cut. */
 @Composable
 private fun Categories(view: PotView, state: me.raddatz.veyq.mobile.expenses.PotModel.State, model: AppModel) {
-    if (!view.canChangeSettings && view.ownCategories.isEmpty()) return
+    if (!view.categoriesShown) return
     val palette = LocalPalette.current
     var renaming by remember { mutableStateOf<Pair<String, String>?>(null) }
     Section(stringResource(R.string.pot_own_categories))
@@ -117,7 +117,7 @@ private fun Categories(view: PotView, state: me.raddatz.veyq.mobile.expenses.Pot
             }
         }
     }
-    if (view.canChangeSettings && view.ownCategories.size < 200) {
+    if (view.canAddCategory) {
         var name by rememberSaveable { mutableStateOf("") }
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             OutlinedTextField(name, { name = it }, label = { Text(stringResource(R.string.settings_category_name)) }, singleLine = true, modifier = Modifier.weight(1f))

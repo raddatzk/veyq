@@ -62,8 +62,6 @@ import java.time.ZoneOffset
 import java.time.format.DateTimeFormatter
 import java.time.format.FormatStyle
 
-/** A link's password: at least this many characters (`FolderShareDialog`'s `PASSWORD_MIN`). */
-private const val PASSWORD_MIN = 10
 
 /**
  * The sentences a node's share sheet says in its kind's words (the web's `ShareDialogCopy`): a folder's are core's
