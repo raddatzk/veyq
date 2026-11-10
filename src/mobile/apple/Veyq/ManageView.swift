@@ -13,13 +13,13 @@ struct ManageView: View {
                 ForEach(model.managing ?? []) { server in
                     Section {
                         ForEach(server.tenants) { t in
-                            Toggle(isOn: Binding(get: { !t.hidden || t.current }, set: { model.setTenantHidden(server.account, t.tenant, !$0) })) {
+                            Toggle(isOn: Binding(get: { t.shown }, set: { model.setTenantHidden(server.account, t.tenant, !$0) })) {
                                 VStack(alignment: .leading, spacing: 2) {
                                     Text(t.tenant.name).fontWeight(.semibold)
-                                    Text(t.current ? say(.manageCurrent) : t.tenant.domain).font(.caption).foregroundStyle(Role.muted)
+                                    Text(t.subtitle).font(.caption).foregroundStyle(Role.muted)
                                 }
                             }
-                            .disabled(t.current)
+                            .disabled(!t.switchable)
                             if let spaces = t.spaces {
                                 ForEach(spaces) { s in
                                     Toggle(Names.spaceName(s.space), isOn: Binding(get: { !s.hidden }, set: { model.setSpaceHidden(s.space.scopeId, !$0) }))

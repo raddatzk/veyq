@@ -53,7 +53,7 @@ import me.raddatz.veyq.mobile.session.Person
 fun PotCreateSheet(s: Screen.Signed, model: AppModel, onClose: () -> Unit) {
     val creating by model.creating.collectAsStateWithLifecycle()
     var name by rememberSaveable { mutableStateOf("") }
-    var scopeId by rememberSaveable { mutableStateOf(s.shell.space ?: s.spaces.firstOrNull()?.scopeId ?: "") }
+    var scopeId by rememberSaveable { mutableStateOf(PotCreate.defaultSpace(s.shell, s.spaces) ?: "") }
     var currency by rememberSaveable { mutableStateOf(PotCreate.defaultCurrency(java.util.Locale.getDefault().language)) }
     var typed by rememberSaveable { mutableStateOf("") }
     var people by remember { mutableStateOf(PotCreate.People()) }
@@ -128,7 +128,7 @@ fun PotCreateSheet(s: Screen.Signed, model: AppModel, onClose: () -> Unit) {
                     onClick = {
                         takeTyped()
                         // in the folder on screen, where the sheet creates in the space shown (the web's "New" at a level)
-                        val parent = if (scopeId == s.shell.space) s.shell.folder?.nodeId else null
+                        val parent = PotCreate.parentIn(s.shell, scopeId)
                         model.createPot(scopeId, name, currency, minorUnitsOf(currency), people.list, parent) { onClose() }
                     },
                     enabled = name.isNotBlank() && scopeId.isNotEmpty() && !creating.saving,

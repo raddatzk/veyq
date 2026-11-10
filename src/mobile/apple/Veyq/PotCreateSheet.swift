@@ -81,7 +81,7 @@ struct PotCreateSheet: View {
                 }
             }
             .task(id: scopeId) {
-                if scopeId.isEmpty { scopeId = model.shell.space ?? model.spaces.first?.scopeId ?? "" }
+                if scopeId.isEmpty { scopeId = PotCreate.shared.defaultSpace(shell: model.shell, spaces: model.spaces) ?? "" }
                 members = scopeId.isEmpty ? [] : await model.membersOf(scopeId)
                 // A member chosen from another space is no member here.
                 people = people.keep(members: members)

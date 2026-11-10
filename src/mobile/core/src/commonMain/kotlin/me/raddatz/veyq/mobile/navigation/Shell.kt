@@ -71,6 +71,9 @@ data class Shell(
     }
 
     /** The folder Home shows (null: the root) as a node action takes it, in space [scopeId]. */
+    /** The drawer opens at the start only where nothing is chosen yet: Home, no space, no folder. */
+    val drawerOpensAtStart: Boolean get() = isHome && space == null && path.isEmpty()
+
     fun folderAt(scopeId: String): NodeAt? = folder?.let { NodeAt(scopeId, it.nodeId, NodeRef.FOLDER, it.name) }
 
     fun filter(app: ApplicationId?): Shell = copy(filter = app)

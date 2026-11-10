@@ -47,22 +47,21 @@ with both apps behaving as before on a device for what it touched, and commits o
 10. **Done 2026-11-09, ahead of its turn** (slice 1 needed its keys, and the Apple app had no German). **One catalog.** The words move into the core's catalog and are generated into `strings.xml` and the String
     Catalog (decision 3); a guard holds that no platform carries a word of its own beyond the generated ones.
 
-## Left after the second sweep (2026-11-10)
+## The second sweep (2026-11-10)
 
-A read of both apps after the slices found these rules still written twice; each moves like the slices did (core
-function, its commonTest, both apps calling it):
+A read of both apps after the slices found rules still written twice; they moved like the slices did (core function,
+its commonTest, both apps calling it): the Pot's refusal and problem tables, the rows' read (`RowDetails`), the editor's
+steps, the overview's balances, the trash sheet (`TrashSheet`), the report form, the move sheet's words, the upload tray's
+summary, the shell's words and "New", a Memory's picture rule, the drawer at the start, a new Pot's place, Manage
+servers' switches. What stays with each platform, by decision:
 
-- What a kind's page gives the header beyond `AppKinds.header`: a Pot's cover and copy only while `canWrite`, a file's
-  copy, download and send only with content; the kind→page registry (an unknown kind: Apple falls back, Android throws).
-- The shell's chrome: which node is headed, when the trash and the top level's "Add files only" are offered (Android
-  tests `folder == null`, Apple `folderAt == nil`), the body's routing, the drawer open at start (Android also needs an
-  empty path).
-- The share sheet's flows: which notice follows edit, renew, reactivate, switch-off and delete, and the re-read after
-  each; a link's end day to the instant (end of the local day) and the picker's range.
-- Memories: a video without a preview, download only unblocked, chapters only for a Memory, the re-read trigger (Apple
-  only the details' count).
-- The share inbox's wiring (taken into a Pot when its page shows it), the new Pot's parent and default space, Manage
-  servers' switches and words, the upload label.
+- A link's end day as an instant (the end of a local day) and the picker's range: the device's calendar and time zone,
+  as a date's format is; core holds the day (`LinkForm`), not the zone (it has no time-zone library, and one is not
+  added for this).
+- The order of a sheet's own steps (re-read after a link change, the fresh link shown): the words each step says are
+  core's (`Notices.linkChanged`, `linkClosed`), the sequence is the view's.
+- A kind page's own facts it passes to the header (a Pot's `canWrite`, a file's `hasContent`) and the body's routing:
+  each is one read of a core value, no rule.
 
 ## Differences, settled here
 

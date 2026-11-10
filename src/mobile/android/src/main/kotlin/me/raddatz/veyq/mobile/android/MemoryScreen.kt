@@ -279,7 +279,7 @@ private fun LightboxPage(item: MemoryMedia.Item, model: AppModel, current: Boole
             else -> {
                 val read by produceState<Read?>(null, item.mediaId) {
                     // a video without a poster has none to show: its original is no picture
-                    value = Read(if (item.isVideo && item.preview == null) null else model.mediaPicture(item, item.lightboxBlob))
+                    value = Read(if (!item.hasPicture) null else model.mediaPicture(item, item.lightboxBlob))
                 }
                 val r = read
                 when {

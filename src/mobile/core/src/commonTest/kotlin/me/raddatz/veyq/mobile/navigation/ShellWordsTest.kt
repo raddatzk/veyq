@@ -62,4 +62,27 @@ class ShellWordsTest {
         kotlin.test.assertNull(UseKey.decode("s\tn"))
         kotlin.test.assertNull(UseKey.decode("s\tn\tlater"))
     }
+
+    @Test
+    fun the_drawer_opens_only_with_nothing_chosen_and_a_new_pot_lands_where_the_shell_is() {
+        assertTrue(Shell.start(null, null).drawerOpensAtStart)
+        assertFalse(Shell.start(null, "t").drawerOpensAtStart)
+        val inFolder = Shell.start(null, "t").enter(FolderRef("f", "F"))
+        assertEquals("f", me.raddatz.veyq.mobile.expenses.PotCreate.parentIn(inFolder, "t"))
+        kotlin.test.assertNull(me.raddatz.veyq.mobile.expenses.PotCreate.parentIn(inFolder, "other"))
+        assertEquals("t", me.raddatz.veyq.mobile.expenses.PotCreate.defaultSpace(inFolder, listOf(SpaceRef("p", "PERSONAL", "Mine"))))
+        assertEquals("p", me.raddatz.veyq.mobile.expenses.PotCreate.defaultSpace(Shell.start(null, null), listOf(SpaceRef("p", "PERSONAL", "Mine"))))
+    }
+
+    @Test
+    fun manage_servers_keeps_the_current_tenant_shown_and_names_it_so() {
+        val t = TenantRef("t", "Verein", "verein.example")
+        val current = me.raddatz.veyq.mobile.session.SessionModel.ManagedTenant(t, hidden = true, current = true, spaces = null)
+        assertTrue(current.shown)
+        assertFalse(current.switchable)
+        assertEquals(Piece.Said(Notice(Msg.MANAGE_CURRENT)), current.subtitle)
+        val hidden = me.raddatz.veyq.mobile.session.SessionModel.ManagedTenant(t, hidden = true, current = false, spaces = null)
+        assertFalse(hidden.shown)
+        assertEquals(Piece.Plain("verein.example"), hidden.subtitle)
+    }
 }

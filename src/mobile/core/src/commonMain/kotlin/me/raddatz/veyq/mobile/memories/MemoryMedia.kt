@@ -65,6 +65,9 @@ object MemoryMedia {
         internal val key: ByteArray,
     ) {
         val isVideo: Boolean get() = type?.startsWith("video/") == true
+
+        /** The lightbox shows a picture of it: not for a video without a poster, whose original is no picture. */
+        val hasPicture: Boolean get() = !(isVideo && preview == null)
         /** The tier the grid draws: the thumbnail, else a small enough original, else none (the grid shows an icon). */
         val gridBlob: Blob? get() = thumbnail ?: original.takeIf { it.size <= GRID_ORIGINAL_MAX && !isVideo }
         /** The tier the lightbox shows: the preview, else the original. */

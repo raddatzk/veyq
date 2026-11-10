@@ -20,6 +20,10 @@ struct ManagedTenant: Identifiable {
     let hidden: Bool
     let current: Bool
     let spaces: [ManagedSpace]?
+    /// Core's answers (`SessionModel.ManagedTenant`): its switch on, whether it may be switched, the line under its name.
+    var shown = true
+    var switchable = true
+    var subtitle = ""
     var id: String { tenant.tenantId }
 }
 
@@ -256,7 +260,7 @@ final class AppModel {
             ManagedServer(account: c.account, tenants: c.tenants.map { t in
                 ManagedTenant(tenant: t.tenant, hidden: t.hidden, current: t.current, spaces: t.spaces?.map {
                     ManagedSpace(space: $0.space, hidden: $0.hidden, canHide: $0.canHide)
-                })
+                }, shown: t.shown, switchable: t.switchable, subtitle: say(piece: t.subtitle))
             }, trusted: c.trusted)
         }
     }
@@ -319,7 +323,7 @@ final class AppModel {
             ServerEntry(account: c, tenants: hidden.visibleTenants(connectionKey: c.key, tenants: c.tenants, current: c == account ? tenant : nil))
         }
         shell = state.shell
-        if start { drawerOpen = shell.isHome && shell.space == nil }
+        if start { drawerOpen = shell.drawerOpensAtStart }
     }
 
     /// Whether "New" is offered where the shell is (core's `ShellModel.canCreateHere`).
@@ -1171,7 +1175,7 @@ final class AppModel {
         guard let pots = potModel, let shellModel else { return false }
         creatingPot = CreatingPot(saving: true)
         // in the folder on screen, where the sheet creates in the space shown (the web's "New" at a level)
-        let parent = scopeId == shell.space ? shell.folder?.nodeId : nil
+        let parent = PotCreate.shared.parentIn(shell: shell, scopeId: scopeId)
         let created = (try? await pots.create(
             shell: shellModel, scopeId: scopeId, parentId: parent, name: name,
             base: Ledger.BaseCurrency(currency: currency, minorUnits: minorUnits), people: people

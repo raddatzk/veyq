@@ -54,6 +54,14 @@ object PotCreate {
             members.filter { m -> list.none { it.userId == m.userId } }
     }
 
+    /** The space a new Pot's sheet starts on: the one shown, else the first. */
+    fun defaultSpace(shell: me.raddatz.veyq.mobile.navigation.Shell, spaces: List<me.raddatz.veyq.mobile.navigation.SpaceRef>): String? =
+        shell.space ?: spaces.firstOrNull()?.scopeId
+
+    /** Where a new Pot lands in [scopeId]: the folder shown where that is the space shown (the web's "New" at a level), else its root. */
+    fun parentIn(shell: me.raddatz.veyq.mobile.navigation.Shell, scopeId: String): String? =
+        if (scopeId == shell.space) shell.folder?.nodeId else null
+
     /** The base currency a new Pot starts with: the euro for a German-speaking person, else the dollar (the web's). */
     fun defaultCurrency(language: String): String = if (language == "de") "EUR" else "USD"
 

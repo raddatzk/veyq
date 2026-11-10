@@ -76,10 +76,10 @@ fun ManageScreen(servers: List<ManagedServer>, model: AppModel) {
                         for (t in server.tenants) {
                             ListItem(
                                 headlineContent = { Text(t.tenant.name, fontWeight = FontWeight.SemiBold) },
-                                supportingContent = { Text(if (t.current) stringResource(R.string.manage_current) else t.tenant.domain, color = role(palette.muted)) },
+                                supportingContent = { Text(piece(t.subtitle), color = role(palette.muted)) },
                                 trailingContent = {
                                     Switch(
-                                        checked = !t.hidden || t.current, enabled = !t.current,
+                                        checked = t.shown, enabled = t.switchable,
                                         onCheckedChange = { model.setTenantHidden(server.account, t.tenant, !it) },
                                         colors = SwitchDefaults.colors(checkedTrackColor = role(palette.accent)),
                                     )

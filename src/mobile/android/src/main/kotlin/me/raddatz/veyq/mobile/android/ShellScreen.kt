@@ -102,7 +102,7 @@ import me.raddatz.veyq.mobile.navigation.ObjectRef
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ShellScreen(s: Screen.Signed, model: AppModel) {
-    val drawer = rememberDrawerState(if (s.shell.isHome && s.shell.path.isEmpty() && s.shell.space == null) DrawerValue.Open else DrawerValue.Closed)
+    val drawer = rememberDrawerState(if (s.shell.drawerOpensAtStart) DrawerValue.Open else DrawerValue.Closed)
     val scope = rememberCoroutineScope()
     val snackbar = androidx.compose.runtime.remember { androidx.compose.material3.SnackbarHostState() }
     val shell = s.shell

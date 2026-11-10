@@ -270,7 +270,7 @@ private struct LightboxPage: View {
         .onChange(of: current) { if !current { playing = false } }
         .task(id: item.mediaId) {
             // a video without a poster has none to show: its original is no picture
-            if !(item.isVideo && item.preview == nil) { picture = await model.mediaPicture(item, blob: item.lightboxBlob) }
+            if item.hasPicture { picture = await model.mediaPicture(item, blob: item.lightboxBlob) }
             read = true
         }
     }

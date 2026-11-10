@@ -36,4 +36,15 @@ class MemoryMediaTest {
         val ordered = MemoryMedia.order(listOf(item("a", 10), item("b", null), item("c", 30), item("d", 20, override = 40), item("e", 30)))
         assertEquals(listOf("d", "c", "e", "a", "b"), ordered.map { it.mediaId })
     }
+
+    @Test
+    fun aVideoWithoutAPosterHasNoPictureToShow() {
+        fun item(type: String, preview: MemoryMedia.Blob?) = MemoryMedia.Item(
+            "s", "n", "m", MemoryMedia.Blob("b", 1, 29, "", null), null, preview, null, type, null, null, false, ByteArray(0),
+        )
+        val poster = MemoryMedia.Blob("p", 1, 29, "", null)
+        assertEquals(false, item("video/mp4", null).hasPicture)
+        assertEquals(true, item("video/mp4", poster).hasPicture)
+        assertEquals(true, item("image/jpeg", null).hasPicture)
+    }
 }

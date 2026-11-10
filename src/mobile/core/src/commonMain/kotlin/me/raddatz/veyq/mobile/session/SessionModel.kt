@@ -251,7 +251,16 @@ class SessionModel<A : Connection, T : Any>(
     class ManagedSpace(val space: SpaceRef, val hidden: Boolean, val canHide: Boolean)
 
     /** A tenant on "Manage servers"; [spaces] is null while they load. */
-    class ManagedTenant(val tenant: TenantRef, val hidden: Boolean, val current: Boolean, val spaces: List<ManagedSpace>?)
+    class ManagedTenant(val tenant: TenantRef, val hidden: Boolean, val current: Boolean, val spaces: List<ManagedSpace>?) {
+        /** Its switch: on while it is shown — the current one always is, and cannot be hidden. */
+        val shown: Boolean get() = !hidden || current
+        val switchable: Boolean get() = !current
+
+        /** The line under its name: "Shown now" for the current one, else its domain. */
+        val subtitle: me.raddatz.veyq.mobile.words.Piece
+            get() = if (current) me.raddatz.veyq.mobile.words.Piece.Said(me.raddatz.veyq.mobile.words.Notice(me.raddatz.veyq.mobile.words.Msg.MANAGE_CURRENT))
+            else me.raddatz.veyq.mobile.words.Piece.Plain(tenant.domain)
+    }
 
     /** A server on "Manage servers": its account, its tenants, how this device trusts it, if it does. */
     class ManagedServer<A : Any>(val account: A, val label: String, val tenants: List<ManagedTenant>, val trusted: TrustedDevice.Method?)
