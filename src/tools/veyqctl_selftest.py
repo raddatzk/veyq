@@ -280,6 +280,9 @@ class FakeHost(vc.Host):
     def ask(self, key, example):
         return self.answers.get(key)
 
+    def wait(self, prompt):
+        return False  # no terminal: a missing program is refused
+
     def prompt(self, question, default="", hint=""):
         """A terminal where each question gets its answer from `answers`, else Enter (the default, or nothing)."""
         return self.answers.get(question) or default or None
@@ -1720,22 +1723,51 @@ def test_programs_checked_first(tmp: pathlib.Path) -> None:
     top.mkdir()
 
     class Missing(GitOpsHost):
-        def __init__(self, missing, **kwargs):
+        def __init__(self, missing, installs=False, **kwargs):
             super().__init__(top=top, **kwargs)
-            self.missing, self.asked = set(missing), []
+            self.missing, self.asked, self.installs, self.waited = set(missing), [], installs, []
+            self.asked_at: list[int] = []
 
         def which(self, name):
             return None if name in self.missing else super().which(name)
 
+        def wait(self, prompt):
+            """A terminal where the person installs what is missing, when `installs` says so, and presses Enter."""
+            self.waited.append(set(self.missing))
+            if self.installs:
+                self.missing = set()
+            return self.installs
+
         def prompt(self, question, default="", hint=""):
             self.asked.append(question)
+            self.asked_at.append(len(self.commands))  # how many commands had run when it was asked
             return super().prompt(question, default, hint)
 
     host = Missing({"kubectl", "helm"})
     rc, out = run_main(["init", "--gitops", top / "apps" / "veyq", *INIT, "--secrets", "none"], host)
-    check("init --gitops without kubectl and helm is refused naming both and where to get them, before any question "
-          "or command", rc == 1 and "kubectl, helm, not on PATH" in out and vc.PROGRAMS["helm"] in out
-          and vc.PROGRAMS["kubectl"] in out and not host.asked and not host.commands, out[-400:])
+    check("init --gitops without kubectl and helm: after the setup answers, both named with where to get them, "
+          "waited for, refused without a terminal — no cluster question, no command but git's",
+          rc == 1 and "kubectl, helm, not on PATH" in out and vc.PROGRAMS["helm"] in out
+          and vc.PROGRAMS["kubectl"] in out and host.waited == [{"kubectl", "helm"}]
+          and "kubeconfig context" not in host.asked and all(c[0] == "git" for c in host.commands)
+          and "brew install kubernetes-cli helm" in out, out[-400:])
+    host = Missing({"sops"}, answers={"secrets: sops, external-secrets, sealed-secrets, none": "sops"})
+    (top / ".sops.yaml").write_text("creation_rules: []\n")
+    rc, out = run_main(["init", "--gitops", top / "apps" / "veyq-sops", *INIT], host)
+    check("the secrets answer decides the programs: sops chosen and missing is named in the one check",
+          rc == 1 and "needs sops, not on PATH" in out and "kubeconfig context" not in host.asked, out[-400:])
+    (top / ".sops.yaml").unlink()
+    mirror = gitops_mirror(tmp / "programs-mirror", ("v1.0", None))
+    host = Missing({"helm"}, installs=True, signed=gitops_signed("1.0"))
+    rc, out = run_main(["--source", mirror, "init", "--gitops", top / "apps" / "veyq-waited", "--name", "waited", *INIT,
+                        "--secrets", "none"], host)
+    check("a program installed while init waits is found on Enter, and the same run goes on to write veyq's half",
+          rc == 0 and host.waited == [{"helm"}] and (top / "apps" / "veyq-waited" / vc.GITOPS_FILE).is_file(),
+          out[-400:])
+    steps = [i for i, c in enumerate(host.commands) if c[0].endswith("cosign") and "version" not in c
+             or c[:2] == ["helm", "template"] or c[:1] == ["sops"]]
+    check("no question after the run's first step (the release's verification, the render, the encryption)",
+          host.asked and steps and max(host.asked_at) <= steps[0], f"{list(zip(host.asked, host.asked_at))} {steps[:1]}")
     host = Missing({"git"}, answers={"compose or gitops": "gitops"})
     rc, out = run_main(["init"], host)
     check("init with gitops chosen at its prompt and no git is refused before the next question",
@@ -1820,11 +1852,32 @@ def test_gitops_init(tmp: pathlib.Path) -> None:
           and meta["chart"] == "ghcr.io/raddatzk/charts/veyq", str(meta))
     check("init --gitops lists the instance under the repository's name and makes it current",
           vc.read_registry() == {"current": "repo", "instances": {"repo": str(d.resolve())}})
+    setup = json.loads((top / vc.SETUP_FILE).read_text())
+    check("init --gitops kept every answer in the repository's veyq-setup.json, by veyq's directory, no secret",
+          setup["veyq"]["apps/veyq"].get("domain") == "veyq.example.org"
+          and setup["veyq"]["apps/veyq"].get("secrets") == "external-secrets"
+          and not any(k in json.dumps(setup) for k in ("mariadbPassword", "rpcSecret")), json.dumps(setup))
     before = tree_text(top)
     rc, out = run_main(["--source", mirror, "init", "--gitops", d, *INIT, "--secrets", "none"], GitOpsHost(top=top, signed=signed))
-    check("a second init into the same directory is refused, pointing at how a half that exists is managed, and changes "
-          "nothing", rc == 1 and "holds files already" in out and vc.EXISTING_HALF_DOCS in out
+    check("a second init into the written directory with an answer that differs is refused, naming it, and changes "
+          "nothing", rc == 1 and "--secrets none (answered: external-secrets) differs" in out
           and tree_text(top) == before, out[-300:])
+    host = GitOpsHost(top=top, signed=signed)
+    rc, out = run_main(["--source", mirror, "init", "--gitops", d], host)
+    check("init again in the written checkout asks nothing and writes nothing (its answers are veyq-setup.json's)",
+          rc == 0 and "nothing to write" in out and tree_text(top) == before and not host.ran("helm", "template"),
+          out[-300:])
+    stray = top / "apps" / "veyq-stray"
+    stray.mkdir(parents=True)
+    (stray / "values.yaml").write_text("{}\n")
+    before = tree_text(top)
+    rc, out = run_main(["--source", mirror, "init", "--gitops", stray, "--name", "stray", *INIT, "--secrets", "none"],
+                       GitOpsHost(top=top, signed=signed))
+    check("init into a directory holding files no answers describe is refused, pointing at how a half that exists is "
+          "managed, and changes nothing", rc == 1 and "holds files already" in out and vc.EXISTING_HALF_DOCS in out
+          and tree_text(top) == before, out[-300:])
+    stray.joinpath("values.yaml").unlink()
+    stray.rmdir()
     rc, out = run_main(["--instance", "repo", "--source", mirror, "verify"], GitOpsHost(top=top, signed=signed))
     check("verify on a GitOps instance: manifest, three images and chart", rc == 0 and "chart" in out
           and "nothing was written" in out, out[-400:])
@@ -1962,19 +2015,19 @@ def test_init_resumes(tmp: pathlib.Path) -> None:
     top = tmp / "resume"
     top.mkdir()
     d = top / "apps" / "veyq"
-    answers = {"veyq's domain": "resume.example.org", "provider: sops, external-secrets, sealed-secrets, none": "none",
+    answers = {"veyq's domain": "resume.example.org", "secrets: sops, external-secrets, sealed-secrets, none": "none",
                "instance name": "resumed"}
     argv = ["--source", mirror, "init", "--gitops", d]
     interrupted(argv, GitOpsHost(top=top, signed=signed, answers=answers, interrupt=("helm", "template")))
-    progress = vc.Progress(top.resolve())
-    check("an interrupted init kept its answers at once, outside the repository, no secret among them",
-          progress.answer("domain") == "resume.example.org" and progress.answer("secrets") == "none"
-          and not progress.path.is_relative_to(top) and not d.exists()
-          and "secrets" not in json.dumps(progress.doc["steps"]), str(progress.doc))
+    progress = vc.Progress(top.resolve(), "apps/veyq")
+    check("an interrupted init kept its answers at once in the repository's veyq-setup.json, its steps outside it, no "
+          "secret in either", progress.answer("domain") == "resume.example.org" and progress.answer("secrets") == "none"
+          and progress.setup_path == top.resolve() / vc.SETUP_FILE and not progress.path.is_relative_to(top.resolve())
+          and not d.exists() and "secrets" not in json.dumps(progress.doc["steps"]), str(progress.answers))
     rc, out = run_main(argv, GitOpsHost(top=top, signed=signed))  # no answers at all this time
     values = (d / "values.yaml").read_text() if (d / "values.yaml").exists() else ""
     check("the same command continues: nothing asked again, the answers taken (and shown), the instance written",
-          rc == 0 and "domain: resume.example.org" in values and "(from the last run)" in out
+          rc == 0 and "domain: resume.example.org" in values and f"(from {vc.SETUP_FILE})" in out
           and "a run here stopped" in out and vc.read_registry()["instances"].get("resumed") == str(d.resolve())
           and not progress.path.exists(), out[-600:])
 
@@ -1995,6 +2048,32 @@ def test_init_resumes(tmp: pathlib.Path) -> None:
           rc == 0 and before and handed.read_text() == before and (d2 / "values.yaml").read_text() == written
           and not host.ran("helm", "template") and vc.read_registry()["instances"].get("resumed2") == str(d2.resolve()),
           out[-500:])
+
+
+def test_init_resumes_from_flags(tmp: pathlib.Path) -> None:
+    """Flags given once are answers too: a run started with them and continued with none writes what they said."""
+    mirror, signed = tmp / "g-mirror", gitops_signed("1.0", "1.1", "2.0")
+    top = tmp / "resume-flags"
+    top.mkdir()
+    d = top / "apps" / "veyq"
+    interrupted(["--source", mirror, "init", "--gitops", d, "--name", "flags", *INIT, "--secrets", "none",
+                 "--no-bundled-store", "--backup-size", "5Gi", "--namespace", "web", "--revision", "live"],
+                GitOpsHost(top=top, signed=signed, interrupt=("helm", "template")))
+    # --no-cluster-check: nothing read from the cluster offers `acme`, so only the recorded answer can give it
+    rc, out = run_main(["--source", mirror, "init", "--gitops", d, "--no-cluster-check"], GitOpsHost(top=top, signed=signed))
+    values = (d / "values.yaml").read_text() if (d / "values.yaml").exists() else ""
+    claim = (d / "resources/backup-pvc.yaml").read_text() if (d / "resources/backup-pvc.yaml").exists() else ""
+    application = (d / "application.yaml").read_text() if (d / "application.yaml").exists() else ""
+    check("continued with no flag: TLS derived from --acme-email, the store left out, the claim's size, the namespace "
+          "and the branch are the first run's",
+          rc == 0 and "ops@example.org" in values and "store." not in values and "storage: 5Gi" in claim
+          and "namespace: web" in claim and "targetRevision: live" in application, out[-500:] + values[:300])
+    before = tree_text(top)
+    host = GitOpsHost(top=top, signed=signed)
+    rc, out = run_main(["init"], host)
+    check("`init` alone in the written checkout takes veyq-setup.json's directory, asks nothing, writes nothing",
+          rc == 0 and "nothing to write" in out and tree_text(top) == before and not host.ran("helm", "template"),
+          out[-400:])
 
 
 def test_gitops_upgrade(tmp: pathlib.Path) -> None:
@@ -2155,11 +2234,12 @@ def main() -> int:
         test_manifest_signature(tmp)
         test_entry_signed(tmp)
         test_instances(tmp)
-        test_programs_checked_first(tmp)
         test_gitops_init(tmp)
         test_init_resumes(tmp)
+        test_init_resumes_from_flags(tmp)
         test_gitops_upgrade(tmp)
         test_gitops_hand_written(tmp)
+        test_programs_checked_first(tmp)
     if failures:
         print(f"\nveyqctl self-test FAILED: {len(failures)} check(s)")
         return 1
