@@ -105,7 +105,7 @@ struct EntryEditor: View {
 
     /// The currencies offered, by code: core's one table (the web's `Intl`).
     private static var currencies: [String] { Currencies.shared.known }
-    private static let defaults = ["food", "groceries", "accommodation", "transport", "leisure", "household", "other"]
+    private static var defaults: [String] { RevisionFormat.shared.DEFAULT_CATEGORIES }
 
     /// The minor-unit digits of `code` (the euro 2, the yen 0, the dinar 3): core's one table.
     private static func minorUnits(_ code: String) -> Int32 { Currencies.shared.minorUnits(code: code) }
@@ -267,15 +267,15 @@ struct EntryEditor: View {
                     #if os(iOS)
                         .keyboardType(.decimalPad)
                     #endif
-                    if form.payers.count > 1 && editable {
+                    if form.kotlin.canRemovePayer && editable {
                         Button { form.payers.remove(at: i) } label: { Image(systemName: "minus.circle") }
                             .buttonStyle(.borderless)
                             .accessibilityLabel(say(.peopleRemove, name(form.payers[i].participant)))
                     }
                 }
             }
-            if editable, let unused = people.first(where: { p in !form.payers.contains { $0.participant == p.id } }) {
-                Button(say(.edAddPayer)) { form.payers.append(.init(participant: unused.id, amount: "")) }
+            if editable, let unused = form.kotlin.nextPayer(people: people.map(\.id)) {
+                Button(say(.edAddPayer)) { form.payers.append(.init(participant: unused, amount: "")) }
             }
             problem(shown("payers"))
         } header: {
@@ -303,7 +303,7 @@ struct EntryEditor: View {
             problem(shown("items"))
         }
         let restLeft = form.kotlin.restLeft
-        if form.items.isEmpty || restLeft > 0 {
+        if form.kotlin.showsRest {
             Section {
                 SplitEditor(split: $form.rest, people: people, part: restLeft, currency: form.currency, minorUnits: form.minorUnits)
                 problem(shown("rest"))
@@ -347,11 +347,7 @@ struct SplitEditor: View {
     var body: some View {
         if !split.expanded {
             HStack {
-                if split.rows.count == 1 {
-                    Text(say(.edSplitOnly, people.first { $0.id == split.rows[0].participant }?.name ?? ""))
-                } else {
-                    Text(say(.edSplitEveryone, split.rows.count))
-                }
+                Text(say(notice: EntryForm.companion.collapsedWords(split: FormState.kotlin(split), people: people)))
                 Spacer()
                 if editable { Button(say(.edAdjust)) { split.expanded = true }.buttonStyle(.borderless) }
             }
@@ -367,12 +363,7 @@ struct SplitEditor: View {
                     Toggle(p.name, isOn: Binding(
                         get: { split.rows.contains { $0.participant == p.id } },
                         set: { on in
-                            if on {
-                                let ids = people.map(\.id)
-                                split.rows = ids.compactMap { id in split.rows.first { $0.participant == id } ?? (id == p.id ? .init(participant: id) : nil) }
-                            } else {
-                                split.rows.removeAll { $0.participant == p.id }
-                            }
+                            split = FormState.split(EntryForm.companion.toggled(split: FormState.kotlin(split), person: p.id, on: on, order: people.map(\.id)))
                         }
                     ))
                     if let i = split.rows.firstIndex(where: { $0.participant == p.id }) {
@@ -387,13 +378,8 @@ struct SplitEditor: View {
                 }
             }
             let k = FormState.kotlin(split)
-            if split.mode == .percent, EntryForm.companion.percentTotal(split: k) != 10_000 {
-                Text(say(.edPercentTotal, Amounts.shared.text(amount: EntryForm.companion.percentTotal(split: k), minorUnits: 2, separator: decimalSeparator)))
-                    .font(.caption)
-            }
-            if split.mode == .amounts, part > 0, EntryForm.companion.amountsTotal(split: k, minorUnits: minorUnits) != part {
-                Text(say(.edAmountsTotal, money(EntryForm.companion.amountsTotal(split: k, minorUnits: minorUnits), currency, minorUnits), money(part, currency, minorUnits)))
-                    .font(.caption)
+            if let hint = EntryForm.companion.splitHint(split: k, part: part, currency: currency, minorUnits: minorUnits, separator: decimalSeparator) {
+                Text(say(notice: hint)).font(.caption)
             }
             if editable {
                 Button(say(.edEveryoneEqually)) {

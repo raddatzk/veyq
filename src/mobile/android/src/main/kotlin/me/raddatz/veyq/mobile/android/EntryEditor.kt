@@ -182,7 +182,7 @@ fun EntryEditor(
                 }
                 if (editable) TextButton(onClick = { form = form.copy(items = form.items + EntryForm.emptyItem(ids)) }) { Text(stringResource(R.string.ed_add_item)) }
                 at("items")?.let { Text(problemText(it.problem), color = MaterialTheme.colorScheme.error) }
-                if (form.items.isEmpty() || form.restLeft > 0) {
+                if (form.showsRest) {
                     HorizontalDivider()
                     Text(stringResource(if (form.items.isEmpty()) R.string.ed_whole else R.string.ed_rest), fontWeight = FontWeight.SemiBold)
                     SplitEditor(form.rest, people, form.restLeft, form, sep) { form = form.copy(rest = it) }
@@ -328,7 +328,7 @@ private fun Payers(form: EntryForm, people: List<PotView.Person>, problem: Strin
                 singleLine = true, label = { Text(stringResource(R.string.entry_amount)) }, modifier = Modifier.width(120.dp).padding(start = 8.dp),
                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal), enabled = LocalEditable.current,
             )
-            if (form.payers.size > 1 && LocalEditable.current) {
+            if (form.canRemovePayer && LocalEditable.current) {
                 IconButton(onClick = { onChange(form.copy(payers = form.payers.toMutableList().also { it.removeAt(i) })) }) {
                     Icon(Icons.Outlined.Close, stringResource(R.string.ed_remove_payer, people.firstOrNull { it.id == p.participant }?.name ?: ""))
                 }
@@ -336,9 +336,9 @@ private fun Payers(form: EntryForm, people: List<PotView.Person>, problem: Strin
         }
     }
     problem?.let { Text(problemText(it), color = MaterialTheme.colorScheme.error) }
-    val unused = people.firstOrNull { pp -> form.payers.none { it.participant == pp.id } }
+    val unused = form.nextPayer(people.map { it.id })
     if (unused != null && LocalEditable.current) {
-        TextButton(onClick = { onChange(form.copy(payers = form.payers + EntryForm.Payer(unused.id, ""))) }) { Text(stringResource(R.string.ed_add_payer)) }
+        TextButton(onClick = { onChange(form.copy(payers = form.payers + EntryForm.Payer(unused, ""))) }) { Text(stringResource(R.string.ed_add_payer)) }
     }
 }
 
@@ -348,12 +348,7 @@ private fun SplitEditor(split: FormSplit, people: List<PotView.Person>, part: Lo
     val ids = people.map { it.id }
     if (!split.expanded) {
         Row(verticalAlignment = Alignment.CenterVertically) {
-            val on = split.rows.map { it.participant }
-            Text(
-                if (on.size == 1) stringResource(R.string.ed_split_only, people.firstOrNull { it.id == on[0] }?.name ?: "")
-                else pluralStringResource(R.plurals.ed_split_everyone, on.size, on.size),
-                Modifier.weight(1f),
-            )
+            Text(say(EntryForm.collapsedWords(split, people)), Modifier.weight(1f))
             if (LocalEditable.current) TextButton(onClick = { onChange(split.copy(expanded = true)) }) { Text(stringResource(R.string.ed_adjust)) }
         }
         return
@@ -369,16 +364,13 @@ private fun SplitEditor(split: FormSplit, people: List<PotView.Person>, part: Lo
         val row = split.rows.firstOrNull { it.participant == p.id }
         Row(verticalAlignment = Alignment.CenterVertically) {
             Checkbox(row != null, { on ->
-                onChange(split.copy(rows = if (on) ids.mapNotNull { id -> split.rows.firstOrNull { it.participant == id } ?: EntryForm.SplitRow(id).takeIf { id == p.id } } else split.rows.filter { it.participant != p.id }))
+                onChange(EntryForm.toggled(split, p.id, on, ids))
             }, enabled = LocalEditable.current)
             Text(p.name, Modifier.weight(1f))
             if (row != null) {
                 val value = when (split.mode) { Mode.SHARES -> row.shares; Mode.PERCENT -> row.percent; Mode.AMOUNTS -> row.amount }
                 OutlinedTextField(
-                    value, { v ->
-                        val next = when (split.mode) { Mode.SHARES -> row.copy(shares = v); Mode.PERCENT -> row.copy(percent = v); Mode.AMOUNTS -> row.copy(amount = v) }
-                        onChange(split.copy(rows = split.rows.map { if (it.participant == p.id) next else it }))
-                    },
+                    value, { v -> onChange(EntryForm.typed(split, p.id, v)) },
                     singleLine = true, modifier = Modifier.width(110.dp), enabled = LocalEditable.current,
                     keyboardOptions = KeyboardOptions(keyboardType = if (split.mode == Mode.SHARES) KeyboardType.Number else KeyboardType.Decimal),
                     suffix = { if (split.mode == Mode.PERCENT) Text("%") },
@@ -386,15 +378,7 @@ private fun SplitEditor(split: FormSplit, people: List<PotView.Person>, part: Lo
             }
         }
     }
-    when (split.mode) {
-        Mode.PERCENT -> EntryForm.percentTotal(split).takeIf { it != RevisionFormat.PERCENT_WHOLE }?.let {
-            Text(stringResource(R.string.ed_percent_total, me.raddatz.veyq.mobile.expenses.Amounts.text(it, 2, sep)), style = MaterialTheme.typography.bodySmall)
-        }
-        Mode.AMOUNTS -> EntryForm.amountsTotal(split, form.minorUnits).takeIf { it != part && part > 0 }?.let {
-            Text(stringResource(R.string.ed_amounts_total, money(it, form.currency, form.minorUnits), money(part, form.currency, form.minorUnits)), style = MaterialTheme.typography.bodySmall)
-        }
-        Mode.SHARES -> {}
-    }
+    EntryForm.splitHint(split, part, form.currency, form.minorUnits, sep)?.let { Text(say(it), style = MaterialTheme.typography.bodySmall) }
     if (LocalEditable.current) TextButton(onClick = { onChange(EntryForm.everyoneEqually(split, ids)) }) { Text(stringResource(R.string.ed_everyone_equally)) }
 }
 

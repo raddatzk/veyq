@@ -52,9 +52,6 @@ with both apps behaving as before on a device for what it touched, and commits o
 A read of both apps after the slices found these rules still written twice; each moves like the slices did (core
 function, its commonTest, both apps calling it):
 
-- The entry editor's form steps: a split's people toggled in people order, "add payer" takes the first unused, a payer
-  removed only while more than one, when the rest split and the total hints show, the collapsed split's words (Apple
-  still spells `10_000` and the default categories instead of `PERCENT_WHOLE`, `DEFAULT_CATEGORIES`).
 - What a kind's page gives the header beyond `AppKinds.header`: a Pot's cover and copy only while `canWrite`, a file's
   copy, download and send only with content; the kind→page registry (an unknown kind: Apple falls back, Android throws).
 - The shell's chrome: which node is headed, when the trash and the top level's "Add files only" are offered (Android

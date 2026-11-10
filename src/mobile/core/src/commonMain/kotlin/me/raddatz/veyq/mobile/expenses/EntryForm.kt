@@ -68,6 +68,42 @@ data class EntryForm(
 
         fun equalSplit(people: List<String>, expanded: Boolean = false) = FormSplit(Mode.SHARES, people.map { SplitRow(it) }, expanded)
 
+        /** [person] taken into or out of [split]; the rows stay in the Pot's people [order], what was typed for each kept. */
+        fun toggled(split: FormSplit, person: String, on: Boolean, order: List<String>): FormSplit = split.copy(
+            rows = if (on) order.mapNotNull { id -> split.rows.firstOrNull { it.participant == id } ?: SplitRow(id).takeIf { id == person } }
+            else split.rows.filter { it.participant != person },
+        )
+
+        /** [person]'s value typed in [split]'s mode. */
+        fun typed(split: FormSplit, person: String, text: String): FormSplit = split.copy(
+            rows = split.rows.map { r ->
+                if (r.participant != person) r else when (split.mode) {
+                    Mode.SHARES -> r.copy(shares = text)
+                    Mode.PERCENT -> r.copy(percent = text)
+                    Mode.AMOUNTS -> r.copy(amount = text)
+                }
+            },
+        )
+
+        /** A folded split in one line: "only X" for one person, else "everyone (n)". */
+        fun collapsedWords(split: FormSplit, people: List<PotView.Person>): me.raddatz.veyq.mobile.words.Notice {
+            val on = split.rows.map { it.participant }
+            return if (on.size == 1) me.raddatz.veyq.mobile.words.Notice(me.raddatz.veyq.mobile.words.Msg.ED_SPLIT_ONLY, people.firstOrNull { it.id == on[0] }?.name.orEmpty())
+            else me.raddatz.veyq.mobile.words.Notice(me.raddatz.veyq.mobile.words.Msg.ED_SPLIT_EVERYONE, on.size)
+        }
+
+        /**
+         * What the split says under its rows: by percent, the total where it is not a whole hundred; by amounts, the
+         * total where it is not the [part] it splits. Nothing by shares, nor while the part is zero.
+         */
+        fun splitHint(split: FormSplit, part: Long, currency: String?, minorUnits: Int, separator: Char = '.'): me.raddatz.veyq.mobile.words.Notice? = when (split.mode) {
+            Mode.PERCENT -> percentTotal(split).takeIf { it != RevisionFormat.PERCENT_WHOLE }
+                ?.let { me.raddatz.veyq.mobile.words.Notice(me.raddatz.veyq.mobile.words.Msg.ED_PERCENT_TOTAL, Amounts.text(it, 2, separator)) }
+            Mode.AMOUNTS -> amountsTotal(split, minorUnits).takeIf { it != part && part > 0 }
+                ?.let { me.raddatz.veyq.mobile.words.Notice(me.raddatz.veyq.mobile.words.Msg.ED_AMOUNTS_TOTAL, me.raddatz.veyq.mobile.words.Amount(it, currency, minorUnits), me.raddatz.veyq.mobile.words.Amount(part, currency, minorUnits)) }
+            Mode.SHARES -> null
+        }
+
         /** [split] with every one of [everyone] on it at 1 share and no one else; what was typed otherwise is kept. */
         fun everyoneEqually(split: FormSplit, everyone: List<String>) =
             FormSplit(Mode.SHARES, everyone.map { id -> (split.rows.firstOrNull { it.participant == id } ?: SplitRow(id)).copy(shares = "1") }, true)
@@ -147,6 +183,15 @@ data class EntryForm(
 
     /** What is left for the rest: the payers' total less the typed items (negative: the items are above the amount). */
     val restLeft: Long get() = payersTotal - typedSum(items.map { it.amount }, minorUnits)
+
+    /** The rest's split shows: without items (it is the whole), or while the items leave some of the amount. */
+    val showsRest: Boolean get() = items.isEmpty() || restLeft > 0
+
+    /** A payer may be removed while there is more than one. */
+    val canRemovePayer: Boolean get() = payers.size > 1
+
+    /** The person "Add payer" adds: the first of the Pot's [people] not paying yet; null when everyone is. */
+    fun nextPayer(people: List<String>): String? = people.firstOrNull { p -> payers.none { it.participant == p } }
 
     /** An item's typed amount in minor units (0 while it is none): what an amounts split of it must add up to. */
     fun itemAmount(item: FormItem): Long = Amounts.parse(item.amount, minorUnits) ?: 0

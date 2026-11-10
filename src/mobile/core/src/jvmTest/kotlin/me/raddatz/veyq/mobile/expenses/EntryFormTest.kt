@@ -275,4 +275,35 @@ class EntryFormTest {
         assertEquals("0.5", Amounts.parseRate(" 0,5 "))
         assertNull(Amounts.parseRate("0"))
     }
+
+    @Test
+    fun theEditorsStepsAreTheFormsOwn() {
+        val people = listOf("a", "b", "c")
+        val split = EntryForm.equalSplit(listOf("a", "c"))
+        // b taken in lands between a and c; what was typed for c stays
+        val typed = EntryForm.typed(split, "c", "3")
+        val withB = EntryForm.toggled(typed, "b", true, people)
+        kotlin.test.assertEquals(listOf("a", "b", "c"), withB.rows.map { it.participant })
+        kotlin.test.assertEquals("3", withB.rows.last().shares)
+        kotlin.test.assertEquals(listOf("a", "c"), EntryForm.toggled(withB, "b", false, people).rows.map { it.participant })
+        // the folded line
+        val names = listOf(PotView.Person("a", "Anna"), PotView.Person("b", "Ben"))
+        kotlin.test.assertEquals(me.raddatz.veyq.mobile.words.Notice(me.raddatz.veyq.mobile.words.Msg.ED_SPLIT_ONLY, "Anna"), EntryForm.collapsedWords(EntryForm.equalSplit(listOf("a")), names))
+        kotlin.test.assertEquals(me.raddatz.veyq.mobile.words.Notice(me.raddatz.veyq.mobile.words.Msg.ED_SPLIT_EVERYONE, 2), EntryForm.collapsedWords(EntryForm.equalSplit(listOf("a", "b")), names))
+        // the hints: a percent total off a hundred, an amounts total off its part, nothing by shares
+        val pct = EntryForm.typed(EntryForm.typed(split.copy(mode = EntryForm.Mode.PERCENT), "a", "40"), "c", "50")
+        kotlin.test.assertEquals(me.raddatz.veyq.mobile.words.Notice(me.raddatz.veyq.mobile.words.Msg.ED_PERCENT_TOTAL, "90,00"), EntryForm.splitHint(pct, 0, "EUR", 2, ','))
+        val amounts = EntryForm.typed(split.copy(mode = EntryForm.Mode.AMOUNTS), "a", "1.00")
+        kotlin.test.assertEquals(
+            me.raddatz.veyq.mobile.words.Notice(me.raddatz.veyq.mobile.words.Msg.ED_AMOUNTS_TOTAL, me.raddatz.veyq.mobile.words.Amount(100, "EUR", 2), me.raddatz.veyq.mobile.words.Amount(300, "EUR", 2)),
+            EntryForm.splitHint(amounts, 300, "EUR", 2),
+        )
+        kotlin.test.assertNull(EntryForm.splitHint(amounts, 0, "EUR", 2))
+        kotlin.test.assertNull(EntryForm.splitHint(split, 300, "EUR", 2))
+        // payers: the next unused, removable past one; the rest shows without items
+        val form = EntryForm.empty(Ledger.BaseCurrency("EUR", 2), people, "2026-11-10")
+        kotlin.test.assertEquals("b", form.nextPayer(people))
+        kotlin.test.assertFalse(form.canRemovePayer)
+        kotlin.test.assertTrue(form.showsRest)
+    }
 }
