@@ -10,13 +10,23 @@ share target). This page is kept current as slices land; a row moves from open t
 ## The split
 
 Everything that is not drawing a screen or talking to the device belongs in the Kotlin core (owner 2026-11-09,
-[ADR 0127](../decisions/0127-an-apps-logic-is-the-kotlin-cores-each-platform-draws-only-its-own-ui.md)): the
-suite, the API, the session, the navigation model, every application's domain and its flows, the upload queue — and,
-still to move there, each screen's state and actions and which notice an outcome raises. A platform keeps only its UI,
-built to its own guidelines, and what only it can do: the system pickers and share sheets, the secure store, decoding
-pictures for a medium's tiers, and its words. Today the two app models (`android/…/AppModel.kt`, `apple/Veyq/AppModel.swift`)
-still hold logic both repeat — refresh rules, outcome-to-notice mapping, the sign-in and unlock flow, page state —; moving
-it into the core comes before a third platform.
+[ADR 0127](../decisions/0127-an-apps-logic-is-the-kotlin-cores-each-platform-draws-only-its-own-ui.md)), and it is there
+(2026-11-10): the suite, the API, every application's domain and its flows, the upload queue, and each screen's state and
+rules as a core model both apps draw — the way in (`session/SessionModel`), the shell and its lists (`navigation/ShellModel`,
+`RowDetails`), the trash sheet (`navigation/TrashSheet`), the open Pot (`expenses/PotModel`), shared files
+(`expenses/ShareInbox`), the link form and a link's row (`session/LinkForm`, `LinkRow`), a header's rights and words
+(`navigation/NodeHeader`); which words an outcome raises (`words/Notices`) and what a row or a page says, piece by piece
+(`words/Piece`). A platform keeps only its UI, built to its own guidelines, and what only it can do: the system pickers
+and share sheets, the secure store, decoding and framing pictures, writing a date, a size or an amount its own way, the
+device's calendar, and the order of a view's own steps.
+
+Where the two apps had drifted, one answer was chosen (each pinned by a core test): after the open node is trashed the
+shell goes to its parent, read anew; shared files fit a Pot by one rule (`PotShare`'s count and byte budget); a file's
+page is decided and read by the core, decoded and drawn by the platform; a Pot created from a level lands in the level
+shown; a currency's minor units are one table measured from the web's `Intl` (`expenses/Currencies`, not
+`java.util.Currency` or `NumberFormatter`); a drop onto an open Pot runs the core's state machine; receipts a save left out
+for want of room close the editor and the shell says which (the web's toast); a report's contact is counted as the web's
+`maxlength` counts it; the lists' covers are read again after every change on both.
 
 ## Platforms
 
@@ -76,7 +86,6 @@ Apple's toolbar button and list — measured 2026-11-09 (the list behind Apple's
 - Android: an adaptive layout for tablets and large windows (the sidebar open, list and detail side by side).
 - iPad and macOS: run, look at and fix the split view; macOS has no share extension.
 - Windows (WinUI) and Linux (GTK/libadwaita): the apps (ADR 0127 decisions 4 and 5).
-- The logic still in both app models moved into the core (§ The split), before Windows and Linux.
 - A CI job for the apps.
 
 **Account**
