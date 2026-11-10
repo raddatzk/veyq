@@ -2453,6 +2453,14 @@ def test_server_path(tmp: pathlib.Path) -> None:
             again = (home / ".ssh" / "config").read_text()
             check("connect: the block rewritten in place, the owner's own Host kept",
                   rc == 0 and again.count("# >>> server-run") == 1 and "Host other" in again, out[-300:])
+            (home / ".ssh" / "config").write_text("# >>> server-run (scripts/connect.py)\nHost server-run\n  HostName old\n"
+                                                  "  IdentityAgent ~/agent.sock\n# <<< server-run\n\nHost other\n")
+            rc, out = run_main(["connect"], ServerHost(top=top))
+            again = (home / ".ssh" / "config").read_text()
+            check("connect: the block the retired scripts/connect.py wrote is taken over — replaced, its own lines kept",
+                  rc == 0 and "scripts/connect.py" not in again and "# >>> server-run (veyqctl connect)" in again
+                  and "IdentityAgent ~/agent.sock" in again and "HostName old" not in again and "Host other" in again,
+                  again)
             (home / ".ssh" / "config").write_text("Host server-run\n  User mine\n")
             rc, out = run_main(["connect"], ServerHost(top=top))
             check("connect: never shadows a `Host` of the owner's own", rc == 1 and "of its own" in out

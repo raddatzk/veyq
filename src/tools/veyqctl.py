@@ -3685,7 +3685,9 @@ def bootstrap(host: Host, top: Path, answers: dict[str, str], pinned: str) -> No
         host.workdir = workdir
 
 
-SSH_BLOCK = re.compile(r"^# >>> (?P<name>\S+) \(veyqctl connect\)\n(?P<body>.*?)^# <<< (?P=name)\n\n?", re.S | re.M)
+# veyqctl's block — or the one affenbande's scripts/connect.py wrote before it, which this one replaces.
+SSH_BLOCK = re.compile(r"^# >>> (?P<name>\S+) \((?:veyqctl connect|scripts/connect\.py)\)\n(?P<body>.*?)^# <<< (?P=name)\n\n?",
+                       re.S | re.M)
 SSH_OWNED = re.compile(r"\s*(HostName|User|LocalForward|ExitOnForwardFailure|ServerAliveInterval)\s", re.I)
 
 
