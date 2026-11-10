@@ -216,6 +216,11 @@ holds it to the descriptor field by field; a Pot's view, sent and never read bac
 to the view's descriptor. The Rust half ran once in a scratch crate (serde 1.0.229 and serde_json 1.0.151 from the
 local cargo cache, `--offline`): `cargo test` read all 45 samples back field for field, `cargo clippy --all-targets -D
 warnings` clean — Phase 3 makes it the package's own test.
+**Built (Phase 3):** `bridge.rs` carries no inner attribute — an `include!`d file may hold none, so the app's `wire`
+module carries the lints' allowances — and ends with a generated `reserialize(rust_type, json)`, one case per wire type:
+the app's `every_sample_the_core_wrote_reads_back_field_for_field` reads every sample through it and compares the JSON
+written back with the JSON read as values, so a sample of a type the host lacks (bitten: `Ghost-0.json`, "no wire type
+Ghost") and a field the host's type drops (bitten: `Config` with an extra field) are red without a list in the test.
 
 **D8 — The Rust app lives in `src/mobile/linux/`.** A Cargo package (`veyq`, edition 2024) with a committed
 `Cargo.lock` and `cargo build --locked`: gtk4 0.11, libadwaita 0.9 (features `v4_20`, `v1_8`: GTK 4.22, libadwaita
@@ -229,6 +234,19 @@ status and writes the date in the CR's retro). `build.rs` links `libveyq.so` fro
 **`linux/run.py`** (Python, per the repository's rule) builds the image, runs `cargo` in it with the bridge library
 and the generated sources mounted, and runs the app under `gtk4-broadwayd` with the port published on 127.0.0.1 only
 — the one entry point the launcher's tasks (`./gradlew linux:build`, `linux:run`, `linux:test`) call.
+**Built (Phase 3):** the package is a library (`src/lib.rs`: `bridge`, `words`, `theme`, `create_action`, each `pub`)
+and the app (`src/main.rs`), so what the screens will use is no dead code before they exist; the hand-written `bridge`
+module is `src/bridge/mod.rs`, which keeps Phase 3's `bridge\.rs$` check about the generated file only. `build.rs`
+reads `VEYQ_GENERATED` (`src/mobile/build/generated`, mounted) and `VEYQ_LIB_DIR`, which `run.py` sets — not the
+launcher, which only calls `run.py`. `run.py` gained `build` (generation on the host — `:bridge:generateBindings`,
+`:bridge:jvmTest --tests '*WireTest*'` for the samples, the two generators — then `cargo clippy --locked --all-targets
+-- -D warnings`, `cargo test --locked`, `cargo build --locked` in the container), `run [--port]` (gtk4-broadwayd on
+display :5, published on 127.0.0.1:8095) and `lock` (`cargo update`, the one writer of `Cargo.lock`); the cargo
+registry and target live in the Docker volumes `veyq-linux-cargo` / `veyq-linux-target`. The app links the bridge's
+debug library (`linkDebugShared<Target>`, which `:bridge:jvmTest` links anyway). The Containerfile gained `clippy`
+(Fedora's `rust` ships none: `rpm -q clippy` "not installed", measured) and `glibc-langpack-en`/`-de` (D10). The
+launcher's tasks are `linux:build`, `linux:run`, `linux:coreTest` (`run.py test`) and `linux:bridge`: infra/README.md
+§ The launcher names no task `test`, so a bare `./gradlew test` aggregates nothing — the CR's `linux:test` would have.
 `scripts/repo_layout.py` gains `MOBILE_LINUX`; every guard and script names the path through it
 (`validate_mobile_words.py` today spells `ROOT / "src" / "mobile"` itself — it moves onto `repo_layout` in the same
 phase).
@@ -251,6 +269,16 @@ writes `words.rs`: one function per key with typed arguments (as the Kotlin `Msg
 `glib::dpgettext2("veyq", key, english)` and filling `{n}` placeholders. `bindtextdomain`/`textdomain` are glibc's,
 declared as two `extern "C"` lines — no gettext crate. A `Notice` the core raises arrives as its key and arguments
 (ADR 0127 decision 1) and is said by the same generated function.
+**Built (Phase 3):** `--gettext DIR` writes `veyq.pot`, `en.po`, `de.po` and `words.rs` into one directory
+(`src/mobile/build/generated/linux/words`); `build.rs` compiles each `.po` with `msgfmt --check` into
+`OUT_DIR/locale` and the app binds there. The per-key functions take `&str` / `i64`; `say(key, &[Arg])` reaches them by
+key (a `Notice`), and `KEYS` lists them. A third glibc line, `bind_textdomain_codeset(…, "UTF-8")`, keeps the words
+UTF-8 whatever the locale's charset. **glibc's gettext ignores `LANGUAGE` under a C locale, C.UTF-8 included**
+(measured: `LANG=C.UTF-8 LANGUAGE=de gettext --context=drawer_open -d veyq "Open menu"` answered the English, and the
+words test was red on every German key); a desktop never runs under C, the container now does not either
+(`glibc-langpack-en`/`-de`, `run.py` sets `LANG=en_US.UTF-8`), so Phase 4's `LANGUAGE=de` holds. The app's refusal of
+an AES-less CPU (Q1) needed a word: `start_no_aes` joins the catalog (its wording is the implementer's — the owner's to
+review).
 
 **D11 — Theme: libadwaita CSS generated from the web's tokens.** `generate_theme.py --gtk <dir>` writes `style.css`
 and `style-dark.css` (libadwaita loads both from the application's resource base path by itself), setting
@@ -258,6 +286,14 @@ libadwaita's own named colours from the web's roles (`--accent-bg-color`, `--acc
 the mapping a table in the generator) and the radii; and the app icon (`me.raddatz.veyq.svg`, its symbolic variant)
 from the brand mark. Never committed, as on the other platforms. libadwaita's widgets keep their own shapes — the
 roles colour them (ADR 0123 decision 9: the platform's look over the web's).
+**Built (Phase 3), where it differs:** libadwaita 1.9 **deprecates `style-dark.css`** (its binary carries "The resource
+%s is deprecated and shouldn't be used anymore. Use style.css with media queries instead.", measured with `strings` in
+the image), so `--gtk DIR` writes one `style.css` whose dark roles sit under `@media (prefers-color-scheme: dark)`. No
+radii: libadwaita 1.9's stylesheet declares one length variable, `--window-radius` (its `gresource extract`, measured),
+the window's own shape, which the platform keeps. The mapping (`GTK_ROLES`) follows Android's scheme: the web's accent is
+libadwaita's accent, danger is destructive and error; the web's primary (green, creating) has no libadwaita slot. The
+icon is `icons/scalable/apps/me.raddatz.veyq.svg` and `icons/symbolic/apps/me.raddatz.veyq-symbolic.svg`; `build.rs`
+bundles the directory with `glib-compile-resources` under `/me/raddatz/veyq`, the app registers it before it starts.
 
 **D12 — The guards learn Linux.** `validate_mobile_words.py` gains **linux-literal**: no Rust string literal with
 letters handed to a widget's shown text — `.title(`, `.subtitle(`, `.label(`, `.description(`, `.tooltip_text(`,
@@ -269,6 +305,14 @@ action as a header-bar / sidebar button with `list-add-symbolic` (and a menu whe
 action button). Each rule is bitten at implement time by injecting one violation into a scratch copy and reading it
 red, then green on the restore (`changes/README.md` § Bite-proof a guard by snapshot-and-restore). Both guards fail
 when they read no Rust source (as they do for Kotlin and Swift).
+**Built (Phase 3):** the Rust is read through `scripts/rust_lexer.py` (`kotlin_lexer` reads a lifetime `'a` as a char
+literal). linux-literal covers the setter of each property too (`set_subtitle`, `set_tooltip_text`, …) and
+`heading`/`body` (an `AdwAlertDialog`'s), with the literal bare, as `Some(…)`, borrowed or a `format!` template;
+linux-po reads the directory, not `git ls-files`. linux-block also refuses GNOME's add icon in any other Rust file (as
+apple-block refuses a bare "+"), and demands a `gtk::MenuButton` beside the `gtk::Button`; linux-floating-button sees a
+button named in `add_overlay`'s argument or a variable the file binds to one (a `Button` or the block's
+`create_action(…)`). Twelve bites, each red with its rule's line and green on the restore, two controls green (a
+literal in a comment beside a lifetime; a `Label` overlaid), and both guards red on an empty directory.
 
 ## Inventory (locators — run at implement time, not counts)
 
@@ -329,7 +373,7 @@ symbols; `./gradlew :core:jvmTest :core:macosArm64Test` green and both apps comp
 empty `AdwApplicationWindow` that starts the core (D8), `create_action.rs`, the guard rules (D12), `repo_layout.MOBILE_LINUX`,
 the launcher tasks (`settings.gradle.kts` + `launcher/`, per `infra/README.md` § The launcher).
 
-**Done when:** `run.py build` green with `cargo clippy --locked -- -D warnings` and `cargo test --locked` (the Rust
+**Done when** (`linux:test` is `linux:coreTest`, D8 § Built)**:** `run.py build` green with `cargo clippy --locked -- -D warnings` and `cargo test --locked` (the Rust
 half of D7's round trip, and the words module: every key's German and English, a plural on both sides of 1);
 `/usr/bin/python3 scripts/validate_mobile_words.py` and `validate_mobile_platform_guidelines.py` green, each new rule
 bitten (D12); `scripts/validate_guard_gaps.py` run once (a guard changed); the generated `.po`, CSS and `bridge.rs`
@@ -464,3 +508,34 @@ Process:
   :bridge:linkReleaseSharedLinuxArm64 :bridge:linkReleaseSharedLinuxX64 :bridge:compileCommonMainKotlinMetadata
   :bridge:compileLinuxMainKotlinMetadata` (2 min 34 s, 1.4 GB fetched) left `gradle/verification-metadata.xml`
   unchanged — everything `:bridge` resolves, `:core` already had.
+
+### Phase 3 (2026-11-10)
+
+Technical:
+- **A platform's deprecation is read from the platform, not the docs a refine remembers.** D11's `style-dark.css` is
+  deprecated in libadwaita 1.9; one `strings` over the library said so, and `gresource extract` of its own stylesheet
+  gave the variables it declares (one radius only). Reading the binary the app links beat any page about it.
+- **gettext's language switch is off under C, and C.UTF-8 is C.** The words test was green in English and red on every
+  German key — English is the `msgid`, so an English-only pass proves nothing about the catalogs. A test of a
+  translation layer has to assert a language whose words differ from the fallback.
+- **`include!` cannot carry an inner attribute.** The Phase 2 scratch crate compiled `bridge.rs` as a file module; the
+  package includes it, so the generator dropped its `#![allow]` and gained the round trip's door (`reserialize`) —
+  the derivation the CR wanted ("a root added without a case is red") had to be generated, or the Rust test would have
+  kept a list of its own.
+- **The CR's own check can collide with the code's names.** `git ls-files … | grep 'bridge\.rs$'` would have matched
+  the hand-written `bridge` module; it lives in `src/bridge/mod.rs`, so the check keeps meaning "the generated file".
+- Crates against the no-deprecated rule (2026-11-10, crates.io API and each repository's API): gtk4 0.11.5 (gtk-rs/gtk4-rs,
+  not archived, pushed 2026-11-10), libadwaita 0.9.2 (GNOME World/Rust/libadwaita-rs, active 2026-09-26), glib 0.22.10
+  (gtk-rs/gtk-rs-core, released 2026-09-19), async-channel 2.5.0 (smol-rs, not archived, pushed 2026-07-13), serde
+  1.0.229 and serde_json 1.0.154 (serde-rs, not archived, pushed 2026-10-16). `Cargo.lock` locks 77 packages; the
+  transitive ones (gtk-rs' sys crates, futures-core, event-listener, …) were not read one by one — cargo has no
+  deprecation gate, and the rule's check on them is still a reading, not a guard.
+
+Process:
+- A `test` verb in the launcher would have broken its own rule (no task named `test`): the CR named the task from
+  `run.py`'s verb, not from infra/README.md § The launcher. A launcher task is named against that section first.
+- The bite harness for a guard pair is one scratch script: inject, run the real guard as a subprocess, restore from a
+  snapshot copy, assert green again after each bite — fourteen cases in under a minute, the restore itself checked.
+- `run.py build` re-run after only a Rust edit took ~25 s (Gradle up to date, cargo incremental in its volume); the first
+  cold one ~50 s plus the image's 75 s for `clippy` and the langpacks.
+
