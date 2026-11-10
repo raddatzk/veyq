@@ -116,4 +116,18 @@ class ExchangeRatesTest {
         assertEquals("7.466", odd["CNY"]!!.rate)
         assertNull(ExchangeRates.parseTable(Json.parseToJsonElement("""{"rates":{}}""")))
     }
+
+    @Test
+    fun a_rate_is_asked_only_for_another_currency_without_one_and_never_fills_over_a_typed_one() {
+        kotlin.test.assertTrue(ExchangeRates.wanted(true, "EUR", "CHF", " "))
+        kotlin.test.assertFalse(ExchangeRates.wanted(true, "EUR", "EUR", ""))
+        kotlin.test.assertFalse(ExchangeRates.wanted(true, "EUR", "CHF", "0.9"))
+        kotlin.test.assertFalse(ExchangeRates.wanted(false, "EUR", "CHF", ""))
+        val f = ExchangeRates.fill(ExchangeRates.Filled("1.0425", "2026-11-09"), "", ',')
+        kotlin.test.assertEquals("1,0425" to "2026-11-09", f.rate to f.filledOn)
+        val typed = ExchangeRates.fill(ExchangeRates.Filled("1.0425", "2026-11-09"), "1.1", '.')
+        kotlin.test.assertEquals(null, typed.rate)
+        kotlin.test.assertFalse(typed.missing)
+        kotlin.test.assertTrue(ExchangeRates.fill(null, "", '.').missing)
+    }
 }

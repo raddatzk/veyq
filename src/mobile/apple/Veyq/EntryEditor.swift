@@ -220,20 +220,17 @@ struct EntryEditor: View {
         // Another currency with an empty rate: the day's table fills it (one request a device and day, at most).
         .task(id: form.currency) {
             let code = form.currency
-            guard view.ratesOffered, code != view.currency, form.rate.trimmingCharacters(in: .whitespaces).isEmpty else {
+            guard ExchangeRates.shared.wanted(ratesOffered: view.ratesOffered, base: view.currency, currency: code, rate: form.rate) else {
                 rateNote = nil
                 return
             }
             rateNote = .loading
             let filled = await model.rateFor(code)
             guard form.currency == code else { return }
-            if let filled, form.rate.trimmingCharacters(in: .whitespaces).isEmpty {
-                let sep = Locale.current.decimalSeparator ?? "."
-                form.rate = filled.rate.replacingOccurrences(of: ".", with: sep)
-                rateNote = .filled(filled.date)
-            } else {
-                rateNote = filled == nil ? .missing(code) : nil
-            }
+            let sep = (Locale.current.decimalSeparator ?? ".").utf16.first ?? 46
+            let fill = ExchangeRates.shared.fill(answer: filled, rate: form.rate, separator: sep)
+            if let rate = fill.rate { form.rate = rate }
+            rateNote = fill.filledOn.map { .filled($0) } ?? (fill.missing ? .missing(code) : nil)
         }
     }
 

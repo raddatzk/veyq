@@ -43,6 +43,22 @@ object ExchangeRates {
     /** A rate the editor fills: one unit of `from` in the base, and the day of the rows it was computed from. */
     data class Filled(val rate: String, val date: String)
 
+    /** Whether an entry's rate is asked of the day's table: rates offered here, another currency than the base, no rate typed. */
+    fun wanted(ratesOffered: Boolean, base: String?, currency: String, rate: String): Boolean =
+        ratesOffered && currency != base && rate.isBlank()
+
+    /**
+     * What an answer does to the form whose rate is now [rate] (it may have been typed meanwhile): a [Fill] of the table's
+     * rate in the person's [separator] with the day it is from, nothing over a typed rate, or that the table had none.
+     */
+    class Fill(val rate: String?, val filledOn: String?, val missing: Boolean)
+
+    fun fill(answer: Filled?, rate: String, separator: Char): Fill = when {
+        answer == null -> Fill(null, null, missing = true)
+        rate.isBlank() -> Fill(answer.rate.replace('.', separator), answer.date, missing = false)
+        else -> Fill(null, null, missing = false)
+    }
+
     /** The table's address for [day], or null when the template holds no `{date}` (a client never guesses a URL). */
     fun tableUrl(template: String, day: String): String? =
         if (PLACEHOLDER !in template || !DAY.matches(day)) null else template.replace(PLACEHOLDER, day)

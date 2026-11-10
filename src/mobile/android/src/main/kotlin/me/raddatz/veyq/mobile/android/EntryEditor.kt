@@ -153,19 +153,16 @@ fun EntryEditor(
             var rateNote by remember { mutableStateOf<RateNote?>(null) }
             androidx.compose.runtime.LaunchedEffect(form.currency) {
                 val code = form.currency
-                if (!view.ratesOffered || code == view.currency || form.rate.isNotBlank()) {
+                if (!me.raddatz.veyq.mobile.expenses.ExchangeRates.wanted(view.ratesOffered, view.currency, code, form.rate)) {
                     rateNote = null
                     return@LaunchedEffect
                 }
                 rateNote = RateNote.Loading
                 val filled = model.rateFor(code)
                 if (form.currency != code) return@LaunchedEffect
-                if (filled != null && form.rate.isBlank()) {
-                    form = form.copy(rate = filled.rate.replace('.', sep))
-                    rateNote = RateNote.Filled(filled.date)
-                } else {
-                    rateNote = if (filled == null) RateNote.Missing(code) else null
-                }
+                val fill = me.raddatz.veyq.mobile.expenses.ExchangeRates.fill(filled, form.rate, sep)
+                fill.rate?.let { form = form.copy(rate = it) }
+                rateNote = fill.filledOn?.let { RateNote.Filled(it) } ?: if (fill.missing) RateNote.Missing(code) else null
             }
             CurrencyField(view, form, at("rate")?.problem, rateNote) { form = it }
 
