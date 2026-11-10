@@ -74,7 +74,8 @@ what prove it. Everything here runs against a mirror directory this file writes 
      repository (handed over 0600, or `sops encrypt` on stdin); the cluster contract naming every gap; `upgrade`
      stopping on a major's entry, rewriting the four pins and three tags, committing its three files alone, pushing
      only with `--push` — and refusing drift, uncommitted changes, an unverified or mis-versioned chart, a failed render
-     and a downgrade with the repository untouched; `--adopt` writing only veyqctl.json once the pins verify.
+     and a downgrade with the repository untouched; a hand-written veyqctl.json confirmed by `check` when its pins
+     are its running release's as signed, and refused by `upgrade` when not.
 What it cannot show: that Docker, cosign and the backup tool behave as the stand-in answers. That is the live runs' (the CR says
 which). Not a `validate_*.py`: it asserts nothing about the repository, only about the tool. Runnable locally:
 
@@ -1756,7 +1757,8 @@ def test_gitops_init(tmp: pathlib.Path) -> None:
           vc.read_registry() == {"current": "repo", "instances": {"repo": str(d.resolve())}})
     before = tree_text(top)
     rc, out = run_main(["--source", mirror, "init", "--gitops", d, *INIT, "--secrets", "none"], GitOpsHost(top=top, signed=signed))
-    check("a second init into the same directory is refused and changes nothing", rc == 1 and "not empty" in out
+    check("a second init into the same directory is refused, pointing at how a half that exists is managed, and changes "
+          "nothing", rc == 1 and "holds files already" in out and vc.EXISTING_HALF_DOCS in out
           and tree_text(top) == before, out[-300:])
     rc, out = run_main(["--instance", "repo", "--source", mirror, "verify"], GitOpsHost(top=top, signed=signed))
     check("verify on a GitOps instance: manifest, three images and chart", rc == 0 and "chart" in out
@@ -1897,31 +1899,49 @@ ADOPTED_APPLICATION = """spec:
 """
 
 
-def test_gitops_adopt(tmp: pathlib.Path) -> None:
-    mirror, signed = tmp / "g-mirror", gitops_signed("1.0", "1.1", "2.0")
-    top = tmp / "adopted"
-    d = top / "gitops" / "apps" / "veyq"
-    d.mkdir(parents=True)
-    pins = {r: pin_of("1.0", r) for r in vc.PIN_ROLES}
+def hand_written(d: pathlib.Path, pins: dict, files_admin: str, running: str = "1.0") -> None:
+    """A veyq half written by hand, as affenbande's, and the veyqctl.json its owner wrote beside it (the Run page's
+    *A veyq half that exists already*): the files pin `pins` but for the admin image, which they pin `files_admin`."""
+    d.mkdir(parents=True, exist_ok=True)
     (d / "application.yaml").write_text(ADOPTED_APPLICATION.format(**pins))
-    (d / "values.yaml").write_text(ADOPTED_VALUES.format(**{**pins, "admin": DIGEST_B}))
-    rc, out = run_main(["--source", mirror, "init", "--gitops", d, "--adopt", "--secrets", "sops"],
-                       GitOpsHost(top=top, signed=signed))
-    check("init --adopt: a file pinning what its release does not is refused, nothing written",
-          rc == 1 and "does not" in out and DIGEST_B in out and not (d / vc.GITOPS_FILE).exists(), out[-400:])
-    (d / "values.yaml").write_text(ADOPTED_VALUES.format(**pins))
-    rc, out = run_main(["--source", mirror, "init", "--gitops", d, "--adopt", "--secrets", "sops"],
-                       GitOpsHost(top=top, signed=signed))
-    meta = json.loads((d / vc.GITOPS_FILE).read_text()) if (d / vc.GITOPS_FILE).exists() else {}
-    check("init --adopt: only veyqctl.json written — running 1.0, its pins verified, the selector its major",
-          rc == 0 and meta.get("running") == "1.0" and meta.get("release") == "1" and meta.get("pins") == pins
-          and sorted(p.name for p in d.iterdir()) == ["application.yaml", "values.yaml", vc.GITOPS_FILE], out[-400:])
+    (d / "values.yaml").write_text(ADOPTED_VALUES.format(**{**pins, "admin": files_admin}))
+    (d / vc.GITOPS_FILE).write_text(json.dumps({
+        "target": "gitops", "release": "1", "secrets": "sops", "application": "application.yaml",
+        "values": "values.yaml", "chart": "ghcr.io/raddatzk/charts/veyq", "namespace": "veyq", "running": running,
+        "pins": {**pins, "admin": files_admin}}, indent=2))
+
+
+def test_gitops_hand_written(tmp: pathlib.Path) -> None:
+    mirror, signed = tmp / "g-mirror", gitops_signed("1.0", "1.1", "2.0")
+    top = tmp / "hand"
+    pins = {r: pin_of("1.0", r) for r in vc.PIN_ROLES}
+    unsigned = tmp / "hand" / "gitops" / "apps" / "unsigned"
+    hand_written(unsigned, pins, DIGEST_B)  # the files and veyqctl.json agree, and the release never signed DIGEST_B
+    rc, out = run_main(["--home", unsigned, "--source", mirror, "check"], GitOpsHost(top=top, signed=signed))
+    check("check: a hand-written veyqctl.json pinning what its running release did not sign is named, exit 1",
+          rc == 1 and "NOT RELEASE 1.0" in out and DIGEST_B in out and "DRIFT" not in out, out[-500:])
+    before = snapshot(unsigned)
     host = GitOpsHost(top=top, signed=signed)
-    rc, out = run_main(["--source", mirror, "upgrade"], host)
+    rc, out = run_main(["--home", unsigned, "--source", mirror, "upgrade"], host)
+    check("upgrade refuses to start from a running release whose pins do not verify, the repository untouched",
+          rc == 1 and "did not sign" in out and snapshot(unsigned) == before and not host.ran("git", "commit"),
+          out[-400:])
+    d = top / "gitops" / "apps" / "veyq"
+    hand_written(d, pins, pins["admin"])
+    rc, out = run_main(["--home", d, "--source", mirror, "check"], GitOpsHost(top=top, signed=signed))
+    check("check: a hand-written veyqctl.json pinning its release's signed pins is confirmed",
+          rc == 0 and "release 1.0's, as it was signed" in out, out[-400:])
+    host = GitOpsHost(top=top, signed=signed)
+    rc, out = run_main(["--home", d, "--source", mirror, "upgrade"], host)
     values, application = (d / "values.yaml").read_text(), (d / "application.yaml").read_text()
-    check("an adopted layout upgrades like a written one: its comments kept, the Renovate hint moved with it",
+    check("a hand-written layout upgrades like a written one: its comments kept, the Renovate hint moved with it",
           rc == 0 and "# hand-written, as affenbande's" in values and values.count('tag: "1.1"') == 3
-          and "version=1.1" in application and pin_of("1.1", "chart") in application, out[-400:] + values)
+          and "version=1.1" in application and pin_of("1.1", "chart") in application and host.ran("git", "commit"),
+          out[-400:] + values)
+    rc, out = run_main(["--source", mirror, "init", "--gitops", d, "--secrets", "sops", *INIT],
+                       GitOpsHost(top=top, signed=signed))
+    check("init into a hand-written half is refused, naming veyqctl.json and the page that says how",
+          rc == 1 and vc.GITOPS_FILE in out and vc.EXISTING_HALF_DOCS in out, out[-300:])
 
 
 def main() -> int:
@@ -1951,7 +1971,7 @@ def main() -> int:
         test_instances(tmp)
         test_gitops_init(tmp)
         test_gitops_upgrade(tmp)
-        test_gitops_adopt(tmp)
+        test_gitops_hand_written(tmp)
     if failures:
         print(f"\nveyqctl self-test FAILED: {len(failures)} check(s)")
         return 1

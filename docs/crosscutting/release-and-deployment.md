@@ -233,9 +233,11 @@ directory holding `veyqctl.json` is a GitOps instance, anything else a Compose h
   `init --gitops DIR` checks the cluster contract (decision 4), verifies the release — manifest, three images, and the
   chart, resolved by tag at the registry, verified by its own signature, its `Chart.yaml` version read back, since the
   manifest does not name it — renders, and only then writes the `Application`, the values, `resources/` with the Secrets
-  of the provider chosen (decision 5) and `veyqctl.json`; `--adopt` takes over a half written by hand once its pins
-  verify. `upgrade` keeps decision 5's resolution below, rewrites the pins it finds once, renders and commits its three
-  files (`--push` pushes); `check` also names drift and missing Secret keys. The Compose lifecycle verbs refuse there.
+  of the provider chosen (decision 5) and `veyqctl.json`; a non-empty directory is refused — a half written by hand is
+  managed once its owner writes `veyqctl.json` beside it. `check` and `upgrade` verify that its pins are the running
+  release's as signed (`upgrade` refuses otherwise: it stands on that release); `upgrade` keeps decision 5's resolution
+  below, rewrites the pins it finds once, renders and commits its three files (`--push` pushes); `check` also names
+  drift and missing Secret keys. The Compose lifecycle verbs refuse there.
   `scripts/veyqctl_gitops_render_check.py` renders what `init` writes with the real Helm in the `chart` job.
 
 **Compose.** An instance lives in its home (`/opt/veyq` by default): `releases/<release>/`, `.env`, `backups/`, and the operator's
