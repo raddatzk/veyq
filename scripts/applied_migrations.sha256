@@ -14,7 +14,6 @@
 # appends its line in the commit that adds it, and its version must be above every line before it (Flyway runs
 # outOfOrder=false: an existing instance refuses a migration below its current version).
 release: none
-0930effb59fd1cb5864f522c82a7db6d3b0974857c99a89702e68526e511f004  src/backend/core/src/main/resources/db/migration/V202611070831__core_baseline.sql
+36ebe2b5246ea2c5e2a3003f3d04db9a6e943b81c9ec3ea51524b17f7b34b1e6  src/backend/core/src/main/resources/db/migration/V202611070831__core_baseline.sql
 1be55aad05de57fb25e1efacec74a2efd67513d63f8203a13e8b3254d0d71ab5  src/backend/apps/memories/src/main/resources/db/migration/V202611070832__memories_baseline.sql
 4a6bdd0ec40c293fbcfd2ab614ed8ca41d13fda3f2550e174721ea6727a2d24d  src/backend/apps/expenses/src/main/resources/db/migration/V202611070833__expenses_baseline.sql
-e3d448af98c8ad6377498c21b2fcdc6f6139a8d0e4e933a75e57cb0f46395c99  src/backend/core/src/main/resources/db/migration/V202611081126__core_donation_banner_dismissed.sql
