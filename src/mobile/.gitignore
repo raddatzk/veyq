@@ -8,3 +8,5 @@ apple/build/
 # Generated into the asset catalog from the web's tokens and brand mark (theme/generate_theme.py); only its root
 # Contents.json is tracked.
 apple/Veyq/Assets.xcassets/*/
+# cargo's own output, should an editor run it here: linux/run.py keeps its target in a Docker volume.
+linux/target/

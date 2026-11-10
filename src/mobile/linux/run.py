@@ -14,6 +14,19 @@ Verbs:
                              symbols (none of the static libraries linked in), and builds and runs
                              `bridge/smoke/smoke.c` against it through bridge.h alone; with VEYQ_LIVE set the smoke
                              also signs in as the seeded principal over the library's own HTTP client.
+  build                      generates what the app is built from but does not keep — the bridge's Rust
+                             (`:bridge:generateBindings`) and the samples its round trip reads (`WireTest`), the words'
+                             gettext catalogs and Rust (`generate_words.py --gettext`), the theme
+                             (`generate_theme.py --gtk`) — links the bridge's library, and runs in the container
+                             `cargo clippy --locked --all-targets -- -D warnings`, `cargo test --locked` and
+                             `cargo build --locked`. Its exit code is cargo's.
+  run [--port N]             `build`'s generation and `cargo build`, then the app under `gtk4-broadwayd`, drawn into a
+                             browser at http://127.0.0.1:N (default 8095; published on 127.0.0.1 only). LANGUAGE and
+                             ADW_DEBUG_COLOR_SCHEME, when set, reach the app.
+  lock                       `cargo update`: writes Cargo.lock anew from Cargo.toml (the one way it changes).
+
+cargo's registry and target directory live in the Docker volumes `veyq-linux-cargo` and `veyq-linux-target`, so a
+rebuild is incremental; `docker volume rm` both to start clean.
 
 Live runs: `VEYQ_LIVE=http://veyq.localhost:8080 run.py test --tests '*LiveSignInTest*'` (or `run.py bridge`) signs in
 as the seeded principal of `.run/.env` (VEYQ_ENV_FILE names another file, e.g. the main checkout's from a worktree).
@@ -39,7 +52,7 @@ ROOT = Path(__file__).resolve().parents[3]
 sys.path.insert(0, str(ROOT / "scripts"))
 import repo_layout  # noqa: E402
 
-HERE = Path(__file__).resolve().parent
+HERE = repo_layout.MOBILE_LINUX
 IMAGE = "veyq-linux-dev"
 # What Kotlin/Native defines in a shared library beside its @CName functions: its C API's entry (`lib<name>_symbols`),
 # two of its runtime's, and the ELF init/fini (read with `nm -D --defined-only` on 2026-11-10, Kotlin 2.4.21).
@@ -47,6 +60,12 @@ KOTLIN_NATIVE_EXPORTS = {"libveyq_symbols", "IsInstance", "Konan_cxa_demangle", 
 ZONE = "Europe/Berlin"
 VECTORS = ROOT / "contracts" / "crypto" / "vectors" / "v1.json"
 NORMALIZATION_TEST = repo_layout.MOBILE / "build" / "utf8proc" / "NormalizationTest.txt"
+GENERATED = repo_layout.MOBILE / "build" / "generated"
+WORDS = repo_layout.MOBILE / "words"
+THEME = repo_layout.MOBILE / "theme"
+# cargo's registry and its target, kept across runs (named volumes: nothing of them lands in the tree)
+CARGO_VOLUMES = {"veyq-linux-cargo": "/veyq/cargo", "veyq-linux-target": "/veyq/target"}
+BROADWAY_DISPLAY = 5  # gtk4-broadwayd serves display :N on port 8080 + N
 # This host's architecture -> (Docker platform, Kotlin/Native target as Gradle names it)
 ARCHES = {"arm64": ("linux/arm64", "LinuxArm64"), "aarch64": ("linux/arm64", "LinuxArm64"),
           "x86_64": ("linux/amd64", "LinuxX64"), "AMD64": ("linux/amd64", "LinuxX64")}
@@ -78,10 +97,17 @@ def test(pattern: str | None) -> int:
     return in_container(docker_platform, mounts, env, f"{prelude}exec /veyq/bin/test.kexe{filter_arg}")
 
 
-def in_container(docker_platform: str, mounts: dict[Path, str], env: dict[str, str], script: str) -> int:
-    """Runs bash [script] in the image, [mounts] read-only; with VEYQ_LIVE, the dev origin reachable under its own name
-    and the seeded principal's env file at /veyq/env. Returns the script's exit code."""
-    docker = ["docker", "run", "--rm", "--platform", docker_platform]
+def in_container(docker_platform: str, mounts: dict[Path, str], env: dict[str, str], script: str,
+                 writable: dict[Path, str] | None = None, volumes: dict[str, str] | None = None,
+                 docker_args: list[str] | None = None) -> int:
+    """Runs bash [script] in the image, [mounts] read-only, [writable] read-write, [volumes] the named volumes; with
+    VEYQ_LIVE, the dev origin reachable under its own name and the seeded principal's env file at /veyq/env. Returns
+    the script's exit code."""
+    docker = ["docker", "run", "--rm", "--platform", docker_platform] + (docker_args or [])
+    for host_path, container_path in (writable or {}).items():
+        docker += ["-v", f"{host_path}:{container_path}"]
+    for name, container_path in (volumes or {}).items():
+        docker += ["-v", f"{name}:{container_path}"]
     prelude = ""
     live = os.environ.get("VEYQ_LIVE")
     if live:
@@ -132,6 +158,63 @@ def bridge() -> int:
     return in_container(docker_platform, mounts, {}, script)
 
 
+def generate(target: str) -> Path:
+    """Writes everything the app is built from but does not keep, and links the bridge's library; returns its
+    directory."""
+    run("./gradlew", ":bridge:generateBindings", f":bridge:linkDebugShared{target}", ":bridge:jvmTest",
+        "--tests", "*WireTest*", cwd=repo_layout.MOBILE)
+    run(sys.executable, str(WORDS / "generate_words.py"), "--gettext", str(GENERATED / "linux" / "words"))
+    run(sys.executable, str(THEME / "generate_theme.py"), "--gtk", str(GENERATED / "linux" / "theme"))
+    lib_dir = repo_layout.MOBILE / "bridge" / "build" / "bin" / (target[0].lower() + target[1:]) / "debugShared"
+    if not (lib_dir / "libveyq.so").exists():
+        sys.exit(f"no library at {lib_dir / 'libveyq.so'}")
+    return lib_dir
+
+
+def cargo(docker_platform: str, lib_dir: Path, script: str, docker_args: list[str] | None = None,
+          env: dict[str, str] | None = None) -> int:
+    """Runs [script] in the package's directory in the container, with what build.rs and the tests read."""
+    mounts = {repo_layout.MOBILE_LINUX: "/veyq/src", GENERATED: "/veyq/generated", lib_dir: "/veyq/lib",
+              WORDS / "words.json": "/veyq/words.json"}
+    base = {"CARGO_HOME": "/veyq/cargo", "CARGO_TARGET_DIR": "/veyq/target", "VEYQ_GENERATED": "/veyq/generated",
+            "VEYQ_LIB_DIR": "/veyq/lib", "LD_LIBRARY_PATH": "/veyq/lib", "VEYQ_SAMPLES": "/veyq/generated/bridge/samples",
+            "VEYQ_WORDS_JSON": "/veyq/words.json", "LANG": "en_US.UTF-8"}
+    return in_container(docker_platform, mounts, base | (env or {}), f"set -e; cd /veyq/src; {script}",
+                        volumes=CARGO_VOLUMES, docker_args=docker_args)
+
+
+def build() -> int:
+    docker_platform, target = arch()
+    lib_dir = generate(target)
+    build_image(docker_platform)
+    return cargo(docker_platform, lib_dir, "cargo clippy --locked --all-targets -- -D warnings; "
+                                           "cargo test --locked; cargo build --locked")
+
+
+def run_app(port: int) -> int:
+    docker_platform, target = arch()
+    lib_dir = generate(target)
+    build_image(docker_platform)
+    inner = 8080 + BROADWAY_DISPLAY
+    env = {k: os.environ[k] for k in ("LANGUAGE", "ADW_DEBUG_COLOR_SCHEME") if k in os.environ}
+    env |= {"GDK_BACKEND": "broadway", "BROADWAY_DISPLAY": f":{BROADWAY_DISPLAY}", "XDG_RUNTIME_DIR": "/tmp/xdg"}
+    print(f"veyq: the app draws into http://127.0.0.1:{port} once cargo built it", flush=True)
+    return cargo(docker_platform, lib_dir,
+                 "cargo build --locked; mkdir -p -m 700 /tmp/xdg; "
+                 f"gtk4-broadwayd --address 0.0.0.0 :{BROADWAY_DISPLAY} & "
+                 # ready once its socket is there (a bare TCP probe makes it log "Error reading request lines")
+                 "for _ in $(seq 50); do ls /tmp/xdg/broadway*.socket >/dev/null 2>&1 && break; sleep 0.1; done; "
+                 "exec /veyq/target/debug/veyq",
+                 docker_args=["-p", f"127.0.0.1:{port}:{inner}"], env=env)
+
+
+def lock() -> int:
+    docker_platform, _ = arch()
+    build_image(docker_platform)
+    return in_container(docker_platform, {}, {"CARGO_HOME": "/veyq/cargo"}, "set -e; cd /veyq/src; cargo update",
+                        writable={repo_layout.MOBILE_LINUX: "/veyq/src"}, volumes={"veyq-linux-cargo": "/veyq/cargo"})
+
+
 def arch() -> tuple[str, str]:
     try:
         return ARCHES[platform.machine()]
@@ -145,7 +228,17 @@ def main() -> None:
     t = verbs.add_parser("test", help="link the core's Linux test binary and run it in the container")
     t.add_argument("--tests", help="Kotlin/Native --ktest_filter pattern, e.g. '*LiveSignInTest*'")
     verbs.add_parser("bridge", help="link the bridge's library, check what it exports and run the C smoke against it")
+    verbs.add_parser("build", help="generate, then cargo clippy, test and build the app in the container")
+    r = verbs.add_parser("run", help="build the app and run it under gtk4-broadwayd, drawn into a browser")
+    r.add_argument("--port", type=int, default=8095, help="the port on 127.0.0.1 the browser opens (default 8095)")
+    verbs.add_parser("lock", help="cargo update: write Cargo.lock anew")
     args = parser.parse_args()
+    if args.verb == "build":
+        sys.exit(build())
+    if args.verb == "run":
+        sys.exit(run_app(args.port))
+    if args.verb == "lock":
+        sys.exit(lock())
     if args.verb == "test":
         sys.exit(test(args.tests))
     if args.verb == "bridge":

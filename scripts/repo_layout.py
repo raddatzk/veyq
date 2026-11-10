@@ -34,6 +34,8 @@ CRYPTO = SRC / "packages/crypto"
 MOBILE = SRC / "mobile"
 MOBILE_ANDROID = MOBILE / "android"
 MOBILE_APPLE = MOBILE / "apple"
+# The Linux app (CR core-as-a-native-library D8): a Cargo package, built and run in a container by its `run.py`.
+MOBILE_LINUX = MOBILE / "linux"
 # Every surface, for the guards that iterate them.
 SURFACES = (BACKEND, WEB, ADMIN_WEB, CRYPTO)
 # Where a tree from before stage 2 carries each surface (repository-relative): the upgrade proof builds a predecessor

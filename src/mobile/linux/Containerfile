@@ -1,17 +1,20 @@
 # The Linux app's build and run environment (CR core-as-a-native-library D8): Fedora 44, whose GTK 4.22 and libadwaita
-# 1.9 the app is written against. `run.py` builds this image and runs everything Linux in it — the core's test binary
-# today, cargo and the app under gtk4-broadwayd once the app exists. Nothing is copied in: run.py mounts what a run reads.
+# 1.9 the app is written against. `run.py` builds this image and runs everything Linux in it — the core's test binary,
+# the bridge's C smoke, cargo and the app under gtk4-broadwayd. Nothing is copied in: run.py mounts what a run reads.
 #
 # By digest (scripts/validate_image_pins.py): the multi-arch index of fedora:44, read with
 # `docker buildx imagetools inspect fedora:44` on 2026-11-10 (linux/amd64 and linux/arm64/v8).
 FROM fedora:44@sha256:15da97ed9aa94dd3d92c3925eb89520f6c80e07ea7ee24cba848d1f8b6912b3e
 
-# gtk4-devel, libadwaita-devel, rust, cargo, gcc, gettext: the app's build (later phases).
+# gtk4-devel, libadwaita-devel, rust, cargo, clippy, gcc, gettext: the app's build (`run.py build`; gettext's msgfmt
+#   compiles the words' catalogs, glib2-devel's glib-compile-resources — gtk4-devel's dependency — the theme).
 # libxcrypt-compat: libcrypt.so.1, the one library Ktor's statically linked libcurl needs beyond glibc, zlib and
 #   libresolv (src/mobile/CLAUDE.md § Traps).
 # ca-certificates, tzdata: the system's CA bundle the Curl engine verifies against, and the zones kotlinx-datetime reads.
+# glibc-langpack-en, glibc-langpack-de: the locales the words are tried in — glibc's gettext ignores LANGUAGE under a C
+#   locale (C.UTF-8 included: measured 2026-11-10, `gettext --context` answered the English), as a desktop never runs.
 # socat: run.py's forward of a `*.localhost` dev origin to the host (the backend picks the tenant from the Host header).
 RUN dnf install -y --setopt=install_weak_deps=False \
-        gtk4-devel libadwaita-devel rust cargo gcc gettext \
-        libxcrypt-compat ca-certificates tzdata socat \
+        gtk4-devel libadwaita-devel rust cargo clippy gcc gettext \
+        libxcrypt-compat ca-certificates tzdata glibc-langpack-en glibc-langpack-de socat \
     && dnf clean all

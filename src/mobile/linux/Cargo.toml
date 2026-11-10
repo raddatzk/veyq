@@ -1,0 +1,18 @@
+# The veyq app on Linux (ADR 0127 decision 4, CR core-as-a-native-library D8): GTK 4 and libadwaita drawing what the
+# core's models say, reached through libveyq.so's six functions. Built and run in the Fedora 44 image beside it, only
+# through `run.py` (it sets VEYQ_GENERATED and VEYQ_LIB_DIR, which build.rs reads); never edit Cargo.lock by hand —
+# `run.py lock` writes it.
+[package]
+name = "veyq"
+version = "0.1.0"
+edition = "2024"
+publish = false
+license = "AGPL-3.0-only"
+
+[dependencies]
+# GTK 4.22 and libadwaita 1.9 are what Fedora 44 carries (gtk4-4.22.5, libadwaita-1.9.4, measured 2026-11-10).
+gtk = { package = "gtk4", version = "0.11", features = ["v4_20"] }
+adw = { package = "libadwaita", version = "0.9", features = ["v1_8"] }
+async-channel = "2"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
