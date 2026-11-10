@@ -3,7 +3,7 @@
      file is empty ON PURPOSE, with verification on — so the first plugin or dependency added to the root fails the
      build until someone writes metadata for it, and that is the moment to ask whether the launcher is turning into
      an orchestrator. Its one component is no dependency of the build: an IntelliJ sync with "download sources" fetches
-     the sources of the Groovy the Gradle distribution embeds (gradle-9.8.2/lib/groovy-4.0.33.jar), and with them that
+     the sources of the Groovy the Gradle distribution embeds (gradle-9.9.0/lib/groovy-4.0.33.jar), and with them that
      Groovy's POM and module, which no trust rule may exempt (validate_build_input_pins.py); a wrapper bump that moves
      the embedded Groovy owes the next version's two hashes here and in src/backend/'s file, checked against Maven
      Central's .sha1 (2026-11-01). The backend's components are verified by src/backend/gradle/verification-metadata.xml, in its own

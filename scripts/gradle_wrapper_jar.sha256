@@ -8,11 +8,11 @@
 # How a line is obtained (and how the next one must be): hash the JAR `./gradlew wrapper` wrote, and cross-check
 # it against Gradle's own published checksum for the wrapper of the Gradle version that wrote it:
 #   https://services.gradle.org/distributions/gradle-<v>-wrapper.jar.sha256
-# 9.8.2, done 2026-10-30 (inbox #806): `./gradlew wrapper` run twice, so the 9.8.2 distribution wrote its own JAR
-# (the first run, under 9.5.1, writes 9.5.1's), in both builds (src/backend/ and the root launcher); the hash of each
-# written JAR equals that URL's answer, and the JAR and the distribution it launches are now the same version.
+# 9.9.0, done 2026-11-10 (inbox #828): `./gradlew wrapper` run twice in each build (src/backend/ and the root
+# launcher), so the 9.9.0 distribution wrote its own JAR (the first run, under 9.8.2, writes 9.8.2's); the hash of each
+# written JAR equals that URL's answer, and the JAR and the distribution it launches are the same version.
 # Trust-on-first-write, like the generator pin.
 #
 # Format: `<gradle version> <sha256>`, one per line. A wrapper upgrade adds the new line; the old one may go once
 # no tracked JAR hashes to it.
-9.8.2 3b8a25775a69158b5ad2b1d17a80a88dc7b40a352a73eb27d06c612a7ce68e98
+9.9.0 621008afc4f5d59357fcf06ffa644dd5aade5e091bdc363742710445f73cdaf8
