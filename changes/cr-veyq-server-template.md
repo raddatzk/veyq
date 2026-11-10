@@ -1,11 +1,11 @@
 ---
 id: cr-veyq-server-template
 title: veyq-server holds the server half as a Copier template, released and signed
-status: planned
+status: in-progress
 satisfies: []
 adrs: ["0126"]
 invariants:
-  - "veyq-server holds nothing of veyq's: no veyq Application, values, Secret or host-access part of veyq's (ADR 0126 decision 1)"
+  - "veyq-server holds nothing of veyq's: no veyq Application, values, Secret or host-access part of veyq's (ADR 0126 decision 1) — two lines name it, by design: the AppProject allows veyq's chart (the Application veyqctl writes joins it) and Renovate leaves gitops/apps/veyq/ alone (veyqctl's)"
   - "a release is verifiable before Copier reads it: a manifest naming the commit and the sha256 of its tree, signed keylessly by veyq-server's own release workflow (decision 6)"
   - "no secret value is in the template or in a rendered repository in plaintext; the template ships no instance value (no host, user, key, domain, URL)"
   - "the rendered repository's layout is gitops/ beside ansible/ (owner 2026-11-10), so veyqctl offers gitops/apps/veyq"
@@ -52,7 +52,7 @@ anything of this repository by hand; `cr-veyqctl-server-path` drives it.
 
 ## Phases
 
-- [ ] **1 the template** — the files above under `template/` with Jinja placeholders for the answers, `copier.yml`,
+- [x] **1 the template** — the files above under `template/` with Jinja placeholders for the answers, `copier.yml`,
   the README for operators (what it installs, what each answer is; how veyqctl uses it). · Done when: `copier copy` with
   sample answers renders a repository whose `gitops/` builds with kustomize and helm and whose Ansible passes the syntax
   check.
@@ -67,3 +67,25 @@ anything of this repository by hand; `cr-veyqctl-server-path` drives it.
 
 The template renders and its checks pass in veyq-server's CI; `v0.1` is released and verifies; ADR 0126 decision 6's
 verification has a release to verify. `affenbande`'s server half is retired into it (phase 4 of the other CR).
+
+## Progress (2026-11-10)
+
+Phase 1 in `raddatzk/veyq-server` at `6822b05` (pushed): 63 files from `affenbande` at `bca6dc4` under `template/`,
+12 of them Copier templates (`.jinja`, markers `[[ ]]`/`[% %]`); the questions `server_address`, `node_name` (offered
+from the address), `admin_user`, `admin_ssh_public_key`, `age_recipient`, `repo_url`, `branch` (main), `project`
+(server), `host_access` (yes); system names `affenbande` → `veyq-server` (nftables `veyq_server`, sshd's
+`01-veyq-server.conf`, `/var/lib/veyq-server/bootstrap`); `.copier-answers.yml` rendered. Not moved: `setup.py`,
+`connect.py`, `render.sh`, `play`, the veyq upgrade workflow, veyq's half and its host-access component.
+
+Measured locally (`scripts/check_template.py --no-lint`, copier 9.10.3 in a venv): both answer sets render with no
+marker left; yamllint; `kustomize build` of gitops/apps, Argo CD's install (its NodePort exactly with host access) and
+system-upgrade; the Gateway API CRDs at the pinned commit; `helm template` of cert-manager and Traefik by digest;
+`ansible-galaxy` installs the requirements; `--syntax-check` of both playbooks — all green. ansible-lint is not
+measured locally: Homebrew's runs on Python 3.15, which ansible-core 2.21 does not support, and resolves no collection;
+CI installs it under the runner's Python 3.12 (`requirements-ci.txt`).
+
+Phase 2: `checks.yml` pushed; its first run waits on GitHub (Actions partial outage, githubstatus.com, 2026-11-10 ~17:50).
+Phase 3 (`release.yml`, `scripts/tree_hash.py` — a sorted `<mode> <sha256> <path>` listing rather than `git archive`,
+whose tar may differ between git versions) is written; the first release waits on the owner's go and immutable
+releases switched on in the repository's settings.
+
