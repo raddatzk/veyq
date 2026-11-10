@@ -9,6 +9,8 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
+import kotlinx.serialization.SerialName
+import kotlinx.serialization.Serializable
 import me.raddatz.veyq.mobile.crypto.Primitives
 import me.raddatz.veyq.mobile.navigation.Connection
 import me.raddatz.veyq.mobile.navigation.Connections
@@ -17,6 +19,7 @@ import me.raddatz.veyq.mobile.navigation.RecentUses
 import me.raddatz.veyq.mobile.navigation.SpaceRef
 import me.raddatz.veyq.mobile.navigation.TenantRef
 import me.raddatz.veyq.mobile.words.Msg
+import me.raddatz.veyq.mobile.words.MsgKey
 
 /**
  * The app's way in, for every platform (ADR 0123 decision 8, ADR 0127): where it opens — every account the person stays
@@ -53,30 +56,36 @@ class SessionModel<A : Connection, T : Any>(
         suspend fun forgetDevice(account: A)
     }
 
-    /** Where the way in stands. */
+    /** Where the way in stands; serializable, since the native bridge sends it as it is (CR core-as-a-native-library D6). */
+    @Serializable
     sealed class Gate {
         /** The remembered accounts resuming at start. */
+        @Serializable @SerialName("Starting")
         object Starting : Gate()
 
         /** The share extension with no account it can open: the app signs in (ADR 0126). */
+        @Serializable @SerialName("NeedsApp")
         object NeedsApp : Gate()
 
         /** The full sign-in, with the Secret Key; [server] and [email] filled in where a trusted device's record knew them. */
+        @Serializable @SerialName("SignIn")
         data class SignIn(
             val working: Boolean = false,
-            val error: Msg? = null,
+            @Serializable(with = MsgKey::class) val error: Msg? = null,
             val adding: Boolean = false,
             val server: String? = null,
             val email: String? = null,
         ) : Gate()
 
         /** An account this device trusts: the password alone (DEVICE), or the person's authentication (DEVICE_KEY). */
-        data class Unlock(val record: TrustedDevice, val working: Boolean = false, val error: Msg? = null) : Gate()
+        @Serializable @SerialName("Unlock")
+        data class Unlock(val record: TrustedDevice, val working: Boolean = false, @Serializable(with = MsgKey::class) val error: Msg? = null) : Gate()
 
         /**
          * Signed in, the shell over tenant [tenantId] of connection [connectionKey] — while [switching], still the one
          * shown, the switch to another under way.
          */
+        @Serializable @SerialName("Signed")
         data class Signed(val connectionKey: String, val tenantId: String, val switching: Boolean = false) : Gate()
     }
 

@@ -1,11 +1,25 @@
 package me.raddatz.veyq.mobile.expenses
 
+import kotlinx.serialization.KSerializer
+import kotlinx.serialization.SerialName
+import kotlinx.serialization.Serializable
+import kotlinx.serialization.SerializationException
+import kotlinx.serialization.descriptors.SerialDescriptor
+import kotlinx.serialization.encoding.Decoder
+import kotlinx.serialization.encoding.Encoder
+import me.raddatz.veyq.mobile.words.Notice
+import me.raddatz.veyq.mobile.words.Piece
+
 /**
  * What a Pot's three views show (ADR 0122 decision 4: an open Pot's bar is Entries, Overview, Settings, as the web's Pot
  * has them, `src/web/src/features/expenses/components/`), computed once for both platforms, which only lay it out and
  * format money. Amounts are minor units of the base currency; a name is null for an erased person (the platform says
  * "deleted person").
+ *
+ * On the wire (the native bridge, CR core-as-a-native-library D6) a view is what it shows, [Shown]: its rows each with
+ * the words the core says for them. It is sent, never received — it is computed from a session, which stays here.
  */
+@Serializable(with = PotView.AsShown::class)
 class PotView internal constructor(session: Source) {
     /** What a view is computed from: a session's state, or a test's. */
     internal class Source(
@@ -29,6 +43,7 @@ class PotView internal constructor(session: Source) {
     /** One entry row: its title (a transfer may have none), date, category id (null for a transfer), who paid or received
      *  (a transfer: from and to), its base amount (negative for a refund), the foreign amount where its currency is not the
      *  base, and whether it is invalid, unreadable or edited. */
+    @Serializable
     class EntryRow(
         val id: String, val kind: Kind?, val title: String?, val date: String?, val category: String?, val who: List<String>,
         val amount: Long?, val foreignAmount: Long?, val foreignCurrency: String?, val foreignMinorUnits: Int,
@@ -36,12 +51,15 @@ class PotView internal constructor(session: Source) {
     )
 
     /** One balance row; [settled] what transfers moved (positive: sent, negative: received). */
+    @Serializable
     class PersonRow(
         val id: String, val name: String?, val paid: Long, val share: Long, val balance: Long, val active: Boolean, val settled: Long = 0,
         /** A listed member's user id, whose picture the row shows; null for a name, a former member and the erased (the letter). */
         val userId: String? = null,
     )
+    @Serializable
     class SettleRow(val from: String?, val to: String?, val amount: Long, val fromId: String = "", val toId: String = "")
+    @Serializable
     class CategoryRow(val id: String, val ownName: String?, val amount: Long)
     class Person(val id: String, val name: String)
 
@@ -255,6 +273,7 @@ class PotView internal constructor(session: Source) {
     /** One person of the Settings tab's people (uc.expenses.manage-participants): their balance in short, and what may be
      *  done to them — renamed (a name only, never a member), deactivated or activated, deleted (a revision names them) or
      *  removed (none does; then they appear nowhere), the last two only once settled. */
+    @Serializable
     class PersonEntry(
         val id: String, val name: String, val standing: Standing, val active: Boolean, val balance: Long,
         val renamable: Boolean, val canToggle: Boolean, val canErase: Boolean, val named: Boolean,
@@ -340,6 +359,7 @@ class PotView internal constructor(session: Source) {
     /** How a balance reads: owed to them (the accent), they owe (the danger), or settled (quiet). */
     enum class Tone { OWED, OWES, SETTLED }
 
+    @Serializable
     class Balance(val notice: me.raddatz.veyq.mobile.words.Notice, val tone: Tone)
 
     /** A person's balance in words beside their row. */
@@ -411,12 +431,74 @@ class PotView internal constructor(session: Source) {
     }
 
     /** What an entry row says beside its line: invalid or unreadable ([Badge.danger]), else edited, else nothing. */
+    @Serializable
     class Badge(val notice: me.raddatz.veyq.mobile.words.Notice, val danger: Boolean)
 
     fun badge(e: EntryRow): Badge? = when (e.status) {
         Ledger.Status.INVALID -> Badge(me.raddatz.veyq.mobile.words.Notice(me.raddatz.veyq.mobile.words.Msg.POT_INVALID), true)
         Ledger.Status.UNREADABLE -> Badge(me.raddatz.veyq.mobile.words.Notice(me.raddatz.veyq.mobile.words.Msg.POT_UNREADABLE), true)
         else -> if (e.edited) Badge(me.raddatz.veyq.mobile.words.Notice(me.raddatz.veyq.mobile.words.Msg.POT_EDITED), false) else null
+    }
+
+    /** An entry row with its line and badge. */
+    @Serializable
+    class ShownEntry(val row: EntryRow, val line: List<Piece>, val badge: Badge?)
+
+    /** A balance row with its words and what makes it. */
+    @Serializable
+    class ShownBalance(val row: PersonRow, val balance: Balance, val facts: List<Piece>)
+
+    /** A settle-up row with its sentence. */
+    @Serializable
+    class ShownSettle(val row: SettleRow, val pays: Notice)
+
+    /** A category's total with its name. */
+    @Serializable
+    class ShownCategory(val row: CategoryRow, val label: Piece)
+
+    /** One of the Settings tab's people with their facts. */
+    @Serializable
+    class ShownPerson(val entry: PersonEntry, val facts: List<Piece>)
+
+    /** What the view shows, as data: every row with the words the core says for it, the missing records by name. */
+    @Serializable
+    @SerialName("PotView.Shown")
+    class Shown(
+        val name: String,
+        val subtitle: Notice?,
+        val currency: String?,
+        val minorUnits: Int,
+        val ready: Boolean,
+        val canWrite: Boolean,
+        val entries: List<ShownEntry>,
+        val balances: List<ShownBalance>,
+        val settleUp: List<ShownSettle>,
+        val total: Long,
+        val byCategory: List<ShownCategory>,
+        val people: List<ShownPerson>,
+        val deletedPeople: Int,
+        val missing: List<Piece>,
+    )
+
+    /** What this view shows ([Shown]). */
+    fun shown(): Shown = Shown(
+        name, subtitle, currency, minorUnits, ready, canWrite,
+        entries.map { ShownEntry(it, line(it), badge(it)) },
+        balances.map { ShownBalance(it, balance(it), balanceFacts(it)) },
+        settleUp.map { ShownSettle(it, pays(it)) },
+        total,
+        byCategory.map { ShownCategory(it, categoryLabel(it.id)) },
+        personEntries.map { ShownPerson(it, personFacts(it)) },
+        deletedPeople,
+        missing.map(::missingName),
+    )
+
+    /** A view on the wire: its [Shown], under the view's own name; there is no view to read back from it. */
+    object AsShown : KSerializer<PotView> {
+        @OptIn(kotlinx.serialization.ExperimentalSerializationApi::class)
+        override val descriptor: SerialDescriptor = SerialDescriptor("PotView", Shown.serializer().descriptor)
+        override fun serialize(encoder: Encoder, value: PotView) = encoder.encodeSerializableValue(Shown.serializer(), value.shown())
+        override fun deserialize(decoder: Decoder): PotView = throw SerializationException("a Pot's view is computed from its session: it is sent, never received")
     }
 
     private fun row(e: Ledger.Entry): EntryRow {

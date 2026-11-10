@@ -1,9 +1,13 @@
 package me.raddatz.veyq.mobile.navigation
 
+import kotlinx.serialization.Serializable
+
 /** A space the member belongs to, by its decrypted name (the tenant's, a group's, or the personal one). */
+@Serializable
 data class SpaceRef(val scopeId: String, val kind: String, val name: String)
 
 /** A node of a space's tree, decrypted: a folder or an object of an application. */
+@Serializable
 data class NodeRef(
     val scopeId: String,
     val nodeId: String,

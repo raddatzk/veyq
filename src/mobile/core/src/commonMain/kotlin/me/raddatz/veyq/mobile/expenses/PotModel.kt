@@ -19,7 +19,11 @@ import me.raddatz.veyq.mobile.session.TenantSession
  * pull to refresh, the writes, and a new Pot's creation. Both apps observe [state] (or [watch]); what they draw is theirs.
  */
 class PotModel(private val tenant: TenantSession, private val now: () -> Long) {
-    /** The open Pot's views: [view] null while it loads, [failed] when it did not open; [message] the last write's refusal. */
+    /**
+     * The open Pot's views: [view] null while it loads, [failed] when it did not open; [message] the last write's refusal.
+     * Serializable, since the native bridge sends it as it is (CR core-as-a-native-library D6).
+     */
+    @kotlinx.serialization.Serializable
     class State(val ref: ObjectRef, val view: PotView? = null, val failed: Boolean = false, val saving: Boolean = false, val message: String? = null) {
         internal fun with(view: PotView? = this.view, failed: Boolean = this.failed, saving: Boolean = this.saving, message: String? = this.message) =
             State(ref, view, failed, saving, message)

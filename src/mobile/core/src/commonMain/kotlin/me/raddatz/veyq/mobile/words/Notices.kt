@@ -1,5 +1,14 @@
 package me.raddatz.veyq.mobile.words
 
+import kotlinx.serialization.KSerializer
+import kotlinx.serialization.SerialName
+import kotlinx.serialization.Serializable
+import kotlinx.serialization.SerializationException
+import kotlinx.serialization.descriptors.PrimitiveKind
+import kotlinx.serialization.descriptors.PrimitiveSerialDescriptor
+import kotlinx.serialization.descriptors.SerialDescriptor
+import kotlinx.serialization.encoding.Decoder
+import kotlinx.serialization.encoding.Encoder
 import me.raddatz.veyq.mobile.blob.UploadQueue
 import me.raddatz.veyq.mobile.depot.DepotFiles
 import me.raddatz.veyq.mobile.depot.DropBoxes
@@ -20,6 +29,7 @@ import me.raddatz.veyq.mobile.session.ShareLinks
  * the person's language. An argument is a `String`, an `Int`, a [Bytes] (a size the platform formats its own way),
  * a [Moment], an [Amount], another [Notice] (a word inside the sentence) or a [Joined] list of those.
  */
+@Serializable(with = NoticeSerializer::class)
 class Notice(val msg: Msg, val args: List<Any> = emptyList()) {
     constructor(msg: Msg, vararg args: Any) : this(msg, args.toList())
 
@@ -39,31 +49,37 @@ class Joined(val parts: List<Any>, val separator: String) {
  * One piece of a row's line, which a platform writes its own way and joins with the others: words of the catalog, a
  * name as written, a day (ISO, `2026-11-10`), a size in bytes or an amount in a currency's minor units.
  */
+@Serializable
 sealed class Piece {
+    @Serializable @SerialName("said")
     class Said(val notice: Notice) : Piece() {
         override fun equals(other: Any?) = other is Said && other.notice == notice
         override fun hashCode() = notice.hashCode()
         override fun toString() = "Said($notice)"
     }
 
+    @Serializable @SerialName("plain")
     class Plain(val text: String) : Piece() {
         override fun equals(other: Any?) = other is Plain && other.text == text
         override fun hashCode() = text.hashCode()
         override fun toString() = "Plain($text)"
     }
 
+    @Serializable @SerialName("day")
     class Day(val iso: String) : Piece() {
         override fun equals(other: Any?) = other is Day && other.iso == iso
         override fun hashCode() = iso.hashCode()
         override fun toString() = "Day($iso)"
     }
 
+    @Serializable @SerialName("size")
     class Size(val bytes: Long) : Piece() {
         override fun equals(other: Any?) = other is Size && other.bytes == bytes
         override fun hashCode() = bytes.hashCode()
         override fun toString() = "Size($bytes)"
     }
 
+    @Serializable @SerialName("money")
     class Money(val amount: Long, val currency: String?, val minorUnits: Int) : Piece() {
         override fun equals(other: Any?) = other is Money && other.amount == amount && other.currency == currency && other.minorUnits == minorUnits
         override fun hashCode() = amount.hashCode()
@@ -90,6 +106,71 @@ class Bytes(val count: Long) {
     override fun equals(other: Any?) = other is Bytes && other.count == count
     override fun hashCode() = count.hashCode()
     override fun toString() = "Bytes($count)"
+}
+
+/**
+ * A [Msg] on the wire (the native bridge, CR core-as-a-native-library D6) as its catalog key — `words.json`'s, which
+ * each platform's words are generated under — never as the entry's Kotlin name.
+ */
+object MsgKey : KSerializer<Msg> {
+    override val descriptor: SerialDescriptor = PrimitiveSerialDescriptor("me.raddatz.veyq.mobile.words.MsgKey", PrimitiveKind.STRING)
+    override fun serialize(encoder: Encoder, value: Msg) = encoder.encodeString(value.key)
+    override fun deserialize(decoder: Decoder): Msg {
+        val key = decoder.decodeString()
+        return Msg.entries.firstOrNull { it.key == key } ?: throw SerializationException("no word has the key $key")
+    }
+}
+
+/**
+ * A [Notice] on the wire: its key and each argument tagged by what it is, so the platform across the bridge says it
+ * as a platform here does ([NoticeArg]); an argument of another type is refused, never sent as its `toString`.
+ */
+object NoticeSerializer : KSerializer<Notice> {
+    override val descriptor: SerialDescriptor = NoticeWire.serializer().descriptor
+    override fun serialize(encoder: Encoder, value: Notice) = encoder.encodeSerializableValue(NoticeWire.serializer(), NoticeWire.of(value))
+    override fun deserialize(decoder: Decoder): Notice = decoder.decodeSerializableValue(NoticeWire.serializer()).notice()
+}
+
+@Serializable @SerialName("Notice")
+internal class NoticeWire(@Serializable(with = MsgKey::class) val msg: Msg, val args: List<NoticeArg>) {
+    fun notice() = Notice(msg, args.map { it.arg() })
+
+    companion object {
+        fun of(n: Notice) = NoticeWire(n.msg, n.args.map(NoticeArg::of))
+    }
+}
+
+/** One argument of a [Notice] as the wire carries it: each kind the class documents, by its own tag. */
+@Serializable @SerialName("NoticeArg")
+internal sealed class NoticeArg {
+    abstract fun arg(): Any
+
+    @Serializable @SerialName("text") class Text(val text: String) : NoticeArg() { override fun arg() = text }
+    @Serializable @SerialName("int") class IntArg(val value: Int) : NoticeArg() { override fun arg() = value }
+    @Serializable @SerialName("long") class LongArg(val value: Long) : NoticeArg() { override fun arg() = value }
+    @Serializable @SerialName("bytes") class BytesArg(val count: Long) : NoticeArg() { override fun arg() = Bytes(count) }
+    @Serializable @SerialName("moment") class MomentArg(val epochMs: Long) : NoticeArg() { override fun arg() = Moment(epochMs) }
+    @Serializable @SerialName("amount") class AmountArg(val amount: Long, val currency: String?, val minorUnits: Int) : NoticeArg() {
+        override fun arg() = Amount(amount, currency, minorUnits)
+    }
+    @Serializable @SerialName("notice") class Said(val notice: Notice) : NoticeArg() { override fun arg() = notice }
+    @Serializable @SerialName("joined") class JoinedArg(val parts: List<NoticeArg>, val separator: String) : NoticeArg() {
+        override fun arg() = Joined(parts.map { it.arg() }, separator)
+    }
+
+    companion object {
+        fun of(a: Any): NoticeArg = when (a) {
+            is String -> Text(a)
+            is Int -> IntArg(a)
+            is Long -> LongArg(a)
+            is Bytes -> BytesArg(a.count)
+            is Moment -> MomentArg(a.epochMs)
+            is Amount -> AmountArg(a.amount, a.currency, a.minorUnits)
+            is Notice -> Said(a)
+            is Joined -> JoinedArg(a.parts.map(::of), a.separator)
+            else -> throw SerializationException("a notice's argument of ${a::class.simpleName} has no form on the wire")
+        }
+    }
 }
 
 /**

@@ -1,5 +1,7 @@
 package me.raddatz.veyq.mobile.navigation
 
+import kotlinx.serialization.Serializable
+
 /**
  * The applications the app holds (ADR 0122 decision 1): the built ones. The id is the capability register's application
  * id (contracts/platform/capabilities.json).
@@ -22,6 +24,7 @@ enum class ApplicationId(val id: String) {
 enum class BarLevel { APPLICATION, OBJECT }
 
 /** One place in an application's bottom bar. [key] is stable and names its string in each platform's catalog. */
+@Serializable
 data class BarTab(val key: String)
 
 data class ApplicationShape(

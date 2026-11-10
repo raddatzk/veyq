@@ -1,6 +1,9 @@
 package me.raddatz.veyq.mobile.navigation
 
+import kotlinx.serialization.Serializable
+
 /** A tenant of a server, as the switcher shows it. */
+@Serializable
 data class TenantRef(val tenantId: String, val name: String, val domain: String)
 
 /** One server the app is signed in to: an account of its own, with the tenants it belongs to there. */

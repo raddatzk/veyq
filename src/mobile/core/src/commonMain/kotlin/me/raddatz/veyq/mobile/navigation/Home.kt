@@ -1,8 +1,10 @@
 package me.raddatz.veyq.mobile.navigation
 
+import kotlinx.serialization.Serializable
 import me.raddatz.veyq.mobile.words.Msg
 
 /** A folder on Home's path. */
+@Serializable
 data class FolderRef(val nodeId: String, val name: String)
 
 /**
@@ -24,7 +26,8 @@ object Home {
      * One group of a level, as the web's level view draws it (`LevelView`'s groups): the folders, then the contents.
      * [heading] is null where the level has one group only, which then needs none.
      */
-    data class Group(val folders: Boolean, val nodes: List<NodeRef>, val heading: Msg?)
+    @Serializable
+    data class Group(val folders: Boolean, val nodes: List<NodeRef>, @Serializable(with = me.raddatz.veyq.mobile.words.MsgKey::class) val heading: Msg?)
 
     /** A level ([level]'s order) in its groups: the folders apart from the rest, an empty group left out. */
     fun groups(level: List<NodeRef>): List<Group> {

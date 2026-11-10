@@ -1,10 +1,13 @@
 package me.raddatz.veyq.mobile.navigation
 
+import kotlinx.serialization.Serializable
+
 /**
  * Where the app is (ADR 0122): Home (one space's tree) or an application the drawer chose, which object is open,
  * which of the bar's places is selected, and whether Search has taken the screen. Both platforms render this one
  * state; neither keeps a navigation state of its own beside it.
  */
+@Serializable
 data class Shell(
     /** null: Home is chosen — the space's tree, which belongs to every application. */
     val application: ApplicationId?,

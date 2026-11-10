@@ -1,9 +1,12 @@
 package me.raddatz.veyq.mobile.navigation
 
+import kotlinx.serialization.Serializable
+
 /**
  * An object the app can open: a node of one application in one scope. Its name is the plaintext the app decrypted;
  * it never leaves the device.
  */
+@Serializable
 data class ObjectRef(
     val scopeId: String,
     val nodeId: String,
@@ -23,6 +26,7 @@ data class NodeAt(val scopeId: String, val nodeId: String, val kind: String, val
 data class Use(val ref: ObjectRef, val lastUsedEpochMs: Long)
 
 /** One list arranged by ADR 0122 decision 5. */
+@Serializable
 data class ArrangedList(
     val favorites: List<ObjectRef>,
     val recent: List<ObjectRef>,

@@ -9,6 +9,7 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
+import kotlinx.serialization.Serializable
 import me.raddatz.veyq.mobile.AppKinds
 import me.raddatz.veyq.mobile.export.SubtreeCopy
 import me.raddatz.veyq.mobile.session.FolderCreate
@@ -38,6 +39,7 @@ class ShellModel(
     private val now: () -> Long,
 ) {
     /** What the shell lists, this device's hidden spaces taken out. */
+    @Serializable
     class Lists(
         val spaces: List<SpaceRef>,
         val nodes: List<NodeRef>,
@@ -60,6 +62,8 @@ class ShellModel(
         fun space(shell: Shell): SpaceRef? = spaces.firstOrNull { it.scopeId == shell.space }
     }
 
+    /** Serializable, since the native bridge sends it as it is (CR core-as-a-native-library D6). */
+    @Serializable
     class State(val shell: Shell, val lists: Lists)
 
     /** The tenant as read, before what this device hides is taken out. */
