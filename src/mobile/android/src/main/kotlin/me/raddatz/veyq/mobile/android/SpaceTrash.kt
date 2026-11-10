@@ -21,6 +21,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -46,43 +47,9 @@ import me.raddatz.veyq.mobile.session.NodeTrash
 internal fun SpaceTrashSheet(scopeId: String, model: AppModel, onClose: () -> Unit) {
     val palette = LocalPalette.current
     val scope = rememberCoroutineScope()
-    var rows by remember { mutableStateOf<List<NodeTrash.Trashed>?>(null) }
-    var failed by remember { mutableStateOf(false) }
-    var busy by remember { mutableStateOf<String?>(null) }
-    var renaming by remember { mutableStateOf<String?>(null) }
-    var retryName by remember { mutableStateOf("") }
-    var rowError by remember { mutableStateOf<Pair<String, String>?>(null) }
-    var purging by remember { mutableStateOf<NodeTrash.Trashed?>(null) }
-    val restoreFailed = stringResource(R.string.trash_restore_failed)
-    val nameTaken = stringResource(R.string.trash_name_taken)
-    val purgeFailed = stringResource(R.string.trash_purge_failed)
-
-    suspend fun load() {
-        val read = model.trash(scopeId)
-        if (read == null) failed = true else { rows = read; failed = false }
-    }
-    LaunchedEffect(scopeId) { load() }
-
-    fun restore(row: NodeTrash.Trashed, newName: String? = null) {
-        rowError = null
-        busy = row.id
-        scope.launch {
-            when (model.restoreFromTrash(row, newName)) {
-                NodeTrash.Restored.RESTORED -> {
-                    renaming = null
-                    rows = rows?.filterNot { it.id == row.id }
-                    load() // a child whose own name an earlier delete freed stays: a root of its own now
-                }
-                NodeTrash.Restored.NAME_TAKEN -> {
-                    rowError = row.id to nameTaken
-                    renaming = row.id
-                    retryName = newName ?: row.name
-                }
-                else -> rowError = row.id to restoreFailed
-            }
-            busy = null
-        }
-    }
+    val sheet = remember(scopeId) { model.trashSheet(scopeId) } ?: return
+    val st by sheet.state.collectAsState()
+    LaunchedEffect(scopeId) { sheet.load() }
 
     ModalBottomSheet(onDismissRequest = onClose, sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)) {
         Column(Modifier.padding(horizontal = 20.dp).padding(bottom = 24.dp)) {
@@ -90,9 +57,9 @@ internal fun SpaceTrashSheet(scopeId: String, model: AppModel, onClose: () -> Un
             Spacer(Modifier.padding(4.dp))
             Text(stringResource(R.string.trash_hint), style = MaterialTheme.typography.bodyMedium, color = role(palette.muted))
             Spacer(Modifier.padding(6.dp))
-            val list = rows
+            val list = st.rows
             when {
-                failed -> Text(stringResource(R.string.trash_load_failed), color = role(palette.danger))
+                st.failed -> Text(stringResource(R.string.trash_load_failed), color = role(palette.danger))
                 list == null -> CircularProgressIndicator(Modifier.padding(16.dp).align(Alignment.CenterHorizontally))
                 list.isEmpty() -> Text(stringResource(R.string.trash_empty), color = role(palette.muted), modifier = Modifier.padding(vertical = 12.dp))
                 else -> LazyColumn {
@@ -107,20 +74,21 @@ internal fun SpaceTrashSheet(scopeId: String, model: AppModel, onClose: () -> Un
                                 stringResource(R.string.trash_deleted_on, day(row.deletedAt)) + " · " + stringResource(R.string.trash_purge_on, day(row.purgeAfter)),
                                 style = MaterialTheme.typography.bodySmall, color = role(palette.muted),
                             )
-                            rowError?.takeIf { it.first == row.id }?.let { Text(it.second, style = MaterialTheme.typography.bodySmall, color = role(palette.danger)) }
-                            if (renaming == row.id) {
+                            if (st.errorRow == row.id) st.error?.let { Text(say(it), style = MaterialTheme.typography.bodySmall, color = role(palette.danger)) }
+                            val busy = st.busy == row.id
+                            if (st.renaming == row.id) {
                                 OutlinedTextField(
-                                    retryName, { retryName = it }, label = { Text(stringResource(R.string.trash_retry_name)) },
-                                    singleLine = true, modifier = Modifier.fillMaxWidth().padding(top = 6.dp), enabled = busy != row.id,
+                                    st.retryName, { sheet.type(it) }, label = { Text(stringResource(R.string.trash_retry_name)) },
+                                    singleLine = true, modifier = Modifier.fillMaxWidth().padding(top = 6.dp), enabled = !busy,
                                 )
                                 Row(horizontalArrangement = Arrangement.End, modifier = Modifier.fillMaxWidth()) {
-                                    TextButton(onClick = { renaming = null }, enabled = busy != row.id) { Text(stringResource(R.string.trash_cancel)) }
-                                    TextButton(onClick = { restore(row, retryName) }, enabled = busy != row.id && retryName.isNotBlank()) { Text(stringResource(R.string.trash_restore)) }
+                                    TextButton(onClick = { sheet.cancelRename() }, enabled = !busy) { Text(stringResource(R.string.trash_cancel)) }
+                                    TextButton(onClick = { scope.launch { sheet.retry(row) } }, enabled = st.retryable(row)) { Text(stringResource(R.string.trash_restore)) }
                                 }
                             } else {
                                 Row(horizontalArrangement = Arrangement.End, modifier = Modifier.fillMaxWidth()) {
-                                    if (model.canRestore(row)) TextButton(onClick = { restore(row) }, enabled = busy != row.id) { Text(stringResource(R.string.trash_restore)) }
-                                    TextButton(onClick = { purging = row }, enabled = busy != row.id) { Text(stringResource(R.string.trash_purge), color = role(palette.danger)) }
+                                    if (sheet.canRestore(row)) TextButton(onClick = { scope.launch { sheet.restore(row) } }, enabled = !busy) { Text(stringResource(R.string.trash_restore)) }
+                                    TextButton(onClick = { sheet.askPurge(row) }, enabled = !busy) { Text(stringResource(R.string.trash_purge), color = role(palette.danger)) }
                                 }
                             }
                         }
@@ -130,27 +98,15 @@ internal fun SpaceTrashSheet(scopeId: String, model: AppModel, onClose: () -> Un
             }
         }
     }
-    purging?.let { row ->
+    st.purging?.let { row ->
         AlertDialog(
-            onDismissRequest = { purging = null },
+            onDismissRequest = { sheet.cancelPurge() },
             title = { Text(stringResource(R.string.trash_purge_confirm_title)) },
             text = { Text(stringResource(R.string.trash_purge_confirm, row.name)) },
             confirmButton = {
-                TextButton(onClick = {
-                    purging = null
-                    rowError = null
-                    busy = row.id
-                    scope.launch {
-                        when (model.purge(row)) {
-                            NodeTrash.Purged.PURGED -> rows = rows?.filterNot { it.id == row.id }
-                            NodeTrash.Purged.GONE -> load()
-                            NodeTrash.Purged.FAILED -> rowError = row.id to purgeFailed
-                        }
-                        busy = null
-                    }
-                }) { Text(stringResource(R.string.trash_purge), color = role(palette.danger)) }
+                TextButton(onClick = { scope.launch { sheet.purge() } }) { Text(stringResource(R.string.trash_purge), color = role(palette.danger)) }
             },
-            dismissButton = { TextButton(onClick = { purging = null }) { Text(stringResource(R.string.trash_cancel)) } },
+            dismissButton = { TextButton(onClick = { sheet.cancelPurge() }) { Text(stringResource(R.string.trash_cancel)) } },
         )
     }
 }

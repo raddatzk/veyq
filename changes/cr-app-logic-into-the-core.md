@@ -60,8 +60,6 @@ function, its commonTest, both apps calling it):
 - The shell's chrome: which node is headed, when the trash and the top level's "Add files only" are offered (Android
   tests `folder == null`, Apple `folderAt == nil`), the body's routing, the drawer open at start (Android also needs an
   empty path).
-- The Pot overview's balance words by sign and "Record all" past one; the settings' person facts line.
-- The space trash's outcome handling (restore, name taken prefilled, purge) — its name-taken word differs.
 - The share sheet's flows: which notice follows edit, renew, reactivate, switch-off and delete, and the re-read after
   each; a link's end day to the instant (end of the local day) and the picker's range.
 - Memories: a video without a preview, download only unblocked, chapters only for a Memory, the re-read trigger (Apple

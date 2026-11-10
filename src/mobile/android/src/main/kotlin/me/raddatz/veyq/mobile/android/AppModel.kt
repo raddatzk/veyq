@@ -485,21 +485,11 @@ class AppModel(app: Application) : AndroidViewModel(app) {
 
     // ---- the space's trash (core's NodeTrash) ----
 
-    /** The trash of [scopeId] (the root of each deleted subtree); null when it could not be read. */
-    suspend fun trash(scopeId: String): List<me.raddatz.veyq.mobile.session.NodeTrash.Trashed>? = shellModel?.trashOf(scopeId)
-
-    /** Whether the app can bring [row] back: its kind's fold of a name is known here. */
-    fun canRestore(row: me.raddatz.veyq.mobile.session.NodeTrash.Trashed): Boolean = shellModel?.canRestore(row) ?: false
-
-    /** Brings [row] back from the trash, under [newName] after its own was taken; the lists are read anew. */
-    suspend fun restoreFromTrash(row: me.raddatz.veyq.mobile.session.NodeTrash.Trashed, newName: String? = null): me.raddatz.veyq.mobile.session.NodeTrash.Restored {
-        val m = shellModel ?: return me.raddatz.veyq.mobile.session.NodeTrash.Restored.REFUSED
-        return m.restoreFromTrash(row, newName).also { readRowDetails(m.tenant) }
+    /** The trash sheet of [scopeId] (core's `TrashSheet`); the lists are read anew after each write that went through. */
+    fun trashSheet(scopeId: String): me.raddatz.veyq.mobile.navigation.TrashSheet? {
+        val m = shellModel ?: return null
+        return m.trashSheet(scopeId) { viewModelScope.launch { readRowDetails(m.tenant) } }
     }
-
-    /** Erases [row] and everything under it now: irreversible. */
-    suspend fun purge(row: me.raddatz.veyq.mobile.session.NodeTrash.Trashed): me.raddatz.veyq.mobile.session.NodeTrash.Purged =
-        shellModel?.purge(row) ?: me.raddatz.veyq.mobile.session.NodeTrash.Purged.FAILED
 
     // ---- an open Pot (Expenses) ----
 

@@ -9,13 +9,9 @@ struct SpaceTrashSheet: View {
     let model: AppModel
     let scopeId: String
     @Environment(\.dismiss) private var dismiss
-    @State private var rows: [NodeTrash.Trashed]?
-    @State private var failed = false
-    @State private var busy: String?
-    @State private var renaming: String?
-    @State private var retryName = ""
-    @State private var rowError: (id: String, message: String)?
-    @State private var purging: NodeTrash.Trashed?
+    @State private var box = TrashBox()
+    private var sheet: TrashSheet? { box.sheet }
+    private var st: TrashSheet.State { box.state }
 
     var body: some View {
         NavigationStack {
@@ -25,9 +21,9 @@ struct SpaceTrashSheet: View {
                         .font(.subheadline).foregroundStyle(Role.muted)
                         .listRowBackground(Color.clear)
                 }
-                if failed {
+                if st.failed {
                     Text(say(.trashLoadFailed)).foregroundStyle(Role.danger)
-                } else if let rows {
+                } else if let rows = st.rows {
                     if rows.isEmpty {
                         Text(say(.trashEmpty)).foregroundStyle(Role.muted)
                     } else {
@@ -42,14 +38,19 @@ struct SpaceTrashSheet: View {
             .navigationBarTitleDisplayMode(.inline)
             #endif
             .toolbar { ToolbarItem(placement: .confirmationAction) { Button(say(.shareDone)) { dismiss() } } }
-            .task { await load() }
+            .task {
+                guard box.sheet == nil, let made = model.trashSheet(scopeId) else { return }
+                box.start(made)
+                try? await made.load()
+            }
+            .onDisappear { box.stop() }
             .confirmationDialog(
                 say(.trashPurgeConfirmTitle),
-                isPresented: Binding(get: { purging != nil }, set: { if !$0 { purging = nil } }),
+                isPresented: Binding(get: { st.purging != nil }, set: { if !$0 { sheet?.cancelPurge() } }),
                 titleVisibility: .visible,
-                presenting: purging
+                presenting: st.purging
             ) { row in
-                Button(say(.trashPurge), role: .destructive) { Task { await purge(row) } }
+                Button(say(.trashPurge), role: .destructive) { Task { try? await sheet?.purge() } }
                 Button(say(.signinCancel), role: .cancel) {}
             } message: { row in
                 Text(say(.trashPurgeConfirm, row.name))
@@ -62,61 +63,29 @@ struct SpaceTrashSheet: View {
             Label { Text(row.name).fontWeight(.semibold) } icon: { Tile(symbol: Names.kindSymbol(row.kind)) }
             Text(say(.trashRowDates, Self.day(row.deletedAt), Self.day(row.purgeAfter)))
                 .font(.caption).foregroundStyle(Role.muted)
-            if let e = rowError, e.id == row.id { Text(e.message).font(.caption).foregroundStyle(Role.danger) }
-            if renaming == row.id {
-                TextField(say(.trashRetryName), text: $retryName).textFieldStyle(.roundedBorder).disabled(busy == row.id)
+            if st.errorRow == row.id, let error = st.error { Text(say(error)).font(.caption).foregroundStyle(Role.danger) }
+            let busy = st.busy == row.id
+            if st.renaming == row.id {
+                TextField(say(.trashRetryName), text: Binding(get: { st.retryName }, set: { sheet?.type(name: $0) }))
+                    .textFieldStyle(.roundedBorder).disabled(busy)
                 HStack {
                     Spacer()
-                    Button(say(.signinCancel)) { renaming = nil }.disabled(busy == row.id)
-                    Button(say(.entryRestore)) { Task { await restore(row, newName: retryName) } }
-                        .disabled(busy == row.id || retryName.trimmingCharacters(in: .whitespaces).isEmpty)
+                    Button(say(.signinCancel)) { sheet?.cancelRename() }.disabled(busy)
+                    Button(say(.entryRestore)) { Task { try? await sheet?.retry(row: row) } }.disabled(!st.retryable(row: row))
                 }
                 .buttonStyle(.borderless)
             } else {
                 HStack {
                     Spacer()
-                    if model.canRestore(row) {
-                        Button(say(.entryRestore)) { Task { await restore(row, newName: nil) } }.disabled(busy == row.id)
+                    if sheet?.canRestore(row: row) == true {
+                        Button(say(.entryRestore)) { Task { try? await sheet?.restore(row: row, newName: nil) } }.disabled(busy)
                     }
-                    Button(say(.trashPurge), role: .destructive) { purging = row }.disabled(busy == row.id)
+                    Button(say(.trashPurge), role: .destructive) { sheet?.askPurge(row: row) }.disabled(busy)
                 }
                 .buttonStyle(.borderless)
             }
         }
         .padding(.vertical, 4)
-    }
-
-    private func load() async {
-        if let read = await model.trashOf(scopeId) { rows = read; failed = false } else { failed = true }
-    }
-
-    private func restore(_ row: NodeTrash.Trashed, newName: String?) async {
-        rowError = nil
-        busy = row.id
-        defer { busy = nil }
-        switch await model.restoreFromTrash(row, newName: newName) {
-        case .restored:
-            renaming = nil
-            rows?.removeAll { $0.id == row.id }
-            await load() // a child whose own name an earlier delete freed stays: a root of its own now
-        case .nameTaken:
-            rowError = (row.id, say(.nodeSlugTaken))
-            renaming = row.id
-            retryName = newName ?? row.name
-        default:
-            rowError = (row.id, say(.trashRestoreFailed))
-        }
-    }
-
-    private func purge(_ row: NodeTrash.Trashed) async {
-        rowError = nil
-        busy = row.id
-        defer { busy = nil }
-        switch await model.purge(row) {
-        case .purged: rows?.removeAll { $0.id == row.id }
-        case .gone: await load()
-        default: rowError = (row.id, say(.trashPurgeFailed))
-        }
     }
 
     /// The day of a server instant (ISO 8601), in the device's words.
@@ -126,4 +95,24 @@ struct SpaceTrashSheet: View {
         let date = parse.date(from: instant) ?? ISO8601DateFormatter().date(from: instant)
         return date.map { $0.formatted(date: .abbreviated, time: .omitted) } ?? String(instant.prefix(10))
     }
+}
+
+/// Core's trash sheet held for SwiftUI: its state mirrored on the main actor as it changes.
+@MainActor
+@Observable
+final class TrashBox {
+    private(set) var sheet: TrashSheet?
+    private(set) var state = TrashSheet.State(rows: nil, failed: false, busy: nil, errorRow: nil, error: nil, renaming: nil, retryName: "", purging: nil)
+    @ObservationIgnored private var watch: TrashSheet.Watch?
+
+    func start(_ sheet: TrashSheet) {
+        self.sheet = sheet
+        watch = sheet.watch { @Sendable _ in
+            Task { @MainActor [weak self] in
+                if let current = self?.sheet?.current { self?.state = current }
+            }
+        }
+    }
+
+    func stop() { watch?.stop() }
 }

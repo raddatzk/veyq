@@ -225,6 +225,14 @@ class ShellModel(
     suspend fun purge(row: NodeTrash.Trashed): NodeTrash.Purged =
         runCatching { NodeTrash.purge(tenant, row.scopeId, row.id) }.getOrDefault(NodeTrash.Purged.FAILED)
 
+    /** The trash sheet of [scopeId] over this shell; [changed] after each write that went through. */
+    fun trashSheet(scopeId: String, changed: () -> Unit): TrashSheet = TrashSheet(object : TrashSheet.Door {
+        override suspend fun list() = trashOf(scopeId)
+        override fun canRestore(row: NodeTrash.Trashed) = this@ShellModel.canRestore(row)
+        override suspend fun restore(row: NodeTrash.Trashed, newName: String?) = restoreFromTrash(row, newName)
+        override suspend fun purge(row: NodeTrash.Trashed) = this@ShellModel.purge(row)
+    }, changed)
+
     /** What a rename came to, and its notice where it did not land. */
     class Renamed(val result: NodeRename.Result, val notice: Notice?) {
         /** Renamed, but a link to it still shows its old name to its guests. */

@@ -722,26 +722,16 @@ final class AppModel {
 
     // MARK: The space's trash (core's NodeTrash)
 
-    /// The trash of `scopeId` (the root of each deleted subtree); nil when it could not be read.
-    func trashOf(_ scopeId: String) async -> [NodeTrash.Trashed]? {
-        (try? await shellModel?.trashOf(scopeId: scopeId)) ?? nil
-    }
-
-    /// Whether the app can bring `row` back: its kind's fold of a name is known here.
-    func canRestore(_ row: NodeTrash.Trashed) -> Bool { shellModel?.canRestore(row: row) ?? false }
-
-    /// Brings `row` back from the trash, under `newName` after its own was taken; the lists are read anew.
-    func restoreFromTrash(_ row: NodeTrash.Trashed, newName: String?) async -> NodeTrash.Restored {
-        guard let m = shellModel else { return .refused }
-        let r = (try? await m.restoreFromTrash(row: row, newName: newName)) ?? .refused
-        applyShell(start: false)
-        await readDetails(m.tenant)
-        return r
-    }
-
-    /// Erases `row` and everything under it now: irreversible.
-    func purge(_ row: NodeTrash.Trashed) async -> NodeTrash.Purged {
-        (try? await shellModel?.purge(row: row)) ?? .failed
+    /// The trash sheet of `scopeId` (core's `TrashSheet`); the lists are read anew after each write that went through.
+    func trashSheet(_ scopeId: String) -> TrashSheet? {
+        guard let m = shellModel else { return nil }
+        return m.trashSheet(scopeId: scopeId) { @Sendable in
+            Task { @MainActor [weak self] in
+                guard let self, let t = self.tenantSession else { return }
+                self.applyShell(start: false)
+                await self.readDetails(t)
+            }
+        }
     }
 
     // MARK: An open Pot (Expenses)
