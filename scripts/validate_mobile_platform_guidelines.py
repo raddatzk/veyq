@@ -3,10 +3,11 @@
 (ADR 0123 decision 9).
 
 **What it asserts.** A view's one creating action ("Add entry", "New pot") is Material 3's on Android and Apple's
-HIG's on iOS and macOS, and each platform builds it in exactly one place, so a new list view cannot drift from it.
-Four rules, over the sources of `src/mobile/android/src` (`.kt`) and `src/mobile/apple` (`.swift`, no `build/`), read with
-comments and literals blanked (`kotlin_lexer.mask`), so a name in prose or a bracket in a string poses as nothing; only
-the "+" rule reads the literals:
+HIG's on iOS and macOS and GNOME's on Linux, and each platform builds it in exactly one place, so a new list view cannot
+drift from it. Six rules, over the sources of `src/mobile/android/src` (`.kt`), `src/mobile/apple` (`.swift`, no
+`build/`) and `src/mobile/linux` (`.rs`, no `target/`), read with comments and literals blanked (`kotlin_lexer.mask`,
+`rust_lexer.mask` for Rust), so a name in prose or a bracket in a string poses as nothing; only the "+" rules read the
+literals:
 - **android-fab**: no file but the building block `CreateAction.kt` names a floating action button
   (`FloatingActionButton`, `ExtendedFloatingActionButton`, `SmallFloatingActionButton`, `LargeFloatingActionButton`).
   Material 3 gives a screen at most one, for its primary action; the block is an extended FAB that collapses to its
@@ -20,6 +21,12 @@ the "+" rule reads the literals:
 - **apple-block**: `CreateAction.swift` exists and places its button `.primaryAction`; and no other file draws the bare
   "+" (`Image(systemName: "plus")`), so a hand-made "+" in a bar goes through `.createAction`. A labelled "+"
   (`Label("New", systemImage: "plus")`, the sidebar's) is a row with its words, not the bar's symbol, and passes.
+- **linux-block**: `create_action.rs` exists and builds a `gtk::Button` and a `gtk::MenuButton` (a level that creates
+  several kinds) drawn with GNOME's add icon — the header bar's or the sidebar's "+"; and no other Rust file names that
+  icon, so a hand-made "+" goes through the block.
+- **linux-floating-button**: no Rust file hands a button to `Overlay::add_overlay` — as an argument naming `Button`
+  (`gtk::Button`, `MenuButton`, …) or as a variable the same file binds to one (`let b = gtk::Button::…;`, the
+  block's `create_action(…)`). GNOME has no floating action button.
 
 **The defect that bought it.** The Pot's "Add entry" and Expenses' "New pot" shipped as a floating capsule on iOS, the
 web's and Android's look carried over, until the owner found each by eye (2026-11-09): the first covered the last
@@ -31,7 +38,8 @@ overlay's closure is not seen (the trash notice's case, which is why it passes);
 offsets or `GeometryReader`, nor a Compose `Box` that aligns a plain `Button` at the bottom end. The Swift files are
 read by the Kotlin lexer: a string interpolation holding a quote (`"\\(f("x"))"`) can unbalance a literal, which may hide
 or invent a match after it. It does not judge row actions (an overflow menu on Android, swipe actions and a context
-menu on iOS), which no rule here names.
+menu on iOS), which no rule here names. On Linux a button reaching `add_overlay` through a function's return value or a
+field (`add_overlay(&self.make())`) is not seen; nor a widget floated by a `gtk::Fixed` or margins.
 """
 from __future__ import annotations
 
@@ -42,12 +50,19 @@ import sys
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
 import repo_layout  # noqa: E402
 from kotlin_lexer import mask  # noqa: E402
+from rust_lexer import mask as mask_rust  # noqa: E402
 
 ROOT = repo_layout.ROOT
 ANDROID_SRC = repo_layout.MOBILE_ANDROID / "src"
 APPLE = repo_layout.MOBILE_APPLE
 ANDROID_BLOCK = "CreateAction.kt"
 APPLE_BLOCK = "CreateAction.swift"
+LINUX = repo_layout.MOBILE_LINUX
+LINUX_BLOCK = "create_action.rs"
+ADD_ICON = '"list-add-symbolic"'
+GTK_BUTTON = re.compile(r"\bButton::(?:builder|new|from_icon_name|with_label)\s*\(")
+GTK_MENU_BUTTON = re.compile(r"\bMenuButton::(?:builder|new)\s*\(")
+ADD_OVERLAY = re.compile(r"\.add_overlay\s*\(")
 
 FAB = re.compile(r"\b(?:Extended|Small|Large)?FloatingActionButton\b")
 # A bottom-aligned overlay or stack, or a bottom inset: where a floating button would sit.
@@ -84,11 +99,48 @@ def _line(src: str, offset: int) -> int:
     return src.count("\n", 0, offset) + 1
 
 
-def sources(base: pathlib.Path, suffix: str) -> list[pathlib.Path]:
-    return sorted(p for p in base.rglob(f"*{suffix}") if "build" not in p.relative_to(base).parts)
+def sources(base: pathlib.Path, suffix: str, out: str = "build") -> list[pathlib.Path]:
+    return sorted(p for p in base.rglob(f"*{suffix}") if out not in p.relative_to(base).parts)
 
 
-def check(android_src: pathlib.Path, apple: pathlib.Path) -> list[str]:
+def check_linux(linux: pathlib.Path) -> list[str]:
+    errors: list[str] = []
+    rs = sources(linux, ".rs", out="target") if linux.exists() else []
+    if not rs:
+        errors.append(f"no Rust source under {linux} — the guard would read nothing")
+    block = None
+    for f in rs:
+        text = f.read_text()
+        src = mask_rust(text)
+        if f.name == LINUX_BLOCK:
+            block = (src, mask_rust(text, literals=False))
+        elif ADD_ICON in mask_rust(text, literals=False):
+            errors.append(f"linux-block: {f}: GNOME's add icon outside {LINUX_BLOCK} — "
+                          "a view's creating action is `create_action(…)` / `create_menu(…)`")
+        # A variable this file binds to a button: `let [mut] name[: T] = …Button…;`
+        buttons = {m.group(1) for m in re.finditer(r"\blet\s+(?:mut\s+)?(\w+)[^=;]*=([^;]*);", src)
+                   if re.search(r"Button\b|\bcreate_(?:action|menu)\s*\(", m.group(0))}
+        for m in ADD_OVERLAY.finditer(src):
+            arg = src[m.end() - 1:_close(src, m.end() - 1, "(", ")")]
+            names = set(re.findall(r"\w+", arg))
+            if re.search(r"Button\b", arg) or names & buttons:
+                errors.append(f"linux-floating-button: {f}:{_line(src, m.start())}: a button floated over a view "
+                              "through an Overlay — GNOME has no floating action button; use `create_action(…)` "
+                              "in the header bar")
+    if block is None:
+        errors.append(f"linux-block: no {LINUX_BLOCK} under {linux}")
+    else:
+        code, said = block
+        if ADD_ICON not in said:
+            errors.append(f"linux-block: {LINUX_BLOCK} no longer draws its button with GNOME's add icon")
+        if not GTK_BUTTON.search(code):
+            errors.append(f"linux-block: {LINUX_BLOCK} builds no gtk::Button")
+        if not GTK_MENU_BUTTON.search(code):
+            errors.append(f"linux-block: {LINUX_BLOCK} builds no gtk::MenuButton for a level creating several kinds")
+    return errors
+
+
+def check(android_src: pathlib.Path, apple: pathlib.Path, linux: pathlib.Path = LINUX) -> list[str]:
     errors: list[str] = []
     kt = sources(android_src, ".kt")
     swift = sources(apple, ".swift")
@@ -134,6 +186,7 @@ def check(android_src: pathlib.Path, apple: pathlib.Path) -> list[str]:
         errors.append(f"apple-block: no {APPLE_BLOCK} under {apple}")
     elif not re.search(r"placement\s*:\s*\.primaryAction", apple_block):
         errors.append(f"apple-block: {APPLE_BLOCK} no longer places its button .primaryAction")
+    errors += check_linux(linux)
     return errors
 
 
