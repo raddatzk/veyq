@@ -12,6 +12,7 @@ import kotlin.concurrent.thread
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertIs
+import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
 import kotlin.time.Duration.Companion.minutes
 import kotlinx.serialization.json.JsonNull
@@ -61,7 +62,13 @@ class LiveBridgeTest {
         val signed = gate.until(2.minutes) { (it as Update.Session).gate as? Gate.Signed }
         println("signed in: $signed")
 
-        val state = shell.until(1.minutes) { (it as Update.Shell).state?.takeIf { s -> s.lists.spaces.isNotEmpty() } }
+        val update = shell.until(1.minutes) { (it as Update.Shell).takeIf { u -> u.state?.lists?.spaces?.isNotEmpty() == true } }
+        val state = update.state!!
+        // what the shell shows beside it: the switcher's tenants of this account, Home's groups, each the core's
+        val shown = assertNotNull(update.shown, "a shell state without what it shows")
+        println("switcher: ${shown.switcherSubtitle}; servers: " + shown.servers.joinToString { s -> s.label + "=" + s.tenants.joinToString("/") { it.name } })
+        assertTrue(shown.servers.any { s -> s.connection == shown.connection && shown.tenant in s.tenants }, "the open tenant is not in the switcher")
+        assertEquals(state.lists.groups(state.shell).map { it.nodes.size }, shown.groups.map { it.nodes.size })
         println("spaces: " + state.lists.spaces.joinToString { "${it.kind}:${it.name}" } + "; objects: ${state.lists.objects.size}")
         assertTrue(state.lists.spaces.any { it.kind == "PERSONAL" }, "the personal space did not open")
         assertTrue(kept.isNotEmpty(), "nothing reached the host's store") // the device id, the trust marks
