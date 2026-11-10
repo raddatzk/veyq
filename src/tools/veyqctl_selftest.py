@@ -1807,6 +1807,26 @@ def test_gitops_init(tmp: pathlib.Path) -> None:
           and "generators:" in (d3 / "resources" / "kustomization.yaml").read_text()
           and not (vc.config_dir() / "sops.secrets.json").exists()
           and "sops decrypt --extract" in out, out[-500:])
+    # what init offers when it is not told: kubectl's current context, the cluster's one project besides `default`,
+    # the newest release's major as the selector
+    d5 = top / "apps" / "veyq-offered"
+    host = GitOpsHost(top=top, signed=signed, cluster={
+        "config current-context": (0, "my-cluster\n"),
+        "get appprojects": (0, "appproject.argoproj.io/default\nappproject.argoproj.io/ops\n")})
+    rc, out = run_main(["--source", mirror, "init", "--gitops", d5, "--name", "offered", *INIT, "--secrets", "none"],
+                       host)
+    meta = json.loads((d5 / vc.GITOPS_FILE).read_text()) if (d5 / vc.GITOPS_FILE).exists() else {}
+    check("init offers kubectl's current context, the one project besides default, and the newest major — and uses them",
+          rc == 0 and meta.get("context") == "my-cluster" and meta.get("release") == "2"
+          and meta.get("running") == "2.0" and "project: ops" in (d5 / "application.yaml").read_text()
+          and all("--context" in c and "my-cluster" in c for c in host.commands
+                  if c[0] == "kubectl" and "current-context" not in c), out[-400:])
+    host = GitOpsHost(top=top, signed=signed, cluster={
+        "get appprojects": (0, "appproject.argoproj.io/default\nappproject.argoproj.io/a\nappproject.argoproj.io/b\n")})
+    rc, out = run_main(["--source", mirror, "init", "--gitops", top / "apps" / "veyq-two", "--name", "two-projects",
+                        *INIT, "--secrets", "none"], host)
+    check("init offers `default` when the cluster has several projects of its own (it does not choose between them)",
+          rc == 0 and "project: default" in (top / "apps" / "veyq-two" / "application.yaml").read_text(), out[-300:])
     rc, out = run_main(["--source", mirror, "init", "--gitops", top / "apps" / "veyq-sealed", "--name", "sealed",
                         *INIT, "--secrets", "sealed-secrets"], GitOpsHost(top=top, signed=signed, kubeseal=False))
     check("init --secrets sealed-secrets without kubeseal is refused", rc == 1 and "kubeseal" in out, out[-300:])

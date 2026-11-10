@@ -2448,12 +2448,17 @@ def gitops_init(args: argparse.Namespace, host: Host, directory: Path) -> int:
     rel = directory.relative_to(top).as_posix()
     if rel in ("", "."):
         raise Refused("veyq's half goes into a directory of its own inside the checkout, never its root")
-    name = args.name or top.name
-    name_is_free(name, directory)
     if directory.exists() and any(directory.iterdir()):
         raise Refused(f"{directory} holds files already: `init` writes a fresh directory and never overwrites. To have "
                       f"veyqctl manage a veyq half that exists, write {GITOPS_FILE} beside it as "
                       f"{EXISTING_HALF_DOCS} says, then run `veyqctl check`. Nothing was written.")
+    name = option(args, host, "name", "the instance's name on this machine (`veyqctl instances` lists it)", top.name,
+                  top.name)
+    name_is_free(name, directory)
+    # The cluster `init` checks and `check` reads the Secrets from: asked, with kubectl's current context offered, so
+    # the cluster a run speaks to is seen before it does.
+    current = (host.run(["kubectl", "config", "current-context"], check=False).stdout or "").strip()
+    context = args.context or host.ask("the kubeconfig context of the cluster Argo CD runs in", current) or current
     provider = option(args, host, "secrets", f"where the Secrets come from ({', '.join(PROVIDERS)})", "sops")
     if provider not in PROVIDERS:
         raise Refused(f"--secrets {provider}: one of {', '.join(PROVIDERS)}")
@@ -2475,9 +2480,17 @@ def gitops_init(args: argparse.Namespace, host: Host, directory: Path) -> int:
     if "=" not in peer_label:
         raise Refused(f"--gateway-pod-label {peer_label}: `<key>=<value>`")
     namespace = args.namespace or "veyq"
-    context = args.context
     if not args.no_cluster_check:
         check_cluster(host, context, gateway_class, args.storage_class or "", tls == "acme")
+    # The Argo CD project the Application joins: offered from the cluster — the one project besides `default` when
+    # there is exactly one (a project that limits sources and destinations, which `default` does not), else `default`.
+    listed_projects = host.run(kubectl(context) + ["-n", args.argocd_namespace, "get", "appprojects", "-o", "name"],
+                               check=False)
+    projects = [line.split("/", 1)[-1] for line in (listed_projects.stdout or "").split()
+                if not listed_projects.returncode]
+    own = [p for p in projects if p != "default"]
+    project = option(args, host, "project", "the Argo CD project the Application joins", (own or ["default"])[0],
+                     own[0] if len(own) == 1 else "default")
     store = remote_prefix = store_kind = ""
     if provider == "external-secrets":
         store = option(args, host, "secret_store", "the SecretStore the ExternalSecrets read from", "vault")
@@ -2499,8 +2512,13 @@ def gitops_init(args: argparse.Namespace, host: Host, directory: Path) -> int:
         raise Refused("--revision is required: the branch Argo CD follows (the checkout is on none)")
 
     source = open_source(args.source)
-    selector = check_selector(args.release or "latest")
-    chosen = select(source.releases(), selector, source.describe())
+    listed = source.releases()
+    # Which releases `upgrade` follows: offered as the newest release's major, so a new major is entered only when
+    # its owner sets `latest` or the next major, knowingly (ADR 0085: a major removes something).
+    newest = select(listed, "latest", source.describe())
+    selector = check_selector(option(args, host, "release", "which releases `upgrade` follows: <major>.<minor>, "
+                                     "<major>, or latest", str(newest.major), str(newest.major)))
+    chosen = select(listed, selector, source.describe())
     say(f"{RELEASE_KEY}={selector} takes release {chosen.release} from {source.describe()}")
     manifest = fetch_manifest(host, source, chosen, False)
     chart = chart_repository(manifest.app)
@@ -2510,7 +2528,7 @@ def gitops_init(args: argparse.Namespace, host: Host, directory: Path) -> int:
     files: dict[str, str] = {
         # The Application's name is the cluster's, never the instance's: `--name` is how this machine lists it.
         "application.yaml": application_text(name=args.application_name, argocd_namespace=args.argocd_namespace,
-                                             project=args.project,
+                                             project=project,
                                              chart=chart, digest=pins["chart"], rel=rel, repo_url=repo_url,
                                              revision=revision, namespace=namespace, values="values.yaml"),
         "values.yaml": stack_values(chosen.release, pins, domain=domain, store_domain=store_domain, garage=garage,
@@ -2823,7 +2841,7 @@ def parser() -> argparse.ArgumentParser:
     init.add_argument("--name", help="the instance's name in the list (default: veyq; GitOps: the repository's)")
     init.add_argument("--set", action="append", metavar="KEY=VALUE", help="Compose: a .env value (repeatable)")
     init.add_argument("--unsigned-local", action="store_true", help="Compose: a release from a local docker build")
-    init.add_argument("--release", help="GitOps: the selector veyqctl.json keeps (default latest)")
+    init.add_argument("--release", help="GitOps: the selector veyqctl.json keeps (asked; offered: the newest major)")
     init.add_argument("--secrets", choices=PROVIDERS, help="GitOps: where the Secrets come from")
     init.add_argument("--domain", help="GitOps: veyq's domain")
     init.add_argument("--store-domain", help="GitOps: the bundled store's own host (default store.<domain>)")
@@ -2837,7 +2855,8 @@ def parser() -> argparse.ArgumentParser:
     init.add_argument("--gateway-namespace", help="GitOps: the namespace of the Gateway's data-plane pods")
     init.add_argument("--gateway-pod-label", help="GitOps: a KEY=VALUE label those pods carry")
     init.add_argument("--namespace", help="GitOps: veyq's namespace (default veyq)")
-    init.add_argument("--context", help="GitOps: the kubeconfig context of the cluster (default: kubectl's current)")
+    init.add_argument("--context", help="GitOps: the kubeconfig context of the cluster (asked; offered: kubectl's "
+                                        "current)")
     init.add_argument("--no-cluster-check", action="store_true", help="GitOps: write for a cluster not reachable yet")
     init.add_argument("--storage-class", help="GitOps: the backup claim's StorageClass (default: the cluster's)")
     init.add_argument("--backup-size", default="20Gi", help="GitOps: the backup claim's size (default 20Gi)")
@@ -2847,7 +2866,8 @@ def parser() -> argparse.ArgumentParser:
                                                               "prefix (default veyq-)")
     init.add_argument("--repo-url", help="GitOps: the URL Argo CD reads this repository from (default: origin)")
     init.add_argument("--revision", help="GitOps: the branch Argo CD follows (default: the checkout's)")
-    init.add_argument("--project", default="default", help="GitOps: the Argo CD project (default `default`)")
+    init.add_argument("--project", help="GitOps: the Argo CD project (asked; offered: the cluster's one project "
+                                        "besides `default`, else `default`)")
     init.add_argument("--application-name", default="veyq", help="GitOps: the Argo CD Application's name (default "
                                                                  "veyq) — not --name, which only names it here")
     init.add_argument("--argocd-namespace", default="argocd", help="GitOps: Argo CD's namespace (default argocd)")
