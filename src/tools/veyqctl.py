@@ -36,7 +36,9 @@ so its tag is resolved to a digest at the registry (`Host.oci_digest`), that dig
 and its Chart.yaml version read back (`helm show chart`) — renders the chart with the values (`helm template`), and only
 then writes the directory. Every value is generated once: under `sops` encrypted into the repository, under every other
 provider handed over once in `~/.config/veyq/<name>.secrets.json` (0600, never overwritten); a directory that is not
-empty is refused, so nothing is generated twice — and so is a veyq half written by hand: for one, the operator writes
+empty is refused, so nothing is generated twice — unless this checkout's interrupted `init` wrote it: every answer
+and step is kept in `~/.config/veyq/init-<checkout>.json` the moment it exists (class `Progress`), and the same command
+continues there, reusing what it handed over — and a veyq half written by hand is refused too: for one, the operator writes
 `veyqctl.json` beside it (the Run page's *A veyq half that exists already*). `verify` and `check` work as under Compose;
 `check` also names drift (a pin the files no longer hold), whether the pins `veyqctl.json` records are the running
 release's as it was signed, and whether the Secrets exist with every key. `upgrade` resolves as decision 5 step 1 does,
@@ -2072,9 +2074,90 @@ def suggested_gitops_directory(host: Host) -> str:
         return str(target)
 
 
+class Progress:
+    """What a GitOps `init` asked and did, written the moment it is answered or done (ADR 0126: the same command
+    continues an interrupted run, asking nothing twice). One file per checkout, in config_dir() — never inside the
+    repository, where a `git add` would take it — and never a secret: generated values go into the repository
+    encrypted, or into the hand-over file, which a resumed run reads back rather than making them again."""
+
+    def __init__(self, checkout: Path) -> None:
+        self.path = config_dir() / f"init-{hashlib.sha256(str(checkout).encode()).hexdigest()[:16]}.json"
+        try:
+            doc = json.loads(self.path.read_text()) if self.path.is_file() else {}
+        except (OSError, ValueError):
+            doc = {}
+        self.doc = {"checkout": str(checkout), "answers": dict(doc.get("answers") or {}),
+                    "steps": dict(doc.get("steps") or {})}
+        self.resumed = bool(self.doc["answers"] or self.doc["steps"])
+
+    def answer(self, key: str) -> str | None:
+        value = self.doc["answers"].get(key)
+        return value if isinstance(value, str) and value else None
+
+    def record(self, key: str, value: str) -> None:
+        if self.doc["answers"].get(key) != value:
+            self.doc["answers"][key] = value
+            self._save()
+
+    def done(self, step: str):
+        return self.doc["steps"].get(step)
+
+    def mark(self, step: str, data: object = True) -> None:
+        self.doc["steps"][step] = data
+        self._save()
+
+    def clear(self) -> None:
+        self.path.unlink(missing_ok=True)
+
+    def _save(self) -> None:
+        config_dir().mkdir(parents=True, exist_ok=True)
+        tmp = self.path.with_suffix(".tmp")
+        tmp.write_text(json.dumps(self.doc, indent=2) + "\n")
+        tmp.replace(self.path)
+
+
+def attach_progress(host: Host, checkout: Path) -> bool:
+    """This checkout's progress on `host`; when a run stopped here, say so and ask whether to go on (yes without a
+    terminal: the point of resuming is that nothing need be typed again). Returns whether it resumes."""
+    progress = Progress(checkout)
+    if progress.resumed:
+        host.section("veyqctl init — a run here stopped before it finished")
+        kept = ", ".join(f"{k}={v}" for k, v in progress.doc["answers"].items() if k != "directory")
+        print(f"   Its answers ({kept or 'none yet'}) and steps are in {progress.path}.", flush=True)
+        if host.confirm("Continue it (no: start over, asking everything again)?") is False:
+            progress.clear()
+            progress = Progress(checkout)
+    host.progress = progress
+    return progress.resumed
+
+
+def resumed_answer(host: Host, key: str, question: str) -> str | None:
+    """An answer the last, interrupted run gave, shown as it is taken."""
+    progress = getattr(host, "progress", None)
+    value = progress.answer(key) if progress else None
+    if value:
+        print(f"   {question}: {value}   (from the last run)", flush=True)
+    return value
+
+
+def recorded(host: Host, key: str, value: str) -> str:
+    progress = getattr(host, "progress", None)
+    if progress and value:
+        progress.record(key, value)
+    return value
+
+
 def cmd_init(args: argparse.Namespace, host: Host) -> int:
     """Create an instance, list it and make it current: Compose (what `install` does) or GitOps (ADR 0126)."""
     target = "compose" if args.compose else ("gitops" if args.gitops else None)
+    if not args.compose:
+        # A GitOps run started here before and stopped? Its answers are kept per checkout (Progress).
+        quiet, host.quiet = host.quiet, True
+        here = host.run(["git", "rev-parse", "--show-toplevel"], check=False)
+        host.quiet = quiet
+        top_here = (here.stdout or "").strip() if here.returncode == 0 else ""
+        if top_here and Progress(Path(top_here).resolve()).resumed and attach_progress(host, Path(top_here).resolve()):
+            target = "gitops"
     if target is None:
         host.section("veyqctl init")
         answer = (host.prompt("compose or gitops", hint="compose: veyq on Docker Compose on this host. gitops: veyq's "
@@ -2098,11 +2181,21 @@ def cmd_init(args: argparse.Namespace, host: Host) -> int:
     host.quiet = True
     offered = suggested_gitops_directory(host)
     host.section("1. Where veyq's half goes")
-    directory = args.gitops or host.prompt("directory", offered, "A directory in your checkout of the repository Argo "
-                                           "CD syncs; offered beside the Applications it already holds.") or offered
+    directory = args.gitops or resumed_answer(host, "directory", "directory") or host.prompt(
+        "directory", offered, "A directory in your checkout of the repository Argo CD syncs; offered beside the "
+        "Applications it already holds.") or offered
     if not directory:
         raise Refused("`init --gitops DIR` needs the directory veyq's half goes into, inside a Git checkout")
-    return gitops_init(args, host, Path(directory).expanduser().resolve())
+    path = Path(directory).expanduser().resolve()
+    if getattr(host, "progress", None) is None:
+        try:
+            top = repository_of(host, path)
+        except Refused:
+            top = None
+        if top is not None:
+            attach_progress(host, top)
+    recorded(host, "directory", str(path))
+    return gitops_init(args, host, path)
 
 
 # ---- the GitOps target: veyq's half of an Argo CD repository (ADR 0126 decisions 3-5 and 7) ---------------------
@@ -2300,10 +2393,10 @@ def repository_of(host: Host, directory: Path) -> Path:
 
 def option(args: argparse.Namespace, host: Host, attr: str, question: str, default: str = "", hint: str = "") -> str:
     """A flag's value, else asked at a terminal (Enter takes `default`), else `default`; refused when there is none."""
-    value = getattr(args, attr) or host.prompt(question, default, hint) or default
+    value = getattr(args, attr) or resumed_answer(host, attr, question) or host.prompt(question, default, hint) or default
     if not value:
         raise Refused(f"--{attr.replace('_', '-')} is required ({question}): pass it, or run `init` at a terminal")
-    return value
+    return recorded(host, attr, value)
 
 
 def stack_values(release: str, pins: dict[str, str], *, domain: str, store_domain: str, garage: bool,
@@ -2509,6 +2602,9 @@ def gitops_init(args: argparse.Namespace, host: Host, directory: Path) -> int:
     rel = directory.relative_to(top).as_posix()
     if rel in ("", "."):
         raise Refused("veyq's half goes into a directory of its own inside the checkout, never its root")
+    progress = getattr(host, "progress", None)
+    if progress and progress.done("written") and (directory / GITOPS_FILE).is_file():
+        return gitops_init_finish(args, host, directory, top, read_gitops(directory))
     if directory.exists() and any(directory.iterdir()):
         raise Refused(f"{directory} holds files already: `init` writes a fresh directory and never overwrites. To have "
                       f"veyqctl manage a veyq half that exists, write {GITOPS_FILE} beside it as "
@@ -2520,9 +2616,9 @@ def gitops_init(args: argparse.Namespace, host: Host, directory: Path) -> int:
     host.section("2. The cluster")
     # Asked, with kubectl's current context offered, so the cluster `init` checks is seen before it does.
     current = (host.run(["kubectl", "config", "current-context"], check=False).stdout or "").strip()
-    context = args.context or host.prompt("kubeconfig context", current,
-                                          "The cluster Argo CD runs in: init checks it, `check` reads the Secrets "
-                                          "there.") or current
+    context = recorded(host, "context", args.context or resumed_answer(host, "context", "kubeconfig context")
+                       or host.prompt("kubeconfig context", current, "The cluster Argo CD runs in: init checks it, "
+                                      "`check` reads the Secrets there.") or current)
     k = kubectl(context)
     reachable = not args.no_cluster_check
     classes: list[tuple[str, str]] = []
@@ -2624,7 +2720,12 @@ def gitops_init(args: argparse.Namespace, host: Host, directory: Path) -> int:
     chart = chart_repository(manifest.app)
     pins = verify_gitops_release(host, manifest, chart)
 
-    values = {secret: {key: make() for key, make in keys.items()} for secret, keys in SECRET_VALUES.items()}
+    handed_before = progress.done("handed") if progress else None
+    if handed_before and Path(handed_before).is_file():
+        # The last run handed these over and stopped before writing: the same values, never new ones.
+        values = json.loads(Path(handed_before).read_text())["secrets"]
+    else:
+        values = {secret: {key: make() for key, make in keys.items()} for secret, keys in SECRET_VALUES.items()}
     files: dict[str, str] = {
         # The Application's name is the cluster's, never the instance's: `--name` is how this machine lists it.
         "application.yaml": application_text(name=args.application_name, argocd_namespace=args.argocd_namespace,
@@ -2694,12 +2795,31 @@ files:
     if provider != "sops":
         remote = ({remote_key(remote_prefix, k): v for keys in values.values() for k, v in keys.items()}
                   if provider == "external-secrets" else None)
-        handed = hand_over(name, namespace, values, remote)
+        handed = Path(handed_before) if handed_before and Path(handed_before).is_file() else \
+            hand_over(name, namespace, values, remote)
+        if progress:
+            progress.mark("handed", str(handed))
     (directory / "resources").mkdir(parents=True, exist_ok=True)
     for relative, text in files.items():
         (directory / relative).write_text(text)
     write_gitops(g)
     say(f"wrote veyq's half into {directory}: {', '.join(sorted(files))} and {GITOPS_FILE} (release {chosen.release})")
+    if progress:
+        progress.mark("written")
+    return gitops_init_finish(args, host, directory, top, g)
+
+
+def gitops_init_finish(args: argparse.Namespace, host: Host, directory: Path, top: Path, g: GitOps) -> int:
+    """What follows the written half — listing it and what is left to the person — reached again by a run that resumes
+    after the files were written."""
+    progress = getattr(host, "progress", None)
+    name = (progress.answer("name") if progress else None) or args.name or top.name
+    provider, context = g.doc["secrets"], g.doc.get("context") or None
+    rel = directory.relative_to(top).as_posix()
+    handed = progress.done("handed") if progress else None
+    handed = Path(handed) if handed else None
+    store = (progress.answer("secret_store") if progress else None) or args.secret_store or ""
+    repo_url = args.repo_url or (git(host, top, "remote", "get-url", "origin", check=False).stdout or "").strip()
     register(name, directory)
     if handed:
         say(f"the generated values are in {handed} (0600), once: "
@@ -2713,6 +2833,8 @@ files:
            f"{directory / 'resources/config-secret-key.sops.yaml'}`" if provider == "sops" else ""))
     say(f"next: review, `git -C {top} add {rel} && git commit`, push, give Argo CD read access to {repo_url} (a deploy "
         f"key), and register the Application once: `{' '.join(kubectl(context))} apply -f {directory / 'application.yaml'}`")
+    if progress:
+        progress.clear()
     return 0
 
 

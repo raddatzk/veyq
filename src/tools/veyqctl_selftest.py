@@ -1571,8 +1571,10 @@ class GitOpsHost(FakeHost):
     """FakeHost plus what the GitOps target starts — git, kubectl, helm, sops, kubeseal — and the registry lookup."""
 
     def __init__(self, *, top: pathlib.Path, cluster=None, chart_version=None, dirty=False, kubeseal=True,
-                 render_fails=False, **kwargs) -> None:
+                 render_fails=False, interrupt: tuple = (), interrupt_at: int = 1, **kwargs) -> None:
         super().__init__(**kwargs)
+        self.interrupt = list(interrupt)  # words of a command at which the terminal "closes" (KeyboardInterrupt), once,
+        self.interrupt_at = interrupt_at  # at the n-th such command
         self.top, self.dirty, self.kubeseal, self.render_fails = top, dirty, kubeseal, render_fails
         self.cluster = dict(CLUSTER_OK, **(cluster or {}))
         self.chart_version = chart_version  # what `helm show chart` says; None: the release the digest belongs to
@@ -1589,6 +1591,11 @@ class GitOpsHost(FakeHost):
         return None if name == "kubeseal" and not self.kubeseal else super().which(name)
 
     def run(self, cmd, *, check=True, stream=False, env=None, stdin=None):
+        if self.interrupt and all(word in cmd for word in self.interrupt):
+            self.interrupt_at -= 1
+            if self.interrupt_at == 0:
+                self.interrupt = []
+                raise KeyboardInterrupt
         if cmd[0] not in ("git", "kubectl", "helm", "sops", "kubeseal"):
             return super().run(cmd, check=check, stream=stream, env=env, stdin=stdin)
         self.commands.append(list(cmd))
@@ -1880,6 +1887,57 @@ def test_gitops_init(tmp: pathlib.Path) -> None:
     check("init --secrets sealed-secrets without kubeseal is refused", rc == 1 and "kubeseal" in out, out[-300:])
 
 
+def interrupted(argv: list, host: FakeHost) -> str:
+    """A run whose terminal goes away at the host's `interrupt` point: what it printed until then."""
+    out = io.StringIO()
+    try:
+        with contextlib.redirect_stdout(out):
+            vc.main([str(a) for a in argv], host)
+    except KeyboardInterrupt:
+        return out.getvalue()
+    raise AssertionError("the run was not interrupted")
+
+
+def test_init_resumes(tmp: pathlib.Path) -> None:
+    mirror, signed = tmp / "g-mirror", gitops_signed("1.0", "1.1", "2.0")
+    top = tmp / "resume"
+    top.mkdir()
+    d = top / "apps" / "veyq"
+    answers = {"veyq's domain": "resume.example.org", "provider: sops, external-secrets, sealed-secrets, none": "none",
+               "instance name": "resumed"}
+    argv = ["--source", mirror, "init", "--gitops", d]
+    interrupted(argv, GitOpsHost(top=top, signed=signed, answers=answers, interrupt=("helm", "template")))
+    progress = vc.Progress(top.resolve())
+    check("an interrupted init kept its answers at once, outside the repository, no secret among them",
+          progress.answer("domain") == "resume.example.org" and progress.answer("secrets") == "none"
+          and not progress.path.is_relative_to(top) and not d.exists()
+          and "secrets" not in json.dumps(progress.doc["steps"]), str(progress.doc))
+    rc, out = run_main(argv, GitOpsHost(top=top, signed=signed))  # no answers at all this time
+    values = (d / "values.yaml").read_text() if (d / "values.yaml").exists() else ""
+    check("the same command continues: nothing asked again, the answers taken (and shown), the instance written",
+          rc == 0 and "domain: resume.example.org" in values and "(from the last run)" in out
+          and "a run here stopped" in out and vc.read_registry()["instances"].get("resumed") == str(d.resolve())
+          and not progress.path.exists(), out[-600:])
+
+    # stopped after the values were handed over and the files written: the same values, the files not rewritten
+    top2 = tmp / "resume2"
+    top2.mkdir()
+    d2 = top2 / "apps" / "veyq"
+    argv2 = ["--source", mirror, "init", "--gitops", d2]
+    answers2 = dict(answers, **{"instance name": "resumed2"})
+    interrupted(argv2, GitOpsHost(top=top2, signed=signed, answers=answers2, interrupt=("remote", "get-url"),
+                                       interrupt_at=2))
+    handed = vc.config_dir() / "resumed2.secrets.json"
+    before = handed.read_text() if handed.exists() else ""
+    written = (d2 / "values.yaml").read_text() if (d2 / "values.yaml").exists() else ""
+    host = GitOpsHost(top=top2, signed=signed)
+    rc, out = run_main(argv2, host)
+    check("resumed after the files were written: no second hand-over, no new value, nothing rewritten, listed",
+          rc == 0 and before and handed.read_text() == before and (d2 / "values.yaml").read_text() == written
+          and not host.ran("helm", "template") and vc.read_registry()["instances"].get("resumed2") == str(d2.resolve()),
+          out[-500:])
+
+
 def test_gitops_upgrade(tmp: pathlib.Path) -> None:
     mirror = tmp / "g-mirror"  # test_gitops_init's: 1.0, 1.1, 2.0 entered from 1.1
     signed = gitops_signed("1.0", "1.1", "2.0")
@@ -2039,6 +2097,7 @@ def main() -> int:
         test_entry_signed(tmp)
         test_instances(tmp)
         test_gitops_init(tmp)
+        test_init_resumes(tmp)
         test_gitops_upgrade(tmp)
         test_gitops_hand_written(tmp)
     if failures:

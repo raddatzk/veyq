@@ -50,7 +50,10 @@ Applications your repository already holds — `gitops/apps/veyq` where they sit
 repository's), the **kubeconfig context** of the cluster (kubectl's current one — check it: that is the cluster it
 checks), the **Argo CD project** (the cluster's one project besides `default`, else `default`; a project of your own
 limits which repositories and destinations the Application may use, which `default` does not), and the **selector**
-(the newest release's major, so a new major is entered only once you choose it). In order, it:
+(the newest release's major, so a new major is entered only once you choose it). **An interrupted run is not lost:**
+every answer and every step is kept at once in `~/.config/veyq/` (outside the repository, no secret in it), and the
+same command, run again in the same checkout, offers to continue where it stopped, asking nothing twice and
+generating no value twice. In order, it:
 
 1. finds the checkout the directory lies in (the directory may not exist yet; `init` refuses one that is not empty);
 2. checks the cluster (above);
