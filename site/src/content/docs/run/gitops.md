@@ -227,10 +227,13 @@ by hand on 2026-11-10, against the published releases:
 - the maintainer's existing veyq half on single-node k3s (release 1.0, its `veyqctl.json` written once beside files
   written by hand): `check` verified its four pins as release 1.0's — the chart's digest resolved at ghcr.io equal to the
   one pinned — and found both Secrets with every key; `verify` passed; `upgrade` had nothing to do;
+- the whole server rebuilt, then `init --gitops --secrets sops` writing veyq's half into the maintainer's repository
+  against the fresh cluster: Argo CD synced it, KSOPS decrypted both generated Secrets, the instance came up with both
+  hosts certified, and `check` confirmed release 1.0's pins and both Secrets;
 - `init` into an empty repository against that cluster: the cluster check passed, the release verified, the chart
   rendered, the files written; with `--secrets sops`, both Secrets encrypted by `sops` 3.13.3 and decrypted again;
 - `upgrade` of a repository written at 0.2480 to 1.0 — major 1 entered from its entry — as one commit of the three
   files.
 
-Not yet run: an `upgrade` of a live instance that Argo CD then applies, `--secrets external-secrets` and
+Not yet run: an `upgrade` of a live instance that Argo CD then applies (the next release's), `--secrets external-secrets` and
 `sealed-secrets` against a cluster that has them, and Flux.
