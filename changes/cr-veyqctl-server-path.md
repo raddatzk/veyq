@@ -71,9 +71,9 @@ veyqctl init                                    (resumable: ~/.config/veyq/init-
 
 ## Phases
 
-- [ ] **1 resumable init** — the progress file and resuming, for the existing path (no server step) too. · Done when:
+- [x] **1 resumable init** — the progress file and resuming, for the existing path (no server step) too. · Done when:
   the self-test interrupts init after each step and the re-run continues, asking nothing twice.
-- [ ] **2 veyq's host access** — the admin NodePort as an option of veyq's half. · Done when: rendered and parsed in the
+- [x] **2 veyq's host access** — the admin NodePort as an option of veyq's half. · Done when: rendered and parsed in the
   render check; the self-test writes it on yes and not on no.
 - [ ] **3 the server path** — sections 2, 3, 5, 6 and 7 of the design, `veyqctl connect`, against stand-ins for every
   program. · Done when: the self-test drives the whole run, each confirmation's no stopping before its step, each
@@ -92,3 +92,13 @@ veyqctl init                                    (resumable: ~/.config/veyq/init-
 
 The self-test covers the whole path with every confirmation and refusal; phase 5's run is recorded; the Run page tells
 an operator one command; `affenbande` is `raddatz.me` and was made by it.
+
+## Progress (2026-11-10)
+
+Phase 1 (`d8da4d55f`): the progress file and resuming, bitten. Phase 2 (`95d180600`): veyq-admin's host access as an
+option of veyq's half, in the render check. Toward the invariant on programs (owner 2026-11-10: "check initially that
+all its tools are installed"): `require_programs` checks every program a command starts before its first question —
+`init --gitops` and the GitOps verbs (`GITOPS_PROGRAMS`), Compose (docker; cosign where a manifest is verified), the
+secrets provider's once chosen — all missing ones at once, each with where to get it, cosign also against its floor.
+Self-tested (`test_programs_checked_first`), seven mutations bite. Phase 3 adds the server path's programs to the same
+table (`ssh`, `ssh-keyscan`, `ssh-keygen`, `age-keygen`, `copier`, `ansible-playbook`; `gh` optional, never required).

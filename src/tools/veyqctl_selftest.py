@@ -1318,7 +1318,8 @@ def tamper_one_byte(manifest: pathlib.Path) -> None:
 
 
 def is_cosign(cmd: list) -> bool:
-    return cmd[0].endswith("cosign")
+    """A cosign call that verifies something; `cosign version` (the preflight's floor check) trusts nothing."""
+    return cmd[0].endswith("cosign") and cmd[1:2] != ["version"]
 
 
 def image_verifies(host: FakeHost) -> list:
@@ -1453,7 +1454,7 @@ def test_manifest_signature(tmp: pathlib.Path) -> None:
     check("bite (e): `upgrade` to a manifest changed after it was signed is refused at step 2, every command before "
           "the refusal a read — nothing stopped, fetched or switched",
           rc == 1 and "does not verify" in out and bool(host.ran("verify-blob"))
-          and all(is_cosign(c) and c[1] in ("version", "verify-blob") for c in host.commands)
+          and all(c[0].endswith("cosign") and c[1] in ("version", "verify-blob") for c in host.commands)
           and not (home_e / "releases/1.4").exists()
           and (env.read_bytes(), (home_e / vc.STATE_FILE).read_bytes()) == before, out[-500:])
 
@@ -1711,6 +1712,53 @@ def test_instances(tmp: pathlib.Path) -> None:
     check("instances: each listed with its target and path, the current one marked",
           "* cluster  gitops" in out and "  test  compose" in out, out)
     vc.write_registry({"current": None, "instances": {}})
+
+
+def test_programs_checked_first(tmp: pathlib.Path) -> None:
+    """Every program a command needs is checked before its first question or command, all of them named at once."""
+    top = tmp / "programs-repo"
+    top.mkdir()
+
+    class Missing(GitOpsHost):
+        def __init__(self, missing, **kwargs):
+            super().__init__(top=top, **kwargs)
+            self.missing, self.asked = set(missing), []
+
+        def which(self, name):
+            return None if name in self.missing else super().which(name)
+
+        def prompt(self, question, default="", hint=""):
+            self.asked.append(question)
+            return super().prompt(question, default, hint)
+
+    host = Missing({"kubectl", "helm"})
+    rc, out = run_main(["init", "--gitops", top / "apps" / "veyq", *INIT, "--secrets", "none"], host)
+    check("init --gitops without kubectl and helm is refused naming both and where to get them, before any question "
+          "or command", rc == 1 and "kubectl, helm, not on PATH" in out and vc.PROGRAMS["helm"] in out
+          and vc.PROGRAMS["kubectl"] in out and not host.asked and not host.commands, out[-400:])
+    host = Missing({"git"}, answers={"compose or gitops": "gitops"})
+    rc, out = run_main(["init"], host)
+    check("init with gitops chosen at its prompt and no git is refused before the next question",
+          rc == 1 and "needs git, not on PATH" in out and host.asked == ["compose or gitops"], out[-400:])
+    host = Missing(set(), cosign_version="v3.1.2")
+    rc, out = run_main(["init", "--gitops", top / "apps" / "veyq", *INIT, "--secrets", "none"], host)
+    check("init --gitops with a cosign below the floor is refused before any question",
+          rc == 1 and "older than" in out and not host.asked, out[-400:])
+    home = tmp / "programs-home"
+    home.mkdir()
+    (home / vc.GITOPS_FILE).write_text("{}")
+    host = Missing({"helm"})
+    rc, out = run_main(["--home", home, "upgrade"], host)
+    check("a GitOps verb without helm is refused naming it, before reading the instance",
+          rc == 1 and "`upgrade` of a GitOps instance needs helm" in out and not host.commands, out[-400:])
+    host = Missing({"docker", "cosign"})
+    rc, out = run_main(["--home", tmp / "programs-compose", "install"], host)
+    check("a Compose install without docker and cosign is refused naming both, before any command or file",
+          rc == 1 and "`install` needs docker, cosign, not on PATH" in out and not host.commands
+          and not (tmp / "programs-compose").exists(), out[-400:])
+    host = Missing({"cosign"})
+    rc, out = run_main(["--home", tmp / "programs-compose", "status"], host)
+    check("a Compose command that verifies nothing does not need cosign", "cosign" not in out, out[-400:])
 
 
 def test_gitops_init(tmp: pathlib.Path) -> None:
@@ -2107,6 +2155,7 @@ def main() -> int:
         test_manifest_signature(tmp)
         test_entry_signed(tmp)
         test_instances(tmp)
+        test_programs_checked_first(tmp)
         test_gitops_init(tmp)
         test_init_resumes(tmp)
         test_gitops_upgrade(tmp)

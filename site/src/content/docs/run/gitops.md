@@ -21,7 +21,7 @@ built yet. Without it, the cluster is yours, and it must have what [Kubernetes](
 
 On your machine: `veyqctl` ([Verify a release](/run/verify-a-release/) says how to fetch and check it), `git`, `helm`,
 `kubectl` with a context for the cluster, `cosign` 3.1.3 or later, and the tool of the secrets provider you choose
-(`sops` or `kubeseal`). A checkout of the repository Argo CD syncs.
+(`sops` or `kubeseal`). A checkout of the repository Argo CD syncs. `veyqctl` checks these programs before its first question — `init` the ones its target needs, the provider's once you have chosen it — and names every missing one with where to get it.
 
 On the cluster — `init` checks this before it writes anything and names every gap at once:
 

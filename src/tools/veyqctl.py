@@ -231,7 +231,7 @@ import urllib.error
 import urllib.parse
 import urllib.request
 from pathlib import Path
-from typing import Callable, NamedTuple
+from typing import Callable, Iterable, NamedTuple
 
 UPSTREAM = "raddatzk/veyq"
 DEFAULT_HOME = "/opt/veyq"
@@ -770,6 +770,39 @@ def manifest_reader(host: Host, source: Source, unsigned_local: bool) -> Callabl
 
 
 # ---- verification ---------------------------------------------------------------------------------------------
+
+# Every program a command starts, with where to get it. Checked before the command's first question, all at once and
+# by name (cr-veyqctl-server-path): an operator learns what to install before answering anything, not halfway through.
+PROGRAMS = {
+    "git": "https://git-scm.com/downloads",
+    "docker": "Docker Engine with its Compose plugin, https://docs.docker.com/engine/install/",
+    "kubectl": "https://kubernetes.io/docs/tasks/tools/",
+    "helm": "https://helm.sh/docs/intro/install/",
+    "cosign": f"{COSIGN_MIN_VERSION} or later, https://docs.sigstore.dev/cosign/system_config/installation/",
+    "sops": "https://github.com/getsops/sops/releases",
+    "kubeseal": "https://github.com/bitnami-labs/sealed-secrets#kubeseal",
+}
+COMPOSE_VERIFYING = ("install", "upgrade", "verify")  # what verifies a manifest: cosign, unless --unsigned-local
+
+
+def compose_programs(command: str, unsigned_local: bool) -> list[str]:
+    return ["docker"] + (["cosign"] if command in COMPOSE_VERIFYING and not unsigned_local else [])
+
+
+GITOPS_PROGRAMS = {"init": ("git", "kubectl", "helm", "cosign"), "verify": ("helm", "cosign"),
+                   "check": ("git", "kubectl", "helm", "cosign"), "upgrade": ("git", "helm", "cosign")}
+
+
+def require_programs(host: Host, names: Iterable[str], what: str) -> None:
+    """Refused, naming every program of `names` not on PATH and where to get it; cosign also below its floor."""
+    names = list(names)
+    missing = [name for name in names if not host.which(name)]
+    if missing:
+        raise Refused(f"{what} needs {', '.join(missing)}, not on PATH. Nothing was asked, written or started. Install:"
+                      + "".join(f"\n  {name}: {PROGRAMS[name]}" for name in missing))
+    if "cosign" in names:
+        check_cosign_version(host, host.which("cosign"))
+
 
 def require_cosign(host: Host) -> str:
     cosign = host.which("cosign")
@@ -2151,7 +2184,9 @@ def recorded(host: Host, key: str, value: str) -> str:
 def cmd_init(args: argparse.Namespace, host: Host) -> int:
     """Create an instance, list it and make it current: Compose (what `install` does) or GitOps (ADR 0126)."""
     target = "compose" if args.compose else ("gitops" if args.gitops else None)
-    if not args.compose:
+    if args.gitops:
+        require_programs(host, GITOPS_PROGRAMS["init"], "`init --gitops`")
+    if not args.compose and host.which("git"):
         # A GitOps run started here before and stopped? Its answers are kept per checkout (Progress).
         quiet, host.quiet = host.quiet, True
         here = host.run(["git", "rev-parse", "--show-toplevel"], check=False)
@@ -2171,6 +2206,7 @@ def cmd_init(args: argparse.Namespace, host: Host) -> int:
         home = Path(args.home or DEFAULT_HOME)
         name = args.name or "veyq"
         name_is_free(name, home)
+        require_programs(host, compose_programs("install", args.unsigned_local), "`init --compose`")
         args.home = str(home)
         host.workdir = home
         result = cmd_install(args, host)
@@ -2179,6 +2215,8 @@ def cmd_init(args: argparse.Namespace, host: Host) -> int:
         return result
     if args.unsigned_local:
         raise Refused("--unsigned-local is Compose's: a GitOps instance runs only what verifies (ADR 0126 decision 3)")
+    if not args.gitops:  # chosen at the prompt or resumed: checked now, before its first question
+        require_programs(host, GITOPS_PROGRAMS["init"], "`init --gitops`")
     host.quiet = True
     offered = suggested_gitops_directory(host)
     host.section("1. Where veyq's half goes")
@@ -2764,9 +2802,7 @@ def gitops_init(args: argparse.Namespace, host: Host, directory: Path) -> int:
         raise Refused(f"--secrets sops needs a .sops.yaml in {top} or a directory above {directory} naming the "
                       f"repository's keys: sops encrypts with its creation rules. Nothing was written.")
     if provider in ("sops", "sealed-secrets"):
-        tool = "sops" if provider == "sops" else "kubeseal"
-        if not host.which(tool):
-            raise Refused(f"--secrets {provider} needs `{tool}` on PATH. Nothing was written.")
+        require_programs(host, ["sops" if provider == "sops" else "kubeseal"], f"--secrets {provider}")
     repo_url = args.repo_url or (git(host, top, "remote", "get-url", "origin", check=False).stdout or "").strip()
     if not repo_url:
         raise Refused("--repo-url is required: the URL Argo CD reads this repository from (no `origin` remote)")
@@ -3261,9 +3297,13 @@ def main(argv: list[str] | None = None, host: Host | None = None) -> int:
                 raise Refused("--unsigned-local is Compose's: a GitOps instance pins only what verifies")
             # Resolved: git names the checkout by its real path (macOS' /var is /private/var), and every path veyqctl
             # compares with it or hands to `git add` must be the same one.
+            require_programs(host, GITOPS_PROGRAMS[args.command], f"`{args.command}` of a GitOps instance")
             return GITOPS_VERBS[args.command](args, host, read_gitops(home.resolve()))
         if getattr(args, "push", False):
             raise Refused(f"--push is a GitOps instance's, and {home} is a Compose home")
+        if args.command != "self-update":
+            require_programs(host, compose_programs(args.command, bool(getattr(args, "unsigned_local", False))),
+                             f"`{args.command}`")
         return args.func(args, host)
     except Refused as e:
         say(f"REFUSED: {e}")
