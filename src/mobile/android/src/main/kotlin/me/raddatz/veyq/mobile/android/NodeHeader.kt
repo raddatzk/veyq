@@ -59,7 +59,6 @@ import kotlinx.coroutines.launch
 import me.raddatz.veyq.mobile.navigation.NodeAt
 import me.raddatz.veyq.mobile.navigation.NodeHeader as Plan
 import me.raddatz.veyq.mobile.session.NodeMove
-import me.raddatz.veyq.mobile.session.NodeTrash
 
 /**
  * What a kind's page hands core's header (the web's `contributeNodeHeader`, its rights function and the page's doors): a
@@ -118,18 +117,13 @@ internal fun NodeHeaderActions(
     var pinned by remember(node.nodeId) { mutableStateOf(model.isFavorite(node)) }
     var menu by remember { mutableStateOf(false) }
     var dialog by remember(node.nodeId) { mutableStateOf<String?>(null) }
-    val granted = Plan.Rights(
-        favorite = pinned != null,
-        share = KindPages.of(node.kind)?.shareable == true && model.linkRules().on,
-        rename = contribution.rename,
-        move = true,
-        cover = KindPages.of(node.kind)?.takesCover == true && contribution.cover,
-        copy = contribution.copy != null,
-        download = contribution.download != null,
-        report = reportOffered,
-        delete = true,
+    val page = KindPages.of(node.kind)
+    val rights = Plan.rights(
+        node.kind, favoriteKnown = pinned != null, shareable = page?.shareable == true, linksOn = model.linkRules().on,
+        rename = contribution.rename, takesCover = page?.takesCover == true, coverOffered = contribution.cover,
+        copy = contribution.copy != null, download = contribution.download != null, report = reportOffered,
+        inGuestFolder = model.inIdentityFolder(node),
     )
-    val rights = if (model.inIdentityFolder(node)) Plan.inIdentityFolder(granted, node.kind) else granted
     val plan = Plan.plan(rights, me.raddatz.veyq.mobile.AppKinds.headerOrder(node.kind), maxButtons, contribution.actions.map { Plan.Action(it.id, it.slot) })
     val own = contribution.actions.associateBy { it.id }
 
@@ -243,16 +237,17 @@ internal fun NodeHeaderActions(
 /** The delete into the trash, with the web's undo for as long as the web offers it (`TRASH_UNDO_MS`), or a refusal. */
 private fun trash(node: NodeAt, model: AppModel, snackbar: SnackbarHostState, scope: CoroutineScope, context: android.content.Context) {
     scope.launch {
-        val (deleted, before) = model.trash(node)
-        val said = context.text(me.raddatz.veyq.mobile.words.Notices.trashed(deleted, node.name))
-        if (deleted != NodeTrash.Deleted.TRASHED) {
+        val r = model.trash(node) ?: return@launch
+        val said = context.text(r.notice)
+        val before = r.before
+        if (!r.undoable || before == null) {
             snackbar.showSnackbar(said)
             return@launch
         }
         val answer = kotlinx.coroutines.withTimeoutOrNull(6_000) {
             snackbar.showSnackbar(said, actionLabel = context.getString(R.string.trash_undo), duration = SnackbarDuration.Indefinite)
         }
-        if (answer == SnackbarResult.ActionPerformed && (before == null || !model.restore(before))) {
+        if (answer == SnackbarResult.ActionPerformed && !model.restore(before)) {
             snackbar.showSnackbar(context.text(me.raddatz.veyq.mobile.words.Notices.trashUndoFailed(node.name)))
         }
     }
@@ -265,18 +260,9 @@ private fun iconOf(id: String, own: Map<String, OwnAction>): ImageVector = when 
 }
 
 @Composable
-private fun labelOf(id: String, node: NodeAt, contribution: HeaderContribution, hasCover: Boolean, pinned: Boolean?): String = when (id) {
-    Plan.FAVORITE -> stringResource(if (pinned == true) R.string.node_unfavorite else R.string.node_favorite)
-    Plan.SHARE -> say(shareWords(node.kind).title)
-    Plan.RENAME -> stringResource(R.string.node_rename)
-    Plan.MOVE -> stringResource(R.string.node_move)
-    Plan.COPY -> stringResource(R.string.copy_action)
-    Plan.COVER -> stringResource(if (hasCover) R.string.cover_change else R.string.cover_set)
-    Plan.DOWNLOAD -> stringResource(R.string.node_download)
-    Plan.REPORT -> stringResource(R.string.report_action)
-    Plan.DELETE -> contribution.deleteTitle
-    else -> contribution.actions.firstOrNull { it.id == id }?.label ?: id
-}
+private fun labelOf(id: String, node: NodeAt, contribution: HeaderContribution, hasCover: Boolean, pinned: Boolean?): String =
+    Plan.label(id, node.kind, pinned, hasCover)?.let { say(it) }
+        ?: if (id == Plan.DELETE) contribution.deleteTitle else contribution.actions.firstOrNull { it.id == id }?.label ?: id
 
 /**
  * Core's head of a node's page (the web's `NodeHeader` leading visual, ADR 0110): what the shell hands the body of the node on

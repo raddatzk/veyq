@@ -73,6 +73,39 @@ object NodeHeader {
     fun inIdentityFolder(rights: Rights, kind: String): Rights =
         rights.copy(share = false, rename = false, cover = false, delete = rights.delete && kind != "FOLDER")
 
+    /**
+     * A header's rights as both apps build them (the web's `NodePage`): the heart once the pin set is known, a link where
+     * the kind shares and the tenant's links are on, the kind's rename, a cover where the kind takes one and its page
+     * offers it, its copy and download doors, the report where the server publishes its key; the move and the delete
+     * always — then narrowed where the node is a guest's folder or lies in one ([inIdentityFolder]).
+     */
+    fun rights(
+        kind: String, favoriteKnown: Boolean, shareable: Boolean, linksOn: Boolean, rename: Boolean, takesCover: Boolean,
+        coverOffered: Boolean, copy: Boolean, download: Boolean, report: Boolean, inGuestFolder: Boolean,
+    ): Rights {
+        val granted = Rights(
+            favorite = favoriteKnown, share = shareable && linksOn, rename = rename, move = true,
+            cover = takesCover && coverOffered, copy = copy, download = download, report = report, delete = true,
+        )
+        return if (inGuestFolder) inIdentityFolder(granted, kind) else granted
+    }
+
+    /**
+     * A core action's words in the header: the heart's by whether it is pinned, the share sheet's title of the kind, the
+     * cover's by whether one is set. Null for the delete (its kind's own title) and an application's own action.
+     */
+    fun label(id: String, kind: String, pinned: Boolean?, hasCover: Boolean): me.raddatz.veyq.mobile.words.Msg? = when (id) {
+        FAVORITE -> if (pinned == true) me.raddatz.veyq.mobile.words.Msg.NODE_UNFAVORITE else me.raddatz.veyq.mobile.words.Msg.NODE_FAVORITE
+        SHARE -> me.raddatz.veyq.mobile.session.ShareWords.of(kind).title
+        RENAME -> me.raddatz.veyq.mobile.words.Msg.NODE_RENAME
+        MOVE -> me.raddatz.veyq.mobile.words.Msg.NODE_MOVE
+        COPY -> me.raddatz.veyq.mobile.words.Msg.COPY_ACTION
+        COVER -> if (hasCover) me.raddatz.veyq.mobile.words.Msg.COVER_CHANGE else me.raddatz.veyq.mobile.words.Msg.COVER_SET
+        DOWNLOAD -> me.raddatz.veyq.mobile.words.Msg.NODE_DOWNLOAD
+        REPORT -> me.raddatz.veyq.mobile.words.Msg.REPORT_ACTION
+        else -> null
+    }
+
     /** The header's split: the [buttons] in order, then the menu's [menu] group and, after a separator, its [last] group. */
     data class Plan(val buttons: List<String>, val menu: List<String>, val last: List<String>) {
         /** Whether there is a "more" menu at all. */

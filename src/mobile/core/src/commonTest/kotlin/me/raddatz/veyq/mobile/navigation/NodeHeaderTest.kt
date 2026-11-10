@@ -92,4 +92,27 @@ class NodeHeaderTest {
         kotlin.test.assertTrue(NodeHeader.inIdentityFolder(all, "FILE").delete)
         kotlin.test.assertFalse(NodeHeader.inIdentityFolder(all, "FILE").rename)
     }
+
+    @Test
+    fun the_rights_both_apps_built_come_from_the_kind_the_page_and_a_guests_folder() {
+        val all = NodeHeader.rights("FOLDER", true, shareable = true, linksOn = true, rename = true, takesCover = true, coverOffered = true, copy = true, download = true, report = true, inGuestFolder = false)
+        kotlin.test.assertEquals(NodeHeader.Rights(true, true, true, true, true, true, true, true, true), all)
+        // links off for the tenant: no share; a kind without cover: none, whatever its page offers
+        kotlin.test.assertFalse(NodeHeader.rights("FOLDER", true, true, linksOn = false, rename = true, takesCover = true, coverOffered = true, copy = true, download = true, report = true, inGuestFolder = false).share)
+        kotlin.test.assertFalse(NodeHeader.rights("FILE", true, true, true, true, takesCover = false, coverOffered = true, copy = true, download = true, report = true, inGuestFolder = false).cover)
+        // in a guest's folder: the narrowing
+        val guest = NodeHeader.rights("FOLDER", true, true, true, true, true, true, true, true, true, inGuestFolder = true)
+        kotlin.test.assertEquals(NodeHeader.inIdentityFolder(all, "FOLDER"), guest)
+    }
+
+    @Test
+    fun a_core_actions_words_follow_its_state_and_the_delete_and_own_ones_are_the_kinds() {
+        kotlin.test.assertEquals(me.raddatz.veyq.mobile.words.Msg.NODE_UNFAVORITE, NodeHeader.label(NodeHeader.FAVORITE, "FOLDER", pinned = true, hasCover = false))
+        kotlin.test.assertEquals(me.raddatz.veyq.mobile.words.Msg.NODE_FAVORITE, NodeHeader.label(NodeHeader.FAVORITE, "FOLDER", pinned = null, hasCover = false))
+        kotlin.test.assertEquals(me.raddatz.veyq.mobile.words.Msg.COVER_CHANGE, NodeHeader.label(NodeHeader.COVER, "FOLDER", null, hasCover = true))
+        kotlin.test.assertEquals(me.raddatz.veyq.mobile.words.Msg.COVER_SET, NodeHeader.label(NodeHeader.COVER, "FOLDER", null, hasCover = false))
+        kotlin.test.assertEquals(me.raddatz.veyq.mobile.session.ShareWords.of("EXPENSES_POT").title, NodeHeader.label(NodeHeader.SHARE, "EXPENSES_POT", null, false))
+        kotlin.test.assertNull(NodeHeader.label(NodeHeader.DELETE, "FOLDER", null, false))
+        kotlin.test.assertNull(NodeHeader.label("upload", "MEMORY", null, false))
+    }
 }

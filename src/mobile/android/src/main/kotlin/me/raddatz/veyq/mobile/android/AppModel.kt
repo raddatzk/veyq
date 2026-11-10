@@ -311,12 +311,12 @@ class AppModel(app: Application) : AndroidViewModel(app) {
      * Moves [ref] with everything under it to the space's trash (core's shell: a page whose node went leaves for its
      * parent); an open Pot of it closes. What came of it, and the node as it was before (what an undo restores).
      */
-    suspend fun trash(ref: me.raddatz.veyq.mobile.navigation.NodeAt): Pair<me.raddatz.veyq.mobile.session.NodeTrash.Deleted, me.raddatz.veyq.mobile.session.OpenNode?> {
-        val m = shellModel ?: return me.raddatz.veyq.mobile.session.NodeTrash.Deleted.FAILED to null
+    suspend fun trash(ref: me.raddatz.veyq.mobile.navigation.NodeAt): me.raddatz.veyq.mobile.navigation.ShellModel.Trashed? {
+        val m = shellModel ?: return null
         val r = m.trash(ref)
         if (r.gone) _pot.value?.ref?.takeIf { it.nodeId == ref.nodeId }?.let { potModel?.close(it) }
         readRowDetails(m.tenant)
-        return r.outcome to r.before
+        return r
     }
 
     /** Brings [node] back from the trash under its name (the undo of [trash]); false when it could not be. */

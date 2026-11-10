@@ -195,19 +195,13 @@ struct NodeHeaderActions: View {
 
     private var plan: NodeHeader.Plan {
         let page = KindPage.of(node.kind)
-        let granted = NodeHeader.Rights(
-            favorite: pinned != nil,
-            share: page?.shareable == true && model.linkRules().on,
-            rename: contribution.rename,
-            move: true,
-            cover: page?.takesCover == true && contribution.cover,
-            copy: contribution.copy != nil,
-            download: contribution.download != nil,
-            report: model.reportOffered,
-            delete: true
+        // core's rights (a guest's folder and what lies in it narrowed there: moved out, never renamed, shared, covered)
+        let rights = NodeHeader.shared.rights(
+            kind: node.kind, favoriteKnown: pinned != nil, shareable: page?.shareable == true, linksOn: model.linkRules().on,
+            rename: contribution.rename, takesCover: page?.takesCover == true, coverOffered: contribution.cover,
+            copy: contribution.copy != nil, download: contribution.download != nil, report: model.reportOffered,
+            inGuestFolder: model.inIdentityFolder(node)
         )
-        // a guest's folder and what lies in it: moved out, never renamed, shared, covered or deleted as a folder
-        let rights = model.inIdentityFolder(node) ? NodeHeader.shared.inIdentityFolder(rights: granted, kind: node.kind) : granted
         return NodeHeader.shared.plan(
             rights: rights, order: AppKinds.shared.headerOrder(kind: node.kind), maxButtons: maxButtons,
             own: contribution.actions.map { NodeHeader.Action(id: $0.id, slot: $0.slot) }
@@ -303,18 +297,23 @@ struct NodeHeaderActions: View {
         }
     }
 
+    /// A core action's words (core's `NodeHeader.label`).
+    private func word(_ id: String) -> String {
+        NodeHeader.shared.label(id: id, kind: node.kind, pinned: pinned.map { KotlinBoolean(value: $0) }, hasCover: model.covers[node.nodeId] != nil).map { say($0) } ?? id
+    }
+
     @ViewBuilder private func label(_ id: String) -> some View {
         switch id {
         case NodeHeader.shared.FAVORITE:
-            Label(pinned == true ? say(.nodeUnfavorite) : say(.nodeFavorite), systemImage: pinned == true ? "heart.fill" : "heart")
+            Label(word(id), systemImage: pinned == true ? "heart.fill" : "heart")
                 .foregroundStyle(pinned == true ? Role.favorite : Role.text)
-        case NodeHeader.shared.SHARE: Label(say(ShareWords.companion.of(kind: node.kind).title), systemImage: "square.and.arrow.up")
-        case NodeHeader.shared.RENAME: Label(say(.nodeRename), systemImage: "pencil")
-        case NodeHeader.shared.MOVE: Label(say(.nodeMove), systemImage: "folder")
-        case NodeHeader.shared.COPY: Label(say(.theCopyAction), systemImage: "doc.on.doc")
-        case NodeHeader.shared.COVER: Label(model.covers[node.nodeId] != nil ? say(.coverChange) : say(.coverSet), systemImage: "photo")
-        case NodeHeader.shared.DOWNLOAD: Label(say(.nodeDownload), systemImage: "arrow.down.circle")
-        case NodeHeader.shared.REPORT: Label(say(.reportAction), systemImage: "flag")
+        case NodeHeader.shared.SHARE: Label(word(id), systemImage: "square.and.arrow.up")
+        case NodeHeader.shared.RENAME: Label(word(id), systemImage: "pencil")
+        case NodeHeader.shared.MOVE: Label(word(id), systemImage: "folder")
+        case NodeHeader.shared.COPY: Label(word(id), systemImage: "doc.on.doc")
+        case NodeHeader.shared.COVER: Label(word(id), systemImage: "photo")
+        case NodeHeader.shared.DOWNLOAD: Label(word(id), systemImage: "arrow.down.circle")
+        case NodeHeader.shared.REPORT: Label(word(id), systemImage: "flag")
         case NodeHeader.shared.DELETE: Label(contribution.deleteTitle, systemImage: "trash")
         default:
             if let own = contribution.actions.first(where: { $0.id == id }) { Label(own.label, systemImage: own.systemImage) }
