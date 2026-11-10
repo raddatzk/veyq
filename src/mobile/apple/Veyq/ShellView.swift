@@ -170,13 +170,24 @@ private struct FilledLabel: LabelStyle {
     }
 }
 
-/// The switcher: the current tenant and server; every server's tenants, and adding a server (owner 2026-11-08: one
-/// server can give several tenants, and the app connects to several servers).
+/// The switcher (owner 2026-11-10: spaces and tenants in one): the shown space, its tenant and server under it; the
+/// tenant's spaces first — a space chosen opens its Home —, then every server's tenants (owner 2026-11-08: one server can
+/// give several tenants, and the app connects to several servers), and managing servers.
 struct TenantSwitcher: View {
     @Bindable var model: AppModel
 
+    /// The tenant and the server under the space's name (core's `ShellWords.switcherSubtitle`).
+    private var subtitle: String { ShellWords.shared.switcherSubtitle(space: model.space, tenant: model.tenant?.name ?? "", server: model.server) }
+
     var body: some View {
         Menu {
+            Section(model.tenant?.name ?? "") {
+                ForEach(model.spaces, id: \.scopeId) { space in
+                    Button { model.switchSpace(space.scopeId); model.drawerOpen = false } label: {
+                        Label(Names.spaceName(space), systemImage: space.scopeId == model.shell.space ? "checkmark" : Names.spaceSymbol(space.kind))
+                    }
+                }
+            }
             ForEach(model.servers) { server in
                 Section(server.label) {
                     ForEach(server.tenants, id: \.tenantId) { tenant in
@@ -198,8 +209,8 @@ struct TenantSwitcher: View {
             HStack(spacing: 10) {
                 TenantAvatar(name: model.tenant?.name ?? "?")
                 VStack(alignment: .leading, spacing: 1) {
-                    Text(model.tenant?.name ?? "").fontWeight(.bold).foregroundStyle(Role.text).lineLimit(1)
-                    Text(model.server).font(.caption).foregroundStyle(Role.muted).lineLimit(1)
+                    Text(Names.spaceName(model.space)).fontWeight(.bold).foregroundStyle(Role.text).lineLimit(1)
+                    Text(subtitle).font(.caption).foregroundStyle(Role.muted).lineLimit(1)
                 }
                 Spacer(minLength: 0)
                 if model.switching { ProgressView().controlSize(.small) } else {
@@ -308,7 +319,6 @@ struct Bar: View {
                 Group {
                     if model.shell.searching { SearchHits(model: model, query: query) } else { content(selection.wrappedValue) }
                 }
-                .environment(\.wideShell, true)
                 .modifier(Picking(model: model))
                 // Search in one place on every page: the toolbar's field at its trailing end, as the system's own apps
                 // on an iPad and a Mac (owner 2026-11-10: a segment here, a button there was two places)
@@ -318,16 +328,22 @@ struct Bar: View {
                 .toolbar {
                     toolbar
                     // the bar's places: a segmented control, as the system's own apps on an iPad and a Mac
-                    if !model.shell.barTabs.isEmpty { ToolbarItem(placement: Self.places) {
-                        Picker(say(.tabSearch), selection: selection) {
-                            // symbols, their words for VoiceOver: a word each runs over the back button beside the sidebar
-                            ForEach(tabs, id: \.self) { key in
-                                segment(Names.tab(key, app: model.shell.application, kind: model.shell.openObject?.kind), symbol: Names.tabSymbol(key, app: model.shell.application, kind: model.shell.openObject?.kind)).tag(key)
+                    if !model.shell.barTabs.isEmpty {
+                        // apart from back: the control is a capsule of its own, never inside back's glass (an iPad
+                        // grouped both, the control's capsule nested in it, owner 2026-11-10)
+                        ToolbarSpacer(.fixed, placement: Self.places)
+                        ToolbarItem(placement: Self.places) {
+                            Picker(say(.tabSearch), selection: selection) {
+                                // symbols, their words for VoiceOver: a word each runs over the back button beside the sidebar
+                                ForEach(tabs, id: \.self) { key in
+                                    segment(Names.tab(key, app: model.shell.application, kind: model.shell.openObject?.kind), symbol: Names.tabSymbol(key, app: model.shell.application, kind: model.shell.openObject?.kind)).tag(key)
+                                }
                             }
+                            .pickerStyle(.segmented)
+                            .fixedSize()
                         }
-                        .pickerStyle(.segmented)
-                        .fixedSize()
-                    } }
+                        .sharedBackgroundVisibility(.hidden)
+                    }
                 }
                 .background(Role.bg)
             }
@@ -448,7 +464,7 @@ struct Bar: View {
 
 /// Home (ADR 0122): the shown space's tree, one level at a time, as the web's level view lists it — the folders, then
 /// every application's objects; the filters at the top keep one application's objects, the folders stay. The space is
-/// switched from the title (owner 2026-11-08), iOS' own title menu.
+/// switched in the drawer's switcher, with the tenants (owner 2026-11-10); the title is its name.
 struct HomeView: View {
     @Bindable var model: AppModel
     @State private var naming = false
@@ -574,58 +590,8 @@ struct HomeView: View {
         }
         .scrollContentBackground(.hidden)
         .navigationTitle(title)
-        #if os(iOS)
-        // The inline title is where iOS shows its title menu's chevron; a large title would hide the switcher.
-        .navigationBarTitleDisplayMode(.inline)
-        #endif
-        .modifier(SpaceSwitcherMenu(model: model, shown: model.shell.folder == nil))
     }
 }
-
-/// The space switcher in Home's title, at a space's root only: inside a folder the title is the folder's, and a title menu
-/// with nothing in it would still take the bar's room with its chevron.
-private struct SpaceSwitcherMenu: ViewModifier {
-    @Bindable var model: AppModel
-    let shown: Bool
-    @Environment(\.wideShell) private var wide
-
-    func body(content: Content) -> some View {
-        if shown && wide {
-            // An iPad's and a Mac's title shows no menu of its own (owner 2026-11-10: the switcher was not found there):
-            // the title is the switcher's button, its chevron saying it opens.
-            content
-                .toolbar(removing: .title)
-                .toolbar {
-                    ToolbarItem(placement: .navigation) {
-                        Menu { spaces } label: { Text(switcherTitle).font(.headline) }
-                        .menuIndicator(.hidden)
-                        .accessibilityLabel(say(.spaceSwitch))
-                        .accessibilityValue(Names.spaceName(model.space))
-                    }
-                }
-        } else if shown {
-            content.toolbarTitleMenu { spaces }
-        } else {
-            content
-        }
-    }
-
-    /// The space's name with the chevron after it, as one text: a toolbar draws a label's icon before its title. No word
-    /// of its own, so no catalog key: the name is the space's.
-    private var switcherTitle: LocalizedStringKey {
-        let chevron = Image(systemName: "chevron.down")
-        return "\(Names.spaceName(model.space))  \(chevron)"
-    }
-
-    @ViewBuilder private var spaces: some View {
-        ForEach(model.spaces, id: \.scopeId) { space in
-            Button { model.switchSpace(space.scopeId) } label: {
-                Label(Names.spaceName(space), systemImage: space.scopeId == model.shell.space ? "checkmark" : Names.spaceSymbol(space.kind))
-            }
-        }
-    }
-}
-
 /// The web's folder tile: the info role's soft fill and text.
 struct FolderTile: View {
     var body: some View {
@@ -685,8 +651,6 @@ struct ObjectRow: View {
 extension EnvironmentValues {
     /// Whether the shell is picking a place for what another app shared (ADR 0126).
     @Entry var picking = false
-    /// Whether the page is the split view's detail (an iPad, a Mac), not a tab of the iPhone's bar.
-    @Entry var wideShell = false
 }
 
 /// A space whose trash is open.

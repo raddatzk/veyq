@@ -184,8 +184,8 @@
     "de": "Alle"
   },
   "switcher_open": {
-    "en": "Switch tenant or server",
-    "de": "Tenant oder Server wechseln"
+    "en": "Switch space, tenant or server",
+    "de": "Space, Tenant oder Server wechseln"
   },
   "switcher_add_server": {
     "en": "Add server",

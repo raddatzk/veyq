@@ -191,6 +191,10 @@ first in each of its scrolls — `LocalNodeHero.current(inset)` (Android) / `Nod
   actions there take `.automatic` (`Bar.actions`). A Mac also draws a `Menu` as its own grey pop-up whatever its
   button style: a filled one is drawn in its label, with `.menuStyle(.button)` and `.buttonStyle(.plain)` (the
   sidebar's New), and `toolbarTitleMenu` shows no chevron there, so the switcher was not found (owner 2026-11-10).
+- iOS 26 groups neighbouring toolbar items in one glass capsule: a segmented control beside back sat nested in back's
+  (owner 2026-11-10). A control with a capsule of its own takes `.sharedBackgroundVisibility(.hidden)` and a
+  `ToolbarSpacer(.fixed)` before it. A `.principal` item on an iPad takes the inline title's place but leaves its
+  subtitle under it, a second time below the large title: the places' control sits `.topBarLeading` there.
 - `VeyqCore` has arm64 slices only, so `apple/project.yml` sets `ARCHS: arm64`; without it a Release build (what
   `xcodebuild -target` builds) asks Kotlin's Xcode hook for x86_64 and fails with "Xcode Requested Architecture Not
   Configured in Gradle".

@@ -12,6 +12,13 @@ import kotlin.test.assertTrue
 /** What the shell says, finds and creates, both apps' once (ADR 0127); the two had drifted on two tab words. */
 class ShellWordsTest {
     @Test
+    fun the_switcher_names_the_tenant_under_a_space_unless_it_is_the_tenants_own() {
+        assertEquals("veyq.localhost", ShellWords.switcherSubtitle(SpaceRef("t", "TENANT", "Familie"), "Familie", "veyq.localhost"))
+        assertEquals("Familie · veyq.localhost", ShellWords.switcherSubtitle(SpaceRef("p", "PERSONAL", "Personal"), "Familie", "veyq.localhost"))
+        assertEquals("Familie · veyq.localhost", ShellWords.switcherSubtitle(null, "Familie", "veyq.localhost"))
+    }
+
+    @Test
     fun a_space_is_named_by_its_kind_else_its_name_and_none_is_home() {
         assertEquals(Piece.Said(Notice(Msg.DRAWER_HOME)), ShellWords.space(null))
         assertEquals(Piece.Said(Notice(Msg.SPACE_PERSONAL)), ShellWords.space(SpaceRef("s", "PERSONAL", "x")))

@@ -173,6 +173,7 @@ fun ShellScreen(s: Screen.Signed, model: AppModel) {
             // the modal drawer opens as a list does
             onOpen = { closeDrawerThen { if (wide) model.openAtTop(it) else model.open(it) } },
             onSwitch = { account, tenant -> closeDrawerThen { model.switchTo(account, tenant) } },
+            onSpace = { closeDrawerThen { model.switchSpace(it) } },
             onAddServer = { closeDrawerThen { model.openManage() } },
             onNew = { kind -> closeDrawerThen { model.requestNew(kind) } },
             permanent = wide,
@@ -204,7 +205,8 @@ fun ShellScreen(s: Screen.Signed, model: AppModel) {
                                 }
                                 shell.application != null -> Text(appName(shell.application!!), fontWeight = androidx.compose.ui.text.font.FontWeight.Bold)
                                 shell.folder != null -> Text(shell.folder!!.name, fontWeight = androidx.compose.ui.text.font.FontWeight.Bold)
-                                else -> SpaceSwitcher(s, model::switchSpace)
+                                // the space's name; its switcher is the drawer's, with the tenants (owner 2026-11-10)
+                                else -> Text(spaceName(s.space), fontWeight = androidx.compose.ui.text.font.FontWeight.Bold)
                             }
                         },
                         colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.background),
@@ -304,28 +306,6 @@ private const val EXPANDED_WIDTH_DP = 840
 
 /** One place of the bar: a tab of the chosen application, or Search. */
 private class Place(val selected: Boolean, val onClick: () -> Unit, val icon: ImageVector, val label: String)
-
-/** Home's title: the shown space, and the switcher to the member's other spaces (owner 2026-11-08: in Home's title). */
-@Composable
-private fun SpaceSwitcher(s: Screen.Signed, onSwitch: (String) -> Unit) {
-    var open by remember { mutableStateOf(false) }
-    Box {
-        androidx.compose.material3.TextButton(onClick = { open = true }, contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 4.dp)) {
-            Text(spaceName(s.space), style = MaterialTheme.typography.titleLarge, fontWeight = androidx.compose.ui.text.font.FontWeight.Bold, color = MaterialTheme.colorScheme.onSurface)
-            Icon(Icons.Filled.ArrowDropDown, stringResource(R.string.space_switch), tint = MaterialTheme.colorScheme.onSurface)
-        }
-        androidx.compose.material3.DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
-            for (space in s.spaces) {
-                androidx.compose.material3.DropdownMenuItem(
-                    text = { Text(spaceName(space)) },
-                    leadingIcon = { Icon(spaceIcon(space.kind), null, tint = role(LocalPalette.current.accent)) },
-                    trailingIcon = { if (space.scopeId == s.shell.space) Icon(Icons.Filled.Check, null) },
-                    onClick = { open = false; onSwitch(space.scopeId) },
-                )
-            }
-        }
-    }
-}
 
 @Composable
 internal fun spaceName(space: me.raddatz.veyq.mobile.navigation.SpaceRef?): String = piece(me.raddatz.veyq.mobile.navigation.ShellWords.space(space))
@@ -478,9 +458,17 @@ private fun FolderTile() {
     ) { Icon(Icons.Outlined.Folder, null, Modifier.size(18.dp), tint = role(palette.infoText)) }
 }
 
-/** The switcher at the drawer's top: the current tenant and server; every server's tenants, and adding a server. */
+/**
+ * The switcher at the drawer's top (owner 2026-11-10: spaces and tenants in one): the shown space, its tenant and server
+ * under it; the tenant's spaces first — a space chosen opens its Home —, then every server's tenants, and managing servers.
+ */
 @Composable
-private fun TenantSwitcher(s: Screen.Signed, onSwitch: (me.raddatz.veyq.mobile.session.VeyqAccount, me.raddatz.veyq.mobile.navigation.TenantRef) -> Unit, onAddServer: () -> Unit) {
+private fun Switcher(
+    s: Screen.Signed,
+    onSpace: (String) -> Unit,
+    onSwitch: (me.raddatz.veyq.mobile.session.VeyqAccount, me.raddatz.veyq.mobile.navigation.TenantRef) -> Unit,
+    onAddServer: () -> Unit,
+) {
     val palette = LocalPalette.current
     var open by remember { mutableStateOf(false) }
     Box {
@@ -491,12 +479,22 @@ private fun TenantSwitcher(s: Screen.Signed, onSwitch: (me.raddatz.veyq.mobile.s
         ) {
             TenantAvatar(s.tenant.name)
             Column(Modifier.weight(1f)) {
-                Text(s.tenant.name, fontWeight = androidx.compose.ui.text.font.FontWeight.Bold, color = role(palette.text), maxLines = 1)
-                Text(s.server, style = MaterialTheme.typography.bodySmall, color = role(palette.muted), maxLines = 1)
+                Text(spaceName(s.space), fontWeight = androidx.compose.ui.text.font.FontWeight.Bold, color = role(palette.text), maxLines = 1)
+                Text(me.raddatz.veyq.mobile.navigation.ShellWords.switcherSubtitle(s.space, s.tenant.name, s.server), style = MaterialTheme.typography.bodySmall, color = role(palette.muted), maxLines = 1)
             }
             Icon(Icons.Filled.UnfoldMore, stringResource(R.string.switcher_open), tint = role(palette.muted))
         }
         androidx.compose.material3.DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
+            Text(s.tenant.name, style = VeyqType.sectionLabel, color = role(palette.muted), modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp))
+            for (space in s.spaces) {
+                androidx.compose.material3.DropdownMenuItem(
+                    text = { Text(spaceName(space)) },
+                    leadingIcon = { Icon(spaceIcon(space.kind), null, tint = role(palette.accent)) },
+                    trailingIcon = { if (space.scopeId == s.shell.space) Icon(Icons.Filled.Check, null) },
+                    onClick = { open = false; onSpace(space.scopeId) },
+                )
+            }
+            HorizontalDivider()
             for (server in s.servers) {
                 Text(server.label, style = VeyqType.sectionLabel, color = role(palette.muted), modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp))
                 for (tenant in server.tenants) {
@@ -538,6 +536,8 @@ private fun Drawer(
     onChoose: (ApplicationId?) -> Unit,
     onOpen: (ObjectRef) -> Unit,
     onSwitch: (me.raddatz.veyq.mobile.session.VeyqAccount, me.raddatz.veyq.mobile.navigation.TenantRef) -> Unit,
+    /** A space chosen in the switcher: its Home. */
+    onSpace: (String) -> Unit,
     onAddServer: () -> Unit,
     /** The sidebar's "New": what a level creates ("folder", "pot"), opened on Home. */
     onNew: (String) -> Unit,
@@ -553,7 +553,7 @@ private fun Drawer(
         Column(Modifier.fillMaxSize()) {
             Column(Modifier.weight(1f).verticalScroll(rememberScrollState()).padding(horizontal = 14.dp)) {
                 Brand(Modifier.padding(start = 8.dp, top = 20.dp, bottom = 14.dp))
-                TenantSwitcher(s, onSwitch, onAddServer)
+                Switcher(s, onSpace, onSwitch, onAddServer)
                 Spacer(Modifier.height(12.dp))
                 // the web's sidebar "New": what a level creates, opened on Home
                 var newMenu by remember { mutableStateOf(false) }

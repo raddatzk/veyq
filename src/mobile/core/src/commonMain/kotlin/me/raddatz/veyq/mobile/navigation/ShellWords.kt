@@ -14,6 +14,13 @@ object ShellWords {
         else -> Piece.Plain(space.name)
     }
 
+    /**
+     * The line under the switcher's space (owner 2026-11-10: spaces and tenants in one switcher): the tenant and the
+     * server; the server alone under the tenant's own space, which bears the tenant's name already.
+     */
+    fun switcherSubtitle(space: SpaceRef?, tenant: String, server: String): String =
+        if (space?.kind == "TENANT") server else "$tenant · $server"
+
     /** Search's hits: the objects whose name holds the query, any case; none for a blank query. */
     fun search(objects: List<ObjectRef>, query: String): List<ObjectRef> {
         val q = query.trim()

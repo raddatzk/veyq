@@ -26,12 +26,14 @@ two apps, and a store listing, review and signing setup per app for one maintain
    An application the operator or the tenant owner switched off ([ADR 0088](0088-the-capability-register-is-a-tree-switched-by-operator-and-tenant.md))
    is absent from the navigation, as it is from the web's.
 
-2. **The drawer chooses what the app is in.** At its top the **switcher**: the current tenant and its server, and
-   behind it every server the app is signed in to with the tenants the account holds there (owner 2026-11-08: one
+2. **The drawer chooses what the app is in.** At its top the **switcher**, spaces and tenants in one (owner
+   2026-11-10: a space is switched more often than a tenant): the shown space, its tenant and server under it (the
+   server alone under the tenant's own space); behind it first the tenant's spaces — a space chosen opens its Home —,
+   then every server the app is signed in to with the tenants the account holds there (owner 2026-11-08: one
    server can give several tenants, and the app connects to several servers), and **Manage servers**: a page of its
    own to add a server, sign out of one, and show or hide tenants and spaces. Hiding is the member's view on this
    device only — like Recent (decision 6) never synced, never sent, ids only: a hidden tenant leaves the switcher, a
-   hidden space leaves the whole app (Home's space switcher, the applications' lists, Favorites, Recent, Search); the
+   hidden space leaves the whole app (the switcher's spaces, the applications' lists, Favorites, Recent, Search); the
    current tenant and a tenant's last visible space cannot be hidden. Below the switcher **New** (create, in the
    application last used or one chosen), **Home**, the member's **Favorites**, **Recent**, then the applications, then
    settings. The drawer is a list, so it holds any number of applications. On a wide screen (iPad, Mac, a large
@@ -40,9 +42,8 @@ two apps, and a store listing, review and signing setup per app for one maintain
 3. **Home is one space's tree,** as the web's level view shows it (owner 2026-11-08): the folders, then the objects
    of every application side by side, the folders apart from the rest — each group under its heading, Folders and
    Contents, where both are there (the web's level groups, owner 2026-11-10); a folder opens in place, back goes up.
-   Its **space switcher is Home's title** — iOS' own title menu, Android's top-bar menu, and on an iPad's and a Mac's
-   split view the title as a menu button with its chevron, since their title shows no menu of its own (owner
-   2026-11-10) —, since it only matters there. Its **filters sit at the top** (All,
+   Its title is the space's name; the space is switched in the drawer's switcher (decision 2), no longer from the
+   title (owner 2026-11-10: a title menu was not found on an iPad and a Mac). Its **filters sit at the top** (All,
    then each application left on, the web's level tabs; the folders stay in every filter), not in the bar, which
    would run out of places as applications come. **Depot has no drawer entry:** its files are what Home's folders
    hold, so a flat list of them across spaces would be Home without the folders.
