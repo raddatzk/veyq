@@ -17,6 +17,9 @@ public partial class App : Application
         System.AppDomain.CurrentDomain.UnhandledException += (_, e) => Log.Write($"unhandled exception: {e.ExceptionObject}");
         TaskScheduler.UnobservedTaskException += (_, e) => Log.Write($"unobserved task exception: {e.Exception}");
         InitializeComponent();
+        // the whole app's, not only the window's: a brush a screen looks up in code (a caption's secondary text) is the
+        // application theme's, and under the window's theme alone it stayed light's on a dark window (measured)
+        if (DebugEnv.Theme != ElementTheme.Default) RequestedTheme = DebugEnv.Theme == ElementTheme.Dark ? ApplicationTheme.Dark : ApplicationTheme.Light;
     }
 
     protected override void OnLaunched(LaunchActivatedEventArgs args)

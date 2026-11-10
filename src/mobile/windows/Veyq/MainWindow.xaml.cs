@@ -1,5 +1,6 @@
-// The window and its faces. Today one: what shows while the core opens, refuses, or says where its session is
-// (Phase 3 of cr-the-windows-app-over-the-native-core; the sign-in and the shell are Phase 4's).
+// The window and its faces (cr-the-windows-app-over-the-native-core, Phase 4): what shows while the core opens or
+// refuses, the sign-in, or the shell — the screen the core's session says. Each screen draws the core's state and calls
+// its actions; nothing else. Linux's main.rs, in WinUI.
 using System;
 using System.IO;
 using Microsoft.UI.Xaml;
@@ -11,6 +12,9 @@ namespace Veyq;
 public sealed partial class MainWindow : Window
 {
     private Watch? _session;
+    private Watch? _shellWatch;
+    private SignInView? _signIn;
+    private ShellView? _shell;
 
     public MainWindow()
     {
@@ -58,25 +62,65 @@ public sealed partial class MainWindow : Window
                 return;
         }
         Log.Write("the core started");
-        _session = Core.Watch(new Watched.Session(), Show, e => Log.Write(e.Message));
-        if (_session is null)
+        _session = Core.Watch(new Watched.Session(), ShowGate, e => Log.Write(e.Message));
+        _shellWatch = Core.Watch(new Watched.Shell(), ShellUpdate, e => Log.Write(e.Message));
+        if (_session is null || _shellWatch is null)
         {
-            Log.Write("the core refused to show the session");
+            Log.Write("the core refused to show the session or the shell");
             return;
         }
-        var answer = await Core.CallAsync(new Call.SessionStart());
-        if (answer is not Answer.Done) Log.Write($"the start answered {answer.GetType().Name}");
+        // the way in, once per process: the trusted accounts resume, or the sign-in shows
+        try
+        {
+            var answer = await Core.CallAsync(new Call.SessionStart());
+            if (answer is not Answer.Done) Log.Write($"the start answered {answer.GetType().Name}");
+        }
+        catch (UnreadableException e)
+        {
+            Log.Write($"the start: {e.Message}");
+        }
     }
 
-    private void Show(Update update)
+    private void Face(UIElement? face)
+    {
+        Opening.Visibility = face is null ? Visibility.Visible : Visibility.Collapsed;
+        Faces.Visibility = face is null ? Visibility.Collapsed : Visibility.Visible;
+        if (!ReferenceEquals(Faces.Content, face)) Faces.Content = face;
+    }
+
+    private void ShowGate(Update update)
     {
         if (update is not Update.Session { gate: var gate }) return;
         Log.Write($"session {gate.GetType().Name}");
-        Status.Text = gate switch
+        switch (gate)
         {
-            Gate.Starting => Words.Starting(),
-            Gate.SignIn => Words.SigninTitle(),
-            _ => Status.Text,
-        };
+            case Gate.Starting:
+                Status.Text = Words.Starting();
+                Face(null);
+                break;
+            case Gate.SignIn signIn:
+                if (!signIn.working && signIn.error is null && DevLogin.Take() is { } call) Act.Send(call);
+                _signIn ??= new SignInView();
+                _signIn.Show(signIn);
+                Face(_signIn.Page);
+                break;
+            case Gate.Signed signed:
+                _shell ??= new ShellView();
+                _shell.Switching(signed.switching);
+                Face(_shell.Page);
+                break;
+            default:
+                // neither reaches this slice: no share extension (NeedsApp), no trusted device yet (Unlock); said in the
+                // log, the window stays where it is
+                Log.Write($"the session is at a gate this slice does not draw: {gate.GetType().Name}");
+                break;
+        }
+    }
+
+    private void ShellUpdate(Update update)
+    {
+        if (update is not Update.Shell { state: { } state, shown: { } shown }) return;
+        _shell ??= new ShellView();
+        _shell.Show(state, shown);
     }
 }

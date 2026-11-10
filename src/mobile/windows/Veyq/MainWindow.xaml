@@ -5,12 +5,16 @@
   <Window.SystemBackdrop>
     <MicaBackdrop />
   </Window.SystemBackdrop>
+  <!-- The window's three faces, one shown at a time: what shows while the core opens or refuses, the sign-in, the shell
+       (MainWindow.xaml.cs puts the last two in Faces). -->
   <Grid x:Name="Root">
-    <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center" Spacing="8">
+    <StackPanel x:Name="Opening" HorizontalAlignment="Center" VerticalAlignment="Center" Spacing="8">
       <TextBlock x:Name="Heading" AutomationProperties.AutomationId="heading" HorizontalAlignment="Center"
                  Style="{StaticResource TitleTextBlockStyle}" />
       <TextBlock x:Name="Status" AutomationProperties.AutomationId="status" HorizontalAlignment="Center"
                  TextWrapping="Wrap" MaxWidth="480" TextAlignment="Center" />
     </StackPanel>
+    <ContentControl x:Name="Faces" HorizontalContentAlignment="Stretch" VerticalContentAlignment="Stretch"
+                    Visibility="Collapsed" />
   </Grid>
 </Window>

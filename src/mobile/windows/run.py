@@ -27,12 +27,16 @@ Verbs:
                              the DLL and of Veyq.Tests against the app's .pri — the words in English and German, money and
                              days in two cultures, sizes in the host's — each an x64 process (`--arch x64`; an ARM64 host
                              runs it under emulation with the x64 .NET runtime).
-  run [--width W --height H] builds the app as `build` does (without its tests), stops a running one, puts it in
+  run [--width W --height H] [--devlogin]
+                             builds the app as `build` does (without its tests), stops a running one, puts it in
                              `<dir>\app` and starts it in the logged-on session through the scheduled task `veyq-app`
                              (Veyq.Drive's launch); W × H resizes its window. Then it holds the tunnel to the backend
                              (`ssh -R`, VEYQ_LIVE's port, default http://veyq.localhost:8080) until it is ended (Ctrl+C);
                              the app keeps running. A debug build reads VEYQ_THEME (light, dark) and VEYQ_LANGUAGE (en-US,
-                             de-DE) from this host's environment.
+                             de-DE) from this host's environment. `--devlogin` hands the debug build the seeded
+                             principal of the env file (VEYQ_ENV_FILE, else `.run/.env`) as VEYQ_DEV_*, inside the
+                             launch file Veyq.Drive deletes on reading — never on a command line —, and it signs in
+                             through its own sign-in once (DevLogin.cs).
   drive <step>...            runs Veyq.Drive's steps (its Program.cs: tree, invoke, select, set, key, size, maximize,
                              wait, sleep, shot) against the running app through the scheduled task `veyq-drive`, and
                              prints the app's log first, then what each step saw. `shot <name>.png` lands in
@@ -446,8 +450,11 @@ def launch(env: dict[str, str]) -> int:
     local.write_text(json.dumps({"exe": str(REMOTE_APP / f"{APP_NAME}.exe"), "env": env}))
     powershell(f"New-Item -ItemType Directory -Force -Path {ps_quote(str(REMOTE_RUN))} | Out-Null; "
                f"Remove-Item -Force -ErrorAction SilentlyContinue -Path {ps_quote(str(started))}", quiet=True)
-    copy_to([local], REMOTE_RUN)
-    local.unlink()
+    try:
+        copy_to([local], REMOTE_RUN)
+    finally:
+        # it may hold the dev principal (--devlogin): never left behind here
+        local.unlink(missing_ok=True)
     code = run_task("veyq-app", started, 30)
     if code == 0:
         print("the app runs in the logged-on session", flush=True)
@@ -457,7 +464,22 @@ def launch(env: dict[str, str]) -> int:
     return code
 
 
-def run_app(width: int | None, height: int | None) -> int:
+def dev_principal(live: str) -> dict[str, str]:
+    """The seeded dev principal as the debug build's VEYQ_DEV_* (Linux's and DevLogin.swift's names): the server is
+    [live], the rest the env file's (VEYQ_ENV_FILE, else `.run/.env`). Nothing of it is printed; it reaches the Windows
+    host only inside the launch file, which Veyq.Drive deletes on reading."""
+    values: dict[str, str] = {}
+    for line in env_file().read_text().splitlines():
+        if "=" in line and not line.lstrip().startswith("#"):
+            k, v = line.split("=", 1)
+            values[k.strip()] = v.strip().strip('"').strip("'")
+    return {"VEYQ_DEV_SERVER": live, "VEYQ_DEV_EMAIL": values["VEYQ_EMAIL"], "VEYQ_DEV_PASSWORD": values["VEYQ_PASSWORD"],
+            "VEYQ_DEV_SECRET_KEY": values["VEYQ_SECRET_KEY"]}
+
+
+def run_app(width: int | None, height: int | None, devlogin: bool = False) -> int:
+    live_origin = os.environ.get("VEYQ_LIVE", "http://veyq.localhost:8080")
+    secrets = dev_principal(live_origin) if devlogin else {}
     dll = generate()
     for project in PROJECTS:
         dotnet("restore", "--locked-mode", project)
@@ -474,7 +496,7 @@ def run_app(width: int | None, height: int | None) -> int:
     ))
     if code != 0:
         return code
-    env = {k: os.environ[k] for k in ("VEYQ_THEME", "VEYQ_LANGUAGE") if os.environ.get(k)}
+    env = {k: os.environ[k] for k in ("VEYQ_THEME", "VEYQ_LANGUAGE") if os.environ.get(k)} | secrets
     code = launch(env)
     if code != 0:
         return code
@@ -482,7 +504,7 @@ def run_app(width: int | None, height: int | None) -> int:
         code = drive([f"size {width} {height}"])
         if code != 0:
             return code
-    forward, live = live_forward(os.environ.get("VEYQ_LIVE", "http://veyq.localhost:8080"))
+    forward, live = live_forward(live_origin)
     print(f"veyq: the tunnel to {live} is held until this ends (Ctrl+C); the app keeps running", flush=True)
     try:
         return subprocess.run(ssh_base(forward) + ["-N"]).returncode
@@ -570,6 +592,7 @@ def main() -> None:
     r = verbs.add_parser("run", help="build the app, start it in the Windows host's logged-on session, hold the tunnel")
     r.add_argument("--width", type=int)
     r.add_argument("--height", type=int)
+    r.add_argument("--devlogin", action="store_true", help="sign the debug build in as the seeded principal of the env file")
     d = verbs.add_parser("drive", help="drive the running app by UI Automation (Veyq.Drive's steps) and print what it saw")
     d.add_argument("steps", nargs="+", help="each a step: tree, invoke <id>, select <id>, set <id> <text>, key <keys>, "
                                             "size <w> <h>, maximize, wait <id> [s], sleep <ms>, shot <name>.png")
@@ -582,7 +605,7 @@ def main() -> None:
     if args.verb == "build":
         sys.exit(build())
     if args.verb == "run":
-        sys.exit(run_app(args.width, args.height))
+        sys.exit(run_app(args.width, args.height, args.devlogin))
     if args.verb == "drive":
         sys.exit(drive(args.steps))
     if args.verb == "register":

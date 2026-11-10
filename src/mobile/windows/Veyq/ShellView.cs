@@ -1,0 +1,412 @@
+// The shell (ADR 0122; cr-the-windows-app-over-the-native-core D7), Fluent's way, as Windows' own Settings and Explorer
+// draw theirs: a NavigationView whose pane is Left, LeftCompact or LeftMinimal by the window's width (its own
+// thresholds), holding the one switcher (spaces and tenants) as its header, Search as its AutoSuggestBox (Ctrl+E,
+// Ctrl+F), Home, Favorites, Recent and the applications as its items, and Settings at its foot. The content shows
+// what the core's shell says is open — Home, an application's list, a Pot, or an object this app does not draw yet —
+// under its title and a CommandBar whose first command is New.
+//
+// Every state is the core's (ShellModel.State and ShellShown); every action one call. Which item is selected, whether
+// back is enabled and what the title says follow the state, as Linux's shell.rs draws it.
+using System;
+using System.Collections.Generic;
+using System.Linq;
+using Microsoft.UI.Xaml;
+using Microsoft.UI.Xaml.Automation;
+using Microsoft.UI.Xaml.Controls;
+using Microsoft.UI.Xaml.Input;
+using Veyq.Bridge;
+using Veyq.Bridge.Wire;
+using ApplicationId = Veyq.Bridge.Wire.ApplicationId;
+using Windows.System;
+
+namespace Veyq;
+
+internal sealed class ShellView
+{
+    private readonly NavigationView _nav;
+    private readonly DropDownButton _switcher;
+    private readonly TextBlock _switcherTitle;
+    private readonly TextBlock _switcherSubtitle;
+    private readonly ProgressRing _switching;
+    private readonly AutoSuggestBox _search;
+    private readonly TextBlock _title;
+    private readonly CommandBar _commands;
+    private readonly ContentControl _body;
+    private readonly NavigationViewItem _settings;
+    private PotPage? _pot;
+    private IReadOnlyList<ObjectRef>? _hits;
+    private bool _started;
+    private bool _drawing;
+
+    public UIElement Page => _nav;
+
+    private static readonly Thickness Head = new(16, 8, 8, 4);
+    private static readonly Thickness MinimalHead = new(100, 8, 8, 4);
+
+    public ShellView()
+    {
+        _switcherTitle = new TextBlock { Style = (Style)Application.Current.Resources["BodyStrongTextBlockStyle"], TextTrimming = TextTrimming.CharacterEllipsis };
+        _switcherSubtitle = new TextBlock
+        {
+            Style = (Style)Application.Current.Resources["CaptionTextBlockStyle"],
+            Foreground = (Microsoft.UI.Xaml.Media.Brush)Application.Current.Resources["TextFillColorSecondaryBrush"],
+            TextTrimming = TextTrimming.CharacterEllipsis,
+        };
+        _switching = new ProgressRing { IsActive = false, Width = 16, Height = 16, Visibility = Visibility.Collapsed };
+        var label = new StackPanel();
+        label.Children.Add(_switcherTitle);
+        label.Children.Add(_switcherSubtitle);
+        var switcherContent = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8 };
+        switcherContent.Children.Add(label);
+        switcherContent.Children.Add(_switching);
+        _switcher = new DropDownButton
+        {
+            Content = switcherContent,
+            HorizontalAlignment = HorizontalAlignment.Stretch,
+            HorizontalContentAlignment = HorizontalAlignment.Left,
+            Margin = new Thickness(4, 0, 4, 0),
+        };
+        AutomationProperties.SetAutomationId(_switcher, "switcher");
+        AutomationProperties.SetName(_switcher, Words.SwitcherOpen());
+        ToolTipService.SetToolTip(_switcher, Words.SwitcherOpen());
+
+        _search = new AutoSuggestBox { PlaceholderText = Words.SearchHint(), QueryIcon = new SymbolIcon(Symbol.Find), UpdateTextOnSelect = false };
+        AutomationProperties.SetAutomationId(_search, "search");
+        AutomationProperties.SetName(_search, Words.TabSearch());
+        _search.TextChanged += (_, _) => Query(_search.Text);
+        _search.QuerySubmitted += (_, e) =>
+        {
+            // the box hands over the item or, chosen by a click, its content: both carry the hit
+            if (e.ChosenSuggestion is FrameworkElement { Tag: ObjectRef hit }) OpenHit(hit);
+            else if (e.ChosenSuggestion is not null) Log.Write($"a chosen hit reached no hit ({e.ChosenSuggestion.GetType().Name})");
+        };
+
+        // Settings at the foot, in the app's own words (the pane's built-in item says WinUI's); it does nothing yet, as
+        // on the other apps
+        _settings = new NavigationViewItem { Content = Words.DrawerSettings(), Icon = HomeView.Glyph(""), SelectsOnInvoked = false };
+        AutomationProperties.SetAutomationId(_settings, "settings");
+
+        _title = new TextBlock { Style = (Style)Application.Current.Resources["SubtitleTextBlockStyle"], TextTrimming = TextTrimming.CharacterEllipsis, VerticalAlignment = VerticalAlignment.Center };
+        AutomationProperties.SetAutomationId(_title, "title");
+        AutomationProperties.SetHeadingLevel(_title, Microsoft.UI.Xaml.Automation.Peers.AutomationHeadingLevel.Level1);
+        _commands = new CommandBar { DefaultLabelPosition = CommandBarDefaultLabelPosition.Right, IsDynamicOverflowEnabled = true, VerticalAlignment = VerticalAlignment.Center };
+        AutomationProperties.SetAutomationId(_commands, "commands");
+        var head = new Grid { Padding = Head, ColumnSpacing = 8 };
+        head.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+        head.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+        head.Children.Add(_title);
+        Grid.SetColumn(_commands, 1);
+        head.Children.Add(_commands);
+        _body = new ContentControl { HorizontalContentAlignment = HorizontalAlignment.Stretch, VerticalContentAlignment = VerticalAlignment.Stretch };
+        var content = new Grid();
+        content.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+        content.RowDefinitions.Add(new RowDefinition { Height = new GridLength(1, GridUnitType.Star) });
+        content.Children.Add(head);
+        Grid.SetRow(_body, 1);
+        content.Children.Add(_body);
+
+        _nav = new NavigationView
+        {
+            PaneDisplayMode = NavigationViewPaneDisplayMode.Auto,
+            IsSettingsVisible = false,
+            IsBackButtonVisible = NavigationViewBackButtonVisible.Auto,
+            PaneHeader = _switcher,
+            AutoSuggestBox = _search,
+            Content = content,
+            IsTitleBarAutoPaddingEnabled = false,
+            // no tooltip naming Ctrl+E pops up over the window whenever a key is pressed
+            KeyboardAcceleratorPlacementMode = KeyboardAcceleratorPlacementMode.Hidden,
+        };
+        AutomationProperties.SetAutomationId(_nav, "shell");
+        _nav.FooterMenuItems.Add(_settings);
+        // LeftMinimal lays back and the pane's button over the content's top left: the title moves beside them
+        _nav.DisplayModeChanged += (_, e) => head.Padding = e.DisplayMode == NavigationViewDisplayMode.Minimal ? MinimalHead : Head;
+        // A choice is a selection: a click, the keyboard or UI Automation's SelectionItem (a pane item has no Invoke)
+        // all select. ItemInvoked comes first, before the selection moves, so it acts only for the item already
+        // selected (Home again, out of a folder), which selects nothing new; a selection the state draws sends nothing.
+        _nav.ItemInvoked += (_, e) =>
+        {
+            if (ReferenceEquals(e.InvokedItemContainer, _nav.SelectedItem) && e.InvokedItemContainer?.Tag is Target target) Choose(target);
+        };
+        _nav.SelectionChanged += (_, e) =>
+        {
+            if (!_drawing && e.SelectedItemContainer?.Tag is Target target) Choose(target);
+        };
+        _nav.BackRequested += (_, _) => Act.Send(new Call.ShellBack());
+
+        // Ctrl+E and Ctrl+F focus Search, as in Explorer; a closed pane opens for it
+        foreach (var key in new[] { VirtualKey.E, VirtualKey.F })
+        {
+            var accelerator = new KeyboardAccelerator { Key = key, Modifiers = VirtualKeyModifiers.Control };
+            accelerator.Invoked += (_, e) =>
+            {
+                e.Handled = true;
+                FocusSearch();
+            };
+            _nav.KeyboardAccelerators.Add(accelerator);
+        }
+    }
+
+    /// <summary>What a pane item opens.</summary>
+    private abstract record Target
+    {
+        public sealed record Home : Target;
+
+        public sealed record Application(ApplicationId Id) : Target;
+
+        public sealed record Object(ObjectRef Ref) : Target;
+    }
+
+    private void Choose(Target target)
+    {
+        switch (target)
+        {
+            case Target.Home:
+                Act.Send(new Call.ShellChoose { application = null });
+                break;
+            case Target.Application a:
+                Act.Send(new Call.ShellChoose { application = a.Id });
+                break;
+            case Target.Object o:
+                // the pane beside the content opens a top-level destination, no back (Shell.openAtTop)
+                Act.Send(new Call.ShellOpenAtTop { Ref = o.Ref });
+                break;
+        }
+        ClosePaneIfOverlay();
+    }
+
+    private void ClosePaneIfOverlay()
+    {
+        if (_nav.DisplayMode != NavigationViewDisplayMode.Expanded) _nav.IsPaneOpen = false;
+    }
+
+    private void FocusSearch()
+    {
+        if (_nav.DisplayMode != NavigationViewDisplayMode.Expanded) _nav.IsPaneOpen = true;
+        _search.Focus(FocusState.Keyboard);
+    }
+
+    private void OpenHit(ObjectRef hit)
+    {
+        Act.Send(new Call.ShellOpenAtTop { Ref = hit });
+        // the query is done once its hit opened, as Explorer's box is
+        _search.Text = "";
+        _search.IsSuggestionListOpen = false;
+        ClosePaneIfOverlay();
+    }
+
+    /// <summary>Search over every object's name (ShellWords.search): its hits as the box's suggestions while a query stands.</summary>
+    private async void Query(string query)
+    {
+        if (string.IsNullOrWhiteSpace(query))
+        {
+            _hits = null;
+            _search.ItemsSource = null;
+            return;
+        }
+        Answer answer;
+        try
+        {
+            answer = await Core.CallAsync(new Call.SearchQuery { query = query });
+        }
+        catch (Exception e)
+        {
+            Log.Write($"Search failed ({e.GetType().Name})");
+            return;
+        }
+        // only the answer to the query still standing
+        if (_search.Text != query) return;
+        if (answer is not Answer.Hits { hits: var hits })
+        {
+            Log.Write($"Search answered {answer.GetType().Name}");
+            return;
+        }
+        _hits = hits;
+        DrawHits();
+    }
+
+    private void DrawHits()
+    {
+        var items = new List<ListViewItem>();
+        if (_hits is { Count: 0 })
+        {
+            var none = new ListViewItem { Content = Words.ListEmpty(), IsEnabled = false };
+            AutomationProperties.SetAutomationId(none, "hits-empty");
+            items.Add(none);
+        }
+        foreach (var h in _hits ?? [])
+        {
+            var line = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 12, Tag = h };
+            line.Children.Add(HomeView.Glyph(HomeView.KindGlyph(h.kind)));
+            line.Children.Add(new TextBlock { Text = h.name });
+            var item = new ListViewItem { Content = line, Tag = h };
+            AutomationProperties.SetAutomationId(item, $"hit:{h.name}");
+            AutomationProperties.SetName(item, h.name);
+            items.Add(item);
+        }
+        _search.ItemsSource = items;
+        // hits anew under the lists' change open no list the person is not in
+        _search.IsSuggestionListOpen = items.Count > 0 && _search.FocusState != FocusState.Unfocused;
+    }
+
+    /// <summary>A switch to another tenant is under way (Gate.Signed.switching).</summary>
+    public void Switching(bool on)
+    {
+        _switching.IsActive = on;
+        _switching.Visibility = on ? Visibility.Visible : Visibility.Collapsed;
+        _switcher.IsEnabled = !on;
+    }
+
+    /// <summary>Draws the core's shell: <paramref name="state"/> with what the core says it shows beside it.</summary>
+    public void Show(ShellModelState state, ShellShown shown)
+    {
+        var first = !_started;
+        _started = true;
+        DrawSwitcher(state, shown);
+        DrawPane(state, shown);
+        DrawContent(state, shown);
+        // the lists changed under a standing query: its hits anew
+        if (_hits is not null && _search.Text.Length > 0) Query(_search.Text);
+        if (first && shown.drawerOpensAtStart && _nav.DisplayMode != NavigationViewDisplayMode.Expanded) _nav.IsPaneOpen = true;
+    }
+
+    /// <summary>The switcher: the space shown and its tenant and server; the spaces, then each server's tenants in its
+    /// menu, then Manage servers (not in this slice: shown, as on the other apps, and not offered yet).</summary>
+    private void DrawSwitcher(ShellModelState state, ShellShown shown)
+    {
+        _switcherTitle.Text = Said.Piece(shown.spaceName);
+        _switcherSubtitle.Text = shown.switcherSubtitle;
+        var menu = new MenuFlyout { Placement = Microsoft.UI.Xaml.Controls.Primitives.FlyoutPlacementMode.BottomEdgeAlignedLeft };
+        foreach (var s in shown.spaces)
+        {
+            var name = Said.Piece(s.name);
+            var item = new RadioMenuFlyoutItem { Text = name, GroupName = "space", IsChecked = s.space.scopeId == state.shell.space };
+            AutomationProperties.SetAutomationId(item, $"space:{name}");
+            var scope = s.space.scopeId;
+            item.Click += (_, _) =>
+            {
+                Act.Send(new Call.ShellSwitchSpace { scopeId = scope });
+                ClosePaneIfOverlay();
+            };
+            menu.Items.Add(item);
+        }
+        foreach (var server in shown.servers)
+        {
+            menu.Items.Add(new MenuFlyoutSeparator());
+            foreach (var t in server.tenants)
+            {
+                var current = server.connection == shown.connection && t.tenantId == shown.tenant.tenantId;
+                var item = new RadioMenuFlyoutItem { Text = t.name, GroupName = "tenant", IsChecked = current };
+                ToolTipService.SetToolTip(item, server.label);
+                AutomationProperties.SetAutomationId(item, $"tenant:{t.name}");
+                var (connection, tenant) = (server.connection, t.tenantId);
+                item.Click += (_, _) =>
+                {
+                    if (!current) Act.Send(new Call.SessionSwitchTo { connection = connection, tenantId = tenant });
+                };
+                menu.Items.Add(item);
+            }
+        }
+        menu.Items.Add(new MenuFlyoutSeparator());
+        var manage = new MenuFlyoutItem { Text = Words.SwitcherManage(), IsEnabled = false };
+        AutomationProperties.SetAutomationId(manage, "switcher-manage");
+        menu.Items.Add(manage);
+        _switcher.Flyout = menu;
+    }
+
+    private NavigationViewItem Item(string text, string glyph, string automationId, Target? target)
+    {
+        var item = new NavigationViewItem { Content = text, Icon = HomeView.Glyph(glyph), Tag = target, IsEnabled = target is not null };
+        AutomationProperties.SetAutomationId(item, automationId);
+        return item;
+    }
+
+    private void DrawPane(ShellModelState state, ShellShown shown)
+    {
+        var shell = state.shell;
+        bool Opened(ObjectRef r) => shell.openObject is { } o && o.scopeId == r.scopeId && o.nodeId == r.nodeId;
+        var items = new List<object>();
+        NavigationViewItem? selected = null;
+        void Add(NavigationViewItem item, bool chosen)
+        {
+            items.Add(item);
+            if (chosen) selected = item;
+        }
+
+        Add(Item(Words.DrawerHome(), "", "home", new Target.Home()), shown.isHome);
+        foreach (var (title, refs, prefix) in new[] { (Words.DrawerFavorites(), state.lists.drawer.favorites, "favorite"), (Words.DrawerRecent(), state.lists.drawer.recent, "recent") })
+        {
+            items.Add(new NavigationViewItemHeader { Content = title });
+            if (refs.Count == 0) Add(Item(Words.DrawerNothingYet(), "", $"{prefix}-none", null), false);
+            foreach (var r in refs) Add(Item(r.name, HomeView.KindGlyph(r.kind), $"{prefix}:{r.name}", new Target.Object(r)), Opened(r));
+        }
+        items.Add(new NavigationViewItemHeader { Content = Words.DrawerApplications() });
+        foreach (var app in state.lists.applications)
+        {
+            var chosen = shell.application == app && shell.openObject is null;
+            Add(Item(HomeView.AppName(shown, app), HomeView.AppGlyph(app), $"app:{HomeView.WireName(app)}", new Target.Application(app)), chosen);
+        }
+        _drawing = true;
+        try
+        {
+            _nav.MenuItemsSource = items;
+            _nav.SelectedItem = selected;
+        }
+        finally
+        {
+            _drawing = false;
+        }
+    }
+
+    private void DrawContent(ShellModelState state, ShellShown shown)
+    {
+        var shell = state.shell;
+        // the title as every app heads the screen: the open object, the chosen application, the folder, the space
+        _title.Text = shell.openObject is { } open ? open.name
+            : shell.application is { } app ? HomeView.AppName(shown, app)
+            : shell.path.Count > 0 ? shell.path[^1].name
+            : Said.Piece(shown.spaceName);
+        _nav.IsBackEnabled = shown.canGoBack;
+
+        // New: what the level offers (AppKinds.drawerCreates), none of which this slice creates yet
+        _commands.PrimaryCommands.Clear();
+        if (shown.creates.Count > 0)
+        {
+            _commands.PrimaryCommands.Add(CreateAction.Menu(Words.DrawerNew(), "new",
+                shown.creates.Select(w => (Said.Key(w), $"new:{w}", (Action)(() => { })))));
+        }
+
+        UIElement body;
+        if (shell.openObject is { kind: "EXPENSES_POT" } pot)
+        {
+            if (_pot is null || _pot.Ref != pot)
+            {
+                _pot?.Dispose();
+                _pot = new PotPage(pot);
+            }
+            _pot.Places(shown.tabs, shown.selectedTab);
+            body = _pot.Page;
+        }
+        else
+        {
+            _pot?.Dispose();
+            _pot = null;
+            body = shell.openObject is { } other ? NotBuilt(other)
+                : shell.application is not null ? HomeView.List(shown.list)
+                : HomeView.Home(state, shown);
+        }
+        if (!ReferenceEquals(_body.Content, body)) _body.Content = body;
+    }
+
+    private static UIElement NotBuilt(ObjectRef o)
+    {
+        var column = new StackPanel { Spacing = 12, HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Center, Padding = new Thickness(24) };
+        var glyph = HomeView.Glyph(HomeView.KindGlyph(o.kind));
+        glyph.FontSize = 48;
+        column.Children.Add(glyph);
+        var text = new TextBlock { Text = Words.NotBuilt(), TextWrapping = TextWrapping.Wrap, TextAlignment = TextAlignment.Center };
+        AutomationProperties.SetAutomationId(text, "not-built");
+        column.Children.Add(text);
+        return column;
+    }
+}
