@@ -5,7 +5,7 @@ status: planned
 satisfies: []
 adrs: ["0127", "0123", "0122", "0125"]
 invariants:
-  - the suite on Windows meets contracts/crypto/vectors/v1.json with zero failures, every one of its 172 cases, as Apple's and Linux's do; no primitive is written for Windows
+  - the suite on Windows is libsodium's and meets contracts/crypto/vectors/v1.json with zero failures, every one of its 172 cases, as Apple's and Linux's do; no primitive is written for Windows
   - every rule stays the core's — the bridge only carries; the C# app holds drawing and the device, nothing else (ADR 0127 decision 1)
   - the bridge stays one — bridge.h, the wire and the dispatch unchanged for Windows; the C# types are generated from the core's models, never committed or written by hand (ADR 0127 decision 5)
   - no word in the C# app but from src/mobile/words/words.json, no colour but from the web's tokens (ADR 0127 decision 3, ADR 0123 decision 7)
@@ -50,7 +50,8 @@ side shows Home (folder and contents groups, its filters), an application's list
 
 Throwaway edits of `src/mobile/{core,bridge}` (a `mingwX64()` target, the Linux `actual`s copied to `mingwMain`,
 `ktor-client-winhttp` 3.6.1, `--write-verification-metadata sha256`), reverted afterwards; nothing of it is committed.
-The VM was only read, but for W4/W5's test binaries, run from a scratch directory on `F:` that was deleted after.
+The VM was only read, but for W4/W5's test binaries, run from a scratch directory on `F:` that was deleted after
+(W5 ran after the owner had updated the VM to 26H2, 26300.9711, and after O1–O3).
 
 | # | Question | Command / setup | Result |
 |---|---|---|---|
@@ -58,7 +59,7 @@ The VM was only read, but for W4/W5's test binaries, run from a scratch director
 | W2 | libsodium and utf8proc for mingw, with K/N's own clang? | libsodium 1.0.22 from the pinned tarball (its SHA-256 matched `build_libsodium.py`'s), `./configure --host=x86_64-w64-mingw32` with `CC=<K/N llvm>/clang`, `AR=llvm-ar`, **`RANLIB="llvm-ar s"`** (K/N's LLVM has no `llvm-ranlib`), `--target=x86_64-w64-mingw32 --sysroot=<msys2 toolchain>`; utf8proc 2.11.3's one C file the same way | libsodium in 40 s, 137 objects, ML-KEM-768 headers present; libtool names it `libsodium.lib` (renamed to `.a` for cinterop). utf8proc: one object, 350 KB. |
 | W3 | The bridge DLL: does it link, what does it import and export? | `:bridge:linkReleaseSharedMingwX64` with Linux's `-Wl,--exclude-libs,ALL`, then without; `objdump -p veyq.dll` | With the flag: `lld: error: unknown argument: --exclude-libs` (ELF only). Without: `veyq.dll` 11.4 MB; imports only `KERNEL32`, `ADVAPI32`, `WINHTTP`, `msvcrt` (no runtime to install). Exports **541** symbols: the six `veyq_*` and `veyq_symbols`, and libsodium's (`crypto_*`, `sodium_*`), utf8proc's, winpthreads' and the unwinder's. |
 | W4 | Does the suite run on the VM under x64 emulation? | `test.exe --ktest_negative_gradle_filter=*Conformance*,*Live*` with `VEYQ_VECTORS` | **166 tests, 0 failures, 0.8 s.** |
-| W5 | And the conformance? | `test.exe --ktest_filter=*LibsodiumConformanceTest*`; then a 600 KB C probe against the mingw `libsodium.a` | Both cases red: `LibsodiumPrimitives` refuses to initialise. The probe: `sodium_init=0 aesni=1 pclmul=1 avx=0 avx2=0 sse41=1 aes256gcm=0`. libsodium's AES-256-GCM needs **AES-NI, PCLMUL and AVX** (`aead_aes256gcm_aesni.c:1013`), and Prism shows this x64 process no AVX. → D3, Q1. |
+| W5 | And the conformance? | `test.exe --ktest_filter=*LibsodiumConformanceTest*`; a C probe against the mingw `libsodium.a` (`sodium_runtime_has_*`, `crypto_aead_aes256gcm_is_available`); a second probe reading `cpuid`, `xgetbv` and `IsProcessorFeaturePresent` itself; libsodium rebuilt with `-mxsave` | First red: `LibsodiumPrimitives` refused to start, the probe said `avx=0 aes256gcm=0` — libsodium's AES-256-GCM needs **AES-NI, PCLMUL and AVX** (`aead_aes256gcm_aesni.c:1013`). The same on 26100.4349, 26200.9711 and 26300.9711. But Prism **does** show AVX: CPUID leaf 1 AVX, OSXSAVE, FMA, F16C, leaf 7 AVX2/BMI1/BMI2, `xgetbv(0)`=7, `PF_AVX`/`PF_AVX2` 1; the file's emulation settings offer "hide newer emulated CPU features", i.e. they are shown by default. The defect was **our build's**: libsodium reads XCR0 only through `HAVE__XGETBV` or `HAVE_AVX_ASM`; its `configure` refuses the second for Windows x64 by design and the first failed under clang (`'__builtin_ia32_xgetbv' needs target feature xsave`), so `has_avx` was 0 on **every** CPU, a real x64 PC's too. With **`-mxsave`** in `CFLAGS`: `checking if _xgetbv() is available... yes`, the probe `avx=1 avx2=1 aes256gcm=1`, and the whole suite **168 tests, 0 failures, 1.4 s — `libsodium conformance: 172 cases`**. → D2. |
 | W6 | How does the VM reach the dev backend? | `ssh -R 18181:127.0.0.1:8080 kevin@192.168.64.8` and, in that session, a raw `GET /api/setup` with `Host: veyq.localhost:8080` to `127.0.0.1:18181` | **200** with the setup JSON: unlike Fedora's sshd, the VM's allows remote forwarding (its `sshd_config` sets no `AllowTcpForwarding`). No forwarder on the Mac is needed. `veyq.localhost` does **not** resolve on Windows (`[Dns]::GetHostAddresses` fails; only `localhost` does). → D9. |
 | W7 | The VM itself | `Win32_OperatingSystem`, `Get-AppxPackage`, `Get-Command`, `winget search/show`, the registry | Windows 11 Home 10.0.26100 ARM64, 10 logical CPUs, 8 GB, C: 37.9 GB free, F: Dev Drive 54.5 GB free (trusted, Defender's filter attached). x64 emulation present (`xtajit64.dll`). Installed: Windows App Runtime **2.6.5** for ARM64, x86 and **x64**; VCLibs; .NET Framework 4.8.1 (release 533320); `tar.exe`; `UIAutomationClient` loads in PowerShell. Not installed: `dotnet`, `git`, Visual Studio, a real Python (`python.exe` is the Store stub). winget offers .NET SDK 10.0.404, Git 2.56.0.4. Display **1024 × 768** at 96 DPI; culture and UI culture **de-DE**; zone W. Europe Standard Time; apps light. Display off after 300 s, sleep after 900 s, screen saver on. LongPathsEnabled 0. |
 | W8 | Sessions | `Get-Process explorer`, `(Get-Process -Id $PID).SessionId` | The owner's desktop is session 1 (logged on, not locked: no `LogonUI`); an ssh command runs in **session 0**, which has no desktop — an app started from it shows nothing. → D9. |
@@ -76,7 +77,7 @@ NuGet's catalog); `Microsoft.Windows.SDK.BuildTools` 10.0.28000.2957 (2026-10-28
 intermediate source set **`bridgedMain`** (the targets reached through the bridge; `bridgedTest` beside it), as the
 Linux CR's D1 deferred to this one: `nfc`/`nfkd` over utf8proc and their `utf8proc` cinterop, `localWallClock` over
 kotlinx-datetime, `NormalizationTest` and `WallClockTest`. `linuxMain` keeps the Curl engine; `mingwMain` holds the
-WinHttp engine and D3's AES-GCM. In `:bridge`, `Exports.kt` moves to `bridgedMain` whole; the one difference — the
+WinHttp engine. In `:bridge`, `Exports.kt` moves to `bridgedMain` whole; the one difference — the
 engine — is an `expect` it calls (`linuxMain` Curl, `mingwMain` WinHttp). Kotlin's default hierarchy template is
 extended, not replaced (`applyDefaultHierarchyTemplate { common { group("bridged") { withLinux(); withMingw() } } }`
 or what 2.4.21 names for it — read the plugin, do not remember it). Commonized cinterop
@@ -86,24 +87,26 @@ green, not only each target's compile (the Linux CR's trap).
 **D2 — libsodium and utf8proc for mingw: Kotlin/Native's own clang, in the existing build scripts.** A `mingw_x64`
 slice in `build_libsodium.py` and `build_utf8proc.py`, built as W2 did, with `core/konan_toolchain.py` learning the
 mingw toolchain from `konan.properties` (`toolchainDependency.mingw_x64`, the target triple — never a spelled path).
-Its `RANLIB` is `llvm-ar s`; libtool's `libsodium.lib` is copied as `libsodium.a`. Both are compiled with their
-`*_STATIC` define, so their headers mark nothing `dllexport` (D5's export gate measures whether that is enough).
+Its `RANLIB` is `llvm-ar s`; libtool's `libsodium.lib` is copied as `libsodium.a`. **libsodium's `CFLAGS` carry
+`-mxsave`** (W5): without it its CPU detection never reads XCR0 on mingw, finds no AVX on any CPU and refuses AES-GCM.
+`-mxsave` only lets the compiler accept the `_xgetbv` intrinsic; it emits no XSAVE instruction of its own, and
+libsodium calls `_xgetbv` only after CPUID said OSXSAVE. The script fails the build if its `config.log` does not say
+`checking if _xgetbv() is available... yes` — the defect was silent, so its guard is the line that names it. Both
+libraries are compiled with their `*_STATIC` define, so their headers mark nothing `dllexport` (D5's export gate
+measures whether that is enough). **Trap (measured):** the `cinteropSodium*` task does not take the static library as
+an input, so a rebuilt `libsodium.a` left the old one inside the klib and the test binary red until
+`:core:cinteropSodiumMingwX64 --rerun`; the script's output is wired as the task's input, or the implementer says why
+not.
 
-**D3 — AES-256-GCM on Windows is Windows' own (CNG, `BCryptEncrypt`/`BCryptDecrypt` in GCM mode); every other primitive
-stays libsodium's.** W5: libsodium's AES-GCM needs AVX beside AES-NI, and Prism shows an x64 process none — so the
-x64 app would refuse to start on **every Windows-on-ARM PC**, not only on this VM, and on the x64 CPUs without AVX
-(low-end Atom/Celeron/Pentium Silver, remembered). CNG is in every Windows, maintained by Microsoft, accelerated where
-the CPU has it, correct where it has not; Kotlin/Native already links `bcrypt` for mingw (`linkerKonanFlags.mingw_x64
-… -lbcrypt`). It is not a primitive *we* write — the rule ADR 0127 decision 1 and the Pi 4 decision guard — but a
-platform's, as BouncyCastle is the JVM's; the vectors hold it as they hold BouncyCastle and libsodium. Shape:
-`LibsodiumPrimitives` takes its AES-GCM from a seam `nativeMain` declares (an `expect` or a constructor argument),
-libsodium's on Apple and Linux, CNG's on `mingwMain`; on Windows its start no longer checks
-`crypto_aead_aes256gcm_is_available`, so `veyq_init`'s `3` (no AES) cannot arise there. **This amends ADR 0127
-decision 5** ("the suite's primitives libsodium's") and is **owner question Q1**; until it is answered, Phase 1 builds
-nothing past W1–W5. Rejected: the VM's per-app "Show newer emulated CPU features" setting (makes this VM pass, leaves
-every user of a Windows-on-ARM PC to find a compatibility checkbox, and leaves AVX-less x64 refused); a software
-AES-GCM of our own (the Pi 4 decision's reason); OpenSSL for Windows (a second large C library in the DLL for one
-primitive the OS has).
+**D3 — Every primitive on Windows is libsodium's, AES-256-GCM among them** (owner 2026-11-10, Q1: one source per
+platform, as Apple's and Linux's). libsodium's AES-GCM needs AES-NI, PCLMUL and AVX. Every x64 CPU with AVX has it.
+Windows on ARM runs the x64 app under Prism, which shows x64 apps AVX by default (W5, measured on the VM; the default
+came with Prism's October 2025 update, remembered from Microsoft's emulation-settings page and the press, and a user
+can switch it off per app with "hide newer emulated CPU features"). Refused at start with `veyq_init`'s `3`, as the
+Pi 4 is on Linux: an x64 CPU without AVX (some low-end Atom, Celeron and Pentium Silver parts, remembered), and a
+Windows-on-ARM PC whose Prism does not show AVX (not updated since that release, or that switch set for veyq).
+The app says so and does not start. Rejected: CNG for AES-GCM alone (runs everywhere, but two sources of primitives
+on one platform, where every platform has one); a software AES-GCM of our own (the Pi 4 decision's reason).
 
 **D4 — HTTP is Ktor's WinHttp engine.** TLS is Schannel's and the CA store the system's, so the DLL carries no
 OpenSSL (W3's imports: `WINHTTP` and nothing to install). WinHTTP takes its proxy from `netsh winhttp`, not the
@@ -280,15 +283,16 @@ O3 (`powercfg /query` → 0 for both, `ScreenSaveActive` 0). O5 is `run.py`'s, i
 
 ### Phase 1 — The core on Windows
 
-D1's source sets; D2's mingw slices; D3's AES-GCM, if Q1 says so; D4's engine; `LibsodiumConformanceTest`
+D1's source sets; D2's mingw slices (`-mxsave` and its `config.log` check); D4's engine; `LibsodiumConformanceTest`
 reaching mingw; `NormalizationTest` and `WallClockTest` in `bridgedTest`; the verification metadata for the new
 target, written from an empty Gradle home; `windows/run.py test`. O1 is not needed yet: the test binary needs no .NET.
 
 **Done when:**
 - `python3 src/mobile/windows/run.py test` runs `test.exe` on the VM with **zero failures**: all 172 vector cases,
   `NormalizationTest` over every line, `WallClockTest` in the VM's W. Europe Standard Time.
-- The bites are recorded: a stub `nfc` red; an AEAD off by one byte (`aWrongPrimitiveIsCaught`) red, **on CNG's
-  path**.
+- The bites are recorded: a stub `nfc` red; an AEAD off by one byte (`aWrongPrimitiveIsCaught`) red; libsodium built
+  without `-mxsave` refused by the build script (its `config.log` check) — and, with that check removed, the test
+  binary red at start (W5's defect, reproduced on purpose).
 - `VEYQ_LIVE=http://veyq.localhost:8080 run.py test --tests '*LiveSignInTest*'` signs in on Windows over WinHttp,
   through the `-R` tunnel and O2.
 - `:core:compileBridgedMainKotlinMetadata` and `:core:compileNativeMainKotlinMetadata` are green.
@@ -344,13 +348,15 @@ Each screen draws the core's state and calls its actions; nothing else (a rule f
 
 ### Phase 5 — The docs
 
-- ADR 0127: its **Built** line (decision 5 built for this slice); decision 5 amended by D3 if Q1 took it.
+- ADR 0127: its **Built** line (decision 5 built for this slice; libsodium as decided, W5's `-mxsave` in the
+  Consequences).
 - ADR 0123's Consequences: the core on Windows, the bridge's Windows half, the Windows app, each with what was
   measured.
 - [native-apps](../docs/crosscutting/native-apps.md): the Windows row (builds, UI, layout, seen running — the ARM64
-  VM under x64 emulation); Open: device trust, MSIX, pickers, drag and drop, an x64 PC never run, Q3's AVX row.
-- `src/mobile/CLAUDE.md`: `windows/` in the layout, `run.py`'s verbs in Prove your work, and the traps — AVX under
-  Prism, `*.localhost` on Windows, session 0, the export table, `llvm-ar s`, CP850 and `-EncodedCommand`.
+  VM under x64 emulation); Open: device trust, MSIX, pickers, drag and drop, an x64 PC never run; and the refusal
+  row beside the Pi 4's — no AVX (an x64 CPU without it, a Windows-on-ARM PC whose Prism hides it).
+- `src/mobile/CLAUDE.md`: `windows/` in the layout, `run.py`'s verbs in Prove your work, and the traps — libsodium's
+  `-mxsave` on mingw, a cinterop that keeps an old static library, `*.localhost` on Windows, session 0, the export table, `llvm-ar s`, CP850 and `-EncodedCommand`.
 - `infra/README.md` § The launcher.
 - The published site stays as it is: no Windows app ships to users in this CR.
 
@@ -368,20 +374,16 @@ runs them, `validate_changes.py` among them), and every "measured" in the touche
 
 ## Owner questions
 
-- **Q1 — AES-256-GCM on Windows from CNG instead of libsodium (D3).** Measured (W5): libsodium's AES-GCM needs AVX,
-  which Windows' x64 emulation does not show an x64 app. So with libsodium the Windows app would refuse to start on
-  every Windows-on-ARM PC (Surface, Snapdragon laptops) and on x64 CPUs without AVX. CNG is Windows' own, maintained
-  and in every Windows, and the vectors hold it like every other implementation. **Recommendation: CNG for AES-GCM on
-  Windows, everything else libsodium** — this amends ADR 0127 decision 5. Alternative: keep libsodium and say "Windows
-  on ARM: enable *Show newer emulated CPU features* for veyq" (every such user must find that setting; AVX-less x64
-  stays refused).
-- **Q2 — Approve the VM steps O1–O3 and O5.** Nothing was installed at refine. Git, Visual Studio and Python are
-  **not** needed (O4).
-- **Q3 — Linux x86-64 has the same AVX condition** (libsodium's rule is the same there). An x86-64 Linux PC without AVX
-  is refused today, as the Pi 4 is; Linux x86-64 has never been run. Not this CR's to change. Recommendation: a row in
-  native-apps' Open beside the Pi 4's, decided in the Linux+Windows CR. Note there: `libveyq.so` already links
-  OpenSSL (Ktor's static libcurl), whose AES-GCM runs without AES instructions — the Pi 4's case could be answered
-  the same way as D3.
+- **Q1 — AES-256-GCM on Windows (settled, owner 2026-11-10): libsodium alone.** The owner leaned to one source; the
+  red that had made CNG look necessary was a defect of our libsodium build, not Prism's (W5: Prism shows AVX by
+  default; `configure` never read XCR0 without `-mxsave`). With the flag every case passes under Prism. D3 records it.
+- **Q2 — The VM steps O1–O3 and O5 (settled, owner 2026-11-10: approved).** O1–O3 done the same day (§ Owner
+  steps). The owner also updated the VM to Windows 11 26H2 (26300.9711).
+- **Q3 — none left for Linux.** Linux x86-64 has the same AVX condition (libsodium's rule is the same), but there
+  `configure` assembles XGETBV itself (`HAVE_AVX_ASM`; its refusal is for Windows x64 only), so the defect W5 found
+  does not arise — measured: `./configure --host=x86_64-unknown-linux-gnu` with `build_libsodium.py`'s flags says
+  `checking if _xgetbv() is available... no` and `checking whether we can assemble AVX opcodes... yes`. An x86-64 Linux PC without AVX is refused as the Pi 4 is; the docs phase puts both refusals in one
+  row. Linux x86-64 has still never been run.
 
 ## Retrospective
 
