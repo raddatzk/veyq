@@ -9,24 +9,22 @@ moments. The product center is the **Memory** (nested into **Chapters**); folder
 unshared personal space is confidential even from whoever runs the server — including when that is you. This
 is not a setting; there is no key on the server to misuse.
 
-## Status — read this before you deploy
+## Status
 
-**veyq is pre-V1 and there is no supported deployment path yet.** What runs today is a development stack
-([`infra/`](infra/README.md)): MariaDB, an optional S3-compatible object store, an optional test mailbox. There
-is no upgrade procedure. A production Compose file and a backup-and-restore runbook now exist
-([the Run area](site/src/content/docs/run/index.md) of the docs site), but neither has been executed by any CI run — the remaining V1 work is
-tracked as [the V1 line](docs/inbox.md).
+**v1.0 is the first stable release** (2026-11-10; [releases](https://github.com/raddatzk/veyq/releases)). It installs
+on Docker Compose through `veyqctl` or on Kubernetes through the Helm chart, each from the release's signed files
+([the Run area](site/src/content/docs/run/index.md) of the docs site, which says how far each procedure is proven).
+Every later 1.x release upgrades an instance in place. For development there is a local stack
+([`infra/`](infra/README.md)): MariaDB, an S3-compatible object store, a test mailbox.
 
 Built and in use: accounts and unlock, key recovery from the Emergency Kit (on an instance that can send
 mail), changing your password from a live session, personal / group / tenant spaces with key rotation, device
 linking (add a second device without retyping your password), session management (list your signed-in devices,
 remote sign-out), media upload with client-side encryption and derivatives, the gallery and lightbox, per-Memory
-trash, and seven sharing flows (public links, contributor, uploader drop-box, shared scopes, notes, passwords,
-anonymous accept).
+trash, seven sharing flows (public links, contributor, uploader drop-box, shared scopes, notes, passwords,
+anonymous accept), search across every space, Depot for files, Expenses for shared costs, and moderation.
 
-Not yet built: search, journal, and rotate/zoom in the lightbox. The backup-and-restore + upgrade runbook above
-is built but not yet CI-proven — no remote exists yet for that run. The [V1 line](docs/inbox.md) says which of
-these V1 waits for and which it does not.
+What is still open is tracked in [the inbox](docs/inbox.md).
 
 ## Why self-hosting is the security guarantee
 

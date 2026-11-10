@@ -343,8 +343,8 @@ that release exists, an instance on the fix release cannot enter the new major. 
 that release (ADR 0096, inbox #461).
 
 **What a run on GitHub has shown, and what it still must,** is inbox #471: the first snapshot (of a push, before
-2026-11-07), its signatures and attestations; still owed, the first dispatched and the first weekly snapshot with
-their tag, and later the first promotion. Until each has run, the statements above are about a
+2026-11-07), its signatures and attestations; the dispatched (from 2026-11-07) and the weekly (2026-11-09) snapshot with their tag; the first
+promotions, v0.2480 and v1.0 (2026-11-10). What #471 still lists has not run, and a statement above about it is about a
 file, held by `scripts/validate_release_identity.py`.
 
 ## The migration history starts at three baselines (once per dev database)
@@ -353,8 +353,7 @@ Before the first release the Flyway history was folded into one baseline per mod
 `V202611070831__core_baseline.sql`, `V202611070832__memories_baseline.sql`, `V202611070833__expenses_baseline.sql`
 (`src/backend/CLAUDE.md` § Migrations) — whose schema and seeded rows equal what the history before them built. A
 database created before that holds applied versions no file resolves any more, so the backend's validate refuses it at
-start (`%dev`'s `repair-at-start` does not rescue it either: the baselines then meet tables that exist). Nothing was
-released, so nothing is migrated: recreate the dev database and its store — `./gradlew infra:wipe infra:up` (or
+start (`%dev`'s `repair-at-start` does not rescue it either: the baselines then meet tables that exist). No release held the old history, so nothing is migrated: recreate the dev database and its store — `./gradlew infra:wipe infra:up` (or
 `docker compose -f infra/docker/docker-compose.yml down -v` and `up -d` with the store's profile) — then seed again
 (§ Seeding the local dev principal). An e2e database is recreated by its own run.
 

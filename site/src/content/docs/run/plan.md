@@ -29,7 +29,7 @@ Both targets run the same images and the same procedures; every page in this are
 | Network isolation | Separate container networks | A NetworkPolicy set, enforced only if your CNI enforces NetworkPolicy |
 | Database | The bundled MariaDB | The bundled MariaDB, or your own (`mariadb.enabled: false`, `externalDatabase.jdbcUrl`) |
 | Backup and restore | Rehearsed with the backup tool | The chart's backup gate captures the database and an index of the store before every release change; a restore is a one-off Job; both run once on a kind cluster |
-| Proven | Every stack-lane run installs the hardened recipe through `veyqctl` from a release built on the host; nothing published has been installed | The rendered chart is checked on every run; one kind cluster ran it once, for the backup gate, without a Gateway implementation |
+| Proven | Every stack-lane run installs the hardened recipe through `veyqctl` from a release built on the host; no published release installed through `veyqctl` yet | The rendered chart is checked on every run; one kind cluster ran it once, for the backup gate, without a Gateway implementation |
 
 If you have no cluster, Compose is the smaller and better-proven choice
 ([ADR 0064](https://github.com/raddatzk/veyq/blob/main/docs/decisions/0064-kubernetes-helm-deployment-target.md)).

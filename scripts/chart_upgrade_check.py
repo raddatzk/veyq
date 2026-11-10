@@ -39,7 +39,7 @@ findings are printed with their reasons and the run exits 0, "information only" 
 has no installation to break; from the release on it exits 1, and since `checks.yml`'s `chart` job runs it, a red
 gates `publish`, which needs every stage.
 
-**The defect that bought it - none yet.** No release exists, so no upgrade has ever been made. inbox #428 measured
+**The defect that bought it - none yet.** No upgrade between two releases has been made (v1.0, 2026-11-10, was the first of major 1). inbox #428 measured
 that of these risks only `strategy: Recreate` was checked (`chart_meta_check.py` (iii)) and nothing compared two
 versions. Each refusal was bitten by deleting its check against `chart_upgrade_check_selftest.py`, and the real run by
 an uncommitted edit of `veyq.selector` and of a claim template's size (cr-helm-upgrade-check).

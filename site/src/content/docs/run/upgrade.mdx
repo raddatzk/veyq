@@ -23,8 +23,8 @@ recipe change before it stops anything.
 from two commits of the tree with images built on the host (`--unsigned-local`, so no signature was checked): a
 Memory sealed under the first was still open after it, the upgrade's backup restored onto a fresh install, and its
 refusals were each provoked against a running instance with every container's start time unchanged. The two
-releases' images were identical, so that run proves the switch, not a schema migration. **No release has been
-published**, so no upgrade has pulled a published image or checked its signatures, and none has run a rollback. Step 4's
+releases' images were identical, so that run proves the switch, not a schema migration. No upgrade between two
+published releases has run yet (v1.0 was installed fresh), so none has pulled a published image or checked its signatures, and none has run a rollback. Step 4's
 capture is also rehearsed on every `scripts/run_web_e2e.py` run, and the data half of a whole upgrade by the upgrade
 proof below. Read it that way.
 
@@ -227,13 +227,13 @@ or later is out; that release is the next one cut after 1.10. A next major with 
 or only a prerelease) is refused rather than crossed. `veyqctl check` says which release the next `upgrade` takes,
 and which major the one after it would enter. It reads that from the signed manifests, so it verifies them as
 `upgrade` does (`--unsigned-local` for a local build). Under Helm the chart's backup gate, above, refuses any other
-entry: the same release. This rule is held by `veyqctl`'s self-test; no two published majors exist yet.
+entry: the same release. This rule is held by `veyqctl`'s self-test; no published release has crossed into a major yet but 1, entered from v0.2480.
 
 ## Versions and compatibility
 
 **Decided** ([ADR 0085](https://github.com/raddatzk/veyq/blob/main/docs/decisions/0085-one-major-moved-on-a-yearly-train.md)).
 This is the promise veyq means to keep from V1 on. Major `0` is pre-release and promises nothing. The release you
-run and the version clients check already share one major; no train has left yet, and no installed app exists yet.
+run and the version clients check share one major. Major 1 began with v1.0 (2026-11-10); no train has left yet, and no installed app exists yet.
 
 - **A release is `<major>.<minor>`.** A minor only adds: it is safe to take. The major moves only when something is
   removed (an API operation, a setting you must act on), at most once a year, on 1 May, and only if a removal is

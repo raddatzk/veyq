@@ -244,12 +244,12 @@ maintainer starts one by hand, on `main` or a `release/<major>.x` branch; a push
 nothing (since 2026-11-07: with a dependency bot opening pull requests, a snapshot per push was a flood). In a run that
 publishes, the image build pushes each image to the registry under a staging tag, unsigned and carrying no published name; lane L1 installs
 exactly those images, pulled by digest, and each green leg records what it ran; and the `snapshot` job runs only when
-every stage of that run is green (the switched-off upgrade proof excepted). It names those same digests
+every stage of that run is green, the upgrade proof included. It names those same digests
 `<major>.<minor>-SNAPSHOT` — written once, never replaced — signs them and the Helm chart keylessly, and attaches each
 stack lane's result per architecture as a signed attestation naming what it ran on: the images and the hash of the
 release files it installed. A job of its own then tags the commit `snapshot-<major>.<minor>`, and a commit with that tag
 is never published again. A pull request publishes nothing. One snapshot of a push was published on GitHub before the
-change (2026-11-06); the weekly and the hand-started run are still to be observed.
+change (2026-11-06); since then hand-started runs (from 2026-11-07) and the weekly run (2026-11-09) have published.
 
 A release does not build again (ADR 0091). It is started by hand from a draft on a snapshot's tag, by a workflow of
 its own, `release.yml`, which refuses unless that snapshot is signed as one and every stack lane attested a pass on
@@ -257,7 +257,7 @@ exactly its images, on every architecture; unless the release files produced aga
 lanes installed; and unless it is newer than every release of its major. Only then does it give the snapshot's bytes
 the release name and a release signature, and publish the draft last. So a release is always bytes every test saw,
 and anyone can check which release they run against its signature ([Verify a release](/run/verify-a-release/)); a
-snapshot's signature does not pass that check. The workflow is built and has not run yet. Not built: re-running a lane
+snapshot's signature does not pass that check. It has promoted v0.2480 and v1.0 (2026-11-10). Not built: re-running a lane
 whose inputs moved since the snapshot. Lane L1's inputs cannot move, and a promotion refuses an input it cannot
 compare.
 

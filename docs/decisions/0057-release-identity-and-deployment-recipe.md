@@ -2,7 +2,7 @@
 
 - Status: Accepted
 - Built: yes (§ 2's `v<major>.<minor>` ref and § 3's GitHub Release are now set by ADR 0091's promotion,
-  `release.yml`, which has not run yet)
+  `release.yml`, first run 2026-11-10: v0.2480 and v1.0)
 - Date: 2026-08-10
 - Model: [release-and-deployment](../crosscutting/release-and-deployment.md)
 - Replaced in part: § 1 by ADR 0091 (built: the snapshot and its promotion), § 7 by ADR 0091 (not built); § 3 by ADR

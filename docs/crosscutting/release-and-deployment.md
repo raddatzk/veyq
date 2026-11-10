@@ -191,8 +191,8 @@ rules, and `scripts/chart_upgrade_check.py` renders the predecessor's chart and 
 fails on a change to a field Kubernetes refuses to change, or an operator's values the new schema refuses. With
 `--upgrade-major-entry` it renders the same comparison from the release's major entry
 ([ADR 0085](../decisions/0085-one-major-moved-on-a-yearly-train.md) decision 10), and says why and passes when there is
-none or it is the default predecessor. It renders, never installs; until the first release it informs and gates
-nothing.
+none or it is the default predecessor. It renders, never installs; since the first release (v0.2480) a red gates
+the publish.
 
 **The bundled database upgrades its own data directory.** When a release moves the bundled MariaDB to a newer version
 (2026-11-07: 11.4 to 12.3), its first start on the older directory backs the system tables up into that directory and
@@ -306,8 +306,6 @@ check is logged and retried with a back-off, and blocks nothing.
 - **Lanes L2 and L3 and the backup archive** (ADR 0091 decisions 3 and 6): the previous release upgraded in place
   with `veyqctl upgrade`, and every archived backup of the major, with its object pool, restored into the candidate.
   When they gate, the jar-level upgrade proof retires (decision 7; replaces ADR 0057 § 7).
-- **Immutable releases and the first release** (ADR 0096 decision 3): the repository setting is the owner's, before
-  the first promotion. What the first runs on GitHub must show is inbox #471.
 - **The window of majors a client speaks** ([ADR 0085](../decisions/0085-one-major-moved-on-a-yearly-train.md)
   decision 5). The yearly train, its release order and the previous major's release branch (decisions 2, 3 and 10)
   are a procedure, written in [`infra/README.md`](../../infra/README.md) § Cutting a release, and no train has left.
