@@ -1,7 +1,7 @@
 # ADR 0126 — `veyqctl` writes a GitOps repository, and `veyq-server` sets up the cluster it runs on
 
 - Status: Accepted
-- Built: partly (not built: decision 6)
+- Built: partly (decision 6: veyq-server's template and `init`'s server path are built; its first release and a run on a real server are not — cr-veyqctl-server-path)
 - Date: 2026-11-10
 - Model: [release-and-deployment](../crosscutting/release-and-deployment.md)
 

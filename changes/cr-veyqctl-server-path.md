@@ -86,7 +86,7 @@ veyqctl init            answers: <checkout>/veyq-setup.json · steps done: ~/.co
   answers in `veyq-setup.json` and only the step marks in the progress file; `init` again in a written checkout says
   so and writes nothing. · Done when: the self-test shows no command but git's before the programs, no question after
   the first step, a missing program waited for and found, and a re-run in a written checkout asking nothing.
-- [ ] **3 the server path** — sections 2, 3, 5, 6 and 7 of the design, `veyqctl connect`, against stand-ins for every
+- [x] **3 the server path** — sections 2, 3, 5, 6 and 7 of the design, `veyqctl connect`, against stand-ins for every
   program. · Done when: the self-test drives the whole run, each confirmation's no stopping before its step, each
   refusal (a manifest that does not verify, a tree that differs, a host key not confirmed, an unpushed tree) changing
   nothing outside the repository.
@@ -126,3 +126,21 @@ refused). `init` alone in a checkout takes the unfinished directory, or the only
 real git, kubectl, helm and cosign (PATH without helm: refused after the setup answers, which were in the file; then
 continued with no answer given to a written half against release 1.0; then `init` alone: nothing to write). Phase 3 adds the server path's programs to the same
 table (`ssh`, `ssh-keyscan`, `ssh-keygen`, `age-keygen`, `copier`, `ansible-playbook`; `gh` optional, never required).
+
+Phase 3: `init --server yes` (offered where `git ls-files` lists nothing) asks the server's questions after the
+programs (`server_questions`: address, node, admin user, SSH key from ~/.ssh and the agents, the age key — a file, or
+Enter makes `.age/key.txt` and waits for the password-manager copy —, host access, this machine's name, the current
+context, the sudo password hidden), then: veyq-server's newest release verified (`verify_server_template`: the manifest
+under veyq-server's release identity, the commit cloned and its tree's sha256 — `tree_sha256`, measured equal to
+veyq-server's `scripts/tree_hash.py` on its HEAD `8240090`), Copier from that clone (`_src_path` rewritten to the
+public repository), the server's secrets encrypted once, the host key pinned on confirmation (a rebuilt server's new key
+shown beside the pinned one), veyq's half written into `gitops/apps/veyq` and listed in the root's kustomization, the
+deploy key with `gh` on confirmation (else shown and waited for), DNS waited for, commit and push on confirmation and
+`play`'s push check, the bootstrap on confirmation (skipped when the admin user logs in already), `connect` (the
+`~/.ssh/config` block and the kubeconfig context, also `veyqctl connect`), and the wait for Synced/Healthy through a
+tunnel it opens and closes. Self-tested (`test_server_path`, stand-in `ServerHost`); thirteen mutations bite. Run
+against the real programs where no server is needed: Copier rendering from a clone with `--vcs-ref`, ssh-keygen and
+sops writing and re-reading the secrets file, `ssh-keygen -lf`, `ssh -G`. That run found sops looking for
+`.sops.yaml` from its working directory, not from `--filename-override`: sops now runs where the rules are
+(`sops_run`), on the existing GitOps path too. Not measured: veyq-server's release (CI and release wait on GitHub), a
+real server — phase 5.
