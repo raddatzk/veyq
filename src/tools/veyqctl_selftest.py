@@ -1596,8 +1596,8 @@ class GitOpsHost(FakeHost):
     def answer(self, cmd) -> tuple:
         joined = " ".join(cmd)
         if cmd[0] == "git":
-            if "--show-toplevel" in cmd:
-                return 0, f"{self.top}\n"
+            if "--show-toplevel" in cmd:  # as git: `-C` must name a directory that exists
+                return (0, f"{self.top}\n") if pathlib.Path(cmd[2]).is_dir() else (128, "")
             if "get-url" in cmd:
                 return 0, "git@example.org:ops/cluster.git\n"
             if "--abbrev-ref" in cmd:
@@ -1700,7 +1700,7 @@ def test_gitops_init(tmp: pathlib.Path) -> None:
     mirror = gitops_mirror(tmp / "g-mirror", ("v1.0", None), ("v1.1", None), ("v2.0", "1.1"))
     signed = gitops_signed("1.0", "1.1", "2.0")
     top = tmp / "repo"
-    (top / "apps").mkdir(parents=True)
+    top.mkdir()  # `apps/` does not exist yet either: init finds the checkout from the nearest directory that does
     d = top / "apps" / "veyq"
     host = GitOpsHost(top=top, signed=signed, watch=d)
     rc, out = run_main(["--source", mirror, "init", "--gitops", d, "--release", "1.0", *INIT, "--secrets",

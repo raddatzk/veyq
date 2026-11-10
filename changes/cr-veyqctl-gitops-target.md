@@ -1,7 +1,7 @@
 ---
 id: cr-veyqctl-gitops-target
 title: veyqctl manages a GitOps instance — its instances listed, veyq's half of an Argo CD repository written and upgraded
-status: planned
+status: in-progress
 satisfies: []
 adrs: ["0126", "0096", "0085", "0098", "0064", "0050"]
 invariants:
@@ -87,13 +87,13 @@ work in that repository; `veyqctl`'s side of decision 6 is a CR of its own after
 
 ## Phases
 
-- [ ] **1 instances** — `~/.config/veyq/instances.json` (`$XDG_CONFIG_HOME` if set): name → path, and the current one;
+- [x] **1 instances** — `~/.config/veyq/instances.json` (`$XDG_CONFIG_HOME` if set): name → path, and the current one;
   `instances`, `use <name>`, `--instance <name>`; with no file, `/opt/veyq` as today. The target is read from the
   instance directory. `start`, `stop`, `status`, `logs`, `backup`, `restore`, `rollback`, `self-update`'s Compose
   part refuse on a GitOps instance, naming what does it there. `init` asks Compose or GitOps (and takes `--compose` /
   `--gitops <dir>` without asking); under Compose it is `install`. · Done when: the self-test covers the registry,
   the fallback, `--instance`, every refusal, and its Compose cases are unchanged and green.
-- [ ] **2 gitops init** — for a cluster that exists: the contract check against a reachable cluster (ADR 0126
+- [x] **2 gitops init** — for a cluster that exists: the contract check against a reachable cluster (ADR 0126
   decision 4: Argo CD, Gateway API ≥ v1.5 with the class the values name, a StorageClass, cert-manager ≥ 1.21 when
   TLS is its issuer), skipped with `--no-cluster-check` for a repository written before the cluster exists; then the
   release resolved and verified (manifest, three images, chart); then `veyqctl.json`, `application.yaml`,
@@ -105,7 +105,7 @@ work in that repository; `veyqctl`'s side of decision 6 is a CR of its own after
   self-test writes a repository per provider into a temp dir and `helm template` renders each (in `checks.yml`'s
   `chart` job, which has `helm`); a second `init` over the same directory refuses to overwrite and never regenerates
   a value.
-- [ ] **3 gitops upgrade, check, verify** — `verify`: manifest, images, chart under the release identity, nothing
+- [x] **3 gitops upgrade, check, verify** — `verify`: manifest, images, chart under the release identity, nothing
   written. `check`: which release the next `upgrade` takes and which major the one after it would enter (as under
   Compose), and whether the provider's Secrets exist with every key when the cluster is reachable. `upgrade`: resolve,
   major entry, verify, rewrite the chart's `targetRevision` and the three images' `tag`/`digest`, `helm template`,
@@ -117,7 +117,7 @@ work in that repository; `veyqctl`'s side of decision 6 is a CR of its own after
   go for the commit and the push): `check` and `verify` against v1.0 green, `upgrade` a no-op on v1.0; the first real
   `upgrade` is the next release. · Done when: those three ran against the live repository and their output is
   recorded here.
-- [ ] **5 docs** — a Run page for the GitOps target (EN, Server Owners) beside Set up a new instance and Upgrade; the
+- [x] **5 docs** — a Run page for the GitOps target (EN, Server Owners) beside Set up a new instance and Upgrade; the
   Kubernetes page points at it; `veyqctl`'s docstring; the model's § `veyqctl` covers both targets and § Decided, not
   built keeps only decision 6; ADR 0126's `Built:` line. · Done when: the trust chain and `pnpm run check` in `site/`
   are green.
@@ -131,3 +131,29 @@ No use-case is satisfied: `veyqctl` is operator tooling, held by its self-test l
 ## Open questions (owner)
 
 None blocking. Decision 6 waits for `veyq-server`'s first signed release; this CR does not depend on it.
+
+## Progress (2026-11-10)
+
+Phases 1–3 and 5 built on branch `veyqctl-gitops` (worktree): `veyqctl.py` (instances, `init`, the GitOps target,
+`Host.oci_digest`), its self-test (257 checks; each new refusal bitten by a mutation of the code it guards — no drift
+check, no cluster check, the chart version not read back, a write before the render), `scripts/veyqctl_gitops_render_check.py`
+in the `chart` job (bitten: a TLS mode the schema refuses), the Run page `run/gitops.md`, the model, ADR 0126 `Built:
+partly (not built: decision 6)`.
+
+Phase 4, run by hand against the published releases (this Mac, the cluster as context `raddatz.me` through the tunnel):
+- `init --gitops ~/IdeaProjects/affenbande/gitops/apps/veyq --adopt --secrets sops --name raddatz.me --context
+  raddatz.me` → release 1.0, the four pins verified; `oci_digest` resolved `ghcr.io/raddatzk/charts/veyq:1.0` to
+  `sha256:52af9b60…`, the digest affenbande pins; `helm show chart` read `version: 1.0`.
+- `verify` → the manifest, three images and chart verified; `check` → "release 1.0 is pinned already", "the Secrets
+  veyq-secrets and veyq-config-secret-key exist with every key"; `upgrade` → "nothing to do"; `start` refused.
+- `init --gitops` into an empty scratch repository against the live cluster (`--secrets none`): the cluster contract
+  met, release 1.0 verified, `helm template` of the OCI chart green, the files written, the values handed over 0600.
+  It found a defect the stand-in hid — `init` into a directory whose parent did not exist ran `git -C` on a missing
+  path — fixed (the nearest existing directory) and the stand-in made as strict as git.
+- The same with `--secrets sops` (a throwaway age key): `sops` 3.13.3 encrypted both Secrets through
+  `--filename-override` on stdin, and `sops decrypt` returned the config-secret key.
+- `init --release 0.2480` then `upgrade` with `latest`: major 1 entered from its entry, one commit
+  `veyq 1.0: upgraded from 0.2480 by veyqctl` of the three files.
+
+Left: committing affenbande's `gitops/apps/veyq/veyqctl.json` (the owner's go), then merging this branch into `main`.
+

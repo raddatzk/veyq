@@ -2217,8 +2217,10 @@ def git(host: Host, top: Path, *cmd: str, check: bool = True) -> subprocess.Comp
 
 
 def repository_of(host: Host, directory: Path) -> Path:
-    result = host.run(["git", "-C", str(directory if directory.is_dir() else directory.parent), "rev-parse",
-                       "--show-toplevel"], check=False)
+    probe = directory
+    while not probe.is_dir() and probe != probe.parent:  # `init` writes a directory that may not exist yet, nor its parent
+        probe = probe.parent
+    result = host.run(["git", "-C", str(probe), "rev-parse", "--show-toplevel"], check=False)
     if result.returncode != 0 or not (result.stdout or "").strip():
         raise Refused(f"{directory} is not inside a Git checkout: a GitOps instance is a directory of the repository "
                       f"Argo CD syncs")

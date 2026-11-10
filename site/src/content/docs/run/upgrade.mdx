@@ -128,7 +128,8 @@ way back. Four things are specific to this target.
   starts the new pod before the old one stops, which would run two migrators against one schema during every
   upgrade; `Recreate` is what makes "one migrator at a time" true, at the cost of a short outage per upgrade. It is
   also what makes the gate's capture cold: the old pod has terminated before the new one is created. An upgrade
-  here is `helm upgrade`, started by hand (ADR 0096 decision 8).
+  here is `helm upgrade`, or — when Argo CD syncs a repository — the commit
+  [`veyqctl upgrade`](/run/gitops/#keep-it-current-check-verify-upgrade) makes, started by hand either way.
 - **What the gate does.** It first waits, up to 180 seconds, for the database to accept a connection — on a first
   install the bundled MariaDB starts beside it — and fails, writing nothing, if it never does or refuses the login.
   It keeps a record on the backup claim of the release whose data the database holds. When
