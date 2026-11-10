@@ -47,6 +47,29 @@ with both apps behaving as before on a device for what it touched, and commits o
 10. **Done 2026-11-09, ahead of its turn** (slice 1 needed its keys, and the Apple app had no German). **One catalog.** The words move into the core's catalog and are generated into `strings.xml` and the String
     Catalog (decision 3); a guard holds that no platform carries a word of its own beyond the generated ones.
 
+## Left after the second sweep (2026-11-10)
+
+A read of both apps after the slices found these rules still written twice; each moves like the slices did (core
+function, its commonTest, both apps calling it):
+
+- The entry editor's form steps: a split's people toggled in people order, "add payer" takes the first unused, a payer
+  removed only while more than one, when the rest split and the total hints show, the collapsed split's words (Apple
+  still spells `10_000` and the default categories instead of `PERCENT_WHOLE`, `DEFAULT_CATEGORIES`).
+- What a kind's page gives the header beyond `AppKinds.header`: a Pot's cover and copy only while `canWrite`, a file's
+  copy, download and send only with content; the kind→page registry (an unknown kind: Apple falls back, Android throws).
+- The shell's chrome: which node is headed, when the trash and the top level's "Add files only" are offered (Android
+  tests `folder == null`, Apple `folderAt == nil`), the body's routing, the drawer open at start (Android also needs an
+  empty path).
+- The Pot overview's balance words by sign and "Record all" past one; the settings' person facts line.
+- The space trash's outcome handling (restore, name taken prefilled, purge) — its name-taken word differs.
+- The share sheet's flows: which notice follows edit, renew, reactivate, switch-off and delete, and the re-read after
+  each; a link's end day to the instant (end of the local day) and the picker's range.
+- Memories: a video without a preview, download only unblocked, chapters only for a Memory, the re-read trigger (Apple
+  only the details' count).
+- The share inbox's wiring (taken into a Pot when its page shows it), the new Pot's parent and default space, Manage
+  servers' switches and words, the upload label.
+- Skipped receipts after a save: Android closes with a toast, Apple stays and lists them — one behaviour to settle.
+
 ## Differences, settled here
 
 - After a trash of the open node: the shell goes to its parent, read anew (Apple's way).
