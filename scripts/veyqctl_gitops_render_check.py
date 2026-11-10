@@ -62,6 +62,7 @@ def main() -> int:
             vc.secret_text(vc.SECRETS_SECRET, "veyq", {k: "x" for k in vc.SECRET_VALUES[vc.SECRETS_SECRET]}), "Secret"),
         "the config-secret key's Secret": (
             vc.secret_text(vc.CONFIG_SECRET, "veyq", {vc.CONFIG_SECRET_KEY: "eA=="}), "Secret"),
+        "veyq's admin through the tunnel (two objects)": (vc.admin_host_access_text("veyq", "10.42.0.1/32"), None),
         "an ExternalSecret": (vc.external_secret_text(vc.SECRETS_SECRET, "veyq", "vault", "ClusterSecretStore", "veyq-"),
                               "ExternalSecret"),
         "the Application": (vc.application_text(name="veyq", argocd_namespace="argocd", project="default",
@@ -72,8 +73,9 @@ def main() -> int:
     }
     for label, (text, kind) in texts.items():
         docs = [d for d in yaml.safe_load_all(text) if d is not None]
-        ok = len(docs) == 1 and docs[0].get("kind") == kind
-        print(f"{'ok  ' if ok else 'FAIL'} {label}: one {kind}")
+        ok = ([d.get("kind") for d in docs] == ["Service", "NetworkPolicy"] if kind is None
+              else len(docs) == 1 and docs[0].get("kind") == kind)
+        print(f"{'ok  ' if ok else 'FAIL'} {label}" + (f": one {kind}" if kind else ""))
         if not ok:
             failures.append(label)
     if failures:

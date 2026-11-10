@@ -1872,6 +1872,17 @@ def test_gitops_init(tmp: pathlib.Path) -> None:
           and "storeDomain: store.veyq.example.org" in values
           and "email: owner@example.org" in values
           and json.loads((d6 / vc.GITOPS_FILE).read_text())["secrets"] == "sops", out[-500:])
+    d7 = top / "apps" / "veyq-admin-host"
+    host = GitOpsHost(top=top, signed=signed, answers={"veyq's domain": "veyq.example.org"}, cluster={
+        "get svc argocd-server": (0, "NodePort"), "spec.podCIDR": (0, "10.42.0.0/24")})
+    rc, out = run_main(["--source", mirror, "init", "--gitops", d7, "--name", "admin-host"], host)
+    access = (d7 / "resources" / "admin-host-access.yaml").read_text() if (d7 / "resources").exists() else ""
+    check("init offers veyq's admin through the tunnel where Argo CD's server is a NodePort, the policy admitting the "
+          "node's pod-network gateway from its podCIDR",
+          rc == 0 and "nodePort: 30081" in access and "cidr: 10.42.0.1/32" in access
+          and "  - admin-host-access.yaml" in (d7 / "resources" / "kustomization.yaml").read_text(), out[-400:])
+    check("init offers no admin NodePort where Argo CD's server is none (no host firewall to keep it host-only)",
+          not (d6 / "resources" / "admin-host-access.yaml").exists())
     rc, out = run_main(["--source", mirror, "init", "--gitops", top / "apps" / "veyq-nodomain", "--name", "nodomain"],
                        GitOpsHost(top=top, signed=signed))
     check("init refuses a question with no offer and no answer (the domain), naming the flag",

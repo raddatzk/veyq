@@ -214,6 +214,7 @@ import base64
 import datetime
 import errno
 import hashlib
+import ipaddress
 import json
 import os
 import re
@@ -2555,6 +2556,58 @@ stringData:
 {data}"""
 
 
+ADMIN_HOST_PORT = 30081  # the admin surface's host-only NodePort (veyq-server's firewall keeps it off the public side)
+
+
+def admin_host_access_text(namespace: str, node_source: str) -> str:
+    """veyq's administration surface on a host-only NodePort, so the ssh tunnel that reaches the cluster reaches it too.
+    The chart keeps its admin Service a ClusterIP and a NetworkPolicy admitting nothing (ADR 0065: localhost-only, by
+    `kubectl port-forward`); this adds a second Service and a policy admitting the node alone — a NodePort's traffic
+    reaches the pod masqueraded to the node's pod-network gateway — and only a host firewall that drops NodePorts on the
+    public interface (veyq-server's) makes it host-only. Offered where Argo CD's own server is a NodePort already."""
+    selector = ("      app.kubernetes.io/name: veyq\n      app.kubernetes.io/instance: veyq\n"
+                "      app.kubernetes.io/component: admin\n")
+    return f"""# veyq's administration through the ssh tunnel: a host-only NodePort beside the chart's ClusterIP (veyqctl init).
+apiVersion: v1
+kind: Service
+metadata:
+  name: veyq-admin-host
+  namespace: {namespace}
+spec:
+  type: NodePort
+  selector:
+{selector.replace("      ", "    ")}  ports:
+    - name: http
+      port: 8080
+      targetPort: http
+      nodePort: {ADMIN_HOST_PORT}
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: veyq-admin-host
+  namespace: {namespace}
+spec:
+  podSelector:
+    matchLabels:
+{selector}  policyTypes: [Ingress]
+  ingress:
+    - from:
+        - ipBlock:
+            cidr: {node_source}
+      ports:
+        - port: 8080
+"""
+
+
+def node_gateway(pod_cidr: str) -> str:
+    """The first address of the node's pod network — where a NodePort's traffic comes from inside it — as a /32."""
+    try:
+        return f"{next(ipaddress.ip_network(pod_cidr.strip(), strict=False).hosts())}/32"
+    except (ValueError, StopIteration):
+        return ""
+
+
 def remote_key(prefix: str, key: str) -> str:
     return prefix + re.sub(r"(?<!^)(?=[A-Z])", "-", key).lower().replace(".", "-")
 
@@ -2665,6 +2718,22 @@ def gitops_init(args: argparse.Namespace, host: Host, directory: Path) -> int:
                         "Where Let's Encrypt sends expiry and revocation notices.") if tls == "acme" else ""
     tls_secret = option(args, host, "tls_secret", "the TLS Secret for every host") if tls == "shared" else ""
     namespace = args.namespace or "veyq"
+    argocd_nodeport = reachable and (host.run(k + ["-n", args.argocd_namespace, "get", "svc", "argocd-server", "-o",
+                                                   "jsonpath={.spec.type}"], check=False).stdout or "").strip() == "NodePort"
+    admin_host = option(args, host, "admin_host_access", "veyq's administration through the tunnel: yes or no",
+                        "yes" if argocd_nodeport else "no",
+                        f"A host-only NodePort ({ADMIN_HOST_PORT}) beside Argo CD's, for a server whose firewall keeps "
+                        "NodePorts off the public side (veyq-server's)" + (" — Argo CD's is one here." if argocd_nodeport
+                                                                            else "; without it, `kubectl port-forward`."))
+    if admin_host not in ("yes", "no"):
+        raise Refused(f"--admin-host-access {admin_host}: yes or no")
+    admin_source = ""
+    if admin_host == "yes":
+        cidr = (host.run(k + ["get", "nodes", "-o", "jsonpath={.items[0].spec.podCIDR}"], check=False).stdout or "") \
+            if reachable else ""
+        admin_source = option(args, host, "admin_host_source", "the node's pod-network gateway (a /32)",
+                              node_gateway(cidr), "Where a NodePort's traffic reaches the pod from; the NetworkPolicy "
+                              "admits it alone.")
 
     host.section("4. Secrets")
     has_sops = any((p / ".sops.yaml").is_file() for p in [directory, *directory.parents] if p == top or top in p.parents)
@@ -2739,6 +2808,9 @@ def gitops_init(args: argparse.Namespace, host: Host, directory: Path) -> int:
         "resources/backup-pvc.yaml": backup_claim_text(namespace, args.storage_class or "", args.backup_size),
     }
     listed = ["namespace.yaml", "backup-pvc.yaml"]
+    if admin_host == "yes":
+        files["resources/admin-host-access.yaml"] = admin_host_access_text(namespace, admin_source)
+        listed.append("admin-host-access.yaml")
     generators: list[str] = []
     handed: Path | None = None
     if provider == "sops":
@@ -3088,6 +3160,10 @@ def parser() -> argparse.ArgumentParser:
                                                               "prefix (default veyq-)")
     init.add_argument("--repo-url", help="GitOps: the URL Argo CD reads this repository from (default: origin)")
     init.add_argument("--revision", help="GitOps: the branch Argo CD follows (default: the checkout's)")
+    init.add_argument("--admin-host-access", choices=("yes", "no"), help="GitOps: veyq's administration on a host-only "
+                                                                       "NodePort through the tunnel (asked)")
+    init.add_argument("--admin-host-source", help="GitOps: the node's pod-network gateway the admin policy admits (a /32; "
+                                                  "offered from the node's podCIDR)")
     init.add_argument("--project", help="GitOps: the Argo CD project (asked; offered: the cluster's one project "
                                         "besides `default`, else `default`)")
     init.add_argument("--application-name", default="veyq", help="GitOps: the Argo CD Application's name (default "
