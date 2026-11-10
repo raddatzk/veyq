@@ -31,7 +31,6 @@ import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -55,22 +54,17 @@ fun PotCreateSheet(s: Screen.Signed, model: AppModel, onClose: () -> Unit) {
     val creating by model.creating.collectAsStateWithLifecycle()
     var name by rememberSaveable { mutableStateOf("") }
     var scopeId by rememberSaveable { mutableStateOf(s.shell.space ?: s.spaces.firstOrNull()?.scopeId ?: "") }
-    var currency by rememberSaveable { mutableStateOf(if (java.util.Locale.getDefault().language == "de") "EUR" else "USD") }
+    var currency by rememberSaveable { mutableStateOf(PotCreate.defaultCurrency(java.util.Locale.getDefault().language)) }
     var typed by rememberSaveable { mutableStateOf("") }
-    val people = remember { mutableStateListOf<PotCreate.NewPerson>() }
+    var people by remember { mutableStateOf(PotCreate.People()) }
     var members by remember { mutableStateOf<List<Person>>(emptyList()) }
     LaunchedEffect(scopeId) {
         members = if (scopeId.isEmpty()) emptyList() else model.membersOf(scopeId).orEmpty()
         // A member chosen from another space is no member here.
-        people.removeAll { p -> p.userId != null && members.none { it.userId == p.userId } }
-    }
-    fun keyOf(p: PotCreate.NewPerson) = p.userId?.let { "member:$it" } ?: "name:${p.name.lowercase()}"
-    fun add(p: PotCreate.NewPerson) {
-        if (people.none { keyOf(it) == keyOf(p) }) people += p
+        people = people.keep(members)
     }
     fun takeTyped() {
-        val t = typed.trim()
-        if (t.isNotEmpty()) add(PotCreate.NewPerson.name(t))
+        people = people.typed(typed)
         typed = ""
     }
 
@@ -109,9 +103,9 @@ fun PotCreateSheet(s: Screen.Signed, model: AppModel, onClose: () -> Unit) {
             }
             Text(stringResource(R.string.pot_people), style = MaterialTheme.typography.titleSmall)
             FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                for (p in people.toList()) {
+                for (p in people.list) {
                     InputChip(
-                        selected = false, onClick = { people.remove(p) }, label = { Text(p.name) },
+                        selected = false, onClick = { people = people.remove(p) }, label = { Text(p.name) },
                         trailingIcon = { Icon(Icons.Outlined.Close, stringResource(R.string.people_remove, p.name)) },
                     )
                 }
@@ -120,11 +114,11 @@ fun PotCreateSheet(s: Screen.Signed, model: AppModel, onClose: () -> Unit) {
                 OutlinedTextField(typed, { typed = it }, label = { Text(stringResource(R.string.people_name)) }, singleLine = true, modifier = Modifier.weight(1f))
                 OutlinedButton(onClick = ::takeTyped, enabled = typed.isNotBlank()) { Text(stringResource(R.string.people_add)) }
             }
-            val offered = members.filter { m -> people.none { it.userId == m.userId } }
+            val offered = people.offered(members)
             if (offered.isNotEmpty()) {
                 Text(stringResource(R.string.people_choose_member), style = MaterialTheme.typography.bodySmall)
                 FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    for (m in offered) AssistChip(onClick = { add(PotCreate.NewPerson.member(m.userId, m.displayName)) }, label = { Text(m.displayName) })
+                    for (m in offered) AssistChip(onClick = { people = people.add(PotCreate.NewPerson.member(m.userId, m.displayName)) }, label = { Text(m.displayName) })
                 }
             }
             creating.message?.let { Text(createRefusal(it), color = MaterialTheme.colorScheme.error) }
@@ -135,7 +129,7 @@ fun PotCreateSheet(s: Screen.Signed, model: AppModel, onClose: () -> Unit) {
                         takeTyped()
                         // in the folder on screen, where the sheet creates in the space shown (the web's "New" at a level)
                         val parent = if (scopeId == s.shell.space) s.shell.folder?.nodeId else null
-                        model.createPot(scopeId, name, currency, minorUnitsOf(currency), people.toList(), parent) { onClose() }
+                        model.createPot(scopeId, name, currency, minorUnitsOf(currency), people.list, parent) { onClose() }
                     },
                     enabled = name.isNotBlank() && scopeId.isNotEmpty() && !creating.saving,
                 ) { Text(stringResource(R.string.create_pot_create)) }

@@ -29,6 +29,34 @@ object PotCreate {
         }
     }
 
+    /**
+     * The new Pot's first people as its sheet gathers them (the web's create dialog): a typed name once (any case), a
+     * member once; a member of another space is dropped when the space changes, and members already in are not offered.
+     */
+    class People private constructor(val list: List<NewPerson>) {
+        constructor() : this(emptyList())
+
+        private fun key(p: NewPerson) = p.userId?.let { "member:$it" } ?: "name:${p.name.lowercase()}"
+
+        fun add(p: NewPerson): People = if (list.any { key(it) == key(p) }) this else People(list + p)
+
+        /** A typed name added (trimmed); nothing for a blank one. */
+        fun typed(text: String): People = text.trim().takeIf { it.isNotEmpty() }?.let { add(NewPerson.name(it)) } ?: this
+
+        fun remove(p: NewPerson): People = People(list.filterNot { key(it) == key(p) })
+
+        /** The people left once [members] are the chosen space's: a member of another space goes. */
+        fun keep(members: List<me.raddatz.veyq.mobile.session.Person>): People =
+            People(list.filter { p -> p.userId == null || members.any { it.userId == p.userId } })
+
+        /** The space's members still to offer: those not added yet. */
+        fun offered(members: List<me.raddatz.veyq.mobile.session.Person>): List<me.raddatz.veyq.mobile.session.Person> =
+            members.filter { m -> list.none { it.userId == m.userId } }
+    }
+
+    /** The base currency a new Pot starts with: the euro for a German-speaking person, else the dollar (the web's). */
+    fun defaultCurrency(language: String): String = if (language == "de") "EUR" else "USD"
+
     enum class Outcome { CREATED, PEOPLE_NOT_ADDED, INVALID, NAME_TAKEN, BUSY, BLOCKED, REFUSED }
 
     /** What a create came to: the new Pot's node id where it exists. */

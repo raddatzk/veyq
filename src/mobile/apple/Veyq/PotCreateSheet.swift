@@ -9,9 +9,9 @@ struct PotCreateSheet: View {
     @Environment(\.dismiss) private var dismiss
     @State private var name = ""
     @State private var scopeId = ""
-    @State private var currency = Locale.current.language.languageCode?.identifier == "de" ? "EUR" : "USD"
+    @State private var currency = PotCreate.shared.defaultCurrency(language: Locale.current.language.languageCode?.identifier ?? "")
     @State private var typed = ""
-    @State private var people: [PotCreate.NewPerson] = []
+    @State private var people = PotCreate.People()
     @State private var members: [Person] = []
 
     /// The currencies offered, by code: core's one table (the web's `Intl`).
@@ -20,15 +20,8 @@ struct PotCreateSheet: View {
     /// The minor-unit digits of `code` (the euro 2, the yen 0, the dinar 3): core's one table.
     private static func minorUnits(_ code: String) -> Int32 { Currencies.shared.minorUnits(code: code) }
 
-    private func key(_ p: PotCreate.NewPerson) -> String { p.userId.map { "member:\($0)" } ?? "name:\(p.name.lowercased())" }
-
-    private func add(_ p: PotCreate.NewPerson) {
-        if !people.contains(where: { key($0) == key(p) }) { people.append(p) }
-    }
-
     private func takeTyped() {
-        let t = typed.trimmingCharacters(in: .whitespaces)
-        if !t.isEmpty { add(PotCreate.NewPerson.companion.name(name: t)) }
+        people = people.typed(text: typed)
         typed = ""
     }
 
@@ -47,11 +40,11 @@ struct PotCreateSheet: View {
                     }
                 } footer: { Text(say(.settingsCurrencyHint)) }
                 Section {
-                    ForEach(Array(people.enumerated()), id: \.offset) { _, p in
+                    ForEach(Array(people.list.enumerated()), id: \.offset) { _, p in
                         HStack {
                             Text(p.name)
                             Spacer()
-                            Button { people.removeAll { key($0) == key(p) } } label: { Image(systemName: "xmark.circle.fill") }
+                            Button { people = people.remove(p: p) } label: { Image(systemName: "xmark.circle.fill") }
                                 .buttonStyle(.borderless)
                                 .accessibilityLabel(say(.peopleRemove, p.name))
                         }
@@ -61,8 +54,8 @@ struct PotCreateSheet: View {
                         Button(say(.peopleAdd), action: takeTyped)
                             .disabled(typed.trimmingCharacters(in: .whitespaces).isEmpty)
                     }
-                    ForEach(members.filter { m in !people.contains { $0.userId == m.userId } }, id: \.userId) { m in
-                        Button { add(PotCreate.NewPerson.companion.member(userId: m.userId, displayName: m.displayName)) } label: {
+                    ForEach(people.offered(members: members), id: \.userId) { m in
+                        Button { people = people.add(p: PotCreate.NewPerson.companion.member(userId: m.userId, displayName: m.displayName)) } label: {
                             Label(m.displayName, systemImage: "person.badge.plus")
                         }
                     }
@@ -80,7 +73,7 @@ struct PotCreateSheet: View {
                         takeTyped()
                         Task {
                             if await model.createPot(
-                                scopeId: scopeId, name: name, currency: currency, minorUnits: Self.minorUnits(currency), people: people
+                                scopeId: scopeId, name: name, currency: currency, minorUnits: Self.minorUnits(currency), people: people.list
                             ) { dismiss() }
                         }
                     }
@@ -91,7 +84,7 @@ struct PotCreateSheet: View {
                 if scopeId.isEmpty { scopeId = model.shell.space ?? model.spaces.first?.scopeId ?? "" }
                 members = scopeId.isEmpty ? [] : await model.membersOf(scopeId)
                 // A member chosen from another space is no member here.
-                people.removeAll { p in p.userId != nil && !members.contains { $0.userId == p.userId } }
+                people = people.keep(members: members)
             }
         }
         .tint(Role.accent)
