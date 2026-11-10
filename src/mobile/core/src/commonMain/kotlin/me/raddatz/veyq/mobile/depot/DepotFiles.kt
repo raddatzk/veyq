@@ -26,6 +26,10 @@ object DepotFiles {
         me.raddatz.veyq.mobile.words.Piece.Said(me.raddatz.veyq.mobile.words.Notice(me.raddatz.veyq.mobile.words.Msg.DEPOT_MODIFIED, me.raddatz.veyq.mobile.words.Moment(it)))
     }
 
+    /** A file page's own action: replacing its content, or the first upload into a file without one. */
+    fun replaceWord(f: File?): me.raddatz.veyq.mobile.words.Msg =
+        if (f?.hasContent == true) me.raddatz.veyq.mobile.words.Msg.DEPOT_REPLACE else me.raddatz.veyq.mobile.words.Msg.DEPOT_UPLOAD_INTO
+
     /** A file's row facts (Depot's `details`): its size and when it was modified, or that its upload has not finished. */
     fun rowDetails(f: File): List<me.raddatz.veyq.mobile.words.Piece> =
         if (!f.hasContent) listOf(me.raddatz.veyq.mobile.words.Piece.Said(me.raddatz.veyq.mobile.words.Notice(me.raddatz.veyq.mobile.words.Msg.DEPOT_NOT_UPLOADED)))

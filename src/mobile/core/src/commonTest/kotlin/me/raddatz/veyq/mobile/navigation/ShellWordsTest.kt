@@ -38,4 +38,20 @@ class ShellWordsTest {
         assertTrue(AppKinds.takesShared("EXPENSES_POT"))
         assertFalse(AppKinds.takesShared("FILE"))
     }
+
+    @Test
+    fun a_kinds_header_and_what_a_copy_leaves_behind_are_the_registrys() {
+        val box = AppKinds.header("DEPOT_DROPBOX")!!
+        assertFalse(box.renames)
+        assertEquals(Notice(Msg.DROPBOX_DELETE_CONFIRM, "Box"), box.deleteQuestion("Box"))
+        assertFalse(AppKinds.header("FILE")!!.takesCover)
+        assertFalse(AppKinds.header("MEMORY")!!.shareable)
+        assertEquals(Msg.MEMORY_DELETE_CHAPTER, AppKinds.header("CHAPTER")!!.deleteTitle)
+        kotlin.test.assertNull(AppKinds.header("SHARE_BOOKMARK"))
+        // each loss said once, the kinds in one order on both platforms
+        assertEquals(
+            listOf(Msg.COPY_LOSS_DROPBOX, Msg.COPY_LOSS_POT, Msg.COPY_LOSS_COVER, Msg.COPY_LOSS_FOLDER_COVER),
+            AppKinds.lossesOfCopy(listOf("FOLDER", "EXPENSES_POT", "DEPOT_DROPBOX", "EXPENSES_POT", "FILE")),
+        )
+    }
 }

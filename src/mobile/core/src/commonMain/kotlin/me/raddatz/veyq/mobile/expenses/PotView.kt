@@ -307,6 +307,9 @@ class PotView internal constructor(session: Source) {
         }
     }
 
+    /** The Pot's header line under its name: its base currency ("In EUR"); none before it has one. */
+    val subtitle: me.raddatz.veyq.mobile.words.Notice? get() = currency?.let { me.raddatz.veyq.mobile.words.Notice(me.raddatz.veyq.mobile.words.Msg.POT_IN_CURRENCY, it) }
+
     /** The Pot's own categories, after the defaults. */
     val ownCategories: List<Pair<String, String>> = session.meta?.categories.orEmpty()
 

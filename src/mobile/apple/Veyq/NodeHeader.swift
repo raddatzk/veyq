@@ -37,19 +37,13 @@ struct Downloaded {
     var leftOut: [String] = []
 }
 
-/// What a copy of a node of `kind` leaves behind, in its kind's words (the web descriptor's `copyLosses`).
-func copyLosses(_ kind: String) -> [String] {
-    switch kind {
-    case "FOLDER": [say(.theCopyLossFolderCover)]
-    case PotSession.companion.KIND: [
-        say(.theCopyLossPot),
-        say(.theCopyLossCover),
-    ]
-    case DepotFiles.shared.DROPBOX: [
-        say(.theCopyLossDropbox),
-    ]
-    default: []
-    }
+/// What a copy of nodes of `kinds` leaves behind, in their kinds' words (core's `AppKinds.lossesOfCopy`).
+func copyLosses(_ kinds: [String]) -> [String] { AppKinds.shared.lossesOfCopy(kinds: kinds).map { say($0) } }
+
+/// A kind's delete words and rename from core's registry (`AppKinds.header`).
+private func kindHeader(_ node: NodeAt) -> (title: String, question: String, renames: Bool) {
+    guard let h = AppKinds.shared.header(kind: node.kind) else { return (say(.folderDelete), say(.folderDeleteConfirm, node.name), true) }
+    return (say(h.deleteTitle), say(notice: h.deleteQuestion(name: node.name)), h.renames)
 }
 
 /// An action of the application's own on its node's header.
@@ -66,8 +60,10 @@ struct OwnAction {
 /// tell yet) and the page's body under it (nil: not built; a folder's is core's level). Core draws the header for every
 /// kind, never an application.
 struct KindPage {
-    let shareable: Bool
-    let takesCover: Bool
+    /// What core's registry says of the kind (`AppKinds.header`).
+    let kind: String
+    var shareable: Bool { AppKinds.shared.header(kind: kind)?.shareable == true }
+    var takesCover: Bool { AppKinds.shared.header(kind: kind)?.takesCover == true }
     let header: @MainActor (NodeAt, AppModel) -> HeaderContribution?
     /// The body of an object of the kind on its bar tab (`key`).
     var body: (@MainActor (ObjectRef, String, AppModel) -> AnyView)?
@@ -86,74 +82,69 @@ struct KindPage {
 
     /// Depot's drop box: its guests' folders (`DropBoxScreen`); never renamed; its cover; its ZIP and its copy (a plain folder).
     /// Memories' Memory and chapter: their gallery (`MemoryScreen`); their cover is core's.
-    private static let memory = KindPage(shareable: false, takesCover: true, header: { node, _ in
-        HeaderContribution(
-            deleteTitle: node.kind == "CHAPTER" ? say(.memoryDeleteChapter) : say(.memoryDeleteMemory),
-            deleteQuestion: say(.memoryDeleteConfirm, node.name)
-        )
+    private static let memory = KindPage(kind: "MEMORY", header: { node, _ in
+        HeaderContribution(deleteTitle: kindHeader(node).title, deleteQuestion: kindHeader(node).question)
     }, body: { ref, _, model in AnyView(MemoryScreen(model: model, ref: ref)) })
 
-    private static let dropBox = KindPage(shareable: true, takesCover: true, header: { node, model in
+    private static let dropBox = KindPage(kind: DepotFiles.shared.DROPBOX, header: { node, model in
         HeaderContribution(
-            rename: false,
-            deleteTitle: say(.dropboxDelete),
-            deleteQuestion: say(.dropboxDeleteConfirm, node.name),
+            rename: kindHeader(node).renames,
+            deleteTitle: kindHeader(node).title,
+            deleteQuestion: kindHeader(node).question,
             copy: { to, toName in await model.copyFolder(node, to: to, toName: toName) },
             copyNotes: {
                 let p = await model.copyPreview(node)
-                var seen = Set<String>()
-                return CopyNotes(losses: p.kinds.sorted().flatMap(copyLosses).filter { seen.insert($0).inserted }, leftOut: p.leftOut)
+                return CopyNotes(losses: copyLosses(Array(p.kinds)), leftOut: p.leftOut)
             },
             download: { await model.downloadFolder(node) }
         )
     }, body: { ref, _, model in AnyView(DropBoxScreen(model: model, ref: ref)) })
 
     /// Depot's file: its download under its own name, its replace (or first upload), its page (`FileScreen`).
-    private static let file = KindPage(shareable: true, takesCover: false, header: { node, model in
+    private static let file = KindPage(kind: DepotFiles.shared.FILE, header: { node, model in
         let has = model.files[node.nodeId]?.hasContent == true
         return HeaderContribution(
-            deleteTitle: say(.fileDelete),
-            deleteQuestion: say(.fileDeleteConfirm, node.name),
+            deleteTitle: kindHeader(node).title,
+            deleteQuestion: kindHeader(node).question,
             // a copy is read here and uploaded again under a fresh key (the web's `importFile` for a copy)
             copy: has ? { to, toName in await model.copyFolder(node, to: to, toName: toName) } : nil,
             copyNotes: { CopyNotes(losses: []) },
             download: has ? { await model.downloadFile(node) } : nil,
-            actions: [OwnAction(id: "replace", label: has ? say(.depotReplace) : say(.depotUploadInto), systemImage: "square.and.arrow.down.on.square") {
+            actions: [OwnAction(id: "replace", label: say(DepotFiles.shared.replaceWord(f: model.files[node.nodeId])), systemImage: "square.and.arrow.down.on.square") {
                 model.replacing = node.nodeId
             }] + sendAction(node, model, has)
         )
     }, body: { ref, _, model in AnyView(FileScreen(model: model, ref: ref)) })
 
     /// Core's folder: its ZIP and its copy with everything under it the build exports and copies (`NodeExport`, `SubtreeCopy`).
-    private static let folder = KindPage(shareable: true, takesCover: true, header: { node, model in
+    private static let folder = KindPage(kind: "FOLDER", header: { node, model in
         HeaderContribution(
-            deleteTitle: say(.folderDelete),
-            deleteQuestion: say(.folderDeleteConfirm, node.name),
+            deleteTitle: kindHeader(node).title,
+            deleteQuestion: kindHeader(node).question,
             copy: { to, toName in await model.copyFolder(node, to: to, toName: toName) },
             copyNotes: {
                 let p = await model.copyPreview(node)
-                var seen = Set<String>()
-                return CopyNotes(losses: p.kinds.sorted().flatMap(copyLosses).filter { seen.insert($0).inserted }, leftOut: p.leftOut)
+                return CopyNotes(losses: copyLosses(Array(p.kinds)), leftOut: p.leftOut)
             },
             download: { await model.downloadFolder(node) }
         )
     })
 
     /// Expenses' Pot: its currency under its name, its cover and copy while Expenses is on, its ZIP.
-    private static let pot = KindPage(shareable: true, takesCover: true, header: { node, model in
+    private static let pot = KindPage(kind: PotSession.companion.KIND, header: { node, model in
         guard let state = model.pot, state.ref.nodeId == node.nodeId, let view = state.view else { return nil }
         // a cover and a copy write: offered where Expenses is on (the web's `canCopy`, `expensesRights`)
         let writable = view.canWrite
         let ref = state.ref
         return HeaderContribution(
-            subtitle: view.currency.map { say(.potInCurrency, $0) },
+            subtitle: view.subtitle.map { say(notice: $0) },
             cover: writable,
-            deleteTitle: say(.potDelete),
-            deleteQuestion: say(.potDeleteConfirm, node.name),
+            deleteTitle: kindHeader(node).title,
+            deleteQuestion: kindHeader(node).question,
             copy: writable ? { to, toName in
                 Notices.shared.potCopyRefused(outcome: await model.copyPot(node, to: to, toName: toName)).map { say(notice: $0) }
             } : nil,
-            copyNotes: { CopyNotes(losses: copyLosses(PotSession.companion.KIND)) },
+            copyNotes: { CopyNotes(losses: copyLosses([PotSession.companion.KIND])) },
             download: { await model.downloadPot(ref).map { Downloaded(url: $0) } }
         )
     }, body: { ref, key, model in AnyView(PotScreen(model: model, ref: ref, tab: key)) })

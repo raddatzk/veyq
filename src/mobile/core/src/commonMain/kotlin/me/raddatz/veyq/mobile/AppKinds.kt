@@ -146,6 +146,39 @@ object AppKinds {
     /** The drawer's "New", opened on Home: a folder or a Pot. */
     val drawerCreates: List<Create> = listOf(Create.FOLDER, Create.POT)
 
+    /**
+     * What core's header reads of a kind (the web's `KindRegistration`): whether it brings a share sheet, takes a cover and
+     * is renamed, and its delete's words — its title, and its question with the node's name.
+     */
+    class Header(
+        val shareable: Boolean, val takesCover: Boolean, val renames: Boolean,
+        val deleteTitle: me.raddatz.veyq.mobile.words.Msg, private val deleteQuestionMsg: me.raddatz.veyq.mobile.words.Msg,
+    ) {
+        fun deleteQuestion(name: String): me.raddatz.veyq.mobile.words.Notice = me.raddatz.veyq.mobile.words.Notice(deleteQuestionMsg, name)
+    }
+
+    /** The header of a node of [kind]; null for a kind this build registers no page for. */
+    fun header(kind: String): Header? = when (kind) {
+        FOLDER -> Header(true, true, true, me.raddatz.veyq.mobile.words.Msg.FOLDER_DELETE, me.raddatz.veyq.mobile.words.Msg.FOLDER_DELETE_CONFIRM)
+        PotSession.KIND -> Header(true, true, true, me.raddatz.veyq.mobile.words.Msg.POT_DELETE, me.raddatz.veyq.mobile.words.Msg.POT_DELETE_CONFIRM)
+        FILE -> Header(true, false, true, me.raddatz.veyq.mobile.words.Msg.FILE_DELETE, me.raddatz.veyq.mobile.words.Msg.FILE_DELETE_CONFIRM)
+        // a drop box is never renamed: its name is its guests' address
+        DROPBOX -> Header(true, true, false, me.raddatz.veyq.mobile.words.Msg.DROPBOX_DELETE, me.raddatz.veyq.mobile.words.Msg.DROPBOX_DELETE_CONFIRM)
+        MEMORY -> Header(false, true, true, me.raddatz.veyq.mobile.words.Msg.MEMORY_DELETE_MEMORY, me.raddatz.veyq.mobile.words.Msg.MEMORY_DELETE_CONFIRM)
+        CHAPTER -> Header(false, true, true, me.raddatz.veyq.mobile.words.Msg.MEMORY_DELETE_CHAPTER, me.raddatz.veyq.mobile.words.Msg.MEMORY_DELETE_CONFIRM)
+        else -> null
+    }
+
+    /** What a copy of nodes of [kinds] leaves behind (the web descriptor's `copyLosses`), each said once, by kind in order. */
+    fun lossesOfCopy(kinds: List<String>): List<me.raddatz.veyq.mobile.words.Msg> = kinds.sorted().flatMap { kind ->
+        when (kind) {
+            FOLDER -> listOf(me.raddatz.veyq.mobile.words.Msg.COPY_LOSS_FOLDER_COVER)
+            PotSession.KIND -> listOf(me.raddatz.veyq.mobile.words.Msg.COPY_LOSS_POT, me.raddatz.veyq.mobile.words.Msg.COPY_LOSS_COVER)
+            DROPBOX -> listOf(me.raddatz.veyq.mobile.words.Msg.COPY_LOSS_DROPBOX)
+            else -> emptyList()
+        }
+    }.distinct()
+
     /** Whether an object of [kind] can be chosen as the place for files shared to veyq (ADR 0126 decision 1): a Pot. */
     fun takesShared(kind: String): Boolean = kind == PotSession.KIND
 

@@ -21,61 +21,72 @@ import me.raddatz.veyq.mobile.navigation.ObjectRef
  * every kind (`NodeHeaderActions`), never an application.
  */
 internal class KindPage(
-    val shareable: Boolean,
-    val takesCover: Boolean,
+    kind: String,
     val header: @Composable (NodeAt, AppModel) -> HeaderContribution?,
     val body: (@Composable (ObjectRef, BarTab?, AppModel) -> Unit)? = null,
-)
+) {
+    /** What core's registry says of the kind (`AppKinds.header`). */
+    val rules: me.raddatz.veyq.mobile.AppKinds.Header = requireNotNull(me.raddatz.veyq.mobile.AppKinds.header(kind)) { kind }
+    val shareable: Boolean get() = rules.shareable
+    val takesCover: Boolean get() = rules.takesCover
+}
+
+/** A contribution's delete words and rename from core's registry, for [node]. */
+@Composable
+private fun deleteWords(node: NodeAt): Triple<String, String, Boolean> {
+    val h = requireNotNull(me.raddatz.veyq.mobile.AppKinds.header(node.kind)) { node.kind }
+    return Triple(say(h.deleteTitle), say(h.deleteQuestion(node.name)), h.renames)
+}
 
 /** The pages this build registers, by kind: core's folder and each application's kinds (the composition root). */
 internal object KindPages {
     /** Core's folder: its ZIP and its copy with everything under it the build exports and copies (`NodeExport`, `SubtreeCopy`). */
-    private val folder = KindPage(shareable = true, takesCover = true, header = { node, model ->
+    private val folder = KindPage("FOLDER", header = { node, model ->
         val context = LocalContext.current
+        val (title, question, _) = deleteWords(node)
         HeaderContribution(
-            deleteTitle = stringResource(R.string.folder_delete),
-            deleteQuestion = stringResource(R.string.folder_delete_confirm, node.name),
+            deleteTitle = title,
+            deleteQuestion = question,
             copy = { to -> model.copyFolder(node, to) },
             copyNotes = {
                 val (kinds, left) = model.copyPreview(node)
-                CopyNotes(kinds.flatMap { copyLosses(context, it) }.distinct(), left)
+                CopyNotes(me.raddatz.veyq.mobile.AppKinds.lossesOfCopy(kinds.toList()).map { context.words(it) }, left)
             },
             download = { out -> model.downloadFolder(node, out) },
         )
     })
 
     /** Expenses' Pot: its currency under its name, its cover and copy while Expenses is on, its ZIP. */
-    private val pot = KindPage(shareable = true, takesCover = true, header = { node, model -> potHeader(node, model) }, body = { ref, tab, model ->
+    private val pot = KindPage(PotSession.KIND, header = { node, model -> potHeader(node, model) }, body = { ref, tab, model ->
         PotScreen(ref, tab, model)
     })
 
     /** Depot's file: its download under its own name, its replace (or first upload), its page (`FileScreen`). */
-    private val file = KindPage(shareable = true, takesCover = false, header = { node, model -> fileHeader(node, model) }, body = { ref, _, model ->
+    private val file = KindPage(me.raddatz.veyq.mobile.depot.DepotFiles.FILE, header = { node, model -> fileHeader(node, model) }, body = { ref, _, model ->
         FileScreen(ref, model)
     })
 
     /** Depot's drop box: its guests' folders (`DropBoxScreen`); never renamed; its cover; its ZIP and its copy (a plain folder). */
-    private val dropBox = KindPage(shareable = true, takesCover = true, header = { node, model ->
+    private val dropBox = KindPage(me.raddatz.veyq.mobile.depot.DepotFiles.DROPBOX, header = { node, model ->
         val context = LocalContext.current
+        val (title, question, renames) = deleteWords(node)
         HeaderContribution(
-            rename = false,
-            deleteTitle = stringResource(R.string.dropbox_delete),
-            deleteQuestion = stringResource(R.string.dropbox_delete_confirm, node.name),
+            rename = renames,
+            deleteTitle = title,
+            deleteQuestion = question,
             copy = { to -> model.copyFolder(node, to) },
             copyNotes = {
                 val (kinds, left) = model.copyPreview(node)
-                CopyNotes(kinds.flatMap { copyLosses(context, it) }.distinct(), left)
+                CopyNotes(me.raddatz.veyq.mobile.AppKinds.lossesOfCopy(kinds.toList()).map { context.words(it) }, left)
             },
             download = { out -> model.downloadFolder(node, out) },
         )
     }, body = { ref, _, model -> DropBoxScreen(ref, model) })
 
     /** Memories' Memory and chapter: their gallery (`MemoryScreen`); their cover is core's. */
-    private val memory = KindPage(shareable = false, takesCover = true, header = { node, _ ->
-        HeaderContribution(
-            deleteTitle = stringResource(if (node.kind == "CHAPTER") R.string.memory_delete_chapter else R.string.memory_delete_memory),
-            deleteQuestion = stringResource(R.string.memory_delete_confirm, node.name),
-        )
+    private val memory = KindPage("MEMORY", header = { node, _ ->
+        val (title, question, _) = deleteWords(node)
+        HeaderContribution(deleteTitle = title, deleteQuestion = question)
     }, body = { ref, _, model -> MemoryScreen(ref, model) })
 
     fun of(kind: String): KindPage? = when (kind) {
@@ -86,14 +97,6 @@ internal object KindPages {
         me.raddatz.veyq.mobile.depot.DepotFiles.FILE -> file
         else -> null
     }
-}
-
-/** What a copy of a node of [kind] leaves behind, in its kind's words (the web descriptor's `copyLosses`). */
-private fun copyLosses(context: android.content.Context, kind: String): List<String> = when (kind) {
-    "FOLDER" -> listOf(context.getString(R.string.copy_loss_folder_cover))
-    PotSession.KIND -> listOf(context.getString(R.string.copy_loss_pot), context.getString(R.string.copy_loss_cover))
-    me.raddatz.veyq.mobile.depot.DepotFiles.DROPBOX -> listOf(context.getString(R.string.copy_loss_dropbox))
-    else -> emptyList()
 }
 
 @Composable
@@ -108,8 +111,8 @@ private fun fileHeader(node: NodeAt, model: AppModel): HeaderContribution {
     }
     val has = f?.hasContent == true
     return HeaderContribution(
-        deleteTitle = stringResource(R.string.file_delete),
-        deleteQuestion = stringResource(R.string.file_delete_confirm, node.name),
+        deleteTitle = deleteWords(node).first,
+        deleteQuestion = deleteWords(node).second,
         download = if (has) { out -> model.downloadFile(node, out) } else null,
         // a copy is read here and uploaded again under a fresh key (the web's `importFile` for a copy)
         copy = if (has) { to -> model.copyFolder(node, to) } else null,
@@ -118,7 +121,7 @@ private fun fileHeader(node: NodeAt, model: AppModel): HeaderContribution {
         downloadMime = "application/octet-stream",
         actions = listOf(
             OwnAction(
-                "replace", stringResource(if (has) R.string.depot_replace else R.string.depot_upload_into),
+                "replace", say(me.raddatz.veyq.mobile.depot.DepotFiles.replaceWord(f)),
                 androidx.compose.material.icons.Icons.Outlined.Upload,
             ) { pick.launch(arrayOf("*/*")) },
             // a decrypted copy to another app the person picks (the system's share sheet), after the shell's notice
@@ -139,11 +142,11 @@ private fun potHeader(node: NodeAt, model: AppModel): HeaderContribution? {
     val writable = view.canWrite
     val ref = state.ref
     return HeaderContribution(
-        subtitle = view.currency?.let { stringResource(R.string.pot_in_currency, it) },
+        subtitle = view.subtitle?.let { say(it) },
         cover = writable,
-        deleteTitle = stringResource(R.string.pot_delete),
-        deleteQuestion = stringResource(R.string.pot_delete_confirm, node.name),
-        copyNotes = { CopyNotes(copyLosses(context, PotSession.KIND)) },
+        deleteTitle = deleteWords(node).first,
+        deleteQuestion = deleteWords(node).second,
+        copyNotes = { CopyNotes(me.raddatz.veyq.mobile.AppKinds.lossesOfCopy(listOf(PotSession.KIND)).map { context.words(it) }) },
         copy = if (writable) { to ->
             val r = model.copyPot(ref, to)
             me.raddatz.veyq.mobile.words.Notices.potCopyRefused(r.outcome)?.let { context.text(it) }
