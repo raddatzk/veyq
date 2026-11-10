@@ -20,9 +20,14 @@ Verbs:
                              (`generate_theme.py --gtk`) — links the bridge's library, and runs in the container
                              `cargo clippy --locked --all-targets -- -D warnings`, `cargo test --locked` and
                              `cargo build --locked`. Its exit code is cargo's.
-  run [--port N]             `build`'s generation and `cargo build`, then the app under `gtk4-broadwayd`, drawn into a
+  run [--port N] [--devlogin] `build`'s generation and `cargo build`, then the app under `gtk4-broadwayd`, drawn into a
                              browser at http://127.0.0.1:N (default 8095; published on 127.0.0.1 only). LANGUAGE and
-                             ADW_DEBUG_COLOR_SCHEME, when set, reach the app.
+                             ADW_DEBUG_COLOR_SCHEME, when set, reach the app, VEYQ_LOCALE as its LANG (default
+                             en_US.UTF-8; `VEYQ_LOCALE=de_DE.UTF-8 LANGUAGE=de` for German words and German
+                             money). With VEYQ_LIVE the app reaches the dev origin under its own name (as `test`
+                             does); `--devlogin` (needs VEYQ_LIVE) hands the debug build the seeded principal of the
+                             env file as VEYQ_DEV_*, and it signs in through its own sign-in — the values go to
+                             `docker run` through its environment, never on its command line.
   lock                       `cargo update`: writes Cargo.lock anew from Cargo.toml (the one way it changes).
 
 cargo's registry and target directory live in the Docker volumes `veyq-linux-cargo` and `veyq-linux-target`, so a
@@ -99,11 +104,14 @@ def test(pattern: str | None) -> int:
 
 def in_container(docker_platform: str, mounts: dict[Path, str], env: dict[str, str], script: str,
                  writable: dict[Path, str] | None = None, volumes: dict[str, str] | None = None,
-                 docker_args: list[str] | None = None) -> int:
+                 docker_args: list[str] | None = None, secrets: dict[str, str] | None = None) -> int:
     """Runs bash [script] in the image, [mounts] read-only, [writable] read-write, [volumes] the named volumes; with
-    VEYQ_LIVE, the dev origin reachable under its own name and the seeded principal's env file at /veyq/env. Returns
-    the script's exit code."""
+    VEYQ_LIVE, the dev origin reachable under its own name and the seeded principal's env file at /veyq/env. [secrets]
+    reach the container by name only (`-e NAME`, the value in docker's own environment), so the printed command holds
+    none of them. Returns the script's exit code."""
     docker = ["docker", "run", "--rm", "--platform", docker_platform] + (docker_args or [])
+    for k in secrets or {}:
+        docker += ["-e", k]
     for host_path, container_path in (writable or {}).items():
         docker += ["-v", f"{host_path}:{container_path}"]
     for name, container_path in (volumes or {}).items():
@@ -128,7 +136,7 @@ def in_container(docker_platform: str, mounts: dict[Path, str], env: dict[str, s
         docker += ["-e", f"{k}={v}"]
     docker += [IMAGE, "bash", "-c", prelude + script]
     print("+ " + " ".join(docker), flush=True)
-    return subprocess.run(docker).returncode
+    return subprocess.run(docker, env=os.environ | (secrets or {})).returncode
 
 
 def bridge() -> int:
@@ -172,7 +180,7 @@ def generate(target: str) -> Path:
 
 
 def cargo(docker_platform: str, lib_dir: Path, script: str, docker_args: list[str] | None = None,
-          env: dict[str, str] | None = None) -> int:
+          env: dict[str, str] | None = None, secrets: dict[str, str] | None = None) -> int:
     """Runs [script] in the package's directory in the container, with what build.rs and the tests read."""
     mounts = {repo_layout.MOBILE_LINUX: "/veyq/src", GENERATED: "/veyq/generated", lib_dir: "/veyq/lib",
               WORDS / "words.json": "/veyq/words.json"}
@@ -180,7 +188,7 @@ def cargo(docker_platform: str, lib_dir: Path, script: str, docker_args: list[st
             "VEYQ_LIB_DIR": "/veyq/lib", "LD_LIBRARY_PATH": "/veyq/lib", "VEYQ_SAMPLES": "/veyq/generated/bridge/samples",
             "VEYQ_WORDS_JSON": "/veyq/words.json", "LANG": "en_US.UTF-8"}
     return in_container(docker_platform, mounts, base | (env or {}), f"set -e; cd /veyq/src; {script}",
-                        volumes=CARGO_VOLUMES, docker_args=docker_args)
+                        volumes=CARGO_VOLUMES, docker_args=docker_args, secrets=secrets)
 
 
 def build() -> int:
@@ -191,12 +199,34 @@ def build() -> int:
                                            "cargo test --locked; cargo build --locked")
 
 
-def run_app(port: int) -> int:
+def dev_principal() -> dict[str, str]:
+    """The seeded dev principal as the debug build's VEYQ_DEV_* (DevLogin.swift's names): the server is VEYQ_LIVE's
+    origin, the rest the env file's (VEYQ_ENV_FILE, else `.run/.env`). Nothing of it is printed."""
+    live = os.environ.get("VEYQ_LIVE")
+    if not live:
+        sys.exit("--devlogin needs VEYQ_LIVE (the dev origin the app signs in to, e.g. http://veyq.localhost:8080)")
+    env_file = Path(os.environ.get("VEYQ_ENV_FILE", ROOT / ".run" / ".env"))
+    if not env_file.exists():
+        sys.exit(f"--devlogin needs the seeded principal's {env_file} (VEYQ_ENV_FILE names another)")
+    values: dict[str, str] = {}
+    for line in env_file.read_text().splitlines():
+        if "=" in line and not line.lstrip().startswith("#"):
+            k, v = line.split("=", 1)
+            values[k.strip()] = v.strip().strip('"').strip("'")
+    return {"VEYQ_DEV_SERVER": live, "VEYQ_DEV_EMAIL": values["VEYQ_EMAIL"], "VEYQ_DEV_PASSWORD": values["VEYQ_PASSWORD"],
+            "VEYQ_DEV_SECRET_KEY": values["VEYQ_SECRET_KEY"]}
+
+
+def run_app(port: int, devlogin: bool) -> int:
+    secrets = dev_principal() if devlogin else None
     docker_platform, target = arch()
     lib_dir = generate(target)
     build_image(docker_platform)
     inner = 8080 + BROADWAY_DISPLAY
     env = {k: os.environ[k] for k in ("LANGUAGE", "ADW_DEBUG_COLOR_SCHEME") if k in os.environ}
+    # the app's locale (its money, its dates): VEYQ_LOCALE, never the host's own LANG, which says nothing of the image's
+    if "VEYQ_LOCALE" in os.environ:
+        env["LANG"] = os.environ["VEYQ_LOCALE"]
     env |= {"GDK_BACKEND": "broadway", "BROADWAY_DISPLAY": f":{BROADWAY_DISPLAY}", "XDG_RUNTIME_DIR": "/tmp/xdg"}
     print(f"veyq: the app draws into http://127.0.0.1:{port} once cargo built it", flush=True)
     return cargo(docker_platform, lib_dir,
@@ -205,7 +235,7 @@ def run_app(port: int) -> int:
                  # ready once its socket is there (a bare TCP probe makes it log "Error reading request lines")
                  "for _ in $(seq 50); do ls /tmp/xdg/broadway*.socket >/dev/null 2>&1 && break; sleep 0.1; done; "
                  "exec /veyq/target/debug/veyq",
-                 docker_args=["-p", f"127.0.0.1:{port}:{inner}"], env=env)
+                 docker_args=["-p", f"127.0.0.1:{port}:{inner}"], env=env, secrets=secrets)
 
 
 def lock() -> int:
@@ -231,12 +261,13 @@ def main() -> None:
     verbs.add_parser("build", help="generate, then cargo clippy, test and build the app in the container")
     r = verbs.add_parser("run", help="build the app and run it under gtk4-broadwayd, drawn into a browser")
     r.add_argument("--port", type=int, default=8095, help="the port on 127.0.0.1 the browser opens (default 8095)")
+    r.add_argument("--devlogin", action="store_true", help="sign the debug build in as the seeded principal (needs VEYQ_LIVE)")
     verbs.add_parser("lock", help="cargo update: write Cargo.lock anew")
     args = parser.parse_args()
     if args.verb == "build":
         sys.exit(build())
     if args.verb == "run":
-        sys.exit(run_app(args.port))
+        sys.exit(run_app(args.port, args.devlogin))
     if args.verb == "lock":
         sys.exit(lock())
     if args.verb == "test":

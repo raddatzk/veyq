@@ -80,6 +80,20 @@ unsafe extern "C" fn answered(ctx: *mut c_void, json: *const c_char, _bytes: *co
     let _ = tx.try_send(serde_json::from_str(&text).map_err(Unreadable));
 }
 
+/// [call] sent from GTK's main loop, its answer awaited there; an answer other than done is said on stderr by the call's
+/// kind alone (never its fields: a sign-in's carry what the person typed).
+pub fn send(call: Call) {
+    gtk::glib::spawn_future_local(async move {
+        match self::call(&call).await {
+            Ok(Answer::Done | Answer::PotOpened { .. } | Answer::Groups { .. } | Answer::Hits { .. }) => {}
+            other => {
+                let kind = serde_json::to_value(&call).ok().and_then(|v| v["type"].as_str().map(str::to_owned)).unwrap_or_default();
+                eprintln!("veyq: {kind} answered {other:?}");
+            }
+        }
+    });
+}
+
 /// An observed model; dropping it ends the watch.
 pub struct Watch(u64);
 

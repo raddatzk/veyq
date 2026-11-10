@@ -133,6 +133,7 @@ mod tests {
     /// itself; a plural on both sides of 1. The one test that changes the language (the process's environment).
     #[test]
     fn every_key_says_its_words_in_english_and_german() {
+        let _locale = crate::LOCALE.lock().unwrap_or_else(|p| p.into_inner());
         let path = std::env::var("VEYQ_WORDS_JSON").expect("run.py sets VEYQ_WORDS_JSON to words.json");
         let catalog: serde_json::Map<String, serde_json::Value> =
             serde_json::from_str(&std::fs::read_to_string(path).unwrap()).unwrap();
