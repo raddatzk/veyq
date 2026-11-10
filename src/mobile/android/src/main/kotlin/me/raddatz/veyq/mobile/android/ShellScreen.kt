@@ -304,12 +304,7 @@ private fun SpaceSwitcher(s: Screen.Signed, onSwitch: (String) -> Unit) {
 }
 
 @Composable
-internal fun spaceName(space: me.raddatz.veyq.mobile.navigation.SpaceRef?): String = when (space?.kind) {
-    null -> stringResource(R.string.drawer_home)
-    "PERSONAL" -> stringResource(R.string.space_personal)
-    "GROUP" -> stringResource(R.string.space_group)
-    else -> space.name
-}
+internal fun spaceName(space: me.raddatz.veyq.mobile.navigation.SpaceRef?): String = piece(me.raddatz.veyq.mobile.navigation.ShellWords.space(space))
 
 private fun spaceIcon(kind: String): ImageVector = when (kind) {
     "PERSONAL" -> Icons.Outlined.Person
@@ -348,12 +343,18 @@ private fun HomeScreen(s: Screen.Signed, model: AppModel, onEnter: (me.raddatz.v
     }
     // The level's "New" (the web's menu): a folder here, a Pot here, or files uploaded here.
     // nothing is created in a guest's folder (the web's `folderRights`: no "New" there)
-    val inGuestFolder = s.shell.space?.let { sp -> s.shell.folder?.let { f -> model.inIdentityFolder(me.raddatz.veyq.mobile.navigation.NodeAt(sp, f.nodeId, "FOLDER", f.name)) } } ?: false
-    CreateAction(stringResource(R.string.create_new), shown = s.shell.space != null && !inGuestFolder, onClick = {}, menu = { close ->
-        androidx.compose.material3.DropdownMenuItem(text = { Text(stringResource(R.string.folder_new)) }, onClick = { close(); naming = true })
-        androidx.compose.material3.DropdownMenuItem(text = { Text(stringResource(R.string.create_pot)) }, onClick = { close(); creatingPot = true })
-        androidx.compose.material3.DropdownMenuItem(text = { Text(stringResource(R.string.depot_upload)) }, onClick = { close(); pickFiles.launch(arrayOf("*/*")) })
-        androidx.compose.material3.DropdownMenuItem(text = { Text(stringResource(R.string.depot_upload_folder)) }, onClick = { close(); pickFolder.launch(null) })
+    CreateAction(stringResource(R.string.create_new), shown = model.canCreateHere, onClick = {}, menu = { close ->
+        me.raddatz.veyq.mobile.AppKinds.homeCreates.forEach { c ->
+            androidx.compose.material3.DropdownMenuItem(text = { Text(say(c.word)) }, onClick = {
+                close()
+                when (c) {
+                    me.raddatz.veyq.mobile.AppKinds.Create.FOLDER -> naming = true
+                    me.raddatz.veyq.mobile.AppKinds.Create.POT -> creatingPot = true
+                    me.raddatz.veyq.mobile.AppKinds.Create.UPLOAD_FILES -> pickFiles.launch(arrayOf("*/*"))
+                    me.raddatz.veyq.mobile.AppKinds.Create.UPLOAD_FOLDER -> pickFolder.launch(null)
+                }
+            })
+        }
     }) { list, bottom ->
     Column(Modifier.fillMaxSize()) {
         if (s.filters.size > 1) {
@@ -539,8 +540,12 @@ private fun Drawer(
                     Text(stringResource(R.string.drawer_new))
                 }
                 androidx.compose.material3.DropdownMenu(newMenu, { newMenu = false }) {
-                    androidx.compose.material3.DropdownMenuItem(text = { Text(stringResource(R.string.folder_new)) }, onClick = { newMenu = false; onNew("folder") })
-                    androidx.compose.material3.DropdownMenuItem(text = { Text(stringResource(R.string.create_pot)) }, onClick = { newMenu = false; onNew("pot") })
+                    me.raddatz.veyq.mobile.AppKinds.drawerCreates.forEach { c ->
+                        androidx.compose.material3.DropdownMenuItem(text = { Text(say(c.word)) }, onClick = {
+                            newMenu = false
+                            onNew(if (c == me.raddatz.veyq.mobile.AppKinds.Create.POT) "pot" else "folder")
+                        })
+                    }
                 }
             }
             Spacer(Modifier.height(6.dp))
@@ -653,7 +658,7 @@ private val LocalCovers = androidx.compose.runtime.staticCompositionLocalOf<Map<
 private fun ObjectRow(ref: ObjectRef, onOpen: (ObjectRef) -> Unit) {
     val details = LocalRowDetails.current[ref.nodeId].orEmpty()
     // Picking a place for what was shared: only a kind that takes it can be chosen (ADR 0126 decision 1).
-    val takes = !LocalPicking.current || ref.kind == me.raddatz.veyq.mobile.expenses.PotShare.KIND
+    val takes = !LocalPicking.current || me.raddatz.veyq.mobile.AppKinds.takesShared(ref.kind)
     ListItem(
         headlineContent = { Text(ref.name, fontWeight = androidx.compose.ui.text.font.FontWeight.Bold) },
         // The application's facts about the object (a Pot: its currency), left out when it has none.
@@ -682,7 +687,7 @@ private fun SearchScreen(objects: List<ObjectRef>, onOpen: (ObjectRef) -> Unit, 
     var query by remember { mutableStateOf("") }
     var expanded by remember { mutableStateOf(true) }
     LaunchedEffect(expanded) { if (!expanded) onClose() }
-    val hits = remember(query, objects) { if (query.isBlank()) emptyList() else objects.filter { it.name.contains(query.trim(), ignoreCase = true) } }
+    val hits = remember(query, objects) { me.raddatz.veyq.mobile.navigation.ShellWords.search(objects, query) }
     SearchBar(
         inputField = {
             SearchBarDefaults.InputField(
@@ -715,13 +720,7 @@ private fun Empty() {
 }
 
 @Composable
-private fun appName(app: ApplicationId): String = stringResource(
-    when (app) {
-        ApplicationId.MEMORIES -> R.string.app_memories
-        ApplicationId.DEPOT -> R.string.app_depot
-        ApplicationId.EXPENSES -> R.string.app_expenses
-    },
-)
+private fun appName(app: ApplicationId): String = say(me.raddatz.veyq.mobile.AppKinds.applicationWord(app))
 
 /** The web's motifs (src/web/src/shared/ui/icons.ts) in Material Symbols: images, file, wallet. */
 private fun appIcon(app: ApplicationId): ImageVector = when (app) {
@@ -751,17 +750,7 @@ private fun tabIcon(tab: BarTab, kind: String?): ImageVector = when (tab.key) {
 }
 
 @Composable
-private fun tabLabel(tab: BarTab, kind: String?): String = stringResource(
-    when (tab.key) {
-        "memories.all" -> R.string.tab_memories_all
-        "memories.map" -> R.string.tab_memories_map
-        "depot.file" -> if (kind == me.raddatz.veyq.mobile.depot.DepotFiles.DROPBOX) R.string.tab_depot_dropbox else R.string.tab_depot_file
-        "expenses.entries" -> R.string.tab_expenses_entries
-        "expenses.overview" -> R.string.tab_expenses_overview
-        "expenses.settings" -> R.string.tab_expenses_settings
-        else -> R.string.not_built
-    },
-)
+private fun tabLabel(tab: BarTab, kind: String?): String = say(me.raddatz.veyq.mobile.AppKinds.tabWord(tab, kind))
 
 /** What each object's row says beside its name, by node id (`AppModel.rowDetails`). */
 internal val LocalRowDetails = androidx.compose.runtime.compositionLocalOf<Map<String, List<String>>> { emptyMap() }

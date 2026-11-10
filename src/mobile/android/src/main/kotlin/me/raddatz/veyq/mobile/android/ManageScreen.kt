@@ -148,8 +148,4 @@ fun ManageScreen(servers: List<ManagedServer>, model: AppModel) {
 }
 
 @Composable
-private fun managedSpaceName(space: me.raddatz.veyq.mobile.navigation.SpaceRef): String = when (space.kind) {
-    "PERSONAL" -> stringResource(R.string.space_personal)
-    "GROUP" -> stringResource(R.string.space_group)
-    else -> space.name
-}
+private fun managedSpaceName(space: me.raddatz.veyq.mobile.navigation.SpaceRef): String = spaceName(space)

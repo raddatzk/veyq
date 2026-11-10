@@ -114,6 +114,41 @@ object AppKinds {
         else -> emptyList()
     }
 
+    /** An application's name. */
+    fun applicationWord(app: me.raddatz.veyq.mobile.navigation.ApplicationId): me.raddatz.veyq.mobile.words.Msg = when (app) {
+        me.raddatz.veyq.mobile.navigation.ApplicationId.MEMORIES -> me.raddatz.veyq.mobile.words.Msg.APP_MEMORIES
+        me.raddatz.veyq.mobile.navigation.ApplicationId.DEPOT -> me.raddatz.veyq.mobile.words.Msg.APP_DEPOT
+        me.raddatz.veyq.mobile.navigation.ApplicationId.EXPENSES -> me.raddatz.veyq.mobile.words.Msg.APP_EXPENSES
+    }
+
+    /** A bar tab's name; Depot's one tab names the object open ([objectKind]): a file or a drop box. */
+    fun tabWord(tab: me.raddatz.veyq.mobile.navigation.BarTab, objectKind: String?): me.raddatz.veyq.mobile.words.Msg = when (tab.key) {
+        "memories.all" -> me.raddatz.veyq.mobile.words.Msg.TAB_MEMORIES_ALL
+        "memories.map" -> me.raddatz.veyq.mobile.words.Msg.TAB_MEMORIES_MAP
+        "depot.file" -> if (objectKind == DROPBOX) me.raddatz.veyq.mobile.words.Msg.TAB_DEPOT_DROPBOX else me.raddatz.veyq.mobile.words.Msg.TAB_DEPOT_FILE
+        "expenses.entries" -> me.raddatz.veyq.mobile.words.Msg.TAB_EXPENSES_ENTRIES
+        "expenses.overview" -> me.raddatz.veyq.mobile.words.Msg.TAB_EXPENSES_OVERVIEW
+        "expenses.settings" -> me.raddatz.veyq.mobile.words.Msg.TAB_EXPENSES_SETTINGS
+        else -> me.raddatz.veyq.mobile.words.Msg.NOT_BUILT
+    }
+
+    /** What "New" creates at a level (the web's menu); each app wires each to its own dialog or picker. */
+    enum class Create(val word: me.raddatz.veyq.mobile.words.Msg) {
+        FOLDER(me.raddatz.veyq.mobile.words.Msg.FOLDER_NEW),
+        POT(me.raddatz.veyq.mobile.words.Msg.CREATE_POT),
+        UPLOAD_FILES(me.raddatz.veyq.mobile.words.Msg.DEPOT_UPLOAD),
+        UPLOAD_FOLDER(me.raddatz.veyq.mobile.words.Msg.DEPOT_UPLOAD_FOLDER),
+    }
+
+    /** Home's "New": a folder, a Pot, files or a folder uploaded here. */
+    val homeCreates: List<Create> = listOf(Create.FOLDER, Create.POT, Create.UPLOAD_FILES, Create.UPLOAD_FOLDER)
+
+    /** The drawer's "New", opened on Home: a folder or a Pot. */
+    val drawerCreates: List<Create> = listOf(Create.FOLDER, Create.POT)
+
+    /** Whether an object of [kind] can be chosen as the place for files shared to veyq (ADR 0126 decision 1): a Pot. */
+    fun takesShared(kind: String): Boolean = kind == PotSession.KIND
+
     private const val FOLDER = "FOLDER"
     private const val FILE = "FILE"
     private const val DROPBOX = "DEPOT_DROPBOX"

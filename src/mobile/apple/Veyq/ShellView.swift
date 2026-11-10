@@ -76,8 +76,9 @@ struct DrawerList: View {
                 TenantSwitcher(model: model)
                 // the web's sidebar "New": what a level creates, opened on Home
                 Menu {
-                    Button(say(.folderNew), systemImage: "folder.badge.plus") { model.requestNew(.folder) }
-                    Button(say(.createPot), systemImage: "wallet.bifold") { model.requestNew(.pot) }
+                    ForEach(AppKinds.shared.drawerCreates, id: \.self) { c in
+                        Button(say(c.word), systemImage: Names.createSymbol(c)) { model.requestNew(c == .pot ? .pot : .folder) }
+                    }
                 } label: {
                     Label(say(.drawerNew), systemImage: "plus").frame(maxWidth: .infinity)
                 }
@@ -401,11 +402,17 @@ struct HomeView: View {
             }
         }
         // nothing is created in a guest's folder (the web's `folderRights`: no "New" there)
-        .createMenu(say(.drawerNew), shown: model.shell.space != nil && !(model.shell.space.flatMap { model.shell.folderAt(scopeId: $0) }.map { model.inIdentityFolder($0) } ?? false)) {
-            Button(say(.folderNew), systemImage: "folder.badge.plus") { newName = ""; nameProblem = nil; naming = true }
-            Button(say(.createPot), systemImage: "wallet.bifold") { creatingPot = true }
-            Button(say(.depotUpload), systemImage: "square.and.arrow.up.on.square") { pickingFiles = true }
-            Button(say(.depotUploadFolder), systemImage: "folder.badge.plus") { pickingFolder = true }
+        .createMenu(say(.drawerNew), shown: model.canCreateHere) {
+            ForEach(AppKinds.shared.homeCreates, id: \.self) { c in
+                Button(say(c.word), systemImage: Names.createSymbol(c)) {
+                    switch c {
+                    case .pot: creatingPot = true
+                    case .uploadFiles: pickingFiles = true
+                    case .uploadFolder: pickingFolder = true
+                    default: newName = ""; nameProblem = nil; naming = true
+                    }
+                }
+            }
         }
         // Depot's "Upload files": the system's picker hands over the files chosen, uploaded here one after another
         .fileImporter(isPresented: $pickingFiles, allowedContentTypes: [.item], allowsMultipleSelection: true) { result in
@@ -499,7 +506,7 @@ struct ObjectRow: View {
     @Environment(\.covers) private var covers
 
     /// Picking a place for what was shared: only a kind that takes it can be chosen (ADR 0126 decision 1).
-    private var takes: Bool { !picking || ref.kind == PotShare.shared.KIND }
+    private var takes: Bool { !picking || AppKinds.shared.takesShared(kind: ref.kind) }
 
     var body: some View {
         Button { onOpen(ref) } label: {
@@ -601,7 +608,7 @@ struct SearchList: View {
     @State private var query = ""
 
     var body: some View {
-        let hits = query.trimmingCharacters(in: .whitespaces).isEmpty ? [] : model.objects.filter { $0.name.localizedCaseInsensitiveContains(query) }
+        let hits = ShellWords.shared.search(objects: model.objects, query: query)
         List(hits, id: \.nodeId) { ref in
             ObjectRow(ref: ref) { r in model.search(false); model.open(r) }
         }
@@ -639,14 +646,7 @@ struct ExpensesList: View {
 
 /// The web's motifs (src/web/src/shared/ui/icons.ts) in SF Symbols: images, file, inbox, wallet, folder, link.
 enum Names {
-    static func application(_ app: ApplicationId) -> String {
-        switch app {
-        case .memories: say(.appMemories)
-        case .depot: say(.appDepot)
-        case .expenses: say(.appExpenses)
-        default: say(.application)
-        }
-    }
+    static func application(_ app: ApplicationId) -> String { say(AppKinds.shared.applicationWord(app: app)) }
 
     static func appSymbol(_ app: ApplicationId) -> String {
         switch app {
@@ -668,12 +668,14 @@ enum Names {
         }
     }
 
-    static func spaceName(_ space: SpaceRef?) -> String {
-        switch space?.kind {
-        case nil: say(.drawerHome)
-        case "PERSONAL": say(.spacePersonal)
-        case "GROUP": say(.spaceGroup)
-        default: space!.name
+    static func spaceName(_ space: SpaceRef?) -> String { say(piece: ShellWords.shared.space(space: space)) }
+
+    /// A "New" entry's symbol (the web's motifs in SF Symbols).
+    static func createSymbol(_ c: AppKinds.Create) -> String {
+        switch c {
+        case .pot: "wallet.bifold"
+        case .uploadFiles: "square.and.arrow.up.on.square"
+        default: "folder.badge.plus"
         }
     }
 
@@ -687,15 +689,7 @@ enum Names {
 
     /// A tab's name; Depot's one tab names the object open, a file or a drop box (`kind`).
     static func tab(_ key: String, app: ApplicationId?, kind: String? = nil) -> String {
-        switch key {
-        case "memories.all": say(.appMemories)
-        case "memories.map": say(.tabMemoriesMap)
-        case "depot.file": kind == DepotFiles.shared.DROPBOX ? say(.tabDepotDropbox) : say(.tabDepotFile)
-        case "expenses.entries": say(.tabExpensesEntries)
-        case "expenses.overview": say(.tabExpensesOverview)
-        case "expenses.settings": say(.drawerSettings)
-        default: app.map(application) ?? say(.drawerHome)
-        }
+        say(AppKinds.shared.tabWord(tab: BarTab(key: key), objectKind: kind))
     }
 
     static func tabSymbol(_ key: String, app: ApplicationId?, kind: String? = nil) -> String {

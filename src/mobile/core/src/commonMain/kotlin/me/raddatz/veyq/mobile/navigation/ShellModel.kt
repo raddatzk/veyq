@@ -164,6 +164,14 @@ class ShellModel(
     /** Whether [ref] is a guest's identity folder or lies in one. */
     fun inIdentityFolder(ref: NodeAt): Boolean = tenant.inIdentityFolder(ref.scopeId, ref.nodeId)
 
+    /** Whether "New" is offered where the shell is: in a space, never in a guest's folder (the web's `folderRights`). */
+    val canCreateHere: Boolean
+        get() {
+            val s = shell ?: return false
+            val space = s.space ?: return false
+            return s.folderAt(space)?.let { !inIdentityFolder(it) } ?: true
+        }
+
     /** Pins or unpins [ref], then the lists are read anew; false when it was not stored (the heart goes back). */
     suspend fun toggleFavorite(ref: NodeAt): Boolean {
         val now = tenant.isFavorite(ref.scopeId, ref.nodeId) ?: return false

@@ -1259,6 +1259,9 @@ class AppModel(app: Application) : AndroidViewModel(app) {
     }
 
     fun select(tab: BarTab) = updateShell { it.select(tab) }
+
+    /** Whether "New" is offered where the shell is (core's `ShellModel.canCreateHere`). */
+    val canCreateHere: Boolean get() = shellModel?.canCreateHere == true
     fun search(on: Boolean) = updateShell { it.search(on) }
 
     private fun updateShell(f: (Shell) -> Shell) {

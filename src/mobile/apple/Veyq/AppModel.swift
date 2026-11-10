@@ -331,6 +331,9 @@ final class AppModel {
         if start { drawerOpen = shell.isHome && shell.space == nil }
     }
 
+    /// Whether "New" is offered where the shell is (core's `ShellModel.canCreateHere`).
+    var canCreateHere: Bool { _ = shell; return shellModel?.canCreateHere ?? false }
+
     /// The shell moved by `change` (its transitions are `Shell`'s), at once.
     private func moveShell(_ change: @escaping (Shell) -> Shell) {
         shellModel?.update(change: change)
