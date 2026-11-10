@@ -242,6 +242,11 @@ What makes it work, each from a measurement:
 
 ## Owner steps on the VM (each an approval; nothing was installed at refine)
 
+**Approved by the owner (2026-11-10, Q2) and done the same day:** O1 (`dotnet --list-sdks` → 10.0.404; ARM64 runtimes
+10.0.15 with WindowsDesktop; `C:\Program Files\dotnet\x64\dotnet.exe --list-runtimes` → Microsoft.NETCore.App
+10.0.15), O2 (`[Dns]::GetHostAddresses('veyq.localhost')` → 127.0.0.1; the old file kept as `hosts.veyq-backup`),
+O3 (`powercfg /query` → 0 for both, `ScreenSaveActive` 0). O5 is `run.py`'s, in Phase 3.
+
 - **O1 — .NET 10 SDK, ARM64**: `winget install --id Microsoft.DotNet.SDK.10 --version 10.0.404 --architecture
   arm64`, and the **x64 .NET 10 runtime** beside it (`winget install --id Microsoft.DotNet.Runtime.10 --architecture
   x64`, the version matching the SDK's runtime). `Veyq.Bridge.Tests` loads the x64 `veyq.dll`, so its test host must
