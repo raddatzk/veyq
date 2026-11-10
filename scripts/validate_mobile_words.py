@@ -16,7 +16,8 @@
   such a literal as a key of the default table, so it shows the English in every language.
 - **linux-literal**: no Rust file hands a literal with letters to a widget's shown text — a builder's or a setter's
   `title`, `subtitle`, `label`, `description`, `tooltip_text`, `placeholder_text`, `heading`, `body` (`.title(…)`,
-  `.set_title(…)`, …), `Label::new(`, `Button::with_label(`, `Toast::new(` — directly, as `Some(…)`, or as a
+  `.set_title(…)`, …), `Label::new(`, `Button::with_label(`, `Toast::new(`, `SidebarItem::new(`,
+  `WindowTitle::new(`, `gio::MenuItem::new(`, a menu's `.append_section(` — directly, as `Some(…)`, or as a
   `format!` whose template has letters. The words are `words::<key>(…)`, generated from the catalog with its gettext
   catalogs (CR core-as-a-native-library D10); a literal shows the English in every language. Read with comments
   blanked (`rust_lexer.mask`). The guard fails when it reads no Rust source.
@@ -59,7 +60,8 @@ IDENT = re.compile(r"[a-z0-9_.\-/:]+")
 
 # A widget's shown text in gtk-rs / libadwaita-rs: a builder's or setter's property, or a constructor taking it.
 RUST_SHOWN = (r"(?:\.(?:set_)?(?:title|subtitle|label|description|tooltip_text|placeholder_text|heading|body)|"
-              r"\bLabel::new|\bButton::with_label|\bToast::new)\(")
+              r"\bLabel::new|\bButton::with_label|\bToast::new|\bSidebarItem::new|\bWindowTitle::new|\bMenuItem::new|"
+              r"\.append_section)\(")
 # its argument: a literal (plain or raw), as it is, as `Some(…)`, borrowed, or as a `format!` template
 RUST_LITERAL_ARG = re.compile(RUST_SHOWN + r'\s*(?:Some\(\s*)?&?\s*(?:format!\(\s*)?r?#*"((?:[^"\\]|\\.)*)"')
 
