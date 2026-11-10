@@ -424,7 +424,8 @@ def provision_store(workdir: Path, database: str) -> None:
                 return
             time.sleep(1)
         e2e.tail(boot_log)
-        raise SystemExit("[fuzz] STORE NOT PROVISIONED within 120 s of the boot")
+        raise SystemExit("[fuzz] STORE NOT PROVISIONED within 120 s of the boot"
+                         + (f"; the store's last answer: {e2e.LAST_NOT_YET}" if e2e.LAST_NOT_YET else ""))
     finally:
         e2e.kill(proc)
         secret.unlink(missing_ok=True)
