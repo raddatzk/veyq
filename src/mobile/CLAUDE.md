@@ -179,6 +179,14 @@ first in each of its scrolls — `LocalNodeHero.current(inset)` (Android) / `Nod
   device trust is never enrolled (`veyq: this device could not be trusted with the account: … bind key not stored` on
   the console, measured 2026-11-10) and the next start is the full sign-in. Build for a simulator signed (the scheme's
   default, no flag); `CODE_SIGNING_ALLOWED=NO` only proves a compile.
+- The macOS app runs from a build without a team: `xcodebuild -scheme Veyq -destination 'platform=macOS'
+  CODE_SIGN_IDENTITY=- CODE_SIGN_STYLE=Manual DEVELOPMENT_TEAM= CODE_SIGN_ENTITLEMENTS=` (ad hoc). The same keychain
+  refusal holds there, so every start signs in anew; the `VEYQ_DEV_*` variables `DevLogin.swift` reads, set on the
+  binary's own process (`Contents/MacOS/veyq`), sign it in.
+- A `TabView` in a `NavigationSplitView`'s detail showed no navigation bar on an iPad (iPadOS 26, measured
+  2026-11-10): no title, no back, no header actions. The split view's detail is therefore one `NavigationStack` page
+  whose places are a segmented `Picker` in the toolbar (`Bar(tabbed: false)`); its segments are an `Image` with an
+  `accessibilityLabel`, since a `Label` there was read out by its symbol's name on a Mac.
 - `VeyqCore` has arm64 slices only, so `apple/project.yml` sets `ARCHS: arm64`; without it a Release build (what
   `xcodebuild -target` builds) asks Kotlin's Xcode hook for x86_64 and fails with "Xcode Requested Architecture Not
   Configured in Gradle".

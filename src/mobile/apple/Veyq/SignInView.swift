@@ -90,9 +90,11 @@ struct SignInView: View {
         }
         .formStyle(.grouped)
         .scrollContentBackground(.hidden)
-        .background(Role.bg)
         .tint(Role.accent)
         .frame(maxWidth: 520)
+        // the form a column of its own, the window around it the app's ground (an iPad, a Mac)
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .background(Role.bg)
     }
 }
 
@@ -150,8 +152,10 @@ struct UnlockView: View {
         }
         .formStyle(.grouped)
         .scrollContentBackground(.hidden)
-        .background(Role.bg)
         .tint(Role.accent)
         .frame(maxWidth: 520)
+        // the form a column of its own, the window around it the app's ground (an iPad, a Mac)
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .background(Role.bg)
     }
 }

@@ -39,9 +39,10 @@ struct ShellView: View {
 
     private var wide: some View {
         NavigationSplitView {
-            DrawerList(model: model)
+            // as wide as the switcher's tenant and server need (the system's default left them cut on a Mac)
+            DrawerList(model: model).navigationSplitViewColumnWidth(min: 240, ideal: 280, max: 360)
         } detail: {
-            Bar(model: model)
+            Bar(model: model, tabbed: false)
         }
     }
 
@@ -197,6 +198,10 @@ struct TenantAvatar: View {
 struct Bar: View {
     @Bindable var model: AppModel
     var onMenu: (() -> Void)? = nil
+    /// The places as a tab bar (an iPhone), or — false, in a split view's detail column (an iPad, a Mac) — one page whose
+    /// places are a segmented control in its toolbar: a tab view there showed no navigation bar, so no title, back or
+    /// header actions, on an iPad (measured 2026-11-10).
+    var tabbed = true
 
     private static let search = "search"
     private static let list = "list"
@@ -222,17 +227,61 @@ struct Bar: View {
     /// The space whose top level's "Add files only" share is open.
     @State private var uploadShareOf: TrashOf?
 
-    var body: some View {
-        TabView(selection: selection) {
-            ForEach(tabs, id: \.self) { key in
-                Tab(Names.tab(key, app: model.shell.application, kind: model.shell.openObject?.kind), systemImage: Names.tabSymbol(key, app: model.shell.application, kind: model.shell.openObject?.kind), value: key) {
-                    NavigationStack { content(key).modifier(Picking(model: model)).toolbar { toolbar }.background(Role.bg) }
+    @ViewBuilder private var main: some View {
+        if tabbed {
+            TabView(selection: selection) {
+                ForEach(tabs, id: \.self) { key in
+                    Tab(Names.tab(key, app: model.shell.application, kind: model.shell.openObject?.kind), systemImage: Names.tabSymbol(key, app: model.shell.application, kind: model.shell.openObject?.kind), value: key) {
+                        NavigationStack { content(key).modifier(Picking(model: model)).toolbar { toolbar }.background(Role.bg) }
+                    }
+                }
+                Tab(value: Self.search, role: .search) {
+                    NavigationStack { SearchList(model: model).modifier(Picking(model: model)).toolbar { toolbar } }
                 }
             }
-            Tab(value: Self.search, role: .search) {
-                NavigationStack { SearchList(model: model).modifier(Picking(model: model)).toolbar { toolbar } }
+        } else {
+            NavigationStack {
+                Group {
+                    if model.shell.searching { SearchList(model: model) } else { content(selection.wrappedValue) }
+                }
+                .modifier(Picking(model: model))
+                .toolbar {
+                    toolbar
+                    // without places of its own (Home, an application's list) the title stays — Home's is its space
+                    // switcher — and Search is a button beside it
+                    if model.shell.barTabs.isEmpty {
+                        ToolbarItem(placement: .navigation) {
+                            Button { model.search(!model.shell.searching) } label: {
+                                Label(say(.tabSearch), systemImage: model.shell.searching ? "xmark" : "magnifyingglass")
+                            }
+                        }
+                    }
+                    // the bar's places, Search last: a segmented control, as the system's own apps on an iPad and a Mac
+                    if !model.shell.barTabs.isEmpty { ToolbarItem(placement: .principal) {
+                        Picker(say(.tabSearch), selection: selection) {
+                            // symbols, their words for VoiceOver: a word each runs over the back button beside the sidebar
+                            ForEach(tabs, id: \.self) { key in
+                                segment(Names.tab(key, app: model.shell.application, kind: model.shell.openObject?.kind), symbol: Names.tabSymbol(key, app: model.shell.application, kind: model.shell.openObject?.kind)).tag(key)
+                            }
+                            segment(say(.tabSearch), symbol: "magnifyingglass").tag(Self.search)
+                        }
+                        .pickerStyle(.segmented)
+                        .fixedSize()
+                    } }
+                }
+                .background(Role.bg)
             }
         }
+    }
+
+    /// A segment of the places' control: its symbol, its word for VoiceOver and the pointer's tooltip — a `Label` there
+    /// read out the symbol's own name ("gearshape", measured 2026-11-10 on a Mac).
+    private func segment(_ word: String, symbol: String) -> some View {
+        Image(systemName: symbol).accessibilityLabel(Text(word)).help(word)
+    }
+
+    var body: some View {
+        main
         .sheet(item: $trashOf) { SpaceTrashSheet(model: model, scopeId: $0.scopeId) }
         .sheet(item: $uploadShareOf) { TopLevelUploadSheet(model: model, scopeId: $0.scopeId) }
         // what the model says once (an upload's refusal, its "Replace anyway")
@@ -689,7 +738,9 @@ enum Names {
 
     /// A tab's name; Depot's one tab names the object open, a file or a drop box (`kind`).
     static func tab(_ key: String, app: ApplicationId?, kind: String? = nil) -> String {
-        say(AppKinds.shared.tabWord(tab: BarTab(key: key), objectKind: kind))
+        // a bar with no places of its own (Home, an application's list) holds one tab here, named by where it stands
+        if key == "list" { return app.map(application) ?? say(.drawerHome) }
+        return say(AppKinds.shared.tabWord(tab: BarTab(key: key), objectKind: kind))
     }
 
     static func tabSymbol(_ key: String, app: ApplicationId?, kind: String? = nil) -> String {

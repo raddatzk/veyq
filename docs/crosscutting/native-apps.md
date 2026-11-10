@@ -35,8 +35,8 @@ for want of room close the editor and the shell says which (the web's toast); a 
 | Android phone | yes (minSdk 31) | Compose, Material 3 | — | yes, the emulator, every slice |
 | Android tablet | the same APK | Compose | Material 3's window classes by the window's width: from 600 dp a rail at the side takes the bar's place; from 840 dp the drawer stays open as the sidebar (ADR 0122) and an application's list stands beside its open object (list-detail; a choice there replaces the open one, `Shell.openBeside`); sign-in and unlock read at a form's width | the emulator at 1280 × 800 dp and 800 × 1280 dp (`wm size`), 2026-11-10 |
 | iPhone | yes (iOS 26) | SwiftUI | — | yes, the Simulator, every slice |
-| iPad | yes (the iOS target, no device family set) | SwiftUI | `NavigationSplitView` with its sidebar open in a regular size class | no |
-| macOS | yes (macOS 26) | SwiftUI | always the split view | the core's tests only (`:core:macosArm64Test`); the app itself never; no share extension there |
+| iPad | yes (the iOS target, no device family set) | SwiftUI | `NavigationSplitView` with its sidebar open in a regular size class; the detail is one page whose bar's places are a segmented control in its toolbar (Search last), not a tab bar; sign-in and unlock read at a form's width | the Simulator, 2026-11-10 |
+| macOS | yes (macOS 26) | SwiftUI | always the split view, as the iPad's; the sidebar 240–360 pt wide | an ad-hoc signed build, 2026-11-10 (Home, a Pot's entries and overview); without a team's signing the device trust is never enrolled; no share extension there |
 | Windows | no | — | — | — |
 | Linux | no | — | — | — |
 
@@ -83,7 +83,6 @@ Apple's toolbar button and list — measured 2026-11-09 (the list behind Apple's
 ## Open
 
 **Platforms and form factors**
-- iPad and macOS: run, look at and fix the split view; macOS has no share extension.
 - Windows (WinUI) and Linux (GTK/libadwaita): the apps (ADR 0127 decisions 4 and 5).
 - A CI job for the apps.
 
