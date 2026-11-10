@@ -112,6 +112,15 @@ no command names it.
   Argo CD applies the commit, and the chart's backup gate captures the database before the new release migrates it
   ([Upgrade](/run/upgrade/), [Backup and restore](/run/backup-and-restore/#under-kubernetes)).
 
+**On a schedule, as a pull request.** A job in the repository's own pipeline can run `veyqctl upgrade` on a branch of
+its own and open a pull request, the way Renovate proposes the cluster's other pins; merging it is the upgrade. Never
+let it merge itself: an upgrade replaces the web client that holds your users' keys, so a person reads the release
+notes first. The job fetches `veyqctl` from veyq's newest release and verifies it first (`cosign verify-blob` against
+`veyqctl.bundle`, as [Verify a release](/run/verify-a-release/) says). Keep other updaters off veyq's pins — a second
+mover on the same lines is drift, which `upgrade` refuses. On GitHub, such a job needs the repository
+setting that lets Actions create pull requests (Settings → Actions → General → Workflow permissions); the maintainer
+runs one weekly, beside Renovate.
+
 `start`, `stop`, `status`, `logs`, `backup`, `restore`, `rollback` and `self-update` are Compose's: on a GitOps instance
 each refuses and names what does that job there (Argo CD, `kubectl`, the backup gate, the restore Job).
 

@@ -57,9 +57,12 @@ selector names (an exact release, a major or `latest`, as `VEYQ_RELEASE` does), 
 entry ([ADR 0085](0085-one-major-moved-on-a-yearly-train.md) decision 10) and never goes down; verifies the release's
 manifest, then the chart and the three images under the release identity
 ([Verify a release](../../site/src/content/docs/run/verify-a-release.md)); rewrites the chart's and the images'
-digests; renders the chart with the repository's values; and commits. It pushes only when asked (`--push`), and it
-runs only by hand (ADR 0096 decision 5). Argo CD then applies the commit, and the backup gate captures before the new
-release migrates.
+digests; renders the chart with the repository's values; and commits. It pushes only when asked (`--push`). **Nothing
+applies it unattended** (ADR 0096 decision 5's reason: an upgrade replaces the web client that holds the keys): run by
+hand, or by a scheduled job that commits on a branch of its own and opens a pull request, as Renovate proposes the
+cluster's other pins, it takes effect only through a merge a person makes. Argo CD then applies the commit, and the
+backup gate captures before the new release migrates. veyq's pins are then `veyqctl`'s alone: an updater that moves them
+too (Renovate's rule for them switched off) would be drift, which `upgrade` refuses.
 
 **4. The cluster contract.** veyq's half assumes, and `init` checks before it writes anything against a
 cluster it can reach: Argo CD; the Gateway API CRDs at v1.5 or later with an implementation serving the chart's
@@ -126,6 +129,9 @@ key to register rather than calling a forge's API.
   as one machine manages two instances, and under `sudo` the setting is in another home. The instance carries its
   target; the user's config only lists instances.
 - **Rejected — a `gitops` command group.** Explicit, but every call repeats what the instance already says.
+- **Rejected — auto-merging the scheduled job's pull request.** Hands-off, and it rolls a compromised release out with
+  nobody looking — the case ADR 0096 rejected unattended upgrades for; a signature proves who released it, not that
+  it is sound.
 - **Rejected — Flux beside Argo CD now.** The repository layout differs per tool; Argo CD is what the maintainer runs
   and what `veyq-server` installs. A Flux writer is another decision.
 
