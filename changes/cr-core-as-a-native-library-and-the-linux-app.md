@@ -165,6 +165,34 @@ depending on `:core` as an **implementation** dependency (so the shared library 
 - **Threads.** Every answer and update arrives on a core thread (`Dispatchers.Default`); the Rust wrapper hands it to
   GTK's main loop through an `async_channel` and never touches a widget off it (S5's pattern) — the same rule as
   Swift's `@Sendable` trap in `src/mobile/CLAUDE.md`.
+- **Built (Phase 2), where it differs from the above:**
+  - **`Config` is `{device}` only** — the name the device gives itself in the account's register. The data directory,
+    the language and the server list the refine named have no reader in the core in this slice; each joins with its
+    first one. `veyq_init` answers 0 started, 1 already started, 2 config or host function refused, 3 no AES (Q1);
+    `veyq_watch` answers 0 for a request that is no `Watched`.
+  - **`DeviceKeys` is the bridge's own `NoDeviceKeys` and forwards nothing.** What its functions carry is the Master
+    Key to seal (`sealUnlockable`) and the refresh token to keep (`putSecret`): forwarded as host requests, both would
+    cross the bridge, which invariant 6 forbids. So the VM slice's Secret Service is a decision of its own: the core
+    reaches libsecret itself (cinterop, the key never leaves the library) or the invariant is revisited — never a
+    `HostRequest` carrying a key (§ Not in this CR).
+  - **What crosses inward:** the sign-in's `password` and `secretKey` are what the person typed, on their way to the
+    core — the one place something secret crosses, and never back. § Phase 2's secret-free case is therefore strict for
+    everything the core sends (`Answer`, `Update`, `HostRequest`) and, inward, lets through exactly those two fields by
+    owner and name; three identifiers that only share a word (`Gate.Signed.connectionKey`, `BarTab.key`,
+    `TrustedDevice.wrapId`) are let through by owner and name too, each with its reason, and the test is red when an
+    exception names a field the wire no longer has. Bytes in a JSON field are refused as well (they travel beside it).
+  - **A `PotView` is sent as what it shows.** Its constructor takes a session, so it cannot be annotated: core's
+    `PotView.AsShown` writes its `PotView.Shown` (every row with the core's words for it — line, badge, balance, facts,
+    who pays whom, category label) under the view's own serial name, and refuses to read one back. The words are a
+    `Notice` (catalog key + each argument tagged by kind, `NoticeSerializer`) and `Piece` (tagged by kind).
+  - **The models' watches are their state flows** (`SessionModel.gate`, `ShellModel.state` — the open tenant's, so a
+    switch moves the watch —, `PotModel.state`), not their `watch` wrappers: the bridge is Kotlin.
+  - **A host request blocks its core thread** until `veyq_reply` (30 s, then the store call fails); the model is built
+    on a core thread after `veyq_init` returns, so the store's first read never waits on the thread that started it.
+  - **The library hides what it links in:** `-Wl,--exclude-libs,ALL` keeps libcurl, its OpenSSL, libsodium and utf8proc
+    out of the dynamic symbol table — without it `libveyq.so` defined 11,348 symbols (OpenSSL's whole API among them),
+    which a host whose own libraries load a libcrypto would bind against. With it: 12 — the six and Kotlin/Native's
+    `libveyq_symbols`, `IsInstance`, `Konan_cxa_demangle`, `__cxa_demangle`, `_init`, `_fini` (measured, `run.py bridge`).
 
 **D7 — The Rust (later C#) types are generated from the serial descriptors, by `:bridge` itself.** A JVM task
 `:bridge:generateBindings` walks the `SerialDescriptor`s of the roots `:bridge` registers (`Call`, `HostRequest`, each
@@ -178,6 +206,16 @@ Its proof is two-sided: a `:bridge` jvmTest round-trips one value of every regis
 kotlinx.serialization and through `serde` (a Rust test fed the JSON the JVM wrote — the generated `bridge.rs`
 compiles and deserializes it field for field), and a root added without a case is red by derivation (the test
 enumerates the registered roots, not a list of its own).
+**Built (Phase 2):** the walk is `bridge/src/jvmMain/.../Bindings.kt` (`Schema` + `Bindings.rust`); the tests read the
+same `Schema`. The six `extern "C"` declarations are generated from `bridge.h` itself, so the header is the one
+hand-written source of the C surface. A type's Rust name is its serial name's last part (the last two where that part
+is taken twice: `ShellModelState`, `PotModelState`); a field that holds its own type directly is boxed (`Shell.back`),
+one inside a list is not. `WireTest` writes one value of **every variant of every sealed type the roots reach** (45
+samples into `src/mobile/build/generated/bridge/samples/<RustType>-<n>.json`), reads each back to the same JSON and
+holds it to the descriptor field by field; a Pot's view, sent and never read back, is written as its `Shown` and held
+to the view's descriptor. The Rust half ran once in a scratch crate (serde 1.0.229 and serde_json 1.0.151 from the
+local cargo cache, `--offline`): `cargo test` read all 45 samples back field for field, `cargo clippy --all-targets -D
+warnings` clean — Phase 3 makes it the package's own test.
 
 **D8 — The Rust app lives in `src/mobile/linux/`.** A Cargo package (`veyq`, edition 2024) with a committed
 `Cargo.lock` and `cargo build --locked`: gtk4 0.11, libadwaita 0.9 (features `v4_20`, `v1_8`: GTK 4.22, libadwaita
@@ -275,7 +313,10 @@ declarations — and checked against the K/N-generated `libveyq_api.h` by a test
 generated header is K/N's and changes with it).
 
 **Done when:** `./gradlew :bridge:jvmTest` green — the dispatch over a door the test plays (sign-in, the shell, a Pot,
-Search, through `Call`s, the answers and watch updates read back), every registered root round-tripped, and the
+Search, through `Call`s, the answers and watch updates read back; **built:** the played door reaches the session only —
+`ShellModel` and `PotModel` take a `TenantSession`, which no test can build without a server — so the shell's, Search's
+and the Pot's dispatch is held live: `LiveBridgeTest` with `VEYQ_LIVE`, and `run.py bridge` with `VEYQ_LIVE` from C in
+Fedora; the owner question Q2 below), every registered root round-tripped, and the
 **secret-free schema** case (no generated type carries a field named like a key, seal, token, secret or password;
 its bite: a `@Serializable` test state with a `sealKey: ByteArray` turns it red); `:bridge:linkReleaseSharedLinuxArm64`
 links, and `nm -D libveyq.so` (in the container) exports exactly the six `veyq_*` functions beside K/N's runtime
@@ -323,13 +364,26 @@ runs them, `validate_changes.py` among them), and every "measured" in the touche
 ## Not in this CR
 
 - **The VM slice:** the real GNOME session in the Fedora ARM VM (UTM, `~/.ssh/veyq_vms_ed25519`) — the Secret Service
-  for `DeviceKeys` (staying signed in, the device trust), portals (file chooser, save), drag and drop, and the
+  for `DeviceKeys` (staying signed in, the device trust — reached by the core itself, never by a host request that
+  carries a key: D6 § Built), portals (file chooser, save), drag and drop, and the
   **Flatpak** on the GNOME runtime (with what it must carry: `libcrypt.so.1`, the CA bundle, the zoneinfo).
 - **Windows:** `mingwX64`, Ktor's WinHttp engine, the C# writer of D7, WinUI 3 — needs a Windows host.
 - Every other application's screens on Linux (Depot, Memories), uploads, writes in a Pot.
 - A CI job for the apps (already open in native-apps); this CR's checks run locally.
 
 ## Owner questions
+
+- **Q2 — A door for the shell and the Pot in `:bridge`'s test (Phase 2, open).** D6's done-when wanted the dispatch of
+  the shell, Search and a Pot tested over a door the test plays; `SessionModel` has one (`Door<A, T>`), but
+  `ShellModel(tenant: TenantSession, …)` and `PotModel(tenant: TenantSession, …)` take the concrete session, whose
+  constructor is internal and whose account needs a sign-in. Built instead: the played door for the way in
+  (`DispatchTest`, six cases), and the shell, Home's groups, Search and three Pots over the real core against the dev
+  instance (`LiveBridgeTest`; `run.py bridge` signs in from C on Linux). Options: (a) accept the live proof for those
+  calls (they are one line each onto a model the core's own tests hold); (b) give `ShellModel` and `PotModel` a door
+  as `SessionModel` has — a core refactor that changes what Swift and Kotlin construct (`ShellModel(tenant:)` is how
+  both apps build it); (c) a fake server under a real `TenantSession` (a played backend: sign-in, grants, sealed nodes
+  and ledgers) — heavy. Recommendation: **(a)** now; (b) when a second host (Windows) makes the dispatch worth a door of
+  its own.
 
 - **Q1 — CPUs without AES (Raspberry Pi 4).** The suite's AES-GCM is libsodium's, which needs the CPU's AES
   instructions; the Linux app would not start on a Pi 4 (the web works there). Recommendation: accept for now, keep it
@@ -370,3 +424,40 @@ Process:
   parent POMs and BOMs (`jackson-base`, `guava-parent`, `junit-bom`, `kotlinx-coroutines-bom`) that a warm cache
   never fetches and a fresh CI runner would. `GRADLE_USER_HOME=<empty> ./gradlew --write-verification-metadata sha256
   …` over the Linux, metadata, JVM-test and macOS-test tasks, 6 min 18 s.
+
+### Phase 2 (2026-11-10)
+
+Technical:
+- **A shared library is not done until a host has called it.** `:bridge:jvmTest` was green and the library linked, yet
+  only a C program built against `bridge.h` alone and run in Fedora (`run.py bridge`, `bridge/smoke/smoke.c`) showed the
+  six functions, the callbacks across threads and the host's store answered from the host's own thread working — and,
+  with `VEYQ_LIVE`, a sign-in over the library's own libcurl reaching the shell's lists.
+- **Static libraries leak through a shared one.** The first `nm -D` listed 11,348 defined symbols: everything of
+  libcurl, OpenSSL, libsodium and utf8proc, beside the six. `--exclude-libs,ALL` brought it to 12; the check now
+  compares the whole list (bridge.h's six + Kotlin/Native's), so a dropped flag is red (bitten).
+- **The serialized form of a computed view is what it shows, and only one way.** `PotView` holds a session and derives
+  its rows; annotating it was impossible, a copy in `:bridge` forbidden. A serializer in core that writes its `Shown`
+  keeps the words the core's (each row's line and badge travel with it) and makes the direction explicit: the round trip
+  holds a sent-only type to its descriptor instead of reading it back.
+- **"No key crosses" and "the host keeps the keys" collide at `DeviceKeys`.** The refine had the host answer every
+  `DeviceKeys` call; those calls carry the Master Key and a refresh token. Phase 2 forwards none; the VM slice inherits
+  the choice (D6 § Built).
+- **An inward secret is still a secret on the wire.** The secret-free case as written would have refused the sign-in
+  itself (`password`, `secretKey`); it is now strict outward and names the two typed-in fields inward, by owner.
+- **A done-when can name a door the code does not have.** `ShellModel` and `PotModel` take a concrete `TenantSession`;
+  the played door covers the way in only, the rest is held live — Q2.
+
+Process:
+- Gradle's `--rerun` is a task option: `./gradlew :core:jvmTest :core:macosArm64Test --rerun` re-ran only the last task
+  and reported the first `UP-TO-DATE`; each task takes its own `--rerun`.
+- The Rust half could be tried before Phase 3 with no download: serde was in the local cargo cache, so a scratch crate
+  with `--offline` compiled the generated `bridge.rs` and read every sample. Reading the first output had already shown
+  two generator defects no Kotlin test sees (`pub` on an enum variant's fields, a `Box` inside a `Vec`); the crate proved
+  the fixed output, and `theGeneratedRustBoxesOnlyWhatHoldsItselfDirectly` keeps the second.
+- A host-side test helper that decodes every update failed on the one type that is sent only (`PotView`): the test's
+  own read must be the host's (JSON), not the core's.
+- A new module that resolves nothing new still owes the empty-home write, as evidence: `GRADLE_USER_HOME=<empty>
+  ./gradlew --write-verification-metadata sha256 :bridge:jvmTest :bridge:generateBindings
+  :bridge:linkReleaseSharedLinuxArm64 :bridge:linkReleaseSharedLinuxX64 :bridge:compileCommonMainKotlinMetadata
+  :bridge:compileLinuxMainKotlinMetadata` (2 min 34 s, 1.4 GB fetched) left `gradle/verification-metadata.xml`
+  unchanged — everything `:bridge` resolves, `:core` already had.
