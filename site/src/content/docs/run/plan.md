@@ -84,10 +84,10 @@ stored object once, growing by the new uploads at each backup and pruned to what
 
 | Domain | Docker Compose | Kubernetes | Notes |
 |---|---|---|---|
-| The instance (`VEYQ_DOMAIN` / `domain`) | Required | Required | Written into every invitation and recovery link; changing it later is not supported, and a restore must target the same domain |
+| The instance (`VEYQ_DOMAIN` / `domain`) | Required | Required | The bootstrap domain: routed from configuration, so the instance is reachable before any tenant exists. Changing it later is untested |
 | The bundled object store | — (served under the instance's own origin) | `storeDomain`, required with `garage.enabled`, a host of its own | Presigned uploads and downloads go straight from the browser to this origin; a store of your own has its own address |
 | The admin surface (`ADMIN_DOMAIN` / `admin.domain`) | Optional, unset by default | Optional, unset by default | Leave it unset and reach the console over an SSH tunnel or a port-forward; if you set it, only after the Server Owner exists, and choose a name you publish nowhere |
-| Each tenant's own domain | Required per tenant | Required per tenant | One domain per tenant, routed when the tenant is created, with no restart |
+| Each tenant's own domain | Required per tenant | Required per tenant | One domain per tenant, routed when the tenant is created, with no restart. Written into every invitation and recovery link the tenant's members get; the Server Owner can move a tenant to another domain ([Tenants](/run/first-run/#tenants)), which stops the old one answering at once, so a link mailed before the move no longer opens. A restore targets the domain the backup holds ([Backup and restore](/run/backup-and-restore/)) |
 
 Every domain must resolve to the instance **before** it is used, and port 80 must reach the instance from the
 internet for Let's Encrypt's HTTP-01 challenge. Each new tenant domain is a certificate order: test against Let's

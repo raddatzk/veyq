@@ -172,6 +172,11 @@ database directly is one an operator will eventually run against the wrong row, 
 is a product surface with its own flow — mail templates, outstanding invitations, the unique index — not a
 footnote in a restore procedure.
 
+*Amended 2026-11-10:* that flow is built — a Server Owner moves a tenant to another domain with change-domain
+([uc.admin.create-tenant](../features/admin/use-cases/uc.admin.create-tenant.md) § Change domain). The boundary here
+is unchanged: the restore targets the domain the capture holds and rewrites none. The domain in question is the
+tenant's; the instance's bootstrap domain (`VEYQ_DOMAIN`) is not one a capture holds.
+
 **5. Reading the config-secret state is the restore's final step, not its error path.** The fingerprint
 comparison is the only check that distinguishes a complete restore from one that lost leg (c), and it is the
 difference between an instance that looks healthy and one that cannot admit a member or reset a password. The

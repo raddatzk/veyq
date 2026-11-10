@@ -34,7 +34,7 @@ By hand, copy the template to `.env` and fill it in: every required variable has
 | Variable | Required | Default | Meaning |
 |---|---|---|---|
 | `VEYQ_RELEASE` | No | `latest` | Read by `veyqctl` only: the release line `install` and `upgrade` take. `<major>.<minor>` pins one release, `<major>` takes the newest of that major, `latest` the newest of all; a new major is entered only from the release it was tested from ([Upgrade](/run/upgrade/#which-release-upgrade-takes)) |
-| `VEYQ_DOMAIN` | Yes | — | The instance's domain. It is written into every invitation and recovery link, so changing it later is not supported, and a restore must target the same domain |
+| `VEYQ_DOMAIN` | Yes | — | The instance's bootstrap domain: routed from configuration, so the instance is reachable before any tenant exists, and the bundled store's public address. The links the instance mails carry each tenant's own domain, not this one ([Plan your instance](/run/plan/#domains)). Changing it later is untested |
 | `VEYQ_IMAGE` | Yes | — | The application image, as `ghcr.io/raddatzk/veyq:<major>.<minor>@sha256:<digest>`. `veyqctl` writes it from the release's manifest ([Verify a release](/run/verify-a-release/)) and refuses it as a `--set` |
 | `VEYQ_ADMIN_IMAGE` | Yes | — | The admin image of the same release, pinned the same way |
 | `MARIADB_PASSWORD` | Yes | — | The application's database password |
