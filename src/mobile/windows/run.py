@@ -113,6 +113,7 @@ SSH_TARGET = os.environ.get("VEYQ_WINDOWS_SSH", "kevin@192.168.64.8")
 SSH_KEY = Path(os.environ.get("VEYQ_WINDOWS_KEY", Path.home() / ".ssh" / "veyq_vms_ed25519")).expanduser()
 REMOTE_DIR = PureWindowsPath(os.environ.get("VEYQ_WINDOWS_DIR", r"F:\veyq"))
 REMOTE_MOBILE = REMOTE_DIR / "src" / "mobile"
+APP_NAME = "Veyq.App"  # the app's assembly, exe and .pri name (Veyq.csproj): never veyq, the core's DLL
 REMOTE_APP = REMOTE_DIR / "app"  # the app run.py starts, copied out of the build so a running one blocks no build
 REMOTE_DRIVE = REMOTE_DIR / "drive"  # Veyq.Drive, which the scheduled tasks run
 REMOTE_RUN = REMOTE_DIR / "run"  # the launch's and the drive's files
@@ -415,7 +416,7 @@ def build() -> int:
             f"dotnet test --project {BRIDGE_TESTS} --no-restore --arch x64 {NATIVE}",
         ]),
         "\n".join([
-            f"$env:VEYQ_PRI = {ps_quote(str(windows / APP_OUT / 'veyq.pri'))}",
+            f"$env:VEYQ_PRI = {ps_quote(str(windows / APP_OUT / f'{APP_NAME}.pri'))}",
             f"$env:VEYQ_WORDS_JSON = {ps_quote(str(REMOTE_MOBILE / 'words' / 'words.json'))}",
             f"dotnet test --project {APP_TESTS} --no-restore --arch x64",
         ]),
@@ -442,7 +443,7 @@ def launch(env: dict[str, str]) -> int:
     started = REMOTE_RUN / "app.json.started"
     SMOKE_OUT.parent.mkdir(parents=True, exist_ok=True)
     local = SMOKE_OUT.parent / "app.json"
-    local.write_text(json.dumps({"exe": str(REMOTE_APP / "veyq.exe"), "env": env}))
+    local.write_text(json.dumps({"exe": str(REMOTE_APP / f"{APP_NAME}.exe"), "env": env}))
     powershell(f"New-Item -ItemType Directory -Force -Path {ps_quote(str(REMOTE_RUN))} | Out-Null; "
                f"Remove-Item -Force -ErrorAction SilentlyContinue -Path {ps_quote(str(started))}", quiet=True)
     copy_to([local], REMOTE_RUN)
@@ -465,7 +466,7 @@ def run_app(width: int | None, height: int | None) -> int:
         BUILD_APP,
         BUILD_DRIVE,
         "\n".join([
-            "Get-Process -Name veyq -ErrorAction SilentlyContinue | Stop-Process -Force",
+            f"Get-Process -Name {APP_NAME} -ErrorAction SilentlyContinue | Stop-Process -Force",
             "Start-Sleep -Milliseconds 500",
             f"Remove-Item -Recurse -Force -ErrorAction SilentlyContinue -Path {ps_quote(str(REMOTE_APP))}",
             f"Copy-Item -Recurse -Path {ps_quote(str(REMOTE_MOBILE / 'windows' / APP_OUT))} -Destination {ps_quote(str(REMOTE_APP))}",
@@ -541,7 +542,8 @@ def register() -> int:
     """Registers the scheduled tasks Veyq.Drive runs in the logged-on session (interactive only, as the ssh user, on
     demand: no trigger). The owner's step (O5): a key-authenticated ssh logon can register them, but it is theirs to."""
     lines = [
-        '$user = "$env:USERDOMAIN\\$env:USERNAME"',
+        # the account as Windows names it: over ssh $env:USERDOMAIN reads WORKGROUP, which maps to no SID (0x80070534)
+        "$user = [Security.Principal.WindowsIdentity]::GetCurrent().Name",
         "$principal = New-ScheduledTaskPrincipal -UserId $user -LogonType Interactive -RunLevel Limited",
         "$settings = New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries "
         "-ExecutionTimeLimit (New-TimeSpan -Hours 0) -MultipleInstances Parallel",

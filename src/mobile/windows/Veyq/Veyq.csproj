@@ -17,7 +17,9 @@
     <!-- No trimming or AOT property: one implies an SDK-versioned package, and the lock file would be the SDK's
          (Phase 2's trap). -->
     <RootNamespace>Veyq</RootNamespace>
-    <AssemblyName>veyq</AssemblyName>
+    <!-- Never `veyq`: a .NET app's own assembly is <AssemblyName>.dll beside its exe, and that one overwrote the core's
+         native veyq.dll in the build output, so the app found no veyq_init and crashed at its start (measured 2026-11-10). -->
+    <AssemblyName>Veyq.App</AssemblyName>
     <ApplicationManifest>app.manifest</ApplicationManifest>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
     <!-- The words' fallback language, the .pri's default qualifier. -->

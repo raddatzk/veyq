@@ -34,7 +34,18 @@ public sealed partial class MainWindow : Window
             Log.Write($"the device store did not open ({e.GetType().Name}); this start keeps nothing");
             store = DeviceStore.InMemory();
         }
-        switch (Core.Start(new Config { device = Environment.MachineName }, store))
+        Start started;
+        try
+        {
+            started = Core.Start(new Config { device = Environment.MachineName }, store);
+        }
+        catch (Exception e) when (e is DllNotFoundException or EntryPointNotFoundException or BadImageFormatException)
+        {
+            // an exception out of this async void would end the app in combase, with nothing in the log
+            Log.Write($"the core's veyq.dll did not load ({e.GetType().Name}: {e.Message})");
+            return;
+        }
+        switch (started)
         {
             case Start.Started or Start.AlreadyStarted:
                 break;

@@ -29,7 +29,7 @@ namespace Veyq.Drive;
 
 internal static class Program
 {
-    private const string AppProcess = "veyq";
+    private const string AppProcess = "Veyq.App";
 
     [STAThread]
     private static int Main(string[] args)
