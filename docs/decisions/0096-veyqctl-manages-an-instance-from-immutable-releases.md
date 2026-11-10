@@ -1,9 +1,10 @@
 # ADR 0096 — `veyqctl` manages an instance from immutable releases
 
 - Status: Accepted
-- Built: partly (not built: decision 3's immutable-releases setting and the first published release)
+- Built: yes
 - Date: 2026-10-16
 - Model: [release-and-deployment](../crosscutting/release-and-deployment.md)
+- Replaced in part: decision 8 by ADR 0126 (not built)
 
 ## Context
 
