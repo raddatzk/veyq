@@ -137,7 +137,7 @@ internal fun localDate(iso: String): String = runCatching {
 internal fun categoryName(id: String?, view: PotView): String = if (id == null) "" else piece(view.categoryLabel(id))
 
 @Composable
-private fun personName(name: String?) = name ?: stringResource(R.string.pot_deleted_person)
+private fun personName(name: String?) = piece(PotView.person(name))
 
 @Composable
 private fun Entries(view: PotView, state: me.raddatz.veyq.mobile.expenses.PotModel.State, model: AppModel) {

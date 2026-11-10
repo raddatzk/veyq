@@ -134,10 +134,7 @@ func say(piece: Piece) -> String {
     }
 }
 
-func personName(_ name: String?) -> String {
-    guard let name, !name.isEmpty else { return say(.potDeletedPerson) }
-    return name
-}
+func personName(_ name: String?) -> String { say(piece: PotView.companion.person(name: name)) }
 
 /// The ledger check's notice (ADR 0108 decision 5): what the read found missing or altered, so the balances may be wrong.
 private struct LedgerNotice: View {

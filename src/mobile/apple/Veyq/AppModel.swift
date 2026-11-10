@@ -133,13 +133,11 @@ final class AppModel {
         }
     }
 
-    var space: SpaceRef? { spaces.first { $0.scopeId == shell.space } }
+    // core's shell rules over its lists; the observed lists are read first, so a view follows them as before
+    var space: SpaceRef? { _ = spaces; return shellModel?.current?.lists.space(shell: shell) }
 
     /// Home's level: the shown folder's children in the shown space, under the shown filter.
-    var level: [NodeRef] {
-        guard let s = shell.space else { return [] }
-        return Home.shared.level(nodes: nodes, scopeId: s, parentId: shell.folder?.nodeId, filter: shell.filter)
-    }
+    var level: [NodeRef] { _ = nodes; return shellModel?.current?.lists.level(shell: shell) ?? [] }
 
     /// Where the app opens (ADR 0123 decision 8): every account the person stays signed in to resumes after one
     /// authentication; with none, the most recent password-trusted account asks for its password; with no trusted
@@ -1294,13 +1292,8 @@ final class AppModel {
     func search(_ on: Bool) { moveShell { $0.search(on: on) } }
 
     func applicationList(_ app: ApplicationId) -> ArrangedList {
-        ListsKt.arrange(
-            favorites: favorites.filter { $0.application == app },
-            uses: [],
-            all: objects.filter { $0.application == app },
-            favoritesLimit: nil,
-            recentLimit: nil
-        )
+        _ = objects; _ = favorites
+        return shellModel?.current?.lists.applicationList(app: app) ?? ArrangedList(favorites: [], recent: [], all: [])
     }
 }
 

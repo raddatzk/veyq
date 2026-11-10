@@ -80,13 +80,16 @@ sealed interface Screen {
         val managing: List<ManagedServer>? = null,
     ) : Screen {
         /** The chosen application's own list, by the one rule (ADR 0122 decision 5). */
-        fun applicationList(app: ApplicationId): ArrangedList =
-            arrange(favorites.filter { it.application == app }, emptyList(), objects.filter { it.application == app })
+        fun applicationList(app: ApplicationId): ArrangedList = lists.applicationList(app)
 
-        val space: SpaceRef? get() = spaces.firstOrNull { it.scopeId == shell.space }
+        val space: SpaceRef? get() = lists.space(shell)
 
         /** Home's level: the shown folder's children in the shown space, under the shown filter. */
-        val level: List<NodeRef> get() = shell.space?.let { Home.level(nodes, it, shell.folder?.nodeId, shell.filter) }.orEmpty()
+        val level: List<NodeRef> get() = lists.level(shell)
+
+        /** The lists as core's shell holds them, for its rules. */
+        private val lists: me.raddatz.veyq.mobile.navigation.ShellModel.Lists
+            get() = me.raddatz.veyq.mobile.navigation.ShellModel.Lists(spaces, nodes, objects, favorites, applications, filters, drawer)
     }
 }
 

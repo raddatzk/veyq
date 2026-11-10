@@ -339,6 +339,12 @@ class PotView internal constructor(session: Source) {
     fun personWords(name: String?): Any =
         name?.takeIf { it.isNotEmpty() } ?: me.raddatz.veyq.mobile.words.Notice(me.raddatz.veyq.mobile.words.Msg.POT_DELETED_PERSON)
 
+    companion object {
+        /** A participant's name as a row shows it: as written, or "deleted person" for one erased (no name, or an empty one). */
+        fun person(name: String?): me.raddatz.veyq.mobile.words.Piece = name?.takeIf { it.isNotEmpty() }?.let { me.raddatz.veyq.mobile.words.Piece.Plain(it) }
+            ?: me.raddatz.veyq.mobile.words.Piece.Said(me.raddatz.veyq.mobile.words.Notice(me.raddatz.veyq.mobile.words.Msg.POT_DELETED_PERSON))
+    }
+
     /**
      * An entry row's line under its title, piece by piece (joined with " · "): its day, its category, who paid or received
      * (a transfer: from → to), and its amount in its own currency where that is not the base.
