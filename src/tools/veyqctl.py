@@ -6,6 +6,7 @@ veyq's half of an Argo CD repository (ADR 0126).
 
     init [--compose | --gitops DIR] [--name N] …     create an instance, list it and make it current (GitOps: below)
     connect [--connect-name N] [--make-current yes]  the SSH host and kubeconfig context of a set-up server, again
+    tls production [--yes]                           GitOps: from Let's Encrypt staging to production
     instances | use NAME                             the instances listed in ~/.config/veyq, and which is current
     install [--set KEY=VALUE …] [--unsigned-local]   fetch the release VEYQ_RELEASE selects, verify it, write .env, up
     start | stop | status                            the stack, addressed by the project the recipe names
@@ -857,6 +858,7 @@ def compose_programs(command: str, unsigned_local: bool) -> list[str]:
 
 
 GITOPS_PROGRAMS = {"init": ("git", "kubectl", "helm", "cosign"), "verify": ("helm", "cosign"),
+                   "tls": ("git", "kubectl", "helm"),
                    "check": ("git", "kubectl", "helm", "cosign"), "upgrade": ("git", "helm", "cosign")}
 
 
@@ -2425,6 +2427,10 @@ def cmd_init(args: argparse.Namespace, host: Host) -> int:
 # ---- the GitOps target: veyq's half of an Argo CD repository (ADR 0126 decisions 3-5 and 7) ---------------------
 
 PROVIDERS = ("sops", "external-secrets", "sealed-secrets", "none")
+# Let's Encrypt's two ACME directories (the chart's gateway.tls.acme.server): staging's certificates are not
+# browser-trusted, and it has none of production's tight rate limits — where a new instance starts (ADR 0126).
+ACME_DIRECTORIES = {"production": "https://acme-v02.api.letsencrypt.org/directory",
+                    "staging": "https://acme-staging-v02.api.letsencrypt.org/directory"}
 # What a veyq half written by hand must look like, and its veyqctl.json: the Run page, named where `init` refuses one.
 EXISTING_HALF_DOCS = "https://veyq.app/run/gitops/#a-veyq-half-that-exists-already"
 SECRETS_SECRET = "veyq-secrets"  # the chart's `secrets.existingSecret`
@@ -2636,7 +2642,7 @@ def sops_run(host: Host, cmd: list[str], target: Path, **kwargs) -> subprocess.C
 
 def stack_values(release: str, pins: dict[str, str], *, domain: str, store_domain: str, garage: bool,
                  gateway_class: str, tls: str, acme_email: str, tls_secret: str, peer_namespace: str,
-                 peer_label: str, provider: str) -> str:
+                 peer_label: str, provider: str, acme_directory: str = "production") -> str:
     label_key, _, label_value = peer_label.partition("=")
     lines = [
         "# veyq's chart values, written by veyqctl (ADR 0126). No secret here: the Secrets come from resources/"
@@ -2678,7 +2684,8 @@ def stack_values(release: str, pins: dict[str, str], *, domain: str, store_domai
         "  tls:",
     ]
     if tls == "acme":
-        lines += ["    mode: per-domain", "    acme:", "      enabled: true", f"      email: {acme_email}"]
+        lines += ["    mode: per-domain", "    acme:", "      enabled: true", f"      email: {acme_email}",
+                  f"      server: {ACME_DIRECTORIES[acme_directory]}"]
     elif tls == "shared":
         lines += ["    mode: shared", f"    secretName: {tls_secret}"]
     else:
@@ -3026,6 +3033,12 @@ def gitops_init(args: argparse.Namespace, host: Host, directory: Path) -> int:
     own_email = (git(host, top, "config", "user.email", check=False).stdout or "").strip()
     acme_email = option(args, host, "acme_email", "ACME contact", own_email,
                         "Where Let's Encrypt sends expiry and revocation notices.") if tls == "acme" else ""
+    acme_directory = option(
+        args, host, "acme_directory", "Let's Encrypt: staging or production", "staging" if server else "production",
+        "staging: certificates no browser trusts, without production's rate limits — where a new instance starts; "
+        "`veyqctl tls production` switches once everything runs.") if tls == "acme" else "production"
+    if acme_directory not in ACME_DIRECTORIES:
+        raise Refused(f"--acme-directory {acme_directory}: staging or production")
     tls_secret = option(args, host, "tls_secret", "the TLS Secret for every host") if tls == "shared" else ""
     namespace = args.namespace or "veyq"
     argocd_nodeport = reachable and (host.run(k + ["-n", args.argocd_namespace, "get", "svc", "argocd-server", "-o",
@@ -3115,7 +3128,8 @@ def gitops_init(args: argparse.Namespace, host: Host, directory: Path) -> int:
                                              revision=revision, namespace=namespace, values="values.yaml"),
         "values.yaml": stack_values(chosen.release, pins, domain=domain, store_domain=store_domain, garage=garage,
                                     gateway_class=gateway_class, tls=tls, acme_email=acme_email, tls_secret=tls_secret,
-                                    peer_namespace=peer_namespace, peer_label=peer_label, provider=provider),
+                                    peer_namespace=peer_namespace, peer_label=peer_label, provider=provider,
+                                    acme_directory=acme_directory),
         "resources/namespace.yaml": namespace_text(namespace),
         "resources/backup-pvc.yaml": backup_claim_text(namespace, args.storage_class or "", args.backup_size),
     }
@@ -4022,7 +4036,102 @@ def gitops_upgrade(args: argparse.Namespace, host: Host, g: GitOps) -> int:
     return 0
 
 
-GITOPS_VERBS = {"verify": gitops_verify, "check": gitops_check, "upgrade": gitops_upgrade}
+class server_tunnel:
+    """The SSH tunnel to a veyq-server cluster, open while the block runs, when the checkout's veyq-setup.json names
+    one (the context reaches the API only through it); nothing otherwise."""
+
+    def __init__(self, host: Host, top: Path) -> None:
+        name = (read_setup(top).get("server") or {}).get("connect_name")
+        self.host, self.name, self.process = host, name, None
+
+    def __enter__(self):
+        if self.name:
+            self.process = self.host.background(["ssh", "-N", "-o", "ExitOnForwardFailure=yes", self.name])
+            self.host.sleep(3)  # the forward is up before the first read
+        return self
+
+    def __exit__(self, *exc):
+        if self.process is not None:
+            self.process.terminate()
+        return False
+
+
+def gitops_tls(args: argparse.Namespace, host: Host, g: GitOps) -> int:
+    """`tls production`: from Let's Encrypt's staging directory to production (ADR 0126). The values' ACME server
+    rewritten, rendered, committed and pushed on confirmation; once Argo CD applied the Issuer, the certificates staging
+    issued are deleted on confirmation (it cannot be undone), so cert-manager orders production ones; then waited for."""
+    staging, production = ACME_DIRECTORIES["staging"], ACME_DIRECTORIES["production"]
+    text = g.values.read_text()
+    if f"server: {production}" in text and staging not in text:
+        say("the values name Let's Encrypt's production directory already: nothing to do")
+        return 0
+    if f"server: {staging}" not in text:
+        raise Refused(f"{g.values} names no Let's Encrypt staging directory under gateway.tls.acme (TLS acme with "
+                      f"`server: {staging}`): nothing to switch")
+    top = repository_of(host, g.directory)
+    if git(host, top, "diff", "--quiet", "HEAD", "--", str(g.values), check=False).returncode:
+        raise Refused(f"{g.values} has changes not committed: `tls production` commits only its own. Nothing was "
+                      f"changed.")
+    switched = rewrite_once(text, f"server: {staging}", f"server: {production}", g.doc["values"])
+    namespace = g.doc.get("namespace") or "veyq"
+    with tempfile.TemporaryDirectory(prefix="veyqctl-values-") as tmp:
+        staged = Path(tmp) / "values.yaml"
+        staged.write_text(switched)
+        render(host, g.doc["chart"], g.doc["pins"]["chart"], namespace, staged)
+    branch = (git(host, top, "rev-parse", "--abbrev-ref", "HEAD", check=False).stdout or "").strip()
+    if not args.yes and host.confirm(f"Switch to Let's Encrypt production: commit {g.doc['values']} and push to "
+                                     f"origin {branch}?") is not True:
+        raise Refused("not switched: nothing was changed (without a terminal, pass --yes)")
+    g.values.write_text(switched)
+    paths = [str(g.values)]
+    setup = read_setup(top)
+    rel = g.directory.relative_to(top).as_posix()
+    if rel in (setup.get("veyq") or {}):  # a rebuild from veyq-setup.json starts on production from now on
+        setup["veyq"][rel]["acme_directory"] = "production"
+        atomic_write(top / SETUP_FILE, json.dumps(setup, indent=2, sort_keys=True) + "\n")
+        paths.append(str(top / SETUP_FILE))
+    git(host, top, "add", "--", *paths)
+    git(host, top, "commit", "-m", "veyq: TLS from Let's Encrypt production, by veyqctl tls production", "--", *paths)
+    git(host, top, "push")
+    say("committed and pushed: Argo CD applies the Issuer's new directory at its next sync")
+    k = kubectl(g.doc.get("context") or None) + ["-n", namespace]
+    with server_tunnel(host, top):
+        deadline = time.monotonic() + args.timeout
+        while (host.run(k + ["get", "issuer", "veyq-acme", "-o", "jsonpath={.spec.acme.server}"], check=False).stdout
+               or "").strip() != production:
+            if time.monotonic() > deadline:
+                raise Refused(f"the Issuer veyq-acme does not name the production directory after {int(args.timeout)} s:"
+                              f" has Argo CD synced? The same command goes on (it is pushed already).")
+            host.sleep(10)
+        listed = host.run(k + ["get", "certificates", "-o",
+                               "jsonpath={range .items[*]}{.spec.secretName}{\"\\n\"}{end}"], check=False).stdout or ""
+        secrets_ = sorted({line.strip() for line in listed.splitlines() if line.strip()})
+        if secrets_:
+            print(f"\n   The certificates staging issued: {', '.join(secrets_)} (namespace {namespace}).", flush=True)
+            if not args.yes and host.confirm("Delete them, so cert-manager orders production ones? This cannot be "
+                                             "undone; until the new ones are issued, those hosts serve none") is not True:
+                raise Refused("the staging certificates stay until they renew; `veyqctl tls production` deletes them "
+                              "when you run it again")
+            host.run(k + ["delete", "secret", *secrets_])
+        while True:
+            states = host.run(k + ["get", "certificates", "-o", "jsonpath={range .items[*]}{.metadata.name} "
+                                   "{.status.conditions[?(@.type==\"Ready\")].status}{\"\\n\"}{end}"],
+                              check=False).stdout or ""
+            pending = [line.split()[0] for line in states.splitlines() if line.split() and line.split()[-1] != "True"]
+            if states.strip() and not pending:
+                say("every certificate is issued by Let's Encrypt production")
+                return 0
+            if time.monotonic() > deadline:
+                raise Refused(f"not issued within {int(args.timeout)} s: {', '.join(pending) or 'no certificate'} — "
+                              f"`kubectl describe certificate` tells why")
+            host.sleep(10)
+
+
+def compose_tls(args: argparse.Namespace, host: Host) -> int:
+    raise Refused("`tls` is a GitOps instance's: under Compose, Traefik's ACME resolver takes its directory from .env")
+
+
+GITOPS_VERBS = {"verify": gitops_verify, "check": gitops_check, "upgrade": gitops_upgrade, "tls": gitops_tls}
 
 
 # ---- main ------------------------------------------------------------------------------------------------------
@@ -4061,6 +4170,8 @@ def parser() -> argparse.ArgumentParser:
     init.add_argument("--gateway-class", help="GitOps: the GatewayClass the chart's Gateway uses")
     init.add_argument("--tls", choices=("acme", "shared", "none"), help="GitOps: the chart's TLS (acme: its "
                                                                          "cert-manager issuer)")
+    init.add_argument("--acme-directory", choices=tuple(ACME_DIRECTORIES),
+                      help="GitOps: Let's Encrypt's staging or production directory (server path: staging first)")
     init.add_argument("--acme-email", help="GitOps: the ACME account contact (implies --tls acme)")
     init.add_argument("--tls-secret", help="GitOps --tls shared: the TLS Secret every host uses")
     init.add_argument("--gateway-namespace", help="GitOps: the namespace of the Gateway's data-plane pods")
@@ -4100,6 +4211,12 @@ def parser() -> argparse.ArgumentParser:
     init.add_argument("--sync-timeout", type=float, default=1800.0,
                       help="server path: seconds to wait for Argo CD to report Synced and Healthy (default 1800)")
     init.set_defaults(func=cmd_init)
+
+    tls = sub.add_parser("tls", help="GitOps: from Let's Encrypt staging to production (commit, push, new certificates)")
+    tls.add_argument("directory", choices=("production",), help="the directory to switch to")
+    tls.add_argument("--yes", action="store_true", help="confirm the commit and push and the certificates' deletion")
+    tls.add_argument("--timeout", type=float, default=900.0, help="seconds to wait for Argo CD and cert-manager")
+    tls.set_defaults(func=compose_tls)
 
     connected = sub.add_parser("connect", help="this machine's SSH host and kubeconfig context for the server a "
                                "checkout's veyq-setup.json describes — again after a rebuild")
@@ -4202,7 +4319,7 @@ def main(argv: list[str] | None = None, host: Host | None = None) -> int:
             return GITOPS_VERBS[args.command](args, host, read_gitops(home.resolve()))
         if getattr(args, "push", False):
             raise Refused(f"--push is a GitOps instance's, and {home} is a Compose home")
-        if args.command != "self-update":
+        if args.command not in ("self-update", "tls"):
             require_programs(host, compose_programs(args.command, bool(getattr(args, "unsigned_local", False))),
                              f"`{args.command}`")
         return args.func(args, host)

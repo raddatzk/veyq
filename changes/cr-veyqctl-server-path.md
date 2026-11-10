@@ -90,7 +90,7 @@ veyqctl init            answers: <checkout>/veyq-setup.json · steps done: ~/.co
   program. · Done when: the self-test drives the whole run, each confirmation's no stopping before its step, each
   refusal (a manifest that does not verify, a tree that differs, a host key not confirmed, an unpushed tree) changing
   nothing outside the repository.
-- [ ] **4 TLS staging and `veyqctl tls production`.** · Done when: values rendered for both directories; the switch
+- [x] **4 TLS staging and `veyqctl tls production`.** · Done when: values rendered for both directories; the switch
   driven against stand-ins, nothing deleted on no.
 - [ ] **5 measured: `raddatz.me` from scratch** — `affenbande` renamed to `raddatz.me` on GitHub; the repository emptied;
   a fresh Debian server; `veyqctl init` alone, with staging, then `veyqctl tls production`; Argo CD and veyq healthy, the
@@ -144,3 +144,14 @@ sops writing and re-reading the secrets file, `ssh-keygen -lf`, `ssh -G`. That r
 `.sops.yaml` from its working directory, not from `--filename-override`: sops now runs where the rules are
 (`sops_run`), on the existing GitOps path too. Not measured: veyq-server's release (CI and release wait on GitHub), a
 real server — phase 5.
+
+Phase 4: `init` asks Let's Encrypt staging or production with TLS `acme` (`--acme-directory`; offered staging on the
+server path, production otherwise) and writes `gateway.tls.acme.server` (veyqctl wrote none before: the chart's default
+is production); the render check renders both directories and reads the Issuer's back. `veyqctl tls production` on a
+GitOps instance: refuses uncommitted values, rewrites the server once, renders, commits the values (and
+veyq-setup.json's answer, so a rebuild starts on production) and pushes on confirmation, waits until the Issuer
+`veyq-acme` names production (through the tunnel when veyq-setup.json names a server), then deletes the Secrets of the
+namespace's Certificates on confirmation and waits until every one is Ready; `--yes` for no terminal; on Compose
+refused. Self-tested (each confirmation's no, the Issuer still on staging deleting nothing, nothing to do on
+production); eight mutations bite, and the render check bites the values without the server. Not measured on a real
+cluster — phase 5.

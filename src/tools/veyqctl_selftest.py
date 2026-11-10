@@ -2404,6 +2404,47 @@ def test_server_path(tmp: pathlib.Path) -> None:
               "refused, nothing pushed)", rc == 1 and "github.com/owner/raddatz.me/settings/keys/new" in out
               and not host.pushed, out[-500:])
 
+        values = top / "gitops/apps/veyq/values.yaml"
+        check("server path: TLS starts on Let's Encrypt staging (asked, offered so), recorded in veyq-setup.json",
+              f"server: {vc.ACME_DIRECTORIES['staging']}" in values.read_text() and json.loads(
+                  (top / vc.SETUP_FILE).read_text())["veyq"]["gitops/apps/veyq"]["acme_directory"] == "staging")
+        certs = {"get issuer": (0, vc.ACME_DIRECTORIES["production"]), "secretName": (0, "veyq-app\nveyq-garage\n"),
+                 "Ready": (0, "veyq-app True\nveyq-garage True\n")}
+        staged_values = values.read_text()
+        host = ServerHost(top=top, cluster=certs, confirms={"Switch to Let's Encrypt production": False})
+        rc, out = run_main(["--instance", "server-run", "tls", "production"], host)
+        check("tls production declined: nothing changed, nothing committed or pushed",
+              rc == 1 and values.read_text() == staged_values and not host.ran("commit") and not host.ran("push"),
+              out[-300:])
+        host = ServerHost(top=top, cluster=certs, confirms={"Delete them": False})
+        rc, out = run_main(["--instance", "server-run", "tls", "production"], host)
+        check("tls production: rendered, committed with veyq-setup.json and pushed; the certificates' deletion declined "
+              "deletes nothing", rc == 1 and f"server: {vc.ACME_DIRECTORIES['production']}" in values.read_text()
+              and host.ran("helm", "template") and host.ran("push") and not host.ran("delete", "secret")
+              and json.loads((top / vc.SETUP_FILE).read_text())["veyq"]["gitops/apps/veyq"]["acme_directory"]
+              == "production", out[-300:])
+        (top / "gitops/apps/veyq/values.yaml").write_text(staged_values)  # as if the run before had stopped earlier
+        host = ServerHost(top=top, cluster=dict(certs, **{"get issuer": (0, vc.ACME_DIRECTORIES["staging"])}))
+        rc, out = run_main(["--instance", "server-run", "tls", "production", "--timeout", "0"], host)
+        check("tls production: while the Issuer still names staging (Argo CD not synced), no certificate is deleted",
+              rc == 1 and "does not name the production directory" in out and not host.ran("delete", "secret"),
+              out[-300:])
+        (top / "gitops/apps/veyq/values.yaml").write_text(staged_values)
+        host = ServerHost(top=top, cluster=certs)
+        rc, out = run_main(["--instance", "server-run", "tls", "production"], host)
+        deleted = host.ran("delete", "secret")
+        check("tls production: once the Issuer names production, the certificates staging issued deleted (asked), "
+              "waited for, through a tunnel it closes", rc == 0 and deleted and host.commands[deleted[0]][-2:] ==
+              ["veyq-app", "veyq-garage"] and host.ran("ssh", "-N", "server-run", "&") and host.tunnels == ["closed"]
+              and "issued by Let's Encrypt production" in out, out[-400:])
+        rc, out = run_main(["--instance", "server-run", "tls", "production"], ServerHost(top=top, cluster=certs))
+        check("tls production on production: nothing to do", rc == 0 and "nothing to do" in out, out[-200:])
+        compose_home = tmp / "server-compose-home"
+        compose_home.mkdir()
+        rc, out = run_main(["--home", compose_home, "tls", "production"], FakeHost())
+        check("tls on a Compose home is refused, naming where Compose takes its directory", rc == 1
+              and "GitOps instance's" in out, out[-200:])
+
         (home / ".ssh" / "config").write_text((home / ".ssh" / "config").read_text() + "\nHost other\n  User x\n")
         cwd = os.getcwd()
         os.chdir(top)
