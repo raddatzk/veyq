@@ -71,7 +71,10 @@ jobs:
     needs: check
     if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    # Most of a deploy is GitHub Pages' own `syncing_files`, which this job only polls: 0.1-0.2 min until 2026-11-08,
+    # then 1.8 and 3.1 min, and on 2026-11-10 4.9 min — Pages reported success two seconds before a 5-minute budget
+    # cancelled the job, with the site already live. 15 keeps a slow sync from reading as a failed deploy.
+    timeout-minutes: 15
     # Only this job may publish, and only through the Pages OIDC token; `check` stays read-only.
     permissions:
       pages: write
