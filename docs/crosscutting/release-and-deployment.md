@@ -12,8 +12,8 @@
 
 **Built, first run on GitHub.** Everything below is in the tree unless it stands under
 [§ Decided, not built](#decided-not-built). The repository has a remote since 2026-11-05 and the pipeline has run there; no
-release exists yet: `VERSION` is `0`, git holds no `v*` tag, and `scripts/applied_migrations.sha256` says
-`release: none`. A statement about what CI or a publish *does* is a statement about
+first release is `v0.2480` (2026-11-10), the last of major 0; `VERSION` is `1` since, and
+`scripts/applied_migrations.sha256` says `release: 202611070833` (the three baselines, frozen). A statement about what CI or a publish *does* is a statement about
 [`checks.yml`](../../.github/workflows/checks.yml) (the pipeline) and [`publish.yml`](../../.github/workflows/publish.yml)
 (the snapshot), held by `scripts/validate_release_identity.py`; what a run on GitHub has shown is inbox #471's list,
 and a local run goes through `scripts/run_pipeline.py`, which reads checks.yml and runs what this machine can.

@@ -344,7 +344,7 @@ jobs:
         run: python3 src/tools/veyqctl_selftest.py
 
       # Docker-free: the upgrade proof's pure parts (which predecessor, both builds' migrations, Flyway's refusal named,
-      # the record both builds share). The proof itself is `upgrade-proof` below, disabled until a release.
+      # the record both builds share). The proof itself is `upgrade-proof` below.
       - name: Upgrade proof self-test
         run: python3 scripts/upgrade_proof_selftest.py
 
@@ -990,15 +990,13 @@ jobs:
   # second proof. A leg asks `--resolve` first and builds nothing when there is nothing to prove from: the major-entry
   # leg while the entry is the default predecessor (a major's first release) or there is none.
   #
-  # DISABLED UNTIL THE FIRST RELEASE (owner decision 2026-10-14). Before it a baseline may still change
-  # (src/backend/CLAUDE.md § Migrations), so a red proof informs and gates nothing. The change that sets the `release:` line
-  # of scripts/applied_migrations.sha256 enables it, in the same commit: it deletes `if: false` below AND the
-  # `"skipped"` that `green` tolerates for this job. A disabled job claims no coverage (ADR 0040).
+  # Enabled with the first release (owner decision 2026-10-14): the commit that set the `release:` line of
+  # scripts/applied_migrations.sha256 (v0.2480's three baselines, frozen from then on) deleted its `if: false` and the
+  # `"skipped"` that `green` tolerated for it, so it gates every commit.
   upgrade-proof:
     name: Upgrade proof (the predecessor's backup, restored onto and read by this build)
     runs-on: ubuntu-latest
     timeout-minutes: 15
-    if: false
     strategy:
       fail-fast: false
       matrix:
@@ -1072,10 +1070,9 @@ jobs:
 
   # Every stage passed (ADR 0091 decision 2): the job publish.yml reads, by its result in this run, before it signs
   # this run's staging — so the build may start beside the tests. `always()` so that a job SKIPPED by design does not
-  # skip this one, as a skipped need otherwise would: the disabled upgrade proof (`if: false`, above) and the one build
-  # of the two that this event does not run (`build` on a push, `build-local` on a pull request). Every result then
-  # gates it explicitly, and a red stage SKIPS it. validate_release_identity.py holds the list to every job of this
-  # file and the skips it accepts to those three.
+  # skip this one, as a skipped need otherwise would: the one build of the two that this event does not run (`build` on
+  # a push, `build-local` on a pull request). Every result then gates it explicitly, and a red stage SKIPS it.
+  # validate_release_identity.py holds the list to every job of this file and the skips it accepts to those two.
   green:
     name: Pipeline green
     runs-on: ubuntu-latest
@@ -1106,7 +1103,7 @@ jobs:
       && contains(fromJSON('["success", "skipped"]'), needs.build.result)
       && contains(fromJSON('["success", "skipped"]'), needs.build-local.result)
       && needs.stack.result == 'success'
-      && contains(fromJSON('["success", "skipped"]'), needs.upgrade-proof.result)
+      && needs.upgrade-proof.result == 'success'
     permissions:
       contents: read # reads only its needs' results; no checkout
     steps:

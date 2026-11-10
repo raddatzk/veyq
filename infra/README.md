@@ -294,15 +294,13 @@ a release name is never replaced. One case needs your hand: should `promote` rep
 not the tested digest (Buildx copying an index differently from its documentation), delete that `<major>.<minor>` tag
 of that package in GHCR before running again.
 
-**Which version is V1** — `0.<n>` or `1.0` — is the owner's call, and the workflow promotes either. `1.0` is not a
-snapshot you can pick until a `0.<n>` release exists: the `1.0` commit sets the `release:` line (below), and from then
-on the upgrade proof and the chart upgrade check prove from the newest `v` tag the commit's parent reaches — with no
-`v` tag they refuse, and that commit's pipeline is red.
+**V1 is `1.0`** (owner 2026-11-10). It was entered the way any first major is: a `0.<n>` release first (v0.2480, the
+last of major 0), then one commit setting `VERSION` to `1` **and** the `release:` line of
+`scripts/applied_migrations.sha256` to the highest migration that release ships, which also deleted `upgrade-proof`'s
+`if: false` and the `"skipped"` that `green` tolerated for it, then the promotion of that commit's snapshot. Since then
+the upgrade proof and the chart upgrade check prove from the newest `v` tag the commit's parent reaches, and a released
+migration is never edited ([src/backend/CLAUDE.md](../src/backend/CLAUDE.md) § Migrations).
 
-- **The first `1.x` release is one commit, then its promotion:** `VERSION` set to `1` **and** the `release:`
-  line of `scripts/applied_migrations.sha256` set to the highest migration that release ships, together — the same
-  commit deletes `upgrade-proof`'s `if: false` and the `"skipped"` the `snapshot` job tolerates for it. From then
-  on a released migration is never edited ([src/backend/CLAUDE.md](../src/backend/CLAUDE.md) § Migrations).
 **The 1 May train** ([ADR 0085](../docs/decisions/0085-one-major-moved-on-a-yearly-train.md) decisions 2, 3 and 10)
 leaves only when a removal is pending. A year without one has no major, and an unscheduled major (decision 4) follows
 the same steps on its own date:

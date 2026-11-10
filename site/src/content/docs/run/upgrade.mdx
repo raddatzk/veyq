@@ -41,8 +41,8 @@ names another one, and a ref older than the seeder is refused. A release of majo
 the release its tools image's gate lets a new major be entered from. Where there is none, or it is the predecessor
 above, that run says so and runs nothing. The run's summary ends with the predecessor, both
 builds' highest migration, the migrations changed or removed between them, and the outcome with its cause — a Flyway
-refusal (a changed baseline's checksum above all) is named as such. Before the first release a red proof informs and
-gates nothing; the pipeline's `upgrade-proof` job, which its `green` gate — and so the snapshot — needs, is disabled until then
+refusal (a changed baseline's checksum above all) is named as such. The pipeline's `upgrade-proof` job runs it on every
+commit since the first release (v0.2480), and its `green` gate — and so the snapshot — needs it green
 ([backend/CLAUDE.md](https://github.com/raddatzk/veyq/blob/main/src/backend/CLAUDE.md) § Migrations). **What it does not cover:** it boots jars, not the published
 images, so a pull, an `up` that migrates, and the rollback stay unrehearsed; and it says nothing
 about the chart — `helm upgrade` from the predecessor's chart to the candidate's runs in no cluster; its immutable
