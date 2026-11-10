@@ -1,7 +1,7 @@
 # ADR 0122 — One app holds every application: the drawer chooses, the bar belongs to what is chosen
 
 - Status: Accepted
-- Built: partly (not built: decision 7's index, an open sidebar on a large Android window, some objects' own views — [native-apps](../crosscutting/native-apps.md) keeps the picture)
+- Built: partly (not built: decision 7's index, some objects' own views — [native-apps](../crosscutting/native-apps.md) keeps the picture)
 - Date: 2026-11-07
 
 ## Context

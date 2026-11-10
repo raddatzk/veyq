@@ -102,7 +102,12 @@ import me.raddatz.veyq.mobile.navigation.ObjectRef
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ShellScreen(s: Screen.Signed, model: AppModel) {
-    val drawer = rememberDrawerState(if (s.shell.drawerOpensAtStart) DrawerValue.Open else DrawerValue.Closed)
+    // Material 3's window classes (ADR 0122 decision 2): from a medium window on, a rail at the side takes the bar's place;
+    // on an expanded one the drawer stays open as the sidebar.
+    val widthDp = androidx.compose.ui.platform.LocalConfiguration.current.screenWidthDp
+    val rail = widthDp >= MEDIUM_WIDTH_DP
+    val wide = widthDp >= EXPANDED_WIDTH_DP
+    val drawer = rememberDrawerState(if (s.shell.drawerOpensAtStart && !wide) DrawerValue.Open else DrawerValue.Closed)
     val scope = rememberCoroutineScope()
     val snackbar = androidx.compose.runtime.remember { androidx.compose.material3.SnackbarHostState() }
     val shell = s.shell
@@ -160,19 +165,22 @@ fun ShellScreen(s: Screen.Signed, model: AppModel) {
 
     val covers by model.covers.collectAsStateWithLifecycle()
     androidx.compose.runtime.CompositionLocalProvider(LocalRowDetails provides rowDetails, LocalAvatars provides avatars, LocalPicking provides (incoming != null), LocalCovers provides covers) {
-    ModalNavigationDrawer(
-        drawerState = drawer,
-        drawerContent = {
-            Drawer(
-                s,
-                onChoose = { closeDrawerThen { model.choose(it) } },
-                onOpen = { closeDrawerThen { model.open(it) } },
-                onSwitch = { account, tenant -> closeDrawerThen { model.switchTo(account, tenant) } },
-                onAddServer = { closeDrawerThen { model.openManage() } },
-                onNew = { kind -> closeDrawerThen { model.requestNew(kind) } },
-            )
-        },
-    ) {
+    val drawerContent: @Composable () -> Unit = {
+        Drawer(
+            s,
+            onChoose = { closeDrawerThen { model.choose(it) } },
+            onOpen = { closeDrawerThen { model.open(it) } },
+            onSwitch = { account, tenant -> closeDrawerThen { model.switchTo(account, tenant) } },
+            onAddServer = { closeDrawerThen { model.openManage() } },
+            onNew = { kind -> closeDrawerThen { model.requestNew(kind) } },
+            permanent = wide,
+        )
+    }
+    // the bar's places, drawn as a bar at the bottom or a rail at the side
+    val places = shell.barTabs.map { tab ->
+        Place(!shell.searching && tab == shell.selectedTab, { model.select(tab) }, tabIcon(tab, shell.openObject?.kind), tabLabel(tab, shell.openObject?.kind))
+    } + Place(shell.searching, { model.search(true) }, Icons.Outlined.Search, stringResource(R.string.tab_search))
+    val body: @Composable () -> Unit = {
         Scaffold(
             containerColor = MaterialTheme.colorScheme.background,
             snackbarHost = { androidx.compose.material3.SnackbarHost(snackbar) },
@@ -216,7 +224,7 @@ fun ShellScreen(s: Screen.Signed, model: AppModel) {
                         navigationIcon = {
                             if (shell.canGoBack) {
                                 IconButton(onClick = model::goBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, stringResource(R.string.back)) }
-                            } else {
+                            } else if (!wide) {
                                 IconButton(onClick = { scope.launch { drawer.open() } }) { Icon(Icons.Filled.Menu, stringResource(R.string.drawer_open)) }
                             }
                         },
@@ -226,7 +234,7 @@ fun ShellScreen(s: Screen.Signed, model: AppModel) {
                 }
             },
             bottomBar = {
-                NavigationBar(containerColor = role(palette.surface)) {
+                if (!rail) NavigationBar(containerColor = role(palette.surface)) {
                     val colors = NavigationBarItemDefaults.colors(
                         selectedIconColor = role(palette.accent),
                         selectedTextColor = role(palette.accent),
@@ -234,22 +242,9 @@ fun ShellScreen(s: Screen.Signed, model: AppModel) {
                         unselectedIconColor = role(palette.muted),
                         unselectedTextColor = role(palette.muted),
                     )
-                    for (tab in shell.barTabs) {
-                        NavigationBarItem(
-                            selected = !shell.searching && tab == shell.selectedTab,
-                            onClick = { model.select(tab) },
-                            icon = { Icon(tabIcon(tab, shell.openObject?.kind), null) },
-                            label = { Text(tabLabel(tab, shell.openObject?.kind)) },
-                            colors = colors,
-                        )
+                    for (p in places) {
+                        NavigationBarItem(selected = p.selected, onClick = p.onClick, icon = { Icon(p.icon, null) }, label = { Text(p.label) }, colors = colors)
                     }
-                    NavigationBarItem(
-                        selected = shell.searching,
-                        onClick = { model.search(true) },
-                        icon = { Icon(Icons.Outlined.Search, null) },
-                        label = { Text(stringResource(R.string.tab_search)) },
-                        colors = colors,
-                    )
                 }
             },
         ) { padding ->
@@ -260,9 +255,26 @@ fun ShellScreen(s: Screen.Signed, model: AppModel) {
             val hero: @Composable (androidx.compose.ui.unit.Dp) -> Unit = { inset ->
                 if (paged != null) NodeCoverHero(paged, model, canSet = KindPages.of(paged.kind)?.takesCover == true && pagedContribution?.cover != false, inset = inset)
             }
-            Box(Modifier.padding(padding).fillMaxSize()) {
+            androidx.compose.foundation.layout.Row(Modifier.padding(padding).fillMaxSize()) {
+            if (rail) {
+                androidx.compose.material3.NavigationRail(containerColor = MaterialTheme.colorScheme.background) {
+                    val colors = androidx.compose.material3.NavigationRailItemDefaults.colors(
+                        selectedIconColor = role(palette.accent),
+                        selectedTextColor = role(palette.accent),
+                        indicatorColor = role(palette.accentSoft),
+                        unselectedIconColor = role(palette.muted),
+                        unselectedTextColor = role(palette.muted),
+                    )
+                    for (p in places) {
+                        androidx.compose.material3.NavigationRailItem(selected = p.selected, onClick = p.onClick, icon = { Icon(p.icon, null) }, label = { Text(p.label) }, colors = colors)
+                    }
+                }
+            }
+            Box(Modifier.weight(1f).fillMaxSize()) {
               androidx.compose.runtime.CompositionLocalProvider(LocalNodeHero provides hero) {
                 when {
+                    // a wide window: the application's list and its open object side by side (Material 3's list-detail)
+                    wide && shell.showsListBeside -> ListBeside(s, model)
                     shell.searching -> SearchScreen(s.objects, onOpen = model::open, onClose = { model.search(false) })
                     shell.openObject != null -> KindPages.of(shell.openObject!!.kind)?.body?.invoke(shell.openObject!!, shell.selectedTab, model)
                         ?: ObjectScreen(shell.openObject!!, shell.selectedTab)
@@ -274,12 +286,22 @@ fun ShellScreen(s: Screen.Signed, model: AppModel) {
                 if (s.switching) androidx.compose.material3.LinearProgressIndicator(Modifier.fillMaxWidth())
                 UploadTray(model)
             }
+            }
         }
         trashOf?.let { SpaceTrashSheet(it, model) { trashOf = null } }
         uploadShareAt?.let { TopLevelUploadSheet(it, model) { uploadShareAt = null } }
     }
+    if (wide) androidx.compose.material3.PermanentNavigationDrawer(drawerContent = drawerContent) { body() }
+    else ModalNavigationDrawer(drawerState = drawer, drawerContent = drawerContent) { body() }
     }
 }
+
+/** Material 3's window width classes (dp): a medium window from 600, an expanded one from 840. */
+private const val MEDIUM_WIDTH_DP = 600
+private const val EXPANDED_WIDTH_DP = 840
+
+/** One place of the bar: a tab of the chosen application, or Search. */
+private class Place(val selected: Boolean, val onClick: () -> Unit, val icon: ImageVector, val label: String)
 
 /** Home's title: the shown space, and the switcher to the member's other spaces (owner 2026-11-08: in Home's title). */
 @Composable
@@ -512,16 +534,14 @@ private fun Drawer(
     onAddServer: () -> Unit,
     /** The sidebar's "New": what a level creates ("folder", "pot"), opened on Home. */
     onNew: (String) -> Unit,
+    /** Open for good beside the content (an expanded window), not over it. */
+    permanent: Boolean = false,
 ) {
     val palette = LocalPalette.current
     // The web's sidebar: the surface, washed with a trace of the accent from the top (`--app-chrome-pattern`).
     val chrome = Brush.verticalGradient(listOf(role(palette.accentSoft), role(palette.surface)), endY = 900f)
     val shape = androidx.compose.foundation.shape.RoundedCornerShape(topEnd = 12.dp, bottomEnd = 12.dp)
-    ModalDrawerSheet(
-        drawerContainerColor = androidx.compose.ui.graphics.Color.Transparent,
-        drawerShape = shape,
-        modifier = Modifier.background(chrome, shape),
-    ) {
+    DrawerSheet(permanent, chrome, shape) {
         Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = 14.dp)) {
             Brand(Modifier.padding(start = 8.dp, top = 20.dp, bottom = 14.dp))
             TenantSwitcher(s, onSwitch, onAddServer)
@@ -624,10 +644,10 @@ private fun ObjectItems(refs: List<ObjectRef>, open: ObjectRef?, onOpen: (Object
 
 /** Expenses' own list (its Pots), with "New pot" (uc.expenses.create-pot). */
 @Composable
-private fun ExpensesList(s: Screen.Signed, model: AppModel) {
+private fun ExpensesList(s: Screen.Signed, model: AppModel, onOpen: (ObjectRef) -> Unit = model::open) {
     var creating by remember { mutableStateOf(false) }
     CreateAction(stringResource(R.string.create_pot), shown = s.spaces.isNotEmpty(), onClick = { creating = true }) { list, bottom ->
-        ArrangedListScreen(s.applicationList(ApplicationId.EXPENSES), onOpen = model::open, state = list, bottom = bottom)
+        ArrangedListScreen(s.applicationList(ApplicationId.EXPENSES), onOpen = onOpen, state = list, bottom = bottom)
     }
     if (creating) PotCreateSheet(s, model) { creating = false }
 }
@@ -670,7 +690,10 @@ private fun ObjectRow(ref: ObjectRef, onOpen: (ObjectRef) -> Unit) {
                 cover, null, Modifier.size(34.dp).clip(MaterialTheme.shapes.medium), contentScale = androidx.compose.ui.layout.ContentScale.Crop,
             ) else Tile(kindIcon(ref.kind))
         },
-        colors = ListItemDefaults.colors(containerColor = MaterialTheme.colorScheme.background),
+        // the object open beside the list (a wide window) is marked in it
+        colors = ListItemDefaults.colors(
+            containerColor = if (LocalOpenObject.current == ref.nodeId) role(LocalPalette.current.accentSoft) else MaterialTheme.colorScheme.background,
+        ),
         modifier = Modifier.clip(MaterialTheme.shapes.medium).alpha(if (takes) 1f else 0.38f).let { if (takes) it.clickableRow { onOpen(ref) } else it },
     )
 }
@@ -783,3 +806,59 @@ private fun ShareBanner(incoming: me.raddatz.veyq.mobile.expenses.ShareInbox.Inc
         TextButton(onClick = onCancel) { Text(stringResource(R.string.entry_cancel)) }
     }
 }
+
+/** The drawer's sheet: over the content (a modal drawer), or beside it for good (the sidebar of an expanded window). */
+@Composable
+private fun DrawerSheet(
+    permanent: Boolean, chrome: Brush, shape: androidx.compose.ui.graphics.Shape,
+    content: @Composable androidx.compose.foundation.layout.ColumnScope.() -> Unit,
+) {
+    if (permanent) {
+        androidx.compose.material3.PermanentDrawerSheet(
+            drawerContainerColor = androidx.compose.ui.graphics.Color.Transparent,
+            modifier = Modifier.width(300.dp).background(chrome),
+            content = content,
+        )
+    } else {
+        ModalDrawerSheet(
+            drawerContainerColor = androidx.compose.ui.graphics.Color.Transparent,
+            drawerShape = shape,
+            modifier = Modifier.background(chrome, shape),
+            content = content,
+        )
+    }
+}
+
+/** The object open in the list beside it, marked there (a wide window's list-detail). */
+private val LocalOpenObject = androidx.compose.runtime.staticCompositionLocalOf<String?> { null }
+
+/**
+ * A wide window's list and detail (Material 3, ADR 0122): the chosen application's list on the left, a choice there taking
+ * the open object's place on the right; with none open, the right side says to choose.
+ */
+@Composable
+private fun ListBeside(s: Screen.Signed, model: AppModel) {
+    val shell = s.shell
+    val app = shell.application ?: return
+    val palette = LocalPalette.current
+    androidx.compose.foundation.layout.Row(Modifier.fillMaxSize()) {
+        Box(Modifier.width(LIST_PANE_WIDTH).fillMaxSize()) {
+            androidx.compose.runtime.CompositionLocalProvider(LocalOpenObject provides shell.openObject?.nodeId) {
+                if (app == ApplicationId.EXPENSES) ExpensesList(s, model, onOpen = model::openBeside)
+                else ArrangedListScreen(s.applicationList(app), onOpen = model::openBeside)
+            }
+        }
+        androidx.compose.material3.VerticalDivider(color = role(palette.line))
+        Box(Modifier.weight(1f).fillMaxSize()) {
+            val open = shell.openObject
+            if (open == null) {
+                Text(say(me.raddatz.veyq.mobile.words.Msg.LIST_BESIDE_EMPTY), color = role(palette.muted), modifier = Modifier.align(Alignment.Center))
+            } else {
+                KindPages.of(open.kind)?.body?.invoke(open, shell.selectedTab, model) ?: ObjectScreen(open, shell.selectedTab)
+            }
+        }
+    }
+}
+
+/** The list pane's width beside an object (Material 3's list-detail: a fixed list, the detail takes the rest). */
+private val LIST_PANE_WIDTH = 360.dp

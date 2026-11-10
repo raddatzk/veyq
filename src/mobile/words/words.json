@@ -302,6 +302,10 @@
     "en": "Refund to {1}",
     "de": "Erstattung an {1}"
   },
+  "list_beside_empty": {
+    "en": "Choose one from the list.",
+    "de": "Wähle eines aus der Liste."
+  },
   "pot_transfer_between": {
     "en": "{1} → {2}",
     "de": "{1} → {2}"

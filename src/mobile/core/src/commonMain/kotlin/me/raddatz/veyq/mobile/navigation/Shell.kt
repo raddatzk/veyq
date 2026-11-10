@@ -84,6 +84,16 @@ data class Shell(
      */
     fun open(ref: ObjectRef): Shell = Shell(application = ref.application, openObject = ref, space = space, back = this)
 
+    /**
+     * [ref] chosen from the list beside an open object (a wide window's list and detail): it takes the open one's place, so
+     * back still leads where that one was opened from, not through every object chosen beside it.
+     */
+    fun openBeside(ref: ObjectRef): Shell =
+        if (openObject == null) open(ref) else Shell(application = ref.application, openObject = ref, space = space, back = back)
+
+    /** A wide window shows the application's list beside: an application chosen, not searching. */
+    val showsListBeside: Boolean get() = application != null && !searching
+
     fun select(tab: BarTab): Shell = copy(tab = tab, searching = false)
 
     /** Back from an open object: to where it was opened from, or — opened on start — to its application's list. */

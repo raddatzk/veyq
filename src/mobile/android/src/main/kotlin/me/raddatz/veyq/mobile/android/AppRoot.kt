@@ -9,6 +9,8 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawingPadding
+import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.layout.wrapContentWidth
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
@@ -51,7 +53,7 @@ fun SignInScreen(state: Screen.SignIn, onSignIn: (String, String, String, String
     var password by rememberSaveable { mutableStateOf("") }
     var secretKey by rememberSaveable { mutableStateOf("") }
     Column(
-        modifier = Modifier.fillMaxSize().safeDrawingPadding().imePadding().verticalScroll(rememberScrollState()).padding(24.dp),
+        modifier = Modifier.fillMaxSize().safeDrawingPadding().imePadding().verticalScroll(rememberScrollState()).formColumn(),
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
         Spacer(Modifier.height(32.dp))
@@ -120,7 +122,7 @@ fun UnlockScreen(state: Screen.Unlock, onUnlock: (String) -> Unit, onOther: () -
     val remembered = state.record.method == me.raddatz.veyq.mobile.session.TrustedDevice.Method.DEVICE_KEY
     val palette = LocalPalette.current
     Column(
-        modifier = Modifier.fillMaxSize().safeDrawingPadding().imePadding().verticalScroll(rememberScrollState()).padding(24.dp),
+        modifier = Modifier.fillMaxSize().safeDrawingPadding().imePadding().verticalScroll(rememberScrollState()).formColumn(),
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
         Spacer(Modifier.height(32.dp))
@@ -152,3 +154,7 @@ fun UnlockScreen(state: Screen.Unlock, onUnlock: (String) -> Unit, onOther: () -
         }
     }
 }
+
+/** A form's column: on a wide window it reads at a form's width, centred, as on Apple — never a line of fields across a tablet. */
+private fun Modifier.formColumn(): Modifier =
+    this.wrapContentWidth().widthIn(max = 520.dp).padding(24.dp)

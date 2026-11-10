@@ -140,9 +140,14 @@ class ShellModel(
     fun search(on: Boolean) = update { it.search(on) }
 
     /** Opens [ref], its use recorded (the drawer's Recent). */
-    fun open(ref: ObjectRef) {
+    fun open(ref: ObjectRef) = opened(ref) { it.open(ref) }
+
+    /** [ref] chosen from the list beside the open object ([Shell.openBeside]); recent as any open. */
+    fun openBeside(ref: ObjectRef) = opened(ref) { it.openBeside(ref) }
+
+    private fun opened(ref: ObjectRef, move: (Shell) -> Shell) {
         recent.record(ref, now())
-        _state.update { s -> s?.let { State(it.shell.open(ref), Lists(it.lists.spaces, it.lists.nodes, it.lists.objects, it.lists.favorites, it.lists.applications, it.lists.filters, drawer(it.lists.objects, it.lists.favorites))) } }
+        _state.update { s -> s?.let { State(move(it.shell), Lists(it.lists.spaces, it.lists.nodes, it.lists.objects, it.lists.favorites, it.lists.applications, it.lists.filters, drawer(it.lists.objects, it.lists.favorites))) } }
     }
 
     /** Every node of [scopeId] this device opens: what the move browser walks. */

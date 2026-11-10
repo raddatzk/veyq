@@ -196,6 +196,9 @@ first in each of its scrolls — `LocalNodeHero.current(inset)` (Android) / `Nod
   app's activity resolves then (`am start` answers "Activity class … does not exist", `devlogin.py` "adb failed",
   measured 2026-11-10) — reinstalling does not help. Unlock it first: `adb shell input keyevent 82`, swipe up, `adb
   shell input text <pin>`, Enter (`adb shell dumpsys trust` then says `deviceLocked=0`).
+- A tablet is tried on the phone emulator: `adb shell wm size 2560x1600` and `wm density 320` (1280 dp, expanded;
+  `1600x2560` is 800 dp, medium), `wm size reset` and `wm density reset` after. While the size is changed
+  `uiautomator dump` lists every Compose node as invisible (measured 2026-11-10): look with `adb exec-out screencap -p`.
 - The emulator reaches the developer's machine at 10.0.2.2; the debug build maps every `*.localhost` name there and
   keeps the name in the Host header, since the backend picks the tenant from it. Use the tenant's name
   (`veyq.localhost:8080`), never `10.0.2.2:8080`, as the server.

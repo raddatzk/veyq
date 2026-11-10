@@ -1245,6 +1245,11 @@ class AppModel(app: Application) : AndroidViewModel(app) {
         shellModel?.open(ref)
     }
 
+    /** [ref] chosen from the list beside the open object (a wide window): it takes the open one's place. */
+    fun openBeside(ref: ObjectRef) {
+        shellModel?.openBeside(ref)
+    }
+
     fun select(tab: BarTab) = updateShell { it.select(tab) }
 
     /** Whether "New" is offered where the shell is (core's `ShellModel.canCreateHere`). */

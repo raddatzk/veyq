@@ -46,4 +46,19 @@ class ShellModelTest {
         assertEquals(emptyList(), rootTrashed.path)
         assertSame(shell, ShellModel.relocated(shell, emptyList(), "elsewhere"), "a node off the path leaves it as it is")
     }
+
+    @Test
+    fun an_object_chosen_beside_the_open_one_takes_its_place_and_back_leads_where_that_was_opened_from() {
+        val home = Shell.start(null, "t")
+        val other = ObjectRef("t", "pot2", "EXPENSES_POT", ApplicationId.EXPENSES, "Rome")
+        val first = home.open(pot)
+        val beside = first.openBeside(other)
+        assertEquals(other, beside.openObject)
+        assertSame(home, beside.close())
+        // nothing open: it is an open like any other
+        assertSame(home, home.openBeside(pot).close())
+        kotlin.test.assertTrue(beside.showsListBeside)
+        kotlin.test.assertFalse(home.showsListBeside)
+        kotlin.test.assertFalse(beside.search(true).showsListBeside)
+    }
 }
