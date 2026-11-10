@@ -54,6 +54,20 @@ work in that repository; `veyqctl`'s side of decision 6 is a CR of its own after
   2026-11-10 exactly as phase 3's `upgrade` will do it; host access measured the same day (Argo CD 200 and the admin
   surface 200 through one tunnel, every NodePort and 6443 closed from outside).
 
+### Measured at refine (2026-11-10, this Mac)
+
+- `git`, `helm`, `kubectl`, `cosign`, `sops`, `age`, `kustomize` present; **`kubeseal` absent** — so the self-test
+  drives every external program through the `Host` runner's stand-ins (as it drives `cosign` today), never the real
+  one, and the `sealed-secrets` provider is proved by its stand-in plus one manual run where `kubeseal` exists.
+- `veyqctl` already takes a global `--home` (Compose's instance directory, `args.home` → `host.workdir`). The order
+  becomes: `--home` (a path, as today) wins, then `--instance <name>`, then the current instance in
+  `~/.config/veyq/instances.json`, then `/opt/veyq`.
+- The self-test runs in `checks.yml`'s `guards` job, which has no `helm`; the render of the written repositories runs
+  in the `chart` job, which installs it.
+- The maintainer's Mac reaches the cluster as context `raddatz.me` through one ssh tunnel
+  (`affenbande`'s `scripts/connect.py`, measured 2026-11-10): phase 4's `check` against the live cluster needs that
+  tunnel open.
+
 ## Decisions this CR takes
 
 - **The chart is verified by its own signature**, not through the manifest: `upgrade` resolves
