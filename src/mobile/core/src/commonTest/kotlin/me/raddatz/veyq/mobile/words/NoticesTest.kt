@@ -58,4 +58,19 @@ class NoticesTest {
         assertEquals(listOf(Notice(Msg.DEPOT_FOLDER_NO_ROOM, "Up", Bytes(1234))), Notices.folderUpload(FolderUpload.Report(FolderUpload.Outcome.NO_ROOM, "Up", 1234)))
         assertTrue(Notices.folderUpload(FolderUpload.Report(FolderUpload.Outcome.NOTHING, "Up")).isEmpty())
     }
+
+    @Test
+    fun the_pot_tables_say_each_problem_and_refusal_once_and_a_left_out_node_with_why() {
+        val problems = listOf("title", "date", "amount", "rate", "payers", "split", "split-shares", "split-percents", "split-amounts", "items",
+            "transfer", "payers-unbalanced", "receivers-unbalanced", "items-above-total", "rest-unallocated", "percent-unbalanced",
+            "amounts-unbalanced", "named-twice")
+        assertEquals(problems.size, problems.map { Notices.entryProblem(it) }.toSet().size)
+        assertEquals(Msg.PROBLEM_UNKNOWN_PARTICIPANT, Notices.entryProblem("unknown-participant:x"))
+        assertEquals(Msg.ED_SAVE_FAILED, Notices.entryRefused("REFUSED"))
+        assertEquals(Msg.PEOPLE_SETTLE_FIRST, Notices.potRefused("NOT_SETTLED"))
+        assertEquals(Msg.CREATE_POT_NAME_TAKEN, Notices.potCreateRefused("NAME_TAKEN"))
+        val left = Notices.leftOut(me.raddatz.veyq.mobile.export.NodeExport.Skipped("Old", "FOLDER", me.raddatz.veyq.mobile.export.SubtreeCopy.NOT_COPYABLE))
+        fits(left)
+        assertEquals(Notice(Msg.LEFT_OUT_LINE, "Old", Notice(Msg.LEFT_OUT_NOT_COPYABLE)), left)
+    }
 }

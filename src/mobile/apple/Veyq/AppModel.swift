@@ -1222,14 +1222,7 @@ final class AppModel {
     }
 
     /// Why a node was left out of a download or a copy, in the web's words (`export.reason.*`, `node.copy.reason.*`).
-    private static func leftOutLine(_ s: NodeExport.Skipped) -> String {
-        let reason = switch s.reason {
-        case NodeExport.shared.NOTHING_TO_EXPORT: say(.leftOutNothing)
-        case SubtreeCopy.shared.NOT_COPYABLE: say(.leftOutNotCopyable)
-        default: say(.leftOutUnsupported)
-        }
-        return say(.leftOutLine, s.name, reason)
-    }
+    private static func leftOutLine(_ s: NodeExport.Skipped) -> String { say(notice: Notices.shared.leftOut(s: s)) }
 
     /// Folder `ref` with everything under it as the web's ZIP in a temporary file (core's `NodeExport`, the kinds the
     /// composition root exports), and what it left out as lines to say; nil when it did not finish.

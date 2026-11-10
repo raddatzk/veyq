@@ -90,14 +90,5 @@ struct PotCreateSheet: View {
         .tint(Role.accent)
     }
 
-    static func explain(_ outcome: String) -> String {
-        switch outcome {
-        case "NAME_TAKEN": say(.createPotNameTaken)
-        case "PEOPLE_NOT_ADDED": say(.createPotPeopleFailed)
-        case "BUSY": say(.potBusy)
-        case "BLOCKED": say(.potBlocked)
-        case "INVALID": say(.createPotInvalid)
-        default: say(.createPotFailed)
-        }
-    }
+    static func explain(_ outcome: String) -> String { say(Notices.shared.potCreateRefused(outcome: outcome)) }
 }

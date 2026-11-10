@@ -75,29 +75,7 @@ struct FormState {
 var decimalSeparator: unichar { (Locale.current.decimalSeparator ?? ".").utf16.first ?? 46 }
 
 /// A problem of the form or the write path in words (the web's `expenses.entry.problem.*`).
-func problemText(_ problem: String) -> String {
-    switch problem {
-    case "title": say(.problemTitle)
-    case "date": say(.problemDate)
-    case "amount": say(.problemAmount)
-    case "rate": say(.problemRate)
-    case "payers": say(.problemPayers)
-    case "split": say(.problemSplit)
-    case "split-shares": say(.problemSplitShares)
-    case "split-percents": say(.problemSplitPercents)
-    case "split-amounts": say(.problemSplitAmounts)
-    case "items": say(.problemItems)
-    case "transfer": say(.problemTransfer)
-    case "payers-unbalanced": say(.problemPayersUnbalanced)
-    case "receivers-unbalanced": say(.problemReceiversUnbalanced)
-    case "items-above-total": say(.problemItemsAboveTotal)
-    case "rest-unallocated": say(.problemRestUnallocated)
-    case "percent-unbalanced": say(.problemPercentUnbalanced)
-    case "amounts-unbalanced": say(.problemAmountsUnbalanced)
-    case "named-twice": say(.problemNamedTwice)
-    default: say(.problemUnknownParticipant)
-    }
-}
+func problemText(_ problem: String) -> String { say(Notices.shared.entryProblem(problem: problem)) }
 
 /// The entry editor (the web's `EntryEditor.vue` and `EntrySplit.vue`): an expense, a refund or a transfer; payers with
 /// their amounts (an expense's amount is their sum), items with exact amounts and their own splits, the rest by its split
@@ -348,14 +326,7 @@ struct EntryEditor: View {
         }
     }
 
-    static func explain(_ outcome: String) -> String {
-        switch outcome {
-        case "STALE": say(.edStale)
-        case "BLOCKED": say(.edBlocked)
-        case "BUSY": say(.potBusy)
-        default: say(.peopleFailed)
-        }
-    }
+    static func explain(_ outcome: String) -> String { say(Notices.shared.entryRefused(outcome: outcome)) }
 }
 
 private extension FormState.SplitState {

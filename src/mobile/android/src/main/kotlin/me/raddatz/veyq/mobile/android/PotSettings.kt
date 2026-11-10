@@ -42,16 +42,7 @@ import me.raddatz.veyq.mobile.expenses.RevisionFormat
 
 /** A refusal of a Pot write, in words. */
 @Composable
-internal fun potRefusal(outcome: String): String = stringResource(
-    when (outcome) {
-        "STALE" -> R.string.entry_stale
-        "NOT_SETTLED" -> R.string.people_settle_first
-        "BUSY" -> R.string.pot_busy
-        "BLOCKED" -> R.string.pot_blocked
-        "INVALID" -> R.string.people_invalid
-        else -> R.string.people_failed
-    },
-)
+internal fun potRefusal(outcome: String): String = say(me.raddatz.veyq.mobile.words.Notices.potRefused(outcome))
 
 /**
  * An open Pot's Settings tab (the web's `SettingsPanel.vue` and `PeoplePanel.vue`): its base currency and own categories,

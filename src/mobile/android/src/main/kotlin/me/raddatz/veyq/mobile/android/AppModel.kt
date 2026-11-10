@@ -1144,17 +1144,8 @@ class AppModel(app: Application) : AndroidViewModel(app) {
     }
 
     /** Why a node was left out of a download or a copy, in the web's words (`export.reason.*`, `node.copy.reason.*`). */
-    private fun leftOutLine(s: me.raddatz.veyq.mobile.export.NodeExport.Skipped): String {
-        val app = getApplication<Application>()
-        val reason = app.getString(
-            when (s.reason) {
-                me.raddatz.veyq.mobile.export.NodeExport.NOTHING_TO_EXPORT -> R.string.left_out_nothing
-                me.raddatz.veyq.mobile.export.SubtreeCopy.NOT_COPYABLE -> R.string.left_out_not_copyable
-                else -> R.string.left_out_unsupported
-            },
-        )
-        return app.getString(R.string.left_out_line, s.name, reason)
-    }
+    private fun leftOutLine(s: me.raddatz.veyq.mobile.export.NodeExport.Skipped): String =
+        getApplication<Application>().text(me.raddatz.veyq.mobile.words.Notices.leftOut(s))
 
     /**
      * Writes folder [ref] and everything under it as the web's ZIP into [out] (core's `NodeExport.walk` and `write`, the kinds

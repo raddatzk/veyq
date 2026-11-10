@@ -139,13 +139,4 @@ fun PotCreateSheet(s: Screen.Signed, model: AppModel, onClose: () -> Unit) {
 }
 
 @Composable
-private fun createRefusal(outcome: String): String = stringResource(
-    when (outcome) {
-        "NAME_TAKEN" -> R.string.create_pot_name_taken
-        "PEOPLE_NOT_ADDED" -> R.string.create_pot_people_failed
-        "BUSY" -> R.string.pot_busy
-        "BLOCKED" -> R.string.pot_blocked
-        "INVALID" -> R.string.create_pot_invalid
-        else -> R.string.create_pot_failed
-    },
-)
+private fun createRefusal(outcome: String): String = say(me.raddatz.veyq.mobile.words.Notices.potCreateRefused(outcome))

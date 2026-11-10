@@ -2,16 +2,7 @@ import SwiftUI
 import VeyqCore
 
 /// A refusal of a Pot write, in words.
-func potRefusal(_ outcome: String) -> String {
-    switch outcome {
-    case "STALE": say(.entryStale)
-    case "NOT_SETTLED": say(.peopleSettleFirst)
-    case "BUSY": say(.potBusy)
-    case "BLOCKED": say(.potBlocked)
-    case "INVALID": say(.peopleInvalid)
-    default: say(.peopleFailed)
-    }
-}
+func potRefusal(_ outcome: String) -> String { say(Notices.shared.potRefused(outcome: outcome)) }
 
 /// An open Pot's Settings tab (the web's `SettingsPanel.vue` and `PeoplePanel.vue`): its base currency, chosen while it
 /// holds no money entry; its people, each with their balance in short and what may be done to them

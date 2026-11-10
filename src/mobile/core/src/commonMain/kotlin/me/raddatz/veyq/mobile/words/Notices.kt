@@ -171,6 +171,69 @@ object Notices {
     }
 
     /** Why a new link was not made. */
+    /** A problem of an entry's form or its write path (the web's `expenses.entry.problem.*`); any other: an unknown participant. */
+    fun entryProblem(problem: String): Msg = when (problem) {
+        "title" -> Msg.PROBLEM_TITLE
+        "date" -> Msg.PROBLEM_DATE
+        "amount" -> Msg.PROBLEM_AMOUNT
+        "rate" -> Msg.PROBLEM_RATE
+        "payers" -> Msg.PROBLEM_PAYERS
+        "split" -> Msg.PROBLEM_SPLIT
+        "split-shares" -> Msg.PROBLEM_SPLIT_SHARES
+        "split-percents" -> Msg.PROBLEM_SPLIT_PERCENTS
+        "split-amounts" -> Msg.PROBLEM_SPLIT_AMOUNTS
+        "items" -> Msg.PROBLEM_ITEMS
+        "transfer" -> Msg.PROBLEM_TRANSFER
+        "payers-unbalanced" -> Msg.PROBLEM_PAYERS_UNBALANCED
+        "receivers-unbalanced" -> Msg.PROBLEM_RECEIVERS_UNBALANCED
+        "items-above-total" -> Msg.PROBLEM_ITEMS_ABOVE_TOTAL
+        "rest-unallocated" -> Msg.PROBLEM_REST_UNALLOCATED
+        "percent-unbalanced" -> Msg.PROBLEM_PERCENT_UNBALANCED
+        "amounts-unbalanced" -> Msg.PROBLEM_AMOUNTS_UNBALANCED
+        "named-twice" -> Msg.PROBLEM_NAMED_TWICE
+        else -> Msg.PROBLEM_UNKNOWN_PARTICIPANT
+    }
+
+    /** Why an entry was not saved (`PotWrites` outcome names). */
+    fun entryRefused(outcome: String): Msg = when (outcome) {
+        "STALE" -> Msg.ED_STALE
+        "BLOCKED" -> Msg.ED_BLOCKED
+        "BUSY" -> Msg.POT_BUSY
+        else -> Msg.ED_SAVE_FAILED
+    }
+
+    /** Why a write to a Pot's settings or people was not done. */
+    fun potRefused(outcome: String): Msg = when (outcome) {
+        "STALE" -> Msg.ENTRY_STALE
+        "NOT_SETTLED" -> Msg.PEOPLE_SETTLE_FIRST
+        "BUSY" -> Msg.POT_BUSY
+        "BLOCKED" -> Msg.POT_BLOCKED
+        "INVALID" -> Msg.PEOPLE_INVALID
+        else -> Msg.PEOPLE_FAILED
+    }
+
+    /** Why a new Pot was not created (`PotCreate.Outcome` names). */
+    fun potCreateRefused(outcome: String): Msg = when (outcome) {
+        "NAME_TAKEN" -> Msg.CREATE_POT_NAME_TAKEN
+        "PEOPLE_NOT_ADDED" -> Msg.CREATE_POT_PEOPLE_FAILED
+        "BUSY" -> Msg.POT_BUSY
+        "BLOCKED" -> Msg.POT_BLOCKED
+        "INVALID" -> Msg.CREATE_POT_INVALID
+        else -> Msg.CREATE_POT_FAILED
+    }
+
+    /** A node a download or a copy left out, with why (the web's `export.reason.*`, `node.copy.reason.*`). */
+    fun leftOut(s: me.raddatz.veyq.mobile.export.NodeExport.Skipped): Notice = Notice(
+        Msg.LEFT_OUT_LINE, s.name,
+        Notice(
+            when (s.reason) {
+                me.raddatz.veyq.mobile.export.NodeExport.NOTHING_TO_EXPORT -> Msg.LEFT_OUT_NOTHING
+                me.raddatz.veyq.mobile.export.SubtreeCopy.NOT_COPYABLE -> Msg.LEFT_OUT_NOT_COPYABLE
+                else -> Msg.LEFT_OUT_UNSUPPORTED
+            },
+        ),
+    )
+
     /** What switching a link off says: nothing once closed, that its re-key is still due, or that it failed. */
     fun linkClosed(closed: ShareLinks.Closed): Notice? = when (closed) {
         ShareLinks.Closed.CLOSED -> null

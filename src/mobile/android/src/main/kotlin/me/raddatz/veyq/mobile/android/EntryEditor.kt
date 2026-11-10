@@ -63,29 +63,7 @@ internal val LocalEditable = androidx.compose.runtime.staticCompositionLocalOf {
 
 /** A problem of the form or the write path in words (the web's `expenses.entry.problem.*`). */
 @Composable
-internal fun problemText(problem: String): String = stringResource(
-    when (problem) {
-        "title" -> R.string.problem_title
-        "date" -> R.string.problem_date
-        "amount" -> R.string.problem_amount
-        "rate" -> R.string.problem_rate
-        "payers" -> R.string.problem_payers
-        "split" -> R.string.problem_split
-        "split-shares" -> R.string.problem_split_shares
-        "split-percents" -> R.string.problem_split_percents
-        "split-amounts" -> R.string.problem_split_amounts
-        "items" -> R.string.problem_items
-        "transfer" -> R.string.problem_transfer
-        "payers-unbalanced" -> R.string.problem_payers_unbalanced
-        "receivers-unbalanced" -> R.string.problem_receivers_unbalanced
-        "items-above-total" -> R.string.problem_items_above_total
-        "rest-unallocated" -> R.string.problem_rest_unallocated
-        "percent-unbalanced" -> R.string.problem_percent_unbalanced
-        "amounts-unbalanced" -> R.string.problem_amounts_unbalanced
-        "named-twice" -> R.string.problem_named_twice
-        else -> R.string.problem_unknown_participant
-    },
-)
+internal fun problemText(problem: String): String = say(me.raddatz.veyq.mobile.words.Notices.entryProblem(problem))
 
 /**
  * The entry editor (the web's `EntryEditor.vue` and `EntrySplit.vue`): an expense, a refund or a transfer; payers with
@@ -252,14 +230,7 @@ fun EntryEditor(
 }
 
 @Composable
-private fun entryRefusal(outcome: String): String = stringResource(
-    when (outcome) {
-        "STALE" -> R.string.ed_stale
-        "BLOCKED" -> R.string.ed_blocked
-        "BUSY" -> R.string.pot_busy
-        else -> R.string.ed_save_failed
-    },
-)
+private fun entryRefusal(outcome: String): String = say(me.raddatz.veyq.mobile.words.Notices.entryRefused(outcome))
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
