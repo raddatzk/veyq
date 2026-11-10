@@ -110,4 +110,13 @@ class NodeMoveTest {
         kotlin.test.assertFalse(NodeMove.inIdentityFolder(drop, "box"))
         kotlin.test.assertFalse(NodeMove.inIdentityFolder(drop, null))
     }
+
+    @Test
+    fun a_blocked_place_and_the_place_shown_say_why() {
+        kotlin.test.assertEquals(me.raddatz.veyq.mobile.words.Msg.MOVE_BLOCKED_SELF, NodeMove.placeWord(NodeMove.Block.ITSELF))
+        kotlin.test.assertEquals(me.raddatz.veyq.mobile.words.Msg.MOVE_BLOCKED_INSIDE, NodeMove.placeWord(NodeMove.Block.INSIDE))
+        kotlin.test.assertEquals(me.raddatz.veyq.mobile.words.Msg.COPY_HERE_IDENTITY, NodeMove.hereWord(NodeMove.Block.IDENTITY_FOLDER, copy = true))
+        kotlin.test.assertEquals(me.raddatz.veyq.mobile.words.Msg.MOVE_HERE_IDENTITY, NodeMove.hereWord(NodeMove.Block.IDENTITY_FOLDER, copy = false))
+        NodeMove.Block.entries.forEach { NodeMove.hereWord(it, false) }
+    }
 }

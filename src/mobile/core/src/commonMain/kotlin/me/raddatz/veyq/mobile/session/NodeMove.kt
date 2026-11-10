@@ -32,6 +32,18 @@ object NodeMove {
     /** One place the browser lists at a level: a child there, and why it cannot be opened (null: it can). */
     class Place(val node: NodeRef, val blocked: Block?)
 
+    /** What a blocked place in the list says: the moved node itself, else that it lies inside it. */
+    fun placeWord(block: Block): me.raddatz.veyq.mobile.words.Msg = if (block == Block.ITSELF) me.raddatz.veyq.mobile.words.Msg.MOVE_BLOCKED_SELF else me.raddatz.veyq.mobile.words.Msg.MOVE_BLOCKED_INSIDE
+
+    /** Why the place shown takes nothing ([copy]: the copy dialog's words for a guest's folder). */
+    fun hereWord(block: Block, copy: Boolean): me.raddatz.veyq.mobile.words.Msg = when (block) {
+        Block.ITSELF -> me.raddatz.veyq.mobile.words.Msg.MOVE_HERE_SELF
+        Block.INSIDE -> me.raddatz.veyq.mobile.words.Msg.MOVE_HERE_INSIDE
+        Block.CURRENT -> me.raddatz.veyq.mobile.words.Msg.MOVE_HERE_CURRENT
+        Block.KIND -> me.raddatz.veyq.mobile.words.Msg.MOVE_HERE_KIND
+        Block.IDENTITY_FOLDER -> if (copy) me.raddatz.veyq.mobile.words.Msg.COPY_HERE_IDENTITY else me.raddatz.veyq.mobile.words.Msg.MOVE_HERE_IDENTITY
+    }
+
     /** Whether a node of [kind] may be placed under a parent of [parentKind] (null: the scope root): each kind's placement. */
     fun interface PlacementAllows {
         fun allows(kind: String, parentKind: String?): Boolean

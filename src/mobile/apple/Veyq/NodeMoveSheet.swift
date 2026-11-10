@@ -103,7 +103,7 @@ struct NodeMoveSheet: View {
                                 Label { Text(place.node.name) } icon: { Tile(symbol: Names.kindSymbol(place.node.kind)) }
                                 Spacer()
                                 if let blocked = place.blocked {
-                                    Text(blocked == .inside ? say(.moveBlockedInside) : say(.moveBlockedSelf)).font(.caption).foregroundStyle(Role.muted)
+                                    Text(say(NodeMove.shared.placeWord(block: blocked))).font(.caption).foregroundStyle(Role.muted)
                                 } else {
                                     Image(systemName: "chevron.right").foregroundStyle(Role.muted)
                                 }
@@ -159,15 +159,7 @@ struct NodeMoveSheet: View {
         if outcome == .moved { dismiss() } else { problem = Self.problemText(outcome) }
     }
 
-    private static func hereText(_ block: NodeMove.Block, copying: Bool) -> String {
-        switch block {
-        case .identityFolder: copying ? say(.theCopyHereIdentity) : say(.moveHereIdentity)
-        case .inside: say(.moveHereInside)
-        case .current: say(.moveHereCurrent)
-        case .kind: say(.moveHereKind)
-        default: say(.moveHereSelf)
-        }
-    }
+    private static func hereText(_ block: NodeMove.Block, copying: Bool) -> String { say(NodeMove.shared.hereWord(block: block, copy: copying)) }
 
     /// Why a move did not go through, in the web's words (`node.move.refused.*`).
     static func problemText(_ outcome: NodeMove.Outcome) -> String {

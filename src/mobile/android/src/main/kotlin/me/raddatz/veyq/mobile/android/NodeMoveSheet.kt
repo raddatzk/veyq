@@ -130,7 +130,7 @@ internal fun NodeMoveSheet(
                             Text(place.node.name)
                             place.blocked?.let {
                                 Text(
-                                    stringResource(if (it == NodeMove.Block.ITSELF) R.string.move_blocked_self else R.string.move_blocked_inside),
+                                    say(NodeMove.placeWord(it)),
                                     style = MaterialTheme.typography.bodySmall, color = role(palette.muted),
                                 )
                             }
@@ -141,7 +141,7 @@ internal fun NodeMoveSheet(
                 }
             }
             val block = NodeMove.hereBlock(nodes, moved, at, model.placement, copy = copy != null)
-            val shown = problem ?: noRoom ?: block?.let { stringResource(hereText(it, copy != null)) }
+            val shown = problem ?: noRoom ?: block?.let { say(NodeMove.hereWord(it, copy != null)) }
             shown?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = role(if (problem != null || noRoom != null) palette.danger else palette.muted), modifier = Modifier.padding(top = 10.dp)) }
             val send = {
                 moving = true
@@ -191,14 +191,6 @@ internal fun NodeMoveSheet(
             }
         }
     }
-}
-
-private fun hereText(block: NodeMove.Block, copy: Boolean): Int = when (block) {
-    NodeMove.Block.ITSELF -> R.string.move_here_self
-    NodeMove.Block.INSIDE -> R.string.move_here_inside
-    NodeMove.Block.CURRENT -> R.string.move_here_current
-    NodeMove.Block.KIND -> R.string.move_here_kind
-    NodeMove.Block.IDENTITY_FOLDER -> if (copy) R.string.copy_here_identity else R.string.move_here_identity
 }
 
 /** Why a move did not go through, in the web's words (`node.move.refused.*`). */
