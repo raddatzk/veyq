@@ -1,4 +1,4 @@
-// The shell (ADR 0122; cr-the-windows-app-over-the-native-core D7), Fluent's way, as Windows' own Settings and Explorer
+// The shell (ADR 0122; ADR 0123's Consequences, the Windows app), Fluent's way, as Windows' own Settings and Explorer
 // draw theirs: a NavigationView whose pane is Left, LeftCompact or LeftMinimal by the window's width (its own
 // thresholds), holding the one switcher (spaces and tenants) as its header, Search as its AutoSuggestBox (Ctrl+E,
 // Ctrl+F), Home, Favorites, Recent and the applications as its items, and Settings at its foot. The content shows

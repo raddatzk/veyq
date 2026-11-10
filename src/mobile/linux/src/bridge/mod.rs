@@ -28,7 +28,8 @@ pub enum Start {
     AlreadyStarted,
     /// The config or the host function was refused — a defect of this side.
     Refused,
-    /// This CPU has no AES instructions, which the suite's AES-256-GCM needs (CR Q1): the app says so and stops.
+    /// This CPU has no AES instructions, which the suite's AES-256-GCM needs (ADR 0123's Consequences, the core on
+    /// Linux): the app says so and stops.
     NoAes,
 }
 

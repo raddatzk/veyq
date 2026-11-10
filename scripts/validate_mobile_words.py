@@ -29,7 +29,7 @@
   (`<TextBlock>Open</TextBlock>`; a colour such as `#FF5B4DF5` passes) — and no C# file assigns one to those properties
   (`Text = "…"`, an object initializer's too, a `$"…"` template with letters among them) or hands one to
   `AutomationProperties.SetName(`, `ToolTipService.SetToolTip(` or `CreateAction.Button(` / `.Menu(`. The words are
-  `Words.<Key>(…)`, generated from the catalog with its .resw catalogs (cr-the-windows-app-over-the-native-core D8).
+  `Words.<Key>(…)`, generated from the catalog with its .resw catalogs (ADR 0123's Consequences, the Windows app).
   C# is read with comments blanked (`kotlin_lexer.mask`: C#'s comments are Kotlin's), XAML with its comments removed.
   The guard fails when it reads no C# source.
 - **windows-resw**: no `.resw` file under `src/mobile/windows/`: the catalogs are generated (`generate_words.py

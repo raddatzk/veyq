@@ -58,9 +58,10 @@ internal class Tenant(val shell: ShellModel, val pot: () -> PotModel)
 private class Open<A : Connection>(val models: Tenant, val account: A, val tenant: TenantRef)
 
 /**
- * The dispatch (CR D6): each [Call] is one line onto a model's own function, each [Watched] one model's state flow, and
- * the registry of what is open — the tenant's models, the Pots by id, the watches by id. Nothing here decides anything
- * the person sees: a rule found here is a defect to move into the core (ADR 0127 decision 1).
+ * The dispatch (ADR 0123's Consequences, the bridge): each [Call] is one line onto a model's own function, each
+ * [Watched] one model's state flow, and the registry of what is open — the tenant's models, the Pots by id, the watches
+ * by id. Nothing here decides anything the person sees: a rule found here is a defect to move into the core (ADR 0127
+ * decision 1).
  *
  * Every answer and update is delivered on a core thread ([Dispatchers.Default]); [compose] runs there too, so a host
  * request it makes (the store's first read) never waits on the thread that started the core.
@@ -173,7 +174,10 @@ internal class Bridge<A : Connection, T : Any>(compose: () -> Composition<A, T>)
         is Watched.Pot -> (pots[w.pot]?.state ?: flowOf(null)).map { Update.Pot(w.pot, it) }
     }
 
-    /** What the shell shows beside [s] (CR D9, [ShellShown]): each field one core function's answer. */
+    /**
+     * What the shell shows beside [s] ([ShellShown]; ADR 0123's Consequences, the bridge): each field one core
+     * function's answer.
+     */
     private fun shown(parts: Composition<A, T>, open: Open<A>, s: ShellModel.State): ShellShown {
         val shell = s.shell
         val lists = s.lists

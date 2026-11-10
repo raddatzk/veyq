@@ -41,9 +41,9 @@ Verbs:
                              wait, sleep, shot) against the running app through the scheduled task `veyq-drive`, and
                              prints the app's log first, then what each step saw. `shot <name>.png` lands in
                              src/mobile/build/windows/shots here.
-  register                   registers the two scheduled tasks, interactive only, as the user ssh logs in as (owner step
-                             O5 of cr-the-windows-app-over-the-native-core): they run on demand in the logged-on session,
-                             which an ssh command (session 0) cannot reach. Run once per Windows host, by its owner.
+  register                   registers the two scheduled tasks, interactive only, as the user ssh logs in as: they run
+                             on demand in the logged-on session, which an ssh command (session 0) cannot reach. Run once
+                             per Windows host, by its owner (a persistent change on that machine).
 The Windows host: `VEYQ_WINDOWS_SSH` (default `kevin@192.168.64.8`, the test VM of docs/crosscutting/native-apps.md),
 its key `VEYQ_WINDOWS_KEY` (default `~/.ssh/veyq_vms_ed25519`), and a directory there `VEYQ_WINDOWS_DIR` (default
 `F:\\veyq`, the VM's Dev Drive) which this script owns. The host is x64 or ARM64: the binary is x64 and runs under
@@ -562,7 +562,7 @@ def drive(steps: list[str]) -> int:
 
 def register() -> int:
     """Registers the scheduled tasks Veyq.Drive runs in the logged-on session (interactive only, as the ssh user, on
-    demand: no trigger). The owner's step (O5): a key-authenticated ssh logon can register them, but it is theirs to."""
+    demand: no trigger). The host owner's step: a key-authenticated ssh logon can register them, but it is theirs to."""
     lines = [
         # the account as Windows names it: over ssh $env:USERDOMAIN reads WORKGROUP, which maps to no SID (0x80070534)
         "$user = [Security.Principal.WindowsIdentity]::GetCurrent().Name",

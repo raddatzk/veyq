@@ -1,5 +1,5 @@
 <Project>
-  <!-- What every C# project of the Windows app shares (cr-the-windows-app-over-the-native-core D6, D7). -->
+  <!-- What every C# project of the Windows app shares (ADR 0123's Consequences, the bridge and the Windows app). -->
   <PropertyGroup>
     <LangVersion>latest</LangVersion>
     <Nullable>enable</Nullable>

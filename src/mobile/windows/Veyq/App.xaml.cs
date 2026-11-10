@@ -1,4 +1,4 @@
-// The veyq app on Windows (ADR 0127 decision 5; cr-the-windows-app-over-the-native-core): the window, the core started
+// The veyq app on Windows (ADR 0127 decision 5; ADR 0123's Consequences, the Windows app): the window, the core started
 // behind it, and what its session says. Each screen draws the core's state and calls its actions; nothing else.
 using System.Threading.Tasks;
 using Microsoft.UI.Xaml;

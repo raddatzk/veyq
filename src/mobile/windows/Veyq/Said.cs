@@ -1,4 +1,4 @@
-// What the core says, written the way Windows writes it (cr-the-windows-app-over-the-native-core D8): an amount of money,
+// What the core says, written the way Windows writes it (ADR 0123's Consequences, the Windows app): an amount of money,
 // a day and a size in the person's locale, as the system holds it. Nothing here decides what is said; that is the core's
 // (ADR 0127 decision 1). The same as Android's NoticeText.kt, Apple's say(notice) and Linux's said.rs.
 using System;

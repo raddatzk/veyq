@@ -47,7 +47,8 @@ private const val NO_AES = 3
 fun veyqInit(config: CPointer<ByteVar>?, host: VeyqHost?, hostCtx: COpaquePointer?): Int {
     if (host == null) return CONFIG_REFUSED
     val c = runCatching { wire.decodeFromString(Config.serializer(), config!!.toKString()) }.getOrNull() ?: return CONFIG_REFUSED
-    // libsodium's AES-256-GCM needs the CPU's AES instructions; without them the core refuses to start (CR Q1).
+    // libsodium's AES-256-GCM needs the CPU's AES instructions (on x86-64 AVX too); without them the core refuses to
+    // start (ADR 0123's Consequences, the core on Linux and on Windows).
     runCatching { LibsodiumPrimitives.randomBytes(1) }.onFailure { return NO_AES }
     if (running.load() != null) return ALREADY_STARTED
     val h = Host { token, json ->

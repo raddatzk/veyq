@@ -1,4 +1,4 @@
-// The way in (cr-the-windows-app-over-the-native-core, Phase 4): what the core's SessionModel.Gate says at SignIn — the
+// The way in (ADR 0123's Consequences, the Windows app): what the core's SessionModel.Gate says at SignIn — the
 // full sign-in with the Secret Key, every start until device trust comes — drawn as Windows draws a form: a centred
 // column of headed fields and one accent button. The person's input goes to the core as one call; the core decides
 // what it means and answers with the next gate. Linux's sign_in.rs, in Fluent.

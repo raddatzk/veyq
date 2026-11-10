@@ -1,4 +1,4 @@
-// The app's log (cr-the-windows-app-over-the-native-core D9): what the core said it could not do, the session's gates by
+// The app's log (ADR 0123's Consequences, the Windows app): what the core said it could not do, the session's gates by
 // kind (never their fields) and every unhandled exception, in %LOCALAPPDATA%\veyq\log.txt, begun anew at each start.
 // windows/run.py fetches it before anything on screen is believed.
 using System;

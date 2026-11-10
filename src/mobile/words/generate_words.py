@@ -22,7 +22,7 @@ Outputs (each optional; each a directory or file this script owns and rewrites w
                         app's build compiles with `msgfmt`, and `words.rs`: one function per key with typed arguments
                         (`{n}` a `&str`, `{n:int}` an `i64`, a plural's count first) looking the key up in the domain
                         `veyq`, and `say(key, args)` reaching the same function by its key (a core `Notice`).
-  --resw DIR            the Windows app's (cr-the-windows-app-over-the-native-core D8): `Strings/<culture>/Resources.resw`
+  --resw DIR            the Windows app's (ADR 0123's Consequences, the Windows app): `Strings/<culture>/Resources.resw`
                         per language (`en-US`, `de-DE`; the resource's name the key, a plural one entry per CLDR category
                         its language's rule names, `key#one`, `key#other`; a name the English of an untranslated key in
                         every language) with `_language` naming the language whose rule the plurals follow, and

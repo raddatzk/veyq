@@ -1,4 +1,4 @@
-// What a pass sets on a debug build alone (cr-the-windows-app-over-the-native-core D7): VEYQ_THEME (light, dark) and
+// What a pass sets on a debug build alone (ADR 0123's Consequences, the Windows app): VEYQ_THEME (light, dark) and
 // VEYQ_LANGUAGE (a BCP-47 tag: the words' language). A release build reads neither and follows the system.
 using System;
 using Microsoft.UI.Xaml;

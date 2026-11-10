@@ -1,5 +1,5 @@
 <Project Sdk="Microsoft.NET.Sdk">
-  <!-- The app's words and formats on Windows (cr-the-windows-app-over-the-native-core D8): the app's own Words, MrtWords
+  <!-- The app's words and formats on Windows (ADR 0123's Consequences, the Windows app): the app's own Words, MrtWords
        and Said sources against the .pri its build compiled (VEYQ_PRI) and the system's formatters. Windows only, an x64
        process like the app (run.py runs it on the Windows host with arch x64, after the app's build). -->
   <PropertyGroup>

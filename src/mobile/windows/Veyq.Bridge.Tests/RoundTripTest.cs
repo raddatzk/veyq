@@ -7,7 +7,7 @@ using Veyq.Bridge.Wire;
 namespace Veyq.Bridge.Tests;
 
 /// <summary>
-/// The C# half of the bridge's round trip (cr-the-windows-app-over-the-native-core D6), as the Rust test is: every sample
+/// The C# half of the bridge's round trip (ADR 0123's Consequences, the bridge), as the Rust test is: every sample
 /// the JVM wrote (`WireTest`, one per variant of every type the roots reach) reads as its generated type and writes back
 /// to the same JSON, field for field. A sample of a type this side lacks is red (<see cref="WireTypes.Reserialize"/> is
 /// generated with the types), and so is an empty directory.

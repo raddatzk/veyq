@@ -1,4 +1,4 @@
-// The window and its faces (cr-the-windows-app-over-the-native-core, Phase 4): what shows while the core opens or
+// The window and its faces (ADR 0123's Consequences, the Windows app): what shows while the core opens or
 // refuses, the sign-in, or the shell — the screen the core's session says. Each screen draws the core's state and calls
 // its actions; nothing else. Linux's main.rs, in WinUI.
 using System;

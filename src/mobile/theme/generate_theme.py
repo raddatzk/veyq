@@ -18,7 +18,7 @@ Outputs (each optional, each a directory this script owns and rewrites whole):
                         variables set from the web's roles (`GTK_ROLES`), dark under `prefers-color-scheme: dark`, and
                         the app icon `icons/scalable/apps/me.raddatz.veyq.svg` with its symbolic variant; the app bundles
                         DIR as its GResource, from whose base path libadwaita loads `style.css` itself.
-  --winui DIR           the Windows app's (cr-the-windows-app-over-the-native-core D8): `Theme.xaml`, one
+  --winui DIR           the Windows app's (ADR 0123's Consequences, the Windows app): `Theme.xaml`, one
                         ResourceDictionary that makes the web's brand role (`accent`) the app's accent — `SystemAccentColor`
                         and each of its light and dark steps (`WINUI_ACCENT_KEYS`) — under `ThemeDictionaries`, light and
                         dark; everything else is Fluent's own. No icon: an `.ico` and MSIX's PNGs are the packaging's.

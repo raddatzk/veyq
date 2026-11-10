@@ -1,5 +1,5 @@
 <Project Sdk="Microsoft.NET.Sdk">
-  <!-- The veyq app on Windows (ADR 0127 decision 5; cr-the-windows-app-over-the-native-core D7): WinUI 3 over the core's
+  <!-- The veyq app on Windows (ADR 0127 decision 5; ADR 0123's Consequences, the Windows app): WinUI 3 over the core's
        veyq.dll, unpackaged (MSIX is the packaging's), x64 (Kotlin/Native has no Windows ARM64 target), self-contained
        with the Windows App SDK and .NET, so its build output runs where it is copied. Its words, theme and the bridge's
        types are generated (src/mobile/build/generated, never committed); windows/run.py build writes them first. -->
@@ -15,7 +15,8 @@
     <WindowsAppSDKSelfContained>true</WindowsAppSDKSelfContained>
     <SelfContained>true</SelfContained>
     <!-- No trimming or AOT property: one implies an SDK-versioned package, and the lock file would be the SDK's
-         (Phase 2's trap). -->
+         (IsAotCompatible pulled Microsoft.NET.ILLink.Tasks at each SDK's runtime version; the VM's locked restore was
+         red, NU1004). -->
     <RootNamespace>Veyq</RootNamespace>
     <!-- Never `veyq`: a .NET app's own assembly is <AssemblyName>.dll beside its exe, and that one overwrote the core's
          native veyq.dll in the build output, so the app found no veyq_init and crashed at its start (measured 2026-11-10). -->

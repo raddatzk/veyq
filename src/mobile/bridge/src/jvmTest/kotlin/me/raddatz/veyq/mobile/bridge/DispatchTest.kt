@@ -24,10 +24,10 @@ import kotlin.test.assertNull
 import kotlin.time.Duration.Companion.milliseconds
 
 /**
- * The dispatch (CR D6) over a session door the test plays, as the host drives it: every call and watch as JSON, every
- * answer and update read back as the host reads it. The tenant this door opens is no `TenantSession`, so no shell opens
- * over it: the shell's, Search's and the Pot's calls are refused here, and their dispatch is held by
- * [LiveBridgeTest] over the real core (the shell and the Pot models take only a `TenantSession`).
+ * The dispatch (ADR 0123's Consequences, the bridge) over a session door the test plays, as the host drives it: every
+ * call and watch as JSON, every answer and update read back as the host reads it. The tenant this door opens is no
+ * `TenantSession`, so no shell opens over it: the shell's, Search's and the Pot's calls are refused here, and their
+ * dispatch is held by [LiveBridgeTest] over the real core (the shell and the Pot models take only a `TenantSession`).
  */
 class DispatchTest {
     private data class Acc(override val key: String, override val tenants: List<TenantRef>) : Connection {

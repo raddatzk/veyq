@@ -1,7 +1,7 @@
-// `windows:*` — the veyq app on Windows (src/mobile/windows, cr-the-windows-app-over-the-native-core): every task is a
-// verb of its `run.py`, which cross-compiles the core with src/mobile's own Gradle wrapper and runs the rest on a Windows
-// host over ssh (VEYQ_WINDOWS_SSH; the test VM by default). No task is named `test` (infra/README.md § The launcher):
-// the core's Windows tests are `coreTest`.
+// `windows:*` — the veyq app on Windows (src/mobile/windows; ADR 0123's Consequences, the Windows app): every task is
+// a verb of its `run.py`, which cross-compiles the core with src/mobile's own Gradle wrapper and runs the rest on a
+// Windows host over ssh (VEYQ_WINDOWS_SSH; the test VM by default). No task is named `test` (infra/README.md § The
+// launcher): the core's Windows tests are `coreTest`.
 val runPy = rootDir.resolve("src/mobile/windows/run.py")
 
 fun verb(name: String, what: String, vararg args: String) = tasks.register<Exec>(name) {

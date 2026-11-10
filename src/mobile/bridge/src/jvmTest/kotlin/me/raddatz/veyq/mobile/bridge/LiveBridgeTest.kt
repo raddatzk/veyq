@@ -24,11 +24,11 @@ import kotlinx.serialization.json.long
 import kotlinx.serialization.json.jsonObject
 
 /**
- * The dispatch over the real core (CR D6), as the Linux host will drive it, on the JVM's suite and HTTP client: signs in
- * through a call as the seeded principal (`.run/.env`, or `VEYQ_ENV_FILE`), watches the shell open, reads Home's
- * groups, searches a name and opens the hit, and opens a Pot and reads its view to balances that sum to zero. The
- * device store is a host this test plays, answering from its own thread. Runs only when `VEYQ_LIVE` names an origin
- * of a running dev instance (`./gradlew backend:seed`).
+ * The dispatch over the real core (ADR 0123's Consequences, the bridge), as a host drives it, on the JVM's suite and
+ * HTTP client: signs in through a call as the seeded principal (`.run/.env`, or `VEYQ_ENV_FILE`), watches the shell
+ * open, reads Home's groups, searches a name and opens the hit, and opens a Pot and reads its view to balances that sum
+ * to zero. The device store is a host this test plays, answering from its own thread. Runs only when `VEYQ_LIVE` names
+ * an origin of a running dev instance (`./gradlew backend:seed`).
  */
 class LiveBridgeTest {
     @Test

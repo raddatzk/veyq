@@ -1,5 +1,5 @@
 <Project Sdk="Microsoft.NET.Sdk">
-  <!-- The core as C# sees it (cr-the-windows-app-over-the-native-core D6): the wire's types generated from the core's
+  <!-- The core as C# sees it (ADR 0123's Consequences, the bridge): the wire's types generated from the core's
        models (Bridge.g.cs, never committed), a safe wrapper over veyq.dll's six functions, and the host function with
        the device store. No Windows API: it builds and its round trip runs on any host .NET runs on. -->
   <PropertyGroup>

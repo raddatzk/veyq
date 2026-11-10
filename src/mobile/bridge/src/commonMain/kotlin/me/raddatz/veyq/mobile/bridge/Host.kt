@@ -44,9 +44,9 @@ internal class Registry<V> {
 }
 
 /**
- * The host's one function, the other way (CR D6): the core sends a [HostRequest] under a token and waits for the
- * host's [HostReply] through [reply], which may come on any thread. [send] must not wait for the core: a host that
- * answers only after the core answered it would wait for itself.
+ * The host's one function, the other way (ADR 0123's Consequences, the bridge): the core sends a [HostRequest] under a
+ * token and waits for the host's [HostReply] through [reply], which may come on any thread. [send] must not wait for
+ * the core: a host that answers only after the core answered it would wait for itself.
  */
 internal class Host(private val timeout: kotlin.time.Duration = TIMEOUT, private val send: (token: Long, request: String) -> Unit) {
     private val tokens = AtomicLong(0)

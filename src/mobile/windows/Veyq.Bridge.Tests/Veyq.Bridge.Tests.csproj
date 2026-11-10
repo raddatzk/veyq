@@ -1,5 +1,5 @@
 <Project Sdk="Microsoft.NET.Sdk">
-  <!-- The C# half of the bridge's round trip (cr-the-windows-app-over-the-native-core D6) and the wrapper over the real
+  <!-- The C# half of the bridge's round trip (ADR 0123's Consequences, the bridge) and the wrapper over the real
        veyq.dll on Windows. A Microsoft.Testing.Platform executable (global.json's runner): `dotnet test` on any host;
        on an ARM64 Windows host with `arch x64`, since veyq.dll is x64 (VeyqNative names it; run.py passes it). -->
   <PropertyGroup>

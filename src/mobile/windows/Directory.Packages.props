@@ -1,5 +1,5 @@
 <Project>
-  <!-- The Windows app's packages, central and exact (cr-the-windows-app-over-the-native-core D7). Every restore is in
+  <!-- The Windows app's packages, central and exact (ADR 0123's Consequences, the Windows app). Every restore is in
        locked mode against each project's committed packages.lock.json, and `run.py build` is red on any package
        `dotnet package list` names deprecated or vulnerable. System.Text.Json is the runtime's own: no JSON library.
        MSTest is its framework and adapter alone, not the `MSTest` metapackage, which adds a code-coverage extension
@@ -11,7 +11,7 @@
   <ItemGroup>
     <PackageVersion Include="MSTest.TestFramework" Version="[4.5.2]" />
     <PackageVersion Include="MSTest.TestAdapter" Version="[4.5.2]" />
-    <!-- The app (D7): WinUI and the Windows App SDK's foundation (MRT Core's resources among it) and the SDK build tools
+    <!-- The app: WinUI and the Windows App SDK's foundation (MRT Core's resources among it) and the SDK build tools
          (makepri, the WinRT projection's metadata), not the Microsoft.WindowsAppSDK metapackage, which adds AI, ML,
          Search and Widgets. -->
     <PackageVersion Include="Microsoft.WindowsAppSDK.WinUI" Version="[2.6.5]" />

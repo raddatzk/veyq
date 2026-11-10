@@ -1,4 +1,4 @@
-// Veyq.Drive (cr-the-windows-app-over-the-native-core D9). Two modes, each what one scheduled task runs in the logged-on
+// Veyq.Drive (ADR 0123's Consequences, the Windows app). Two modes, each what one scheduled task runs in the logged-on
 // session (an ssh command runs in session 0, which has no desktop):
 //   --launch <file>   reads the app's start from <file> — {"exe": …, "env": {…}} — deletes it at once, and starts the
 //                     app with that environment (a secret in it never reaches a command line). Writes <file>.started.

@@ -18,7 +18,7 @@ refuses the inline-assembly path (`HAVE_AVX_ASM`) for Windows x64 by design, and
 `-mxsave`. Without it `sodium_runtime_has_avx()` is 0 on every CPU and AES-256-GCM refuses to run, silently — so the
 mingw slice is compiled with `-mxsave` (it lets the compiler accept the intrinsic and emits no XSAVE of its own;
 libsodium calls it only after CPUID said OSXSAVE), and the build fails unless `config.log` says the intrinsic was found
-(measured 2026-11-10, cr-the-windows-app-over-the-native-core W5).
+(measured 2026-11-10, ADR 0123's Consequences, the core on Windows).
 
 Usage: build_libsodium.py <out-dir>   (the Gradle build passes src/mobile/build/libsodium; idempotent)
 """
