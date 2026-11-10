@@ -105,7 +105,10 @@ struct DrawerList: View {
                     }
                 } label: {
                     // drawn here: a Mac draws a bordered menu as its own grey pop-up, whatever its button style
+                    // drawn by its own style: a Mac's menu draws a label's icon in its own control colour, never the
+                    // label's (measured 2026-11-10: black on the green)
                     Label(say(.drawerNew), systemImage: "plus")
+                        .labelStyle(FilledLabel())
                         .fontWeight(.semibold)
                         .foregroundStyle(Role.onFill)
                         .frame(maxWidth: .infinity, minHeight: 34)
@@ -157,6 +160,13 @@ struct DrawerList: View {
             RoundedRectangle(cornerRadius: Radius.row, style: .continuous).fill(selected ? Role.hover : Color.clear).padding(.horizontal, 6)
         )
         .listRowSeparator(.hidden)
+    }
+}
+
+/// A label on a filled control: icon and title side by side in the colour the label is given.
+private struct FilledLabel: LabelStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        HStack(spacing: 6) { configuration.icon; configuration.title }
     }
 }
 
@@ -230,6 +240,25 @@ struct Bar: View {
     private static let search = "search"
     private static let list = "list"
 
+    /// Where the places' control goes: a Mac's toolbar centre; on an iPad beside back, since its centre (`.principal`)
+    /// takes the inline title's place and left the subtitle under it, a second time below the large title (2026-11-10).
+    private static var places: ToolbarItemPlacement {
+        #if os(macOS)
+        .principal
+        #else
+        .topBarLeading
+        #endif
+    }
+
+    /// Back's place: on iOS the places' own, the leading end, so back stands before them.
+    private static var back: ToolbarItemPlacement {
+        #if os(macOS)
+        .navigation
+        #else
+        .topBarLeading
+        #endif
+    }
+
     /// Where a page's actions go: the trailing end. A Mac puts `.primaryAction` at the leading one, beside the title.
     private static var actions: ToolbarItemPlacement {
         #if os(macOS)
@@ -289,7 +318,7 @@ struct Bar: View {
                 .toolbar {
                     toolbar
                     // the bar's places: a segmented control, as the system's own apps on an iPad and a Mac
-                    if !model.shell.barTabs.isEmpty { ToolbarItem(placement: .principal) {
+                    if !model.shell.barTabs.isEmpty { ToolbarItem(placement: Self.places) {
                         Picker(say(.tabSearch), selection: selection) {
                             // symbols, their words for VoiceOver: a word each runs over the back button beside the sidebar
                             ForEach(tabs, id: \.self) { key in
@@ -362,7 +391,8 @@ struct Bar: View {
     }
 
     @ToolbarContentBuilder private var toolbar: some ToolbarContent {
-        ToolbarItem(placement: .navigation) {
+        // back where the places' control is too (an iPad's leading end), so it stands before it, not after
+        ToolbarItem(placement: Self.back) {
             if model.shell.canGoBack {
                 Button { model.goBack() } label: { Image(systemName: "chevron.backward") }
             } else if let onMenu {
