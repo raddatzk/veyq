@@ -510,7 +510,7 @@ ARM64 VM — stop and ask if it needs more (O4).
 - Launcher: `./gradlew -q windows:tasks --group veyq` lists `bridge`, `build`, `coreTest`, `run`; `--warning-mode all`
   printed no deprecation. `validate_build_input_pins.py` green.
 
-### Phase 4 — The slice: sign-in, the shell, Home, a Pot, Search
+### Phase 4 — The slice: sign-in, the shell, Home, a Pot, Search — done (2026-11-11)
 
 Each screen draws the core's state and calls its actions; nothing else (a rule found here moves into the core).
 
@@ -525,6 +525,82 @@ Each screen draws the core's state and calls its actions; nothing else (a rule f
 - **Logs first:** the app's log is read before its tree, and holds no exception.
 - **Proof:** a UIA tree per step; a screenshot per form.
 - `run.py build` and both guards are still green.
+
+**Built (Phase 4):**
+- **The screens** are code, not XAML (`SignInView.cs`, `ShellView.cs`, `HomeView.cs`, `PotPage.cs`; `MainWindow.xaml`
+  keeps only the opening face and a `ContentControl` the other two take turns in): each draws the core's state and
+  calls its actions through `Act.Send` (Linux's `bridge::send`: the answer is logged by its kind, never awaited by the
+  screen). `SaidNotice.cs` writes a `Notice`, a `Piece` and a line through the generated `Words.Say` (the typed
+  arguments first, then every argument as its text, as `said.rs` does). `DevLogin.cs` is `#if DEBUG` only and takes the
+  four `VEYQ_DEV_*` once, removing them from the process's environment; `run.py run --devlogin` puts them in the launch
+  file Veyq.Drive deletes on reading, never on a command line. No rule moved to the core: none was found.
+- **Settings at the pane's foot is a `FooterMenuItems` item, not `IsSettingsVisible`'s**: the built-in item says
+  WinUI's own word in the system's language, and every word comes from `words.json`. WinUI's own chrome (the pane's
+  button, back, the scroll bar) still speaks the system's language under `VEYQ_LANGUAGE=en-US` (`"Navigation öffnen"`
+  in the English pass's tree) — the system's, as on every Windows app.
+- **A pane item is chosen by its selection**, not by `ItemInvoked`: a `NavigationViewItem` has no UIA Invoke (`invoke
+  home` → `can be neither invoked, toggled nor expanded`), only SelectionItem. `SelectionChanged` sends the choice
+  unless the state is drawing it; `ItemInvoked` acts only for the item already selected (Home again, out of a folder),
+  which no selection change reports.
+- **Home is one list per group under its heading** (Explorer Home's sections), not one grouped `ListView`: a grouped
+  one needs a `CollectionViewSource` and a header `DataTemplate` bound to C# objects; per-group lists needed neither.
+- **The switcher's menu** is the spaces, then each server's tenants (`RadioMenuFlyoutItem`s, separators between them,
+  the server's label as a tenant's tooltip — a `MenuFlyout` has no section heading), then Manage servers disabled.
+- **A Search hit arrives as its row's content**: chosen by a click (UIA Invoke on the suggestion), `QuerySubmitted`'s
+  `ChosenSuggestion` is the row's `StackPanel`, not the `ListViewItem` (log: `a chosen hit reached no hit
+  (StackPanel)`); both carry the hit as their `Tag`. A chosen hit clears the query; hits drawn anew under a standing
+  query open no list unless the box has focus (the list re-opened over a space switch).
+- **LeftMinimal lays back and the pane's button over the content's top left**: the title's row takes a left inset
+  there (`DisplayModeChanged`), else "Amsterdam" ran under them (`shot de-light-500.png`, first pass).
+- **A width-capped column straight in a `ScrollViewer` sits off centre and clips** (measured: the Pot's amounts were cut
+  off at the right edge, the sign-in column at x 335 of 784): the lists fill the width; the sign-in's column is capped
+  inside a stretching `Grid`.
+- **`VEYQ_THEME` sets the application's theme, not only the window's**: a brush looked up in code
+  (`TextFillColorSecondaryBrush` for a row's line) is the application theme's, so under the window's dark alone the
+  captions stayed light's — dark on dark (`shot en-dark-500-pane.png`, first pass).
+- **Money follows the system's regional format, words `VEYQ_LANGUAGE`**: the English pass writes `67,34 €`, the VM's de-DE
+  format, as a person's English Windows with German regional settings would (D8's `CurrencyFormatter(code)`).
+- **Veyq.Drive** finds an element in any top-level window of the app (a flyout, a menu, a suggestion list is its own
+  `PopupHost` window) and `tree` prints them after the main one; `invoke`/`select` take the rest of the line as the id
+  (a name's spaces). AutomationIds name what they open: `home`, `app:EXPENSES`, `favorite:<name>`, `recent:<name>`,
+  `folder:<name>`, `object:<name>`, `filter:<APP|all>`, `place:<tab key>`, `space:<name>`, `tenant:<name>`,
+  `hit:<name>`, `switcher`, `settings`, `new`.
+- The VM's display is now 1290 × 848 (the maximized window's tree), not W7's 1024 × 768; the three forms were reached
+  by `maximize`, `size 800 700` and `size 500 700`.
+
+**Met (2026-11-11, commits `f42dc8f74`, `88a6fb79d`):**
+- [x] The instance: `VEYQ_ENV_FILE=<main checkout>/.run/.env VEYQ_LIVE=http://veyq.localhost:8080 ./gradlew
+  :bridge:jvmTest --tests '*LiveBridgeTest*' --rerun` → `servers: veyq.localhost=Familie Raddatz/Turnverein`,
+  `Home: home_group_folders=6, home_group_contents=8`, `Amsterdam: 5 entries, balances "Anna"=6734, "Ben"=-6734`:
+  seeded, the second tenant there; nothing was seeded anew.
+- [x] The steps, driven by `run.py drive` against `VEYQ_LANGUAGE=de-DE VEYQ_THEME=light run.py run --devlogin`, one
+  drive, `FAILED` nowhere, a tree after each step: the log `signing in as the dev principal (debug build)`, `session
+  Signed`; the switcher's menu (`space:Familie Raddatz`, `space:Persönlich`, `tenant:Familie Raddatz`,
+  `tenant:Turnverein`, `switcher-manage disabled`); space `Persönlich` → `#title "Persönlich"`, subtitle `Familie Raddatz
+  · veyq.localhost`; tenant `Turnverein` → `#title "Turnverein"`, `favorite-none`, and back to Familie Raddatz;
+  `filter:EXPENSES selected`; `folder:Reisen` → `#title "Reisen"`, back enabled, and back; `favorite:Sri Lanka` → its
+  Pot at the top (back disabled); `object:Amsterdam` → five `#entry:` rows, `place:expenses.overview`,
+  `place:expenses.settings`; `ctrl+e`, `set TextBox Ams` → `hit:Amsterdam`, invoked → `#title "Amsterdam"`, the query
+  cleared.
+- [x] The forms: maximized → `TogglePaneButton "Navigation schließen"`, `PaneRoot [0,23 320x825]` (Left); 800 →
+  `"Navigation öffnen"`, the pane 48 wide with icons (LeftCompact); 500 → the pane closed, its button over the content
+  (LeftMinimal), `invoke TogglePaneButton` opens it over the content. German light (the pass above) and English dark
+  (`VEYQ_LANGUAGE=en-US VEYQ_THEME=dark`: `"Switch space, tenant or server"`, `Balances`, `Ben pays Anna`, `Total`) in all
+  three forms; the sign-in without `--devlogin` (German, light, 800).
+- [x] The Pot's numbers against `LiveBridgeTest`: Amsterdam's overview says `Anna, bezahlt 144,69 € · verbraucht 77,35 €,
+  bekommt 67,34 €`, `Ben, bezahlt 9,99 € · verbraucht 77,33 €, schuldet 67,34 €`, `Ben zahlt an Anna, 67,34 €`, `Summe,
+  154,68 €`; its entries are five; its people `Anna, 67,34 €`, `Ben, -67,34 €` — the live read's 6734 and −6734. The
+  web's Pot page was not compared (its dev server was not part of this pass).
+- [x] Logs first: each drive printed the app's log before the tree; it holds the gates and the devlogin line, no
+  exception and no `answered`/`did not` line in the final passes.
+- [x] Proof: a UIA tree per step (the drive's output); a screenshot per form, under `src/mobile/build/windows/shots/`:
+  `de-light-signin.png`, `de-light-max-home.png`, `de-light-max-pot.png`, `de-light-800.png`, `de-light-500.png`,
+  `en-dark-max-home.png`, `en-dark-max-pot.png`, `en-dark-800.png`, `en-dark-500.png`, `en-dark-500-pane.png`.
+- [x] `/usr/bin/python3 src/mobile/windows/run.py build` → exit 0: `no package is deprecated or vulnerable` (four
+  projects); the Mac `total: 3, succeeded: 2`; the VM `Veyq.Bridge.Tests` `succeeded: 3`, `Veyq.Tests` `succeeded: 6`.
+  `validate_mobile_words.py` and `validate_mobile_platform_guidelines.py` green; no guard rule was added. The
+  windows-literal rule reads the new screens: `Header = "Server address"` in `SignInView.cs` → red at line 29, restored
+  by snapshot (`cmp` equal), green.
 
 ### Phase 5 — The docs
 
@@ -625,3 +701,19 @@ runs them, `validate_changes.py` among them), and every "measured" in the touche
   app build. And generated C# needs its own `#nullable enable` (CS8669), as Bridge.g.cs already had — the second
   generator to meet it; a third should copy the header of the first.
 
+### Phase 4 (2026-11-11)
+
+- **The driver found the app's accessibility gaps before a person would.** A pane item without Invoke, a chosen hit
+  that arrives as its row's content, popups that are windows of their own: each surfaced as a red step or a log line,
+  never by looking. Worth keeping: give every interactive control an AutomationId that names what it opens, and drive
+  by it from the first screen on — the ids made the pass's steps readable as the CR's Done-when.
+- **Two layout defects were only visible in a screenshot, never in the tree**: a width-capped column in a `ScrollViewer`
+  (the tree's bounds were plausible; the amounts were clipped) and code-looked-up brushes under the window's theme only
+  (the text was there, dark on dark). The owner's rule — text first, screenshots as proof — held, but the proof shots
+  are where these two were found: take each form's shot early in the phase, not only at its end.
+- **The app's state outlives its process**: the core reopened the last object at start, so a pass's first step
+  assumed Home and failed (`no element with AutomationId object:Amsterdam`). A pass starts from a state it sets
+  (`select home`), not one it remembers.
+- **Process:** one app build plus a launch on the VM took about 70 s, so the loop was build, launch, drive the few
+  steps in question, read the log; a scratch script ran only the VM's build to iterate on compile errors. `cp` is
+  interactive in this shell (`command cp -f`).
