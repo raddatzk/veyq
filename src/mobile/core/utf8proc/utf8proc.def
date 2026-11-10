@@ -1,0 +1,9 @@
+# utf8proc for Linux's `nfc`/`nfkd` (CR core-as-a-native-library D3): headers and the static library come from
+# build_utf8proc.py's output, one slice per target, handed in by core/build.gradle.kts (includeDirs, -libraryPath).
+package = me.raddatz.veyq.mobile.utf8proc
+headers = utf8proc.h
+headerFilter = utf8proc.h
+compilerOpts = -DUTF8PROC_STATIC
+staticLibraries = libutf8proc.a
+# Its options are flags OR-ed together: integer constants, not a Kotlin enum.
+nonStrictEnums = utf8proc_option_t
