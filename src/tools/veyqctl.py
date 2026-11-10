@@ -340,10 +340,14 @@ class Host:
     """
 
     workdir: Path | None = None
+    # While `init` only looks around to ask well (git, kubectl reads), its commands are not echoed: the questions are
+    # what the operator reads then. Everything that verifies, renders or writes is echoed as always.
+    quiet = False
 
     def run(self, cmd: list[str], *, check: bool = True, stream: bool = False,
             env: dict[str, str] | None = None, stdin: bytes | None = None) -> subprocess.CompletedProcess:
-        say("+ " + " ".join(shlex.quote(c) for c in cmd))
+        if not self.quiet:
+            say("+ " + " ".join(shlex.quote(c) for c in cmd))
         cwd = self.workdir if self.workdir and self.workdir.is_dir() else None
         try:
             if stdin is not None:  # bytes in (a key), text out
@@ -367,6 +371,27 @@ class Host:
             return None
         shown = f" (e.g. {example})" if example else ""
         return input(f"veyqctl: {key}{shown}: ").strip() or None
+
+    def section(self, title: str) -> None:
+        print(f"\n== {title}", flush=True)
+
+    def prompt(self, question: str, default: str = "", hint: str = "") -> str | None:
+        """A question at a terminal, as setup scripts ask: the hint above it, `[default]` that Enter takes, asked again
+        while an answer is needed and none is given. None without a terminal (the caller then needs the flag)."""
+        if not sys.stdin.isatty():
+            return None
+        print()
+        if hint:
+            print(f"   {hint}")
+        while True:
+            try:
+                answer = input(f"   {question}{f' [{default}]' if default else ''}: ").strip()
+            except EOFError:  # the input ended: the offer, or nothing (the caller refuses, naming the flag)
+                print()
+                return default or None
+            if answer or default:
+                return answer or default
+            print("   An answer is needed here.")
 
     def confirm(self, prompt: str) -> bool | None:
         """True or False at a terminal; None without one (the caller then needs `--yes`)."""
@@ -2051,7 +2076,9 @@ def cmd_init(args: argparse.Namespace, host: Host) -> int:
     """Create an instance, list it and make it current: Compose (what `install` does) or GitOps (ADR 0126)."""
     target = "compose" if args.compose else ("gitops" if args.gitops else None)
     if target is None:
-        answer = (host.ask("Compose (this host) or GitOps (an Argo CD repository)", "compose") or "").strip().lower()
+        host.section("veyqctl init")
+        answer = (host.prompt("compose or gitops", hint="compose: veyq on Docker Compose on this host. gitops: veyq's "
+                              "half of a repository an Argo CD syncs, upgraded by commit.") or "").strip().lower()
         if answer not in ("compose", "gitops"):
             raise Refused("`init` needs a target: --compose (Docker Compose on this host) or --gitops DIR (veyq's "
                           "directory in an Argo CD repository's checkout); without a terminal, pass one")
@@ -2068,9 +2095,11 @@ def cmd_init(args: argparse.Namespace, host: Host) -> int:
         return result
     if args.unsigned_local:
         raise Refused("--unsigned-local is Compose's: a GitOps instance runs only what verifies (ADR 0126 decision 3)")
+    host.quiet = True
     offered = suggested_gitops_directory(host)
-    directory = args.gitops or host.ask("veyq's directory in a checkout of the repository Argo CD syncs",
-                                        offered) or offered
+    host.section("1. Where veyq's half goes")
+    directory = args.gitops or host.prompt("directory", offered, "A directory in your checkout of the repository Argo "
+                                           "CD syncs; offered beside the Applications it already holds.") or offered
     if not directory:
         raise Refused("`init --gitops DIR` needs the directory veyq's half goes into, inside a Git checkout")
     return gitops_init(args, host, Path(directory).expanduser().resolve())
@@ -2269,11 +2298,11 @@ def repository_of(host: Host, directory: Path) -> Path:
     return top
 
 
-def option(args: argparse.Namespace, host: Host, attr: str, question: str, example: str, default: str = "") -> str:
-    """A flag's value, else asked at a terminal, else its default; refused when there is none."""
-    value = getattr(args, attr) or host.ask(question, example) or default
+def option(args: argparse.Namespace, host: Host, attr: str, question: str, default: str = "", hint: str = "") -> str:
+    """A flag's value, else asked at a terminal (Enter takes `default`), else `default`; refused when there is none."""
+    value = getattr(args, attr) or host.prompt(question, default, hint) or default
     if not value:
-        raise Refused(f"--{attr.replace('_', '-')} is required ({question}); without a terminal, pass it")
+        raise Refused(f"--{attr.replace('_', '-')} is required ({question}): pass it, or run `init` at a terminal")
     return value
 
 
@@ -2484,52 +2513,89 @@ def gitops_init(args: argparse.Namespace, host: Host, directory: Path) -> int:
         raise Refused(f"{directory} holds files already: `init` writes a fresh directory and never overwrites. To have "
                       f"veyqctl manage a veyq half that exists, write {GITOPS_FILE} beside it as "
                       f"{EXISTING_HALF_DOCS} says, then run `veyqctl check`. Nothing was written.")
-    name = option(args, host, "name", "the instance's name on this machine (`veyqctl instances` lists it)", top.name,
-                  top.name)
+    name = option(args, host, "name", "instance name", top.name,
+                  "How this machine lists it (`veyqctl instances`); not the cluster's.")
     name_is_free(name, directory)
-    # The cluster `init` checks and `check` reads the Secrets from: asked, with kubectl's current context offered, so
-    # the cluster a run speaks to is seen before it does.
+
+    host.section("2. The cluster")
+    # Asked, with kubectl's current context offered, so the cluster `init` checks is seen before it does.
     current = (host.run(["kubectl", "config", "current-context"], check=False).stdout or "").strip()
-    context = args.context or host.ask("the kubeconfig context of the cluster Argo CD runs in", current) or current
-    provider = option(args, host, "secrets", f"where the Secrets come from ({', '.join(PROVIDERS)})", "sops")
-    if provider not in PROVIDERS:
-        raise Refused(f"--secrets {provider}: one of {', '.join(PROVIDERS)}")
-    domain = option(args, host, "domain", "veyq's domain (cannot be changed later)", "veyq.example.org")
+    context = args.context or host.prompt("kubeconfig context", current,
+                                          "The cluster Argo CD runs in: init checks it, `check` reads the Secrets "
+                                          "there.") or current
+    k = kubectl(context)
+    reachable = not args.no_cluster_check
+    classes: list[tuple[str, str]] = []
+    cert_manager = False
+    if reachable:
+        listed_classes = host.run(k + ["get", "gatewayclass", "-o", "jsonpath={range .items[*]}{.metadata.name} "
+                                       "{.spec.controllerName}{\"\\n\"}{end}"], check=False)
+        classes = [tuple(line.split(" ", 1)) for line in (listed_classes.stdout or "").splitlines()
+                   if " " in line] if not listed_classes.returncode else []
+        cert_manager = not host.run(k + ["get", "crd", "certificates.cert-manager.io", "-o", "name"],
+                                    check=False).returncode
+
+    host.section("3. veyq")
+    domain = option(args, host, "domain", "veyq's domain", "",
+                    "Its own address: mailed links point here; it cannot be changed later. Needs an A record.")
     garage = not args.no_bundled_store
-    store_domain = option(args, host, "store_domain", "the bundled store's own host", f"store.{domain}",
-                          f"store.{domain}") if garage else ""
-    gateway_class = option(args, host, "gateway_class", "the GatewayClass the chart's Gateway uses", "traefik")
-    tls = args.tls or ("acme" if args.acme_email else "") or option(args, host, "tls", "TLS (acme, shared or none)",
-                                                                    "acme")
-    if tls not in ("acme", "shared", "none"):
-        raise Refused(f"--tls {tls}: acme (the chart's cert-manager issuer), shared (one Secret) or none")
-    acme_email = option(args, host, "acme_email", "the ACME account contact", "ops@example.org") if tls == "acme" else ""
-    tls_secret = option(args, host, "tls_secret", "the TLS Secret for every host", "veyq-tls") if tls == "shared" else ""
-    peer_namespace = option(args, host, "gateway_namespace", "the namespace of the Gateway's data-plane pods",
-                            "traefik")
-    peer_label = option(args, host, "gateway_pod_label", "a label the data-plane pods carry",
-                        "app.kubernetes.io/name=traefik")
+    store_domain = option(args, host, "store_domain", "the bundled store's host", f"store.{domain}",
+                          "Where uploads and downloads go, for every tenant. Needs an A record too.") if garage else ""
+    gateway_class = option(args, host, "gateway_class", "GatewayClass", classes[0][0] if len(classes) == 1 else "",
+                           "The Gateway API implementation the chart's Gateway is handed to"
+                           + (f" (the cluster's: {', '.join(c for c, _ in classes)})." if classes else "."))
+    controller = dict(classes).get(gateway_class, "")
+    # Traefik's data-plane pods are its own Deployment's: offered from the cluster when the class is Traefik's.
+    traefik_ns = ""
+    if controller.startswith("traefik.io/"):
+        found = host.run(k + ["get", "deploy", "-A", "-l", "app.kubernetes.io/name=traefik", "-o",
+                              "jsonpath={.items[0].metadata.namespace}"], check=False)
+        traefik_ns = (found.stdout or "").strip() if not found.returncode else ""
+    peer_namespace = option(args, host, "gateway_namespace", "its data-plane pods' namespace", traefik_ns,
+                            "The pods that proxy the traffic: the only peers the NetworkPolicy lets reach veyq.")
+    peer_label = option(args, host, "gateway_pod_label", "a label those pods carry (key=value)",
+                        "app.kubernetes.io/name=traefik" if traefik_ns else "")
     if "=" not in peer_label:
         raise Refused(f"--gateway-pod-label {peer_label}: `<key>=<value>`")
+    tls = args.tls or ("acme" if args.acme_email else "") or option(
+        args, host, "tls", "TLS: acme, shared or none", "acme" if cert_manager else "",
+        "acme: certificates per host from Let's Encrypt through the chart's cert-manager issuer"
+        + (" (cert-manager runs)" if cert_manager else "") + "; shared: one Secret of yours; none: TLS ends before "
+        "the cluster.")
+    if tls not in ("acme", "shared", "none"):
+        raise Refused(f"--tls {tls}: acme (the chart's cert-manager issuer), shared (one Secret) or none")
+    own_email = (git(host, top, "config", "user.email", check=False).stdout or "").strip()
+    acme_email = option(args, host, "acme_email", "ACME contact", own_email,
+                        "Where Let's Encrypt sends expiry and revocation notices.") if tls == "acme" else ""
+    tls_secret = option(args, host, "tls_secret", "the TLS Secret for every host") if tls == "shared" else ""
     namespace = args.namespace or "veyq"
+
+    host.section("4. Secrets")
+    has_sops = any((p / ".sops.yaml").is_file() for p in [directory, *directory.parents] if p == top or top in p.parents)
+    provider = option(args, host, "secrets", f"provider: {', '.join(PROVIDERS)}", "sops" if has_sops else "",
+                      "Where the chart's two Secrets come from"
+                      + (" (this repository has a .sops.yaml)." if has_sops else "."))
+    if provider not in PROVIDERS:
+        raise Refused(f"--secrets {provider}: one of {', '.join(PROVIDERS)}")
     if not args.no_cluster_check:
+        host.quiet = False
         check_cluster(host, context, gateway_class, args.storage_class or "", tls == "acme")
+        host.quiet = True
     # The Argo CD project the Application joins: offered from the cluster — the one project besides `default` when
     # there is exactly one (a project that limits sources and destinations, which `default` does not), else `default`.
-    listed_projects = host.run(kubectl(context) + ["-n", args.argocd_namespace, "get", "appprojects", "-o", "name"],
-                               check=False)
+    listed_projects = host.run(k + ["-n", args.argocd_namespace, "get", "appprojects", "-o", "name"], check=False)
     projects = [line.split("/", 1)[-1] for line in (listed_projects.stdout or "").split()
                 if not listed_projects.returncode]
     own = [p for p in projects if p != "default"]
-    project = option(args, host, "project", "the Argo CD project the Application joins", (own or ["default"])[0],
-                     own[0] if len(own) == 1 else "default")
+    host.section("5. Argo CD and the release")
+    project = option(args, host, "project", "Argo CD project", own[0] if len(own) == 1 else "default",
+                     "The project the Application joins: one of your own limits its sources and destinations.")
     store = remote_prefix = store_kind = ""
     if provider == "external-secrets":
-        store = option(args, host, "secret_store", "the SecretStore the ExternalSecrets read from", "vault")
+        store = option(args, host, "secret_store", "the SecretStore the ExternalSecrets read from")
         store_kind = args.secret_store_kind
         remote_prefix = args.remote_prefix
-    if provider == "sops" and not any((p / ".sops.yaml").is_file() for p in [directory, *directory.parents]
-                                      if p == top or top in p.parents):
+    if provider == "sops" and not has_sops:
         raise Refused(f"--secrets sops needs a .sops.yaml in {top} or a directory above {directory} naming the "
                       f"repository's keys: sops encrypts with its creation rules. Nothing was written.")
     if provider in ("sops", "sealed-secrets"):
@@ -2548,8 +2614,10 @@ def gitops_init(args: argparse.Namespace, host: Host, directory: Path) -> int:
     # Which releases `upgrade` follows: offered as the newest release's major, so a new major is entered only when
     # its owner sets `latest` or the next major, knowingly (ADR 0085: a major removes something).
     newest = select(listed, "latest", source.describe())
-    selector = check_selector(option(args, host, "release", "which releases `upgrade` follows: <major>.<minor>, "
-                                     "<major>, or latest", str(newest.major), str(newest.major)))
+    selector = check_selector(option(args, host, "release", "selector", str(newest.major),
+                                     "Which releases `upgrade` follows: <major>.<minor> pinned, <major> its newest, "
+                                     "latest the newest of all. A new major removes something: enter it knowingly."))
+    host.quiet = False
     chosen = select(listed, selector, source.describe())
     say(f"{RELEASE_KEY}={selector} takes release {chosen.release} from {source.describe()}")
     manifest = fetch_manifest(host, source, chosen, False)

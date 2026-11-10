@@ -280,6 +280,10 @@ class FakeHost(vc.Host):
     def ask(self, key, example):
         return self.answers.get(key)
 
+    def prompt(self, question, default="", hint=""):
+        """A terminal where each question gets its answer from `answers`, else Enter (the default, or nothing)."""
+        return self.answers.get(question) or default or None
+
     def ran(self, *words: str) -> list[int]:
         """The indexes of every recorded command containing all of `words`."""
         return [i for i, c in enumerate(self.commands) if all(w in c for w in words)]
@@ -1552,6 +1556,8 @@ CLUSTER_OK = {
     "crd applications.argoproj.io": (0, "customresourcedefinition.apiextensions.k8s.io/applications.argoproj.io\n"),
     "crd gateways.gateway.networking.k8s.io": (0, "v1.5.1"),
     "get gatewayclass traefik": (0, "gatewayclass.gateway.networking.k8s.io/traefik\n"),
+    "get gatewayclass -o jsonpath": (0, "traefik traefik.io/gateway-controller\n"),
+    "-l app.kubernetes.io/name=traefik": (0, "traefik"),
     "get storageclass": (0, "storageclass.storage.k8s.io/local-path\n"),
     "crd certificates.cert-manager.io": (0, "customresourcedefinition.apiextensions.k8s.io/certificates\n"),
     "app.kubernetes.io/name=cert-manager": (0, "v1.21.3"),
@@ -1606,6 +1612,8 @@ class GitOpsHost(FakeHost):
                 return 0, "main\n"
             if "diff" in cmd:
                 return (1 if self.dirty else 0), ""
+            if "user.email" in cmd:
+                return 0, "owner@example.org\n"
             return 0, ""
         if cmd[0] == "kubectl":
             for key, answer in self.cluster.items():
@@ -1823,7 +1831,7 @@ def test_gitops_init(tmp: pathlib.Path) -> None:
         (layout / "gitops" / "root.yaml").write_text("apiVersion: argoproj.io/v1alpha1\nkind: Application\n")
         offered = vc.suggested_gitops_directory(GitOpsHost(top=layout))
         host = GitOpsHost(top=layout, signed=signed,
-                          answers={"Compose (this host) or GitOps (an Argo CD repository)": "gitops"})
+                          answers={"compose or gitops": "gitops"})
         rc, out = run_main(["--source", mirror, "init", "--name", "beside", *INIT, "--secrets", "none"], host)
     finally:
         os.chdir(cwd)
@@ -1845,6 +1853,22 @@ def test_gitops_init(tmp: pathlib.Path) -> None:
           and meta.get("running") == "2.0" and "project: ops" in (d5 / "application.yaml").read_text()
           and all("--context" in c and "my-cluster" in c for c in host.commands
                   if c[0] == "kubectl" and "current-context" not in c), out[-400:])
+    d6 = top / "apps" / "veyq-enter"
+    (top / ".sops.yaml").write_text("creation_rules: []\n")
+    host = GitOpsHost(top=top, signed=signed, answers={"veyq's domain": "veyq.example.org"})
+    rc, out = run_main(["--source", mirror, "init", "--gitops", d6, "--name", "enter"], host)
+    values = (d6 / "values.yaml").read_text() if (d6 / "values.yaml").exists() else ""
+    check("init with Enter for every offer: the cluster's one GatewayClass, Traefik's namespace and label, acme while "
+          "cert-manager runs, sops beside a .sops.yaml — only the domain typed",
+          rc == 0 and "className: traefik" in values and "kubernetes.io/metadata.name: traefik" in values
+          and "app.kubernetes.io/name: traefik" in values and "mode: per-domain" in values
+          and "storeDomain: store.veyq.example.org" in values
+          and "email: owner@example.org" in values
+          and json.loads((d6 / vc.GITOPS_FILE).read_text())["secrets"] == "sops", out[-500:])
+    rc, out = run_main(["--source", mirror, "init", "--gitops", top / "apps" / "veyq-nodomain", "--name", "nodomain"],
+                       GitOpsHost(top=top, signed=signed))
+    check("init refuses a question with no offer and no answer (the domain), naming the flag",
+          rc == 1 and "--domain is required" in out and not (top / "apps" / "veyq-nodomain").exists(), out[-300:])
     host = GitOpsHost(top=top, signed=signed, cluster={
         "get appprojects": (0, "appproject.argoproj.io/default\nappproject.argoproj.io/a\nappproject.argoproj.io/b\n")})
     rc, out = run_main(["--source", mirror, "init", "--gitops", top / "apps" / "veyq-two", "--name", "two-projects",
