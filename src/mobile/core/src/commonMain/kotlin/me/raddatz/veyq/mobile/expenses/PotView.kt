@@ -126,6 +126,14 @@ class PotView internal constructor(session: Source) {
     class HistoryRow(val revision: Long, val kind: HistoryKind, val title: String?, val amount: Long?, val at: Long, val writer: String?)
     enum class HistoryKind { MONEY, DELETED, OTHER, UNREADABLE }
 
+    /** A history row's line: a money revision's title and amount, else what it was. */
+    fun historyLine(r: HistoryRow): List<me.raddatz.veyq.mobile.words.Piece> = when (r.kind) {
+        HistoryKind.MONEY -> listOfNotNull(r.title?.let { me.raddatz.veyq.mobile.words.Piece.Plain(it) }, r.amount?.let { me.raddatz.veyq.mobile.words.Piece.Money(it, currency, minorUnits) })
+        HistoryKind.DELETED -> listOf(me.raddatz.veyq.mobile.words.Piece.Said(me.raddatz.veyq.mobile.words.Notice(me.raddatz.veyq.mobile.words.Msg.HISTORY_DELETED)))
+        HistoryKind.UNREADABLE -> listOf(me.raddatz.veyq.mobile.words.Piece.Said(me.raddatz.veyq.mobile.words.Notice(me.raddatz.veyq.mobile.words.Msg.HISTORY_UNREADABLE)))
+        HistoryKind.OTHER -> listOf(me.raddatz.veyq.mobile.words.Piece.Said(me.raddatz.veyq.mobile.words.Notice(me.raddatz.veyq.mobile.words.Msg.HISTORY_OTHER)))
+    }
+
     /** Every revision the Pot holds of [entryId], newest first (`EntryHistory.vue`). */
     fun history(entryId: String): List<HistoryRow> = heldById[entryId].orEmpty().sortedByDescending { it.revision }.map { r ->
         val writer = r.writer?.takeIf { it.startsWith("user:") }?.let { writerNames[it.removePrefix("user:")] }
@@ -289,6 +297,14 @@ class PotView internal constructor(session: Source) {
     /** A record the ledger check names (ADR 0108 decision 5): an entry by its title, a person by name, else what it was. */
     class Missing(val kind: MissingKind, val name: String)
     enum class MissingKind { ENTRY, TRANSFER, PERSON, ERASED_PERSON, UNKNOWN }
+
+    /** What the ledger's notice names a missing record by: its name, else what it was. */
+    fun missingName(m: Missing): me.raddatz.veyq.mobile.words.Piece = when (m.kind) {
+        MissingKind.TRANSFER -> me.raddatz.veyq.mobile.words.Piece.Said(me.raddatz.veyq.mobile.words.Notice(me.raddatz.veyq.mobile.words.Msg.POT_TRANSFER))
+        MissingKind.ERASED_PERSON -> me.raddatz.veyq.mobile.words.Piece.Said(me.raddatz.veyq.mobile.words.Notice(me.raddatz.veyq.mobile.words.Msg.POT_DELETED_PERSON))
+        MissingKind.UNKNOWN -> me.raddatz.veyq.mobile.words.Piece.Said(me.raddatz.veyq.mobile.words.Notice(me.raddatz.veyq.mobile.words.Msg.POT_LEDGER_UNKNOWN_ENTRY))
+        else -> me.raddatz.veyq.mobile.words.Piece.Plain(m.name)
+    }
 
     /** What the last read found missing, altered or unreadable, by record: the notice above the Pot ("the balances may be
      *  wrong"), empty when the ledger is complete. */

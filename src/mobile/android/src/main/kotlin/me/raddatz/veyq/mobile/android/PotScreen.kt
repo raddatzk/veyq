@@ -108,12 +108,7 @@ private fun LedgerNotice(view: PotView) {
     Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp)) {
         Text(stringResource(R.string.pot_ledger_missing), color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodyMedium)
         for (m in view.missing) {
-            val name = when (m.kind) {
-                PotView.MissingKind.TRANSFER -> stringResource(R.string.pot_transfer)
-                PotView.MissingKind.ERASED_PERSON -> stringResource(R.string.pot_deleted_person)
-                PotView.MissingKind.UNKNOWN -> stringResource(R.string.pot_ledger_unknown_entry)
-                else -> m.name
-            }
+            val name = piece(view.missingName(m))
             Text("• $name", color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
         }
     }

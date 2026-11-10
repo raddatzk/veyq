@@ -24,12 +24,7 @@ struct EntryHistory: View {
     }
 
     private func what(_ r: PotView.HistoryRow) -> String {
-        switch r.kind {
-        case .money: [r.title, r.amount.map { money($0.int64Value, view.currency, view.minorUnits) }].compactMap { $0 }.joined(separator: " · ")
-        case .deleted: say(.historyDeleted)
-        case .unreadable: say(.historyUnreadable)
-        default: say(.historyOther)
-        }
+        view.historyLine(r: r).map { say(piece: $0) }.joined(separator: " · ")
     }
 }
 

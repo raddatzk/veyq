@@ -152,4 +152,21 @@ class PotViewEntriesTest {
         assertEquals(me.raddatz.veyq.mobile.words.Notice(me.raddatz.veyq.mobile.words.Msg.POT_DELETED_PERSON), v.personWords(""))
         assertEquals(me.raddatz.veyq.mobile.words.Piece.Plain("Mine"), PotView(PotView.Source("T", PotMeta(base, listOf("mine" to "Mine")), null, LedgerCheck.of(emptyList()), null, emptySet(), true)).categoryLabel("mine"))
     }
+
+    @Test
+    fun aHistoryRowAndAMissingRecordAreSaidByTheCore() {
+        val v = view(people + listOf(Rev(dinner, 1, expense("Dinner", 300)), Rev(dinner, 2, Deleted)))
+        val said = { m: me.raddatz.veyq.mobile.words.Msg -> me.raddatz.veyq.mobile.words.Piece.Said(me.raddatz.veyq.mobile.words.Notice(m)) }
+        assertEquals(
+            listOf(me.raddatz.veyq.mobile.words.Piece.Plain("Dinner"), me.raddatz.veyq.mobile.words.Piece.Money(300, "EUR", 2)),
+            v.historyLine(PotView.HistoryRow(1, PotView.HistoryKind.MONEY, "Dinner", 300, 0, null)),
+        )
+        assertEquals(listOf(said(me.raddatz.veyq.mobile.words.Msg.HISTORY_DELETED)), v.historyLine(PotView.HistoryRow(2, PotView.HistoryKind.DELETED, null, null, 0, null)))
+        assertEquals(said(me.raddatz.veyq.mobile.words.Msg.POT_DELETED_PERSON), v.missingName(PotView.Missing(PotView.MissingKind.ERASED_PERSON, "")))
+        assertEquals(me.raddatz.veyq.mobile.words.Piece.Plain("Ben"), v.missingName(PotView.Missing(PotView.MissingKind.PERSON, "Ben")))
+        assertTrue(me.raddatz.veyq.mobile.session.NodeReport.canSend("SPAM", "it is spam", goodFaith = true))
+        assertFalse(me.raddatz.veyq.mobile.session.NodeReport.canSend("SPAM", "   ", goodFaith = true))
+        assertFalse(me.raddatz.veyq.mobile.session.NodeReport.canSend(null, "x", goodFaith = true))
+        assertFalse(me.raddatz.veyq.mobile.session.NodeReport.canSend("SPAM", "x", goodFaith = false))
+    }
 }

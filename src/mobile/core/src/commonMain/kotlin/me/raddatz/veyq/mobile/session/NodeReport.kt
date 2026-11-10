@@ -35,6 +35,9 @@ object NodeReport {
         return Published(k.epoch, unb64(k.kemPublicKey))
     }
 
+    /** Whether a report may be sent: a category chosen, a reason given, good faith confirmed (the web's form). */
+    fun canSend(category: String?, reason: String, goodFaith: Boolean): Boolean = category != null && reason.isNotBlank() && goodFaith
+
     /** What is reported of the node: it and everything in it, or only its name. */
     enum class Scope { WHOLE, NAME }
 

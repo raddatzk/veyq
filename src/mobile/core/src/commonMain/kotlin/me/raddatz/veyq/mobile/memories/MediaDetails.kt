@@ -202,6 +202,17 @@ object MediaDetails {
     /** Who added a medium: a member by name, one who left, or a link's guest (its name is the buckets', not read here yet). */
     class Uploader(val kind: UploaderKind, val name: String? = null)
 
+    /** Who added a medium, as its details say it: a member by name, one who left, a guest. */
+    fun uploaderWords(u: Uploader): me.raddatz.veyq.mobile.words.Piece = when (u.kind) {
+        UploaderKind.MEMBER -> me.raddatz.veyq.mobile.words.Piece.Plain(u.name.orEmpty())
+        UploaderKind.FORMER -> me.raddatz.veyq.mobile.words.Piece.Said(me.raddatz.veyq.mobile.words.Notice(me.raddatz.veyq.mobile.words.Msg.MEMORY_UPLOADER_FORMER))
+        UploaderKind.GUEST -> me.raddatz.veyq.mobile.words.Piece.Said(me.raddatz.veyq.mobile.words.Notice(me.raddatz.veyq.mobile.words.Msg.MEMORY_UPLOADER_GUEST))
+    }
+
+    /** Where the uploader's row stands among [rows]: before the place, as on the web; after the last where none is. */
+    fun uploaderAt(rows: List<Row>): Int =
+        rows.indexOfFirst { it.field == Field.PLACE || it.field == Field.LOCATION }.let { if (it < 0) rows.size else it }
+
     /**
      * Who added each of [items], by its owner key (`useUploaderNames`): `user:<id>` a member, named by core's display
      * rule while in the space, else a former member; `share:<identity>` a link's guest. Empty where the space's members could

@@ -147,7 +147,7 @@ private struct LedgerNotice: View {
         VStack(alignment: .leading, spacing: 4) {
             Text(say(.potLedgerMissing)).font(.subheadline)
             ForEach(Array(view.missing.enumerated()), id: \.offset) { _, m in
-                Text(verbatim: "• \(Self.name(m))").font(.caption)
+                Text(verbatim: "• \(Self.name(m, view))").font(.caption)
             }
         }
         .foregroundStyle(Role.danger)
@@ -156,14 +156,7 @@ private struct LedgerNotice: View {
         .padding(.vertical, 8)
     }
 
-    static func name(_ m: PotView.Missing) -> String {
-        switch m.kind {
-        case .transfer: say(.potTransfer)
-        case .erasedPerson: say(.potDeletedPerson)
-        case .unknown: say(.potLedgerUnknownEntry)
-        default: m.name
-        }
-    }
+    static func name(_ m: PotView.Missing, _ view: PotView) -> String { say(piece: view.missingName(m: m)) }
 }
 
 private struct EntriesList: View {

@@ -405,18 +405,14 @@ private struct MediaDetailsView: View {
 
     private var uploader: String? {
         guard let key = item.ownerKey, let u = uploaders[key] else { return nil }
-        switch u.kind {
-        case .member: return u.name
-        case .former: return say(.memoryUploaderFormer)
-        default: return say(.memoryUploaderGuest)
-        }
+        return say(piece: MediaDetails.shared.uploaderWords(u: u))
     }
 
     var body: some View {
         NavigationStack {
             let rows = self.rows
             // who added it stands before the place, as on the web
-            let placeAt = rows.firstIndex { $0.field == .place || $0.field == .location } ?? rows.count
+            let placeAt = Int(MediaDetails.shared.uploaderAt(rows: rows))
             List {
                 if rows.isEmpty && uploader == nil {
                     Text(say(.memoryNoDetail)).foregroundStyle(Role.muted)

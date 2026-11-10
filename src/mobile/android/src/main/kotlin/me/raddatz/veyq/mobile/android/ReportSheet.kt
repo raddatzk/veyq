@@ -133,7 +133,7 @@ internal fun ReportSheet(ref: me.raddatz.veyq.mobile.navigation.NodeAt, model: A
                             if (r.outcome == NodeReport.Outcome.SENT) sent = r else error = me.raddatz.veyq.mobile.words.Notices.reportRefused(r.outcome)?.let { context.text(it) }
                         }
                     },
-                    enabled = !sending && category != null && reason.isNotBlank() && goodFaith,
+                    enabled = !sending && NodeReport.canSend(category, reason, goodFaith),
                 ) { Text(stringResource(R.string.report_send)) }
             }
         }

@@ -118,7 +118,7 @@ struct ReportSheet: View {
                 } label: {
                     HStack { Spacer(); if sending { ProgressView() } else { Text(say(.reportSend)).fontWeight(.semibold) }; Spacer() }
                 }
-                .disabled(sending || category == nil || reason.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || !goodFaith)
+                .disabled(sending || !NodeReport.shared.canSend(category: category, reason: reason, goodFaith: goodFaith))
             }
         }
     }

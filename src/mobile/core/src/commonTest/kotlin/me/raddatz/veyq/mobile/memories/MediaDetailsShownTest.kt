@@ -35,4 +35,14 @@ class MediaDetailsShownTest {
         assertEquals(listOf("c1"), MediaDetails.chapters("MEMORY", "m", nodes).map { it.nodeId })
         assertEquals(emptyList(), MediaDetails.chapters("CHAPTER", "m", nodes))
     }
+
+    @Test
+    fun the_uploader_is_named_and_stands_before_the_place() {
+        assertEquals(me.raddatz.veyq.mobile.words.Piece.Plain("Anna"), MediaDetails.uploaderWords(MediaDetails.Uploader(MediaDetails.UploaderKind.MEMBER, "Anna")))
+        assertEquals(me.raddatz.veyq.mobile.words.Piece.Said(Notice(Msg.MEMORY_UPLOADER_FORMER)), MediaDetails.uploaderWords(MediaDetails.Uploader(MediaDetails.UploaderKind.FORMER)))
+        assertEquals(me.raddatz.veyq.mobile.words.Piece.Said(Notice(Msg.MEMORY_UPLOADER_GUEST)), MediaDetails.uploaderWords(MediaDetails.Uploader(MediaDetails.UploaderKind.GUEST, "x")))
+        val rows = listOf(Row(Field.CAMERA, "Pixel"), Row(Field.PLACE, "Berlin"), Row(Field.ALTITUDE, "30 m"))
+        assertEquals(1, MediaDetails.uploaderAt(rows))
+        assertEquals(1, MediaDetails.uploaderAt(listOf(Row(Field.CAMERA, "Pixel"))))
+    }
 }

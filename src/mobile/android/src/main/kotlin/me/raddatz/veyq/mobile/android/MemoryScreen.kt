@@ -411,14 +411,9 @@ private fun MediaDetailsSheet(item: MemoryMedia.Item, model: AppModel, uploaders
     val exif by produceState<MediaDetails.Exif?>(null, item.mediaId) { value = model.mediaExif(item) }
     val rows = MediaDetails.rows(item, exif)
     val uploader = item.ownerKey?.let { uploaders[it] }
-    val uploaderName = when (uploader?.kind) {
-        MediaDetails.UploaderKind.MEMBER -> uploader.name
-        MediaDetails.UploaderKind.FORMER -> stringResource(R.string.memory_uploader_former)
-        MediaDetails.UploaderKind.GUEST -> stringResource(R.string.memory_uploader_guest)
-        null -> null
-    }
+    val uploaderName = uploader?.let { piece(MediaDetails.uploaderWords(it)) }
     // who added it stands before the place, as on the web
-    val placeAt = rows.indexOfFirst { it.field == MediaDetails.Field.PLACE || it.field == MediaDetails.Field.LOCATION }.let { if (it < 0) rows.size else it }
+    val placeAt = MediaDetails.uploaderAt(rows)
     Column(Modifier.fillMaxWidth().verticalScroll(rememberScrollState()).padding(bottom = 24.dp)) {
         Text(stringResource(R.string.memory_details), style = MaterialTheme.typography.titleMedium, modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp))
         if (rows.isEmpty() && uploaderName == null) {

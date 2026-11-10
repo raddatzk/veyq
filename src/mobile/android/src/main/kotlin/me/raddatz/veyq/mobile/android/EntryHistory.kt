@@ -39,14 +39,7 @@ internal fun EntryHistory(view: PotView, entryId: String) {
     val palette = LocalPalette.current
     for (r in view.history(entryId)) {
         Column(Modifier.fillMaxWidth().padding(vertical = 4.dp)) {
-            Text(
-                when (r.kind) {
-                    PotView.HistoryKind.MONEY -> listOfNotNull(r.title, r.amount?.let { money(it, view.currency, view.minorUnits) }).joinToString(" · ")
-                    PotView.HistoryKind.DELETED -> stringResource(R.string.history_deleted)
-                    PotView.HistoryKind.UNREADABLE -> stringResource(R.string.history_unreadable)
-                    PotView.HistoryKind.OTHER -> stringResource(R.string.history_other)
-                },
-            )
+            Text(view.historyLine(r).map { piece(it) }.joinToString(" · "))
             Text(
                 "${r.writer ?: stringResource(R.string.history_unknown_writer)}, ${localDateTime(r.at)}",
                 style = MaterialTheme.typography.bodySmall, color = role(palette.muted),
