@@ -423,12 +423,48 @@ gate (they arrive with the first C# project); `BridgeHeaderTest` against both he
   deprecation (only the existing disabled-test-task notices). No new dependency or target, so no verification-metadata
   write.
 
-### Phase 3 — The Windows app's ground
+### Phase 3 — The Windows app's ground — built (2026-11-10), its run/drive proof waits for O5 (Q4)
 
 D8's generators; the WinUI project with an empty window that starts the core and shows its version's words; the guards
 and the launcher (D10); `run.py build`/`run`/`drive`; `Veyq.Drive`; the scheduled tasks; the tunnel. First
 measurement: an unpackaged, self-contained WinUI build with the .NET SDK alone (`dotnet build -r win-x64`) on the
 ARM64 VM — stop and ask if it needs more (O4).
+
+**Built (Phase 3):**
+- **The first measurement passed:** `dotnet build Veyq -r win-x64` on the ARM64 VM (SDK 10.0.404) built the unpackaged,
+  self-contained WinUI app with the .NET SDK and the NuGet packages alone — no Visual Studio, no Windows SDK installer
+  (XAML compiler, makepri and the projection all come from the packages); `bin\…\win-x64` holds `veyq.exe`, `veyq.pri`,
+  `coreclr.dll` and the App SDK's DLLs (279 files), its `runtimeconfig.json` `includedFrameworks` .NET 10.0.15. O4 stays
+  "not needed".
+- **The lock file is one for both hosts:** the Mac's restore (`EnableWindowsTargeting`) wrote `Veyq/packages.lock.json`
+  and the VM's `--locked-mode` restore accepted it. Neither the runtime packs nor `Microsoft.Windows.SDK.NET.Ref` are in
+  it (they are SDK-chosen downloads, not package references), so the self-contained output is the building SDK's
+  runtime — the VM's, 10.0.15. What `.WinUI` pulls beside the three references: `.Base`, `.InteractiveExperiences`
+  (2.6.5), `Microsoft.Web.WebView2` 1.0.3719.77, `Microsoft.Windows.SDK.BuildTools.MSIX` 1.7.251221100; all pass the gate.
+- **Words (D8):** `.resw` resource names take `#` (`memory_items#one` reads back through MRT Core). Which language's plural
+  rule applies is said by the catalog itself: each `.resw` carries `_language` (no key can be named so: keys start with a
+  letter), so a German catalog's forms are never chosen by another language's rule. An untranslated key (a name) is
+  written into every language's catalog. `Words.g.cs` has an English fallback per key, as gettext's `msgid`; the test
+  asserts German for that reason. The app's `.pri` is `veyq.pri` (the assembly's name), read by MRT Core's
+  `ResourceManager()` beside the exe; `Veyq.Tests` opens the same file by path (`VEYQ_PRI`).
+- **Sizes have one culture, the user's:** `StrFormatByteSizeEx` ignores `SetThreadUILanguage` and `SetThreadLocale`,
+  before and after its first call (measured on the VM: `1,50 KB` and `12 Bytes` under every switch), so `SaidTest`
+  asserts a size in the user's culture (de-DE on the VM); money and days are asserted in de-DE and en-US.
+- **Veyq.Tests** compiles the app's `Words.cs`, `MrtWords.cs`, `Said.cs` and the generated `Words.g.cs` rather than
+  referencing the WinUI exe; it is an x64 MSTest executable like `Veyq.Bridge.Tests`.
+- **The window** shows the app's name and the core's state in words (`status`: `Opening…`, then the session's gate —
+  `Sign in` at `SignIn`); `Log.cs` writes the gates by kind. `CreateAction.cs` exists already (the guard's block), used
+  by nothing until Phase 4.
+- **Veyq.Drive** is one tool for both tasks: `--launch <file>` (reads the app's exe and environment from a file, deletes
+  it, starts the app: the start wrapper D9 names, so a secret never reaches a command line) and `--drive <file>`
+  (the steps). `net10.0-windows` with `UseWPF` (UIA client and the PNG encoder), framework-dependent, ARM64-native on the
+  VM; a `WinExe`, so no console window covers the app. `shot` copies the screen at the window's DWM bounds.
+- **The scheduled tasks were refused to this session's agent** (its auto-mode classifier: "Unauthorized Persistence"),
+  so `run.py register` holds the registration for the owner to run (O5, as D9 foresaw). Without them nothing reaches
+  session 1: the app started from ssh (session 0) crashed at once, `0xC000027B` in `combase.dll`, WER's `P7` `80070005`
+  (access denied; Application log events 1000/1001) — no evidence about the app either way.
+- **Guards (D10):** windows-literal also covers `Label`, `Description` and `ToolTipService.ToolTip` (an `AppBarButton`'s
+  words are its `Label`) and a literal handed to `CreateAction.Button`/`.Menu`; C# is read by the Kotlin lexer.
 
 **Done when:**
 - `run.py build` is green: the round trip; the words — every key German and English, a plural on both sides of 1,
@@ -438,6 +474,29 @@ ARM64 VM — stop and ask if it needs more (O4).
 - Both guards are green with every new rule bitten; `validate_guard_gaps.py` has run once.
 - None of `.resw`, `Words.g.cs`, `Theme.xaml` or `Bridge.g.cs` is tracked: `git ls-files src/mobile/windows | grep -E
   '\.resw$|\.g\.cs$|Theme\.xaml$'` is empty.
+
+**Met (2026-11-10) — all but the second, which waits for O5 (Q4):**
+- [x] `/usr/bin/python3 src/mobile/windows/run.py build` → exit 0: `no package is deprecated or vulnerable` for each of
+  the four projects; the Mac's `Veyq.Bridge.Tests` `total: 3, succeeded: 2` (`CoreTest` Windows only); on the VM the app
+  and Veyq.Drive built, `Veyq.Bridge.Tests` `total: 3, succeeded: 3`, `Veyq.Tests` `total: 6, succeeded: 6` —
+  `EveryKeySaysItsWordsInEnglishAndGerman` (every key, plurals at 1, 2 and 0, through the app's `veyq.pri`; more than half
+  the German words differ from the English fallback, asserted), `APluralTakesItsFormOnBothSidesOfOneInGerman`
+  (`1 Objekt`, `2 Objekte`), money in de-DE and en-US (`1.234,56 €`, `€1,234.56`, a foreign `¥` in de-DE), days in both,
+  sizes in the VM's de-DE (`1,50 KB`; one culture only, see Built). Bite: the generator writing the English into the
+  German catalog → `drawer_open in de, n = 0`, expected `Menü öffnen`, actual `Open menu`, `failed: 1`, exit 2; restored
+  by snapshot (`cmp` equal) and green again.
+- [ ] `run.py run` and `run.py drive tree` / `shot`: built and run up to the scheduled task, which is not registered —
+  `veyq: the scheduled task veyq-app did not run: register it once (run.py register)`, exit 3 (Q4).
+- [x] `validate_mobile_words.py` and `validate_mobile_platform_guidelines.py` green; each new rule bitten red and green
+  on the restore (snapshot, `cmp` equal, `git status --porcelain` unchanged): windows-literal (a C# `Text = "Hello
+  world"`, a `$"Open {1} now"` to `AutomationProperties.SetName`, a XAML `Text="Opening the app"`, a
+  `<TextBlock>Opening</TextBlock>`), windows-resw (a `Strings/de-DE/Resources.resw`), windows-block (`Symbol.Add` in
+  `MainWindow.xaml.cs`, `Icon="Add"` in XAML, `CreateAction.cs` without `Symbol.Add` and `MenuFlyout`: 2 violations),
+  windows-floating-button (a XAML `Button VerticalAlignment="Bottom"`, a C# variable given it, an initializer with it).
+  `validate_guard_gaps.py --force` ran once: `guard gaps OK: 104 pinned case(s) hold`.
+- [x] `git ls-files src/mobile/windows | grep -E '\.resw$|\.g\.cs$|Theme\.xaml$'` → empty (exit 1).
+- Launcher: `./gradlew -q windows:tasks --group veyq` lists `bridge`, `build`, `coreTest`, `run`; `--warning-mode all`
+  printed no deprecation. `validate_build_input_pins.py` green.
 
 ### Phase 4 — The slice: sign-in, the shell, Home, a Pot, Search
 
@@ -493,6 +552,14 @@ runs them, `validate_changes.py` among them), and every "measured" in the touche
   does not arise — measured: `./configure --host=x86_64-unknown-linux-gnu` with `build_libsodium.py`'s flags says
   `checking if _xgetbv() is available... no` and `checking whether we can assemble AVX opcodes... yes`. An x86-64 Linux PC without AVX is refused as the Pi 4 is; the docs phase puts both refusals in one
   row. Linux x86-64 has still never been run.
+- **Q4 — Registering the two scheduled tasks (open, 2026-11-10).** The implementing agent's auto-mode classifier refused
+  `Register-ScheduledTask` over ssh ("Unauthorized Persistence"), as D9 foresaw. Recommendation: the owner runs
+  `python3 src/mobile/windows/run.py register` once from this Mac (it registers `veyq-app` and `veyq-drive`, interactive
+  only, as `kevin`, on demand, each running `F:\veyq\drive\Veyq.Drive.exe`; `run.py build` has put that exe there), then
+  Phase 3's last Done-when is `run.py run` (in the background: it holds the tunnel) and `run.py drive tree "shot
+  ground.png"`, before Phase 4 starts. Alternatively the owner adds a permission rule for that one command. Running
+  an existing task (`schtasks /Run`) is what every later `run`/`drive` does; whether the classifier passes that too is
+  unmeasured.
 
 ## Retrospective
 
@@ -527,3 +594,22 @@ runs them, `validate_changes.py` among them), and every "measured" in the touche
   reason (NuGet's audit refused the restore before the gate looked). The bite was what showed it — the gate now reads
   the locked graph with `--no-restore`. And the VM's dotnet writes UTF-8 where Phase 1's `run.py` reads CP850:
   English words (`DOTNET_CLI_UI_LANGUAGE`) avoid the question for dotnet's own output.
+
+### Phase 3 (2026-11-10)
+
+- **The phase's riskiest unknown was the cheapest to settle.** The CR made "does WinUI build with the SDK alone" Phase
+  3's first measurement and a stop-and-ask; a bare project answered it in one push (20 s build on the VM), so everything
+  after was ordinary work. Worth keeping: put the question that could stop a phase first, with a five-file probe.
+- **The persistence step was foreseeable as a refusal and was.** The brief and D9 had already named the fallback (the
+  owner registers), so the refusal cost one command, not a redesign — but it leaves the phase's visible proof undone.
+  Next time a CR needs a standing change on a host (a task, a service, a rule), make it an owner step done *before* the
+  implementing session, as O1–O3 were, rather than a step the agent tries.
+- **One tool, two modes, beat two tools.** D9 sketched a start wrapper and a driver; the wrapper became Veyq.Drive's
+  `--launch` mode, which removed a PowerShell execution-policy question and a batch file's quoting of secrets. A CR that
+  names a component's job rather than its form leaves room for that.
+- **A formatter's culture is not always switchable** (`StrFormatByteSizeEx`): "tested in two cultures" was written
+  from the other two formatters' shape. The probe took two VM calls; the CR now says sizes have one culture.
+- **Process:** a XAML comment may not contain `--` (WMC9997): a comment naming a command-line flag broke the first
+  app build. And generated C# needs its own `#nullable enable` (CS8669), as Bridge.g.cs already had — the second
+  generator to meet it; a third should copy the header of the first.
+
