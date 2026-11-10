@@ -59,7 +59,7 @@ struct DropBoxScreen: View {
         }
         .navigationTitle(ref.name)
         // read again whenever the lists are
-        .task(id: model.rowDetails.count) { folders = await model.dropBoxFolders(scopeId: ref.scopeId, nodeId: ref.nodeId) }
+        .task(id: model.listsRevision) { folders = await model.dropBoxFolders(scopeId: ref.scopeId, nodeId: ref.nodeId) }
         .sheet(item: Binding(get: { movingOut.map { MovingOut(folder: $0) } }, set: { if $0 == nil { movingOut = nil } })) { m in
             NodeMoveSheet(model: model, ref: NodeAt(scopeId: m.folder.node.scopeId, nodeId: m.folder.node.id, kind: m.folder.node.kind, name: m.folder.label))
                 .onDisappear { Task { folders = await model.dropBoxFolders(scopeId: ref.scopeId, nodeId: ref.nodeId) } }

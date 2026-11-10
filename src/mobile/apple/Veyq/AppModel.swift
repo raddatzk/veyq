@@ -761,6 +761,9 @@ final class AppModel {
 
     /// What each object's row says beside its name, by node id (an application's answer: Expenses' `PotRows`).
     private(set) var rowDetails: [String: [String]] = [:]
+    /// Counts each read of the lists: a page of what lies below its node reads again on every one (as Android's does),
+    /// not only when the number of rows moved.
+    private(set) var listsRevision = 0
 
     /// "Add files only" on folder `folder`: a drop box named `name` in it with its first link (`DropBoxes.create`); the lists
     /// are read anew.
@@ -796,6 +799,7 @@ final class AppModel {
         rows = read
         files = read.files
         rowDetails = read.details.mapValues { $0.map { say(piece: $0) } }
+        listsRevision += 1
         await readCovers(t, named: read.covers)
     }
 

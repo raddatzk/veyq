@@ -76,7 +76,7 @@ struct MemoryScreen: View {
             model.uploadMedia(scopeId: ref.scopeId, nodeId: ref.nodeId, label: ref.name, urls: urls, fromPhotos: false)
         })
         // read again whenever the lists are, and when a medium of this device is in
-        .task(id: "\(model.rowDetails.count)/\(model.galleryRevision)") {
+        .task(id: "\(model.listsRevision)/\(model.galleryRevision)") {
             if let read = await model.memoryGallery(scopeId: ref.scopeId, nodeId: ref.nodeId) { gallery = read; failed = false } else { failed = true }
             chapters = MediaDetails.shared.chapters(
                 memoryKind: ref.kind, memoryId: ref.nodeId, scopeNodes: ref.kind == "MEMORY" ? await model.scopeNodes(ref.scopeId) : []
