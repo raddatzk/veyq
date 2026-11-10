@@ -31,30 +31,63 @@ internal sealed partial class AppWindow(string process)
         }
     }
 
+    /// <summary>The first element with AutomationId <paramref name="id"/> in any of the app's top-level windows: a WinUI
+    /// flyout, a menu or a suggestion list is a window of its own beside the main one.</summary>
     private AutomationElement Find(string id, int seconds = 5)
     {
         var deadline = DateTime.UtcNow.AddSeconds(seconds);
+        var byId = new PropertyCondition(AutomationElement.AutomationIdProperty, id);
         while (true)
         {
-            var found = Window().FindFirst(TreeScope.Descendants, new PropertyCondition(AutomationElement.AutomationIdProperty, id));
-            if (found is not null) return found;
+            foreach (var p in Process.GetProcessesByName(process))
+            {
+                var windows = AutomationElement.RootElement.FindAll(TreeScope.Children,
+                    new PropertyCondition(AutomationElement.ProcessIdProperty, p.Id));
+                foreach (AutomationElement w in windows)
+                {
+                    var found = w.FindFirst(TreeScope.Descendants, byId);
+                    if (found is not null) return found;
+                }
+            }
             if (DateTime.UtcNow > deadline) throw new InvalidOperationException($"no element with AutomationId {id}");
             Thread.Sleep(200);
         }
     }
 
+    /// <summary>Every top-level window of the app but the main one (popups: a flyout, a menu, a suggestion list).</summary>
+    private string Popups(AutomationElement main)
+    {
+        var text = new StringBuilder();
+        foreach (var p in Process.GetProcessesByName(process))
+        {
+            foreach (AutomationElement w in AutomationElement.RootElement.FindAll(TreeScope.Children,
+                         new PropertyCondition(AutomationElement.ProcessIdProperty, p.Id)))
+            {
+                if (!Automation.Compare(w, main)) Walk(TreeWalker.ControlViewWalker, w, 0, text);
+            }
+        }
+        return text.ToString();
+    }
+
     public string Step(string line)
     {
         var parts = line.Split(' ', 3, StringSplitOptions.RemoveEmptyEntries);
+        // an AutomationId may hold spaces (a name): invoke and select take the rest of the line
+        var rest = line[parts[0].Length..].Trim();
         switch (parts[0])
         {
             case "tree":
-                return Tree(Window());
+            {
+                var main = Window();
+                return Tree(main) + Popups(main);
+            }
             case "invoke":
-                Invoke(Find(parts[1]));
+                Invoke(Find(rest));
+                Thread.Sleep(300);
                 return "";
             case "select":
-                ((SelectionItemPattern)Find(parts[1]).GetCurrentPattern(SelectionItemPattern.Pattern)).Select();
+                ((SelectionItemPattern)Find(rest).GetCurrentPattern(SelectionItemPattern.Pattern)).Select();
+                Thread.Sleep(300);
                 return "";
             case "set":
                 ((ValuePattern)Find(parts[1]).GetCurrentPattern(ValuePattern.Pattern)).SetValue(parts.Length > 2 ? parts[2] : "");
@@ -105,10 +138,19 @@ internal sealed partial class AppWindow(string process)
 
     private static void Walk(TreeWalker walker, AutomationElement e, int depth, StringBuilder text)
     {
-        var c = e.Current;
-        text.Append(' ', depth * 2).Append(c.ControlType.ProgrammaticName.Replace("ControlType.", ""));
-        if (c.Name.Length > 0) text.Append(" \"").Append(c.Name).Append('"');
-        if (c.AutomationId.Length > 0) text.Append(" #").Append(c.AutomationId);
+        AutomationElement.AutomationElementInformation c;
+        try
+        {
+            c = e.Current;
+        }
+        catch (ElementNotAvailableException)
+        {
+            return; // gone while the tree was read
+        }
+        // a WinUI element may report no control type (or no name) to the managed client
+        text.Append(' ', depth * 2).Append(c.ControlType?.ProgrammaticName.Replace("ControlType.", "") ?? "Element");
+        if (!string.IsNullOrEmpty(c.Name)) text.Append(" \"").Append(c.Name).Append('"');
+        if (!string.IsNullOrEmpty(c.AutomationId)) text.Append(" #").Append(c.AutomationId);
         if (e.TryGetCurrentPattern(ValuePattern.Pattern, out var value)) text.Append(" value=\"").Append(((ValuePattern)value).Current.Value).Append('"');
         if (e.TryGetCurrentPattern(SelectionItemPattern.Pattern, out var item) && ((SelectionItemPattern)item).Current.IsSelected) text.Append(" selected");
         if (!c.IsEnabled) text.Append(" disabled");

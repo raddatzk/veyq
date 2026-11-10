@@ -5,9 +5,11 @@
 //   --drive <file>    runs the steps in <file>, one a line, against the app's window, writes what each did to
 //                     <file>.out (UTF-8) and then <file>.done. A step that fails ends the run, said in the output.
 // Steps:
-//   tree                      the window's UIA tree as text: control type, name, AutomationId, value, enabled, bounds
-//   invoke <id>               the element's Invoke (a button), or its Toggle or ExpandCollapse where it has no Invoke
-//   select <id>               the element's SelectionItem.Select (a list entry, a tab, a pane item)
+//   tree                      the window's UIA tree as text: control type, name, AutomationId, value, enabled, bounds;
+//                             then each other top-level window of the app (a flyout, a menu, a suggestion list)
+//   invoke <id>               the element's Invoke (a button), or its Toggle or ExpandCollapse where it has no Invoke;
+//                             the id is the rest of the line (it may hold a name's spaces)
+//   select <id>               the element's SelectionItem.Select (a list entry, a tab, a pane item); the id as invoke's
 //   set <id> <text>           the element's Value.SetValue (an entry)
 //   key <keys>                keys typed into the window, e.g. `ctrl+e`, `enter`, `tab`, `escape`
 //   size <w> <h>              the window restored and resized to w × h (in its own pixels)
@@ -15,7 +17,8 @@
 //   wait <id> [seconds]       until an element with that AutomationId is there (10 s by default)
 //   sleep <ms>                a pause
 //   shot <file>               a PNG of the window as it shows on the screen (the proof, not a probe)
-// An <id> is an AutomationId; a step's words are never typed from anything but the steps file.
+// An <id> is an AutomationId, found in any top-level window of the app; a step's words are never typed from anything
+// but the steps file.
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
