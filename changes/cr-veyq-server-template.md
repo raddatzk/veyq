@@ -56,8 +56,8 @@ anything of this repository by hand; `cr-veyqctl-server-path` drives it.
   the README for operators (what it installs, what each answer is; how veyqctl uses it). · Done when: `copier copy` with
   sample answers renders a repository whose `gitops/` builds with kustomize and helm and whose Ansible passes the syntax
   check.
-- [ ] **2 its CI** — the render-and-check workflow on every push and pull request. · Done when: green on GitHub.
-- [ ] **3 its release** — `release.yml` (manifest, keyless signature, immutable release), the first release `v0.1`
+- [x] **2 its CI** — the render-and-check workflow on every push and pull request. · Done when: green on GitHub.
+- [x] **3 its release** — `release.yml` (manifest, keyless signature, immutable release), the first release `v0.1`
   (owner's go). · Done when: `cosign verify-blob` of the manifest under the workflow identity passes and the tree hash
   matches `git archive` of the named commit.
 - [ ] **4 measured with cr-veyqctl-server-path** — the `raddatz.me` repository (renamed from `affenbande`) rendered from
@@ -89,3 +89,11 @@ Phase 3 (`release.yml`, `scripts/tree_hash.py` — a sorted `<mode> <sha256> <pa
 whose tar may differ between git versions) is written; the first release waits on the owner's go and immutable
 releases switched on in the repository's settings.
 
+Phase 2 and 3 (2026-11-10, owner's go "mach das Release"): checks.yml green on GitHub, both answer sets, ansible-lint
+included (run 42889413487). Pushes to veyq-server start no run — not one of four did, though both workflows are
+registered and active; the checks were started by hand (`workflow_dispatch`, added for that). Why is open: a question
+for the repository's settings, not for the template. The first release is `v0.5` (the minor counts commits since
+VERSION changed, so not `v0.1`), immutable, commit `1ece48b`. Measured with veyqctl's own code
+(`verify_server_template`): the manifest verifies under veyq-server's release identity, the commit cloned has the
+manifest's tree sha256; the same manifest under veyq's identity, and the manifest with one byte changed, are refused
+by cosign.
