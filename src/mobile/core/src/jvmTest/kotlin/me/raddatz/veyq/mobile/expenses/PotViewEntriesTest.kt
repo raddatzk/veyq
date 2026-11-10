@@ -168,5 +168,11 @@ class PotViewEntriesTest {
         assertFalse(me.raddatz.veyq.mobile.session.NodeReport.canSend("SPAM", "   ", goodFaith = true))
         assertFalse(me.raddatz.veyq.mobile.session.NodeReport.canSend(null, "x", goodFaith = true))
         assertFalse(me.raddatz.veyq.mobile.session.NodeReport.canSend("SPAM", "x", goodFaith = false))
+        // the report's room counts as the web's maxlength does (UTF-16 units), its categories in the web's order
+        assertEquals(254, me.raddatz.veyq.mobile.session.NodeReport.contact("ä".repeat(300)).length)
+        assertEquals(2000, me.raddatz.veyq.mobile.session.NodeReport.reason("x".repeat(2500)).length)
+        assertEquals("CHILD_SEXUAL_ABUSE", me.raddatz.veyq.mobile.session.NodeReport.CATEGORIES.first().token)
+        assertEquals(me.raddatz.veyq.mobile.words.Msg.REPORT_CSAM_NOTE, me.raddatz.veyq.mobile.session.NodeReport.note("CHILD_SEXUAL_ABUSE"))
+        kotlin.test.assertNull(me.raddatz.veyq.mobile.session.NodeReport.note("TERMS_BREACH"))
     }
 }

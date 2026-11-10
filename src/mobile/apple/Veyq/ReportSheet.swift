@@ -20,13 +20,7 @@ struct ReportSheet: View {
     @State private var sent: NodeReport.Sent?
 
     /// The categories a report names, in the web's order (`REPORT_CATEGORIES`), with their words.
-    private static var categories: [(String, String)] { [
-        ("CHILD_SEXUAL_ABUSE", say(.reportCatCsam)),
-        ("TERRORIST_CONTENT", say(.reportCatTerror)),
-        ("THREAT_TO_LIFE", say(.reportCatThreat)),
-        ("ILLEGAL_CONTENT", say(.reportCatIllegal)),
-        ("TERMS_BREACH", say(.reportCatTerms)),
-    ] }
+    private static var categories: [(String, String)] { NodeReport.shared.CATEGORIES.map { ($0.token, say($0.word)) } }
 
     var body: some View {
         NavigationStack {
@@ -82,14 +76,14 @@ struct ReportSheet: View {
                     }
                     .buttonStyle(.plain)
                 }
-                if category == "CHILD_SEXUAL_ABUSE" {
-                    Text(say(.reportCsamNote)).font(.caption).foregroundStyle(Role.accent)
+                if let note = NodeReport.shared.note(category: category) {
+                    Text(say(note)).font(.caption).foregroundStyle(Role.accent)
                 }
             }
             Section {
                 TextField(say(.reportReason), text: $reason, axis: .vertical)
                     .lineLimit(4...8)
-                    .onChange(of: reason) { _, new in if new.count > 2000 { reason = String(new.prefix(2000)) } }
+                    .onChange(of: reason) { _, new in let cut = NodeReport.shared.reason(text: new); if cut != new { reason = cut } }
                 Toggle(say(.reportGoodFaith), isOn: $goodFaith)
                     .font(.footnote)
             } footer: {
@@ -103,9 +97,9 @@ struct ReportSheet: View {
                     .textInputAutocapitalization(.never)
                     #endif
                     .autocorrectionDisabled()
-                    .onChange(of: contact) { _, new in if new.utf8.count > 254 { contact = String(new.prefix(254)) } }
+                    .onChange(of: contact) { _, new in let cut = NodeReport.shared.contact(text: new); if cut != new { contact = cut } }
                 // GDPR Art. 13 applies where a contact is taken: the notice's passage on it
-                if let url = URL(string: model.privacyLink("reporter-contact")) {
+                if let url = URL(string: model.privacyLink(NodeReport.shared.PRIVACY_ANCHOR)) {
                     Button(say(.reportPrivacy)) { openURL(url) }.font(.footnote)
                 }
             } footer: {

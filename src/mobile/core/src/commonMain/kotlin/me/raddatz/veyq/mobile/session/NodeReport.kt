@@ -35,6 +35,34 @@ object NodeReport {
         return Published(k.epoch, unb64(k.kemPublicKey))
     }
 
+    /** A category a report names, with its words. */
+    class Category(val token: String, val word: me.raddatz.veyq.mobile.words.Msg)
+
+    const val CSAM = "CHILD_SEXUAL_ABUSE"
+
+    /** The categories in the web's order (`REPORT_CATEGORIES`). */
+    val CATEGORIES: List<Category> = listOf(
+        Category(CSAM, me.raddatz.veyq.mobile.words.Msg.REPORT_CAT_CSAM),
+        Category("TERRORIST_CONTENT", me.raddatz.veyq.mobile.words.Msg.REPORT_CAT_TERROR),
+        Category("THREAT_TO_LIFE", me.raddatz.veyq.mobile.words.Msg.REPORT_CAT_THREAT),
+        Category("ILLEGAL_CONTENT", me.raddatz.veyq.mobile.words.Msg.REPORT_CAT_ILLEGAL),
+        Category("TERMS_BREACH", me.raddatz.veyq.mobile.words.Msg.REPORT_CAT_TERMS),
+    )
+
+    /** What the form says under a chosen category: the note on child sexual abuse material, else nothing. */
+    fun note(category: String?): me.raddatz.veyq.mobile.words.Msg? = if (category == CSAM) me.raddatz.veyq.mobile.words.Msg.REPORT_CSAM_NOTE else null
+
+    /** The reason's and the contact's room, in UTF-16 units as the web's `maxlength` counts them. */
+    const val REASON_MAX = 2000
+    const val CONTACT_MAX = 254
+
+    /** A typed reason or contact cut to its room. */
+    fun reason(text: String): String = text.take(REASON_MAX)
+    fun contact(text: String): String = text.take(CONTACT_MAX)
+
+    /** The privacy notice's passage on a reporter's contact (GDPR Art. 13 where a contact is taken). */
+    const val PRIVACY_ANCHOR = "reporter-contact"
+
     /** Whether a report may be sent: a category chosen, a reason given, good faith confirmed (the web's form). */
     fun canSend(category: String?, reason: String, goodFaith: Boolean): Boolean = category != null && reason.isNotBlank() && goodFaith
 

@@ -40,15 +40,6 @@ import kotlinx.coroutines.launch
 import me.raddatz.veyq.mobile.navigation.ObjectRef
 import me.raddatz.veyq.mobile.session.NodeReport
 
-/** The categories a report names, in the web's order (`REPORT_CATEGORIES`), with their words. */
-private val CATEGORIES = listOf(
-    "CHILD_SEXUAL_ABUSE" to R.string.report_cat_csam,
-    "TERRORIST_CONTENT" to R.string.report_cat_terror,
-    "THREAT_TO_LIFE" to R.string.report_cat_threat,
-    "ILLEGAL_CONTENT" to R.string.report_cat_illegal,
-    "TERMS_BREACH" to R.string.report_cat_terms,
-)
-
 /**
  * Core's report of a node to its server's moderators (the web's `ReportDialog.vue`, ADR 0093): what it is, why (required),
  * the reporter's good-faith confirmation (required), an optional address for the receipt and the decision with the privacy
@@ -91,19 +82,20 @@ internal fun ReportSheet(ref: me.raddatz.veyq.mobile.navigation.NodeAt, model: A
             Text(stringResource(if (whole) R.string.report_scope_whole_hint else R.string.report_scope_name_hint), style = MaterialTheme.typography.bodySmall, color = role(palette.muted))
             Spacer(Modifier.padding(6.dp))
             Text(stringResource(R.string.report_category), fontWeight = FontWeight.SemiBold)
-            for ((token, words) in CATEGORIES) {
+            for (c in NodeReport.CATEGORIES) {
+                val token = c.token
                 Row(
                     Modifier.fillMaxWidth().selectable(selected = category == token, enabled = !sending, role = Role.RadioButton) { category = token },
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
                     RadioButton(selected = category == token, onClick = null, enabled = !sending)
-                    Text(stringResource(words))
+                    Text(say(c.word))
                 }
             }
-            if (category == "CHILD_SEXUAL_ABUSE") Text(stringResource(R.string.report_csam_note), style = MaterialTheme.typography.bodySmall, color = role(palette.accent))
+            NodeReport.note(category)?.let { Text(say(it), style = MaterialTheme.typography.bodySmall, color = role(palette.accent)) }
             Spacer(Modifier.padding(6.dp))
             OutlinedTextField(
-                reason, { if (it.length <= 2000) reason = it }, label = { Text(stringResource(R.string.report_reason)) }, minLines = 4,
+                reason, { reason = NodeReport.reason(it) }, label = { Text(stringResource(R.string.report_reason)) }, minLines = 4,
                 supportingText = { Text(stringResource(R.string.report_reason_hint)) }, modifier = Modifier.fillMaxWidth(), enabled = !sending,
             )
             Row(Modifier.fillMaxWidth().toggleable(value = goodFaith, enabled = !sending, role = Role.Checkbox) { goodFaith = it }, verticalAlignment = Alignment.CenterVertically) {
@@ -111,13 +103,13 @@ internal fun ReportSheet(ref: me.raddatz.veyq.mobile.navigation.NodeAt, model: A
                 Text(stringResource(R.string.report_good_faith), style = MaterialTheme.typography.bodySmall)
             }
             OutlinedTextField(
-                contact, { if (it.length <= 254) contact = it }, label = { Text(stringResource(R.string.report_contact)) }, singleLine = true,
+                contact, { contact = NodeReport.contact(it) }, label = { Text(stringResource(R.string.report_contact)) }, singleLine = true,
                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Email),
                 supportingText = { Text(stringResource(R.string.report_contact_hint)) }, modifier = Modifier.fillMaxWidth(), enabled = !sending,
             )
             // GDPR Art. 13 applies where a contact is taken: the notice's passage on it, in the browser
             TextButton(onClick = {
-                context.startActivity(android.content.Intent(android.content.Intent.ACTION_VIEW, android.net.Uri.parse(model.privacyLink("reporter-contact"))))
+                context.startActivity(android.content.Intent(android.content.Intent.ACTION_VIEW, android.net.Uri.parse(model.privacyLink(NodeReport.PRIVACY_ANCHOR))))
             }) { Text(stringResource(R.string.report_privacy)) }
             error?.let { Text(it, color = role(palette.danger), style = MaterialTheme.typography.bodySmall) }
             Row(Modifier.fillMaxWidth().padding(top = 8.dp), horizontalArrangement = Arrangement.End) {
