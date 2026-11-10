@@ -1597,8 +1597,9 @@ class GitOpsHost(FakeHost):
     def answer(self, cmd) -> tuple:
         joined = " ".join(cmd)
         if cmd[0] == "git":
-            if "--show-toplevel" in cmd:  # as git: `-C` must name a directory that exists
-                return (0, f"{self.top}\n") if pathlib.Path(cmd[2]).is_dir() else (128, "")
+            if "--show-toplevel" in cmd:  # as git: `-C` must name a directory that exists; without it, the cwd's
+                where = pathlib.Path(cmd[cmd.index("-C") + 1]) if "-C" in cmd else pathlib.Path.cwd()
+                return (0, f"{self.top}\n") if where.is_dir() else (128, "")
             if "get-url" in cmd:
                 return 0, "git@example.org:ops/cluster.git\n"
             if "--abbrev-ref" in cmd:
@@ -1807,6 +1808,29 @@ def test_gitops_init(tmp: pathlib.Path) -> None:
           and "generators:" in (d3 / "resources" / "kustomization.yaml").read_text()
           and not (vc.config_dir() / "sops.secrets.json").exists()
           and "sops decrypt --extract" in out, out[-500:])
+    # where init offers veyq's half: beside the Argo CD Applications the repository holds (a repository of its own)
+    layout = tmp / "layout"
+    layout.mkdir()
+    cwd = os.getcwd()
+    os.chdir(layout)
+    try:
+        check("init offers apps/veyq where the repository holds no Applications in one place",
+              vc.suggested_gitops_directory(GitOpsHost(top=layout)) == "apps/veyq")
+        apps = layout / "gitops" / "apps"
+        for app in ("traefik", "cert-manager"):
+            (apps / app).mkdir(parents=True)
+            (apps / app / "application.yaml").write_text("apiVersion: argoproj.io/v1alpha1\nkind: Application\n")
+        (layout / "gitops" / "root.yaml").write_text("apiVersion: argoproj.io/v1alpha1\nkind: Application\n")
+        offered = vc.suggested_gitops_directory(GitOpsHost(top=layout))
+        host = GitOpsHost(top=layout, signed=signed,
+                          answers={"Compose (this host) or GitOps (an Argo CD repository)": "gitops"})
+        rc, out = run_main(["--source", mirror, "init", "--name", "beside", *INIT, "--secrets", "none"], host)
+    finally:
+        os.chdir(cwd)
+    check("init offers veyq's directory beside the repository's Argo CD Applications, and Enter takes it",
+          offered == "gitops/apps/veyq" and rc == 0 and (apps / "veyq" / vc.GITOPS_FILE).is_file(),
+          f"{offered} {out[-300:]}")
+
     # what init offers when it is not told: kubectl's current context, the cluster's one project besides `default`,
     # the newest release's major as the selector
     d5 = top / "apps" / "veyq-offered"

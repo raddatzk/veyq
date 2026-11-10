@@ -44,7 +44,9 @@ veyqctl init --gitops <checkout>/apps/veyq \
 `<checkout>` is your local clone of the repository Argo CD syncs, and `apps/veyq` the directory veyq's half goes into —
 any directory inside the clone but its root, empty or not there yet. `init` without `--gitops` asks Compose or GitOps;
 every option it does not get, the secrets provider included, it asks for at a terminal, and without one it refuses
-and names the flag. Four it offers an answer for, which Enter takes: the **instance's name** on this machine (the
+and names the flag. Five it offers an answer for, which Enter takes: the **directory** (beside the Argo CD
+Applications your repository already holds — `gitops/apps/veyq` where they sit in `gitops/apps/<app>/` — else
+`apps/veyq`), the **instance's name** on this machine (the
 repository's), the **kubeconfig context** of the cluster (kubectl's current one — check it: that is the cluster it
 checks), the **Argo CD project** (the cluster's one project besides `default`, else `default`; a project of your own
 limits which repositories and destinations the Application may use, which `default` does not), and the **selector**

@@ -2017,6 +2017,36 @@ def cmd_use(args: argparse.Namespace, host: Host) -> int:
     return 0
 
 
+ARGO_APPLICATION = re.compile(r"(?m)^apiVersion:\s*argoproj\.io/v1alpha1\s*$[\s\S]*?^kind:\s*Application\s*$")
+
+
+def suggested_gitops_directory(host: Host) -> str:
+    """Where veyq's half fits the repository this runs in, relative to the current directory: beside the Argo CD
+    Applications the repository already holds — `<their common parent>/veyq` when each sits in a directory of its own
+    under one parent (`gitops/apps/traefik/application.yaml` → `gitops/apps/veyq`) — else `apps/veyq`."""
+    result = host.run(["git", "rev-parse", "--show-toplevel"], check=False)
+    top = Path((result.stdout or "").strip()).resolve() if result.returncode == 0 and (result.stdout or "").strip() else None
+    if top is None or not top.is_dir():
+        return "apps/veyq"
+    parents: set[Path] = set()
+    for path in top.rglob("*.yaml"):
+        relative = path.relative_to(top)
+        if len(relative.parts) > 5 or any(part.startswith(".") or part == "node_modules" for part in relative.parts):
+            continue
+        try:
+            if ARGO_APPLICATION.search(path.read_text(errors="replace")[:4000]) and len(relative.parts) >= 3:
+                parents.add(path.parent.parent)
+        except OSError:
+            continue
+    if len(parents) != 1:
+        return "apps/veyq"
+    target = parents.pop() / "veyq"
+    try:
+        return os.path.relpath(target, Path.cwd().resolve())
+    except ValueError:
+        return str(target)
+
+
 def cmd_init(args: argparse.Namespace, host: Host) -> int:
     """Create an instance, list it and make it current: Compose (what `install` does) or GitOps (ADR 0126)."""
     target = "compose" if args.compose else ("gitops" if args.gitops else None)
@@ -2038,7 +2068,9 @@ def cmd_init(args: argparse.Namespace, host: Host) -> int:
         return result
     if args.unsigned_local:
         raise Refused("--unsigned-local is Compose's: a GitOps instance runs only what verifies (ADR 0126 decision 3)")
-    directory = args.gitops or host.ask("veyq's directory in a checkout of the repository Argo CD syncs", "apps/veyq")
+    offered = suggested_gitops_directory(host)
+    directory = args.gitops or host.ask("veyq's directory in a checkout of the repository Argo CD syncs",
+                                        offered) or offered
     if not directory:
         raise Refused("`init --gitops DIR` needs the directory veyq's half goes into, inside a Git checkout")
     return gitops_init(args, host, Path(directory).expanduser().resolve())
