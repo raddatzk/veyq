@@ -9,12 +9,17 @@ Verbs:
                              libsodium, utf8proc's NormalizationTest, the wall clock in Europe/Berlin, and — with
                              VEYQ_LIVE set — the live sign-in. `--tests` is Kotlin/Native's `--ktest_filter` pattern
                              (`*LiveSignInTest*`). Its exit code is the test binary's.
+  bridge                     links the bridge's release library (`:bridge:linkReleaseShared<Target>`), checks with
+                             `nm -D` that it defines exactly bridge.h's six functions and Kotlin/Native's own
+                             symbols (none of the static libraries linked in), and builds and runs
+                             `bridge/smoke/smoke.c` against it through bridge.h alone; with VEYQ_LIVE set the smoke
+                             also signs in as the seeded principal over the library's own HTTP client.
 
-Live runs: `VEYQ_LIVE=http://veyq.localhost:8080 run.py test --tests '*LiveSignInTest*'` signs in as the seeded
-principal of `.run/.env` (VEYQ_ENV_FILE names another file, e.g. the main checkout's from a worktree). The backend picks
-the tenant from the Host header, so the container keeps the origin's name: a `*.localhost` origin resolves to the
-container's own loopback there, where socat forwards its port to the host (`host.docker.internal`), and every tenant of
-the account (each a `*.localhost` name on that port) arrives under its own name.
+Live runs: `VEYQ_LIVE=http://veyq.localhost:8080 run.py test --tests '*LiveSignInTest*'` (or `run.py bridge`) signs in
+as the seeded principal of `.run/.env` (VEYQ_ENV_FILE names another file, e.g. the main checkout's from a worktree).
+The backend picks the tenant from the Host header, so the container keeps the origin's name: a `*.localhost` origin
+resolves to the container's own loopback there, where socat forwards its port to the host (`host.docker.internal`),
+and every tenant of the account (each a `*.localhost` name on that port) arrives under its own name.
 
 Docker must answer `docker build` / `docker run`; the image is `veyq-linux-dev`, rebuilt from its layer cache each run.
 """
@@ -23,6 +28,7 @@ from __future__ import annotations
 import argparse
 import os
 import platform
+import re
 import shlex
 import subprocess
 import sys
@@ -35,6 +41,9 @@ import repo_layout  # noqa: E402
 
 HERE = Path(__file__).resolve().parent
 IMAGE = "veyq-linux-dev"
+# What Kotlin/Native defines in a shared library beside its @CName functions: its C API's entry (`lib<name>_symbols`),
+# two of its runtime's, and the ELF init/fini (read with `nm -D --defined-only` on 2026-11-10, Kotlin 2.4.21).
+KOTLIN_NATIVE_EXPORTS = {"libveyq_symbols", "IsInstance", "Konan_cxa_demangle", "__cxa_demangle", "_init", "_fini"}
 ZONE = "Europe/Berlin"
 VECTORS = ROOT / "contracts" / "crypto" / "vectors" / "v1.json"
 NORMALIZATION_TEST = repo_layout.MOBILE / "build" / "utf8proc" / "NormalizationTest.txt"
@@ -53,10 +62,7 @@ def build_image(docker_platform: str) -> None:
 
 
 def test(pattern: str | None) -> int:
-    try:
-        docker_platform, target = ARCHES[platform.machine()]
-    except KeyError:
-        sys.exit(f"no Linux target for this host's architecture ({platform.machine()})")
+    docker_platform, target = arch()
     run("./gradlew", f":core:linkDebugTest{target}", cwd=repo_layout.MOBILE)
     kexe_dir = repo_layout.MOBILE / "core" / "build" / "bin" / (target[0].lower() + target[1:]) / "debugTest"
     if not (kexe_dir / "test.kexe").exists():
@@ -66,16 +72,24 @@ def test(pattern: str | None) -> int:
     mounts = {kexe_dir: "/veyq/bin", VECTORS: "/veyq/vectors.json", NORMALIZATION_TEST: "/veyq/NormalizationTest.txt"}
     env = {"VEYQ_VECTORS": "/veyq/vectors.json", "VEYQ_NORMALIZATION_TEST": "/veyq/NormalizationTest.txt",
            "TZ": ZONE}
-    docker = ["docker", "run", "--rm", "--platform", docker_platform]
     # WallClockTest's values are Berlin's. kotlinx-datetime reads the zone from /etc/localtime, glibc from TZ: both set.
     prelude = f"ln -sf /usr/share/zoneinfo/{ZONE} /etc/localtime; "
+    filter_arg = " " + shlex.quote(f"--ktest_filter={pattern}") if pattern else ""
+    return in_container(docker_platform, mounts, env, f"{prelude}exec /veyq/bin/test.kexe{filter_arg}")
+
+
+def in_container(docker_platform: str, mounts: dict[Path, str], env: dict[str, str], script: str) -> int:
+    """Runs bash [script] in the image, [mounts] read-only; with VEYQ_LIVE, the dev origin reachable under its own name
+    and the seeded principal's env file at /veyq/env. Returns the script's exit code."""
+    docker = ["docker", "run", "--rm", "--platform", docker_platform]
+    prelude = ""
     live = os.environ.get("VEYQ_LIVE")
     if live:
         env_file = Path(os.environ.get("VEYQ_ENV_FILE", ROOT / ".run" / ".env"))
         if not env_file.exists():
             sys.exit(f"VEYQ_LIVE needs the seeded principal's {env_file} (VEYQ_ENV_FILE names another)")
-        mounts[env_file] = "/veyq/env"
-        env |= {"VEYQ_LIVE": live, "VEYQ_ENV_FILE": "/veyq/env"}
+        mounts = mounts | {env_file: "/veyq/env"}
+        env = env | {"VEYQ_LIVE": live, "VEYQ_ENV_FILE": "/veyq/env"}
         origin = urlsplit(live)
         if origin.hostname and (origin.hostname == "localhost" or origin.hostname.endswith(".localhost")):
             port = origin.port or (443 if origin.scheme == "https" else 80)
@@ -86,10 +100,43 @@ def test(pattern: str | None) -> int:
         docker += ["-v", f"{host_path}:{container_path}:ro"]
     for k, v in env.items():
         docker += ["-e", f"{k}={v}"]
-    filter_arg = " " + shlex.quote(f"--ktest_filter={pattern}") if pattern else ""
-    docker += [IMAGE, "bash", "-c", f"{prelude}exec /veyq/bin/test.kexe{filter_arg}"]
+    docker += [IMAGE, "bash", "-c", prelude + script]
     print("+ " + " ".join(docker), flush=True)
     return subprocess.run(docker).returncode
+
+
+def bridge() -> int:
+    """Links the bridge's release library, checks it defines exactly bridge.h's six functions and Kotlin/Native's own
+    symbols, and runs `bridge/smoke/smoke.c` against it through bridge.h alone."""
+    docker_platform, target = arch()
+    run("./gradlew", f":bridge:linkReleaseShared{target}", cwd=repo_layout.MOBILE)
+    lib_dir = repo_layout.MOBILE / "bridge" / "build" / "bin" / (target[0].lower() + target[1:]) / "releaseShared"
+    if not (lib_dir / "libveyq.so").exists():
+        sys.exit(f"no library at {lib_dir / 'libveyq.so'}")
+    build_image(docker_platform)
+    mounts = {lib_dir: "/veyq/lib", repo_layout.MOBILE / "bridge" / "bridge.h": "/veyq/include/bridge.h",
+              repo_layout.MOBILE / "bridge" / "smoke": "/veyq/smoke"}
+    # What the library may define: bridge.h's six, read from it, and Kotlin/Native's own — nothing of the static
+    # libraries linked in (bridge/build.gradle.kts: --exclude-libs). A new K/N symbol is read and added here, never waved by.
+    header = (repo_layout.MOBILE / "bridge" / "bridge.h").read_text()
+    six = set(re.findall(r"\b(veyq_[a-z]+)\s*\(", re.sub(r"/\*.*?\*/", "", header, flags=re.S)))
+    expected = sorted(six | KOTLIN_NATIVE_EXPORTS)
+    script = ("set -e; "
+              "echo '+ nm -D --defined-only libveyq.so'; "
+              "nm -D --defined-only /veyq/lib/libveyq.so | awk '{print $3}' | LC_ALL=C sort > /tmp/defined; "
+              "echo \"$(wc -l < /tmp/defined) symbols defined\"; "
+              f"diff <(printf '%s\\n' {' '.join(expected)} | LC_ALL=C sort) /tmp/defined; "
+              "echo 'the library defines bridge.h six functions and Kotlin/Native own symbols, nothing else'; "
+              "gcc -std=c11 -Wall -Wextra -Werror -D_DEFAULT_SOURCE -I/veyq/include /veyq/smoke/smoke.c -L/veyq/lib -lveyq -lpthread -o /tmp/smoke; "
+              "LD_LIBRARY_PATH=/veyq/lib /tmp/smoke")
+    return in_container(docker_platform, mounts, {}, script)
+
+
+def arch() -> tuple[str, str]:
+    try:
+        return ARCHES[platform.machine()]
+    except KeyError:
+        sys.exit(f"no Linux target for this host's architecture ({platform.machine()})")
 
 
 def main() -> None:
@@ -97,9 +144,12 @@ def main() -> None:
     verbs = parser.add_subparsers(dest="verb", required=True)
     t = verbs.add_parser("test", help="link the core's Linux test binary and run it in the container")
     t.add_argument("--tests", help="Kotlin/Native --ktest_filter pattern, e.g. '*LiveSignInTest*'")
+    verbs.add_parser("bridge", help="link the bridge's library, check what it exports and run the C smoke against it")
     args = parser.parse_args()
     if args.verb == "test":
         sys.exit(test(args.tests))
+    if args.verb == "bridge":
+        sys.exit(bridge())
 
 
 if __name__ == "__main__":
