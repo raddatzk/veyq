@@ -1,7 +1,7 @@
 # ADR 0126 — `veyqctl` writes a GitOps repository, and `veyq-server` sets up the cluster it runs on
 
 - Status: Accepted
-- Built: partly (not built: decision 6)
+- Built: partly (decision 6: veyq-server's template and `init`'s server path are built; its first release and a run on a real server are not — cr-veyqctl-server-path)
 - Date: 2026-11-10
 - Model: [release-and-deployment](../crosscutting/release-and-deployment.md)
 
@@ -112,11 +112,27 @@ otherwise it shows the key and where it goes, and waits. Two more things the per
 `init` waits, each said exactly when it is due: the DNS records (which `init` then checks resolve), and reading the
 fingerprint in the provider's console.
 
-**`init` can be run again at any point and continues where it stopped.** Every answer and every step done is written
-to a progress file the moment it is given or done — `~/.config/veyq/`, keyed by the repository, never inside it — so an
-interrupted terminal costs nothing: the same command shows where the last run stopped and goes on from there, asking
-nothing twice. No secret is in that file: generated values go straight into the repository, encrypted, and `init`
-reads from the repository that they exist rather than making them again.
+**Every question comes before the first step that does something** (owner 2026-11-10, "really ask everything at the
+start"), in three parts. First the answers that decide which programs the run needs — the target, whether the server
+is set up too, where the secrets come from — then **the programs**: every one the run will start is checked at once,
+cosign against its floor, and each missing one is named with where to get it (Homebrew's command where `brew` is
+there); `init` installs nothing itself (a download it would have to pin per program and platform is a supply chain
+veyqctl does not take on) and waits for Enter to check again rather than stopping. Then every remaining question, with
+offers read from the cluster and the repository as before, since the programs that read them are there now. After that
+`init` asks no more questions — only the confirmations above, each at its step, and the waits for the person.
+
+**The answers are the repository's: `veyq-setup.json`** at the checkout's root, written the moment each is given and
+committed with the files they produced. They are no secret (generated values go into the repository encrypted, and
+`init` reads that they exist rather than making them again; the age key that decrypts them is never in the
+repository), and they are what set the repository up — so `init` in a checkout that has them asks nothing again: an
+interrupted run goes on, and a lost server is set up again exactly as before from the repository and the age key.
+`veyq-setup.json` is the one record of the answers: what `init` writes for each half (veyq's `veyqctl.json` and
+values, the server half's Copier answers) is produced from it.
+
+**`init` can be run again at any point and continues where it stopped.** Which steps are done — the host key trusted,
+pushed, bootstrapped — is this machine's, not the repository's: it is written to a progress file the moment a step is
+done, in `~/.config/veyq/`, keyed by the repository and veyq's directory, never inside the repository. An interrupted
+terminal costs nothing: the same command shows where the last run stopped and goes on from there, asking nothing twice.
 
 **7. After init the repository is the operator's.** Renovate (or any updater) keeps the server half's pins current;
 `upgrade` keeps veyq's; `copier update` brings a later `veyq-server` release's structural changes in as a merge,
@@ -161,7 +177,17 @@ key and waits.
   owner's rule, and `init` already holds half of it.
 - **Rejected — the deploy key only ever shown, never entered.** Forge-neutral, and a trip to the forge's page in the
   middle of the run where its signed-in tool could do it; kept as the path where there is none, or the person says no.
-- **Rejected — the progress file in the repository.** It sits beside what is committed, where a `git add` takes it.
+- **Rejected — the progress file in the repository.** It sits beside what is committed, where a `git add` takes it,
+  and which steps are done is the machine's (a new server is a new host key and a new bootstrap). The answers are the
+  part that belongs to the repository, and they are there (`veyq-setup.json`).
+- **Rejected — the answers only in the machine's progress file.** An interrupted run resumes as well, but a rebuild
+  on another machine, or after the file is gone, asks everything again and may answer differently.
+- **Rejected — veyqctl installing the programs it needs.** Downloads pinned per program, version and platform are a
+  supply chain to keep current; a package manager verifies and updates its own. `init` names what is missing and
+  waits.
+- **Rejected — reading the cluster's offers before the program check** (asking "read them later, or answer now?").
+  An offer read later can be ambiguous and needs a question after the actions began; with the programs checked after
+  the three answers that decide them, every later question has its offers.
 - **Rejected — Flux beside Argo CD now.** The repository layout differs per tool; Argo CD is what the maintainer runs
   and what `veyq-server` installs. A Flux writer is another decision.
 

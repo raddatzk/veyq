@@ -21,7 +21,8 @@ built yet. Without it, the cluster is yours, and it must have what [Kubernetes](
 
 On your machine: `veyqctl` ([Verify a release](/run/verify-a-release/) says how to fetch and check it), `git`, `helm`,
 `kubectl` with a context for the cluster, `cosign` 3.1.3 or later, and the tool of the secrets provider you choose
-(`sops` or `kubeseal`). A checkout of the repository Argo CD syncs.
+(`sops` or `kubeseal`). A checkout of the repository Argo CD syncs. `veyqctl` checks these programs before it starts
+anything (below).
 
 On the cluster — `init` checks this before it writes anything and names every gap at once:
 
@@ -50,7 +51,19 @@ Applications your repository already holds — `gitops/apps/veyq` where they sit
 repository's), the **kubeconfig context** of the cluster (kubectl's current one — check it: that is the cluster it
 checks), the **Argo CD project** (the cluster's one project besides `default`, else `default`; a project of your own
 limits which repositories and destinations the Application may use, which `default` does not), and the **selector**
-(the newest release's major, so a new major is entered only once you choose it). In order, it:
+(the newest release's major, so a new major is entered only once you choose it).
+
+**Every question comes before the first step.** First the directory, the name and the secrets provider — the answers
+that decide which programs the run needs — then **the programs**: every one it will start is checked at once, and each
+missing one is named with where to get it (and Homebrew's command, where `brew` is there); `init` installs nothing and
+waits for Enter to look again. Then every other question, with its offers. After that it asks nothing more.
+
+**The answers are kept in the repository: `veyq-setup.json`** at the checkout's root, written as each is given — flags
+included — and committed with veyq's half (the closing hint names it). No secret is in it. An interrupted run is not
+lost: the same command, run again in the checkout (`veyqctl init` alone is enough), offers to continue where it
+stopped, asking nothing twice and generating no value twice; which steps are done is kept on this machine, in
+`~/.config/veyq/`. In a checkout whose half is written, `init` says so and writes nothing; a flag that differs from an
+answer is refused, as `init` never changes a written half (`upgrade` moves its release). In order, it:
 
 1. finds the checkout the directory lies in (the directory may not exist yet; `init` refuses one that is not empty);
 2. checks the cluster (above);
@@ -66,7 +79,7 @@ What it writes:
 |---|---|
 | `application.yaml` | The Argo CD `Application`, named `veyq` (`--application-name`; `--name` only names the instance on your machine): the chart from `oci://ghcr.io/raddatzk/charts/veyq` by digest, its values and `resources/` from this repository; automated sync with self-heal, never prune |
 | `values.yaml` | The domains, the three images by tag and digest, the Secrets' names, the gateway, TLS, and the NetworkPolicy peer (your Gateway's data-plane pods) |
-| `resources/` | The namespace (`restricted`), the backup gate's claim (never pruned or deleted by Argo CD), the Secrets, a `kustomization.yaml` |
+| `resources/` | The namespace (`restricted`), the backup gate's claim (never pruned or deleted by Argo CD), the Secrets, a `kustomization.yaml` — and, when you say yes, veyq's administration on a host-only NodePort (30081) beside Argo CD's, offered where Argo CD's server is a NodePort already: a server whose host firewall keeps NodePorts off the public side, as veyq-server's does |
 | `veyqctl.json` | Which release it follows (`release`: a pin, a major, or `latest`), the provider, the running release and its four pins |
 
 Then **you** review it, commit and push, give Argo CD read access to the repository (a deploy key), and register the

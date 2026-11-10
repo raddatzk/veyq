@@ -327,7 +327,8 @@ check is logged and retried with a back-off, and blocks nothing.
   are a procedure, written in [`infra/README.md`](../../infra/README.md) § Cutting a release, and no train has left.
 - **`veyq-server`** ([ADR 0126](../decisions/0126-veyqctl-writes-a-gitops-repository-and-veyq-server-sets-up-its-cluster.md)
   decision 6): a repository of its own that sets up the server and cluster beneath a GitOps instance, rendered by
-  Copier from a verified release, which `init` offers when there is no cluster. The repository exists
-  (`github.com/raddatzk/veyq-server`), empty.
+  Copier from a verified release, which `init` offers in an empty repository. Built: the template and its checks in
+  `github.com/raddatzk/veyq-server` (cr-veyq-server-template), and `init`'s server path, self-tested against
+  stand-ins (cr-veyqctl-server-path phase 3). Not yet: veyq-server's first release, and a run on a real server.
 - **L3's archive holding the major entry** (ADR 0085 decision 10, inbox #461): the major entry's backup in the
   archive lane L3 restores.
