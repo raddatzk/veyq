@@ -35,13 +35,16 @@ On the cluster — `init` checks this before it writes anything and names every 
 ## Write the instance: `init`
 
 ```sh
-veyqctl init --gitops ~/src/cluster/apps/veyq \
+veyqctl init --gitops <checkout>/apps/veyq \
   --domain veyq.example.org --gateway-class traefik --acme-email ops@example.org \
   --gateway-namespace traefik --gateway-pod-label app.kubernetes.io/name=traefik \
   --secrets external-secrets --secret-store vault --context my-cluster
 ```
 
-`init` without `--gitops` asks Compose or GitOps; every option it does not get, it asks for at a terminal. In order, it:
+`<checkout>` is your local clone of the repository Argo CD syncs, and `apps/veyq` the directory veyq's half goes into —
+any directory inside the clone but its root, empty or not there yet. `init` without `--gitops` asks Compose or GitOps;
+every option it does not get, the secrets provider included, it asks for at a terminal, and without one it refuses
+and names the flag. In order, it:
 
 1. finds the checkout the directory lies in (the directory may not exist yet; `init` refuses one that is not empty);
 2. checks the cluster (above);
@@ -86,12 +89,18 @@ directory is refused.
 ### A veyq half you wrote by hand: `--adopt`
 
 ```sh
-veyqctl init --gitops ~/src/cluster/gitops/apps/veyq --adopt --secrets sops
+veyqctl init --gitops <checkout>/apps/veyq --adopt --secrets sops
 ```
 
 writes only `veyqctl.json` — and only once the chart digest in the `Application` and the three image digests in the
 values are exactly those of a release that verifies. Its tags name the running release; `veyqctl` records the major it
 belongs to as the selector. Your files keep their comments and layout; an upgrade rewrites only the pins.
+
+It takes over this one shape and nothing else, by design: a chart pinned by version, images by tag, a release
+installed with `helm install` rather than from a repository, or a snapshot is refused, naming what differs. Bring
+the files into this shape first ([Verify a release](/run/verify-a-release/) pins by digest), or write a fresh
+instance with `init` and give its Secrets your running instance's values — never new ones: the database and every
+backup are bound to them.
 
 ## Which instance a command acts on
 
