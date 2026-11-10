@@ -96,10 +96,30 @@ half runs Ansible as root, so it is never taken from a branch. Then it writes ve
 repository holding the whole server as code. Without the server step, `init` writes veyq's half alone, into a
 repository the operator already syncs.
 
+With the server step, **`init` is the one command from an empty repository to a running instance** (owner 2026-11-10:
+the operator never has to know which command comes next). In one run it asks the server's questions (what a setup script asked
+before: the address, the admin user and SSH key, the age key), pins the server's host key once its fingerprint is
+confirmed against the provider's console, generates and encrypts the server half's secrets, generates Argo CD's
+read-only deploy key and shows where to enter it, writes veyq's half (TLS from Let's Encrypt's **staging** or production directory, asked; host
+access, asked), commits and pushes, runs the bootstrap playbook, connects this machine (an `~/.ssh/config` host and a
+kubeconfig context, as `veyqctl connect` does at any later time), and waits until Argo CD reports the cluster's
+applications and veyq synced and healthy, ending with what is left to the person: Argo CD's first password, the
+Server Owner, the config-secret key into a password manager. **It asks before every step that changes something
+outside the repository or cannot be undone** — the host key's trust, the push, the bootstrap that runs as root,
+`veyqctl tls production` deleting the staging certificates — and shows what the step will do. Three things the person
+does outside the terminal while `init` waits, each said exactly when it is due: entering the deploy key at the forge,
+the DNS records (which `init` then checks resolve), and reading the fingerprint in the provider's console.
+
+**`init` can be run again at any point and continues where it stopped.** Every answer and every step done is written
+to a progress file the moment it is given or done — `~/.config/veyq/`, keyed by the repository, never inside it — so an
+interrupted terminal costs nothing: the same command shows where the last run stopped and goes on from there, asking
+nothing twice. No secret is in that file: generated values go straight into the repository, encrypted, and `init`
+reads from the repository that they exist rather than making them again.
+
 **7. After init the repository is the operator's.** Renovate (or any updater) keeps the server half's pins current;
 `upgrade` keeps veyq's; `copier update` brings a later `veyq-server` release's structural changes in as a merge,
-verified as decision 6 verifies. Nothing requires GitHub: Argo CD reads any Git remote, and `veyqctl` prints the deploy
-key to register rather than calling a forge's API.
+verified as decision 6 verifies. Nothing requires GitHub: Argo CD reads any Git remote, and `veyqctl` calls no forge's
+API — it shows the deploy key and where to enter it, and waits.
 
 ## Consequences
 
@@ -111,9 +131,10 @@ key to register rather than calling a forge's API.
 - **`veyq-server` and veyq are paired only through the contract** (decision 4), not through a tested combination of
   releases: `veyqctl` takes `veyq-server`'s newest verified release. A pairing a veyq release names in its manifest is
   the stronger form and waits for that lane.
-- **`affenbande` becomes the first repository this writes**: its server half is `veyq-server`'s first release, its
-  veyq half what `init` and `upgrade` produce; its host access (Argo CD and the admin surface on
-  host-only NodePorts behind one ssh tunnel) moves with the half each part belongs to.
+- **`affenbande` becomes the first repository this writes**, renamed `raddatz.me` after its instance: its server half is
+  `veyq-server`'s first release, its veyq half what `init` and `upgrade` produce; its host access (Argo CD and the admin
+  surface on host-only NodePorts behind one ssh tunnel) moves with the half each part belongs to. Rebuilt from an empty
+  repository by `veyqctl init` alone, with Let's Encrypt staging, it is the end-to-end test of decision 6.
 - **ADR 0096 decision 8 is replaced:** `veyqctl` no longer drives Compose only. It still ships no in-cluster operator.
 - **Rejected — the whole server repository as a veyq release asset.** One download, but it freezes the server half's
   pins at veyq's release and leaves every later fix to a stack component waiting for a veyq release.
@@ -132,6 +153,12 @@ key to register rather than calling a forge's API.
 - **Rejected — auto-merging the scheduled job's pull request.** Hands-off, and it rolls a compromised release out with
   nobody looking — the case ADR 0096 rejected unattended upgrades for; a signature proves who released it, not that
   it is sound.
+- **Rejected — a wrapper script in the server repository** around the setup script, git, the playbook and the connect
+  script. Cheap, and a second front door that `veyq-server` would replace; one tool that runs the whole process is the
+  owner's rule, and `init` already holds half of it.
+- **Rejected — registering the deploy key through a forge's tool (`gh`).** No waiting, but it binds `init` to one
+  forge's CLI and its sign-in; entering one key on the forge's page, when `init` says so, keeps it forge-neutral.
+- **Rejected — the progress file in the repository.** It sits beside what is committed, where a `git add` takes it.
 - **Rejected — Flux beside Argo CD now.** The repository layout differs per tool; Argo CD is what the maintainer runs
   and what `veyq-server` installs. A Flux writer is another decision.
 
