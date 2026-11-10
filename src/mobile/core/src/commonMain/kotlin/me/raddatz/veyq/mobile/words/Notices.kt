@@ -194,6 +194,13 @@ object Notices {
         else -> Msg.PROBLEM_UNKNOWN_PARTICIPANT
     }
 
+    /**
+     * What a saved entry says when receipts were left out for want of room (the web's `expenses.receipts.noRoom`): the entry
+     * is saved and its editor closes; a receipt is attached again once there is room. Null when none was left out.
+     */
+    fun receiptsSkipped(names: List<String>): Notice? =
+        if (names.isEmpty()) null else Notice(Msg.RECEIPTS_NO_ROOM, Joined(names, ", "))
+
     /** Why an entry was not saved (`PotWrites` outcome names). */
     fun entryRefused(outcome: String): Msg = when (outcome) {
         "STALE" -> Msg.ED_STALE

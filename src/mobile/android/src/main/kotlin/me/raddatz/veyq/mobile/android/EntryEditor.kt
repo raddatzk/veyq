@@ -213,8 +213,8 @@ fun EntryEditor(
                             val picked = pending
                             model.potWrite({ it.saveEntry(editing?.first, form, editing?.second?.basedOn, picked) }) {
                                 // A receipt the space's storage had no room for was left out; the entry is saved.
-                                model.skippedReceipts().takeIf { it.isNotEmpty() }?.let { names ->
-                                    android.widget.Toast.makeText(context, context.getString(R.string.receipts_no_room, names.joinToString()), android.widget.Toast.LENGTH_LONG).show()
+                                me.raddatz.veyq.mobile.words.Notices.receiptsSkipped(model.skippedReceipts())?.let {
+                                    android.widget.Toast.makeText(context, context.text(it), android.widget.Toast.LENGTH_LONG).show()
                                 }
                                 onSaved()
                                 onClose()

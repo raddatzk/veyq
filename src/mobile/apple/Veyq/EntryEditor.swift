@@ -100,8 +100,6 @@ struct EntryEditor: View {
     enum RateNote: Equatable { case loading, filled(String), missing(String) }
     @State private var rateNote: RateNote?
     @State private var pending: [PotSession.PendingReceipt] = []
-    /// The receipts a save left out for want of room: the entry was saved, the editor says so before it closes.
-    @State private var noRoom: [String] = []
     @State private var receiptsUI = ReceiptsUI()
     @Environment(\.dismiss) private var dismiss
 
@@ -153,7 +151,6 @@ struct EntryEditor: View {
                 Group { if form.kind == .transfer { transferFields } else { expenseFields } }.disabled(!editable)
                 EntryReceipts(view: view, kept: $form.receipts, pending: $pending, ui: $receiptsUI, editable: editable)
                 if let message = model.pot?.message { Section { Text(Self.explain(message)).foregroundStyle(Role.danger) } }
-                if !noRoom.isEmpty { Section { Text(say(.receiptsNoRoom, noRoom.joined(separator: ", "))).foregroundStyle(Role.danger) } }
                 if tried, let r = refusal, r.at == nil { Section { problem(r.problem) } }
                 if let id = entryId, let based = basedOn {
                     Section { EntryHistory(view: view, entryId: id) }
@@ -184,7 +181,11 @@ struct EntryEditor: View {
                         Task {
                             if await model.potWrite({ try await $0.saveEntry(entryId: id, form: f, basedOn: based, pending: picked) }) {
                                 onSaved?()
-                                if model.skippedReceipts.isEmpty { dismiss() } else { noRoom = model.skippedReceipts; pending = [] }
+                                // a receipt the space's storage had no room for was left out; the entry is saved, the editor closes
+                                if let left = Notices.shared.receiptsSkipped(names: model.skippedReceipts) {
+                                    model.notice = AppModel.Notice(text: say(notice: left))
+                                }
+                                dismiss()
                             }
                         }
                     }

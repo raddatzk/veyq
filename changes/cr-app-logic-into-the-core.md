@@ -68,7 +68,6 @@ function, its commonTest, both apps calling it):
   only the details' count).
 - The share inbox's wiring (taken into a Pot when its page shows it), the new Pot's parent and default space, Manage
   servers' switches and words, the upload label.
-- Skipped receipts after a save: Android closes with a toast, Apple stays and lists them — one behaviour to settle.
 
 ## Differences, settled here
 
@@ -78,6 +77,7 @@ function, its commonTest, both apps calling it):
 - A Pot's parent when created from a level: the level shown.
 - A currency's minor units: one core table (the web's), not `java.util.Currency` or `NumberFormatter`.
 - A drop onto an open Pot: the state machine is the core's; Android's drop stays open (ADR 0126).
+- Receipts a save left out for want of room: the entry is saved, the editor closes and the shell says which (the web's toast; owner 2026-11-10), `Notices.receiptsSkipped`.
 
 ## Done when
 

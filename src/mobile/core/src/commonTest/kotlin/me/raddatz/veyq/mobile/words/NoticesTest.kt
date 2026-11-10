@@ -73,4 +73,12 @@ class NoticesTest {
         fits(left)
         assertEquals(Notice(Msg.LEFT_OUT_LINE, "Old", Notice(Msg.LEFT_OUT_NOT_COPYABLE)), left)
     }
+
+    @Test
+    fun receipts_left_out_are_named_once_the_entry_is_saved() {
+        assertNull(Notices.receiptsSkipped(emptyList()))
+        val n = Notices.receiptsSkipped(listOf("a.jpg", "b.pdf"))
+        fits(n)
+        assertEquals(Notice(Msg.RECEIPTS_NO_ROOM, Joined(listOf("a.jpg", "b.pdf"), ", ")), n)
+    }
 }
