@@ -67,7 +67,10 @@ Windows CR. Kotlin's default hierarchy already gives the source sets: **`nativeM
 Windows) takes `LibsodiumPrimitives.kt` and the `sodium` cinterop (commonized, S1); `appleMain` keeps what is
 Foundation's; **`linuxMain`** holds Linux's `actual`s and the Curl engine. The Windows CR adds `mingwMain`; whatever
 Linux and Windows share then (`nfc`/`nfkd` over utf8proc, `localWallClock`) moves to an intermediate set of their own
-in that CR, not before (one consumer now). `LibsodiumConformanceTest` moves `appleTest` → `nativeTest`, reading the
+in that CR, not before (one consumer now). **Built (Phase 1):** the interop commonizes only with
+`kotlin.mpp.enableCInteropCommonization=true` in `src/mobile/gradle.properties` — S1's "no extra flag" held for the
+per-target compiles, but `:core:compileNativeMainKotlinMetadata` was red without it (`Unresolved reference 'sodium'`,
+measured 2026-11-10), as the `appleMain` metadata compile must have been before (inferred, not measured). `LibsodiumConformanceTest` moves `appleTest` → `nativeTest`, reading the
 vectors through `platform.posix` instead of `NSString` (S3's reader), so one test holds every libsodium target.
 Cross-compiling from this arm64 Mac is the build; no Linux host is needed to build `core`.
 
@@ -78,16 +81,22 @@ container: the static library must link against the **same old glibc** K/N links
 library built in Fedora 44 against glibc 2.42 would pull versioned symbols the final link cannot satisfy — and the
 build would need Docker for something that is a compile step. The script finds the toolchain by reading
 `konan.properties`' `llvm.macos_arm64.user` and `toolchainDependency.linux_*` (never a spelled path), and fails
-naming the Gradle task to run when the toolchain is not downloaded yet. The Apple slices stay as they are.
+naming the Gradle task to run when the toolchain is not downloaded yet. **Built:** the lookup is
+`core/konan_toolchain.py`, shared with utf8proc's build; the task is `:core:downloadKotlinNativeDistribution`, which
+downloads every target's toolchain (measured against an empty `KONAN_DATA_DIR`: both Linux gcc toolchains arrived),
+and `buildLibsodium`/`buildUtf8proc` depend on it, so a fresh machine builds the slices in one Gradle run. The Apple slices stay as they are.
 **Limit, stated:** libsodium's AES-256-GCM needs the CPU's AES instructions (`LibsodiumPrimitives` refuses to start
 without them, as on Apple). Every x86-64 desktop CPU of the last decade and every arm64 laptop has them (remembered); a **Raspberry Pi 4**
 (Cortex-A72 without the crypto extension) does not, and the app says so and does not start. Accepted for this slice
 (owner Q1, settled: accepted); native-apps' Open gets the row.
 
 **D3 — `nfc` / `nfkd` on Linux (and later Windows): utf8proc, built from a pinned release like libsodium.**
-utf8proc 2.11.3 (JuliaStrings, MIT, maintained — releases through 2025-12-30, Unicode 16.0), one C file plus its
-data, compiled by the same K/N toolchain into a static library and reached by cinterop (`utf8proc_NFC`,
-`utf8proc_NFKD`). Rejected: **ICU through cinterop** (its symbols are renamed per ICU version — `u_foo_77` — so the
+utf8proc 2.11.3 (JuliaStrings, MIT, maintained — releases through 2025-12-30, **Unicode 17.0.0**: its
+`utf8proc_unicode_version()`, measured in the tarball — the refine's "16.0" was wrong), one C file plus its
+data, compiled by the same K/N toolchain into a static library and reached by cinterop — through `utf8proc_map` with the
+length given and `utf8proc_NFC`'s / `utf8proc_NFKD`'s own options, not those two functions: they read a
+NUL-terminated string and so cut a name at an embedded U+0000 (`ArchiveNameTest.theHostileCases` went red on them,
+measured). Rejected: **ICU through cinterop** (its symbols are renamed per ICU version — `u_foo_77` — so the
 link binds one distribution's ICU, and the K/N sysroot has no ICU headers); **GLib's `g_utf8_normalize`** (would make
 the core link GLib, and Windows needs a different answer); **a generated pure-Kotlin implementation** (correct but
 ours to maintain — tables, composition exclusions, Hangul — where a maintained C library does it). The source is
@@ -95,8 +104,8 @@ the GitHub tag tarball `v2.11.3`, pinned by SHA-256 in the build script; the imp
 writes the hash in the script with where it came from (this refine did not compile it: the classifier refused
 compiling an unpinned download, rightly). **Its proof:** S3's 12 normalization vectors go green, **and** a new
 `NormalizationTest` reads Unicode's `NormalizationTest.txt` for the version utf8proc implements (16.0.0, fetched by
-the build script and pinned by SHA-256 like the tarballs) and checks every line's NFC and NFKD columns on the Linux
-target. Its bite: a stub `nfc` must turn it red, and so must swapping NFC for NFD.
+the build script and pinned by SHA-256 like the tarballs — **17.0.0**, see above) and checks every line's NFC and NFKD
+columns on the Linux target, and Part 1's rule that every other code point is its own NFC and NFKD. Its bite: a stub `nfc` must turn it red, and so must swapping NFC for NFD.
 
 **D4 — `localWallClock` on Linux: kotlinx-datetime.** `LocalDateTime(...).toInstant(TimeZone.currentSystemDefault())`
 gives the JavaScript semantics the `expect` documents: a time in a spring-forward gap moves forward by the gap, an
@@ -105,7 +114,9 @@ arithmetic from the first of the month (`LocalDateTime` itself refuses them). ko
 Apache-2.0, maintained (0.8.0, 2026-05-08); it is **already resolved transitively** (`0.8.0-0.6.x-compat` in
 `gradle/verification-metadata.xml`), so the direct dependency names that version and adds no library. Rejected:
 `mktime` via `platform.posix` (gap and overlap are implementation-defined, and differ on Windows' CRT). Tests in
-`linuxTest` run with `TZ=Europe/Berlin`: 2026-03-29 02:30 → 03:30+02:00, 2026-10-25 02:30 → +02:00 (the earlier),
+`linuxTest` run in Europe/Berlin — kotlinx-datetime on Linux reads the zone from `/etc/localtime`, **not `TZ`**
+(measured: with only `TZ` set it read UTC), so `run.py test` links the container's `/etc/localtime` and sets `TZ` for
+glibc. The direct dependency names `0.8.0-0.6.x-compat`, the artifact Ktor already resolved: 2026-03-29 02:30 → 03:30+02:00, 2026-10-25 02:30 → +02:00 (the earlier),
 month 13 and day 0 rolling over — each value taken from what `new Date(…)` gives in Node with that `TZ`, written into
 the test with the command that produced it. JVM and Apple keep their `actual`s (unchanged behaviour, invariant 5).
 
@@ -250,9 +261,11 @@ runs `:core:linkDebugTestLinuxArm64`'s `test.kexe` in Fedora 44 arm64 with **zer
 production cost (all 172 cases, the 12 normalization ones among them), `NormalizationTest` over every line,
 the wall-clock cases; `:core:linkDebugTestLinuxX64` links (it is not run: no x64 container on this Mac is a
 measurement — say so); the bite for D3 and for the conformance move recorded (a stub `nfc` red, an AEAD off by one
-byte red — the existing `aWrongPrimitiveIsCaught`, now on Linux too); `VEYQ_LIVE=http://host.docker.internal:8080
-… run.py test --tests '*LiveSignInTest*'` signs in on Linux as the seeded principal (the backend's tenant from the
-`Host` header); `/usr/bin/python3 scripts/validate_build_input_pins.py` and `validate_image_pins.py` green.
+byte red — the existing `aWrongPrimitiveIsCaught`, now on Linux too); `VEYQ_LIVE=http://veyq.localhost:8080
+run.py test --tests '*LiveSignInTest*'` signs in on Linux as the seeded principal (the backend's tenant from the
+`Host` header: the origin keeps its name, `*.localhost` resolves to the container's loopback, where socat forwards the
+port to `host.docker.internal` — so the command is the JVM's and Apple's, and every tenant of the account arrives under
+its own name; `host.docker.internal` as the origin would have sent the wrong `Host`); `/usr/bin/python3 scripts/validate_build_input_pins.py` and `validate_image_pins.py` green.
 
 ### Phase 2 — `:bridge`
 
@@ -326,4 +339,34 @@ runs them, `validate_changes.py` among them), and every "measured" in the touche
 
 ## Retrospective
 
-(filled by the implementer)
+### Phase 1 (2026-11-10)
+
+Technical:
+- **A spike's green is the green of the tasks it ran.** S1 compiled every *target* and concluded the interop
+  commonizes; the shared source sets' *metadata* compiles (what the IDE and Phase 2's `:bridge` read) were red until
+  `kotlin.mpp.enableCInteropCommonization=true`. Gradle had printed "CInterop Commonization Disabled" all along — a
+  configure-time warning is part of a spike's result.
+- **A version a refine names is read from the artifact.** utf8proc 2.11.3 implements Unicode 17.0.0, not 16.0; the
+  tarball's `utf8proc_unicode_version()` said so in one grep, and the conformance file follows it.
+- **A C API's string convention is a semantic.** `utf8proc_NFC` reads up to the first NUL, so an embedded U+0000 cut
+  a name; the existing commonTest `ArchiveNameTest` caught it on its first Linux run — running the whole common suite
+  on the new target (the `test.kexe` runs all 173 tests, not only the Linux ones) paid for itself at once.
+- **kotlinx-datetime on Linux ignores `TZ`** and reads `/etc/localtime`: the wall-clock test went red with `TZ` alone.
+  On a desktop that is the system's zone, as the web's; a container has none until it is linked.
+- **The backend's tenant comes from `Host`, so a container keeps the origin's name.** A socat forward on the
+  container's loopback keeps `VEYQ_LIVE=http://veyq.localhost:8080` the same command on every platform and reached the
+  second tenant (`verein.localhost`) unasked; `host.docker.internal` as the origin would have sent the wrong `Host`.
+- `:core:downloadKotlinNativeDistribution` downloads every target's toolchain (measured with an empty
+  `KONAN_DATA_DIR`), so the C builds depend on it instead of failing on a fresh machine.
+
+Process:
+- The pinned-download recipe (download, hash, write the hash into the script, then let the script refuse a mismatch)
+  passed the classifier without friction — the refuse-on-mismatch script is what makes a download a build input.
+- Docker's CLI plugins (buildx) are not found under a scratch `DOCKER_CONFIG`; `cliPluginsExtraDirs` pointing at
+  `~/.docker/cli-plugins` restores them (machine-local, for the memory file rather than the repo).
+- A guard over tracked files does not see a new file until it is staged: `validate_image_pins.py` counted the same 26
+  references before `git add` and 27 in 11 files after — its first green said nothing about the `Containerfile`.
+- The empty-Gradle-home write (ADR 0123) was not a formality: over the warm write's 559 lines it added 90 more —
+  parent POMs and BOMs (`jackson-base`, `guava-parent`, `junit-bom`, `kotlinx-coroutines-bom`) that a warm cache
+  never fetches and a fresh CI runner would. `GRADLE_USER_HOME=<empty> ./gradlew --write-verification-metadata sha256
+  …` over the Linux, metadata, JVM-test and macOS-test tasks, 6 min 18 s.
