@@ -1052,8 +1052,9 @@ final class AppModel {
 
     private func readCovers(_ t: TenantSession) async {
         let named = ((try? await NodeCover.shared.framed(tenant: t)) ?? [:])
-        var next = covers.filter { named[$0.key] == $0.value.blobId }
-        for (nodeId, key) in named where next[nodeId] == nil {
+        let changes = NodeCover.shared.changes(named: named, held: covers.mapValues { $0.blobId })
+        var next = covers.filter { changes.keep.contains($0.key) }
+        for (nodeId, key) in changes.open {
             if let opened = (try? await AppleSessions.shared.openFramedCover(tenant: t, nodeId: nodeId)) ?? nil,
                let whole = CoverImages.image(opened.data as Data, maxPixels: 384),
                let image = Self.framed(whole, opened.crop) {

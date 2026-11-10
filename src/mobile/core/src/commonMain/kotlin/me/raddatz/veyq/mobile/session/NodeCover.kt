@@ -102,6 +102,18 @@ object NodeCover {
                 ?.let { n.id to "${it.blobId}@${it.crop.x},${it.crop.y},${it.crop.width},${it.crop.height}" }
         }.toMap()
 
+    /** What a list's covers do after a read: [keep] the pictures held whose key still holds, [open] the nodes to open anew. */
+    class Changes(val keep: Set<String>, val open: Map<String, String>)
+
+    /**
+     * A list's covers after [framed] read [named] (node id to key): a picture [held] under the key the node still names is
+     * kept; every other named node is opened — a new cover, another crop; one the node no longer names is dropped.
+     */
+    fun changes(named: Map<String, String>, held: Map<String, String>): Changes {
+        val keep = held.filter { (id, key) -> named[id] == key }.keys
+        return Changes(keep, named.filterKeys { it !in keep })
+    }
+
     /** A cover opened here: its image's bytes and where its frame sits on it. */
     class Opened(val bytes: ByteArray, val crop: Crop)
 

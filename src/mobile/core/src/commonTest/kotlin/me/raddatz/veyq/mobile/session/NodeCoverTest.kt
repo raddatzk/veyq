@@ -40,4 +40,14 @@ class NodeCoverTest {
         assertNull(NodeCover.read(json("""{"cover":{"source":{"kind":"upload","ref":{"blobId":"b"}}}}""") as JsonObject))
         assertNull(NodeCover.read(json("""{"date":"2026"}""") as JsonObject))
     }
+
+    @Test
+    fun a_lists_covers_keep_what_still_holds_and_open_what_changed() {
+        val held = mapOf("a" to "b1@0,0,1,1", "b" to "b2@0,0,1,1", "gone" to "b3@0,0,1,1")
+        val named = mapOf("a" to "b1@0,0,1,1", "b" to "b2@0.5,0,0.5,1", "new" to "b4@0,0,1,1")
+        val c = NodeCover.changes(named, held)
+        // the same blob and crop: kept; a new crop or a new cover: opened; one no longer named: dropped
+        kotlin.test.assertEquals(setOf("a"), c.keep)
+        kotlin.test.assertEquals(mapOf("b" to "b2@0.5,0,0.5,1", "new" to "b4@0,0,1,1"), c.open)
+    }
 }

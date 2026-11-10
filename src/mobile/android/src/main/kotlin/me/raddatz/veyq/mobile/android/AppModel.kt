@@ -940,8 +940,9 @@ class AppModel(app: Application) : AndroidViewModel(app) {
     private fun readCovers(t: me.raddatz.veyq.mobile.session.TenantSession) {
         viewModelScope.launch(kotlinx.coroutines.Dispatchers.IO) {
             val named = runCatching { me.raddatz.veyq.mobile.session.NodeCover.framed(t) }.getOrDefault(emptyMap())
-            val have = _covers.value.filter { (id, c) -> named[id] == c.first }
-            val fresh = named.filter { (id, key) -> have[id]?.first != key }.mapNotNull { (id, key) ->
+            val changes = me.raddatz.veyq.mobile.session.NodeCover.changes(named, _covers.value.mapValues { it.value.first })
+            val have = _covers.value.filterKeys { it in changes.keep }
+            val fresh = changes.open.mapNotNull { (id, key) ->
                 val opened = runCatching { me.raddatz.veyq.mobile.session.NodeCover.openFramed(t, id) }.getOrNull() ?: return@mapNotNull null
                 thumbnail(opened.bytes, opened.crop)?.let { id to (key to it) }
             }
