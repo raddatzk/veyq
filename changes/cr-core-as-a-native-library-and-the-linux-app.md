@@ -383,7 +383,10 @@ runs them, `validate_changes.py` among them), and every "measured" in the touche
   as `SessionModel` has — a core refactor that changes what Swift and Kotlin construct (`ShellModel(tenant:)` is how
   both apps build it); (c) a fake server under a real `TenantSession` (a played backend: sign-in, grants, sealed nodes
   and ledgers) — heavy. Recommendation: **(a)** now; (b) when a second host (Windows) makes the dispatch worth a door of
-  its own.
+  its own. **Settled 2026-11-10 (technical, the refiner's): (a).** Each of those calls is one line onto a model whose
+  rules the core's own tests hold (`ShellModelTest`, `PotViewEntriesTest`, …); what the bridge adds — the wire, the
+  dispatch's way in, the registry, threads — is held without a server. `LiveBridgeTest` skips itself without
+  `VEYQ_LIVE`, so a phase whose Done-when leans on it states that it ran with `VEYQ_LIVE` set. The Windows CR revisits (b).
 
 - **Q1 — CPUs without AES (Raspberry Pi 4).** The suite's AES-GCM is libsodium's, which needs the CPU's AES
   instructions; the Linux app would not start on a Pi 4 (the web works there). Recommendation: accept for now, keep it
