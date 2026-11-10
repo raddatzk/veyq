@@ -239,6 +239,7 @@ class AppModel(app: Application) : AndroidViewModel(app) {
         t.rekeyRules = me.raddatz.veyq.mobile.AppKinds.rules
         tenantSession?.let { was -> if (was.account !== account || was.tenant.tenantId != tenant.tenantId) uploads.clear() }
         tenantSession = t
+        rows = me.raddatz.veyq.mobile.RowDetails.Read.EMPTY
         resumeRekeys(t)
         val pots = me.raddatz.veyq.mobile.expenses.PotModel(t, System::currentTimeMillis)
         potWatch?.cancel()
@@ -526,15 +527,17 @@ class AppModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
+    /** What the rows read last (core's `RowDetails`): a part that does not read next time keeps these. */
+    private var rows = me.raddatz.veyq.mobile.RowDetails.Read.EMPTY
+
     private suspend fun readRowDetails(t: me.raddatz.veyq.mobile.session.TenantSession) {
-        val pots = runCatching { me.raddatz.veyq.mobile.expenses.PotRows.details(t) }.getOrDefault(emptyMap())
-        val files = runCatching { me.raddatz.veyq.mobile.depot.DepotFiles.list(t) }.getOrDefault(emptyMap())
-        if (tenantSession === t) _files.value = files
+        val read = me.raddatz.veyq.mobile.RowDetails.read(t, rows)
+        if (tenantSession !== t) return
+        rows = read
+        _files.value = read.files
         val app = getApplication<Application>()
-        // a drop box's row: how many guests have a folder in it (Depot's `people`)
-        val boxes = me.raddatz.veyq.mobile.depot.DropBoxes.people(runCatching { t.nodes() }.getOrDefault(emptyList())).mapValues { listOf(app.text(it.value)) }
-        _rowDetails.value = pots + files.mapValues { (_, f) -> me.raddatz.veyq.mobile.depot.DepotFiles.rowDetails(f).map { app.piece(it) } } + boxes
-        readCovers(t)
+        _rowDetails.value = read.details.mapValues { (_, facts) -> facts.map { app.piece(it) } }
+        readCovers(t, read.covers)
     }
 
     // ---- what the shell says (a snackbar), and an upload under way ----
@@ -937,9 +940,8 @@ class AppModel(app: Application) : AndroidViewModel(app) {
     private val _covers = MutableStateFlow<Map<String, Pair<String, androidx.compose.ui.graphics.ImageBitmap>>>(emptyMap())
     val covers: StateFlow<Map<String, Pair<String, androidx.compose.ui.graphics.ImageBitmap>>> = _covers.asStateFlow()
 
-    private fun readCovers(t: me.raddatz.veyq.mobile.session.TenantSession) {
+    private fun readCovers(t: me.raddatz.veyq.mobile.session.TenantSession, named: Map<String, String>) {
         viewModelScope.launch(kotlinx.coroutines.Dispatchers.IO) {
-            val named = runCatching { me.raddatz.veyq.mobile.session.NodeCover.framed(t) }.getOrDefault(emptyMap())
             val changes = me.raddatz.veyq.mobile.session.NodeCover.changes(named, _covers.value.mapValues { it.value.first })
             val have = _covers.value.filterKeys { it in changes.keep }
             val fresh = changes.open.mapNotNull { (id, key) ->

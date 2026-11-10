@@ -298,7 +298,6 @@ final class AppModel {
             Task { @MainActor [weak self] in self?.applyShell(start: false) }
         }
         await readDetails(t, reset: true)
-        await readCovers(t)
         // The pictures the directory names a revision for, in the background; the letters show meanwhile.
         avatars = [:]
         Task {
@@ -419,7 +418,6 @@ final class AppModel {
         try? await shellModel?.refresh()
         applyShell(start: false)
         await readDetails(t)
-        await readCovers(t)
     }
 
     /// What a delete says at the bottom of the shell: moved to the trash, with the node as it was for its Undo; or why not.
@@ -806,17 +804,17 @@ final class AppModel {
     /// Every file of the tenant with its content's reference and opened meta, by node id (Depot's `DepotFiles.list`).
     private(set) var files: [String: DepotFiles.File] = [:]
 
-    /// The rows' facts: each Pot's (Expenses' `PotRows`) and each file's (its size and modified time, Depot's `details`).
+    /// What the rows read last (core's `RowDetails`): a part that does not read next time keeps these.
+    @ObservationIgnored private var rows = RowDetails.ReadCompanion.shared.EMPTY
+
+    /// The rows' facts and the lists' covers, read anew (core's `RowDetails`: Pots, files, drop boxes, cover keys).
     private func readDetails(_ t: TenantSession, reset: Bool = false) async {
-        let pots = (try? await PotRows.shared.details(tenant: t)) ?? (reset ? [:] : rowDetails)
-        let read = (try? await DepotFiles.shared.list(tenant: t)) ?? (reset ? [:] : files)
-        guard tenantSession === t else { return }
-        files = read
-        var details = pots
-        for (id, f) in read { details[id] = DepotFiles.shared.rowDetails(f: f).map { say(piece: $0) } }
-        // a drop box's row: how many guests have a folder in it (Depot's `people`)
-        for (id, people) in DropBoxes.shared.people(nodes: shellModel?.current?.lists.nodes ?? []) { details[id] = [say(notice: people)] }
-        rowDetails = details
+        if reset { rows = RowDetails.ReadCompanion.shared.EMPTY }
+        guard let read = try? await RowDetails.shared.read(tenant: t, previous: rows), tenantSession === t else { return }
+        rows = read
+        files = read.files
+        rowDetails = read.details.mapValues { $0.map { say(piece: $0) } }
+        await readCovers(t, named: read.covers)
     }
 
     /// A file page's facts: size, the sealed type (a claim, shown as such), modified (core's `DepotFiles.facts`).
@@ -1050,8 +1048,7 @@ final class AppModel {
     /// another or none.
     private(set) var covers: [String: (blobId: String, image: CGImage)] = [:]
 
-    private func readCovers(_ t: TenantSession) async {
-        let named = ((try? await NodeCover.shared.framed(tenant: t)) ?? [:])
+    private func readCovers(_ t: TenantSession, named: [String: String]) async {
         let changes = NodeCover.shared.changes(named: named, held: covers.mapValues { $0.blobId })
         var next = covers.filter { changes.keep.contains($0.key) }
         for (nodeId, key) in changes.open {
