@@ -94,7 +94,13 @@ Apple's toolbar button and list — measured 2026-11-09 (the list behind Apple's
     library), or the bridge's rule is revisited (ADR 0127's Consequences). Also open there: the portals (file chooser,
     save) and drag and drop.
   - **The Flatpak** on the GNOME runtime. It must carry GTK 4.22 and libadwaita 1.9, `libcrypt.so.1`, a CA bundle and
-    the zoneinfo.
+    the zoneinfo. The app's build and tests move into that runtime's SDK (`org.gnome.Sdk`), replacing the Fedora 44
+    container as what the app is proved against (ADR 0127 decision 4); Fedora stays only as a test VM's system.
+  - **Other desktops** (ADR 0127 decision 4: one libadwaita app for all). Not measured yet, remembered only: KWallet
+    answers the Secret Service, KDE's portal the file chooser and the colour scheme. The desktop-session slice checks
+    them under Fedora's KDE Plasma edition beside GNOME — staying signed in through KWallet, a file picked and saved
+    through KDE's dialogs, dark mode following Plasma's — and that the app still runs, signing in at every start,
+    where no Secret Service answers.
   - **The other screens.** Every other application's screens (Depot, Memories), uploads and a Pot's writes are not
     built. New, "Manage servers" and Settings are there but offer nothing yet.
   - **A CPU without AES instructions** (a Raspberry Pi 4) is refused at start (owner 2026-11-10, accepted). A software

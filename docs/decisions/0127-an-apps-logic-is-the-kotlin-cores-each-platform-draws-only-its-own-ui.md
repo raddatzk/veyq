@@ -53,6 +53,13 @@ four times.
    `linuxArm64` shared library — the suite's primitives libsodium's, built from the pinned release as for Apple (ADR
    0123 decision 3) — through the same narrow bridge as Windows (decision 5), its Rust types generated from the core's
    models. It ships as a Flatpak on the GNOME runtime. Its secure store is the Secret Service.
+   **One Linux UI for every desktop** (owner 2026-11-10): KDE Plasma and the others get the same libadwaita app. The
+   Flatpak brings GTK and libadwaita with the runtime, the system's dialogs come through the xdg-desktop-portals (KDE's
+   own file chooser under Plasma), the colour scheme through the Settings portal, the secure store through any Secret
+   Service (gnome-keyring, KWallet, KeePassXC); libadwaita does not take a desktop's theme, so under Plasma it looks
+   like a GNOME app. Where no Secret Service runs, the app works without staying signed in. **It is built and tested
+   against the runtime it ships on** — the GNOME SDK (`org.gnome.Sdk`) of the Flatpak's runtime version — so the
+   distribution a developer or a test VM runs is never what the app is proved against.
 
 5. **Windows: WinUI 3 in C#, the core as a Kotlin/Native library.** The Windows app is C# on the Windows App SDK. The
    core joins as a `mingwX64` DLL — the suite's primitives libsodium's, built from the pinned release as for Apple
@@ -101,6 +108,9 @@ four times.
 - **Windows through Kotlin/Native's whole C export, or the core on a JVM beside a C# UI.** The first exposes every
   class as handles and function tables a C# hand-maintains; the second runs a second runtime and process for a UI.
   The narrow bridge (decision 5) keeps the surface to one call and one callback.
+- **A second Linux UI for KDE Plasma (Qt with Kirigami, over the same bridge).** Plasma's own look and theme. Rejected
+  by the owner (2026-11-10): every screen a fifth time; the libadwaita app works under Plasma through the portals and
+  the Secret Service, and only its look is GNOME's.
 - **Linux on the JVM, in Kotlin through java-gi** (decision 4 as first taken, 2026-11-09). No bridge, maintained
   bindings, one language, and a spike ran (2026-11-10: GTK 4.22 and libadwaita 1.9 from an ARM container, java-gi
   1.0.0-RC3 on JDK 25). Replaced by the owner (2026-11-10): a Java runtime inside every Linux install, where the
