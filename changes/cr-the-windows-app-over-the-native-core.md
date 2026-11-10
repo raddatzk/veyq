@@ -1,7 +1,7 @@
 ---
 id: cr-the-windows-app-over-the-native-core
 title: The core as a Windows DLL behind the same bridge, proved by the Windows app's first slice in WinUI 3
-status: planned
+status: in-progress
 satisfies: []
 adrs: ["0127", "0123", "0122", "0125"]
 invariants:
@@ -83,6 +83,13 @@ extended, not replaced (`applyDefaultHierarchyTemplate { common { group("bridged
 or what 2.4.21 names for it — read the plugin, do not remember it). Commonized cinterop
 (`kotlin.mpp.enableCInteropCommonization=true`) must reach the new set: `:core:compileBridgedMainKotlinMetadata` is
 green, not only each target's compile (the Linux CR's trap).
+**Built (Phase 1):** 2.4.21 names it `applyHierarchyTemplate(KotlinHierarchyTemplate.default) { group("native") {
+group("bridged") { group("linux"); group("mingw") } } }` (read from `kotlin-gradle-plugin-api-2.4.21-sources.jar`,
+`KotlinHierarchyDsl.kt`; experimental, opted in), in `:core` and `:bridge` alike, so `linuxMain` → `bridgedMain` →
+`nativeMain`. The interop reached the new set with no further flag (`:core:compileBridgedMainKotlinMetadata` green).
+`:bridge` has the `mingwX64` target but links no DLL yet — Phase 2's, with its export gate. `LinuxLiveSignInTest` is
+`bridgedTest`'s `BridgedLiveSignInTest`; its engine is a test `expect` (`linuxTest` Curl, `mingwTest` WinHttp), as
+`Exports.kt`'s `platformHttpClient` is.
 
 **D2 — libsodium and utf8proc for mingw: Kotlin/Native's own clang, in the existing build scripts.** A `mingw_x64`
 slice in `build_libsodium.py` and `build_utf8proc.py`, built as W2 did, with `core/konan_toolchain.py` learning the
@@ -97,6 +104,13 @@ measures whether that is enough). **Trap (measured):** the `cinteropSodium*` tas
 an input, so a rebuilt `libsodium.a` left the old one inside the klib and the test binary red until
 `:core:cinteropSodiumMingwX64 --rerun`; the script's output is wired as the task's input, or the implementer says why
 not.
+**Built (Phase 1):** `config.log` writes the check and its result on two lines (`checking if _xgetbv() is available`,
+then `result: yes`; the one-line form is `configure`'s stdout), so the script matches the pair. `-DSODIUM_STATIC` is in
+the mingw `CFLAGS`. Every `sodium` and `utf8proc` cinterop — Apple's and Linux's too — declares its static library an
+input (`libraryInput` in `core/build.gradle.kts`): in the `-mxsave` bite `:core:cinteropSodiumMingwX64` re-ran on the
+rebuilt library without `--rerun`, and again on the restore (measured, `windows/run.py test`'s Gradle lines). The
+verification-metadata write from an empty Gradle home added 288 lines (`git diff --stat`); the empty home was given
+only the wrapper's Gradle distribution (its download timed out; it is no dependency).
 
 **D3 — Every primitive on Windows is libsodium's, AES-256-GCM among them** (owner 2026-11-10, Q1: one source per
 platform, as Apple's and Linux's). libsodium's AES-GCM needs AES-NI, PCLMUL and AVX. Every x64 CPU with AVX has it.
@@ -281,7 +295,7 @@ O3 (`powercfg /query` → 0 for both, `ScreenSaveActive` 0). O5 is `run.py`'s, i
 
 ## Phases
 
-### Phase 1 — The core on Windows
+### Phase 1 — The core on Windows — done (2026-11-10)
 
 D1's source sets; D2's mingw slices (`-mxsave` and its `config.log` check); D4's engine; `LibsodiumConformanceTest`
 reaching mingw; `NormalizationTest` and `WallClockTest` in `bridgedTest`; the verification metadata for the new
@@ -299,6 +313,26 @@ target, written from an empty Gradle home; `windows/run.py test`. O1 is not need
 - Unchanged and green: `./gradlew :core:jvmTest :core:macosArm64Test`, and `python3 src/mobile/linux/run.py test`
   (Linux's sets moved).
 - `/usr/bin/python3 scripts/validate_build_input_pins.py` is green.
+
+**Met (2026-11-10, commit `73b9bc7a8`):**
+- [x] `/usr/bin/python3 src/mobile/windows/run.py test` → exit 0: `176 tests from 38 test cases ran`, `PASSED 176`,
+  `libsodium conformance: 172 cases`, `NormalizationTest: 20034 lines, 1094978 other code points, 0 failures`,
+  `WallClockTest` OK under `windows zone: W. Europe Standard Time` (kotlinx-datetime names it `Europe/Berlin`, which
+  the test asserts). The binary is x64, run on the ARM64 VM under emulation; no x64 PC measured.
+- [x] Bites: a stub `nfc` (`= s`) → `NormalizationTest … 31233 failures`, exit 1; `aWrongPrimitiveIsCaught` green on
+  Windows (the AEAD off by one byte is caught); `MINGW_FLAGS` without `-mxsave` → `build_libsodium.py` exits 1 naming
+  `config.log` (`'__builtin_ia32_xgetbv' needs target feature xsave` in it); with the check removed as well → the
+  binary red at start, both conformance tests `FAILED` with `IllegalStateException: this CPU has no AES-GCM support`
+  (W5's defect, reproduced). Each restored by snapshot (`cmp` equal) and the good slice put back; the run after is green.
+- [x] `VEYQ_ENV_FILE=<main checkout>/.run/.env VEYQ_LIVE=http://veyq.localhost:8080 run.py test --tests
+  '*LiveSignInTest*'` → `windows (winhttp) tenants: Familie Raddatz@veyq.localhost, Turnverein@verein.localhost`, both
+  personal scopes open, `PASSED 1`; the env file is gone from the VM afterwards (`dir F:\veyq\test`).
+- [x] `./gradlew :core:compileBridgedMainKotlinMetadata :core:compileNativeMainKotlinMetadata
+  :bridge:compileBridgedMainKotlinMetadata` green.
+- [x] `./gradlew :core:jvmTest :core:macosArm64Test :bridge:jvmTest` green (344, 176 and 15 tests, 0 failures, from
+  their JUnit XML); `python3 src/mobile/linux/run.py test` → `PASSED 176`, and `linux/run.py bridge` (Exports.kt moved)
+  → `the library answered every step`.
+- [x] `/usr/bin/python3 scripts/validate_build_input_pins.py` green.
 
 ### Phase 2 — `:bridge` on Windows, and the C# types
 
@@ -387,4 +421,15 @@ runs them, `validate_changes.py` among them), and every "measured" in the touche
 
 ## Retrospective
 
-(Written per phase, as the phases close.)
+### Phase 1 (2026-11-10)
+
+- **The refine's measurements carried the phase.** W1–W5 had already found every trap (`llvm-ar s`, `-mxsave`, the
+  stale klib), so the build was one pass. What reality still changed was small and is recorded under D1/D2: the DSL's
+  exact form, `config.log`'s two-line check, and that the live test's engine is a test `expect`, which D1 had named
+  only for `:bridge`.
+- **A Gradle deprecation slipped in and was caught only by reading `--warning-mode all`.** `val bridgedMain by
+  getting` is deprecated for Gradle 10; the build only said "deprecated features were used". Next time: run
+  `--warning-mode all` once after any build-script edit, before the phase's verification, not after.
+- **Process:** the empty-Gradle-home write failed first on the wrapper's own download (a read timeout), not on a
+  dependency; seeding the empty home with the wrapper distribution alone keeps the write honest. Worth one line in
+  `src/mobile/CLAUDE.md`'s trap with Phase 5.
