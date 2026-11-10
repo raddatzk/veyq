@@ -10,3 +10,6 @@ apple/build/
 apple/Veyq/Assets.xcassets/*/
 # cargo's own output, should an editor run it here: linux/run.py keeps its target in a Docker volume.
 linux/target/
+# .NET's own output beside each C# project of the Windows app (windows/run.py builds them; nothing of it is kept).
+windows/**/bin/
+windows/**/obj/

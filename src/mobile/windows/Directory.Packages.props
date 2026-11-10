@@ -1,0 +1,15 @@
+<Project>
+  <!-- The Windows app's packages, central and exact (cr-the-windows-app-over-the-native-core D7). Every restore is in
+       locked mode against each project's committed packages.lock.json, and `run.py build` is red on any package
+       `dotnet package list` names deprecated or vulnerable. System.Text.Json is the runtime's own: no JSON library.
+       MSTest is its framework and adapter alone, not the `MSTest` metapackage, which adds a code-coverage extension
+       whose licence is no open-source expression and the VSTest host the Microsoft.Testing.Platform runner does not
+       need. -->
+  <PropertyGroup>
+    <ManagePackageVersionsCentrally>true</ManagePackageVersionsCentrally>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageVersion Include="MSTest.TestFramework" Version="[4.5.2]" />
+    <PackageVersion Include="MSTest.TestAdapter" Version="[4.5.2]" />
+  </ItemGroup>
+</Project>

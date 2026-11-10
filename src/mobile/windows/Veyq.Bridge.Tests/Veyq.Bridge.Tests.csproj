@@ -1,0 +1,23 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!-- The C# half of the bridge's round trip (cr-the-windows-app-over-the-native-core D6) and the wrapper over the real
+       veyq.dll on Windows. A Microsoft.Testing.Platform executable (global.json's runner): `dotnet test` on any host;
+       on an ARM64 Windows host with `arch x64`, since veyq.dll is x64 (VeyqNative names it; run.py passes it). -->
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <OutputType>Exe</OutputType>
+    <EnableMSTestRunner>true</EnableMSTestRunner>
+    <TestingPlatformDotnetTestSupport>true</TestingPlatformDotnetTestSupport>
+    <!-- Restored for win-x64 too on every host, so the lock file is one whether an x64 test run asks for it or not. -->
+    <RuntimeIdentifiers>win-x64</RuntimeIdentifiers>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="MSTest.TestFramework" />
+    <PackageReference Include="MSTest.TestAdapter" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="../Veyq.Bridge/Veyq.Bridge.csproj" />
+  </ItemGroup>
+  <ItemGroup Condition="'$(VeyqNative)' != ''">
+    <None Include="$(VeyqNative)" Link="veyq.dll" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+</Project>

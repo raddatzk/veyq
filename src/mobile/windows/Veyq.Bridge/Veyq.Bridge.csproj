@@ -1,0 +1,17 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!-- The core as C# sees it (cr-the-windows-app-over-the-native-core D6): the wire's types generated from the core's
+       models (Bridge.g.cs, never committed), a safe wrapper over veyq.dll's six functions, and the host function with
+       the device store. No Windows API: it builds and its round trip runs on any host .NET runs on. -->
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+  </PropertyGroup>
+  <ItemGroup>
+    <InternalsVisibleTo Include="Veyq.Bridge.Tests" />
+    <Compile Include="$(VeyqGenerated)bridge/Bridge.g.cs" Link="Bridge.g.cs" />
+  </ItemGroup>
+  <Target Name="VeyqBridgeGenerated" BeforeTargets="CoreCompile">
+    <Error Condition="!Exists('$(VeyqGenerated)bridge/Bridge.g.cs')"
+           Text="No $(VeyqGenerated)bridge/Bridge.g.cs: run `./gradlew :bridge:generateBindings` in src/mobile (or windows/run.py build)." />
+  </Target>
+</Project>

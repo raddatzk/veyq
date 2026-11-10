@@ -1,7 +1,8 @@
 // The native bridge (ADR 0127 decision 5; ADR 0123's Consequences, the bridge): the core as one shared library,
-// `libveyq.so`, whose only public surface is the six C functions of `bridge.h`. It depends on `:core` as an
-// implementation dependency, so the library exports none of the core's classes — only the `@CName` functions of
-// `src/bridgedMain` (Linux and Windows, as in `:core`; each brings only its HTTP engine). The JVM target exists for the tests and for the generator of the Rust types (`generateBindings`).
+// `libveyq.so` on Linux and `veyq.dll` on Windows, whose only public surface is the six C functions of `bridge.h`. It
+// depends on `:core` as an implementation dependency, so the library exports none of the core's classes — only the
+// `@CName` functions of `src/bridgedMain` (Linux and Windows, as in `:core`; each brings only its HTTP engine). The JVM
+// target exists for the tests and for the generator of the Rust and the C# types (`generateBindings`).
 import org.jetbrains.kotlin.gradle.ExperimentalKotlinGradlePluginApi
 import org.jetbrains.kotlin.gradle.plugin.KotlinHierarchyTemplate
 
@@ -22,9 +23,16 @@ kotlin {
             }
         }
     }
-    // Windows (ADR 0127 decision 5) compiles here; its DLL is linked by the next phase of
-    // cr-the-windows-app-over-the-native-core, with the export gate it needs.
-    mingwX64()
+    mingwX64 {
+        binaries.sharedLib {
+            baseName = "veyq"
+            // veyq.dll exports what the .def Kotlin/Native writes beside it names — bridge.h's six and veyq_symbols —
+            // and nothing else: without a .def, lld exports every symbol of the link (winpthreads', the unwinder's,
+            // iconv's; 185 measured 2026-11-10), as a MinGW link does when nothing is marked dllexport.
+            // `windows/run.py bridge` reads the export table.
+            linkerOpts(outputDirectory.resolve("veyq.def").absolutePath)
+        }
+    }
     listOf(linuxArm64(), linuxX64()).forEach { target ->
         target.binaries.sharedLib {
             baseName = "veyq"
@@ -56,14 +64,14 @@ kotlin {
     }
 }
 
-// The hand-written C surface and where the generated Rust goes: never committed (as the theme and the words).
+// The hand-written C surface and where the generated Rust and C# go: never committed (as the theme and the words).
 val header = file("bridge.h")
 val generatedBridge = rootDir.resolve("build/generated/bridge")
 
 val jvmMain = kotlin.jvm().compilations.getByName("main")
 val generateBindings = tasks.register<JavaExec>("generateBindings") {
     group = "veyq"
-    description = "Writes bridge.rs (the Rust types of the bridge's wire, and its six extern \"C\" functions) into src/mobile/build/generated/bridge."
+    description = "Writes bridge.rs and Bridge.g.cs (the Rust and the C# types of the bridge's wire, and its six C functions) into src/mobile/build/generated/bridge."
     dependsOn(jvmMain.compileTaskProvider)
     classpath = files(jvmMain.output.allOutputs, jvmMain.runtimeDependencyFiles)
     mainClass.set("me.raddatz.veyq.mobile.bridge.BindingsKt")
@@ -72,14 +80,19 @@ val generateBindings = tasks.register<JavaExec>("generateBindings") {
     args(header.absolutePath, generatedBridge.absolutePath)
 }
 
-// The header test reads the header Kotlin/Native writes beside the library it links, and the samples it writes are the
-// Rust half's input (ADR 0123's Consequences, the bridge: the generated bridge.rs deserializes what the JVM wrote).
+// The header test reads the header Kotlin/Native writes beside each library it links, and the samples WireTest writes
+// are the Rust and the C# half's input (ADR 0123's Consequences, the bridge: the generated bridge.rs and Bridge.g.cs
+// deserialize what the JVM wrote).
 tasks.named<Test>("jvmTest") {
-    val linked = tasks.named("linkDebugSharedLinuxArm64")
-    dependsOn(linked)
+    dependsOn("linkDebugSharedLinuxArm64", "linkDebugSharedMingwX64")
     inputs.file(header).withPropertyName("header")
     systemProperty("veyq.bridgeHeader", header.absolutePath)
-    systemProperty("veyq.knHeader", layout.buildDirectory.file("bin/linuxArm64/debugShared/libveyq_api.h").get().asFile.absolutePath)
+    // Kotlin/Native's header of each bridged family, which BridgeHeaderTest holds bridge.h against: Linux's and Windows'
+    systemProperty(
+        "veyq.knHeaders",
+        listOf("bin/linuxArm64/debugShared/libveyq_api.h", "bin/mingwX64/debugShared/veyq_api.h")
+            .joinToString(File.pathSeparator) { layout.buildDirectory.file(it).get().asFile.absolutePath },
+    )
     systemProperty("veyq.samples", generatedBridge.resolve("samples").absolutePath)
     systemProperty("veyq.repoRoot", rootDir.resolve("../..").canonicalPath)
     System.getenv("VEYQ_LIVE")?.let { environment("VEYQ_LIVE", it) }

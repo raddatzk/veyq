@@ -1,0 +1,12 @@
+<Project>
+  <!-- What every C# project of the Windows app shares (cr-the-windows-app-over-the-native-core D6, D7). -->
+  <PropertyGroup>
+    <LangVersion>latest</LangVersion>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>disable</ImplicitUsings>
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+    <RestorePackagesWithLockFile>true</RestorePackagesWithLockFile>
+    <!-- What the build writes but never keeps: the bridge's C#, the samples (src/mobile/build/generated, from Gradle). -->
+    <VeyqGenerated Condition="'$(VeyqGenerated)' == ''">$(MSBuildThisFileDirectory)../build/generated/</VeyqGenerated>
+  </PropertyGroup>
+</Project>
