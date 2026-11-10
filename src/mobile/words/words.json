@@ -262,6 +262,11 @@
     "en": "Opening…",
     "de": "Wird geöffnet…"
   },
+  "start_no_aes": {
+    "en": "This computer's processor lacks the AES instructions veyq's encryption needs, so veyq cannot open here.",
+    "de": "Der Prozessor dieses Computers hat die AES-Befehle nicht, die veyqs Verschlüsselung braucht. veyq kann hier nicht öffnen.",
+    "note": "Shown by the Linux app when the CPU has no AES instructions (e.g. a Raspberry Pi 4)."
+  },
   "unlock_title": {
     "en": "Welcome back",
     "de": "Willkommen zurück"

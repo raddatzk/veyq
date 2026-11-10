@@ -16,6 +16,12 @@ Outputs (each optional; each a directory or file this script owns and rewrites w
                         own name, so `R.string.<key>` is the key.
   --android-kotlin DIR  `me/raddatz/veyq/mobile/android/Words.kt`: `Context.words(msg, args)`, a `Msg` to its resource.
   --apple-strings FILE  a String Catalog (table `Words`): the Apple app's `say(msg, args)` looks the key up there.
+  --gettext DIR         the Linux app's (CR core-as-a-native-library D10): `veyq.pot` and one `<lang>.po` per language
+                        (`msgctxt` the key, `msgid` the English, `msgstr` the language's; a plural's CLDR categories
+                        mapped to the language's `Plural-Forms`, a language without a known mapping refused), which the
+                        app's build compiles with `msgfmt`, and `words.rs`: one function per key with typed arguments
+                        (`{n}` a `&str`, `{n:int}` an `i64`, a plural's count first) looking the key up in the domain
+                        `veyq`, and `say(key, args)` reaching the same function by its key (a core `Notice`).
 
 Python 3.9 (Xcode's and Gradle's `python3` on the developer's Mac), standard library only.
 """
@@ -180,6 +186,124 @@ def apple_strings(words: dict, out: Path) -> None:
     write(out, json.dumps(catalog, ensure_ascii=False, indent=2) + "\n")
 
 
+# ---- Linux (gettext) ----
+
+# A language's gettext plural rule and which CLDR category each of its forms is, in order. A language missing here is
+# refused: its plural is a decision (a rule and its categories), never a silent wrong form.
+GETTEXT_PLURALS = {
+    "en": ("nplurals=2; plural=(n != 1);", ("one", "other")),
+    "de": ("nplurals=2; plural=(n != 1);", ("one", "other")),
+}
+RUST_KEYWORDS = {
+    "as", "async", "await", "break", "const", "continue", "crate", "dyn", "else", "enum", "extern", "false", "fn", "for",
+    "gen", "if", "impl", "in", "let", "loop", "match", "mod", "move", "mut", "pub", "ref", "return", "self", "static",
+    "struct", "super", "trait", "true", "type", "unsafe", "use", "where", "while", "abstract", "become", "box", "do",
+    "final", "macro", "override", "priv", "try", "typeof", "unsized", "virtual", "yield",
+}
+
+
+def po_quote(t: str) -> str:
+    return '"' + t.replace("\\", "\\\\").replace('"', '\\"').replace("\n", "\\n").replace("\t", "\\t") + '"'
+
+
+def plural_forms(entry: dict, lang: str, key: str) -> list:
+    """[lang]'s text of a plural [entry] per gettext form, in the order GETTEXT_PLURALS gives its categories."""
+    _, cats = GETTEXT_PLURALS[lang]
+    v = entry[lang]
+    unknown = sorted(set(v) - set(cats))
+    if unknown:
+        raise CatalogError(f"{key}.{lang}: gettext's rule for {lang} has no form for {', '.join(unknown)}")
+    return [v.get(c, v["other"]) for c in cats]
+
+
+def gettext_catalogs(words: dict, out: Path) -> None:
+    for lang in LANGS:
+        if lang not in GETTEXT_PLURALS:
+            raise CatalogError(f"{lang}: no gettext plural rule for this language — add it to GETTEXT_PLURALS")
+    head = ["# Generated from src/mobile/words/words.json by generate_words.py; never edited.", 'msgid ""', 'msgstr ""']
+
+    def header(lang: str | None) -> list:
+        rule = GETTEXT_PLURALS[lang or "en"][0]
+        lines = ['"Project-Id-Version: veyq\\n"', '"MIME-Version: 1.0\\n"', '"Content-Type: text/plain; charset=UTF-8\\n"',
+                 '"Content-Transfer-Encoding: 8bit\\n"', f'"Plural-Forms: {rule}\\n"']
+        if lang:
+            lines.insert(1, f'"Language: {lang}\\n"')
+        return head + lines + [""]
+
+    for lang in (None,) + LANGS:
+        lines = header(lang)
+        for key, entry in words.items():
+            en = entry["en"]
+            lines.append(f"msgctxt {po_quote(key)}")
+            if is_plural(entry):
+                one, other = plural_forms(entry, "en", key)
+                lines += [f"msgid {po_quote(one)}", f"msgid_plural {po_quote(other)}"]
+                forms = plural_forms(entry, lang, key) if lang and lang in entry else ["", ""]
+                lines += [f"msgstr[{i}] {po_quote(t)}" for i, t in enumerate(forms)]
+            else:
+                lines.append(f"msgid {po_quote(en)}")
+                lines.append(f"msgstr {po_quote(entry[lang] if lang and lang in entry else '')}")
+            lines.append("")
+        write(out / (f"{lang}.po" if lang else "veyq.pot"), "\n".join(lines))
+
+
+def rust_str(t: str) -> str:
+    return '"' + t.replace("\\", "\\\\").replace('"', '\\"').replace("\n", "\\n").replace("\t", "\\t") + '"'
+
+
+def rust_words(words: dict, out: Path) -> None:
+    lines = [
+        "// Generated from src/mobile/words/words.json by generate_words.py; never edited, never committed.",
+        "// Each key a function: its words in the person's language (gettext, domain `veyq`, msgctxt the key), its",
+        "// placeholders filled from its typed arguments; `say` reaches the same function by its key.",
+        "",
+    ]
+    dispatch = []
+    for key, entry in words.items():
+        typed = placeholders_of(list(entry["en"].values()) if is_plural(entry) else [entry["en"]], key)
+        name = f"r#{key}" if key in RUST_KEYWORDS else key
+        params = [f"a{i + 1}: {'i64' if t else '&str'}" for i, t in enumerate(typed)]
+        args = [f"Arg::{'Int' if t else 'Text'}(a{i + 1})" for i, t in enumerate(typed)]
+        fills = ", ".join(args)
+        # an integer is copied out of the pattern's reference; a text reference is handed on as it is
+        names = [f"*a{i + 1}" if t else f"a{i + 1}" for i, t in enumerate(typed)]
+        if is_plural(entry):
+            if typed and not typed[0]:
+                raise CatalogError(f"{key}: a plural's first placeholder is its count, an integer ({{1:int}})")
+            if not typed:
+                params, args, names = ["n: i64"], ["Arg::Int(n)"], ["*n"]
+            one, other = plural_forms(entry, "en", key)
+            count = "a1" if typed else "n"
+            look = f"plural({rust_str(key)}, {rust_str(one)}, {rust_str(other)}, {count})"
+        else:
+            look = f"single({rust_str(key)}, {rust_str(entry['en'])})"
+        shown = entry["en"]["other"] if is_plural(entry) else entry["en"]
+        lines.append(f"/// `{key}`: {' '.join(shown.split())}")
+        lines.append(f"pub fn {name}({', '.join(params)}) -> String {{")
+        lines.append(f"    fill(&{look}, &[{fills}])")
+        lines.append("}")
+        lines.append("")
+        pattern = ", ".join(args)
+        dispatch.append(f"        ({rust_str(key)}, [{pattern}]) => Some({name}({', '.join(names)})),")
+    lines += [
+        "/// [key]'s words with [args] (a core `Notice`'s key and arguments); None for a key the catalog does not have, or",
+        "/// arguments of another count or kind than its placeholders.",
+        "pub fn say(key: &str, args: &[Arg]) -> Option<String> {",
+        "    match (key, args) {",
+        *dispatch,
+        "        _ => None,",
+        "    }",
+        "}",
+        "",
+        "/// Every key of the catalog, in its order.",
+        f"pub const KEYS: [&str; {len(words)}] = [",
+        *[f"    {rust_str(k)}," for k in words],
+        "];",
+        "",
+    ]
+    write(out / "words.rs", "\n".join(lines))
+
+
 def write(path: Path, text: str) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     if not path.exists() or path.read_text(encoding="utf-8") != text:
@@ -192,6 +316,7 @@ def main() -> int:
     ap.add_argument("--android-res", type=Path)
     ap.add_argument("--android-kotlin", type=Path)
     ap.add_argument("--apple-strings", type=Path)
+    ap.add_argument("--gettext", type=Path)
     a = ap.parse_args()
     try:
         words = load()
@@ -206,6 +331,13 @@ def main() -> int:
         android_kotlin(words, a.android_kotlin)
     if a.apple_strings:
         apple_strings(words, a.apple_strings)
+    if a.gettext:
+        try:
+            gettext_catalogs(words, a.gettext)
+            rust_words(words, a.gettext)
+        except CatalogError as e:
+            print(f"words.json: {e}", file=sys.stderr)
+            return 1
     return 0
 
 
