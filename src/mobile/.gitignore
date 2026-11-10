@@ -13,3 +13,4 @@ linux/target/
 # .NET's own output beside each C# project of the Windows app (windows/run.py builds them; nothing of it is kept).
 windows/**/bin/
 windows/**/obj/
+windows/**/TestResults/

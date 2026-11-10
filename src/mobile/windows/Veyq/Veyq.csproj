@@ -1,0 +1,50 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!-- The veyq app on Windows (ADR 0127 decision 5; cr-the-windows-app-over-the-native-core D7): WinUI 3 over the core's
+       veyq.dll, unpackaged (MSIX is the packaging's), x64 (Kotlin/Native has no Windows ARM64 target), self-contained
+       with the Windows App SDK and .NET, so its build output runs where it is copied. Its words, theme and the bridge's
+       types are generated (src/mobile/build/generated, never committed); windows/run.py build writes them first. -->
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net10.0-windows10.0.26100.0</TargetFramework>
+    <RuntimeIdentifier>win-x64</RuntimeIdentifier>
+    <RuntimeIdentifiers>win-x64</RuntimeIdentifiers>
+    <Platforms>x64</Platforms>
+    <PlatformTarget>x64</PlatformTarget>
+    <UseWinUI>true</UseWinUI>
+    <WindowsPackageType>None</WindowsPackageType>
+    <WindowsAppSDKSelfContained>true</WindowsAppSDKSelfContained>
+    <SelfContained>true</SelfContained>
+    <!-- No trimming or AOT property: one implies an SDK-versioned package, and the lock file would be the SDK's
+         (Phase 2's trap). -->
+    <RootNamespace>Veyq</RootNamespace>
+    <AssemblyName>veyq</AssemblyName>
+    <ApplicationManifest>app.manifest</ApplicationManifest>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <!-- The words' fallback language, the .pri's default qualifier. -->
+    <DefaultLanguage>en-US</DefaultLanguage>
+    <!-- The Mac restores it too (the lock file, the deprecation gate); only Windows builds it. -->
+    <EnableWindowsTargeting>true</EnableWindowsTargeting>
+    <VeyqWords>$(VeyqGenerated)words/windows/</VeyqWords>
+    <VeyqTheme>$(VeyqGenerated)theme/windows/</VeyqTheme>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="Microsoft.WindowsAppSDK.WinUI" />
+    <PackageReference Include="Microsoft.WindowsAppSDK.Foundation" />
+    <PackageReference Include="Microsoft.Windows.SDK.BuildTools" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="../Veyq.Bridge/Veyq.Bridge.csproj" />
+  </ItemGroup>
+  <ItemGroup>
+    <Compile Include="$(VeyqWords)Words.g.cs" Link="Words.g.cs" />
+    <PRIResource Include="$(VeyqWords)Strings/**/*.resw" Link="Strings/%(RecursiveDir)%(Filename)%(Extension)" />
+    <Page Include="$(VeyqTheme)Theme.xaml" Link="Theme.xaml" />
+    <None Include="$(VeyqNative)" Link="veyq.dll" CopyToOutputDirectory="PreserveNewest" Condition="'$(VeyqNative)' != ''" />
+  </ItemGroup>
+  <Target Name="VeyqAppGenerated" BeforeTargets="PrepareForBuild">
+    <Error Condition="!Exists('$(VeyqWords)Words.g.cs') Or !Exists('$(VeyqTheme)Theme.xaml')"
+           Text="No generated words or theme under $(VeyqGenerated): run windows/run.py build." />
+    <Error Condition="'$(VeyqNative)' == '' Or !Exists('$(VeyqNative)')"
+           Text="VeyqNative names no veyq.dll ('$(VeyqNative)'): windows/run.py build passes the core's DLL." />
+  </Target>
+</Project>

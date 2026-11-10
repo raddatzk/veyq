@@ -22,6 +22,14 @@ Outputs (each optional; each a directory or file this script owns and rewrites w
                         app's build compiles with `msgfmt`, and `words.rs`: one function per key with typed arguments
                         (`{n}` a `&str`, `{n:int}` an `i64`, a plural's count first) looking the key up in the domain
                         `veyq`, and `say(key, args)` reaching the same function by its key (a core `Notice`).
+  --resw DIR            the Windows app's (cr-the-windows-app-over-the-native-core D8): `Strings/<culture>/Resources.resw`
+                        per language (`en-US`, `de-DE`; the resource's name the key, a plural one entry per CLDR category
+                        its language's rule names, `key#one`, `key#other`; a name the English of an untranslated key in
+                        every language) with `_language` naming the language whose rule the plurals follow, and
+                        `Words.g.cs`: one method per key with typed arguments (`{n}` a `string`, `{n:int}` a `long`, a
+                        plural's count first), its placeholders filled by number, the plural's category picked by the
+                        rule of the language the catalog that answered names (a language without a rule refused), and
+                        `Say(key, args)` reaching the same method by its key (a core `Notice`).
 
 Python 3.9 (Xcode's and Gradle's `python3` on the developer's Mac), standard library only.
 """
@@ -304,6 +312,161 @@ def rust_words(words: dict, out: Path) -> None:
     write(out / "words.rs", "\n".join(lines))
 
 
+# ---- Windows (.resw, MRT Core) ----
+
+# A language's culture folder and its CLDR plural rule for an integer count, as C# over `n` (a `long`), in the order
+# its categories are tested, the last one `other`. A language missing here is refused: its plural is a decision.
+RESW_LANGS = {
+    "en": ("en-US", (("one", "n == 1"), ("other", "true"))),
+    "de": ("de-DE", (("one", "n == 1"), ("other", "true"))),
+}
+CSHARP_KEYWORDS = {
+    "abstract", "as", "base", "bool", "break", "byte", "case", "catch", "char", "checked", "class", "const", "continue",
+    "decimal", "default", "delegate", "do", "double", "else", "enum", "event", "explicit", "extern", "false", "finally",
+    "fixed", "float", "for", "foreach", "goto", "if", "implicit", "in", "int", "interface", "internal", "is", "lock",
+    "long", "namespace", "new", "null", "object", "operator", "out", "override", "params", "private", "protected",
+    "public", "readonly", "ref", "return", "sbyte", "sealed", "short", "sizeof", "stackalloc", "static", "string",
+    "struct", "switch", "this", "throw", "true", "try", "typeof", "uint", "ulong", "unchecked", "unsafe", "ushort",
+    "using", "virtual", "void", "volatile", "while",
+}
+
+
+def xml_text(t: str) -> str:
+    return t.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+
+
+def resw_forms(entry: dict, lang: str, key: str) -> list:
+    """(category, text) of a plural [entry] in [lang] for each category [lang]'s rule names; a category the entry does not
+    name takes its `other`, one the rule does not know is refused (it would never be chosen)."""
+    _, rule = RESW_LANGS[lang]
+    cats = [c for c, _ in rule]
+    v = entry.get(lang, entry["en"])
+    unknown = sorted(set(v) - set(cats))
+    if unknown:
+        raise CatalogError(f"{key}.{lang}: the plural rule for {lang} has no category {', '.join(unknown)}")
+    return [(c, v.get(c, v["other"])) for c in cats]
+
+
+def resw(words: dict, out: Path) -> None:
+    for lang in LANGS:
+        if lang not in RESW_LANGS:
+            raise CatalogError(f"{lang}: no plural rule for this language on Windows — add it to RESW_LANGS")
+    for lang in LANGS:
+        culture, _ = RESW_LANGS[lang]
+        lines = [
+            '<?xml version="1.0" encoding="utf-8"?>',
+            "<!-- Generated from src/mobile/words/words.json by generate_words.py; never edited, never committed. -->",
+            "<root>",
+            '  <resheader name="resmimetype"><value>text/microsoft-resx</value></resheader>',
+            '  <resheader name="version"><value>2.0</value></resheader>',
+            '  <resheader name="reader"><value>System.Resources.ResXResourceReader, System.Windows.Forms, Version=4.0.0.0, '
+            'Culture=neutral, PublicKeyToken=b77a5c561934e089</value></resheader>',
+            '  <resheader name="writer"><value>System.Resources.ResXResourceWriter, System.Windows.Forms, Version=4.0.0.0, '
+            'Culture=neutral, PublicKeyToken=b77a5c561934e089</value></resheader>',
+            f'  <data name="_language" xml:space="preserve"><value>{lang}</value></data>',
+        ]
+        for key, entry in words.items():
+            note = f"<comment>{xml_text(entry['note'])}</comment>" if "note" in entry else ""
+            if is_plural(entry):
+                for cat, text in resw_forms(entry, lang, key):
+                    lines.append(f'  <data name="{key}#{cat}" xml:space="preserve"><value>{xml_text(text)}</value>{note}</data>')
+            else:
+                text = entry.get(lang, entry["en"])
+                lines.append(f'  <data name="{key}" xml:space="preserve"><value>{xml_text(text)}</value>{note}</data>')
+        lines += ["</root>", ""]
+        write(out / "Strings" / culture / "Resources.resw", "\n".join(lines))
+
+
+def cs_str(t: str) -> str:
+    return '"' + t.replace("\\", "\\\\").replace('"', '\\"').replace("\n", "\\n").replace("\t", "\\t") + '"'
+
+
+def pascal(key: str) -> str:
+    return "".join(p[:1].upper() + p[1:] for p in key.split("_"))
+
+
+def csharp_words(words: dict, out: Path) -> None:
+    methods: dict = {}
+    for key in words:
+        name = pascal(key)
+        if name in methods or name in ("Say", "Keys", "Lookup", "Category", "Fill", "Single", "Plural"):
+            raise CatalogError(f"{key}: its C# name {name} is taken (by {methods.get(name, 'Words itself')})")
+        methods[name] = key
+    rules = []
+    for lang in LANGS:
+        _, rule = RESW_LANGS[lang]
+        arms = " : ".join(f'{cond} ? "{cat}"' for cat, cond in rule[:-1])
+        rules.append(f'        "{lang}" => {arms} : "{rule[-1][0]}",' if arms else f'        "{lang}" => "{rule[-1][0]}",')
+    lines = [
+        "// Generated from src/mobile/words/words.json by generate_words.py; never edited, never committed.",
+        "// Each key a method: its words in the person's language (the catalog Lookup reads: MRT Core's resources.pri in",
+        "// the app), its placeholders filled by number from its typed arguments; Say reaches the same method by its key.",
+        "#nullable enable",
+        "using System.Collections.Generic;",
+        "",
+        "namespace Veyq;",
+        "",
+        "public static partial class Words",
+        "{",
+        "    /// <summary>",
+        "    /// The plural category of <paramref name=\"n\"/> under the rule of <paramref name=\"language\"/>, the language the",
+        "    /// catalog that answered names (its <c>_language</c>); null for a language this catalog has no rule for.",
+        "    /// </summary>",
+        "    public static string? Category(string language, long n) => language switch",
+        "    {",
+        *rules,
+        "        _ => null,",
+        "    };",
+        "",
+    ]
+    dispatch = []
+    for key, entry in words.items():
+        typed = placeholders_of(list(entry["en"].values()) if is_plural(entry) else [entry["en"]], key)
+        params = [f"{'long' if t else 'string'} a{i + 1}" for i, t in enumerate(typed)]
+        names = [f"a{i + 1}" for i in range(len(typed))]
+        if is_plural(entry):
+            if typed and not typed[0]:
+                raise CatalogError(f"{key}: a plural's first placeholder is its count, an integer ({{1:int}})")
+            count = "a1" if typed else "n"
+            if not typed:
+                params, names = ["long n"], ["n"]
+            look = f"Plural({cs_str(key)}, {cs_str(entry['en'].get('one', entry['en']['other']))}, {cs_str(entry['en']['other'])}, {count})"
+        else:
+            look = f"Single({cs_str(key)}, {cs_str(entry['en'])})"
+        fills = ", ".join(f"(object){n}" for n in names[: len(typed)])
+        shown = entry["en"]["other"] if is_plural(entry) else entry["en"]
+        lines.append(f"    /// <summary><c>{key}</c>: {xml_text(' '.join(shown.split()))}</summary>")
+        lines.append(f"    public static string {pascal(key)}({', '.join(params)}) => Fill({look}, [{fills}]);")
+        lines.append("")
+        conds = [f"args[{i}] is {'long' if t else 'string'} {n}" for i, (t, n) in enumerate(zip(typed, names))]
+        if is_plural(entry) and not typed:
+            conds = ["args[0] is long n"]
+        arity = max(len(typed), 1 if is_plural(entry) else 0)
+        guard = f" when {' && '.join(conds)}" if conds else ""
+        dispatch.append(f"        ({cs_str(key)}, {arity}){guard} => {pascal(key)}({', '.join(names)}),")
+    lines += [
+        "    /// <summary>",
+        "    /// <paramref name=\"key\"/>'s words with <paramref name=\"args\"/> (a core Notice's key and arguments: a",
+        "    /// <c>string</c> for a <c>{n}</c> placeholder, a <c>long</c> for a <c>{n:int}</c> one); null for a key this catalog",
+        "    /// does not have, or arguments of another count or kind than its placeholders.",
+        "    /// </summary>",
+        "    public static string? Say(string key, IReadOnlyList<object> args) => (key, args.Count) switch",
+        "    {",
+        *dispatch,
+        "        _ => null,",
+        "    };",
+        "",
+        "    /// <summary>Every key of the catalog, in its order.</summary>",
+        "    public static readonly IReadOnlyList<string> Keys =",
+        "    [",
+        *[f"        {cs_str(k)}," for k in words],
+        "    ];",
+        "}",
+        "",
+    ]
+    write(out / "Words.g.cs", "\n".join(lines))
+
+
 def write(path: Path, text: str) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     if not path.exists() or path.read_text(encoding="utf-8") != text:
@@ -317,6 +480,7 @@ def main() -> int:
     ap.add_argument("--android-kotlin", type=Path)
     ap.add_argument("--apple-strings", type=Path)
     ap.add_argument("--gettext", type=Path)
+    ap.add_argument("--resw", type=Path)
     a = ap.parse_args()
     try:
         words = load()
@@ -335,6 +499,13 @@ def main() -> int:
         try:
             gettext_catalogs(words, a.gettext)
             rust_words(words, a.gettext)
+        except CatalogError as e:
+            print(f"words.json: {e}", file=sys.stderr)
+            return 1
+    if a.resw:
+        try:
+            resw(words, a.resw)
+            csharp_words(words, a.resw)
         except CatalogError as e:
             print(f"words.json: {e}", file=sys.stderr)
             return 1

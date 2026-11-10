@@ -16,17 +16,35 @@ Verbs:
                              (Kotlin/Native's clang, an import library written from the DLL's .def) and runs it on the
                              Windows host beside the DLL; with VEYQ_LIVE the smoke also signs in as the seeded
                              principal over the DLL's own HTTP client (WinHTTP).
-  build                      generates the bridge's C# (`:bridge:generateBindings`, Bridge.g.cs) and the samples its
-                             round trip reads (`WireTest`), links the debug DLL, and holds the C# packages to the
-                             deprecation gate (`dotnet package list --deprecated` and `--vulnerable`, every package,
-                             transitive ones too: red on any). Then `dotnet test` of Veyq.Bridge.Tests here, and on the
-                             Windows host, as an x64 process beside the DLL (`--arch x64`; an ARM64 host runs it under
-                             emulation with the x64 .NET runtime). Every restore is `--locked-mode`.
-
+  build                      generates what the app is built from but does not keep — the bridge's C#
+                             (`:bridge:generateBindings`, Bridge.g.cs) and the samples its round trip reads (`WireTest`),
+                             the words (`generate_words.py --resw`: the .resw catalogs and Words.g.cs) and the theme
+                             (`generate_theme.py --winui`: Theme.xaml) — and links the debug DLL. Here: every C# project
+                             restored `--locked-mode` and held to the deprecation gate (`dotnet package list --deprecated`
+                             and `--vulnerable`, transitive packages too: red on any), then `dotnet test` of
+                             Veyq.Bridge.Tests. On the Windows host: the same locked restores, the app built (Veyq, WinUI,
+                             unpackaged, self-contained, x64) and Veyq.Drive, then `dotnet test` of Veyq.Bridge.Tests beside
+                             the DLL and of Veyq.Tests against the app's .pri — the words in English and German, money and
+                             days in two cultures, sizes in the host's — each an x64 process (`--arch x64`; an ARM64 host
+                             runs it under emulation with the x64 .NET runtime).
+  run [--width W --height H] builds the app as `build` does (without its tests), stops a running one, puts it in
+                             `<dir>\app` and starts it in the logged-on session through the scheduled task `veyq-app`
+                             (Veyq.Drive's launch); W × H resizes its window. Then it holds the tunnel to the backend
+                             (`ssh -R`, VEYQ_LIVE's port, default http://veyq.localhost:8080) until it is ended (Ctrl+C);
+                             the app keeps running. A debug build reads VEYQ_THEME (light, dark) and VEYQ_LANGUAGE (en-US,
+                             de-DE) from this host's environment.
+  drive <step>...            runs Veyq.Drive's steps (its Program.cs: tree, invoke, select, set, key, size, maximize,
+                             wait, sleep, shot) against the running app through the scheduled task `veyq-drive`, and
+                             prints the app's log first, then what each step saw. `shot <name>.png` lands in
+                             src/mobile/build/windows/shots here.
+  register                   registers the two scheduled tasks, interactive only, as the user ssh logs in as (owner step
+                             O5 of cr-the-windows-app-over-the-native-core): they run on demand in the logged-on session,
+                             which an ssh command (session 0) cannot reach. Run once per Windows host, by its owner.
 The Windows host: `VEYQ_WINDOWS_SSH` (default `kevin@192.168.64.8`, the test VM of docs/crosscutting/native-apps.md),
 its key `VEYQ_WINDOWS_KEY` (default `~/.ssh/veyq_vms_ed25519`), and a directory there `VEYQ_WINDOWS_DIR` (default
 `F:\\veyq`, the VM's Dev Drive) which this script owns. The host is x64 or ARM64: the binary is x64 and runs under
-Windows' x64 emulation on ARM64. ssh lands in session 0 there, which is enough for a test binary. Every PowerShell
+Windows' x64 emulation on ARM64. ssh lands in session 0 there, which is enough for a test binary but shows no window:
+the app and its driver start in the logged-on session through the scheduled tasks `register` sets up. Every PowerShell
 script goes as `-EncodedCommand` (UTF-16LE, base64: no quoting through cmd.exe), and what it prints is read as the
 console's code page, CP850 on the German VM.
 
@@ -72,7 +90,18 @@ DLL_DIR = {kind: repo_layout.MOBILE / "bridge" / "build" / "bin" / "mingwX64" / 
 GENERATED = repo_layout.MOBILE / "build" / "generated"
 SMOKE_OUT = repo_layout.MOBILE / "build" / "windows" / "smoke"
 HERE = repo_layout.MOBILE_WINDOWS
+WORDS = repo_layout.MOBILE / "words"
+THEME = repo_layout.MOBILE / "theme"
 BRIDGE_TESTS = "Veyq.Bridge.Tests"
+APP = "Veyq"
+APP_TESTS = "Veyq.Tests"
+DRIVE = "Veyq.Drive"
+PROJECTS = (BRIDGE_TESTS, APP, APP_TESTS, DRIVE)  # every one restored locked and held to the deprecation gate
+SHOTS = repo_layout.MOBILE / "build" / "windows" / "shots"
+# The app's build output on the Windows host, below src/mobile/windows (the app is x64, unpackaged, self-contained).
+APP_OUT = PureWindowsPath(APP, "bin", "Debug", "net10.0-windows10.0.26100.0", "win-x64")
+DRIVE_OUT = PureWindowsPath(DRIVE, "bin", "Release", "net10.0-windows")
+TASKS = {"veyq-app": "--launch", "veyq-drive": "--drive"}  # each scheduled task and Veyq.Drive's mode it runs
 # What Kotlin/Native exports from a DLL beside the @CName functions: its C API's entry (`<library>_symbols`), read from
 # the export table of `veyq.dll` (2026-11-10, Kotlin 2.4.21). A new one is read and added here, never waved by.
 KOTLIN_NATIVE_EXPORTS = {"veyq_symbols"}
@@ -83,6 +112,11 @@ DOTNET_ENV = {"DOTNET_CLI_TELEMETRY_OPTOUT": "1", "TESTINGPLATFORM_TELEMETRY_OPT
 SSH_TARGET = os.environ.get("VEYQ_WINDOWS_SSH", "kevin@192.168.64.8")
 SSH_KEY = Path(os.environ.get("VEYQ_WINDOWS_KEY", Path.home() / ".ssh" / "veyq_vms_ed25519")).expanduser()
 REMOTE_DIR = PureWindowsPath(os.environ.get("VEYQ_WINDOWS_DIR", r"F:\veyq"))
+REMOTE_MOBILE = REMOTE_DIR / "src" / "mobile"
+REMOTE_APP = REMOTE_DIR / "app"  # the app run.py starts, copied out of the build so a running one blocks no build
+REMOTE_DRIVE = REMOTE_DIR / "drive"  # Veyq.Drive, which the scheduled tasks run
+REMOTE_RUN = REMOTE_DIR / "run"  # the launch's and the drive's files
+REMOTE_LOG = "AppData/Local/veyq/log.txt"  # the app's log (Log.cs, %LOCALAPPDATA%), from the ssh user's home
 CODE_PAGE = "cp850"  # the console code page PowerShell writes in over ssh on the (German) test VM
 
 
@@ -131,10 +165,10 @@ def ps_quote(value: str) -> str:
     return "'" + value.replace("'", "''") + "'"
 
 
-def live_forward() -> tuple[list[str], str]:
-    """With VEYQ_LIVE: the `ssh -R` that makes the origin's port on the Windows host's loopback this host's, and the
-    origin. The name stays the origin's, which the Windows host's `hosts` maps to 127.0.0.1."""
-    live = os.environ["VEYQ_LIVE"]
+def live_forward(live: str | None = None) -> tuple[list[str], str]:
+    """The `ssh -R` that makes the origin's port ([live], else VEYQ_LIVE's) on the Windows host's loopback this host's,
+    and the origin. The name stays the origin's, which the Windows host's `hosts` maps to 127.0.0.1."""
+    live = live or os.environ["VEYQ_LIVE"]
     origin = urlsplit(live)
     if not origin.hostname:
         sys.exit(f"VEYQ_LIVE is not an origin: {live}")
@@ -304,39 +338,224 @@ def tree_tar(entries: dict[Path, str], exclude: set[str]) -> bytes:
     return buf.getvalue()
 
 
-def build() -> int:
+def generate() -> Path:
+    """Writes what the C# is built from but never keeps — the bridge's types and samples, the words, the theme — and
+    links the debug DLL; returns the DLL."""
     run("./gradlew", ":bridge:generateBindings", ":bridge:linkDebugSharedMingwX64", ":bridge:jvmTest", "--tests",
         "*WireTest*", cwd=repo_layout.MOBILE)
+    run(sys.executable, str(WORDS / "generate_words.py"), "--resw", str(GENERATED / "words" / "windows"))
+    run(sys.executable, str(THEME / "generate_theme.py"), "--winui", str(GENERATED / "theme" / "windows"))
     dll = DLL_DIR["debug"] / "veyq.dll"
     if not dll.exists():
         sys.exit(f"no DLL at {dll}")
-    dotnet("restore", "--locked-mode", BRIDGE_TESTS)
-    if not deprecation_gate(BRIDGE_TESTS):
-        return 1
-    dotnet("test", "--project", BRIDGE_TESTS, "--no-restore")
+    return dll
 
-    # The Windows host: the C# tree, the generated bridge and the samples under their paths here, the DLL beside them.
-    mobile = PureWindowsPath(REMOTE_DIR) / "src" / "mobile"
+
+def push_tree(dll: Path) -> None:
+    """The C# tree, the generated sources, words.json and the DLL to the Windows host, under their paths here (a
+    project's own bin, obj and test results left behind)."""
     archive = SMOKE_OUT.parent / "tree.tar"
     archive.parent.mkdir(parents=True, exist_ok=True)
-    archive.write_bytes(tree_tar({HERE: "src/mobile/windows", GENERATED / "bridge": "src/mobile/build/generated/bridge",
-                                  dll: "bin/veyq.dll"}, exclude={"bin", "obj"}))
+    archive.write_bytes(tree_tar({
+        HERE: "src/mobile/windows",
+        GENERATED / "bridge": "src/mobile/build/generated/bridge",
+        GENERATED / "words" / "windows": "src/mobile/build/generated/words/windows",
+        GENERATED / "theme" / "windows": "src/mobile/build/generated/theme/windows",
+        WORDS / "words.json": "src/mobile/words/words.json",
+        dll: "bin/veyq.dll",
+    }, exclude={"bin", "obj", "TestResults"}))
     copy_to([archive], REMOTE_DIR)
-    tests = mobile / "windows" / BRIDGE_TESTS
-    script = "\n".join([
+
+
+def host_script(*steps: str) -> str:
+    """A PowerShell script for the Windows host: the pushed tree unpacked in place of the last one, every project
+    restored locked, then [steps] (each stops the script on a non-zero exit) in src/mobile/windows."""
+    lines = [
+        "$ErrorActionPreference = 'Stop'",
         *(f"$env:{k} = {ps_quote(v)}" for k, v in DOTNET_ENV.items()),
-        f"$env:VEYQ_SAMPLES = {ps_quote(str(mobile / 'build' / 'generated' / 'bridge' / 'samples'))}",
         f"Remove-Item -Recurse -Force -ErrorAction SilentlyContinue -Path {ps_quote(str(REMOTE_DIR / 'src'))}, {ps_quote(str(REMOTE_DIR / 'bin'))}",
         f"Set-Location {ps_quote(str(REMOTE_DIR))}",
         "tar.exe -xf tree.tar; if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }",
         "Remove-Item -Force tree.tar",
-        f"Set-Location {ps_quote(str(mobile / 'windows'))}",
+        f"Set-Location {ps_quote(str(REMOTE_MOBILE / 'windows'))}",
         "Write-Output ('+ dotnet ' + (dotnet --version))",
-        f"dotnet restore --locked-mode {BRIDGE_TESTS}; if ($LASTEXITCODE -ne 0) {{ exit $LASTEXITCODE }}",
-        f"dotnet test --project {BRIDGE_TESTS} --no-restore --arch x64 -p:VeyqNative={ps_quote(str(REMOTE_DIR / 'bin' / 'veyq.dll'))}",
-        "exit $LASTEXITCODE",
-    ])
-    return powershell(script)
+        *(f"dotnet restore --locked-mode {p}; if ($LASTEXITCODE -ne 0) {{ exit $LASTEXITCODE }}" for p in PROJECTS),
+    ]
+    for step in steps:
+        lines += [f"Write-Output {ps_quote('+ ' + step.splitlines()[0])}", step,
+                  "if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }"]
+    return "\n".join(lines + ["exit 0"])
+
+
+NATIVE = f"-p:VeyqNative={ps_quote(str(REMOTE_DIR / 'bin' / 'veyq.dll'))}"
+BUILD_APP = f"dotnet build {APP} -c Debug --no-restore {NATIVE}"
+BUILD_DRIVE = "\n".join([
+    f"dotnet build {DRIVE} -c Release --no-restore; if ($LASTEXITCODE -ne 0) {{ exit $LASTEXITCODE }}",
+    # the tasks run it from one place; it is never running between two drives
+    f"Remove-Item -Recurse -Force -ErrorAction SilentlyContinue -Path {ps_quote(str(REMOTE_DRIVE))}",
+    f"Copy-Item -Recurse -Path {ps_quote(str(REMOTE_MOBILE / 'windows' / DRIVE_OUT))} -Destination {ps_quote(str(REMOTE_DRIVE))}",
+])
+
+
+def build() -> int:
+    dll = generate()
+    for project in PROJECTS:
+        dotnet("restore", "--locked-mode", project)
+    gated = [deprecation_gate(project) for project in PROJECTS]
+    if not all(gated):
+        return 1
+    dotnet("test", "--project", BRIDGE_TESTS, "--no-restore")
+    push_tree(dll)
+    windows = REMOTE_MOBILE / "windows"
+    return powershell(host_script(
+        BUILD_APP,
+        BUILD_DRIVE,
+        "\n".join([
+            f"$env:VEYQ_SAMPLES = {ps_quote(str(REMOTE_MOBILE / 'build' / 'generated' / 'bridge' / 'samples'))}",
+            f"dotnet test --project {BRIDGE_TESTS} --no-restore --arch x64 {NATIVE}",
+        ]),
+        "\n".join([
+            f"$env:VEYQ_PRI = {ps_quote(str(windows / APP_OUT / 'veyq.pri'))}",
+            f"$env:VEYQ_WORDS_JSON = {ps_quote(str(REMOTE_MOBILE / 'words' / 'words.json'))}",
+            f"dotnet test --project {APP_TESTS} --no-restore --arch x64",
+        ]),
+    ))
+
+
+def run_task(task: str, wait_for: PureWindowsPath, seconds: int) -> int:
+    """Runs the scheduled [task] in the logged-on session and waits until [wait_for] exists there (at most [seconds])."""
+    return powershell("\n".join([
+        f"schtasks.exe /Run /TN {task} | Out-Null",
+        f"if ($LASTEXITCODE -ne 0) {{ Write-Output 'veyq: the scheduled task {task} did not run: register it once (run.py register)'; exit 3 }}",
+        f"$deadline = (Get-Date).AddSeconds({seconds})",
+        f"while (-not (Test-Path {ps_quote(str(wait_for))})) {{",
+        f"  if ((Get-Date) -gt $deadline) {{ Write-Output 'veyq: {task} wrote no {wait_for.name} in {seconds} s'; exit 4 }}",
+        "  Start-Sleep -Milliseconds 200",
+        "}",
+        "exit 0",
+    ]), quiet=True)
+
+
+def launch(env: dict[str, str]) -> int:
+    """Starts the app in <dir>\\app in the logged-on session with [env] (through a file Veyq.Drive deletes on reading)."""
+    start = REMOTE_RUN / "app.json"
+    started = REMOTE_RUN / "app.json.started"
+    SMOKE_OUT.parent.mkdir(parents=True, exist_ok=True)
+    local = SMOKE_OUT.parent / "app.json"
+    local.write_text(json.dumps({"exe": str(REMOTE_APP / "veyq.exe"), "env": env}))
+    powershell(f"New-Item -ItemType Directory -Force -Path {ps_quote(str(REMOTE_RUN))} | Out-Null; "
+               f"Remove-Item -Force -ErrorAction SilentlyContinue -Path {ps_quote(str(started))}", quiet=True)
+    copy_to([local], REMOTE_RUN)
+    local.unlink()
+    code = run_task("veyq-app", started, 30)
+    if code == 0:
+        print("the app runs in the logged-on session", flush=True)
+    else:
+        # the launch read nothing: its file goes, whatever it held
+        powershell(f"Remove-Item -Force -ErrorAction SilentlyContinue -Path {ps_quote(str(start))}", quiet=True)
+    return code
+
+
+def run_app(width: int | None, height: int | None) -> int:
+    dll = generate()
+    for project in PROJECTS:
+        dotnet("restore", "--locked-mode", project)
+    push_tree(dll)
+    code = powershell(host_script(
+        BUILD_APP,
+        BUILD_DRIVE,
+        "\n".join([
+            "Get-Process -Name veyq -ErrorAction SilentlyContinue | Stop-Process -Force",
+            "Start-Sleep -Milliseconds 500",
+            f"Remove-Item -Recurse -Force -ErrorAction SilentlyContinue -Path {ps_quote(str(REMOTE_APP))}",
+            f"Copy-Item -Recurse -Path {ps_quote(str(REMOTE_MOBILE / 'windows' / APP_OUT))} -Destination {ps_quote(str(REMOTE_APP))}",
+        ]),
+    ))
+    if code != 0:
+        return code
+    env = {k: os.environ[k] for k in ("VEYQ_THEME", "VEYQ_LANGUAGE") if os.environ.get(k)}
+    code = launch(env)
+    if code != 0:
+        return code
+    if width and height:
+        code = drive([f"size {width} {height}"])
+        if code != 0:
+            return code
+    forward, live = live_forward(os.environ.get("VEYQ_LIVE", "http://veyq.localhost:8080"))
+    print(f"veyq: the tunnel to {live} is held until this ends (Ctrl+C); the app keeps running", flush=True)
+    try:
+        return subprocess.run(ssh_base(forward) + ["-N"]).returncode
+    except KeyboardInterrupt:
+        return 0
+
+
+def fetch(remote: str, local: Path) -> bool:
+    """[remote] (a path on the Windows host) to [local]; False where it is not there."""
+    local.parent.mkdir(parents=True, exist_ok=True)
+    done = subprocess.run(["scp", "-q", "-o", "BatchMode=yes", "-o", "ConnectTimeout=30", "-i", str(SSH_KEY),
+                           f"{SSH_TARGET}:{remote.replace(chr(92), '/')}", str(local)], capture_output=True)
+    return done.returncode == 0
+
+
+def drive(steps: list[str]) -> int:
+    """Runs [steps] through Veyq.Drive in the logged-on session; prints the app's log, then what each step saw. A
+    `shot <name>` step's PNG lands in SHOTS here."""
+    shots = []
+    lines = []
+    for step in steps:
+        if step.split(" ", 1)[0] == "shot":
+            name = PureWindowsPath(step.split(" ", 1)[1].strip()).name
+            shots.append(name)
+            lines.append(f"shot {REMOTE_RUN / 'shots' / name}")
+        else:
+            lines.append(step)
+    local = SMOKE_OUT.parent / "steps.txt"
+    local.parent.mkdir(parents=True, exist_ok=True)
+    local.write_text("\n".join(lines) + "\n", encoding="utf-8")
+    steps_file = REMOTE_RUN / "steps.txt"
+    powershell(f"New-Item -ItemType Directory -Force -Path {ps_quote(str(REMOTE_RUN))} | Out-Null; Remove-Item -Force "
+               f"-ErrorAction SilentlyContinue -Path {ps_quote(str(steps_file) + '.out')}, {ps_quote(str(steps_file) + '.done')}",
+               quiet=True)
+    copy_to([local], REMOTE_RUN)
+    code = run_task("veyq-drive", PureWindowsPath(str(steps_file) + ".done"), 300)
+    log = SMOKE_OUT.parent / "log.txt"
+    print("--- the app's log", flush=True)
+    print(log.read_text(encoding="utf-8-sig") if fetch(REMOTE_LOG, log) else "(none)", flush=True)
+    if code != 0:
+        return code
+    out = SMOKE_OUT.parent / "steps.out"
+    if not fetch(str(steps_file) + ".out", out):
+        sys.exit("veyq: the drive wrote no output")
+    print("--- drive", flush=True)
+    print(out.read_text(encoding="utf-8"), flush=True)
+    failed = "FAILED:" in out.read_text(encoding="utf-8")
+    for name in shots:
+        if fetch(str(REMOTE_RUN / "shots" / name), SHOTS / name):
+            print(f"shot: {SHOTS / name}", flush=True)
+        elif not failed:
+            sys.exit(f"veyq: no shot {name}")
+    return 1 if failed else 0
+
+
+def register() -> int:
+    """Registers the scheduled tasks Veyq.Drive runs in the logged-on session (interactive only, as the ssh user, on
+    demand: no trigger). The owner's step (O5): a key-authenticated ssh logon can register them, but it is theirs to."""
+    lines = [
+        '$user = "$env:USERDOMAIN\\$env:USERNAME"',
+        "$principal = New-ScheduledTaskPrincipal -UserId $user -LogonType Interactive -RunLevel Limited",
+        "$settings = New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries "
+        "-ExecutionTimeLimit (New-TimeSpan -Hours 0) -MultipleInstances Parallel",
+    ]
+    for task, mode in TASKS.items():
+        file = REMOTE_RUN / ("app.json" if mode == "--launch" else "steps.txt")
+        lines += [
+            f"$action = New-ScheduledTaskAction -Execute {ps_quote(str(REMOTE_DRIVE / (DRIVE + '.exe')))} "
+            f"-Argument {ps_quote(f'{mode} {file}')}",
+            f"Register-ScheduledTask -TaskName {task} -Action $action -Principal $principal -Settings $settings "
+            f"-Description 'veyq: run on demand by src/mobile/windows/run.py in the logged-on session' -Force | "
+            "Select-Object TaskName, State | Format-Table -AutoSize | Out-String",
+        ]
+    return powershell("\n".join(lines))
 
 
 def main() -> None:
@@ -345,7 +564,14 @@ def main() -> None:
     t = verbs.add_parser("test", help="link the core's Windows test binary and run it on the Windows host")
     t.add_argument("--tests", help="Kotlin/Native --ktest_filter pattern, e.g. '*LiveSignInTest*'")
     verbs.add_parser("bridge", help="link the bridge's DLL, check its export table and run the C smoke on the Windows host")
-    verbs.add_parser("build", help="generate the bridge's C#, gate the packages, dotnet test here and on the Windows host")
+    verbs.add_parser("build", help="generate the C#'s sources, gate the packages, build and test here and on the Windows host")
+    r = verbs.add_parser("run", help="build the app, start it in the Windows host's logged-on session, hold the tunnel")
+    r.add_argument("--width", type=int)
+    r.add_argument("--height", type=int)
+    d = verbs.add_parser("drive", help="drive the running app by UI Automation (Veyq.Drive's steps) and print what it saw")
+    d.add_argument("steps", nargs="+", help="each a step: tree, invoke <id>, select <id>, set <id> <text>, key <keys>, "
+                                            "size <w> <h>, maximize, wait <id> [s], sleep <ms>, shot <name>.png")
+    verbs.add_parser("register", help="register the scheduled tasks veyq-app and veyq-drive on the Windows host (owner)")
     args = parser.parse_args()
     if args.verb == "test":
         sys.exit(test(args.tests))
@@ -353,6 +579,12 @@ def main() -> None:
         sys.exit(bridge())
     if args.verb == "build":
         sys.exit(build())
+    if args.verb == "run":
+        sys.exit(run_app(args.width, args.height))
+    if args.verb == "drive":
+        sys.exit(drive(args.steps))
+    if args.verb == "register":
+        sys.exit(register())
 
 
 if __name__ == "__main__":

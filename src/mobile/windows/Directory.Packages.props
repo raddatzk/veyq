@@ -11,5 +11,11 @@
   <ItemGroup>
     <PackageVersion Include="MSTest.TestFramework" Version="[4.5.2]" />
     <PackageVersion Include="MSTest.TestAdapter" Version="[4.5.2]" />
+    <!-- The app (D7): WinUI and the Windows App SDK's foundation (MRT Core's resources among it) and the SDK build tools
+         (makepri, the WinRT projection's metadata), not the Microsoft.WindowsAppSDK metapackage, which adds AI, ML,
+         Search and Widgets. -->
+    <PackageVersion Include="Microsoft.WindowsAppSDK.WinUI" Version="[2.6.5]" />
+    <PackageVersion Include="Microsoft.WindowsAppSDK.Foundation" Version="[2.6.5]" />
+    <PackageVersion Include="Microsoft.Windows.SDK.BuildTools" Version="[10.0.28000.2957]" />
   </ItemGroup>
 </Project>

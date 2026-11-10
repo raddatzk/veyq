@@ -1,0 +1,14 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!-- The pass's hands and eyes on the Windows host (cr-the-windows-app-over-the-native-core D9): started in the
+       logged-on session by its scheduled task, it starts the app there (launch) or drives it by UI Automation and
+       writes what it saw as text (drive). UIAutomationClient and the PNG encoder are the Windows Desktop runtime's
+       (UseWPF), no package. Framework-dependent and of any architecture: native on an ARM64 host. No window of its own. -->
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net10.0-windows</TargetFramework>
+    <UseWPF>true</UseWPF>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <EnableWindowsTargeting>true</EnableWindowsTargeting>
+    <RootNamespace>Veyq.Drive</RootNamespace>
+  </PropertyGroup>
+</Project>

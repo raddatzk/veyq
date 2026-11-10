@@ -1,0 +1,30 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!-- The app's words and formats on Windows (cr-the-windows-app-over-the-native-core D8): the app's own Words, MrtWords
+       and Said sources against the .pri its build compiled (VEYQ_PRI) and the system's formatters. Windows only, an x64
+       process like the app (run.py runs it on the Windows host with arch x64, after the app's build). -->
+  <PropertyGroup>
+    <TargetFramework>net10.0-windows10.0.26100.0</TargetFramework>
+    <RuntimeIdentifiers>win-x64</RuntimeIdentifiers>
+    <Platforms>x64</Platforms>
+    <OutputType>Exe</OutputType>
+    <EnableMSTestRunner>true</EnableMSTestRunner>
+    <TestingPlatformDotnetTestSupport>true</TestingPlatformDotnetTestSupport>
+    <WindowsPackageType>None</WindowsPackageType>
+    <WindowsAppSDKSelfContained>true</WindowsAppSDKSelfContained>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <EnableWindowsTargeting>true</EnableWindowsTargeting>
+    <RootNamespace>Veyq.Tests</RootNamespace>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="MSTest.TestFramework" />
+    <PackageReference Include="MSTest.TestAdapter" />
+    <PackageReference Include="Microsoft.WindowsAppSDK.Foundation" />
+    <PackageReference Include="Microsoft.Windows.SDK.BuildTools" />
+  </ItemGroup>
+  <ItemGroup>
+    <Compile Include="../Veyq/Words.cs" Link="App/Words.cs" />
+    <Compile Include="../Veyq/MrtWords.cs" Link="App/MrtWords.cs" />
+    <Compile Include="../Veyq/Said.cs" Link="App/Said.cs" />
+    <Compile Include="$(VeyqGenerated)words/windows/Words.g.cs" Link="App/Words.g.cs" />
+  </ItemGroup>
+</Project>

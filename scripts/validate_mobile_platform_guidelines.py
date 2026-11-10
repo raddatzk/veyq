@@ -3,11 +3,12 @@
 (ADR 0123 decision 9).
 
 **What it asserts.** A view's one creating action ("Add entry", "New pot") is Material 3's on Android and Apple's
-HIG's on iOS and macOS and GNOME's on Linux, and each platform builds it in exactly one place, so a new list view cannot
-drift from it. Six rules, over the sources of `src/mobile/android/src` (`.kt`), `src/mobile/apple` (`.swift`, no
-`build/`) and `src/mobile/linux` (`.rs`, no `target/`), read with comments and literals blanked (`kotlin_lexer.mask`,
-`rust_lexer.mask` for Rust), so a name in prose or a bracket in a string poses as nothing; only the "+" rules read the
-literals:
+HIG's on iOS and macOS, GNOME's on Linux and Fluent's on Windows, and each platform builds it in exactly one place, so a
+new list view cannot drift from it. Eight rules, over the sources of `src/mobile/android/src` (`.kt`), `src/mobile/apple`
+(`.swift`, no `build/`), `src/mobile/linux` (`.rs`, no `target/`) and `src/mobile/windows` (`.cs` and `.xaml`, no `bin/`
+or `obj/`), read with comments and literals blanked (`kotlin_lexer.mask`, `rust_lexer.mask` for Rust, C# by the Kotlin
+lexer, XAML with its comments removed), so a name in prose or a bracket in a string poses as nothing; only the "+" rules
+read the literals:
 - **android-fab**: no file but the building block `CreateAction.kt` names a floating action button
   (`FloatingActionButton`, `ExtendedFloatingActionButton`, `SmallFloatingActionButton`, `LargeFloatingActionButton`).
   Material 3 gives a screen at most one, for its primary action; the block is an extended FAB that collapses to its
@@ -27,6 +28,15 @@ literals:
 - **linux-floating-button**: no Rust file hands a button to `Overlay::add_overlay` — as an argument naming `Button`
   (`gtk::Button`, `MenuButton`, …) or as a variable the same file binds to one (`let b = gtk::Button::…;`, the
   block's `create_action(…)`). GNOME has no floating action button.
+- **windows-block**: `CreateAction.cs` exists and builds an `AppBarButton` with Fluent's Add symbol (`Symbol.Add`) — the
+  first command of the content's `CommandBar`, where Explorer puts New — and a `MenuFlyout` for a level that creates
+  several kinds; and no other C# or XAML file names that symbol (`Symbol.Add`, `Symbol="Add"`, `Icon="Add"`, its
+  glyph `E710`), so a hand-made "+" goes through the block.
+- **windows-floating-button**: no button (`Button`, `AppBarButton`, `DropDownButton`, `SplitButton`, `ToggleButton`,
+  `HyperlinkButton`, `RepeatButton`, `ToggleSplitButton`) is laid over a view: in XAML no such element that sets
+  `VerticalAlignment="Bottom"`, `Canvas.ZIndex`, `Canvas.Top` or `Canvas.Left`; in C# none created with such an
+  alignment in its initializer, nor a variable the same file binds to one given it (`b.VerticalAlignment =
+  VerticalAlignment.Bottom`, `Canvas.SetZIndex(b, …)`). Fluent has no floating action button.
 
 **The defect that bought it.** The Pot's "Add entry" and Expenses' "New pot" shipped as a floating capsule on iOS, the
 web's and Android's look carried over, until the owner found each by eye (2026-11-09): the first covered the last
@@ -35,7 +45,9 @@ entries, the second was found only after the first was fixed. The owner then ask
 
 **Its limit.** It reads names, not rendering. A button built inside another view and only that view's name in the
 overlay's closure is not seen (the trash notice's case, which is why it passes); nor is a floating button drawn by
-offsets or `GeometryReader`, nor a Compose `Box` that aligns a plain `Button` at the bottom end. The Swift files are
+offsets or `GeometryReader`, nor a Compose `Box` that aligns a plain `Button` at the bottom end. On Windows a button
+floated by its container (a `Grid` cell aligned at the bottom holding it, a `RelativePanel`, a `TeachingTip`) or a
+style setting its alignment is not seen. The Swift files are
 read by the Kotlin lexer: a string interpolation holding a quote (`"\\(f("x"))"`) can unbalance a literal, which may hide
 or invent a match after it. It does not judge row actions (an overflow menu on Android, swipe actions and a context
 menu on iOS), which no rule here names. On Linux a button reaching `add_overlay` through a function's return value or a
@@ -63,6 +75,15 @@ ADD_ICON = '"list-add-symbolic"'
 GTK_BUTTON = re.compile(r"\bButton::(?:builder|new|from_icon_name|with_label)\s*\(")
 GTK_MENU_BUTTON = re.compile(r"\bMenuButton::(?:builder|new)\s*\(")
 ADD_OVERLAY = re.compile(r"\.add_overlay\s*\(")
+WINDOWS = repo_layout.MOBILE_WINDOWS
+WINDOWS_BLOCK = "CreateAction.cs"
+# Fluent's Add symbol, as C# names it, as XAML does, and its glyph in Segoe Fluent Icons / MDL2 (U+E710).
+ADD_SYMBOL = re.compile(r'\bSymbol\.Add\b|\b(?:Symbol|Icon)\s*=\s*"Add"|(?:&#x|\\u)E710\b', re.I)
+WIN_BUTTONS = r"(?:AppBar|DropDown|Split|Toggle|ToggleSplit|Hyperlink|Repeat)?Button"
+XAML_BUTTON_TAG = re.compile(r"<\s*(?:\w+:)?" + WIN_BUTTONS + r"\b[^>]*>", re.S)
+FLOATS = re.compile(r'VerticalAlignment\s*=\s*"?(?:VerticalAlignment\.)?Bottom|Canvas\.(?:ZIndex|Top|Left)\s*=|'
+                    r'Canvas\.Set(?:ZIndex|Top|Left)\s*\(')
+CS_NEW_BUTTON = re.compile(r"\bnew\s+(?:[\w.]+\.)?" + WIN_BUTTONS + r"\s*(?:\([^)]*\))?\s*(\{)?")
 
 FAB = re.compile(r"\b(?:Extended|Small|Large)?FloatingActionButton\b")
 # A bottom-aligned overlay or stack, or a bottom inset: where a floating button would sit.
@@ -140,7 +161,59 @@ def check_linux(linux: pathlib.Path) -> list[str]:
     return errors
 
 
-def check(android_src: pathlib.Path, apple: pathlib.Path, linux: pathlib.Path = LINUX) -> list[str]:
+def check_windows(windows: pathlib.Path) -> list[str]:
+    errors: list[str] = []
+    cs = sorted(p for p in windows.rglob("*.cs") if not {"bin", "obj"} & set(p.relative_to(windows).parts)) if windows.exists() else []
+    xaml = sorted(p for p in windows.rglob("*.xaml") if not {"bin", "obj"} & set(p.relative_to(windows).parts)) if windows.exists() else []
+    if not cs:
+        errors.append(f"no C# source under {windows} — the guard would read nothing")
+    block = None
+    for f in cs:
+        text = f.read_text()
+        src, said = mask(text), mask(text, literals=False)
+        if f.name == WINDOWS_BLOCK:
+            block = src
+        else:
+            for m in ADD_SYMBOL.finditer(said):
+                errors.append(f"windows-block: {f}:{_line(src, m.start())}: Fluent's Add symbol outside {WINDOWS_BLOCK} — "
+                              "a view's creating action is `CreateAction.Button(…)` / `CreateAction.Menu(…)`")
+        # buttons created with a floating alignment in their initializer, and variables bound to a button
+        buttons = set()
+        for m in CS_NEW_BUTTON.finditer(src):
+            if m.group(1) and FLOATS.search(src[m.start(1):_close(src, m.start(1), "{", "}")]):
+                errors.append(f"windows-floating-button: {f}:{_line(src, m.start())}: a button laid over a view — Fluent "
+                              "has no floating action button; New is `CreateAction.Button(…)` in the CommandBar")
+            bound = re.search(r"(\w+)\s*=\s*$", src[max(0, m.start() - 80):m.start()])
+            if bound:
+                buttons.add(bound.group(1))
+        for name in buttons:
+            for m in re.finditer(r"\b" + re.escape(name) + r"\.VerticalAlignment\s*=\s*VerticalAlignment\.Bottom|"
+                                 r"Canvas\.Set(?:ZIndex|Top|Left)\s*\(\s*" + re.escape(name) + r"\b", src):
+                errors.append(f"windows-floating-button: {f}:{_line(src, m.start())}: the button {name} laid over a view — "
+                              "Fluent has no floating action button; New is `CreateAction.Button(…)` in the CommandBar")
+    for f in xaml:
+        text = re.sub(r"<!--.*?-->", lambda m: re.sub(r"[^\n]", " ", m.group()), f.read_text(), flags=re.S)
+        for m in ADD_SYMBOL.finditer(text):
+            errors.append(f"windows-block: {f}:{_line(text, m.start())}: Fluent's Add symbol outside {WINDOWS_BLOCK} — "
+                          "a view's creating action is `CreateAction.Button(…)` / `CreateAction.Menu(…)`")
+        for m in XAML_BUTTON_TAG.finditer(text):
+            if FLOATS.search(m.group()):
+                errors.append(f"windows-floating-button: {f}:{_line(text, m.start())}: a button laid over a view — Fluent "
+                              "has no floating action button; New is `CreateAction.Button(…)` in the CommandBar")
+    if block is None:
+        errors.append(f"windows-block: no {WINDOWS_BLOCK} under {windows}")
+    else:
+        if not re.search(r"\bnew\s+AppBarButton\b", block):
+            errors.append(f"windows-block: {WINDOWS_BLOCK} builds no AppBarButton")
+        if not re.search(r"\bSymbol\.Add\b", block):
+            errors.append(f"windows-block: {WINDOWS_BLOCK} no longer draws its command with Fluent's Add symbol")
+        if not re.search(r"\bnew\s+MenuFlyout\b", block):
+            errors.append(f"windows-block: {WINDOWS_BLOCK} builds no MenuFlyout for a level creating several kinds")
+    return errors
+
+
+def check(android_src: pathlib.Path, apple: pathlib.Path, linux: pathlib.Path = LINUX,
+          windows: pathlib.Path = WINDOWS) -> list[str]:
     errors: list[str] = []
     kt = sources(android_src, ".kt")
     swift = sources(apple, ".swift")
@@ -187,6 +260,7 @@ def check(android_src: pathlib.Path, apple: pathlib.Path, linux: pathlib.Path = 
     elif not re.search(r"placement\s*:\s*\.primaryAction", apple_block):
         errors.append(f"apple-block: {APPLE_BLOCK} no longer places its button .primaryAction")
     errors += check_linux(linux)
+    errors += check_windows(windows)
     return errors
 
 
