@@ -309,8 +309,8 @@ check is logged and retried with a back-off, and blocks nothing.
 - **The window of majors a client speaks** ([ADR 0085](../decisions/0085-one-major-moved-on-a-yearly-train.md)
   decision 5). The yearly train, its release order and the previous major's release branch (decisions 2, 3 and 10)
   are a procedure, written in [`infra/README.md`](../../infra/README.md) § Cutting a release, and no train has left.
-- **`veyqctl gitops` and `veyq-server`** ([ADR 0126](../decisions/0126-veyqctl-writes-a-gitops-repository-and-veyq-server-sets-up-its-cluster.md)):
-  a GitOps target that writes veyq's half of an Argo CD repository (its Application, values and Secrets from a chosen
+- **`veyqctl`'s GitOps target and `veyq-server`** ([ADR 0126](../decisions/0126-veyqctl-writes-a-gitops-repository-and-veyq-server-sets-up-its-cluster.md)):
+  a GitOps target, read from the instance (a user's instances listed in `~/.config/veyq/`), that writes veyq's half of an Argo CD repository (its Application, values and Secrets from a chosen
   provider) and upgrades it by commit under ADR 0096's rules, and a repository of its own, `veyq-server`, that sets up
   the server and cluster beneath it, rendered by Copier from a verified release. Until it is built, a cluster upgrades
   by hand as [Verify a release](../../site/src/content/docs/run/verify-a-release.md) and the chart's values describe.
