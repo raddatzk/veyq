@@ -169,7 +169,9 @@ fun ShellScreen(s: Screen.Signed, model: AppModel) {
         Drawer(
             s,
             onChoose = { closeDrawerThen { model.choose(it) } },
-            onOpen = { closeDrawerThen { model.open(it) } },
+            // the sidebar an expanded window keeps open chooses a top-level destination, no back (`Shell.openAtTop`);
+            // the modal drawer opens as a list does
+            onOpen = { closeDrawerThen { if (wide) model.openAtTop(it) else model.open(it) } },
             onSwitch = { account, tenant -> closeDrawerThen { model.switchTo(account, tenant) } },
             onAddServer = { closeDrawerThen { model.openManage() } },
             onNew = { kind -> closeDrawerThen { model.requestNew(kind) } },
@@ -399,28 +401,33 @@ private fun HomeScreen(s: Screen.Signed, model: AppModel, onEnter: (me.raddatz.v
                 }
             }
         }
-        val level = s.level
+        val groups = s.levelGroups
         val hero = LocalNodeHero.current
         run {
             LazyColumn(Modifier.fillMaxSize().padding(horizontal = 8.dp), state = list, contentPadding = androidx.compose.foundation.layout.PaddingValues(bottom = bottom)) {
                 item(key = "hero") { hero(8.dp) }
-                if (level.isEmpty()) item(key = "empty") { Empty() }
-                items(level, key = { it.scopeId + it.nodeId }) { node ->
-                    val folder = node.asFolder()
-                    if (folder != null) {
-                        ListItem(
-                            headlineContent = { Text(node.name, fontWeight = androidx.compose.ui.text.font.FontWeight.Bold) },
-                            leadingContent = {
-                                val cover = LocalCovers.current[node.nodeId]?.second
-                                if (cover != null) androidx.compose.foundation.Image(
-                                    cover, null, Modifier.size(34.dp).clip(MaterialTheme.shapes.medium), contentScale = androidx.compose.ui.layout.ContentScale.Crop,
-                                ) else FolderTile()
-                            },
-                            colors = ListItemDefaults.colors(containerColor = MaterialTheme.colorScheme.background),
-                            modifier = Modifier.clip(MaterialTheme.shapes.medium).clickableRow { onEnter(folder) },
-                        )
-                    } else {
-                        node.asObject()?.let { ObjectRow(it, onOpen) }
+                if (groups.isEmpty()) item(key = "empty") { Empty() }
+                // the folders apart from the rest, as the web's level view (core's `Home.groups`)
+                for (group in groups) {
+                    val heading = group.heading
+                    if (heading != null) item(key = "group-${group.folders}") { Box(Modifier.padding(horizontal = 8.dp)) { Section(say(heading)) } }
+                    items(group.nodes, key = { it.scopeId + it.nodeId }) { node ->
+                        val folder = node.asFolder()
+                        if (folder != null) {
+                            ListItem(
+                                headlineContent = { Text(node.name, fontWeight = androidx.compose.ui.text.font.FontWeight.Bold) },
+                                leadingContent = {
+                                    val cover = LocalCovers.current[node.nodeId]?.second
+                                    if (cover != null) androidx.compose.foundation.Image(
+                                        cover, null, Modifier.size(34.dp).clip(MaterialTheme.shapes.medium), contentScale = androidx.compose.ui.layout.ContentScale.Crop,
+                                    ) else FolderTile()
+                                },
+                                colors = ListItemDefaults.colors(containerColor = MaterialTheme.colorScheme.background),
+                                modifier = Modifier.clip(MaterialTheme.shapes.medium).clickableRow { onEnter(folder) },
+                            )
+                        } else {
+                            node.asObject()?.let { ObjectRow(it, onOpen) }
+                        }
                     }
                 }
             }
@@ -542,45 +549,51 @@ private fun Drawer(
     val chrome = Brush.verticalGradient(listOf(role(palette.accentSoft), role(palette.surface)), endY = 900f)
     val shape = androidx.compose.foundation.shape.RoundedCornerShape(topEnd = 12.dp, bottomEnd = 12.dp)
     DrawerSheet(permanent, chrome, shape) {
-        Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = 14.dp)) {
-            Brand(Modifier.padding(start = 8.dp, top = 20.dp, bottom = 14.dp))
-            TenantSwitcher(s, onSwitch, onAddServer)
-            Spacer(Modifier.height(12.dp))
-            // the web's sidebar "New": what a level creates, opened on Home
-            var newMenu by remember { mutableStateOf(false) }
-            Box {
-                Button(
-                    onClick = { newMenu = true },
-                    colors = ButtonDefaults.buttonColors(containerColor = role(palette.primary), contentColor = role(palette.onFill)),
-                    shape = MaterialTheme.shapes.small,
-                    modifier = Modifier.fillMaxWidth(),
-                ) {
-                    Icon(Icons.Filled.Add, null, Modifier.size(18.dp))
-                    Spacer(Modifier.width(6.dp))
-                    Text(stringResource(R.string.drawer_new))
-                }
-                androidx.compose.material3.DropdownMenu(newMenu, { newMenu = false }) {
-                    me.raddatz.veyq.mobile.AppKinds.drawerCreates.forEach { c ->
-                        androidx.compose.material3.DropdownMenuItem(text = { Text(say(c.word)) }, onClick = {
-                            newMenu = false
-                            onNew(if (c == me.raddatz.veyq.mobile.AppKinds.Create.POT) "pot" else "folder")
-                        })
+        // Settings pinned at the foot, below what scrolls (owner 2026-11-10)
+        Column(Modifier.fillMaxSize()) {
+            Column(Modifier.weight(1f).verticalScroll(rememberScrollState()).padding(horizontal = 14.dp)) {
+                Brand(Modifier.padding(start = 8.dp, top = 20.dp, bottom = 14.dp))
+                TenantSwitcher(s, onSwitch, onAddServer)
+                Spacer(Modifier.height(12.dp))
+                // the web's sidebar "New": what a level creates, opened on Home
+                var newMenu by remember { mutableStateOf(false) }
+                Box {
+                    Button(
+                        onClick = { newMenu = true },
+                        colors = ButtonDefaults.buttonColors(containerColor = role(palette.primary), contentColor = role(palette.onFill)),
+                        shape = MaterialTheme.shapes.small,
+                        modifier = Modifier.fillMaxWidth(),
+                    ) {
+                        Icon(Icons.Filled.Add, null, Modifier.size(18.dp))
+                        Spacer(Modifier.width(6.dp))
+                        Text(stringResource(R.string.drawer_new))
+                    }
+                    androidx.compose.material3.DropdownMenu(newMenu, { newMenu = false }) {
+                        me.raddatz.veyq.mobile.AppKinds.drawerCreates.forEach { c ->
+                            androidx.compose.material3.DropdownMenuItem(text = { Text(say(c.word)) }, onClick = {
+                                newMenu = false
+                                onNew(if (c == me.raddatz.veyq.mobile.AppKinds.Create.POT) "pot" else "folder")
+                            })
+                        }
                     }
                 }
+                Spacer(Modifier.height(6.dp))
+                Row(app = Icons.Outlined.Home, label = stringResource(R.string.drawer_home), selected = s.shell.isHome) { onChoose(null) }
+                Section(stringResource(R.string.drawer_favorites))
+                ObjectItems(s.drawer.favorites, s.shell.openObject, onOpen)
+                Section(stringResource(R.string.drawer_recent))
+                ObjectItems(s.drawer.recent, s.shell.openObject, onOpen)
+                Section(stringResource(R.string.drawer_applications))
+                for (app in s.applications) {
+                    Row(app = appIcon(app), label = appName(app), selected = s.shell.application == app && s.shell.openObject == null) { onChoose(app) }
+                }
+                Spacer(Modifier.height(12.dp))
             }
-            Spacer(Modifier.height(6.dp))
-            Row(app = Icons.Outlined.Home, label = stringResource(R.string.drawer_home), selected = s.shell.isHome) { onChoose(null) }
-            Section(stringResource(R.string.drawer_favorites))
-            ObjectItems(s.drawer.favorites, s.shell.openObject, onOpen)
-            Section(stringResource(R.string.drawer_recent))
-            ObjectItems(s.drawer.recent, s.shell.openObject, onOpen)
-            Section(stringResource(R.string.drawer_applications))
-            for (app in s.applications) {
-                Row(app = appIcon(app), label = appName(app), selected = s.shell.application == app && s.shell.openObject == null) { onChoose(app) }
+            Column(Modifier.padding(horizontal = 14.dp)) {
+                HorizontalDivider(Modifier.padding(bottom = 8.dp), color = role(palette.line))
+                Row(app = Icons.Outlined.Settings, label = stringResource(R.string.drawer_settings), selected = false) {}
+                Spacer(Modifier.height(12.dp))
             }
-            HorizontalDivider(Modifier.padding(vertical = 12.dp), color = role(palette.line))
-            Row(app = Icons.Outlined.Settings, label = stringResource(R.string.drawer_settings), selected = false) {}
-            Spacer(Modifier.height(12.dp))
         }
     }
 }

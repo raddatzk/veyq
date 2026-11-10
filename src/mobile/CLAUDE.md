@@ -187,6 +187,10 @@ first in each of its scrolls — `LocalNodeHero.current(inset)` (Android) / `Nod
   2026-11-10): no title, no back, no header actions. The split view's detail is therefore one `NavigationStack` page
   whose places are a segmented `Picker` in the toolbar (`Bar(tabbed: false)`); its segments are an `Image` with an
   `accessibilityLabel`, since a `Label` there was read out by its symbol's name on a Mac.
+- On a Mac `.primaryAction` is the toolbar's LEADING end, beside the title (an iPad's is the trailing one): a page's
+  actions there take `.automatic` (`Bar.actions`). A Mac also draws a `Menu` as its own grey pop-up whatever its
+  button style: a filled one is drawn in its label, with `.menuStyle(.button)` and `.buttonStyle(.plain)` (the
+  sidebar's New), and `toolbarTitleMenu` shows no chevron there, so the switcher was not found (owner 2026-11-10).
 - `VeyqCore` has arm64 slices only, so `apple/project.yml` sets `ARCHS: arm64`; without it a Release build (what
   `xcodebuild -target` builds) asks Kotlin's Xcode hook for x86_64 and fails with "Xcode Requested Architecture Not
   Configured in Gradle".

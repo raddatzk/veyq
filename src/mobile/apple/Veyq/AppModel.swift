@@ -136,6 +136,8 @@ final class AppModel {
 
     /// Home's level: the shown folder's children in the shown space, under the shown filter.
     var level: [NodeRef] { _ = nodes; return shellModel?.current?.lists.level(shell: shell) ?? [] }
+    /// Home's level in its groups, the folders apart (core's `Home.groups`).
+    var levelGroups: [Home.Group] { _ = nodes; return shellModel?.current?.lists.groups(shell: shell) ?? [] }
 
     /// Where the app opens (ADR 0123 decision 8): every account the person stays signed in to resumes after one
     /// authentication; with none, the most recent password-trusted account asks for its password; with no trusted
@@ -1278,6 +1280,12 @@ final class AppModel {
         shellModel?.open(ref: ref)
         applyShell(start: false)
         drawerOpen = false
+    }
+
+    /// [ref] chosen from the split view's sidebar: a top-level destination, no back (core's `Shell.openAtTop`).
+    func openAtTop(_ ref: ObjectRef) {
+        shellModel?.openAtTop(ref: ref)
+        applyShell(start: false)
     }
 
     func select(_ tab: BarTab) { moveShell { $0.select(tab: tab) } }

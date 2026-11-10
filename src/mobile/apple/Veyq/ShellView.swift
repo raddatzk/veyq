@@ -40,7 +40,7 @@ struct ShellView: View {
     private var wide: some View {
         NavigationSplitView {
             // as wide as the switcher's tenant and server need (the system's default left them cut on a Mac)
-            DrawerList(model: model).navigationSplitViewColumnWidth(min: 240, ideal: 280, max: 360)
+            DrawerList(model: model, atTop: true).navigationSplitViewColumnWidth(min: 240, ideal: 280, max: 360)
         } detail: {
             Bar(model: model, tabbed: false)
         }
@@ -69,8 +69,31 @@ struct ShellView: View {
 /// settings and signing out of the current server.
 struct DrawerList: View {
     @Bindable var model: AppModel
+    /// The split view's sidebar, always beside: what it opens is a top-level destination with no back (core's
+    /// `Shell.openAtTop`); the iPhone's drawer opens as a list does, back leading where it was.
+    var atTop = false
 
+    // Settings pinned at the foot, below what scrolls (owner 2026-11-10)
     var body: some View {
+        VStack(spacing: 0) {
+            list
+            Divider()
+            Button { } label: {
+                HStack(spacing: 12) {
+                    Tile(symbol: "gearshape")
+                    Text(say(.drawerSettings)).foregroundStyle(Role.controlText)
+                    Spacer(minLength: 0)
+                }
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .padding(.horizontal, 16)
+            .padding(.vertical, 10)
+        }
+        .background { Chrome() }
+    }
+
+    private var list: some View {
         List {
             Section {
                 Brand().padding(.vertical, 6)
@@ -81,12 +104,17 @@ struct DrawerList: View {
                         Button(say(c.word), systemImage: Names.createSymbol(c)) { model.requestNew(c == .pot ? .pot : .folder) }
                     }
                 } label: {
-                    Label(say(.drawerNew), systemImage: "plus").frame(maxWidth: .infinity)
+                    // drawn here: a Mac draws a bordered menu as its own grey pop-up, whatever its button style
+                    Label(say(.drawerNew), systemImage: "plus")
+                        .fontWeight(.semibold)
+                        .foregroundStyle(Role.onFill)
+                        .frame(maxWidth: .infinity, minHeight: 34)
+                        .background(Role.primary, in: RoundedRectangle(cornerRadius: Radius.control, style: .continuous))
+                        .contentShape(RoundedRectangle(cornerRadius: Radius.control, style: .continuous))
                 }
-                .buttonStyle(.borderedProminent)
-                .tint(Role.primary)
-                .foregroundStyle(Role.onFill)
-                .buttonBorderShape(.roundedRectangle(radius: Radius.control))
+                .menuStyle(.button)
+                .buttonStyle(.plain)
+                .menuIndicator(.hidden)
                 row(say(.drawerHome), symbol: "house", selected: model.shell.isHome) { model.choose(nil) }
             }
             .listRowBackground(Color.clear)
@@ -99,13 +127,9 @@ struct DrawerList: View {
                     row(Names.application(app), symbol: Names.appSymbol(app), selected: model.shell.application == app && model.shell.openObject == nil) { model.choose(app) }
                 }
             } header: { SectionLabel(title: say(.drawerApplications)) }
-            Section {
-                row(say(.drawerSettings), symbol: "gearshape", selected: false) { }
-            }
         }
         .listStyle(.sidebar)
         .scrollContentBackground(.hidden)
-        .background { Chrome() }
     }
 
     @ViewBuilder private func refs(_ list: [ObjectRef]) -> some View {
@@ -114,7 +138,7 @@ struct DrawerList: View {
         }
         ForEach(list, id: \.nodeId) { ref in
             row(ref.name, symbol: Names.kindSymbol(ref.kind),
-                selected: model.shell.openObject?.nodeId == ref.nodeId) { model.open(ref) }
+                selected: model.shell.openObject?.nodeId == ref.nodeId) { if atTop { model.openAtTop(ref) } else { model.open(ref) } }
         }
     }
 
@@ -206,6 +230,15 @@ struct Bar: View {
     private static let search = "search"
     private static let list = "list"
 
+    /// Where a page's actions go: the trailing end. A Mac puts `.primaryAction` at the leading one, beside the title.
+    private static var actions: ToolbarItemPlacement {
+        #if os(macOS)
+        .automatic
+        #else
+        .primaryAction
+        #endif
+    }
+
     private var tabs: [String] {
         let keys = model.shell.barTabs.map { $0.key }
         return keys.isEmpty ? [Self.list] : keys
@@ -222,6 +255,8 @@ struct Bar: View {
         )
     }
 
+    /// What the split view's toolbar search field holds; searching while it is not empty.
+    @State private var query = ""
     /// The space whose trash is open.
     @State private var trashOf: TrashOf?
     /// The space whose top level's "Add files only" share is open.
@@ -242,28 +277,24 @@ struct Bar: View {
         } else {
             NavigationStack {
                 Group {
-                    if model.shell.searching { SearchList(model: model) } else { content(selection.wrappedValue) }
+                    if model.shell.searching { SearchHits(model: model, query: query) } else { content(selection.wrappedValue) }
                 }
+                .environment(\.wideShell, true)
                 .modifier(Picking(model: model))
+                // Search in one place on every page: the toolbar's field at its trailing end, as the system's own apps
+                // on an iPad and a Mac (owner 2026-11-10: a segment here, a button there was two places)
+                .searchable(text: $query, placement: .toolbar, prompt: say(.searchHint))
+                .onChange(of: query) { _, typed in if typed.isEmpty == model.shell.searching { model.search(!typed.isEmpty) } }
+                .onChange(of: model.shell.searching) { _, on in if !on { query = "" } }
                 .toolbar {
                     toolbar
-                    // without places of its own (Home, an application's list) the title stays — Home's is its space
-                    // switcher — and Search is a button beside it
-                    if model.shell.barTabs.isEmpty {
-                        ToolbarItem(placement: .navigation) {
-                            Button { model.search(!model.shell.searching) } label: {
-                                Label(say(.tabSearch), systemImage: model.shell.searching ? "xmark" : "magnifyingglass")
-                            }
-                        }
-                    }
-                    // the bar's places, Search last: a segmented control, as the system's own apps on an iPad and a Mac
+                    // the bar's places: a segmented control, as the system's own apps on an iPad and a Mac
                     if !model.shell.barTabs.isEmpty { ToolbarItem(placement: .principal) {
                         Picker(say(.tabSearch), selection: selection) {
                             // symbols, their words for VoiceOver: a word each runs over the back button beside the sidebar
                             ForEach(tabs, id: \.self) { key in
                                 segment(Names.tab(key, app: model.shell.application, kind: model.shell.openObject?.kind), symbol: Names.tabSymbol(key, app: model.shell.application, kind: model.shell.openObject?.kind)).tag(key)
                             }
-                            segment(say(.tabSearch), symbol: "magnifyingglass").tag(Self.search)
                         }
                         .pickerStyle(.segmented)
                         .fixedSize()
@@ -338,11 +369,14 @@ struct Bar: View {
                 Button(action: onMenu) { Image(systemName: "line.3.horizontal") }
             }
         }
+        // the title's room in the split view: the page's actions and Search keep the trailing end, also where the title
+        // is Home's space switcher and takes less
+        if !tabbed { ToolbarSpacer(.flexible) }
         // what is being uploaded (core's queue), while something is
-        ToolbarItem(placement: .primaryAction) { UploadsButton(model: model) }
+        ToolbarItem(placement: Self.actions) { UploadsButton(model: model) }
         // An open object's header: core's actions for every kind (the web's `NodePage` + `NodeHeader`), with what its kind's
         // page contributes.
-        ToolbarItem(placement: .primaryAction) {
+        ToolbarItem(placement: Self.actions) {
             if let ref = model.shell.openObject, let contribution = KindPage.of(ref.kind)?.header(ref.at, model) {
                 NodeHeaderActions(model: model, node: ref.at, contribution: contribution).id(ref.nodeId)
             } else if model.shell.openObject == nil, model.shell.application == nil, !model.shell.searching, let space = model.shell.space {
@@ -394,6 +428,33 @@ struct HomeView: View {
     @State private var pickingFiles = false
     @State private var pickingFolder = false
 
+    /// A group's rows: a folder enters, an object opens.
+    @ViewBuilder private func rows(_ nodes: [NodeRef]) -> some View {
+        ForEach(nodes, id: \.nodeId) { node in
+            if let folder = node.asFolder() {
+                Button { model.enter(folder) } label: {
+                    HStack(spacing: 12) {
+                        if let cover = model.covers[node.nodeId]?.image {
+                            Image(decorative: cover, scale: 1).resizable().scaledToFill()
+                                .frame(width: 34, height: 34)
+                                .clipShape(RoundedRectangle(cornerRadius: Radius.row, style: .continuous))
+                        } else {
+                            FolderTile()
+                        }
+                        Text(node.name).fontWeight(.bold).foregroundStyle(Role.text)
+                        Spacer(minLength: 0)
+                        Image(systemName: "chevron.forward").font(.footnote.weight(.semibold)).foregroundStyle(Role.muted)
+                    }
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .listRowBackground(Role.surface)
+            } else if let ref = node.asObject() {
+                ObjectRow(ref: ref, onOpen: model.open).listRowBackground(Role.surface)
+        }
+        }
+    }
+
     private var title: String {
         if let folder = model.shell.folder { return folder.name }
         return Names.spaceName(model.space)
@@ -412,31 +473,16 @@ struct HomeView: View {
                 .listRowBackground(Color.clear)
                 .listRowInsets(EdgeInsets(top: 4, leading: 0, bottom: 4, trailing: 0))
             }
-            let level = model.level
-            if level.isEmpty {
+            let groups = model.levelGroups
+            if groups.isEmpty {
                 Text(say(.listEmpty)).foregroundStyle(Role.muted).listRowBackground(Color.clear)
             }
-            ForEach(level, id: \.nodeId) { node in
-                if let folder = node.asFolder() {
-                    Button { model.enter(folder) } label: {
-                        HStack(spacing: 12) {
-                            if let cover = model.covers[node.nodeId]?.image {
-                                Image(decorative: cover, scale: 1).resizable().scaledToFill()
-                                    .frame(width: 34, height: 34)
-                                    .clipShape(RoundedRectangle(cornerRadius: Radius.row, style: .continuous))
-                            } else {
-                                FolderTile()
-                            }
-                            Text(node.name).fontWeight(.bold).foregroundStyle(Role.text)
-                            Spacer(minLength: 0)
-                            Image(systemName: "chevron.forward").font(.footnote.weight(.semibold)).foregroundStyle(Role.muted)
-                        }
-                        .contentShape(Rectangle())
-                    }
-                    .buttonStyle(.plain)
-                    .listRowBackground(Role.surface)
-                } else if let ref = node.asObject() {
-                    ObjectRow(ref: ref, onOpen: model.open).listRowBackground(Role.surface)
+            // the folders apart from the rest, as the web's level view (core's `Home.groups`)
+            ForEach(groups, id: \.folders) { group in
+                Section {
+                    rows(group.nodes)
+                } header: {
+                    if let heading = group.heading { SectionLabel(title: say(heading)) }
                 }
             }
         }
@@ -511,18 +557,41 @@ struct HomeView: View {
 private struct SpaceSwitcherMenu: ViewModifier {
     @Bindable var model: AppModel
     let shown: Bool
+    @Environment(\.wideShell) private var wide
 
     func body(content: Content) -> some View {
-        if shown {
-            content.toolbarTitleMenu {
-                ForEach(model.spaces, id: \.scopeId) { space in
-                    Button { model.switchSpace(space.scopeId) } label: {
-                        Label(Names.spaceName(space), systemImage: space.scopeId == model.shell.space ? "checkmark" : Names.spaceSymbol(space.kind))
+        if shown && wide {
+            // An iPad's and a Mac's title shows no menu of its own (owner 2026-11-10: the switcher was not found there):
+            // the title is the switcher's button, its chevron saying it opens.
+            content
+                .toolbar(removing: .title)
+                .toolbar {
+                    ToolbarItem(placement: .navigation) {
+                        Menu { spaces } label: { Text(switcherTitle).font(.headline) }
+                        .menuIndicator(.hidden)
+                        .accessibilityLabel(say(.spaceSwitch))
+                        .accessibilityValue(Names.spaceName(model.space))
                     }
                 }
-            }
+        } else if shown {
+            content.toolbarTitleMenu { spaces }
         } else {
             content
+        }
+    }
+
+    /// The space's name with the chevron after it, as one text: a toolbar draws a label's icon before its title. No word
+    /// of its own, so no catalog key: the name is the space's.
+    private var switcherTitle: LocalizedStringKey {
+        let chevron = Image(systemName: "chevron.down")
+        return "\(Names.spaceName(model.space))  \(chevron)"
+    }
+
+    @ViewBuilder private var spaces: some View {
+        ForEach(model.spaces, id: \.scopeId) { space in
+            Button { model.switchSpace(space.scopeId) } label: {
+                Label(Names.spaceName(space), systemImage: space.scopeId == model.shell.space ? "checkmark" : Names.spaceSymbol(space.kind))
+            }
         }
     }
 }
@@ -586,6 +655,8 @@ struct ObjectRow: View {
 extension EnvironmentValues {
     /// Whether the shell is picking a place for what another app shared (ADR 0126).
     @Entry var picking = false
+    /// Whether the page is the split view's detail (an iPad, a Mac), not a tab of the iPhone's bar.
+    @Entry var wideShell = false
 }
 
 /// A space whose trash is open.
@@ -652,16 +723,26 @@ struct ArrangedListView: View {
     }
 }
 
+/// The iPhone's Search tab: its own field over the hits.
 struct SearchList: View {
     @Bindable var model: AppModel
     @State private var query = ""
+
+    var body: some View {
+        SearchHits(model: model, query: query).searchable(text: $query, prompt: say(.searchHint))
+    }
+}
+
+/// What a query finds among the tenant's objects; opening one ends the search.
+struct SearchHits: View {
+    @Bindable var model: AppModel
+    let query: String
 
     var body: some View {
         let hits = ShellWords.shared.search(objects: model.objects, query: query)
         List(hits, id: \.nodeId) { ref in
             ObjectRow(ref: ref) { r in model.search(false); model.open(r) }
         }
-        .searchable(text: $query, prompt: say(.searchHint))
         .navigationTitle(say(.tabSearch))
     }
 }

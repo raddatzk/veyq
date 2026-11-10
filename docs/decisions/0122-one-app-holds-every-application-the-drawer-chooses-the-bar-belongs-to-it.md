@@ -38,8 +38,11 @@ two apps, and a store listing, review and signing setup per app for one maintain
    Android window) it stays open as the sidebar.
 
 3. **Home is one space's tree,** as the web's level view shows it (owner 2026-11-08): the folders, then the objects
-   of every application side by side; a folder opens in place, back goes up. Its **space switcher is Home's title** —
-   iOS' own title menu, Android's top-bar menu —, since it only matters there. Its **filters sit at the top** (All,
+   of every application side by side, the folders apart from the rest — each group under its heading, Folders and
+   Contents, where both are there (the web's level groups, owner 2026-11-10); a folder opens in place, back goes up.
+   Its **space switcher is Home's title** — iOS' own title menu, Android's top-bar menu, and on an iPad's and a Mac's
+   split view the title as a menu button with its chevron, since their title shows no menu of its own (owner
+   2026-11-10) —, since it only matters there. Its **filters sit at the top** (All,
    then each application left on, the web's level tabs; the folders stay in every filter), not in the bar, which
    would run out of places as applications come. **Depot has no drawer entry:** its files are what Home's folders
    hold, so a flat list of them across spaces would be Home without the folders.
@@ -65,7 +68,10 @@ two apps, and a store listing, review and signing setup per app for one maintain
 7. **How an object presents itself is its application's;** the drawer, the bar's place for Search and the list rule
    around it are the same for all. Choosing an object of another application — from Favorites, Recent, Home or
    Search — switches the bar to that application, and back returns to where it was chosen (Home stays Home, in the
-   folder it was opened from); an object the app opened on goes back to its application's list.
+   folder it was opened from); an object the app opened on goes back to its application's list. **An object chosen
+   from the sidebar a wide window keeps open** is a top-level destination as Home and the applications are, with no
+   back: the sidebar beside it is the way elsewhere (owner 2026-11-10, `Shell.openAtTop`). A phone's drawer, which
+   closes over what it opened, keeps back.
 
 8. **Search runs on the device only;** the server holds ciphertext and searches nothing. The first stage searches
    the names the app decrypted. A persistent index of them, to search without reading every tree first, is sealed at

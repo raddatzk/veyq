@@ -54,6 +54,9 @@ class ShellModel(
         /** Home's level: the shown folder's children in the shown space, under the shown filter. */
         fun level(shell: Shell): List<NodeRef> = shell.space?.let { Home.level(nodes, it, shell.folder?.nodeId, shell.filter) }.orEmpty()
 
+        /** Home's level in its groups, folders apart ([Home.groups]). */
+        fun groups(shell: Shell): List<Home.Group> = Home.groups(level(shell))
+
         fun space(shell: Shell): SpaceRef? = spaces.firstOrNull { it.scopeId == shell.space }
     }
 
@@ -141,6 +144,9 @@ class ShellModel(
 
     /** Opens [ref], its use recorded (the drawer's Recent). */
     fun open(ref: ObjectRef) = opened(ref) { it.open(ref) }
+
+    /** [ref] chosen from the sidebar a wide window keeps open ([Shell.openAtTop]); recent as any open. */
+    fun openAtTop(ref: ObjectRef) = opened(ref) { it.openAtTop(ref) }
 
     /** [ref] chosen from the list beside the open object ([Shell.openBeside]); recent as any open. */
     fun openBeside(ref: ObjectRef) = opened(ref) { it.openBeside(ref) }

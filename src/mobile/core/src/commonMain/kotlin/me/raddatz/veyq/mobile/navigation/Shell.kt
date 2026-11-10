@@ -22,6 +22,11 @@ data class Shell(
      * Search, another object. Null for an object the app opened on, whose back is its own application's list.
      */
     val back: Shell? = null,
+    /**
+     * Chosen from the sidebar a wide window keeps open: a top-level destination as Home and the applications are, which
+     * back does not leave — the sidebar is the way elsewhere (owner 2026-11-10).
+     */
+    val top: Boolean = false,
 ) {
     val shape: ApplicationShape? get() = application?.let { a -> APPLICATION_SHAPES.first { it.id == a } }
 
@@ -42,8 +47,8 @@ data class Shell(
     /** The folder Home shows: null is the space's root. */
     val folder: FolderRef? get() = path.lastOrNull()
 
-    /** Whether back has somewhere to go inside the app: an open object, or a folder below the root. */
-    val canGoBack: Boolean get() = openObject != null || (isHome && path.isNotEmpty())
+    /** Whether back has somewhere to go inside the app: an open object not chosen at the top, or a folder below the root. */
+    val canGoBack: Boolean get() = (openObject != null && !top) || (isHome && path.isNotEmpty())
 
     /** The drawer chose an application (null: Home): its list, nothing open, the same space kept for Home. */
     fun choose(app: ApplicationId?): Shell = Shell(application = app, space = space)
@@ -70,10 +75,10 @@ data class Shell(
         return copy(path = path)
     }
 
-    /** The folder Home shows (null: the root) as a node action takes it, in space [scopeId]. */
     /** The drawer opens at the start only where nothing is chosen yet: Home, no space, no folder. */
     val drawerOpensAtStart: Boolean get() = isHome && space == null && path.isEmpty()
 
+    /** The folder Home shows (null: the root) as a node action takes it, in space [scopeId]. */
     fun folderAt(scopeId: String): NodeAt? = folder?.let { NodeAt(scopeId, it.nodeId, NodeRef.FOLDER, it.name) }
 
     fun filter(app: ApplicationId?): Shell = copy(filter = app)
@@ -83,6 +88,12 @@ data class Shell(
      * returns to the screen it was opened from (ADR 0122 decision 7), not to that application's list.
      */
     fun open(ref: ObjectRef): Shell = Shell(application = ref.application, openObject = ref, space = space, back = this)
+
+    /**
+     * [ref] chosen from the sidebar a wide window keeps open: the object alone, nothing to go back to ([top]). An object
+     * opened from it then has it behind.
+     */
+    fun openAtTop(ref: ObjectRef): Shell = Shell(application = ref.application, openObject = ref, space = space, top = true)
 
     /**
      * [ref] chosen from the list beside an open object (a wide window's list and detail): it takes the open one's place, so
@@ -101,7 +112,7 @@ data class Shell(
 
     /** Back, whatever is shown: an object closes, a folder goes up to its parent. */
     fun goBack(): Shell = when {
-        openObject != null -> close()
+        openObject != null && !top -> close()
         isHome && path.isNotEmpty() -> copy(path = path.dropLast(1))
         else -> this
     }

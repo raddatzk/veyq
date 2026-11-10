@@ -1,5 +1,7 @@
 package me.raddatz.veyq.mobile.navigation
 
+import me.raddatz.veyq.mobile.words.Msg
+
 /** A folder on Home's path. */
 data class FolderRef(val nodeId: String, val name: String)
 
@@ -17,6 +19,22 @@ object Home {
         nodes.filter { it.scopeId == scopeId && it.parentId == parentId }
             .filter { it.isFolder || (it.application != null && (filter == null || it.application == filter)) }
             .sortedWith(compareBy<NodeRef> { !it.isFolder }.thenBy { it.name.lowercase() })
+
+    /**
+     * One group of a level, as the web's level view draws it (`LevelView`'s groups): the folders, then the contents.
+     * [heading] is null where the level has one group only, which then needs none.
+     */
+    data class Group(val folders: Boolean, val nodes: List<NodeRef>, val heading: Msg?)
+
+    /** A level ([level]'s order) in its groups: the folders apart from the rest, an empty group left out. */
+    fun groups(level: List<NodeRef>): List<Group> {
+        val (folders, contents) = level.partition { it.isFolder }
+        val both = folders.isNotEmpty() && contents.isNotEmpty()
+        return listOfNotNull(
+            folders.takeIf { it.isNotEmpty() }?.let { Group(true, it, Msg.HOME_GROUP_FOLDERS.takeIf { both }) },
+            contents.takeIf { it.isNotEmpty() }?.let { Group(false, it, Msg.HOME_GROUP_CONTENTS.takeIf { both }) },
+        )
+    }
 
     /** The space Home starts on: the tenant's own, else the first. */
     fun defaultSpace(spaces: List<SpaceRef>): SpaceRef? = spaces.firstOrNull { it.kind == "TENANT" } ?: spaces.firstOrNull()

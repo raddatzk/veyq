@@ -61,4 +61,24 @@ class ShellModelTest {
         kotlin.test.assertFalse(home.showsListBeside)
         kotlin.test.assertFalse(beside.search(true).showsListBeside)
     }
+
+    @Test
+    fun an_object_chosen_from_the_sidebar_has_no_back_and_one_opened_from_it_returns_to_it() {
+        val home = Shell(application = null, space = "s").enter(FolderRef("f", "Trips"))
+        val pot = ObjectRef("t", "pot", "EXPENSES_POT", ApplicationId.EXPENSES, "Paris")
+        val other = ObjectRef("t", "pot2", "EXPENSES_POT", ApplicationId.EXPENSES, "Rome")
+        val top = home.openAtTop(pot)
+        assertEquals(pot, top.openObject)
+        assertEquals("s", top.space)
+        kotlin.test.assertFalse(top.canGoBack)
+        assertSame(top, top.goBack())
+        // its places keep it at the top
+        kotlin.test.assertFalse(top.select(top.barTabs.last()).canGoBack)
+        // an object opened from it goes back to it
+        val inner = top.open(other)
+        kotlin.test.assertTrue(inner.canGoBack)
+        assertSame(top, inner.goBack())
+        // opened as before, back still leads to where it was opened from
+        assertSame(home, home.open(pot).goBack())
+    }
 }

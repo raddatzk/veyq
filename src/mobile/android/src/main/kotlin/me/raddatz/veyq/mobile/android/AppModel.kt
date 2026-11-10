@@ -86,6 +86,8 @@ sealed interface Screen {
 
         /** Home's level: the shown folder's children in the shown space, under the shown filter. */
         val level: List<NodeRef> get() = lists.level(shell)
+        /** Home's level in its groups, the folders apart (core's `Home.groups`). */
+        val levelGroups: List<me.raddatz.veyq.mobile.navigation.Home.Group> get() = lists.groups(shell)
 
         /** The lists as core's shell holds them, for its rules. */
         private val lists: me.raddatz.veyq.mobile.navigation.ShellModel.Lists
@@ -1243,6 +1245,11 @@ class AppModel(app: Application) : AndroidViewModel(app) {
 
     fun open(ref: ObjectRef) {
         shellModel?.open(ref)
+    }
+
+    /** [ref] chosen from the sidebar an expanded window keeps open: a top-level destination, no back (`Shell.openAtTop`). */
+    fun openAtTop(ref: ObjectRef) {
+        shellModel?.openAtTop(ref)
     }
 
     /** [ref] chosen from the list beside the open object (a wide window): it takes the open one's place. */

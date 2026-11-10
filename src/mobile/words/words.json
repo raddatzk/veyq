@@ -19,6 +19,14 @@
     "en": "Recent",
     "de": "Zuletzt"
   },
+  "home_group_folders": {
+    "en": "Folders",
+    "de": "Ordner"
+  },
+  "home_group_contents": {
+    "en": "Contents",
+    "de": "Inhalte"
+  },
   "drawer_applications": {
     "en": "Applications",
     "de": "Anwendungen"
