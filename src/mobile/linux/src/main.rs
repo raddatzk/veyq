@@ -102,7 +102,7 @@ fn activate(app: &adw::Application) {
     };
     glib::spawn_future_local(async move {
         // The way in, once per process: the trusted accounts resume, or the sign-in shows.
-        match bridge::call(&Call::SessionStart).await {
+        match bridge::call(&Call::SessionStart).await.map(|(answer, _)| answer) {
             Ok(Answer::Done) => {}
             other => eprintln!("veyq: the start answered {other:?}"),
         }

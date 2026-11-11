@@ -72,7 +72,7 @@ public sealed partial class MainWindow : Window
         // the way in, once per process: the trusted accounts resume, or the sign-in shows
         try
         {
-            var answer = await Core.CallAsync(new Call.SessionStart());
+            var (answer, _) = await Core.CallAsync(new Call.SessionStart());
             if (answer is not Answer.Done) Log.Write($"the start answered {answer.GetType().Name}");
         }
         catch (UnreadableException e)

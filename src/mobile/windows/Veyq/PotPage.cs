@@ -41,7 +41,7 @@ internal sealed class PotPage : IDisposable
         Answer answer;
         try
         {
-            answer = await Core.CallAsync(new Call.PotOpen { Ref = Ref });
+            (answer, _) = await Core.CallAsync(new Call.PotOpen { Ref = Ref });
         }
         catch (Exception e)
         {

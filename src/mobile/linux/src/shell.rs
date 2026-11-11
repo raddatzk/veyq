@@ -207,7 +207,7 @@ impl Shell {
         }
         let weak = Rc::downgrade(self);
         glib::spawn_future_local(async move {
-            let answer = bridge::call(&Call::SearchQuery { query: query.clone() }).await;
+            let answer = bridge::call(&Call::SearchQuery { query: query.clone() }).await.map(|(answer, _)| answer);
             let Some(s) = weak.upgrade() else { return };
             // only the answer to the query still standing
             if s.search.text() != query.as_str() {

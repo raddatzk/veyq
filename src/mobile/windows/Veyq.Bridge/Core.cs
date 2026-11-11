@@ -80,10 +80,14 @@ public static unsafe class Core
         }
     }
 
-    /// <summary>One action of the core, answered once. Before the core started it is never answered.</summary>
-    public static Task<Answer> CallAsync(Call call)
+    /// <summary>
+    /// One action of the core, answered once, with the payload beside the answer: the bytes of an <c>Answer.Bytes</c> (a
+    /// member's picture, a blob's range), copied out of the callback; null for every other answer. Before the core started
+    /// it is never answered.
+    /// </summary>
+    public static Task<(Answer Answer, byte[]? Payload)> CallAsync(Call call)
     {
-        var answer = new TaskCompletionSource<Answer>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var answer = new TaskCompletionSource<(Answer, byte[]?)>(TaskCreationOptions.RunContinuationsAsynchronously);
         var handle = GCHandle.Alloc(answer);
         fixed (byte* json = Utf8(JsonSerializer.Serialize(call, WireContext.Default.Call)))
         {
@@ -121,12 +125,13 @@ public static unsafe class Core
         try
         {
             var handle = GCHandle.FromIntPtr((nint)ctx);
-            var answer = (TaskCompletionSource<Answer>)handle.Target!;
+            var answer = (TaskCompletionSource<(Answer, byte[]?)>)handle.Target!;
             handle.Free(); // the core answers once
             var text = Copy(json);
+            var payload = Native.Payload(bytes, len); // copied here: the core's bytes are valid only during this call
             try
             {
-                answer.TrySetResult(JsonSerializer.Deserialize(text, WireContext.Default.Answer) ?? throw new JsonException("null"));
+                answer.TrySetResult((JsonSerializer.Deserialize(text, WireContext.Default.Answer) ?? throw new JsonException("null"), payload));
             }
             catch (JsonException e)
             {

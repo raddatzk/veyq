@@ -12,7 +12,7 @@ internal static class Act
     {
         try
         {
-            var answer = await Core.CallAsync(call);
+            var (answer, _) = await Core.CallAsync(call);
             if (answer is not Answer.Done) Log.Write($"{call.GetType().Name} answered {answer.GetType().Name}");
         }
         catch (UnreadableException e)

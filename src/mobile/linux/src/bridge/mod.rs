@@ -63,29 +63,35 @@ pub fn shutdown() {
 #[derive(Debug)]
 pub struct Unreadable(pub serde_json::Error);
 
+/// A call's answer and the payload beside it: the bytes of an `Answer::Bytes` (a member's picture, a blob's range),
+/// copied out of the callback; None for every other answer.
+pub type Answered = (Answer, Option<Vec<u8>>);
+
 /// One action of the core, answered once. Before the core started it is never answered.
-pub async fn call(call: &Call) -> Result<Answer, Unreadable> {
+pub async fn call(call: &Call) -> Result<Answered, Unreadable> {
     let json = CString::new(serde_json::to_string(call).expect("a Call writes")).expect("JSON holds no NUL");
-    let (tx, rx) = async_channel::bounded::<Result<Answer, Unreadable>>(1);
+    let (tx, rx) = async_channel::bounded::<Result<Answered, Unreadable>>(1);
     let ctx = Box::into_raw(Box::new(tx)).cast::<c_void>();
     // SAFETY: the request is read before the call returns; ctx is taken back exactly once, by [answered].
     unsafe { wire::veyq_call(json.as_ptr(), ptr::null(), 0, ctx, answered) };
     rx.recv().await.unwrap_or_else(|_| unreachable!("the answer's sender is dropped only after it sent"))
 }
 
-unsafe extern "C" fn answered(ctx: *mut c_void, json: *const c_char, _bytes: *const u8, _len: usize) {
+unsafe extern "C" fn answered(ctx: *mut c_void, json: *const c_char, bytes: *const u8, len: usize) {
     // SAFETY: ctx is the sender [call] leaked for this one answer; the core answers once.
-    let tx = unsafe { Box::from_raw(ctx.cast::<async_channel::Sender<Result<Answer, Unreadable>>>()) };
+    let tx = unsafe { Box::from_raw(ctx.cast::<async_channel::Sender<Result<Answered, Unreadable>>>()) };
     // SAFETY: a NUL-terminated string valid during this call, copied here.
     let text = unsafe { CStr::from_ptr(json) }.to_string_lossy();
-    let _ = tx.try_send(serde_json::from_str(&text).map_err(Unreadable));
+    // SAFETY: NULL, or `len` bytes valid during this call, copied here (the generated layer's one reading of them).
+    let payload = unsafe { wire::payload(bytes, len) };
+    let _ = tx.try_send(serde_json::from_str(&text).map(|answer| (answer, payload)).map_err(Unreadable));
 }
 
 /// [call] sent from GTK's main loop, its answer awaited there; an answer other than done is said on stderr by the call's
 /// kind alone (never its fields: a sign-in's carry what the person typed).
 pub fn send(call: Call) {
     gtk::glib::spawn_future_local(async move {
-        match self::call(&call).await {
+        match self::call(&call).await.map(|(answer, _)| answer) {
             Ok(Answer::Done | Answer::PotOpened { .. } | Answer::Groups { .. } | Answer::Hits { .. }) => {}
             other => {
                 let kind = serde_json::to_value(&call).ok().and_then(|v| v["type"].as_str().map(str::to_owned)).unwrap_or_default();
@@ -222,6 +228,31 @@ mod tests {
         }
         assert!(read > 0, "no sample in {dir}");
         eprintln!("{read} samples read back");
+    }
+
+    /// D7: the payload beside an answer is copied before the callback returns — the core's buffer may be gone right
+    /// after — and NULL is no payload, while an empty one is still one (an empty range).
+    #[test]
+    fn an_answers_payload_is_copied_before_the_callback_returns() {
+        fn answer(json: &str, bytes: *const u8, len: usize) -> Answered {
+            let (tx, rx) = async_channel::bounded::<Result<Answered, Unreadable>>(1);
+            let ctx = Box::into_raw(Box::new(tx)).cast::<c_void>();
+            let json = CString::new(json).unwrap();
+            // SAFETY: ctx is a leaked sender, taken back by answered; json and bytes are valid during the call.
+            unsafe { answered(ctx, json.as_ptr(), bytes, len) };
+            rx.try_recv().expect("answered at once").expect("the answer reads")
+        }
+        let picture = r#"{"type":"Bytes","mediaType":"image/png"}"#;
+        let mut core_buffer = vec![0x89, b'P', b'N', b'G', 0, 255];
+        let (a, payload) = answer(picture, core_buffer.as_ptr(), core_buffer.len());
+        core_buffer.fill(0); // the core reuses its buffer once the callback returned
+        drop(core_buffer);
+        assert_eq!(a, Answer::Bytes { media_type: Some("image/png".into()) });
+        assert_eq!(payload, Some(vec![0x89, b'P', b'N', b'G', 0, 255]));
+
+        let empty = [0u8; 1];
+        assert_eq!(answer(r#"{"type":"Bytes","mediaType":null}"#, empty.as_ptr(), 0).1, Some(vec![]));
+        assert_eq!(answer(r#"{"type":"Done"}"#, ptr::null(), 0), (Answer::Done, None));
     }
 
     #[test]

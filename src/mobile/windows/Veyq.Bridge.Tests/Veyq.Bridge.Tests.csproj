@@ -9,6 +9,8 @@
     <TestingPlatformDotnetTestSupport>true</TestingPlatformDotnetTestSupport>
     <!-- Restored for win-x64 too on every host, so the lock file is one whether an x64 test run asks for it or not. -->
     <RuntimeIdentifiers>win-x64</RuntimeIdentifiers>
+    <!-- PayloadTest hands the generated layer a pointer, as the core does. -->
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
   </PropertyGroup>
   <ItemGroup>
     <PackageReference Include="MSTest.TestFramework" />

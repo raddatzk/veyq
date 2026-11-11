@@ -39,7 +39,7 @@ impl PotPage {
         let weak = Rc::downgrade(&inner);
         let open = r.clone();
         gtk::glib::spawn_future_local(async move {
-            let Ok(Answer::PotOpened { pot }) = bridge::call(&Call::PotOpen { r#ref: open }).await else {
+            let Ok((Answer::PotOpened { pot }, _)) = bridge::call(&Call::PotOpen { r#ref: open }).await else {
                 eprintln!("veyq: the Pot did not open in the core");
                 return;
             };

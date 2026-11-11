@@ -207,7 +207,7 @@ internal sealed class ShellView
         Answer answer;
         try
         {
-            answer = await Core.CallAsync(new Call.SearchQuery { query = query });
+            (answer, _) = await Core.CallAsync(new Call.SearchQuery { query = query });
         }
         catch (Exception e)
         {

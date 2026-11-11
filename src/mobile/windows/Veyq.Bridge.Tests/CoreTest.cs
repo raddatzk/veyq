@@ -31,11 +31,13 @@ public sealed class CoreTest
             Assert.IsNotNull(watch, "the Session watch was refused");
             Assert.IsInstanceOfType<Gate.Starting>(GateOf(Next(gates)));
 
-            Assert.AreEqual(new Answer.Done(), await Core.CallAsync(new Call.SessionStart()).WaitAsync(Wait));
+            var started = await Core.CallAsync(new Call.SessionStart()).WaitAsync(Wait);
+            Assert.AreEqual(new Answer.Done(), started.Answer);
+            Assert.IsNull(started.Payload, "a payload beside an answer that is no Bytes");
             while (GateOf(Next(gates)) is not Gate.SignIn) { }
             Assert.IsGreaterThan(0, store.Answered, "the core asked the host's store");
 
-            var refused = await Core.CallAsync(new Call.SearchQuery { query = "x" }).WaitAsync(Wait);
+            var (refused, _) = await Core.CallAsync(new Call.SearchQuery { query = "x" }).WaitAsync(Wait);
             Assert.AreEqual(new Answer.Refused { why = Why.NoTenantOpen }, refused);
 
             watch.Dispose();
