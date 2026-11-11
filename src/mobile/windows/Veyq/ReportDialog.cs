@@ -177,8 +177,12 @@ internal sealed class ReportDialog
         panel.Children.Add(Text(Words.ReportIntro(), "report-intro", "TextFillColorSecondaryBrush"));
 
         var scope = new RadioButtons { Header = Words.ReportScope() };
-        scope.Items.Add(new RadioButton { Content = Words.ReportScopeWhole() });
-        scope.Items.Add(new RadioButton { Content = Words.ReportScopeName() });
+        foreach (var (id, word) in new[] { ("whole", Words.ReportScopeWhole()), ("name", Words.ReportScopeName()) })
+        {
+            var item = new RadioButton { Content = word };
+            AutomationProperties.SetAutomationId(item, $"report-scope:{id}");
+            scope.Items.Add(item);
+        }
         AutomationProperties.SetAutomationId(scope, "report-scope");
         scope.SelectionChanged += (_, _) =>
         {

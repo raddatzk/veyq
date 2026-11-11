@@ -185,14 +185,22 @@ def ps_quote(value: str) -> str:
 
 
 def live_forward(live: str | None = None) -> tuple[list[str], str]:
-    """The `ssh -R` that makes the origin's port ([live], else VEYQ_LIVE's) on the Windows host's loopback this host's,
-    and the origin. The name stays the origin's, which the Windows host's `hosts` maps to 127.0.0.1."""
+    """The `ssh -R` that makes the origin's port ([live], else VEYQ_LIVE's) — and VEYQ_LIVE_STORE's, the object store's
+    public endpoint — on the Windows host's loopback this host's, and the origin. The name stays the origin's, which the Windows host's `hosts` maps to 127.0.0.1."""
     live = live or os.environ["VEYQ_LIVE"]
     origin = urlsplit(live)
     if not origin.hostname:
         sys.exit(f"VEYQ_LIVE is not an origin: {live}")
     port = origin.port or (443 if origin.scheme == "https" else 80)
-    return ["-R", f"{port}:127.0.0.1:{port}"], live
+    forward = ["-R", f"{port}:127.0.0.1:{port}"]
+    # a blob's way up or down (a cover, a receipt) goes to the object store's public endpoint, a dev instance's Vite
+    # origin (VEYQ_LIVE_STORE, e.g. http://veyq.localhost:8081): its port too, where it is another
+    store = urlsplit(os.environ.get("VEYQ_LIVE_STORE", ""))
+    if store.hostname:
+        store_port = store.port or (443 if store.scheme == "https" else 80)
+        if store_port != port:
+            forward += ["-R", f"{store_port}:127.0.0.1:{store_port}"]
+    return forward, live
 
 
 def env_file() -> Path:

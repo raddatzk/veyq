@@ -26,6 +26,11 @@ namespace Veyq;
 
 internal sealed class CoverDialog
 {
+    /// <summary>The frame, 16:9 at the width a ContentDialog's content takes (a size of its own: a frame sized from its
+    /// layout collapsed inside the dialog's scroller).</summary>
+    private const double FrameWidth = 480;
+    private const double FrameHeight = FrameWidth * 9 / 16;
+
     private readonly Window _window;
     private readonly long _header;
     private readonly Crop? _stored;
@@ -60,6 +65,9 @@ internal sealed class CoverDialog
         body.Children.Add(new TextBlock { Text = Words.CoverHint(), TextWrapping = TextWrapping.Wrap, Foreground = (Brush)Application.Current.Resources["TextFillColorSecondaryBrush"] });
         var frame = new Grid
         {
+            Width = FrameWidth,
+            Height = FrameHeight,
+            HorizontalAlignment = HorizontalAlignment.Left,
             CornerRadius = new CornerRadius(8),
             Background = (Brush)Application.Current.Resources["CardBackgroundFillColorDefaultBrush"],
             BorderBrush = (Brush)Application.Current.Resources["CardStrokeColorDefaultBrush"],
@@ -73,14 +81,7 @@ internal sealed class CoverDialog
         frame.Children.Add(_ring);
         AutomationProperties.SetName(frame, Words.CoverTitle());
         AutomationProperties.SetAutomationId(frame, "cover-frame");
-        // 16:9, as wide as the dialog lets it be
-        frame.SizeChanged += (_, e) =>
-        {
-            if (Math.Abs(frame.Height - e.NewSize.Width * 9 / 16) > 0.5) frame.Height = e.NewSize.Width * 9 / 16;
-            _canvas.Clip = new RectangleGeometry { Rect = new Windows.Foundation.Rect(0, 0, e.NewSize.Width, e.NewSize.Width * 9 / 16) };
-            // the frame's size changed: the same crop, posed anew for it
-            Pose(null, _crop ?? (_picked ? null : _stored), 0, 0, 1);
-        };
+        _canvas.Clip = new RectangleGeometry { Rect = new Windows.Foundation.Rect(0, 0, FrameWidth, FrameHeight) };
         _canvas.ManipulationMode = ManipulationModes.TranslateX | ManipulationModes.TranslateY;
         _canvas.ManipulationStarted += (_, _) => _dragFrom = _pose;
         _canvas.ManipulationDelta += (_, e) =>
@@ -142,11 +143,11 @@ internal sealed class CoverDialog
     /// centred), panned and zoomed by <paramref name="factor"/>. Only the latest ask's answer is drawn.</summary>
     private async void Pose(Pose? at, Crop? crop, double panX, double panY, double factor)
     {
-        if (_bitmap is not { } b || _canvas.ActualWidth <= 0) return;
+        if (_bitmap is not { } b) return;
         var n = ++_asked;
         var call = new Call.CoverPose
         {
-            imageWidth = b.PixelWidth, imageHeight = b.PixelHeight, frameWidth = _canvas.ActualWidth, frameHeight = _canvas.ActualWidth * 9 / 16,
+            imageWidth = b.PixelWidth, imageHeight = b.PixelHeight, frameWidth = FrameWidth, frameHeight = FrameHeight,
             at = at, crop = crop, panX = panX, panY = panY, zoom = factor,
         };
         Answer answer;
