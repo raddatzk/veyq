@@ -205,6 +205,57 @@ Android and Apple thinned onto it.
 - A pass on Linux (container) and on Windows (VM) of each action, de/en, light/dark.
 - Builds and guards green.
 
+**Status: done (2026-11-11).**
+
+**Built:**
+- core: `TrashSheet.purge(row)` (the row confirmed is handed in; `purge()` reading the question is gone) and
+  `TrashSheet.row(id)`; Android's and Apple's trash dialogs call it, which makes `1c17a82df` structural. `NodeAt`,
+  `AppKinds.Facts` and `AppKinds.Create` are `@Serializable` for the wire.
+- Android: a guest's folder removed from a drop box's page goes through the header's `trash(…)` helper with the shell's
+  snackbar (`LocalShellNotices`), its Undo held for the core's window, as Apple's notice does.
+- bridge: `Header.Open(node, facts, maxButtons)` → `HeaderOpened`, `Header.Facts/Close/Pin/Undo/Rename`, `Header.Trash` →
+  `Trashed(notice, undoable)`, `Shell.CreateFolder`, `Trash.Open` → `TrashOpened`, `Trash.Close/Restore/Type/Retry/
+  CancelRename/Purge(row)`; `Watched.Header(id)` (`HeaderShown`: node, pinned, the plan with each action's words, the
+  delete's question, the undo while offered, gone) and `Watched.Trash(id)` (`TrashShown`: rows with `restorable` and
+  `retryable`, busy, error, renaming, retryName). `ShellShown` gains `creates` by kind, `canCreateHere` and `headed`.
+  `Tenant` takes the header, trash and new-folder doors (the live ones over `ShellModel`, a test's played).
+- Linux (`header.rs`, `trash.rs`): the header bar's buttons and More menu, `AdwAlertDialog` for rename, delete and New
+  folder (asked again with the core's problem), an `AdwToast` with Undo held until the state's undo ends, the space's
+  trash an `AdwDialog` from the switcher's menu with "Delete forever?" an `AdwAlertDialog`. `said::instant_day`.
+- Windows (`NodeHeader.cs`, `TrashDialog.cs`, `Dialogs.cs`, `HeaderPlan.cs`): the `CommandBar`'s primary and secondary
+  commands, `ContentDialog`s through `Dialogs.Show` (one at a time), the `InfoBar`'s Undo, the trash a `ContentDialog`
+  from the switcher with "Delete forever?" asked in place. `Said.InstantDay`; `CreateAction.Menu` takes a disabled kind.
+- **Not drawn yet (both desktops):** share, move, copy, report, cover and a folder's download — left out of the bar
+  (`header::DRAWN`, `HeaderPlan.Drawn`), not drawn as commands answering "not yet": a dead control breaks both
+  guidelines, and each later phase adds its id. A Pot's Download is drawn (it existed: `Pot.Download`). New's Pot entry is
+  shown disabled.
+
+**Met:**
+- `./gradlew :core:jvmTest :core:macosArm64Test :bridge:jvmTest` green. `TrashSheetTest` (4) bitten: `purge(row)` reading
+  `current.purging` again → 2 red. `DispatchTest` (16) drives every new call over a played door (header, trash, new folder),
+  bitten: `Header.Undo` and `Trash.Purge` made no-ops → 2 red.
+- `VEYQ_LIVE=http://veyq.localhost:8080 VEYQ_ENV_FILE=<main>/.run/.env ./gradlew :bridge:jvmTest --tests
+  '*LiveBridgeTest.aFolderIs*' --rerun`: New folder "App header <n>", pin and unpin (each read back by a refresh and a
+  fresh header), rename, trash, undo, trash again with the undo left to the core's window (offered 6007 ms), restore from
+  the space's trash, trash and purge — each read back, the folder purged at the end.
+- `linux/run.py build` green (clippy `-D warnings`; `cargo test` 18 incl. `header::tests`, `said`'s instant day);
+  `windows/run.py build` green (Veyq.Tests 15/15 incl. `HeaderPlanTest`, `InstantDay`).
+- `scripts/validate_mobile_words.py`, `validate_mobile_platform_guidelines.py` green.
+- `ANDROID_HOME=… ./gradlew :android:assembleDebug` and `xcodebuild -target Veyq -sdk macosx CODE_SIGNING_ALLOWED=NO`
+  green; a signed iOS 27 simulator build green.
+- Linux (container, `run --devlogin --no-secret-service`, Broadway on 8097 driven from headless system Chrome; stderr read
+  before each shot): a folder ("Linux pass") made in Personal, pinned, renamed, trashed with Undo, the Undo left to its
+  window (the toast dismissed with the state), restored from the space's trash, trashed and undone; a Pot (Sri Lanka)
+  unpinned and pinned, renamed and back, trashed and undone; en/light and de/dark (the trash's dates, "Rückgängig", the
+  purge's question); the folder purged at the end.
+- Windows (VM, `run --devlogin`, then `--devlogin --unlock`; `run.py drive`): the same on a folder ("Windows pass") and on
+  Sri Lanka, en/light and de/dark, the offer answered "Not now", the folder purged; ended with Stop trusting
+  (`manage servers: None`). No Hello prompt was raised.
+- Android's and Apple's additions by compile and `TrashSheetTest`/`NodeHeaderModelTest` only: the iOS simulator tool's
+  access was not granted in this session (the throwaway `veyq_p2` was created, the app installed and signed in, then
+  deleted), and no drop box with a guest's folder was found in the dev instance (`DropBoxLiveTest` against
+  `App dropre 56950/Box` found none), so Android's drop-box Undo is proven by compile and the shared `trash(…)` helper.
+
 ### Phase 3 — Move, copy and a folder's download: `MoveSheet`, the storage check, one undo (D4); the core-run download
 
 Android and Apple thinned.
@@ -276,3 +327,23 @@ is copy, since GNOME has no share sheet (D3).
   is out of reach of the tool's round trip, so timed flows are proven on Android and in `commonTest`.
 - **Deviation:** the report's offer is cached only once read; a failed read is asked again by the next header (both
   apps kept a failure as "not offered" for the whole tenant). Report is a legal duty, so the safe side.
+
+### Phase 2 (2026-11-11)
+
+- **An answer can overtake a watch's update.** Linux's first trash toast had no Undo: the host read the offer from the
+  watched state, whose update arrived after `Header.Trash`'s answer. The answer now says `undoable` (as Apple reads
+  `header.current.undo` after the trash), and a host ends the Undo only on the state's transition from offered to not,
+  so an update from before the trash ends nothing.
+- **A wire class named `Action`** clashed with `System.Action` in the generated C# (`PlanAction` now): a nested wire
+  class's simple name is the hosts' type name; avoid the platforms' common names.
+- **A server instant is no ISO day:** the trash rows showed `2026-11-11T16:46:58Z` raw through `said::day`; both desktops
+  now say an instant's local day (`instant_day`, `InstantDay`), as Android and Apple do.
+- **Open:** a Pot opened from the sidebar (`openAtTop`) and then trashed stays the open object — `ShellModel.trash` goes
+  back only where `canGoBack`, and the Pot model is closed — so the page shows "Loading" until another place is chosen,
+  also after Undo. It is the core's rule, on every app; a fix (back to the application's list) is a core change for the
+  owner to place.
+- **Deviations:** headers and trash sheets are watched by an id the bridge holds (`Watched.Header(id)`,
+  `Watched.Trash(id)`), as Pots are (D2's own wording), not by ref or scope: a rename changes the ref, and a header must
+  outlive its page while its Undo stands. The header's state carries no undo deadline: the host shows Undo until the
+  core's state ends it, so there is no second clock. The `Trash.Type`/`Retry` pair carries the new name through the core
+  (its `retryable` rule) rather than a `Restore(row, name)`.
