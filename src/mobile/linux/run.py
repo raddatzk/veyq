@@ -8,7 +8,11 @@ Verbs:
                              (`:core:linkDebugTest<Target>`) and runs it in the container: the conformance suite over
                              libsodium, utf8proc's NormalizationTest, the wall clock in Europe/Berlin, and — with
                              VEYQ_LIVE set — the live sign-in. `--tests` is Kotlin/Native's `--ktest_filter` pattern
-                             (`*LiveSignInTest*`). Its exit code is the test binary's.
+                             (`*LiveSignInTest*`). It runs inside a session bus of its own with gnome-keyring-daemon,
+                             its login collection unlocked by a password drawn in the container, so the DeviceKeys
+                             contract runs over a real Secret Service; without `--tests`, the Secret Service probe
+                             runs twice more, without a session bus and with libsecret moved away. Its exit code is
+                             the first red test binary's.
   bridge                     links the bridge's release library (`:bridge:linkReleaseShared<Target>`), checks with
                              `nm -D` that it defines exactly bridge.h's six functions and Kotlin/Native's own
                              symbols (none of the static libraries linked in), and builds and runs
@@ -99,7 +103,30 @@ def test(pattern: str | None) -> int:
     # WallClockTest's values are Berlin's. kotlinx-datetime reads the zone from /etc/localtime, glibc from TZ: both set.
     prelude = f"ln -sf /usr/share/zoneinfo/{ZONE} /etc/localtime; "
     filter_arg = " " + shlex.quote(f"--ktest_filter={pattern}") if pattern else ""
-    return in_container(docker_platform, mounts, env, f"{prelude}exec /veyq/bin/test.kexe{filter_arg}")
+    script = prelude + SECRET_SERVICE.format(tests=f"/veyq/bin/test.kexe{filter_arg}")
+    if not pattern:
+        # The store where none answers (the CR's Phase 2): libsecret there but no session bus, then libsecret moved away.
+        probe = "/veyq/bin/test.kexe --ktest_filter='*SecretServiceProbeTest*'"
+        script += (f"; rc=$?; [ $rc -ne 0 ] && exit $rc; "
+                   f"echo '+ the Secret Service probe without a session bus'; "
+                   f"env -u DBUS_SESSION_BUS_ADDRESS VEYQ_SECRET_SERVICE=no-bus {probe} || exit $?; "
+                   f"echo '+ the Secret Service probe with libsecret-1.so.0 moved away'; "
+                   f"mkdir -p /tmp/away && mv /usr/lib64/libsecret-1.so.0* /tmp/away/ && "
+                   f"VEYQ_SECRET_SERVICE=absent exec {probe}")
+    # gnome-keyring-daemon drops its capabilities at start, which a container refuses unless it may lock memory
+    return in_container(docker_platform, mounts, env, script, docker_args=["--cap-add=IPC_LOCK"])
+
+
+# The Secret Service the core's LinuxDeviceKeys contract runs over (the CR device-trust-on-linux-and-windows, D3): a
+# session bus of its own, gnome-keyring-daemon on it with its login collection made and unlocked by a password drawn
+# here, in the container, per run — a throwaway test value, never printed, never leaving the container. `{tests}` runs
+# inside that session with VEYQ_SECRET_SERVICE=present; the script's exit code is its.
+SECRET_SERVICE = (
+    "mkdir -p -m 700 /tmp/xdg ~/.cache ~/.local/share/keyrings; export XDG_RUNTIME_DIR=/tmp/xdg; "
+    "dbus-run-session -- env VEYQ_SECRET_SERVICE=present bash -c '"
+    "head -c 32 /dev/urandom | base64 | tr -d \"\\n\" | gnome-keyring-daemon --unlock --components=secrets >/dev/null "
+    "|| exit 70; exec \"$@\"' veyq {tests}"
+)
 
 
 def in_container(docker_platform: str, mounts: dict[Path, str], env: dict[str, str], script: str,

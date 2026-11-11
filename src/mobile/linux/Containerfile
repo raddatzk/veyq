@@ -14,7 +14,12 @@ FROM fedora:44@sha256:15da97ed9aa94dd3d92c3925eb89520f6c80e07ea7ee24cba848d1f8b6
 # glibc-langpack-en, glibc-langpack-de: the locales the words are tried in — glibc's gettext ignores LANGUAGE under a C
 #   locale (C.UTF-8 included: measured 2026-11-10, `gettext --context` answered the English), as a desktop never runs.
 # socat: run.py's forward of a `*.localhost` dev origin to the host (the backend picks the tenant from the Host header).
+# libsecret: what the core's LinuxDeviceKeys loads at run time (`dlopen("libsecret-1.so.0")`, core/secret/), the one
+#   thing of these the app itself needs. gnome-keyring, dbus-daemon: the Secret Service `run.py test` holds the core's
+#   DeviceKeys contract against — gnome-keyring-daemon under `dbus-run-session`, its login collection unlocked by a
+#   password drawn in the container per run (the CR device-trust-on-linux-and-windows, D2/D3); test-only.
 RUN dnf install -y --setopt=install_weak_deps=False \
         gtk4-devel libadwaita-devel rust cargo clippy gcc gettext \
         libxcrypt-compat ca-certificates tzdata glibc-langpack-en glibc-langpack-de socat \
+        libsecret gnome-keyring dbus-daemon \
     && dnf clean all
