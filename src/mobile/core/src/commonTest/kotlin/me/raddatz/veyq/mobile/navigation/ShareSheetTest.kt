@@ -156,7 +156,7 @@ class ShareSheetTest {
         s.edit("a")
         assertEquals("a", s.current.editing)
         assertEquals("Old", s.current.form?.label)
-        assertEquals(Msg.SHARE_SAVE, s.submit)
+        assertEquals(Msg.SHARE_SAVE, s.submit())
         s.label("New")
         val done = s.save()
         assertEquals(listOf("edit:a"), server.sent)

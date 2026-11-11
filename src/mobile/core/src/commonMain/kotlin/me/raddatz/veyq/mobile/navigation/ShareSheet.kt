@@ -120,7 +120,7 @@ class ShareSheet(
     fun row(shareId: String): LinkRow? = rows().firstOrNull { it.link.shareId == shareId }
 
     /** The form's button: create, or save an edit. */
-    val submit: Msg get() = if (current.editing != null) Msg.SHARE_SAVE else Msg.SHARE_CREATE
+    fun submit(state: State = current): Msg = if (state.editing != null) Msg.SHARE_SAVE else Msg.SHARE_CREATE
 
     /** What the password's switch says under it: the tenant's rule, or the offer (each with the least characters). */
     val passwordHint: Notice get() = Notice(if (door.rules.passwordRequired) Msg.SHARE_PASSWORD_BY_RULE else Msg.SHARE_PASSWORD_HINT, LinkForm.PASSWORD_MIN)

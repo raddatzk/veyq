@@ -21,7 +21,7 @@ struct NodeShareSheet: View {
                     } else if let form = st.form {
                         NewLinkForm(
                             form: form, words: sheet.words, saving: st.saving, problem: st.problem.map { say(notice: $0) },
-                            submit: sheet.submit, change: { sheet.form(change: $0) }, onCancel: { sheet.cancelForm() },
+                            submit: sheet.submit(state: st), change: { sheet.form(change: $0) }, onCancel: { sheet.cancelForm() },
                             onSave: { Task { _ = try? await sheet.save() } }
                         )
                     } else {

@@ -95,7 +95,7 @@ internal fun ShareSheet(ref: me.raddatz.veyq.mobile.navigation.NodeAt, model: Ap
             when {
                 made != null -> FreshLink(made) { sheet.freshSeen() }
                 form != null -> NewLinkForm(
-                    form, words, saving = state.saving, problem = state.problem?.let { say(it) }, submit = sheet.submit,
+                    form, words, saving = state.saving, problem = state.problem?.let { say(it) }, submit = sheet.submit(state),
                     onChange = sheet::form, onCancel = sheet::cancelForm, onSave = { scope.launch { sheet.save() } },
                 )
                 else -> {
