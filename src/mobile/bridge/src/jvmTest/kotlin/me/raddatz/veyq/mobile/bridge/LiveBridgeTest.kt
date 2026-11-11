@@ -362,7 +362,7 @@ class LiveBridgeTest {
         println("renamed to $renamed")
 
         // trashed, its undo offered; undone, read back where it was
-        assertEquals(me.raddatz.veyq.mobile.words.Msg.TRASH_MOVED, (b.ask(Call.HeaderTrash(h2), timeout = 1.minutes) as Answer.Said).notice!!.msg)
+        assertEquals(me.raddatz.veyq.mobile.words.Msg.TRASH_MOVED, (b.ask(Call.HeaderTrash(h2), timeout = 1.minutes) as Answer.Trashed).notice.msg)
         w2.until { u -> (u as Update.Header).shown?.takeIf { it.undo != null && it.gone } }
         assertNull(node(fresh(), renamed), "the trash did not land")
         assertEquals(Answer.Said(null), b.ask(Call.HeaderUndo(h2), timeout = 1.minutes))
@@ -370,7 +370,7 @@ class LiveBridgeTest {
         println("trashed and undone")
 
         // trashed again, its undo left to the core's window (6 s): the offer ends by itself
-        assertEquals(me.raddatz.veyq.mobile.words.Msg.TRASH_MOVED, (b.ask(Call.HeaderTrash(h2), timeout = 1.minutes) as Answer.Said).notice!!.msg)
+        assertEquals(me.raddatz.veyq.mobile.words.Msg.TRASH_MOVED, (b.ask(Call.HeaderTrash(h2), timeout = 1.minutes) as Answer.Trashed).notice.msg)
         val offeredAt = System.currentTimeMillis()
         w2.until { u -> (u as Update.Header).shown?.takeIf { it.undo != null } }
         w2.until(30.seconds) { u -> (u as Update.Header).shown?.takeIf { it.undo == null } }
@@ -399,7 +399,7 @@ class LiveBridgeTest {
         println("restored from the space's trash")
 
         val h3 = (b.ask(Call.HeaderOpen(at2, me.raddatz.veyq.mobile.AppKinds.Facts(), 2)) as Answer.HeaderOpened).header
-        assertEquals(me.raddatz.veyq.mobile.words.Msg.TRASH_MOVED, (b.ask(Call.HeaderTrash(h3), timeout = 1.minutes) as Answer.Said).notice!!.msg)
+        assertEquals(me.raddatz.veyq.mobile.words.Msg.TRASH_MOVED, (b.ask(Call.HeaderTrash(h3), timeout = 1.minutes) as Answer.Trashed).notice.msg)
         assertEquals(Answer.Done, b.ask(Call.TrashClose(t)))
         val t2 = (b.ask(Call.TrashOpen(personal.scopeId)) as Answer.TrashOpened).trash
         val tw2 = b.watching(Watched.Trash(t2))

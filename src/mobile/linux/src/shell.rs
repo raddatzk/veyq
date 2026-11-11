@@ -13,10 +13,11 @@ use std::rc::Rc;
 use adw::prelude::*;
 use gtk::{gio, glib};
 
-use crate::bridge::{self, wire::ApplicationId, wire::Call, wire::ObjectRef, wire::ShellModelState, wire::ShellShown};
+use crate::bridge::{self, wire::Answer, wire::ApplicationId, wire::Call, wire::Create, wire::Facts, wire::ObjectRef, wire::ShellModelState, wire::ShellShown};
+use crate::header::{self, Header};
 use crate::home::{self, app_icon, app_name, kind_icon};
 use crate::pot::PotPage;
-use crate::{avatars, create_action, said, words};
+use crate::{avatars, create_action, said, trash, words};
 
 /// What a sidebar item opens.
 #[derive(Clone)]
@@ -50,7 +51,11 @@ pub struct Shell {
     content_header: adw::HeaderBar,
     content_title: adw::WindowTitle,
     back: gtk::Button,
-    pot_menu: gtk::MenuButton,
+    /// The header bar's end, where the node on screen draws its actions (`header`).
+    header_bar: gtk::Box,
+    header: Rc<RefCell<Option<Header>>>,
+    /// A header whose page left while its trash's Undo stands: kept until another takes its place.
+    undoing: RefCell<Option<Header>>,
     toasts: adw::ToastOverlay,
     window: adw::ApplicationWindow,
     pot: RefCell<Option<PotPage>>,
@@ -102,11 +107,9 @@ impl Shell {
         let content_header = adw::HeaderBar::new();
         content_header.set_title_widget(Some(&content_title));
         content_header.pack_start(&back);
-        // the open Pot's actions, GNOME's way: a menu at the header bar's end
-        let pot_actions = gio::Menu::new();
-        pot_actions.append(Some(&words::node_download()), Some("win.pot-download"));
-        let pot_menu = gtk::MenuButton::builder().icon_name("view-more-symbolic").tooltip_text(words::node_more()).menu_model(&pot_actions).visible(false).build();
-        content_header.pack_end(&pot_menu);
+        // the node on screen's actions, GNOME's way: buttons and a menu at the header bar's end (`header`)
+        let header_bar = gtk::Box::new(gtk::Orientation::Horizontal, 6);
+        content_header.pack_end(&header_bar);
         let content_view = adw::ToolbarView::new();
         content_view.add_top_bar(&content_header);
         let toasts = adw::ToastOverlay::new();
@@ -143,7 +146,9 @@ impl Shell {
             content_header,
             content_title,
             back,
-            pot_menu,
+            header_bar,
+            header: Rc::new(RefCell::new(None)),
+            undoing: RefCell::new(None),
             toasts,
             window: window.clone(),
             pot: RefCell::new(None),
@@ -178,6 +183,54 @@ impl Shell {
             }
         });
         window.add_action(&download);
+
+        // the header's actions, on the node on screen (`header`)
+        for id in ["favorite", "rename", "delete"] {
+            let action = gio::SimpleAction::new(&format!("header-{id}"), None);
+            let weak = Rc::downgrade(self);
+            action.connect_activate(move |_, _| {
+                let Some(s) = weak.upgrade() else { return };
+                let held = s.header.borrow();
+                let Some(h) = held.as_ref() else { return };
+                match id {
+                    "favorite" => h.pin(),
+                    "rename" => h.rename(&s.window),
+                    _ => h.delete(&s.window),
+                }
+            });
+            window.add_action(&action);
+        }
+        // New's folder (`Shell.CreateFolder`), named in an alert dialog that asks again with the core's problem
+        let create_folder = gio::SimpleAction::new("create-folder", None);
+        let weak = Rc::downgrade(self);
+        create_folder.connect_activate(move |_, _| {
+            let Some(s) = weak.upgrade() else { return };
+            let toasts = s.toasts.clone();
+            header::ask_name(s.window.upcast_ref(), &words::folder_new(), &words::folder_name(), "", None, &words::folder_create(), move |name, again| {
+                let toasts = toasts.clone();
+                glib::spawn_future_local(async move {
+                    match bridge::call(&Call::ShellCreateFolder { name: name.clone() }).await.map(|(a, _)| a) {
+                        Ok(Answer::Said { notice: Some(n) }) => {
+                            eprintln!("veyq: new folder: {}", n.msg);
+                            again(name, said::notice(&n));
+                        }
+                        other => header::say(&toasts, other, "Shell.CreateFolder"),
+                    }
+                });
+            });
+        });
+        window.add_action(&create_folder);
+        // the space's trash, from the switcher's menu (`trash`)
+        let open_trash = gio::SimpleAction::new("trash", None);
+        let weak = Rc::downgrade(self);
+        open_trash.connect_activate(move |_, _| {
+            let Some(s) = weak.upgrade() else { return };
+            let space = s.now.borrow().as_ref().and_then(|(state, _)| state.shell.space.clone());
+            if let Some(space) = space {
+                trash::open(&s.window, space);
+            }
+        });
+        window.add_action(&open_trash);
 
         let weak = Rc::downgrade(self);
         self.space_action.connect_activate(move |_, scope| {
@@ -305,6 +358,10 @@ impl Shell {
             }
             menu.append_section(Some(&server.label), &tenants);
         }
+        // the space's trash (`trash.rs`)
+        let space_menu = gio::Menu::new();
+        space_menu.append(Some(&words::trash_title()), Some("win.trash"));
+        menu.append_section(None, &space_menu);
         // "Manage servers" (the window's `win.manage`, `manage.rs`)
         let manage = gio::Menu::new();
         manage.append(Some(&words::switcher_manage()), Some("win.manage"));
@@ -314,15 +371,17 @@ impl Shell {
         self.tenant_action.set_state(&format!("{}\n{}", shown.connection, shown.tenant.tenant_id).to_variant());
     }
 
-    /// New: what the sidebar's New offers (`AppKinds.drawerCreates`), none of which this slice creates yet.
+    /// New: what the sidebar's New offers (`AppKinds.drawerCreates`) where the shell may create (`canCreateHere`). A
+    /// folder is made here; the others are later CRs' (their entry stays insensitive: `win.create` is no action).
     fn draw_new(&self) {
         let now = self.now.borrow();
         let Some((_, shown)) = now.as_ref() else { return };
         let menu = gio::Menu::new();
-        for word in &shown.creates {
-            menu.append(Some(&said::key(word)), Some("win.create"));
+        for c in &shown.creates {
+            menu.append(Some(&said::key(&c.word)), Some(if c.create == Create::Folder { "win.create-folder" } else { "win.create" }));
         }
         self.new.set_menu_model(Some(&menu));
+        self.new.set_visible(shown.can_create_here);
     }
 
     fn draw_sidebar(&self) {
@@ -381,6 +440,29 @@ impl Shell {
         self.sidebar.set_selected(selected);
     }
 
+    /// The header of the node the content heads (`ShellShown.headed`): opened anew when the node (or its name) changed,
+    /// none on a space's root. A header whose trash's Undo stands is kept until the offer ends.
+    fn draw_header(&self, shown: &ShellShown) {
+        let same = self.header.borrow().as_ref().map(|h| &h.node) == shown.headed.as_ref();
+        if same {
+            return;
+        }
+        if let Some(old) = self.header.borrow_mut().take()
+            && old.undoing()
+        {
+            old.leave_bar();
+            *self.undoing.borrow_mut() = Some(old);
+        }
+        while let Some(child) = self.header_bar.first_child() {
+            self.header_bar.remove(&child);
+        }
+        if let Some(node) = &shown.headed {
+            // a folder's page knows all it needs; a Pot's tells once it is read
+            let facts = (node.kind != "EXPENSES_POT").then_some(Facts { can_write: true, has_content: true });
+            *self.header.borrow_mut() = Some(Header::open(node, facts, &self.header_bar, &self.toasts));
+        }
+    }
+
     fn draw_content(&self) {
         let now = self.now.borrow();
         let Some((state, shown)) = now.as_ref() else { return };
@@ -401,12 +483,22 @@ impl Shell {
         self.back.set_visible(shown.can_go_back);
         self.content_header.set_show_back_button(!shown.can_go_back);
 
-        self.pot_menu.set_visible(shell.open_object.as_ref().is_some_and(|o| o.kind == "EXPENSES_POT"));
+        self.draw_header(shown);
         let body: gtk::Widget = match &shell.open_object {
             Some(o) if o.kind == "EXPENSES_POT" => {
                 let mut pot = self.pot.borrow_mut();
                 if pot.as_ref().is_none_or(|p| p.r#ref != *o) {
-                    *pot = Some(PotPage::open(o));
+                    let page = PotPage::open(o);
+                    // the Pot read: the header learns whether it takes writes (`AppKinds.Facts`)
+                    let held = Rc::downgrade(&self.header);
+                    page.on_read(move |can_write| {
+                        if let Some(held) = held.upgrade()
+                            && let Some(h) = held.borrow().as_ref()
+                        {
+                            h.facts(Some(Facts { can_write, has_content: true }));
+                        }
+                    });
+                    *pot = Some(page);
                 }
                 let page = pot.as_ref().expect("set above");
                 page.places(&shown.tabs, shown.selected_tab.as_ref());

@@ -14,6 +14,9 @@ use crate::bridge::{self, Watch, wire::Answer, wire::BarTab, wire::Call, wire::O
 use crate::home::glib_escape;
 use crate::{avatars, said, words};
 
+/// What a Pot page tells of each read: whether it takes writes.
+type OnRead = Box<dyn Fn(bool)>;
+
 /// The Pot on screen: opened in the core when made, closed when dropped.
 pub struct PotPage {
     pub r#ref: ObjectRef,
@@ -26,6 +29,8 @@ struct Inner {
     state: RefCell<Option<PotModelState>>,
     tabs: RefCell<(Vec<ShownTab>, Option<BarTab>)>,
     watch: RefCell<Option<Watch>>,
+    /// Told whether the Pot takes writes, each time it is read (its header's facts).
+    read: RefCell<Option<OnRead>>,
 }
 
 impl PotPage {
@@ -36,6 +41,7 @@ impl PotPage {
             state: RefCell::new(None),
             tabs: RefCell::new((Vec::new(), None)),
             watch: RefCell::new(None),
+            read: RefCell::new(None),
         });
         inner.draw();
         let weak = Rc::downgrade(&inner);
@@ -103,6 +109,11 @@ impl PotPage {
         });
     }
 
+    /// [f] is told whether the Pot takes writes, each time its view is read.
+    pub fn on_read(&self, f: impl Fn(bool) + 'static) {
+        *self.inner.read.borrow_mut() = Some(Box::new(f));
+    }
+
     pub fn widget(&self) -> &gtk::Box {
         &self.inner.root
     }
@@ -131,6 +142,9 @@ async fn follow(weak: Weak<Inner>, updates: async_channel::Receiver<Result<Updat
         let Some(inner) = weak.upgrade() else { return };
         match update {
             Ok(Update::Pot { state, .. }) => {
+                if let (Some(view), Some(read)) = (state.as_ref().and_then(|s| s.view.as_ref()), inner.read.borrow().as_ref()) {
+                    read(view.can_write);
+                }
                 *inner.state.borrow_mut() = state;
                 inner.draw();
             }

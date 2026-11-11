@@ -93,6 +93,17 @@ pub fn day(iso: &str) -> String {
         .unwrap_or_else(|| iso.to_string())
 }
 
+/// The day of a server's instant (ISO 8601, `2026-11-11T16:46:58.016Z`) in the local zone, as the locale writes a date
+/// (Android's and Apple's trash rows do the same); the instant's own day where it does not read.
+pub fn instant_day(instant: &str) -> String {
+    glib::DateTime::from_iso8601(instant, None)
+        .and_then(|t| t.to_local())
+        .ok()
+        .and_then(|t| t.format("%x").ok())
+        .map(String::from)
+        .unwrap_or_else(|| instant.chars().take(10).collect())
+}
+
 /// A size as GNOME writes one (`g_format_size`).
 pub fn size(bytes: i64) -> String {
     glib::format_size(bytes.max(0) as u64).into()
@@ -239,5 +250,12 @@ mod tests {
     fn a_day_that_is_no_day_stays_as_it_came() {
         assert_eq!(day("soon"), "soon");
         assert_eq!(day("2026-13-40"), "2026-13-40");
+    }
+
+    #[test]
+    fn a_servers_instant_is_said_as_its_day_and_one_that_does_not_read_as_its_first_ten_characters() {
+        let said = instant_day("2026-11-11T12:00:00.016Z");
+        assert!(!said.contains('T') && !said.contains(':') && said.contains("11"), "{said}");
+        assert_eq!(instant_day("2026-11-11 or so"), "2026-11-11");
     }
 }

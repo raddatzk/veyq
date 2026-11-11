@@ -175,7 +175,10 @@ internal sealed class Call {
     /** Pins or unpins (`toggleFavorite`): [Answer.Said] with the failure's notice, or none. */
     @Serializable @SerialName("Header.Pin") data class HeaderPin(val header: Long) : Call()
 
-    /** To the trash (`trash`): [Answer.Said] with what it says; its undo stands in the header's state while offered. */
+    /**
+     * To the trash (`trash`): [Answer.Trashed] with what it says and whether its undo is offered now (the state's undo,
+     * read as the call returns: the host's toast takes its Undo at once, and goes when the state's undo is null again).
+     */
     @Serializable @SerialName("Header.Trash") data class HeaderTrash(val header: Long) : Call()
 
     /** The trash's undo while offered (`undoTrash`): [Answer.Said] with why it failed, or none. */
@@ -235,6 +238,9 @@ internal sealed class Answer {
 
     /** What an action says: its notice, or null where it says nothing (it went through). */
     @Serializable @SerialName("Said") data class Said(val notice: Notice?) : Answer()
+
+    /** A trash: what it says, and whether its undo is offered ([HeaderShown.undo] says when the offer ended). */
+    @Serializable @SerialName("Trashed") data class Trashed(val notice: Notice, val undoable: Boolean) : Answer()
 
     /** A rename: why it did not land ([problem]: the dialog asks again), or what to say once it did ([notice]). */
     @Serializable @SerialName("Renamed") data class Renamed(val problem: Notice?, val notice: Notice?) : Answer()

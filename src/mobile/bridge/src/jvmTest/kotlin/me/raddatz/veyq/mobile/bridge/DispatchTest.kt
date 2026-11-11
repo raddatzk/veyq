@@ -588,8 +588,9 @@ class DispatchTest {
         assertEquals(listOf("Taken", "Trip 2"), played.renamedTo)
 
         // trash: said, gone, its undo offered in the state; the bridge's closeOpen ran; the undo brings it back
-        val said = (b.ask(Call.HeaderTrash(id)) as Answer.Said).notice!!
-        assertEquals(Msg.TRASH_MOVED, said.msg)
+        val said = b.ask(Call.HeaderTrash(id)) as Answer.Trashed
+        assertEquals(Msg.TRASH_MOVED, said.notice.msg)
+        assertTrue(said.undoable, "the answer did not say the undo is offered")
         val offered = w.until { u -> (u as Update.Header).shown?.takeIf { it.undo != null } }
         assertTrue(offered.gone)
         assertEquals(listOf(folder), played.closed)
