@@ -2164,6 +2164,7 @@ class ServerHost(GitOpsHost):
         self.remote_differs = remote_differs  # origin's gitops/ is not this checkout's after the push
         self.dns = dns if dns is not None else {}
         self.waited: list[str] = []
+        self.prompted: list[str] = []
         self.tunnels: list = []
         # git's state outlives a run, as a repository's does: kept beside the checkout
         self.state = self.top.parent / f"{self.top.name}.git-state"
@@ -2190,6 +2191,10 @@ class ServerHost(GitOpsHost):
     def wait(self, prompt):
         self.waited.append(prompt)
         return self.waits
+
+    def prompt(self, question, default="", hint="", yes_no=False):
+        self.prompted.append(question)
+        return super().prompt(question, default, hint, yes_no)
 
     def secret(self, question):
         return ""  # Enter: generated
@@ -2424,6 +2429,9 @@ def test_server_path(tmp: pathlib.Path, home: pathlib.Path) -> pathlib.Path:
           and f"_src_path: {vc.SERVER_TEMPLATE_URL}" in rendered and host.rendered["repo_url"] ==
           "git@github.com:owner/raddatz.me.git" and host.rendered["admin_ssh_public_key"].endswith("Key")
           and host.rendered["age_recipient"] == AGE_PUBLIC, json.dumps(setup))
+    check("server path: the node name is not asked — derived from the address, kept for a rebuild",
+          not any("node name" in q for q in host.prompted) and setup["server"]["node_name"] == "server"
+          and host.rendered["node_name"] == "server", f"{host.prompted} {setup['server']}")
 
     host, rc, out = run(top, confirms={"Commit them": False})
     check("server path: resumed, nothing asked again, the host key pinned; commit declined: nothing pushed, no "

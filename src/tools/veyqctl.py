@@ -3370,7 +3370,7 @@ class Q:
                               "in to it as root with your SSH key; veyq-server's README says which system it needs.",
                               pattern=f"{HOSTNAME_RE}|{IPV4_RE}", section="server")
     NODE_NAME = Question("node_name", "node name", "The server's name as Kubernetes shows it (`kubectl get nodes`) "
-                         "and in the repository's Ansible inventory. A label only: the server's own hostname stays.",
+                         "and in the repository's Ansible inventory. Not asked: derived from the address.",
                          pattern=r"[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?", section="server")
     ADMIN_USER = Question("admin_user", "admin user", "Your login on the server. Logging in as root is switched off.",
                           pattern=r"(?!root$|ci$)[a-z_][a-z0-9_-]{0,31}", section="server")
@@ -3976,7 +3976,11 @@ def ask_server(run: InitRun) -> None:
     a = run.server_answers
     a["server_address"] = run.ask(Q.SERVER_ADDRESS)
     address = a["server_address"]
-    a["node_name"] = run.ask(Q.NODE_NAME, "server" if address[0].isdigit() else address.split(".")[0])
+    # Not asked: k3s needs one fixed name per node (the bootstrap waits for it), but nothing of veyq's depends on
+    # it — the chart pins no pod to a node. Derived from the address; --node-name or an earlier answer wins.
+    derived = "server" if address[0].isdigit() else address.split(".")[0]
+    a["node_name"] = run.ask(Q.NODE_NAME, given=run.args.node_name or run.progress.get("server", "node_name")
+                             or derived)
     own = re.sub(r"[^a-z0-9_-]", "", os.environ.get("USER", "").split(".")[0].lower())
     a["admin_user"] = run.ask(Q.ADMIN_USER, own if own not in ("root", "ci") else "")
     a["admin_ssh_public_key"] = run.ask(Q.SSH_KEY, given=pick_ssh_key(run))
