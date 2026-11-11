@@ -241,8 +241,17 @@ docker compose -f "releases/<release>/docker-compose.prod.yml" --env-file .env e
 ```
 
 Pass the password **by name** (`-e VEYQ_ADMIN_PASSWORD`): written as `-e VEYQ_ADMIN_PASSWORD="$VEYQ_ADMIN_PASSWORD"`
-it lands in `docker compose`'s own argument list, where every user on the host can see it while the call runs. On
-Kubernetes, run the same command with `kubectl -n veyq exec deploy/veyq-admin --`.
+it lands in `docker compose`'s own argument list, where every user on the host can see it while the call runs.
+`kubectl exec` passes no variable by name, so on Kubernetes the password goes in on standard input, read inside the pod:
+
+```sh
+read -rs VEYQ_ADMIN_PASSWORD
+printf '%s\n' "$VEYQ_ADMIN_PASSWORD" | kubectl -n veyq exec -i deploy/veyq-admin -- sh -c \
+  'read -r VEYQ_ADMIN_PASSWORD; export VEYQ_ADMIN_PASSWORD VEYQ_ADMIN_EMAIL=you@example.com; veyq-admin tenant list'
+```
+
+`printf` is the shell's own, so the password is in no process's argument list. `veyq-admin --help` needs no password:
+`kubectl -n veyq exec deploy/veyq-admin -- veyq-admin --help`.
 
 | Command | What it does |
 |---|---|

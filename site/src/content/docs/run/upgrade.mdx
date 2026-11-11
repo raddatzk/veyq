@@ -58,8 +58,9 @@ cd /opt/veyq
 ./veyqctl self-update                                        # then: veyqctl itself, as the new release ships it
 ```
 
-`upgrade` runs only when you run it, and in this order — **nothing is stopped before step 4**. Each step names what it
-runs, so you can do it by hand.
+`upgrade` runs only when you run it, and in this order — **nothing is stopped before step 4**. Each step is a heading
+of its own; with `-v` (`--verbose`, on every command) it also shows every program it runs, with its arguments, so you can
+do it by hand.
 
 1. **Resolve the release** `.env`'s `VEYQ_RELEASE` selects ([below](#which-release-upgrade-takes)). The running one:
    nothing to do. An older one: refused — there is no downgrade.

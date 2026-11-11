@@ -51,9 +51,10 @@ veyqctl init             # gitops · set up the server too? yes
 It asks everything first — the server's address, the admin user and the SSH key it logs in with (offered from
 `~/.ssh` and your agents, 1Password's included), the age key the repository's secrets are encrypted to (a file you
 have, or Enter for a new one in `.age/key.txt`, gitignored — `init` waits until you have put its copy into your password
-manager), Argo CD's and veyq's administration through the SSH tunnel (yes), this machine's name for the server, the
-admin user's sudo password (hidden; Enter generates one), and veyq's own questions, where TLS starts on **Let's Encrypt
-staging**. Then, each step said as it comes and every one that changes something outside the repository asked first:
+manager), Argo CD's and veyq's administration through the SSH tunnel (yes), the admin user's sudo password (hidden;
+Enter generates one), and veyq's own questions — its domain, whether to use the bundled store, and TLS, which starts on
+**Let's Encrypt staging**. The instance's name is also this machine's name for the server (`ssh -N <name>`, the kubectl
+context). Then, each step said as it comes and every one that changes something outside the repository asked first:
 
 1. **veyq-server's newest release, verified** before Copier reads it: its manifest's signature under veyq-server's
    release workflow, the commit it names checked out, and that tree's sha256 compared with the manifest's. Copier
