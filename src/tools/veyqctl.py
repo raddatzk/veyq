@@ -921,7 +921,8 @@ def check_cosign_version(host: Host, cosign: str) -> None:
 
 
 def verify_manifest(host: Host, cosign: str, raw: bytes, bundle: bytes, what: str,
-                    identity: str = COSIGN_IDENTITY_REGEXP, publisher: str = "veyq") -> None:
+                    identity: str = COSIGN_IDENTITY_REGEXP, publisher: str = "veyq",
+                    bundle_name: str = MANIFEST_BUNDLE_ASSET) -> None:
     """`cosign verify-blob` of the manifest's exact bytes against its bundle and the one identity that publishes it:
     veyq's release workflow, or (the server path) veyq-server's."""
     check_cosign_version(host, cosign)
@@ -933,7 +934,7 @@ def verify_manifest(host: Host, cosign: str, raw: bytes, bundle: bytes, what: st
                            COSIGN_OIDC_ISSUER, "--certificate-identity-regexp", identity], check=False)
     if result.returncode != 0:
         raise Refused(
-            f"{what} does not verify against its {MANIFEST_BUNDLE_ASSET} and the identity that publishes {publisher} "
+            f"{what} does not verify against its {bundle_name} and the identity that publishes {publisher} "
             f"({identity}): {(result.stderr or '').strip()[-800:]}\n"
             f"Nothing was pulled, written or started."
         )
@@ -3435,7 +3436,8 @@ def verify_server_template(host: Host, into: Path) -> dict[str, str]:
     sha256 compared. Returns the manifest."""
     tag, raw, bundle = host.server_release()
     verify_manifest(host, require_cosign(host), raw, bundle, f"veyq-server {tag}'s manifest",
-                    identity=SERVER_IDENTITY_REGEXP, publisher="veyq-server")
+                    identity=SERVER_IDENTITY_REGEXP, publisher="veyq-server",
+                    bundle_name=f"{SERVER_MANIFEST_FILE}.bundle")
     try:
         doc = json.loads(raw)
     except ValueError as e:
@@ -3683,7 +3685,9 @@ def bootstrap(host: Host, top: Path, answers: dict[str, str], pinned: str) -> No
         host.workdir = workdir
 
 
-SSH_BLOCK = re.compile(r"^# >>> (?P<name>\S+) \(veyqctl connect\)\n(?P<body>.*?)^# <<< (?P=name)\n\n?", re.S | re.M)
+# veyqctl's block — or the one affenbande's scripts/connect.py wrote before it, which this one replaces.
+SSH_BLOCK = re.compile(r"^# >>> (?P<name>\S+) \((?:veyqctl connect|scripts/connect\.py)\)\n(?P<body>.*?)^# <<< (?P=name)\n\n?",
+                       re.S | re.M)
 SSH_OWNED = re.compile(r"\s*(HostName|User|LocalForward|ExitOnForwardFailure|ServerAliveInterval)\s", re.I)
 
 
