@@ -122,7 +122,7 @@ class WireTest {
             Update.Shell(ShellModel.State(shell, lists), shown), Update.Shell(null),
             Update.Pot(3, PotModel.State(ref, failed = false, saving = true, message = "REFUSED"), listOf("user-1")), Update.Pot(4, null),
             Update.Header(7, HeaderShown(me.raddatz.veyq.mobile.navigation.NodeAt("scope-1", "node-1", "EXPENSES_POT", "Trip to Lyon"), pinned = true,
-                plan = HeaderShown.Plan(listOf(HeaderShown.Action("favorite", Msg.NODE_UNFAVORITE)), listOf(HeaderShown.Action("own", null)), listOf(HeaderShown.Action("delete", Msg.POT_DELETE))),
+                plan = HeaderShown.Plan(listOf(HeaderShown.PlanAction("favorite", Msg.NODE_UNFAVORITE)), listOf(HeaderShown.PlanAction("own", null)), listOf(HeaderShown.PlanAction("delete", Msg.POT_DELETE))),
                 deleteQuestion = Notice(Msg.POT_DELETE_CONFIRM, listOf("Trip to Lyon")), undo = Notice(Msg.TRASH_MOVED, listOf("Trip to Lyon")), gone = true)),
             Update.Header(7, HeaderShown(me.raddatz.veyq.mobile.navigation.NodeAt("scope-1", "node-1", "EXPENSES_POT", "Trip to Lyon"), pinned = null, plan = null, deleteQuestion = Notice(Msg.POT_DELETE_CONFIRM, listOf("x")), undo = null, gone = false)),
             Update.Header(9, null),

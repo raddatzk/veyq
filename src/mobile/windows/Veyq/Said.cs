@@ -48,6 +48,13 @@ public static partial class Said
             ? day.ToString("d", culture ?? CultureInfo.CurrentCulture)
             : iso;
 
+    /// <summary>The day of a server's instant (ISO 8601, <c>2026-11-11T16:46:58.016Z</c>) in the local zone, as the
+    /// culture's short date (Android's and Apple's trash rows do the same); the instant's own day where it does not read.</summary>
+    public static string InstantDay(string instant, CultureInfo? culture = null) =>
+        DateTimeOffset.TryParse(instant, CultureInfo.InvariantCulture, DateTimeStyles.RoundtripKind, out var at)
+            ? DateOnly.FromDateTime(at.ToLocalTime().DateTime).ToString("d", culture ?? CultureInfo.CurrentCulture)
+            : instant[..Math.Min(10, instant.Length)];
+
     /// <summary>A size as Explorer writes one (<c>StrFormatByteSizeEx</c>, rounded to its shown digits), in the person's
     /// locale: Windows reads it for the process, not per thread (measured: SetThreadUILanguage and SetThreadLocale change
     /// nothing), so a size has no culture to pass.</summary>

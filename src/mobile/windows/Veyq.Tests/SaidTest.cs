@@ -30,6 +30,15 @@ public sealed class SaidTest
     }
 
     [TestMethod]
+    public void AServersInstantIsItsLocalDayAndOneThatDoesNotReadItsFirstTenCharacters()
+    {
+        // noon UTC is the same day in every zone a test host runs in (W. Europe, the Mac's)
+        Assert.AreEqual("10.11.2026", Said.InstantDay("2026-11-10T12:00:00.016Z", CultureInfo.GetCultureInfo("de-DE")));
+        Assert.AreEqual("11/10/2026", Said.InstantDay("2026-11-10T12:00:00Z", CultureInfo.GetCultureInfo("en-US")));
+        Assert.AreEqual("2026-11-10", Said.InstantDay("2026-11-10 or so", CultureInfo.GetCultureInfo("de-DE")));
+    }
+
+    [TestMethod]
     public void ASizeIsExplorersInThePersonsLocale()
     {
         var point = CultureInfo.CurrentCulture.NumberFormat.NumberDecimalSeparator;

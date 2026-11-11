@@ -19,15 +19,16 @@ internal static class CreateAction
         return button;
     }
 
-    /// <summary>The command that opens the kinds a level creates, each an entry of its menu.</summary>
-    public static AppBarButton Menu(string label, string automationId, IEnumerable<(string Label, string AutomationId, Action Create)> kinds)
+    /// <summary>The command that opens the kinds a level creates, each an entry of its menu (disabled where its create is
+    /// null: a kind this app does not create yet).</summary>
+    public static AppBarButton Menu(string label, string automationId, IEnumerable<(string Label, string AutomationId, Action? Create)> kinds)
     {
         var menu = new MenuFlyout();
         foreach (var (kindLabel, kindId, create) in kinds)
         {
-            var item = new MenuFlyoutItem { Text = kindLabel };
+            var item = new MenuFlyoutItem { Text = kindLabel, IsEnabled = create is not null };
             AutomationProperties.SetAutomationId(item, kindId);
-            item.Click += (_, _) => create();
+            item.Click += (_, _) => create?.Invoke();
             menu.Items.Add(item);
         }
         var button = new AppBarButton { Icon = new SymbolIcon(Symbol.Add), Label = label, Flyout = menu };

@@ -441,7 +441,7 @@ internal class Bridge<A : Connection, T : Any>(compose: () -> Composition<A, T>)
     private fun shownHeader(h: HeldHeader): HeaderShown {
         val m = h.model
         val s = m.current
-        fun actions(ids: List<String>) = ids.map { HeaderShown.Action(it, m.label(it, hasCover = false)) }
+        fun actions(ids: List<String>) = ids.map { HeaderShown.PlanAction(it, m.label(it, hasCover = false)) }
         return HeaderShown(
             node = m.node,
             pinned = s.pinned,

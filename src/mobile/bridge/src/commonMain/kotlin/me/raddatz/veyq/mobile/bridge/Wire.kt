@@ -320,10 +320,13 @@ internal class HeaderShown(
     val gone: Boolean,
 ) {
     /** `NodeHeader.Plan`: the bar's buttons, the menu, and the menu's last group after a separator. */
-    @Serializable class Plan(val buttons: List<Action>, val menu: List<Action>, val last: List<Action>)
+    @Serializable class Plan(val buttons: List<PlanAction>, val menu: List<PlanAction>, val last: List<PlanAction>)
 
-    /** One action: its id (`NodeHeader`'s, or an application's own) and its words (null: an application's own). */
-    @Serializable class Action(val id: String, @Serializable(with = MsgKey::class) val word: Msg?)
+    /**
+     * One action: its id (`NodeHeader`'s, or an application's own) and its words (null: an application's own). Not named
+     * `Action`: the generated C# would clash with `System.Action`.
+     */
+    @Serializable class PlanAction(val id: String, @Serializable(with = MsgKey::class) val word: Msg?)
 }
 
 /**

@@ -39,6 +39,10 @@ internal sealed class ShellView
     private readonly NavigationViewItem _settings;
     private readonly Action _manage;
     private PotPage? _pot;
+    /// <summary>The header of the node on screen (ShellShown.headed), and one whose page left while its trash's Undo stands.</summary>
+    private NodeHeader? _header;
+    private NodeHeader? _undoing;
+    private ShellShown? _shown;
     private IReadOnlyList<ObjectRef>? _hits;
     private bool _started;
     private bool _drawing;
@@ -327,6 +331,17 @@ internal sealed class ShellView
             }
         }
         menu.Items.Add(new MenuFlyoutSeparator());
+        // the space's trash (TrashDialog)
+        var trash = new MenuFlyoutItem { Text = Words.TrashTitle(), Icon = new SymbolIcon(Symbol.Delete) };
+        AutomationProperties.SetAutomationId(trash, "switcher-trash");
+        var space = state.shell.space;
+        trash.Click += (_, _) =>
+        {
+            if (space is not null) TrashDialog.Open(_window, space);
+            ClosePaneIfOverlay();
+        };
+        trash.IsEnabled = space is not null;
+        menu.Items.Add(trash);
         var manage = new MenuFlyoutItem { Text = Words.SwitcherManage() };
         AutomationProperties.SetAutomationId(manage, "switcher-manage");
         manage.Click += (_, _) =>
@@ -392,16 +407,8 @@ internal sealed class ShellView
             : Said.Piece(shown.spaceName);
         _nav.IsBackEnabled = shown.canGoBack;
 
-        // New: what the level offers (AppKinds.drawerCreates), none of which this slice creates yet
-        _commands.PrimaryCommands.Clear();
-        if (shown.creates.Count > 0)
-        {
-            _commands.PrimaryCommands.Add(CreateAction.Menu(Words.DrawerNew(), "new",
-                shown.creates.Select(w => (Said.Key(w), $"new:{w}", (Action)(() => { })))));
-        }
-
-        // the open Pot's actions beyond New: the CommandBar's secondary commands, behind its own More
-        _commands.SecondaryCommands.Clear();
+        _shown = shown;
+        DrawHeader(shown);
         UIElement body;
         if (shell.openObject is { kind: "EXPENSES_POT" } pot)
         {
@@ -409,13 +416,10 @@ internal sealed class ShellView
             {
                 _pot?.Dispose();
                 _pot = new PotPage(pot);
+                // the Pot read: the header learns whether it takes writes (AppKinds.Facts)
+                _pot.Read = canWrite => _header?.Facts(new Facts { canWrite = canWrite, hasContent = true });
                 _said.IsOpen = false;
             }
-            var download = new AppBarButton { Icon = new SymbolIcon(Symbol.Download), Label = Words.NodeDownload() };
-            AutomationProperties.SetAutomationId(download, "pot-download");
-            var page = _pot;
-            download.Click += (_, _) => page.Download(WinRT.Interop.WindowNative.GetWindowHandle(_window), Say);
-            _commands.SecondaryCommands.Add(download);
             _pot.Places(shown.tabs, shown.selectedTab);
             body = _pot.Page;
         }
@@ -429,11 +433,78 @@ internal sealed class ShellView
                 : HomeView.Home(state, shown);
         }
         if (!ReferenceEquals(_body.Content, body)) _body.Content = body;
+        DrawCommands();
+    }
+
+    /// <summary>The header of the node the content heads (ShellShown.headed): opened anew when the node (or its name)
+    /// changed, none on a space's root. A header whose trash's Undo stands is kept until another takes its place.</summary>
+    private void DrawHeader(ShellShown shown)
+    {
+        if (_header?.Node == shown.headed) return;
+        if (_header is { Undoing: true })
+        {
+            _undoing?.Dispose();
+            _undoing = _header;
+        }
+        else _header?.Dispose();
+        _header = null;
+        if (shown.headed is { } node)
+        {
+            // a folder's page knows all it needs; a Pot's tells once it is read
+            var facts = node.kind == "EXPENSES_POT" ? null : new Facts { canWrite = true, hasContent = true };
+            _header = new NodeHeader(_window, node, facts, DrawCommands, Say) { UndoBar = _said };
+        }
+    }
+
+    /// <summary>The CommandBar: New first where the shell may create (canCreateHere), then the header's primary commands;
+    /// the header's secondary ones behind the bar's own More.</summary>
+    private void DrawCommands()
+    {
+        _commands.PrimaryCommands.Clear();
+        _commands.SecondaryCommands.Clear();
+        if (_shown is not { } shown) return;
+        if (shown.canCreateHere && shown.creates.Count > 0)
+        {
+            // a folder is made here; the others are later CRs' (their entry stays disabled)
+            _commands.PrimaryCommands.Add(CreateAction.Menu(Words.DrawerNew(), "new",
+                shown.creates.Select(c => (Said.Key(c.word), $"new:{c.create}", c.create == Create.Folder ? (Action?)NewFolder : null))));
+        }
+        if (_header is null) return;
+        var page = _pot;
+        var (primary, secondary) = _header.Commands(() => page?.Download(WinRT.Interop.WindowNative.GetWindowHandle(_window), Say));
+        foreach (var c in primary) _commands.PrimaryCommands.Add(c);
+        foreach (var c in secondary) _commands.SecondaryCommands.Add(c);
+    }
+
+    /// <summary>New's folder (Shell.CreateFolder), named in a dialog that asks again with the core's problem.</summary>
+    private async void NewFolder() => await NewFolder("", null);
+
+    private async System.Threading.Tasks.Task NewFolder(string name, string? problem)
+    {
+        var typed = await Dialogs.AskName(_window, "new-folder", Words.FolderNew(), Words.FolderName(), name, problem, Words.FolderCreate());
+        if (typed is null) return;
+        Answer answer;
+        try
+        {
+            (answer, _) = await Core.CallAsync(new Call.ShellCreateFolder { name = typed });
+        }
+        catch (Exception e)
+        {
+            Log.Write($"Shell.CreateFolder failed ({e.GetType().Name})");
+            return;
+        }
+        if (answer is Answer.Said { notice: { } n })
+        {
+            Log.Write($"new folder: {n.msg}");
+            await NewFolder(typed, Said.Notice(n));
+        }
+        else Log.Write($"Shell.CreateFolder: {(answer is Answer.Said ? "Done" : answer.GetType().Name)}");
     }
 
     /// <summary>How an action went, under the bar until it is closed or the object leaves.</summary>
     public void Say(bool done, string message)
     {
+        _said.ActionButton = null;
         _said.Severity = done ? InfoBarSeverity.Success : InfoBarSeverity.Error;
         _said.Message = message;
         _said.IsOpen = true;

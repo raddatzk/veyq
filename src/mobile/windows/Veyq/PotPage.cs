@@ -29,6 +29,9 @@ internal sealed class PotPage : IDisposable
 
     public ObjectRef Ref { get; }
 
+    /// <summary>Told whether the Pot takes writes, each time its view is read (its header's facts).</summary>
+    public Action<bool>? Read { get; set; }
+
     public UIElement Page => _root;
 
     public PotPage(ObjectRef r)
@@ -67,6 +70,7 @@ internal sealed class PotPage : IDisposable
         {
             if (_closed || update is not Update.Pot p) return;
             _state = p.state;
+            if (p.state?.view is { } view) Read?.Invoke(view.canWrite);
             Draw();
         }, e => Log.Write($"a Pot update: {e.Message}"));
     }
