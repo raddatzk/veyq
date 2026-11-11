@@ -37,7 +37,7 @@ Copy is CR 3a's (its Phase 3, measured below); this CR only passes it again on a
   - ADR 0127 (decisions 1 and 2), ADR 0128 (all four decisions), ADR 0123 decision 9;
   - `src/mobile/CLAUDE.md` whole (the bridge, the traps, each platform's guideline);
   - `docs/apps/expenses.md` (the Pot, Entries, Exchange rates, Receipts, What the client computes, Rights);
-  - CR 3a's retrospectives, whose traps hold here (an answer overtaking an update, one `ContentDialog` at a time,
+  - CR 3a's lessons, now in `src/mobile/CLAUDE.md` § Traps, which hold here (an answer overtaking an update, one `ContentDialog` at a time,
     `doNew…` in Swift, a SwiftUI view shadowing a core class, decrypting off the caller's thread, an emulator is no
     clock, Broadway's clipboard).
 - **Where what runs:** as in CR 3a.
@@ -87,7 +87,7 @@ Cites are into `src/mobile/`, the core being `core/src/commonMain/kotlin/me/radd
 | R8 | **No file goes in by path over the bridge yet:** `blob/FileSource.kt` (`nativeMain`) exists, no call uses it; native-apps § Open says Depot's uploads bring it. The Reader registry has no consumer either. | `core/src/nativeMain/.../blob/FileSource.kt`; `Bridge.kt:363` |
 | R9 | **No PDF renderer on either desktop**; images decode through `gdk::Texture::from_bytes` (glycin) and `BitmapImage` (WIC) for avatars only. Linux's crates: `gtk4` 0.11, `libadwaita` 0.9, `async-channel`, `serde`, `serde_json`; Windows' packages: the Windows App SDK 2.6.5 and the SDK build tools, MSTest. | `linux/Cargo.toml`, `linux/Containerfile`; `windows/Directory.Packages.props` |
 | R10 | **The words are there:** 182 Expenses keys in `words.json`, all with German, generated into every platform's catalog; the desktops use 13 (Linux) and 12 (Windows) of them. | `words/words.json` |
-| R11 | **A Pot's copy reaches both desktops already** (CR 3a Phase 3: `LiveBridgeTest.aPotIsCopied…`, both desktops' passes). | CR 3a § Phase 3 |
+| R11 | **A Pot's copy reaches both desktops already** (CR 3a: `LiveBridgeTest.aPotIsCopied…`, both desktops' passes). | ADR 0123's Consequences, the Linux app and the Windows app |
 | R12 | **No published page speaks for the native apps:** `git grep -li "linux\|windows" -- site/src/content/docs` finds only `run/operations.md`, which is about the server. | `site/` |
 
 ## Decisions
@@ -288,6 +288,9 @@ Android and Apple thinned.
   (Android's page cap shown on a PDF of more than 20 pages), a picture shared into a Pot from the system's share sheet.
 
 ### Phase 3 — Bridge and desktops: the live poll, refresh, settle-up, an entry's history and restore
+
+Also: the Pot page draws the core's head with its cover on both desktops (no desktop shows a cover outside its dialog
+yet, native-apps § Open; `HeaderShown.cover`, `Header.CoverPicture` and `NodeCover.THUMBNAIL_EDGE` are there for it).
 
 **Done when:**
 - `DispatchTest` drives `Watched.PotLive`, `Pot.Refresh`, `Pot.Record`, `Pot.Restore` over a played Pot, bitten (each
