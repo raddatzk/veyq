@@ -360,12 +360,10 @@ final class AppModel {
         let account = opened.account
         let tenant = opened.tenant
         let t = opened.session
-        // a member's write pulls its path forward, and the scopes served as re-keying are finished in the background
-        t.rekeyRules = AppKinds.shared.rules
+        // the re-key's rules and its background resume are the core's (`AccountDoor.open`/`opened`)
         if let was = tenantSession, was.account !== account || was.tenant.tenantId != tenant.tenantId { uploads.clear() }
         watchUploads()
         tenantSession = t
-        resumeRekeys(t)
         let pots = PotModel(tenant: t, now: { @Sendable in KotlinLong(value: Int64(Date().timeIntervalSince1970 * 1000)) })
         potWatch?.stop()
         potModel = pots
@@ -616,99 +614,18 @@ final class AppModel {
     /// The tenant's link rules (its capability set): what the share dialog offers and requires.
     func linkRules() -> ShareLinks.Rules { tenantSession?.linkRules ?? ShareLinks.RulesCompanion.shared.UNKNOWN }
 
-    /// The READ and READ_WRITE links on `ref`, newest first; nil when they do not list.
-    func shareLinks(_ ref: NodeAt) async -> [ShareLinks.Link]? {
-        guard let t = tenantSession else { return nil }
-        return try? await ShareLinks.shared.list(tenant: t, scopeId: ref.scopeId, nodeId: ref.nodeId, writeOnly: ref.kind == DepotFiles.shared.DROPBOX)
-    }
-
-    /// Mints a `role` link on `ref`; on success its address, to hand out once.
-    func mintLink(_ ref: NodeAt, role: String, label: String, password: String, expiresAt: String?) async -> ShareLinks.Minted {
-        let failed = ShareLinks.Minted(outcome: .failed, url: nil, refusal: nil)
-        guard let t = tenantSession else { return failed }
-        return (try? await ShareLinks.shared.mint(
-            tenant: t, scopeId: ref.scopeId, nodeId: ref.nodeId, role: role, label: label, password: password, expiresAt: expiresAt,
-            waitsMs: NodeEpochWrite.shared.REKEY_WAITS_MS
-        )) ?? failed
-    }
-
-    /// Switches link `shareId` on `ref` off and re-keys the subtree below it (core's `ShareLinks.switchOff`, each kind's
-    /// content through `AppKinds`); an open Pot is read anew, since its key may have changed.
-    func switchOffLink(_ ref: NodeAt, shareId: String) async -> ShareLinks.Closed {
-        guard let t = tenantSession else { return .failed }
-        let r = (try? await ShareLinks.shared.switchOff(
-            tenant: t, scopeId: ref.scopeId, nodeId: ref.nodeId, shareId: shareId, kinds: AppKinds.shared.rekeys,
-            tokenInput: { @Sendable kind, name in AppModel.tokenInputFor(kind: kind, name: name) },
-            uuid: { @Sendable in UUID().uuidString.lowercased() }
-        )) ?? .failed
-        await potRekeyed()
-        return r
-    }
-
-    /// Finishes, in the background, the re-key of every scope `t` was served as re-keying (ADR 0114 decision 9: a link's close
-    /// or a rotation another device began, or this one left when it closed): what this device can, top-down; the lists are
-    /// read anew after it. A run that cannot finish leaves the marks for the next start or another device.
-    private func resumeRekeys(_ t: TenantSession) {
-        guard !t.rekeyingScopes.isEmpty else { return }
-        Task {
-            let ran = (try? await NodeRekey.shared.resume(tenant: t)) ?? [:]
-            if !ran.isEmpty, tenantSession === t {
-                await potRekeyed()
-                await refreshLists(t)
+    /// The share sheet of `node` (core's `ShareSheet` over the shell: its links, the form, mint, edit, renew, switch off and
+    /// on, delete, a folder's "Add files only"; a link's close tells the tenant, whose open Pot reads again); the lists and
+    /// the rows' details are read anew after a drop box was made.
+    func shareSheet(_ node: NodeAt) -> VeyqCore.ShareSheet? {
+        guard let m = shellModel else { return nil }
+        return m.shareSheet(node: node) { @Sendable in
+            Task { @MainActor [weak self] in
+                guard let self, let t = self.tenantSession else { return }
+                self.applyShell(start: false)
+                await self.readDetails(t)
             }
         }
-    }
-
-    /// Edits one of this member's open links on `ref` in place: label, password (nil untouched, blank removed), end, role.
-    func editLink(_ ref: NodeAt, shareId: String, edit: ShareLinkChanges.Edit) async -> ShareLinkChanges.Changed {
-        let failed = ShareLinkChanges.Changed(outcome: .failed, url: nil)
-        guard let t = tenantSession else { return failed }
-        return (try? await ShareLinkChanges.shared.edit(
-            tenant: t, scopeId: ref.scopeId, nodeId: ref.nodeId, shareId: shareId, edit: edit, nowMs: Int64(Date().timeIntervalSince1970 * 1000)
-        )) ?? failed
-    }
-
-    /// Renews link `shareId` on `ref`: a new address carrying its settings, the old one closed and the node re-keyed.
-    /// Switches link `shareId` on `ref` on again, its address kept (`ShareLinkChanges.reactivate`).
-    func reactivateLink(_ ref: NodeAt, shareId: String) async -> ShareLinkChanges.Changed {
-        let failed = ShareLinkChanges.Changed(outcome: .failed, url: nil)
-        guard let t = tenantSession else { return failed }
-        return (try? await ShareLinkChanges.shared.reactivate(
-            tenant: t, scopeId: ref.scopeId, nodeId: ref.nodeId, shareId: shareId, waitsMs: NodeEpochWrite.shared.REKEY_WAITS_MS
-        )) ?? failed
-    }
-
-    func renewLink(_ ref: NodeAt, shareId: String) async -> ShareLinkChanges.Changed {
-        let failed = ShareLinkChanges.Changed(outcome: .failed, url: nil)
-        guard let t = tenantSession else { return failed }
-        let r = (try? await ShareLinkChanges.shared.renew(
-            tenant: t, scopeId: ref.scopeId, nodeId: ref.nodeId, shareId: shareId, kinds: AppKinds.shared.rekeys,
-            tokenInput: { @Sendable kind, name in AppModel.tokenInputFor(kind: kind, name: name) },
-            uuid: { @Sendable in UUID().uuidString.lowercased() }, nowMs: Int64(Date().timeIntervalSince1970 * 1000),
-            waitsMs: NodeEpochWrite.shared.REKEY_WAITS_MS
-        )) ?? failed
-        await potRekeyed()
-        return r
-    }
-
-    /// Deletes link `shareId` on `ref` for good.
-    func deleteLink(_ ref: NodeAt, shareId: String) async -> ShareLinkChanges.Changed {
-        let failed = ShareLinkChanges.Changed(outcome: .failed, url: nil)
-        guard let t = tenantSession else { return failed }
-        let r = (try? await ShareLinkChanges.shared.delete(
-            tenant: t, scopeId: ref.scopeId, nodeId: ref.nodeId, shareId: shareId, kinds: AppKinds.shared.rekeys,
-            tokenInput: { @Sendable kind, name in AppModel.tokenInputFor(kind: kind, name: name) },
-            uuid: { @Sendable in UUID().uuidString.lowercased() }, nowMs: Int64(Date().timeIntervalSince1970 * 1000)
-        )) ?? failed
-        await potRekeyed()
-        return r
-    }
-
-    /// The open Pot read anew under its key, after a re-key that may have reached it: a link on it or on a folder above it
-    /// closed, or a scope's re-key finished in the background. A Pot the re-key did not reach reads the same.
-    private func potRekeyed() async {
-        try? await potModel?.rekeyed()
-        syncPot()
     }
 
     /// Memory or chapter `nodeId`'s gallery (`MemoryMedia.list`); nil when it could not be read.
@@ -813,13 +730,6 @@ final class AppModel {
         }
     }
 
-    /// How a kind folds a name to its slug token's input: the composition root's answer (`AppKinds`, the web's
-    /// `registry.tokenInputFor`). Nil for a kind the app does not know: nothing is placed under it.
-    /// Free of the main actor: core calls it from its own threads, after a request answered (a re-key, a placement).
-    nonisolated static func tokenInputFor(kind: String, name: String) -> String? {
-        AppKinds.shared.tokenInput(kind: kind, name: name)
-    }
-
     // MARK: The space's trash (core's NodeTrash)
 
     /// The trash sheet of `scopeId` (core's `TrashSheet`); the lists are read anew after each write that went through.
@@ -864,12 +774,6 @@ final class AppModel {
     /// Counts each read of the lists: a page of what lies below its node reads again on every one (as Android's does),
     /// not only when the number of rows moved.
     private(set) var listsRevision = 0
-
-    /// "Add files only" on folder `folder`: a drop box named `name` in it with its first link (`DropBoxes.create`); the lists
-    /// are read anew.
-    func createDropBox(_ folder: NodeAt, name: String, password: String, expiresAt: String?) async -> DropBoxes.Created {
-        await createDropBox(scopeId: folder.scopeId, parentId: folder.nodeId, name: name, password: password, expiresAt: expiresAt)
-    }
 
     /// "Add files only" at `parentId` of `scopeId` (nil: the space's top level, the web's level share).
     func createDropBox(scopeId: String, parentId: String?, name: String, password: String, expiresAt: String?) async -> DropBoxes.Created {

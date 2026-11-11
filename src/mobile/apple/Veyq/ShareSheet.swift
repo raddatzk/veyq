@@ -1,169 +1,109 @@
 import SwiftUI
 import VeyqCore
 
-/// The sentences a node's share sheet says in its kind's words (the web's `ShareDialogCopy`): a folder's are core's
-/// (`share.folder.*`), a Pot's Expenses' (`expenses.share.*`). The rest of the sheet is the same for every kind.
-/// A node's guest links (core's `FolderShareDialog`, a Pot's with Expenses' words, `ShareWords`): the links on it, newest
-/// first, each copied from here; "New link" mints one — view only, or view and contribute where the tenant allows it, an
-/// optional label only the member sees, a password and an end where the member wants them or the tenant's rules require
-/// them — and shows it once to copy or share. Switching a link off re-keys what is below it.
-struct ShareSheet: View {
+/// A node's guest links, drawn from core's `ShareSheet` (its links newest first, the form, every write and what each says;
+/// a Pot's in Expenses' words): each open link copied from here or handed to another app; "New link" mints one — view
+/// only, or view and contribute where the tenant allows it, an optional label only the member sees, a password and an end
+/// where the member wants them or the tenant's rules require them — and shows it once. Switching a link off re-keys what is
+/// below it. Swipe actions, the context menu and the alerts are Apple's; every decision is the core's.
+struct NodeShareSheet: View {
     let model: AppModel
     let ref: NodeAt
-    private var words: ShareWords { ShareWords.companion.of(kind: ref.kind) }
-    /// A drop box's own links: WRITE_ONLY only, no name of their own; a folder offers "Add files only", which makes one.
-    private var dropBox: Bool { ref.kind == DepotFiles.shared.DROPBOX }
     @Environment(\.dismiss) private var dismiss
-    @State private var links: [ShareLinks.Link]?
-    @State private var failed = false
-    @State private var creating = false
-    @State private var fresh: String?
-    @State private var busy: String?
-    @State private var notice: String?
-    @State private var editing: ShareLinks.Link?
-    @State private var renewing: ShareLinks.Link?
-    @State private var deleting: ShareLinks.Link?
+    @State private var box = ShareBox()
 
     var body: some View {
         NavigationStack {
             Group {
-                if let fresh {
-                    FreshLinkView(url: fresh) { self.fresh = nil }
-                } else if let link = editing {
-                    NewLinkForm(rules: model.linkRules(), words: words, editing: link, writeOnly: dropBox, onCancel: { editing = nil }) { role, label, password, expiresAt in
-                        let r = await model.editLink(ref, shareId: link.shareId, edit: ShareLinkChanges.Edit(label: label, password: password, expiresAt: expiresAt, role: role))
-                        guard r.outcome == .done else { return Self.changed(r.outcome) }
-                        editing = nil
-                        await load()
-                        return nil
-                    }
-                } else if creating {
-                    NewLinkForm(
-                        rules: model.linkRules(), words: words, writeOnly: dropBox,
-                        uploadOffered: ref.kind == "FOLDER" && model.linkRules().dropBox, onCancel: { creating = false }
-                    ) { role, label, password, expiresAt in
-                        let mint = LinkRow.companion.mint(role: role, label: label, onDropBox: dropBox)
-                        if mint.makesDropBox {
-                            // "Add files only" on a folder: a drop box named so, here, with its first link (`createDropBoxWithLink`)
-                            let made = await model.createDropBox(ref, name: mint.label, password: password ?? "", expiresAt: expiresAt)
-                            if made.outcome == .created {
-                                creating = false
-                                fresh = made.url
-                                return nil
-                            }
-                            return Notices.shared.dropBoxRefused(outcome: made.outcome).map { say(notice: $0) }
-                        }
-                        let minted = await model.mintLink(ref, role: mint.role, label: mint.label, password: password ?? "", expiresAt: expiresAt)
-                        guard minted.outcome == .created, let url = minted.url else { return Self.problem(minted.outcome) }
-                        creating = false
-                        fresh = url
-                        await load()
-                        return nil
+                if let sheet = box.sheet, let st = box.state {
+                    if let fresh = st.fresh {
+                        FreshLinkView(url: fresh) { sheet.freshSeen() }
+                    } else if let form = st.form {
+                        NewLinkForm(
+                            form: form, words: sheet.words, saving: st.saving, problem: st.problem.map { say(notice: $0) },
+                            submit: sheet.submit, change: { sheet.form(change: $0) }, onCancel: { sheet.cancelForm() },
+                            onSave: { Task { _ = try? await sheet.save() } }
+                        )
+                    } else {
+                        list(sheet, st)
                     }
                 } else {
-                    list
+                    ProgressView()
                 }
             }
-            .navigationTitle(say(words.title))
+            .navigationTitle(box.sheet.map { say($0.words.title) } ?? "")
             #if os(iOS)
             .navigationBarTitleDisplayMode(.inline)
             #endif
             .toolbar { ToolbarItem(placement: .confirmationAction) { Button(say(.shareDone)) { dismiss() } } }
         }
-        .task { await load() }
-        .alert(say(.shareRenew), isPresented: Binding(get: { renewing != nil }, set: { if !$0 { renewing = nil } }), presenting: renewing) { link in
-            Button(say(.shareRenew)) { Task { await renew(link) } }
-            Button(say(.signinCancel), role: .cancel) {}
-        } message: { _ in
+        .task {
+            guard box.sheet == nil, let made = model.shareSheet(ref) else { return }
+            box.start(made)
+            try? await made.load()
+        }
+        .onDisappear { box.stop() }
+        // the question is the sheet's state: a binding that cancelled on dismissal would run before the button's action (Phase
+        // 1's purge), so only Cancel cancels
+        .alert(say(.shareRenew), isPresented: Binding(get: { box.state?.renewing != nil }, set: { _ in })) {
+            Button(say(.shareRenew)) { Task { _ = try? await box.sheet?.renew() } }
+            Button(say(.signinCancel), role: .cancel) { box.sheet?.cancelAsk() }
+        } message: {
             Text(say(.shareRenewConfirm))
         }
-        .alert(say(.shareDelete), isPresented: Binding(get: { deleting != nil }, set: { if !$0 { deleting = nil } }), presenting: deleting) { link in
-            Button(say(.shareDelete), role: .destructive) { Task { await delete(link) } }
-            Button(say(.signinCancel), role: .cancel) {}
-        } message: { _ in
-            Text(say(words.deleteConfirm))
+        .alert(say(.shareDelete), isPresented: Binding(get: { box.state?.deleting != nil }, set: { _ in })) {
+            Button(say(.shareDelete), role: .destructive) { Task { _ = try? await box.sheet?.delete() } }
+            Button(say(.signinCancel), role: .cancel) { box.sheet?.cancelAsk() }
+        } message: {
+            Text(box.sheet.map { say($0.words.deleteConfirm) } ?? "")
         }
     }
 
-    private func renew(_ link: ShareLinks.Link) async {
-        busy = link.shareId
-        let r = await model.renewLink(ref, shareId: link.shareId)
-        busy = nil
-        notice = r.outcome == .done ? nil : Self.changed(r.outcome)
-        if let url = r.url { fresh = url }
-        await load()
-    }
-
-    private func reactivate(_ link: ShareLinks.Link) async {
-        busy = link.shareId
-        let r = await model.reactivateLink(ref, shareId: link.shareId)
-        busy = nil
-        notice = r.outcome == .done ? nil : Self.changed(r.outcome)
-        await load()
-    }
-
-    private func delete(_ link: ShareLinks.Link) async {
-        busy = link.shareId
-        let r = await model.deleteLink(ref, shareId: link.shareId)
-        busy = nil
-        notice = r.outcome == .done ? nil : Self.changed(r.outcome)
-        await load()
-    }
-
-    private static func changed(_ outcome: ShareLinkChanges.Outcome) -> String {
-        say(notice: Notices.shared.linkChanged(outcome: outcome) ?? Notices.shared.of(msg: .shareFailed))
-    }
-
-    private var list: some View {
+    private func list(_ sheet: VeyqCore.ShareSheet, _ st: VeyqCore.ShareSheet.State) -> some View {
         List {
             Section {
-                Text(say(words.intro))
+                Text(say(sheet.words.intro))
                     .font(.subheadline).foregroundStyle(Role.muted)
-                if model.linkRules().on {
-                    Button(say(.shareNew), systemImage: "plus") { creating = true }
+                if sheet.canMint {
+                    Button(say(.shareNew), systemImage: "plus") { sheet.addLink() }
                 }
-                if let notice { Text(notice).font(.caption).foregroundStyle(Role.muted) }
+                if let notice = st.notice { Text(say(notice: notice)).font(.caption).foregroundStyle(Role.muted) }
             }
             Section {
-                if failed {
+                if st.failed {
                     Text(say(.shareLoadFailed)).foregroundStyle(Role.danger)
-                } else if let links {
-                    ForEach(links, id: \.shareId) { link in
+                } else if st.links != nil {
+                    ForEach(sheet.rows(state: st), id: \.link.shareId) { row in
                         // what this member may do with it is core's (`LinkRow`, the web's dialogs' rules)
-                        let row = LinkRow(link: link, dropBox: dropBox, words: words)
-                        let canEdit = row.canEdit
-                        let canRenew = row.canRenew
-                        let canSwitchOff = row.canSwitchOff
-                        let canDelete = row.canDelete
-                        let canReactivate = row.canReactivate
-                        LinkRowView(row: row, busy: busy == link.shareId)
+                        let id = row.link.shareId
+                        LinkRowView(row: row, busy: st.busy == id)
                             // Apple's HIG: a row's actions as swipe actions and its context menu, as Mail's
                             .swipeActions(edge: .trailing) {
-                                if canSwitchOff {
-                                    Button(say(.shareSwitchOff), systemImage: "nosign", role: .destructive) { Task { await switchOff(link) } }
+                                if row.canSwitchOff {
+                                    Button(say(.shareSwitchOff), systemImage: "nosign", role: .destructive) { Task { _ = try? await sheet.switchOff(shareId: id) } }
                                 }
-                                if canDelete {
-                                    Button(say(.shareDelete), systemImage: "trash", role: .destructive) { deleting = link }
+                                if row.canDelete {
+                                    Button(say(.shareDelete), systemImage: "trash", role: .destructive) { sheet.askDelete(shareId: id) }
                                 }
                             }
                             .swipeActions(edge: .leading) {
-                                if canReactivate {
-                                    Button(say(.shareReactivate), systemImage: "power") { Task { await reactivate(link) } }.tint(Role.accent)
+                                if row.canReactivate {
+                                    Button(say(.shareReactivate), systemImage: "power") { Task { _ = try? await sheet.reactivate(shareId: id) } }.tint(Role.accent)
                                 }
-                                if canRenew { Button(say(.shareRenew), systemImage: "arrow.clockwise") { renewing = link }.tint(Role.accent) }
+                                if row.canRenew { Button(say(.shareRenew), systemImage: "arrow.clockwise") { sheet.askRenew(shareId: id) }.tint(Role.accent) }
                             }
                             .contextMenu {
                                 // an open link goes to another app through the system's share sheet, first (as Safari's links)
-                                if row.canCopy, let url = link.url.flatMap(URL.init(string:)) {
+                                if row.canCopy, let url = row.link.url.flatMap(URL.init(string:)) {
                                     ShareLink(item: url) { Label(say(.shareLinkShare), systemImage: "square.and.arrow.up") }
                                 }
-                                if canEdit { Button(say(.shareEdit), systemImage: "pencil") { editing = link } }
-                                if canReactivate { Button(say(.shareReactivate), systemImage: "power") { Task { await reactivate(link) } } }
-                                if canRenew { Button(say(.shareRenew), systemImage: "arrow.clockwise") { renewing = link } }
-                                if canSwitchOff {
-                                    Button(say(.shareSwitchOff), systemImage: "nosign", role: .destructive) { Task { await switchOff(link) } }
+                                if row.canEdit { Button(say(.shareEdit), systemImage: "pencil") { sheet.edit(shareId: id) } }
+                                if row.canReactivate { Button(say(.shareReactivate), systemImage: "power") { Task { _ = try? await sheet.reactivate(shareId: id) } } }
+                                if row.canRenew { Button(say(.shareRenew), systemImage: "arrow.clockwise") { sheet.askRenew(shareId: id) } }
+                                if row.canSwitchOff {
+                                    Button(say(.shareSwitchOff), systemImage: "nosign", role: .destructive) { Task { _ = try? await sheet.switchOff(shareId: id) } }
                                 }
-                                if canDelete { Button(say(.shareDelete), systemImage: "trash", role: .destructive) { deleting = link } }
+                                if row.canDelete { Button(say(.shareDelete), systemImage: "trash", role: .destructive) { sheet.askDelete(shareId: id) } }
                             }
                     }
                 } else {
@@ -172,23 +112,27 @@ struct ShareSheet: View {
             }
         }
     }
+}
 
-    /// Switched off at once, as the web does: the Pot gets a new key, so the link opens nothing any more.
-    private func switchOff(_ link: ShareLinks.Link) async {
-        busy = link.shareId
-        let closed = await model.switchOffLink(ref, shareId: link.shareId)
-        busy = nil
-        notice = Notices.shared.linkClosed(closed: closed).map { say(notice: $0) }
-        await load()
+/// Core's share sheet held for SwiftUI: its state mirrored on the main actor as it changes.
+@MainActor
+@Observable
+final class ShareBox {
+    private(set) var sheet: VeyqCore.ShareSheet?
+    private(set) var state: VeyqCore.ShareSheet.State?
+    @ObservationIgnored private var watch: VeyqCore.ShareSheet.Watch?
+
+    func start(_ sheet: VeyqCore.ShareSheet) {
+        self.sheet = sheet
+        state = sheet.current
+        watch = sheet.watch { @Sendable _ in
+            Task { @MainActor [weak self] in
+                if let current = self?.sheet?.current { self?.state = current }
+            }
+        }
     }
 
-    private func load() async {
-        if let read = await model.shareLinks(ref) { links = read; failed = false } else { failed = true }
-    }
-
-    private static func problem(_ outcome: ShareLinks.Outcome) -> String {
-        say(notice: Notices.shared.linkRefused(outcome: outcome) ?? Notices.shared.of(msg: .shareFailed))
-    }
+    func stop() { watch?.stop() }
 }
 
 /// One link: its label (else its role), when it was made and ends, its badges, and its copy where it can be rebuilt.
@@ -229,20 +173,26 @@ struct TopLevelUploadSheet: View {
     let scopeId: String
     @Environment(\.dismiss) private var dismiss
     @State private var fresh: String?
+    @State private var form: LinkForm?
+    @State private var saving = false
+    @State private var problem: String?
 
     var body: some View {
         NavigationStack {
             Group {
                 if let fresh {
                     FreshLinkView(url: fresh) { dismiss() }
+                } else if let form {
+                    NewLinkForm(
+                        form: form, words: ShareWords.companion.of(kind: "FOLDER"), saving: saving, problem: problem, submit: .shareCreate,
+                        change: { self.form = $0(form) }, onCancel: { dismiss() }, onSave: { Task { await save(form) } }
+                    )
                 } else {
-                    NewLinkForm(rules: model.linkRules(), words: ShareWords.companion.of(kind: "FOLDER"), uploadOnly: true, onCancel: { dismiss() }) { _, label, password, expiresAt in
-                        let made = await model.createDropBox(scopeId: scopeId, parentId: nil, name: label, password: password ?? "", expiresAt: expiresAt)
-                        if made.outcome == .created {
-                            fresh = made.url
-                            return nil
-                        }
-                        return Notices.shared.dropBoxRefused(outcome: made.outcome).map { say(notice: $0) }
+                    ProgressView().onAppear {
+                        form = LinkForm.companion.start(
+                            rules: model.linkRules(), editing: nil, writeOnly: false, uploadOffered: false, uploadOnly: true,
+                            today: LocalDays.shared.dayOf(epochMs: Int64(Date().timeIntervalSince1970 * 1000)), editingEndDay: nil
+                        )
                     }
                 }
             }
@@ -251,6 +201,19 @@ struct TopLevelUploadSheet: View {
             .navigationBarTitleDisplayMode(.inline)
             #endif
         }
+    }
+
+    private func save(_ f: LinkForm) async {
+        saving = true
+        problem = nil
+        let made = await model.createDropBox(
+            scopeId: scopeId, parentId: nil, name: f.label, password: f.submittedPassword ?? "",
+            expiresAt: f.submittedEndDay.map { LocalDays.shared.endOf(day: $0.int64Value) }
+        )
+        if made.outcome == .created { fresh = made.url } else {
+            problem = say(notice: Notices.shared.dropBoxRefused(outcome: made.outcome) ?? Notices.shared.of(msg: .shareFailed))
+        }
+        saving = false
     }
 }
 
@@ -273,62 +236,43 @@ private struct FreshLinkView: View {
 }
 
 
-/// The form of a new link: its role, an optional label, a password and an end. A rule of the tenant turns its switch on and
-/// keeps it on; the end is a day no later than the rule's last, sent as the end of that local day. `onCreate` answers why
-/// not, or nil once minted.
+/// The form of a new link or of one being edited, as core's `LinkForm` has it (its rules, the web's `FolderShareDialog`): its
+/// role, an optional label, a password and an end, the end a local day. Each change goes to `change`; `onSave` sends it,
+/// `problem` says why it did not go through.
 private struct NewLinkForm: View {
-    let rules: ShareLinks.Rules
+    let form: LinkForm
     let words: ShareWords
-    /// The link an edit changes (its settings fill the form; a password left blank stays as it is); nil mints a new one.
-    var editing: ShareLinks.Link? = nil
-    /// A drop box's own link: its role is fixed and it has no name of its own.
-    var writeOnly = false
-    /// A folder's third role, "Add files only" (Depot's `folderUploadShare`): it makes a drop box with the name typed.
-    var uploadOffered = false
-    /// That role alone (the space's top level, where no link roots): no role to pick.
-    var uploadOnly = false
+    let saving: Bool
+    let problem: String?
+    let submit: Msg
+    let change: (@escaping (LinkForm) -> LinkForm) -> Void
     let onCancel: () -> Void
-    /// role, label, password (nil: untouched, blank: none), end; answers why not, or nil once done.
-    let onCreate: (String, String, String?, String?) async -> String?
-    /// Core's form (`LinkForm`: its rules, the web's `FolderShareDialog`), a new one each change.
-    @State private var form: LinkForm?
-    @State private var problem: String?
-    @State private var saving = false
+    let onSave: () -> Void
 
     private var passwordMin: Int { Int(LinkForm.companion.PASSWORD_MIN) }
 
     var body: some View {
-        if let form { content(form) } else {
-            ProgressView().onAppear {
-                let endDay = editing?.expiresAt.flatMap(Self.parse).map(Self.epochDay)
-                form = LinkForm.companion.start(
-                    rules: rules, editing: editing, writeOnly: writeOnly, uploadOffered: uploadOffered, uploadOnly: uploadOnly,
-                    today: Self.epochDay(Date()), editingEndDay: endDay.map { KotlinLong(value: $0) }
-                )
-            }
-        }
-    }
-
-    @ViewBuilder private func content(_ f: LinkForm) -> some View {
+        let f = form
+        let rules = f.rules
         Form {
             Section {
                 if !f.roles.isEmpty {
-                    Picker(say(.shareRole), selection: Binding(get: { f.role }, set: { form = f.withRole(role: $0) })) {
+                    Picker(say(.shareRole), selection: Binding(get: { f.role }, set: { r in change { $0.withRole(role: r) } })) {
                         ForEach(f.roles, id: \.self) { r in Text(say(words.roleWord(role: r))).tag(r) }
                     }
                     .pickerStyle(.segmented)
                 }
                 Text(say(words.hint(role: f.role))).font(.caption).foregroundStyle(Role.muted)
                 if f.namesIt {
-                    TextField(say(f.nameLabel), text: Binding(get: { f.label }, set: { form = f.withLabel(label: $0) }))
+                    TextField(say(f.nameLabel), text: Binding(get: { f.label }, set: { v in change { $0.withLabel(label: v) } }))
                 }
             }
             Section {
-                Toggle(say(.sharePasswordSection), isOn: Binding(get: { f.withPassword }, set: { form = f.withPasswordOn(on: $0) }))
+                Toggle(say(.sharePasswordSection), isOn: Binding(get: { f.withPassword }, set: { on in change { $0.withPasswordOn(on: on) } }))
                     .disabled(!f.passwordOptional)
                 if f.withPassword {
                     SecureField(f.hadPassword ? say(.sharePasswordKeep) : say(.signinPassword),
-                                text: Binding(get: { f.password }, set: { form = f.withPassword(password: $0) }))
+                                text: Binding(get: { f.password }, set: { v in change { $0.withPassword(password: v) } }))
                     Text(say(.sharePasswordShort, passwordMin)).font(.caption)
                         .foregroundStyle(f.passwordTooShort ? Role.danger : Role.muted)
                 }
@@ -336,12 +280,12 @@ private struct NewLinkForm: View {
                 if rules.passwordRequired { Text(say(.sharePasswordRequired)) }
             }
             Section {
-                Toggle(say(.shareExpirySection), isOn: Binding(get: { f.withEnd }, set: { form = f.withEndOn(on: $0) }))
+                Toggle(say(.shareExpirySection), isOn: Binding(get: { f.withEnd }, set: { on in change { $0.withEndOn(on: on) } }))
                     .disabled(!f.endOptional)
                 if f.withEnd {
                     DatePicker(
                         say(.shareExpiresOn),
-                        selection: Binding(get: { Self.date(f.endDay) }, set: { form = f.withEndDay(day: Self.epochDay($0)) }),
+                        selection: Binding(get: { Self.date(f.endDay) }, set: { d in change { $0.withEndDay(day: Self.epochDay(d)) } }),
                         in: Self.date(f.today)...(f.lastDay.map { Self.date($0.int64Value) } ?? .distantFuture),
                         displayedComponents: .date
                     )
@@ -352,16 +296,8 @@ private struct NewLinkForm: View {
             }
             if let problem { Section { Text(problem).foregroundStyle(Role.danger) } }
             Section {
-                Button {
-                    saving = true
-                    problem = nil
-                    let sent = f
-                    Task {
-                        problem = await onCreate(sent.role, sent.label, sent.submittedPassword, sent.submittedEndDay.map { Self.endOfDay($0.int64Value) })
-                        saving = false
-                    }
-                } label: {
-                    HStack { Spacer(); if saving { ProgressView() } else { Text(editing == nil ? say(.shareCreate) : say(.entrySave)).fontWeight(.semibold) }; Spacer() }
+                Button(action: onSave) {
+                    HStack { Spacer(); if saving { ProgressView() } else { Text(say(submit)).fontWeight(.semibold) }; Spacer() }
                 }
                 .disabled(saving || !f.canSave)
                 Button(say(.signinCancel), action: onCancel).disabled(saving)
@@ -369,13 +305,7 @@ private struct NewLinkForm: View {
         }
     }
 
-    private static func parse(_ instant: String) -> Date? {
-        let f = ISO8601DateFormatter()
-        f.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
-        return f.date(from: instant) ?? ISO8601DateFormatter().date(from: instant)
-    }
-
-    /// A local calendar day as core counts it: days since 1970-01-01.
+    /// The picker's date as core's day: the local calendar day it shows, counted since 1970-01-01.
     private static func epochDay(_ date: Date) -> Int64 {
         let c = Calendar.current.dateComponents([.year, .month, .day], from: date)
         var utc = Calendar(identifier: .gregorian)
@@ -383,19 +313,12 @@ private struct NewLinkForm: View {
         return Int64(utc.date(from: c)!.timeIntervalSince1970 / 86_400)
     }
 
-    /// The local start of core's day.
+    /// The local start of core's day, for the picker.
     private static func date(_ day: Int64) -> Date {
         var utc = Calendar(identifier: .gregorian)
         utc.timeZone = TimeZone(identifier: "UTC")!
         let c = utc.dateComponents([.year, .month, .day], from: Date(timeIntervalSince1970: TimeInterval(day) * 86_400))
         return Calendar.current.date(from: c)!
-    }
-
-    /// The end of a local day as an instant (`FolderShareDialog`: 23:59:59.999 there).
-    private static func endOfDay(_ day: Int64) -> String {
-        let f = ISO8601DateFormatter()
-        f.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
-        return f.string(from: date(day + 1).addingTimeInterval(-0.001))
     }
 }
 

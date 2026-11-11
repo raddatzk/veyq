@@ -162,7 +162,7 @@ struct NodeHeaderActions: View {
             }
         }
         .onChange(of: contribution.facts) { header?.update(facts: contribution.facts) }
-        .sheet(isPresented: shown(NodeHeader.shared.SHARE)) { ShareSheet(model: model, ref: node) }
+        .sheet(isPresented: shown(NodeHeader.shared.SHARE)) { NodeShareSheet(model: model, ref: node) }
         .sheet(isPresented: shown(NodeHeader.shared.REPORT)) { ReportSheet(model: model, ref: node) }
         .sheet(isPresented: shown(NodeHeader.shared.COVER)) { CoverSheet(model: model, node: node) }
         .sheet(isPresented: shown(NodeHeader.shared.MOVE)) { NodeMoveSheet(model: model, ref: node) }
