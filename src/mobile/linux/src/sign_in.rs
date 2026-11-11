@@ -19,6 +19,18 @@ pub fn remember_words(stay: StaySignedIn) -> Option<(String, String)> {
     }
 }
 
+/// What the unlock of [method]'s record says, its line and its button, by what staying signed in uses here ([stay],
+/// the core's answer beside a remembered account's unlock): the password's line for a password-trusted account; for a
+/// remembered one the presence line where the store asks the person, else (`LOGIN`: nothing is asked, so the unlock
+/// shows only after a resume that failed) the line that says so and "Try again" (owner 2026-11-11).
+pub fn unlock_words(method: Method, stay: Option<StaySignedIn>) -> (String, String) {
+    match (method, stay) {
+        (Method::Device, _) => (words::unlock_password_hint(), words::unlock_submit()),
+        (Method::DeviceKey, Some(StaySignedIn::Login)) => (words::unlock_login_hint(), words::unlock_retry()),
+        (Method::DeviceKey, _) => (words::unlock_remembered_hint(), words::unlock_submit()),
+    }
+}
+
 /// The column every way-in page shares: the brand, a heading, then [rows], clamped and scrolling, under a bare header bar.
 fn page(heading: &gtk::Label, rows: &[&gtk::Widget]) -> adw::ToolbarView {
     let column = gtk::Box::new(gtk::Orientation::Vertical, 18);
@@ -226,14 +238,17 @@ impl Unlock {
         s
     }
 
-    /// Draws [gate] (a `Gate.Unlock`): whose account, the password where it opens with one, working or not, the error.
-    pub fn show(&self, gate: &Gate) {
+    /// Draws [gate] (a `Gate.Unlock`): whose account, the password where it opens with one, what opens it ([stay]),
+    /// working or not, the error.
+    pub fn show(&self, gate: &Gate, stay: Option<StaySignedIn>) {
         let Gate::Unlock { record, working, error } = gate else { return };
         self.account.set_title(&record.email);
         self.account.set_subtitle(&record.server);
         let remembered = record.method == Method::DeviceKey;
         self.password.set_visible(!remembered);
-        self.group.set_description(Some(&if remembered { words::unlock_remembered_hint() } else { words::unlock_password_hint() }));
+        let (hint, button) = unlock_words(record.method, stay);
+        self.group.set_description(Some(&hint));
+        self.submit.set_label(&button);
         self.submit.set_sensitive(!working);
         self.other.set_sensitive(!working);
         self.spinner.set_visible(*working);
@@ -260,5 +275,14 @@ mod tests {
         assert_eq!(presence, words::signin_remember());
         assert_eq!(login_hint, words::signin_remember_hint_login());
         assert_ne!(login_hint, presence_hint, "the login's switch says the person is asked");
+    }
+
+    #[test]
+    fn a_remembered_unlock_says_what_opens_it() {
+        assert_eq!(unlock_words(Method::DeviceKey, Some(StaySignedIn::Login)), (words::unlock_login_hint(), words::unlock_retry()));
+        assert_eq!(unlock_words(Method::DeviceKey, Some(StaySignedIn::Presence)), (words::unlock_remembered_hint(), words::unlock_submit()));
+        assert_eq!(unlock_words(Method::DeviceKey, None), (words::unlock_remembered_hint(), words::unlock_submit()));
+        assert_eq!(unlock_words(Method::Device, Some(StaySignedIn::Login)), (words::unlock_password_hint(), words::unlock_submit()));
+        assert_ne!(words::unlock_login_hint(), words::unlock_remembered_hint());
     }
 }

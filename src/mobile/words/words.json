@@ -255,6 +255,16 @@
     "en": "Opens when you sign in to this computer, without asking again. Anyone who can use your account on this computer can open your content. Off, the app asks for your password, never again for the Secret Key.",
     "de": "Öffnet, sobald du dich an diesem Computer anmeldest, ohne erneut zu fragen. Wer dein Benutzerkonto auf diesem Computer verwenden kann, kann deine Inhalte öffnen. Aus fragt die App nach deinem Passwort, aber nie wieder nach dem Secret Key."
   },
+  "signin_remember_hello": {
+    "note": "the sign-in's \"Stay signed in\" on Windows where Windows Hello is set up (StaySignedIn PRESENCE): Hello asks at each start",
+    "en": "Stay signed in with Windows Hello",
+    "de": "Mit Windows Hello angemeldet bleiben"
+  },
+  "signin_remember_hint_hello": {
+    "note": "the line under signin_remember_hello",
+    "en": "Opens with Windows Hello: your face, fingerprint or PIN. Anyone who can confirm it is you with Windows Hello on this computer can open your content. Off, the app asks for your password, never again for the Secret Key.",
+    "de": "Öffnet mit Windows Hello: Gesicht, Fingerabdruck oder PIN. Wer sich an diesem Computer mit Windows Hello ausweisen kann, kann deine Inhalte öffnen. Aus fragt die App nach deinem Passwort, aber nie wieder nach dem Secret Key."
+  },
   "signin_error_device_not_trusted": {
     "en": "This device is no longer trusted with this account. Sign in with your Secret Key.",
     "de": "Dieses Gerät ist für dieses Konto nicht mehr vertraut. Melde dich mit deinem Secret Key an."
@@ -283,6 +293,16 @@
   "unlock_remembered_hint": {
     "en": "Confirm it is you to open your spaces.",
     "de": "Bestätige, dass du es bist, um deine Spaces zu öffnen."
+  },
+  "unlock_login_hint": {
+    "note": "the unlock of a remembered account whose store asks nothing (StaySignedIn LOGIN: Linux, Windows without Hello): it shows only when the resume at the start failed (owner 2026-11-11)",
+    "en": "Your session couldn't be continued just now.",
+    "de": "Deine Sitzung konnte gerade nicht fortgesetzt werden."
+  },
+  "unlock_retry": {
+    "note": "the button under unlock_login_hint: the same unlock again (owner 2026-11-11)",
+    "en": "Try again",
+    "de": "Erneut versuchen"
   },
   "unlock_submit": {
     "en": "Unlock",

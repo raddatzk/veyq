@@ -58,7 +58,7 @@ impl Screens {
                 }
             }
             Gate::Unlock { record, working, error } => {
-                self.unlock.show(gate);
+                self.unlock.show(gate, stay);
                 self.face(&self.unlock.page);
                 if record.method == Method::Device
                     && !working
