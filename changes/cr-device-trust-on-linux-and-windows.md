@@ -368,7 +368,7 @@ D4: the calls, `Config.window`, `platformDeviceKeys`, the generated Rust and C#.
   :core:compileBridgedMainKotlinMetadata --warning-mode all` → `BUILD SUCCESSFUL`, no deprecation (354 and 190 test
   cases, none failed); `ANDROID_HOME=$HOME/Library/Android/sdk ./gradlew :android:compileDebugKotlin` → `BUILD
   SUCCESSFUL`. No dependency added, so no verification-metadata write.
-- **Left for Phases 4 and 5:** "Manage servers"' hide switches have no call yet (`Hidden.setTenantHidden` /
+- **Left for Phases 4 and 5 (both done in Phase 4):** "Manage servers"' hide switches have no call yet (`Hidden.setTenantHidden` /
   `setSpaceHidden` and the shell's rebuild after them); the wire carries what they show. A live `run.py bridge` on
   Windows (`VEYQ_LIVE`) now enrols the password trust under DPAPI and leaves its wrap on the dev instance, since the
   smoke never stops trusting.
@@ -385,6 +385,67 @@ D5 on Linux.
 - the same with the libsecret library absent: every start signs in, nothing fails;
 - de/en, light/dark;
 - `run.py build` and both guards are green.
+
+**Built (Phase 4):**
+- **The screens** (`linux/src/sign_in.rs`, `manage.rs`, `main.rs`), as D5 says, libadwaita's way:
+  - the sign-in's "Stay signed in" is an `AdwSwitchRow`, off, in a group whose line says what it uses
+    (`sign_in::remember_words`, drawing the core's `StaySignedIn`: `LOGIN` the new `signin_remember_hint_login`, EN and
+    DE; `PRESENCE` the apps' hint; `NONE` hides it); "Add server" titles the sign-in so and gives it Cancel;
+  - `Gate.Unlock` is a page of its own: the account, the password row for DEVICE (none for DEVICE_KEY, whose button
+    sends `""`), Unlock, "Use another account";
+  - "Manage servers" is an `AdwPreferencesDialog` from the switcher: a group per server (its trust as the line), each
+    tenant an `AdwExpanderRow` with its shown switch and its spaces' `AdwSwitchRow`s, "Sign out of this server" and
+    "Stop trusting this device" as `AdwButtonRow`s, "Add server" last. It closes when the way in leaves the shell.
+- **The hide switches on the wire:** `Manage.HideTenant(connection, tenantId, hidden)` and `Manage.HideSpace(scopeId,
+  hidden)`, one line each onto `Hidden`; the shell rebuilds after a space and re-reads the switcher's tenants after a
+  tenant (a counter combined into the shell's watch, since the shell's state does not change), and "Manage servers"
+  follows. Windows' Phase 5 uses the same calls.
+- **(a) The orphaned DEVICE_KEY wrap** (`Account.trustThisDevice`): a `putSecret` that throws deletes the wrap just
+  added before it rethrows, so the password fallback leaves nothing on the server (`RememberEnrolTest`, `commonTest`).
+- **(b) The smoke** ends a live run with `Session.ForgetDevice` for the connection the shell names.
+- **`run.py run`** runs the app under `dbus-run-session` with gnome-keyring-daemon (`--cap-add=IPC_LOCK`), `~/.local/share`
+  on the named volume `veyq-linux-home`: the device store, `keyrings/`, and the collection's throwaway password
+  (`veyq-run/keyring`, drawn in the container at the first start, never printed). `--no-secret-service` runs without bus
+  and volume. The debug devlogin gains `--fill` (fills the form; the pass turns the switch and presses Sign in) and
+  `--unlock` (`VEYQ_DEV_UNLOCK_PASSWORD`, which a DEVICE record's unlock takes once, Android's and Apple's flag).
+
+**Met (2026-11-11, commits `f099a3b1e`, `a5e09bdc6`, `8cf3152dd`, `1d8a5b9f3`):** the pass ran against the dev instance
+in the container, driven from headless system Chrome (the browser pane, hidden, lagged Broadway's frames); its log first,
+then the screenshots (28, not committed).
+- [x] **Staying signed in:** `run --devlogin --fill`, the switch turned and Sign in pressed → `session SignIn, stay signed
+  in: Login`, `session Signed`, Manage `Some(DeviceKey)`. Window closed; `run` (no devlogin) → `session Starting`,
+  `session Signed`: resumed, no sign-in, no prompt. "Stop trusting" → Manage `None`; closed; `run --devlogin` →
+  `session SignIn` first.
+- [x] **The password trust:** that sign-in, the switch off → Manage `Some(Device)`; closed; `run` → `session Unlock`,
+  the password row shown; "Use another account" → `session SignIn` (empty form). `run --devlogin --unlock` → `session
+  Unlock`, `unlocking with the dev principal's password (debug build)`, `session Signed`: the core's unlock path, no
+  password typed by the agent. Then Stop trusting, Manage `None`.
+- [x] **The switch's three states:** `LOGIN` the plain label with the login line; `run --no-secret-service` → `stay
+  signed in: None`, the switch hidden, the sign-in's trust refused (`DeviceAuthFailed: not kept: Cannot spawn a message
+  bus…`), Manage `None`, and the next `--no-secret-service` start signs in. `PRESENCE` is Windows' (Phase 5). The absent
+  library stays measured by Phase 2's probe (`absent`), not this pass.
+- [x] **The hide switches:** Turnverein's switch off → the switcher lists one tenant; Personal's off → the switcher's
+  spaces lose it; both on → both back.
+- [x] **Add server:** the sign-in titled "Server hinzufügen" with "Abbrechen", which returns to `session Signed`.
+- [x] **Language and theme:** sign-in, unlock and Manage in English light and German dark; the hidden switch's sign-in in
+  English dark and German light.
+- [x] `/usr/bin/python3 src/mobile/linux/run.py build` → clippy `-D warnings`, `cargo test` (14, `remember_words`' among
+  them), build green; **bite**: `LOGIN` given the presence hint → that test red, restored.
+- [x] `/usr/bin/python3 scripts/validate_mobile_words.py` → OK; `scripts/validate_mobile_platform_guidelines.py` → OK
+  (it refused "Add server"'s `list-add-symbolic` outside `create_action.rs` first; the row has no icon now).
+- [x] `./gradlew :core:jvmTest --rerun :core:macosArm64Test --rerun :bridge:jvmTest --rerun` → `BUILD SUCCESSFUL`, 355
+  and 25 JVM cases, none failed. `DispatchTest` 13 (the hide switches and their refusals); **bites**: the tenant's
+  `setTenantHidden` dropped, the space's `managed` refresh dropped → each red. `RememberEnrolTest` **bite**: the wrap's
+  delete dropped → red ("the wrap the refused token was for stayed on the server").
+- [x] Live: `VEYQ_LIVE=… VEYQ_ENV_FILE=<main>/.run/.env ./gradlew :bridge:jvmTest --tests '*LiveBridgeTest*' --rerun` →
+  green, `hid and showed again: space Personal, tenant Turnverein`; **bite**: the shell's re-read after a tenant
+  (`hiddenTurned`) dropped → red, timed out at the tenant step.
+- [x] `linux/run.py test` → `PASSED 201`, then `no-bus` and `absent` `PASSED 1` each; `windows/run.py test` → `PASSED 202`.
+- [x] The smoke: live `linux/run.py bridge` → green, `ok Session.ForgetDevice stops trusting this device`; the container
+  has no bus there, so Linux's sign-in trusted nothing to begin with (`DeviceAuthFailed: not kept`). Live
+  `windows/run.py bridge` → green with the same line after a trust that DPAPI kept — the run that left a wrap before.
+- The volume `veyq-linux-home` was removed after the pass; nothing of it trusts the dev instance (each enrolment was
+  ended by Stop trusting).
 
 ### Phase 5 — Windows' screens
 
@@ -445,5 +506,11 @@ D5 on Windows.
 - **Phase 3, design: "staying signed in" got its answer from the store, not a host**, and the value named what it means
   everywhere (`PRESENCE`/`LOGIN`/`NONE`) rather than Windows' word (`HELLO`): Android and Apple without a screen lock
   then answer `NONE` honestly, which is the case Phase 2 found Linux in.
+- **Phase 4, execution: the hidden browser pane showed a switch unturned after the click that turned it,** and the next
+  click turned it back; caught only because headless Chrome's first shot showed it on. Broadway's frames lag in a hidden
+  pane, the input does not: the pass moved to headless system Chrome at once, each state read from the log first. Now
+  a trap in `src/mobile/CLAUDE.md`.
+- **Phase 4, design: the brief's smoke leftover was Windows', not Linux's.** Measured before the fix: `run.py bridge` on
+  Linux has no session bus, so its trust failed before any wrap was added. The fix is the same for both and proved on both.
 - **Next time:** a verb that waits for a person waits for the process it started and fetches its outcome whatever
   ended the wait; its brief to the owner lists every prompt the run may raise, the uncertain ones marked so.
