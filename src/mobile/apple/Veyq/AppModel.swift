@@ -39,6 +39,9 @@ struct ManagedServer: Identifiable {
     let tenants: [ManagedTenant]
     /// How this device trusts the account, if it does.
     let trusted: TrustedDevice.Method?
+    /// The level a staying-signed-in trust is at, and the levels this device offers (core's `ManagedServer`).
+    var level: StaySignedIn?
+    var levels: [StaySignedIn] = []
     var id: String { account.key }
     var label: String { account.label }
 }
@@ -148,6 +151,12 @@ final class AppModel {
 
     /// What the way in shows, as core's model has it; signed in, the shell shows once it read the tenant opened.
     private func gateChanged() {
+        if !(session.current is SessionModelGate.Signed) { offer = nil }
+        switch session.current {
+        case let g as SessionModelGate.Signed: trustLog("gate Signed, offer: \(g.offer.map { "\($0.levels)" } ?? "none")")
+        case let g as SessionModelGate.Unlock: trustLog("gate Unlock, \(g.record.method), level: \(g.record.unlockLevel.map { "\($0)" } ?? "none")")
+        default: trustLog("gate \(type(of: session.current))")
+        }
         switch session.current {
         case let g as SessionModelGate.SignIn:
             screen = .signIn(working: g.working, error: g.error, adding: g.adding, server: g.server, email: g.email)
@@ -157,6 +166,7 @@ final class AppModel {
             screen = .needsApp
         case let g as SessionModelGate.Signed:
             switching = g.switching
+            offer = g.offer
             if shellModel != nil, shellModel?.tenant === session.signedTo?.session { applyShell(start: false); screen = .signed }
         default:
             screen = .starting
@@ -165,19 +175,87 @@ final class AppModel {
 
     /// The debug build's unlock (`devlogin.py --unlock`): the password for the unlock screen, now or once it shows.
     func devUnlock(password: String) {
+        devFillPasswordTrust(password)
         Task { if let opened = try? await session.devUnlock(password: password) { try? await show(opened) } }
     }
 
-    /// The full sign-in, which holds the password trust, then — when `remember` — staying signed in at the presence level
-    /// (which asks the person to authenticate; declined, the password trust stays). Until this app draws the core's offer
-    /// (the CR device-trust-on-linux-and-windows, Phase 8), its switch answers it so; off, the offer stays unanswered.
-    func signIn(server: String, email: String, password: String, secretKey: String, remember: Bool = false) {
+    /// The full sign-in, which holds the password trust; the core's offer to stay signed in follows it (`offer`). `then`
+    /// runs once it opened — the debug build's `VEYQ_DEV_REMEMBER` answers the offer there, as a person would.
+    func signIn(server: String, email: String, password: String, secretKey: String, then: (@MainActor () -> Void)? = nil) {
         Task {
             if let opened = try? await session.signIn(server: server, email: email, password: password, secretKey: secretKey) {
-                if remember { _ = try? await session.stay(level: .presence) }
                 try? await show(opened)
+                then?()
             }
         }
+    }
+
+    // MARK: Staying signed in (D7 of the CR device-trust-on-linux-and-windows)
+
+    /// The offer to stay signed in a sign-in left open (core's `Gate.Signed.offer`), a sheet over the shell; nil once answered.
+    private(set) var offer: SessionModelOffer?
+    /// A change of this device's trust is under way (the offer's answer, Manage's): its controls wait.
+    private(set) var trustWorking = false
+    /// "Manage servers"' line under a server after a change it refused (a wrong password), by the account's key.
+    var manageSaid: [String: String] = [:]
+
+    /// The offer's answer: staying signed in at `level`, or "Not Now" (nil). A cancelled prompt leaves the offer standing
+    /// (the core's rule); a level this device could not keep ends it, said in the shell.
+    func answerOffer(_ level: StaySignedIn?) {
+        guard let level else {
+            _ = session.notNow()
+            trustLog("offer answered: NotNow")
+            return
+        }
+        Task {
+            trustWorking = true
+            let change = (try? await session.stay(level: level)) ?? nil
+            trustWorking = false
+            trustLog("offer answered: \(level) -> \(change.map { "\($0)" } ?? "none")")
+            if change == .failed { notice = Notice(text: say(.trustFailed)) }
+        }
+    }
+
+    /// "Manage servers": `account` staying signed in at `level`, replacing the trust it had.
+    func stayAt(_ account: VeyqAccount, _ level: StaySignedIn) {
+        Task {
+            trustWorking = true
+            let change = (try? await session.stay(account: account, level: level)) ?? .failed
+            trustWorking = false
+            trustLog("manage stay signed in \(level): \(change)")
+            manageSaid[account.key] = change == .failed ? say(.trustFailed) : nil
+            if managing != nil { managing = managed() }
+        }
+    }
+
+    /// "Manage servers"' way back to the password trust for `account` with `password`; whether it is done (a wrong
+    /// password says so under the server and changes nothing).
+    func backToPassword(_ account: VeyqAccount, _ password: String) async -> Bool {
+        trustWorking = true
+        let change = (try? await session.trustWithPassword(account: account, password: password)) ?? .failed
+        trustWorking = false
+        trustLog("manage back to the password: \(change)")
+        switch change {
+        case .done: manageSaid[account.key] = nil
+        case .wrongPassword: manageSaid[account.key] = say(.manageWrongPassword)
+        default: manageSaid[account.key] = say(.trustFailed)
+        }
+        if managing != nil { managing = managed() }
+        return change == .done
+    }
+
+    /// The debug build's `--unlock` password, for "Manage servers"' password field once (never typed by a pass).
+    @ObservationIgnored private var devPasswordTrust: String?
+    func devFillPasswordTrust(_ password: String) { devPasswordTrust = password }
+    func takeDevPasswordTrust() -> String? {
+        defer { devPasswordTrust = nil }
+        return devPasswordTrust
+    }
+
+    /// The device trust's steps in the unified log (`veyq-trust:`; `log show --predicate 'eventMessage CONTAINS
+    /// "veyq-trust"'`), for a pass to read before it looks: never a key or a password.
+    private func trustLog(_ line: String) {
+        NSLog("veyq-trust: %@", line)
     }
 
     /// The trusted account's unlock: its password, or the person's authentication again.
@@ -254,19 +332,23 @@ final class AppModel {
     func forgetDevice(_ account: VeyqAccount) {
         Task {
             try? await session.forgetDevice(account: account)
+            trustLog("manage stop trusting")
+            manageSaid[account.key] = nil
             if managing != nil { managing = managed() }
         }
     }
 
     /// "Manage servers" as core lists it, for SwiftUI's lists.
     private func managed() -> [ManagedServer] {
-        session.managed().map { c in
+        let servers = session.managed().map { c in
             ManagedServer(account: c.account, tenants: c.tenants.map { t in
                 ManagedTenant(tenant: t.tenant, hidden: t.hidden, current: t.current, spaces: t.spaces?.map {
                     ManagedSpace(space: $0.space, hidden: $0.hidden, canHide: $0.canHide)
                 }, shown: t.shown, switchable: t.switchable, subtitle: say(piece: t.subtitle))
-            }, trusted: c.trusted)
+            }, trusted: c.trusted, level: c.level, levels: c.levels)
         }
+        trustLog("manage servers: " + servers.map { "\($0.trusted.map { "\($0)" } ?? "none")/\($0.level.map { "\($0)" } ?? "none")" }.joined(separator: ", "))
+        return servers
     }
 
     // MARK: The current tenant

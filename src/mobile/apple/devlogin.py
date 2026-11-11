@@ -2,12 +2,13 @@
 """Launches the debug Apple app in a booted simulator, signed in as the seeded dev principal (the app's `?devlogin`).
 
 Reads VEYQ_EMAIL, VEYQ_PASSWORD, VEYQ_SECRET_KEY and VEYQ_TENANT_DOMAIN from the repository's `.run/.env` (written by
-`./gradlew backend:seed`) and hands them to the app as its environment through `simctl launch` (`SIMCTL_CHILD_…`);
+`./gradlew backend:seed`; `VEYQ_ENV_FILE` names another, e.g. the main checkout's from a worktree) and hands them to the app as its environment through `simctl launch` (`SIMCTL_CHILD_…`);
 nothing is printed. The simulator resolves the `*.localhost` tenant as the Mac does.
 
 Usage: devlogin.py <device name or UDID> [port] [--remember] [--unlock]   (default port 8080, the dev backend)
-  --remember  sign in staying signed in (the DEVICE_KEY trust; the simulator asks for Face ID)
-  --unlock    hand only the password, for the unlock screen of a password-trusted account
+  --remember  answer the offer after the sign-in with the presence level (the simulator asks for Face ID)
+  --unlock    hand only the password, for the unlock screen of a password-trusted account; it also fills "Manage
+              servers"' password field once (the way back to the password trust), for the pass to press
 """
 from __future__ import annotations
 
@@ -22,7 +23,8 @@ BUNDLE = "me.raddatz.veyq"
 
 def env() -> dict[str, str]:
     out: dict[str, str] = {}
-    for line in (ROOT / ".run/.env").read_text().splitlines():
+    path = Path(os.environ["VEYQ_ENV_FILE"]) if os.environ.get("VEYQ_ENV_FILE") else ROOT / ".run/.env"
+    for line in path.read_text().splitlines():
         if "=" in line and not line.lstrip().startswith("#"):
             k, v = line.split("=", 1)
             out[k.strip()] = v.strip().strip('"').strip("'")
