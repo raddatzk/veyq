@@ -18,8 +18,8 @@ import kotlin.test.assertTrue
  * walks what the generator walks ([Schema]), so a type added to the wire is checked without a list of its own.
  *
  * Two kinds of name are let through, each by its owner and field, each with why:
- * - inward, what the person typed on its way to the core — the sign-in's password and Secret Key, which cross once and
- *   never come back;
+ * - inward, what the person typed on its way to the core — the sign-in's password and Secret Key, and the unlock's
+ *   password, which cross once and never come back;
  * - an identifier or a catalog key that only shares the word: a connection's key (`host#userId`, it names an account),
  *   a bar place's key (the catalog's name of its words) and a trusted device's wrap id (the server's name for the wrap).
  */
@@ -27,6 +27,7 @@ class SecretFreeSchemaTest {
     private val typedIn = mapOf(
         "Session.SignIn.password" to "the password the person typed, on its way to the core",
         "Session.SignIn.secretKey" to "the Secret Key the person typed, on its way to the core",
+        "Session.Unlock.password" to "the password the person typed at the unlock, on its way to the core",
     )
     private val identifiers = mapOf(
         "Signed.connectionKey" to "a connection's id, host#userId: it names an account and opens nothing",

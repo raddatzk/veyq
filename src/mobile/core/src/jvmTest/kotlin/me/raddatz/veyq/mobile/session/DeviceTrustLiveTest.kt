@@ -30,7 +30,9 @@ class DeviceTrustLiveTest {
     @Test
     fun aTrustedDeviceUnlocksWithThePasswordAndARememberedOneWithNothingTyped() = runTest(timeout = 3.minutes) {
         val origin = System.getenv("VEYQ_LIVE") ?: return@runTest
-        val env = File(System.getProperty("veyq.repoRoot"), ".run/.env").readLines()
+        // `.run/.env` of this checkout, or VEYQ_ENV_FILE's (a worktree has none)
+        val envFile = System.getenv("VEYQ_ENV_FILE")?.let(::File) ?: File(System.getProperty("veyq.repoRoot"), ".run/.env")
+        val env = envFile.readLines()
             .mapNotNull { l -> l.substringBefore('=', "").takeIf { it.isNotBlank() }?.let { it.trim() to l.substringAfter('=').trim().trim('"', '\'') } }
             .toMap()
         val email = env.getValue("VEYQ_EMAIL")

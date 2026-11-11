@@ -54,6 +54,9 @@ class SessionModel<A : Connection, T : Any>(
         suspend fun spaces(session: T): List<SpaceRef>
         suspend fun signOut(account: A)
         suspend fun forgetDevice(account: A)
+
+        /** What staying signed in would use on this device now ([DeviceKeys.staySignedIn]). */
+        fun staySignedIn(): StaySignedIn
     }
 
     /** Where the way in stands; serializable, since the native bridge sends it as it is (ADR 0123's Consequences, the bridge). */
@@ -105,6 +108,12 @@ class SessionModel<A : Connection, T : Any>(
     fun watch(listener: (Gate) -> Unit): Watch = Watch(scope.launch { gate.collect { listener(it) } })
 
     private val connections = Connections<A>()
+
+    /**
+     * What the sign-in's "Stay signed in" would use on this device now: [StaySignedIn.NONE] hides the switch, the others
+     * name it (the CR device-trust-on-linux-and-windows, D5). Asked of the device's store each time.
+     */
+    val staySignedIn: StaySignedIn get() = door.staySignedIn()
 
     /** The servers signed in to. */
     val accounts: List<A> get() = connections.all
@@ -408,4 +417,5 @@ class AccountDoor(
     override suspend fun spaces(session: TenantSession): List<SpaceRef> = session.spaces()
     override suspend fun signOut(account: VeyqAccount) = account.signOut()
     override suspend fun forgetDevice(account: VeyqAccount) = account.forgetThisDevice()
+    override fun staySignedIn(): StaySignedIn = device.keys.staySignedIn
 }

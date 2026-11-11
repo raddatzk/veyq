@@ -95,6 +95,10 @@ class WindowsDeviceKeys internal constructor(
     /** Whether a new unlock key would be Windows Hello's: Hello is set up for this user (the switch's label, D5). */
     val helloAvailable: Boolean get() = helloSetUp()
 
+    /** Hello's where it is set up, else DPAPI's, which the Windows sign-in opens (Q2). DPAPI is always there. */
+    override val staySignedIn: StaySignedIn
+        get() = if (helloAvailable) StaySignedIn.PRESENCE else StaySignedIn.LOGIN
+
     /** The path the present unlock key took (`hello`, `dpapi`), or null when there is none. */
     val unlockPath: String? get() = store.read(UNLOCK_PATH)
 

@@ -43,7 +43,9 @@ public sealed partial class MainWindow : Window
         Start started;
         try
         {
-            started = Core.Start(new Config { device = Environment.MachineName }, store);
+            // the window owns Windows Hello's prompt, in the app's words (the CR device-trust-on-linux-and-windows, D1)
+            var hwnd = WinRT.Interop.WindowNative.GetWindowHandle(this).ToInt64();
+            started = Core.Start(new Config { device = Environment.MachineName, window = hwnd, prompt = Words.DeviceUnlockPrompt() }, store);
         }
         catch (Exception e) when (e is DllNotFoundException or EntryPointNotFoundException or BadImageFormatException)
         {

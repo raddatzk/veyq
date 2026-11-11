@@ -19,7 +19,11 @@ import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonNull
 import kotlinx.serialization.json.int
 import me.raddatz.veyq.mobile.session.DeviceStore
+import me.raddatz.veyq.mobile.session.SoftwareDeviceKeys
+import me.raddatz.veyq.mobile.session.StaySignedIn
 import me.raddatz.veyq.mobile.session.ThisDevice
+import me.raddatz.veyq.mobile.session.TrustedDevice
+import kotlin.test.assertNull
 import me.raddatz.veyq.mobile.session.VeyqAccount
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.boolean
@@ -59,13 +63,13 @@ class LiveBridgeTest {
                 host.reply(token, wire.encodeToString(HostReply.serializer(), reply))
             }
         }
-        val b = Bridge.live(BouncyCastlePrimitives, { block -> HttpClient(OkHttp, block) }, Config("bridge test"), HostStore(host), JvmFiles)
+        val b = Bridge.live(BouncyCastlePrimitives, { block -> HttpClient(OkHttp, block) }, Config("bridge test"), HostStore(host), { NoDeviceKeys }, JvmFiles)
         val gate = b.watching(Watched.Session)
         val shell = b.watching(Watched.Shell)
 
         assertEquals(Answer.Done, b.ask(Call.SessionStart))
         assertIs<Gate.SignIn>(gate.until { (it as Update.Session).gate.takeIf { g -> g is Gate.SignIn } })
-        val signIn = Call.SessionSignIn(origin, env.getValue("VEYQ_EMAIL"), env.getValue("VEYQ_PASSWORD"), env.getValue("VEYQ_SECRET_KEY"))
+        val signIn = Call.SessionSignIn(origin, env.getValue("VEYQ_EMAIL"), env.getValue("VEYQ_PASSWORD"), env.getValue("VEYQ_SECRET_KEY"), remember = false)
         assertEquals(Answer.Done, b.ask(signIn, timeout = 2.minutes))
         val signed = gate.until(2.minutes) { (it as Update.Session).gate as? Gate.Signed }
         println("signed in: $signed")
@@ -152,6 +156,106 @@ class LiveBridgeTest {
         assertEquals(Answer.Done, b.ask(Call.PotClose(potId)))
         dir.deleteRecursively()
         b.shutdown()
+    }
+
+    /**
+     * The device trust through calls (CR device-trust-on-linux-and-windows, Phase 3), over core's [SoftwareDeviceKeys]
+     * whose prompt the test plays and a device store the host keeps across bridges — each new bridge the app started
+     * again. Staying signed in: the sign-in carries what it uses, a fresh bridge resumes, a cancelled prompt stays on the
+     * unlock, the unlock by the device key opens, Manage servers says how, and the sign-out ends it. The password trust:
+     * a fresh bridge unlocks with the password, and "Stop trusting" ends it. Everything enrolled is removed again.
+     */
+    @Test
+    fun staySignedInResumesAFreshBridgeAndTheUnlockOpensByTheDeviceKeyAndByThePassword() = runBlocking {
+        val origin = System.getenv("VEYQ_LIVE") ?: return@runBlocking
+        val envFile = System.getenv("VEYQ_ENV_FILE")?.let(::File) ?: File(System.getProperty("veyq.repoRoot"), ".run/.env")
+        val env = envFile.readLines()
+            .mapNotNull { l -> l.substringBefore('=', "").takeIf { it.isNotBlank() }?.let { it.trim() to l.substringAfter('=').trim().trim('"', '\'') } }
+            .toMap()
+        val kept = ConcurrentHashMap<String, String>()
+        val keys = SoftwareDeviceKeys(BouncyCastlePrimitives)
+        fun started() = Bridge.live(BouncyCastlePrimitives, { block -> HttpClient(OkHttp, block) }, Config("bridge trust test"), hostStore(kept), { keys }, JvmFiles)
+        fun signIn(remember: Boolean) = Call.SessionSignIn(origin, env.getValue("VEYQ_EMAIL"), env.getValue("VEYQ_PASSWORD"), env.getValue("VEYQ_SECRET_KEY"), remember)
+
+        // signed in staying signed in; beside the sign-in, what it uses (the fake's: the person's confirmation)
+        val first = started()
+        val gate = first.watching(Watched.Session)
+        assertEquals(Answer.Done, first.ask(Call.SessionStart))
+        assertEquals(StaySignedIn.PRESENCE, gate.until { (it as Update.Session).takeIf { u -> u.gate is Gate.SignIn }?.staySignedIn })
+        assertEquals(Answer.Done, first.ask(signIn(remember = true), timeout = 2.minutes))
+        val connection = gate.until(2.minutes) { (it as Update.Session).gate as? Gate.Signed }.connectionKey
+        assertEquals(1, keys.prompts, "staying signed in did not ask the person")
+        first.shutdown() // the app closed, not signed out
+
+        // started again: resumed, nothing typed
+        started().apply {
+            assertEquals(Answer.Done, ask(Call.SessionStart, timeout = 2.minutes))
+            assertIs<Gate.Signed>(gateNow(), "a remembered account did not resume")
+        }.shutdown()
+        assertEquals(2, keys.prompts)
+
+        // started again with the prompt cancelled: the unlock, which a cancel keeps and the device key opens
+        keys.authenticates = false
+        val third = started()
+        assertEquals(Answer.Done, third.ask(Call.SessionStart, timeout = 2.minutes))
+        val unlock = assertIs<Gate.Unlock>(third.gateNow())
+        assertEquals(TrustedDevice.Method.DEVICE_KEY, unlock.record.method)
+        assertEquals(Answer.Done, third.ask(Call.SessionUnlock(""), timeout = 2.minutes))
+        assertEquals(Gate.Unlock(unlock.record), third.gateNow(), "a cancelled prompt left the unlock")
+        keys.authenticates = true
+        assertEquals(Answer.Done, third.ask(Call.SessionUnlock(""), timeout = 2.minutes))
+        assertIs<Gate.Signed>(third.gateNow(), "the device key did not unlock")
+
+        // Manage servers says how this device trusts the server; the sign-out ends staying signed in
+        val manage = third.watching(Watched.Manage)
+        assertEquals(Answer.Done, third.ask(Call.ManageOpen))
+        assertEquals(TrustedDevice.Method.DEVICE_KEY, manage.until { (it as Update.Manage).servers?.single { s -> s.connection == connection } }.trusted)
+        assertEquals(Answer.Done, third.ask(Call.ManageClose))
+        assertEquals(Answer.Done, third.ask(Call.SessionSignOut(connection)))
+        assertIs<Gate.SignIn>(third.gateNow(), "the sign-out left a remembered account")
+
+        // the password trust: started again, the unlock asks for the password alone
+        assertEquals(Answer.Done, third.ask(signIn(remember = false), timeout = 2.minutes))
+        assertIs<Gate.Signed>(third.gateNow())
+        third.shutdown()
+        val fourth = started()
+        assertEquals(Answer.Done, fourth.ask(Call.SessionStart, timeout = 2.minutes))
+        val byPassword = assertIs<Gate.Unlock>(fourth.gateNow())
+        assertEquals(TrustedDevice.Method.DEVICE, byPassword.record.method)
+        assertEquals(Answer.Done, fourth.ask(Call.SessionUnlock(env.getValue("VEYQ_PASSWORD")), timeout = 2.minutes))
+        assertIs<Gate.Signed>(fourth.gateNow(), "the password did not unlock")
+        val prompts = keys.prompts
+
+        // "Stop trusting this device": Manage servers shows no trust, and the next start signs in
+        val managed = fourth.watching(Watched.Manage)
+        assertEquals(Answer.Done, fourth.ask(Call.ManageOpen))
+        assertEquals(TrustedDevice.Method.DEVICE, managed.until { (it as Update.Manage).servers?.single { s -> s.connection == connection } }.trusted)
+        assertEquals(Answer.Done, fourth.ask(Call.SessionForgetDevice(connection), timeout = 2.minutes))
+        assertNull(managed.until { (it as Update.Manage).servers?.single { s -> s.connection == connection }?.takeIf { s -> s.trusted == null } }.trusted)
+        assertEquals(Answer.Done, fourth.ask(Call.ManageClose))
+        assertEquals(Answer.Done, fourth.ask(Call.SessionSignOut(connection)))
+        fourth.shutdown()
+        started().apply {
+            assertEquals(Answer.Done, ask(Call.SessionStart))
+            assertIs<Gate.SignIn>(gateNow(), "a device no longer trusted did not sign in")
+        }.shutdown()
+        assertEquals(prompts, keys.prompts, "the password trust asked for the person")
+    }
+
+    /** A device store the test's host keeps in [kept], answering from its own thread as a UI loop does. */
+    private fun hostStore(kept: ConcurrentHashMap<String, String>): HostStore {
+        lateinit var host: Host
+        host = Host { token, json ->
+            thread {
+                val reply = when (val r = wire.decodeFromString(HostRequest.serializer(), json)) {
+                    is HostRequest.StoreRead -> HostReply.Value(kept[r.name])
+                    is HostRequest.StoreWrite -> HostReply.Done.also { kept[r.name] = r.value }
+                    is HostRequest.StoreRemove -> HostReply.Done.also { kept.remove(r.name) }
+                }
+                host.reply(token, wire.encodeToString(HostReply.serializer(), reply))
+            }
+        }
+        return HostStore(host)
     }
 
     /** Member [userId]'s picture as the core reads it in a session of its own: a sign-in, the tenant, its sync. */

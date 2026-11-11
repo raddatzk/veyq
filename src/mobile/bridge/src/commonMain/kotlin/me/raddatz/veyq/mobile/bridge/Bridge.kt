@@ -33,12 +33,14 @@ import me.raddatz.veyq.mobile.navigation.ShellModel
 import me.raddatz.veyq.mobile.navigation.ShellWords
 import me.raddatz.veyq.mobile.navigation.TenantRef
 import me.raddatz.veyq.mobile.navigation.UseKey
+import me.raddatz.veyq.mobile.session.DeviceKeys
 import me.raddatz.veyq.mobile.session.DeviceStore
 import me.raddatz.veyq.mobile.session.SessionModel
 import me.raddatz.veyq.mobile.session.TenantSession
 import me.raddatz.veyq.mobile.session.ThisDevice
 import me.raddatz.veyq.mobile.session.VeyqAccount
 import kotlin.concurrent.atomics.AtomicLong
+import kotlin.concurrent.atomics.AtomicReference
 import kotlin.concurrent.atomics.ExperimentalAtomicApi
 import kotlin.concurrent.atomics.incrementAndFetch
 import kotlin.time.Clock
@@ -113,6 +115,10 @@ internal class Bridge<A : Connection, T : Any>(compose: () -> Composition<A, T>)
     private val readers = Registry<RangeReader>()
     private val watches = Registry<Job>()
 
+    /** "Manage servers" while it is open, null while closed; its spaces read by [managing]'s job. */
+    private val manage = MutableStateFlow<List<ManagedShown>?>(null)
+    private val managing = AtomicReference<Job?>(null)
+
     /**
      * One call, answered once through [answer] on a core thread — a request that is no [Call] too. The payload beside
      * the JSON is the bytes of an [Answer.Bytes] (never null for one, empty included) and null for every other answer.
@@ -139,17 +145,37 @@ internal class Bridge<A : Connection, T : Any>(compose: () -> Composition<A, T>)
         val shell = tenant.value?.models?.shell
         return when (call) {
             Call.SessionStart -> opened(session.start())
-            is Call.SessionSignIn -> opened(session.signIn(call.server, call.email, call.password, call.secretKey, remember = false))
+            is Call.SessionSignIn -> opened(session.signIn(call.server, call.email, call.password, call.secretKey, call.remember)).also { managed(parts) }
+            is Call.SessionUnlock -> opened(session.unlock(call.password))
+            Call.SessionOtherAccount -> Answer.Done.also { session.otherAccount() }
+            Call.SessionAddServer -> Answer.Done.also { session.addServer() }
+            Call.SessionCancelAdd -> Answer.Done.also { session.cancelAdd() }
+            is Call.SessionForgetDevice -> {
+                val account = session.accounts.firstOrNull { it.key == call.connection } ?: return Answer.Refused(Answer.Why.NO_SUCH_CONNECTION)
+                session.forgetDevice(account)
+                managed(parts)
+                Answer.Done
+            }
+            Call.ManageOpen -> {
+                manage.value = shownManaged(parts)
+                managing.exchange(scope.launch { session.loadSpaces { managed(parts) } })?.cancel()
+                Answer.Done
+            }
+            Call.ManageClose -> {
+                managing.exchange(null)?.cancel()
+                manage.value = null
+                Answer.Done
+            }
             is Call.SessionSwitchTo -> {
                 val account = session.accounts.firstOrNull { it.key == call.connection } ?: return Answer.Refused(Answer.Why.NO_SUCH_CONNECTION)
                 val to = account.tenants.firstOrNull { it.tenantId == call.tenantId } ?: return Answer.Refused(Answer.Why.NO_SUCH_TENANT)
-                opened(session.switchTo(account, to))
+                opened(session.switchTo(account, to)).also { managed(parts) }
             }
             is Call.SessionSignOut -> {
                 val account = session.accounts.firstOrNull { it.key == call.connection } ?: return Answer.Refused(Answer.Why.NO_SUCH_CONNECTION)
                 val out = session.signOut(account)
                 if (out.wasCurrent) closeTenant()
-                opened(out.next)
+                opened(out.next).also { managed(parts) }
             }
             is Call.ShellChoose -> shell?.choose(call.application).done()
             is Call.ShellSwitchSpace -> shell?.switchSpace(call.scopeId).done()
@@ -206,6 +232,20 @@ internal class Bridge<A : Connection, T : Any>(compose: () -> Composition<A, T>)
 
     private val noTenant = Answer.Refused(Answer.Why.NO_TENANT_OPEN)
 
+    /** "Manage servers" as the core has it now, when it is open (after a call that changed the servers or their trust). */
+    private fun managed(parts: Composition<A, T>) {
+        if (manage.value != null) manage.value = shownManaged(parts)
+    }
+
+    /** `SessionModel.managed`, each field the core's own ([ManagedShown]). */
+    private fun shownManaged(parts: Composition<A, T>): List<ManagedShown> = parts.session.managed().map { m ->
+        ManagedShown(m.account.key, m.label, m.trusted, m.tenants.map { t ->
+            ManagedShown.Tenant(t.tenant, t.hidden, t.current, t.shown, t.switchable, t.subtitle, t.spaces?.map { s ->
+                ManagedShown.Space(s.space, ShellWords.space(s.space), s.hidden, s.canHide)
+            })
+        })
+    }
+
     private fun Unit?.done(why: Answer.Why = Answer.Why.NO_TENANT_OPEN): Answer = if (this == null) Answer.Refused(why) else Answer.Done
 
     /**
@@ -243,7 +283,11 @@ internal class Bridge<A : Connection, T : Any>(compose: () -> Composition<A, T>)
     }
 
     private suspend fun updates(w: Watched): Flow<Update> = when (w) {
-        Watched.Session -> parts.await().session.gate.map { Update.Session(it) }
+        Watched.Session -> parts.await().session.let { session ->
+            // asked of the store only beside a sign-in: it may reach the platform (D-Bus, cryptngc)
+            session.gate.map { Update.Session(it, if (it is SessionModel.Gate.SignIn) session.staySignedIn else null) }
+        }
+        Watched.Manage -> manage.map { Update.Manage(it) }
         Watched.Shell -> {
             val parts = parts.await()
             tenant.flatMapLatest { open ->
@@ -307,6 +351,8 @@ internal class Bridge<A : Connection, T : Any>(compose: () -> Composition<A, T>)
             client: (block: HttpClientConfig<*>.() -> Unit) -> HttpClient,
             config: Config,
             store: DeviceStore,
+            /** The device's keys over [store]: the platform's (`platformDeviceKeys`), a test's own on the JVM. */
+            keys: (DeviceStore) -> DeviceKeys,
             files: DeviceFiles,
             now: () -> Long = { Clock.System.now().toEpochMilliseconds() },
         ): Bridge<VeyqAccount, TenantSession> = Bridge {
@@ -318,7 +364,7 @@ internal class Bridge<A : Connection, T : Any>(compose: () -> Composition<A, T>)
                 persist = { ids -> store.write(HIDDEN, ids.joinToString("\n")) },
                 initial = store.read(HIDDEN)?.lines()?.filter { it.isNotEmpty() }?.toSet().orEmpty(),
             )
-            val device = ThisDevice(store, NoDeviceKeys, config.device, primitives)
+            val device = ThisDevice(store, keys(store), config.device, primitives)
             Composition(SessionModel.accounts(primitives, device, client, hidden, recent), hidden, files) { t ->
                 Tenant(ShellModel(t, hidden, recent, now), { PotModel(t, now) }, t.account.userId, t.pictures.state, t.pictures::load)
             }

@@ -18,6 +18,7 @@ pub fn take() -> Option<Call> {
             email: var("VEYQ_DEV_EMAIL")?,
             password: var("VEYQ_DEV_PASSWORD")?,
             secret_key: var("VEYQ_DEV_SECRET_KEY")?,
+            remember: false,
         };
         if TAKEN.swap(true, Ordering::SeqCst) {
             return None;

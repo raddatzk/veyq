@@ -19,6 +19,8 @@ import kotlinx.cinterop.toKString
 import kotlinx.cinterop.usePinned
 import me.raddatz.veyq.mobile.blob.FileSink
 import me.raddatz.veyq.mobile.crypto.LibsodiumPrimitives
+import me.raddatz.veyq.mobile.session.DeviceKeys
+import me.raddatz.veyq.mobile.session.DeviceStore
 import kotlin.concurrent.atomics.AtomicReference
 import kotlin.concurrent.atomics.ExperimentalAtomicApi
 import kotlin.experimental.ExperimentalNativeApi
@@ -38,6 +40,13 @@ typealias VeyqHost = CPointer<CFunction<(COpaquePointer?, ULong, CPointer<ByteVa
 
 /** The platform's own Ktor engine, the one thing Linux and Windows differ in here: Curl (`linuxMain`), WinHTTP (`mingwMain`). */
 internal expect fun platformHttpClient(block: HttpClientConfig<*>.() -> Unit): HttpClient
+
+/**
+ * The platform's device keys over the host's device [store], reached by the core itself so no key, seal or token crosses
+ * the bridge (ADR 0127's Consequences): the Secret Service (`linuxMain`), DPAPI and Windows Hello owned by
+ * [Config.window] (`mingwMain`).
+ */
+internal expect fun platformDeviceKeys(config: Config, store: DeviceStore): DeviceKeys
 
 private class Running(val bridge: Bridge<*, *>, val host: Host)
 
@@ -66,7 +75,7 @@ fun veyqInit(config: CPointer<ByteVar>?, host: VeyqHost?, hostCtx: COpaquePointe
     val h = Host { token, json ->
         memScoped { host.invoke(hostCtx, token.toULong(), json.cstr.ptr, null, 0u) }
     }
-    val bridge = Bridge.live(LibsodiumPrimitives, { block -> platformHttpClient(block) }, c, HostStore(h), Files)
+    val bridge = Bridge.live(LibsodiumPrimitives, { block -> platformHttpClient(block) }, c, HostStore(h), { platformDeviceKeys(c, it) }, Files)
     if (!running.compareAndSet(null, Running(bridge, h))) {
         bridge.shutdown()
         return ALREADY_STARTED

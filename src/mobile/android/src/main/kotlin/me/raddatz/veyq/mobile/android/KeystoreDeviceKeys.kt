@@ -1,6 +1,7 @@
 package me.raddatz.veyq.mobile.android
 
 import android.app.Activity
+import android.app.KeyguardManager
 import android.content.Context
 import android.hardware.biometrics.BiometricManager.Authenticators.BIOMETRIC_STRONG
 import android.hardware.biometrics.BiometricManager.Authenticators.DEVICE_CREDENTIAL
@@ -16,6 +17,7 @@ import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.withContext
 import me.raddatz.veyq.mobile.session.DeviceAuthFailed
 import me.raddatz.veyq.mobile.session.DeviceKeys
+import me.raddatz.veyq.mobile.session.StaySignedIn
 import java.security.KeyStore
 import javax.crypto.Cipher
 import javax.crypto.KeyGenerator
@@ -40,6 +42,11 @@ import kotlin.coroutines.resumeWithException
 class KeystoreDeviceKeys(context: Context, private val host: () -> Activity?) : DeviceKeys {
     private val keyStore = KeyStore.getInstance(STORE).apply { load(null) }
     private val prefs = context.getSharedPreferences("veyq.device-secrets", Context.MODE_PRIVATE)
+    private val keyguard = context.getSystemService(KeyguardManager::class.java)
+
+    /** The person's, where a secure lock screen is set (the unlock key needs one), else none: no unlock key can exist. */
+    override val staySignedIn: StaySignedIn
+        get() = if (keyguard?.isDeviceSecure == true) StaySignedIn.PRESENCE else StaySignedIn.NONE
 
     override fun createBindKey(alias: String) {
         deleteBindKey(alias)

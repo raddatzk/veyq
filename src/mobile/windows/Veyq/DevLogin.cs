@@ -31,7 +31,7 @@ internal static class DevLogin
         _taken = true;
         foreach (var name in Names) Environment.SetEnvironmentVariable(name, null);
         Log.Write("signing in as the dev principal (debug build)");
-        return new Call.SessionSignIn { server = values[0], email = values[1], password = values[2], secretKey = values[3] };
+        return new Call.SessionSignIn { server = values[0], email = values[1], password = values[2], secretKey = values[3], remember = false };
 #else
         return null;
 #endif

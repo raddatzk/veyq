@@ -34,6 +34,7 @@ import me.raddatz.veyq.mobile.navigation.ShellModel
 import me.raddatz.veyq.mobile.navigation.SpaceRef
 import me.raddatz.veyq.mobile.navigation.TenantRef
 import me.raddatz.veyq.mobile.session.SessionModel.Gate
+import me.raddatz.veyq.mobile.session.StaySignedIn
 import me.raddatz.veyq.mobile.session.TrustedDevice
 import me.raddatz.veyq.mobile.words.Amount
 import me.raddatz.veyq.mobile.words.Bytes
@@ -83,16 +84,18 @@ class WireTest {
 
     /** Each root's values: every variant of a sealed root once. */
     private val samples: Map<KSerializer<*>, List<Any>> = mapOf(
-        Config.serializer() to listOf(Config("Fedora 44")),
+        Config.serializer() to listOf(Config("Fedora 44", 0, ""), Config("WIN-VM", 0x2051C, "veyq wants to open your account")),
         Call.serializer() to listOf(
-            Call.SessionStart, Call.SessionSignIn("veyq.localhost:8080", "p@example.org", "typed", "A3-TYPED"), Call.SessionSwitchTo("veyq.localhost#user-1", "t"),
+            Call.SessionStart, Call.SessionSignIn("veyq.localhost:8080", "p@example.org", "typed", "A3-TYPED", remember = true),
+            Call.SessionUnlock("typed"), Call.SessionUnlock(""), Call.SessionOtherAccount, Call.SessionForgetDevice("veyq.localhost#user-1"),
+            Call.SessionAddServer, Call.SessionCancelAdd, Call.ManageOpen, Call.ManageClose, Call.SessionSwitchTo("veyq.localhost#user-1", "t"),
             Call.SessionSignOut("veyq.localhost#user-1"), Call.ShellChoose(null), Call.ShellSwitchSpace("scope-1"), Call.ShellEnter(folder),
             Call.ShellFilter(ApplicationId.DEPOT), Call.ShellBack, Call.ShellSelect(BarTab("expenses.overview")), Call.ShellOpen(ref), Call.ShellOpenAtTop(ref), Call.ShellSearch(true), Call.ShellRefresh,
             Call.HomeGroups, Call.SearchQuery("lyon"), Call.PotOpen(ref), Call.PotRefresh(3), Call.PotClose(3),
             Call.PotDownload(3, "/home/p/Downloads/Trip to Lyon.zip", "deleted person"), Call.PotArchiveName(3), Call.AvatarPicture("user-1"),
             Call.ReaderRead(5, 262_144, 65_536), Call.ReaderClose(5),
         ),
-        Watched.serializer() to listOf(Watched.Session, Watched.Shell, Watched.Pot(3)),
+        Watched.serializer() to listOf(Watched.Session, Watched.Shell, Watched.Pot(3), Watched.Manage),
         HostReply.serializer() to listOf(HostReply.Value("s\tn\t1"), HostReply.Value(null), HostReply.Done, HostReply.Failed("disk full")),
         Answer.serializer() to listOf(
             Answer.Done, Answer.Refused(Answer.Why.NO_TENANT_OPEN), Answer.Failed("IllegalStateException"),
@@ -101,10 +104,19 @@ class WireTest {
             Answer.Reader(5, 9_000_000_000, "video/mp4"), Answer.Reader(6, 0, null),
         ),
         Update.serializer() to listOf(
-            Update.Session(Gate.Starting), Update.Session(Gate.NeedsApp), Update.Session(Gate.SignIn(error = Msg.SIGNIN_ERROR_CREDENTIALS, server = "veyq.localhost:8080")),
+            Update.Session(Gate.Starting), Update.Session(Gate.NeedsApp), Update.Session(Gate.SignIn(error = Msg.SIGNIN_ERROR_CREDENTIALS, server = "veyq.localhost:8080"), StaySignedIn.PRESENCE),
+            Update.Session(Gate.SignIn(), StaySignedIn.LOGIN), Update.Session(Gate.SignIn(adding = true), StaySignedIn.NONE),
             Update.Session(Gate.Unlock(record)), Update.Session(Gate.Signed("veyq.localhost#user-1", "t", switching = true)),
             Update.Shell(ShellModel.State(shell, lists), shown), Update.Shell(null),
             Update.Pot(3, PotModel.State(ref, failed = false, saving = true, message = "REFUSED"), listOf("user-1")), Update.Pot(4, null),
+            Update.Manage(null), Update.Manage(listOf(
+                ManagedShown("veyq.localhost#user-1", "veyq.localhost:8080", TrustedDevice.Method.DEVICE_KEY, listOf(
+                    ManagedShown.Tenant(tenant, hidden = false, current = true, shown = true, switchable = false, subtitle = Piece.Said(Notice(Msg.MANAGE_CURRENT)),
+                        spaces = listOf(ManagedShown.Space(lists.spaces.first(), Piece.Said(Notice(Msg.SPACE_PERSONAL)), hidden = false, canHide = false))),
+                    ManagedShown.Tenant(TenantRef("t2", "Family", "family.localhost"), hidden = true, current = false, shown = false, switchable = true, subtitle = Piece.Plain("family.localhost"), spaces = null),
+                )),
+                ManagedShown("other.example#user-9", "other.example", null, emptyList()),
+            )),
         ),
         HostRequest.serializer() to listOf(HostRequest.StoreRead("veyq.recent"), HostRequest.StoreWrite("veyq.recent", "s\tn\t1"), HostRequest.StoreRemove("veyq.recent")),
     )

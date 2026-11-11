@@ -55,3 +55,7 @@ internal fun Bridge<*, *>.watching(w: Watched): Watching {
     val id = watch(wire.encodeToString(Watched.serializer(), w)) { ch.trySend(it) }
     return Watching(id, ch)
 }
+
+/** The way in as it is now: a fresh watch delivers the present state first. */
+internal suspend fun Bridge<*, *>.gateNow(): me.raddatz.veyq.mobile.session.SessionModel.Gate =
+    watching(Watched.Session).let { w -> (w.next() as Update.Session).gate.also { unwatch(w.id) } }

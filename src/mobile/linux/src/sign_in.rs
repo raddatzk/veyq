@@ -73,6 +73,7 @@ impl SignIn {
                     email: email.text().trim().to_string(),
                     password: password.text().to_string(),
                     secret_key: secret_key.text().trim().to_string(),
+                    remember: false, // "Stay signed in" is Phase 4's switch
                 });
             }
         };

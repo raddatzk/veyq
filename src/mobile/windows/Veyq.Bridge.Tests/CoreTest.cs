@@ -22,8 +22,8 @@ public sealed class CoreTest
     public async Task TheCoreAnswersThroughTheWrapper()
     {
         var store = DeviceStore.InMemory();
-        Assert.AreEqual(Start.Started, Core.Start(new Config { device = "Veyq.Bridge.Tests" }, store));
-        Assert.AreEqual(Start.AlreadyStarted, Core.Start(new Config { device = "Veyq.Bridge.Tests" }, DeviceStore.InMemory()));
+        Assert.AreEqual(Start.Started, Core.Start(new Config { device = "Veyq.Bridge.Tests", window = 0, prompt = "" }, store));
+        Assert.AreEqual(Start.AlreadyStarted, Core.Start(new Config { device = "Veyq.Bridge.Tests", window = 0, prompt = "" }, DeviceStore.InMemory()));
         try
         {
             var gates = new BlockingCollection<Update>();
@@ -43,7 +43,7 @@ public sealed class CoreTest
             watch.Dispose();
             var before = gates.Count;
             // a sign-in nobody answers moves the gate, which no ended watch may report
-            await Core.CallAsync(new Call.SessionSignIn { server = "http://127.0.0.1:9", email = "a@b.c", password = "x", secretKey = "x" }).WaitAsync(Wait);
+            await Core.CallAsync(new Call.SessionSignIn { server = "http://127.0.0.1:9", email = "a@b.c", password = "x", secretKey = "x", remember = false }).WaitAsync(Wait);
             await Task.Delay(300);
             Assert.AreEqual(before, gates.Count, "an ended watch got an update");
         }

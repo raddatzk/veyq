@@ -8,6 +8,7 @@ import kotlinx.coroutines.withTimeout
 import me.raddatz.veyq.mobile.session.DeviceAuthFailed
 import me.raddatz.veyq.mobile.session.DeviceKeys
 import me.raddatz.veyq.mobile.session.DeviceStore
+import me.raddatz.veyq.mobile.session.StaySignedIn
 import kotlin.concurrent.atomics.AtomicLong
 import kotlin.concurrent.atomics.AtomicReference
 import kotlin.concurrent.atomics.ExperimentalAtomicApi
@@ -96,7 +97,7 @@ internal class HostStore(private val host: Host) : DeviceStore {
 }
 
 /**
- * The device keys of a host without a key store (CR § Context: device trust is not in this slice): no bind key, no
+ * The device keys of a composition without a key store (a test's, and LiveBridgeTest's first walk): no bind key, no
  * unlock key, no secret kept, so a sign-in never trusts this device and every start is the full sign-in — the core's own
  * path on a build whose keychain refuses. It forwards nothing: what these functions carry (a Master Key to seal, a
  * refresh token to keep) must never cross the bridge.
@@ -113,4 +114,5 @@ internal object NoDeviceKeys : DeviceKeys {
     override fun putSecret(alias: String, value: String) = throw UnsupportedOperationException("this device keeps no keys")
     override fun secret(alias: String): String? = null
     override fun deleteSecret(alias: String) {}
+    override val staySignedIn = StaySignedIn.NONE
 }

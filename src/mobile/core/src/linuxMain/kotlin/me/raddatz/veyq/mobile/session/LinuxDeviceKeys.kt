@@ -59,6 +59,10 @@ class LinuxDeviceKeys internal constructor(
      */
     val secretServiceAvailable: Boolean get() = service?.answers() == true
 
+    /** The login's (the collection opens with the desktop sign-in; no presence check, Q1), or none without a service. */
+    override val staySignedIn: StaySignedIn
+        get() = if (secretServiceAvailable) StaySignedIn.LOGIN else StaySignedIn.NONE
+
     override fun createBindKey(alias: String) {
         val key = p.randomBytes(64)
         try {

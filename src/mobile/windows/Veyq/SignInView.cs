@@ -83,6 +83,7 @@ internal sealed class SignInView
         email = _email.Text.Trim(),
         password = _password.Password,
         secretKey = _secretKey.Password.Trim(),
+        remember = false, // "Stay signed in" is Phase 5's switch
     });
 
     /// <summary>Draws <paramref name="gate"/>: the server and the email it knows, working or not, the core's error.</summary>

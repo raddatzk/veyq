@@ -46,6 +46,39 @@ interface DeviceKeys {
     fun putSecret(alias: String, value: String)
     fun secret(alias: String): String?
     fun deleteSecret(alias: String)
+
+    /**
+     * What staying signed in would use on this device now, asked of the store itself (never a host's own probe): the
+     * sign-in's switch shows or hides by it, and its label says which. May reach the platform (D-Bus, cryptngc), so it is
+     * asked when a sign-in shows, not on every frame.
+     */
+    val staySignedIn: StaySignedIn
+}
+
+/**
+ * What "Stay signed in" uses on a device: the strongest it has (the CR device-trust-on-linux-and-windows, Q1/Q2, owner
+ * 2026-11-11). The same meaning on every platform; the words a platform gives each are its own.
+ */
+@Serializable
+enum class StaySignedIn {
+    /**
+     * The unlock key opens only after the person authenticated to the device, enforced by the store: Windows Hello's key,
+     * Android's screen lock (biometric or device credential), Apple's `.userPresence`. Windows labels it "Stay signed in
+     * with Windows Hello".
+     */
+    PRESENCE,
+
+    /**
+     * The unlock key opens with the person's desktop sign-in and asks nothing of its own (Windows without Hello: DPAPI;
+     * Linux: the Secret Service, unlocked by the login): the web's level. The plain "Stay signed in".
+     */
+    LOGIN,
+
+    /**
+     * Nothing can be kept that staying signed in needs (Linux without a Secret Service; Android and Apple without a screen
+     * lock): the switch is hidden, since turned on it would do what it does off.
+     */
+    NONE,
 }
 
 /** The person did not authenticate for the unlock key ([cancelled]), or the key no longer works. */

@@ -5,7 +5,8 @@ import me.raddatz.veyq.mobile.crypto.Primitives
 /**
  * [DeviceKeys] in memory, for tests only: the platforms' keys are the Keystore's, the Keychain's, DPAPI's and Hello's,
  * which no test on a JVM reaches. It passes [DeviceKeysContract] as every store does. Its extras, for the flows' own
- * tests: [authenticates] plays the person at the unlock key's prompt; [prompts] counts how often they were asked.
+ * tests: [authenticates] plays the person at the unlock key's prompt; [prompts] counts how often they were asked. It
+ * lives in `src/testDevice`, compiled into core's common tests and :bridge's JVM tests alike.
  */
 class SoftwareDeviceKeys(private val p: Primitives) : DeviceKeys {
     private val bindKeys = HashMap<String, ByteArray>()
@@ -13,6 +14,9 @@ class SoftwareDeviceKeys(private val p: Primitives) : DeviceKeys {
     private val secrets = HashMap<String, String>()
     var authenticates = true
     var prompts = 0
+
+    /** What this fake answers for staying signed in; a test sets another to see the sign-in's switch follow it. */
+    override var staySignedIn = StaySignedIn.PRESENCE
 
     override fun createBindKey(alias: String) { bindKeys[alias] = p.randomBytes(64) }
     override fun bindHmac(alias: String, message: ByteArray): ByteArray? = bindKeys[alias]?.let { p.hmacSha256(it, message) }

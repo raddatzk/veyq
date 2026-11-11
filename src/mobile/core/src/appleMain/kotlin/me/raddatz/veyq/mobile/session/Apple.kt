@@ -12,6 +12,8 @@ import me.raddatz.veyq.mobile.crypto.Primitives
 import platform.Foundation.NSData
 import platform.Foundation.NSUserDefaults
 import platform.Foundation.create
+import platform.LocalAuthentication.LAContext
+import platform.LocalAuthentication.LAPolicyDeviceOwnerAuthentication
 import platform.posix.memcpy
 
 /**
@@ -99,6 +101,11 @@ class AppleDeviceKeys(private val keychain: KeychainBridge, private val prompt: 
     override fun secret(alias: String): String? = keychain.load(alias, prompt, protected = false).data?.toByteArray()?.decodeToString()
 
     override fun deleteSecret(alias: String) = keychain.remove(alias)
+
+    /** The person's, where the device has a passcode (`.userPresence` needs one), else none: no unlock key can exist. */
+    @OptIn(ExperimentalForeignApi::class)
+    override val staySignedIn: StaySignedIn
+        get() = if (LAContext().canEvaluatePolicy(LAPolicyDeviceOwnerAuthentication, null)) StaySignedIn.PRESENCE else StaySignedIn.NONE
 
     private companion object {
         const val UNLOCK = "veyq.unlock"

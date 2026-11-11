@@ -49,6 +49,7 @@ class SessionModelTest {
         override suspend fun spaces(session: String) = listOf(SpaceRef(session, "SHARED", session))
         override suspend fun signOut(account: Acc) { signedOut += account.key }
         override suspend fun forgetDevice(account: Acc) {}
+        override fun staySignedIn() = StaySignedIn.PRESENCE
     }
 
     private val a = Acc("a.example#u1", listOf(TenantRef("ta", "A", "a.example"), TenantRef("ta2", "A2", "a2.example")))

@@ -15,6 +15,8 @@ import me.raddatz.veyq.mobile.navigation.ShellModel
 import me.raddatz.veyq.mobile.navigation.SpaceRef
 import me.raddatz.veyq.mobile.navigation.TenantRef
 import me.raddatz.veyq.mobile.session.SessionModel
+import me.raddatz.veyq.mobile.session.StaySignedIn
+import me.raddatz.veyq.mobile.session.TrustedDevice
 import me.raddatz.veyq.mobile.words.Msg
 import me.raddatz.veyq.mobile.words.MsgKey
 import me.raddatz.veyq.mobile.words.Piece
@@ -31,9 +33,14 @@ internal val wire = Json {
     classDiscriminator = "type"
 }
 
-/** What the host starts the core with ([veyq_init]): the name this device gives itself in the account's device register. */
+/**
+ * What the host starts the core with ([veyq_init]): [device] the name this device gives itself in the account's device
+ * register; [window] Windows' HWND of the host's top-level window, which owns Windows Hello's prompt (`0` elsewhere, and
+ * for a prompt without an owner); [prompt] the words that prompt shows (the host's `device_unlock_prompt`, empty where
+ * none shows). None of them secret: the device keys themselves are the core's (`platformDeviceKeys`).
+ */
 @Serializable
-internal class Config(val device: String)
+internal class Config(val device: String, val window: Long = 0, val prompt: String = "")
 
 /**
  * One action of the host ([veyq_call]): each a model's own function, dispatched by [Bridge] one line per case. The
@@ -45,13 +52,40 @@ internal sealed class Call {
     /** The way in, once per process: the trusted accounts resume, or the sign-in shows (SessionModel.start). */
     @Serializable @SerialName("Session.Start") data object SessionStart : Call()
 
+    /**
+     * The full sign-in, then this device trusted: staying signed in when [remember] (what it uses is
+     * [Update.Session.staySignedIn]), else the password trust.
+     */
     @Serializable @SerialName("Session.SignIn")
-    data class SessionSignIn(val server: String, val email: String, val password: String, val secretKey: String) : Call()
+    data class SessionSignIn(val server: String, val email: String, val password: String, val secretKey: String, val remember: Boolean) : Call()
+
+    /**
+     * The unlock of the trusted account `Gate.Unlock` shows: its [password] for a DEVICE record; for DEVICE_KEY `""`, the
+     * core asking the person itself (Windows Hello's prompt). A cancelled prompt leaves the unlock standing.
+     */
+    @Serializable @SerialName("Session.Unlock") data class SessionUnlock(val password: String) : Call()
+
+    /** From the unlock to the full sign-in, for another account. */
+    @Serializable @SerialName("Session.OtherAccount") data object SessionOtherAccount : Call()
+
+    /** "Stop trusting this device" for the connection whose key is [connection]: the next sign-in asks for the Secret Key. */
+    @Serializable @SerialName("Session.ForgetDevice") data class SessionForgetDevice(val connection: String) : Call()
+
+    /** "Add server": the sign-in again, which [SessionCancelAdd] leaves back to the shell. */
+    @Serializable @SerialName("Session.AddServer") data object SessionAddServer : Call()
+    @Serializable @SerialName("Session.CancelAdd") data object SessionCancelAdd : Call()
 
     /** The switcher: tenant [tenantId] of the connection whose key is [connection] (`Gate.Signed.connectionKey`). */
     @Serializable @SerialName("Session.SwitchTo") data class SessionSwitchTo(val connection: String, val tenantId: String) : Call()
 
     @Serializable @SerialName("Session.SignOut") data class SessionSignOut(val connection: String) : Call()
+
+    /**
+     * "Manage servers" opened: [Watched.Manage] delivers every server with its trust from now on, each tenant's spaces as
+     * they read; [ManageClose] ends it (null again).
+     */
+    @Serializable @SerialName("Manage.Open") data object ManageOpen : Call()
+    @Serializable @SerialName("Manage.Close") data object ManageClose : Call()
 
     @Serializable @SerialName("Shell.Choose") data class ShellChoose(val application: ApplicationId?) : Call()
     @Serializable @SerialName("Shell.SwitchSpace") data class ShellSwitchSpace(val scopeId: String) : Call()
@@ -132,12 +166,23 @@ internal sealed class Watched {
     /** The shell over the tenant open now, whichever that is: a switch moves the watch to the new tenant's shell. */
     @Serializable @SerialName("Shell") data object Shell : Watched()
     @Serializable @SerialName("Pot") data class Pot(val pot: Long) : Watched()
+
+    /** "Manage servers" while it is open ([Call.ManageOpen]). */
+    @Serializable @SerialName("Manage") data object Manage : Watched()
 }
 
 /** One state a watch delivers: the first at once, then each change. */
 @Serializable
 internal sealed class Update {
-    @Serializable @SerialName("Session") data class Session(val gate: SessionModel.Gate) : Update()
+    /**
+     * The way in. Beside a `Gate.SignIn`, [staySignedIn] is what its "Stay signed in" would use on this device, the
+     * core's store's own answer (`SessionModel.staySignedIn`): `NONE` hides the switch, `LOGIN` is the plain one,
+     * `PRESENCE` the one the person confirms (Windows: "with Windows Hello"). Null beside every other gate.
+     */
+    @Serializable @SerialName("Session") data class Session(val gate: SessionModel.Gate, val staySignedIn: StaySignedIn? = null) : Update()
+
+    /** "Manage servers": every server signed in to, null while it is closed. */
+    @Serializable @SerialName("Manage") data class Manage(val servers: List<ManagedShown>?) : Update()
 
     /** Null while no tenant is open, or its lists are not read yet; [shown] beside a state, null with none. */
     @Serializable @SerialName("Shell") data class Shell(val state: ShellModel.State?, val shown: ShellShown? = null) : Update()
@@ -194,6 +239,25 @@ internal class ShellShown(
     @Serializable class ShownSpace(val space: SpaceRef, val name: Piece)
     @Serializable class ShownApplication(val application: ApplicationId, @Serializable(with = MsgKey::class) val word: Msg)
     @Serializable class ShownTab(val tab: BarTab, @Serializable(with = MsgKey::class) val word: Msg)
+}
+
+/**
+ * One server on "Manage servers", as Android's `ManageScreen` and Apple's `ManageView` read it from the core
+ * (`SessionModel.managed`): its connection's key and label, how this device trusts it ([trusted]: null when it does not,
+ * DEVICE with the password, DEVICE_KEY staying signed in), and its tenants.
+ */
+@Serializable
+internal class ManagedShown(val connection: String, val label: String, val trusted: TrustedDevice.Method?, val tenants: List<Tenant>) {
+    /**
+     * A tenant: [shown] its switch (on while shown; the current one always is), [switchable] whether it may be turned,
+     * [subtitle] the line under its name; [spaces] null while they read.
+     */
+    @Serializable
+    class Tenant(val tenant: TenantRef, val hidden: Boolean, val current: Boolean, val shown: Boolean, val switchable: Boolean, val subtitle: Piece, val spaces: List<Space>?)
+
+    /** A space of a tenant, with its name (`ShellWords.space`), shown unless [hidden]; [canHide] its switch's. */
+    @Serializable
+    class Space(val space: SpaceRef, val name: Piece, val hidden: Boolean, val canHide: Boolean)
 }
 
 /** What the core asks of the host ([veyq_init]'s host function), answered through [veyq_reply] with a [HostReply]. */
