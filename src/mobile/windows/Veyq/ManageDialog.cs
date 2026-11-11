@@ -18,7 +18,9 @@ namespace Veyq;
 internal sealed class ManageDialog
 {
     private readonly Window _window;
-    private readonly StackPanel _servers = new() { Spacing = 24 };
+    /// <summary>What the open dialog shows, new at each open: an element keeps its parent, the closed dialog's
+    /// ScrollViewer, and a second open that reused it crashed the app (measured 2026-11-11).</summary>
+    private StackPanel _servers = new();
     /// <summary>The tenants whose spaces the person opened, kept across the redraw each switch brings.</summary>
     private readonly HashSet<string> _expanded = [];
     private ContentDialog? _dialog;
@@ -29,6 +31,7 @@ internal sealed class ManageDialog
     public async void Open()
     {
         if (_dialog is not null) return;
+        _servers = new StackPanel { Spacing = 24 };
         var dialog = new ContentDialog
         {
             Title = Words.ManageTitle(),
@@ -43,7 +46,6 @@ internal sealed class ManageDialog
         dialog.Closed += (_, _) =>
         {
             _dialog = null;
-            _servers.Children.Clear();
             Act.Send(new Call.ManageClose());
         };
         Act.Send(new Call.ManageOpen());
