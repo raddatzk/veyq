@@ -432,6 +432,10 @@ first in each of its scrolls — `LocalNodeHero.current(inset)` (Android) / `Nod
 - The app's assembly is `Veyq.App`, never `veyq`: a .NET app's own assembly is `<AssemblyName>.dll` beside its exe, and
   as `veyq` it overwrote the core's native `veyq.dll` in the build output. The app then found no `veyq_init` and died in
   `combase.dll` (`0xC000027B`) with nothing in its log (measured 2026-11-10).
+- The taskbar keeps an exe's icon by its path: `F:\veyq\app\Veyq.App.exe` ran without an icon first, and after the icon
+  came the title bar showed it but the taskbar kept the default one until the user's icon cache was cleared
+  (`ie4uinit.exe -show`, then the app started anew; measured 2026-11-11). A changed icon is checked that way, never
+  taken as missing.
 - A property that implies an SDK package makes the lock file the SDK's: `IsAotCompatible` added
   `Microsoft.NET.ILLink.Tasks` at the SDK's runtime version, and the VM's locked restore under another SDK was red
   (NU1004). The first locked restore of a new C# project runs on both hosts.
