@@ -103,6 +103,14 @@ four times.
   was our build's defect: libsodium's `configure` reads XCR0 on Windows x64 only through the `_xgetbv` intrinsic, which
   clang accepts only under `-mxsave`, so without the flag no CPU had AVX, an x64 PC's neither (measured 2026-11-10; ADR
   0123's Consequences, the core on Windows).
+- **"The platform's side of a file" (decision 1) is read as: the dialog and the grant are the platform's, the bytes the
+  core's** ([ADR 0128](0128-the-bridge-carries-shown-bytes-beside-the-json-ranges-through-a-reader-and-files-by-path.md)
+  decision 3). The platform's save or open dialog chooses the file and hands over its path; the core opens it and reads
+  or writes it (`blob/FileSink`, `blob/FileSource`), removing a download that did not finish. The Apple app did so
+  first (`AppleDepot`); Linux and Windows do so through the bridge, where nothing of a file's content crosses.
+- **When the members' pictures are read is the core's** (`session/AvatarsModel`, decision 1): Android and Apple had
+  each synced them when a tenant opened, a rule in two apps before a third and fourth copy. They now watch the core's
+  model, and Linux and Windows read its id set through the bridge (ADR 0128 decision 1).
 - The repository's Rust (`src/mobile/linux/`) is held to the no-deprecated rule by reading: cargo has no deprecation
   gate, as the JavaScript install has.
   The repository's C# (`src/mobile/windows/`) has one: `run.py build` is red on any NuGet package `dotnet package list`

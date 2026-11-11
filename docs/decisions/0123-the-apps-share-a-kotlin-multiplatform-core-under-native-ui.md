@@ -575,8 +575,20 @@ implementation exists but what holds it to the first.
   - **The Rust types are generated.** `:bridge:generateBindings` walks the serial descriptors of the roots `:bridge`
     registers into `bridge.rs` (serde types, `#[serde(tag = "type")]` for a sealed class). It writes the `extern "C"`
     lines from `bridge.h` and a `reserialize` door per type. The output is never committed.
+  - **Three channels beside the JSON** ([ADR 0128](0128-the-bridge-carries-shown-bytes-beside-the-json-ranges-through-a-reader-and-files-by-path.md), built 2026-11-11):
+    - **Shown bytes:** `Answer.Bytes(mediaType)` with the bytes as the callback's payload. NULL is no payload, a
+      non-NULL pointer with length 0 an empty one; only `Answer.Bytes` carries one, never an update.
+      `Avatar.Picture(userId)` answers a member's picture; `ShellShown.me` and `ShellShown.pictures` (and
+      `Update.Pot.pictures`) name the ids to ask for.
+    - **Ranges:** `Answer.Reader(reader, size, mediaType)`, `Reader.Read`, `Reader.Close` over the core's `RangeReader`,
+      held per tenant and closed with it. `Bridge.openReader` is the door; no call opens one yet.
+    - **Files by path:** `Pot.Download(pot, path, deletedName)` writes through core's `FileSink` (`DeviceFiles` in
+      `Bridge.kt`, a JVM stand-in in `LiveBridgeTest`); `Pot.ArchiveName` names the file. `Why` gained `NO_SUCH_READER`,
+      `NO_PICTURE` and `NOTHING_TO_DOWNLOAD`.
+    - The generated layer copies the payload once: Rust's `payload(bytes, len) -> Option<Vec<u8>>`, C#'s
+      `Native.Payload(byte*, nuint) -> byte[]?`; `bridge::call` and `Core.CallAsync` answer the answer and its payload.
 
-  Measured 2026-11-10:
+  Measured 2026-11-10 (the channels 2026-11-11, ADR 0128's Consequences):
   - `./gradlew :bridge:jvmTest` runs four checks:
     - `DispatchTest` covers the way in, over a door the test plays.
     - `WireTest` writes a sample of every variant of every sealed type the roots reach, reads each back and holds it
@@ -640,6 +652,13 @@ implementation exists but what holds it to the first.
   - **Guards** (decision 9). The words guard holds linux-literal (no Rust literal as a widget's shown text) and
     linux-po; the guidelines guard holds linux-block (the creating action only in `create_action.rs`) and
     linux-floating-button. Each rule was bitten red and green on the restore.
+  - **Pictures and a Pot's download** (built 2026-11-11, ADR 0128). `src/avatars.rs`'s `Held` (no widget, tested) keeps
+    the open tenant's pictures, fed by the shell's `ShellShown.pictures` alone: another tenant drops everything, a set
+    that differs is asked for whole, the same set asks nothing, a late answer or one for an id no longer listed is
+    dropped. A person is an `adw::Avatar`, its image `gdk::Texture::from_bytes`, on the Pot's Settings people and
+    Overview balances, and the signed-in member's beside the tenant in the switcher. The content header's menu
+    (`view-more-symbolic`) holds Download: `Pot.ArchiveName`, `gtk::FileDialog` (the portal where one runs) in Downloads,
+    `Pot.Download`, an `AdwToast` saying it is done or failed; a dismissed dialog says nothing.
 
   Measured 2026-11-10:
   - `python3 src/mobile/linux/run.py build` is green: `cargo clippy -- -D warnings`, and `cargo test` (the round
@@ -649,6 +668,12 @@ implementation exists but what holds it to the first.
     a folder, a favorite, Search and its hit. A Pot's entries and overview matched what the core reads for it live
     (`LiveBridgeTest`: Amsterdam's 5 entries, Anna owed 67.34, Ben owing it). The app's stderr held no GTK or
     libadwaita warning.
+  - 2026-11-11, the pictures and the download (`run.py build`: `avatars::tests`, each rule bitten; a pass under
+    Broadway, `run.py run --devlogin` against the dev instance, English light and German dark, 800 and 420 wide): the
+    principal's picture on "App link"'s people and in the switcher, `A` and `B` for Amsterdam's; Amsterdam downloaded
+    into the container's home, 6,089 B, its CSV to the manifest, then imported by the web as the same Pot; a save into
+    the read-only source mount answered `Failed`, the failed toast, nothing left. WebP decodes through glycin's loaders
+    (`glycin-loaders` removed: "No image loaders are configured", the decode test red).
 - **The Windows app** (ADR 0127 decision 5; `src/mobile/windows/`). WinUI 3 in C# on .NET 10, `win-x64`, unpackaged
   and self-contained, the Windows App SDK included, so its build output runs where it is copied. Built 2026-11-10/11.
   - **Packages.** `Microsoft.WindowsAppSDK.WinUI` and `.Foundation` 2.6.5 and `Microsoft.Windows.SDK.BuildTools`, not the
@@ -683,6 +708,15 @@ implementation exists but what holds it to the first.
     and takes a screenshot only as proof.
   - **Guards** (decision 9): the words guard holds windows-literal and windows-resw, the guidelines guard windows-block
     (the creating action only in `CreateAction.cs`) and windows-floating-button; each rule bitten red and green.
+  - **Pictures and a Pot's download** (built 2026-11-11, ADR 0128). `Veyq/AvatarsHeld.cs`'s `Held<T>` (no control) is
+    Linux's `Held` rule for rule; `Veyq/Avatars.cs` feeds it from `ShellShown.pictures`, decodes each payload through
+    `BitmapImage.SetSourceAsync` over an `InMemoryRandomAccessStream`, and sets `ProfilePicture` on every
+    `PersonPicture` bound to that id (initials of its `DisplayName` otherwise): the Pot's Settings people and Overview
+    balances, and the signed-in member's before the tenant in the switcher. While a Pot is open the content's
+    `CommandBar` holds Download among its secondary commands: `Pot.ArchiveName`, `FileSavePicker` (given the window's
+    HWND through `InitializeWithWindow`, an unpackaged app's need; Downloads; one type, `download_type_zip`),
+    `Pot.Download`, an `InfoBar` saying it is done or failed. `Veyq.Drive` gained `type <id> <text>` and `press <id>
+    [keys]`, which focus an element and send real keys (`SendInput`), for the system's dialog.
 
   Measured 2026-11-10 and 2026-11-11, on the ARM64 VM under x64 emulation:
   - `python3 src/mobile/windows/run.py build` is green: the gate, the round trip, and `Veyq.Tests` — every key in
@@ -694,6 +728,13 @@ implementation exists but what holds it to the first.
     opened; maximized (Left), 800 wide (LeftCompact) and 500 wide (LeftMinimal); German light and English dark; the
     sign-in without `--devlogin`. Amsterdam's numbers matched `LiveBridgeTest` (5 entries, Anna owed 67,34 €, Ben
     owing it). The app's log held no exception.
+  - 2026-11-11, the pictures and the download (`run.py build`: `AvatarsTest`, each rule bitten; a pass by `run.py
+    drive`, English dark and German light, maximized and 500 wide): the principal's WebP decoded (`a member's picture
+    decoded: 2628 B, 256×256` in the log) on "App link"'s people and in the switcher, `A` and `B` for Amsterdam's;
+    Amsterdam saved through the system's "Speichern unter" into Downloads, 6,089 B, its CSV to the manifest, then
+    imported by the web as the same Pot; an 8 MB FAT volume filled to one free cluster answered `Failed`, the error
+    `InfoBar`, nothing left; a dismissed picker said nothing. WebP decodes only with the Store's Webp Image Extensions
+    (removed: the decode test red, `COMException`).
 - **Not built yet:** every other write (another kind's node), the
   other applications' views behind the bar, a CI job for the apps. The grant check is held by `GrantTrustTest` against a server the test plays — each refusal killed by
   a mutation of the rule it pins, but for three a second rule also holds (a pending or self-naming signer, and a cycle

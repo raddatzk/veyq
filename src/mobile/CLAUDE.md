@@ -5,7 +5,12 @@ a Kotlin Multiplatform base under each platform's own UI ([ADR 0123](../../docs/
 A Gradle build of its own, run through its own wrapper.
 
 - `core/` — the shared base: the v1 suite (`crypto/`), the generated API client (`build/generated/openapi`, from
-  `contracts/api`, never edited), the session (`session/`), the navigation model (`navigation/`), a photo's and a video's metadata read from their bytes (`media/`), and each
+  `contracts/api`, never edited), the session (`session/`), the navigation model (`navigation/`), a photo's and a video's metadata read from their bytes (`media/`),
+  files on the device by the path a platform's dialog gave (`blob/FileSink`, `blob/FileSource`, `nativeMain`: the
+  core opens, writes and reads them, and removes a download that did not finish; the one call that differs is
+  `blob/Files.kt`'s, `posixMain` for Apple and Linux, `mingwMain` for Windows; [ADR 0128](../../docs/decisions/0128-the-bridge-carries-shown-bytes-beside-the-json-ranges-through-a-reader-and-files-by-path.md) decision 3), when the members'
+  pictures are read (`session/AvatarsModel`, held as `TenantSession.pictures`: synced when the tenant opens and when
+  `peopleRead` gets a different set; every app watches it), and each
   application's own package (`expenses/`: the web's Expenses domain, a Pot's session and what its views show; `depot/`: Depot's files, each one
   core attachment, and how a file's page shows it; `memories/`: a Memory's gallery, each medium under the key its origin
   fixes), which
@@ -26,10 +31,17 @@ A Gradle build of its own, run through its own wrapper.
   `bridge.rs` and `Bridge.g.cs` (`:bridge:generateBindings`, into `build/generated/bridge`, never committed). `smoke/smoke.c` is a C
   host built against `bridge.h` alone. A rule found in the dispatch is a defect to move into the core; a field the UI
   does not draw, and any key, seal or token, is never part of a state the bridge sends (`SecretFreeSchemaTest`).
+  Beside the JSON go three channels ([ADR 0128](../../docs/decisions/0128-the-bridge-carries-shown-bytes-beside-the-json-ranges-through-a-reader-and-files-by-path.md)): bytes a UI shows as `Answer.Bytes`' payload (`Avatar.Picture`; the
+  state names the ids to ask for, an update never carries bytes), a blob's ranges through a reader held by id
+  (`Answer.Reader`, `Reader.Read`, `Reader.Close`, closed with the tenant; `Bridge.openReader` the door), and files by
+  the path the host's dialog gave, which the core opens (`Pot.Download` through `DeviceFiles`, core's `FileSink`).
+  The generated layer copies a payload once (Rust `Option<Vec<u8>>`, C# `byte[]?`); no screen touches a pointer.
 - `linux/` — the Linux app (ADR 0127 decision 4): a Cargo package in Rust (gtk4-rs, libadwaita-rs), with `Cargo.lock`
   committed and every cargo run `--locked`. `src/lib.rs` is the library: `bridge` (the safe wrapper over the six
   functions, the host function), `words`, `said` (money, days and sizes the desktop's way), `theme`, `create_action`
-  and one module per screen (`sign_in`, `shell` with Search, `home`, `pot`; `dev_login` in a debug build only).
+  and one module per screen (`sign_in`, `shell` with Search, `home`, `pot` with its download; `dev_login` in a debug
+  build only), and `avatars` (`Held`, no widget and tested: the open tenant's pictures, asked for again only when the
+  shell's id set changes; drawn as `adw::Avatar`).
   `src/main.rs` is the app. `build.rs` reads the generated bridge, words and theme from `VEYQ_GENERATED` and the
   library from `VEYQ_LIB_DIR`, both set by `run.py`. `Containerfile` (Fedora 44 by digest) is its build and run
   environment. `run.py` is its one entry point (§ Prove your work); `run.py lock` is the one writer of `Cargo.lock`.
@@ -38,7 +50,9 @@ A Gradle build of its own, run through its own wrapper.
   `Veyq.Bridge` (net10.0, no Windows API) is the safe wrapper over the six functions, the host's device store under
   `%LOCALAPPDATA%\veyq\`, and the hand-off to the UI thread; `Veyq.Bridge.Tests` its round trip and the real DLL.
   `Veyq` is the app (WinUI 3, unpackaged, self-contained, `win-x64`; its assembly `Veyq.App`): `App.xaml.cs`,
-  `MainWindow`, one class per screen (`SignInView`, `ShellView` with Search, `HomeView`, `PotPage`), `Act` (sends a
+  `MainWindow`, one class per screen (`SignInView`, `ShellView` with Search, `HomeView`, `PotPage` with its download),
+  `AvatarsHeld` (`Held<T>`, no control, Linux's `avatars::Held` rule for rule; `AvatarsTest`) and `Avatars` (decodes
+  each picture through `BitmapImage`, sets it on every `PersonPicture` of that id), `Act` (sends a
   call, logs its answer), `Words`/`MrtWords` and `SaidNotice` (the words), `Said` (money, days and sizes the system's
   way), `CreateAction`, `Log` (`%LOCALAPPDATA%\veyq\log.txt`), and in a debug build `DevLogin` and `DebugEnv`
   (`VEYQ_THEME`, `VEYQ_LANGUAGE`). `Veyq.Tests` holds the words and formats against the app's `.pri`. `Veyq.Drive` is the
@@ -79,20 +93,22 @@ A Gradle build of its own, run through its own wrapper.
   `Money.kt` changes only with the case that pins it; so does one of `expenses/PotWrites.kt` and `LedgerCheck.kt`
   (`PotWritesTest`, over real seals), of `EntryForm.kt` (`EntryFormTest`, over the vectors), of `ExchangeRates.kt` (`ExchangeRatesTest`), of `Currencies.kt` (`CurrenciesTest`: the web's `Intl` codes and digits), of `Receipts.kt` and core's `blob/Sniff.kt` (`ReceiptsTest`), of `PotShare.kt` (`PotShareTest`), of core's `session/LivePoll.kt` (`LivePollTest`, on virtual time), of core's `session/MemberAvatars.kt` (`MemberAvatarsTest`) and `session/ShareNames.kt` (`ShareNamesTest`), of `PotView.kt`'s people, balances and entries, an entry row's line and badge among them (`PotViewPeopleTest`, `PotViewEntriesTest`), of core's `session/NodeEpochWrite.kt` and `session/NodeMetaWrite.kt` (`NodeEpochWriteTest`, `NodeMetaWriteTest`), of
   core's `session/NodeMove.kt` browser rules, a guest's folder's included (`NodeMoveTest`), of `navigation/NodeHeader.kt`'s plan and
-  its narrowing in a guest's folder (`NodeHeaderTest`), of core's `session/CoverFrame.kt` (`CoverFrameTest`), of core's `export/NodeExport.kt` archive (`FolderExportTest`, `ZipTest`) and its streamed `export/Sha256.kt` (`Sha256Test`), of Depot's `depot/FolderUpload.kt` plan (`FolderUploadTest`), of what Depot's rows and file page say (`DepotWordsTest`), of Memories' `memories/MemoryMedia.kt` listed tier and order (`MemoryMediaTest`) and `memories/MediaDetails.kt` (`MediaDetailsTest`, `MediaDetailsShownTest`), of core's `blob/RangeReader.kt` (`RangeReaderTest`), of core's `blob/UploadQueue.kt` (`UploadQueueTest`, the web's `queue.test.ts` rules on virtual time), of core's `session/LinkForm.kt` (`LinkFormTest`: the new-link form's rules) and `session/LinkRow.kt` (`LinkRowTest`: a link's row and what a member may do with it), of Expenses' `expenses/ShareInbox.kt` (`ShareInboxTest`: shared files from arrival to their Pot), of core's `navigation/ShellModel.kt` (`ShellModelTest`: the shell after a read and after a folder on Home's path changed), `navigation/TrashSheet.kt` (`TrashSheetTest`: a space's trash sheet) and `navigation/ShellWords.kt` with `AppKinds`' words (`ShellWordsTest`), of core's `session/SessionModel.kt` (`SessionModelTest`: the start, sign-in, unlock, switcher and sign-out over a door the test plays), of core's `words/Notices.kt` (`NoticesTest`: every outcome's key with as many arguments as its words take), of core's `media/ExifReader.kt` and `media/VideoHeader.kt` and Memories' `memories/MediaMetadata.kt` (`MediaMetadataFixtureTest` over the web's own fixtures, held to what the web's `readExif.fixture.test.ts` and `videoHeader.test.ts` expect; `MediaMetadataNativeTest` on the Apple path; `XmpValueTest`: its XMP reads across line breaks), of `memories/MediaUpload.kt`'s type and core's `crypto/BlobMeta.kt` digest (`MediaUploadTest`), of Depot's `depot/FileView.kt` and core's
+  its narrowing in a guest's folder (`NodeHeaderTest`), of core's `session/CoverFrame.kt` (`CoverFrameTest`), of core's `export/NodeExport.kt` archive (`FolderExportTest`, `ZipTest`) and its streamed `export/Sha256.kt` (`Sha256Test`), of Depot's `depot/FolderUpload.kt` plan (`FolderUploadTest`), of what Depot's rows and file page say (`DepotWordsTest`), of Memories' `memories/MemoryMedia.kt` listed tier and order (`MemoryMediaTest`) and `memories/MediaDetails.kt` (`MediaDetailsTest`, `MediaDetailsShownTest`), of core's `blob/RangeReader.kt` (`RangeReaderTest`), of core's `blob/FileSink.kt`, `FileSource.kt` and `Files.kt` (`FilesTest`, `nativeTest`: on macOS, Linux and Windows, through a non-ASCII name, the directory listed by the platform's own calls), of core's `session/AvatarsModel.kt` (`AvatarsModelTest`), of core's `blob/UploadQueue.kt` (`UploadQueueTest`, the web's `queue.test.ts` rules on virtual time), of core's `session/LinkForm.kt` (`LinkFormTest`: the new-link form's rules) and `session/LinkRow.kt` (`LinkRowTest`: a link's row and what a member may do with it), of Expenses' `expenses/ShareInbox.kt` (`ShareInboxTest`: shared files from arrival to their Pot), of core's `navigation/ShellModel.kt` (`ShellModelTest`: the shell after a read and after a folder on Home's path changed), `navigation/TrashSheet.kt` (`TrashSheetTest`: a space's trash sheet) and `navigation/ShellWords.kt` with `AppKinds`' words (`ShellWordsTest`), of core's `session/SessionModel.kt` (`SessionModelTest`: the start, sign-in, unlock, switcher and sign-out over a door the test plays), of core's `words/Notices.kt` (`NoticesTest`: every outcome's key with as many arguments as its words take), of core's `media/ExifReader.kt` and `media/VideoHeader.kt` and Memories' `memories/MediaMetadata.kt` (`MediaMetadataFixtureTest` over the web's own fixtures, held to what the web's `readExif.fixture.test.ts` and `videoHeader.test.ts` expect; `MediaMetadataNativeTest` on the Apple path; `XmpValueTest`: its XMP reads across line breaks), of `memories/MediaUpload.kt`'s type and core's `crypto/BlobMeta.kt` digest (`MediaUploadTest`), of Depot's `depot/FileView.kt` and core's
   `blob/Sniff.kt` and `blob/DownloadName.kt` (`FileViewTest`), and of core's `session/NodeRekey.kt` frontier and what it
   leaves to another device (`NodeRekeyRulesTest`).
 - `./gradlew :bridge:jvmTest` — the bridge (ADR 0123's Consequences, the bridge):
-  - `DispatchTest` covers the way in, over a door the test plays.
+  - `DispatchTest` covers the way in, over a door the test plays: a reader read backwards in uneven ranges and closed
+    with the tenant, a picture's bytes and its refusal.
   - `WireTest` writes and reads back a sample of every variant of every sealed type the wire reaches. The samples go
     to `build/generated/bridge/samples`, which the Rust test reads.
   - `SecretFreeSchemaTest` checks that nothing the core sends has a field named like a key, seal, token, secret or
-    password, and that no bytes travel in JSON.
+    password, and that no byte array travels in JSON (a field, a list's element, a map's value).
   - `BridgeHeaderTest` holds `bridge.h` against Kotlin/Native's headers, Linux's and mingw's.
 
   A root or sealed variant added to the wire is in the samples by derivation. With `VEYQ_LIVE` set,
   `--tests '*LiveBridgeTest*'` signs in through a `Call` and reads the shell, Home's groups, Search and every seeded
-  Pot over the real core. It is the only proof of the shell's, Search's and the Pot's dispatch, so a change there
+  Pot over the real core, the principal's picture through `Avatar.Picture` (its SHA-256 the core's own read's), and
+  downloads Amsterdam through `Pot.Download`, every payload to the manifest. It is the only proof of the shell's, Search's and the Pot's dispatch, so a change there
   runs it live.
 - `python3 linux/run.py <verb>` — everything Linux. From the repository root the launcher runs the same verbs as
   `./gradlew linux:coreTest`, `linux:bridge`, `linux:build` and `linux:run`. The Kotlin is cross-compiled here by this
@@ -438,3 +454,43 @@ first in each of its scrolls — `LocalNodeHero.current(inset)` (Android) / `Nod
   button and back lie over the content's top left, so the title takes a left inset there (`DisplayModeChanged`). Two
   defects of this kind showed only in a screenshot, never in the tree: take each form's shot early.
 - A XAML comment may not contain `--` (WMC9997), and generated C# carries its own `#nullable enable` (CS8669).
+- mingw's `fopen` reads its path in the ANSI code page: a UTF-8 name is not refused but written under mojibake
+  (`Büro € 中文.bin` became `BÃ¼ro â‚¬ ä¸­æ–‡.bin` on the German VM, measured 2026-11-11), and a round trip through the
+  same call passes. The core therefore opens through `_wfopen`/`_wremove` over UTF-16 (`Files.mingw.kt`), and
+  `FilesTest` lists the directory through Windows' own wide calls, never the calls under test.
+- A payload beside the JSON: NULL means none, a non-NULL pointer with length 0 an empty one (a range past a blob's
+  end). `Exports.kt` hands an empty payload as a pointer to a byte never read; both hosts' copy tests hold `Some([])`
+  / an empty array apart from NULL.
+- `type` is the wire's class discriminator: kotlinx.serialization refuses a variant with a field of that name, so a
+  media type on the wire is `mediaType`.
+- WebP, the web's picture format, is not every platform's own. GTK 4.22 decodes it through glycin's loaders
+  (`glycin-loaders`, which gtk4 pulls in Fedora; without them "No image loaders are configured" and every person shows
+  initials), so a Flatpak's runtime must carry them. Windows decodes it through the Store's Webp Image Extensions, not
+  the OS image's WIC: without the package the decode throws (`COMException`), so MSIX must depend on it. Its
+  registration needs the logged-on session; over ssh it is refused (`0x80070005`).
+- GTK's own file dialog in the Fedora container speaks English under `LANGUAGE=de` (Home, Cancel, Save): the image
+  carries no gtk4 catalogs; only our words in it (its title) are German. On a desktop the portal's dialog is the
+  system's. The container's working directory is the read-only source mount, where GTK's dialog opens — a write there
+  is the failure case, not a bug.
+- The container runs with `--rm`: what the app keeps on the device lives in the container and is gone at the next
+  `run.py run`, Recent with it. A pass that shows Recent opens its objects first in that run (remembered from the
+  bridge's Linux pass, 2026-11-11).
+- The common file dialog on Windows cannot be pressed through UI Automation: its Save invoked by UIA arrives as an
+  input-synchronous call and the dialog cannot reach the file broker (`RPC_E_CANTCALLOUT_ININPUTSYNCCALL`, nothing
+  written), and a file name set as a UIA `Value` shows in the tree but is not read. `Veyq.Drive`'s `type` and `press`
+  focus the element and send real keys (`SendInput`). The picker is a window of the app's own process.
+- `PersonPicture` is not in UIA's control view: a tree tells no picture from initials. The app's log says each decode
+  (`a member's picture decoded: <bytes> B, <w>×<h>`); a shot is the proof.
+- A picture replaced under the same user id keeps the id set, so no update tells a host to ask again. Nothing reads
+  the people anew yet; the first caller of `AvatarsModel.peopleRead` owes the hosts that signal (a revision per id,
+  say; native-apps § Open).
+- Only the shell's `ShellShown.pictures` feeds a host's picture cache. `Update.Pot.pictures` is empty while no Pot is
+  open, so feeding it would drop every picture held and ask them all again at the shell's next update.
+- A watch delivers a state once per change. A test that waits on one watch for one fact misses a later fact that
+  arrived meanwhile (the pictures' update came while `LiveBridgeTest` waited for the open object): read a fresh watch,
+  which delivers the state as it is now.
+- An app is refused at sign-in by a backend of another major (`server major 1, app 0`): a branch whose `VERSION` lags
+  the running dev backend's cannot run a live pass until `main` is merged into it.
+- A download's failure on Windows is shown with a nearly full volume (a small FAT VHD filled to one free cluster): the
+  common file dialog itself refuses a folder the user cannot write to before the core is called (remembered, not
+  measured), so Linux's read-only folder has no counterpart there.

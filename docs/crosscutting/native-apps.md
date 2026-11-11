@@ -37,20 +37,22 @@ for want of room close the editor and the shell says which (the web's toast); a 
 | iPhone | yes (iOS 26) | SwiftUI | — | yes, the Simulator, every slice |
 | iPad | yes (the iOS target, no device family set) | SwiftUI | `NavigationSplitView` with its sidebar open in a regular size class; the detail is one page whose bar's places are a segmented control in its toolbar, not a tab bar, Search always the toolbar's field at its trailing end; Settings pinned at the sidebar's foot; an object chosen in the sidebar has no back (ADR 0122 decision 7); sign-in and unlock read at a form's width | the Simulator, 2026-11-10 |
 | macOS | yes (macOS 26) | SwiftUI | always the split view, as the iPad's; the sidebar 240–360 pt wide | an ad-hoc signed build, 2026-11-10 (Home, a Pot's entries and overview); without a team's signing the device trust is never enrolled; no share extension there |
-| Windows | the core and the bridge for x64 (`veyq.dll`), cross-compiled on the developer's Mac; the app on a Windows host (`src/mobile/windows/run.py build`), unpackaged and self-contained | WinUI 3 in C#, Fluent, over the core as `veyq.dll` through the bridge | `NavigationView` with its own thresholds: Left from 1008 epx, LeftCompact (icons) from 641, LeftMinimal below; the switcher its pane header, Search its `AutoSuggestBox` (Ctrl+E, Ctrl+F), Settings at its foot, New the first command of the content's `CommandBar` | an ARM64 Windows 11 VM under x64 emulation, driven through UI Automation, 2026-11-11 (the first slice: sign-in, the shell, Home, a Pot read only, Search; maximized, 800 and 500 wide); no x64 PC; no device trust, so every start signs in |
-| Linux | the core and the bridge for arm64 and x86-64, cross-compiled on the developer's Mac; the app for arm64, in a Fedora 44 container (`src/mobile/linux/run.py build`) | GTK 4 and libadwaita in Rust, over the core as `libveyq.so` through the bridge | `AdwNavigationSplitView` with libadwaita's `AdwSidebar` (240–360 sp), collapsing below 600 sp to a navigation stack, the sidebar in its page mode; the switcher the sidebar's title menu, Search a search bar under it (Ctrl+F), Settings at its foot | Broadway in Fedora 44 arm64, drawn into a browser, 2026-11-10 (the first slice: sign-in, the shell, Home, a Pot read only, Search; 1100 × 750 and 500 × 750); no desktop session yet, so no device trust: every start signs in |
+| Windows | the core and the bridge for x64 (`veyq.dll`), cross-compiled on the developer's Mac; the app on a Windows host (`src/mobile/windows/run.py build`), unpackaged and self-contained | WinUI 3 in C#, Fluent, over the core as `veyq.dll` through the bridge | `NavigationView` with its own thresholds: Left from 1008 epx, LeftCompact (icons) from 641, LeftMinimal below; the switcher its pane header, Search its `AutoSuggestBox` (Ctrl+E, Ctrl+F), Settings at its foot, New the first command of the content's `CommandBar` | an ARM64 Windows 11 VM under x64 emulation, driven through UI Automation, 2026-11-11 (the first slice: sign-in, the shell, Home, a Pot read only, Search; maximized, 800 and 500 wide); the members' pictures and a Pot's download through the system's save picker, its ZIP imported by the web, 2026-11-11; no x64 PC; no device trust, so every start signs in |
+| Linux | the core and the bridge for arm64 and x86-64, cross-compiled on the developer's Mac; the app for arm64, in a Fedora 44 container (`src/mobile/linux/run.py build`) | GTK 4 and libadwaita in Rust, over the core as `libveyq.so` through the bridge | `AdwNavigationSplitView` with libadwaita's `AdwSidebar` (240–360 sp), collapsing below 600 sp to a navigation stack, the sidebar in its page mode; the switcher the sidebar's title menu, Search a search bar under it (Ctrl+F), Settings at its foot | Broadway in Fedora 44 arm64, drawn into a browser, 2026-11-10 (the first slice: sign-in, the shell, Home, a Pot read only, Search; 1100 × 750 and 500 × 750); the members' pictures and a Pot's download through GTK's save dialog, its ZIP imported by the web, 2026-11-11; no desktop session yet, so no device trust: every start signs in |
 
 Windows and Linux are wanted (owner 2026-11-09), each with its own native UI over the same core
 ([ADR 0127](../decisions/0127-an-apps-logic-is-the-kotlin-cores-each-platform-draws-only-its-own-ui.md)): Linux GTK 4 and
 libadwaita in Rust, Windows WinUI 3 in C#, both over the core as a Kotlin/Native library through one bridge (owner
 2026-11-10). Each has its first slice built (ADR 0123's Consequences: the core on Linux and on Windows, the bridge, the
-Linux app and the Windows app). On Windows that core is x64 only: Kotlin/Native has no Windows ARM64 target.
+Linux app and the Windows app), and the bridge's channels for shown bytes, a blob's ranges and files by path ([ADR 0128](../decisions/0128-the-bridge-carries-shown-bytes-beside-the-json-ranges-through-a-reader-and-files-by-path.md)),
+proved by the members' pictures and a Pot's download on both. On Windows that core is x64 only: Kotlin/Native has no Windows ARM64 target.
 
 ## Built, by area
 
 "Measured" means ADR 0123 records it run against a dev instance (and, where it says so, read back by the web); "built"
 means the code is there and compiles, nothing recorded beyond. Both apps hold everything listed unless a row says
-otherwise; the Linux and Windows apps hold only their first slice (their rows above).
+otherwise; the Linux and Windows apps hold only their first slice, the members' pictures and a Pot's download (their
+rows above).
 
 **Account and session.** Sign-in with password and Secret Key behind the `/api/setup` major gate, each grant judged as
 the web judges it (measured, `LiveSignInTest`, `GrantTrustTest`); the device trusted with the password, staying signed
@@ -88,8 +90,12 @@ Apple's toolbar button and list — measured 2026-11-09 (the list behind Apple's
 - Windows beyond its first slice (the next slice is Linux's and Windows' together, owner 2026-11-10):
   - **The device trust:** DPAPI with Windows Hello, reached by the core itself through cinterop — the key never crosses
     the bridge (ADR 0127's Consequences), as libsecret on Linux.
-  - **Packaging:** MSIX with its signing and its PNG assets, and the app's icon.
-  - **The system's file pickers, save dialogs and drag and drop.**
+  - **Packaging:** MSIX with its signing and its PNG assets, and the app's icon. It must depend on the Store's Webp
+    Image Extensions, or the app decodes WebP itself: without the package every member's picture is drawn as initials
+    (measured 2026-11-11, the decode test's bite). Whether a packaged app's picked path still opens in the core is
+    checked there (ADR 0128).
+  - **The system's open picker and drag and drop.** The save picker is built (a Pot's download); a picked file read by
+    the core (`FileSource` by path, ADR 0128 decision 3) has no call yet — Depot's uploads bring it.
   - **The other screens.** Every other application's screens, uploads and a Pot's writes are not built. New, "Manage
     servers" and Settings are there but offer nothing yet.
   - **An x64 PC.** The app has run only on the ARM64 VM under x64 emulation (`ssh kevin@192.168.64.8`, key
@@ -101,8 +107,9 @@ Apple's toolbar button and list — measured 2026-11-09 (the list behind Apple's
   - **The desktop session** (the Fedora ARM VM). Staying signed in and the device trust need the Secret Service. The
     bridge carries no key, and `DeviceKeys`' calls carry the Master Key and the refresh token, so the host cannot
     answer them. The core reaches the Secret Service itself (libsecret through cinterop, the key never leaving the
-    library), or the bridge's rule is revisited (ADR 0127's Consequences). Also open there: the portals (file chooser,
-    save) and drag and drop. The test VM is Fedora 45 Workstation, aarch64, in UTM (`ssh kevin@192.168.64.9`, key
+    library), or the bridge's rule is revisited (ADR 0127's Consequences). Also open there: the portals (the save
+    dialog is built and ran as GTK's own in the container, never through a portal; the file chooser has no call yet)
+    and drag and drop. The test VM is Fedora 45 Workstation, aarch64, in UTM (`ssh kevin@192.168.64.9`, key
     `~/.ssh/veyq_vms_ed25519`): GTK 4.24.1, libadwaita 1.10.0, and no gnome-keyring — `org.freedesktop.secrets` is
     answered by **oo7** (`oo7-daemon` 0.7.0 beta, GNOME's Secret Service in Rust), measured 2026-11-10 (`busctl --user
     status org.freedesktop.secrets`, `rpm -qa`). The core is tested against oo7 there and against KWallet under Plasma.
@@ -111,7 +118,9 @@ Apple's toolbar button and list — measured 2026-11-09 (the list behind Apple's
     session is Wayland; Flathub offers `org.gnome.Platform`/`Sdk` 49, 50 and 51 for aarch64 (`flatpak remote-ls
     --runtime --arch=aarch64 flathub`); and Fedora 45 lacks `libcrypt.so.1` as Fedora 44 does (`ldd` of the app).
   - **The Flatpak** on the GNOME runtime. It must carry GTK 4.22 and libadwaita 1.9, `libcrypt.so.1`, a CA bundle and
-    the zoneinfo. The app's build and tests move into that runtime's SDK (`org.gnome.Sdk`), replacing the Fedora 44
+    the zoneinfo, and glycin's loaders, through which GTK 4.22 decodes WebP (without them every member's picture is
+    drawn as initials, measured 2026-11-11). Whether the document portal's path opens in the core is checked there
+    (ADR 0128). The app's build and tests move into that runtime's SDK (`org.gnome.Sdk`), replacing the Fedora 44
     container as what the app is proved against (ADR 0127 decision 4); Fedora stays only as a test VM's system.
   - **Other desktops** (ADR 0127 decision 4: one libadwaita app for all). Not measured yet, remembered only: KWallet
     answers the Secret Service, KDE's portal the file chooser and the colour scheme. The desktop-session slice checks
@@ -129,6 +138,16 @@ Apple's toolbar button and list — measured 2026-11-09 (the list behind Apple's
   software AES-GCM, or a second source such as CNG, would be a second implementation of a primitive on one platform;
   it is revisited if someone asks.
 - A CI job for the apps (Windows needs a Windows runner).
+
+**The bridge** ([ADR 0128](../decisions/0128-the-bridge-carries-shown-bytes-beside-the-json-ranges-through-a-reader-and-files-by-path.md))
+- **A picture replaced under the same user id sends no signal.** The id set stays the same, so no update tells Linux
+  or Windows to ask again. Nothing reads the people anew yet; the first caller of `AvatarsModel.peopleRead` owes the
+  hosts that signal (a revision per id, say).
+- **Cancelling a write.** A download runs to its end or fails, and the partial file is removed; cancelling comes with
+  the first consumer that needs it (Depot's large files).
+- **The calls that open a reader** (a Depot file, a Memory's medium) and the video player, the upload queue in the
+  bridge, and covers, tiles and receipts as UI are their applications' slices: the channels are there (ADR 0128
+  decisions 1 and 2).
 
 **Account**
 - Linking a device on a phone ([ADR 0059](../decisions/0059-device-linking.md)): the contract gives a client without
