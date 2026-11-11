@@ -425,6 +425,85 @@ Android and Apple thinned.
   - a cover set from a picked picture, cropped, read back by `CoverCropLiveTest`'s checks, and removed;
   - de/en, light/dark.
 
+**Status: done (2026-11-12).**
+
+**Built:**
+- core `navigation/ReportSheet.kt` (ADR 0127 decision 2): state (`whole`, `category`, `reason`, `goodFaith`, `contact`,
+  `sending`, `problem`, `sent`; derived `canSend`, `note`, `scopeHint`, `receipt`), `watch`, `whole`/`category`/`reason`/
+  `goodFaith`/`contact` (cut to `NodeReport`'s room, held still while a send runs or after it), `send()` (once; the
+  refusal's notice keeps the form), `categories`, `privacyUrl`. `NodeReport.privacyUrl(origin)` builds the passage's
+  address in the core; `ShellModel.reportSheet(node)` over the tenant.
+- core `NodeCover`: `LONG_EDGE` 2048, `QUALITY` 0.85, `QUALITY_PERCENT` 85, `THUMBNAIL_EDGE` 384 and `encodedSize(w, h)`
+  (the web's `COVER_SPEC`); `Crop` and `CoverFrame.Pose` `@Serializable`. `NodeHeaderModel` holds the node's cover frame
+  (`State.cover`, read when a kind that takes a cover opens and after each write) and `coverPicture`, `saveCover(jpeg?,
+  crop)` (a picked picture set, or the stored one framed anew), `removeCover`, `label(id)` with the cover's state; its
+  `Door` gains the cover's reads and writes (defaults for doors that have none), `ShellModel.header`'s over `NodeCover`.
+- Android and Apple thinned: the report sheet draws core's `ReportSheet` (Apple through `ReportBox`); gone from both app
+  models: `report(…)`, `privacyLink(…)` (the URL built in the app). Their cover code takes `NodeCover`'s constants
+  (Android's decode and `compress`, Apple's `CoverImages` calls) instead of the literals 2048/0.85/85/384.
+- bridge: `Report.Open/Close/Whole/Category/Reason/GoodFaith/Contact/Send`, `Answer.ReportOpened`, `Watched.Report` →
+  `ReportShown` (categories, `scopeHint`, `note`, `reasonMax`/`contactMax`, `canSend`, `sending`, `problem`, `sent`,
+  `reference`, `receivedAt`, `privacyUrl`; the typed reason and contact are not echoed). `Header.CoverPicture` (the JPEG as
+  `Answer.Bytes`), `Header.CoverSave(path?, crop)` (the host's encoded JPEG read by path, `DeviceFiles.read`, natively
+  `FileSource`, at most `COVER_MOST`), `Header.CoverRemove`; `Cover.Pose` (`CoverFrame` asked per change: the pose, the
+  drawn size and the crop) and `Cover.Fit` (the encode size and quality); `HeaderShown.cover`.
+  `SecretFreeSchemaTest.publicAddresses` lists `ReportShown.privacyUrl` by name (a public page, no fragment key).
+- Linux (`report.rs`, `cover.rs`): the report an `AdwDialog` (radio rows, a `gtk::TextView`, a check row, an
+  `AdwEntryRow`, the privacy passage an `AdwButtonRow` through `gtk::UriLauncher`; Cancel and Send in the header bar, the
+  receipt after); the cover an `AdwDialog` with the 16:9 `gtk::DrawingArea` (a drag pans, a `gtk::Scale` zooms), GTK's
+  open dialog, `gdk::Texture` decode, cairo's scale to `Cover.Fit`'s size, gdk-pixbuf's JPEG saver at the core's quality.
+  `said::instant_moment`. Both drawn in the header (`header::DRAWN`).
+- Windows (`ReportDialog.cs`, `CoverDialog.cs`): the report a `ContentDialog` (`RadioButtons`, a multi-line `TextBox` with
+  the core's `MaxLength`, a `CheckBox`, a `HyperlinkButton` through `Launcher.LaunchUriAsync`; Send primary, the receipt
+  after); the cover a `ContentDialog` with a 480×270 frame (a manipulation pans, a `Slider` zooms), the open picker, WIC's
+  `BitmapDecoder` at `Cover.Fit`'s size (upright by EXIF), `BitmapEncoder` JPEG at the core's quality. `Said.InstantMoment`.
+  `HeaderPlan.Drawn` holds report and cover.
+- `linux/run.py` and `windows/run.py`: `VEYQ_LIVE_STORE` (a dev instance's store, Vite's origin) is forwarded beside
+  `VEYQ_LIVE`, else no blob goes up from the container or the VM.
+
+**Met:**
+- `./gradlew :core:jvmTest :core:macosArm64Test :bridge:jvmTest` green. `ReportSheetTest` (4), `NodeCoverTest`'s spec case,
+  `NodeHeaderModelTest`'s cover case; bitten by a script (each mutation red, restored with `/bin/cp -f`): good faith not
+  required, the privacy URL's trailing slash, a second send, edits while sending, the refusal unsaid, the long edge, an
+  enlarging `encodedSize`, the covers' diff keeping a changed crop (`NodeCover.changes`), the cover not read at open, a
+  re-frame sent as an upload — 10/10 red.
+- `DispatchTest.aReportIsFilled…` and `.aCoverIsPosed…` drive every new call over played doors; `WireTest` samples every new
+  variant. Bitten: `Report.Send` and `Report.GoodFaith` made no-ops, `Header.CoverSave` dropping the host's file,
+  `Cover.Pose` ignoring a stored crop, the header's label ignoring the cover, `privacyUrl` not listed — 6/6 red.
+- `VEYQ_LIVE=… VEYQ_ENV_FILE=<main>/.run/.env VEYQ_LIVE_REPORT_BRIDGE=1 ./gradlew :bridge:jvmTest --tests
+  '*LiveBridgeTest.aCover*' --tests '*LiveBridgeTest.aReport*' --rerun`: "App report 90445" reported by its name (receipt
+  `195bf339`), trashed; "App cover 91385": the frame posed by the core (left half, `Crop(0, 0.25, 0.5, 0.5)`), set from a
+  file, a fresh header read the crop, `Header.CoverPicture` the same bytes, re-framed on the right half (picture kept),
+  removed (`NO_COVER`), purged.
+- `linux/run.py build` green (clippy `-D warnings`, `cargo test` 23 incl. `report::tests`, `cover::tests`);
+  `windows/run.py build` green (Veyq.Tests 17 incl. `HeaderPlanTest` with report and cover, `SaidTest`'s instant moment);
+  `:android:assembleDebug`; `xcodebuild -target Veyq -sdk macosx CODE_SIGNING_ALLOWED=NO` and the signed iOS simulator
+  build (`-scheme Veyq -destination 'generic/platform=iOS Simulator'`) green; `validate_mobile_words.py`,
+  `validate_mobile_platform_guidelines.py`, `validate_changes.py` green.
+- Linux (container, Broadway on 8097, headless system Chrome, `run --devlogin --no-secret-service` with
+  `VEYQ_LIVE_STORE=http://veyq.localhost:8081`), on a folder "Linux cover": en/light — Set cover, a 4000×2250 JPEG picked in
+  GTK's dialog (`picked 4000×2250, framed and encoded at 2048×1152, quality 85`), zoomed to 2 and dragged, saved; read back
+  by `VEYQ_LIVE_COVER_READ="Linux cover" VEYQ_LIVE_COVER_EXPECT=<the crop the log said> … --tests
+  '*CoverCropLiveTest.aCoverAnAppSet*'` in a fresh session (2048×1152 JPEG, the crop to 1e-6); the menu then said "Change
+  cover", the stored cover reopened as framed; the report filled (only its name, a breach of the terms; the CSAM note
+  shown on its category), the privacy row pressed (`UriLauncher`: "Operation not supported" — the container has no
+  browser; the address is the core's, and the web's page at it shows the passage `#reporter-contact`, headless Chrome on
+  Vite), sent once (receipt `e75dd708`). de/dark — the stored cover reopened, dragged and saved as a re-frame (read back:
+  the new crop, the same blob and SHA-256), removed (`VEYQ_LIVE_COVER_GONE=1` read back none, the menu "Titelbild
+  festlegen"); the report sheet opened, not sent ("Melden", the CSAM note in German); the folder trashed.
+- Windows (VM, `run --devlogin`, then `--devlogin --unlock`, `VEYQ_LIVE_STORE` tunnelled; `run.py drive`), on a folder
+  "Windows cover": en/light — Set cover, the same picture through the open picker (typed into its name box), zoomed to 2
+  (`Header.CoverSave (picked, crop 0,25,0,25,0,5,0,5)`), read back by `CoverCropLiveTest.aCoverAnAppSet` (`Crop(0.25,
+  0.25, 0.5, 0.5)`, a 2048×1152 JPEG); "Change cover" in the More; the report filled (the whole folder, a breach of the
+  terms), the privacy link opened in Edge (`privacy: opened http://veyq.localhost:8080/privacy#reporter-contact` — a dev
+  origin is the backend, which serves no web page there: Edge showed its 404), sent once (receipt `bf212443`, the receipt's
+  time in the culture's words). de/dark — the stored cover reopened as framed, zoomed to 3 and saved as a re-frame (read
+  back `Crop(⅓, ⅓, ⅓, ⅓)`, the same blob), removed (read back none, "Titelbild festlegen"); the report sheet opened in
+  German (scope "Nur seinen Namen", the CSAM note), cancelled; the folder trashed; ended with Stop trusting (`manage
+  servers: None`).
+- Android and Apple: compile only, and the core's tests (the coordinator drives the simulator; no Android pass was needed
+  for a change that moved no screen, only its state into the core).
+
 ### Phase 6 — The docs
 
 - ADR 0127's Consequences: the screen models moved.
@@ -537,4 +616,39 @@ is copy, since GNOME has no share sheet (D3).
 - **Left in the dev instance by my runs:** `SubtreeRekeyLiveTest`'s "App subtree <n>" folders under Reisen (the test
   keeps them by design; one from a first run that failed on an unreachable store, before Vite was started on 8081).
 - `src/mobile/CLAUDE.md`'s trap about `AppModel.tokenInputFor` names a function gone from Apple now: Phase 6's docs.
+
+### Phase 5 (2026-11-12)
+
+- **A dialog's state that only weak handlers reach is gone at once.** Linux's first cover dialog did nothing on "Choose a
+  picture": every handler upgraded a `Weak` that nothing held. The dialog holds its state until `closed` now, as the share
+  sheet did; a new GTK dialog module does the same.
+- **A dev instance's blobs go through Vite's origin** (`VEYQ_BUNDLED_STORE_PUBLIC_ENDPOINT=http://veyq.localhost:8081`):
+  the container's and the VM's first cover upload failed (`cover_failed`) because only the backend's port was forwarded.
+  `VEYQ_LIVE_STORE` forwards the store's port in both `run.py`s; a desktop pass that writes a blob sets it (Phase 6: the
+  CLAUDE.md lines of both).
+- **A WinUI frame sized from its layout collapsed inside a `ContentDialog`'s scroller** (480×2, nothing drawn): the cover's
+  frame is a fixed 480×270 now. Seen only in the shot, never in the tree's sizes before a picture was held — the trap's
+  "take each form's shot early" again.
+- **The open picker takes a typed name only once it finished loading:** the first `type` into its name box landed
+  nowhere; a second, a few seconds later, did. A pass reads the box's value in the tree before it presses Open.
+- **A dev origin is the backend:** the privacy link the core builds (`<origin>/privacy#reporter-contact`) is right for a
+  deployed instance, where one origin serves the API and the web; on the dev stack the web lives on Vite (8081), so the
+  link opened the backend's 404 on Windows and nothing in the container. The passage was checked on Vite's origin.
+- **Decisions (mine):** the cover's frame is asked of the core per change (`Cover.Pose`, D3's open choice): the in-process
+  call is cheap, and the host keeps only the latest answer (a counter), so neither desktop mirrors `CoverFrame`'s math —
+  the answer carries the drawn size too, so no host computes `baseScale`. The cover's writes live on `NodeHeaderModel`
+  (no `CoverSheet` model of its own): the frame is header state the label needs anyway, and the dialog's busy and problem
+  are what each write returns, as for rename. The stored cover crosses as one `Answer.Bytes` payload, not a reader (D2
+  named a reader for the full picture): a cover is a JPEG of at most 2048 px, a few hundred KB, one payload as a member's
+  picture is. Android and Apple keep their own cover writes through `NodeCover` (D1 moved only the spec and the diff);
+  moving them onto the header model is open. The report sheet's typed reason and contact are not echoed in
+  `ReportShown` (no cursor fights; the host's field holds them, cut to the core's room). `SecretFreeSchemaTest` lists a
+  public page's address apart from the key-bearing link addresses (`publicAddresses`), by name, never as a blanket rule.
+- **Not done:** Windows' `HeaderPlanTest`/`SaidTest` additions and Linux's `report::tests`/`cover::tests` were not bitten
+  (each bite is a VM or container build); the cover's pan on Windows was not driven (the drive has no drag: zoom framed
+  it); the desktops show no cover outside the dialog yet (no hero, no row thumbnail — Android's and Apple's draw both:
+  open for the kinds' CRs, `THUMBNAIL_EDGE` and `NodeCover.changes` are the core's for it).
+- **Left in the dev instance by my runs:** three reports (`195bf339` the bridge's, `e75dd708` Linux's, `bf212443`
+  Windows') for the dev moderators; the reported folders "App report 90445", "Linux cover" and "Windows cover" in the
+  Familie Raddatz space's trash, not purged, as `VEYQ_LIVE_REPORT` leaves its Pot.
 
