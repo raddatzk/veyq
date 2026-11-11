@@ -2,8 +2,9 @@
  * libveyq.so run as a host runs it, from C through bridge.h alone (`run.py bridge`): the core starts, a watch gets the
  * way in's gate, a call is answered, the host's store is asked and answered from the host's own thread, a call that is
  * no call is refused, and the core shuts down. With VEYQ_LIVE it signs in as the seeded principal (VEYQ_EMAIL,
- * VEYQ_PASSWORD, VEYQ_SECRET_KEY of the env file VEYQ_ENV_FILE names) over the library's own HTTP client and waits for the
- * shell's lists. Exit 0 when every step answered as expected; each step prints what came back.
+ * VEYQ_PASSWORD, VEYQ_SECRET_KEY of the env file VEYQ_ENV_FILE names) over the library's own HTTP client, waits for the
+ * shell's lists and stops trusting this device, so no run leaves its password-trust wrap on the dev instance. Exit 0
+ * when every step answered as expected; each step prints what came back.
  */
 #include <pthread.h>
 #include <stdio.h>
@@ -203,7 +204,20 @@ int main(void) {
         call(req);
         expect(wait_for(&last_answer, "{\"type\":\"Done\"}", 120), "Session.SignIn is answered Done");
         expect(wait_for(&last_update, "\"PERSONAL\"", 60), "the shell's lists arrive with the personal space");
+        pthread_mutex_lock(&seen_lock);
+        char *connection = last_update ? field(last_update, "connection") : NULL;
+        pthread_mutex_unlock(&seen_lock);
         veyq_unwatch(shell);
+        /* the sign-in trusted this device with the password: its wrap is the dev instance's until it is forgotten */
+        expect(connection != NULL, "the shell names the connection signed in to");
+        if (connection) {
+            static char forget[1024], c[512];
+            quote(connection, c);
+            snprintf(forget, sizeof forget, "{\"type\":\"Session.ForgetDevice\",\"connection\":\"%s\"}", c);
+            call(forget);
+            expect(wait_for(&last_answer, "{\"type\":\"Done\"}", 60), "Session.ForgetDevice stops trusting this device");
+            free(connection);
+        }
     }
 
     veyq_unwatch(gate);
