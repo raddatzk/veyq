@@ -2048,19 +2048,9 @@ def test_gitops_init(tmp: pathlib.Path) -> None:
     rc, out = run_main(["--source", mirror, "init", "--gitops", top / "apps" / "veyq-sealed", "--name", "sealed",
                         *INIT, "--secrets", "sealed-secrets"], GitOpsHost(top=top, signed=signed, kubeseal=False))
     check("init --secrets sealed-secrets without kubeseal is refused", rc == 1 and "kubeseal" in out, out[-300:])
-
-
-def interrupted(argv: list, host: FakeHost) -> str:
-    """A run whose terminal goes away at the host's `interrupt` point: what it printed until then."""
-    out = io.StringIO()
-    try:
-        with contextlib.redirect_stdout(out):
-            vc.main([str(a) for a in argv], host)
-    except KeyboardInterrupt:
-        return out.getvalue()
-    raise AssertionError("the run was not interrupted")
     d_yn = top / "apps" / "veyq-yn"
-    rc, out = run_main(["--source", mirror, "init", "--gitops", d_yn, "--name", "yes-no", *INIT, "--secrets", "none"],
+    rc, out = run_main(["--source", mirror, "init", "--gitops", d_yn, "--name", "yes-no", *INIT, "--secrets", "none",
+                        "--admin-host-source", "10.42.0.1/32"],
                        GitOpsHost(top=top, signed=signed, answers={"veyq's admin page through an SSH tunnel": "y"}))
     check("a yes/no question answered `y` is taken as yes, and kept as `yes`",
           rc == 0 and (d_yn / "resources/admin-host-access.yaml").is_file() and json.loads(
@@ -2080,6 +2070,18 @@ def interrupted(argv: list, host: FakeHost) -> str:
           and "use the bundled store for photos and files" in host.asked and "storage domain" not in host.asked
           and json.loads((top / vc.SETUP_FILE).read_text())["veyq"]["apps/veyq-own-store"]["bundled_store"] == "no",
           out[-300:] + own[:300])
+
+
+def interrupted(argv: list, host: FakeHost) -> str:
+    """A run whose terminal goes away at the host's `interrupt` point: what it printed until then."""
+    out = io.StringIO()
+    try:
+        with contextlib.redirect_stdout(out):
+            vc.main([str(a) for a in argv], host)
+    except KeyboardInterrupt:
+        return out.getvalue()
+    raise AssertionError("the run was not interrupted")
+
 
 
 def test_init_resumes(tmp: pathlib.Path) -> None:
