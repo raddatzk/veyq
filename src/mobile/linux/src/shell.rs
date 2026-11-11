@@ -185,7 +185,7 @@ impl Shell {
         window.add_action(&download);
 
         // the header's actions, on the node on screen (`header`)
-        for id in ["favorite", "share", "rename", "delete", "move", "copy", "download"] {
+        for id in ["favorite", "share", "rename", "delete", "move", "copy", "download", "report", "cover"] {
             let action = gio::SimpleAction::new(&format!("header-{id}"), None);
             let weak = Rc::downgrade(self);
             action.connect_activate(move |_, _| {
@@ -199,6 +199,8 @@ impl Shell {
                     "move" => h.move_sheet(&s.window, false),
                     "copy" => h.move_sheet(&s.window, true),
                     "download" => h.download(s.window.upcast_ref()),
+                    "report" => h.report(&s.window),
+                    "cover" => h.cover(&s.window),
                     _ => h.delete(&s.window),
                 }
             });

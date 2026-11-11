@@ -7,8 +7,8 @@
 //!
 //! The move and the copy open core's sheet ([crate::move_sheet]); a folder's download goes where GTK's save dialog says
 //! (`Header.Download`, under the core's archive name), a Pot's through its page (`Pot.Download`); the share opens core's
-//! share sheet ([crate::share_sheet]). The report and the cover are the CR's later phases: their ids are not drawn yet
-//! ([DRAWN]), never shown as a control that answers "not yet".
+//! share sheet ([crate::share_sheet]); the report opens core's report sheet ([crate::report]), the cover its dialog
+//! ([crate::cover]), whose words follow the core's state (Set cover, or Change cover where the node has one).
 use std::cell::{Cell, RefCell};
 use std::rc::{Rc, Weak};
 
@@ -22,7 +22,7 @@ use crate::{said, words};
 pub const MAX_BUTTONS: i32 = 2;
 
 /// The header's ids drawn so far; every other id of the plan is left out until its phase.
-pub const DRAWN: &[&str] = &["favorite", "share", "rename", "delete", "download", "move", "copy"];
+pub const DRAWN: &[&str] = &["favorite", "share", "rename", "delete", "download", "move", "copy", "report", "cover"];
 
 /// Whether [id] is drawn for a node of [kind]: a download where it is the node's archive (a file's is its own bytes,
 /// Depot's page).
@@ -152,6 +152,18 @@ impl Header {
     /// The share sheet over [parent] (core's `ShareSheet`, [crate::share_sheet]).
     pub fn share(&self, parent: &impl IsA<gtk::Widget>) {
         crate::share_sheet::open(parent, &self.node);
+    }
+
+    /// The report sheet over [parent] (core's `ReportSheet`, [crate::report]).
+    pub fn report(&self, parent: &impl IsA<gtk::Widget>) {
+        crate::report::open(parent, &self.node);
+    }
+
+    /// The cover dialog over [parent] ([crate::cover]): the stored cover framed as the core holds it, or a picture to pick.
+    pub fn cover(&self, parent: &impl IsA<gtk::Widget>) {
+        let Some(header) = self.inner.id.get() else { return };
+        let stored = self.inner.shown.borrow().as_ref().and_then(|s| s.cover.clone());
+        crate::cover::open(parent, header, &self.node, stored, &self.inner.toasts);
     }
 
     /// Downloads the node as the web's ZIP: GTK's save dialog (the file chooser portal where there is one) suggests the
@@ -345,6 +357,8 @@ pub fn icon_of(id: &str) -> &'static str {
         "copy" => "edit-copy-symbolic",
         "rename" => "document-edit-symbolic",
         "delete" => "user-trash-symbolic",
+        "report" => "dialog-warning-symbolic",
+        "cover" => "image-x-generic-symbolic",
         _ => "view-more-symbolic",
     }
 }
@@ -411,14 +425,14 @@ mod tests {
     use super::*;
 
     #[test]
-    fn the_phases_actions_so_far_are_drawn_and_a_download_where_it_is_the_nodes_archive() {
-        for id in ["favorite", "share", "rename", "delete", "move", "copy", "download"] {
+    fn the_cores_actions_are_drawn_and_a_download_where_it_is_the_nodes_archive() {
+        for id in ["favorite", "share", "rename", "delete", "move", "copy", "download", "report", "cover"] {
             assert!(drawn(id, "FOLDER") && drawn(id, "EXPENSES_POT"), "{id}");
         }
         assert!(!drawn("download", "FILE"), "a file's download is its own bytes");
-        for id in ["report", "cover", "an-applications-own"] {
-            assert!(!drawn(id, "FOLDER") && !drawn(id, "EXPENSES_POT"), "{id} drawn before its phase");
-        }
+        assert!(!drawn("an-applications-own", "FOLDER"), "an application's own action is its page's");
+        assert_eq!(action_of("report", "FOLDER"), "win.header-report");
+        assert_eq!(action_of("cover", "EXPENSES_POT"), "win.header-cover");
         assert_eq!(action_of("download", "EXPENSES_POT"), "win.pot-download");
         assert_eq!(action_of("download", "FOLDER"), "win.header-download");
         assert_eq!(action_of("move", "EXPENSES_POT"), "win.header-move");

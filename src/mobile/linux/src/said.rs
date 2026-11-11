@@ -104,6 +104,17 @@ pub fn instant_day(instant: &str) -> String {
         .unwrap_or_else(|| instant.chars().take(10).collect())
 }
 
+/// A server's instant (ISO 8601) in the local zone, as the locale writes a date and a time (a report's receipt); the
+/// instant itself where it does not read.
+pub fn instant_moment(instant: &str) -> String {
+    glib::DateTime::from_iso8601(instant, None)
+        .and_then(|t| t.to_local())
+        .ok()
+        .and_then(|t| t.format("%x %R").ok())
+        .map(String::from)
+        .unwrap_or_else(|| instant.to_string())
+}
+
 /// A size as GNOME writes one (`g_format_size`).
 pub fn size(bytes: i64) -> String {
     glib::format_size(bytes.max(0) as u64).into()
