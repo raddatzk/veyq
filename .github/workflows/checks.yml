@@ -257,12 +257,13 @@ jobs:
           "${RUNNER_TEMP}/chart-venv/bin/pip" install --quiet pyyaml
           "${RUNNER_TEMP}/chart-venv/bin/python" scripts/chart_meta_check.py
 
-      # What `veyqctl init --gitops` writes (ADR 0126) rendered with this Helm against this tree's chart, for every
-      # TLS choice with and without the bundled store, and its resources/ parsed: veyqctl's self-test drives helm
-      # through a stand-in, so this is where a chart change a written repository no longer satisfies turns red.
+      # What `veyqctl init --gitops` writes (ADR 0126) rendered with this Helm against this tree's chart AND the newest
+      # published release's (`init` installs a published one), for every TLS choice with and without the bundled store,
+      # and its resources/ parsed: veyqctl's self-test drives helm through a stand-in, so this is where values a chart
+      # refuses turn red — 2026-11-11 the ACME e-mail dropped here was still required by release 1.0's chart.
       - name: veyqctl GitOps render check
         run: |
-          "${RUNNER_TEMP}/chart-venv/bin/python" scripts/veyqctl_gitops_render_check.py
+          "${RUNNER_TEMP}/chart-venv/bin/python" scripts/veyqctl_gitops_render_check.py --published
 
       # A `helm upgrade` from the upgrade proof's predecessor's chart to this one, checked on rendered manifests
       # (ADR 0064 § Decision, the chart-upgrade check): immutable fields, claims that would go, values an operator
