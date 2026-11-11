@@ -13,9 +13,9 @@ import platform.posix.fwrite
 
 /**
  * A file on the device written as its bytes are produced (a download, an archive), at the path the platform's save
- * dialog handed over: the dialog and its grant are the platform's, the bytes the core's (the CR's D3). Nothing is held
- * whole. A write that does not finish leaves nothing at [path]: [fill] removes the partial file whenever its producer
- * throws or its answer is not one to keep.
+ * dialog handed over: the dialog and its grant are the platform's, the bytes the core's (ADR 0128 decision 3). Nothing
+ * is held whole. A write that does not finish leaves nothing at [path]: [fill] removes the partial file whenever its
+ * producer throws or its answer is not one to keep.
  */
 class FileSink private constructor(val path: String, private var file: CPointer<FILE>?) {
     /** Appends [bytes]; throws when the device took fewer (a full disk). */

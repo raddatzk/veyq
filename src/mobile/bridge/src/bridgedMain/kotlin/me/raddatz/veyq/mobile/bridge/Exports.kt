@@ -23,9 +23,9 @@ import kotlin.concurrent.atomics.AtomicReference
 import kotlin.concurrent.atomics.ExperimentalAtomicApi
 import kotlin.experimental.ExperimentalNativeApi
 
-// The six C functions of bridge.h (ADR 0123's Consequences, the bridge) — the library's whole surface. Each pointer the host
-// hands in is read before the function returns; each pointer handed to the host is valid only during that call, so the
-// host copies what it keeps. JSON is UTF-8 and NUL-terminated; the byte payload beside it carries the bytes of an
+// The six C functions of bridge.h (ADR 0123's Consequences, the bridge) — the library's whole surface. Each pointer the
+// host hands in is read before the function returns; each pointer handed to the host is valid only during that call, so
+// the host copies what it keeps. JSON is UTF-8 and NUL-terminated; the byte payload beside it carries the bytes of an
 // `Answer.Bytes` (an avatar, a blob's range), which never travel as base64, and is null with length 0 for every other
 // answer, every update and every host request. Inward, no call or reply carries one yet: what veyq_call and veyq_reply
 // are handed beside the JSON is not read.
@@ -41,7 +41,7 @@ internal expect fun platformHttpClient(block: HttpClientConfig<*>.() -> Unit): H
 
 private class Running(val bridge: Bridge<*, *>, val host: Host)
 
-/** The files the host names by path, written by core's [FileSink]: one not finished is removed (the CR's D3). */
+/** The files the host names by path, written by core's [FileSink]: one not finished is removed (ADR 0128). */
 private object Files : DeviceFiles {
     override suspend fun write(path: String, produce: suspend (sink: (ByteArray) -> Unit) -> Boolean): Boolean =
         FileSink.write(path, kept = { it }, produce)

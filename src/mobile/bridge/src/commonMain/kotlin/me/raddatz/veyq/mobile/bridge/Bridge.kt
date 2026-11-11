@@ -52,7 +52,10 @@ internal class Composition<A : Connection, T : Any>(
     val session: SessionModel<A, T>,
     /** What this device hides, which the switcher's tenants leave out ([ShellShown.servers]). */
     val hidden: Hidden,
-    /** The files the host names by their paths (the CR's D3); a test's composition that writes none has [DeviceFiles.None]. */
+    /**
+     * The files the host names by their paths (ADR 0128 decision 3); a test's composition that writes none has
+     * [DeviceFiles.None].
+     */
     val files: DeviceFiles = DeviceFiles.None,
     /** The models over a tenant just opened; null where there are none (a test's tenant that is no `TenantSession`). */
     val tenant: (T) -> Tenant?,
@@ -72,8 +75,8 @@ internal class Tenant(
 )
 
 /**
- * A file on the device the host named by its path, as its save dialog gave it (the CR's D3): the core opens and writes
- * it, and nothing of its content crosses the bridge. Natively core's `FileSink`; a JVM test plays one.
+ * A file on the device the host named by its path, as its save dialog gave it (ADR 0128 decision 3): the core opens and
+ * writes it, and nothing of its content crosses the bridge. Natively core's `FileSink`; a JVM test plays one.
  */
 internal interface DeviceFiles {
     /**
@@ -190,9 +193,9 @@ internal class Bridge<A : Connection, T : Any>(compose: () -> Composition<A, T>)
     }
 
     /**
-     * Holds [reader] for the host until [Call.ReaderClose] or the tenant closes, answered as [Answer.Reader] (the CR's
-     * D1.2): the door of every call that opens a blob for reading in ranges (Depot's file, Memories' medium; their CRs),
-     * and of the test's reader until then. Refused while no tenant is open.
+     * Holds [reader] for the host until [Call.ReaderClose] or the tenant closes, answered as [Answer.Reader] (ADR 0128
+     * decision 2): the door of every call that opens a blob for reading in ranges (Depot's file, Memories' medium;
+     * their CRs), and of the test's reader until then. Refused while no tenant is open.
      */
     internal fun openReader(reader: RangeReader, mediaType: String?): Answer {
         if (tenant.value == null) return noTenant

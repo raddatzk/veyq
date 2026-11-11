@@ -4,11 +4,9 @@ using Veyq.Bridge.Wire;
 
 namespace Veyq.Bridge.Tests;
 
-/// <summary>
-/// D7 of the bridge's CR: the payload a callback is handed beside its JSON is read once, in the generated layer
-/// (<c>Native.Payload</c>), and copied before the callback returns — the core's buffer may be gone right after. NULL is no
-/// payload; an empty one is still one (an empty range). Runs on any host: no veyq.dll is loaded.
-/// </summary>
+/// <summary> ADR 0128 decision 1: the payload a callback is handed beside its JSON is read once, in the generated layer
+/// (<c>Native.Payload</c>), and copied before the callback returns — the core's buffer may be gone right after. NULL is
+/// no payload; an empty one is still one (an empty range). Runs on any host: no veyq.dll is loaded. </summary>
 [TestClass]
 public sealed unsafe class PayloadTest
 {

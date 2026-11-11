@@ -13,9 +13,9 @@ import kotlin.test.assertEquals
 import kotlin.test.assertTrue
 
 /**
- * No key, seal, token or secret crosses the bridge (the CR's invariant): no generated type carries a field named like
- * one, and none carries bytes — bytes the UI shows travel beside the JSON, never in it. The check walks what the
- * generator walks ([Schema]), so a type added to the wire is checked without a list of its own.
+ * No key, seal, token or secret crosses the bridge (ADR 0123's Consequences, the bridge): no generated type carries a
+ * field named like one, and none carries bytes — bytes the UI shows travel beside the JSON, never in it. The check
+ * walks what the generator walks ([Schema]), so a type added to the wire is checked without a list of its own.
  *
  * Two kinds of name are let through, each by its owner and field, each with why:
  * - inward, what the person typed on its way to the core — the sign-in's password and Secret Key, which cross once and
@@ -47,7 +47,10 @@ class SecretFreeSchemaTest {
         assertEquals(emptySet(), (typedIn + identifiers).keys - fields)
     }
 
-    /** The check itself, against the state the CR names: a field `sealKey: ByteArray` is red twice — its name and its bytes. */
+    /**
+     * The check itself, against what it must refuse: a field `sealKey: ByteArray` is red twice — its name and its
+     * bytes.
+     */
     @Test
     fun aStateThatCarriesASealKeyIsRefused() {
         assertEquals(
@@ -59,9 +62,9 @@ class SecretFreeSchemaTest {
     }
 
     /**
-     * Bytes the UI shows ride beside the JSON (`Answer.Bytes`), never in it (the CR's D1.1): a byte array is refused
-     * wherever it sits — a field, a list's element, a map's value — and whatever it is named. The members' pictures
-     * as the core holds them (`AvatarsModel.state`, a map of user id to bytes) are the shape this catches.
+     * Bytes the UI shows ride beside the JSON (`Answer.Bytes`), never in it (ADR 0128 decision 1): a byte array is
+     * refused wherever it sits — a field, a list's element, a map's value — and whatever it is named. The members'
+     * pictures as the core holds them (`AvatarsModel.state`, a map of user id to bytes) are the shape this catches.
      */
     @Test
     fun aByteArrayAnywhereOnTheWireIsRefusedHoweverItIsNamed() {

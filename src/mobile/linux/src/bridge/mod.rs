@@ -230,8 +230,8 @@ mod tests {
         eprintln!("{read} samples read back");
     }
 
-    /// D7: the payload beside an answer is copied before the callback returns — the core's buffer may be gone right
-    /// after — and NULL is no payload, while an empty one is still one (an empty range).
+    /// ADR 0128 decision 1: the payload beside an answer is copied before the callback returns — the core's buffer may
+    /// be gone right after — and NULL is no payload, while an empty one is still one (an empty range).
     #[test]
     fn an_answers_payload_is_copied_before_the_callback_returns() {
         fn answer(json: &str, bytes: *const u8, len: usize) -> Answered {

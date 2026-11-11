@@ -1,9 +1,9 @@
 // An open Pot, read only (ADR 0122 decision 4: Expenses' places are the open Pot's Entries, Overview and Settings, as
-// the web's Pot has them). The Pot is a model of its own in the core (Pot.Open), watched while it is on screen and closed
-// when it leaves; what each row says — its line, its badge, a balance's words and tone, who pays whom — is the core's
-// (PotView.Shown). This lays it out and writes money. Linux's pot.rs, in Fluent: a SelectorBar over the places' lists,
-// each person with their picture (Avatars). Its download (Pot.Download) goes where the system's save picker says, under
-// the name the core gives (Pot.ArchiveName); the core writes the file (the bridge CR's D3).
+// the web's Pot has them). The Pot is a model of its own in the core (Pot.Open), watched while it is on screen and
+// closed when it leaves; what each row says — its line, its badge, a balance's words and tone, who pays whom — is the
+// core's (PotView.Shown). This lays it out and writes money. Linux's pot.rs, in Fluent: a SelectorBar over the places'
+// lists, each person with their picture (Avatars). Its download (Pot.Download) goes where the system's save picker
+// says, under the name the core gives (Pot.ArchiveName); the core writes the file (ADR 0128 decision 3).
 using System;
 using System.Collections.Generic;
 using System.IO;

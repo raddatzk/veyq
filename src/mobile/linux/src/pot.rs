@@ -3,7 +3,7 @@
 //! (`Pot.Open`), watched while it is on screen and closed when it leaves; what each row says — its line, its badge, a
 //! balance's words and tone, who pays whom — is the core's (`PotView.Shown`). This lays it out and writes money. Its
 //! download (`Pot.Download`) goes where GTK's save dialog says, under the name the core gives (`Pot.ArchiveName`); the
-//! core writes the file (the CR's D3).
+//! core writes the file (ADR 0128 decision 3).
 use std::cell::{Cell, RefCell};
 use std::rc::{Rc, Weak};
 

@@ -12,10 +12,10 @@ import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 /**
- * Files by path (the CR's D3, D4) on every native target — macOS, Linux and Windows: [FileSink] writes a file of uneven
- * frames, [FileSource] reads it at offsets and whole, through a name with `ü`, `€` and a CJK character, and the directory
- * as the system lists it ([listDir], the platform's own listing, never the calls under test) holds that name exactly. A
- * sink that fails mid-way leaves nothing behind.
+ * Files by path (ADR 0128 decision 3) on every native target — macOS, Linux and Windows: [FileSink] writes a file of
+ * uneven frames, [FileSource] reads it at offsets and whole, through a name with `ü`, `€` and a CJK character, and the
+ * directory as the system lists it ([listDir], the platform's own listing, never the calls under test) holds that name
+ * exactly. A sink that fails mid-way leaves nothing behind.
  *
  * The bites, each measured red: Windows' `openFile` over plain `fopen` (the name listed is another); [FileSink.fill]
  * without its removal (the partial file stays).

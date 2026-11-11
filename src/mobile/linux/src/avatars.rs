@@ -1,6 +1,6 @@
-//! The members' pictures (the CR's D5 and D6): when they are read is the core's (`AvatarsModel`); the shell's state
+//! The members' pictures (ADR 0128 decision 1): when they are read is the core's (`AvatarsModel`); the shell's state
 //! names the user ids whose picture the core holds (`ShellShown.pictures`), and each is asked for once with
-//! `Avatar.Picture`, its bytes beside the answer (D1.1). The host keeps them per tenant open and asks again whenever that
+//! `Avatar.Picture`, its bytes beside the answer. The host keeps them per tenant open and asks again whenever that
 //! set of ids changes, as the bridge's protocol says; the Pot's update carries the same set, so the shell's alone feeds
 //! it. A person is drawn as libadwaita draws one (`AdwAvatar`): their picture where it is held, their initials
 //! otherwise — GTK decodes the picture (`gdk::Texture::from_bytes`).

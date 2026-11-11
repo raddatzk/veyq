@@ -1,6 +1,6 @@
-// The members' pictures (the bridge CR's D5 and D6), as Linux's avatars.rs draws them: the shell's state names the
+// The members' pictures (ADR 0128 decision 1), as Linux's avatars.rs draws them: the shell's state names the
 // user ids whose picture the core holds (ShellShown.pictures), each is asked for once with Avatar.Picture, its bytes
-// beside the answer (D1.1), and held per tenant open (Held, AvatarsHeld.cs). The Pot's update carries the same set, so
+// beside the answer, and held per tenant open (Held, AvatarsHeld.cs). The Pot's update carries the same set, so
 // the shell's alone feeds it. A person is drawn as Fluent draws one, a PersonPicture: their picture where it is held,
 // the initials of their name otherwise. WinUI decodes the picture (BitmapImage over the bytes in memory; the web writes
 // WebP, which Windows decodes through its WebP codec).

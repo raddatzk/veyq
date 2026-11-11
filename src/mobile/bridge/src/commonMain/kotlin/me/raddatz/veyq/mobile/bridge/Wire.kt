@@ -20,10 +20,10 @@ import me.raddatz.veyq.mobile.words.MsgKey
 import me.raddatz.veyq.mobile.words.Piece
 
 /**
- * What crosses the bridge (ADR 0123's Consequences, the bridge), as kotlinx.serialization writes it: UTF-8 JSON, every field
- * present (a default too, a null as `null`), a sealed class tagged by `type` with its serial name. The host's types are
- * generated from these descriptors (`Bindings.kt`), so what is written here is what the host reads — and a call the
- * host sends with a field this side does not know is refused, never half-read.
+ * What crosses the bridge (ADR 0123's Consequences, the bridge), as kotlinx.serialization writes it: UTF-8 JSON, every
+ * field present (a default too, a null as `null`), a sealed class tagged by `type` with its serial name. The host's
+ * types are generated from these descriptors (`Bindings.kt`), so what is written here is what the host reads — and a
+ * call the host sends with a field this side does not know is refused, never half-read.
  */
 internal val wire = Json {
     encodeDefaults = true
@@ -76,9 +76,10 @@ internal sealed class Call {
     @Serializable @SerialName("Pot.Close") data class PotClose(val pot: Long) : Call()
 
     /**
-     * Downloads Pot [pot] as the web's ZIP into the file at [path], which the host's save dialog gave (the CR's D3: the
-     * core opens it and writes it; nothing of the file crosses). [deletedName] is the host's word for an erased person
-     * (`pot_deleted_person`), which the CSV carries. [Answer.Done], or [Answer.Failed] with nothing left at [path].
+     * Downloads Pot [pot] as the web's ZIP into the file at [path], which the host's save dialog gave (ADR 0128
+     * decision 3: the core opens it and writes it; nothing of the file crosses). [deletedName] is the host's word for
+     * an erased person (`pot_deleted_person`), which the CSV carries. [Answer.Done], or [Answer.Failed] with nothing
+     * left at [path].
      */
     @Serializable @SerialName("Pot.Download") data class PotDownload(val pot: Long, val path: String, val deletedName: String) : Call()
 
@@ -107,14 +108,15 @@ internal sealed class Answer {
     @Serializable @SerialName("Name") data class Name(val name: String) : Answer()
 
     /**
-     * Bytes the UI shows, carried beside this JSON as the callback's payload (`bytes`, `len`), never in it (the CR's
-     * D1.1): an answer of this kind always has a payload, an empty one included. [mediaType] is the core's sniffed type
-     * (`Sniff`), null where the core does not know it. (`type` is the wire's tag, so the field is named otherwise.)
+     * Bytes the UI shows, carried beside this JSON as the callback's payload (`bytes`, `len`), never in it (ADR 0128
+     * decision 1): an answer of this kind always has a payload, an empty one included. [mediaType] is the core's
+     * sniffed type (`Sniff`), null where the core does not know it. (`type` is the wire's tag, so the field is named
+     * otherwise.)
      */
     @Serializable @SerialName("Bytes") data class Bytes(val mediaType: String?) : Answer()
 
     /**
-     * A blob opened for reading in ranges (the CR's D1.2): [reader] is its id for [Call.ReaderRead] and
+     * A blob opened for reading in ranges (ADR 0128 decision 2): [reader] is its id for [Call.ReaderRead] and
      * [Call.ReaderClose], [size] its plaintext's length. Every reader of a tenant closes when the tenant does.
      */
     @Serializable @SerialName("Reader") data class Reader(val reader: Long, val size: Long, val mediaType: String?) : Answer()
@@ -183,8 +185,8 @@ internal class ShellShown(
     /** The signed-in member's user id, whose picture the switcher shows when [pictures] holds it. */
     val me: String?,
     /**
-     * The user ids whose picture the core holds (`AvatarsModel`), each asked for with [Call.AvatarPicture]: the letter for
-     * everyone else. A change of the set is a new update; the bytes never ride one (the CR's D1.1).
+     * The user ids whose picture the core holds (`AvatarsModel`), each asked for with [Call.AvatarPicture]: the letter
+     * for everyone else. A change of the set is a new update; the bytes never ride one (ADR 0128 decision 1).
      */
     val pictures: List<String>,
 ) {
