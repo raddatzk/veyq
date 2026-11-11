@@ -283,8 +283,8 @@ internal sealed class Answer {
     @Serializable @SerialName("MoveSent") data class MoveSent(val done: Notice?, val undoable: Boolean, val confirming: Boolean, val problem: Notice?) : Answer()
     @Serializable @SerialName("MoveOpened") data class MoveOpened(val move: Long) : Answer()
 
-    /** A download: what it says (done or failed) and what it left out, or null. */
-    @Serializable @SerialName("Downloaded") data class Downloaded(val notice: Notice, val leftOut: Notice?) : Answer()
+    /** A download: whether the file was written, what it says (done or failed) and what it left out, or null. */
+    @Serializable @SerialName("Downloaded") data class Downloaded(val written: Boolean, val notice: Notice, val leftOut: Notice?) : Answer()
 
     /** A rename: why it did not land ([problem]: the dialog asks again), or what to say once it did ([notice]). */
     @Serializable @SerialName("Renamed") data class Renamed(val problem: Notice?, val notice: Notice?) : Answer()

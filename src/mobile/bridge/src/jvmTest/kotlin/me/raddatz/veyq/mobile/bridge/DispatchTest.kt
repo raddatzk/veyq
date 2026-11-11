@@ -755,11 +755,13 @@ class DispatchTest {
         val file = java.io.File.createTempFile("veyq-download", ".zip")
         val done = b.ask(Call.HeaderDownload(folder, file.path, "deleted")) as Answer.Downloaded
         assertEquals(me.raddatz.veyq.mobile.words.Notice(Msg.DOWNLOAD_DONE, "Trips"), done.notice)
+        assertTrue(done.written)
         assertEquals(Msg.DOWNLOAD_LEFT_OUT, done.leftOut!!.msg)
         assertEquals("PK-zip", file.readText())
         val broken = (b.ask(Call.HeaderOpen(NodeAt("s", "b", "FOLDER", "Broken"), AppKinds.Facts(), 2)) as Answer.HeaderOpened).header
         val failed = b.ask(Call.HeaderDownload(broken, file.path, "deleted")) as Answer.Downloaded
         assertEquals(me.raddatz.veyq.mobile.words.Notice(Msg.DOWNLOAD_FAILED, "Broken"), failed.notice)
+        assertTrue(!failed.written)
         assertTrue(!file.exists(), "a download that did not finish left its file")
 
         // every sheet closes with its tenant

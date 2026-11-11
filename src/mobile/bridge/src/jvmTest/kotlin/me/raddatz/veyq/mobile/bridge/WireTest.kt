@@ -119,8 +119,8 @@ class WireTest {
             Answer.Renamed(Notice(Msg.NODE_SLUG_TAKEN), null), Answer.Renamed(null, Notice(Msg.SHARE_NAME_RESEAL_FAILED)), Answer.Refused(Answer.Why.NO_SUCH_ROW),
             Answer.MoveOpened(9), Answer.MoveSent(Notice(Msg.MOVE_MOVED, listOf("Trip", Notice(Msg.SPACE_PERSONAL))), undoable = true, confirming = false, problem = null),
             Answer.MoveSent(null, undoable = false, confirming = true, problem = Notice(Msg.MOVE_REFUSED_GONE)),
-            Answer.Downloaded(Notice(Msg.DOWNLOAD_DONE, listOf("Holidays")), Notice(Msg.DOWNLOAD_LEFT_OUT, listOf(Joined(listOf(Notice(Msg.LEFT_OUT_LINE, listOf("x", Notice(Msg.LEFT_OUT_UNSUPPORTED)))), "; ")))),
-            Answer.Downloaded(Notice(Msg.DOWNLOAD_FAILED, listOf("Holidays")), null),
+            Answer.Downloaded(true, Notice(Msg.DOWNLOAD_DONE, listOf("Holidays")), Notice(Msg.DOWNLOAD_LEFT_OUT, listOf(Joined(listOf(Notice(Msg.LEFT_OUT_LINE, listOf("x", Notice(Msg.LEFT_OUT_UNSUPPORTED)))), "; ")))),
+            Answer.Downloaded(false, Notice(Msg.DOWNLOAD_FAILED, listOf("Holidays")), null),
         ),
         Update.serializer() to listOf(
             Update.Session(Gate.Starting), Update.Session(Gate.NeedsApp), Update.Session(Gate.SignIn(error = Msg.SIGNIN_ERROR_CREDENTIALS, server = "veyq.localhost:8080")),

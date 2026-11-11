@@ -529,6 +529,7 @@ class LiveBridgeTest {
             val zip = File(dir, shown.archiveName)
             val downloaded = b.ask(Call.HeaderDownload(header, zip.path, "deleted person"), timeout = 3.minutes) as Answer.Downloaded
             assertEquals(me.raddatz.veyq.mobile.words.Msg.DOWNLOAD_DONE, downloaded.notice.msg)
+            assertTrue(downloaded.written)
             val payloads = readBackFolder(zip, amsterdam.kind)
             println("$name downloaded: ${zip.length()} bytes of ZIP, $payloads payloads to their SHA-256, left out: ${downloaded.leftOut}")
             // a path that does not open: failed, nothing written

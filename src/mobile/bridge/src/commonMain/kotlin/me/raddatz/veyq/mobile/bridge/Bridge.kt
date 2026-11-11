@@ -291,7 +291,7 @@ internal class Bridge<A : Connection, T : Any>(compose: () -> Composition<A, T>)
                 val download = tenant.value?.models?.download ?: return noTenant
                 var leftOut: List<NodeExport.Skipped>? = null
                 runCatching { parts.files.write(call.path) { sink -> download(h.model.node, call.deletedName, sink).also { leftOut = it } != null } }
-                Answer.Downloaded(Notices.downloaded(h.model.node.name, leftOut), Notices.downloadLeftOut(leftOut))
+                Answer.Downloaded(leftOut != null, Notices.downloaded(h.model.node.name, leftOut), Notices.downloadLeftOut(leftOut))
             } ?: noHeader
             is Call.MoveOpen -> tenant.value?.models?.move?.let { make ->
                 val id = ids.incrementAndFetch()
