@@ -414,6 +414,212 @@ class LiveBridgeTest {
         b.shutdown()
     }
 
+    /**
+     * The move and copy sheet and a folder's download through calls (the header CR's Phase 3), over the real core: a folder
+     * "App move <n>" made beside the seeded Pot Amsterdam; Amsterdam copied beside itself (its open Pot model's copy), the
+     * copy moved into the folder and undone, read back where it was, then moved in again with its undo left to the core's
+     * window; the folder copied (with the Pot in it) and downloaded into a file the host named, read back as
+     * `VEYQ_LIVE_FOLDER` reads an archive. Everything made is trashed and purged at the end.
+     */
+    @Test
+    fun aPotIsCopiedMovedAndUndoneAFolderCopiedAndDownloadedThroughCalls() = runBlocking {
+        val origin = System.getenv("VEYQ_LIVE") ?: return@runBlocking
+        val envFile = System.getenv("VEYQ_ENV_FILE")?.let(::File) ?: File(System.getProperty("veyq.repoRoot"), ".run/.env")
+        val env = envFile.readLines()
+            .mapNotNull { l -> l.substringBefore('=', "").takeIf { it.isNotBlank() }?.let { it.trim() to l.substringAfter('=').trim().trim('"', '\'') } }
+            .toMap()
+        val b = Bridge.live(BouncyCastlePrimitives, { block -> HttpClient(OkHttp, block) }, Config("bridge move test"), hostStore(ConcurrentHashMap()), { NoDeviceKeys }, JvmFiles)
+        val gate = b.watching(Watched.Session)
+        assertEquals(Answer.Done, b.ask(Call.SessionStart))
+        gate.until { (it as Update.Session).gate as? Gate.SignIn }
+        assertEquals(Answer.Done, b.ask(Call.SessionSignIn(origin, env.getValue("VEYQ_EMAIL"), env.getValue("VEYQ_PASSWORD"), env.getValue("VEYQ_SECRET_KEY")), timeout = 2.minutes))
+        gate.until(2.minutes) { (it as Update.Session).gate as? Gate.Signed }
+        val first = b.watching(Watched.Shell).until(1.minutes) { (it as Update.Shell).takeIf { u -> u.state?.lists?.objects?.any { o -> o.name == "Amsterdam" } == true } }
+        val amsterdam = first.state!!.lists.objects.first { it.name == "Amsterdam" }
+        val scope = amsterdam.scopeId
+        val home = first.state.lists.nodes.first { it.nodeId == amsterdam.nodeId }.parentId
+
+        suspend fun fresh(): Update.Shell {
+            assertEquals(Answer.Done, b.ask(Call.ShellRefresh, timeout = 1.minutes))
+            return b.watching(Watched.Shell).next() as Update.Shell
+        }
+        fun nodes(u: Update.Shell) = u.state!!.lists.nodes.filter { it.scopeId == scope }
+        fun at(n: me.raddatz.veyq.mobile.navigation.NodeRef) = me.raddatz.veyq.mobile.navigation.NodeAt(n.scopeId, n.nodeId, n.kind, n.name)
+
+        /** A sheet opened and read: its id and its first loaded state (a copy's: once its losses are read too). */
+        suspend fun sheet(node: me.raddatz.veyq.mobile.navigation.NodeAt, copy: Boolean): Pair<Long, MoveShown> {
+            val id = (b.ask(Call.MoveOpen(node, copy, "deleted person")) as Answer.MoveOpened).move
+            val shown = b.watching(Watched.Move(id)).until(2.minutes) { u -> (u as Update.Move).shown?.takeIf { it.loaded && (!copy || it.losses.size > 1) } }
+            return id to shown
+        }
+        /** Goes to [place] (null: the root) in sheet [id], read back from its state. */
+        suspend fun go(id: Long, place: String?) {
+            assertEquals(Answer.Done, b.ask(Call.MoveGo(id, place)))
+            b.watching(Watched.Move(id)).until { u -> (u as Update.Move).shown?.takeIf { it.trail.last().nodeId == place } }
+        }
+
+        // a folder beside Amsterdam (Home in its space, its folder)
+        assertEquals(Answer.Done, b.ask(Call.ShellChoose(null)))
+        assertEquals(Answer.Done, b.ask(Call.ShellSwitchSpace(scope)))
+        home?.let { h -> nodes(first).first { it.nodeId == h }.asFolder()?.let { assertEquals(Answer.Done, b.ask(Call.ShellEnter(it))) } }
+        val n = System.currentTimeMillis() % 100_000
+        val name = "App move $n"
+        assertEquals(Answer.Said(null), b.ask(Call.ShellCreateFolder(name), timeout = 1.minutes))
+        val folder = assertNotNull(nodes(fresh()).firstOrNull { it.name == name && it.parentId == home }, "the new folder is not listed")
+        println("made $name")
+        val made = mutableListOf(folder)
+        try {
+            // Amsterdam copied beside itself by its open Pot model: "Amsterdam (2)" (or the next free name)
+            val potId = (b.ask(Call.PotOpen(amsterdam)) as Answer.PotOpened).pot
+            b.watching(Watched.Pot(potId)).untilJson(1.minutes) { u -> (u["state"] as? JsonObject)?.get("view") as? JsonObject }
+            val (copyPot, opened) = sheet(at(nodes(first).first { it.nodeId == amsterdam.nodeId }), copy = true)
+            assertEquals(home, opened.trail.last().nodeId)
+            assertNull(opened.here, "a copy goes beside its original")
+            assertEquals(me.raddatz.veyq.mobile.words.Msg.COPY_LOSS_POT, opened.losses[1].msg)
+            val copied = b.ask(Call.MoveHere(copyPot), timeout = 3.minutes) as Answer.MoveSent
+            assertEquals(me.raddatz.veyq.mobile.words.Msg.COPY_DONE, copied.done?.msg, "${copied.problem}")
+            assertTrue(!copied.undoable)
+            b.ask(Call.MoveClose(copyPot))
+            b.ask(Call.PotClose(potId))
+            val before = first.state.lists.nodes.map { it.nodeId }.toSet()
+            val potCopy = assertNotNull(nodes(fresh()).firstOrNull { it.kind == amsterdam.kind && it.parentId == home && it.nodeId !in before }, "the Pot's copy is not listed")
+            made += potCopy
+            println("copied Amsterdam: ${potCopy.name}")
+
+            // the copy moved into the folder, undone (back beside Amsterdam), moved again with the undo left to its window
+            val (move, browsing) = sheet(at(potCopy), copy = false)
+            assertEquals(me.raddatz.veyq.mobile.words.Msg.MOVE_HERE_CURRENT, browsing.here)
+            go(move, folder.nodeId)
+            val sent = b.ask(Call.MoveHere(move), timeout = 1.minutes) as Answer.MoveSent
+            assertEquals(me.raddatz.veyq.mobile.words.Msg.MOVE_MOVED, sent.done?.msg, "${sent.problem}")
+            assertTrue(sent.undoable)
+            assertEquals(folder.nodeId, nodes(fresh()).first { it.nodeId == potCopy.nodeId }.parentId, "the move did not land")
+            assertEquals(Answer.Said(null), b.ask(Call.MoveUndo(move), timeout = 1.minutes))
+            assertEquals(home, nodes(fresh()).first { it.nodeId == potCopy.nodeId }.parentId, "the undo did not move it back")
+            b.ask(Call.MoveClose(move))
+            println("moved into $name and undone")
+            val (again, _) = sheet(at(potCopy), copy = false)
+            go(again, folder.nodeId)
+            assertTrue((b.ask(Call.MoveHere(again), timeout = 1.minutes) as Answer.MoveSent).undoable)
+            val offeredAt = System.currentTimeMillis()
+            b.watching(Watched.Move(again)).until(30.seconds) { u -> (u as Update.Move).shown?.takeIf { it.undo == null } }
+            val held = System.currentTimeMillis() - offeredAt
+            println("the move's undo was offered for $held ms")
+            assertTrue(held >= me.raddatz.veyq.mobile.navigation.ShellModel.TRASH_UNDO_MS - 500, "the undo ended early")
+            assertEquals(folder.nodeId, nodes(fresh()).first { it.nodeId == potCopy.nodeId }.parentId)
+            b.ask(Call.MoveClose(again))
+
+            // the folder copied beside itself, the Pot in it with it
+            val (copyFolder, folderSheet) = sheet(at(folder), copy = true)
+            assertEquals(listOf(me.raddatz.veyq.mobile.words.Msg.COPY_LOSS_ALWAYS), folderSheet.losses.take(1).map { it.msg })
+            val folderCopied = b.ask(Call.MoveHere(copyFolder), timeout = 5.minutes) as Answer.MoveSent
+            assertEquals(me.raddatz.veyq.mobile.words.Msg.COPY_DONE, folderCopied.done?.msg, "${folderCopied.problem}")
+            b.ask(Call.MoveClose(copyFolder))
+            val after = nodes(fresh())
+            val folderCopy = assertNotNull(after.firstOrNull { it.kind == "FOLDER" && it.parentId == home && it.name.startsWith("$name (") }, "the folder's copy is not listed")
+            made += folderCopy
+            assertTrue(after.any { it.parentId == folderCopy.nodeId && it.kind == amsterdam.kind }, "the folder's copy holds no Pot")
+            println("copied $name: ${folderCopy.name}")
+
+            // the folder downloaded into a file the host named, read back
+            val header = (b.ask(Call.HeaderOpen(at(folder), me.raddatz.veyq.mobile.AppKinds.Facts(), 2)) as Answer.HeaderOpened).header
+            val shown = (b.watching(Watched.Header(header)).until { u -> (u as Update.Header).shown?.takeIf { it.plan != null } })
+            assertTrue(shown.plan!!.menu.any { it.id == "download" } || shown.plan.buttons.any { it.id == "download" }, "a folder offers no download")
+            val dir = kotlin.io.path.createTempDirectory("veyq-bridge").toFile()
+            val zip = File(dir, shown.archiveName)
+            val downloaded = b.ask(Call.HeaderDownload(header, zip.path, "deleted person"), timeout = 3.minutes) as Answer.Downloaded
+            assertEquals(me.raddatz.veyq.mobile.words.Msg.DOWNLOAD_DONE, downloaded.notice.msg)
+            val payloads = readBackFolder(zip, amsterdam.kind)
+            println("$name downloaded: ${zip.length()} bytes of ZIP, $payloads payloads to their SHA-256, left out: ${downloaded.leftOut}")
+            // a path that does not open: failed, nothing written
+            val nowhere = File(dir, "missing/${shown.archiveName}")
+            assertEquals(me.raddatz.veyq.mobile.words.Msg.DOWNLOAD_FAILED, (b.ask(Call.HeaderDownload(header, nowhere.path, "deleted person"), timeout = 3.minutes) as Answer.Downloaded).notice.msg)
+            assertTrue(!nowhere.exists())
+            dir.deleteRecursively()
+            b.ask(Call.HeaderClose(header))
+        } finally {
+            // everything made goes to the trash and is purged (what lies in a folder made goes with it), and any "App move"
+            // row a run stopped by force left in the space's trash is purged too
+            val listed = nodes(fresh())
+            val ids = made.map { it.nodeId }.toSet()
+            val roots = listed.filter { it.nodeId in ids && it.parentId !in ids }
+            for (m in roots) {
+                val h = (b.ask(Call.HeaderOpen(at(m), me.raddatz.veyq.mobile.AppKinds.Facts(), 2)) as Answer.HeaderOpened).header
+                println("trash ${m.name}: ${(b.ask(Call.HeaderTrash(h), timeout = 1.minutes) as? Answer.Trashed)?.notice?.msg}")
+                b.ask(Call.HeaderClose(h))
+            }
+            val t = (b.ask(Call.TrashOpen(scope)) as Answer.TrashOpened).trash
+            val tw = b.watching(Watched.Trash(t))
+            val rows = tw.until(1.minutes) { u -> (u as Update.Trash).shown?.rows }
+            for (row in rows.filter { r -> r.id in ids || (r.kind == "FOLDER" && Regex("App move \\d+( \\(\\d+\\))?").matches(r.name)) }) {
+                val purged = b.ask(Call.TrashPurge(t, row.id), timeout = 1.minutes)
+                println("purge ${row.name}: $purged")
+                if (purged == Answer.Done) tw.until(1.minutes) { u -> (u as Update.Trash).shown?.takeIf { s -> s.busy == null && s.rows?.none { it.id == row.id } == true } }
+            }
+            b.ask(Call.TrashClose(t))
+            assertTrue(nodes(fresh()).none { it.nodeId in ids }, "something made was left")
+            println("trashed and purged: nothing left")
+        }
+        b.shutdown()
+    }
+
+    /**
+     * A copy the tenant has no room for, through calls: run with `VEYQ_LIVE_NO_ROOM=1` while the core's
+     * `DepotLiveTest.aCopyOrAFolder*` holds the tenant's quota at one byte (`VEYQ_LIVE_STORAGE_FIT`,
+     * `VEYQ_LIVE_STORAGE_FIT_HOLD_S`; it puts the quota back however it ends). Amsterdam's copy sheet says so with the
+     * copy's size, "Copy here" cannot be chosen, and a call to it sends nothing.
+     */
+    @Test
+    fun aCopyWithoutRoomIsSaidFirstAndNothingIsSent() = runBlocking {
+        val origin = System.getenv("VEYQ_LIVE") ?: return@runBlocking
+        System.getenv("VEYQ_LIVE_NO_ROOM") ?: return@runBlocking
+        val envFile = System.getenv("VEYQ_ENV_FILE")?.let(::File) ?: File(System.getProperty("veyq.repoRoot"), ".run/.env")
+        val env = envFile.readLines()
+            .mapNotNull { l -> l.substringBefore('=', "").takeIf { it.isNotBlank() }?.let { it.trim() to l.substringAfter('=').trim().trim('"', '\'') } }
+            .toMap()
+        val b = Bridge.live(BouncyCastlePrimitives, { block -> HttpClient(OkHttp, block) }, Config("bridge no-room test"), hostStore(ConcurrentHashMap()), { NoDeviceKeys }, JvmFiles)
+        val gate = b.watching(Watched.Session)
+        assertEquals(Answer.Done, b.ask(Call.SessionStart))
+        gate.until { (it as Update.Session).gate as? Gate.SignIn }
+        assertEquals(Answer.Done, b.ask(Call.SessionSignIn(origin, env.getValue("VEYQ_EMAIL"), env.getValue("VEYQ_PASSWORD"), env.getValue("VEYQ_SECRET_KEY")), timeout = 2.minutes))
+        gate.until(2.minutes) { (it as Update.Session).gate as? Gate.Signed }
+        val first = b.watching(Watched.Shell).until(1.minutes) { (it as Update.Shell).takeIf { u -> u.state?.lists?.objects?.any { o -> o.name == "Amsterdam" } == true } }
+        val amsterdam = first.state!!.lists.objects.first { it.name == "Amsterdam" }
+        val potId = (b.ask(Call.PotOpen(amsterdam)) as Answer.PotOpened).pot
+        b.watching(Watched.Pot(potId)).untilJson(1.minutes) { u -> (u["state"] as? JsonObject)?.get("view") as? JsonObject }
+        val node = me.raddatz.veyq.mobile.navigation.NodeAt(amsterdam.scopeId, amsterdam.nodeId, amsterdam.kind, amsterdam.name)
+        val id = (b.ask(Call.MoveOpen(node, true, "deleted person")) as Answer.MoveOpened).move
+        val full = b.watching(Watched.Move(id)).until(2.minutes) { u -> (u as Update.Move).shown?.takeIf { it.loaded && it.noRoom != null } }
+        assertEquals(me.raddatz.veyq.mobile.words.Msg.COPY_NO_ROOM, full.noRoom!!.msg)
+        assertTrue(!full.canChoose)
+        val sent = b.ask(Call.MoveHere(id)) as Answer.MoveSent
+        assertNull(sent.done)
+        assertEquals(Answer.Done, b.ask(Call.ShellRefresh, timeout = 1.minutes))
+        val after = (b.watching(Watched.Shell).next() as Update.Shell).state!!.lists.nodes
+        assertEquals(first.state.lists.nodes.map { it.nodeId }.toSet(), after.map { it.nodeId }.toSet(), "something was written without room")
+        println("Amsterdam's copy is said not to fit: ${full.noRoom}; nothing sent")
+        b.ask(Call.MoveClose(id))
+        b.ask(Call.PotClose(potId))
+        b.shutdown()
+    }
+
+    /** A folder's download read back as `VEYQ_LIVE_FOLDER` reads it: a folder without content, the Pot in it, every payload. */
+    private fun readBackFolder(file: File, potKind: String): Int = java.util.zip.ZipFile(file).use { zip ->
+        val manifest = Json.parseToJsonElement(zip.getInputStream(zip.getEntry(".veyq/manifest.json")).readBytes().decodeToString()).jsonObject
+        assertEquals(2, manifest.getValue("version").jsonPrimitive.int)
+        val root = manifest.getValue("root").jsonObject
+        assertEquals("FOLDER", root.getValue("kind").jsonPrimitive.content)
+        assertTrue("content" !in root)
+        assertTrue(root["children"]?.jsonArray.orEmpty().any { it.jsonObject.getValue("kind").jsonPrimitive.content == potKind }, "the Pot is missing from the archive")
+        val refs = Regex("\"path\":\\s*\"([^\"]+)\",\\s*\"size\"[^}]*\"sha256\":\\s*\"([0-9a-f]{64})\"").findAll(manifest.toString()).toList()
+        assertTrue(refs.isNotEmpty(), "the archive names no payload")
+        for (r in refs) {
+            val bytes = zip.getInputStream(zip.getEntry(r.groupValues[1])).readBytes()
+            assertEquals(r.groupValues[2], sha256(bytes), "${r.groupValues[1]} is not what the manifest names")
+        }
+        refs.size
+    }
+
     /** A device store the test's host keeps in [kept], answering from its own thread as a UI loop does. */
     private fun hostStore(kept: ConcurrentHashMap<String, String>): HostStore {
         lateinit var host: Host
