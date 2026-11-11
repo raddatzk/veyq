@@ -120,4 +120,25 @@ class ShellModelTest {
         val open = home.openAtTop(pot)
         assertSame(open, ShellModel.afterTrash(open, "other"))
     }
+
+    @Test
+    fun an_object_renamed_shows_its_new_name_where_it_was_and_one_chosen_at_the_top_stays_at_the_top() {
+        val home = Shell(application = null, space = "s").enter(FolderRef("f", "Trips"))
+        val pot = ObjectRef("t", "pot", "EXPENSES_POT", ApplicationId.EXPENSES, "Paris")
+        val renamed = ObjectRef("t", "pot", "EXPENSES_POT", ApplicationId.EXPENSES, "Paris 2026")
+        // chosen from the sidebar: still at the top, no back, its place kept
+        val top = home.openAtTop(pot).let { it.select(it.barTabs.last()) }
+        val after = ShellModel.afterRename(top, renamed)
+        assertEquals(renamed, after.openObject)
+        kotlin.test.assertTrue(after.top)
+        kotlin.test.assertFalse(after.canGoBack)
+        assertEquals(top.selectedTab, after.selectedTab)
+        // opened from Home: back still leads to Home's folder
+        val opened = ShellModel.afterRename(home.open(pot), renamed)
+        assertEquals(renamed, opened.openObject)
+        assertSame(home, opened.goBack())
+        // another object renamed: the open one stays as it is
+        val open = home.openAtTop(pot)
+        assertSame(open, ShellModel.afterRename(open, ObjectRef("t", "other", "EXPENSES_POT", ApplicationId.EXPENSES, "Rome")))
+    }
 }

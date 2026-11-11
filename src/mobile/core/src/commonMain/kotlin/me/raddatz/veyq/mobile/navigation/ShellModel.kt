@@ -300,7 +300,7 @@ class ShellModel(
         if (r.outcome == NodeRename.Outcome.RENAMED) {
             refresh()
             val renamed = _state.value?.lists?.objects?.firstOrNull { it.scopeId == ref.scopeId && it.nodeId == ref.nodeId }
-            if (renamed != null && shell?.openObject?.nodeId == ref.nodeId) update { it.goBack().open(renamed) }
+            if (renamed != null) update { afterRename(it, renamed) }
             relocate(ref)
         }
         return Renamed(r, Notices.renameRefused(r))
@@ -416,6 +416,13 @@ class ShellModel(
          * top for its application's list, since back does not leave it (its undo brings it back to that list, not open).
          */
         fun afterTrash(shell: Shell, nodeId: String): Shell = if (shell.openObject?.nodeId == nodeId) shell.leave() else shell
+
+        /**
+         * The shell once object [renamed] has its new name: an open page of it shows it under that name, where it was —
+         * its back and its place among the top-level destinations ([Shell.top]) kept.
+         */
+        fun afterRename(shell: Shell, renamed: ObjectRef): Shell =
+            if (shell.openObject?.let { it.nodeId == renamed.nodeId && it.scopeId == renamed.scopeId } == true) shell.copy(openObject = renamed) else shell
 
         /** How long a trash's undo is offered (the web's `TRASH_UNDO_MS`). */
         const val TRASH_UNDO_MS = 6_000L
