@@ -11,9 +11,10 @@ import me.raddatz.veyq.mobile.crypto.V1
  * frames at once (a player reads on); at most [KEEP] frames stay held, the least recently read dropped first.
  * One read at a time: a player's threads queue on it.
  *
- * [frames] hands frames `first until until` to its sink in order (core's `ApplicationBlobs.FrameSource`).
+ * [frames] hands frames `first until until` to its sink in order (core's `ApplicationBlobs.FrameSource`); the constructor
+ * is public for a source of frames outside the core too (the bridge's test door).
  */
-class RangeReader internal constructor(
+class RangeReader(
     /** The plaintext's size. */
     val size: Long,
     private val chunkCount: Int,

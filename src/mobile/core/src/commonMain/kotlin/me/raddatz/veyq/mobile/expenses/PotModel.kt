@@ -138,6 +138,17 @@ class PotModel(private val tenant: TenantSession, private val now: () -> Long) {
     /** A receipt of the open Pot opened to its bytes, or null (blocked, or it did not read). */
     suspend fun openReceipt(receiptId: String): ByteArray? = session?.let { runCatching { it.openReceipt(receiptId) }.getOrNull() }
 
+    /**
+     * The open Pot downloaded as the web's ZIP into [sink] (`PotExport.download`), or null when nothing is open or it has
+     * no settings to export in. [deletedName] is the platform's word for an erased person, which the CSV carries.
+     */
+    @Throws(Exception::class)
+    suspend fun download(deletedName: String, sink: (ByteArray) -> Unit): me.raddatz.veyq.mobile.export.NodeExport.Written? =
+        session?.let { PotExport.download(it, deletedName, now(), sink) }
+
+    /** The file the open Pot's download is saved as (`NodeExport.fileName`: the web's archive name), or null: none open. */
+    fun archiveName(): String? = session?.let { me.raddatz.veyq.mobile.export.NodeExport.fileName(it.name) }
+
     /** The receipts the last save left out for want of room (the entry was saved). */
     val skippedReceipts: List<String> get() = session?.skippedReceipts.orEmpty()
 
