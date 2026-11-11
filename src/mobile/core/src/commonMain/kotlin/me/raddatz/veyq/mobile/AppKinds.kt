@@ -210,6 +210,13 @@ object AppKinds {
         }
     }.distinct()
 
+    /**
+     * Whether a node of [kind] copies by its open model rather than with everything under it (`SubtreeCopy`): a Pot by the
+     * Pot open on its page (`PotModel.duplicate`: its session read, its write right known — the web's `canCopy`); every
+     * other kind (a folder, a drop box, a file) through `SubtreeCopy`.
+     */
+    fun copiesByOpenModel(kind: String): Boolean = kind == PotSession.KIND
+
     /** Whether an object of [kind] can be chosen as the place for files shared to veyq (ADR 0129 decision 1): a Pot. */
     fun takesShared(kind: String): Boolean = kind == PotSession.KIND
 

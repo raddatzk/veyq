@@ -329,6 +329,14 @@ object Notices {
         ),
     )
 
+    /** What a download of [name] says once it ended: downloaded, or (null [leftOut]: it did not finish) failed. */
+    fun downloaded(name: String, leftOut: List<me.raddatz.veyq.mobile.export.NodeExport.Skipped>?): Notice =
+        Notice(if (leftOut == null) Msg.DOWNLOAD_FAILED else Msg.DOWNLOAD_DONE, name)
+
+    /** What a download left out, one line ([leftOut] each, joined); null where it left out nothing. */
+    fun downloadLeftOut(leftOut: List<me.raddatz.veyq.mobile.export.NodeExport.Skipped>?): Notice? =
+        leftOut?.takeIf { it.isNotEmpty() }?.let { Notice(Msg.DOWNLOAD_LEFT_OUT, Joined(it.map(::leftOut), "; ")) }
+
     /** What switching a link off says: nothing once closed, that its re-key is still due, or that it failed. */
     fun linkClosed(closed: ShareLinks.Closed): Notice? = when (closed) {
         ShareLinks.Closed.CLOSED -> null

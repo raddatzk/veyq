@@ -11,6 +11,7 @@ import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.serialization.Serializable
 import me.raddatz.veyq.mobile.AppKinds
+import me.raddatz.veyq.mobile.export.NodeExport
 import me.raddatz.veyq.mobile.export.SubtreeCopy
 import me.raddatz.veyq.mobile.session.FolderCreate
 import me.raddatz.veyq.mobile.session.NodeCreate
@@ -19,6 +20,8 @@ import me.raddatz.veyq.mobile.session.NodeRename
 import me.raddatz.veyq.mobile.session.NodeReport
 import me.raddatz.veyq.mobile.session.NodeTrash
 import me.raddatz.veyq.mobile.session.OpenNode
+import me.raddatz.veyq.mobile.session.StorageFit
+import me.raddatz.veyq.mobile.session.VeyqAccount
 import me.raddatz.veyq.mobile.session.TenantSession
 import me.raddatz.veyq.mobile.words.Msg
 import me.raddatz.veyq.mobile.words.Notice
@@ -347,6 +350,40 @@ class ShellModel(
         val r = runCatching { SubtreeCopy.duplicate(tenant, ref.scopeId, ref.nodeId, to, AppKinds.copies(deletedName, uuid)) }.getOrNull()
         refresh()
         return Notices.subtreeCopyRefused(r?.outcome)
+    }
+
+    /**
+     * The move or copy sheet of [node] over this shell ([MoveSheet]): its copy by the kind's way — an open Pot by [pot] (the
+     * Pot model its page holds; none: the copy fails), everything else with what is under it —, [deletedName] how a copied
+     * Pot names an erased person (each new id a UUID from the suite's randomness); [changed] after each write.
+     */
+    fun moveSheet(
+        node: NodeAt, copying: Boolean, pot: me.raddatz.veyq.mobile.expenses.PotModel?, deletedName: String, changed: () -> Unit,
+    ): MoveSheet = MoveSheet(node, copying, object : MoveSheet.Door {
+        val uuid = { NodeCreate.uuid(tenant.account) }
+        override suspend fun tree(scopeId: String) = scopeNodes(scopeId)
+        override val placement get() = AppKinds.placement
+        override fun rootName(scopeId: String) = ShellWords.space(current?.lists?.spaces?.firstOrNull { it.scopeId == scopeId })
+        override suspend fun move(ref: NodeAt, to: String?) = this@ShellModel.move(ref, to).result.outcome
+        override suspend fun duplicateOpen(ref: NodeAt, to: String?): Notice? {
+            val open = pot?.current?.ref?.takeIf { it.nodeId == ref.nodeId } ?: return Notice(Msg.COPY_FAILED)
+            return Notices.potCopyRefused(pot.duplicate(this@ShellModel, open, to, deletedName, uuid).outcome)
+        }
+        override suspend fun duplicateSubtree(ref: NodeAt, to: String?) = duplicate(ref, to, deletedName, uuid)
+        override suspend fun preview(ref: NodeAt) = SubtreeCopy.preview(tenant, ref.scopeId, ref.nodeId, AppKinds.copies(deletedName, uuid))
+        override suspend fun noRoom(ref: NodeAt) = StorageFit.noRoomForCopy(tenant, ref.scopeId, ref.nodeId, AppKinds.exports(deletedName))
+        override fun changed() = changed()
+    })
+
+    /**
+     * Node [ref] with everything under it as the web's ZIP into [sink] (`NodeExport.walk`, `write`; the kinds the build
+     * exports, a copied Pot's erased people named [deletedName]): what it left out, or null when there is nothing to export.
+     * Natively the sink is a file by its path (`FileSink`, which removes a download that did not finish).
+     */
+    suspend fun download(ref: NodeAt, deletedName: String, nowMs: Long, sink: (ByteArray) -> Unit): List<NodeExport.Skipped>? {
+        val walked = NodeExport.walk(tenant, ref.scopeId, ref.nodeId, AppKinds.exports(deletedName)) ?: return null
+        NodeExport.write(walked.root, VeyqAccount.MAJOR.toString(), nowMs, sink)
+        return walked.skipped
     }
 
     companion object {
