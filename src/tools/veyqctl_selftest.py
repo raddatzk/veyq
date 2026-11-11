@@ -2578,6 +2578,8 @@ def test_server_path(tmp: pathlib.Path, home: pathlib.Path) -> pathlib.Path:
           and "LocalForward 18443 server.example.org:30443" in config and "name: server-run" in kube
           and "https://127.0.0.1:16443" in kube and host.tunnels == ["closed"]
           and HOST_KEY in (home / ".ssh" / "known_hosts").read_text() and "Synced and Healthy" in out, out[-900:])
+    check("server path: on staging the closing lines say the store check fails until `veyqctl tls production`",
+          "store check fails" in out and "veyqctl tls production" in out[out.index("Synced and Healthy"):], out[-700:])
 
     host, rc, out = run(top)
     check("server path: init again on a set-up server — nothing rendered, nothing committed, no bootstrap (the "

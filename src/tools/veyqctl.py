@@ -3301,6 +3301,7 @@ def server_finish(run: InitRun, g: GitOps, repo_url: str) -> None:
             answers["make_current"] == "yes")
     await_synced(host, name, run.args.application_name, run.args.sync_timeout)
     host.section(Step.DONE)
+    staging = (run.acme_directory or run.progress.answers.get("acme_directory")) == "staging"
     lines = [f"Open the tunnel: ssh -N {name}",
              "Argo CD: " + (f"https://localhost:{CONNECT_PORTS['argocd']}" if answers["host_access"] == "yes"
                             else f"kubectl --context {name} -n argocd port-forward svc/argocd-server 8080:443")
@@ -3309,6 +3310,10 @@ def server_finish(run: InitRun, g: GitOps, repo_url: str) -> None:
              "Secret."]
     if admin:
         lines.append(f"veyq's admin page: http://localhost:{CONNECT_PORTS['admin']} — create the Server Owner there.")
+    if staging:  # raddatz.me, 2026-11-11: the store check failed on the test certificates, which nothing said
+        lines.append("TLS runs on Let's Encrypt's test certificates: browsers warn, and the admin console's store check "
+                     "fails (veyq's server trusts them no more than a browser does). Switch: veyqctl tls production — "
+                     "then check the store again.")
     lines.append(f"Your sudo password: sops decrypt --extract '[\"admin_password\"]' {top / SERVER_SECRETS}")
     lines.append(f"Keep the age key ({run.age_env().get('SOPS_AGE_KEY_FILE', 'its file')}) in your password manager. "
                  f"With it and this repository, `veyqctl init` sets the server up again.")
@@ -3574,7 +3579,8 @@ class Q:
                    "cert-manager). shared: one certificate of yours. none: TLS ends in front of the cluster.",
                    ("acme", "shared", "none"))
     ACME_DIRECTORY = Question("acme_directory", "Let's Encrypt: staging or production", "Start with staging: test "
-                              "certificates, without production's limits. Switch later with `veyqctl tls production`.",
+                              "certificates, without production's limits. Nothing trusts them — browsers warn, and "
+                              "the admin console's store check fails — until `veyqctl tls production` switches.",
                               tuple(ACME_DIRECTORIES))
     TLS_SECRET = Question("tls_secret", "name of your TLS Secret")
     ADMIN_HOST_ACCESS = Question("admin_host_access", "open veyq's admin page directly while connected to the server",

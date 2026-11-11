@@ -84,7 +84,9 @@ Every answer is in `veyq-setup.json`, committed with the rest; the age key is th
 hold. **Keep it in your password manager**: with it and the repository, `veyqctl init` sets a lost server up again — on
 a fresh one it pins the new host key on your yes, bootstraps and connects, asking nothing else.
 
-**Once everything runs on staging**, switch to production — its certificates are the browser-trusted ones:
+**Once everything runs on staging**, switch to production — its certificates are the browser-trusted ones. Until
+then the admin console's store check fails too (veyq's server trusts staging certificates no more than a browser does),
+so check the store after the switch:
 
 ```sh
 veyqctl tls production
