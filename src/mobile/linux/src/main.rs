@@ -5,10 +5,11 @@ use std::rc::Rc;
 
 use adw::prelude::*;
 use gtk::glib;
-use veyq::bridge::wire::{Answer, Call, Config, Gate, Update, Watched};
+use veyq::bridge::wire::{Answer, Call, Config, Gate, Method, StaySignedIn, Update, Watched};
 use veyq::bridge::{self, DeviceStore, Start};
 use veyq::shell::Shell;
-use veyq::sign_in::SignIn;
+use veyq::manage::Manage;
+use veyq::sign_in::{SignIn, Unlock};
 use veyq::theme::APP_ID;
 use veyq::{dev_login, words};
 
@@ -21,13 +22,16 @@ fn main() -> glib::ExitCode {
     app.run()
 }
 
-/// The window's three faces: what shows while the core opens or refuses, the sign-in, the shell.
+/// The window's faces: what shows while the core opens or refuses, the sign-in, the unlock, the shell; and "Manage
+/// servers" over the shell.
 struct Screens {
     window: adw::ApplicationWindow,
     status: adw::ToolbarView,
     status_page: adw::StatusPage,
     sign_in: SignIn,
+    unlock: Unlock,
     shell: Rc<Shell>,
+    manage: Rc<Manage>,
 }
 
 impl Screens {
@@ -37,26 +41,40 @@ impl Screens {
         }
     }
 
-    fn gate(&self, gate: &Gate) {
+    fn gate(&self, gate: &Gate, stay: Option<StaySignedIn>) {
+        if !matches!(gate, Gate::Signed { .. }) {
+            self.manage.close();
+        }
         match gate {
             Gate::Starting => self.face(&self.status),
             Gate::SignIn { working, error, .. } => {
+                self.sign_in.show(gate, stay);
+                self.face(&self.sign_in.page);
                 if !working
                     && error.is_none()
-                    && let Some(call) = dev_login::take()
+                    && let Some(dev) = dev_login::take()
                 {
-                    bridge::send(call);
+                    self.sign_in.dev(dev);
                 }
-                self.sign_in.show(gate);
-                self.face(&self.sign_in.page);
+            }
+            Gate::Unlock { record, working, error } => {
+                self.unlock.show(gate);
+                self.face(&self.unlock.page);
+                if record.method == Method::Device
+                    && !working
+                    && error.is_none()
+                    && let Some(password) = dev_login::take_unlock()
+                {
+                    bridge::send(Call::SessionUnlock { password });
+                }
             }
             Gate::Signed { switching, .. } => {
                 self.shell.switching(*switching);
                 self.face(&self.shell.split);
             }
-            // Neither reaches this slice: no share extension (NeedsApp), no trusted device without the Secret Service
-            // (Unlock, the VM slice). Said on stderr, the window stays where it is.
-            other => eprintln!("veyq: the session is at a gate this slice does not draw: {other:?}"),
+            // Only the share extension reaches it (ADR 0129), which this app has none of: said on stderr, the window
+            // stays where it is.
+            Gate::NeedsApp => eprintln!("veyq: the session is at a gate this app does not draw: NeedsApp"),
         }
     }
 }
@@ -77,7 +95,13 @@ fn activate(app: &adw::Application) {
         .content(&status)
         .build();
     let shell = Shell::new(&window);
-    let screens = Rc::new(Screens { window: window.clone(), status, status_page, sign_in: SignIn::new(), shell });
+    let manage = Manage::new(&window);
+    // the switcher's "Manage servers"
+    let open_manage = gtk::gio::SimpleAction::new("manage", None);
+    let m = manage.clone();
+    open_manage.connect_activate(move |_, _| m.open());
+    window.add_action(&open_manage);
+    let screens = Rc::new(Screens { window: window.clone(), status, status_page, sign_in: SignIn::new(), unlock: Unlock::new(), shell, manage });
     window.present();
 
     let store = DeviceStore::open(glib::user_data_dir().join("veyq").join("device-store.json")).unwrap_or_else(|e| {
@@ -98,8 +122,10 @@ fn activate(app: &adw::Application) {
         }
     }
     eprintln!("veyq: the core started");
-    let (Some((session_watch, gates)), Some((shell_watch, shells))) = (bridge::watch(&Watched::Session), bridge::watch(&Watched::Shell)) else {
-        eprintln!("veyq: the core refused to show the session or the shell");
+    let (Some((session_watch, gates)), Some((shell_watch, shells)), Some((manage_watch, managed))) =
+        (bridge::watch(&Watched::Session), bridge::watch(&Watched::Shell), bridge::watch(&Watched::Manage))
+    else {
+        eprintln!("veyq: the core refused to show the session, the shell or Manage servers");
         return;
     };
     glib::spawn_future_local(async move {
@@ -114,12 +140,30 @@ fn activate(app: &adw::Application) {
         let _watch = session_watch;
         while let Ok(update) = gates.recv().await {
             match update {
-                Ok(Update::Session { gate, .. }) => {
-                    eprintln!("veyq: session {}", kind(&gate));
-                    s.gate(&gate);
+                Ok(Update::Session { gate, stay_signed_in }) => {
+                    eprintln!("veyq: session {}{}", kind(&gate), stay_signed_in.map(|s| format!(", stay signed in: {s:?}")).unwrap_or_default());
+                    s.gate(&gate, stay_signed_in);
                 }
                 Ok(_) => {}
                 Err(e) => eprintln!("veyq: a session update did not read: {:?}", e.0),
+            }
+        }
+    });
+    let m = screens.manage.clone();
+    glib::spawn_future_local(async move {
+        let _watch = manage_watch;
+        while let Ok(update) = managed.recv().await {
+            match update {
+                Ok(Update::Manage { servers }) => {
+                    if let Some(servers) = &servers {
+                        // what this device trusts, for the pass's log: each server's method, no name of a person
+                        let methods: Vec<String> = servers.iter().map(|s| format!("{:?}", s.trusted)).collect();
+                        eprintln!("veyq: manage servers: {}", methods.join(", "));
+                    }
+                    m.show(servers);
+                }
+                Ok(_) => {}
+                Err(e) => eprintln!("veyq: a Manage servers update did not read: {:?}", e.0),
             }
         }
     });

@@ -250,6 +250,11 @@
     "apple_en": "Opens with Face ID, Touch ID or the device passcode. Anyone who can unlock this device can open your content. Off, the app asks for your password, never again for the Secret Key.",
     "apple_de": "Öffnet mit Face ID, Touch ID oder dem Gerätecode. Wer dieses Gerät entsperren kann, kann deine Inhalte öffnen. Aus fragt die App nach deinem Passwort, aber nie wieder nach dem Secret Key."
   },
+  "signin_remember_hint_login": {
+    "note": "the sign-in's \"Stay signed in\" where the desktop sign-in is what opens it (Linux's Secret Service, Windows without Hello): no further question is asked",
+    "en": "Opens when you sign in to this computer, without asking again. Anyone who can use your account on this computer can open your content. Off, the app asks for your password, never again for the Secret Key.",
+    "de": "Öffnet, sobald du dich an diesem Computer anmeldest, ohne erneut zu fragen. Wer dein Benutzerkonto auf diesem Computer verwenden kann, kann deine Inhalte öffnen. Aus fragt die App nach deinem Passwort, aber nie wieder nach dem Secret Key."
+  },
   "signin_error_device_not_trusted": {
     "en": "This device is no longer trusted with this account. Sign in with your Secret Key.",
     "de": "Dieses Gerät ist für dieses Konto nicht mehr vertraut. Melde dich mit deinem Secret Key an."

@@ -300,7 +300,7 @@ impl Shell {
             }
             menu.append_section(Some(&server.label), &tenants);
         }
-        // managing servers is not in this slice: shown, as on the other apps, and not offered yet
+        // "Manage servers" (the window's `win.manage`, `manage.rs`)
         let manage = gio::Menu::new();
         manage.append(Some(&words::switcher_manage()), Some("win.manage"));
         menu.append_section(None, &manage);

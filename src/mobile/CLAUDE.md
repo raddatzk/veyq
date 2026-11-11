@@ -39,9 +39,9 @@ A Gradle build of its own, run through its own wrapper.
 - `linux/` — the Linux app (ADR 0127 decision 4): a Cargo package in Rust (gtk4-rs, libadwaita-rs), with `Cargo.lock`
   committed and every cargo run `--locked`. `src/lib.rs` is the library: `bridge` (the safe wrapper over the six
   functions, the host function), `words`, `said` (money, days and sizes the desktop's way), `theme`, `create_action`
-  and one module per screen (`sign_in`, `shell` with Search, `home`, `pot` with its download; `dev_login` in a debug
-  build only), and `avatars` (`Held`, no widget and tested: the open tenant's pictures, asked for again only when the
-  shell's id set changes; drawn as `adw::Avatar`).
+  and one module per screen (`sign_in` with the unlock, `shell` with Search, `home`, `pot` with its download, `manage`
+  for "Manage servers"; `dev_login` in a debug build only), and `avatars` (`Held`, no widget and tested: the open
+  tenant's pictures, asked for again only when the shell's id set changes; drawn as `adw::Avatar`).
   `src/main.rs` is the app. `build.rs` reads the generated bridge, words and theme from `VEYQ_GENERATED` and the
   library from `VEYQ_LIB_DIR`, both set by `run.py`. `Containerfile` (Fedora 44 by digest) is its build and run
   environment. `run.py` is its one entry point (§ Prove your work); `run.py lock` is the one writer of `Cargo.lock`.
@@ -125,8 +125,13 @@ A Gradle build of its own, run through its own wrapper.
   - `bridge` checks `libveyq.so`'s exports and runs the C smoke.
   - `build` generates the bridge's Rust, the words and the theme, then runs `cargo clippy -- -D warnings`,
     `cargo test` and `cargo build` (remembered: about 25 s after a Rust edit alone).
-  - `run [--port N] [--devlogin]` serves the app under `gtk4-broadwayd` at `http://127.0.0.1:8095`, for the browser
-    pane. `LANGUAGE=de VEYQ_LOCALE=de_DE.UTF-8` gives German, and `ADW_DEBUG_COLOR_SCHEME=prefer-dark` gives dark.
+  - `run [--port N] [--devlogin [--fill|--unlock]] [--no-secret-service]` serves the app under `gtk4-broadwayd` at
+    `http://127.0.0.1:8095`, for the browser pane. `LANGUAGE=de VEYQ_LOCALE=de_DE.UTF-8` gives German, and
+    `ADW_DEBUG_COLOR_SCHEME=prefer-dark` gives dark. It runs under a session bus with gnome-keyring-daemon, its home's
+    data (the device store, the keyring and the password it opens with) on the volume `veyq-linux-home`, so a second
+    start resumes what the first trusted; `docker volume rm veyq-linux-home` starts from nothing. `--no-secret-service`
+    runs without both ("Stay signed in" hidden, every start signs in). `--fill` only fills the sign-in, for a pass to
+    turn the switch and press it; `--unlock` hands the password alone to a password-trusted account's unlock.
   - `lock` writes `Cargo.lock` anew.
 
   With `VEYQ_LIVE=http://veyq.localhost:8080`, `test --tests '*LiveSignInTest*'` and `bridge` sign in as the seeded
@@ -490,9 +495,14 @@ first in each of its scrolls — `LocalNodeHero.current(inset)` (Android) / `Nod
   carries no gtk4 catalogs; only our words in it (its title) are German. On a desktop the portal's dialog is the
   system's. The container's working directory is the read-only source mount, where GTK's dialog opens — a write there
   is the failure case, not a bug.
-- The container runs with `--rm`: what the app keeps on the device lives in the container and is gone at the next
-  `run.py run`, Recent with it. A pass that shows Recent opens its objects first in that run (remembered from the
-  bridge's Linux pass, 2026-11-11).
+- The container runs with `--rm`: what the app keeps outside `~/.local/share` (the volume `veyq-linux-home`) is gone at
+  the next `run.py run`, and with `--no-secret-service` all of it, Recent included. A pass that shows Recent there opens
+  its objects first in that run (remembered from the bridge's Linux pass, 2026-11-11).
+- The browser pane, hidden, showed a Broadway switch unturned after a click that had turned it (measured 2026-11-11, the
+  device trust's Linux pass): the frames lag, not the input. A pass whose pane is hidden drives Broadway from headless
+  system Chrome through the workspace's Playwright (`channel: 'chrome'`), one connection per run of steps, and reads
+  each state from the app's stderr before its screenshot. `run.py run`'s app is stopped by closing its window: `docker
+  stop` ends it by SIGKILL after the timeout (exit 137).
 - The common file dialog on Windows cannot be pressed through UI Automation: its Save invoked by UIA arrives as an
   input-synchronous call and the dialog cannot reach the file broker (`RPC_E_CANTCALLOUT_ININPUTSYNCCALL`, nothing
   written), and a file name set as a UIA `Value` shows in the tree but is not read. `Veyq.Drive`'s `type` and `press`

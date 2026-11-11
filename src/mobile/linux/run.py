@@ -24,14 +24,21 @@ Verbs:
                              (`generate_theme.py --gtk`) — links the bridge's library, and runs in the container
                              `cargo clippy --locked --all-targets -- -D warnings`, `cargo test --locked` and
                              `cargo build --locked`. Its exit code is cargo's.
-  run [--port N] [--devlogin] `build`'s generation and `cargo build`, then the app under `gtk4-broadwayd`, drawn into a
-                             browser at http://127.0.0.1:N (default 8095; published on 127.0.0.1 only). LANGUAGE and
+  run [--port N] [--devlogin [--fill|--unlock]] [--no-secret-service]
+                             `build`'s generation and `cargo build`, then the app under `gtk4-broadwayd`, drawn into a
+                             browser at http://127.0.0.1:N (default 8095; published on 127.0.0.1 only). It runs under a
+                             session bus of its own with gnome-keyring-daemon, and the home's data directory (the device
+                             store, the keyring and the password it opens with) is the volume `veyq-linux-home`, so a
+                             second start finds what the first kept; `--no-secret-service` runs with neither, where
+                             "Stay signed in" is hidden and every start signs in. LANGUAGE and
                              ADW_DEBUG_COLOR_SCHEME, when set, reach the app, VEYQ_LOCALE as its LANG (default
                              en_US.UTF-8; `VEYQ_LOCALE=de_DE.UTF-8 LANGUAGE=de` for German words and German
                              money). With VEYQ_LIVE the app reaches the dev origin under its own name (as `test`
                              does); `--devlogin` (needs VEYQ_LIVE) hands the debug build the seeded principal of the
                              env file as VEYQ_DEV_*, and it signs in through its own sign-in — the values go to
-                             `docker run` through its environment, never on its command line.
+                             `docker run` through its environment, never on its command line. `--fill` only fills the
+                             sign-in, for the pass to turn "Stay signed in" and press it; `--unlock` hands the password
+                             alone, which the unlock of a password-trusted account takes.
   lock                       `cargo update`: writes Cargo.lock anew from Cargo.toml (the one way it changes).
 
 cargo's registry and target directory live in the Docker volumes `veyq-linux-cargo` and `veyq-linux-target`, so a
@@ -207,7 +214,8 @@ def generate(target: str) -> Path:
 
 
 def cargo(docker_platform: str, lib_dir: Path, script: str, docker_args: list[str] | None = None,
-          env: dict[str, str] | None = None, secrets: dict[str, str] | None = None) -> int:
+          env: dict[str, str] | None = None, secrets: dict[str, str] | None = None,
+          volumes: dict[str, str] | None = None) -> int:
     """Runs [script] in the package's directory in the container, with what build.rs and the tests read."""
     mounts = {repo_layout.MOBILE_LINUX: "/veyq/src", GENERATED: "/veyq/generated", lib_dir: "/veyq/lib",
               WORDS / "words.json": "/veyq/words.json"}
@@ -215,7 +223,7 @@ def cargo(docker_platform: str, lib_dir: Path, script: str, docker_args: list[st
             "VEYQ_LIB_DIR": "/veyq/lib", "LD_LIBRARY_PATH": "/veyq/lib", "VEYQ_SAMPLES": "/veyq/generated/bridge/samples",
             "VEYQ_WORDS_JSON": "/veyq/words.json", "LANG": "en_US.UTF-8"}
     return in_container(docker_platform, mounts, base | (env or {}), f"set -e; cd /veyq/src; {script}",
-                        volumes=CARGO_VOLUMES, docker_args=docker_args, secrets=secrets)
+                        volumes=CARGO_VOLUMES | (volumes or {}), docker_args=docker_args, secrets=secrets)
 
 
 def build() -> int:
@@ -226,9 +234,11 @@ def build() -> int:
                                            "cargo test --locked; cargo build --locked")
 
 
-def dev_principal() -> dict[str, str]:
+def dev_principal(unlock: bool = False, fill: bool = False) -> dict[str, str]:
     """The seeded dev principal as the debug build's VEYQ_DEV_* (DevLogin.swift's names): the server is VEYQ_LIVE's
-    origin, the rest the env file's (VEYQ_ENV_FILE, else `.run/.env`). Nothing of it is printed."""
+    origin, the rest the env file's (VEYQ_ENV_FILE, else `.run/.env`). With [unlock] the password alone, as
+    VEYQ_DEV_UNLOCK_PASSWORD (Android's `--unlock`); with [fill] the app fills its sign-in and leaves the switch and the
+    button to the pass (VEYQ_DEV_FILL). Nothing of it is printed."""
     live = os.environ.get("VEYQ_LIVE")
     if not live:
         sys.exit("--devlogin needs VEYQ_LIVE (the dev origin the app signs in to, e.g. http://veyq.localhost:8080)")
@@ -240,12 +250,33 @@ def dev_principal() -> dict[str, str]:
         if "=" in line and not line.lstrip().startswith("#"):
             k, v = line.split("=", 1)
             values[k.strip()] = v.strip().strip('"').strip("'")
-    return {"VEYQ_DEV_SERVER": live, "VEYQ_DEV_EMAIL": values["VEYQ_EMAIL"], "VEYQ_DEV_PASSWORD": values["VEYQ_PASSWORD"],
-            "VEYQ_DEV_SECRET_KEY": values["VEYQ_SECRET_KEY"]}
+    if unlock:
+        return {"VEYQ_DEV_UNLOCK_PASSWORD": values["VEYQ_PASSWORD"]}
+    principal = {"VEYQ_DEV_SERVER": live, "VEYQ_DEV_EMAIL": values["VEYQ_EMAIL"], "VEYQ_DEV_PASSWORD": values["VEYQ_PASSWORD"],
+                 "VEYQ_DEV_SECRET_KEY": values["VEYQ_SECRET_KEY"]}
+    return principal | ({"VEYQ_DEV_FILL": "1"} if fill else {})
 
 
-def run_app(port: int, devlogin: bool) -> int:
-    secrets = dev_principal() if devlogin else None
+# What the app keeps between two `run`s (the CR device-trust-on-linux-and-windows, Phase 4): the home's data directory
+# as a named volume — the device store (`veyq/device-store.json`), gnome-keyring's login collection (`keyrings/`) and
+# the throwaway password that collection opens with (`veyq-run/keyring`, drawn in the container at the first start,
+# never printed). A test value beside the keyring it opens: this keyring holds a dev instance's trust and nothing else.
+# `docker volume rm veyq-linux-home` starts from nothing.
+HOME_VOLUME = "veyq-linux-home"
+
+# The app under a session bus of its own with gnome-keyring-daemon on it, whose login collection the kept password makes
+# or unlocks, so a second start finds the keys the first one stored.
+APP_UNDER_SECRET_SERVICE = (
+    "mkdir -p -m 700 ~/.cache ~/.local/share/keyrings ~/.local/share/veyq-run; "
+    "[ -s ~/.local/share/veyq-run/keyring ] || (umask 077; head -c 32 /dev/urandom | base64 | tr -d '\\n' "
+    "> ~/.local/share/veyq-run/keyring); "
+    "exec dbus-run-session -- bash -c 'gnome-keyring-daemon --unlock --components=secrets "
+    "< ~/.local/share/veyq-run/keyring >/dev/null || exit 70; exec \"$@\"' veyq /veyq/target/debug/veyq"
+)
+
+
+def run_app(port: int, devlogin: bool, unlock: bool = False, fill: bool = False, secret_service: bool = True) -> int:
+    secrets = dev_principal(unlock, fill) if devlogin else None
     docker_platform, target = arch()
     lib_dir = generate(target)
     build_image(docker_platform)
@@ -261,8 +292,10 @@ def run_app(port: int, devlogin: bool) -> int:
                  f"gtk4-broadwayd --address 0.0.0.0 :{BROADWAY_DISPLAY} & "
                  # ready once its socket is there (a bare TCP probe makes it log "Error reading request lines")
                  "for _ in $(seq 50); do ls /tmp/xdg/broadway*.socket >/dev/null 2>&1 && break; sleep 0.1; done; "
-                 "exec /veyq/target/debug/veyq",
-                 docker_args=["-p", f"127.0.0.1:{port}:{inner}"], env=env, secrets=secrets)
+                 + (APP_UNDER_SECRET_SERVICE if secret_service else "exec /veyq/target/debug/veyq"),
+                 # gnome-keyring-daemon drops its capabilities at start, which a container refuses unless it may lock memory
+                 docker_args=["-p", f"127.0.0.1:{port}:{inner}"] + (["--cap-add=IPC_LOCK"] if secret_service else []),
+                 env=env, secrets=secrets, volumes={HOME_VOLUME: "/root/.local/share"} if secret_service else None)
 
 
 def lock() -> int:
@@ -289,12 +322,18 @@ def main() -> None:
     r = verbs.add_parser("run", help="build the app and run it under gtk4-broadwayd, drawn into a browser")
     r.add_argument("--port", type=int, default=8095, help="the port on 127.0.0.1 the browser opens (default 8095)")
     r.add_argument("--devlogin", action="store_true", help="sign the debug build in as the seeded principal (needs VEYQ_LIVE)")
+    r.add_argument("--fill", action="store_true", help="with --devlogin: only fill the sign-in; the pass presses it")
+    r.add_argument("--unlock", action="store_true", help="with --devlogin: the password alone, for a password-trusted unlock")
+    r.add_argument("--no-secret-service", action="store_true",
+                   help="no session bus and no kept home: nothing is kept, every start signs in")
     verbs.add_parser("lock", help="cargo update: write Cargo.lock anew")
     args = parser.parse_args()
     if args.verb == "build":
         sys.exit(build())
     if args.verb == "run":
-        sys.exit(run_app(args.port, args.devlogin))
+        if (args.fill or args.unlock) and not args.devlogin:
+            sys.exit("--fill and --unlock go with --devlogin")
+        sys.exit(run_app(args.port, args.devlogin, args.unlock, args.fill, not args.no_secret_service))
     if args.verb == "lock":
         sys.exit(lock())
     if args.verb == "test":
