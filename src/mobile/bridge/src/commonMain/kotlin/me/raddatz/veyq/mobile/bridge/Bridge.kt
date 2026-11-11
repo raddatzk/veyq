@@ -33,8 +33,12 @@ import me.raddatz.veyq.mobile.navigation.NodeHeaderModel
 import me.raddatz.veyq.mobile.navigation.TrashSheet
 import me.raddatz.veyq.mobile.navigation.MoveSheet
 import me.raddatz.veyq.mobile.navigation.ShareSheet
+import me.raddatz.veyq.mobile.navigation.ReportSheet
+import me.raddatz.veyq.mobile.session.CoverFrame
+import me.raddatz.veyq.mobile.session.NodeCover
 import me.raddatz.veyq.mobile.export.NodeExport
 import me.raddatz.veyq.mobile.session.NodeMove
+import me.raddatz.veyq.mobile.session.NodeReport
 import me.raddatz.veyq.mobile.words.Notices
 import me.raddatz.veyq.mobile.words.Notice
 import me.raddatz.veyq.mobile.words.Msg
@@ -102,6 +106,8 @@ internal class Tenant(
     },
     /** A node's share sheet (`ShellModel.shareSheet`). */
     val share: ((node: NodeAt) -> ShareSheet)? = shell?.let { s -> { node -> s.shareSheet(node) {} } },
+    /** A node's report sheet (`ShellModel.reportSheet`). */
+    val report: ((node: NodeAt) -> ReportSheet)? = shell?.let { s -> { node -> s.reportSheet(node) } },
     /** A node with everything under it into a sink (`ShellModel.download`): what it left out, or null. */
     val download: (suspend (node: NodeAt, deletedName: String, sink: (ByteArray) -> Unit) -> List<NodeExport.Skipped>?)? = shell?.let { s ->
         { node, deletedName, sink -> s.download(node, deletedName, Clock.System.now().toEpochMilliseconds(), sink) }
@@ -122,10 +128,19 @@ internal interface DeviceFiles {
      */
     suspend fun write(path: String, produce: suspend (sink: (ByteArray) -> Unit) -> Boolean): Boolean
 
+    /** The whole file at [path] (a cover the host encoded); throws when it does not open or holds more than [most] bytes. */
+    suspend fun read(path: String, most: Int): ByteArray
+
     /** No file is written: a test's composition that has none to offer. */
     object None : DeviceFiles {
         override suspend fun write(path: String, produce: suspend (sink: (ByteArray) -> Unit) -> Boolean) =
             throw UnsupportedOperationException("this composition writes no files")
+        override suspend fun read(path: String, most: Int): ByteArray = throw UnsupportedOperationException("this composition reads no files")
+    }
+
+    companion object {
+        /** The most a cover file the host encoded may hold (a 2048-pixel JPEG is a few MB at most). */
+        const val COVER_MOST = 32 shl 20
     }
 }
 
@@ -153,6 +168,7 @@ internal class Bridge<A : Connection, T : Any>(compose: () -> Composition<A, T>)
     private val trashes = Registry<TrashSheet>()
     private val moves = Registry<MoveSheet>()
     private val shares = Registry<ShareSheet>()
+    private val reports = Registry<ReportSheet>()
 
     /** "Manage servers" while it is open, null while closed; its spaces read by [managing]'s job. */
     private val manage = MutableStateFlow<List<ManagedShown>?>(null)
@@ -292,6 +308,38 @@ internal class Bridge<A : Connection, T : Any>(compose: () -> Composition<A, T>)
             is Call.HeaderTrash -> headers[call.header]?.let { h -> h.model.trash().let { Answer.Trashed(it, h.model.current.undo != null) } } ?: noHeader
             is Call.HeaderUndo -> headers[call.header]?.let { Answer.Said(it.model.undoTrash()) } ?: noHeader
             is Call.HeaderRename -> headers[call.header]?.let { it.model.rename(call.name).let { r -> Answer.Renamed(r.problem, r.notice) } } ?: noHeader
+            is Call.HeaderCoverPicture -> headers[call.header]?.let { h ->
+                val picture = h.model.coverPicture() ?: return Answer.Refused(Answer.Why.NO_COVER)
+                payload(picture)
+                Answer.Bytes(Sniff.image(picture)?.mime)
+            } ?: noHeader
+            is Call.HeaderCoverSave -> headers[call.header]?.let { h ->
+                val jpeg = call.path?.let { path ->
+                    runCatching { parts.files.read(path, DeviceFiles.COVER_MOST) }.getOrNull() ?: return Answer.Said(Notice(Msg.COVER_FAILED))
+                }
+                Answer.Said(h.model.saveCover(jpeg, call.crop))
+            } ?: noHeader
+            is Call.HeaderCoverRemove -> headers[call.header]?.let { Answer.Said(it.model.removeCover()) } ?: noHeader
+            is Call.CoverPose -> {
+                val frame = CoverFrame(call.imageWidth, call.imageHeight, call.frameWidth, call.frameHeight)
+                val start = call.at?.let(frame::clamp) ?: call.crop?.let(frame::pose) ?: frame.centred()
+                val pose = frame.zoom(frame.pan(start, call.panX, call.panY), call.zoom)
+                val scale = frame.baseScale * pose.zoom
+                Answer.CoverPosed(pose, call.imageWidth * scale, call.imageHeight * scale, frame.crop(pose))
+            }
+            is Call.CoverFit -> NodeCover.encodedSize(call.width, call.height).let { Answer.CoverFit(it[0], it[1], NodeCover.QUALITY, NodeCover.QUALITY_PERCENT) }
+            is Call.ReportOpen -> tenant.value?.models?.report?.let { make ->
+                val id = ids.incrementAndFetch()
+                reports.put(id, make(call.node))
+                Answer.ReportOpened(id)
+            } ?: noTenant
+            is Call.ReportClose -> reports.remove(call.report)?.let { Answer.Done } ?: noReport
+            is Call.ReportWhole -> reports[call.report]?.whole(call.whole).done(Answer.Why.NO_SUCH_REPORT)
+            is Call.ReportCategory -> reports[call.report]?.category(call.category).done(Answer.Why.NO_SUCH_REPORT)
+            is Call.ReportReason -> reports[call.report]?.reason(call.reason).done(Answer.Why.NO_SUCH_REPORT)
+            is Call.ReportGoodFaith -> reports[call.report]?.goodFaith(call.on).done(Answer.Why.NO_SUCH_REPORT)
+            is Call.ReportContact -> reports[call.report]?.contact(call.contact).done(Answer.Why.NO_SUCH_REPORT)
+            is Call.ReportSend -> reports[call.report]?.let { Answer.Said(it.send().problem) } ?: noReport
             is Call.HeaderDownload -> headers[call.header]?.let { h ->
                 val download = tenant.value?.models?.download ?: return noTenant
                 var leftOut: List<NodeExport.Skipped>? = null
@@ -372,6 +420,7 @@ internal class Bridge<A : Connection, T : Any>(compose: () -> Composition<A, T>)
     private val noTrash = Answer.Refused(Answer.Why.NO_SUCH_TRASH)
     private val noMove = Answer.Refused(Answer.Why.NO_SUCH_MOVE)
     private val noShare = Answer.Refused(Answer.Why.NO_SUCH_SHARE)
+    private val noReport = Answer.Refused(Answer.Why.NO_SUCH_REPORT)
 
     /** A move sheet's state as a write's answer ([Answer.MoveSent]). */
     private fun sent(s: MoveSheet.State) = Answer.MoveSent(s.done, s.undo != null, s.confirming, s.problem)
@@ -435,6 +484,7 @@ internal class Bridge<A : Connection, T : Any>(compose: () -> Composition<A, T>)
         trashes.removeAll()
         moves.removeAll()
         shares.removeAll()
+        reports.removeAll()
     }
 
     /**
@@ -471,6 +521,8 @@ internal class Bridge<A : Connection, T : Any>(compose: () -> Composition<A, T>)
             ?: flowOf(Update.Move(w.move, null))
         is Watched.Share -> shares[w.share]?.let { sh -> sh.state.map { Update.Share(w.share, shownShare(sh, it)) } }
             ?: flowOf(Update.Share(w.share, null))
+        is Watched.Report -> reports[w.report]?.let { r -> r.state.map { Update.Report(w.report, shownReport(r, it)) } }
+            ?: flowOf(Update.Report(w.report, null))
         is Watched.Pot -> {
             val pictures = tenant.value?.models?.pictures ?: flowOf(emptyMap())
             (pots[w.pot]?.state ?: flowOf(null)).combine(pictures) { s, p -> Update.Pot(w.pot, s, if (s == null) emptyList() else p.keys.sorted()) }
@@ -516,7 +568,7 @@ internal class Bridge<A : Connection, T : Any>(compose: () -> Composition<A, T>)
     private fun shownHeader(h: HeldHeader): HeaderShown {
         val m = h.model
         val s = m.current
-        fun actions(ids: List<String>) = ids.map { HeaderShown.PlanAction(it, m.label(it, hasCover = false)) }
+        fun actions(ids: List<String>) = ids.map { HeaderShown.PlanAction(it, m.label(it, hasCover = s.cover != null)) }
         return HeaderShown(
             node = m.node,
             pinned = s.pinned,
@@ -525,8 +577,17 @@ internal class Bridge<A : Connection, T : Any>(compose: () -> Composition<A, T>)
             undo = s.undo,
             gone = s.gone,
             archiveName = NodeExport.fileName(m.node.name),
+            cover = s.cover,
         )
     }
+
+    /** A report sheet as the host draws it ([ReportShown]), each field the sheet's own answer. */
+    private fun shownReport(r: ReportSheet, s: ReportSheet.State): ReportShown = ReportShown(
+        node = r.node, categories = r.categories.map { ReportShown.ShownCategory(it.token, it.word) }, whole = s.whole,
+        scopeHint = s.scopeHint, category = s.category, note = s.note, reasonMax = NodeReport.REASON_MAX,
+        contactMax = NodeReport.CONTACT_MAX, goodFaith = s.goodFaith, canSend = s.canSend, sending = s.sending, problem = s.problem,
+        sent = s.sent != null, reference = s.sent?.reference, receivedAt = s.sent?.receivedAt, privacyUrl = r.privacyUrl,
+    )
 
     /** A move or copy sheet as the host draws it ([MoveShown]), each field the sheet's own answer. */
     private fun shownMove(m: MoveSheet, s: MoveSheet.State): MoveShown = MoveShown(

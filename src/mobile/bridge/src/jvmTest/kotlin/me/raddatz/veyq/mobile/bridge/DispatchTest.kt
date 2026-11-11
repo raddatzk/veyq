@@ -916,6 +916,142 @@ class DispatchTest {
     }
 
     @Test
+    fun aReportIsFilledSentOnceAndItsPrivacyLinkIsTheCoresThroughCalls() = runBlocking {
+        val sent = java.util.concurrent.CopyOnWriteArrayList<String>()
+        val door = object : me.raddatz.veyq.mobile.navigation.ReportSheet.Door {
+            override val origin = "http://veyq.localhost:8080/"
+            override suspend fun send(scope: me.raddatz.veyq.mobile.session.NodeReport.Scope, category: String, reason: String, contact: String): me.raddatz.veyq.mobile.session.NodeReport.Sent {
+                sent += "${scope.name}:$category:$reason:$contact"
+                return me.raddatz.veyq.mobile.session.NodeReport.Sent(me.raddatz.veyq.mobile.session.NodeReport.Outcome.SENT, "abcd1234", "2026-11-11T10:00:00Z")
+            }
+        }
+        val b = Bridge {
+            val hidden = Hidden({}, emptySet())
+            Composition(SessionModel(Door(), hidden, RecentUses({}, emptyList())), hidden) { _ ->
+                Tenant(
+                    shell = null, pot = null, me = "u1", pictures = pictures, loadPictures = {},
+                    report = { node -> me.raddatz.veyq.mobile.navigation.ReportSheet(node, door) },
+                )
+            }
+        }
+        val photos = NodeAt("s", "f", "FOLDER", "Photos")
+        assertEquals(Answer.Refused(Answer.Why.NO_TENANT_OPEN), b.ask(Call.ReportOpen(photos)))
+        b.signedIn()
+        val id = (b.ask(Call.ReportOpen(photos)) as Answer.ReportOpened).report
+        val w = b.watching(Watched.Report(id))
+        val fresh = (w.next() as Update.Report).shown!!
+        assertEquals("http://veyq.localhost:8080/privacy#reporter-contact", fresh.privacyUrl)
+        assertEquals(listOf("CHILD_SEXUAL_ABUSE", "TERRORIST_CONTENT", "THREAT_TO_LIFE", "ILLEGAL_CONTENT", "TERMS_BREACH"), fresh.categories.map { it.id })
+        assertTrue(fresh.whole && !fresh.canSend && !fresh.sent)
+        assertEquals(me.raddatz.veyq.mobile.session.NodeReport.REASON_MAX, fresh.reasonMax)
+
+        assertEquals(Answer.Done, b.ask(Call.ReportCategory(id, "CHILD_SEXUAL_ABUSE")))
+        w.until { u -> (u as Update.Report).shown?.takeIf { it.note == Msg.REPORT_CSAM_NOTE } }
+        assertEquals(Answer.Done, b.ask(Call.ReportCategory(id, "ILLEGAL_CONTENT")))
+        assertEquals(Answer.Done, b.ask(Call.ReportWhole(id, false)))
+        assertEquals(Answer.Done, b.ask(Call.ReportReason(id, "why")))
+        assertEquals(Answer.Done, b.ask(Call.ReportContact(id, "me@example.org")))
+        // not yet: good faith is not confirmed, and a send then sends nothing
+        assertEquals(Answer.Said(null), b.ask(Call.ReportSend(id)))
+        assertTrue(sent.isEmpty())
+        assertEquals(Answer.Done, b.ask(Call.ReportGoodFaith(id, true)))
+        val ready = w.until { u -> (u as Update.Report).shown?.takeIf { it.canSend } }
+        assertEquals(Msg.REPORT_SCOPE_NAME_HINT, ready.scopeHint)
+        assertEquals(Answer.Said(null), b.ask(Call.ReportSend(id)))
+        val receipt = w.until { u -> (u as Update.Report).shown?.takeIf { it.sent } }
+        assertEquals("abcd1234", receipt.reference)
+        assertEquals("2026-11-11T10:00:00Z", receipt.receivedAt)
+        assertEquals(listOf("NAME:ILLEGAL_CONTENT:why:me@example.org"), sent.toList())
+        // sent once: a second send sends nothing
+        b.ask(Call.ReportSend(id))
+        assertEquals(1, sent.size)
+
+        assertEquals(Answer.Done, b.ask(Call.ReportClose(id)))
+        assertEquals(Update.Report(id, null), b.watching(Watched.Report(id)).next())
+        assertEquals(Answer.Refused(Answer.Why.NO_SUCH_REPORT), b.ask(Call.ReportSend(id)))
+        val again = (b.ask(Call.ReportOpen(photos)) as Answer.ReportOpened).report
+        assertEquals(Answer.Done, b.ask(Call.SessionSignOut("a.example#u1")))
+        assertEquals(Answer.Refused(Answer.Why.NO_SUCH_REPORT), b.ask(Call.ReportWhole(again, true)), "a sheet outlived its tenant")
+        b.shutdown()
+    }
+
+    @Test
+    fun aCoverIsPosedSetFromTheHostsFileFramedAnewAndRemovedThroughCalls() = runBlocking {
+        val played = Played()
+        var stored: me.raddatz.veyq.mobile.session.NodeCover.Crop? = null
+        var picture: ByteArray? = null
+        val writes = java.util.concurrent.CopyOnWriteArrayList<String>()
+        val b = Bridge {
+            val hidden = Hidden({}, emptySet())
+            Composition(SessionModel(Door(), hidden, RecentUses({}, emptyList())), hidden, JvmFiles) { _ ->
+                Tenant(
+                    shell = null, pot = null, me = "u1", pictures = pictures, loadPictures = {},
+                    header = { node, facts, _ ->
+                        me.raddatz.veyq.mobile.navigation.NodeHeaderModel(node, facts, object : me.raddatz.veyq.mobile.navigation.NodeHeaderModel.Door by played {
+                            override suspend fun cover(ref: NodeAt) = stored
+                            override suspend fun coverPicture(ref: NodeAt) = picture
+                            override suspend fun setCover(ref: NodeAt, jpeg: ByteArray, crop: me.raddatz.veyq.mobile.session.NodeCover.Crop): me.raddatz.veyq.mobile.session.NodeCover.Outcome {
+                                writes += "set ${jpeg.toList()}"; stored = crop; picture = jpeg
+                                return me.raddatz.veyq.mobile.session.NodeCover.Outcome.DONE
+                            }
+                            override suspend fun recropCover(ref: NodeAt, crop: me.raddatz.veyq.mobile.session.NodeCover.Crop): me.raddatz.veyq.mobile.session.NodeCover.Outcome {
+                                writes += "recrop"; stored = crop
+                                return me.raddatz.veyq.mobile.session.NodeCover.Outcome.DONE
+                            }
+                            override suspend fun removeCover(ref: NodeAt): me.raddatz.veyq.mobile.session.NodeCover.Outcome {
+                                writes += "remove"; stored = null; picture = null
+                                return me.raddatz.veyq.mobile.session.NodeCover.Outcome.DONE
+                            }
+                        })
+                    },
+                )
+            }
+        }
+        // the frame's math is the core's: a fresh picture centred, a pan held inside, a crop read back as its pose
+        val posed = b.ask(Call.CoverPose(400.0, 300.0, 160.0, 90.0, null, null, 0.0, 0.0, 1.0)) as Answer.CoverPosed
+        assertEquals(me.raddatz.veyq.mobile.session.CoverFrame(400.0, 300.0, 160.0, 90.0).centred(), posed.pose)
+        // drawn so it covers the frame: 400 × 300 under 160 × 90 at zoom 1 is 160 × 120
+        assertEquals(160.0, posed.width, 1e-9)
+        assertEquals(120.0, posed.height, 1e-9)
+        val far = b.ask(Call.CoverPose(400.0, 300.0, 160.0, 90.0, posed.pose, null, 1000.0, 0.0, 1.0)) as Answer.CoverPosed
+        assertEquals(0.0, far.crop.x, "panned past the edge: held at it")
+        val zoomed = b.ask(Call.CoverPose(400.0, 300.0, 160.0, 90.0, far.pose, null, 0.0, 0.0, 2.0)) as Answer.CoverPosed
+        assertEquals(0.5, zoomed.crop.width, 1e-9)
+        val left = me.raddatz.veyq.mobile.session.NodeCover.Crop(0.0, 0.0, 0.5, 0.5)
+        val reopened = b.ask(Call.CoverPose(400.0, 300.0, 160.0, 90.0, null, left, 0.0, 0.0, 1.0)) as Answer.CoverPosed
+        assertEquals(left.width, reopened.crop.width, 1e-9)
+        assertEquals(Answer.CoverFit(2048, 1536, 0.85, 85), b.ask(Call.CoverFit(4000, 3000)))
+
+        b.signedIn()
+        val folder = NodeAt("s", "f", "FOLDER", "Trip")
+        val id = (b.ask(Call.HeaderOpen(folder, AppKinds.Facts(), 2)) as Answer.HeaderOpened).header
+        val w = b.watching(Watched.Header(id))
+        val none = w.until { u -> (u as Update.Header).shown?.plan }
+        assertEquals(Msg.COVER_SET, (none.buttons + none.menu + none.last).first { it.id == "cover" }.word)
+        assertEquals(Answer.Refused(Answer.Why.NO_COVER), b.ask(Call.HeaderCoverPicture(id)))
+
+        // set from the host's file, its bytes read by the core
+        val file = java.io.File.createTempFile("cover", ".jpg").apply { writeBytes(byteArrayOf(1, 2, 3)); deleteOnExit() }
+        assertEquals(Answer.Said(null), b.ask(Call.HeaderCoverSave(id, file.path, left)))
+        assertEquals("set [1, 2, 3]", writes.single())
+        val set = w.until { u -> (u as Update.Header).shown?.takeIf { it.cover != null } }
+        assertEquals(left, set.cover)
+        assertEquals(Msg.COVER_CHANGE, set.plan!!.let { it.buttons + it.menu + it.last }.first { it.id == "cover" }.word)
+        val (pictureAnswer, bytes) = b.askWithPayload(Call.HeaderCoverPicture(id))
+        assertIs<Answer.Bytes>(pictureAnswer)
+        assertEquals(listOf<Byte>(1, 2, 3), bytes!!.toList())
+        // a path that does not read: nothing written, said
+        assertEquals(Answer.Said(me.raddatz.veyq.mobile.words.Notice(Msg.COVER_FAILED)), b.ask(Call.HeaderCoverSave(id, file.path + ".gone", left)))
+        // framed anew, its picture kept; then removed
+        assertEquals(Answer.Said(null), b.ask(Call.HeaderCoverSave(id, null, me.raddatz.veyq.mobile.session.NodeCover.Crop.FULL)))
+        w.until { u -> (u as Update.Header).shown?.takeIf { it.cover == me.raddatz.veyq.mobile.session.NodeCover.Crop.FULL } }
+        assertEquals(Answer.Said(null), b.ask(Call.HeaderCoverRemove(id)))
+        w.until { u -> (u as Update.Header).shown?.takeIf { it.cover == null } }
+        assertEquals(listOf("set [1, 2, 3]", "recrop", "remove"), writes.toList())
+        b.shutdown()
+    }
+
+    @Test
     fun withoutATenantOpenTheShellSearchAndPotCallsAreRefusedNeverThrown() = runBlocking {
         val b = bridge()
         val ref = ObjectRef("s", "n", "EXPENSE_POT", ApplicationId.EXPENSES, "Trip")

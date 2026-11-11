@@ -684,6 +684,142 @@ class LiveBridgeTest {
         b.shutdown()
     }
 
+    /** Signs a live bridge in as the seeded principal and returns it with its first shell (Amsterdam listed). */
+    private suspend fun signedInLive(origin: String, device: String): Pair<Bridge<*, *>, Update.Shell> {
+        val envFile = System.getenv("VEYQ_ENV_FILE")?.let(::File) ?: File(System.getProperty("veyq.repoRoot"), ".run/.env")
+        val env = envFile.readLines()
+            .mapNotNull { l -> l.substringBefore('=', "").takeIf { it.isNotBlank() }?.let { it.trim() to l.substringAfter('=').trim().trim('"', '\'') } }
+            .toMap()
+        val b = Bridge.live(BouncyCastlePrimitives, { block -> HttpClient(OkHttp, block) }, Config(device), hostStore(ConcurrentHashMap()), { NoDeviceKeys }, JvmFiles)
+        val gate = b.watching(Watched.Session)
+        assertEquals(Answer.Done, b.ask(Call.SessionStart))
+        gate.until { (it as Update.Session).gate as? Gate.SignIn }
+        assertEquals(Answer.Done, b.ask(Call.SessionSignIn(origin, env.getValue("VEYQ_EMAIL"), env.getValue("VEYQ_PASSWORD"), env.getValue("VEYQ_SECRET_KEY")), timeout = 2.minutes))
+        gate.until(2.minutes) { (it as Update.Session).gate as? Gate.Signed }
+        return b to b.watching(Watched.Shell).until(1.minutes) { (it as Update.Shell).takeIf { u -> u.state?.lists?.objects?.any { o -> o.name == "Amsterdam" } == true } }
+    }
+
+    /** A folder named [name] made beside Amsterdam through calls; [body] runs on it, then it is trashed (and purged where [purge]). */
+    private suspend fun withFolder(b: Bridge<*, *>, first: Update.Shell, name: String, purge: Boolean, body: suspend (me.raddatz.veyq.mobile.navigation.NodeAt) -> Unit) {
+        val amsterdam = first.state!!.lists.objects.first { it.name == "Amsterdam" }
+        val scope = amsterdam.scopeId
+        val home = first.state.lists.nodes.first { it.nodeId == amsterdam.nodeId }.parentId
+        suspend fun fresh(): Update.Shell {
+            assertEquals(Answer.Done, b.ask(Call.ShellRefresh, timeout = 1.minutes))
+            return b.watching(Watched.Shell).next() as Update.Shell
+        }
+        fun nodes(u: Update.Shell) = u.state!!.lists.nodes.filter { it.scopeId == scope }
+        assertEquals(Answer.Done, b.ask(Call.ShellChoose(null)))
+        assertEquals(Answer.Done, b.ask(Call.ShellSwitchSpace(scope)))
+        home?.let { h -> nodes(first).first { it.nodeId == h }.asFolder()?.let { assertEquals(Answer.Done, b.ask(Call.ShellEnter(it))) } }
+        assertEquals(Answer.Said(null), b.ask(Call.ShellCreateFolder(name), timeout = 1.minutes))
+        val folder = assertNotNull(nodes(fresh()).firstOrNull { it.name == name && it.parentId == home }, "the new folder is not listed")
+        val at = me.raddatz.veyq.mobile.navigation.NodeAt(folder.scopeId, folder.nodeId, folder.kind, folder.name)
+        println("made $name")
+        try {
+            body(at)
+        } finally {
+            val h = (b.ask(Call.HeaderOpen(at, me.raddatz.veyq.mobile.AppKinds.Facts(), 2)) as Answer.HeaderOpened).header
+            println("trash $name: ${(b.ask(Call.HeaderTrash(h), timeout = 1.minutes) as? Answer.Trashed)?.notice?.msg}")
+            b.ask(Call.HeaderClose(h))
+            if (purge) {
+                val t = (b.ask(Call.TrashOpen(scope)) as Answer.TrashOpened).trash
+                val tw = b.watching(Watched.Trash(t))
+                val rows = tw.until(1.minutes) { u -> (u as Update.Trash).shown?.rows }
+                rows.firstOrNull { it.id == folder.nodeId }?.let { row ->
+                    val purged = b.ask(Call.TrashPurge(t, row.id), timeout = 1.minutes)
+                    println("purge ${row.name}: $purged")
+                    if (purged == Answer.Done) tw.until(1.minutes) { u -> (u as Update.Trash).shown?.takeIf { s -> s.busy == null && s.rows?.none { it.id == row.id } == true } }
+                }
+                b.ask(Call.TrashClose(t))
+                assertTrue(nodes(fresh()).none { it.nodeId == folder.nodeId }, "the folder made was left")
+            }
+        }
+    }
+
+    /**
+     * A cover through calls, as a desktop sets one: a drawn 16:9 JPEG (CoverCropLiveTest's: left half red, right half blue
+     * with a white disc) written to a file as the host's encoder would, its frame posed by the core (`Cover.Pose`: zoomed to
+     * 2 and panned to the left edge, the left half), set from that file (`Header.CoverSave`), read back by a fresh header
+     * (the crop) and `Header.CoverPicture` (the bytes); framed anew on its right half with its picture kept, then removed.
+     * The folder ("App cover <n>") is trashed and purged.
+     */
+    @Test
+    fun aCoverIsSetFromAFileFramedAnewReadBackAndRemovedThroughCalls() = runBlocking {
+        val origin = System.getenv("VEYQ_LIVE") ?: return@runBlocking
+        val (b, first) = signedInLive(origin, "bridge cover test")
+        val image = java.awt.image.BufferedImage(640, 360, java.awt.image.BufferedImage.TYPE_INT_RGB).apply {
+            createGraphics().run {
+                color = java.awt.Color(0xdc, 0x26, 0x26); fillRect(0, 0, 320, 360)
+                color = java.awt.Color(0x25, 0x63, 0xeb); fillRect(320, 0, 320, 360)
+                color = java.awt.Color.WHITE; fillOval(420, 100, 120, 120)
+                dispose()
+            }
+        }
+        val jpeg = java.io.ByteArrayOutputStream().also { javax.imageio.ImageIO.write(image, "jpg", it) }.toByteArray()
+        val file = File.createTempFile("cover", ".jpg").apply { writeBytes(jpeg); deleteOnExit() }
+        assertEquals(Answer.CoverFit(640, 360, 0.85, 85), b.ask(Call.CoverFit(640, 360)))
+        val centred = b.ask(Call.CoverPose(640.0, 360.0, 320.0, 180.0, null, null, 0.0, 0.0, 1.0)) as Answer.CoverPosed
+        val zoomed = b.ask(Call.CoverPose(640.0, 360.0, 320.0, 180.0, centred.pose, null, 0.0, 0.0, 2.0)) as Answer.CoverPosed
+        val left = (b.ask(Call.CoverPose(640.0, 360.0, 320.0, 180.0, zoomed.pose, null, 10_000.0, 0.0, 1.0)) as Answer.CoverPosed).crop
+        assertEquals(me.raddatz.veyq.mobile.session.NodeCover.Crop(0.0, 0.25, 0.5, 0.5), left)
+        withFolder(b, first, "App cover ${System.currentTimeMillis() % 100_000}", purge = true) { at ->
+            /** A fresh header's frame, read when it opens: red (by the timeout) unless it reads [expected]. */
+            suspend fun freshHeader(expected: me.raddatz.veyq.mobile.session.NodeCover.Crop): HeaderShown {
+                val h = (b.ask(Call.HeaderOpen(at, me.raddatz.veyq.mobile.AppKinds.Facts(), 2)) as Answer.HeaderOpened).header
+                return b.watching(Watched.Header(h)).until(1.minutes) { u -> (u as Update.Header).shown?.takeIf { it.cover == expected } }
+                    .also { b.ask(Call.HeaderClose(h)) }
+            }
+            val h = (b.ask(Call.HeaderOpen(at, me.raddatz.veyq.mobile.AppKinds.Facts(), 2)) as Answer.HeaderOpened).header
+            assertEquals(Answer.Said(null), b.ask(Call.HeaderCoverSave(h, file.path, left), timeout = 2.minutes))
+            val set = freshHeader(left)
+            assertEquals(me.raddatz.veyq.mobile.words.Msg.COVER_CHANGE, set.plan!!.let { it.buttons + it.menu + it.last }.first { it.id == "cover" }.word)
+            val (answer, bytes) = b.askWithPayload(Call.HeaderCoverPicture(h), timeout = 1.minutes)
+            assertEquals(Answer.Bytes("image/jpeg"), answer)
+            assertTrue(bytes!!.contentEquals(jpeg), "the cover does not open to the bytes set")
+            println("set: framed ${set.cover}, ${bytes.size} bytes back")
+            val right = me.raddatz.veyq.mobile.session.NodeCover.Crop(0.5, 0.25, 0.5, 0.5)
+            assertEquals(Answer.Said(null), b.ask(Call.HeaderCoverSave(h, null, right), timeout = 2.minutes))
+            freshHeader(right)
+            assertTrue((b.askWithPayload(Call.HeaderCoverPicture(h), timeout = 1.minutes).second)!!.contentEquals(jpeg), "a recrop must keep the picture")
+            assertEquals(Answer.Said(null), b.ask(Call.HeaderCoverRemove(h), timeout = 2.minutes))
+            assertEquals(Answer.Refused(Answer.Why.NO_COVER), b.ask(Call.HeaderCoverPicture(h), timeout = 1.minutes))
+            println("re-framed on its right half, picture kept, removed")
+            b.ask(Call.HeaderClose(h))
+        }
+        b.shutdown()
+    }
+
+    /**
+     * A report through calls, with `VEYQ_LIVE_REPORT_BRIDGE=1`: a fresh folder ("App report <n>") reported by its name in
+     * "Breach of the terms" with a reason and good faith, the server's receipt read back, the privacy link the core's from
+     * the tenant's origin; the folder trashed. Each run leaves an open report for the dev moderators: run it once.
+     */
+    @Test
+    fun aReportIsSentOnceThroughCallsAndItsReceiptReadBack() = runBlocking {
+        val origin = System.getenv("VEYQ_LIVE") ?: return@runBlocking
+        System.getenv("VEYQ_LIVE_REPORT_BRIDGE") ?: return@runBlocking
+        val (b, first) = signedInLive(origin, "bridge report test")
+        withFolder(b, first, "App report ${System.currentTimeMillis() % 100_000}", purge = false) { at ->
+            val id = (b.ask(Call.ReportOpen(at)) as Answer.ReportOpened).report
+            val w = b.watching(Watched.Report(id))
+            val fresh = (w.next() as Update.Report).shown!!
+            assertEquals("${origin.trimEnd('/')}/privacy#reporter-contact", fresh.privacyUrl)
+            assertEquals(Answer.Done, b.ask(Call.ReportWhole(id, false)))
+            assertEquals(Answer.Done, b.ask(Call.ReportCategory(id, "TERMS_BREACH")))
+            assertEquals(Answer.Done, b.ask(Call.ReportReason(id, "A check of the bridge's report (LiveBridgeTest)")))
+            assertEquals(Answer.Done, b.ask(Call.ReportGoodFaith(id, true)))
+            w.until { u -> (u as Update.Report).shown?.takeIf { it.canSend } }
+            assertEquals(Answer.Said(null), b.ask(Call.ReportSend(id), timeout = 2.minutes))
+            val receipt = w.until(1.minutes) { u -> (u as Update.Report).shown?.takeIf { it.sent } }
+            assertEquals(8, receipt.reference?.length)
+            assertNotNull(receipt.receivedAt)
+            println("reported ${at.name}: reference ${receipt.reference}, received ${receipt.receivedAt}")
+            b.ask(Call.ReportClose(id))
+        }
+        b.shutdown()
+    }
+
     /**
      * A desktop pass's read-back for the web's guest page: with `VEYQ_LIVE_SHARE_LIST=<folder name>` (a folder at a space's
      * top) and `VEYQ_LIVE_LINKS_OUT=<file>`, that folder's share sheet is opened through calls and each link's id and

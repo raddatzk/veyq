@@ -25,7 +25,8 @@ import kotlin.test.assertTrue
  *
  * A guest link's address is a key by its nature — `K_share` rides its fragment (`#k=`) — and still crosses outward,
  * since it is what the person copies and hands out. That is the one allowance of its kind, written once ([linkAddresses])
- * and held by name: any outward field named like an address (`url`, `address`) not listed there is refused.
+ * and held by name: any outward field named like an address (`url`, `address`) not listed there is refused. A public
+ * page's address (the privacy notice a report points to) carries no key; it is listed apart ([publicAddresses]), by name too.
  */
 class SecretFreeSchemaTest {
     private val typedIn = mapOf(
@@ -40,6 +41,10 @@ class SecretFreeSchemaTest {
         "me.raddatz.veyq.mobile.bridge.ShareShown.ShownLink.address" to "an open link's address, which the person copies or shares from its row",
         "me.raddatz.veyq.mobile.bridge.ShareShown.freshAddress" to "the address just minted or renewed, shown once to copy or share",
     )
+    /** The outward fields that carry the address of a public page, no key in it, each with why. */
+    private val publicAddresses = mapOf(
+        "me.raddatz.veyq.mobile.bridge.ReportShown.privacyUrl" to "the server's privacy notice at its passage on a reporter's contact: a public page, no fragment key",
+    )
     private val identifiers = mapOf(
         "Signed.connectionKey" to "a connection's id, host#userId: it names an account and opens nothing",
         "me.raddatz.veyq.mobile.navigation.BarTab.key" to "the catalog's name of a bar place's words",
@@ -49,10 +54,10 @@ class SecretFreeSchemaTest {
     @Test
     fun nothingTheCoreSendsCarriesAKeyASealATokenASecretOrBytes() {
         assertEquals(emptyList(), leaks(Roots.outward, identifiers))
-        assertEquals(emptyList(), addresses(Roots.outward, linkAddresses))
+        assertEquals(emptyList(), addresses(Roots.outward, linkAddresses + publicAddresses))
         // each listed address is a field the wire has
         val fields = Schema(Roots.all).let { s -> s.types.values.flatMap { t -> s.fields(t).map { "${it.owner}.${it.name}" } } }.toSet()
-        assertEquals(emptySet(), linkAddresses.keys - fields)
+        assertEquals(emptySet(), (linkAddresses + publicAddresses).keys - fields)
     }
 
     /** The address check against what it must refuse: an outward `url` or `…Address` not listed is red, a listed one is not. */

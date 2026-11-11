@@ -23,6 +23,8 @@ import me.raddatz.veyq.mobile.words.Msg
 import me.raddatz.veyq.mobile.words.MsgKey
 import me.raddatz.veyq.mobile.words.Notice
 import me.raddatz.veyq.mobile.words.Piece
+import me.raddatz.veyq.mobile.session.CoverFrame
+import me.raddatz.veyq.mobile.session.NodeCover
 
 /**
  * What crosses the bridge (ADR 0123's Consequences, the bridge), as kotlinx.serialization writes it: UTF-8 JSON, every
@@ -196,6 +198,37 @@ internal sealed class Call {
     @Serializable @SerialName("Header.Download") data class HeaderDownload(val header: Long, val path: String, val deletedName: String) : Call()
 
     /**
+     * The header's cover picture as stored (`coverPicture`): [Answer.Bytes], the JPEG beside the JSON (at most
+     * `NodeCover.LONG_EDGE` on its long edge, one payload as a picture is); refused where there is none. Its frame is
+     * [HeaderShown.cover].
+     */
+    @Serializable @SerialName("Header.CoverPicture") data class HeaderCoverPicture(val header: Long) : Call()
+
+    /**
+     * Sets the cover (`saveCover`): the JPEG the host encoded to the core's spec ([Answer.CoverFit]) and wrote to the file at
+     * [path] (ADR 0128 decision 3: the core reads it; the host removes its file after), framed by [crop] — or, [path]
+     * null, the stored picture framed anew. [Answer.Said] with why not, or none.
+     */
+    @Serializable @SerialName("Header.CoverSave") data class HeaderCoverSave(val header: Long, val path: String?, val crop: NodeCover.Crop) : Call()
+
+    /** Removes the cover (`removeCover`): [Answer.Said]. */
+    @Serializable @SerialName("Header.CoverRemove") data class HeaderCoverRemove(val header: Long) : Call()
+
+    /**
+     * Where a picture of [imageWidth] × [imageHeight] sits in a cover's frame of [frameWidth] × [frameHeight] (core's
+     * `CoverFrame`, the web's cropper; asked per change, the math never the host's): from [at] — or, none, from [crop] (a
+     * stored cover reopens as framed) or centred (a fresh picture) — moved by [panX], [panY] and zoomed by [zoom] about the
+     * frame's centre. [Answer.CoverPosed]: the pose to draw and the crop it shows.
+     */
+    @Serializable @SerialName("Cover.Pose") data class CoverPose(
+        val imageWidth: Double, val imageHeight: Double, val frameWidth: Double, val frameHeight: Double,
+        val at: CoverFrame.Pose?, val crop: NodeCover.Crop?, val panX: Double, val panY: Double, val zoom: Double,
+    ) : Call()
+
+    /** The size and quality a picked picture of [width] × [height] is encoded at as a cover (`NodeCover.encodedSize`). */
+    @Serializable @SerialName("Cover.Fit") data class CoverFit(val width: Int, val height: Int) : Call()
+
+    /**
      * The move ([copy] false) or copy sheet of [node] (`ShellModel.moveSheet`, core's `MoveSheet`, read at once), answered
      * with its id ([Answer.MoveOpened]) for [Watched.Move]. A Pot copies by the Pot model the host opened for it
      * (`Pot.Open`); [deletedName] is the host's word for an erased person, which a copied Pot carries. A sheet stays until
@@ -282,6 +315,22 @@ internal sealed class Call {
     /** "Revoke" and "Switch on again" on [link], at once (`switchOff`, `reactivate`): [Answer.Said]. */
     @Serializable @SerialName("Share.SwitchOff") data class ShareSwitchOff(val share: Long, val link: String) : Call()
     @Serializable @SerialName("Share.Reactivate") data class ShareReactivate(val share: Long, val link: String) : Call()
+
+    /**
+     * The report sheet of [node] (`ShellModel.reportSheet`, core's `ReportSheet`), answered with its id
+     * ([Answer.ReportOpened]) for [Watched.Report]. It stays until [ReportClose] or the tenant closes. The reason and the
+     * contact the person typed cross inward only; the core cuts them to their room ([ReportShown.reasonMax]).
+     */
+    @Serializable @SerialName("Report.Open") data class ReportOpen(val node: NodeAt) : Call()
+    @Serializable @SerialName("Report.Close") data class ReportClose(val report: Long) : Call()
+    @Serializable @SerialName("Report.Whole") data class ReportWhole(val report: Long, val whole: Boolean) : Call()
+    @Serializable @SerialName("Report.Category") data class ReportCategory(val report: Long, val category: String) : Call()
+    @Serializable @SerialName("Report.Reason") data class ReportReason(val report: Long, val reason: String) : Call()
+    @Serializable @SerialName("Report.GoodFaith") data class ReportGoodFaith(val report: Long, val on: Boolean) : Call()
+    @Serializable @SerialName("Report.Contact") data class ReportContact(val report: Long, val contact: String) : Call()
+
+    /** Sends the report once (`send`): [Answer.Said] with why not, or none (the receipt is [ReportShown.reference]). */
+    @Serializable @SerialName("Report.Send") data class ReportSend(val report: Long) : Call()
 }
 
 /** A call's one answer; what the call changed arrives as the watched states' updates. */
@@ -328,6 +377,17 @@ internal sealed class Answer {
     @Serializable @SerialName("MoveSent") data class MoveSent(val done: Notice?, val undoable: Boolean, val confirming: Boolean, val problem: Notice?) : Answer()
     @Serializable @SerialName("MoveOpened") data class MoveOpened(val move: Long) : Answer()
     @Serializable @SerialName("ShareOpened") data class ShareOpened(val share: Long) : Answer()
+    @Serializable @SerialName("ReportOpened") data class ReportOpened(val report: Long) : Answer()
+
+    /**
+     * A picture's place in a cover's frame ([Call.CoverPose]): the pose (its top-left at [CoverFrame.Pose.x],
+     * [CoverFrame.Pose.y]), the size the picture is drawn at there ([width] × [height], the frame's units) and the crop that
+     * pose shows.
+     */
+    @Serializable @SerialName("CoverPosed") data class CoverPosed(val pose: CoverFrame.Pose, val width: Double, val height: Double, val crop: NodeCover.Crop) : Answer()
+
+    /** What a picked picture is encoded at as a cover: its size, and the JPEG quality (0–1, and 0–100 for a percentage). */
+    @Serializable @SerialName("CoverFit") data class CoverFit(val width: Int, val height: Int, val quality: Double, val qualityPercent: Int) : Answer()
 
     /** A download: whether the file was written, what it says (done or failed) and what it left out, or null. */
     @Serializable @SerialName("Downloaded") data class Downloaded(val written: Boolean, val notice: Notice, val leftOut: Notice?) : Answer()
@@ -337,7 +397,7 @@ internal sealed class Answer {
 
     enum class Why {
         NOT_A_CALL, NO_TENANT_OPEN, NO_SUCH_CONNECTION, NO_SUCH_TENANT, NO_SUCH_POT, NO_SUCH_READER, NO_PICTURE, NOTHING_TO_DOWNLOAD,
-        NO_SUCH_HEADER, NO_SUCH_TRASH, NO_SUCH_ROW, NO_SUCH_MOVE, NO_SUCH_SHARE,
+        NO_SUCH_HEADER, NO_SUCH_TRASH, NO_SUCH_ROW, NO_SUCH_MOVE, NO_SUCH_SHARE, NO_SUCH_REPORT, NO_COVER,
 
         /** A change of trust (`TrustChange`): no offer to answer; the person cancelled the prompt; not enrolled; the
          *  password was not the account's. */
@@ -368,6 +428,9 @@ internal sealed class Watched {
 
     /** A share sheet opened by [Call.ShareOpen]. */
     @Serializable @SerialName("Share") data class Share(val share: Long) : Watched()
+
+    /** A report sheet opened by [Call.ReportOpen]. */
+    @Serializable @SerialName("Report") data class Report(val report: Long) : Watched()
 }
 
 /** One state a watch delivers: the first at once, then each change. */
@@ -403,6 +466,41 @@ internal sealed class Update {
 
     /** A share sheet; null once it was closed. */
     @Serializable @SerialName("Share") data class Share(val share: Long, val shown: ShareShown?) : Update()
+
+    /** A report sheet; null once it was closed. */
+    @Serializable @SerialName("Report") data class Report(val report: Long, val shown: ReportShown?) : Update()
+}
+
+/**
+ * A report sheet as the host draws it (`ReportSheet`), each field one core function's answer: the node; the categories in
+ * the web's order with their words; whether the node is reported whole and what that choice says ([scopeHint]); the
+ * category chosen and its note; the room of the reason and the contact (the host's fields hold no more); the good-faith
+ * switch; whether Send is offered, a send under way and why the last did not go through; once sent, the receipt's
+ * reference and when the server received it (an instant the host says in its words); the privacy notice's passage on a
+ * reporter's contact ([privacyUrl], built by the core from the tenant's origin). The typed reason and contact are not
+ * echoed: the host's fields hold them.
+ */
+@Serializable
+internal class ReportShown(
+    val node: NodeAt,
+    val categories: List<ShownCategory>,
+    val whole: Boolean,
+    @Serializable(with = MsgKey::class) val scopeHint: Msg,
+    val category: String?,
+    @Serializable(with = MsgKey::class) val note: Msg?,
+    val reasonMax: Int,
+    val contactMax: Int,
+    val goodFaith: Boolean,
+    val canSend: Boolean,
+    val sending: Boolean,
+    val problem: Notice?,
+    val sent: Boolean,
+    val reference: String?,
+    val receivedAt: String?,
+    val privacyUrl: String,
+) {
+    /** A category: the contract's name of it (its `category` on [Call.ReportCategory]) and its words. */
+    @Serializable class ShownCategory(val id: String, @Serializable(with = MsgKey::class) val word: Msg)
 }
 
 /**
@@ -422,6 +520,8 @@ internal class HeaderShown(
     val gone: Boolean,
     /** The file name a download's save dialog suggests (`NodeExport.fileName`: the web's archive name). */
     val archiveName: String,
+    /** Where the frame of the node's cover sits (`State.cover`); null while it has none. Its picture: [Call.HeaderCoverPicture]. */
+    val cover: NodeCover.Crop?,
 ) {
     /** `NodeHeader.Plan`: the bar's buttons, the menu, and the menu's last group after a separator. */
     @Serializable class Plan(val buttons: List<PlanAction>, val menu: List<PlanAction>, val last: List<PlanAction>)

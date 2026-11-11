@@ -18,6 +18,7 @@ import kotlinx.cinterop.reinterpret
 import kotlinx.cinterop.toKString
 import kotlinx.cinterop.usePinned
 import me.raddatz.veyq.mobile.blob.FileSink
+import me.raddatz.veyq.mobile.blob.FileSource
 import me.raddatz.veyq.mobile.crypto.LibsodiumPrimitives
 import me.raddatz.veyq.mobile.session.DeviceKeys
 import me.raddatz.veyq.mobile.session.DeviceStore
@@ -54,6 +55,23 @@ private class Running(val bridge: Bridge<*, *>, val host: Host)
 private object Files : DeviceFiles {
     override suspend fun write(path: String, produce: suspend (sink: (ByteArray) -> Unit) -> Boolean): Boolean =
         FileSink.write(path, kept = { it }, produce)
+
+    override suspend fun read(path: String, most: Int): ByteArray {
+        val source = FileSource(path, "", 0, null, null)
+        try {
+            var out = ByteArray(0)
+            while (true) {
+                val part = source.read(out.size.toLong(), READ_STEP)
+                out += part
+                if (out.size > most) throw IllegalStateException("too large")
+                if (part.size < READ_STEP) return out
+            }
+        } finally {
+            source.close()
+        }
+    }
+
+    private const val READ_STEP = 1 shl 16
 }
 
 private val running = AtomicReference<Running?>(null)

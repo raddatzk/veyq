@@ -62,6 +62,9 @@ internal suspend fun Bridge<*, *>.gateNow(): me.raddatz.veyq.mobile.session.Sess
 
 /** core's `FileSink` as the JVM plays it: the file stays only when the producer answered true. */
 internal object JvmFiles : DeviceFiles {
+    override suspend fun read(path: String, most: Int): ByteArray =
+        java.io.File(path).readBytes().also { if (it.size > most) throw IllegalStateException("too large") }
+
     override suspend fun write(path: String, produce: suspend (sink: (ByteArray) -> Unit) -> Boolean): Boolean {
         val file = java.io.File(path)
         var keep = false
