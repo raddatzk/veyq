@@ -6,9 +6,9 @@
 //! words is the core's; this lays it out.
 //!
 //! The move and the copy open core's sheet ([crate::move_sheet]); a folder's download goes where GTK's save dialog says
-//! (`Header.Download`, under the core's archive name), a Pot's through its page (`Pot.Download`). The share, the report
-//! and the cover are the CR's later phases: their ids are not drawn yet ([DRAWN]), never shown as a control that answers
-//! "not yet".
+//! (`Header.Download`, under the core's archive name), a Pot's through its page (`Pot.Download`); the share opens core's
+//! share sheet ([crate::share_sheet]). The report and the cover are the CR's later phases: their ids are not drawn yet
+//! ([DRAWN]), never shown as a control that answers "not yet".
 use std::cell::{Cell, RefCell};
 use std::rc::{Rc, Weak};
 
@@ -22,7 +22,7 @@ use crate::{said, words};
 pub const MAX_BUTTONS: i32 = 2;
 
 /// The header's ids drawn so far; every other id of the plan is left out until its phase.
-pub const DRAWN: &[&str] = &["favorite", "rename", "delete", "download", "move", "copy"];
+pub const DRAWN: &[&str] = &["favorite", "share", "rename", "delete", "download", "move", "copy"];
 
 /// Whether [id] is drawn for a node of [kind]: a download where it is the node's archive (a file's is its own bytes,
 /// Depot's page).
@@ -147,6 +147,11 @@ impl Header {
     /// The move ([copy] false) or copy sheet over [parent] (core's `MoveSheet`, [crate::move_sheet]).
     pub fn move_sheet(&self, parent: &impl IsA<gtk::Widget>, copy: bool) {
         crate::move_sheet::open(parent, &self.node, copy, &self.inner.toasts);
+    }
+
+    /// The share sheet over [parent] (core's `ShareSheet`, [crate::share_sheet]).
+    pub fn share(&self, parent: &impl IsA<gtk::Widget>) {
+        crate::share_sheet::open(parent, &self.node);
     }
 
     /// Downloads the node as the web's ZIP: GTK's save dialog (the file chooser portal where there is one) suggests the
@@ -335,6 +340,7 @@ fn clear(bar: &gtk::Box) {
 pub fn icon_of(id: &str) -> &'static str {
     match id {
         "download" => "folder-download-symbolic",
+        "share" => "send-to-symbolic",
         "move" => "folder-symbolic",
         "copy" => "edit-copy-symbolic",
         "rename" => "document-edit-symbolic",
@@ -406,11 +412,11 @@ mod tests {
 
     #[test]
     fn the_phases_actions_so_far_are_drawn_and_a_download_where_it_is_the_nodes_archive() {
-        for id in ["favorite", "rename", "delete", "move", "copy", "download"] {
+        for id in ["favorite", "share", "rename", "delete", "move", "copy", "download"] {
             assert!(drawn(id, "FOLDER") && drawn(id, "EXPENSES_POT"), "{id}");
         }
         assert!(!drawn("download", "FILE"), "a file's download is its own bytes");
-        for id in ["share", "report", "cover", "an-applications-own"] {
+        for id in ["report", "cover", "an-applications-own"] {
             assert!(!drawn(id, "FOLDER") && !drawn(id, "EXPENSES_POT"), "{id} drawn before its phase");
         }
         assert_eq!(action_of("download", "EXPENSES_POT"), "win.pot-download");

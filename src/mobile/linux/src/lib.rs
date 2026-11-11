@@ -13,6 +13,7 @@ pub mod manage;
 pub mod move_sheet;
 pub mod pot;
 pub mod said;
+pub mod share_sheet;
 pub mod shell;
 pub mod sign_in;
 pub mod theme;
