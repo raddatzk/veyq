@@ -335,12 +335,10 @@ class AppModel(app: Application) : AndroidViewModel(app) {
         val account = opened.account
         val tenant = opened.tenant
         val t = opened.session
-        // a member's write pulls its path forward, and the scopes served as re-keying are finished in the background
-        t.rekeyRules = me.raddatz.veyq.mobile.AppKinds.rules
+        // the re-key's rules and its background resume are the core's (`AccountDoor.open`/`opened`)
         tenantSession?.let { was -> if (was.account !== account || was.tenant.tenantId != tenant.tenantId) uploads.clear() }
         tenantSession = t
         rows = me.raddatz.veyq.mobile.RowDetails.Read.EMPTY
-        resumeRekeys(t)
         val pots = me.raddatz.veyq.mobile.expenses.PotModel(t, System::currentTimeMillis)
         potWatch?.cancel()
         potModel = pots
@@ -408,12 +406,6 @@ class AppModel(app: Application) : AndroidViewModel(app) {
         shellModel?.refresh()
     }
 
-    /**
-     * How a kind folds a name to its slug token's input: the composition root's answer (`AppKinds`, the web's
-     * `registry.tokenInputFor`). Null for a kind the app does not know: nothing is placed under it.
-     */
-    private fun tokenInputFor(kind: String, name: String): String? = me.raddatz.veyq.mobile.AppKinds.tokenInput(kind, name)
-
     // ---- a report (core's NodeReport) ----
 
     /** Reports [ref] to the moderators: whole or by its name, in [category] for [reason], [contact] optional. */
@@ -432,90 +424,14 @@ class AppModel(app: Application) : AndroidViewModel(app) {
     fun linkRules(): me.raddatz.veyq.mobile.session.ShareLinks.Rules =
         tenantSession?.linkRules ?: me.raddatz.veyq.mobile.session.ShareLinks.Rules.UNKNOWN
 
-    /** The READ and READ_WRITE links on [ref], newest first; null when they do not list. */
-    suspend fun shareLinks(ref: me.raddatz.veyq.mobile.navigation.NodeAt): List<me.raddatz.veyq.mobile.session.ShareLinks.Link>? {
-        val t = tenantSession ?: return null
-        return runCatching { me.raddatz.veyq.mobile.session.ShareLinks.list(t, ref.scopeId, ref.nodeId, writeOnly = ref.kind == me.raddatz.veyq.mobile.depot.DepotFiles.DROPBOX) }.getOrNull()
-    }
-
-    /** Mints a [role] link on [ref]; on success its address, to hand out once. */
-    suspend fun mintLink(ref: me.raddatz.veyq.mobile.navigation.NodeAt, role: String, label: String, password: String, expiresAt: String?): me.raddatz.veyq.mobile.session.ShareLinks.Minted {
-        val failed = me.raddatz.veyq.mobile.session.ShareLinks.Minted(me.raddatz.veyq.mobile.session.ShareLinks.Outcome.FAILED)
-        val t = tenantSession ?: return failed
-        return runCatching { me.raddatz.veyq.mobile.session.ShareLinks.mint(t, ref.scopeId, ref.nodeId, role, label, password, expiresAt) }.getOrDefault(failed)
-    }
-
     /**
-     * Switches link [shareId] on [ref] off and re-keys the subtree below it (core's `ShareLinks.switchOff`, each kind's
-     * content through `AppKinds`); an open Pot is read anew, since its key may have changed.
+     * The share sheet of [node] (core's `ShareSheet` over the shell: its links, the form, mint, edit, renew, switch off and
+     * on, delete, a folder's "Add files only"; a link's close tells the tenant, whose open Pot reads again); the rows'
+     * details are read anew after a drop box was made.
      */
-    suspend fun switchOffLink(ref: me.raddatz.veyq.mobile.navigation.NodeAt, shareId: String): me.raddatz.veyq.mobile.session.ShareLinks.Closed {
-        val t = tenantSession ?: return me.raddatz.veyq.mobile.session.ShareLinks.Closed.FAILED
-        val r = runCatching {
-            me.raddatz.veyq.mobile.session.ShareLinks.switchOff(t, ref.scopeId, ref.nodeId, shareId, me.raddatz.veyq.mobile.AppKinds.rekeys, ::tokenInputFor) { java.util.UUID.randomUUID().toString() }
-        }.getOrDefault(me.raddatz.veyq.mobile.session.ShareLinks.Closed.FAILED)
-        potRekeyed()
-        return r
-    }
-
-    /**
-     * Finishes, in the background, the re-key of every scope [t] was served as re-keying (ADR 0114 decision 9: a link's
-     * close or a rotation another device began, or this one left when it closed): what this device can, top-down; the
-     * lists are read anew after it. A run that cannot finish leaves the marks for the next start or another device.
-     */
-    private fun resumeRekeys(t: me.raddatz.veyq.mobile.session.TenantSession) {
-        if (t.rekeyingScopes.isEmpty()) return
-        viewModelScope.launch {
-            val ran = runCatching { me.raddatz.veyq.mobile.session.NodeRekey.resume(t) }.getOrDefault(emptyMap())
-            if (ran.isNotEmpty() && tenantSession === t) {
-                potRekeyed()
-                refreshLists(t)
-            }
-        }
-    }
-
-    /** Edits one of this member's open links on [ref] in place: label, password (null untouched, blank removed), end, role. */
-    suspend fun editLink(ref: me.raddatz.veyq.mobile.navigation.NodeAt, shareId: String, edit: me.raddatz.veyq.mobile.session.ShareLinkChanges.Edit): me.raddatz.veyq.mobile.session.ShareLinkChanges.Changed {
-        val failed = me.raddatz.veyq.mobile.session.ShareLinkChanges.Changed(me.raddatz.veyq.mobile.session.ShareLinkChanges.Outcome.FAILED)
-        val t = tenantSession ?: return failed
-        return runCatching { me.raddatz.veyq.mobile.session.ShareLinkChanges.edit(t, ref.scopeId, ref.nodeId, shareId, edit, System.currentTimeMillis()) }.getOrDefault(failed)
-    }
-
-    /** Renews link [shareId] on [ref]: a new address carrying its settings, the old one closed and the node re-keyed. */
-    suspend fun renewLink(ref: me.raddatz.veyq.mobile.navigation.NodeAt, shareId: String): me.raddatz.veyq.mobile.session.ShareLinkChanges.Changed {
-        val failed = me.raddatz.veyq.mobile.session.ShareLinkChanges.Changed(me.raddatz.veyq.mobile.session.ShareLinkChanges.Outcome.FAILED)
-        val t = tenantSession ?: return failed
-        val r = runCatching {
-            me.raddatz.veyq.mobile.session.ShareLinkChanges.renew(t, ref.scopeId, ref.nodeId, shareId, me.raddatz.veyq.mobile.AppKinds.rekeys, ::tokenInputFor, { java.util.UUID.randomUUID().toString() }, System.currentTimeMillis())
-        }.getOrDefault(failed)
-        potRekeyed()
-        return r
-    }
-
-    /** Switches link [shareId] on [ref] on again, its address kept (`ShareLinkChanges.reactivate`). */
-    suspend fun reactivateLink(ref: me.raddatz.veyq.mobile.navigation.NodeAt, shareId: String): me.raddatz.veyq.mobile.session.ShareLinkChanges.Changed {
-        val failed = me.raddatz.veyq.mobile.session.ShareLinkChanges.Changed(me.raddatz.veyq.mobile.session.ShareLinkChanges.Outcome.FAILED)
-        val t = tenantSession ?: return failed
-        return runCatching { me.raddatz.veyq.mobile.session.ShareLinkChanges.reactivate(t, ref.scopeId, ref.nodeId, shareId) }.getOrDefault(failed)
-    }
-
-    /** Deletes link [shareId] on [ref] for good. */
-    suspend fun deleteLink(ref: me.raddatz.veyq.mobile.navigation.NodeAt, shareId: String): me.raddatz.veyq.mobile.session.ShareLinkChanges.Changed {
-        val failed = me.raddatz.veyq.mobile.session.ShareLinkChanges.Changed(me.raddatz.veyq.mobile.session.ShareLinkChanges.Outcome.FAILED)
-        val t = tenantSession ?: return failed
-        val r = runCatching {
-            me.raddatz.veyq.mobile.session.ShareLinkChanges.delete(t, ref.scopeId, ref.nodeId, shareId, me.raddatz.veyq.mobile.AppKinds.rekeys, ::tokenInputFor, { java.util.UUID.randomUUID().toString() }, System.currentTimeMillis())
-        }.getOrDefault(failed)
-        potRekeyed()
-        return r
-    }
-
-    /**
-     * The open Pot read anew under its key, after a re-key that may have reached it: a link on it or on a folder above it
-     * closed, or a scope's re-key finished in the background. A Pot the re-key did not reach reads the same.
-     */
-    private suspend fun potRekeyed() {
-        potModel?.rekeyed()
+    fun shareSheet(node: me.raddatz.veyq.mobile.navigation.NodeAt): me.raddatz.veyq.mobile.navigation.ShareSheet? {
+        val m = shellModel ?: return null
+        return m.shareSheet(node) { viewModelScope.launch { readRowDetails(m.tenant) } }
     }
 
     // ---- the move and copy sheet (core's MoveSheet) ----
@@ -714,13 +630,6 @@ class AppModel(app: Application) : AndroidViewModel(app) {
     }
 
     // ---- Depot's files (the application's `depot/`) ----
-
-    /**
-     * "Add files only" on folder [folder]: a drop box named [name] in it with its first link (`DropBoxes.create`); the lists
-     * are read anew.
-     */
-    suspend fun createDropBox(folder: me.raddatz.veyq.mobile.navigation.NodeAt, name: String, password: String, expiresAt: String?): me.raddatz.veyq.mobile.depot.DropBoxes.Created =
-        createDropBox(folder.scopeId, folder.nodeId, name, password, expiresAt)
 
     /** Who uploaded [file]'s content (Depot's `uploaderOf`); null where nobody is to be named. */
     suspend fun uploader(file: me.raddatz.veyq.mobile.depot.DepotFiles.File): me.raddatz.veyq.mobile.depot.Uploaders.Uploader? {

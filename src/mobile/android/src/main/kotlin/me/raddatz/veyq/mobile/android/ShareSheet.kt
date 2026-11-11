@@ -39,6 +39,7 @@ import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -63,44 +64,25 @@ import java.time.format.DateTimeFormatter
 import java.time.format.FormatStyle
 
 
-/**
- * The sentences a node's share sheet says in its kind's words (the web's `ShareDialogCopy`): a folder's are core's
- * (`share.folder.*`), a Pot's Expenses' (`expenses.share.*`). The rest of the sheet is the same for every kind.
- */
 /** The words of [kind]'s share sheet (core's `ShareWords`). */
 internal fun shareWords(kind: String): ShareWords = me.raddatz.veyq.mobile.session.ShareWords.of(kind)
 
 /**
- * A node's guest links (core's `FolderShareDialog`, a Pot's with Expenses' words, [shareWords]): the links on it, newest
- * first, each copied from here; "New link" mints one — view only, or view and contribute where the tenant allows it, an
- * optional label only the member sees, a password and an end where the member wants them or the tenant's rules require
- * them — and shows it once to copy or share. Switching a link off re-keys what is below it.
+ * A node's guest links, drawn from core's `ShareSheet` (its links newest first, the form, every write and what each says;
+ * a Pot's in Expenses' words): each open link copied from here or handed to another app; "New link" mints one — view only,
+ * or view and contribute where the tenant allows it, an optional label only the member sees, a password and an end where
+ * the member wants them or the tenant's rules require them — and shows it once. Switching a link off re-keys what is below
+ * it. The row's menu, the bottom sheet and the dialogs are Material 3's; every decision is the core's.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 internal fun ShareSheet(ref: me.raddatz.veyq.mobile.navigation.NodeAt, model: AppModel, onClose: () -> Unit) {
-    val words = shareWords(ref.kind)
-    // a drop box's own links: WRITE_ONLY only, no name of their own; a folder offers "Add files only", which makes one
-    val dropBox = ref.kind == me.raddatz.veyq.mobile.depot.DepotFiles.DROPBOX
+    val sheet = remember(ref) { model.shareSheet(ref) } ?: return
+    val state by sheet.state.collectAsStateWithLifecycle()
+    val words = sheet.words
     val palette = LocalPalette.current
     val scope = rememberCoroutineScope()
-    val context = LocalContext.current
-    val rules = model.linkRules()
-    var links by remember { mutableStateOf<List<ShareLinks.Link>?>(null) }
-    var failed by remember { mutableStateOf(false) }
-    var creating by remember { mutableStateOf(false) }
-    var fresh by remember { mutableStateOf<String?>(null) }
-    var busy by remember { mutableStateOf<String?>(null) }
-    var notice by remember { mutableStateOf<String?>(null) }
-    var editing by remember { mutableStateOf<ShareLinks.Link?>(null) }
-    var renewing by remember { mutableStateOf<ShareLinks.Link?>(null) }
-    var deleting by remember { mutableStateOf<ShareLinks.Link?>(null) }
-    val changedText = { o: me.raddatz.veyq.mobile.session.ShareLinkChanges.Outcome -> me.raddatz.veyq.mobile.words.Notices.linkChanged(o)?.let { context.text(it) } }
-    suspend fun load() {
-        val read = model.shareLinks(ref)
-        if (read == null) failed = true else { links = read; failed = false }
-    }
-    LaunchedEffect(ref) { load() }
+    LaunchedEffect(sheet) { sheet.load() }
 
     ModalBottomSheet(onDismissRequest = onClose, sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)) {
         Column(Modifier.padding(horizontal = 20.dp).padding(bottom = 24.dp).verticalScroll(rememberScrollState())) {
@@ -108,83 +90,33 @@ internal fun ShareSheet(ref: me.raddatz.veyq.mobile.navigation.NodeAt, model: Ap
             Spacer(Modifier.padding(4.dp))
             Text(say(words.intro), style = MaterialTheme.typography.bodyMedium, color = role(palette.muted))
             Spacer(Modifier.padding(8.dp))
-            val made = fresh
+            val made = state.fresh
+            val form = state.form
             when {
-                made != null -> FreshLink(made) { fresh = null }
-                editing != null -> NewLinkForm(rules, words, onCancel = { editing = null }, editing = editing, writeOnly = dropBox) { role, label, password, expiresAt ->
-                    val link = editing!!
-                    val r = model.editLink(ref, link.shareId, me.raddatz.veyq.mobile.session.ShareLinkChanges.Edit(label, password, expiresAt, role))
-                    changedText(r.outcome).also {
-                        if (it == null) {
-                            editing = null
-                            scope.launch { load() }
-                        }
-                    }
-                }
-                creating -> NewLinkForm(
-                    rules, words, onCancel = { creating = false }, writeOnly = dropBox,
-                    uploadOffered = ref.kind == "FOLDER" && rules.dropBox,
-                ) { role, label, password, expiresAt ->
-                    val mint = me.raddatz.veyq.mobile.session.LinkRow.mint(role, label, onDropBox = dropBox)
-                    if (mint.makesDropBox) {
-                        // "Add files only" on a folder: a drop box named so, here, with its first link (`createDropBoxWithLink`)
-                        val made = model.createDropBox(ref, mint.label, password.orEmpty(), expiresAt)
-                        return@NewLinkForm when (made.outcome) {
-                            me.raddatz.veyq.mobile.depot.DropBoxes.Outcome.CREATED -> {
-                                creating = false
-                                fresh = made.url
-                                null
-                            }
-                            else -> me.raddatz.veyq.mobile.words.Notices.dropBoxRefused(made.outcome)?.let { context.text(it) }
-                        }
-                    }
-                    val minted = model.mintLink(ref, mint.role, mint.label, password.orEmpty(), expiresAt)
-                    if (minted.outcome == ShareLinks.Outcome.CREATED) {
-                        creating = false
-                        fresh = minted.url
-                        scope.launch { load() }
-                        null
-                    } else context.text(me.raddatz.veyq.mobile.words.Notices.linkRefused(minted.outcome) ?: me.raddatz.veyq.mobile.words.Notice(me.raddatz.veyq.mobile.words.Msg.SHARE_FAILED))
-                }
+                made != null -> FreshLink(made) { sheet.freshSeen() }
+                form != null -> NewLinkForm(
+                    form, words, saving = state.saving, problem = state.problem?.let { say(it) }, submit = sheet.submit,
+                    onChange = sheet::form, onCancel = sheet::cancelForm, onSave = { scope.launch { sheet.save() } },
+                )
                 else -> {
-                    if (rules.on) Button(onClick = { creating = true }, modifier = Modifier.fillMaxWidth()) { Text(stringResource(R.string.share_new)) }
-                    notice?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = role(palette.muted), modifier = Modifier.padding(top = 8.dp)) }
+                    if (sheet.canMint) Button(onClick = sheet::addLink, modifier = Modifier.fillMaxWidth()) { Text(stringResource(R.string.share_new)) }
+                    state.notice?.let { Text(say(it), style = MaterialTheme.typography.bodySmall, color = role(palette.muted), modifier = Modifier.padding(top = 8.dp)) }
                     Spacer(Modifier.padding(6.dp))
-                    val list = links
+                    val list = state.links
                     when {
-                        failed -> Text(stringResource(R.string.share_load_failed), color = role(palette.danger))
+                        state.failed -> Text(stringResource(R.string.share_load_failed), color = role(palette.danger))
                         list == null -> CircularProgressIndicator(Modifier.padding(16.dp).align(Alignment.CenterHorizontally))
                         else -> LazyColumn(Modifier.heightIn(max = 420.dp)) {
-                            items(list, key = { it.shareId }) { link ->
+                            items(sheet.rows(state), key = { it.link.shareId }) { row ->
                                 // what this member may do with it is core's (`LinkRow`, the web's dialogs' rules)
-                                val row = me.raddatz.veyq.mobile.session.LinkRow(link, dropBox, words)
+                                val id = row.link.shareId
                                 LinkRow(
-                                    row, busy = busy == link.shareId,
-                                    onEdit = if (row.canEdit) ({ editing = link }) else null,
-                                    onRenew = if (row.canRenew) ({ renewing = link }) else null,
-                                    onDelete = if (row.canDelete) ({ deleting = link }) else null,
-                                    onReactivate = if (row.canReactivate) {
-                                        {
-                                            busy = link.shareId
-                                            scope.launch {
-                                                val r = model.reactivateLink(ref, link.shareId)
-                                                busy = null
-                                                notice = changedText(r.outcome)
-                                                load()
-                                            }
-                                        }
-                                    } else null,
-                                    onSwitchOff = if (row.canSwitchOff) {
-                                    {
-                                        busy = link.shareId
-                                        scope.launch {
-                                            val closed = model.switchOffLink(ref, link.shareId)
-                                            busy = null
-                                            notice = me.raddatz.veyq.mobile.words.Notices.linkClosed(closed)?.let { context.text(it) }
-                                            load()
-                                        }
-                                    }
-                                } else null,
+                                    row, busy = state.busy == id,
+                                    onEdit = if (row.canEdit) ({ sheet.edit(id) }) else null,
+                                    onRenew = if (row.canRenew) ({ sheet.askRenew(id) }) else null,
+                                    onDelete = if (row.canDelete) ({ sheet.askDelete(id) }) else null,
+                                    onReactivate = if (row.canReactivate) ({ scope.launch { sheet.reactivate(id) } }) else null,
+                                    onSwitchOff = if (row.canSwitchOff) ({ scope.launch { sheet.switchOff(id) } }) else null,
                                 )
                                 HorizontalDivider()
                             }
@@ -194,44 +126,24 @@ internal fun ShareSheet(ref: me.raddatz.veyq.mobile.navigation.NodeAt, model: Ap
             }
         }
     }
-    renewing?.let { link ->
+    if (state.renewing != null) {
         androidx.compose.material3.AlertDialog(
-            onDismissRequest = { renewing = null },
+            onDismissRequest = sheet::cancelAsk,
             title = { Text(stringResource(R.string.share_renew)) },
             text = { Text(stringResource(R.string.share_renew_confirm)) },
-            confirmButton = {
-                TextButton(onClick = {
-                    renewing = null
-                    busy = link.shareId
-                    scope.launch {
-                        val r = model.renewLink(ref, link.shareId)
-                        busy = null
-                        notice = changedText(r.outcome)
-                        if (r.url != null) fresh = r.url
-                        load()
-                    }
-                }) { Text(stringResource(R.string.share_renew)) }
-            },
-            dismissButton = { TextButton(onClick = { renewing = null }) { Text(stringResource(R.string.trash_cancel)) } },
+            confirmButton = { TextButton(onClick = { scope.launch { sheet.renew() } }) { Text(stringResource(R.string.share_renew)) } },
+            dismissButton = { TextButton(onClick = sheet::cancelAsk) { Text(stringResource(R.string.trash_cancel)) } },
         )
     }
-    deleting?.let { link ->
+    if (state.deleting != null) {
         androidx.compose.material3.AlertDialog(
-            onDismissRequest = { deleting = null },
+            onDismissRequest = sheet::cancelAsk,
             title = { Text(stringResource(R.string.share_delete)) },
             text = { Text(say(words.deleteConfirm)) },
             confirmButton = {
-                TextButton(onClick = {
-                    deleting = null
-                    busy = link.shareId
-                    scope.launch {
-                        notice = changedText(model.deleteLink(ref, link.shareId).outcome)
-                        busy = null
-                        load()
-                    }
-                }) { Text(stringResource(R.string.share_delete), color = role(palette.danger)) }
+                TextButton(onClick = { scope.launch { sheet.delete() } }) { Text(stringResource(R.string.share_delete), color = role(palette.danger)) }
             },
-            dismissButton = { TextButton(onClick = { deleting = null }) { Text(stringResource(R.string.trash_cancel)) } },
+            dismissButton = { TextButton(onClick = sheet::cancelAsk) { Text(stringResource(R.string.trash_cancel)) } },
         )
     }
 }
@@ -295,20 +207,37 @@ private fun LinkRow(
 @Composable
 internal fun TopLevelUploadSheet(scopeId: String, model: AppModel, onClose: () -> Unit) {
     val context = LocalContext.current
+    val scope = rememberCoroutineScope()
     var fresh by remember { mutableStateOf<String?>(null) }
+    var form by remember {
+        mutableStateOf(me.raddatz.veyq.mobile.session.LinkForm.start(
+            model.linkRules(), null, writeOnly = false, uploadOffered = false, uploadOnly = true,
+            today = me.raddatz.veyq.mobile.session.LocalDays.dayOf(System.currentTimeMillis()), editingEndDay = null,
+        ))
+    }
+    var saving by remember { mutableStateOf(false) }
+    var problem by remember { mutableStateOf<String?>(null) }
     ModalBottomSheet(onDismissRequest = onClose, sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)) {
         Column(Modifier.padding(horizontal = 20.dp).padding(bottom = 24.dp).verticalScroll(rememberScrollState())) {
             Text(stringResource(R.string.share_role_uploader), style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
             Spacer(Modifier.padding(8.dp))
             val made = fresh
             if (made != null) FreshLink(made, onClose)
-            else NewLinkForm(model.linkRules(), shareWords("FOLDER"), onCancel = onClose, uploadOnly = true) { _, label, password, expiresAt ->
-                val r = model.createDropBox(scopeId, null, label, password.orEmpty(), expiresAt)
-                when (r.outcome) {
-                    me.raddatz.veyq.mobile.depot.DropBoxes.Outcome.CREATED -> { fresh = r.url; null }
-                    else -> me.raddatz.veyq.mobile.words.Notices.dropBoxRefused(r.outcome)?.let { context.text(it) }
-                }
-            }
+            else NewLinkForm(
+                form, shareWords("FOLDER"), saving, problem, me.raddatz.veyq.mobile.words.Msg.SHARE_CREATE,
+                onChange = { form = it(form) }, onCancel = onClose,
+                onSave = {
+                    saving = true
+                    problem = null
+                    val sent = form
+                    scope.launch {
+                        val r = model.createDropBox(scopeId, null, sent.label, sent.submittedPassword.orEmpty(), sent.submittedEndDay?.let(me.raddatz.veyq.mobile.session.LocalDays::endOf))
+                        if (r.outcome == me.raddatz.veyq.mobile.depot.DropBoxes.Outcome.CREATED) fresh = r.url
+                        else problem = context.text(me.raddatz.veyq.mobile.words.Notices.dropBoxRefused(r.outcome) ?: me.raddatz.veyq.mobile.words.Notice(me.raddatz.veyq.mobile.words.Msg.SHARE_FAILED))
+                        saving = false
+                    }
+                },
+            )
         }
     }
 }
@@ -331,42 +260,29 @@ private fun FreshLink(url: String, onDone: () -> Unit) {
 }
 
 /**
- * The form of a new link or of one being edited (core's `LinkForm`: its rules, the web's `FolderShareDialog`): its role,
- * an optional label, a password and an end, the end a local day sent as the end of that day. [onCreate] answers why
- * not, or null once done.
+ * The form of a new link or of one being edited, as core's `LinkForm` has it (its rules, the web's `FolderShareDialog`):
+ * its role, an optional label, a password and an end, the end a local day. Each change goes to [onChange]; [onSave] sends
+ * it, [problem] says why it did not go through.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun NewLinkForm(
-    rules: ShareLinks.Rules, words: ShareWords, onCancel: () -> Unit,
-    /** A drop box's own link: its role is fixed and it has no name of its own. */
-    writeOnly: Boolean = false,
-    /** A folder's third role, "Add files only" (Depot's `folderUploadShare`): it makes a drop box with the name typed. */
-    uploadOffered: Boolean = false,
-    /** That role alone (the space's top level, where no link roots): no role to pick. */
-    uploadOnly: Boolean = false,
-    /** The link an edit changes (its settings fill the form; a password left blank stays as it is); null mints a new one. */
-    editing: ShareLinks.Link? = null,
-    /** role, label, password (null: untouched, blank: none), end; answers why not, or null once done. */
-    onCreate: suspend (String, String, String?, String?) -> String?,
+    form: me.raddatz.veyq.mobile.session.LinkForm, words: ShareWords, saving: Boolean, problem: String?,
+    submit: me.raddatz.veyq.mobile.words.Msg,
+    onChange: ((me.raddatz.veyq.mobile.session.LinkForm) -> me.raddatz.veyq.mobile.session.LinkForm) -> Unit,
+    onCancel: () -> Unit, onSave: () -> Unit,
 ) {
     val palette = LocalPalette.current
-    val scope = rememberCoroutineScope()
-    var form by remember {
-        val editEnd = editing?.expiresAt?.let { runCatching { Instant.parse(it).atZone(ZoneId.systemDefault()).toLocalDate().toEpochDay() }.getOrNull() }
-        mutableStateOf(me.raddatz.veyq.mobile.session.LinkForm.start(rules, editing, writeOnly, uploadOffered, uploadOnly, LocalDate.now().toEpochDay(), editEnd))
-    }
+    val rules = form.rules
     var picking by remember { mutableStateOf(false) }
-    var problem by remember { mutableStateOf<String?>(null) }
-    var saving by remember { mutableStateOf(false) }
     val min = me.raddatz.veyq.mobile.session.LinkForm.PASSWORD_MIN
 
     if (form.roles.isNotEmpty()) Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-        for (r in form.roles) FilterChip(selected = form.role == r, onClick = { form = form.withRole(r) }, label = { Text(say(words.roleWord(r))) })
+        for (r in form.roles) FilterChip(selected = form.role == r, onClick = { onChange { it.withRole(r) } }, label = { Text(say(words.roleWord(r))) })
     }
     Text(say(words.hint(form.role)), style = MaterialTheme.typography.bodySmall, color = role(palette.muted), modifier = Modifier.padding(vertical = 6.dp))
     if (form.namesIt) OutlinedTextField(
-        form.label, { form = form.withLabel(it) }, label = { Text(say(form.nameLabel)) }, singleLine = true, modifier = Modifier.fillMaxWidth(),
+        form.label, { v -> onChange { it.withLabel(v) } }, label = { Text(say(form.nameLabel)) }, singleLine = true, modifier = Modifier.fillMaxWidth(),
     )
     Spacer(Modifier.padding(6.dp))
     Row(verticalAlignment = Alignment.CenterVertically) {
@@ -377,10 +293,10 @@ private fun NewLinkForm(
                 style = MaterialTheme.typography.bodySmall, color = role(palette.muted),
             )
         }
-        Switch(form.withPassword, { form = form.withPasswordOn(it) }, enabled = form.passwordOptional)
+        Switch(form.withPassword, { on -> onChange { it.withPasswordOn(on) } }, enabled = form.passwordOptional)
     }
     if (form.withPassword) OutlinedTextField(
-        form.password, { form = form.withPassword(it) }, label = { Text(stringResource(R.string.share_password_section)) }, singleLine = true,
+        form.password, { v -> onChange { it.withPassword(v) } }, label = { Text(stringResource(R.string.share_password_section)) }, singleLine = true,
         visualTransformation = PasswordVisualTransformation(), keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
         isError = form.passwordTooShort,
         placeholder = if (form.hadPassword) ({ Text(stringResource(R.string.share_password_keep)) }) else null,
@@ -395,7 +311,7 @@ private fun NewLinkForm(
                 style = MaterialTheme.typography.bodySmall, color = role(palette.muted),
             )
         }
-        Switch(form.withEnd, { form = form.withEndOn(it) }, enabled = form.endOptional)
+        Switch(form.withEnd, { on -> onChange { it.withEndOn(on) } }, enabled = form.endOptional)
     }
     if (form.withEnd) TextButton(onClick = { picking = true }) {
         Text(stringResource(R.string.share_expires, LocalDate.ofEpochDay(form.endDay).format(DateTimeFormatter.ofLocalizedDate(FormatStyle.MEDIUM))))
@@ -414,7 +330,7 @@ private fun NewLinkForm(
             onDismissRequest = { picking = false },
             confirmButton = {
                 TextButton(onClick = {
-                    state.selectedDateMillis?.let { form = form.withEndDay(Instant.ofEpochMilli(it).atZone(ZoneOffset.UTC).toLocalDate().toEpochDay()) }
+                    state.selectedDateMillis?.let { ms -> onChange { it.withEndDay(Instant.ofEpochMilli(ms).atZone(ZoneOffset.UTC).toLocalDate().toEpochDay()) } }
                     picking = false
                 }) { Text(stringResource(R.string.share_done)) }
             },
@@ -424,20 +340,7 @@ private fun NewLinkForm(
     Row(Modifier.fillMaxWidth().padding(top = 12.dp), horizontalArrangement = Arrangement.End) {
         TextButton(onClick = onCancel, enabled = !saving) { Text(stringResource(R.string.trash_cancel)) }
         Spacer(Modifier.width(8.dp))
-        Button(
-            onClick = {
-                saving = true
-                problem = null
-                // the end of the picked local day (`FolderShareDialog`: 23:59:59.999 there)
-                val expiresAt = form.submittedEndDay?.let { LocalDate.ofEpochDay(it).plusDays(1).atStartOfDay(ZoneId.systemDefault()).toInstant().minusMillis(1).toString() }
-                val sent = form
-                scope.launch {
-                    problem = onCreate(sent.role, sent.label, sent.submittedPassword, expiresAt)
-                    saving = false
-                }
-            },
-            enabled = form.canSave && !saving,
-        ) { Text(stringResource(if (editing != null) R.string.share_save else R.string.share_create)) }
+        Button(onClick = onSave, enabled = form.canSave && !saving) { Text(say(submit)) }
     }
 }
 
