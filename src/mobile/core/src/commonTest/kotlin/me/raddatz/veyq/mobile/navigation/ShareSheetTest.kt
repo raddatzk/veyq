@@ -205,7 +205,7 @@ class ShareSheetTest {
         val on = s.reactivate("a")
         assertEquals(listOf("off:a", "on:a"), server.sent)
         assertTrue(on.links!!.single().enabled)
-        assertEquals("https://t/s/a#k=keya", on.links!!.single().url, "its old address")
+        assertEquals("https://t/s/a#k=keya", on.links.single().url, "its old address")
         assertEquals(1, server.rekeys, "switching on re-keys nothing")
     }
 
