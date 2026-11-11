@@ -38,6 +38,7 @@ import me.raddatz.veyq.mobile.session.DeviceStore
 import me.raddatz.veyq.mobile.session.SessionModel
 import me.raddatz.veyq.mobile.session.TenantSession
 import me.raddatz.veyq.mobile.session.ThisDevice
+import me.raddatz.veyq.mobile.session.TrustedDevice
 import me.raddatz.veyq.mobile.session.VeyqAccount
 import kotlin.concurrent.atomics.AtomicLong
 import kotlin.concurrent.atomics.AtomicReference
@@ -301,8 +302,9 @@ internal class Bridge<A : Connection, T : Any>(compose: () -> Composition<A, T>)
 
     private suspend fun updates(w: Watched): Flow<Update> = when (w) {
         Watched.Session -> parts.await().session.let { session ->
-            // asked of the store only beside a sign-in: it may reach the platform (D-Bus, cryptngc)
-            session.gate.map { Update.Session(it, if (it is SessionModel.Gate.SignIn) session.staySignedIn else null) }
+            // asked of the store only where a screen words itself by it, since it may reach the platform (D-Bus,
+            // cryptngc): the sign-in's switch, and the unlock of a remembered account, whose line says what opens it
+            session.gate.map { Update.Session(it, if (it.wordedByStaySignedIn()) session.staySignedIn else null) }
         }
         Watched.Manage -> manage.map { Update.Manage(it) }
         Watched.Shell -> {
@@ -393,3 +395,8 @@ internal class Bridge<A : Connection, T : Any>(compose: () -> Composition<A, T>)
         const val HIDDEN = "veyq.hidden"
     }
 }
+
+/** A gate whose screen says what staying signed in uses here: the sign-in's switch, a remembered account's unlock. */
+private fun SessionModel.Gate.wordedByStaySignedIn(): Boolean =
+    this is SessionModel.Gate.SignIn ||
+        (this is SessionModel.Gate.Unlock && record.method == TrustedDevice.Method.DEVICE_KEY)

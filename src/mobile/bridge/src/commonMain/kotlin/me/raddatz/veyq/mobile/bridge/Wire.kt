@@ -185,7 +185,9 @@ internal sealed class Update {
     /**
      * The way in. Beside a `Gate.SignIn`, [staySignedIn] is what its "Stay signed in" would use on this device, the
      * core's store's own answer (`SessionModel.staySignedIn`): `NONE` hides the switch, `LOGIN` is the plain one,
-     * `PRESENCE` the one the person confirms (Windows: "with Windows Hello"). Null beside every other gate.
+     * `PRESENCE` the one the person confirms (Windows: "with Windows Hello"). Beside a `Gate.Unlock` of a
+     * `DEVICE_KEY` record it is the same answer, by which the unlock words what opens the account (a `LOGIN` store asks
+     * nothing, so its unlock shows only after a resume that failed). Null beside every other gate.
      */
     @Serializable @SerialName("Session") data class Session(val gate: SessionModel.Gate, val staySignedIn: StaySignedIn? = null) : Update()
 

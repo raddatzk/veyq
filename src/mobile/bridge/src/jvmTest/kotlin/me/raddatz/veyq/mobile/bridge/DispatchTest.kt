@@ -316,6 +316,21 @@ class DispatchTest {
     }
 
     @Test
+    fun aRememberedAccountsUnlockCarriesWhatStayingSignedInUses() = runBlocking {
+        val kept = Kept()
+        started(kept).apply { signIn(remember = true) }.shutdown()
+        val record = kept.records.single()
+        // a store that asks nothing (Windows without Hello, Linux) still reaches the unlock when the resume fails
+        kept.keys.authenticates = false
+        kept.keys.staySignedIn = StaySignedIn.LOGIN
+        val b = started(kept)
+        val gate = b.watching(Watched.Session)
+        assertEquals(Answer.Done, b.ask(Call.SessionStart))
+        assertEquals(Update.Session(Gate.Unlock(record), StaySignedIn.LOGIN), gate.until { (it as Update.Session).takeIf { u -> u.gate is Gate.Unlock } })
+        b.shutdown()
+    }
+
+    @Test
     fun theSignInCarriesWhatStayingSignedInUsesAndOtherAccountAndAddServerReachIt() = runBlocking {
         val kept = Kept()
         started(kept).apply { signIn(remember = false) }.shutdown()
