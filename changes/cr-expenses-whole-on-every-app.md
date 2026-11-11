@@ -270,6 +270,55 @@ Android and Apple thinned.
   Save, an edit, a stale save provoked from the web, a receipt added (image and PDF), delete asked and done — read as
   text first (`uiautomator dump` / the simulator's accessibility), unchanged from before.
 
+**Status: done (2026-11-12).**
+
+**Built:**
+- core `expenses/EntryEditor.kt` (ADR 0127 decision 2): state (`isNew`, `form` — core's `EntryForm` —, `people`,
+  `editable`, `invalid`, `tried`, `refusal` once tried, `preview`, `rate` as `Rate(FILLING|FILLED|MISSING, day)`, `pending`,
+  `canAddReceipt`, `refusedPick`, `saving`, `notice`, `asking`, `done`), `watch`, `change(EditorChange)` over the sealed
+  set D1 names, `addReceipts(Picked)`, `dropReceipt`, `save()` → `Saved(done, notice)`, `askDelete`/`cancelAsk`,
+  `delete()`, `close`; over a `Door` (view, today, newId, rate, save, delete). `PotModel.editor(entryId, separator,
+  pending)` opens it over the open Pot: its saves and deletes are the model's writes (`writing(said = false)`: saving
+  shown, the live poll skipped, the Pot's message left alone). `PotModel.today()` and `LocalDays.iso`/`isoOf`: today the
+  core's. `Receipts.READ_LIMIT`: what a device reads of a picked file at most. `PotSession.uploadedReceipts` and
+  `saveEntry(…, own)`: a save tried again lists what an earlier one uploaded, never uploads it twice.
+- `PotModel` has a seam for its open Pot (`Opened`, `SessionOpened`; an internal constructor), the live poll's skip rule
+  moved into it from `PotSession.live` (gone), and its `commonTest` (`PotModelTest`); `EntryEditorTest` with
+  `PotFixture` in `commonTest`.
+- Android `EntryEditorSheet` and Apple `EntryEditorSheet` draw the model; Apple's `AppModel` holds and watches it
+  (`openEditor`, `edit`, `saveEntry`, `askDelete`, `deleteEntry`, `closeEditor`, `editorState`). Gone: `FormState` and its
+  conversions, both `RateNote`s, the Compose state and SwiftUI `@State` machine, `rateFor`/`skippedReceipts` on both app
+  models, the receipts' count and caps, `LocalDate.now()`/`Date()` in the editor and in a settle-up's date.
+- `words.json`: `entry_delete_confirm` (en, de).
+
+**Met:**
+- `EntryEditorTest` 11/11, `PotModelTest` 4/4; 17 mutations, each its case red and restored by
+  `scratchpad/e1/bite.py` (`/bin/cp -f`): the refusal hidden until tried, a kind's change, the fill started by a
+  currency, an answer for a changed currency dropped, the size cap, the count cap, a refused pick said, a stale save
+  reading the other version, carrying its own receipts, going on top, never uploading twice, the skipped notice, delete
+  only once asked, a new entry dated the door's today; `PotModel`: today the core's clock, the poll skipped while saving,
+  a refusal as the message — all 17 bit.
+- `./gradlew :core:jvmTest :core:macosArm64Test :bridge:jvmTest` green.
+- The inventory's first locator finds nothing in `EntryEditor.kt`/`EntryReceipts.kt`/`.swift` (what it still finds is
+  Phase 2's: `EntryHistory`'s restore window, the downloads' `now`).
+- `:android:assembleDebug`, `xcodebuild -target Veyq -sdk macosx CODE_SIGNING_ALLOWED=NO` and `xcodebuild -scheme Veyq`
+  signed for the iPhone 18 Pro simulator green; `linux/run.py build` (clippy, `cargo test`) and `windows/run.py build`
+  (the VM; Veyq.Bridge.Tests and Veyq.Tests passed) green, nothing of theirs changed.
+- `validate_mobile_words.py`, `validate_mobile_platform_guidelines.py` green.
+- Android (throwaway AVD `veyq_e1_throwaway`, deleted), read through `uiautomator dump`: Amsterdam copied through the
+  move sheet and renamed `App pot e1`; a new entry dated the core's today; Save on the empty form said the payers'
+  refusal, none before; "Museum e1" with Anna 30 and Ben 20, CHF with its rate filled ("Computed from the ECB's euro
+  reference rates of Nov 11, 2026", 1.082954299329), an item "Tickets" 20 split 70/30 by percent (its hint at 70 %), the
+  preview 31.41 / 22.74 EUR, a JPEG and a PDF picked in the system's picker, saved (€54.15); reopened as saved; edited on
+  the iPhone meanwhile, the Android save said "Someone else changed this entry…" and showed the iPhone's category, the
+  receipts kept; saved on top; delete asked, cancelled, asked and done (in the deleted entries); the copy trashed and
+  deleted forever.
+- Apple (the booted iPhone 18 Pro, iOS 27, German): the copy's entry opened as Android saved it, its category changed and
+  saved (the stale save above); a new entry dated 12.11.2026, Save said the payers' refusal, a second payer added, GBP
+  filled its rate in the German separator ("1,195914755196", "Berechnet aus den Euro-Referenzkursen der EZB vom 11. Nov.
+  2026"); an entry deleted through the ask ("Diesen Eintrag löschen? …", "Löschen" — no longer "peopleDeleteAccept");
+  the live poll showed Android's delete without a refresh.
+
 ### Phase 2 — The Pot's other screens in the core: record, restore, `PotSettings`, `PotCreateSheet`, receipts shown, D8
 
 Android and Apple thinned.
@@ -378,3 +427,35 @@ None open. D8's unifications (one currency rule, one share-intake rule, one dele
 owner's veto. D4's renderers (poppler-glib on Linux, `Windows.Data.Pdf` on Windows) were decided here.
 
 ## Retrospective
+
+### Phase 1 (2026-11-12)
+
+- **A stale save now does what the web does, which neither app did.** Both apps kept the form and the revision it was
+  based on after a `409`, so the next save was stale again; and a stale or refused save uploaded its picked receipts
+  again under the same ids. The editor reads the other writer's version into the form (`ED_STALE` says "here is their
+  version"), carries the receipts it uploaded, and saves on top; the record's id is minted at open, as the web's
+  `recordId`. Decided here (the web's rule and words), open to the owner.
+- **The delete is asked** (D1's `asking`): the web asks nothing for an entry; a new word, `entry_delete_confirm`, says
+  that it can be restored. The editor's delete already says `entry_delete` on Apple (D8's word, done in this phase since
+  its editor was rewritten anyway).
+- **An answer for a rate is dropped by a counter, not by cancelling** its request: a cancelled request makes "dropped
+  when the currency changed" unbiteable, and USD → GBP → USD would otherwise let the first USD answer fill the field.
+- **A text field must read the model synchronously after an edit**: both hosts set their drawn state from
+  `editor.current` right after `change(…)` (Compose's `mutableStateOf`, Apple's `editorState`) and from the watch only for
+  what the core changes itself (the rate). A field bound to a value that arrives a frame later loses keystrokes.
+- **The editor's writes leave the Pot's message alone** (`PotModel.writing(said = false)`): the editor says its own
+  outcome; the apps called `clearPotMessage()` on every close before.
+- **A device reads at most `Receipts.READ_LIMIT`** of a picked file (Android a bounded read — `readNBytes` is API 33,
+  the app's minimum 31 —, Apple `FileHandle.read(upToCount:)`, which read the file whole before); the refusal is the
+  core's.
+- **Earlier than planned:** a settle-up's date is the core's today on both apps (`PotModel.today()`), since `FormState`,
+  which dated it on Apple, went. The restore window (`EntryHistory`) is still the platform's clock: Phase 2.
+- **Deviations:** the platforms' views are `EntryEditorSheet` (CR 3a's shadowing trap); the copy is named `App pot e1`
+  (renamed after the copy), not `App pot <n>`; the stale save was provoked from the iPhone simulator, a second device,
+  not from the web (the web wants a password typed); the Apple pass ran on the booted iPhone 18 Pro the brief named, not a
+  throwaway one, and the app stays installed and signed in there (no sign-out at the end).
+- **Not verified on Apple** (the Simulator tool types no text): a typed title or amount, so no new entry saved there,
+  no item split, no receipt picked (no files in the simulator's Photos or Files); Android's pass and the core's tests
+  hold them. A shared file into a Pot (ADR 0129) now opens the editor through `openEditor(nil, pending:)` on Apple and
+  `entryEditor(…, pending)` on Android — not passed by hand in this phase (Phase 2 passes a share).
+- **Left in the dev instance by my runs:** nothing; `App pot e1` was deleted forever from the trash.
