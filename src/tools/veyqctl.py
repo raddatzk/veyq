@@ -3544,11 +3544,10 @@ class Q:
                        pattern=SSH_PUBLIC_KEY_RE, section="server", flag="--admin-ssh-key")
     AGE_KEY = Question("age_key", "age key file (Enter: create a new one)", "The key that encrypts your repository's "
                        "secrets. Keep a copy in your password manager.")
-    HOST_ACCESS = Question("host_access", "Argo CD and veyq's admin page on server-only ports, for an SSH tunnel",
-                           "Neither is on the internet either way: the server's firewall keeps these ports closed from "
-                           f"outside. yes: `ssh -N <name>` opens both on this computer (localhost:"
-                           f"{CONNECT_PORTS['argocd']} and localhost:{CONNECT_PORTS['admin']}). no: use `kubectl "
-                           "port-forward` each time.", ("yes", "no"), section="server")
+    HOST_ACCESS = Question("host_access", "open Argo CD and veyq's admin page directly while connected to the server",
+                           f"yes: while you are connected, both are at localhost:{CONNECT_PORTS['argocd']} and "
+                           f"localhost:{CONNECT_PORTS['admin']}, without `kubectl port-forward`. Neither is reachable "
+                           "from the internet either way.", ("yes", "no"), section="server")
     CONNECT_NAME = Question("connect_name", "name for the server on this computer", "Used for `ssh -N <name>` and "
                             "`kubectl --context <name>`. Not asked: the instance's name.", pattern=r"[A-Za-z0-9._-]+",
                             section="server")
@@ -3578,9 +3577,9 @@ class Q:
                               "certificates, without production's limits. Switch later with `veyqctl tls production`.",
                               tuple(ACME_DIRECTORIES))
     TLS_SECRET = Question("tls_secret", "name of your TLS Secret")
-    ADMIN_HOST_ACCESS = Question("admin_host_access", "veyq's admin page on a server-only port, for an SSH tunnel",
-                                 "A NodePort beside Argo CD's. Only where the host firewall keeps NodePorts closed "
-                                 "from outside, as veyq-server's does. no: use `kubectl port-forward` each time.",
+    ADMIN_HOST_ACCESS = Question("admin_host_access", "open veyq's admin page directly while connected to the server",
+                                 "yes: a NodePort beside Argo CD's, so no `kubectl port-forward` is needed. Only where "
+                                 "the host firewall keeps NodePorts closed from outside, as veyq-server's does.",
                                  ("yes", "no"))
     ADMIN_HOST_SOURCE = Question("admin_host_source", "the node's pod network gateway (a /32)", "Where the tunnel's "
                                  "traffic comes from. The offer is usually right.")
@@ -4677,7 +4676,7 @@ def parser() -> argparse.ArgumentParser:
     init.add_argument("--admin-ssh-key", dest="admin_ssh_public_key", help="new server: the SSH public key you log in with")
     init.add_argument("--age-key", help="new server: the age key file that encrypts your repository's secrets")
     init.add_argument("--host-access", choices=("yes", "no"),
-                      help="new server: Argo CD and veyq's admin page on server-only ports, for an SSH tunnel")
+                      help="new server: open Argo CD and veyq's admin page directly while connected to the server")
     init.add_argument("--connect-name", help="new server: its name on this computer (SSH host and kubeconfig context)")
     init.add_argument("--make-current", choices=("yes", "no"), help="new server: make it kubectl's default context")
     init.add_argument("--sync-timeout", type=float, default=1800.0,
