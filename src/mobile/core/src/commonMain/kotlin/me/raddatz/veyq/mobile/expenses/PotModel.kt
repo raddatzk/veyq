@@ -6,6 +6,7 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import me.raddatz.veyq.mobile.navigation.ObjectRef
@@ -50,7 +51,14 @@ class PotModel(private val tenant: TenantSession, private val now: () -> Long) {
     /** Calls [listener] with each state (null: no Pot open) on a background thread. */
     fun watch(listener: (State?) -> Unit): Watch = Watch(scope.launch { state.collect { listener(it) } })
 
-    /** Opens and reads Pot [ref] unless it is the one open (and did open). */
+    /** While a Pot is open: its re-read after each re-key of the tenant ([TenantSession.rekeyed]). */
+    private var rekeys: kotlinx.coroutines.Job? = null
+
+    /**
+     * Opens and reads Pot [ref] unless it is the one open (and did open). While it is open it is read anew under its key
+     * after each re-key the tenant ran ([rekeyed]): a link on it or above it closed, a scope's re-key finished in the
+     * background — no app asks for that.
+     */
     suspend fun open(ref: ObjectRef) {
         _state.value?.let { if (it.ref == ref && !it.failed) return }
         _state.value = State(ref)
@@ -59,11 +67,15 @@ class PotModel(private val tenant: TenantSession, private val now: () -> Long) {
         session = s
         poll = LivePoll(now = now)
         _state.value = State(ref, s?.let(::PotView), failed = s == null)
+        rekeys?.cancel()
+        rekeys = scope.launch { tenant.rekeyed.drop(1).collect { rekeyed() } }
     }
 
     /** The Pot is gone (trashed, its space left): nothing is open. */
     fun close(ref: ObjectRef? = null) {
         if (ref != null && _state.value?.ref != ref) return
+        rekeys?.cancel()
+        rekeys = null
         _state.value = null
         session = null
         poll = null

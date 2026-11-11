@@ -6,6 +6,7 @@ import io.ktor.client.plugins.contentnegotiation.ContentNegotiation
 import io.ktor.http.HttpHeaders
 import io.ktor.http.Url
 import io.ktor.serialization.kotlinx.json.json
+import kotlinx.coroutines.async
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.serialization.json.Json
@@ -755,6 +756,37 @@ class TenantSession internal constructor(
     /** How this app re-keys and folds each kind (its composition root's), for a write that pulls its path forward and for
      *  the background run that finishes a scope's re-key ([NodeRekey.pull], [NodeRekey.resume]); null: neither runs. */
     var rekeyRules: NodeRekey.Rules? = null
+
+    private val background = kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.SupervisorJob() + kotlinx.coroutines.Dispatchers.Default)
+    private val _rekeyed = kotlinx.coroutines.flow.MutableStateFlow(0L)
+
+    /**
+     * Moves each time a re-key may have changed keys this session read: the background run finished something, or a link
+     * this device closed re-keyed what was below it ([noteRekeyed]). The models over this session read again on it — the
+     * shell its lists, an open Pot its content under its key (`ShellModel`, `PotModel`) —, so no app re-reads by hand.
+     */
+    val rekeyed: kotlinx.coroutines.flow.StateFlow<Long> = _rekeyed
+
+    /** A re-key ran through this session: the tree is read anew and every model over it reads again ([rekeyed]). */
+    fun noteRekeyed() {
+        forgetTree()
+        _rekeyed.value = _rekeyed.value + 1
+    }
+
+    /**
+     * Finishes, in the background, the re-key of every scope this session was served as re-keying (ADR 0114 decision 9: a
+     * link's close or a rotation another device began, or this one left when it closed) — what this device can, top-down,
+     * by [rekeyRules]; a run that cannot finish leaves the marks for the next start or another device. Started when the
+     * tenant opens (`AccountDoor.opened`), never by an app. The run's outcome per scope, or null where none is due.
+     */
+    fun resumeRekeys(): kotlinx.coroutines.Deferred<Map<String, NodeRekey.Outcome>>? {
+        if (rekeyRules == null || rekeyingScopes.isEmpty()) return null
+        return background.async {
+            val ran = runCatching { NodeRekey.resume(this@TenantSession) }.getOrDefault(emptyMap())
+            if (ran.isNotEmpty()) noteRekeyed()
+            ran
+        }
+    }
 
     /** Whether this account owns [scopeId] (an owner re-keys every node, a member all but the owner-only ones). */
     internal fun isScopeOwner(scopeId: String): Boolean =

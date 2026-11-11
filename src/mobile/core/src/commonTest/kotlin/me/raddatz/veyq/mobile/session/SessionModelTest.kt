@@ -71,6 +71,9 @@ class SessionModelTest {
             if (tenant.tenantId in unopenable) throw SignInFailure(SignInFailure.Reason.UNREACHABLE)
             return "${account.key}/${tenant.tenantId}"
         }
+        /** Each tenant shown, in order (where the background runs start). */
+        val shown = mutableListOf<String>()
+        override fun opened(session: String) { shown += session }
         override suspend fun spaces(session: String) = listOf(SpaceRef(session, "SHARED", session))
         override suspend fun signOut(account: Acc) { signedOut += account.key }
         override suspend fun forgetDevice(account: Acc) {}
@@ -203,6 +206,8 @@ class SessionModelTest {
         m.start()
         assertEquals("a.example#u1/ta2", m.switchTo(a, a.tenants[1])!!.session)
         assertEquals(Gate.Signed(a.key, "ta2"), m.current)
+        // each tenant shown starts what runs in the background while it is open (the re-key's resume): the start's, the switch's
+        assertEquals(listOf("b.example#u2/tb", "a.example#u1/ta2"), d.shown)
         d.unopenable += "tb"
         assertNull(m.switchTo(b, b.tenants[0]))
         assertEquals(Gate.Signed(a.key, "ta2"), m.current)
@@ -260,6 +265,8 @@ class SessionModelTest {
         m.loadSpaces { seen++ }
         assertEquals(2, seen)
         assertEquals(2, m.managed().single().tenants.count { it.spaces != null })
+        // a tenant read only for its spaces is not shown: nothing of its own starts in the background
+        assertEquals(listOf("a.example#u1/ta"), d.shown)
     }
 
     @Test

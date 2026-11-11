@@ -3,6 +3,7 @@ package me.raddatz.veyq.mobile.expenses
 import io.ktor.client.HttpClient
 import io.ktor.client.engine.okhttp.OkHttp
 import kotlinx.coroutines.async
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.test.runTest
 import me.raddatz.veyq.mobile.crypto.BouncyCastlePrimitives
 import me.raddatz.veyq.mobile.session.VeyqAccount
@@ -26,13 +27,16 @@ class SubtreeRekeyLiveTest {
     @Test
     fun aCloseReKeysTheSubtree_andAnInterruptedOneIsResumed() = runTest(timeout = 10.minutes) {
         val origin = System.getenv("VEYQ_LIVE") ?: return@runTest
-        val env = File(System.getProperty("veyq.repoRoot"), ".run/.env").readLines()
+        // `.run/.env` of this checkout, or VEYQ_ENV_FILE's (a worktree has none)
+        val env = (System.getenv("VEYQ_ENV_FILE")?.let(::File) ?: File(System.getProperty("veyq.repoRoot"), ".run/.env")).readLines()
             .mapNotNull { l -> l.substringBefore('=', "").takeIf { it.isNotBlank() }?.let { it.trim() to l.substringAfter('=').trim().trim('"', '\'') } }
             .toMap()
+        val device = testDevice(BouncyCastlePrimitives)
+        val client = { block: io.ktor.client.HttpClientConfig<*>.() -> Unit -> HttpClient(OkHttp, block) }
         val account = VeyqAccount.signIn(
             BouncyCastlePrimitives, origin, env.getValue("VEYQ_EMAIL"), env.getValue("VEYQ_PASSWORD"), env.getValue("VEYQ_SECRET_KEY"),
-            testDevice(BouncyCastlePrimitives),
-        ) { block -> HttpClient(OkHttp, block) }
+            device, client,
+        )
         val tenant = account.open(account.defaultTenant!!)
         System.getenv("VEYQ_LIVE_SUBTREE")?.let { folderName ->
             // A folder F in the root folder [folderName] holding a Pot P (an entry, a receipt) and a folder G holding a Pot Q,
@@ -100,18 +104,24 @@ class SubtreeRekeyLiveTest {
                 println("[$folderName] \"App subtree $n\": an interrupted close left P, G and Q due, for an app's background run")
                 return@let
             }
-            // the background run any member's device makes finishes it
-            val resumer = account.open(tenant.tenant).also { it.rekeyRules = rules }
+            // the background run any member's device makes finishes it: the core starts it when the tenant is shown (the
+            // session's door, what every app opens a tenant through), never an app — and says so to the tenant's models
+            val door = me.raddatz.veyq.mobile.session.AccountDoor(BouncyCastlePrimitives, device, client)
+            val resumer = door.open(account, tenant.tenant)
+            assertTrue(resumer.rekeyRules != null, "the tenant opened without the build's re-key rules")
             assertTrue(scopeId in resumer.rekeyingScopes, "the server does not serve the scope as re-keying")
-            val resumed = me.raddatz.veyq.mobile.session.NodeRekey.resume(resumer)
-            assertTrue(resumed[scopeId] != me.raddatz.veyq.mobile.session.NodeRekey.Outcome.FAILED, "the resume failed: $resumed")
+            door.opened(resumer)
+            val told = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Default) {
+                kotlinx.coroutines.withTimeout(5.minutes) { resumer.rekeyed.first { it > 0 } }
+            }
+            val resumed = "rekeyed $told"
             assertEquals(emptySet(), due(), "the resume left a node of the subtree due")
             readsBack("Before the closes")
             val writer = PotSession.open(account.open(tenant.tenant).also { it.rekeyRules = rules }, scopeId, p)!!
             val after = PotView(writer).blankForm(java.time.LocalDate.now().toString())!!
                 .copy(title = "After the resume", payers = listOf(EntryForm.Payer(writer.ledger!!.participants.first().id, "2")))
             assertEquals(PotSession.WriteOutcome.WRITTEN, writer.saveEntry(writer.newId(), after, null))
-            println("[$folderName] \"App subtree $n\": a close re-keyed F, P, G and Q; an interrupted one left P, G, Q due, a write waited, the resume (${resumed[scopeId]}) finished it")
+            println("[$folderName] \"App subtree $n\": a close re-keyed F, P, G and Q; an interrupted one left P, G, Q due, a write waited, the resume at the tenant's open ($resumed) finished it")
         }
         System.getenv("VEYQ_LIVE_SUBTREE_DUE")?.let { folderName ->
             // After `VEYQ_LIVE_SUBTREE_LEAVE` and an app started: the app's background run left nothing of the space due,

@@ -64,6 +64,12 @@ class SessionModel<A : Connection, T : Any>(
         /** How this device trusts [account] now, if it does. */
         fun trustedBy(account: A): TrustedDevice?
         suspend fun open(account: A, tenant: TenantRef): T
+
+        /**
+         * [session] became the tenant shown (a sign-in, an unlock, a resume, a switch) — not one read only for its spaces
+         * ([loadSpaces]): what runs in the background while a tenant is open starts here (the re-key's resume).
+         */
+        fun opened(session: T) {}
         suspend fun spaces(session: T): List<SpaceRef>
         suspend fun signOut(account: A)
         suspend fun forgetDevice(account: A)
@@ -437,6 +443,7 @@ class SessionModel<A : Connection, T : Any>(
 
     private suspend fun openTenant(account: A, tenant: TenantRef): Opened<A, T> {
         val o = Opened(account, tenant, door.open(account, tenant))
+        door.opened(o.session)
         opened = o
         _gate.value = signed(account.key, tenant.tenantId)
         return o
@@ -545,7 +552,14 @@ class AccountDoor(
 
     override fun defaultTenant(account: VeyqAccount): TenantRef? = account.defaultTenant
     override fun trustedBy(account: VeyqAccount): TrustedDevice? = account.trusted
-    override suspend fun open(account: VeyqAccount, tenant: TenantRef): TenantSession = account.open(tenant)
+    /** A tenant opened re-keys by the build's kinds ([AppKinds.rules]): a write pulls its path forward, the resume finishes a scope. */
+    override suspend fun open(account: VeyqAccount, tenant: TenantRef): TenantSession =
+        account.open(tenant).also { it.rekeyRules = me.raddatz.veyq.mobile.AppKinds.rules }
+
+    /** The tenant shown: the scopes served as re-keying are finished in the background ([TenantSession.resumeRekeys]). */
+    override fun opened(session: TenantSession) {
+        session.resumeRekeys()
+    }
     override suspend fun spaces(session: TenantSession): List<SpaceRef> = session.spaces()
     override suspend fun signOut(account: VeyqAccount) = account.signOut()
     override suspend fun forgetDevice(account: VeyqAccount) = account.forgetThisDevice()

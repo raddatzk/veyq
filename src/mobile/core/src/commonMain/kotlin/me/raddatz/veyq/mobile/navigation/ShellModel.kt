@@ -5,6 +5,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
@@ -20,6 +21,8 @@ import me.raddatz.veyq.mobile.session.NodeRename
 import me.raddatz.veyq.mobile.session.NodeReport
 import me.raddatz.veyq.mobile.session.NodeTrash
 import me.raddatz.veyq.mobile.session.OpenNode
+import me.raddatz.veyq.mobile.session.ShareLinkChanges
+import me.raddatz.veyq.mobile.session.ShareLinks
 import me.raddatz.veyq.mobile.session.StorageFit
 import me.raddatz.veyq.mobile.session.VeyqAccount
 import me.raddatz.veyq.mobile.session.TenantSession
@@ -107,7 +110,11 @@ class ShellModel(
     suspend fun load(openLastUsed: Boolean) {
         reading.withLock { raw = read() }
         rebuild(start = true, openLastUsed = openLastUsed)
+        // a re-key the tenant ran (its background resume, a link closed) changed keys the lists were read under
+        if (rekeys == null) rekeys = CoroutineScope(Dispatchers.Default).launch { tenant.rekeyed.drop(1).collect { refresh() } }
     }
+
+    private var rekeys: kotlinx.coroutines.Job? = null
 
     /** Reads the lists anew (after a write, or what another device wrote); a read that fails keeps what was listed. */
     suspend fun refresh() {
@@ -374,6 +381,37 @@ class ShellModel(
         override suspend fun noRoom(ref: NodeAt) = StorageFit.noRoomForCopy(tenant, ref.scopeId, ref.nodeId, AppKinds.exports(deletedName))
         override fun changed() = changed()
     })
+
+    /**
+     * The share sheet of [node] over this tenant ([ShareSheet]): its links (a drop box's WRITE_ONLY ones), the writes on
+     * them — a link's close re-keying what is below it by the build's kinds (`AppKinds.rekeys`), each new id a UUID from the
+     * suite's randomness, and the tenant told ([TenantSession.noteRekeyed]) —, a folder's "Add files only"; [changed] after a
+     * node was made.
+     */
+    fun shareSheet(node: NodeAt, changed: () -> Unit): ShareSheet = ShareSheet(node, object : ShareSheet.Door {
+        val uuid = { NodeCreate.uuid(tenant.account) }
+        val writeOnly = node.kind == me.raddatz.veyq.mobile.depot.DepotFiles.DROPBOX
+        override val rules get() = tenant.linkRules
+        override suspend fun list() = ShareLinks.list(tenant, node.scopeId, node.nodeId, writeOnly)
+        override suspend fun mint(role: String, label: String, password: String, expiresAt: String?) =
+            ShareLinks.mint(tenant, node.scopeId, node.nodeId, role, label, password, expiresAt)
+        override suspend fun createDropBox(name: String, password: String, expiresAt: String?) =
+            me.raddatz.veyq.mobile.depot.DropBoxes.create(tenant, node.scopeId, node.nodeId, name, password, expiresAt)
+        override suspend fun edit(shareId: String, edit: ShareLinkChanges.Edit) =
+            ShareLinkChanges.edit(tenant, node.scopeId, node.nodeId, shareId, edit, now())
+        override suspend fun renew(shareId: String) =
+            ShareLinkChanges.renew(tenant, node.scopeId, node.nodeId, shareId, AppKinds.rekeys, AppKinds::tokenInput, uuid, now())
+        override suspend fun switchOff(shareId: String) =
+            ShareLinks.switchOff(tenant, node.scopeId, node.nodeId, shareId, AppKinds.rekeys, AppKinds::tokenInput, uuid)
+        override suspend fun reactivate(shareId: String) = ShareLinkChanges.reactivate(tenant, node.scopeId, node.nodeId, shareId)
+        override suspend fun delete(shareId: String) =
+            ShareLinkChanges.delete(tenant, node.scopeId, node.nodeId, shareId, AppKinds.rekeys, AppKinds::tokenInput, uuid, now())
+        override fun rekeyed() = tenant.noteRekeyed()
+        override fun changed() {
+            changed()
+            CoroutineScope(Dispatchers.Default).launch { refresh() }
+        }
+    }, now)
 
     /**
      * Node [ref] with everything under it as the web's ZIP into [sink] (`NodeExport.walk`, `write`; the kinds the build
