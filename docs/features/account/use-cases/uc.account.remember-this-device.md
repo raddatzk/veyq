@@ -71,6 +71,35 @@ sequenceDiagram
   end
 ```
 
+## In the apps — an offer after the sign-in, every level the device has
+
+The web keeps its one checkbox: it has one level, a key with no presence check. The native apps (Android, Apple,
+Windows, Linux) put the choice **after** the sign-in instead ([ADR 0123](../../../decisions/0123-the-apps-share-a-kotlin-multiplatform-core-under-native-ui.md)
+decision 8, owner 2026-11-11):
+
+1. The sign-in asks for email, Secret Key and password; it has no "Stay signed in" switch. Every sign-in enrols the
+   password trust ([uc.account.trust-device](uc.account.trust-device.md) § In the apps).
+2. Right after it — and after a password unlock, so an account trusted before the offer existed is asked once — the
+   app offers what the device's store can do, each answer with a line saying what it means:
+   - **the presence level** ("Sign in with Windows Hello", Face ID, Touch ID, "fingerprint or screen lock"): a
+     password-less `DEVICE_KEY` wrap whose unlock key opens only after the person authenticated to the device; each
+     start asks once for every remembered account;
+   - **the login level** ("Stay signed in"): a `DEVICE_KEY` wrap whose unlock key opens without asking, the device's
+     own sign-in the authentication. Offered beside the presence level, never only where it is missing;
+   - **"Not now":** the password trust stays, and the offer is not repeated for this account on this device until it
+     is no longer trusted there.
+   A device whose store offers neither level (Android or Apple without a screen lock, Linux without a Secret Service)
+   shows no offer.
+3. **"Manage servers"** changes it later, per server: to the other level, or back to the password trust, which asks
+   for the password (the DEVICE wrap needs it) and checks it by a login whose session ends at once. One convenience
+   wrap per device holds throughout (ADR 0005 §9): a change replaces the wrap and its key.
+4. **Returning:** at the presence level the device asks (Hello, Face ID, the screen lock) and the shell opens; a cancel
+   stays on an unlock screen with one button that asks again. At the login level the shell opens with no prompt.
+
+A trust that fails never fails the sign-in: a cancelled prompt keeps the offer, any other failure ends it with the
+password trust in place. What each platform's store guarantees at each level is
+[security-model](../../../crosscutting/security-model.md) § What a trusted device rests on.
+
 ## Alternate / exception flows
 
 - **E1 — wrong password / Secret Key:** one generic failure; the screen keeps the inputs for a retry (server

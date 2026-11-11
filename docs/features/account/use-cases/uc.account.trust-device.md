@@ -75,6 +75,19 @@ sequenceDiagram
   C-->>U: this device is trusted (password-only next time)
 ```
 
+## In the apps — every sign-in trusts the device, an offer follows
+
+The native apps (Android, Apple, Windows, Linux) enrol the same DEVICE wrap, at **every** sign-in, with no switch
+on the sign-in screen ([ADR 0123](../../../decisions/0123-the-apps-share-a-kotlin-multiplatform-core-under-native-ui.md)
+decision 8, owner 2026-11-11). The bind key is not a WebCrypto key there but one the platform's secure store keeps — an
+Android Keystore HMAC key, a Keychain item, DPAPI-protected bytes on Windows, a Secret Service item on Linux — and the
+factor it computes is the same `HMAC(bindKey, "veyq/v1/device-bind")`. Right after the sign-in the app **offers** to
+stay signed in at each level the device has ([uc.account.remember-this-device](uc.account.remember-this-device.md) § In
+the apps); "Not now" keeps this DEVICE wrap. Where the store keeps no bind key (Linux without a Secret Service), nothing
+is enrolled and every start asks for the Secret Key, as E4 does on the web. "Stop trusting this device" sits in the app's
+"Manage servers", per server. What each store guarantees is
+[security-model](../../../crosscutting/security-model.md) § What a trusted device rests on.
+
 ## Routine unlock on a trusted device (the DEVICE path of uc.account.unlock)
 
 The actual unlock is [uc.account.unlock](uc.account.unlock.md); trust-device adds the DEVICE method it can
