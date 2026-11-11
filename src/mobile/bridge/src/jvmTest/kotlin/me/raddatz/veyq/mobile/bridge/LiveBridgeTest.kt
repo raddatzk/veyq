@@ -464,18 +464,4 @@ class LiveBridgeTest {
     }
 
     private fun sha256(b: ByteArray) = java.security.MessageDigest.getInstance("SHA-256").digest(b).joinToString("") { "%02x".format(it) }
-
-    /** core's `FileSink` as the JVM plays it: the file stays only when the producer answered true. */
-    private object JvmFiles : DeviceFiles {
-        override suspend fun write(path: String, produce: suspend (sink: (ByteArray) -> Unit) -> Boolean): Boolean {
-            val file = File(path)
-            var keep = false
-            try {
-                file.outputStream().buffered().use { out -> keep = produce { out.write(it) } }
-                return keep
-            } finally {
-                if (!keep) file.delete()
-            }
-        }
-    }
 }

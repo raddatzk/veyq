@@ -187,6 +187,39 @@ internal sealed class Call {
     /** Renames the node (`rename`): [Answer.Renamed]. */
     @Serializable @SerialName("Header.Rename") data class HeaderRename(val header: Long, val name: String) : Call()
 
+    /**
+     * Downloads the header's node with everything under it as the web's ZIP into the file at [path], which the host's
+     * save dialog gave (`ShellModel.download`; ADR 0128 decision 3: the core opens it, writes it and removes a download
+     * that did not finish). [deletedName] is the host's word for an erased person, which a Pot's CSV carries.
+     * [Answer.Downloaded]. The name the dialog suggests is [HeaderShown.archiveName].
+     */
+    @Serializable @SerialName("Header.Download") data class HeaderDownload(val header: Long, val path: String, val deletedName: String) : Call()
+
+    /**
+     * The move ([copy] false) or copy sheet of [node] (`ShellModel.moveSheet`, core's `MoveSheet`, read at once), answered
+     * with its id ([Answer.MoveOpened]) for [Watched.Move]. A Pot copies by the Pot model the host opened for it
+     * (`Pot.Open`); [deletedName] is the host's word for an erased person, which a copied Pot carries. A sheet stays until
+     * [MoveClose] or the tenant closes, so a move's undo outlives the dialog.
+     */
+    @Serializable @SerialName("Move.Open") data class MoveOpen(val node: NodeAt, val copy: Boolean, val deletedName: String) : Call()
+    @Serializable @SerialName("Move.Close") data class MoveClose(val move: Long) : Call()
+
+    /** Shows place [at] (null: the space's root): a crumb of the trail or a place listed (`go`). */
+    @Serializable @SerialName("Move.Go") data class MoveGo(val move: Long, val at: String?) : Call()
+
+    /** One place up the trail (`up`). */
+    @Serializable @SerialName("Move.Up") data class MoveUp(val move: Long) : Call()
+
+    /** "Move here" / "Copy here" (`choose`): [Answer.MoveSent]; a move ending a guest's folder asks first. */
+    @Serializable @SerialName("Move.Here") data class MoveHere(val move: Long) : Call()
+
+    /** The guest folder's confirm answered (`confirm`): [Answer.MoveSent]; or declined (`cancelConfirm`). */
+    @Serializable @SerialName("Move.Confirm") data class MoveConfirm(val move: Long) : Call()
+    @Serializable @SerialName("Move.CancelConfirm") data class MoveCancelConfirm(val move: Long) : Call()
+
+    /** The move's undo while offered (`undo`): [Answer.Said] with why it failed, or none. */
+    @Serializable @SerialName("Move.Undo") data class MoveUndo(val move: Long) : Call()
+
     /** A new folder where the shell is (`ShellModel.createFolderHere`): [Answer.Said] with why not, or none. */
     @Serializable @SerialName("Shell.CreateFolder") data class ShellCreateFolder(val name: String) : Call()
 
@@ -242,12 +275,23 @@ internal sealed class Answer {
     /** A trash: what it says, and whether its undo is offered ([HeaderShown.undo] says when the offer ended). */
     @Serializable @SerialName("Trashed") data class Trashed(val notice: Notice, val undoable: Boolean) : Answer()
 
+    /**
+     * A move or copy sent (or asked first): what it says once done ([done]; the dialog closes), whether its undo is offered
+     * now, whether the guest folder's confirm is asked, and why it did not go through ([problem]) — read as the call
+     * returns, so the host's toast takes its Undo at once ([MoveShown.undo] says when the offer ended).
+     */
+    @Serializable @SerialName("MoveSent") data class MoveSent(val done: Notice?, val undoable: Boolean, val confirming: Boolean, val problem: Notice?) : Answer()
+    @Serializable @SerialName("MoveOpened") data class MoveOpened(val move: Long) : Answer()
+
+    /** A download: what it says (done or failed) and what it left out, or null. */
+    @Serializable @SerialName("Downloaded") data class Downloaded(val notice: Notice, val leftOut: Notice?) : Answer()
+
     /** A rename: why it did not land ([problem]: the dialog asks again), or what to say once it did ([notice]). */
     @Serializable @SerialName("Renamed") data class Renamed(val problem: Notice?, val notice: Notice?) : Answer()
 
     enum class Why {
         NOT_A_CALL, NO_TENANT_OPEN, NO_SUCH_CONNECTION, NO_SUCH_TENANT, NO_SUCH_POT, NO_SUCH_READER, NO_PICTURE, NOTHING_TO_DOWNLOAD,
-        NO_SUCH_HEADER, NO_SUCH_TRASH, NO_SUCH_ROW,
+        NO_SUCH_HEADER, NO_SUCH_TRASH, NO_SUCH_ROW, NO_SUCH_MOVE,
 
         /** A change of trust (`TrustChange`): no offer to answer; the person cancelled the prompt; not enrolled; the
          *  password was not the account's. */
@@ -272,6 +316,9 @@ internal sealed class Watched {
 
     /** A space's trash opened by [Call.TrashOpen]. */
     @Serializable @SerialName("Trash") data class Trash(val trash: Long) : Watched()
+
+    /** A move or copy sheet opened by [Call.MoveOpen]. */
+    @Serializable @SerialName("Move") data class Move(val move: Long) : Watched()
 }
 
 /** One state a watch delivers: the first at once, then each change. */
@@ -301,6 +348,9 @@ internal sealed class Update {
 
     /** A space's trash sheet; null once it was closed. */
     @Serializable @SerialName("Trash") data class Trash(val trash: Long, val shown: TrashShown?) : Update()
+
+    /** A move or copy sheet; null once it was closed. */
+    @Serializable @SerialName("Move") data class Move(val move: Long, val shown: MoveShown?) : Update()
 }
 
 /**
@@ -318,6 +368,8 @@ internal class HeaderShown(
     val deleteQuestion: Notice,
     val undo: Notice?,
     val gone: Boolean,
+    /** The file name a download's save dialog suggests (`NodeExport.fileName`: the web's archive name). */
+    val archiveName: String,
 ) {
     /** `NodeHeader.Plan`: the bar's buttons, the menu, and the menu's last group after a separator. */
     @Serializable class Plan(val buttons: List<PlanAction>, val menu: List<PlanAction>, val last: List<PlanAction>)
@@ -327,6 +379,46 @@ internal class HeaderShown(
      * `Action`: the generated C# would clash with `System.Action`.
      */
     @Serializable class PlanAction(val id: String, @Serializable(with = MsgKey::class) val word: Msg?)
+}
+
+/**
+ * A move or copy sheet as the host draws it (`MoveSheet`), each field one core function's answer: the node and whether it
+ * is copied; the title, the hint and the button's words; whether the tree is read ([loaded]); the trail from the space's
+ * root to the place shown (each but the last can be chosen: [Call.MoveGo]); the places listed there, a blocked one with
+ * why ([MovePlace.blocked]) and not to be opened, and what an empty place says; why the place takes nothing ([here]); the
+ * last write's problem; a copy's no-room notice with its size; what a copy leaves behind ([losses], each one line) and
+ * out ([leftOut]); whether a write runs, whether "here" can be chosen, the guest folder's confirm and its question; what it
+ * said once done ([done]: the dialog closes) and the move's undo while the core offers it ([undo]: the host's toast shows
+ * its Undo until this is null again — the window is the core's).
+ */
+@Serializable
+internal class MoveShown(
+    val node: NodeAt,
+    val copying: Boolean,
+    val title: Notice,
+    @Serializable(with = MsgKey::class) val hint: Msg,
+    @Serializable(with = MsgKey::class) val submit: Msg,
+    val loaded: Boolean,
+    val trail: List<MoveCrumb>,
+    val places: List<MovePlace>,
+    val empty: Notice?,
+    @Serializable(with = MsgKey::class) val here: Msg?,
+    val problem: Notice?,
+    val noRoom: Notice?,
+    val losses: List<Notice>,
+    val leftOut: List<Notice>,
+    val busy: Boolean,
+    val canChoose: Boolean,
+    val confirming: Boolean,
+    val confirmQuestion: Notice,
+    val done: Notice?,
+    val undo: Notice?,
+) {
+    /** A place on the trail: the space's root ([nodeId] null) or a folder, with its name. */
+    @Serializable class MoveCrumb(val nodeId: String?, val name: Piece)
+
+    /** A place listed: its node, and why it cannot be opened ([blocked]: the node itself, or below it; null: it can). */
+    @Serializable class MovePlace(val nodeId: String, val kind: String, val name: String, @Serializable(with = MsgKey::class) val blocked: Msg?)
 }
 
 /**

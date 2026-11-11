@@ -662,6 +662,112 @@ class DispatchTest {
         b.shutdown()
     }
 
+    /** A move sheet's door the test plays: a tree with a folder and a Pot, every write recorded. */
+    private class PlayedMove : me.raddatz.veyq.mobile.navigation.MoveSheet.Door {
+        val tree = listOf(
+            me.raddatz.veyq.mobile.navigation.NodeRef("s", "trips", null, "FOLDER", "Trips"),
+            me.raddatz.veyq.mobile.navigation.NodeRef("s", "rome", "trips", "EXPENSES_POT", "Rome"),
+        )
+        val moves = java.util.concurrent.CopyOnWriteArrayList<String>()
+        val copies = java.util.concurrent.CopyOnWriteArrayList<String>()
+        @Volatile var room: Long? = null
+        override suspend fun tree(scopeId: String) = tree
+        override val placement = me.raddatz.veyq.mobile.session.NodeMove.PlacementAllows { _, parent -> parent == null || parent == "FOLDER" }
+        override fun rootName(scopeId: String): me.raddatz.veyq.mobile.words.Piece = me.raddatz.veyq.mobile.words.Piece.Plain("Personal")
+        override suspend fun move(ref: NodeAt, to: String?): me.raddatz.veyq.mobile.session.NodeMove.Outcome {
+            moves += "${ref.nodeId}->$to"
+            return me.raddatz.veyq.mobile.session.NodeMove.Outcome.MOVED
+        }
+        override suspend fun duplicateOpen(ref: NodeAt, to: String?): me.raddatz.veyq.mobile.words.Notice? { copies += "open:${ref.nodeId}->$to"; return null }
+        override suspend fun duplicateSubtree(ref: NodeAt, to: String?): me.raddatz.veyq.mobile.words.Notice? { copies += "subtree:${ref.nodeId}->$to"; return null }
+        override suspend fun preview(ref: NodeAt) = me.raddatz.veyq.mobile.export.SubtreeCopy.Preview(setOf("FOLDER"), emptyList())
+        override suspend fun noRoom(ref: NodeAt) = room
+        override fun changed() {}
+    }
+
+    /** A bridge whose tenant's move sheets and download are played over [played], its files the JVM's. */
+    private fun bridgeWithMove(played: PlayedMove, written: ByteArray, leftOut: List<me.raddatz.veyq.mobile.export.NodeExport.Skipped>) = Bridge {
+        val hidden = Hidden({}, emptySet())
+        Composition(SessionModel(Door(), hidden, RecentUses({}, emptyList())), hidden, JvmFiles) { _ ->
+            Tenant(
+                shell = null, pot = null, me = "u1", pictures = pictures, loadPictures = {},
+                header = { node, facts, _ -> me.raddatz.veyq.mobile.navigation.NodeHeaderModel(node, facts, Played()) },
+                move = { node, copying, _, _ -> me.raddatz.veyq.mobile.navigation.MoveSheet(node, copying, played) },
+                download = { node, _, sink -> if (node.name == "Broken") error("walk failed") else { sink(written); leftOut } },
+            )
+        }
+    }
+
+    @Test
+    fun aMoveWithItsUndoACopyAndAFoldersDownloadAreDrivenThroughCalls() = runBlocking {
+        val played = PlayedMove()
+        val skipped = listOf(me.raddatz.veyq.mobile.export.NodeExport.Skipped("x", "MEMORY", "unsupported"))
+        val b = bridgeWithMove(played, "PK-zip".encodeToByteArray(), skipped)
+        val rome = NodeAt("s", "rome", "EXPENSES_POT", "Rome")
+        assertEquals(Answer.Refused(Answer.Why.NO_TENANT_OPEN), b.ask(Call.MoveOpen(rome, false, "deleted")))
+        b.signedIn()
+
+        // the move: opened at its place, up to the root, sent; its undo offered until the call or the core's window ends it
+        val id = (b.ask(Call.MoveOpen(rome, false, "deleted")) as Answer.MoveOpened).move
+        val w = b.watching(Watched.Move(id))
+        val opened = w.until { u -> (u as Update.Move).shown?.takeIf { it.loaded } }
+        assertEquals(listOf(null, "trips"), opened.trail.map { it.nodeId })
+        assertEquals(Msg.MOVE_HERE_CURRENT, opened.here)
+        assertTrue(!opened.canChoose)
+        assertEquals(Msg.MOVE_SUBMIT, opened.submit)
+        assertEquals(Answer.Done, b.ask(Call.MoveUp(id)))
+        val atRoot = w.until { u -> (u as Update.Move).shown?.takeIf { it.trail.size == 1 } }
+        assertEquals(listOf("trips" to null), atRoot.places.map { it.nodeId to it.blocked })
+        assertTrue(atRoot.canChoose)
+        val sent = b.ask(Call.MoveHere(id)) as Answer.MoveSent
+        assertEquals(Msg.MOVE_MOVED, sent.done!!.msg)
+        assertTrue(sent.undoable, "the answer did not say the undo is offered")
+        assertEquals(Answer.Said(null), b.ask(Call.MoveUndo(id)))
+        assertEquals(listOf("rome->null", "rome->trips"), played.moves)
+        w.until { u -> (u as Update.Move).shown?.takeIf { it.undo == null } }
+        assertEquals(Answer.Done, b.ask(Call.MoveGo(id, "trips")))
+
+        // the copy: a Pot by its open model, a folder with what is under it; no room said with its size and nothing sent
+        val copyPot = (b.ask(Call.MoveOpen(rome, true, "deleted")) as Answer.MoveOpened).move
+        b.watching(Watched.Move(copyPot)).until { u -> (u as Update.Move).shown?.takeIf { it.loaded } }
+        val copied = b.ask(Call.MoveHere(copyPot)) as Answer.MoveSent
+        assertEquals(Msg.COPY_DONE, copied.done!!.msg)
+        assertTrue(!copied.undoable)
+        val trips = NodeAt("s", "trips", "FOLDER", "Trips")
+        played.room = 4096
+        val full = (b.ask(Call.MoveOpen(trips, true, "deleted")) as Answer.MoveOpened).move
+        val noRoom = b.watching(Watched.Move(full)).until { u -> (u as Update.Move).shown?.takeIf { it.loaded && it.noRoom != null } }
+        assertEquals(Msg.COPY_NO_ROOM, noRoom.noRoom!!.msg)
+        assertEquals(listOf(Msg.COPY_LOSS_ALWAYS, Msg.COPY_LOSS_FOLDER_COVER), noRoom.losses.map { it.msg })
+        assertTrue(!noRoom.canChoose)
+        assertEquals(null, (b.ask(Call.MoveHere(full)) as Answer.MoveSent).done)
+        assertEquals(listOf("open:rome->trips"), played.copies)
+
+        // closed: refused, watched as none
+        assertEquals(Answer.Done, b.ask(Call.MoveClose(full)))
+        assertEquals(Update.Move(full, null), b.watching(Watched.Move(full)).next())
+        listOf(Call.MoveGo(full, null), Call.MoveUp(full), Call.MoveHere(full), Call.MoveConfirm(full), Call.MoveCancelConfirm(full), Call.MoveUndo(full), Call.MoveClose(full))
+            .forEach { assertEquals(Answer.Refused(Answer.Why.NO_SUCH_MOVE), b.ask(it), "$it") }
+
+        // a folder's download into the file the host named: written, what it left out said; a failed one leaves nothing
+        val folder = (b.ask(Call.HeaderOpen(trips, AppKinds.Facts(), 2)) as Answer.HeaderOpened).header
+        assertEquals(me.raddatz.veyq.mobile.export.NodeExport.fileName("Trips"), (b.watching(Watched.Header(folder)).next() as Update.Header).shown!!.archiveName)
+        val file = java.io.File.createTempFile("veyq-download", ".zip")
+        val done = b.ask(Call.HeaderDownload(folder, file.path, "deleted")) as Answer.Downloaded
+        assertEquals(me.raddatz.veyq.mobile.words.Notice(Msg.DOWNLOAD_DONE, "Trips"), done.notice)
+        assertEquals(Msg.DOWNLOAD_LEFT_OUT, done.leftOut!!.msg)
+        assertEquals("PK-zip", file.readText())
+        val broken = (b.ask(Call.HeaderOpen(NodeAt("s", "b", "FOLDER", "Broken"), AppKinds.Facts(), 2)) as Answer.HeaderOpened).header
+        val failed = b.ask(Call.HeaderDownload(broken, file.path, "deleted")) as Answer.Downloaded
+        assertEquals(me.raddatz.veyq.mobile.words.Notice(Msg.DOWNLOAD_FAILED, "Broken"), failed.notice)
+        assertTrue(!file.exists(), "a download that did not finish left its file")
+
+        // every sheet closes with its tenant
+        assertEquals(Answer.Done, b.ask(Call.SessionSignOut("a.example#u1")))
+        assertEquals(Answer.Refused(Answer.Why.NO_SUCH_MOVE), b.ask(Call.MoveUndo(id)), "a sheet outlived its tenant")
+        b.shutdown()
+    }
+
     @Test
     fun withoutATenantOpenTheShellSearchAndPotCallsAreRefusedNeverThrown() = runBlocking {
         val b = bridge()

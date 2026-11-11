@@ -31,6 +31,10 @@ import me.raddatz.veyq.mobile.navigation.Hidden
 import me.raddatz.veyq.mobile.navigation.NodeAt
 import me.raddatz.veyq.mobile.navigation.NodeHeaderModel
 import me.raddatz.veyq.mobile.navigation.TrashSheet
+import me.raddatz.veyq.mobile.navigation.MoveSheet
+import me.raddatz.veyq.mobile.export.NodeExport
+import me.raddatz.veyq.mobile.session.NodeMove
+import me.raddatz.veyq.mobile.words.Notices
 import me.raddatz.veyq.mobile.words.Notice
 import me.raddatz.veyq.mobile.navigation.RecentUses
 import me.raddatz.veyq.mobile.navigation.ShellModel
@@ -90,6 +94,14 @@ internal class Tenant(
     val trash: ((scopeId: String) -> TrashSheet)? = shell?.let { s -> { scopeId -> s.trashSheet(scopeId) {} } },
     /** A new folder where the shell is (`ShellModel.createFolderHere`): why not, or null. */
     val createFolder: (suspend (name: String) -> Notice?)? = shell?.let { s -> { name -> s.createFolderHere(name) } },
+    /** A node's move or copy sheet (`ShellModel.moveSheet`), a Pot's copy by the open Pot model handed in. */
+    val move: ((node: NodeAt, copying: Boolean, pot: PotModel?, deletedName: String) -> MoveSheet)? = shell?.let { s ->
+        { node, copying, pot, deletedName -> s.moveSheet(node, copying, pot, deletedName) {} }
+    },
+    /** A node with everything under it into a sink (`ShellModel.download`): what it left out, or null. */
+    val download: (suspend (node: NodeAt, deletedName: String, sink: (ByteArray) -> Unit) -> List<NodeExport.Skipped>?)? = shell?.let { s ->
+        { node, deletedName, sink -> s.download(node, deletedName, Clock.System.now().toEpochMilliseconds(), sink) }
+    },
 )
 
 /** A header the host opened, with the most buttons its bar holds. */
@@ -135,6 +147,7 @@ internal class Bridge<A : Connection, T : Any>(compose: () -> Composition<A, T>)
     private val watches = Registry<Job>()
     private val headers = Registry<HeldHeader>()
     private val trashes = Registry<TrashSheet>()
+    private val moves = Registry<MoveSheet>()
 
     /** "Manage servers" while it is open, null while closed; its spaces read by [managing]'s job. */
     private val manage = MutableStateFlow<List<ManagedShown>?>(null)
@@ -274,6 +287,26 @@ internal class Bridge<A : Connection, T : Any>(compose: () -> Composition<A, T>)
             is Call.HeaderTrash -> headers[call.header]?.let { h -> h.model.trash().let { Answer.Trashed(it, h.model.current.undo != null) } } ?: noHeader
             is Call.HeaderUndo -> headers[call.header]?.let { Answer.Said(it.model.undoTrash()) } ?: noHeader
             is Call.HeaderRename -> headers[call.header]?.let { it.model.rename(call.name).let { r -> Answer.Renamed(r.problem, r.notice) } } ?: noHeader
+            is Call.HeaderDownload -> headers[call.header]?.let { h ->
+                val download = tenant.value?.models?.download ?: return noTenant
+                var leftOut: List<NodeExport.Skipped>? = null
+                runCatching { parts.files.write(call.path) { sink -> download(h.model.node, call.deletedName, sink).also { leftOut = it } != null } }
+                Answer.Downloaded(Notices.downloaded(h.model.node.name, leftOut), Notices.downloadLeftOut(leftOut))
+            } ?: noHeader
+            is Call.MoveOpen -> tenant.value?.models?.move?.let { make ->
+                val id = ids.incrementAndFetch()
+                val sheet = make(call.node, call.copy, pots.values().firstOrNull { it.current?.ref?.nodeId == call.node.nodeId }, call.deletedName)
+                moves.put(id, sheet)
+                scope.launch { sheet.load() }
+                Answer.MoveOpened(id)
+            } ?: noTenant
+            is Call.MoveClose -> moves.remove(call.move)?.let { Answer.Done } ?: noMove
+            is Call.MoveGo -> moves[call.move]?.go(call.at).done(Answer.Why.NO_SUCH_MOVE)
+            is Call.MoveUp -> moves[call.move]?.up().done(Answer.Why.NO_SUCH_MOVE)
+            is Call.MoveHere -> moves[call.move]?.let { sent(it.choose()) } ?: noMove
+            is Call.MoveConfirm -> moves[call.move]?.let { sent(it.confirm()) } ?: noMove
+            is Call.MoveCancelConfirm -> moves[call.move]?.cancelConfirm().done(Answer.Why.NO_SUCH_MOVE)
+            is Call.MoveUndo -> moves[call.move]?.let { Answer.Said(it.undo()) } ?: noMove
             is Call.ShellCreateFolder -> tenant.value?.models?.createFolder?.let { Answer.Said(it(call.name)) } ?: noTenant
             is Call.TrashOpen -> tenant.value?.models?.trash?.let { make ->
                 val id = ids.incrementAndFetch()
@@ -306,6 +339,10 @@ internal class Bridge<A : Connection, T : Any>(compose: () -> Composition<A, T>)
     private val noTenant = Answer.Refused(Answer.Why.NO_TENANT_OPEN)
     private val noHeader = Answer.Refused(Answer.Why.NO_SUCH_HEADER)
     private val noTrash = Answer.Refused(Answer.Why.NO_SUCH_TRASH)
+    private val noMove = Answer.Refused(Answer.Why.NO_SUCH_MOVE)
+
+    /** A move sheet's state as a write's answer ([Answer.MoveSent]). */
+    private fun sent(s: MoveSheet.State) = Answer.MoveSent(s.done, s.undo != null, s.confirming, s.problem)
 
     /** [act] on the row of trash sheet [trash] listed as [rowId] (`TrashSheet.row`). */
     private suspend fun onRow(trash: Long, rowId: String, act: suspend (TrashSheet, me.raddatz.veyq.mobile.session.NodeTrash.Trashed) -> Unit): Answer {
@@ -364,6 +401,7 @@ internal class Bridge<A : Connection, T : Any>(compose: () -> Composition<A, T>)
         readers.removeAll()
         headers.removeAll()
         trashes.removeAll()
+        moves.removeAll()
     }
 
     /**
@@ -396,6 +434,8 @@ internal class Bridge<A : Connection, T : Any>(compose: () -> Composition<A, T>)
             ?: flowOf(Update.Header(w.header, null))
         is Watched.Trash -> trashes[w.trash]?.let { t -> t.state.map { Update.Trash(w.trash, shownTrash(t, it)) } }
             ?: flowOf(Update.Trash(w.trash, null))
+        is Watched.Move -> moves[w.move]?.let { m -> m.state.map { Update.Move(w.move, shownMove(m, it)) } }
+            ?: flowOf(Update.Move(w.move, null))
         is Watched.Pot -> {
             val pictures = tenant.value?.models?.pictures ?: flowOf(emptyMap())
             (pots[w.pot]?.state ?: flowOf(null)).combine(pictures) { s, p -> Update.Pot(w.pot, s, if (s == null) emptyList() else p.keys.sorted()) }
@@ -449,8 +489,19 @@ internal class Bridge<A : Connection, T : Any>(compose: () -> Composition<A, T>)
             deleteQuestion = m.deleteQuestion(),
             undo = s.undo,
             gone = s.gone,
+            archiveName = NodeExport.fileName(m.node.name),
         )
     }
+
+    /** A move or copy sheet as the host draws it ([MoveShown]), each field the sheet's own answer. */
+    private fun shownMove(m: MoveSheet, s: MoveSheet.State): MoveShown = MoveShown(
+        node = m.node, copying = m.copying, title = m.title, hint = m.hint, submit = m.submit, loaded = s.loaded,
+        trail = s.trail.map { MoveShown.MoveCrumb(it.nodeId, it.name) },
+        places = s.places.map { MoveShown.MovePlace(it.node.nodeId, it.node.kind, it.node.name, it.blocked?.let(NodeMove::placeWord)) },
+        empty = m.empty.takeIf { s.loaded && s.places.isEmpty() },
+        here = m.hereWord(s), problem = s.problem, noRoom = s.noRoom, losses = s.losses.map { Notice(it) }, leftOut = s.leftOut,
+        busy = s.busy, canChoose = s.canChoose, confirming = s.confirming, confirmQuestion = m.confirmQuestion, done = s.done, undo = s.undo,
+    )
 
     /** A trash sheet as the host draws it ([TrashShown]), each field the sheet's own answer. */
     private fun shownTrash(sheet: TrashSheet, s: TrashSheet.State): TrashShown = TrashShown(

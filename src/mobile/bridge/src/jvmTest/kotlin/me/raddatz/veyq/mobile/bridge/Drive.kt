@@ -59,3 +59,17 @@ internal fun Bridge<*, *>.watching(w: Watched): Watching {
 /** The way in as it is now: a fresh watch delivers the present state first. */
 internal suspend fun Bridge<*, *>.gateNow(): me.raddatz.veyq.mobile.session.SessionModel.Gate =
     watching(Watched.Session).let { w -> (w.next() as Update.Session).gate.also { unwatch(w.id) } }
+
+/** core's `FileSink` as the JVM plays it: the file stays only when the producer answered true. */
+internal object JvmFiles : DeviceFiles {
+    override suspend fun write(path: String, produce: suspend (sink: (ByteArray) -> Unit) -> Boolean): Boolean {
+        val file = java.io.File(path)
+        var keep = false
+        try {
+            file.outputStream().buffered().use { out -> keep = produce { out.write(it) } }
+            return keep
+        } finally {
+            if (!keep) file.delete()
+        }
+    }
+}
