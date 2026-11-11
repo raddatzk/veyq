@@ -1481,6 +1481,24 @@ def test_manifest_signature(tmp: pathlib.Path) -> None:
           and max(host.ran("verify-blob")) < min(image_verifies(host)) and "✓ manifest" in out
           and "✓ app image" in out and "✓ admin image" in out and "as signed" in out.splitlines()[-1],
           out[-300:])
+    check("verify: no program is shown without --verbose, and digests are shortened on screen",
+          "+ " not in out and not re.search(r"sha256:[0-9a-f]{13}", out), out[-300:])
+    host = FakeHost(signed=SIGNED_TARGETS)
+    rc, out = run_main(["--home", tmp / "home-verify", "--source", mirror, "verify", "--release", "1.3", "-v"], host)
+    check("verify -v: cosign's version checked once for three signatures",
+          rc == 0 and sum(c[0].endswith("cosign") and c[1:2] == ["version"] for c in host.commands) == 1
+          and len(image_verifies(host)) == 2, out[-300:])
+    # The real Host shows a program only under --verbose (the stand-in records instead of running, so it is asked here).
+    shown = {}
+    for verbose in (False, True):
+        vc.set_verbose(verbose)
+        buffer = io.StringIO()
+        with contextlib.redirect_stdout(buffer):
+            vc.Host().run([sys.executable, "-c", "pass"])
+        vc.set_verbose(False)
+        shown[verbose] = buffer.getvalue()
+    check("Host.run: a program is shown with --verbose, with its arguments, and not without",
+          shown[False] == "" and shown[True].strip() == f"+ {sys.executable} -c pass", repr(shown))
 
     # bite (e): upgrade toward a release whose manifest was changed after it was signed
     up_mirror = signed_mirror(tmp / "mirror-up-signed", "v1.3", "v1.4")
