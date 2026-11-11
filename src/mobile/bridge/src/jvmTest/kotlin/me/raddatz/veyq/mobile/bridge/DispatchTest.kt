@@ -372,6 +372,39 @@ class DispatchTest {
     }
 
     @Test
+    fun manageServersHidesATenantAndASpaceOnThisDeviceAndShowsThemAgain() = runBlocking {
+        val kept = mutableListOf<Set<String>>()
+        val b = Bridge {
+            val hidden = Hidden({ kept += it }, emptySet())
+            Composition(SessionModel(Door(), hidden, RecentUses({}, emptyList())), hidden) { null }
+        }
+        b.signedIn()
+        val manage = b.watching(Watched.Manage)
+        assertEquals(Update.Manage(null), manage.next())
+        assertEquals(Answer.Done, b.ask(Call.ManageOpen))
+        manage.until { (it as Update.Manage).servers?.takeIf { s -> s.single().tenants.all { t -> t.spaces != null } } }
+        fun tenant(u: Update, id: String) = (u as Update.Manage).servers?.single()?.tenants?.single { it.tenant.tenantId == id }
+
+        assertEquals(Answer.Refused(Answer.Why.NO_SUCH_CONNECTION), b.ask(Call.ManageHideTenant("b.example#u2", "ta2", hidden = true)))
+        assertEquals(Answer.Refused(Answer.Why.NO_SUCH_TENANT), b.ask(Call.ManageHideTenant("a.example#u1", "tz", hidden = true)))
+        assertEquals(Answer.Done, b.ask(Call.ManageHideTenant("a.example#u1", "ta2", hidden = true)))
+        val hidden = manage.until { u -> tenant(u, "ta2")?.takeIf { it.hidden } }
+        assertTrue(!hidden.shown && hidden.switchable)
+        assertEquals(setOf("tenant:a.example#u1#ta2"), kept.last(), "the switch was not kept on this device")
+
+        assertEquals(Answer.Done, b.ask(Call.ManageHideSpace("a.example#u1/ta2", hidden = true)))
+        manage.until { u -> tenant(u, "ta2")?.spaces?.single()?.takeIf { it.hidden } }
+        assertEquals(setOf("tenant:a.example#u1#ta2", "space:a.example#u1/ta2"), kept.last())
+
+        assertEquals(Answer.Done, b.ask(Call.ManageHideTenant("a.example#u1", "ta2", hidden = false)))
+        assertEquals(Answer.Done, b.ask(Call.ManageHideSpace("a.example#u1/ta2", hidden = false)))
+        val shownAgain = manage.until { u -> tenant(u, "ta2")?.takeIf { t -> t.shown && t.spaces?.single()?.hidden == false } }
+        assertTrue(!shownAgain.hidden)
+        assertEquals(emptySet(), kept.last())
+        b.shutdown()
+    }
+
+    @Test
     fun withoutATenantOpenTheShellSearchAndPotCallsAreRefusedNeverThrown() = runBlocking {
         val b = bridge()
         val ref = ObjectRef("s", "n", "EXPENSE_POT", ApplicationId.EXPENSES, "Trip")

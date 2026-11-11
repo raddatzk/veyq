@@ -88,7 +88,8 @@ class WireTest {
         Call.serializer() to listOf(
             Call.SessionStart, Call.SessionSignIn("veyq.localhost:8080", "p@example.org", "typed", "A3-TYPED", remember = true),
             Call.SessionUnlock("typed"), Call.SessionUnlock(""), Call.SessionOtherAccount, Call.SessionForgetDevice("veyq.localhost#user-1"),
-            Call.SessionAddServer, Call.SessionCancelAdd, Call.ManageOpen, Call.ManageClose, Call.SessionSwitchTo("veyq.localhost#user-1", "t"),
+            Call.SessionAddServer, Call.SessionCancelAdd, Call.ManageOpen, Call.ManageClose, Call.ManageHideTenant("veyq.localhost#user-1", "t2", hidden = true),
+            Call.ManageHideSpace("scope-1", hidden = false), Call.SessionSwitchTo("veyq.localhost#user-1", "t"),
             Call.SessionSignOut("veyq.localhost#user-1"), Call.ShellChoose(null), Call.ShellSwitchSpace("scope-1"), Call.ShellEnter(folder),
             Call.ShellFilter(ApplicationId.DEPOT), Call.ShellBack, Call.ShellSelect(BarTab("expenses.overview")), Call.ShellOpen(ref), Call.ShellOpenAtTop(ref), Call.ShellSearch(true), Call.ShellRefresh,
             Call.HomeGroups, Call.SearchQuery("lyon"), Call.PotOpen(ref), Call.PotRefresh(3), Call.PotClose(3),

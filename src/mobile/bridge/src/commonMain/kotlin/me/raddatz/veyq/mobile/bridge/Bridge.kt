@@ -119,6 +119,9 @@ internal class Bridge<A : Connection, T : Any>(compose: () -> Composition<A, T>)
     private val manage = MutableStateFlow<List<ManagedShown>?>(null)
     private val managing = AtomicReference<Job?>(null)
 
+    /** Turned by each tenant hidden or shown, so the shell's watch reads the switcher's tenants anew. */
+    private val hiddenTurned = MutableStateFlow(0L)
+
     /**
      * One call, answered once through [answer] on a core thread — a request that is no [Call] too. The payload beside
      * the JSON is the bytes of an [Answer.Bytes] (never null for one, empty included) and null for every other answer.
@@ -164,6 +167,20 @@ internal class Bridge<A : Connection, T : Any>(compose: () -> Composition<A, T>)
             Call.ManageClose -> {
                 managing.exchange(null)?.cancel()
                 manage.value = null
+                Answer.Done
+            }
+            is Call.ManageHideTenant -> {
+                val account = session.accounts.firstOrNull { it.key == call.connection } ?: return Answer.Refused(Answer.Why.NO_SUCH_CONNECTION)
+                if (account.tenants.none { it.tenantId == call.tenantId }) return Answer.Refused(Answer.Why.NO_SUCH_TENANT)
+                parts.hidden.setTenantHidden(account.key, call.tenantId, call.hidden)
+                hiddenTurned.value++ // the switcher's tenants are read beside the shell's state, which did not change
+                managed(parts)
+                Answer.Done
+            }
+            is Call.ManageHideSpace -> {
+                parts.hidden.setSpaceHidden(call.scopeId, call.hidden)
+                shell?.rebuild()
+                managed(parts)
                 Answer.Done
             }
             is Call.SessionSwitchTo -> {
@@ -292,8 +309,9 @@ internal class Bridge<A : Connection, T : Any>(compose: () -> Composition<A, T>)
             val parts = parts.await()
             tenant.flatMapLatest { open ->
                 val m = open?.models
-                m?.shell?.state?.combine(m.pictures) { s, pictures -> Update.Shell(s, s?.let { shown(parts, open, it, pictures.keys) }) }
-                    ?: flowOf(Update.Shell(null))
+                m?.shell?.state?.let { state ->
+                    combine(state, m.pictures, hiddenTurned) { s, pictures, _ -> Update.Shell(s, s?.let { shown(parts, open, it, pictures.keys) }) }
+                } ?: flowOf(Update.Shell(null))
             }
         }
         is Watched.Pot -> {

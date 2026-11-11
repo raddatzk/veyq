@@ -87,6 +87,14 @@ internal sealed class Call {
     @Serializable @SerialName("Manage.Open") data object ManageOpen : Call()
     @Serializable @SerialName("Manage.Close") data object ManageClose : Call()
 
+    /**
+     * "Manage servers"' switches (`Hidden`): tenant [tenantId] of the connection whose key is [connection] left out of the
+     * switcher on this device while [hidden], or space [scopeId] left out of the whole app. Nothing is hidden from the
+     * server. The shell and "Manage servers" follow.
+     */
+    @Serializable @SerialName("Manage.HideTenant") data class ManageHideTenant(val connection: String, val tenantId: String, val hidden: Boolean) : Call()
+    @Serializable @SerialName("Manage.HideSpace") data class ManageHideSpace(val scopeId: String, val hidden: Boolean) : Call()
+
     @Serializable @SerialName("Shell.Choose") data class ShellChoose(val application: ApplicationId?) : Call()
     @Serializable @SerialName("Shell.SwitchSpace") data class ShellSwitchSpace(val scopeId: String) : Call()
     @Serializable @SerialName("Shell.Enter") data class ShellEnter(val folder: FolderRef) : Call()

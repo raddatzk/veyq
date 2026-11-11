@@ -85,6 +85,24 @@ class LiveBridgeTest {
         assertTrue(state.lists.spaces.any { it.kind == "PERSONAL" }, "the personal space did not open")
         assertTrue(kept.isNotEmpty(), "nothing reached the host's store") // the device id, the trust marks
 
+        // "Manage servers"' switches: a space hidden leaves the shell's spaces and a tenant the switcher's, each back when
+        // shown again — the shell's rebuild and the switcher's re-read, which only the real ShellModel shows
+        val hideable = assertNotNull(shown.spaces.firstOrNull { it.space != shown.space }, "the seeded principal has one space only").space
+        assertEquals(Answer.Done, b.ask(Call.ManageHideSpace(hideable.scopeId, hidden = true)))
+        shell.until(1.minutes) { (it as Update.Shell).shown?.takeIf { s -> s.spaces.none { sp -> sp.space == hideable } } }
+        assertEquals(Answer.Done, b.ask(Call.ManageHideSpace(hideable.scopeId, hidden = false)))
+        shell.until(1.minutes) { (it as Update.Shell).shown?.takeIf { s -> s.spaces.any { sp -> sp.space == hideable } } }
+        val listed = shown.servers.single { it.connection == shown.connection }.tenants
+        val otherTenant = listed.firstOrNull { it != shown.tenant }
+        if (otherTenant == null) println("one tenant only: the tenant's switch is not walked") else {
+            fun tenants(u: Update) = (u as Update.Shell).shown?.servers?.single { it.connection == shown.connection }?.tenants
+            assertEquals(Answer.Done, b.ask(Call.ManageHideTenant(shown.connection, otherTenant.tenantId, hidden = true)))
+            shell.until(1.minutes) { u -> tenants(u)?.takeIf { otherTenant !in it } }
+            assertEquals(Answer.Done, b.ask(Call.ManageHideTenant(shown.connection, otherTenant.tenantId, hidden = false)))
+            shell.until(1.minutes) { u -> tenants(u)?.takeIf { otherTenant in it } }
+            println("hid and showed again: space ${hideable.name}, tenant ${otherTenant.name}")
+        }
+
         val groups = b.ask(Call.HomeGroups) as Answer.Groups
         println("Home: " + groups.groups.joinToString { g -> "${g.heading?.key}=${g.nodes.size}" })
 
