@@ -267,9 +267,7 @@ Android and Apple thinned.
 - Bridge + both desktops' pass: move and undo; copy of a Pot and a folder; no room (`VEYQ_LIVE_STORAGE_FIT`'s one-byte
   quota, put back however the pass ends); a folder's download, read back by `VEYQ_LIVE_EXPORT`'s checks.
 
-**Status: built (2026-11-11); the Windows pass is open** — the VM rebooted at 19:31 and sits at its sign-in screen, so
-the scheduled task that starts the app in the logged-on session cannot run (`veyq-app wrote no app.json.started`); an
-agent never types its password. Someone logs on at the VM's console, then the pass below runs.
+**Status: done (2026-11-11).** The Windows pass ran once the owner had logged on at the VM's console (with Phase 4's).
 
 **Built:**
 - core, fix first: `Shell.leave()` and `ShellModel.afterTrash(shell, nodeId)` — an object opened at the top
@@ -330,7 +328,16 @@ agent never types its password. Someone logs on at the VM's console, then the pa
 - Apple: the throwaway iPhone 18 Pro's signed build installed and signed in (`devlogin.py`) up to the offer to stay
   signed in; the simulator tool's access was not granted and `simctl` cannot tap, so nothing past the offer was driven
   on Apple — the sheet's rules are the core's tests', the Swift its compile.
-- Not met: the Windows pass (see the status).
+- Windows (VM, `run --devlogin`, then `--devlogin --unlock`; `run.py drive`), run with Phase 4's: the offer answered
+  "Not now"; a folder ("Windows pass") moved into Reisen with the `InfoBar`'s Undo, undone (log `Move.Here: move_moved,
+  undo offered: True`, `move undo: Said`), en/light and de/dark ("Rückgängig"); the folder copied beside itself
+  (`copy_done`) and Amsterdam copied by its open Pot model; no room under `DepotLiveTest`'s held one-byte quota
+  (Amsterdam's copy "…nicht genug Speicherplatz frei (365 Bytes)…", "Hierher kopieren" disabled; the quota put back,
+  exit 0); a folder's download through the save picker (`download_done`, `Windows pass.zip` fetched and read back:
+  the folder's directory and `.veyq/manifest.json`); the folder's More shows the separator `HeaderPlan.Secondary` puts
+  between Download, Rename and Move to…, Copy to…, Delete folder (shot `p3-en-folder-more.png`). The copies and the
+  folder trashed and purged; ended with Stop trusting (`manage servers: None`). The move's undo left to its window was
+  not timed on Windows (the drive's round trip; the core's test, Linux and Android hold it).
 
 ### Phase 4 — Share links and the re-key's resume: `ShareSheet`, R4's tests, the core-run resume
 
@@ -341,6 +348,72 @@ Android and Apple thinned.
 - The resume runs at tenant open in the core (`SubtreeRekeyLiveTest` green with the app models no longer starting it).
 - Bridge + both desktops' pass: list, mint (copy to the clipboard; Windows' share sheet once), edit, renew, off/on,
   delete. A link opened in the web's guest page after mint and after renew (the old one opens nothing).
+
+**Status: done (2026-11-11).**
+
+**Built:**
+- core `navigation/ShareSheet.kt` (ADR 0127 decision 2): state (`links`, `failed`, `busy`, `notice`, `form` — the
+  `LinkForm` held as the sheet's state —, `editing`, `saving`, `problem`, `fresh`, `renewing`, `deleting`), `watch`,
+  `load`, `addLink`, `edit`, the form's changes (`form(change)`, `role`, `label`, `passwordOn`, `password`, `endOn`,
+  `endDay`), `cancelForm`, `save` (an edit, a mint, or a folder's "Add files only" making a drop box), `freshSeen`,
+  `askRenew`/`askDelete`/`cancelAsk`, `renew`, `delete`, `switchOff`, `reactivate`, `rows`, `submit(state)`,
+  `passwordHint`, `endHint`. `ShellModel.shareSheet(node, changed)` builds it over the tenant. `session/LocalDays.kt`:
+  a local day ↔ an instant through `localWallClock`, so no platform turns a link's end into an instant.
+- The re-key's resume: `SessionModel.Door.opened(session)` runs when a tenant is shown (never for one read only for
+  its spaces); `AccountDoor.open` sets `AppKinds.rules`, `opened` starts `TenantSession.resumeRekeys()`.
+  `TenantSession.rekeyed` moves after a re-key ran through the session (the resume did something, or a link's close:
+  the sheet's door calls `noteRekeyed`, which also forgets the tree); `ShellModel` refreshes and an open `PotModel`
+  reads again on it. Android and Apple no longer set the rules, start the resume or re-read the Pot after a link write.
+- Fix 6: `ShellModel.afterRename(shell, renamed)` swaps the open object for its renamed ref — back, `top` and its place
+  kept (it ran `goBack().open(renamed)`, which at the top opened the object over itself and lost `top`).
+- Android (`ShareSheet.kt`) and Apple (`NodeShareSheet` in `ShareSheet.swift`, mirrored through `ShareBox`) draw the
+  core's sheet; the app models' `shareLinks`/`mintLink`/`editLink`/`renewLink`/`reactivateLink`/`deleteLink`/
+  `switchOffLink`/`resumeRekeys`/`potRekeyed` and the folder's `createDropBox` overload are gone. The top level's "Add
+  files only" sheet keeps its form locally and sends its end through `LocalDays`.
+- bridge: `Share.Open/Close/Add/Edit/Role/Label/LockOn/Password/EndOn/EndDay/CancelForm/Save/FreshSeen/AskRenew/
+  AskDelete/CancelAsk/Renew/Delete/SwitchOff/Reactivate`, `Answer.ShareOpened`, `Watched.Share` → `ShareShown` (the
+  links as `ShownLink`, the form as `ShownForm` with `ShownLock`/`ShownEnd`/`ShownRole`). A link's address crosses
+  outward in `ShareShown.freshAddress` and `ShownLink.address` only — `SecretFreeSchemaTest.linkAddresses` names both,
+  and any other outward field named `url`/`address` is refused (`anAddressNotListedIsRefused`); the link's password
+  crosses inward only (`Share.Password.password`, in `typedIn`).
+- Linux (`share_sheet.rs`): an `AdwDialog` — the links as `AdwActionRow`s with a copy button and a More menu, the form
+  (`AdwComboRow`, `AdwEntryRow`, `AdwSwitchRow` + `AdwPasswordEntryRow`, `AdwSwitchRow` + a `gtk::Calendar` popover;
+  Cancel and Create/Save in the header bar), the fresh address with Copy link, renew/delete in an `AdwAlertDialog`;
+  copy is the share (GNOME has no share sheet). Share in the header bar (`send-to-symbolic`).
+- Windows (`ShareDialog.cs`, `ShareDays.cs`): a `ContentDialog` — cards with Copy link, Share (Windows' share sheet
+  through `DataTransferManagerInterop` for the app's HWND) and a More flyout, the form (`RadioButtons`, `TextBox`,
+  `ToggleSwitch` + `PasswordBox`, `ToggleSwitch` + `CalendarDatePicker`; Create/Save primary, Cancel secondary), the
+  fresh address, renew/delete asked in place. Share in the `CommandBar`.
+
+**Met:**
+- `./gradlew :core:jvmTest :core:macosArm64Test :bridge:jvmTest` green. `ShareSheetTest` (7, both targets): mint
+  (and a refusal keeping the form), "Add files only", edit (its password kept), renew, off/on, delete, a local day's
+  end; `ShellModelTest`'s rename at the top; `SessionModelTest`'s open hook. Bitten by a script, each mutation red and
+  restored with `/bin/cp -f`: the mint's re-read, the drop box's path, the edit's kept password, the renew's fresh
+  address, reactivate closing nothing, switch-off telling the tenant, delete only when off, the rename keeping `top`,
+  the open hook.
+- `DispatchTest.aLinkIsMintedEditedRenewedSwitchedOffAndOnAndDeletedThroughCalls` drives every call over a played
+  server; bitten: `Share.Save`, `Share.Password` and `Share.SwitchOff` made no-ops, an address not listed and the link
+  password not allowed in `SecretFreeSchemaTest` → each red.
+- `VEYQ_LIVE=… VEYQ_ENV_FILE=<main>/.run/.env ./gradlew :bridge:jvmTest --tests '*LiveBridgeTest.aLinkIs*' --rerun`:
+  "App share <n>" made, a link minted through the form, edited (label read back), renewed (new id, label carried),
+  switched off and on (address kept), off and deleted; the folder trashed and purged.
+- `VEYQ_LIVE_SUBTREE=Reisen … --tests '*SubtreeRekeyLiveTest*' --rerun` green, its resume now through
+  `AccountDoor.open`/`opened` and `TenantSession.rekeyed` ("the resume at the tenant's open (rekeyed 1)").
+- `linux/run.py build` green (clippy `-D warnings`, `cargo test` 21); `windows/run.py build` green (Veyq.Tests incl.
+  `ShareDaysTest`, `HeaderPlanTest` with share drawn); `:android:assembleDebug`; `xcodebuild -target Veyq -sdk macosx
+  CODE_SIGNING_ALLOWED=NO` and the signed iOS simulator build green; both guards green.
+- Linux (container, Broadway on 8097, headless system Chrome), en/light and de/dark on a folder "Linux share": the
+  list, mint (label, role, an end picked in the calendar), Copy link ("Copied"/"Kopiert"), edit, renew (asked), off,
+  on, off and delete (asked). The web's guest page (Vite on 8081, headless Chrome) opened the minted link, after the
+  renew the old one showed "Dieser Link ist nicht verfügbar" and the new one the folder (de: in contributor mode),
+  switched off nothing, on again the folder; the folder purged at the end.
+- Windows (VM), en/light and de/dark on a folder "Windows pass": the same flow through `run.py drive`, Windows' share
+  sheet opened once ("Link teilen" with the link, `share: Windows' share sheet took the link`), the guest page checked
+  after mint, renew (old: nothing), on again and delete; the folder purged; ended with Stop trusting.
+- Android (throwaway AVD `veyq_p4`, deleted): "Android share" — mint, Copy link, edit, renew (asked), Revoke, Switch on
+  again, Revoke, Delete link (asked), read through `uiautomator dump`; the folder trashed and purged.
+- Apple: compile only here (the coordinator drives the simulator).
 
 ### Phase 5 — Report and cover: `ReportSheet` with the core's privacy URL; the cover's spec in the core; the desktops' picker, crop and encode
 
@@ -434,3 +507,34 @@ is copy, since GNOME has no share sheet (D3).
 - **Deviations:** a Pot's copy is found by the bridge among the Pot models the host opened (no `pot` field on
   `Move.Open`); the sheet's UUIDs come from the suite (`NodeCreate.uuid`), not the platform's; `Answer.Downloaded`
   carries `written` so a host never reads a word's key for its severity.
+
+### Phase 4 (2026-11-11)
+
+- **"Over a played server" was read as the sheet's door playing the server's links** (as Phases 1–3's doors):
+  `ShareLinks`/`ShareLinkChanges`' HTTP and crypto stay proven by the live tests (`LiveBridgeTest.aLinkIs…`,
+  `SubtreeRekeyLiveTest`, the `VEYQ_LIVE_LINK_*` runs). A MockEngine harness that plays a signed-in tenant's scope keys
+  and tree would close R4 at that layer too; it was judged not worth its size now (decided here, open to the owner).
+- **A name starting `new` reaches Swift as `doNew…`:** the sheet's "New link" is `addLink`.
+- **SwiftUI's view `ShareSheet` shadowed core's class of that name**: the view is `NodeShareSheet` (the file kept).
+- **An alert's binding that cancels on dismissal runs before the button's action** (Phase 1's purge): the share
+  sheet's renew and delete alerts cancel only through their Cancel button.
+- **Broadway hands the app's clipboard to no browser:** the Linux pass reads a folder's addresses back through the
+  bridge (`LiveBridgeTest.theLinksOfAFolder…`, `VEYQ_LIVE_SHARE_LIST`) for the web's guest page; the copy itself is
+  proven by its toast and stderr.
+- **WinUI's `ToggleSwitch` speaks the system's language** ("Ein"/"Aus" under an English app on the German VM): the
+  share form's switches carry no words of their own, their headers say what they turn on. The fresh address showed two
+  "Done" (the dialog's and the page's): the dialog's is hidden there.
+- **Windows' share sheet left a ghost:** after it was used once, screenshots taken while a later `ContentDialog`
+  opened showed its window again (stale, with the first link), while UI Automation drove the dialog beneath; after an
+  app restart it was gone. Whether a person sees it on a real display is unverified — open, for the next Windows pass.
+- **The resume's start moved to `SessionModel.Door.opened`**, not `Door.open`, which `loadSpaces` also calls for every
+  tenant of "Manage servers": a tenant read only for its spaces starts nothing in the background.
+- **Row details are not re-read after a re-key** (Android and Apple did): a re-key changes keys, not what the rows
+  show; the shell refreshes and the tree is forgotten.
+- **Deviations:** the form lives in the sheet's state (D1 named the confirms; the form had to be the core's for the
+  bridge). `Share.LockOn` is the password switch's call (a name without "password" for a field that holds none).
+  `SubtreeRekeyLiveTest` reads `VEYQ_ENV_FILE` first, as `DepotLiveTest` does.
+- **Left in the dev instance by my runs:** `SubtreeRekeyLiveTest`'s "App subtree <n>" folders under Reisen (the test
+  keeps them by design; one from a first run that failed on an unreachable store, before Vite was started on 8081).
+- `src/mobile/CLAUDE.md`'s trap about `AppModel.tokenInputFor` names a function gone from Apple now: Phase 6's docs.
+
