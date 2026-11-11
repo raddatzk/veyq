@@ -1,10 +1,14 @@
 //! The way in (ADR 0123's Consequences, the Linux app): what the core's `SessionModel.Gate` says — the full sign-in with
-//! the Secret Key ([SignIn]) and the unlock of an account this device trusts ([Unlock]) — drawn as GNOME draws a form: a
-//! clamped boxed list of rows and one suggested button. The person's input goes to the core as one call; the core
-//! decides what it means and answers with the next gate.
-use adw::prelude::*;
+//! the Secret Key ([SignIn]), the unlock of an account this device trusts ([Unlock]) and, right after a sign-in, the offer
+//! to stay signed in ([Offer]) — drawn as GNOME draws a form: a clamped boxed list of rows and one suggested button. The
+//! person's input goes to the core as one call; the core decides what it means and answers with the next gate.
+use std::cell::RefCell;
+use std::rc::Rc;
 
-use crate::bridge::{self, wire::Call, wire::Gate, wire::Method, wire::StaySignedIn};
+use adw::prelude::*;
+use gtk::glib;
+
+use crate::bridge::{self, wire::Answer, wire::Call, wire::Gate, wire::Method, wire::StaySignedIn, wire::Why};
 use crate::dev_login::DevSignIn;
 use crate::{said, theme, words};
 
@@ -234,6 +238,111 @@ impl Default for Unlock {
     }
 }
 
+/// One answer of the offer: stay signed in at a level, or "Not now".
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Choice {
+    Stay(StaySignedIn),
+    NotNow,
+}
+
+/// What a level is called on this platform, its title and its line; None for PRESENCE, which no store here offers
+/// (`LinuxDeviceKeys` keeps LOGIN alone: the Secret Service has no check of its own) and whose words are each platform's
+/// own (Windows Hello, Face ID).
+pub fn level_words(level: StaySignedIn) -> Option<(String, String)> {
+    match level {
+        StaySignedIn::Login => Some((words::signin_remember(), words::offer_login_hint())),
+        StaySignedIn::Presence => None,
+    }
+}
+
+/// The offer's answers, in order: each level the core offers (`Gate.Signed.offer`, in the core's order) that has words
+/// here, then "Not now" — each with its title and its line.
+pub fn offer_choices(levels: &[StaySignedIn]) -> Vec<(Choice, String, String)> {
+    let mut choices: Vec<_> = levels.iter().filter_map(|&l| level_words(l).map(|(title, hint)| (Choice::Stay(l), title, hint))).collect();
+    choices.push((Choice::NotNow, words::offer_not_now(), words::offer_not_now_hint()));
+    choices
+}
+
+/// The offer to stay signed in (the CR device-trust-on-linux-and-windows, D7), shown while the core's `Gate.Signed`
+/// carries one: a page of the way in, the sign-in's column, its answers activatable rows each with the line that says
+/// what it means — GNOME's way to choose among described options (an `AdwAlertDialog`'s responses are bare labels, and
+/// the choice continues the sign-in rather than interrupting the shell). Each row is one call; the core answers with the
+/// next gate (a cancelled prompt keeps the offer, and this page with it).
+pub struct Offer {
+    pub page: adw::ToolbarView,
+    group: adw::PreferencesGroup,
+    rows: RefCell<Vec<adw::ActionRow>>,
+    shown: RefCell<Vec<StaySignedIn>>,
+    spinner: adw::Spinner,
+    /// Says a level this device could not keep, where the person then is (the shell: the offer has ended).
+    said: Rc<dyn Fn(String)>,
+}
+
+impl Offer {
+    pub fn new(said: Rc<dyn Fn(String)>) -> Self {
+        let group = adw::PreferencesGroup::new();
+        let footer = gtk::Label::builder().label(words::offer_footer(&words::switcher_manage())).wrap(true).xalign(0.0).build();
+        footer.add_css_class("dim-label");
+        footer.add_css_class("caption");
+        let spinner = adw::Spinner::builder().visible(false).build();
+        let heading = gtk::Label::new(Some(&words::offer_title()));
+        let page = page(&heading, &[group.upcast_ref(), footer.upcast_ref(), spinner.upcast_ref()]);
+        Self { page, group, rows: RefCell::new(Vec::new()), shown: RefCell::new(Vec::new()), spinner, said }
+    }
+
+    /// Draws [levels], the offer's; the rows are built anew only when the levels change.
+    pub fn show(&self, levels: &[StaySignedIn]) {
+        if *self.shown.borrow() == levels {
+            return;
+        }
+        *self.shown.borrow_mut() = levels.to_vec();
+        for row in self.rows.borrow_mut().drain(..) {
+            self.group.remove(&row);
+        }
+        let choices = offer_choices(levels);
+        let rows: Vec<adw::ActionRow> = choices
+            .iter()
+            .map(|(_, title, hint)| {
+                let row = adw::ActionRow::builder().title(title.as_str()).subtitle(hint.as_str()).activatable(true).build();
+                row.add_suffix(&gtk::Image::from_icon_name("go-next-symbolic"));
+                row
+            })
+            .collect();
+        for ((choice, _, _), row) in choices.into_iter().zip(&rows) {
+            let (all, spinner, said) = (rows.clone(), self.spinner.clone(), self.said.clone());
+            row.connect_activated(move |_| answer(choice, all.clone(), spinner.clone(), said.clone()));
+            self.group.add(row);
+        }
+        *self.rows.borrow_mut() = rows;
+    }
+}
+
+/// Sends [choice]; the rows wait meanwhile (a prompt may be up). What the core answers moves the gate on; a level it could
+/// not keep is said through [said], since the offer has ended then (the password trust stays).
+fn answer(choice: Choice, rows: Vec<adw::ActionRow>, spinner: adw::Spinner, said: Rc<dyn Fn(String)>) {
+    let call = match choice {
+        Choice::Stay(level) => Call::SessionStaySignedIn { level },
+        Choice::NotNow => Call::SessionNotNow,
+    };
+    rows.iter().for_each(|r| r.set_sensitive(false));
+    spinner.set_visible(true);
+    glib::spawn_future_local(async move {
+        let answered = bridge::call(&call).await.map(|(a, _)| a);
+        rows.iter().for_each(|r| r.set_sensitive(true));
+        spinner.set_visible(false);
+        match answered {
+            Ok(Answer::Done) => eprintln!("veyq: offer answered: {choice:?}"),
+            // the prompt cancelled: the offer stands, as the core keeps it
+            Ok(Answer::Refused { why: Why::TrustCancelled }) => eprintln!("veyq: offer {choice:?}: cancelled"),
+            Ok(Answer::Refused { why: Why::TrustFailed }) => {
+                eprintln!("veyq: offer {choice:?}: not kept");
+                said(words::trust_failed());
+            }
+            other => eprintln!("veyq: offer {choice:?} answered {other:?}"),
+        }
+    });
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -245,5 +354,17 @@ mod tests {
         assert_eq!(unlock_words(Method::DeviceKey, None), (words::unlock_remembered_hint(), words::unlock_submit()));
         assert_eq!(unlock_words(Method::Device, Some(StaySignedIn::Login)), (words::unlock_password_hint(), words::unlock_submit()));
         assert_ne!(words::unlock_login_hint(), words::unlock_remembered_hint());
+    }
+
+    #[test]
+    fn the_offer_lists_what_the_core_offers_then_not_now() {
+        let choices: Vec<Choice> = offer_choices(&[StaySignedIn::Login]).into_iter().map(|c| c.0).collect();
+        assert_eq!(choices, vec![Choice::Stay(StaySignedIn::Login), Choice::NotNow]);
+        assert_eq!(offer_choices(&[StaySignedIn::Login])[0].1, words::signin_remember());
+        assert_eq!(offer_choices(&[StaySignedIn::Login])[0].2, words::offer_login_hint());
+        // PRESENCE has no words here (no Linux store offers it): never drawn as LOGIN's
+        let presence: Vec<Choice> = offer_choices(&[StaySignedIn::Presence, StaySignedIn::Login]).into_iter().map(|c| c.0).collect();
+        assert_eq!(presence, vec![Choice::Stay(StaySignedIn::Login), Choice::NotNow]);
+        assert_eq!(offer_choices(&[]).into_iter().map(|c| c.0).collect::<Vec<_>>(), vec![Choice::NotNow]);
     }
 }

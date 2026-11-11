@@ -248,6 +248,11 @@ impl Shell {
         });
     }
 
+    /// Says [text] as a toast over the content.
+    pub fn say(&self, text: &str) {
+        self.toasts.add_toast(adw::Toast::new(text));
+    }
+
     /// A switch to another tenant is under way (`Gate.Signed.switching`).
     pub fn switching(&self, on: bool) {
         self.switching.set_visible(on);

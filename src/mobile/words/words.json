@@ -240,7 +240,28 @@
     "en": "Stop trusting this device",
     "de": "Diesem Gerät nicht mehr vertrauen"
   },
+  "manage_trusted_hello": {
+    "note": "Manage servers' line for a server staying signed in with Windows Hello (StaySignedIn PRESENCE on Windows); manage_trusted_remembered is the level without a check",
+    "en": "You sign in on this device with Windows Hello.",
+    "de": "Auf diesem Gerät meldest du dich mit Windows Hello an."
+  },
+  "manage_password_trust": {
+    "note": "Manage servers' way back from staying signed in to the password trust; it asks for the password",
+    "en": "Back to your password",
+    "de": "Zurück zum Passwort"
+  },
+  "manage_password_trust_hint": {
+    "note": "the line beside the password field manage_password_trust opens",
+    "en": "Enter your veyq password. After that, this device asks for it at each start.",
+    "de": "Gib dein veyq-Passwort ein. Danach fragt dieses Gerät bei jedem Start danach."
+  },
+  "manage_wrong_password": {
+    "note": "the password typed for manage_password_trust is not the account's",
+    "en": "The password is not right.",
+    "de": "Das Passwort stimmt nicht."
+  },
   "signin_remember": {
+    "note": "Android's and Apple's sign-in switch until their offer (Phase 8 of the CR device-trust-on-linux-and-windows); the desktops' offer and Manage servers name the level without a check (StaySignedIn LOGIN) by it",
     "en": "Stay signed in",
     "de": "Angemeldet bleiben"
   },
@@ -250,20 +271,45 @@
     "apple_en": "Opens with Face ID, Touch ID or the device passcode. Anyone who can unlock this device can open your content. Off, the app asks for your password, never again for the Secret Key.",
     "apple_de": "Öffnet mit Face ID, Touch ID oder dem Gerätecode. Wer dieses Gerät entsperren kann, kann deine Inhalte öffnen. Aus fragt die App nach deinem Passwort, aber nie wieder nach dem Secret Key."
   },
-  "signin_remember_hint_login": {
-    "note": "the sign-in's \"Stay signed in\" where the desktop sign-in is what opens it (Linux's Secret Service, Windows without Hello): no further question is asked",
-    "en": "Opens when you sign in to this computer, without asking again. Anyone who can use your account on this computer can open your content. Off, the app asks for your password, never again for the Secret Key.",
-    "de": "Öffnet, sobald du dich an diesem Computer anmeldest, ohne erneut zu fragen. Wer dein Benutzerkonto auf diesem Computer verwenden kann, kann deine Inhalte öffnen. Aus fragt die App nach deinem Passwort, aber nie wieder nach dem Secret Key."
+  "offer_title": {
+    "note": "the offer after a sign-in (D7): how this device signs in from now on",
+    "en": "Signing in on this device",
+    "de": "Anmeldung auf diesem Gerät"
   },
-  "signin_remember_hello": {
-    "note": "the sign-in's \"Stay signed in\" on Windows where Windows Hello is set up (StaySignedIn PRESENCE): Hello asks at each start",
-    "en": "Stay signed in with Windows Hello",
-    "de": "Mit Windows Hello angemeldet bleiben"
+  "offer_hello": {
+    "note": "the offer's and Manage servers' level with a check (StaySignedIn PRESENCE) on Windows: Windows Hello asks at each start",
+    "en": "Sign in with Windows Hello",
+    "de": "Mit Windows Hello anmelden"
   },
-  "signin_remember_hint_hello": {
-    "note": "the line under signin_remember_hello",
-    "en": "Opens with Windows Hello: your face, fingerprint or PIN. Anyone who can confirm it is you with Windows Hello on this computer can open your content. Off, the app asks for your password, never again for the Secret Key.",
-    "de": "Öffnet mit Windows Hello: Gesicht, Fingerabdruck oder PIN. Wer sich an diesem Computer mit Windows Hello ausweisen kann, kann deine Inhalte öffnen. Aus fragt die App nach deinem Passwort, aber nie wieder nach dem Secret Key."
+  "offer_hello_hint": {
+    "note": "the line under offer_hello",
+    "en": "At each start Windows asks for your face, fingerprint or PIN.",
+    "de": "Beim Start fragt Windows nach Gesicht, Fingerabdruck oder PIN."
+  },
+  "offer_login_hint": {
+    "note": "the line under the offer's \"Stay signed in\" (signin_remember; StaySignedIn LOGIN): the desktop sign-in is what opens it",
+    "en": "veyq asks nothing at the start. Anyone signed in to this computer can open your content.",
+    "de": "Beim Start fragt veyq nichts. Wer an diesem Computer angemeldet ist, kann deine Inhalte öffnen."
+  },
+  "offer_not_now": {
+    "note": "the offer's third answer: the password trust stays, the offer does not come back on this device",
+    "en": "Not now",
+    "de": "Nicht jetzt"
+  },
+  "offer_not_now_hint": {
+    "note": "the line under offer_not_now",
+    "en": "At each start you enter your password.",
+    "de": "Beim Start gibst du dein Passwort ein."
+  },
+  "offer_footer": {
+    "note": "under the offer; {1} is switcher_manage",
+    "en": "You can change this in {1}.",
+    "de": "Ändern kannst du das unter „{1}“."
+  },
+  "trust_failed": {
+    "note": "a level chosen in the offer or in Manage servers that this device could not keep: the trust it had stays",
+    "en": "This device could not keep it. Nothing changed.",
+    "de": "Dieses Gerät konnte das nicht speichern. Es hat sich nichts geändert."
   },
   "signin_error_device_not_trusted": {
     "en": "This device is no longer trusted with this account. Sign in with your Secret Key.",

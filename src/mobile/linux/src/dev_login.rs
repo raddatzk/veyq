@@ -6,7 +6,9 @@
 //!   the core first asks for one, and signs in through it — with "Stay signed in" as the switch stands, off unless
 //!   `VEYQ_DEV_FILL` is set: then it only fills the form, and the pass turns the switch and presses Sign in itself.
 //! - `run.py run --devlogin --unlock` hands the password alone (`VEYQ_DEV_UNLOCK_PASSWORD`, Android's `--unlock`,
-//!   Apple's variable): the unlock of a password-trusted account takes it once, when the core shows that unlock.
+//!   Apple's variable): the unlock of a password-trusted account takes it once, when the core shows that unlock; and
+//!   "Manage servers"' way back to the password trust fills its password field with it once (fill only: the pass
+//!   presses the button), so the agent never types it.
 use std::sync::atomic::{AtomicBool, Ordering};
 
 /// The seeded principal the environment names, for the sign-in's fields.
@@ -53,6 +55,23 @@ pub fn take_unlock() -> Option<String> {
             return None;
         }
         eprintln!("veyq: unlocking with the dev principal's password (debug build)");
+        Some(password)
+    }
+    #[cfg(not(debug_assertions))]
+    None
+}
+
+/// The password for "Manage servers"' way back to the password trust, once per process, apart from [take_unlock]'s; None
+/// in a release build, without `VEYQ_DEV_UNLOCK_PASSWORD`, or after it was taken.
+pub fn take_password_trust() -> Option<String> {
+    #[cfg(debug_assertions)]
+    {
+        static TAKEN: AtomicBool = AtomicBool::new(false);
+        let password = var("VEYQ_DEV_UNLOCK_PASSWORD")?;
+        if TAKEN.swap(true, Ordering::SeqCst) {
+            return None;
+        }
+        eprintln!("veyq: filling the password field with the dev principal's password (debug build)");
         Some(password)
     }
     #[cfg(not(debug_assertions))]

@@ -9,7 +9,7 @@ use veyq::bridge::wire::{Answer, Call, Config, Gate, Method, Update, Watched};
 use veyq::bridge::{self, DeviceStore, Start};
 use veyq::shell::Shell;
 use veyq::manage::Manage;
-use veyq::sign_in::{SignIn, Unlock};
+use veyq::sign_in::{Offer, SignIn, Unlock};
 use veyq::theme::APP_ID;
 use veyq::{dev_login, words};
 
@@ -30,6 +30,7 @@ struct Screens {
     status_page: adw::StatusPage,
     sign_in: SignIn,
     unlock: Unlock,
+    offer: Offer,
     shell: Rc<Shell>,
     manage: Rc<Manage>,
 }
@@ -68,6 +69,11 @@ impl Screens {
                     bridge::send(Call::SessionUnlock { password });
                 }
             }
+            // the offer to stay signed in stands over the shell until it is answered (D7)
+            Gate::Signed { offer: Some(offer), .. } => {
+                self.offer.show(&offer.levels);
+                self.face(&self.offer.page);
+            }
             Gate::Signed { switching, .. } => {
                 self.shell.switching(*switching);
                 self.face(&self.shell.split);
@@ -101,7 +107,9 @@ fn activate(app: &adw::Application) {
     let m = manage.clone();
     open_manage.connect_activate(move |_, _| m.open());
     window.add_action(&open_manage);
-    let screens = Rc::new(Screens { window: window.clone(), status, status_page, sign_in: SignIn::new(), unlock: Unlock::new(), shell, manage });
+    let said = shell.clone();
+    let offer = Offer::new(Rc::new(move |text: String| said.say(&text)));
+    let screens = Rc::new(Screens { window: window.clone(), status, status_page, sign_in: SignIn::new(), unlock: Unlock::new(), offer, shell, manage });
     window.present();
 
     let store = DeviceStore::open(glib::user_data_dir().join("veyq").join("device-store.json")).unwrap_or_else(|e| {
@@ -179,9 +187,8 @@ fn activate(app: &adw::Application) {
     });
 }
 
-/// A gate's kind alone, for stderr (its fields are no one's business there).
 /// What the log says of the trust beside a gate: the offer a sign-in left open, a remembered account's level at its
-/// unlock (the offer itself is drawn in Phase 7 of the CR device-trust-on-linux-and-windows).
+/// unlock.
 fn trust_note(gate: &Gate) -> String {
     match gate {
         Gate::Signed { offer: Some(offer), .. } => format!(", offer: {:?}", offer.levels),
@@ -190,6 +197,7 @@ fn trust_note(gate: &Gate) -> String {
     }
 }
 
+/// A gate's kind alone, for stderr (its fields are no one's business there).
 fn kind(gate: &Gate) -> String {
     serde_json::to_value(gate).ok().and_then(|v| v["type"].as_str().map(str::to_owned)).unwrap_or_default()
 }
