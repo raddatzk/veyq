@@ -16,7 +16,7 @@ or through Argo CD on Kubernetes (ADR 0126), optionally with a new server beneat
     restore DIR --domain D --key-from F | rollback DIR --key-from F   Compose: from a backup
     self-update                                      Compose: this file, replaced by the installed release's
 
-`veyqctl <command> --help` has every flag.
+`veyqctl <command> --help` has every flag; `-v` / `--verbose` shows every program it starts, with its arguments.
 
 One file, Python 3.9 and the standard library only, because an operator fetches it with `curl` onto a host that
 already needs `python3` for backups: no `pip`, no virtualenv (ADR 0096 decision 2). It manages the instance's
@@ -159,19 +159,60 @@ class Refused(Exception):
 
 # ---- output ------------------------------------------------------------------------------------------------
 
+# One look for every command: a heading per step (`== …`), what happened beneath it as indented sentences, a check
+# that passed as `✓ <what>  <detail>`, and what to do next at the end. The programs veyqctl starts are shown only with
+# `--verbose`; one that fails is named in the refusal either way. Digests are shortened on screen — the files and
+# `--verbose` carry them whole.
+
 _unverified = False
+_verbose = False
+UNVERIFIED_PREFIX = "veyqctl [--unsigned-local: NOTHING VERIFIED]: "
+
+
+def _print(line: str) -> None:
+    print(f"{UNVERIFIED_PREFIX if _unverified else ''}{line}", flush=True)
 
 
 def say(message: str) -> None:
-    """Every line veyqctl prints. Under `--unsigned-local` each one says that nothing was verified."""
-    prefix = "veyqctl [--unsigned-local: NOTHING VERIFIED]" if _unverified else "veyqctl"
+    """A line of what happens, under the current heading. Under `--unsigned-local` each one says that nothing was
+    verified."""
     for line in message.splitlines() or [""]:
-        print(f"{prefix}: {line}", flush=True)
+        _print(f"   {line}" if line else "")
+
+
+def heading(title: str) -> None:
+    """A step: a blank line, then `== title`."""
+    print(flush=True)
+    _print(f"== {title}")
+
+
+def checked(what: str, detail: str = "") -> None:
+    """A check that passed: `✓ what  detail`, the details of a run's checks aligned."""
+    say(f"✓ {what:<12}  {detail}".rstrip() if detail else f"✓ {what}")
+
+
+def refused(message: str) -> None:
+    """A refusal, set apart: `REFUSED:` and the whole explanation."""
+    print(flush=True)
+    lines = message.splitlines() or [""]
+    _print(f"REFUSED: {lines[0]}")
+    for line in lines[1:]:
+        _print(f"   {line}")
+
+
+def short(ref: str) -> str:
+    """`name@sha256:<64 hex>` (or a bare digest) as `name@sha256:<12 hex>…` — enough to tell two apart on screen."""
+    return re.sub(r"(sha256:[0-9a-f]{12})[0-9a-f]{52}", r"\1…", ref)
 
 
 def set_unverified(on: bool) -> None:
     global _unverified
     _unverified = on
+
+
+def set_verbose(on: bool) -> None:
+    global _verbose
+    _verbose = on
 
 
 # ---- the host: every process veyqctl starts --------------------------------------------------------------------
@@ -200,9 +241,11 @@ class Host:
     """
 
     workdir: Path | None = None
-    # While `init` only looks around to ask well (git, kubectl reads), its commands are not echoed: the questions are
-    # what the operator reads then. Everything that verifies, renders or writes is echoed as always.
+    # With `--verbose` every program is shown before it runs — except while `init` only looks around to ask well (git,
+    # kubectl reads): the questions are what the operator reads then.
     quiet = False
+    # The cosign whose version passed the floor in this run: checked once, not before every signature.
+    cosign_checked: str | None = None
 
     @contextlib.contextmanager
     def quietly(self):
@@ -215,7 +258,7 @@ class Host:
 
     def run(self, cmd: list[str], *, check: bool = True, stream: bool = False,
             env: dict[str, str] | None = None, stdin: bytes | None = None) -> subprocess.CompletedProcess:
-        if not self.quiet:
+        if _verbose and not self.quiet:
             say("+ " + " ".join(shlex.quote(c) for c in cmd))
         cwd = self.workdir if self.workdir and self.workdir.is_dir() else None
         try:
@@ -239,10 +282,10 @@ class Host:
         if not sys.stdin.isatty():
             return None
         shown = f" (e.g. {example})" if example else ""
-        return input(f"veyqctl: {key}{shown}: ").strip() or None
+        return input(f"   {key}{shown}: ").strip() or None
 
     def section(self, title: str) -> None:
-        print(f"\n== {title}", flush=True)
+        heading(title)
 
     def prompt(self, question: str, default: str = "", hint: str = "", yes_no: bool = False,
                optional: bool = False) -> str | None:
@@ -284,7 +327,8 @@ class Host:
 
     def background(self, cmd: list[str]) -> subprocess.Popen:
         """A command left running (the tunnel `init` opens to wait for Argo CD), its output discarded."""
-        say("+ " + " ".join(shlex.quote(c) for c in cmd) + " &")
+        if _verbose:
+            say("+ " + " ".join(shlex.quote(c) for c in cmd) + " &")
         return subprocess.Popen(cmd, stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 
     def resolve(self, name: str) -> set[str]:
@@ -319,7 +363,7 @@ class Host:
         """True or False at a terminal; None without one (the caller then needs `--yes`)."""
         if not sys.stdin.isatty():
             return None
-        return input(f"veyqctl: {prompt} [y/N]: ").strip().lower() in ("y", "yes")
+        return input(f"   {prompt} [y/N]: ").strip().lower() in ("y", "yes")
 
     def oci_digest(self, ref: str) -> str:
         """The digest `<registry>/<repository>:<tag>` resolves to now: the registry's manifest endpoint (the OCI
@@ -691,7 +735,8 @@ def fetch_manifest(host: Host, source: Source, chosen: Listed, unsigned_local: b
                       f"signature nothing in the release is trusted. A mirror must copy it like every other file; a "
                       f"release you built locally has none — install it with --unsigned-local. Nothing was pulled, "
                       f"written or started.") from None
-    verify_manifest(host, cosign, raw, bundle, f"the manifest of {chosen.tag} from {source.describe()}")
+    verify_manifest(host, cosign, raw, bundle, f"the manifest of {chosen.tag} from {source.describe()}",
+                    shown=f"{chosen.tag}, signed by veyq's release workflow")
     return parse_manifest(raw, chosen.tag)._replace(bundle=bytes(bundle))
 
 
@@ -747,26 +792,31 @@ def plan(host: Host, source_spec: str | None, selector: str, running: str = "", 
     return Plan(source, listed, selector, selection, running, relation, target, manifest_of)
 
 
-def say_selection(p: Plan) -> None:
-    say(f"release {p.selection.release} (selected by `{p.selector}`), from {p.source.describe()}")
+def say_selection(p: Plan, doing: str = "") -> None:
+    """The release a run acts on and where it came from — under a heading of its own when `doing` names one."""
+    if doing:
+        heading(f"{doing} release {p.selection.release}")
+        say(f"Selected by {RELEASE_KEY}={p.selector}, from {p.source.describe()}.")
+    else:
+        say(f"Release {p.selection.release}, selected by {RELEASE_KEY}={p.selector}, from {p.source.describe()}.")
 
 
 def say_check(p: Plan, runs: str) -> None:
     """What `check` reports, on every target: what `upgrade` would do, and a newer major beyond the selection.
     `runs` is how the target says a release is in place ("running", "installed")."""
+    heading("What `upgrade` would do")
     if p.relation == "same":
-        say(f"release {p.running} is {runs} already ({RELEASE_KEY}={p.selector}): `upgrade` has nothing to do")
+        say(f"Nothing: release {p.running} is {runs} already ({RELEASE_KEY}={p.selector}).")
     elif p.relation == "older":
-        say(f"{RELEASE_KEY}={p.selector} selects {p.selection.release}, older than the {runs} {p.running}: `upgrade` "
-            f"would refuse")
+        say(f"Refuse: {RELEASE_KEY}={p.selector} selects {p.selection.release}, older than the {runs} {p.running}.")
     else:
-        say(f"`upgrade` would take release {p.target.release}" + (f" ({runs}: {p.running}" if p.running else " (")
-            + f"{'; ' if p.running else ''}{RELEASE_KEY}={p.selector})")
+        say(f"Take release {p.target.release}" + (f", {runs} now: {p.running}" if p.running else "")
+            + f" ({RELEASE_KEY}={p.selector}).")
         if p.target != p.selection:
-            say(entry_note(p.selector, p.selection, p.target, "the `upgrade` after that one"))
+            say(entry_note(p.selector, p.selection, p.target, "the `upgrade` after that one") + ".")
     beyond = newer_major(p.listed, p.selection)
     if beyond:
-        say(f"a newer major exists: {beyond.release} — read its release notes before you select it")
+        say(f"A newer major exists: {beyond.release}. Read its release notes before you select it.")
 
 
 # ---- the programs a command starts: checked before its first question ------------------------------------
@@ -867,7 +917,10 @@ def require_cosign(host: Host) -> str:
 
 
 def check_cosign_version(host: Host, cosign: str) -> None:
-    """Refused below `COSIGN_MIN_VERSION`, by name: the manifest's bundle is only as safe as the cosign that reads it."""
+    """Refused below `COSIGN_MIN_VERSION`, by name: the manifest's bundle is only as safe as the cosign that reads it.
+    Once per run and cosign."""
+    if host.cosign_checked == cosign:
+        return
     result = host.run([cosign, "version"], check=False)
     found = COSIGN_VERSION.search(f"{result.stdout or ''}\n{result.stderr or ''}")
     have = tuple(int(x) for x in found.groups()) if found else None
@@ -877,13 +930,14 @@ def check_cosign_version(host: Host, cosign: str) -> None:
         raise Refused(f"cosign {shown} is older than {COSIGN_MIN_VERSION}, which veyqctl needs: every cosign up to 3.1.2 "
                       f"accepts a forged signature bundle (GHSA-fx35-mq7g-6g98). Install cosign {COSIGN_MIN_VERSION} "
                       f"or later. Nothing was pulled, written or started.")
+    host.cosign_checked = cosign
 
 
 def verify_manifest(host: Host, cosign: str, raw: bytes, bundle: bytes, what: str,
                     identity: str = COSIGN_IDENTITY_REGEXP, publisher: str = "veyq",
-                    bundle_name: str = MANIFEST_BUNDLE_ASSET) -> None:
+                    bundle_name: str = MANIFEST_BUNDLE_ASSET, shown: str = "") -> None:
     """`cosign verify-blob` of the manifest's exact bytes against its bundle and the one identity that publishes it:
-    veyq's release workflow, or (the server path) veyq-server's."""
+    veyq's release workflow, or (the server path) veyq-server's. `shown` is the checklist's detail (default `what`)."""
     check_cosign_version(host, cosign)
     with tempfile.TemporaryDirectory(prefix="veyqctl-manifest-") as tmp:  # 0700: nobody swaps the blob in between
         blob, sig = Path(tmp) / MANIFEST_ASSET, Path(tmp) / MANIFEST_BUNDLE_ASSET
@@ -897,7 +951,7 @@ def verify_manifest(host: Host, cosign: str, raw: bytes, bundle: bytes, what: st
             f"({identity}): {(result.stderr or '').strip()[-800:]}\n"
             f"Nothing was pulled, written or started."
         )
-    say(f"{what}: signature verified")
+    checked("manifest", shown or what)
 
 
 def cosign_target(role: str, ref: str) -> str:
@@ -927,7 +981,7 @@ def verify_images(host: Host, manifest: Manifest, unsigned_local: bool) -> None:
             if host.run(["docker", "image", "inspect", "--format", "{{.Id}}", ref], check=False).returncode != 0:
                 raise Refused(f"the {role} image `{ref}` is not on this computer. veyqctl never downloads a local name (it "
                               f"would come from Docker Hub), so build it first")
-            say(f"{role} image {ref}: a local build, NOT VERIFIED")
+            say(f"✗ {role + ' image':<12}  {ref}: a local build, NOT VERIFIED")
         return
     targets = {role: cosign_target(role, ref) for role, ref in refs.items()}
     for role, target in targets.items():
@@ -964,7 +1018,7 @@ def fetch_release(source: Source, chosen: Listed, manifest: Manifest, home: Path
         bundle = dest / MANIFEST_BUNDLE_ASSET
         if manifest.bundle and not bundle.is_file():
             bundle.write_bytes(manifest.bundle)
-        say(f"release {manifest.release}: already downloaded to {dest}, every file matches its manifest")
+        checked("files", f"in {dest} already, each as the manifest names it")
         return dest
     staging = dest.parent / f".{manifest.release}.partial"
     if staging.exists():
@@ -984,7 +1038,7 @@ def fetch_release(source: Source, chosen: Listed, manifest: Manifest, home: Path
     except BaseException:
         shutil.rmtree(staging, ignore_errors=True)
         raise
-    say(f"release {manifest.release}: downloaded to {dest}, every file matches its manifest")
+    checked("files", f"downloaded to {dest}, each as the manifest names it")
     return dest
 
 
@@ -1238,13 +1292,13 @@ def services(host: Host, project: str) -> list[Service]:
 def report(host: Host, project: str) -> bool:
     rows = services(host, project)
     if not rows:
-        say(f"{project}: no containers are running")
+        say(f"No container of {project} is running.")
         return False
     width = max(len(r.service) for r in rows)
     for r in rows:
-        say(f"  {r.service:<{width}}  {r.shown}{'' if r.ok else '   <- NOT HEALTHY'}")
+        say(f"{'✓' if r.ok else '✗'} {r.service:<{width}}  {r.shown}{'' if r.ok else '   <- NOT HEALTHY'}")
     healthy = all(r.ok for r in rows)
-    say(f"{project}: {'every service is healthy' if healthy else 'NOT every service is healthy'}")
+    say("Every service is healthy." if healthy else "NOT every service is healthy: `veyqctl logs` shows why.")
     return healthy
 
 
@@ -1291,7 +1345,7 @@ def cmd_install(args: argparse.Namespace, host: Host) -> int:
     spec = source_spec(args, home)
     p = plan(host, spec, selector, unsigned_local=args.unsigned_local)
     source, chosen = p.source, p.selection
-    say_selection(p)
+    say_selection(p, "Installing")
     manifest = fetch_manifest(host, source, chosen, args.unsigned_local)
     verify_images(host, manifest, args.unsigned_local)
 
@@ -1306,17 +1360,20 @@ def cmd_install(args: argparse.Namespace, host: Host) -> int:
     if missing:
         raise Refused(f"the release needs {', '.join(missing)}, which have no value yet: pass "
                       + " ".join(f"--set {k}=…" for k in missing))
+    heading("Configuration")
     write_private(home / ENV_FILE, render_env(template, values))
-    say(f"created {home / ENV_FILE} (readable by you only) and generated {', '.join(k for k in SECRETS if k not in given)}")
+    say(f"Created {home / ENV_FILE}, readable by you only, and generated "
+        f"{', '.join(k for k in SECRETS if k not in given)}.")
     unnamed = compose(home, manifest.release)
     host.run([*unnamed, "config", "--quiet"])
     project = project_name(host, unnamed)
     write_state(home, State(manifest.release, project, spec, args.unsigned_local))
+    heading(f"Starting veyq {manifest.release}")
     up(host, compose(home, manifest.release, project), project)
     address = admin_address(host, project)
-    say(f"veyq {manifest.release} is running (project {project})."
-        + (f" Next: create the Server Owner in the admin console at {address} — from your computer through `ssh -L`."
-           if address else ""))
+    heading(f"veyq {manifest.release} is running (project {project})")
+    if address:
+        say(f"Next: create the Server Owner in the admin console at {address}, from your computer through `ssh -L`.")
     pool_warning(host, home, read_state(home))
     return 0
 
@@ -1324,25 +1381,28 @@ def cmd_install(args: argparse.Namespace, host: Host) -> int:
 def cmd_start(args: argparse.Namespace, host: Host) -> int:
     home = Path(args.home)
     state = read_state(home)
+    heading(f"Starting veyq {state.release}")
     up(host, compose(home, state.release, state.project), state.project)
     try:
         prune(host, home, state, backup_tool(host, home, state, store=False), required=False)
     except Refused as e:  # the tool itself could not be settled: said, the start stands
-        say(f"WARNING: the captures older than B were not pruned ({str(e).splitlines()[0][:200]})")
+        say(f"WARNING: the backups older than the retention period were not deleted ({str(e).splitlines()[0][:200]}).")
     return 0
 
 
 def cmd_stop(args: argparse.Namespace, host: Host) -> int:
     state = read_state(Path(args.home))
+    heading(f"Stopping veyq {state.release}")
     host.run([*by_project(state.project), "stop"], stream=True)
-    say("stopped. `veyqctl start` starts it again.")
+    say("Stopped. `veyqctl start` starts it again.")
     return 0
 
 
 def cmd_status(args: argparse.Namespace, host: Host) -> int:
     home = Path(args.home)
     state = read_state(home)
-    say(f"release {state.release}" + (" (installed with --unsigned-local: NOT VERIFIED)" if state.unsigned_local else ""))
+    heading(f"veyq {state.release}" + (", installed with --unsigned-local: NOT VERIFIED" if state.unsigned_local else "")
+            + f" (project {state.project})")
     healthy = report(host, state.project)
     pool_warning(host, home, state)
     retention_warning(host, home, state)
@@ -1375,11 +1435,11 @@ def cmd_verify(args: argparse.Namespace, host: Host) -> int:
     selector = selected(args, home)
     p = plan(host, source_spec(args, home), selector, unsigned_local=args.unsigned_local)
     chosen = p.selection
-    say_selection(p)
+    say_selection(p, "Verifying")
     manifest = fetch_manifest(host, p.source, chosen, args.unsigned_local)
     verify_images(host, manifest, args.unsigned_local)
-    say(f"release {chosen.release}: " + ("NOT VERIFIED (--unsigned-local)" if args.unsigned_local
-                                          else "manifest and both images verified. Nothing was downloaded."))
+    say("NOT VERIFIED (--unsigned-local)." if args.unsigned_local
+        else f"Release {chosen.release} is veyq's, as signed. Nothing was downloaded.")
     return 0
 
 
@@ -1606,7 +1666,8 @@ def pool_choice(home: Path, given: str | None, flag: str) -> PoolChoice:
 def copy_objects_early(host: Host, home: Path, state: State, tool: BackupTool, pool: PoolChoice) -> None:
     """The hot early copy (ADR 0096 decision 5 step 4): the whole bucket into the pool while the app still runs, so the
     cold top-up after the stop copies only what arrived since. Objects are immutable; a failure stops nothing."""
-    say(f"copying photos and files into the pool {pool.target} while veyq keeps running")
+    heading("Copying photos and files into the pool")
+    say(f"Into {pool.target}, while veyq keeps running.")
     host.run([sys.executable, str(tool.path), "copy-objects", "--objects-to", pool.target, "--docker-network",
               tool.facts.network], env={**tool.env, **pool.env}, stream=True)
 
@@ -1627,8 +1688,9 @@ def capture(host: Host, home: Path, state: State, tool: BackupTool, key_into: Pa
                   "--docker-network", facts.network, "--config-secret-file", str(key), "--key-into", str(key_into),
                   "--into", str(target), *pooled], env=env, stream=True)
     host.run([sys.executable, str(tool.path), "verify", str(target), "--key-from", str(key_into)], env=env, stream=True)
-    say(f"backup written to {target} (the database and the store's index); the config-secret key is in {key_into}. "
-        f"Keep the two apart and encrypt both before they leave this server. "
+    checked("backup", f"{target}: the database and the store's index")
+    checked("key", f"{key_into}: the config-secret key")
+    say("Keep the two apart, and encrypt both before they leave this server. "
         + (f"Photos and files are in the pool {pool.target}." if pooled else "Photos and files stay in the store only."))
     return target
 
@@ -1652,10 +1714,11 @@ def pool_warning(host: Host, home: Path, state: State) -> None:
         in_use = host.run([sys.executable, str(tool.path), "store-in-use", "--compose-file",
                            str(release_dir(home, state.release) / COMPOSE_ASSET)], env=tool.env).stdout.strip()
     except Refused as e:
-        say(f"the store setting in use could not be read ({str(e).splitlines()[0][:200]})")
+        say(f"The store setting in use could not be read ({str(e).splitlines()[0][:200]}).")
         in_use = "unreadable"
     if in_use != "own":
-        say(f"store in use: {in_use or 'none set'}")
+        heading("Your photos and files")
+        say(f"Store in use: {in_use or 'none set'}.")
         say(BUNDLED_WARNING)
 
 
@@ -1696,8 +1759,8 @@ def prune(host: Host, home: Path, state: State, tool: BackupTool, *, required: b
     except Refused as e:
         if required:
             raise
-        say(f"WARNING: the captures older than B were not pruned ({str(e).splitlines()[0][:200]}); the next `backup`, "
-            f"`upgrade`, `start` or `backup prune` tries again")
+        say(f"WARNING: the backups older than the retention period were not deleted ({str(e).splitlines()[0][:200]}); "
+            f"the next `backup`, `upgrade`, `start` or `backup prune` tries again.")
 
 
 def retention_warning(host: Host, home: Path, state: State) -> None:
@@ -1709,10 +1772,12 @@ def retention_warning(host: Host, home: Path, state: State) -> None:
                         "--compose-file", str(release_dir(home, state.release) / COMPOSE_ASSET)], env=tool.env).stdout
         answer = json.loads(raw.strip().splitlines()[-1])
     except (Refused, ValueError, IndexError) as e:
-        say(f"B and the captures could not be read ({str(e).splitlines()[0][:200] if str(e) else type(e).__name__})")
+        say(f"The retention period and the backups could not be read "
+            f"({str(e).splitlines()[0][:200] if str(e) else type(e).__name__}).")
         return
     if not answer.get("fresh"):
         newest = answer.get("youngest")
+        heading("Backups")
         say(f"WARNING: no backup in {home / BACKUPS_DIR} is younger than the retention period ({answer.get('days')} "
             f"days" + (f"; the newest, {newest}, is from {answer.get('youngestAt')}" if newest else "; there is none")
             + "). Older backups are deleted, so this instance has none to restore. Run `veyqctl backup` — the docs "
@@ -1727,7 +1792,7 @@ def read_ledger(host: Host, home: Path, state: State, key_path: str, into: Path)
     result = host.run([*compose(home, state.release, state.project), "run", "--rm", "--no-deps", "-T", *IMAGE_COMMANDS,
                        "read-file", ledger], check=False)
     if result.returncode != 0:
-        say(f"no erasure ledger at {ledger} in the app's volume: the restore checks the objects without it")
+        say(f"No erasure ledger at {ledger} in the app's volume: the restore checks the objects without it.")
         return None
     into.write_text(result.stdout or "")
     os.chmod(into, 0o600)
@@ -1792,24 +1857,24 @@ def cmd_upgrade(args: argparse.Namespace, host: Host) -> int:
     p = plan(host, spec, selector, state.release, args.unsigned_local)
     source, selection = p.source, p.selection
     if p.relation == "same":
-        say(f"release {selection.release} is running already ({RELEASE_KEY}={selector}): nothing to upgrade")
+        heading(f"veyq {state.release}: nothing to upgrade")
+        say(f"Release {selection.release} is running already ({RELEASE_KEY}={selector}).")
         return 0
     if p.relation == "older":
         raise Refused(f"{RELEASE_KEY}={selector} selects {selection.release}, older than the running {state.release}. "
                       f"There is no downgrade: to go back, restore a backup taken under that release "
                       f"(`veyqctl rollback`). Nothing was stopped.")
     manifest_of, target = p.manifest_of, p.target
-    say(f"step 1 of 4: release {target.release} ({RELEASE_KEY}={selector}; running: {state.release})"
-        + (f" — {selection.release} is in a later major, which is entered only from the release its manifest names"
+    heading(f"Upgrading veyq {state.release} to {target.release}")
+    say(f"Step 1 of 4: release {target.release}, selected by {RELEASE_KEY}={selector}."
+        + (f" {selection.release} is in a later major, which is entered only from the release its manifest names."
            if target != selection else ""))
 
     # 2. its manifest verified, both images verified by the manifest's digests, then its assets into releases/<release>/
+    heading(f"Step 2 of 4: verifying and downloading {target.release}")
     manifest = manifest_of(target)
     verify_images(host, manifest, args.unsigned_local)
     directory = fetch_release(source, target, manifest, home)
-    say(f"step 2 of 4: release {manifest.release} downloaded and " + ("NOT verified (--unsigned-local)"
-                                                                     if args.unsigned_local
-                                                                     else "verified (manifest and both images)"))
 
     # 3. refuse if the new template requires a value .env lacks, naming it
     template = (directory / TEMPLATE_ASSET).read_text()
@@ -1828,7 +1893,8 @@ def cmd_upgrade(args: argparse.Namespace, host: Host) -> int:
     except Refused:
         staged.unlink()
         raise
-    say(f"step 3 of 4: {home / ENV_FILE} has everything release {manifest.release} needs")
+    heading("Step 3 of 4: configuration")
+    checked(".env", f"{home / ENV_FILE} has everything release {manifest.release} needs")
     try:
         tool = backup_tool(host, home, state)
         pool = pool_choice(home, args.objects_to, "--objects-to")
@@ -1839,30 +1905,31 @@ def cmd_upgrade(args: argparse.Namespace, host: Host) -> int:
         raise
 
     # 4. back up; stop the app; switch to the new release's recipe and image lines; up; wait until healthy
+    heading(f"Step 4 of 4: backing up, then switching to {manifest.release}")
     stopped = time.monotonic()
     stop_app(host, home, state)
     try:
         backup = capture(host, home, state, tool, key_into, f"{utc_stamp()}-before-{manifest.release}", pool)
     except Refused:
         staged.unlink()
-        say(f"the backup failed, so nothing was switched; starting release {state.release} again")
+        say(f"The backup failed, so nothing was switched; starting release {state.release} again.")
         up(host, compose(home, state.release, state.project), state.project)
         raise
     prune(host, home, state, tool, required=False)
     os.replace(staged, home / ENV_FILE)
     write_state(home, state._replace(release=manifest.release, source=spec, unsigned_local=args.unsigned_local))
-    say(f"step 4 of 4: backed up to {backup}, switched to release {manifest.release}")
+    say(f"Switched to release {manifest.release}.")
     try:
         up(host, compose(home, manifest.release, state.project), state.project)
     except Refused as e:
         raise Refused(f"{e}\nRelease {manifest.release} is switched in but not healthy. To go back to release "
                       f"{state.release} (still in {release_dir(home, state.release)}): "
                       f"`veyqctl rollback {backup} --key-from {key_into}`.") from None
-    say(f"downtime: {time.monotonic() - stopped:.0f} s, from stopping veyq until release {manifest.release} was healthy")
-    say(f"release {manifest.release} is running; release {state.release} stays in {release_dir(home, state.release)} "
-        f"for a rollback")
+    heading(f"veyq {manifest.release} is running")
+    say(f"Downtime: {time.monotonic() - stopped:.0f} s, from stopping veyq until release {manifest.release} was healthy.")
+    say(f"Release {state.release} stays in {release_dir(home, state.release)} for a rollback.")
     if target != selection:
-        say(entry_note(selector, selection, target, "the next `upgrade`"))
+        say(entry_note(selector, selection, target, "the next `upgrade`") + ".")
     return 0
 
 
@@ -1901,14 +1968,16 @@ def cmd_backup(args: argparse.Namespace, host: Host) -> int:
     pool = pool_choice(home, args.objects_to, "--objects-to")
     if pool.target:
         copy_objects_early(host, home, state, tool, pool)
+    heading(f"Backing up veyq {state.release}")
     stopped = time.monotonic()
     stop_app(host, home, state)
     try:
         capture(host, home, state, tool, key_into, utc_stamp(), pool)
         prune(host, home, state, tool, required=False)
     finally:
+        heading(f"Starting veyq {state.release} again")
         up(host, compose(home, state.release, state.project), state.project)
-        say(f"downtime: {time.monotonic() - stopped:.0f} s, from stopping veyq until every service was healthy again")
+        say(f"Downtime: {time.monotonic() - stopped:.0f} s, from stopping veyq until every service was healthy again.")
     return 0
 
 
@@ -1930,6 +1999,7 @@ def cmd_restore(args: argparse.Namespace, host: Host) -> int:
     # it the restore checks the objects in the live store (the way back from an upgrade) and writes none.
     pool = pool_choice(home, args.objects_from, "--objects-from") if args.objects_from else PoolChoice(None, {})
     source = ["--objects-from", pool.target] if pool.target else []
+    heading(f"Restoring {backup.name} onto veyq {state.release}")
     stop_app(host, home, state)
     with tempfile.TemporaryDirectory(prefix=".key-", dir=home) as tmp:
         key = Path(tmp) / "config-secret.key"
@@ -1941,14 +2011,16 @@ def cmd_restore(args: argparse.Namespace, host: Host) -> int:
                       "--config-secret-file", str(key), *key_args, *source, *erasures], env={**tool.env, **pool.env},
                      stream=True)
         except Refused:
-            say("the restore did not finish and veyq stays STOPPED. The output above says whether anything was written: "
-                "if it refused at a check, nothing was, and `veyqctl start` brings veyq back as it was.")
+            say("The restore did not finish, and veyq stays STOPPED. The output above says whether anything was "
+                "written: if it refused at a check, nothing was, and `veyqctl start` brings veyq back as it was.")
             raise
         if key.is_file():
             place_key(host, home, state, key, tool.facts.key_path)
-            say(f"placed the config-secret key at {tool.facts.key_path} in the app's volume")
+            checked("key", f"the config-secret key placed at {tool.facts.key_path} in the app's volume")
+    heading(f"Starting veyq {state.release}")
     up(host, base, state.project)
-    say(f"restored. {AFTER_RESTORE}")
+    heading("Restored")
+    say(AFTER_RESTORE)
     return 0
 
 
@@ -1999,12 +2071,13 @@ def cmd_rollback(args: argparse.Namespace, host: Host) -> int:
     ledger_dir = Path(tempfile.mkdtemp(prefix=".ledger-", dir=home))
     ledger = read_ledger(host, home, state, facts.key_path, ledger_dir / LEDGER_FILE)
     erasures = ["--erasures", str(ledger)] if ledger else []
+    heading(f"Checking {capture_dir.name} against the store")
     try:
         host.run(["docker", "compose", "-p", state.project, *compose_files(home, target), "--env-file", str(staged),
                   "config", "--quiet"])
         host.run([sys.executable, str(tool.path), "verify", str(capture_dir), "--key-from", str(key_from),
                   "--against-store", "--docker-network", facts.network, *erasures], env=tool.env, stream=True)
-        say("the backup matches the store: every file it needs is there")
+        checked("backup", "it matches the store: every file it needs is there")
         sure = True if args.yes else host.confirm(
             f"EMPTY the database of {state.project} (release {state.release}) and restore {capture_dir.name} under "
             f"release {target}? This cannot be undone")
@@ -2018,13 +2091,14 @@ def cmd_rollback(args: argparse.Namespace, host: Host) -> int:
         shutil.rmtree(ledger_dir, ignore_errors=True)
         raise
 
+    heading(f"Rolling back to release {target}")
     stop_app(host, home, state)
     host.run([sys.executable, str(tool.path), "empty-database", "--yes", "--compose-file",
               str(release_dir(home, state.release) / COMPOSE_ASSET)], env=tool.env, stream=True)
     os.replace(staged, home / ENV_FILE)
     back = state._replace(release=target)
     write_state(home, back)
-    say(f"the database is empty and release {target} is selected; starting it once so it creates the empty tables")
+    say(f"The database is empty and release {target} is selected; starting it once so it creates the empty tables.")
     base = compose(home, target, state.project)
     up(host, base, state.project)
     stop_app(host, home, back)
@@ -2036,16 +2110,17 @@ def cmd_rollback(args: argparse.Namespace, host: Host) -> int:
                       "--config-secret-file", str(key), "--key-from", str(key_from), *erasures], env=tool.env,
                      stream=True)
         except Refused:
-            say(f"the restore did not finish: release {target} has an EMPTY database and veyq is STOPPED. The output above "
-                f"says why. Fix it, then run `veyqctl restore {capture_dir} --domain {domain} --key-from {key_from}`")
+            say(f"The restore did not finish: release {target} has an EMPTY database and veyq is STOPPED. The output "
+                f"above says why. Fix it, then run `veyqctl restore {capture_dir} --domain {domain} --key-from {key_from}`.")
             raise
         if key.is_file():
             place_key(host, home, back, key, facts.key_path)
     shutil.rmtree(ledger_dir, ignore_errors=True)
     up(host, base, state.project)
-    say(f"rolled back to release {target} from {capture_dir.name}; release {state.release} stays in "
-        f"{release_dir(home, state.release)}. VEYQ_RELEASE in .env is unchanged, so the next `upgrade` moves forward "
-        f"again — set it to {target} to stay. {AFTER_RESTORE}")
+    heading(f"Rolled back to release {target}, from {capture_dir.name}")
+    say(f"Release {state.release} stays in {release_dir(home, state.release)}. VEYQ_RELEASE in .env is unchanged, so "
+        f"the next `upgrade` moves forward again: set it to {target} to stay.")
+    say(AFTER_RESTORE)
     return 0
 
 
@@ -2065,15 +2140,17 @@ def cmd_self_update(args: argparse.Namespace, host: Host) -> int:
         except OSError as e:
             raise Refused(f"release {state.release} on disk has no manifest that verifies ({e}), so its `veyqctl` cannot "
                           f"be trusted. Nothing was replaced.") from None
-        verify_manifest(host, require_cosign(host), raw, bundle, f"the manifest of release {state.release} in {directory}")
+        heading(f"Verifying release {state.release} on disk")
+        verify_manifest(host, require_cosign(host), raw, bundle, f"the manifest of release {state.release} in {directory}",
+                        shown=f"release {state.release}, in {directory}")
     asset = verified_asset(home, state.release, SELF_ASSET)
     target = SELF.resolve()
     if target == asset.resolve():
-        say(f"{target} is release {state.release}'s own copy — nothing to replace")
+        say(f"{target} is release {state.release}'s own copy: nothing to replace.")
         return 0
     data = asset.read_bytes()
     if target.is_file() and target.read_bytes() == data:
-        say(f"{target} is already release {state.release}'s veyqctl")
+        say(f"{target} is release {state.release}'s veyqctl already: nothing to replace.")
         return 0
     staged = target.with_name(f".{target.name}.new")
     mode = stat.S_IMODE(target.stat().st_mode) if target.exists() else 0o755
@@ -2084,8 +2161,9 @@ def cmd_self_update(args: argparse.Namespace, host: Host) -> int:
     except OSError as e:
         staged.unlink(missing_ok=True)
         raise Refused(f"{target} cannot be replaced: {e}") from None
-    say(f"{target} is now release {state.release}'s veyqctl (sha256 {sha256(data)[:16]}…, as its manifest names)"
-        + (" — that release was installed --unsigned-local: NOT VERIFIED" if state.unsigned_local else ""))
+    heading(f"veyqctl is now release {state.release}'s")
+    say(f"{target}, sha256 {sha256(data)[:16]}…, as its manifest names."
+        + (" That release was installed --unsigned-local: NOT VERIFIED." if state.unsigned_local else ""))
     return 0
 
 
@@ -2148,7 +2226,7 @@ def name_is_free(name: str, path: Path) -> None:
     if listed is None or Path(listed) == path:
         return
     if not Path(listed).exists():
-        say(f"the instance named {name} was at {listed}, which no longer exists: this one takes its name")
+        say(f"The instance named {name} was at {listed}, which no longer exists: this one takes its name.")
         return
     raise Refused(f"there is already an instance named {name} ({listed}): choose another name with --name")
 
@@ -2159,7 +2237,15 @@ def register(name: str, path: Path) -> None:
     registry["instances"][name] = str(path)
     registry["current"] = name
     write_registry(registry)
-    say(f"{name} is now this computer's current instance (`veyqctl instances` lists them)")
+    say(f"{name} is now this computer's current instance (`veyqctl instances` lists them).")
+
+
+def instance_label(path: Path) -> str:
+    """How a heading names an instance: its name on this computer, else its directory."""
+    for name, listed in read_registry()["instances"].items():
+        if Path(listed).resolve() == path.resolve():
+            return name
+    return str(path)
 
 
 def resolve_home(args: argparse.Namespace) -> Path:
@@ -2180,11 +2266,15 @@ def resolve_home(args: argparse.Namespace) -> Path:
 def cmd_instances(args: argparse.Namespace, host: Host) -> int:
     registry = read_registry()
     if not registry["instances"]:
-        say(f"no instances yet: every command acts on {DEFAULT_HOME}. `veyqctl init` creates one and lists it.")
+        say(f"No instances yet: every command acts on {DEFAULT_HOME}. `veyqctl init` creates one and lists it.")
         return 0
-    for name, path in sorted(registry["instances"].items()):
+    rows = sorted(registry["instances"].items())
+    width = max(len(name) for name, _ in rows)
+    for name, path in rows:
         mark = "*" if name == registry["current"] else " "
-        say(f"{mark} {name}  {target_of(Path(path))}  {path}")
+        say(f"{mark} {name:<{width}}  {target_of(Path(path)):<7}  {path}")
+    say("")
+    say("* is the current one; `veyqctl use NAME` switches.")
     return 0
 
 
@@ -2194,8 +2284,8 @@ def cmd_use(args: argparse.Namespace, host: Host) -> int:
         raise Refused(f"no instance named {args.name}: `veyqctl instances` lists them")
     registry["current"] = args.name
     write_registry(registry)
-    say(f"{args.name} is now the current instance ({target_of(Path(registry['instances'][args.name]))}, "
-        f"{registry['instances'][args.name]})")
+    say(f"{args.name} is now the current instance: {target_of(Path(registry['instances'][args.name]))}, "
+        f"{registry['instances'][args.name]}.")
     return 0
 
 
@@ -2340,8 +2430,7 @@ def check_cluster(host: Host, context: str | None, gateway_class: str, storage_c
     if missing:
         raise Refused("your cluster lacks what veyq needs: " + "; ".join(missing)
                       + ". Nothing was written. (For a cluster you set up later: --no-cluster-check.)")
-    say("your cluster has what veyq needs: Argo CD, the Gateway API and its class, a StorageClass"
-        + (", cert-manager" if acme else ""))
+    checked("cluster", "Argo CD, the Gateway API and its class, a StorageClass" + (", cert-manager" if acme else ""))
 
 
 def chart_repository(app_ref: str) -> str:
@@ -2361,7 +2450,7 @@ def cosign_verify_ref(host: Host, what: str, target: str, untouched: str) -> Non
     if result.returncode != 0:
         raise Refused(f"the {what} {target} does not verify against the identity that publishes veyq "
                       f"({COSIGN_IDENTITY_REGEXP}): {(result.stderr or '').strip()[-800:]}\n{untouched}")
-    say(f"{what} {target}: signature verified")
+    checked(what, short(target))
 
 
 def verify_gitops_release(host: Host, manifest: Manifest, chart: str) -> dict[str, str]:
@@ -2397,7 +2486,7 @@ def render(host: Host, chart: str, digest: str, namespace: str, values: str) -> 
         result = host.run(cmd, check=False)
     if result.returncode != 0:
         raise Refused(f"`helm template` of the chart with your values.yaml failed: {(result.stderr or '').strip()[-800:]}")
-    say("the chart renders with your values.yaml")
+    checked("the chart renders with your values.yaml")
 
 
 def git(host: Host, top: Path, *cmd: str, check: bool = True) -> subprocess.CompletedProcess:
@@ -2797,7 +2886,7 @@ def verify_server_template(host: Host, into: Path) -> dict[str, str]:
     if found != tree:
         raise Refused(f"veyq-server {release} does not match its signed manifest: commit {commit[:12]} has the tree "
                       f"sha256 {found}, its signed manifest says {tree}. Nothing was added to your repository.")
-    say(f"veyq-server {release}: commit {commit[:12]}, tree verified")
+    checked("veyq-server", f"{release}: commit {commit[:12]}, its files as signed")
     return {"release": release, "commit": commit}
 
 
@@ -2855,8 +2944,8 @@ def server_secrets(host: Host, top: Path, answers: dict[str, str], repo_name: st
         raise Refused(f"sops did not encrypt {SERVER_SECRETS}: check the rules in .sops.yaml")
     target.parent.mkdir(parents=True, exist_ok=True)
     target.write_text(encrypted)
-    say("encrypted your sudo password" + (" (generated)" if not answers.get("admin_password") else "")
-        + f" and Argo CD's deploy key into {SERVER_SECRETS}")
+    checked("secrets", "your sudo password" + (" (generated)" if not answers.get("admin_password") else "")
+            + f" and Argo CD's deploy key, encrypted into {SERVER_SECRETS}")
     return public
 
 
@@ -2917,7 +3006,7 @@ def deploy_key_at_forge(host: Host, repo_url: str, public: str) -> None:
                                                   check=False).returncode:
         listed = host.run(["gh", "repo", "deploy-key", "list", "--repo", repo], check=False).stdout or ""
         if public.split()[1] in listed:
-            say(f"Argo CD's deploy key is on {repo} already")
+            checked("deploy key", f"on {repo} already")
             return
         if host.confirm(f"Add Argo CD's deploy key to {repo} on GitHub (read-only)?") is True:
             with tempfile.TemporaryDirectory(prefix="veyqctl-key-") as tmp:
@@ -2925,7 +3014,7 @@ def deploy_key_at_forge(host: Host, repo_url: str, public: str) -> None:
                 pub.write_text(public + "\n")
                 host.run(["gh", "repo", "deploy-key", "add", str(pub), "--repo", repo, "--title",
                           f"{public.split()[-1]} (read-only)"])
-            say(f"added Argo CD's deploy key to {repo}, read-only")
+            checked("deploy key", f"added to {repo}, read-only")
             return
     where = f"https://github.com/{repo}/settings/keys/new" if repo else f"your forge's settings of {repo_url}"
     print(f"\n   Add this as a deploy key at {where}, read-only (leave write access off):\n\n   {public}\n",
@@ -2941,7 +3030,7 @@ def await_dns(host: Host, address: str, names: list[str]) -> None:
     while True:
         wrong = [n for n in names if not want or host.resolve(n) - want or not host.resolve(n)]
         if not wrong:
-            say(f"DNS: {', '.join(names)} resolve to {', '.join(sorted(want))}")
+            checked("DNS", f"{', '.join(names)} resolve to {', '.join(sorted(want))}")
             return
         target = ", ".join(sorted(want)) or address
         message = (f"Create an A record for {', '.join(wrong)} pointing to {target} (no AAAA record: the cluster "
@@ -2992,7 +3081,7 @@ def trust_host_key(host: Host, address: str, line: str) -> None:
         host.run(["ssh-keygen", "-R", address, "-f", str(known)], check=False)
     with open(known, "a") as f:
         f.write(line + "\n")
-    say(f"saved the server's fingerprint in {known}")
+    checked("fingerprint", f"the server's, saved in {known}")
 
 
 def ansible_core(host: Host) -> tuple[int, ...]:
@@ -3009,7 +3098,7 @@ def bootstrap(host: Host, top: Path, answers: dict[str, str], pinned: str, age_e
     probe = host.run(["ssh", "-o", "BatchMode=yes", "-o", "ConnectTimeout=15", "-o", "ClearAllForwardings=yes",
                       f"{answers['admin_user']}@{address}", "true"], check=False)
     if not probe.returncode:
-        say(f"{answers['admin_user']} logs in to {address} already: the server is bootstrapped, nothing to run")
+        say(f"{answers['admin_user']} logs in to {address} already: the server is bootstrapped, nothing to run.")
         return
     if ansible_core(host) < ANSIBLE_CORE_FLOOR:
         raise Refused(f"ansible-core {'.'.join(map(str, ANSIBLE_CORE_FLOOR))} or later is needed, but "
@@ -3056,7 +3145,7 @@ def connect(host: Host, name: str, address: str, admin_user: str, argocd: bool, 
                        "  ServerAliveInterval 30", f"# <<< {name}"]) + "\n"
     config.parent.mkdir(mode=0o700, exist_ok=True)
     write_private(config, block + ("\n" + rest.lstrip("\n") if rest.strip() else ""))
-    say(f"added `Host {name}` to {config}")
+    checked("SSH", f"`Host {name}` in {config}")
 
     remote = host.run(["ssh", "-o", "BatchMode=yes", "-o", "ClearAllForwardings=yes", name, "cat ~/.kube/config"]).stdout
     renamed = re.sub(r"(?m)^(\s*(?:- )?(?:name|cluster|user|current-context): )default$", rf"\g<1>{name}", remote)
@@ -3075,7 +3164,7 @@ def connect(host: Host, name: str, address: str, admin_user: str, argocd: bool, 
         paths = f"{kubeconfig}:{fresh}" if kubeconfig.is_file() else str(fresh)
         merged = host.run(["kubectl", "config", "view", "--flatten"], env={"KUBECONFIG": paths}).stdout
     write_private(kubeconfig, merged)
-    say(f"added the kubectl context {name} to {kubeconfig} (it works while the tunnel is open)")
+    checked("kubectl", f"the context {name} in {kubeconfig}; it works while the tunnel is open")
     if make_current:
         host.run(["kubectl", "config", "use-context", name], env={"KUBECONFIG": str(kubeconfig)})
 
@@ -3097,11 +3186,11 @@ def await_synced(host: Host, name: str, application: str, timeout: float) -> Non
                                               i.get("status", {}).get("health", {}).get("status", "?")) for i in items}
             pending = {n: s for n, s in states.items() if s != ("Synced", "Healthy")}
             if application in states and not pending:
-                say(f"everything runs: Argo CD reports {', '.join(sorted(states))} Synced and Healthy")
+                checked("Argo CD", f"{', '.join(sorted(states))} Synced and Healthy")
                 return
             shown = ", ".join(f"{n} {'/'.join(s)}" for n, s in sorted(pending.items())) or "no application yet"
             if shown != last:
-                say(f"waiting for Argo CD: {shown}")
+                say(f"Waiting for Argo CD: {shown}")
                 last = shown
             if time.monotonic() > deadline:
                 raise Refused(f"not everything runs after {int(timeout)} s ({shown}). Look with `kubectl --context {name} -n "
@@ -3122,9 +3211,9 @@ def server_prepare(run: InitRun) -> None:
             template = Path(tmp) / "veyq-server"
             release = verify_server_template(host, template)
             render_server(host, top, template, release["commit"], answers, run.project, run.repo_url, run.revision)
-        say(f"added veyq-server {release['release']} to your repository")
+        checked("veyq-server", f"{release['release']}, added to your repository")
     else:
-        say(f"veyq-server is rendered in {top} already (.copier-answers.yml)")
+        checked("veyq-server", f"in {top} already (.copier-answers.yml)")
     m = GITHUB_REPO.fullmatch(run.repo_url)
     run.deploy_key = server_secrets(host, top, answers, m.group(1) if m else top.name, run.age_env())
     run.pinned = pin_host_key(host, top, answers["server_address"])
@@ -3851,7 +3940,7 @@ def write_half(run: InitRun) -> GitOps:
     for relative, text in files.items():
         (run.directory / relative).write_text(text)
     write_gitops(g)
-    say(f"wrote veyq's files into {run.rel} (release {p.selection.release})")
+    checked("files", f"veyq's, written into {run.rel} (release {p.selection.release})")
     run.progress.mark("written")
     return g
 
@@ -3925,7 +4014,7 @@ def continue_written(run: InitRun) -> int:
                       f"`init` does not change it: `upgrade` installs a newer release; anything else, edit the files. "
                       f"{NOTHING_WRITTEN}")
     if not run.progress.done("written"):
-        say(f"veyq's files are in {run.rel}, written from {SETUP_FILE}'s answers: nothing to write")
+        say(f"veyq's files are in {run.rel}, written from {SETUP_FILE}'s answers: nothing to write.")
     answers = run.progress.answers
     run.name = answers.get("name") or run.top.name
     run.server = answers.get("server") == "yes"
@@ -3949,22 +4038,24 @@ def finish_init(run: InitRun, g: GitOps) -> int:
         git(host, run.top, "remote", "get-url", "origin", check=False).stdout or "").strip()
     register(run.progress.get("veyq", "name") or args.name or run.top.name, run.directory)
     if handed:
-        say(f"the generated values are in {handed} (0600), once: "
+        say(f"The generated values are in {handed} (0600), once: "
             + ("put each under its remote key into the store `" + store + "` reads, " if provider == "external-secrets"
                else "create the two Secrets from it in the namespace, " if provider == "none"
                else "they are sealed into the repository; ")
-            + "then move the file off this machine")
-    say("keep veyq's config-secret key in your password manager too: without it, no backup can be read"
+            + "then move the file off this machine.")
+    say("Keep veyq's config-secret key in your password manager too: without it, no backup can be read"
         + (f". Read it with: sops decrypt --extract '[\"stringData\"][\"{CONFIG_SECRET_KEY}\"]' "
            f"{(run.directory / 'resources/config-secret-key.sops.yaml').relative_to(run.top)}" if provider == "sops"
-           else f" (`{CONFIG_SECRET_KEY}` in the Secret {CONFIG_SECRET})"))
+           else f" (`{CONFIG_SECRET_KEY}` in the Secret {CONFIG_SECRET})") + ".")
     if run.server:
         if not run.domains:
             run.domains = [d for d in (run.domain, run.store_domain) if d]
         server_finish(run, g, repo_url)
     else:
-        say(f"next: review, `git -C {run.top} add {run.rel} {SETUP_FILE} && git commit`, push, give Argo CD read access "
-            f"to {repo_url} (a deploy key), and register the Application once: `{' '.join(kubectl(context))} apply -f "
+        heading("Next")
+        say(f"1. Review, then `git -C {run.top} add {run.rel} {SETUP_FILE} && git commit`, and push.")
+        say(f"2. Give Argo CD read access to {repo_url} (a deploy key).")
+        say(f"3. Register the Application once: `{' '.join(kubectl(context))} apply -f "
             f"{run.directory / 'application.yaml'}`")
     run.progress.clear_steps()
     return 0
@@ -4050,7 +4141,7 @@ def age_key_file(run: InitRun) -> Path:
             key_file.parent.mkdir(mode=0o700, exist_ok=True)
             host.run(["age-keygen", "-o", str(key_file)])
             key_file.chmod(0o600)
-            say(f"created a new age key in {key_file}. Copy it into your password manager now: without it, nothing in "
+            say(f"Created a new age key in {key_file}. Copy it into your password manager now: without it, nothing in "
                 f"your repository can be decrypted, and a lost server cannot be set up again.")
             if not host.wait("Press Enter once it is in your password manager"):
                 raise Refused(f"copy the new age key ({key_file}) into your password manager first, then run the same "
@@ -4108,6 +4199,7 @@ def running_differs(host: Host, source: Source, listed: list[Listed], g: GitOps)
     the release identity and compared. `upgrade` stands on the running release (no downgrade, a major only from its
     entry), so a veyqctl.json written by hand — or one whose `running` was edited — is checked before it is trusted."""
     running = select(listed, g.doc["running"], source.describe())
+    heading(f"The installed release, {running.release}")
     pins = verify_gitops_release(host, fetch_manifest(host, source, running, False), g.doc["chart"])
     return [f"{role} {g.doc['pins'][role]} (release {running.release}: {pins[role]})" for role in PIN_ROLES
             if g.doc["pins"][role] != pins[role]]
@@ -4116,9 +4208,9 @@ def running_differs(host: Host, source: Source, listed: list[Listed], g: GitOps)
 def gitops_verify(args: argparse.Namespace, host: Host, g: GitOps) -> int:
     p = plan(host, args.source or g.doc.get("source") or None, check_selector(args.release or g.doc["release"]))
     chosen = p.selection
-    say_selection(p)
+    say_selection(p, "Verifying")
     verify_gitops_release(host, fetch_manifest(host, p.source, chosen, False), g.doc["chart"])
-    say(f"release {chosen.release}: manifest, three images and chart verified. Nothing was written.")
+    say(f"Release {chosen.release} is veyq's, as signed. Nothing was written.")
     return 0
 
 
@@ -4143,20 +4235,24 @@ def gitops_check(args: argparse.Namespace, host: Host, g: GitOps) -> int:
              g.doc["running"])
     source, listed, running = p.source, p.listed, p.running
     say_check(p, "installed")
-    drift = gitops_drift(g)
-    for line in drift:
-        say(f"DRIFT: {line}, not what {GITOPS_FILE} records")
     differs = running_differs(host, source, listed, g)
     if differs:
-        say(f"NOT RELEASE {running}: {GITOPS_FILE} pins " + "; ".join(differs) + " — `upgrade` refuses until it pins "
-            "what that release signed")
+        say(f"✗ NOT RELEASE {running}: {GITOPS_FILE} pins " + "; ".join(differs) + ". `upgrade` refuses until it "
+            "pins what that release signed.")
     else:
-        say(f"the pins in {GITOPS_FILE} are release {running}'s, as it was signed")
+        checked(GITOPS_FILE, f"pins what {running} signed")
+    heading("Your files")
+    drift = gitops_drift(g)
+    for line in drift:
+        say(f"✗ DRIFT: {line}, not what {GITOPS_FILE} records")
+    if not drift:
+        checked("files", f"{g.doc['application']} and {g.doc['values']} pin what {GITOPS_FILE} records")
     drift = drift + differs
     namespace = g.namespace
     k = kubectl(g.doc.get("context") or None)
+    heading("The cluster")
     if host.run(k + ["get", "namespace", namespace, "-o", "name"], check=False).returncode:
-        say(f"the cluster or the namespace {namespace} is not reachable, so the Secrets were not checked")
+        say(f"The cluster or the namespace {namespace} is not reachable, so the Secrets were not checked.")
         return 1 if drift else 0
     absent = []
     for secret, keys in SECRET_VALUES.items():
@@ -4170,9 +4266,9 @@ def gitops_check(args: argparse.Namespace, host: Host, g: GitOps) -> int:
         elif set(keys) - have:
             absent.append(f"{secret} without {', '.join(sorted(set(keys) - have))}")
     if absent:
-        say(f"the Secrets the chart reads are not complete ({g.doc['secrets']}): " + "; ".join(absent))
+        say(f"✗ The Secrets the chart reads are not complete ({g.doc['secrets']}): " + "; ".join(absent) + ".")
     else:
-        say(f"the Secrets {SECRETS_SECRET} and {CONFIG_SECRET} exist with every key")
+        checked("Secrets", f"{SECRETS_SECRET} and {CONFIG_SECRET} exist with every key")
     return 1 if drift or absent else 0
 
 
@@ -4183,8 +4279,10 @@ def gitops_upgrade(args: argparse.Namespace, host: Host, g: GitOps) -> int:
                       "itself up before the new release starts")
     p = plan(host, args.source or g.doc.get("source") or None, check_selector(g.doc["release"]), g.doc["running"])
     source, listed, selector, selection, running = p.source, p.listed, p.selector, p.selection, p.running
+    heading(f"veyq {instance_label(g.directory)}: {running} installed, {RELEASE_KEY}={selector} selects "
+            f"{selection.release}")
     if p.relation == "same":
-        say(f"release {running} is installed already ({RELEASE_KEY}={selector}): nothing to do")
+        say("Nothing to do.")
         return 0
     if p.relation == "older":
         raise Refused(f"{RELEASE_KEY}={selector} selects {selection.release}, older than the installed {running}: "
@@ -4204,6 +4302,8 @@ def gitops_upgrade(args: argparse.Namespace, host: Host, g: GitOps) -> int:
         raise Refused(f"{GITOPS_FILE} says release {running} is installed, but pins what that release did not sign: "
                       + "; ".join(differs) + f". Nothing was changed: an upgrade starts only from a release that "
                       f"verifies ({EXISTING_HALF_DOCS}).")
+    checked(GITOPS_FILE, f"pins what {running} signed")
+    heading(f"Verifying {target.release}")
     manifest = manifest_of(target)
     pins = verify_gitops_release(host, manifest, g.doc["chart"])
     old = g.doc["pins"]
@@ -4219,14 +4319,16 @@ def gitops_upgrade(args: argparse.Namespace, host: Host, g: GitOps) -> int:
     write_gitops(g._replace(doc={**g.doc, "running": target.release, "pins": pins}))
     git(host, top, "add", "--", *paths)
     git(host, top, "commit", "-m", f"veyq {target.release}: upgraded from {running} by veyqctl", "--", *paths)
-    say(f"release {target.release} pinned and committed (was {running}); veyq backs up before the new release starts")
+    heading(f"Committed: veyq {target.release}, upgraded from {running}")
     if target != selection:
-        say(entry_note(selector, selection, target, "the next `upgrade`"))
+        say(entry_note(selector, selection, target, "the next `upgrade`") + ".")
     if args.push:
         git(host, top, "push")
-        say("pushed: Argo CD applies it at its next sync")
+        say("Pushed: Argo CD applies it at its next sync.")
     else:
-        say(f"not pushed yet: run `git -C {top} push` (or `upgrade --push` next time), then Argo CD applies it")
+        say(f"Next: git -C {top} push   (or `upgrade --push` next time)")
+        say("Argo CD applies it at its next sync after the push.")
+    say(f"veyq backs itself up before {target.release} starts.")
     return 0
 
 
@@ -4257,7 +4359,7 @@ def gitops_tls(args: argparse.Namespace, host: Host, g: GitOps) -> int:
     staging, production = ACME_DIRECTORIES["staging"], ACME_DIRECTORIES["production"]
     text = g.values.read_text()
     if f"server: {production}" in text and staging not in text:
-        say("the values name Let's Encrypt's production directory already: nothing to do")
+        say("The values name Let's Encrypt's production directory already: nothing to do.")
         return 0
     if f"server: {staging}" not in text:
         raise Refused(f"{g.values} does not use Let's Encrypt's test certificates: nothing to switch")
@@ -4265,6 +4367,7 @@ def gitops_tls(args: argparse.Namespace, host: Host, g: GitOps) -> int:
     if git(host, top, "diff", "--quiet", "HEAD", "--", str(g.values), check=False).returncode:
         raise Refused(f"{g.values} has uncommitted changes: commit or undo them first, as `tls production` commits "
                       f"only its own. Nothing was changed.")
+    heading(f"veyq {instance_label(g.directory)}: from Let's Encrypt's test certificates to real ones")
     switched = rewrite_once(text, f"server: {staging}", f"server: {production}", g.doc["values"])
     namespace = g.namespace
     render(host, g.doc["chart"], g.doc["pins"]["chart"], namespace, switched)
@@ -4283,7 +4386,8 @@ def gitops_tls(args: argparse.Namespace, host: Host, g: GitOps) -> int:
     git(host, top, "add", "--", *paths)
     git(host, top, "commit", "-m", "veyq: TLS from Let's Encrypt production, by veyqctl tls production", "--", *paths)
     git(host, top, "push")
-    say("committed and pushed: Argo CD applies the Issuer's new directory at its next sync")
+    checked("committed", "and pushed: Argo CD applies the Issuer's new directory at its next sync")
+    heading("Waiting for Argo CD and the new certificates")
     k = kubectl(g.doc.get("context") or None) + ["-n", namespace]
     with server_tunnel(host, top):
         deadline = time.monotonic() + args.timeout
@@ -4308,7 +4412,7 @@ def gitops_tls(args: argparse.Namespace, host: Host, g: GitOps) -> int:
                               check=False).stdout or ""
             pending = [line.split()[0] for line in states.splitlines() if line.split() and line.split()[-1] != "True"]
             if states.strip() and not pending:
-                say("every certificate is issued by Let's Encrypt production")
+                checked("certificates", "every one issued by Let's Encrypt production")
                 return 0
             if time.monotonic() > deadline:
                 raise Refused(f"not issued after {int(args.timeout)} s: {', '.join(pending) or 'no certificate'} — "
@@ -4566,12 +4670,19 @@ def parser() -> argparse.ArgumentParser:
 
     update = sub.add_parser("self-update", help="replace this veyqctl with the one of the installed release")
     update.set_defaults(func=cmd_self_update)
+    # Before the command or after it: `veyqctl -v upgrade` and `veyqctl upgrade -v` both. SUPPRESS on the command's
+    # own, or its default would overwrite the one given before it.
+    verbose_help = "show every program veyqctl starts, with its arguments"
+    p.add_argument("-v", "--verbose", action="store_true", help=verbose_help)
+    for command in sub.choices.values():
+        command.add_argument("-v", "--verbose", action="store_true", default=argparse.SUPPRESS, help=verbose_help)
     return p
 
 
 def main(argv: list[str] | None = None, host: Host | None = None) -> int:
     args = parser().parse_args(argv)
     set_unverified(bool(getattr(args, "unsigned_local", False)))
+    set_verbose(bool(getattr(args, "verbose", False)))
     host = host or Host()
     try:
         if args.command in ("instances", "use", "init", "connect"):
@@ -4581,10 +4692,11 @@ def main(argv: list[str] | None = None, host: Host | None = None) -> int:
         host.workdir = home
         return TARGETS[target_of(home)](args, host, home).run(args.command)
     except Refused as e:
-        say(f"REFUSED: {e}")
+        refused(str(e))
         return 1
     finally:
         set_unverified(False)
+        set_verbose(False)
 
 
 if __name__ == "__main__":

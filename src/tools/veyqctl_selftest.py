@@ -102,6 +102,7 @@ import io
 import json
 import os
 import pathlib
+import re
 import shutil
 import stat
 import subprocess
@@ -787,7 +788,7 @@ def test_upgrade_selector(tmp: pathlib.Path) -> None:
         rc = vc.main(["--home", str(home), "check", "--unsigned-local"],
                      FakeHost(local_images=all_images(), project="veyq-proof"))
     check("check: from 1.3 with `latest`, `upgrade` would take 1.12 and the one after it enters major 2",
-          rc == 0 and "would take release 1.12" in out.getvalue()
+          rc == 0 and "Take release 1.12" in out.getvalue()
           and "the `upgrade` after that one enters major 2" in out.getvalue(), out.getvalue()[-400:])
     home = installed(tmp, "home-up-down", mirror, "1.12", "1.3")
     host = FakeHost(local_images=all_images(), project="veyq-proof")
@@ -799,7 +800,7 @@ def test_upgrade_selector(tmp: pathlib.Path) -> None:
         rc = vc.main(["--home", str(home), "check", "--unsigned-local"],
                      FakeHost(local_images=all_images(), project="veyq-proof"))
     check("check: VEYQ_RELEASE below the running release says `upgrade` would refuse, as `upgrade` does",
-          rc == 0 and "would refuse" in out.getvalue() and "would take" not in out.getvalue(), out.getvalue()[-300:])
+          rc == 0 and "Refuse: " in out.getvalue() and "Take release" not in out.getvalue(), out.getvalue()[-300:])
 
 
 def test_upgrade_order(tmp: pathlib.Path) -> None:
@@ -1235,7 +1236,7 @@ def test_retention_and_ledger(tmp: pathlib.Path) -> None:
     check("start: the stack up, then the prune", rc == 0 and first("up") < first("prune") < 10 ** 6, out[-300:])
     host = FakeHost(local_images=all_images(), project="veyq-proof", fail_tool="prune")
     rc, out = run_main(["--home", str(home), "start"], host)
-    check("start: a failed prune is said and the start stands", rc == 0 and "were not pruned" in out, out[-300:])
+    check("start: a failed prune is said and the start stands", rc == 0 and "were not deleted" in out, out[-300:])
 
     up_home = installed(tmp, "home-b-up", mirror, "1.3", "1.12")
     host = FakeHost(local_images=all_images(), project="veyq-proof")
@@ -1475,9 +1476,10 @@ def test_manifest_signature(tmp: pathlib.Path) -> None:
     # `verify` names the manifest too
     host = FakeHost(signed=SIGNED_TARGETS)
     rc, out = run_main(["--home", tmp / "home-verify", "--source", mirror, "verify", "--release", "1.3"], host)
-    check("verify: the manifest's signature, then both images, and the closing line names the manifest",
+    check("verify: the manifest's signature, then both images, each checked off, and the closing line says so",
           rc == 0 and host.ran("verify-blob") and image_verifies(host)
-          and max(host.ran("verify-blob")) < min(image_verifies(host)) and "manifest" in out.splitlines()[-1],
+          and max(host.ran("verify-blob")) < min(image_verifies(host)) and "✓ manifest" in out
+          and "✓ app image" in out and "✓ admin image" in out and "as signed" in out.splitlines()[-1],
           out[-300:])
 
     # bite (e): upgrade toward a release whose manifest was changed after it was signed
@@ -1762,7 +1764,7 @@ def test_instances(tmp: pathlib.Path) -> None:
     check("upgrade --push on a Compose home is refused before anything runs", rc == 1 and "GitOps" in out, out)
     rc, out = run_main(["instances"], FakeHost())
     check("instances: each listed with its target and path, the current one marked",
-          "* cluster  gitops" in out and "  test  compose" in out, out)
+          re.search(r"\* cluster +gitops ", out) is not None and re.search(r"  test +compose ", out) is not None, out)
     vc.write_registry({"current": None, "instances": {}})
 
 
@@ -2620,7 +2622,7 @@ def test_gitops_upgrade(tmp: pathlib.Path) -> None:
     check("upgrade --push from 1.1 enters major 2 (2.0) and pushes", rc == 0 and json.loads(
         (d / vc.GITOPS_FILE).read_text())["running"] == "2.0" and host.ran("git", "push"), out[-400:])
     rc, out = run_main(["--instance", "repo", "--source", mirror, "upgrade"], GitOpsHost(top=top, signed=signed))
-    check("upgrade on the newest: nothing to do", rc == 0 and "nothing to do" in out, out[-200:])
+    check("upgrade on the newest: nothing to do", rc == 0 and "nothing to do" in out.lower(), out[-200:])
 
     # every refusal leaves the repository untouched and commits nothing
     d4 = top / "apps" / "veyq-refusals"
@@ -2710,7 +2712,7 @@ def test_gitops_hand_written(tmp: pathlib.Path) -> None:
     hand_written(d, pins, pins["admin"])
     rc, out = run_main(["--home", d, "--source", mirror, "check"], GitOpsHost(top=top, signed=signed))
     check("check: a hand-written veyqctl.json pinning its release's signed pins is confirmed",
-          rc == 0 and "release 1.0's, as it was signed" in out, out[-400:])
+          rc == 0 and "pins what 1.0 signed" in out, out[-400:])
     host = GitOpsHost(top=top, signed=signed)
     rc, out = run_main(["--home", d, "--source", mirror, "upgrade"], host)
     values, application = (d / "values.yaml").read_text(), (d / "application.yaml").read_text()
