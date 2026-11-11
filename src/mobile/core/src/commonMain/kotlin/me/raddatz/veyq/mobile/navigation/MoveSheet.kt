@@ -4,7 +4,7 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
-import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.withContext
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -137,9 +137,9 @@ class MoveSheet(
 
     /**
      * Reads the space's tree and opens at the node's place; a copy reads what it would leave behind and out, and whether the
-     * tenant has room for it, meanwhile.
+     * tenant has room for it, meanwhile. The reads and writes run off the caller's thread (a UI's main one: they decrypt).
      */
-    suspend fun load() = coroutineScope {
+    suspend fun load() = withContext(Dispatchers.Default) {
         if (copying) {
             launch {
                 val p = runCatching { door.preview(node) }.getOrNull() ?: return@launch
@@ -151,7 +151,7 @@ class MoveSheet(
             }
         }
         val read = runCatching { door.tree(node.scopeId) }.getOrDefault(emptyList())
-        val m = read.firstOrNull { it.nodeId == node.nodeId } ?: return@coroutineScope
+        val m = read.firstOrNull { it.nodeId == node.nodeId } ?: return@withContext
         tree = read
         moved = m
         show(NodeMove.start(read, m), loaded = true)
@@ -212,7 +212,9 @@ class MoveSheet(
     /** The guest folder's confirm declined: nothing is sent. */
     fun cancelConfirm() = _state.update { it.copy(confirming = false) }
 
-    private suspend fun send(): State {
+    private suspend fun send(): State = withContext(Dispatchers.Default) { sending() }
+
+    private suspend fun sending(): State {
         val m = moved ?: return current
         val to = current.at
         val from = m.parentId
@@ -258,7 +260,7 @@ class MoveSheet(
         val b = back ?: return null
         undoWindow?.cancel()
         endUndo()
-        val outcome = runCatching { door.move(node, b.from) }.getOrDefault(NodeMove.Outcome.FAILED)
+        val outcome = withContext(Dispatchers.Default) { runCatching { door.move(node, b.from) }.getOrDefault(NodeMove.Outcome.FAILED) }
         door.changed()
         return if (outcome == NodeMove.Outcome.MOVED) null else Notice(Msg.MOVE_UNDO_FAILED, node.name)
     }
