@@ -14,10 +14,14 @@ import kotlinx.coroutines.async
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
+import me.raddatz.veyq.mobile.blob.RangeReader
+import me.raddatz.veyq.mobile.blob.Sniff
 import me.raddatz.veyq.mobile.crypto.Primitives
 import me.raddatz.veyq.mobile.expenses.PotModel
 import me.raddatz.veyq.mobile.AppKinds
@@ -48,11 +52,42 @@ internal class Composition<A : Connection, T : Any>(
     val session: SessionModel<A, T>,
     /** What this device hides, which the switcher's tenants leave out ([ShellShown.servers]). */
     val hidden: Hidden,
+    /** The files the host names by their paths (the CR's D3); a test's composition that writes none has [DeviceFiles.None]. */
+    val files: DeviceFiles = DeviceFiles.None,
     /** The models over a tenant just opened; null where there are none (a test's tenant that is no `TenantSession`). */
     val tenant: (T) -> Tenant?,
 )
 
-internal class Tenant(val shell: ShellModel, val pot: () -> PotModel)
+/**
+ * What a tenant opened offers the bridge: its shell, a Pot model per Pot opened (both null for a test's tenant, as they
+ * take only a `TenantSession`), the signed-in member's user id ([me]) and the members' pictures the core holds
+ * ([pictures], `AvatarsModel.state`), read when [loadPictures] runs (`AvatarsModel.load`: when is the core's rule).
+ */
+internal class Tenant(
+    val shell: ShellModel?,
+    val pot: (() -> PotModel)?,
+    val me: String?,
+    val pictures: StateFlow<Map<String, ByteArray>>,
+    val loadPictures: suspend () -> Unit,
+)
+
+/**
+ * A file on the device the host named by its path, as its save dialog gave it (the CR's D3): the core opens and writes
+ * it, and nothing of its content crosses the bridge. Natively core's `FileSink`; a JVM test plays one.
+ */
+internal interface DeviceFiles {
+    /**
+     * Writes the file at [path] with what [produce] hands its sink; it stays only when [produce] answers true, and one
+     * that throws or answers false leaves nothing at [path]. Throws when [path] does not open.
+     */
+    suspend fun write(path: String, produce: suspend (sink: (ByteArray) -> Unit) -> Boolean): Boolean
+
+    /** No file is written: a test's composition that has none to offer. */
+    object None : DeviceFiles {
+        override suspend fun write(path: String, produce: suspend (sink: (ByteArray) -> Unit) -> Boolean) =
+            throw UnsupportedOperationException("this composition writes no files")
+    }
+}
 
 /** The tenant open now: its models, and the account and tenant the session opened them for. */
 private class Open<A : Connection>(val models: Tenant, val account: A, val tenant: TenantRef)
@@ -72,25 +107,32 @@ internal class Bridge<A : Connection, T : Any>(compose: () -> Composition<A, T>)
     private val tenant = MutableStateFlow<Open<A>?>(null)
     private val ids = AtomicLong(0)
     private val pots = Registry<PotModel>()
+    private val readers = Registry<RangeReader>()
     private val watches = Registry<Job>()
 
-    /** One call, answered once through [answer] on a core thread — a request that is no [Call] too. */
-    fun call(request: String, answer: (String) -> Unit) {
+    /**
+     * One call, answered once through [answer] on a core thread — a request that is no [Call] too. The payload beside
+     * the JSON is the bytes of an [Answer.Bytes] (never null for one, empty included) and null for every other answer.
+     */
+    fun call(request: String, answer: (json: String, payload: ByteArray?) -> Unit) {
         scope.launch {
+            var payload: ByteArray? = null
             val a = try {
                 val call = runCatching { wire.decodeFromString(Call.serializer(), request) }.getOrNull()
-                if (call == null) Answer.Refused(Answer.Why.NOT_A_CALL) else dispatch(call)
+                if (call == null) Answer.Refused(Answer.Why.NOT_A_CALL) else dispatch(call) { payload = it }
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
                 Answer.Failed(e::class.simpleName ?: "Exception")
             }
-            answer(wire.encodeToString(Answer.serializer(), a))
+            answer(wire.encodeToString(Answer.serializer(), a), if (a is Answer.Bytes) payload ?: ByteArray(0) else null)
         }
     }
 
-    private suspend fun dispatch(call: Call): Answer {
-        val session = parts.await().session
+    /** One line per call; a call whose answer is [Answer.Bytes] hands its bytes to [payload] first. */
+    private suspend fun dispatch(call: Call, payload: (ByteArray) -> Unit): Answer {
+        val parts = parts.await()
+        val session = parts.session
         val shell = tenant.value?.models?.shell
         return when (call) {
             Call.SessionStart -> opened(session.start())
@@ -118,35 +160,69 @@ internal class Bridge<A : Connection, T : Any>(compose: () -> Composition<A, T>)
             Call.ShellRefresh -> shell?.refresh().done()
             Call.HomeGroups -> shell?.current?.let { Answer.Groups(it.lists.groups(it.shell)) } ?: noTenant
             is Call.SearchQuery -> shell?.current?.let { Answer.Hits(ShellWords.search(it.lists.objects, call.query)) } ?: noTenant
-            is Call.PotOpen -> tenant.value?.models?.let { t ->
+            is Call.PotOpen -> tenant.value?.models?.pot?.let { make ->
                 val id = ids.incrementAndFetch()
-                val pot = t.pot()
+                val pot = make()
                 pots.put(id, pot)
                 scope.launch { pot.open(call.ref) }
                 Answer.PotOpened(id)
             } ?: noTenant
             is Call.PotRefresh -> pots[call.pot]?.refresh().done(Answer.Why.NO_SUCH_POT)
             is Call.PotClose -> pots.remove(call.pot)?.close().done(Answer.Why.NO_SUCH_POT)
+            is Call.PotDownload -> pots[call.pot]?.let { pot ->
+                val written = parts.files.write(call.path) { sink -> pot.download(call.deletedName, sink) != null }
+                if (written) Answer.Done else Answer.Refused(Answer.Why.NOTHING_TO_DOWNLOAD)
+            } ?: Answer.Refused(Answer.Why.NO_SUCH_POT)
+            is Call.PotArchiveName -> pots[call.pot]?.let { pot ->
+                pot.archiveName()?.let(Answer::Name) ?: Answer.Refused(Answer.Why.NOTHING_TO_DOWNLOAD)
+            } ?: Answer.Refused(Answer.Why.NO_SUCH_POT)
+            is Call.AvatarPicture -> tenant.value?.models?.let { t ->
+                val picture = t.pictures.value[call.userId] ?: return Answer.Refused(Answer.Why.NO_PICTURE)
+                payload(picture)
+                Answer.Bytes(Sniff.image(picture)?.mime)
+            } ?: noTenant
+            is Call.ReaderRead -> readers[call.reader]?.let { r ->
+                payload(r.read(call.position, call.length))
+                Answer.Bytes(null)
+            } ?: Answer.Refused(Answer.Why.NO_SUCH_READER)
+            is Call.ReaderClose -> readers.remove(call.reader)?.let { Answer.Done } ?: Answer.Refused(Answer.Why.NO_SUCH_READER)
         }
+    }
+
+    /**
+     * Holds [reader] for the host until [Call.ReaderClose] or the tenant closes, answered as [Answer.Reader] (the CR's
+     * D1.2): the door of every call that opens a blob for reading in ranges (Depot's file, Memories' medium; their CRs),
+     * and of the test's reader until then. Refused while no tenant is open.
+     */
+    internal fun openReader(reader: RangeReader, mediaType: String?): Answer {
+        if (tenant.value == null) return noTenant
+        val id = ids.incrementAndFetch()
+        readers.put(id, reader)
+        return Answer.Reader(id, reader.size, mediaType)
     }
 
     private val noTenant = Answer.Refused(Answer.Why.NO_TENANT_OPEN)
 
     private fun Unit?.done(why: Answer.Why = Answer.Why.NO_TENANT_OPEN): Answer = if (this == null) Answer.Refused(why) else Answer.Done
 
-    /** A tenant the session opened becomes the open one: its shell read and shown, every Pot of the one before closed. */
+    /**
+     * A tenant the session opened becomes the open one: its shell read and shown, its pictures read in the background
+     * (the letters show meanwhile), every Pot and reader of the one before closed.
+     */
     private suspend fun opened(o: SessionModel.Opened<A, T>?): Answer {
         if (o == null) return Answer.Done
         val t = parts.await().tenant(o.session) ?: return Answer.Done
         closeTenant()
         tenant.value = Open(t, o.account, o.tenant)
-        t.shell.load(openLastUsed = true)
+        scope.launch { runCatching { t.loadPictures() } }
+        t.shell?.load(openLastUsed = true)
         return Answer.Done
     }
 
     private fun closeTenant() {
         tenant.value = null
         pots.removeAll().forEach { it.close() }
+        readers.removeAll()
     }
 
     /**
@@ -168,17 +244,22 @@ internal class Bridge<A : Connection, T : Any>(compose: () -> Composition<A, T>)
         Watched.Shell -> {
             val parts = parts.await()
             tenant.flatMapLatest { open ->
-                open?.models?.shell?.state?.map { s -> Update.Shell(s, s?.let { shown(parts, open, it) }) } ?: flowOf(Update.Shell(null))
+                val m = open?.models
+                m?.shell?.state?.combine(m.pictures) { s, pictures -> Update.Shell(s, s?.let { shown(parts, open, it, pictures.keys) }) }
+                    ?: flowOf(Update.Shell(null))
             }
         }
-        is Watched.Pot -> (pots[w.pot]?.state ?: flowOf(null)).map { Update.Pot(w.pot, it) }
+        is Watched.Pot -> {
+            val pictures = tenant.value?.models?.pictures ?: flowOf(emptyMap())
+            (pots[w.pot]?.state ?: flowOf(null)).combine(pictures) { s, p -> Update.Pot(w.pot, s, if (s == null) emptyList() else p.keys.sorted()) }
+        }
     }
 
     /**
      * What the shell shows beside [s] ([ShellShown]; ADR 0123's Consequences, the bridge): each field one core
      * function's answer.
      */
-    private fun shown(parts: Composition<A, T>, open: Open<A>, s: ShellModel.State): ShellShown {
+    private fun shown(parts: Composition<A, T>, open: Open<A>, s: ShellModel.State, pictures: Set<String>): ShellShown {
         val shell = s.shell
         val lists = s.lists
         val space = lists.space(shell)
@@ -202,6 +283,8 @@ internal class Bridge<A : Connection, T : Any>(compose: () -> Composition<A, T>)
             isHome = shell.isHome,
             drawerOpensAtStart = shell.drawerOpensAtStart,
             creates = AppKinds.drawerCreates.map { it.word },
+            me = open.models.me,
+            pictures = pictures.sorted(),
         )
     }
 
@@ -221,6 +304,7 @@ internal class Bridge<A : Connection, T : Any>(compose: () -> Composition<A, T>)
             client: (block: HttpClientConfig<*>.() -> Unit) -> HttpClient,
             config: Config,
             store: DeviceStore,
+            files: DeviceFiles,
             now: () -> Long = { Clock.System.now().toEpochMilliseconds() },
         ): Bridge<VeyqAccount, TenantSession> = Bridge {
             val recent = RecentUses(
@@ -232,8 +316,8 @@ internal class Bridge<A : Connection, T : Any>(compose: () -> Composition<A, T>)
                 initial = store.read(HIDDEN)?.lines()?.filter { it.isNotEmpty() }?.toSet().orEmpty(),
             )
             val device = ThisDevice(store, NoDeviceKeys, config.device, primitives)
-            Composition(SessionModel.accounts(primitives, device, client, hidden, recent), hidden) { t ->
-                Tenant(ShellModel(t, hidden, recent, now)) { PotModel(t, now) }
+            Composition(SessionModel.accounts(primitives, device, client, hidden, recent), hidden, files) { t ->
+                Tenant(ShellModel(t, hidden, recent, now), { PotModel(t, now) }, t.account.userId, t.pictures.state, t.pictures::load)
             }
         }
 

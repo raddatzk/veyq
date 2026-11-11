@@ -58,6 +58,25 @@ class SecretFreeSchemaTest {
         assertTrue(leaks(listOf(Leaky3.serializer()), identifiers).single().endsWith("password: named like a secret"))
     }
 
+    /**
+     * Bytes the UI shows ride beside the JSON (`Answer.Bytes`), never in it (the CR's D1.1): a byte array is refused
+     * wherever it sits — a field, a list's element, a map's value — and whatever it is named. The members' pictures
+     * as the core holds them (`AvatarsModel.state`, a map of user id to bytes) are the shape this catches.
+     */
+    @Test
+    fun aByteArrayAnywhereOnTheWireIsRefusedHoweverItIsNamed() {
+        assertEquals(
+            listOf("Pictured.Shown.picture: bytes", "Pictured.Shown.pictures: bytes", "Pictured.Shown.frames: bytes"),
+            leaks(listOf(Pictured.serializer()), identifiers),
+        )
+    }
+
+    @Serializable @kotlinx.serialization.SerialName("Pictured")
+    sealed class Pictured {
+        @Serializable @kotlinx.serialization.SerialName("Pictured.Shown")
+        class Shown(val name: String, val picture: ByteArray?, val pictures: Map<String, ByteArray>, val frames: List<ByteArray>) : Pictured()
+    }
+
     @Serializable @kotlinx.serialization.SerialName("Leaky")
     class Leaky(val name: String, val sealKey: ByteArray)
 
@@ -80,8 +99,12 @@ class SecretFreeSchemaTest {
         }
     }
 
-    private fun bytes(d: SerialDescriptor): Boolean =
-        d.kind == StructureKind.LIST && d.getElementDescriptor(0).kind.let { it == PrimitiveKind.BYTE }
+    /** Bytes: a list of bytes (`ByteArray`, `List<Byte>`), or a list or a map that holds one. */
+    private fun bytes(d: SerialDescriptor): Boolean = when (d.kind) {
+        StructureKind.LIST -> d.getElementDescriptor(0).let { it.kind == PrimitiveKind.BYTE || bytes(it) }
+        StructureKind.MAP -> bytes(d.getElementDescriptor(0)) || bytes(d.getElementDescriptor(1))
+        else -> false
+    }
 
     companion object {
         private val SECRET = Regex("key|seal|token|secret|passw|private|wrap", RegexOption.IGNORE_CASE)

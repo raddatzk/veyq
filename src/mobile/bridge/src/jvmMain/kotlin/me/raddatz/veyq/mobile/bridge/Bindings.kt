@@ -279,7 +279,30 @@ internal object Bindings {
         out.append("\nunsafe extern \"C\" {\n")
         functions.forEach { out.append("    pub fn ${it.name}(${sig(it)};\n") }
         out.append("}\n")
+        if (typedefs.any(::carriesPayload)) {
+            out.append(
+                """
+                |
+                |/// The payload a callback is handed beside its JSON (bridge.h's `bytes`, `len`) as the `Option<&[u8]>` it is,
+                |/// copied into a `Vec<u8>` before the callback returns: the core's pointer is valid only during the call. None
+                |/// where the core passed none (NULL): every answer but `Answer::Bytes`, every update, every host request.
+                |///
+                |/// # Safety
+                |/// `bytes` is NULL, or points at `len` bytes readable for the duration of this call.
+                |pub unsafe fn payload(bytes: *const u8, len: usize) -> Option<Vec<u8>> {
+                |    // SAFETY: the caller's: NULL, or `len` readable bytes.
+                |    let shown: Option<&[u8]> = if bytes.is_null() { None } else { Some(unsafe { std::slice::from_raw_parts(bytes, len) }) };
+                |    shown.map(<[u8]>::to_vec)
+                |}
+                |""".trimMargin(),
+            )
+        }
         return out.toString()
+    }
+
+    /** Whether a callback of bridge.h is handed a payload beside its JSON: a `const uint8_t *` followed by its `size_t`. */
+    private fun carriesPayload(d: Decl): Boolean = d.params.zipWithNext().any { (a, b) ->
+        a.first.replace(" ", "") == "constuint8_t*" && b.first.trim() == "size_t"
     }
 
     // ---- C# (the Windows host, ADR 0123's Consequences, the bridge) ----
@@ -467,6 +490,21 @@ internal object Bindings {
         val out = StringBuilder("// ---- bridge.h ----\n\n")
         out.append("/// <summary>bridge.h's six functions, exported by veyq.dll.</summary>\n")
         out.append("public static unsafe partial class Native\n{\n")
+        if (typedefs.any(::carriesPayload)) {
+            out.append(
+                """
+                |    /// <summary>
+                |    /// The payload a callback is handed beside its JSON (bridge.h's <c>bytes</c>, <c>len</c>) as the span it is, copied into
+                |    /// a <c>byte[]</c> before the callback returns: the core's pointer is valid only during the call. Null where the core
+                |    /// passed none (NULL): every answer but <c>Answer.Bytes</c>, every update, every host request.
+                |    /// </summary>
+                |    public static byte[]? Payload(byte* bytes, nuint len) =>
+                |        bytes == null ? null : new global::System.ReadOnlySpan<byte>(bytes, checked((int)len)).ToArray();
+                |
+                |
+                """.trimMargin(),
+            )
+        }
         functions.forEach { f ->
             val params = f.params.joinToString(", ") { (t, n) -> "${csC(t, names)} ${if (n in CS_KEYWORDS) "@$n" else n}" }
             out.append("    [global::System.Runtime.InteropServices.LibraryImport(\"veyq\")]\n")

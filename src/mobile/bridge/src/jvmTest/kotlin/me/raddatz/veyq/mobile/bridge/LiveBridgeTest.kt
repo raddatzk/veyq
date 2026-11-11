@@ -15,7 +15,12 @@ import kotlin.test.assertIs
 import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
 import kotlin.time.Duration.Companion.minutes
+import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonNull
+import kotlinx.serialization.json.int
+import me.raddatz.veyq.mobile.session.DeviceStore
+import me.raddatz.veyq.mobile.session.ThisDevice
+import me.raddatz.veyq.mobile.session.VeyqAccount
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.boolean
 import kotlinx.serialization.json.jsonArray
@@ -27,8 +32,11 @@ import kotlinx.serialization.json.jsonObject
  * The dispatch over the real core (ADR 0123's Consequences, the bridge), as a host drives it, on the JVM's suite and
  * HTTP client: signs in through a call as the seeded principal (`.run/.env`, or `VEYQ_ENV_FILE`), watches the shell
  * open, reads Home's groups, searches a name and opens the hit, and opens a Pot and reads its view to balances that sum
- * to zero. The device store is a host this test plays, answering from its own thread. Runs only when `VEYQ_LIVE` names
- * an origin of a running dev instance (`./gradlew backend:seed`).
+ * to zero. Then the CR's channels: the principal's own picture through `Avatar.Picture`, the same bytes as the core's
+ * own read in a session of its own (it needs a picture set: Settings, your profile, in the web); and Amsterdam
+ * downloaded through `Pot.Download` into a file, every payload of its ZIP to the SHA-256 its manifest names. The device
+ * store is a host this test plays, answering from its own thread, and the files a JVM stand-in for core's `FileSink`.
+ * Runs only when `VEYQ_LIVE` names an origin of a running dev instance (`./gradlew backend:seed`).
  */
 class LiveBridgeTest {
     @Test
@@ -51,7 +59,7 @@ class LiveBridgeTest {
                 host.reply(token, wire.encodeToString(HostReply.serializer(), reply))
             }
         }
-        val b = Bridge.live(BouncyCastlePrimitives, { block -> HttpClient(OkHttp, block) }, Config("bridge test"), HostStore(host))
+        val b = Bridge.live(BouncyCastlePrimitives, { block -> HttpClient(OkHttp, block) }, Config("bridge test"), HostStore(host), JvmFiles)
         val gate = b.watching(Watched.Session)
         val shell = b.watching(Watched.Shell)
 
@@ -104,6 +112,94 @@ class LiveBridgeTest {
             if (entries.isNotEmpty() && ++withEntries == 2) break
         }
         assertTrue(withEntries > 0, "no seeded Pot has entries")
+
+        // The principal's own picture: its id in what the shell shows once the core read the pictures, its bytes beside
+        // the answer, equal to what the core reads in a session of its own
+        val me = assertNotNull(shown.me, "the shell names no signed-in member")
+        // a watch of its own: the update that brought the pictures may lie behind the ones read above, and nothing has
+        // moved the shell since
+        val withPictures = b.watching(Watched.Shell).until(1.minutes) { u -> (u as Update.Shell).shown?.takeIf { me in it.pictures } }
+        println("pictures: ${withPictures.pictures.size} members")
+        val (pictured, picture) = b.askWithPayload(Call.AvatarPicture(me))
+        assertIs<Answer.Bytes>(pictured)
+        val coreOwn = coreOwnPicture(origin, env, withPictures.tenant.tenantId, me)
+        assertEquals(sha256(coreOwn), sha256(picture!!), "the bridge's picture is not the core's")
+        println("picture: ${picture.size} bytes, ${pictured.mediaType}, sha256 ${sha256(picture)}")
+        // ... and a Pot whose people hold the principal carries its id among the pictures
+        val link = pots.first { it.name == "App link" }
+        val linkId = (b.ask(Call.PotOpen(link)) as Answer.PotOpened).pot
+        // a Pot's update is read as JSON (its view is sent, never read back): its people, and the ids with a picture
+        val linkUpdate = b.watching(Watched.Pot(linkId)).untilJson(1.minutes) { u -> u.takeIf { (u["state"] as? JsonObject)?.get("view") is JsonObject } }
+        val people = linkUpdate.getValue("state").jsonObject.getValue("view").jsonObject.getValue("people").jsonArray
+        assertTrue(people.any { me in it.toString() }, "App link's people do not hold the principal")
+        assertTrue(me in linkUpdate.getValue("pictures").jsonArray.map { it.jsonPrimitive.content }, "App link's update carries no picture id for the principal")
+        assertEquals(Answer.Done, b.ask(Call.PotClose(linkId)))
+
+        // Amsterdam downloaded into a file the host named, read back as VEYQ_LIVE_EXPORT reads it
+        val amsterdam = pots.first { it.name == "Amsterdam" }
+        val potId = (b.ask(Call.PotOpen(amsterdam)) as Answer.PotOpened).pot
+        b.watching(Watched.Pot(potId)).untilJson(1.minutes) { u -> (u["state"] as? JsonObject)?.get("view") as? JsonObject }
+        assertEquals(Answer.Name("Amsterdam.zip"), b.ask(Call.PotArchiveName(potId)))
+        val dir = kotlin.io.path.createTempDirectory("veyq-bridge").toFile()
+        val zip = File(dir, "Amsterdam.zip")
+        assertEquals(Answer.Done, b.ask(Call.PotDownload(potId, zip.path, "deleted person"), timeout = 2.minutes))
+        val payloads = readBack(zip)
+        println("Amsterdam: ${zip.length()} bytes of ZIP, $payloads payloads to their SHA-256")
+        // a path that does not open fails the call, and nothing is written
+        val nowhere = File(dir, "missing/Amsterdam.zip")
+        assertIs<Answer.Failed>(b.ask(Call.PotDownload(potId, nowhere.path, "deleted person"), timeout = 2.minutes))
+        assertTrue(!nowhere.exists())
+        assertEquals(Answer.Done, b.ask(Call.PotClose(potId)))
+        dir.deleteRecursively()
         b.shutdown()
+    }
+
+    /** Member [userId]'s picture as the core reads it in a session of its own: a sign-in, the tenant, its sync. */
+    private suspend fun coreOwnPicture(origin: String, env: Map<String, String>, tenantId: String, userId: String): ByteArray {
+        val store = object : DeviceStore {
+            val values = ConcurrentHashMap<String, String>()
+            override fun read(key: String) = values[key]
+            override fun write(key: String, value: String) { values[key] = value }
+            override fun remove(key: String) { values.remove(key) }
+        }
+        val account = VeyqAccount.signIn(
+            BouncyCastlePrimitives, origin, env.getValue("VEYQ_EMAIL"), env.getValue("VEYQ_PASSWORD"), env.getValue("VEYQ_SECRET_KEY"),
+            ThisDevice(store, NoDeviceKeys, "bridge test, the core's own read", BouncyCastlePrimitives),
+        ) { block -> HttpClient(OkHttp, block) }
+        val tenant = account.open(account.tenants.first { it.tenantId == tenantId })
+        tenant.avatars.sync(tenant.people.values)
+        return assertNotNull(tenant.avatars.pictureOf(userId), "the core's own read has no picture of $userId")
+    }
+
+    /** The download read back as `VEYQ_LIVE_EXPORT` reads it: every payload the manifest names, to its size and SHA-256. */
+    private fun readBack(file: File): Int = java.util.zip.ZipFile(file).use { zip ->
+        val manifest = Json.parseToJsonElement(zip.getInputStream(zip.getEntry(".veyq/manifest.json")).readBytes().decodeToString()).jsonObject
+        assertEquals(2, manifest.getValue("version").jsonPrimitive.int)
+        val pot = manifest.getValue("root").jsonObject.getValue("content").jsonObject
+        val refs = pot.getValue("entries").jsonArray.flatMap { e -> e.jsonObject["receipts"]?.jsonArray.orEmpty().map { it.jsonObject.getValue("file").jsonObject } } +
+            pot.getValue("table").jsonObject
+        assertTrue(refs.isNotEmpty())
+        for (r in refs) {
+            val bytes = zip.getInputStream(zip.getEntry(r.getValue("path").jsonPrimitive.content)).readBytes()
+            assertEquals(r.getValue("size").jsonPrimitive.long, bytes.size.toLong())
+            assertEquals(r.getValue("sha256").jsonPrimitive.content, sha256(bytes), r.getValue("path").jsonPrimitive.content)
+        }
+        refs.size
+    }
+
+    private fun sha256(b: ByteArray) = java.security.MessageDigest.getInstance("SHA-256").digest(b).joinToString("") { "%02x".format(it) }
+
+    /** core's `FileSink` as the JVM plays it: the file stays only when the producer answered true. */
+    private object JvmFiles : DeviceFiles {
+        override suspend fun write(path: String, produce: suspend (sink: (ByteArray) -> Unit) -> Boolean): Boolean {
+            val file = File(path)
+            var keep = false
+            try {
+                file.outputStream().buffered().use { out -> keep = produce { out.write(it) } }
+                return keep
+            } finally {
+                if (!keep) file.delete()
+            }
+        }
     }
 }

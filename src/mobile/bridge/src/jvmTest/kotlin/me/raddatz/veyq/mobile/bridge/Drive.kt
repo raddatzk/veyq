@@ -11,13 +11,22 @@ import kotlin.time.Duration.Companion.seconds
 /** A test's side of the bridge: calls and watches as the host makes them, as JSON both ways. */
 internal suspend fun Bridge<*, *>.ask(call: Call, timeout: Duration = 10.seconds): Answer = ask(wire.encodeToString(Call.serializer(), call), timeout)
 
-internal suspend fun Bridge<*, *>.ask(json: String, timeout: Duration = 10.seconds): Answer {
-    val answered = CompletableDeferred<String>()
+internal suspend fun Bridge<*, *>.ask(json: String, timeout: Duration = 10.seconds): Answer =
+    askWithPayload(json, timeout).also { (a, payload) -> check(payload == null) { "$a came with a payload" } }.first
+
+/** A call whose answer may carry a payload beside its JSON: the answer and the payload, as the host gets both. */
+internal suspend fun Bridge<*, *>.askWithPayload(call: Call, timeout: Duration = 10.seconds): Pair<Answer, ByteArray?> =
+    askWithPayload(wire.encodeToString(Call.serializer(), call), timeout)
+
+internal suspend fun Bridge<*, *>.askWithPayload(json: String, timeout: Duration = 10.seconds): Pair<Answer, ByteArray?> {
+    val answered = CompletableDeferred<Pair<String, ByteArray?>>()
     var count = 0
-    call(json) { count++; answered.complete(it) }
-    val a = withTimeout(timeout) { answered.await() }
+    call(json) { a, payload -> count++; answered.complete(a to payload) }
+    val (a, payload) = withTimeout(timeout) { answered.await() }
     check(count == 1) { "answered $count times" }
-    return wire.decodeFromString(Answer.serializer(), a)
+    val answer = wire.decodeFromString(Answer.serializer(), a)
+    check((answer is Answer.Bytes) == (payload != null)) { "$answer with a payload of ${payload?.size}" }
+    return answer to payload
 }
 
 /**

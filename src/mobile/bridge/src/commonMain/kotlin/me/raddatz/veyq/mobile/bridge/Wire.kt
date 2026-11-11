@@ -74,6 +74,23 @@ internal sealed class Call {
     @Serializable @SerialName("Pot.Open") data class PotOpen(val ref: ObjectRef) : Call()
     @Serializable @SerialName("Pot.Refresh") data class PotRefresh(val pot: Long) : Call()
     @Serializable @SerialName("Pot.Close") data class PotClose(val pot: Long) : Call()
+
+    /**
+     * Downloads Pot [pot] as the web's ZIP into the file at [path], which the host's save dialog gave (the CR's D3: the
+     * core opens it and writes it; nothing of the file crosses). [deletedName] is the host's word for an erased person
+     * (`pot_deleted_person`), which the CSV carries. [Answer.Done], or [Answer.Failed] with nothing left at [path].
+     */
+    @Serializable @SerialName("Pot.Download") data class PotDownload(val pot: Long, val path: String, val deletedName: String) : Call()
+
+    /** The file name the save dialog suggests for Pot [pot]'s download ([Answer.Name]): the core's, never the host's. */
+    @Serializable @SerialName("Pot.ArchiveName") data class PotArchiveName(val pot: Long) : Call()
+
+    /** Member [userId]'s picture ([Answer.Bytes], the image beside the JSON); refused where the letter shows. */
+    @Serializable @SerialName("Avatar.Picture") data class AvatarPicture(val userId: String) : Call()
+
+    /** [length] bytes of reader [reader] from [position] ([Answer.Bytes]): fewer only at the end, none past it. */
+    @Serializable @SerialName("Reader.Read") data class ReaderRead(val reader: Long, val position: Long, val length: Int) : Call()
+    @Serializable @SerialName("Reader.Close") data class ReaderClose(val reader: Long) : Call()
 }
 
 /** A call's one answer; what the call changed arrives as the watched states' updates. */
@@ -87,8 +104,22 @@ internal sealed class Answer {
     @Serializable @SerialName("Groups") data class Groups(val groups: List<Home.Group>) : Answer()
     @Serializable @SerialName("Hits") data class Hits(val hits: List<ObjectRef>) : Answer()
     @Serializable @SerialName("PotOpened") data class PotOpened(val pot: Long) : Answer()
+    @Serializable @SerialName("Name") data class Name(val name: String) : Answer()
 
-    enum class Why { NOT_A_CALL, NO_TENANT_OPEN, NO_SUCH_CONNECTION, NO_SUCH_TENANT, NO_SUCH_POT }
+    /**
+     * Bytes the UI shows, carried beside this JSON as the callback's payload (`bytes`, `len`), never in it (the CR's
+     * D1.1): an answer of this kind always has a payload, an empty one included. [mediaType] is the core's sniffed type
+     * (`Sniff`), null where the core does not know it. (`type` is the wire's tag, so the field is named otherwise.)
+     */
+    @Serializable @SerialName("Bytes") data class Bytes(val mediaType: String?) : Answer()
+
+    /**
+     * A blob opened for reading in ranges (the CR's D1.2): [reader] is its id for [Call.ReaderRead] and
+     * [Call.ReaderClose], [size] its plaintext's length. Every reader of a tenant closes when the tenant does.
+     */
+    @Serializable @SerialName("Reader") data class Reader(val reader: Long, val size: Long, val mediaType: String?) : Answer()
+
+    enum class Why { NOT_A_CALL, NO_TENANT_OPEN, NO_SUCH_CONNECTION, NO_SUCH_TENANT, NO_SUCH_POT, NO_SUCH_READER, NO_PICTURE, NOTHING_TO_DOWNLOAD }
 }
 
 /** What a watch observes ([veyq_watch]): one screen model's state. */
@@ -109,8 +140,11 @@ internal sealed class Update {
     /** Null while no tenant is open, or its lists are not read yet; [shown] beside a state, null with none. */
     @Serializable @SerialName("Shell") data class Shell(val state: ShellModel.State?, val shown: ShellShown? = null) : Update()
 
-    /** Null while nothing is open in this Pot model (closed, or an id the bridge does not hold). */
-    @Serializable @SerialName("Pot") data class Pot(val pot: Long, val state: PotModel.State?) : Update()
+    /**
+     * Null while nothing is open in this Pot model (closed, or an id the bridge does not hold). [pictures] are the user
+     * ids whose picture the core holds ([Call.AvatarPicture]); a person whose member id is not among them shows the letter.
+     */
+    @Serializable @SerialName("Pot") data class Pot(val pot: Long, val state: PotModel.State?, val pictures: List<String> = emptyList()) : Update()
 }
 
 /**
@@ -146,6 +180,13 @@ internal class ShellShown(
     val drawerOpensAtStart: Boolean,
     /** What the sidebar's New offers (`AppKinds.drawerCreates`' words). */
     val creates: List<@Serializable(with = MsgKey::class) Msg>,
+    /** The signed-in member's user id, whose picture the switcher shows when [pictures] holds it. */
+    val me: String?,
+    /**
+     * The user ids whose picture the core holds (`AvatarsModel`), each asked for with [Call.AvatarPicture]: the letter for
+     * everyone else. A change of the set is a new update; the bytes never ride one (the CR's D1.1).
+     */
+    val pictures: List<String>,
 ) {
     @Serializable class ShownServer(val connection: String, val label: String, val tenants: List<TenantRef>)
     @Serializable class ShownSpace(val space: SpaceRef, val name: Piece)

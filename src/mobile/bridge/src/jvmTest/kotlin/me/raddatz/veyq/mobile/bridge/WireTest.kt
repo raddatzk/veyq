@@ -77,6 +77,7 @@ class WireTest {
         groups = listOf(Home.Group(true, lists.nodes.take(1), null)), list = lists.drawer,
         tabs = listOf(ShellShown.ShownTab(BarTab("expenses.entries"), Msg.TAB_EXPENSES_ENTRIES)), selectedTab = BarTab("expenses.entries"),
         canGoBack = true, isHome = false, drawerOpensAtStart = false, creates = listOf(Msg.FOLDER_NEW),
+        me = "user-1", pictures = listOf("user-1", "user-2"),
     )
     private val record = TrustedDevice("http://veyq.localhost:8080", "p@example.org", "user-1", TrustedDevice.Method.DEVICE, "wrap-1", "veyq.device.ab")
 
@@ -88,19 +89,22 @@ class WireTest {
             Call.SessionSignOut("veyq.localhost#user-1"), Call.ShellChoose(null), Call.ShellSwitchSpace("scope-1"), Call.ShellEnter(folder),
             Call.ShellFilter(ApplicationId.DEPOT), Call.ShellBack, Call.ShellSelect(BarTab("expenses.overview")), Call.ShellOpen(ref), Call.ShellOpenAtTop(ref), Call.ShellSearch(true), Call.ShellRefresh,
             Call.HomeGroups, Call.SearchQuery("lyon"), Call.PotOpen(ref), Call.PotRefresh(3), Call.PotClose(3),
+            Call.PotDownload(3, "/home/p/Downloads/Trip to Lyon.zip", "deleted person"), Call.PotArchiveName(3), Call.AvatarPicture("user-1"),
+            Call.ReaderRead(5, 262_144, 65_536), Call.ReaderClose(5),
         ),
         Watched.serializer() to listOf(Watched.Session, Watched.Shell, Watched.Pot(3)),
         HostReply.serializer() to listOf(HostReply.Value("s\tn\t1"), HostReply.Value(null), HostReply.Done, HostReply.Failed("disk full")),
         Answer.serializer() to listOf(
             Answer.Done, Answer.Refused(Answer.Why.NO_TENANT_OPEN), Answer.Failed("IllegalStateException"),
             Answer.Groups(listOf(Home.Group(true, lists.nodes.take(1), Msg.HOME_GROUP_FOLDERS), Home.Group(false, lists.nodes.drop(1), null))),
-            Answer.Hits(listOf(ref)), Answer.PotOpened(3),
+            Answer.Hits(listOf(ref)), Answer.PotOpened(3), Answer.Name("Trip to Lyon.zip"), Answer.Bytes("image/png"), Answer.Bytes(null),
+            Answer.Reader(5, 9_000_000_000, "video/mp4"), Answer.Reader(6, 0, null),
         ),
         Update.serializer() to listOf(
             Update.Session(Gate.Starting), Update.Session(Gate.NeedsApp), Update.Session(Gate.SignIn(error = Msg.SIGNIN_ERROR_CREDENTIALS, server = "veyq.localhost:8080")),
             Update.Session(Gate.Unlock(record)), Update.Session(Gate.Signed("veyq.localhost#user-1", "t", switching = true)),
             Update.Shell(ShellModel.State(shell, lists), shown), Update.Shell(null),
-            Update.Pot(3, PotModel.State(ref, failed = false, saving = true, message = "REFUSED")), Update.Pot(4, null),
+            Update.Pot(3, PotModel.State(ref, failed = false, saving = true, message = "REFUSED"), listOf("user-1")), Update.Pot(4, null),
         ),
         HostRequest.serializer() to listOf(HostRequest.StoreRead("veyq.recent"), HostRequest.StoreWrite("veyq.recent", "s\tn\t1"), HostRequest.StoreRemove("veyq.recent")),
     )
