@@ -3369,7 +3369,8 @@ class Q:
     SERVER_ADDRESS = Question("server_address", "server address", "The new server's DNS name or IP address. You log "
                               "in to it as root with your SSH key; veyq-server's README says which system it needs.",
                               pattern=f"{HOSTNAME_RE}|{IPV4_RE}", section="server")
-    NODE_NAME = Question("node_name", "node name", "A short name for the server inside Kubernetes.",
+    NODE_NAME = Question("node_name", "node name", "The server's name as Kubernetes shows it (`kubectl get nodes`) "
+                         "and in the repository's Ansible inventory. A label only: the server's own hostname stays.",
                          pattern=r"[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?", section="server")
     ADMIN_USER = Question("admin_user", "admin user", "Your login on the server. Logging in as root is switched off.",
                           pattern=r"(?!root$|ci$)[a-z_][a-z0-9_-]{0,31}", section="server")
