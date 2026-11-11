@@ -406,17 +406,10 @@ class AppModel(app: Application) : AndroidViewModel(app) {
         shellModel?.refresh()
     }
 
-    // ---- a report (core's NodeReport) ----
+    // ---- a report (core's ReportSheet) ----
 
-    /** Reports [ref] to the moderators: whole or by its name, in [category] for [reason], [contact] optional. */
-    suspend fun report(ref: me.raddatz.veyq.mobile.navigation.NodeAt, scope: me.raddatz.veyq.mobile.session.NodeReport.Scope, category: String, reason: String, contact: String): me.raddatz.veyq.mobile.session.NodeReport.Sent {
-        val failed = me.raddatz.veyq.mobile.session.NodeReport.Sent(me.raddatz.veyq.mobile.session.NodeReport.Outcome.FAILED)
-        val t = tenantSession ?: return failed
-        return runCatching { me.raddatz.veyq.mobile.session.NodeReport.report(t, ref.scopeId, ref.nodeId, scope, category, reason, contact) }.getOrDefault(failed)
-    }
-
-    /** The server's privacy notice at [anchor] (`privacyLink`): the page every place that takes personal data points to. */
-    fun privacyLink(anchor: String): String = "${tenantSession?.origin.orEmpty()}/privacy#$anchor"
+    /** The report of [node] to the tenant's moderators (core's `ReportSheet`: the form's rules, the send, the privacy URL). */
+    fun reportSheet(node: me.raddatz.veyq.mobile.navigation.NodeAt): me.raddatz.veyq.mobile.navigation.ReportSheet? = shellModel?.reportSheet(node)
 
     // ---- guest links (core's ShareLinks) ----
 
@@ -910,20 +903,17 @@ class AppModel(app: Application) : AndroidViewModel(app) {
         val bounds = android.graphics.BitmapFactory.Options().apply { inJustDecodeBounds = true }
         android.graphics.BitmapFactory.decodeByteArray(bytes, 0, bytes.size, bounds)
         var sample = 1
-        while (minOf(bounds.outWidth, bounds.outHeight) / (sample * 2) >= 384) sample *= 2
+        while (minOf(bounds.outWidth, bounds.outHeight) / (sample * 2) >= me.raddatz.veyq.mobile.session.NodeCover.THUMBNAIL_EDGE) sample *= 2
         val whole = android.graphics.BitmapFactory.decodeByteArray(bytes, 0, bytes.size, android.graphics.BitmapFactory.Options().apply { inSampleSize = sample })
         val (x, y, w, h) = me.raddatz.veyq.mobile.session.CoverFrame.pixels(crop, whole.width, whole.height).toList()
         android.graphics.Bitmap.createBitmap(whole, x, y, w, h)
     }.getOrNull()?.asImageBitmap()
 
-    /** A picture decoded for the cover sheet's frame: its long edge at most the cover's 2048 (`COVER_SPEC`). */
+    /** A picture decoded for the cover sheet's frame: its long edge at most the core's (`NodeCover.encodedSize`). */
     private fun picture(source: android.graphics.ImageDecoder.Source): android.graphics.Bitmap =
         android.graphics.ImageDecoder.decodeBitmap(source) { decoder, info, _ ->
-            val long = maxOf(info.size.width, info.size.height)
-            if (long > 2048) {
-                val f = 2048.0 / long
-                decoder.setTargetSize((info.size.width * f).toInt().coerceAtLeast(1), (info.size.height * f).toInt().coerceAtLeast(1))
-            }
+            val (w, h) = me.raddatz.veyq.mobile.session.NodeCover.encodedSize(info.size.width, info.size.height).let { it[0] to it[1] }
+            if (w != info.size.width || h != info.size.height) decoder.setTargetSize(w, h)
             decoder.allocator = android.graphics.ImageDecoder.ALLOCATOR_SOFTWARE
         }
 
@@ -940,7 +930,7 @@ class AppModel(app: Application) : AndroidViewModel(app) {
             runCatching { picture(android.graphics.ImageDecoder.createSource(java.nio.ByteBuffer.wrap(opened.bytes))).asImageBitmap() }.getOrNull()?.let { it to opened.crop }
         }
 
-    /** [ref]'s cover as its page's head shows it: the framed part of the stored picture, at up to 2048 px; null: none. */
+    /** [ref]'s cover as its page's head shows it: the framed part of the stored picture, at up to the cover's long edge; null: none. */
     suspend fun coverHero(ref: me.raddatz.veyq.mobile.navigation.NodeAt): androidx.compose.ui.graphics.ImageBitmap? {
         val (image, crop) = coverSource(ref) ?: return null
         return kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Default) {
@@ -963,7 +953,7 @@ class AppModel(app: Application) : AndroidViewModel(app) {
 
     /**
      * Sets the picture at [uri] as the cover of [ref], framed by [crop]: decoded on the device and made the web's cover JPEG
-     * (long edge 2048, quality 0.85, `COVER_SPEC`) — the whole picture, the crop stored beside it as the web stores it —,
+     * (core's `NodeCover.LONG_EDGE` and `QUALITY`, the web's `COVER_SPEC`) — the whole picture, the crop stored beside it as the web stores it —,
      * uploaded and attached (core's `NodeCover`); false when it did not land.
      */
     suspend fun setCover(
@@ -973,7 +963,7 @@ class AppModel(app: Application) : AndroidViewModel(app) {
         val t = tenantSession ?: return@withContext false
         val jpeg = runCatching {
             val bitmap = picture(android.graphics.ImageDecoder.createSource(getApplication<Application>().contentResolver, uri))
-            java.io.ByteArrayOutputStream().also { bitmap.compress(android.graphics.Bitmap.CompressFormat.JPEG, 85, it) }.toByteArray()
+            java.io.ByteArrayOutputStream().also { bitmap.compress(android.graphics.Bitmap.CompressFormat.JPEG, me.raddatz.veyq.mobile.session.NodeCover.QUALITY_PERCENT, it) }.toByteArray()
         }.getOrNull() ?: return@withContext false
         val done = runCatching { me.raddatz.veyq.mobile.session.NodeCover.set(t, ref.scopeId, ref.nodeId, jpeg, crop) }
             .getOrNull() == me.raddatz.veyq.mobile.session.NodeCover.Outcome.DONE
