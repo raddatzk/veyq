@@ -3,7 +3,7 @@
 // buttons as the CommandBar's primary commands (the heart as Favorite), the rest as its secondary ones behind its own
 // More, the menu's last group after a separator —, rename and delete asked in a ContentDialog (Dialogs), the trash's
 // Undo an InfoBar's action held for exactly as long as the core offers it (it closes when the state's undo does: no
-// timer here). The move and the copy open core's sheet (MoveDialog); a folder's download goes where the save picker says
+// timer here). The move and the copy open core's sheet (MoveDialog), the share core's share sheet (ShareDialog); a folder's download goes where the save picker says
 // (Header.Download, under the core's archive name), a Pot's through its page (Pot.Download). What is offered, in which
 // order and with which words is the core's (HeaderPlan: what is drawn so far, and the bar's groups).
 using System;
@@ -138,6 +138,7 @@ internal sealed class NodeHeader : IDisposable
             "delete" => new SymbolIcon(Symbol.Delete),
             "move" => new SymbolIcon(Symbol.MoveToFolder),
             "copy" => new SymbolIcon(Symbol.Copy),
+            "share" => new SymbolIcon(Symbol.Share),
             _ => new SymbolIcon(Symbol.More),
         };
         var button = new AppBarButton { Icon = icon, Label = label };
@@ -147,6 +148,7 @@ internal sealed class NodeHeader : IDisposable
             switch (a.id)
             {
                 case "favorite": Pin(); break;
+                case "share": ShareDialog.Open(_window, s.node); break;
                 case "rename": Rename(s.node.name, null); break;
                 case "delete": Delete(); break;
                 case "download" when s.node.kind == "EXPENSES_POT": potDownload(); break;

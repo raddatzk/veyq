@@ -1,5 +1,5 @@
 // Which of a header's planned actions this app draws, and in which groups (the header CR): the plan and its words are the
-// core's (NodeHeaderModel through Header.*); the share, the report and the cover are the CR's later phases, left out until
+// core's (NodeHeaderModel through Header.*); the report and the cover are the CR's later phases, left out until
 // then rather than drawn as a command that answers "not yet". Linux's header::drawn, rule for rule. The bar's secondary
 // commands are the plan's menu, then its last group after a separator — read from the plan's groups, so a folder's More
 // and a Pot's are laid out alike whatever each holds.
@@ -12,7 +12,7 @@ namespace Veyq;
 internal static class HeaderPlan
 {
     /// <summary>The ids drawn so far.</summary>
-    public static readonly string[] Drawn = ["favorite", "rename", "delete", "download", "move", "copy"];
+    public static readonly string[] Drawn = ["favorite", "share", "rename", "delete", "download", "move", "copy"];
 
     /// <summary>Whether <paramref name="id"/> is drawn for a node of <paramref name="kind"/>: a download where it is the
     /// node's archive (a file's is its own bytes, Depot's page).</summary>

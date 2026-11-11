@@ -10,12 +10,12 @@ public sealed class HeaderPlanTest
     [TestMethod]
     public void TheActionsSoFarAreDrawnAndADownloadWhereItIsTheNodesArchive()
     {
-        foreach (var id in new[] { "favorite", "rename", "delete", "move", "copy", "download" })
+        foreach (var id in new[] { "favorite", "share", "rename", "delete", "move", "copy", "download" })
         {
             Assert.IsTrue(HeaderPlan.IsDrawn(id, "FOLDER") && HeaderPlan.IsDrawn(id, "EXPENSES_POT"), id);
         }
         Assert.IsFalse(HeaderPlan.IsDrawn("download", "FILE"), "a file's download is its own bytes");
-        foreach (var id in new[] { "share", "report", "cover", "an-applications-own" })
+        foreach (var id in new[] { "report", "cover", "an-applications-own" })
         {
             Assert.IsFalse(HeaderPlan.IsDrawn(id, "FOLDER") || HeaderPlan.IsDrawn(id, "EXPENSES_POT"), $"{id} drawn before its phase");
         }
@@ -36,11 +36,11 @@ public sealed class HeaderPlanTest
         var pot = P(["favorite", "share"], ["download", "rename", "cover"], ["move", "copy", "report", "delete"]);
         Assert.AreEqual("download,rename,|,move,copy,delete", Ids(HeaderPlan.Secondary(folder, "FOLDER")));
         Assert.AreEqual(Ids(HeaderPlan.Secondary(pot, "EXPENSES_POT")), Ids(HeaderPlan.Secondary(folder, "FOLDER")));
-        Assert.AreEqual("favorite", Ids(HeaderPlan.Primary(folder, "FOLDER")));
+        Assert.AreEqual("favorite,share", Ids(HeaderPlan.Primary(folder, "FOLDER")));
         // one drawn action in the menu still stands apart from the last group
-        Assert.AreEqual("rename,|,delete", Ids(HeaderPlan.Secondary(P(["favorite"], ["share", "rename"], ["report", "delete"]), "FOLDER")));
+        Assert.AreEqual("rename,|,delete", Ids(HeaderPlan.Secondary(P(["favorite"], ["cover", "rename"], ["report", "delete"]), "FOLDER")));
         // no separator where a group draws nothing
-        Assert.AreEqual("delete", Ids(HeaderPlan.Secondary(P(["favorite"], ["share"], ["delete"]), "FOLDER")));
+        Assert.AreEqual("delete", Ids(HeaderPlan.Secondary(P(["favorite"], ["cover"], ["delete"]), "FOLDER")));
         Assert.AreEqual("rename", Ids(HeaderPlan.Secondary(P(["favorite"], ["rename"], ["report"]), "FOLDER")));
     }
 }

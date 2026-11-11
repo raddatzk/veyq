@@ -29,6 +29,7 @@
     <Compile Include="../Veyq/AvatarsHeld.cs" Link="App/AvatarsHeld.cs" />
     <Compile Include="../Veyq/TrustWords.cs" Link="App/TrustWords.cs" />
     <Compile Include="../Veyq/HeaderPlan.cs" Link="App/HeaderPlan.cs" />
+    <Compile Include="../Veyq/ShareDays.cs" Link="App/ShareDays.cs" />
     <Compile Include="$(VeyqGenerated)bridge/Bridge.g.cs" Link="App/Bridge.g.cs" />
     <Compile Include="$(VeyqGenerated)words/windows/Words.g.cs" Link="App/Words.g.cs" />
   </ItemGroup>
