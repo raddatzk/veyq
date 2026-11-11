@@ -317,8 +317,19 @@ CLUSTER_SCOPED = {
     "PersistentVolume", "StorageClass", "IngressClass", "GatewayClass", "PriorityClass",
     "ValidatingWebhookConfiguration", "MutatingWebhookConfiguration",
 }
-# The opt-in's contract names — fixed, like every object name in the chart (`_helpers.tpl`), and named in ADR 0064.
-ISSUER_NAME = "veyq-acme"
+# The opt-in's contract names, named in ADR 0064. The Issuer's is the one derived name (`veyq.acmeIssuer`): one per ACME
+# directory, so that switching the directory renames it and cert-manager re-orders every certificate by itself.
+ACME_DIRECTORIES = {"https://acme-v02.api.letsencrypt.org/directory": "production",
+                    "https://acme-staging-v02.api.letsencrypt.org/directory": "staging"}
+ACME_DEFAULT_SERVER = "https://acme-v02.api.letsencrypt.org/directory"  # values.yaml's gateway.tls.acme.server
+
+
+def acme_issuer_name(server: str) -> str:
+    """`veyq.acmeIssuer`, read the other way: Let's Encrypt's two directories by name, any other CA by its URL's hash."""
+    import hashlib
+    return f"veyq-acme-{ACME_DIRECTORIES.get(server) or hashlib.sha256(server.encode()).hexdigest()[:8]}"
+
+
 ISSUER_ANNOTATION = "cert-manager.io/issuer"
 # A ListenerSet's HTTP-01 challenge goes to the parent Gateway's port-80 listener (cert-manager 1.21; ADR 0064).
 FALLBACK_ANNOTATION = "acme.cert-manager.io/http01-parentreffallback"
@@ -963,6 +974,8 @@ def check(values_file: pathlib.Path) -> list[dict]:
     gateway = values.get("gateway") or {}
     tls = gateway.get("tls") or {}
     acme = bool((tls.get("acme") or {}).get("enabled"))
+    acme_server = (tls.get("acme") or {}).get("server") or ACME_DEFAULT_SERVER
+    ISSUER_NAME = acme_issuer_name(acme_server)  # noqa: N806 — the name every opted-in assertion below expects
     admin_domain = bool((values.get("admin") or {}).get("domain"))
     garage = garage_enabled(values)
 
@@ -1176,7 +1189,19 @@ def check(values_file: pathlib.Path) -> list[dict]:
             errors.append(f"(vii) {tag}: the app's properties file mentions `{CERT_MANAGER_PREFIX}` although gateway.tls.acme is not enabled and the values name none")
         return rendered
 
-    # (viii) exactly one Issuer, named veyq-acme, HTTP-01 only.
+    # (viii) exactly one Issuer, named for its directory, HTTP-01 only — and another directory renames it, the Gateway's
+    # annotation and the properties file's following: the rename is what makes cert-manager re-order (veyq.acmeIssuer).
+    other_server = next(u for u in ACME_DIRECTORIES if u != acme_server)
+    switched = render(values_file, ["--set", f"gateway.tls.acme.server={other_server}"])
+    renamed = acme_issuer_name(other_server)
+    switched_objects = objects(switched) if switched else []
+    if not ([(o.get("metadata") or {}).get("name") for o in switched_objects if o.get("kind") == "Issuer"] == [renamed]
+            and all(((o.get("metadata") or {}).get("annotations") or {}).get(ISSUER_ANNOTATION) == renamed
+                    for o in switched_objects if o.get("kind") == "Gateway")
+            and f'annotations."{ISSUER_ANNOTATION}"={renamed}' in (app_properties(switched_objects) or "")):
+        errors.append(f"(viii) {tag}: with gateway.tls.acme.server={other_server} the Issuer, the Gateway's annotation and "
+                      f"the properties file must all name `{renamed}` — a switch that keeps the name re-orders no "
+                      f"certificate, and the old directory's stay served")
     if len(issuers) != 1 or (issuers[0].get("metadata") or {}).get("name") != ISSUER_NAME:
         errors.append(
             f"(viii) {tag}: gateway.tls.acme is enabled, so the render must contain exactly one Issuer named `{ISSUER_NAME}` — "
@@ -1334,7 +1359,8 @@ print(
     f"admitted by policy from the admin pod alone; a default-deny over every pod, the public port admitted from "
     f"ingressFrom exactly and the database from the app and the daily backup prune alone, no policy when switched off, and no install without "
     f"ingressFrom; the ACME "
-    f"opt-in absent where off, and where on one `{ISSUER_NAME}` Issuer on the Gateway and in the properties file, "
+    f"opt-in absent where off, and where on one Issuer named for its ACME directory, on the Gateway and in the "
+    f"properties file, renamed by another directory, "
     f"its contradictions refused by the schema; a pinned image digest is the digest the pod runs; no Ingress, every "
     f"route on the one Gateway on the listener its TLS mode names, the sink's listeners present, and a Role on "
     f"httproutes/listenersets with nothing on gateways; the PROXY protocol on exactly with the probes on the admin "

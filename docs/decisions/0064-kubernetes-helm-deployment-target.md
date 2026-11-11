@@ -71,7 +71,10 @@ so where the chart deploys `garage` it deploys nothing beside it.
   The chart's half, as the recipe's counterpart: it **may template the one thing the recipe configures, an ACME issuer,
   as an opt-in** (`gateway.tls.acme.*`): one namespaced cert-manager `Issuer` answering HTTP-01 on the `Gateway`'s
   port-80 listener, stamped onto every `ListenerSet` through the same annotations, so a tenant created at runtime is a
-  certificate order with no chart edit and no restart. It needs no backend RBAC — Helm applies it with the operator's
+  certificate order with no chart edit and no restart. The `Issuer` is named for its ACME directory (amended
+  2026-11-11): a switch of directory renames it, and cert-manager re-orders a certificate whose issuer changed — while
+  a changed server URL under one name re-orders nothing, and the old directory's certificates stayed served
+  (raddatz.me, staging to production). It needs no backend RBAC — Helm applies it with the operator's
   credentials — and requires `per-domain`, refusing any other mode rather than overriding an explicit one. The chart
   does **not** install cert-manager or the Gateway API CRDs, template a `ClusterIssuer`, or let the backend speak ACME:
   cluster-scoped objects break the no-cluster-wide-RBAC bar, and `create` on `Secret`s cannot be narrowed in the

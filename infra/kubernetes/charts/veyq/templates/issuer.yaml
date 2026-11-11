@@ -1,6 +1,7 @@
 {{- /*
 The ACME opt-in (gateway.tls.acme; ADR 0064 § Decision, the TLS paragraph): the one thing the compose RECIPE
-configures — Traefik's ACME resolver — translated as one namespaced cert-manager Issuer. The chart's half of the
+configures — Traefik's ACME resolver — translated as one namespaced cert-manager Issuer, named per directory
+(`veyq.acmeIssuer`, which says why). The chart's half of the
 cut; the sink's half only stamps references, which `veyq.gatewayAnnotations` points here.
 
 Namespaced on purpose, never a ClusterIssuer: nothing this chart renders reaches beyond its namespace. cert-manager
@@ -15,14 +16,15 @@ The account key Secret is cert-manager's to create and keep, never a chart value
 apiVersion: cert-manager.io/v1
 kind: Issuer
 metadata:
-  name: veyq-acme
+  name: {{ include "veyq.acmeIssuer" . }}
   labels:
     {{- include "veyq.labels" . | nindent 4 }}
 spec:
   acme:
     server: {{ required "gateway.tls.acme.server is required" .Values.gateway.tls.acme.server | quote }}
     privateKeySecretRef:
-      name: veyq-acme-account-key
+      # One ACME account per directory: an account belongs to the CA that registered it.
+      name: {{ include "veyq.acmeIssuer" . }}-account-key
     solvers:
       # HTTP-01 only: it works for any tenant domain with no DNS-provider credentials (a Secret this chart would
       # have to reference), and a wildcard is already `mode: shared`. Compose's resolver is HTTP-01 only too. The

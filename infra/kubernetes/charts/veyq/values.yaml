@@ -255,7 +255,7 @@ gateway:
   # verbs because cert-manager watches the objects the backend already writes; the issuer the reference names is
   # configured either by you — bring your own, e.g.
   #   cert-manager.io/cluster-issuer: letsencrypt
-  # — or by the chart, through gateway.tls.acme below, which adds `cert-manager.io/issuer: veyq-acme` here for
+  # — or by the chart, through gateway.tls.acme below, which adds `cert-manager.io/issuer: veyq-acme-…` here for
   # you. Not both: the schema refuses an issuer annotation beside the opt-in.
   annotations: {}
   tls:
@@ -289,8 +289,9 @@ gateway:
     # disabled, never a failed boot — so an install that forgets it routes nothing rather than half.
     secretName: ""
     # The chart's ACME issuer — what Traefik's resolver (and VEYQ_ACME_CASERVER) is under compose. Enabled, the
-    # chart templates ONE namespaced cert-manager Issuer, `veyq-acme` (HTTP-01 through the Gateway's :80
-    # listener), and stamps `cert-manager.io/issuer: veyq-acme` plus `acme.cert-manager.io/http01-parentreffallback`
+    # chart templates ONE namespaced cert-manager Issuer named for its directory — `veyq-acme-production`,
+    # `veyq-acme-staging`, or `veyq-acme-<hash>` for another CA (HTTP-01 through the Gateway's :80 listener) — and
+    # stamps `cert-manager.io/issuer: <that name>` plus `acme.cert-manager.io/http01-parentreffallback`
     # on the Gateway and every tenant ListenerSet, so a tenant created at runtime is a certificate order with no
     # chart edit and no restart. Requires `mode: per-domain` (ACME is how per-domain certificates are obtained,
     # not a fourth mode); the schema refuses another mode rather than overriding you. No account e-mail: Let's
@@ -309,7 +310,9 @@ gateway:
       #   https://acme-staging-v02.api.letsencrypt.org/directory
       # — its certificates are NOT browser-trusted, so an instance left on staging boots and every browser
       # refuses it; with garage.enabled the app's own check of the bundled store fails on the store host's staging
-      # certificate too, and passes on a later try once a production one replaces it. What production costs a test (letsencrypt.org/docs/rate-limits): 5 failed validations per
+      # certificate too, and passes on a later try once a production one replaces it. Switching this URL renames the
+      # Issuer, so cert-manager re-orders every certificate from the new directory by itself, the old ones served
+      # until the new are Ready. What production costs a test (letsencrypt.org/docs/rate-limits): 5 failed validations per
       # hostname per hour, and 50 new certificates per registered domain per week.
       server: https://acme-v02.api.letsencrypt.org/directory
 

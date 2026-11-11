@@ -19,7 +19,7 @@ Then point DNS at the address your Gateway API implementation gives the Gateway 
 {{- end }}
 {{- if (.Values.gateway.tls.acme | default dict).enabled }}
 
-TLS: this release templates the cert-manager Issuer `veyq-acme` (ACME HTTP-01)
+TLS: this release templates the cert-manager Issuer `{{ include "veyq.acmeIssuer" . }}` (ACME HTTP-01)
 against {{ .Values.gateway.tls.acme.server }}
 and stamps it on the Gateway and every tenant ListenerSet — a tenant created later is a certificate order of its own.
 It works only if:
@@ -32,13 +32,14 @@ It works only if:
     a tenant's DNS points here BEFORE the tenant is created — cert-manager self-checks reachability, then orders
 {{- if contains "staging" .Values.gateway.tls.acme.server }}
 This is a STAGING directory: its certificates are not browser-trusted. Switch gateway.tls.acme.server to the
-production directory once a test order succeeds — until then every browser refuses the instance.
+production directory once a test order succeeds — until then every browser refuses the instance. The switch renames
+the Issuer, and cert-manager re-orders every certificate from production, serving the staging ones until then.
 {{- else }}
 Production limits worth knowing before you test here (letsencrypt.org/docs/rate-limits): 5 failed validations per
 hostname per hour, 50 new certificates per registered domain per week. The staging directory is the one-line switch.
 {{- end }}
 Watch the orders:
-    kubectl -n {{ .Release.Namespace }} get issuer veyq-acme
+    kubectl -n {{ .Release.Namespace }} get issuer {{ include "veyq.acmeIssuer" . }}
     kubectl -n {{ .Release.Namespace }} get certificate
     kubectl -n {{ .Release.Namespace }} get listenersets
 {{- else if eq .Values.gateway.tls.mode "none" }}

@@ -139,11 +139,15 @@ Under `per-domain` and `shared` the chart also redirects port 80 to `https` with
 Traefik 3.7 supports it, and an implementation that does not leaves port 80 unredirected while HTTPS still serves.
 
 **The ACME opt-in: the chart's counterpart of Traefik's resolver under Compose.** Set `gateway.tls.acme.enabled:
-true` and `mode: per-domain` — no account e-mail: Let's Encrypt keeps no contact since June 2025 — and the chart templates one namespaced cert-manager `Issuer`, `veyq-acme` (ACME
-HTTP-01, its solver route on the `Gateway`'s port-80 listener), and adds `cert-manager.io/issuer: veyq-acme` and
+true` and `mode: per-domain` — no account e-mail: Let's Encrypt keeps no contact since June 2025 — and the chart templates one namespaced cert-manager `Issuer`, named for its
+directory — `veyq-acme-production`, `veyq-acme-staging`, or `veyq-acme-<hash>` for another CA — (ACME HTTP-01, its
+solver route on the `Gateway`'s port-80 listener), and adds `cert-manager.io/issuer: <that name>` and
 `acme.cert-manager.io/http01-parentreffallback: "true"` to the annotation map — so they reach every tenant
 `ListenerSet` the app projects later, exactly as a resolver reference does under compose, and each tenant's
-challenge is answered on the `Gateway`'s one port-80 listener.
+challenge is answered on the `Gateway`'s one port-80 listener. Switching `gateway.tls.acme.server` (from staging to
+production, say) renames the `Issuer`, so cert-manager re-orders every certificate from the new directory by itself and
+keeps serving the old ones until the new are Ready; a server URL changed under one unchanged name would not have
+re-ordered anything.
 
 ```yaml
 gateway:
@@ -186,7 +190,7 @@ gateway:
   choice, not yours.
 - **Lifecycle.** `helm uninstall` removes the `Issuer` and the `Gateway`. The `Certificate` cert-manager creates
   for a listener is owned by the `Gateway` or `ListenerSet` that carries it, so a tenant's goes when its domain is
-  withdrawn; the issued `Secret` stays (the residue above). The ACME account key (`veyq-acme-account-key`) is
+  withdrawn; the issued `Secret` stays (the residue above). The ACME account key (`<issuer>-account-key`, one per directory) is
   cert-manager's `Secret`, not the chart's, and may remain after an uninstall.
 
 **What the app's cluster identity can and cannot do.** A namespace-local `ServiceAccount` + `Role` with the
