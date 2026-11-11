@@ -212,7 +212,7 @@ fun ShellScreen(s: Screen.Signed, model: AppModel) {
                         colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.background),
                         actions = {
                             if (headed != null && contribution != null) {
-                                NodeHeaderActions(headed, contribution, model, snackbar, scope, spaceName(s.spaces.firstOrNull { it.scopeId == headed.scopeId }))
+                                NodeHeaderActions(headed, contribution, model, snackbar, scope)
                             }
                             // The space's trash, from its Home (the web's level toolbar): every application's nodes.
                             val open = shell.openObject

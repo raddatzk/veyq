@@ -106,13 +106,9 @@ internal fun DropBoxScreen(ref: ObjectRef, model: AppModel) {
         }
     }
     movingOut?.let { f ->
-        val spaces = (screen as? Screen.Signed)?.spaces.orEmpty()
-        NodeMoveSheet(
-            me.raddatz.veyq.mobile.navigation.NodeAt(f.node.scopeId, f.node.id, f.node.kind, f.label),
-            spaceName(spaces.firstOrNull { it.scopeId == f.node.scopeId }), model,
-            onMoved = { _, _ -> folders = null },
-            onClose = { movingOut = null },
-        )
+        androidx.compose.runtime.remember(f) {
+            model.moveSheet(me.raddatz.veyq.mobile.navigation.NodeAt(f.node.scopeId, f.node.id, f.node.kind, f.label), copying = false)
+        }?.let { sheet -> NodeMoveSheet(sheet, onDone = { folders = null }, onClose = { movingOut = null }) }
     }
     deleting?.let { f ->
         AlertDialog(

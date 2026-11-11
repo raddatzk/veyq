@@ -60,7 +60,6 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import me.raddatz.veyq.mobile.navigation.NodeAt
 import me.raddatz.veyq.mobile.navigation.NodeHeader as Plan
-import me.raddatz.veyq.mobile.session.NodeMove
 
 /**
  * What a kind's page hands core's header (the web's `contributeNodeHeader` and the page's doors): a subtitle under the name,
@@ -73,21 +72,14 @@ internal class HeaderContribution(
     val subtitle: String? = null,
     /** What the page knows of its object (a Pot's write right, a file's content): the kind's doors follow it in core. */
     val facts: me.raddatz.veyq.mobile.AppKinds.Facts = me.raddatz.veyq.mobile.AppKinds.Facts(),
-    /** The copy door: copies to the folder chosen (null: the space's top), answers why not, or null once copied. */
-    val copy: (suspend (to: String?) -> String?)? = null,
-    /** What the copy dialog says before anything is written: what does not come along and what is left out (the web's). */
-    val copyNotes: (suspend () -> CopyNotes)? = null,
-    /** The download door: writes the node's ZIP to the stream; what it left out (lines to say), or null when not whole. */
-    val download: (suspend (java.io.OutputStream) -> List<String>?)? = null,
+    /** The download door: writes the node's ZIP to the stream; what it left out, or null when not whole. */
+    val download: (suspend (java.io.OutputStream) -> List<me.raddatz.veyq.mobile.export.NodeExport.Skipped>?)? = null,
     /** What the download is saved as (its name and type): the node's ZIP by default, a file its own name and bytes. */
     val downloadName: String? = null,
     val downloadMime: String = "application/zip",
     /** The application's own actions, merged into core's plan where the kind's order puts them. */
     val actions: List<OwnAction> = emptyList(),
 )
-
-/** What a copy leaves behind ([losses], the kinds' `copyLosses` after core's line) and leaves out ([leftOut]). */
-internal class CopyNotes(val losses: List<String>, val leftOut: List<String> = emptyList())
 
 /** An action of the application's own on its node's header. */
 internal class OwnAction(val id: String, val label: String, val icon: ImageVector, val slot: Plan.Slot = Plan.Slot.ANY, val onClick: () -> Unit)
@@ -103,8 +95,6 @@ internal class OwnAction(val id: String, val label: String, val icon: ImageVecto
 @Composable
 internal fun NodeHeaderActions(
     node: NodeAt, contribution: HeaderContribution, model: AppModel, snackbar: SnackbarHostState, scope: CoroutineScope,
-    /** The name of the node's space, where the move and copy browser starts its path. */
-    rootName: String,
     maxButtons: Int = 2,
 ) {
     val context = LocalContext.current
@@ -121,8 +111,6 @@ internal fun NodeHeaderActions(
     val hasCover = covers.containsKey(node.nodeId)
 
     // the download goes where the person picks (the system's "create document"), streamed there as it is written
-    val downloadFailed = stringResource(R.string.download_failed, node.name)
-    val downloaded = stringResource(R.string.download_done, node.name)
     val saveTo = androidx.activity.compose.rememberLauncherForActivityResult(
         androidx.activity.result.contract.ActivityResultContracts.CreateDocument(contribution.downloadMime),
     ) { uri ->
@@ -133,14 +121,11 @@ internal fun NodeHeaderActions(
             val left = out?.use { door(it) }
             // a half archive is no download: the document goes again
             if (left == null) runCatching { android.provider.DocumentsContract.deleteDocument(context.contentResolver, uri) }
-            snackbar.showSnackbar(
-                when {
-                    left == null -> downloadFailed
-                    left.isEmpty() -> downloaded
-                    else -> downloaded + " " + context.getString(R.string.download_left_out, left.joinToString("; "))
-                },
-                duration = if (left.isNullOrEmpty()) SnackbarDuration.Short else SnackbarDuration.Long,
-            )
+            // what it says is core's: downloaded or failed, then what it left out
+            val said = listOfNotNull(
+                me.raddatz.veyq.mobile.words.Notices.downloaded(node.name, left), me.raddatz.veyq.mobile.words.Notices.downloadLeftOut(left),
+            ).joinToString(" ") { context.text(it) }
+            snackbar.showSnackbar(said, duration = if (left.isNullOrEmpty()) SnackbarDuration.Short else SnackbarDuration.Long)
         }
     }
     fun run(id: String) {
@@ -192,18 +177,10 @@ internal fun NodeHeaderActions(
             r.notice?.let { scope.launch { snackbar.showSnackbar(context.text(it)) } }
             r.problem?.let { context.text(it) }
         }, onClose = close)
-        Plan.MOVE -> NodeMoveSheet(node, rootName, model, onMoved = { to, from ->
-            scope.launch {
-                // the web's undo: the node moved back the same way, to where it was
-                val answer = snackbar.showSnackbar(context.getString(R.string.move_moved, node.name, to), actionLabel = context.getString(R.string.trash_undo), duration = SnackbarDuration.Long)
-                if (answer == SnackbarResult.ActionPerformed && model.move(node, from).outcome != NodeMove.Outcome.MOVED) {
-                    snackbar.showSnackbar(context.getString(R.string.move_undo_failed, node.name))
-                }
-            }
-        }, onClose = close)
-        Plan.COPY -> NodeMoveSheet(node, rootName, model, onMoved = { to, _ ->
-            scope.launch { snackbar.showSnackbar(context.getString(R.string.copy_done, node.name, to)) }
-        }, copy = contribution.copy, notes = contribution.copyNotes, onClose = close)
+        Plan.MOVE, Plan.COPY -> remember(node, dialog) { model.moveSheet(node, dialog == Plan.COPY) }?.let { sheet ->
+            // what a move or copy says is core's, and a move's undo is offered for core's window (the header CR's D4)
+            NodeMoveSheet(sheet, onDone = { done -> moved(done, snackbar, scope, context) }, onClose = close)
+        }
         Plan.DELETE -> AlertDialog(
             onDismissRequest = close,
             title = { Text(say(header.deleteTitle)) },
@@ -225,18 +202,37 @@ internal fun NodeHeaderActions(
 internal fun trash(header: me.raddatz.veyq.mobile.navigation.NodeHeaderModel, snackbar: SnackbarHostState, scope: CoroutineScope, context: android.content.Context) {
     scope.launch {
         val said = context.text(header.trash())
-        if (header.current.undo == null) {
-            snackbar.showSnackbar(said)
-            return@launch
-        }
-        val answer = kotlinx.coroutines.coroutineScope {
-            val shown = async { snackbar.showSnackbar(said, actionLabel = context.getString(R.string.trash_undo), duration = SnackbarDuration.Indefinite) }
-            // core ends the offer after its window: the snackbar goes with it
-            val window = launch { header.state.first { it.undo == null }; shown.cancel() }
-            runCatching { shown.await() }.getOrNull().also { window.cancel() }
-        }
-        if (answer == SnackbarResult.ActionPerformed) header.undoTrash()?.let { snackbar.showSnackbar(context.text(it)) }
+        offerUndo(said, header.current.undo != null, { header.state.first { it.undo == null } }, { header.undoTrash() }, snackbar, context)
     }
+}
+
+/** What a move or copy said once [sheet] is done, a move's undo shown for as long as core offers it (the header CR's D4). */
+internal fun moved(sheet: me.raddatz.veyq.mobile.navigation.MoveSheet, snackbar: SnackbarHostState, scope: CoroutineScope, context: android.content.Context) {
+    val done = sheet.current.done ?: return
+    scope.launch {
+        offerUndo(context.text(done), sheet.current.undo != null, { sheet.state.first { it.undo == null } }, { sheet.undo() }, snackbar, context)
+    }
+}
+
+/**
+ * [said] in the snackbar; while core offers an undo ([offered]), with its Undo until core ends the offer ([ended]), the
+ * undo's failure said after.
+ */
+private suspend fun offerUndo(
+    said: String, offered: Boolean, ended: suspend () -> Unit, undo: suspend () -> me.raddatz.veyq.mobile.words.Notice?,
+    snackbar: SnackbarHostState, context: android.content.Context,
+) {
+    if (!offered) {
+        snackbar.showSnackbar(said)
+        return
+    }
+    val answer = kotlinx.coroutines.coroutineScope {
+        val shown = async { snackbar.showSnackbar(said, actionLabel = context.getString(R.string.trash_undo), duration = SnackbarDuration.Indefinite) }
+        // core ends the offer after its window: the snackbar goes with it
+        val window = launch { ended(); shown.cancel() }
+        runCatching { shown.await() }.getOrNull().also { window.cancel() }
+    }
+    if (answer == SnackbarResult.ActionPerformed) undo()?.let { snackbar.showSnackbar(context.text(it)) }
 }
 
 private fun iconOf(id: String, own: Map<String, OwnAction>): ImageVector = when (id) {

@@ -8,7 +8,6 @@ import kotlinx.coroutines.launch
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import me.raddatz.veyq.mobile.expenses.PotCopy
 import me.raddatz.veyq.mobile.expenses.PotSession
 import me.raddatz.veyq.mobile.navigation.BarTab
 import me.raddatz.veyq.mobile.navigation.NodeAt
@@ -29,13 +28,7 @@ internal class KindPage(
 internal object KindPages {
     /** Core's folder: its ZIP and its copy with everything under it the build exports and copies (`NodeExport`, `SubtreeCopy`). */
     private val folder = KindPage(header = { node, model ->
-        val context = LocalContext.current
         HeaderContribution(
-            copy = { to -> model.copyFolder(node, to) },
-            copyNotes = {
-                val (kinds, left) = model.copyPreview(node)
-                CopyNotes(me.raddatz.veyq.mobile.AppKinds.lossesOfCopy(kinds.toList()).map { context.words(it) }, left)
-            },
             download = { out -> model.downloadFolder(node, out) },
         )
     })
@@ -52,13 +45,7 @@ internal object KindPages {
 
     /** Depot's drop box: its guests' folders (`DropBoxScreen`); never renamed; its cover; its ZIP and its copy (a plain folder). */
     private val dropBox = KindPage(header = { node, model ->
-        val context = LocalContext.current
         HeaderContribution(
-            copy = { to -> model.copyFolder(node, to) },
-            copyNotes = {
-                val (kinds, left) = model.copyPreview(node)
-                CopyNotes(me.raddatz.veyq.mobile.AppKinds.lossesOfCopy(kinds.toList()).map { context.words(it) }, left)
-            },
             download = { out -> model.downloadFolder(node, out) },
         )
     }, body = { ref, _, model -> DropBoxScreen(ref, model) })
@@ -90,9 +77,6 @@ private fun fileHeader(node: NodeAt, model: AppModel): HeaderContribution {
     return HeaderContribution(
         facts = me.raddatz.veyq.mobile.AppKinds.Facts(hasContent = has),
         download = { out -> model.downloadFile(node, out) },
-        // a copy is read here and uploaded again under a fresh key (the web's `importFile` for a copy)
-        copy = { to -> model.copyFolder(node, to) },
-        copyNotes = { CopyNotes(emptyList()) },
         downloadName = me.raddatz.veyq.mobile.depot.DepotFiles.downloadName(f, node.name),
         downloadMime = "application/octet-stream",
         actions = listOf(
@@ -111,7 +95,6 @@ private fun fileHeader(node: NodeAt, model: AppModel): HeaderContribution {
 
 @Composable
 private fun potHeader(node: NodeAt, model: AppModel): HeaderContribution? {
-    val context = LocalContext.current
     val state = model.pot.collectAsStateWithLifecycle().value
     val view = state?.takeIf { it.ref.nodeId == node.nodeId }?.view ?: return null
     val ref = state.ref
@@ -119,11 +102,6 @@ private fun potHeader(node: NodeAt, model: AppModel): HeaderContribution? {
         subtitle = view.subtitle?.let { say(it) },
         // a cover and a copy write: core offers them where Expenses is on (the web's `canCopy`, `expensesRights`)
         facts = me.raddatz.veyq.mobile.AppKinds.Facts(canWrite = view.canWrite),
-        copyNotes = { CopyNotes(me.raddatz.veyq.mobile.AppKinds.lossesOfCopy(listOf(PotSession.KIND)).map { context.words(it) }) },
-        copy = { to ->
-            val r = model.copyPot(ref, to)
-            me.raddatz.veyq.mobile.words.Notices.potCopyRefused(r.outcome)?.let { context.text(it) }
-        },
         download = { out -> if (model.downloadPot(ref, out)) emptyList() else null },
     )
 }

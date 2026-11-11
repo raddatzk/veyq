@@ -518,30 +518,20 @@ class AppModel(app: Application) : AndroidViewModel(app) {
         potModel?.rekeyed()
     }
 
-    // ---- a move (core's NodeMove) ----
+    // ---- the move and copy sheet (core's MoveSheet) ----
 
-    /** Where a node of a kind may be placed: the build's kinds' placement (`AppKinds.placement`). */
-    val placement = me.raddatz.veyq.mobile.AppKinds.placement
-
-    /** Every node of [scopeId] this device opens: what the move browser walks. */
+    /** Every node of [scopeId] this device opens (a Memory's chapters). */
     suspend fun scopeNodes(scopeId: String): List<me.raddatz.veyq.mobile.navigation.NodeRef> = shellModel?.scopeNodes(scopeId).orEmpty()
 
-    /** Moves [ref] under [to] (null: the space's root), its name kept (core's shell). */
-    suspend fun move(ref: me.raddatz.veyq.mobile.navigation.NodeAt, to: String?): me.raddatz.veyq.mobile.session.NodeMove.Result {
-        val m = shellModel ?: return me.raddatz.veyq.mobile.session.NodeMove.Result(me.raddatz.veyq.mobile.session.NodeMove.Outcome.FAILED)
-        return m.move(ref, to).result.also { readRowDetails(m.tenant) }
-    }
-
     /**
-     * Copies the open Pot [ref] to [to] (null: the space's root) in its space (uc.platform.copy-node): a new Pot under fresh
-     * keys with its people, live entries and receipts; the lists are read anew. A failed copy leaves nothing behind.
+     * The move or copy sheet of [node] (core's `MoveSheet` over the shell: its browser, the guest folder's confirm, the
+     * kind's copy — a Pot by the open Pot —, the storage check, the move's undo); each write reads the rows' details anew.
      */
-    suspend fun copyPot(ref: ObjectRef, to: String?): me.raddatz.veyq.mobile.expenses.PotCopy.Copied {
-        val failed = me.raddatz.veyq.mobile.expenses.PotCopy.Copied(me.raddatz.veyq.mobile.expenses.PotCopy.Outcome.FAILED)
-        val pots = potModel ?: return failed
-        val shell = shellModel ?: return failed
-        val deleted = getApplication<Application>().getString(R.string.pot_deleted_person)
-        return pots.duplicate(shell, ref, to, deleted) { java.util.UUID.randomUUID().toString() }.also { readRowDetails(shell.tenant) }
+    fun moveSheet(node: me.raddatz.veyq.mobile.navigation.NodeAt, copying: Boolean): me.raddatz.veyq.mobile.navigation.MoveSheet? {
+        val m = shellModel ?: return null
+        return m.moveSheet(node, copying, potModel, getApplication<Application>().getString(R.string.pot_deleted_person)) {
+            viewModelScope.launch { readRowDetails(m.tenant) }
+        }
     }
 
     // ---- the space's trash (core's NodeTrash) ----
@@ -888,7 +878,7 @@ class AppModel(app: Application) : AndroidViewModel(app) {
     }
 
     /** Writes file [ref]'s content to [out] as it is read; nothing left out, or null when it did not finish. */
-    suspend fun downloadFile(ref: me.raddatz.veyq.mobile.navigation.NodeAt, out: java.io.OutputStream): List<String>? {
+    suspend fun downloadFile(ref: me.raddatz.veyq.mobile.navigation.NodeAt, out: java.io.OutputStream): List<me.raddatz.veyq.mobile.export.NodeExport.Skipped>? {
         val file = _files.value[ref.nodeId]?.takeIf { it.hasContent } ?: return null
         val ok = runCatching {
             out.buffered(1 shl 16).let { b ->
@@ -1199,59 +1189,18 @@ class AppModel(app: Application) : AndroidViewModel(app) {
         done
     }
 
-    /** Why a node was left out of a download or a copy, in the web's words (`export.reason.*`, `node.copy.reason.*`). */
-    private fun leftOutLine(s: me.raddatz.veyq.mobile.export.NodeExport.Skipped): String =
-        getApplication<Application>().text(me.raddatz.veyq.mobile.words.Notices.leftOut(s))
-
     /**
-     * Writes folder [ref] and everything under it as the web's ZIP into [out] (core's `NodeExport.walk` and `write`, the kinds
-     * the composition root exports); what it left out, as lines to say, or null when it did not finish.
+     * Writes folder [ref] and everything under it as the web's ZIP into [out] (core's `ShellModel.download`); what it left
+     * out, or null when it did not finish. [out] is closed either way.
      */
-    suspend fun downloadFolder(ref: me.raddatz.veyq.mobile.navigation.NodeAt, out: java.io.OutputStream): List<String>? = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
-        val t = tenantSession ?: return@withContext null
+    suspend fun downloadFolder(ref: me.raddatz.veyq.mobile.navigation.NodeAt, out: java.io.OutputStream): List<me.raddatz.veyq.mobile.export.NodeExport.Skipped>? = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+        val m = shellModel ?: return@withContext null
         val deleted = getApplication<Application>().getString(R.string.pot_deleted_person)
         val skipped = runCatching {
-            val walked = me.raddatz.veyq.mobile.export.NodeExport.walk(t, ref.scopeId, ref.nodeId, me.raddatz.veyq.mobile.AppKinds.exports(deleted)) ?: return@runCatching null
-            out.buffered(1 shl 16).let { b ->
-                me.raddatz.veyq.mobile.export.NodeExport.write(
-                    walked.root, me.raddatz.veyq.mobile.session.VeyqAccount.MAJOR.toString(), System.currentTimeMillis(),
-                ) { b.write(it) }
-                b.flush()
-            }
-            walked.skipped
+            out.buffered(1 shl 16).let { b -> m.download(ref, deleted, System.currentTimeMillis()) { b.write(it) }.also { b.flush() } }
         }.getOrNull()
         runCatching { out.close() }
-        skipped?.map(::leftOutLine)
-    }
-
-    /** What a copy of folder [ref] would make (its kinds) and leave out (as lines to say), before anything is written. */
-    suspend fun copyPreview(ref: me.raddatz.veyq.mobile.navigation.NodeAt): Pair<Set<String>, List<String>> {
-        val t = tenantSession ?: return emptySet<String>() to emptyList()
-        val p = runCatching {
-            me.raddatz.veyq.mobile.export.SubtreeCopy.preview(t, ref.scopeId, ref.nodeId, me.raddatz.veyq.mobile.AppKinds.copies("") { "" })
-        }.getOrNull() ?: return emptySet<String>() to emptyList()
-        return p.kinds to p.leftOut.map(::leftOutLine)
-    }
-
-    /**
-     * Copies folder [ref] with everything under it to [to] (null: the space's top) in its space (core's `SubtreeCopy`): a new
-     * folder tree under fresh keys, each Pot by Expenses' copy; the lists are read anew. Why not, or null once copied.
-     */
-    /** Why a copy of [ref] cannot go: the tenant has no room for its bytes (`StorageFit.noRoomForCopy`); null where it fits. */
-    suspend fun copyNoRoom(ref: me.raddatz.veyq.mobile.navigation.NodeAt): String? {
-        val app = getApplication<Application>()
-        val t = tenantSession ?: return null
-        val bytes = runCatching {
-            me.raddatz.veyq.mobile.session.StorageFit.noRoomForCopy(t, ref.scopeId, ref.nodeId, me.raddatz.veyq.mobile.AppKinds.exports(app.getString(R.string.pot_deleted_person)))
-        }.getOrNull() ?: return null
-        return app.getString(R.string.copy_no_room, android.text.format.Formatter.formatShortFileSize(app, bytes))
-    }
-
-    suspend fun copyFolder(ref: me.raddatz.veyq.mobile.navigation.NodeAt, to: String?): String? {
-        val app = getApplication<Application>()
-        val m = shellModel ?: return app.getString(R.string.copy_failed)
-        return m.duplicate(ref, to, app.getString(R.string.pot_deleted_person)) { java.util.UUID.randomUUID().toString() }
-            ?.let { app.text(it) }.also { readRowDetails(m.tenant) }
+        skipped
     }
 
     suspend fun openReceipt(receiptId: String): ByteArray? = potModel?.openReceipt(receiptId)
