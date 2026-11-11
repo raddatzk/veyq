@@ -41,10 +41,10 @@ class RefreshKeptTest {
             override fun putSecret(alias: String, value: String) = throw DeviceAuthFailed(cancelled = false, detail = "the store is gone")
         }
         val masterKey = p.randomBytes(32)
-        val (iv, sealed) = soft.sealUnlockable(masterKey, "veyq/v1/device-key-wrap".encodeToByteArray())
+        val (iv, sealed) = soft.sealUnlockable(masterKey, "veyq/v1/device-key-wrap".encodeToByteArray(), StaySignedIn.PRESENCE)
         val identity = suite.seal(Context("identity-priv"), masterKey, concat(lp(p.randomBytes(32)), lp(p.randomBytes(32))))
         val device = testDevice(p, failing)
-        val record = TrustedDevice("http://a.example", "p@a.example", "u1", TrustedDevice.Method.DEVICE_KEY, "w1", "veyq.device.test")
+        val record = TrustedDevice("http://a.example", "p@a.example", "u1", TrustedDevice.Method.DEVICE_KEY, "w1", "veyq.device.test", StaySignedIn.PRESENCE)
         device.remember(record)
         soft.putSecret(record.refreshAlias, "refresh-0")
 

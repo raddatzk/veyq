@@ -4,8 +4,10 @@ import Security
 import VeyqCore
 
 /// The Keychain for core's `AppleDeviceKeys` (ADR 0123 decision 8): generic-password items of this app, on this device
-/// only, never in a backup or iCloud. A protected item (the unlock key of the accounts the person stays signed in to)
-/// carries `.userPresence` — Face ID, Touch ID or the passcode — and exists only while a passcode is set.
+/// only, never in a backup or iCloud. A protected item (the presence level's unlock key of the accounts the person stays
+/// signed in to) carries `.userPresence` — Face ID, Touch ID or the passcode — and exists only while a passcode is set.
+/// A passcode item (the login level's unlock key, the CR device-trust-on-linux-and-windows' D7) asks nothing but exists
+/// only while a passcode is set, readable while the device is unlocked.
 ///
 /// Reading a protected item first asks the person through LocalAuthentication, once per start (`reuse`), and hands the
 /// evaluated context to the Keychain, so the device's own enforcement of the item's access control asks nothing twice.
@@ -40,7 +42,7 @@ final class KeychainStore: NSObject, KeychainBridge {
         ]
     }
 
-    func store(account: String, data: Data, protected: Bool) -> Bool {
+    func store(account: String, data: Data, protected: Bool, passcode: Bool) -> Bool {
         var query = base(account)
         query[kSecValueData as String] = data
         if protected {
@@ -49,6 +51,8 @@ final class KeychainStore: NSObject, KeychainBridge {
                 return false
             }
             query[kSecAttrAccessControl as String] = access
+        } else if passcode {
+            query[kSecAttrAccessible as String] = kSecAttrAccessibleWhenPasscodeSetThisDeviceOnly
         } else {
             query[kSecAttrAccessible as String] = kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly
         }
@@ -67,7 +71,8 @@ final class KeychainStore: NSObject, KeychainBridge {
         var out: CFTypeRef?
         let status = SecItemCopyMatching(query as CFDictionary, &out)
         if status == errSecSuccess, let item = out as? [String: Any], let data = item[kSecValueData as String] as? Data {
-            moveIntoSharedGroup(account, data: data, protected: protected, group: item[kSecAttrAccessGroup as String] as? String)
+            let passcode = !protected && (item[kSecAttrAccessible as String] as? String) == (kSecAttrAccessibleWhenPasscodeSetThisDeviceOnly as String)
+            moveIntoSharedGroup(account, data: data, protected: protected, passcode: passcode, group: item[kSecAttrAccessGroup as String] as? String)
             return KeychainRead(data: data, cancelled: false)
         }
         return KeychainRead(data: nil, cancelled: status == errSecUserCanceled || status == errSecAuthFailed)
@@ -95,10 +100,10 @@ final class KeychainStore: NSObject, KeychainBridge {
     }
 
     /// An item read from outside the shared group stored again into it (the default group) and removed where it was.
-    private func moveIntoSharedGroup(_ account: String, data: Data, protected: Bool, group: String?) {
+    private func moveIntoSharedGroup(_ account: String, data: Data, protected: Bool, passcode: Bool, group: String?) {
         #if os(iOS)
         guard movesLegacy, let group, !group.hasSuffix(Self.sharedGroupSuffix) else { return }
-        guard store(account: account, data: data, protected: protected) else { return }
+        guard store(account: account, data: data, protected: protected, passcode: passcode) else { return }
         var legacy = base(account)
         legacy[kSecAttrAccessGroup as String] = group
         SecItemDelete(legacy as CFDictionary)

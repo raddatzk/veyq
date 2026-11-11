@@ -50,22 +50,22 @@ import kotlin.time.TimeMark
 import kotlin.time.TimeSource
 
 /**
- * [DeviceKeys] on Windows (the CR device-trust-on-linux-and-windows, D1). "Stay signed in" uses the strongest the device
- * has (owner 2026-11-11):
+ * [DeviceKeys] on Windows (the CR device-trust-on-linux-and-windows, D1, D7). The person chooses the level (owner
+ * 2026-11-11):
  *
  *  - **bind keys and secrets: DPAPI** for the current user, never with UI. The device store keeps the protected blobs;
  *    HMAC runs in libsodium, so a key's bytes are in memory while in use — Apple's level.
- *  - **the unlock key: Windows Hello where it is set up.** 32 random bytes, encrypted under the public half of an RSA key
- *    in the Microsoft Passport Key Storage Provider (no prompt); opening decrypts them there, which Windows Hello asks
- *    the person for, with [window] (the host's HWND) as the prompt's owner and [prompt] as its words. Windows refuses
- *    the private key's use without Hello: enforced by the key, not by a dialog.
- *  - **where Hello is not set up, the unlock key is DPAPI's** too: no presence check, the Windows sign-in is the
- *    authentication (Linux's and the web's level). [helloAvailable] says which a new key would take, for the switch's
- *    label. Which one a key took is kept beside it (`hello` / `dpapi`), so an open takes the path its seal took; a
- *    Hello set up later applies from the next enrolment.
+ *  - **the [StaySignedIn.PRESENCE] unlock key: Windows Hello**, offered only where it is set up. 32 random bytes,
+ *    encrypted under the public half of an RSA key in the Microsoft Passport Key Storage Provider (creating that key asks
+ *    for the PIN once); opening decrypts them there, which Windows Hello asks the person for, with [window] (the host's
+ *    HWND) as the prompt's owner and [prompt] as its words. Windows refuses the private key's use without Hello: enforced
+ *    by the key, not by a dialog. Without Hello a presence seal is refused, never weakened to DPAPI.
+ *  - **the [StaySignedIn.LOGIN] unlock key: DPAPI**, always offered: no presence check, the Windows sign-in is the
+ *    authentication (Linux's and the web's level).
  *
- * An opened unlock key is held in memory for 15 s, so one prompt at a start opens every remembered account (Android's
- * and Apple's windows). A cancelled prompt is `DeviceAuthFailed(cancelled = true)`, anything else `false` ([authFailure]).
+ * Each level's key is kept apart (`veyq.wincred.unlock.presence` / `.login`); an opened key is held in memory for 15 s
+ * per level, so one prompt at a start opens every account remembered at PRESENCE (Android's and Apple's windows). A
+ * cancelled prompt is `DeviceAuthFailed(cancelled = true)`, anything else `false` ([authFailure]).
  */
 class WindowsDeviceKeys internal constructor(
     private val store: DeviceStore,
@@ -92,19 +92,23 @@ class WindowsDeviceKeys internal constructor(
             (hello as? PassportGuard)?.prompt = value
         }
 
-    /** Whether a new unlock key would be Windows Hello's: Hello is set up for this user (the switch's label, D5). */
+    /** Whether Windows Hello is set up for this user: the presence level is offered only then (D7). */
     val helloAvailable: Boolean get() = helloSetUp()
 
-    /** Hello's where it is set up, else DPAPI's, which the Windows sign-in opens (Q2). DPAPI is always there. */
-    override val staySignedIn: StaySignedIn
-        get() = if (helloAvailable) StaySignedIn.PRESENCE else StaySignedIn.LOGIN
+    /** Both where Hello is set up, else DPAPI's alone, which the Windows sign-in opens. DPAPI is always there. */
+    override val staySignedIn: Set<StaySignedIn>
+        get() = if (helloAvailable) setOf(StaySignedIn.PRESENCE, StaySignedIn.LOGIN) else setOf(StaySignedIn.LOGIN)
 
-    /** The path the present unlock key took (`hello`, `dpapi`), or null when there is none. */
-    val unlockPath: String? get() = store.read(UNLOCK_PATH)
+    /** Whether [level]'s unlock key exists (for the probe and the tests). */
+    fun hasUnlockKey(level: StaySignedIn): Boolean = store.read(unlockName(level)) != null
+
+    private fun guard(level: StaySignedIn): UnlockGuard = when (level) {
+        StaySignedIn.PRESENCE -> hello
+        StaySignedIn.LOGIN -> dpapi
+    }
 
     private val unlock = Mutex()
-    private var opened: ByteArray? = null
-    private var openedAt: TimeMark? = null
+    private val opened = HashMap<StaySignedIn, Pair<ByteArray, TimeMark>>()
 
     override fun createBindKey(alias: String) {
         val key = p.randomBytes(64)
@@ -123,8 +127,8 @@ class WindowsDeviceKeys internal constructor(
 
     override fun deleteBindKey(alias: String) = store.remove(BIND + alias)
 
-    override suspend fun sealUnlockable(plaintext: ByteArray, aad: ByteArray): Pair<ByteArray, ByteArray> {
-        val key = unlockKey(create = true)
+    override suspend fun sealUnlockable(plaintext: ByteArray, aad: ByteArray, level: StaySignedIn): Pair<ByteArray, ByteArray> {
+        val key = unlockKey(level, create = true)
         return try {
             val iv = p.randomBytes(12)
             iv to p.aesGcmSeal(key, iv, plaintext, aad)
@@ -133,8 +137,8 @@ class WindowsDeviceKeys internal constructor(
         }
     }
 
-    override suspend fun openUnlockable(iv: ByteArray, ciphertext: ByteArray, aad: ByteArray): ByteArray {
-        val key = unlockKey(create = false)
+    override suspend fun openUnlockable(iv: ByteArray, ciphertext: ByteArray, aad: ByteArray, level: StaySignedIn): ByteArray {
+        val key = unlockKey(level, create = false)
         return try {
             p.aesGcmOpen(key, iv, ciphertext, aad)
         } catch (e: Exception) {
@@ -144,60 +148,54 @@ class WindowsDeviceKeys internal constructor(
         }
     }
 
-    /** The unlock key's bytes (a copy the caller clears): held ones within the window, else opened (or created). */
-    private suspend fun unlockKey(create: Boolean): ByteArray = unlock.withLock {
-        held()?.let { return@withLock it }
-        val blob = store.read(UNLOCK)
-        val path = store.read(UNLOCK_PATH)
-        val key = if (blob == null || path == null) {
-            if (!create) throw DeviceAuthFailed(cancelled = false, detail = "no unlock key")
-            val guard = if (helloSetUp()) hello else dpapi
+    /**
+     * [level]'s unlock key bytes (a copy the caller clears): held ones within the window, else opened (or created). A
+     * presence key is created only where Hello is set up; one created before Hello was turned off still opens through
+     * Hello (which then refuses it), never through DPAPI.
+     */
+    private suspend fun unlockKey(level: StaySignedIn, create: Boolean): ByteArray = unlock.withLock {
+        held(level)?.let { return@withLock it }
+        val guard = guard(level)
+        val blob = store.read(unlockName(level))
+        val key = if (blob == null) {
+            if (!create) throw DeviceAuthFailed(cancelled = false, detail = "no $level unlock key")
+            if (level == StaySignedIn.PRESENCE && !helloSetUp()) throw DeviceAuthFailed(cancelled = false, detail = "Windows Hello is not set up")
             val key = p.randomBytes(32)
             val sealed = withContext(Dispatchers.Default) { guard.protect(key) }
-            store.write(UNLOCK, b64(sealed))
-            store.write(UNLOCK_PATH, guard.path)
+            store.write(unlockName(level), b64(sealed))
             key
         } else {
-            val guard = when (path) {
-                hello.path -> hello
-                dpapi.path -> dpapi
-                else -> throw DeviceAuthFailed(cancelled = false, detail = "unknown unlock path $path")
-            }
             val key = withContext(Dispatchers.Default) { guard.unprotect(unb64(blob)) }
             if (key.size != 32) throw DeviceAuthFailed(cancelled = false, detail = "unlock key of ${key.size} bytes")
             key
         }
-        hold(key)
+        hold(level, key)
         key
     }
 
-    private fun held(): ByteArray? {
-        val key = opened ?: return null
-        if (openedAt?.let { it.elapsedNow() < WINDOW } != true) {
-            forgetHeld()
+    private fun held(level: StaySignedIn): ByteArray? {
+        val (key, at) = opened[level] ?: return null
+        if (at.elapsedNow() >= WINDOW) {
+            forgetHeld(level)
             return null
         }
         return key.copyOf()
     }
 
-    private fun hold(key: ByteArray) {
-        forgetHeld()
-        opened = key.copyOf()
-        openedAt = time.markNow()
+    private fun hold(level: StaySignedIn, key: ByteArray) {
+        forgetHeld(level)
+        opened[level] = key.copyOf() to time.markNow()
     }
 
-    private fun forgetHeld() {
-        opened?.fill(0)
-        opened = null
-        openedAt = null
+    private fun forgetHeld(level: StaySignedIn) {
+        opened.remove(level)?.first?.fill(0)
     }
 
-    override fun deleteUnlockKey() {
-        val path = store.read(UNLOCK_PATH)
-        store.remove(UNLOCK)
-        store.remove(UNLOCK_PATH)
-        forgetHeld()
-        if (path == hello.path) runCatching { hello.delete() }
+    override fun deleteUnlockKey(level: StaySignedIn) {
+        val had = store.read(unlockName(level)) != null
+        store.remove(unlockName(level))
+        forgetHeld(level)
+        if (had && level == StaySignedIn.PRESENCE) runCatching { hello.delete() }
     }
 
     override fun putSecret(alias: String, value: String) =
@@ -217,8 +215,10 @@ class WindowsDeviceKeys internal constructor(
         const val UNLOCK_KEY_NAME = "unlock"
         const val BIND = "veyq.wincred.bind."
         const val SECRET = "veyq.wincred.secret."
-        const val UNLOCK = "veyq.wincred.unlock"
-        const val UNLOCK_PATH = "veyq.wincred.unlock.path"
+        const val UNLOCK = "veyq.wincred.unlock."
+
+        /** Where [level]'s protected unlock key is kept in the device store. */
+        fun unlockName(level: StaySignedIn) = UNLOCK + level.name.lowercase()
         // DPAPI's entropy per use, so one blob is never accepted as another's
         val BIND_ENTROPY = "veyq/wincred/bind".encodeToByteArray()
         val SECRET_ENTROPY = "veyq/wincred/secret".encodeToByteArray()

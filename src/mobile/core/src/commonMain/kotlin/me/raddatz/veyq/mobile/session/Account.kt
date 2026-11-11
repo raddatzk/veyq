@@ -273,24 +273,29 @@ class VeyqAccount private constructor(
 
     /**
      * Trusts this device with the account (ADR 0005, ADR 0123 decision 8), replacing how it trusted it before (one device
-     * wrap per account per device): [stayingSignedIn] enrols a DEVICE_KEY wrap under the unlock key, which asks the person
-     * to authenticate, and keeps the refresh token; otherwise a DEVICE wrap under Argon2id(device factor, [password]), so
-     * the next start needs the password and no Secret Key. Only after the new wrap is recorded is the old one deleted.
+     * wrap per account per device, ADR 0005 §9): a [level] enrols a DEVICE_KEY wrap under that level's unlock key (which,
+     * at [StaySignedIn.PRESENCE], asks the person to authenticate) and keeps the refresh token; null a DEVICE wrap under
+     * Argon2id(device factor, [password]), so the next start needs the password and no Secret Key. Only after the new wrap
+     * is recorded is the old one deleted, and with it an unlock key no remembered account uses any more. A failure
+     * before that leaves the trust it had untouched.
      */
-    suspend fun trustThisDevice(password: String?, stayingSignedIn: Boolean): TrustOutcome {
+    suspend fun trustThisDevice(password: String?, level: StaySignedIn?): TrustOutcome {
         val previous = trusted
         val alias = device.newAlias()
-        val record = if (stayingSignedIn) {
+        val record = if (level != null) {
             val refresh = tokens.refresh ?: throw SignInFailure(SignInFailure.Reason.PROTOCOL, "no refresh token to keep")
-            val (iv, sealed) = device.keys.sealUnlockable(masterKey, DEVICE_KEY_AAD)
-            val id = addWrap(AddWrapRequest.Method.DEVICE_KEY, sealed, iv) ?: return TrustOutcome.NOT_OFFERED
-            TrustedDevice(server, email, userId, TrustedDevice.Method.DEVICE_KEY, id, alias).also {
+            val (iv, sealed) = device.keys.sealUnlockable(masterKey, DEVICE_KEY_AAD, level)
+            // a key the seal created for a level nothing ends up using goes again, whatever stopped the enrolment
+            val id = try { addWrap(AddWrapRequest.Method.DEVICE_KEY, sealed, iv) } catch (e: Exception) { releaseUnlockKeys(); throw e }
+                ?: return TrustOutcome.NOT_OFFERED.also { releaseUnlockKeys() }
+            TrustedDevice(server, email, userId, TrustedDevice.Method.DEVICE_KEY, id, alias, level).also {
                 try {
                     device.keys.putSecret(it.refreshAlias, refresh)
                 } catch (e: Exception) {
                     // a store that cannot keep the token cannot resume: the wrap just added would open nothing, ever, so
                     // it goes before the caller falls back to the password trust (`RememberEnrolTest`)
                     runCatching { respond { AccountWrapsApi(server, http).deleteAccountWrap(id) } }
+                    releaseUnlockKeys()
                     throw e
                 }
             }
@@ -312,8 +317,40 @@ class VeyqAccount private constructor(
         device.remember(record)
         trusted = record
         previous?.let { drop(it) }
+        releaseUnlockKeys()
         runCatching { register().remember(device.id, device.label, null, record.wrapId, now()) }
-        return if (stayingSignedIn) TrustOutcome.REMEMBERED else TrustOutcome.TRUSTED
+        return if (level != null) TrustOutcome.REMEMBERED else TrustOutcome.TRUSTED
+    }
+
+    /**
+     * Whether [password] is this account's: a login with it on this server (ADR 0003), whose new session is revoked at
+     * once. The password trust a remembered account goes back to is keyed by the password, which nothing else can check:
+     * a DEVICE wrap under a mistyped one would open nothing at the next start. False only where the server refused the
+     * password; a server that cannot be asked throws.
+     */
+    suspend fun isPassword(password: String): Boolean {
+        val login = LoginApi(server, http)
+        val challenge = login.requestLoginChallenge(LoginChallengeRequest(email)).let {
+            if (!it.success) throw SignInFailure(SignInFailure.Reason.PROTOCOL, "challenge ${it.status}")
+            it.body()
+        }
+        val seed = suite.authSeed(password, suite.authSalt(unb64(challenge.instanceSalt), email))
+        val signature = try { primitives.ed25519Sign(seed, unb64(challenge.nonce)) } finally { seed.fill(0) }
+        val session = login.verifyLogin(LoginVerifyRequest(email = email, nonce = challenge.nonce, signature = b64(signature)))
+        if (session.status == 401) return false
+        if (!session.success) throw SignInFailure(SignInFailure.Reason.PROTOCOL, "verify ${session.status}")
+        // the check's own session is not this one: it ends here (best effort — it expires unused otherwise)
+        runCatching { respond { SessionApi(server, http).revokeSessionFamily(session.body().family.id) } }
+        return true
+    }
+
+    /**
+     * Each level's unlock key that no DEVICE_KEY record on this device uses any more is deleted (one per level, shared by
+     * every account remembered at it): after a sign-out, a stop, or a change of level.
+     */
+    private fun releaseUnlockKeys() {
+        val used = device.trusted().mapNotNull { it.unlockLevel }.toSet()
+        for (level in StaySignedIn.entries) if (level !in used) runCatching { device.keys.deleteUnlockKey(level) }
     }
 
     /** Ends this device's trust in the account: its wrap deleted on the server, its keys and record here. */
@@ -325,7 +362,7 @@ class VeyqAccount private constructor(
         drop(record)
         device.forget(record.key)
         trusted = null
-        if (device.trusted().none { it.method == TrustedDevice.Method.DEVICE_KEY }) device.keys.deleteUnlockKey()
+        releaseUnlockKeys()
     }
 
     /** The wrap deleted on the server (best effort: a wrap left behind opens only with this device's key, now gone) and
@@ -630,7 +667,7 @@ class VeyqAccount private constructor(
                 val wrap = material.wraps.firstOrNull { it.method == MasterKeyWrap.Method.DEVICE_KEY && it.id == record.wrapId }
                     ?: throw SignInFailure(SignInFailure.Reason.DEVICE_NOT_TRUSTED, "wrap not served")
                 val masterKey = try {
-                    device.keys.openUnlockable(unb64(wrap.kdfParams ?: throw OpenRefused("no iv")), unb64(wrap.wrappedKey), DEVICE_KEY_AAD)
+                    device.keys.openUnlockable(unb64(wrap.kdfParams ?: throw OpenRefused("no iv")), unb64(wrap.wrappedKey), DEVICE_KEY_AAD, record.unlockLevel!!)
                 } catch (e: DeviceAuthFailed) {
                     throw SignInFailure(if (e.cancelled) SignInFailure.Reason.DEVICE_AUTH_CANCELLED else SignInFailure.Reason.DEVICE_NOT_TRUSTED, e.message)
                 } catch (e: OpenRefused) {

@@ -168,11 +168,13 @@ final class AppModel {
         Task { if let opened = try? await session.devUnlock(password: password) { try? await show(opened) } }
     }
 
-    /// The full sign-in, then this device trusted with the account: staying signed in when `remember` (which asks the
-    /// person to authenticate; declined, the password trust instead), else the password trust.
+    /// The full sign-in, which holds the password trust, then — when `remember` — staying signed in at the presence level
+    /// (which asks the person to authenticate; declined, the password trust stays). Until this app draws the core's offer
+    /// (the CR device-trust-on-linux-and-windows, Phase 8), its switch answers it so; off, the offer stays unanswered.
     func signIn(server: String, email: String, password: String, secretKey: String, remember: Bool = false) {
         Task {
-            if let opened = try? await session.signIn(server: server, email: email, password: password, secretKey: secretKey, remember: remember) {
+            if let opened = try? await session.signIn(server: server, email: email, password: password, secretKey: secretKey) {
+                if remember { _ = try? await session.stay(level: .presence) }
                 try? await show(opened)
             }
         }

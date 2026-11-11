@@ -38,10 +38,10 @@ class RememberEnrolTest {
                 if (refusing) throw DeviceAuthFailed(cancelled = false, detail = "the store is gone") else soft.putSecret(alias, value)
         }
         val masterKey = p.randomBytes(32)
-        val (iv, sealed) = soft.sealUnlockable(masterKey, "veyq/v1/device-key-wrap".encodeToByteArray())
+        val (iv, sealed) = soft.sealUnlockable(masterKey, "veyq/v1/device-key-wrap".encodeToByteArray(), StaySignedIn.PRESENCE)
         val identity = suite.seal(Context("identity-priv"), masterKey, concat(lp(p.randomBytes(32)), lp(p.randomBytes(32))))
         val device = testDevice(p, keys)
-        val record = TrustedDevice("http://a.example", "p@a.example", "u1", TrustedDevice.Method.DEVICE_KEY, "w1", "veyq.device.test")
+        val record = TrustedDevice("http://a.example", "p@a.example", "u1", TrustedDevice.Method.DEVICE_KEY, "w1", "veyq.device.test", StaySignedIn.PRESENCE)
         device.remember(record)
         soft.putSecret(record.refreshAlias, "refresh-0")
 
@@ -80,7 +80,7 @@ class RememberEnrolTest {
 
         // staying signed in anew, the token refused: the enrolment fails as the store's failure, its wrap deleted
         refusing = true
-        val failed = assertFailsWith<DeviceAuthFailed> { account.trustThisDevice(null, stayingSignedIn = true) }
+        val failed = assertFailsWith<DeviceAuthFailed> { account.trustThisDevice(null, StaySignedIn.PRESENCE) }
         assertEquals(false, failed.cancelled)
         assertEquals(listOf("w2"), added)
         assertEquals(listOf("w2"), deleted, "the wrap the refused token was for stayed on the server")

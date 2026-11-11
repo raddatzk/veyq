@@ -27,7 +27,8 @@ private fun dpapiKeys(store: DeviceStore = MemoryDeviceStore(), time: TimeSource
     store, LibsodiumPrimitives, NoHello, DpapiGuard(WindowsDeviceKeys.UNLOCK_ENTROPY), { false }, time,
 )
 
-/** The contract over Windows' DPAPI half: the bind keys, the secrets and the unlock key where Hello is not set up. */
+/** The contract over Windows' DPAPI half: the bind keys, the secrets and the LOGIN unlock key; Hello not set up, so the
+ *  presence level is refused without reaching Hello. */
 class WindowsDeviceKeysContractTest : DeviceKeysContract() {
     override fun keys(): DeviceKeys = dpapiKeys()
 }
@@ -65,14 +66,14 @@ class WindowsDeviceKeysTest {
         val store = MemoryDeviceStore()
         val hello = PlayedHello()
         val (iv, ct) = WindowsDeviceKeys(store, p, hello, DpapiGuard(WindowsDeviceKeys.UNLOCK_ENTROPY), { true }, TimeSource.Monotonic)
-            .sealUnlockable(byteArrayOf(5), ByteArray(0))
+            .sealUnlockable(byteArrayOf(5), ByteArray(0), StaySignedIn.PRESENCE)
         val next = WindowsDeviceKeys(store, p, hello, DpapiGuard(WindowsDeviceKeys.UNLOCK_ENTROPY), { true }, TimeSource.Monotonic)
         hello.status = NTE_USER_CANCELLED
-        assertTrue(assertFailsWith<DeviceAuthFailed> { next.openUnlockable(iv, ct, ByteArray(0)) }.cancelled)
+        assertTrue(assertFailsWith<DeviceAuthFailed> { next.openUnlockable(iv, ct, ByteArray(0), StaySignedIn.PRESENCE) }.cancelled)
         hello.status = NTE_NO_KEY
-        assertFalse(assertFailsWith<DeviceAuthFailed> { next.openUnlockable(iv, ct, ByteArray(0)) }.cancelled)
+        assertFalse(assertFailsWith<DeviceAuthFailed> { next.openUnlockable(iv, ct, ByteArray(0), StaySignedIn.PRESENCE) }.cancelled)
         hello.status = 0
-        assertContentEquals(byteArrayOf(5), next.openUnlockable(iv, ct, ByteArray(0)))
+        assertContentEquals(byteArrayOf(5), next.openUnlockable(iv, ct, ByteArray(0), StaySignedIn.PRESENCE))
     }
 
     @Test
@@ -81,37 +82,48 @@ class WindowsDeviceKeysTest {
         val hello = PlayedHello()
         val time = TestTimeSource()
         fun keys() = WindowsDeviceKeys(store, p, hello, DpapiGuard(WindowsDeviceKeys.UNLOCK_ENTROPY), { true }, time)
-        val (iv, ct) = keys().sealUnlockable(byteArrayOf(1), ByteArray(0))
+        val (iv, ct) = keys().sealUnlockable(byteArrayOf(1), ByteArray(0), StaySignedIn.PRESENCE)
         assertEquals(0, hello.opens, "creating the key opened it")
         val started = keys() // a new start: nothing held
-        assertContentEquals(byteArrayOf(1), started.openUnlockable(iv, ct, ByteArray(0)))
+        assertContentEquals(byteArrayOf(1), started.openUnlockable(iv, ct, ByteArray(0), StaySignedIn.PRESENCE))
         assertEquals(1, hello.opens)
         time += 14.seconds
-        started.openUnlockable(iv, ct, ByteArray(0))
-        started.sealUnlockable(byteArrayOf(2), ByteArray(0))
+        started.openUnlockable(iv, ct, ByteArray(0), StaySignedIn.PRESENCE)
+        started.sealUnlockable(byteArrayOf(2), ByteArray(0), StaySignedIn.PRESENCE)
         assertEquals(1, hello.opens, "a second account within the window asked again")
         time += 2.seconds
-        started.openUnlockable(iv, ct, ByteArray(0))
+        started.openUnlockable(iv, ct, ByteArray(0), StaySignedIn.PRESENCE)
         assertEquals(2, hello.opens, "the window outlived 15 s")
     }
 
     @Test
-    fun anOpenTakesThePathItsSealTookAndADeleteRemovesTheHelloKey() = runTest {
+    fun presenceIsHellosAndLoginIsDpapisEachKeptApartAndADeleteRemovesTheHelloKey() = runTest {
         val store = MemoryDeviceStore()
         val hello = PlayedHello()
         var setUp = true
         fun keys() = WindowsDeviceKeys(store, p, hello, DpapiGuard(WindowsDeviceKeys.UNLOCK_ENTROPY), { setUp }, TimeSource.Monotonic)
-        val (iv, ct) = keys().sealUnlockable(byteArrayOf(3), ByteArray(0))
-        assertEquals("hello", keys().unlockPath)
-        setUp = false // Hello turned off since: the key still opens through Hello, never through DPAPI
-        assertContentEquals(byteArrayOf(3), keys().openUnlockable(iv, ct, ByteArray(0)))
+        assertEquals(setOf(StaySignedIn.PRESENCE, StaySignedIn.LOGIN), keys().staySignedIn)
+        val (pIv, pCt) = keys().sealUnlockable(byteArrayOf(3), ByteArray(0), StaySignedIn.PRESENCE)
+        val (lIv, lCt) = keys().sealUnlockable(byteArrayOf(4), ByteArray(0), StaySignedIn.LOGIN)
+        assertTrue(keys().hasUnlockKey(StaySignedIn.PRESENCE) && keys().hasUnlockKey(StaySignedIn.LOGIN))
+        // the login key opens without Hello
+        assertContentEquals(byteArrayOf(4), keys().openUnlockable(lIv, lCt, ByteArray(0), StaySignedIn.LOGIN))
+        assertEquals(0, hello.opens, "the login level reached Hello")
+        setUp = false // Hello turned off since: the presence key still opens through Hello, never through DPAPI
+        assertEquals(setOf(StaySignedIn.LOGIN), keys().staySignedIn)
+        assertContentEquals(byteArrayOf(3), keys().openUnlockable(pIv, pCt, ByteArray(0), StaySignedIn.PRESENCE))
         assertEquals(1, hello.opens)
-        keys().deleteUnlockKey()
+        keys().deleteUnlockKey(StaySignedIn.PRESENCE)
         assertTrue(hello.deleted, "the Hello key outlived its delete")
-        assertNull(keys().unlockPath)
-        // the next enrolment takes what is set up now: DPAPI
-        keys().sealUnlockable(byteArrayOf(4), ByteArray(0))
-        assertEquals("dpapi", keys().unlockPath)
+        assertFalse(keys().hasUnlockKey(StaySignedIn.PRESENCE))
+        assertContentEquals(byteArrayOf(4), keys().openUnlockable(lIv, lCt, ByteArray(0), StaySignedIn.LOGIN), "the presence delete took the login key")
+        // without Hello a presence key is refused, never made under DPAPI
+        assertFalse(assertFailsWith<DeviceAuthFailed> { keys().sealUnlockable(byteArrayOf(5), ByteArray(0), StaySignedIn.PRESENCE) }.cancelled)
+        assertFalse(keys().hasUnlockKey(StaySignedIn.PRESENCE))
+        // a login delete leaves Hello alone
+        hello.deleted = false
+        keys().deleteUnlockKey(StaySignedIn.LOGIN)
+        assertFalse(hello.deleted, "a login delete reached Hello")
     }
 
     @Test

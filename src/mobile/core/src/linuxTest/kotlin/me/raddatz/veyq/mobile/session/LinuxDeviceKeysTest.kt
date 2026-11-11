@@ -54,10 +54,10 @@ class LinuxDeviceKeysTest {
         val b = ownKeys()
         a.createBindKey("same")
         a.putSecret("same", "a's")
-        a.sealUnlockable(byteArrayOf(1), ByteArray(0))
+        a.sealUnlockable(byteArrayOf(1), ByteArray(0), StaySignedIn.LOGIN)
         assertNull(b.bindHmac("same", "m".encodeToByteArray()))
         assertNull(b.secret("same"))
-        assertFalse(assertFailsWith<DeviceAuthFailed> { b.openUnlockable(ByteArray(12), ByteArray(17), ByteArray(0)) }.cancelled)
+        assertFalse(assertFailsWith<DeviceAuthFailed> { b.openUnlockable(ByteArray(12), ByteArray(17), ByteArray(0), StaySignedIn.LOGIN) }.cancelled)
     }
 
     @Test
@@ -68,8 +68,8 @@ class LinuxDeviceKeysTest {
         keys().createBindKey("a")
         val hmac = assertNotNull(keys().bindHmac("a", "m".encodeToByteArray()))
         assertContentEquals(hmac, keys().bindHmac("a", "m".encodeToByteArray()))
-        val (iv, ct) = keys().sealUnlockable(byteArrayOf(4, 2), "aad".encodeToByteArray())
-        assertContentEquals(byteArrayOf(4, 2), keys().openUnlockable(iv, ct, "aad".encodeToByteArray()))
+        val (iv, ct) = keys().sealUnlockable(byteArrayOf(4, 2), "aad".encodeToByteArray(), StaySignedIn.LOGIN)
+        assertContentEquals(byteArrayOf(4, 2), keys().openUnlockable(iv, ct, "aad".encodeToByteArray(), StaySignedIn.LOGIN))
         keys().putSecret("a.refresh", "kept")
         assertEquals("kept", keys().secret("a.refresh"))
     }
@@ -95,9 +95,10 @@ class SecretServiceProbeTest {
             "present" -> {
                 assertNotNull(SecretService.system)
                 assertTrue(keys.secretServiceAvailable)
-                val (iv, ct) = keys.sealUnlockable(byteArrayOf(3), ByteArray(0))
-                assertContentEquals(byteArrayOf(3), keys.openUnlockable(iv, ct, ByteArray(0)))
-                keys.deleteUnlockKey()
+                assertEquals(setOf(StaySignedIn.LOGIN), keys.staySignedIn, "the Secret Service offers the login level alone")
+                val (iv, ct) = keys.sealUnlockable(byteArrayOf(3), ByteArray(0), StaySignedIn.LOGIN)
+                assertContentEquals(byteArrayOf(3), keys.openUnlockable(iv, ct, ByteArray(0), StaySignedIn.LOGIN))
+                keys.deleteUnlockKey(StaySignedIn.LOGIN)
             }
             "absent" -> {
                 assertNull(SecretService.system, "libsecret loaded though it was moved away")
@@ -115,13 +116,14 @@ class SecretServiceProbeTest {
  *  quietly — so the flows fall back and the app works as without a store. */
 private suspend fun assertNoStore(keys: LinuxDeviceKeys) {
     assertFalse(keys.secretServiceAvailable)
-    assertFalse(assertFailsWith<DeviceAuthFailed> { keys.sealUnlockable(byteArrayOf(1), ByteArray(0)) }.cancelled)
+    assertEquals(emptySet(), keys.staySignedIn, "a store that keeps nothing offers a level")
+    assertFalse(assertFailsWith<DeviceAuthFailed> { keys.sealUnlockable(byteArrayOf(1), ByteArray(0), StaySignedIn.LOGIN) }.cancelled)
     assertFalse(assertFailsWith<DeviceAuthFailed> { keys.createBindKey("a") }.cancelled)
     assertFalse(assertFailsWith<DeviceAuthFailed> { keys.putSecret("a.refresh", "t") }.cancelled)
-    assertFalse(assertFailsWith<DeviceAuthFailed> { keys.openUnlockable(ByteArray(12), ByteArray(17), ByteArray(0)) }.cancelled)
+    assertFalse(assertFailsWith<DeviceAuthFailed> { keys.openUnlockable(ByteArray(12), ByteArray(17), ByteArray(0), StaySignedIn.LOGIN) }.cancelled)
     assertNull(keys.bindHmac("a", "m".encodeToByteArray()))
     assertNull(keys.secret("a.refresh"))
     keys.deleteBindKey("a")
     keys.deleteSecret("a.refresh")
-    keys.deleteUnlockKey()
+    keys.deleteUnlockKey(StaySignedIn.LOGIN)
 }

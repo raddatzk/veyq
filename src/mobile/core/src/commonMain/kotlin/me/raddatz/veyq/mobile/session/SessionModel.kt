@@ -2,6 +2,7 @@ package me.raddatz.veyq.mobile.session
 
 import io.ktor.client.HttpClient
 import io.ktor.client.HttpClientConfig
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -24,8 +25,9 @@ import me.raddatz.veyq.mobile.words.MsgKey
 /**
  * The app's way in, for every platform (ADR 0123 decision 8, ADR 0127): where it opens — every account the person stays
  * signed in to resumes after one authentication; with none, the most recent password-trusted account asks for its
- * password; with no trusted account, the sign-in —, the full sign-in with this device's trust after it, the unlock, the
- * switcher, a server added, a sign-out and what becomes current after it, and "Manage servers"' list.
+ * password; with no trusted account, the sign-in —, the full sign-in with this device's password trust after it, the
+ * offer to stay signed in that follows a sign-in ([Offer]), the unlock, the switcher, a server added, a sign-out and
+ * what becomes current after it, and "Manage servers"' list with each server's trust and its change.
  *
  * A UI observes [gate] (or [watch]) and draws the sign-in, the unlock or — once [Gate.Signed] — its shell over the
  * tenant an action returned [Opened]; it holds no account logic of its own. [A] is the account, [T] an opened tenant:
@@ -46,18 +48,40 @@ class SessionModel<A : Connection, T : Any>(
         suspend fun unlockOnDevice(record: TrustedDevice, password: String): A
         suspend fun resume(record: TrustedDevice): A
 
-        /** This device trusted with [account] after a sign-in; never fails the sign-in. */
-        suspend fun trust(account: A, password: String, remember: Boolean)
+        /** This device trusted with [account] by the password after a sign-in (DEVICE); never fails the sign-in. */
+        suspend fun trust(account: A, password: String)
+
+        /**
+         * Staying signed in with [account] at [level] (a DEVICE_KEY wrap), replacing how this device trusted it. Never
+         * signs out: anything short of [TrustChange.DONE] leaves the trust it had.
+         */
+        suspend fun stay(account: A, level: StaySignedIn): TrustChange
+
+        /** Back to the password trust for [account] with [password], which is checked first ([TrustChange.WRONG_PASSWORD]). */
+        suspend fun trustWithPassword(account: A, password: String): TrustChange
         fun defaultTenant(account: A): TenantRef?
-        fun trustedMethod(account: A): TrustedDevice.Method?
+
+        /** How this device trusts [account] now, if it does. */
+        fun trustedBy(account: A): TrustedDevice?
         suspend fun open(account: A, tenant: TenantRef): T
         suspend fun spaces(session: T): List<SpaceRef>
         suspend fun signOut(account: A)
         suspend fun forgetDevice(account: A)
 
-        /** What staying signed in would use on this device now ([DeviceKeys.staySignedIn]). */
-        fun staySignedIn(): StaySignedIn
+        /** The levels staying signed in can take on this device now ([DeviceKeys.staySignedIn]). */
+        fun staySignedIn(): Set<StaySignedIn>
+
+        /** Whether the person answered [account]'s offer with "Not now" on this device ([ThisDevice.declined]). */
+        fun declined(account: A): Boolean
+        fun setDeclined(account: A, declined: Boolean)
     }
+
+    /**
+     * The offer to stay signed in after a sign-in (D7): the levels this device's store offers ([StaySignedIn], in that
+     * order) for the account of connection [connection]. Answered by [stay] or [notNow]; the shell is open beneath it.
+     */
+    @Serializable
+    data class Offer(val connection: String, val levels: List<StaySignedIn>)
 
     /** Where the way in stands; serializable, since the native bridge sends it as it is (ADR 0123's Consequences, the bridge). */
     @Serializable
@@ -86,10 +110,11 @@ class SessionModel<A : Connection, T : Any>(
 
         /**
          * Signed in, the shell over tenant [tenantId] of connection [connectionKey] — while [switching], still the one
-         * shown, the switch to another under way.
+         * shown, the switch to another under way. [offer] is the offer to stay signed in a sign-in left open, shown over
+         * the shell until it is answered.
          */
         @Serializable @SerialName("Signed")
-        data class Signed(val connectionKey: String, val tenantId: String, val switching: Boolean = false) : Gate()
+        data class Signed(val connectionKey: String, val tenantId: String, val switching: Boolean = false, val offer: Offer? = null) : Gate()
     }
 
     /** A tenant opened: the shell goes over [session]. */
@@ -110,10 +135,10 @@ class SessionModel<A : Connection, T : Any>(
     private val connections = Connections<A>()
 
     /**
-     * What the sign-in's "Stay signed in" would use on this device now: [StaySignedIn.NONE] hides the switch, the others
-     * name it (the CR device-trust-on-linux-and-windows, D5). Asked of the device's store each time.
+     * The levels staying signed in can take on this device now (D7): what an offer and "Manage servers" offer, none where
+     * nothing can be kept. Asked of the device's store each time.
      */
-    val staySignedIn: StaySignedIn get() = door.staySignedIn()
+    val staySignedIn: Set<StaySignedIn> get() = door.staySignedIn()
 
     /** The servers signed in to. */
     val accounts: List<A> get() = connections.all
@@ -124,6 +149,9 @@ class SessionModel<A : Connection, T : Any>(
     private var opened: Opened<A, T>? = null
     private var started = false
     private var pendingUnlock: String? = null
+
+    /** The offer a sign-in left open ([Gate.Signed.offer]), null once answered. */
+    private var offer: Offer? = null
 
     /** The start, once per process: what opened, or null for the sign-in or the unlock [gate] now shows. */
     suspend fun start(): Opened<A, T>? {
@@ -150,18 +178,20 @@ class SessionModel<A : Connection, T : Any>(
     }
 
     /**
-     * The full sign-in, then this device trusted with the account: staying signed in when [remember] (which asks the
-     * person to authenticate; declined, the password trust instead), else the password trust. A trust that cannot be
-     * enrolled leaves the sign-in standing: the next start then asks for the Secret Key again.
+     * The full sign-in, then this device trusted with the account by the password (DEVICE), then — where the device
+     * offers a level and the person never said "Not now" for this account here — the offer to stay signed in
+     * ([Gate.Signed.offer], D7). A trust that cannot be enrolled leaves the sign-in standing: the next start then asks for
+     * the Secret Key again.
      */
-    suspend fun signIn(server: String, email: String, password: String, secretKey: String, remember: Boolean): Opened<A, T>? {
+    suspend fun signIn(server: String, email: String, password: String, secretKey: String): Opened<A, T>? {
         started = true // a sign-in (the dev login among them) decides where the app is; the start does not run after it
         val adding = (current as? Gate.SignIn)?.adding == true
         _gate.value = Gate.SignIn(working = true, adding = adding, server = server, email = email)
         return try {
             val account = door.signIn(origin(server), email, password, secretKey)
-            door.trust(account, password, remember)
+            door.trust(account, password)
             add(account)
+            offer = offerFor(account)
             val (held, tenant) = connections.current!!
             openTenant(held, tenant)
         } catch (e: Exception) {
@@ -170,7 +200,10 @@ class SessionModel<A : Connection, T : Any>(
         }
     }
 
-    /** The trusted account's unlock: its password (DEVICE), or the person's authentication again (DEVICE_KEY). */
+    /**
+     * The trusted account's unlock: its password (DEVICE), or the person's authentication again (DEVICE_KEY). A password
+     * unlock is a sign-in like the full one: the offer follows it where it would follow that one.
+     */
     suspend fun unlock(password: String): Opened<A, T>? {
         val state = current as? Gate.Unlock ?: return null
         val record = state.record
@@ -181,6 +214,7 @@ class SessionModel<A : Connection, T : Any>(
                 TrustedDevice.Method.DEVICE_KEY -> door.resume(record)
             }
             add(account)
+            if (record.method == TrustedDevice.Method.DEVICE) offer = offerFor(account)
             val (held, tenant) = connections.current!!
             openTenant(held, tenant)
         } catch (e: Exception) {
@@ -214,8 +248,70 @@ class SessionModel<A : Connection, T : Any>(
 
     fun cancelAdd() {
         val o = opened ?: return
-        _gate.value = Gate.Signed(o.account.key, o.tenant.tenantId)
+        _gate.value = signed(o.account.key, o.tenant.tenantId)
     }
+
+    /** The offer's answer: stay signed in at [level] ([stay] for the offer's account); null without an offer. */
+    suspend fun stay(level: StaySignedIn): TrustChange? {
+        val o = offer ?: return null
+        val account = connections.all.firstOrNull { it.key == o.connection } ?: return null.also { endOffer() }
+        return stay(account, level)
+    }
+
+    /**
+     * Staying signed in with [account] at [level], from the offer or "Manage servers" (D7): the device's DEVICE_KEY wrap
+     * for it at that level, replacing the trust it had (the other level's wrap and, unused, its key). A level the device
+     * does not offer is [TrustChange.FAILED] without asking anyone; the level it has already is [TrustChange.DONE]. A
+     * prompt the person cancelled ([TrustChange.CANCELLED]) leaves an offer standing; any other answer ends it, and a
+     * level taken forgets an earlier "Not now".
+     */
+    suspend fun stay(account: A, level: StaySignedIn): TrustChange {
+        val now = door.trustedBy(account)
+        val change = when {
+            level !in door.staySignedIn() -> TrustChange.FAILED
+            now?.method == TrustedDevice.Method.DEVICE_KEY && now.unlockLevel == level -> TrustChange.DONE
+            else -> door.stay(account, level)
+        }
+        if (change == TrustChange.DONE) door.setDeclined(account, false)
+        if (offer?.connection == account.key && change != TrustChange.CANCELLED) endOffer()
+        return change
+    }
+
+    /** The offer's "Not now": the password trust stays, and this account is not offered again on this device (D7).
+     *  False without an offer. */
+    fun notNow(): Boolean {
+        val o = offer ?: return false
+        connections.all.firstOrNull { it.key == o.connection }?.let { door.setDeclined(it, true) }
+        endOffer()
+        return true
+    }
+
+    /**
+     * "Manage servers"' way back from staying signed in to the password trust for [account] (D7): a DEVICE wrap under
+     * [password], which is checked first, replacing the DEVICE_KEY one. Already password-trusted, nothing changes.
+     */
+    suspend fun trustWithPassword(account: A, password: String): TrustChange {
+        if (door.trustedBy(account)?.method == TrustedDevice.Method.DEVICE) return TrustChange.DONE
+        return door.trustWithPassword(account, password)
+    }
+
+    /** The offer for [account] after its sign-in, or none: the share extension never offers, nor a device without a
+     *  level, nor an account staying signed in already or whose offer the person declined here. */
+    private fun offerFor(account: A): Offer? {
+        if (signInElsewhere || door.declined(account)) return null
+        if (door.trustedBy(account)?.method == TrustedDevice.Method.DEVICE_KEY) return null
+        val levels = door.staySignedIn()
+        return if (levels.isEmpty()) null else Offer(account.key, StaySignedIn.entries.filter { it in levels })
+    }
+
+    private fun endOffer() {
+        offer = null
+        (current as? Gate.Signed)?.let { _gate.value = it.copy(offer = null) }
+    }
+
+    /** The shell's gate, with the offer standing. */
+    private fun signed(connectionKey: String, tenantId: String, switching: Boolean = false) =
+        Gate.Signed(connectionKey, tenantId, switching, offer)
 
     /**
      * The switcher: another tenant of the same server is the same session at another domain; another server is its own.
@@ -225,12 +321,12 @@ class SessionModel<A : Connection, T : Any>(
         val was = opened
         val before = connections.current
         connections.switchTo(account, tenant)
-        if (was != null) _gate.value = Gate.Signed(was.account.key, was.tenant.tenantId, switching = true)
+        if (was != null) _gate.value = signed(was.account.key, was.tenant.tenantId, switching = true)
         return try {
             openTenant(account, tenant)
         } catch (e: Exception) {
             before?.let { connections.switchTo(it.first, it.second) }
-            if (was != null) _gate.value = Gate.Signed(was.account.key, was.tenant.tenantId)
+            if (was != null) _gate.value = signed(was.account.key, was.tenant.tenantId)
             null
         }
     }
@@ -246,6 +342,7 @@ class SessionModel<A : Connection, T : Any>(
     suspend fun signOut(account: A): SignedOut<A, T> {
         val wasCurrent = connections.current?.first == account
         connections.remove(account)
+        if (offer?.connection == account.key) offer = null
         if (wasCurrent) opened = null
         runCatching { door.signOut(account) }
         val next = connections.current
@@ -280,8 +377,19 @@ class SessionModel<A : Connection, T : Any>(
             else me.raddatz.veyq.mobile.words.Piece.Plain(tenant.domain)
     }
 
-    /** A server on "Manage servers": its account, its tenants, how this device trusts it, if it does. */
-    class ManagedServer<A : Any>(val account: A, val label: String, val tenants: List<ManagedTenant>, val trusted: TrustedDevice.Method?)
+    /**
+     * A server on "Manage servers": its account, its tenants, how this device trusts it ([trusted], null when it does not;
+     * [level] the level a DEVICE_KEY trust is at), and the levels it may change to ([levels], the device's: [stay] for
+     * one, [trustWithPassword] back to the password trust).
+     */
+    class ManagedServer<A : Any>(
+        val account: A,
+        val label: String,
+        val tenants: List<ManagedTenant>,
+        val trusted: TrustedDevice.Method?,
+        val level: StaySignedIn? = null,
+        val levels: List<StaySignedIn> = emptyList(),
+    )
 
     /** Key of a tenant's spaces in [managed]'s `loaded`. */
     fun spacesKey(account: A, tenant: TenantRef): String = account.key + "#" + tenant.tenantId
@@ -295,8 +403,10 @@ class SessionModel<A : Connection, T : Any>(
 
     internal fun managed(loaded: Map<String, List<SpaceRef>>): List<ManagedServer<A>> {
         val now = connections.current
+        val levels = StaySignedIn.entries.filter { it in door.staySignedIn() }
         return connections.all.map { c ->
-            ManagedServer(c, c.label, trusted = door.trustedMethod(c), tenants = c.tenants.map { t ->
+            val trust = door.trustedBy(c)
+            ManagedServer(c, c.label, trusted = trust?.method, level = trust?.unlockLevel, levels = levels, tenants = c.tenants.map { t ->
                 val spaces = loaded[spacesKey(c, t)]
                 ManagedTenant(
                     tenant = t,
@@ -324,7 +434,7 @@ class SessionModel<A : Connection, T : Any>(
     private suspend fun openTenant(account: A, tenant: TenantRef): Opened<A, T> {
         val o = Opened(account, tenant, door.open(account, tenant))
         opened = o
-        _gate.value = Gate.Signed(account.key, tenant.tenantId)
+        _gate.value = signed(account.key, tenant.tenantId)
         return o
     }
 
@@ -400,22 +510,46 @@ class AccountDoor(
 
     override suspend fun resume(record: TrustedDevice): VeyqAccount = VeyqAccount.resume(primitives, record, device, client)
 
-    override suspend fun trust(account: VeyqAccount, password: String, remember: Boolean) {
-        runCatching {
-            if (!remember) account.trustThisDevice(password, stayingSignedIn = false)
-            else try {
-                account.trustThisDevice(null, stayingSignedIn = true)
-            } catch (e: DeviceAuthFailed) {
-                account.trustThisDevice(password, stayingSignedIn = false)
-            }
-        }.onFailure { println("veyq: this device could not be trusted with the account: $it") }
+    override suspend fun trust(account: VeyqAccount, password: String) {
+        runCatching { account.trustThisDevice(password, level = null) }
+            .onFailure { if (it is CancellationException) throw it; println("veyq: this device could not be trusted with the account: $it") }
+    }
+
+    override suspend fun stay(account: VeyqAccount, level: StaySignedIn): TrustChange = changed("staying signed in") {
+        if (account.trustThisDevice(null, level) == VeyqAccount.TrustOutcome.REMEMBERED) TrustChange.DONE else TrustChange.FAILED
+    }
+
+    override suspend fun trustWithPassword(account: VeyqAccount, password: String): TrustChange = changed("the password trust") {
+        when {
+            !account.isPassword(password) -> TrustChange.WRONG_PASSWORD
+            account.trustThisDevice(password, level = null) == VeyqAccount.TrustOutcome.TRUSTED -> TrustChange.DONE
+            else -> TrustChange.FAILED
+        }
+    }
+
+    /** A change of trust's outcome: a cancelled prompt is [TrustChange.CANCELLED], any other failure logged and FAILED. */
+    private suspend fun changed(what: String, block: suspend () -> TrustChange): TrustChange = try {
+        block()
+    } catch (e: CancellationException) {
+        throw e
+    } catch (e: DeviceAuthFailed) {
+        if (e.cancelled) TrustChange.CANCELLED else TrustChange.FAILED.also { println("veyq: $what was not enrolled: $e") }
+    } catch (e: Exception) {
+        println("veyq: $what was not enrolled: $e")
+        TrustChange.FAILED
     }
 
     override fun defaultTenant(account: VeyqAccount): TenantRef? = account.defaultTenant
-    override fun trustedMethod(account: VeyqAccount): TrustedDevice.Method? = account.trusted?.method
+    override fun trustedBy(account: VeyqAccount): TrustedDevice? = account.trusted
     override suspend fun open(account: VeyqAccount, tenant: TenantRef): TenantSession = account.open(tenant)
     override suspend fun spaces(session: TenantSession): List<SpaceRef> = session.spaces()
     override suspend fun signOut(account: VeyqAccount) = account.signOut()
     override suspend fun forgetDevice(account: VeyqAccount) = account.forgetThisDevice()
-    override fun staySignedIn(): StaySignedIn = device.keys.staySignedIn
+    override fun staySignedIn(): Set<StaySignedIn> = device.keys.staySignedIn
+    override fun declined(account: VeyqAccount): Boolean = device.declined(account.key)
+    override fun setDeclined(account: VeyqAccount, declined: Boolean) = device.setDeclined(account.key, declined)
 }
+
+/** What a change of this device's trust came to (D7): [DONE]; the person [CANCELLED] the prompt (an offer stays); the
+ *  password was not the account's; or it [FAILED] otherwise — the trust the account had stands in every case but DONE. */
+enum class TrustChange { DONE, CANCELLED, WRONG_PASSWORD, FAILED }

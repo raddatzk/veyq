@@ -60,37 +60,80 @@ abstract class DeviceKeysContract {
         assertEquals("other", keys.secret("contract.other"))
     }
 
+    /** The levels this store offers: each runs the unlock key's half of the contract; one it does not, the refusal. */
+    private fun offered(keys: DeviceKeys): Set<StaySignedIn> =
+        keys.staySignedIn.also { assertTrue(it.isNotEmpty(), "a store that offers no level runs no unlock key's contract") }
+
     @Test
-    fun aSealOpensUnderItsAadAndNotUnderAnother() = runTest {
+    fun aSealOpensUnderItsAadAndNotUnderAnotherAtEachOfferedLevel() = runTest {
         val keys = keys()
-        val plaintext = ByteArray(32) { it.toByte() }
-        val (iv, ciphertext) = keys.sealUnlockable(plaintext, "aad-1".encodeToByteArray())
-        assertContentEquals(plaintext, keys.openUnlockable(iv, ciphertext, "aad-1".encodeToByteArray()))
-        assertTrue(runCatching { keys.openUnlockable(iv, ciphertext, "aad-2".encodeToByteArray()) }.isFailure, "opened under another AAD")
-        val tampered = ciphertext.copyOf().also { it[0] = (it[0].toInt() xor 1).toByte() }
-        assertTrue(runCatching { keys.openUnlockable(iv, tampered, "aad-1".encodeToByteArray()) }.isFailure, "opened a tampered ciphertext")
-        // a second seal is under the same unlock key: both open
-        val (iv2, ciphertext2) = keys.sealUnlockable(byteArrayOf(7), "aad-3".encodeToByteArray())
-        assertContentEquals(byteArrayOf(7), keys.openUnlockable(iv2, ciphertext2, "aad-3".encodeToByteArray()))
-        assertContentEquals(plaintext, keys.openUnlockable(iv, ciphertext, "aad-1".encodeToByteArray()))
+        for (level in offered(keys)) {
+            val plaintext = ByteArray(32) { it.toByte() }
+            val (iv, ciphertext) = keys.sealUnlockable(plaintext, "aad-1".encodeToByteArray(), level)
+            assertContentEquals(plaintext, keys.openUnlockable(iv, ciphertext, "aad-1".encodeToByteArray(), level), "$level")
+            assertTrue(runCatching { keys.openUnlockable(iv, ciphertext, "aad-2".encodeToByteArray(), level) }.isFailure, "$level opened under another AAD")
+            val tampered = ciphertext.copyOf().also { it[0] = (it[0].toInt() xor 1).toByte() }
+            assertTrue(runCatching { keys.openUnlockable(iv, tampered, "aad-1".encodeToByteArray(), level) }.isFailure, "$level opened a tampered ciphertext")
+            // a second seal is under the same unlock key: both open
+            val (iv2, ciphertext2) = keys.sealUnlockable(byteArrayOf(7), "aad-3".encodeToByteArray(), level)
+            assertContentEquals(byteArrayOf(7), keys.openUnlockable(iv2, ciphertext2, "aad-3".encodeToByteArray(), level))
+            assertContentEquals(plaintext, keys.openUnlockable(iv, ciphertext, "aad-1".encodeToByteArray(), level))
+        }
     }
 
     @Test
-    fun anOpenWithoutAnUnlockKeyFailsAsNotCancelled() = runTest {
+    fun anOpenWithoutAnUnlockKeyFailsAsNotCancelledAtEachOfferedLevel() = runTest {
         val keys = keys()
-        val never = assertFailsWith<DeviceAuthFailed> { keys.openUnlockable(ByteArray(12), ByteArray(48), ByteArray(0)) }
-        assertFalse(never.cancelled, "no unlock key reads as a cancelled prompt")
-        val (iv, ciphertext) = keys.sealUnlockable(byteArrayOf(1, 2, 3), ByteArray(0))
-        keys.deleteUnlockKey()
-        val deleted = assertFailsWith<DeviceAuthFailed> { keys.openUnlockable(iv, ciphertext, ByteArray(0)) }
-        assertFalse(deleted.cancelled, "a deleted unlock key reads as a cancelled prompt")
-        // a new unlock key after the delete does not open what the old one sealed
-        keys.sealUnlockable(byteArrayOf(9), ByteArray(0))
-        assertTrue(runCatching { keys.openUnlockable(iv, ciphertext, ByteArray(0)) }.isFailure, "a new unlock key opened the old one's seal")
+        for (level in offered(keys)) {
+            val never = assertFailsWith<DeviceAuthFailed> { keys.openUnlockable(ByteArray(12), ByteArray(48), ByteArray(0), level) }
+            assertFalse(never.cancelled, "no $level unlock key reads as a cancelled prompt")
+            val (iv, ciphertext) = keys.sealUnlockable(byteArrayOf(1, 2, 3), ByteArray(0), level)
+            keys.deleteUnlockKey(level)
+            val deleted = assertFailsWith<DeviceAuthFailed> { keys.openUnlockable(iv, ciphertext, ByteArray(0), level) }
+            assertFalse(deleted.cancelled, "a deleted $level unlock key reads as a cancelled prompt")
+            // a new unlock key after the delete does not open what the old one sealed
+            keys.sealUnlockable(byteArrayOf(9), ByteArray(0), level)
+            assertTrue(runCatching { keys.openUnlockable(iv, ciphertext, ByteArray(0), level) }.isFailure, "a new $level unlock key opened the old one's seal")
+            keys.deleteUnlockKey(level)
+        }
+    }
+
+    @Test
+    fun eachLevelIsAKeyOfItsOwn() = runTest {
+        val keys = keys()
+        val levels = offered(keys)
+        if (levels.size < 2) return@runTest // one level: nothing to tell apart (Linux)
+        val (pIv, pCt) = keys.sealUnlockable(byteArrayOf(1), ByteArray(0), StaySignedIn.PRESENCE)
+        val (lIv, lCt) = keys.sealUnlockable(byteArrayOf(2), ByteArray(0), StaySignedIn.LOGIN)
+        assertTrue(runCatching { keys.openUnlockable(pIv, pCt, ByteArray(0), StaySignedIn.LOGIN) }.isFailure, "the login key opened a presence seal")
+        assertTrue(runCatching { keys.openUnlockable(lIv, lCt, ByteArray(0), StaySignedIn.PRESENCE) }.isFailure, "the presence key opened a login seal")
+        keys.deleteUnlockKey(StaySignedIn.LOGIN)
+        assertContentEquals(byteArrayOf(1), keys.openUnlockable(pIv, pCt, ByteArray(0), StaySignedIn.PRESENCE), "deleting the login key took the presence key")
+        assertFalse(assertFailsWith<DeviceAuthFailed> { keys.openUnlockable(lIv, lCt, ByteArray(0), StaySignedIn.LOGIN) }.cancelled)
+        val (lIv2, lCt2) = keys.sealUnlockable(byteArrayOf(3), ByteArray(0), StaySignedIn.LOGIN)
+        keys.deleteUnlockKey(StaySignedIn.PRESENCE)
+        assertContentEquals(byteArrayOf(3), keys.openUnlockable(lIv2, lCt2, ByteArray(0), StaySignedIn.LOGIN), "deleting the presence key took the login key")
+        keys.deleteUnlockKey(StaySignedIn.LOGIN)
+    }
+
+    @Test
+    fun aLevelTheStoreDoesNotOfferIsRefusedAndNeverFallsBack() = runTest {
+        val keys = keys()
+        val refused = StaySignedIn.entries - offered(keys)
+        for (level in refused) {
+            assertFalse(assertFailsWith<DeviceAuthFailed> { keys.sealUnlockable(byteArrayOf(1), ByteArray(0), level) }.cancelled, "$level")
+            assertFalse(assertFailsWith<DeviceAuthFailed> { keys.openUnlockable(ByteArray(12), ByteArray(17), ByteArray(0), level) }.cancelled, "$level")
+            keys.deleteUnlockKey(level) // quiet
+        }
     }
 }
 
 /** The contract over the fake every flow test uses. */
 class SoftwareDeviceKeysContractTest : DeviceKeysContract() {
     override fun keys(): DeviceKeys = SoftwareDeviceKeys(testPrimitives)
+}
+
+/** The contract over the fake as a store with the login level alone (Linux's shape): the presence level is refused. */
+class LoginOnlySoftwareDeviceKeysContractTest : DeviceKeysContract() {
+    override fun keys(): DeviceKeys = SoftwareDeviceKeys(testPrimitives).apply { staySignedIn = setOf(StaySignedIn.LOGIN) }
 }

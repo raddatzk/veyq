@@ -13,14 +13,17 @@ import me.raddatz.veyq.mobile.crypto.unb64
 import me.raddatz.veyq.mobile.crypto.utf8
 
 /**
- * The platform's keys that never leave this device (Android Keystore, the Apple Keychain), for the two device wraps of
- * the Master Key (ADR 0005, ADR 0123 decision 8):
+ * The platform's keys that never leave this device (Android Keystore, the Apple Keychain, Windows' DPAPI and Hello, the
+ * Secret Service), for the two device wraps of the Master Key (ADR 0005, ADR 0123 decision 8):
  *
  *  - a **bind key** per trusted account: its HMAC over `veyq/v1/device-bind` is the DEVICE wrap's device factor, so the
  *    wrap opens with the password and this device, no Secret Key;
- *  - one **unlock key** for the app: AES-256-GCM that works only after the person authenticated (biometrics or the
- *    device's own code), which seals the DEVICE_KEY wraps of the accounts the person chose to stay signed in to. One
- *    authentication may open several within a short window, so one launch asks once.
+ *  - an **unlock key per level** ([StaySignedIn]) for the app: AES-256-GCM that seals the DEVICE_KEY wraps of the
+ *    accounts the person chose to stay signed in to at that level. The [StaySignedIn.PRESENCE] key works only after the
+ *    person authenticated (biometrics, the device's own code, Windows Hello); one authentication may open several within
+ *    a short window, so one launch asks once. The [StaySignedIn.LOGIN] key opens without asking: the device's own
+ *    sign-in is the authentication. Each level is a key of its own, so a level a seal used is the level its open uses
+ *    (the record keeps it, [TrustedDevice.level]); deleting one leaves the other.
  *
  * And small secrets kept without asking the person: a remembered account's refresh token (server access, not content).
  */
@@ -33,52 +36,56 @@ interface DeviceKeys {
 
     fun deleteBindKey(alias: String)
 
-    /** Seals [plaintext] under the unlock key (created on first use): (iv, ciphertext‖tag). May ask the person; throws
-     *  [DeviceAuthFailed] when they do not authenticate. */
-    suspend fun sealUnlockable(plaintext: ByteArray, aad: ByteArray): Pair<ByteArray, ByteArray>
+    /**
+     * Seals [plaintext] under [level]'s unlock key (created on first use): (iv, ciphertext‖tag). At
+     * [StaySignedIn.PRESENCE] it may ask the person, and throws [DeviceAuthFailed] (`cancelled`) when they do not
+     * authenticate. A level this store does not offer ([staySignedIn]) throws `DeviceAuthFailed(cancelled = false)`, and
+     * never falls back to another: a key sealed at a level is that level's.
+     */
+    suspend fun sealUnlockable(plaintext: ByteArray, aad: ByteArray, level: StaySignedIn): Pair<ByteArray, ByteArray>
 
-    /** Opens what [sealUnlockable] sealed. May ask the person; throws [DeviceAuthFailed] when they do not authenticate,
-     *  or when the unlock key is gone (a new biometric enrolment invalidates it on Android). */
-    suspend fun openUnlockable(iv: ByteArray, ciphertext: ByteArray, aad: ByteArray): ByteArray
+    /** Opens what [sealUnlockable] sealed at [level]. May ask the person at [StaySignedIn.PRESENCE]; throws
+     *  [DeviceAuthFailed] when they do not authenticate, or when that level's key is gone (a new biometric enrolment
+     *  invalidates the presence key on Android). */
+    suspend fun openUnlockable(iv: ByteArray, ciphertext: ByteArray, aad: ByteArray, level: StaySignedIn): ByteArray
 
-    fun deleteUnlockKey()
+    /** Deletes [level]'s unlock key (nothing where there is none); the other level's stays. */
+    fun deleteUnlockKey(level: StaySignedIn)
 
     fun putSecret(alias: String, value: String)
     fun secret(alias: String): String?
     fun deleteSecret(alias: String)
 
     /**
-     * What staying signed in would use on this device now, asked of the store itself (never a host's own probe): the
-     * sign-in's switch shows or hides by it, and its label says which. May reach the platform (D-Bus, cryptngc), so it is
-     * asked when a sign-in shows, not on every frame.
+     * The levels staying signed in can take on this device now, asked of the store itself (never a host's own probe): what
+     * the offer after a sign-in and "Manage servers" offer (the CR device-trust-on-linux-and-windows, D7). Empty where
+     * nothing staying signed in needs can be kept: no offer. May reach the platform (D-Bus, cryptngc, the keyguard), so
+     * it is asked when an offer is made, not on every frame.
      */
-    val staySignedIn: StaySignedIn
+    val staySignedIn: Set<StaySignedIn>
 }
 
 /**
- * What "Stay signed in" uses on a device: the strongest it has (the CR device-trust-on-linux-and-windows, Q1/Q2, owner
- * 2026-11-11). The same meaning on every platform; the words a platform gives each are its own.
+ * A level of staying signed in (the CR device-trust-on-linux-and-windows, D7, owner 2026-11-11): the person chooses
+ * among the levels their device offers ([DeviceKeys.staySignedIn]), after the sign-in or later in "Manage servers". The
+ * same meaning on every platform; the words a platform gives each are its own.
  */
 @Serializable
 enum class StaySignedIn {
     /**
      * The unlock key opens only after the person authenticated to the device, enforced by the store: Windows Hello's key,
-     * Android's screen lock (biometric or device credential), Apple's `.userPresence`. Windows labels it "Stay signed in
-     * with Windows Hello".
+     * Android's screen lock (biometric or device credential), Apple's `.userPresence`. "Sign in with Windows Hello" (Face
+     * ID, Touch ID, fingerprint).
      */
     PRESENCE,
 
     /**
-     * The unlock key opens with the person's desktop sign-in and asks nothing of its own (Windows without Hello: DPAPI;
-     * Linux: the Secret Service, unlocked by the login): the web's level. The plain "Stay signed in".
+     * The unlock key opens without asking: the person's own sign-in to the device is the authentication (Windows: DPAPI;
+     * Linux: the Secret Service, unlocked by the login; Android: a Keystore key without user authentication; Apple: a
+     * Keychain item without `.userPresence`): the web's level. The plain "Stay signed in". Offered beside
+     * [PRESENCE], not only where it is missing: a device with a fingerprint reader must not force anyone to use it.
      */
     LOGIN,
-
-    /**
-     * Nothing can be kept that staying signed in needs (Linux without a Secret Service; Android and Apple without a screen
-     * lock): the switch is hidden, since turned on it would do what it does off.
-     */
-    NONE,
 }
 
 /** The person did not authenticate for the unlock key ([cancelled]), or the key no longer works. */
@@ -86,8 +93,9 @@ class DeviceAuthFailed(val cancelled: Boolean, detail: String? = null) : Excepti
 
 /**
  * One account this device trusts (the record the web keeps in IndexedDB): which server and account, which of the two
- * wraps, the wrap's id the server answered (how the unlock finds it among the served wraps), and the local alias of its
- * key. Not secret: the email is the person's own, on their own device.
+ * wraps, the wrap's id the server answered (how the unlock finds it among the served wraps), the local alias of its
+ * key, and — for a DEVICE_KEY wrap — the [level] its unlock key is ([unlockLevel]). Not secret: the email is the
+ * person's own, on their own device.
  */
 @Serializable
 data class TrustedDevice(
@@ -97,8 +105,17 @@ data class TrustedDevice(
     val method: Method,
     val wrapId: String,
     val alias: String,
+    /** The level a DEVICE_KEY wrap was sealed at; null for DEVICE, and in a record kept before levels existed. */
+    val level: StaySignedIn? = null,
 ) {
     enum class Method { DEVICE, DEVICE_KEY }
+
+    /**
+     * The level whose unlock key opens this DEVICE_KEY wrap, null for DEVICE. A record kept before the levels (D7) is
+     * [StaySignedIn.PRESENCE]: Android and Apple sealed every one behind the person's authentication.
+     */
+    val unlockLevel: StaySignedIn?
+        get() = if (method == Method.DEVICE_KEY) level ?: StaySignedIn.PRESENCE else null
 
     /** Whose record this is: one per account per server, as a connection is. */
     val key: String get() = "${io.ktor.http.Url(server).host}#$userId"
@@ -116,9 +133,10 @@ class ThisDevice(val store: DeviceStore, val keys: DeviceKeys, val label: String
     val id: String
         get() = store.read(ID) ?: uuid().also { store.write(ID, it) }
 
-    /** Every account this device trusts, the most recently used first. */
+    /** Every account this device trusts, the most recently used first; a DEVICE_KEY record always names its level. */
     fun trusted(): List<TrustedDevice> =
         runCatching { store.read(TRUSTED)?.let { JSON.decodeFromString<List<TrustedDevice>>(it) } }.getOrNull().orEmpty()
+            .map { if (it.level == null && it.unlockLevel != null) it.copy(level = it.unlockLevel) else it }
 
     fun trusted(key: String): TrustedDevice? = trusted().firstOrNull { it.key == key }
 
@@ -126,6 +144,21 @@ class ThisDevice(val store: DeviceStore, val keys: DeviceKeys, val label: String
         store.write(TRUSTED, JSON.encodeToString(listOf(record) + trusted().filter { it.key != record.key }))
 
     internal fun forget(key: String) = store.write(TRUSTED, JSON.encodeToString(trusted().filter { it.key != key }))
+
+    /**
+     * Whether the person answered the offer to stay signed in for account [key] with "Not now" on this device (D7): it
+     * is asked once per account and device. Not secret: whether someone chose to stay signed in is not content.
+     */
+    fun declined(key: String): Boolean = key in declinedKeys()
+
+    /** Remembers [key]'s "Not now" ([declined] true), or forgets it once a level is taken. */
+    internal fun setDeclined(key: String, declined: Boolean) {
+        val now = declinedKeys().filter { it != key } + if (declined) listOf(key) else emptyList()
+        store.write(DECLINED, JSON.encodeToString(now))
+    }
+
+    private fun declinedKeys(): List<String> =
+        runCatching { store.read(DECLINED)?.let { JSON.decodeFromString<List<String>>(it) } }.getOrNull().orEmpty()
 
     /** Marks [key] the most recently used, so the app opens on it next time. */
     fun touch(key: String) {
@@ -146,6 +179,7 @@ class ThisDevice(val store: DeviceStore, val keys: DeviceKeys, val label: String
     private companion object {
         const val ID = "veyq.device-id"
         const val TRUSTED = "veyq.trusted-devices"
+        const val DECLINED = "veyq.stay-signed-in-declined"
         val JSON = Json { ignoreUnknownKeys = true }
     }
 }

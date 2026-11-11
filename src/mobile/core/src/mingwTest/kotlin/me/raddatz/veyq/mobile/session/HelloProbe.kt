@@ -42,17 +42,17 @@ class HelloProbe {
         val aad = "probe".encodeToByteArray()
         runBlocking {
             val sealing = WindowsDeviceKeys(store, window, "veyq probe 1: if asked, enter your PIN", PROBE_KEY)
-            val (iv, ct) = log.step("seal", "if asked: enter your PIN") { sealing.sealUnlockable(plaintext, aad) } ?: return@runBlocking
-            log.line("path ${sealing.unlockPath}")
+            val (iv, ct) = log.step("seal", "if asked: enter your PIN") { sealing.sealUnlockable(plaintext, aad, StaySignedIn.PRESENCE) } ?: return@runBlocking
+            log.line("presence key kept ${sealing.hasUnlockKey(StaySignedIn.PRESENCE)}")
             val started = WindowsDeviceKeys(store, window, "veyq probe 2: enter your PIN", PROBE_KEY)
-            log.step("open", "enter your PIN") { check(started.openUnlockable(iv, ct, aad).contentEquals(plaintext)) { "opened to other bytes" } }
-            log.step("open-in-window", "no prompt") { check(started.openUnlockable(iv, ct, aad).contentEquals(plaintext)) { "opened to other bytes" } }
+            log.step("open", "enter your PIN") { check(started.openUnlockable(iv, ct, aad, StaySignedIn.PRESENCE).contentEquals(plaintext)) { "opened to other bytes" } }
+            log.step("open-in-window", "no prompt") { check(started.openUnlockable(iv, ct, aad, StaySignedIn.PRESENCE).contentEquals(plaintext)) { "opened to other bytes" } }
             sleep(16u)
             started.prompt = "veyq probe 3: press Cancel"
-            log.step("open-after-window", "press Cancel") { started.openUnlockable(iv, ct, aad) }
-            val blob = store.read(WindowsDeviceKeys.UNLOCK)
-            started.deleteUnlockKey()
-            log.step("open-after-delete", "no prompt") { started.openUnlockable(iv, ct, aad) }
+            log.step("open-after-window", "press Cancel") { started.openUnlockable(iv, ct, aad, StaySignedIn.PRESENCE) }
+            val blob = store.read(WindowsDeviceKeys.unlockName(StaySignedIn.PRESENCE))
+            started.deleteUnlockKey(StaySignedIn.PRESENCE)
+            log.step("open-after-delete", "no prompt") { started.openUnlockable(iv, ct, aad, StaySignedIn.PRESENCE) }
             // the Passport key itself is gone, not only the store's record of it
             if (blob != null) log.step("passport-key-after-delete", "no prompt") { PassportGuard(PROBE_KEY, window).unprotect(unb64(blob)) }
         }

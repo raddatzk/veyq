@@ -159,11 +159,16 @@ class AppModel(app: Application) : AndroidViewModel(app) {
     }
 
     /**
-     * The full sign-in, then this device trusted with the account: staying signed in when [remember] (which asks the
-     * person to authenticate; declined, the password trust instead), else the password trust.
+     * The full sign-in, which holds the password trust, then — when [remember] — staying signed in at the presence level
+     * (which asks the person to authenticate; declined, the password trust stays). Until this app draws the core's offer
+     * (the CR device-trust-on-linux-and-windows, Phase 8), its switch answers it so; off, the offer stays unanswered.
      */
     fun signIn(server: String, email: String, password: String, secretKey: String, remember: Boolean = false) {
-        viewModelScope.launch { session.signIn(server, email, password, secretKey, remember)?.let { show(it) } }
+        viewModelScope.launch {
+            val opened = session.signIn(server, email, password, secretKey) ?: return@launch
+            if (remember) session.stay(me.raddatz.veyq.mobile.session.StaySignedIn.PRESENCE)
+            show(opened)
+        }
     }
 
     /** The trusted account's unlock: its password (DEVICE), or the person's authentication again (DEVICE_KEY). */

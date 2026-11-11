@@ -32,9 +32,10 @@ import me.raddatz.veyq.mobile.secret.veyq_secret_store
  * the one unlock key and each small secret. HMAC and AES-GCM run in libsodium, so a key's bytes are in memory while in
  * use: Apple's level for the bind key.
  *
- * **The unlock key has no presence check** (owner 2026-11-11, Q1+Q2: "stay signed in uses the strongest the device
- * has"). The Secret Service has no such concept: its collection is unlocked by the desktop sign-in, and that login
- * session is the authentication — the web's level. So nothing here prompts, and [DeviceAuthFailed] is never `cancelled`.
+ * **The one level is [StaySignedIn.LOGIN]** (owner 2026-11-11, Q1; D7): the Secret Service has no presence check. Its
+ * collection is unlocked by the desktop sign-in, and that login session is the authentication — the web's level. So
+ * nothing here prompts, [DeviceAuthFailed] is never `cancelled`, and [StaySignedIn.PRESENCE] is neither offered nor
+ * kept: a seal or an open at it is refused (`DeviceAuthFailed(false)`), never made at the login level instead.
  *
  * libsecret is loaded at run time (`dlopen("libsecret-1.so.0")`, `core/secret/veyq_secret.h`), never linked. Where it is
  * absent, where no Secret Service answers on the session bus, or where the collection stays locked, creating a key or
@@ -52,16 +53,15 @@ class LinuxDeviceKeys internal constructor(
 
     /**
      * Whether a Secret Service answers: libsecret loaded and a session opened with the service on the session bus (no
-     * item read, so a locked collection is not asked to open). The switch's capability (D5): where it is false the
-     * "Stay signed in" switch is hidden, since neither the unlock key nor the password trust's bind key could be kept —
-     * unlike Android and Apple without a screen lock, which still keep the password trust. A locked collection the
-     * person does not open later still fails the enrolment, which then falls back as everywhere.
+     * item read, so a locked collection is not asked to open). Where it is false nothing is offered after a sign-in,
+     * since neither the unlock key nor the password trust's bind key could be kept. A locked collection the person does
+     * not open later still fails the enrolment, which leaves the trust it had.
      */
     val secretServiceAvailable: Boolean get() = service?.answers() == true
 
-    /** The login's (the collection opens with the desktop sign-in; no presence check, Q1), or none without a service. */
-    override val staySignedIn: StaySignedIn
-        get() = if (secretServiceAvailable) StaySignedIn.LOGIN else StaySignedIn.NONE
+    /** The login level (the collection opens with the desktop sign-in; no presence check, Q1), or none without a service. */
+    override val staySignedIn: Set<StaySignedIn>
+        get() = if (secretServiceAvailable) setOf(StaySignedIn.LOGIN) else emptySet()
 
     override fun createBindKey(alias: String) {
         val key = p.randomBytes(64)
@@ -79,7 +79,8 @@ class LinuxDeviceKeys internal constructor(
 
     override fun deleteBindKey(alias: String) = clear(BIND + alias)
 
-    override suspend fun sealUnlockable(plaintext: ByteArray, aad: ByteArray): Pair<ByteArray, ByteArray> {
+    override suspend fun sealUnlockable(plaintext: ByteArray, aad: ByteArray, level: StaySignedIn): Pair<ByteArray, ByteArray> {
+        loginOnly(level)
         val key = withContext(Dispatchers.Default) { unlockKey(create = true) }
         return try {
             val iv = p.randomBytes(12)
@@ -89,7 +90,8 @@ class LinuxDeviceKeys internal constructor(
         }
     }
 
-    override suspend fun openUnlockable(iv: ByteArray, ciphertext: ByteArray, aad: ByteArray): ByteArray {
+    override suspend fun openUnlockable(iv: ByteArray, ciphertext: ByteArray, aad: ByteArray, level: StaySignedIn): ByteArray {
+        loginOnly(level)
         val key = withContext(Dispatchers.Default) { unlockKey(create = false) }
         return try {
             p.aesGcmOpen(key, iv, ciphertext, aad)
@@ -124,7 +126,14 @@ class LinuxDeviceKeys internal constructor(
         return key
     }
 
-    override fun deleteUnlockKey() = clear(UNLOCK)
+    /** The Secret Service keeps the login level's key alone: another is refused, never served by it. */
+    private fun loginOnly(level: StaySignedIn) {
+        if (level != StaySignedIn.LOGIN) throw DeviceAuthFailed(cancelled = false, detail = "the Secret Service has no $level level")
+    }
+
+    override fun deleteUnlockKey(level: StaySignedIn) {
+        if (level == StaySignedIn.LOGIN) clear(UNLOCK)
+    }
 
     override fun putSecret(alias: String, value: String) = store(SECRET + alias, "veyq sign-in token", value)
 

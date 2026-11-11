@@ -32,9 +32,10 @@ import kotlin.coroutines.resumeWithException
  *
  *  - a bind key per password-trusted account, an HMAC-SHA256 key whose MAC over `veyq/v1/device-bind` is the DEVICE
  *    wrap's factor;
- *  - one AES-256-GCM unlock key for the remembered accounts, usable for [VALIDITY_SECONDS] after the person
- *    authenticated with a strong biometric or the device's own code, and invalidated by a new biometric enrolment (a
- *    finger someone adds later does not open what was sealed before);
+ *  - an AES-256-GCM unlock key per level for the remembered accounts (D7): the [StaySignedIn.PRESENCE] one usable for
+ *    [VALIDITY_SECONDS] after the person authenticated with a strong biometric or the device's own code, and
+ *    invalidated by a new biometric enrolment (a finger someone adds later does not open what was sealed before); the
+ *    [StaySignedIn.LOGIN] one without user authentication, opened by the unlocked device itself;
  *  - one AES-256-GCM key without authentication that seals the small secrets (a refresh token) kept in preferences.
  *
  * [host] is the activity a prompt is shown over, set while one is resumed.
@@ -44,9 +45,18 @@ class KeystoreDeviceKeys(context: Context, private val host: () -> Activity?) : 
     private val prefs = context.getSharedPreferences("veyq.device-secrets", Context.MODE_PRIVATE)
     private val keyguard = context.getSystemService(KeyguardManager::class.java)
 
-    /** The person's, where a secure lock screen is set (the unlock key needs one), else none: no unlock key can exist. */
-    override val staySignedIn: StaySignedIn
-        get() = if (keyguard?.isDeviceSecure == true) StaySignedIn.PRESENCE else StaySignedIn.NONE
+    /**
+     * Both levels where a secure lock screen is set, else none. The presence key cannot exist without a lock screen; the
+     * login key could, but its guarantee is that the device's own sign-in authenticates, and without a lock nothing does:
+     * the Master Key would open for anyone holding the phone. The password trust stays offered there, as everywhere.
+     */
+    override val staySignedIn: Set<StaySignedIn>
+        get() = if (keyguard?.isDeviceSecure == true) setOf(StaySignedIn.PRESENCE, StaySignedIn.LOGIN) else emptySet()
+
+    private fun unlockAlias(level: StaySignedIn) = when (level) {
+        StaySignedIn.PRESENCE -> UNLOCK
+        StaySignedIn.LOGIN -> UNLOCK_LOGIN
+    }
 
     override fun createBindKey(alias: String) {
         deleteBindKey(alias)
@@ -84,9 +94,11 @@ class KeystoreDeviceKeys(context: Context, private val host: () -> Activity?) : 
         }
     }
 
-    /** Runs [op] with the unlock key, asking the person once when its window has passed. */
-    private suspend fun <T> withUnlockKey(create: Boolean, op: (SecretKey) -> T): T {
-        val key = aesKey(UNLOCK, create, authenticated = true) ?: throw DeviceAuthFailed(cancelled = false, detail = "no unlock key")
+    /** Runs [op] with [level]'s unlock key, asking the person once (at PRESENCE) when its window has passed. */
+    private suspend fun <T> withUnlockKey(level: StaySignedIn, create: Boolean, op: (SecretKey) -> T): T {
+        if (create && level !in staySignedIn) throw DeviceAuthFailed(cancelled = false, detail = "$level is not offered without a secure lock screen")
+        val key = aesKey(unlockAlias(level), create, authenticated = level == StaySignedIn.PRESENCE)
+            ?: throw DeviceAuthFailed(cancelled = false, detail = "no $level unlock key")
         return try {
             try {
                 op(key)
@@ -95,31 +107,32 @@ class KeystoreDeviceKeys(context: Context, private val host: () -> Activity?) : 
                 op(key)
             }
         } catch (e: KeyPermanentlyInvalidatedException) {
-            deleteUnlockKey()
+            deleteUnlockKey(level)
             throw DeviceAuthFailed(cancelled = false, detail = "unlock key invalidated")
         } catch (e: javax.crypto.AEADBadTagException) {
             throw DeviceAuthFailed(cancelled = false, detail = "does not open")
         }
     }
 
-    override suspend fun sealUnlockable(plaintext: ByteArray, aad: ByteArray): Pair<ByteArray, ByteArray> =
+    override suspend fun sealUnlockable(plaintext: ByteArray, aad: ByteArray, level: StaySignedIn): Pair<ByteArray, ByteArray> =
         withContext(Dispatchers.Default) {
-            withUnlockKey(create = true) { key ->
+            withUnlockKey(level, create = true) { key ->
                 val cipher = Cipher.getInstance(AES_GCM).apply { init(Cipher.ENCRYPT_MODE, key); updateAAD(aad) }
                 val sealed = cipher.doFinal(plaintext)
                 cipher.iv to sealed
             }
         }
 
-    override suspend fun openUnlockable(iv: ByteArray, ciphertext: ByteArray, aad: ByteArray): ByteArray =
+    override suspend fun openUnlockable(iv: ByteArray, ciphertext: ByteArray, aad: ByteArray, level: StaySignedIn): ByteArray =
         withContext(Dispatchers.Default) {
-            withUnlockKey(create = false) { key ->
+            withUnlockKey(level, create = false) { key ->
                 Cipher.getInstance(AES_GCM).apply { init(Cipher.DECRYPT_MODE, key, GCMParameterSpec(128, iv)); updateAAD(aad) }.doFinal(ciphertext)
             }
         }
 
-    override fun deleteUnlockKey() {
-        if (keyStore.containsAlias(UNLOCK)) keyStore.deleteEntry(UNLOCK)
+    override fun deleteUnlockKey(level: StaySignedIn) {
+        val alias = unlockAlias(level)
+        if (keyStore.containsAlias(alias)) keyStore.deleteEntry(alias)
     }
 
     /** The system's prompt over the current activity: a strong biometric or the device's code. */
@@ -172,7 +185,9 @@ class KeystoreDeviceKeys(context: Context, private val host: () -> Activity?) : 
     private companion object {
         const val STORE = "AndroidKeyStore"
         const val AES_GCM = "AES/GCM/NoPadding"
+        /** The presence key's alias, the one unlock key there was before the levels (D7): its seals still open. */
         const val UNLOCK = "veyq.unlock"
+        const val UNLOCK_LOGIN = "veyq.unlock.login"
         const val SECRETS = "veyq.secrets"
 
         /** One authentication opens every remembered account of one start, and nothing after. */
