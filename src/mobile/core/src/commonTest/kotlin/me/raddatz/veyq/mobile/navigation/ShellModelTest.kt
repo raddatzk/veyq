@@ -103,4 +103,21 @@ class ShellModelTest {
         // opened as before, back still leads to where it was opened from
         assertSame(home, home.open(pot).goBack())
     }
+
+    @Test
+    fun an_object_trashed_leaves_and_one_chosen_at_the_top_leaves_for_its_applications_list() {
+        val home = Shell(application = null, space = "s").enter(FolderRef("f", "Trips"))
+        val pot = ObjectRef("t", "pot", "EXPENSES_POT", ApplicationId.EXPENSES, "Paris")
+        // chosen from the sidebar: back does not leave it, the trash does — to Expenses' list, nothing open
+        val gone = ShellModel.afterTrash(home.openAtTop(pot), "pot")
+        kotlin.test.assertNull(gone.openObject)
+        assertEquals(ApplicationId.EXPENSES, gone.application)
+        assertEquals("s", gone.space)
+        kotlin.test.assertFalse(gone.top)
+        // opened from Home: back to Home's folder
+        assertSame(home, ShellModel.afterTrash(home.open(pot), "pot"))
+        // another node trashed: the open object stays
+        val open = home.openAtTop(pot)
+        assertSame(open, ShellModel.afterTrash(open, "other"))
+    }
 }

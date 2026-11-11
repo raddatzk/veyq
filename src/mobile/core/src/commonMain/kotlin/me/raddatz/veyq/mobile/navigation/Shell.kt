@@ -120,6 +120,12 @@ data class Shell(
         else -> this
     }
 
+    /**
+     * The open object is gone (to the trash): back to where it was opened from, and one chosen at the top ([top], which
+     * back does not leave) to its application's list — never left open on an object that is no longer there.
+     */
+    fun leave(): Shell = if (openObject != null && top) copy(openObject = null, tab = null, top = false) else goBack()
+
     fun search(on: Boolean): Shell = copy(searching = on)
 
     companion object {

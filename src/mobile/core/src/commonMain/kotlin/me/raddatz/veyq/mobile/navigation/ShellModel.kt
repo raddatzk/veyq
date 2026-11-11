@@ -215,7 +215,7 @@ class ShellModel(
         val before = runCatching { tenant.node(ref.scopeId, ref.nodeId) }.getOrNull()
         val outcome = runCatching { NodeTrash.delete(tenant, ref.scopeId, ref.nodeId) }.getOrDefault(NodeTrash.Deleted.FAILED)
         val r = Trashed(outcome, Notices.trashed(outcome, ref.name), before)
-        if (r.gone && shell?.openObject?.nodeId == ref.nodeId) goBack()
+        if (r.gone) update { afterTrash(it, ref.nodeId) }
         refresh()
         if (r.gone) relocate(ref)
         return r
@@ -373,6 +373,12 @@ class ShellModel(
             val i = shell.path.indexOfFirst { it.nodeId == nodeId }
             return shell.at(tree, if (i > 0) shell.path[i - 1].nodeId else null)
         }
+
+        /**
+         * The shell once node [nodeId] went to the trash: an open object of it leaves ([Shell.leave]) — one opened at the
+         * top for its application's list, since back does not leave it (its undo brings it back to that list, not open).
+         */
+        fun afterTrash(shell: Shell, nodeId: String): Shell = if (shell.openObject?.nodeId == nodeId) shell.leave() else shell
 
         /** How long a trash's undo is offered (the web's `TRASH_UNDO_MS`). */
         const val TRASH_UNDO_MS = 6_000L
