@@ -490,8 +490,15 @@ def run_app(width: int | None, height: int | None, devlogin: bool = False) -> in
         "\n".join([
             f"Get-Process -Name {APP_NAME} -ErrorAction SilentlyContinue | Stop-Process -Force",
             "Start-Sleep -Milliseconds 500",
-            f"Remove-Item -Recurse -Force -ErrorAction SilentlyContinue -Path {ps_quote(str(REMOTE_APP))}",
-            f"Copy-Item -Recurse -Path {ps_quote(str(REMOTE_MOBILE / 'windows' / APP_OUT))} -Destination {ps_quote(str(REMOTE_APP))}",
+            # A file still held open (an app the stop had not ended yet) survived the remove once, and Copy-Item into the
+            # folder left behind then nested the build one level down (`app\win-x64\`): no Veyq.App.exe where the launch
+            # looks (measured 2026-11-11). So: retry the remove, refuse a folder that stays, copy the build's contents.
+            f"$app = {ps_quote(str(REMOTE_APP))}",
+            "foreach ($i in 1..10) { Remove-Item -Recurse -Force -ErrorAction SilentlyContinue -Path $app; "
+            "if (-not (Test-Path $app)) { break }; Start-Sleep -Milliseconds 500 }",
+            "if (Test-Path $app) { Write-Error \"$app could not be removed: a file in it is still open\"; exit 1 }",
+            "New-Item -ItemType Directory -Path $app | Out-Null",
+            f"Copy-Item -Recurse -Path (Join-Path {ps_quote(str(REMOTE_MOBILE / 'windows' / APP_OUT))} '*') -Destination $app",
         ]),
     ))
     if code != 0:
