@@ -1,4 +1,4 @@
-// A node's cover (the header CR's Phase 5; the web's CoverDialog around its 16:9 cropper), Fluent's way: one ContentDialog
+// A node's cover (the spec and the frame core's, ADR 0127's Consequences; the web's CoverDialog around its 16:9 cropper), Fluent's way: one ContentDialog
 // holding the 16:9 frame, a zoom Slider under it, "Choose a picture" (the file open picker for the app's window) and,
 // where the node has a cover, "Remove cover"; Save the primary button, Cancel the close one. A drag pans the picture.
 // The device's part is the platform's (ADR 0127 decision 1): WIC decodes the picked picture (BitmapDecoder, upright by its

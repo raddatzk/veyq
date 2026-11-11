@@ -291,7 +291,7 @@ class LiveBridgeTest {
     }
 
     /**
-     * A node's header and the space's trash through calls (the header CR, Phase 2): in the personal space's root, New
+     * A node's header and the space's trash through calls: in the personal space's root, New
      * folder makes "App header <n>"; its header pins and unpins it, renames it, trashes it and undoes that, trashes it
      * again; the space's trash restores it, then it is trashed and purged. Each step is read back by a fresh read of the
      * server (`Shell.Refresh`, a fresh watch; the trash opened anew), and nothing is left behind: the folder is purged.
@@ -415,7 +415,7 @@ class LiveBridgeTest {
     }
 
     /**
-     * The move and copy sheet and a folder's download through calls (the header CR's Phase 3), over the real core: a folder
+     * The move and copy sheet and a folder's download through calls, over the real core: a folder
      * "App move <n>" made beside the seeded Pot Amsterdam; Amsterdam copied beside itself (its open Pot model's copy), the
      * copy moved into the folder and undone, read back where it was, then moved in again with its undo left to the core's
      * window; the folder copied (with the Pot in it) and downloaded into a file the host named, read back as
@@ -565,7 +565,7 @@ class LiveBridgeTest {
     }
 
     /**
-     * The share sheet through calls (the header CR's Phase 4), over the real core: a folder "App share <n>" made beside the
+     * The share sheet through calls, over the real core: a folder "App share <n>" made beside the
      * seeded Pot Amsterdam; a link minted on it through the form (its address shown once), edited in place (its label read
      * back), renewed (a new address, the old one gone from the list), switched off and on again (its address kept), switched
      * off and deleted — each read back from the sheet's list. The folder is trashed and purged at the end, its links with it.

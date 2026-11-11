@@ -1,4 +1,4 @@
-// The app's ContentDialogs (the header CR's Phase 2), Fluent's way and WinUI's rule: one ContentDialog at a time
+// The app's ContentDialogs, Fluent's way and WinUI's rule: one ContentDialog at a time
 // (a second ShowAsync while one is open throws), so every dialog goes through Show, which refuses a second while the
 // first stands; a confirmation inside a dialog is asked in place (the space's trash's "Delete forever?", as Manage
 // servers asks its password). Each dialog's content is built per open: a control reused under a new parent after its

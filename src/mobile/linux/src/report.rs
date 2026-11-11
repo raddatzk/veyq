@@ -1,4 +1,4 @@
-//! A node's report to its server's moderators (the header CR's Phase 5; core's `ReportSheet`, the web's `ReportDialog`,
+//! A node's report to its server's moderators (ADR 0127 decision 2; core's `ReportSheet`, the web's `ReportDialog`,
 //! ADR 0093), GNOME's way: an `AdwDialog` with Cancel and Send in its header bar over a preferences page — what is reported
 //! (the node whole or only its name) and the category as radio rows, the reason in a text view, the good-faith
 //! confirmation as a check row, the optional contact in an `AdwEntryRow` and the privacy notice's passage on it, opened in

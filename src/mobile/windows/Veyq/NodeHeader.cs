@@ -1,4 +1,4 @@
-// A node's header (the header CR's Phase 2; ADR 0127 decision 2): core's NodeHeaderModel, opened per node on screen
+// A node's header (ADR 0127 decision 2): core's NodeHeaderModel, opened per node on screen
 // (Header.Open) and watched while it shows, drawn Fluent's way as Explorer draws a selection's commands — the plan's
 // buttons as the CommandBar's primary commands (the heart as Favorite), the rest as its secondary ones behind its own
 // More, the menu's last group after a separator —, rename and delete asked in a ContentDialog (Dialogs), the trash's

@@ -1,4 +1,4 @@
-// A node's move and copy sheet (the header CR's Phase 3; core's MoveSheet, the web's MoveNodeDialog and CopyNodesDialog),
+// A node's move and copy sheet (ADR 0127 decision 2; core's MoveSheet, the web's MoveNodeDialog and CopyNodesDialog),
 // Fluent's way as Explorer's "Move to" picks a place: a ContentDialog (WinUI shows one at a time, so the guest folder's
 // "Move out?" is asked in place) with a BreadcrumbBar for the core's trail, one place at a time listed under it — the node
 // itself and what lies below it listed but not to be opened —, why the place takes nothing (or a copy's missing room)

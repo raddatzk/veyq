@@ -1,4 +1,4 @@
-// Which of a header's planned actions this app draws, and in which groups (the header CR): the plan and its words are the
+// Which of a header's planned actions this app draws, and in which groups: the plan and its words are the
 // core's (NodeHeaderModel through Header.*); an application's own action is its page's. Linux's header::drawn, rule for rule. The bar's secondary
 // commands are the plan's menu, then its last group after a separator — read from the plan's groups, so a folder's More
 // and a Pot's are laid out alike whatever each holds.

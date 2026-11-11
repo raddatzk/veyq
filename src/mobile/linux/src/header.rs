@@ -1,4 +1,4 @@
-//! A node's header (the header CR's Phase 2; ADR 0127 decision 2): core's `NodeHeaderModel`, opened per node on screen
+//! A node's header (ADR 0127 decision 2): core's `NodeHeaderModel`, opened per node on screen
 //! (`Header.Open`) and watched while it shows, drawn GNOME's way — the plan's buttons in the content's header bar (the
 //! heart as a toggle, a Pot's Download), the rest in its "More" menu with the menu's last group behind a separator —, its
 //! rename and its delete asked in an `AdwAlertDialog`, the trash's Undo an `AdwToast` held for exactly as long as the core

@@ -1,4 +1,4 @@
-// The core's local day (days since 1970-01-01, the share form's count, the header CR's Phase 4) as the calendar picker's
+// The core's local day (days since 1970-01-01, the share form's count) as the calendar picker's
 // date and back, and as the person reads it. Which day a link ends on, today and the last day a pick may take are the
 // core's (ShareSheet through Share.*); Linux's share_sheet::ymd and day_of.
 using System;

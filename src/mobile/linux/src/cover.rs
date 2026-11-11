@@ -1,4 +1,4 @@
-//! A node's cover (the header CR's Phase 5; the web's `CoverDialog` around its 16:9 cropper), GNOME's way: an `AdwDialog`
+//! A node's cover (the spec and the frame core's, ADR 0127's Consequences; the web's `CoverDialog` around its 16:9 cropper), GNOME's way: an `AdwDialog`
 //! with Cancel and Save in its header bar over the 16:9 frame, a zoom slider under it, "Choose a picture" (GTK's file
 //! dialog, the portal's where there is one) and, where the node has a cover, "Remove cover". A drag pans the picture.
 //!

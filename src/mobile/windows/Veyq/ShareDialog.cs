@@ -1,4 +1,4 @@
-// A node's share sheet (the header CR's Phase 4; core's ShareSheet, the web's FolderShareDialog), Fluent's way: one
+// A node's share sheet (ADR 0127 decision 2; core's ShareSheet, the web's FolderShareDialog), Fluent's way: one
 // ContentDialog (WinUI shows one at a time, so a renew's and a delete's question are asked in place) holding the list of
 // links — each a card with Copy link, Share (Windows' share sheet, DataTransferManager for the app's window) and its other
 // commands in a More flyout —, the new-link or edit form (RadioButtons for the role, a TextBox for the label, a ToggleSwitch

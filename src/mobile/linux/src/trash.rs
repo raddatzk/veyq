@@ -1,4 +1,4 @@
-//! A space's trash (the header CR's Phase 2; core's `TrashSheet`, the web's `SpaceTrashDialog.vue`), GNOME's way: an
+//! A space's trash (ADR 0127 decision 2; core's `TrashSheet`, the web's `SpaceTrashDialog.vue`), GNOME's way: an
 //! `AdwDialog` from the switcher's menu, each deleted subtree's root a row with Restore and "Delete forever", the latter
 //! asked first in an `AdwAlertDialog` naming it. A row whose name was taken meanwhile asks for another under it. Every
 //! state is the core's (`Trash.*`, watched while the dialog is open); the dialog only lays it out.
