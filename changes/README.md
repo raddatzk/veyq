@@ -2221,6 +2221,23 @@ backend → web is the order the *work* is done in, not the order it may *merge*
 client sends required merges its server and client phases in one merge, or keeps the field optional until the client
 phase merges.
 
+### A multi-job write flow names, per write, the state a failure right after it leaves — and who puts it back
+
+cr-release-promotes-a-tested-snapshot (2026-11-06) planned the promotion's writes in order — move `<major>` and
+`latest`, move the draft onto `v<version>`, push that tag — and never asked what the world looks like if the run dies
+between two of them: `latest` would have named an image whose release never published, and a run that had pushed the
+tag could not be retried, since its own checks refuse an existing tag. The build reordered the channels after the
+publication and added the `refused` job that rolls a half-done run back. So a refine of a workflow with more than one
+write lists, for each write, what a failure just after it leaves and which job or person restores it.
+
+### A done-when names the proof; a command is one way to get it
+
+The same CR's phase 1 named `run_pipeline.py --job version` as its bar, and the phase's brief forbade pipeline runs
+(the owner's rule of that phase) — a bar the implementation could not meet as written, though the guard's executed
+scenario proved the same thing. Name what must be shown; the command is an example of how. And before a CR decides to
+*record* a value somewhere, grep where it would come from: the same CR planned to record the major entry, which the
+tools image already carried (`/opt/veyq/release.json`).
+
 ### Every CR closes with a short, honest retrospective
 
 A `## Retrospective` section: what went wrong

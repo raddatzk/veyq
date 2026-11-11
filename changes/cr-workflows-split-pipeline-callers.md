@@ -36,8 +36,8 @@ pure split, no security change):
 
 - ADR 0091 decisions 2 (one pipeline per commit), 4 (when what runs), 5 (build once, promote; the 2026-11-07
   amendment); ADR 0045 (the mutation gates' trigger lists); ADR 0057 §3 (the identity a verification pins).
-- Live CR `cr-release-promotes-a-tested-snapshot` (phase 2, retention, after V1) names `ci.yml` in its text; this CR
-  re-points the code and corrects that CR's identity lines in its docs phase.
+- `cr-release-promotes-a-tested-snapshot` was closed on 2026-11-11 (its retention phase unbuilt, inbox #460); nothing
+  of it is left to re-point.
 - **Substrate:** worktree `claude/awesome-sinoussi-6ae208` at `0dd2438c9` (= pushed `main`), clean. Remote
   `raddatzk/veyq`.
 - **Gates at refine:** `for f in scripts/validate_*.py; do /usr/bin/python3 "$f" || echo "RED $f"; done` (without
@@ -213,7 +213,7 @@ Re-point readers first: everything works on today's tree (no call job) and on a 
   verify-a-release.md`, `run/upgrade.mdx`, `security/how-veyq-is-tested.md` (stage map), `security/
   verify-it-yourself.md`, `.claude/skills/trust-chain/SKILL.md` (its line citations), the coverage prose (41 hits
   `ci.yml → stack|frontend` → `pipeline.yml → …`), the comment-only mentions in scripts/src/tests/launcher/.github,
-  and `cr-release-promotes-a-tested-snapshot.md`'s identity lines.
+  (and the snapshot CR's identity lines, while it lived).
 - `validate_guard_gaps.py --force` (guards changed in phases 1–3).
 - **Done when:** `grep -rn 'ci\.yml\|mutation-backend\.yml' . --exclude-dir=.git` hits only history-stating lines
   (ADR amendments); trust chain green; guard gaps green; the site's check if a site page changed.

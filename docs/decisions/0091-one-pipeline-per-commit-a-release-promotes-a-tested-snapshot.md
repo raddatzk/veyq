@@ -123,7 +123,8 @@ Three structural costs sat on top of what a run took:
      does nothing else; the retention job below deletes a snapshot's tag with its images, so the release page's tag
      list offers exactly the snapshots that can still be promoted. The owner saves a **draft** release on one of them,
      with the notes in their words, then presses *Run workflow* on `release.yml` — a dispatch with no required input,
-     not the commit-naming one: it promotes the one draft on a `snapshot-` tag and refuses none or several. A saved
+     not the commit-naming one: exactly one draft may exist, on a `snapshot-` tag, and it promotes that one — none,
+several, or one on another tag is refused (`scripts/promote.py` check 1). A saved
      draft starts no workflow by itself (GitHub runs none for a draft's `created`, `edited` or `deleted`, measured
      2026-11-06 on the events page), and its publication comes too late to attach anything (owner's choice of trigger,
      2026-11-06). The promotion refuses unless the tag

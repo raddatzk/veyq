@@ -10,7 +10,8 @@ name: Release
 #
 # GitHub starts no workflow for a draft (its events page: "Workflows are not triggered for the created, edited, or
 # deleted activity types for draft releases"), and a published immutable release takes no asset, so the draft cannot
-# start this by itself and the run publishes it last.
+# start this by itself and the run publishes it last. A dispatch also runs the branch tip's copy of this file, where a
+# `release` event would run the snapshot commit's: the promotion's logic is always the newest.
 #
 # This file is the RELEASE identity: keyless signing names the workflow that signed, so `cosign verify` with
 # `.github/workflows/release.yml` on `main` or `release/<major>.x` (site/src/content/docs/run/verify-a-release.md,

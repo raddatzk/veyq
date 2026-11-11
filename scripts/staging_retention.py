@@ -119,6 +119,7 @@ def main() -> int:
     tips = {str(b["commit"]["sha"]) for b in _paged(f"repos/{args.repository}/branches")}
     total = 0
     for image in args.image:
+        # `users/…` while the repository is a user's; `orgs/…` after the move to the organisation `veyq` (inbox #471).
         versions = _paged(f"users/{args.owner}/packages/container/{image}/versions")
         cache: dict[str, set[str]] = {}
 
@@ -137,7 +138,7 @@ def main() -> int:
         print(f"{image}: {len(versions)} version(s), {len(deletions)} to delete")
         for d in deletions:
             print(f"  delete {image} version {d.version_id} ({d.digest}): {d.reason}")
-            _gh("--method", "DELETE", f"users/{args.owner}/packages/container/{image}/versions/{d.version_id}")
+            _gh("--method", "DELETE", f"users/{args.owner}/packages/container/{image}/versions/{d.version_id}")  # orgs/ too
         total += len(deletions)
     print(f"staging retention: {total} version(s) deleted, older than {args.days:g} days and no branch tip")
     return 0

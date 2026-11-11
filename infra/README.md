@@ -241,7 +241,8 @@ gh workflow run publish.yml --ref main               # the tip's snapshot now, a
   signing names the file holding the signing job, and `snapshot` is Publish's own; a snapshot signed by `ci.yml`, before
   the split of 2026-11-07, is not promotable). The two are
   the same digests, so the identity is what tells them apart: Verify a release and `veyqctl` accept only the release
-  identity. To check a snapshot you try on a throwaway instance, verify it under the snapshot identity:
+  identity. To check a snapshot you try on a throwaway instance, verify it under the snapshot identity (the two
+  commands spell `raddatzk/veyq` themselves and no guard reads them: a move of the repository edits them by hand):
 
   ```sh
   cosign verify ghcr.io/raddatzk/veyq@sha256:<digest> \
@@ -266,7 +267,9 @@ gh workflow run publish.yml --ref main               # the tip's snapshot now, a
 **A release promotes a snapshot** (ADR 0091 decision 5, `.github/workflows/release.yml`). Nothing is built: the
 images every lane tested get the release's names and a second signature, from `release.yml` — the identity Verify a
 release and `veyqctl` accept. Once, before the first release: switch on **immutable releases** in the repository's
-settings (ADR 0096 decision 3). Then, per release:
+settings (ADR 0096 decision 3). Never delete a published release to redo it: GitHub allows deleting an immutable
+release, but its tag name can never be used again (GitHub's immutable-releases page, 2026-11-06; not tried here). Then,
+per release:
 
 1. **GitHub → Releases → Draft a new release.** *Choose a tag*: the snapshot's, `snapshot-<major>.<minor>` — the list
    offers exactly the snapshots that are still promotable. The title is overwritten (`veyq <major>.<minor>`); write the
