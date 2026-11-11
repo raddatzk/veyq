@@ -140,10 +140,14 @@ internal sealed class ShareDialog
         if (s.freshAddress is { } fresh)
         {
             _formOf = null;
-            Plain(dialog);
+            Plain(dialog, fresh: true);
             DrawFresh(fresh, share);
         }
-        else if (s.form is { } form) DrawForm(dialog, s, form, share);
+        else if (s.form is { } form)
+        {
+            dialog.CloseButtonText = Words.ShareDone();
+            DrawForm(dialog, s, form, share);
+        }
         else
         {
             _formOf = null;
@@ -152,11 +156,13 @@ internal sealed class ShareDialog
         }
     }
 
-    /// <summary>No form: only Done closes the dialog.</summary>
-    private static void Plain(ContentDialog dialog)
+    /// <summary>No form: only Done closes the dialog — on the address shown once its own Done leads back to the list, so
+    /// the dialog's is not shown beside it.</summary>
+    private static void Plain(ContentDialog dialog, bool fresh = false)
     {
         dialog.PrimaryButtonText = "";
         dialog.SecondaryButtonText = "";
+        dialog.CloseButtonText = fresh ? "" : Words.ShareDone();
     }
 
     private void DrawList(ShareShown s, long share)
@@ -362,14 +368,16 @@ internal sealed class ShareDialog
         var label = new TextBox();
         AutomationProperties.SetAutomationId(label, "share-label");
         label.TextChanged += (_, _) => { if (!_drawing) Act.Send(new Call.ShareLabel { share = share, label = label.Text }); };
-        var lockOn = new ToggleSwitch();
+        // the switches carry no words of their own (WinUI's On/Off speak the system's language): the header says what
+        // each turns on
+        var lockOn = new ToggleSwitch { OnContent = "", OffContent = "" };
         AutomationProperties.SetAutomationId(lockOn, "share-lock");
         lockOn.Toggled += (_, _) => { if (!_drawing) Act.Send(new Call.ShareLockOn { share = share, on = lockOn.IsOn }); };
         var password = new PasswordBox { Header = Words.SharePasswordSection() };
         AutomationProperties.SetAutomationId(password, "share-password");
         password.PasswordChanged += (_, _) => { if (!_drawing) Act.Send(new Call.SharePassword { share = share, password = password.Password }); };
         var tooShort = new TextBlock { Text = Words.SharePasswordShort(10), Style = (Style)Application.Current.Resources["CaptionTextBlockStyle"] };
-        var end = new ToggleSwitch();
+        var end = new ToggleSwitch { OnContent = "", OffContent = "" };
         AutomationProperties.SetAutomationId(end, "share-end");
         end.Toggled += (_, _) => { if (!_drawing) Act.Send(new Call.ShareEndOn { share = share, on = end.IsOn }); };
         var day = new CalendarDatePicker { Header = Words.ShareExpiresOn() };
