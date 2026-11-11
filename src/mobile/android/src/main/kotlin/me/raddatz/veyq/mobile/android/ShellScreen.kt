@@ -680,6 +680,10 @@ private fun ArrangedListScreen(
     LazyColumn(Modifier.fillMaxSize().padding(horizontal = 8.dp), state = state, contentPadding = androidx.compose.foundation.layout.PaddingValues(bottom = bottom)) {
         group(R.string.drawer_favorites, list.favorites, onOpen)
         group(R.string.drawer_recent, list.recent, onOpen)
+        // the rest has no heading: under Favorites or Recent a divider sets it apart, else its rows ran on as theirs
+        if (list.all.isNotEmpty() && (list.favorites.isNotEmpty() || list.recent.isNotEmpty())) {
+            item { androidx.compose.material3.HorizontalDivider(Modifier.padding(horizontal = 16.dp, vertical = 8.dp)) }
+        }
         group(null, list.all, onOpen)
     }
 }

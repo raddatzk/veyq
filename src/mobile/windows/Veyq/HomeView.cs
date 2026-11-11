@@ -83,8 +83,19 @@ internal static class HomeView
             () => Act.Send(new Call.ShellEnter { folder = new FolderRef { nodeId = n.nodeId, name = n.name } }));
 
     /// <summary>A section: its heading (if any), then its rows as one list whose item click opens the row.</summary>
-    private static void Section(StackPanel content, string? heading, IEnumerable<ListViewItem> rows)
+    private static void Section(StackPanel content, string? heading, IEnumerable<ListViewItem> rows, bool apart = false)
     {
+        if (heading is null && apart)
+        {
+            // a group without a heading under another (an application's rest under its Favorites or Recent) is set apart
+            // by Fluent's divider, as a heading sets the others apart; without it the rows ran on as one list
+            content.Children.Add(new Microsoft.UI.Xaml.Shapes.Rectangle
+            {
+                Height = 1,
+                Margin = new Thickness(12, 12, 12, 8),
+                Fill = (Microsoft.UI.Xaml.Media.Brush)Application.Current.Resources["DividerStrokeColorDefaultBrush"],
+            });
+        }
         if (heading is not null)
         {
             var title = new TextBlock { Text = heading, Style = (Style)Application.Current.Resources["BodyStrongTextBlockStyle"], Margin = new Thickness(12, 8, 0, 0) };
@@ -168,9 +179,12 @@ internal static class HomeView
             content.Children.Add(Empty());
             return scroll;
         }
+        var drawn = false;
         foreach (var (title, refs) in new (string?, IReadOnlyList<ObjectRef>)[] { (Words.DrawerFavorites(), list.favorites), (Words.DrawerRecent(), list.recent), (null, list.all) })
         {
-            if (refs.Count > 0) Section(content, title, refs.Select(ObjectRow));
+            if (refs.Count == 0) continue;
+            Section(content, title, refs.Select(ObjectRow), apart: drawn);
+            drawn = true;
         }
         return scroll;
     }
