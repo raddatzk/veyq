@@ -68,6 +68,11 @@ a table of attacks with the state of each today, followed by a list of what stay
 - **Missing hardening headers or rate limits on an instance you configured yourself.** Limits are deliberately
   tunable per instance
   ([ADR 0051](https://github.com/raddatzk/veyq/blob/main/docs/decisions/0051-declarative-rate-limit-posture.md)).
+- **No web application firewall.** Neither recipe ships one, on purpose: the content of a request body is
+  ciphertext, so a generic rule set has nothing to inspect there, and a request the API contract does not allow is
+  refused by the application itself
+  ([security-model § Threat model](https://github.com/raddatzk/veyq/blob/main/docs/crosscutting/security-model.md#threat-model--trust-boundaries)).
+  A missing WAF is not a finding; an injection the contract lets through is.
 
 ## Supported versions
 
