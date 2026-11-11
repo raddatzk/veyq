@@ -23,12 +23,37 @@ import me.raddatz.veyq.mobile.blob.ApplicationBlobs
  * attaches the upload and writes the meta (`setNodeCover`, compared against the blob the meta being replaced named); removing
  * one frees the blob in the same way (`removeNodeCover`); a moved crop is a plain meta write. Every write is revision-checked
  * ([NodeMetaWrite]), the meta's other fields kept. The image the app uploads is the device's one JPEG of the picked picture
- * (the web's `COVER_SPEC`: long edge 2048, quality 0.85), made by the platform.
+ * (the web's `COVER_SPEC`: long edge 2048, quality 0.85), made by the platform to [LONG_EDGE] and [QUALITY].
  */
 object NodeCover {
     const val ROLE = "COVER"
     const val FIELD = "cover"
 
+    /**
+     * The cover's JPEG as every client makes it (the web's `COVER_SPEC`): the picked picture whole, its long edge at most
+     * [LONG_EDGE] pixels (never enlarged), at [QUALITY] — the platform decodes and encodes, these numbers are the core's.
+     */
+    const val LONG_EDGE = 2048
+    const val QUALITY = 0.85
+
+    /** [QUALITY] on the 0–100 scale an encoder that takes a percentage reads (Android's `compress`, gdk-pixbuf's saver). */
+    const val QUALITY_PERCENT = 85
+
+    /** A list's small picture of a cover is decoded at about this many pixels on an edge (a row draws it a few dozen wide). */
+    const val THUMBNAIL_EDGE = 384
+
+    /**
+     * The size a picture of [width] × [height] pixels is encoded at as a cover: scaled so its long edge is at most
+     * [LONG_EDGE], its aspect kept, never enlarged, each side at least one pixel.
+     */
+    fun encodedSize(width: Int, height: Int): IntArray {
+        val long = maxOf(width, height)
+        if (long <= LONG_EDGE || width <= 0 || height <= 0) return intArrayOf(width, height)
+        val f = LONG_EDGE.toDouble() / long
+        return intArrayOf((width * f).toInt().coerceAtLeast(1), (height * f).toInt().coerceAtLeast(1))
+    }
+
+    @kotlinx.serialization.Serializable
     data class Crop(val x: Double, val y: Double, val width: Double, val height: Double) {
         companion object {
             val FULL = Crop(0.0, 0.0, 1.0, 1.0)

@@ -50,4 +50,19 @@ class NodeCoverTest {
         kotlin.test.assertEquals(setOf("a"), c.keep)
         kotlin.test.assertEquals(mapOf("b" to "b2@0.5,0,0.5,1", "new" to "b4@0,0,1,1"), c.open)
     }
+
+    @Test
+    fun a_covers_jpeg_is_the_webs_spec_and_its_size_keeps_the_aspect_without_enlarging() {
+        // the web's COVER_SPEC: long edge 2048, quality 0.85; a list's picture at least 384 on its short edge
+        kotlin.test.assertEquals(2048, NodeCover.LONG_EDGE)
+        kotlin.test.assertEquals(0.85, NodeCover.QUALITY)
+        kotlin.test.assertEquals(kotlin.math.round(NodeCover.QUALITY * 100).toInt(), NodeCover.QUALITY_PERCENT)
+        kotlin.test.assertEquals(384, NodeCover.THUMBNAIL_EDGE)
+        kotlin.test.assertContentEquals(intArrayOf(2048, 1536), NodeCover.encodedSize(4000, 3000))
+        kotlin.test.assertContentEquals(intArrayOf(1152, 2048), NodeCover.encodedSize(3024, 5376))
+        kotlin.test.assertContentEquals(intArrayOf(2048, 1), NodeCover.encodedSize(10000, 2))
+        // a picture inside the spec is never enlarged
+        kotlin.test.assertContentEquals(intArrayOf(800, 600), NodeCover.encodedSize(800, 600))
+        kotlin.test.assertContentEquals(intArrayOf(2048, 2048), NodeCover.encodedSize(2048, 2048))
+    }
 }

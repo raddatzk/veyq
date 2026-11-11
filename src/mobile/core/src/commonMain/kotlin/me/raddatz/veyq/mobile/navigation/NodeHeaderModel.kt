@@ -11,6 +11,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import me.raddatz.veyq.mobile.AppKinds
+import me.raddatz.veyq.mobile.session.NodeCover
 import me.raddatz.veyq.mobile.session.OpenNode
 import me.raddatz.veyq.mobile.words.Msg
 import me.raddatz.veyq.mobile.words.Notice
@@ -26,10 +27,14 @@ import me.raddatz.veyq.mobile.words.Notices
  * - **pin**: the heart turns at once and turns back when the write did not land, with its notice;
  * - **trash**: the undo is offered for [ShellModel.TRASH_UNDO_MS], which this model runs, and an open object of the node
  *   closes once it is gone;
- * - **rename**: why it did not land, or the notice that a link kept the old name (the rename stands).
+ * - **rename**: why it did not land, or the notice that a link kept the old name (the rename stands);
+ * - **the cover** of a kind that takes one: where its frame sits ([State.cover], read when the header opens and after each
+ *   cover write), its picture, a picked picture set (the platform's JPEG to [NodeCover]'s spec) or the stored one framed
+ *   anew, and its removal — what the bridge's hosts draw; Android and Apple still write their covers through `NodeCover`
+ *   directly.
  *
  * Each app draws [state] (or [watch]) and the dialogs; what it says is a [Notice] the actions return. The move, the copy,
- * the download, the share, the report and the cover stay the apps' doors for now (the header CR's later phases).
+ * the share and the report are sheets of their own ([MoveSheet], [ShareSheet], [ReportSheet]).
  */
 class NodeHeaderModel(
     val node: NodeAt,
@@ -56,6 +61,13 @@ class NodeHeaderModel(
         fun closeOpen(ref: NodeAt)
         /** After each write that went through, for what the app keeps around the lists (its rows' details). */
         fun changed()
+        /** Where the frame of [ref]'s cover sits, or null where its meta names none. */
+        suspend fun cover(ref: NodeAt): NodeCover.Crop? = null
+        /** [ref]'s cover picture (the JPEG its uploader made), or null. */
+        suspend fun coverPicture(ref: NodeAt): ByteArray? = null
+        suspend fun setCover(ref: NodeAt, jpeg: ByteArray, crop: NodeCover.Crop): NodeCover.Outcome = NodeCover.Outcome.FAILED
+        suspend fun recropCover(ref: NodeAt, crop: NodeCover.Crop): NodeCover.Outcome = NodeCover.Outcome.FAILED
+        suspend fun removeCover(ref: NodeAt): NodeCover.Outcome = NodeCover.Outcome.FAILED
     }
 
     data class State(
@@ -67,6 +79,8 @@ class NodeHeaderModel(
         val undo: Notice? = null,
         /** The node went to the trash (or was gone already): its page has left. */
         val gone: Boolean = false,
+        /** Where the frame of the node's cover sits; null while it has none (or its kind takes none). */
+        val cover: NodeCover.Crop? = null,
     )
 
     private var facts: AppKinds.Facts? = facts
@@ -91,6 +105,7 @@ class NodeHeaderModel(
             reportOffered = door.reportOffered()
             recompose()
         }
+        if (AppKinds.header(node.kind)?.takesCover == true) scope.launch { readCover() }
     }
 
     /** What the kind's page knows now (null: it cannot tell yet): the rights follow. */
@@ -119,6 +134,9 @@ class NodeHeaderModel(
     /** A core action's words ([NodeHeader.label]; the delete's its kind's title); null for an application's own. */
     fun label(id: String, hasCover: Boolean): Msg? =
         NodeHeader.label(id, node.kind, current.pinned, hasCover) ?: if (id == NodeHeader.DELETE) deleteTitle else null
+
+    /** A core action's words with the cover's state as the header holds it ([State.cover]). */
+    fun label(id: String): Msg? = label(id, current.cover != null)
 
     /** The delete's title in the kind's words (`deleteTitle`). */
     val deleteTitle: Msg get() = AppKinds.header(node.kind)?.deleteTitle ?: Msg.FOLDER_DELETE
@@ -188,5 +206,39 @@ class NodeHeaderModel(
         door.changed()
         // renamed; a link that kept the old name is said (the rename stands)
         return Renamed(r.notice, if (r.linksFailed) Notice(Msg.SHARE_NAME_RESEAL_FAILED) else null)
+    }
+
+    private suspend fun readCover() {
+        val crop = runCatching { door.cover(node) }.getOrNull()
+        _state.update { it.copy(cover = crop) }
+    }
+
+    /** The cover's picture as stored (the frame is [State.cover]); null where there is none or it did not open. */
+    suspend fun coverPicture(): ByteArray? = runCatching { door.coverPicture(node) }.getOrNull()
+
+    /**
+     * Sets the cover: [jpeg] (the platform's encoding of a picked picture, [NodeCover.LONG_EDGE] and [NodeCover.QUALITY])
+     * framed by [crop], or — [jpeg] null — the stored picture framed anew by [crop] (its blob kept, the web's `keep`). Why
+     * not, or null once it landed; the frame is read again either way.
+     */
+    suspend fun saveCover(jpeg: ByteArray?, crop: NodeCover.Crop): Notice? {
+        val outcome = runCatching {
+            when {
+                jpeg != null -> door.setCover(node, jpeg, crop)
+                current.cover != null -> door.recropCover(node, crop)
+                else -> NodeCover.Outcome.FAILED
+            }
+        }.getOrDefault(NodeCover.Outcome.FAILED)
+        return afterCover(outcome)
+    }
+
+    /** Removes the cover (its blob freed); why not, or null once it landed. */
+    suspend fun removeCover(): Notice? = afterCover(runCatching { door.removeCover(node) }.getOrDefault(NodeCover.Outcome.FAILED))
+
+    private suspend fun afterCover(outcome: NodeCover.Outcome): Notice? {
+        readCover()
+        if (outcome != NodeCover.Outcome.DONE) return Notice(Msg.COVER_FAILED)
+        door.changed()
+        return null
     }
 }

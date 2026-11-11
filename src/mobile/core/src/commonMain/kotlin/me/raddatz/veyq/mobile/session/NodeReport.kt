@@ -63,6 +63,12 @@ object NodeReport {
     /** The privacy notice's passage on a reporter's contact (GDPR Art. 13 where a contact is taken). */
     const val PRIVACY_ANCHOR = "reporter-contact"
 
+    /**
+     * The server's privacy notice at its passage on a reporter's contact (the web's `privacyLink`): the page under the tenant's
+     * [origin], whatever trailing slash it was written with.
+     */
+    fun privacyUrl(origin: String): String = "${origin.trimEnd('/')}/privacy#$PRIVACY_ANCHOR"
+
     /** Whether a report may be sent: a category chosen, a reason given, good faith confirmed (the web's form). */
     fun canSend(category: String?, reason: String, goodFaith: Boolean): Boolean = category != null && reason.isNotBlank() && goodFaith
 

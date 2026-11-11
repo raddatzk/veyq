@@ -13,6 +13,7 @@ class CoverFrame(
     val imageWidth: Double, val imageHeight: Double, val frameWidth: Double, val frameHeight: Double,
 ) {
     /** Where the image sits: its zoom over [baseScale], and its top-left against the frame's (≤ 0). */
+    @kotlinx.serialization.Serializable
     data class Pose(val zoom: Double, val x: Double, val y: Double)
 
     val baseScale: Double = max(frameWidth / imageWidth, frameHeight / imageHeight)

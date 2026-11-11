@@ -15,7 +15,9 @@ import me.raddatz.veyq.mobile.AppKinds
 import me.raddatz.veyq.mobile.export.NodeExport
 import me.raddatz.veyq.mobile.export.SubtreeCopy
 import me.raddatz.veyq.mobile.session.FolderCreate
+import me.raddatz.veyq.mobile.session.NodeCover
 import me.raddatz.veyq.mobile.session.NodeCreate
+import me.raddatz.veyq.mobile.session.NodeMetaWrite
 import me.raddatz.veyq.mobile.session.NodeMove
 import me.raddatz.veyq.mobile.session.NodeRename
 import me.raddatz.veyq.mobile.session.NodeReport
@@ -273,6 +275,14 @@ class ShellModel(
             override suspend fun rename(ref: NodeAt, name: String) = this@ShellModel.rename(ref, name)
             override fun closeOpen(ref: NodeAt) = closeOpen(ref)
             override fun changed() = changed()
+            override suspend fun cover(ref: NodeAt): NodeCover.Crop? {
+                val n = tenant.node(ref.scopeId, ref.nodeId) ?: return null
+                return NodeCover.read(NodeMetaWrite.openForWrite(tenant.account.suite, n.scopeId, n.id, n.key, n.wrappedMeta))?.crop
+            }
+            override suspend fun coverPicture(ref: NodeAt) = NodeCover.openNode(tenant, ref.nodeId)
+            override suspend fun setCover(ref: NodeAt, jpeg: ByteArray, crop: NodeCover.Crop) = NodeCover.set(tenant, ref.scopeId, ref.nodeId, jpeg, crop)
+            override suspend fun recropCover(ref: NodeAt, crop: NodeCover.Crop) = NodeCover.recrop(tenant, ref.scopeId, ref.nodeId, crop)
+            override suspend fun removeCover(ref: NodeAt) = NodeCover.remove(tenant, ref.scopeId, ref.nodeId)
         })
 
     private var reportKnown: Boolean? = null
@@ -412,6 +422,13 @@ class ShellModel(
             CoroutineScope(Dispatchers.Default).launch { refresh() }
         }
     }, now)
+
+    /** The report of [node] to the tenant's moderators over this tenant ([ReportSheet], core's [NodeReport]). */
+    fun reportSheet(node: NodeAt): ReportSheet = ReportSheet(node, object : ReportSheet.Door {
+        override val origin get() = tenant.origin
+        override suspend fun send(scope: NodeReport.Scope, category: String, reason: String, contact: String) =
+            NodeReport.report(tenant, node.scopeId, node.nodeId, scope, category, reason, contact)
+    })
 
     /**
      * Node [ref] with everything under it as the web's ZIP into [sink] (`NodeExport.walk`, `write`; the kinds the build

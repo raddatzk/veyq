@@ -7,6 +7,7 @@ import kotlinx.coroutines.test.advanceTimeBy
 import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
 import me.raddatz.veyq.mobile.AppKinds
+import me.raddatz.veyq.mobile.session.NodeCover
 import me.raddatz.veyq.mobile.session.NodeRename
 import me.raddatz.veyq.mobile.session.NodeTrash
 import me.raddatz.veyq.mobile.session.OpenNode
@@ -57,6 +58,28 @@ class NodeHeaderModelTest {
         override suspend fun rename(ref: NodeAt, name: String) = ShellModel.Renamed(renamed, Notices.renameRefused(renamed))
         override fun closeOpen(ref: NodeAt) { closed += ref }
         override fun changed() { changes++ }
+        var stored: NodeCover.Crop? = null
+        var picture: ByteArray? = null
+        var coverLands = true
+        val coverWrites = mutableListOf<String>()
+        override suspend fun cover(ref: NodeAt) = stored
+        override suspend fun coverPicture(ref: NodeAt) = picture
+        override suspend fun setCover(ref: NodeAt, jpeg: ByteArray, crop: NodeCover.Crop): NodeCover.Outcome {
+            coverWrites += "set ${jpeg.size}"
+            if (!coverLands) return NodeCover.Outcome.REFUSED
+            stored = crop; picture = jpeg
+            return NodeCover.Outcome.DONE
+        }
+        override suspend fun recropCover(ref: NodeAt, crop: NodeCover.Crop): NodeCover.Outcome {
+            coverWrites += "recrop"
+            stored = crop
+            return NodeCover.Outcome.DONE
+        }
+        override suspend fun removeCover(ref: NodeAt): NodeCover.Outcome {
+            coverWrites += "remove"
+            stored = null; picture = null
+            return NodeCover.Outcome.DONE
+        }
     }
 
     private fun TestScope.header(node: NodeAt, door: Door = Door(), facts: AppKinds.Facts? = AppKinds.Facts()) =
@@ -168,5 +191,35 @@ class NodeHeaderModelTest {
         assertEquals(Notice(Msg.NODE_SAVE_FAILED), failed.problem)
         assertNull(failed.notice)
         assertEquals(3, door.changes)
+    }
+
+    @Test
+    fun the_cover_is_read_at_open_set_framed_anew_and_removed() = runTest {
+        val door = Door().apply { stored = NodeCover.Crop(0.5, 0.0, 0.5, 1.0) }
+        val h = header(folder, door)
+        assertEquals(NodeCover.Crop(0.5, 0.0, 0.5, 1.0), h.current.cover, "read when the header opens")
+        assertEquals(Msg.COVER_CHANGE, h.label(NodeHeader.COVER))
+        // no picture picked: the stored one framed anew, its blob kept
+        val left = NodeCover.Crop(0.0, 0.0, 0.5, 1.0)
+        assertNull(h.saveCover(null, left))
+        assertEquals(listOf("recrop"), door.coverWrites)
+        assertEquals(left, h.current.cover)
+        // a picked picture is uploaded with its frame
+        assertNull(h.saveCover(ByteArray(3), NodeCover.Crop.FULL))
+        assertEquals("set 3", door.coverWrites.last())
+        assertEquals(3, h.coverPicture()?.size)
+        // a write that did not land says so, the frame read again
+        door.coverLands = false
+        assertEquals(Notice(Msg.COVER_FAILED), h.saveCover(ByteArray(4), left))
+        assertEquals(NodeCover.Crop.FULL, h.current.cover)
+        assertNull(h.removeCover())
+        assertNull(h.current.cover)
+        assertEquals(Msg.COVER_SET, h.label(NodeHeader.COVER))
+        // nothing to frame anew without a cover
+        assertEquals(Notice(Msg.COVER_FAILED), h.saveCover(null, left))
+        assertEquals(listOf("recrop", "set 3", "set 4", "remove"), door.coverWrites)
+        assertEquals(3, door.changes, "only the writes that landed")
+        // a kind that takes no cover asks for none
+        assertNull(header(file, Door().apply { stored = left }).current.cover)
     }
 }
