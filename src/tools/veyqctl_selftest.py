@@ -1806,6 +1806,8 @@ def test_gitops_init(tmp: pathlib.Path) -> None:
     rc, out = run_main(["--source", mirror, "init", "--gitops", d, "--release", "1.0", *INIT, "--secrets",
                         "external-secrets", "--secret-store", "vault"], host)
     files = {p.relative_to(d).as_posix() for p in d.rglob("*") if p.is_file()}
+    check("init without the server shows no server outline", "With the server, after the questions" not in out
+          and "sets up a veyq instance" in out, out[:300])
     check("init --gitops: writes the Application, the values, resources/ with ExternalSecrets, and veyqctl.json",
           rc == 0 and files == {"application.yaml", "values.yaml", vc.GITOPS_FILE, "resources/kustomization.yaml",
                                 "resources/namespace.yaml", "resources/backup-pvc.yaml",
@@ -2344,6 +2346,9 @@ def test_server_path(tmp: pathlib.Path) -> None:
         check("server path: a host key not confirmed is refused — not pinned, nothing pushed, ~/.ssh and ~/.kube "
               "untouched", rc == 1 and "not confirmed" in out and not vc.pinned_host_key(top) and not host.pushed
               and outside() == before and not host.ran("ansible-playbook"), out[-500:])
+        check("init begins by saying what it does, and the server path adds its steps' outline",
+              out.index("sets up a veyq instance") < out.index("1. Setup") and "With the server, after the questions"
+              in out, out[:600])
         rendered = (top / ".copier-answers.yml").read_text()
         secrets_file = (top / vc.SERVER_SECRETS).read_text()
         setup = json.loads((top / vc.SETUP_FILE).read_text())

@@ -2350,10 +2350,29 @@ def recorded(host: Host, key: str, value: str) -> str:
     return value
 
 
+INIT_INTRO = """
+veyqctl init — sets up a veyq instance: on Docker Compose on this host, or as veyq's half of a Git repository an
+Argo CD syncs; in an empty repository, with the server and its cluster too (veyq-server: k3s, Argo CD, Traefik,
+cert-manager).
+
+  1. Setup      what to create, and where
+  2. Programs   what it needs on this machine: anything missing is named, with how to install it, and waited for
+  3. Questions  everything else, at once; every answer is kept (in the repository's veyq-setup.json)
+  Then the steps, each said as it comes. Whatever changes something outside the repository or cannot be undone
+  is asked first. Stopped, or the terminal closed? The same command goes on where it stopped, asking nothing twice."""
+SERVER_INTRO = """
+   With the server, after the questions: veyq-server's newest release verified and rendered into the repository ·
+   the server's secrets encrypted · its host key (you compare the fingerprint with your provider's console) · veyq's
+   half · Argo CD's deploy key at your forge · the DNS records · commit and push · the bootstrap, as root on the
+   server · this machine connected (SSH tunnel and kubeconfig context) · the wait until Argo CD reports everything
+   synced and healthy."""
+
+
 def cmd_init(args: argparse.Namespace, host: Host) -> int:
     """Create an instance, list it and make it current: Compose (what `install` does) or GitOps (ADR 0126). Every
     question comes before the first step: the setup answers, then the programs, then the rest."""
     target = "compose" if args.compose else ("gitops" if args.gitops else None)
+    print(INIT_INTRO, flush=True)
     resume: tuple[Path, str] | None = None
     if not args.compose and host.which("git"):
         # A GitOps run started here before and stopped? Its answers are in the checkout's veyq-setup.json.
@@ -2944,6 +2963,7 @@ def gitops_init(args: argparse.Namespace, host: Host, directory: Path) -> int:
     name_is_free(name, directory)
     server = option(args, host, "server", "set up the server too: yes or no", "no") == "yes"
     if server:
+        print(SERVER_INTRO, flush=True)
         # veyq-server's repository encrypts with SOPS (KSOPS in Argo CD), and its root syncs gitops/apps/.
         if args.secrets not in (None, "sops"):
             raise Refused(f"--secrets {args.secrets}: with the server set up, the secrets are SOPS's (veyq-server's "
