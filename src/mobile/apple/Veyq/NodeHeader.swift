@@ -11,30 +11,17 @@ struct HeaderContribution {
     var subtitle: String?
     /// What the page knows of its object (a Pot's write right, a file's content): the kind's doors follow it in core.
     var facts = AppKinds.Facts(canWrite: true, hasContent: true)
-    /// The copy door: copies to the folder chosen (nil: the space's top; then its name), answers why not, or nil once copied.
-    var copy: ((String?, String) async -> String?)?
-    /// What the copy dialog says before anything is written: what does not come along and what is left out (the web's).
-    var copyNotes: (() async -> CopyNotes)?
     /// The download door: writes the node's ZIP to a temporary file; it and what it left out, or nil when not whole.
     var download: (() async -> Downloaded?)?
     /// The application's own actions, merged into core's plan where the kind's order puts them.
     var actions: [OwnAction] = []
 }
 
-/// What a copy leaves behind (`losses`, the kinds' `copyLosses` after core's line) and leaves out (`leftOut`).
-struct CopyNotes {
-    var losses: [String]
-    var leftOut: [String] = []
-}
-
-/// A download written: the file, and what it left out (lines to say).
+/// A download written: the file, and what it left out.
 struct Downloaded {
     let url: URL
-    var leftOut: [String] = []
+    var leftOut: [NodeExport.Skipped] = []
 }
-
-/// What a copy of nodes of `kinds` leaves behind, in their kinds' words (core's `AppKinds.lossesOfCopy`).
-func copyLosses(_ kinds: [String]) -> [String] { AppKinds.shared.lossesOfCopy(kinds: kinds).map { say($0) } }
 
 /// An action of the application's own on its node's header.
 struct OwnAction {
@@ -72,11 +59,6 @@ struct KindPage {
 
     private static let dropBox = KindPage(header: { node, model in
         HeaderContribution(
-            copy: { to, toName in await model.copyFolder(node, to: to, toName: toName) },
-            copyNotes: {
-                let p = await model.copyPreview(node)
-                return CopyNotes(losses: copyLosses(Array(p.kinds)), leftOut: p.leftOut)
-            },
             download: { await model.downloadFolder(node) }
         )
     }, body: { ref, _, model in AnyView(DropBoxScreen(model: model, ref: ref)) })
@@ -86,9 +68,6 @@ struct KindPage {
         let has = model.files[node.nodeId]?.hasContent == true
         return HeaderContribution(
             facts: AppKinds.Facts(canWrite: true, hasContent: has),
-            // a copy is read here and uploaded again under a fresh key (the web's `importFile` for a copy)
-            copy: { to, toName in await model.copyFolder(node, to: to, toName: toName) },
-            copyNotes: { CopyNotes(losses: []) },
             download: { await model.downloadFile(node) },
             actions: [OwnAction(id: "replace", label: say(DepotFiles.shared.replaceWord(f: model.files[node.nodeId])), systemImage: "square.and.arrow.down.on.square") {
                 model.replacing = node.nodeId
@@ -99,11 +78,6 @@ struct KindPage {
     /// Core's folder: its ZIP and its copy with everything under it the build exports and copies (`NodeExport`, `SubtreeCopy`).
     private static let folder = KindPage(header: { node, model in
         HeaderContribution(
-            copy: { to, toName in await model.copyFolder(node, to: to, toName: toName) },
-            copyNotes: {
-                let p = await model.copyPreview(node)
-                return CopyNotes(losses: copyLosses(Array(p.kinds)), leftOut: p.leftOut)
-            },
             download: { await model.downloadFolder(node) }
         )
     })
@@ -116,10 +90,6 @@ struct KindPage {
             subtitle: view.subtitle.map { say(notice: $0) },
             // a cover and a copy write: core offers them where Expenses is on (the web's `canCopy`, `expensesRights`)
             facts: AppKinds.Facts(canWrite: view.canWrite, hasContent: true),
-            copy: { to, toName in
-                Notices.shared.potCopyRefused(outcome: await model.copyPot(node, to: to, toName: toName)).map { say(notice: $0) }
-            },
-            copyNotes: { CopyNotes(losses: copyLosses([PotSession.companion.KIND])) },
             download: { await model.downloadPot(ref).map { Downloaded(url: $0) } }
         )
     }, body: { ref, key, model in AnyView(PotScreen(model: model, ref: ref, tab: key)) })
@@ -155,7 +125,7 @@ struct NodeHeaderActions: View {
     @State private var downloading = false
     @State private var downloaded: URL?
     /// What the last download left out, said once its file is saved.
-    @State private var leftOut: [String] = []
+    @State private var leftOut: [NodeExport.Skipped] = []
 
     /// Core's header of the node (one per node and name, held by the app model).
     private var header: NodeHeaderModel? { model.header(node, facts: contribution.facts) }
@@ -196,7 +166,7 @@ struct NodeHeaderActions: View {
         .sheet(isPresented: shown(NodeHeader.shared.REPORT)) { ReportSheet(model: model, ref: node) }
         .sheet(isPresented: shown(NodeHeader.shared.COVER)) { CoverSheet(model: model, node: node) }
         .sheet(isPresented: shown(NodeHeader.shared.MOVE)) { NodeMoveSheet(model: model, ref: node) }
-        .sheet(isPresented: shown(NodeHeader.shared.COPY)) { NodeMoveSheet(model: model, ref: node, copy: contribution.copy, notes: contribution.copyNotes) }
+        .sheet(isPresented: shown(NodeHeader.shared.COPY)) { NodeMoveSheet(model: model, ref: node, copying: true) }
         // The system's save sheet takes the written file where the person picks; the temporary copy goes either way.
         .fileMover(isPresented: Binding(get: { downloaded != nil }, set: { if !$0 { cleanUpDownload() } }), file: downloaded) { _ in
             cleanUpDownload()
@@ -297,7 +267,7 @@ struct NodeHeaderActions: View {
             leftOut = written.leftOut
             downloaded = written.url
         } else {
-            failed = say(.downloadFailed, node.name)
+            failed = say(notice: Notices.shared.downloaded(name: node.name, leftOut: nil))
         }
     }
 
@@ -305,8 +275,8 @@ struct NodeHeaderActions: View {
         if let url = downloaded { try? FileManager.default.removeItem(at: url.deletingLastPathComponent()) }
         downloaded = nil
         // what the archive left out, said once the save sheet is gone
-        if !leftOut.isEmpty {
-            failed = say(.downloadLeftOut, leftOut.joined(separator: "; "))
+        if let said = Notices.shared.downloadLeftOut(leftOut: leftOut) {
+            failed = say(notice: said)
             leftOut = []
         }
     }
@@ -540,7 +510,7 @@ struct TrashNotice: View {
             HStack(spacing: 12) {
                 Text(notice.message).font(.subheadline).foregroundStyle(Role.text)
                 Spacer(minLength: 0)
-                if notice.header != nil || notice.moveBack != nil {
+                if notice.header != nil || notice.move != nil {
                     Button(say(.trashUndo)) { Task { await model.undoTrash() } }.fontWeight(.semibold)
                 }
             }
@@ -551,8 +521,8 @@ struct TrashNotice: View {
             .padding(.horizontal, 16)
             .padding(.bottom, 96)
             .task(id: notice.id) {
-                // a trash's undo goes when core ends its offer; any other notice after the same time
-                guard notice.header == nil else { return }
+                // a trash's or a move's undo goes when core ends its offer; any other notice after the same time
+                guard notice.header == nil, notice.move == nil else { return }
                 try? await Task.sleep(for: .milliseconds(ShellModel.companion.TRASH_UNDO_MS))
                 model.dismissTrashNotice(notice.id)
             }

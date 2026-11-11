@@ -19,18 +19,12 @@ object FileDownloads {
     }
 
     /**
-     * Writes node [nodeId] of [scopeId] with everything under it [kinds] exports to [path] (`NodeExport.walk`, `write`); what
-     * it left out, or null when there is nothing to export (nothing is left at [path] then).
+     * Writes node [ref] with everything under it the build exports to [path] ([ShellModel.download]); what it left out, or
+     * null when there is nothing to export or it did not finish (nothing is left at [path] then).
      */
     @Throws(Exception::class)
     suspend fun subtree(
-        tenant: me.raddatz.veyq.mobile.session.TenantSession, scopeId: String, nodeId: String, kinds: NodeExport.Kinds,
-        appVersion: String, nowMs: Long, path: String,
-    ): List<NodeExport.Skipped>? = withContext(Dispatchers.Default) {
-        val walked = NodeExport.walk(tenant, scopeId, nodeId, kinds) ?: return@withContext null
-        FileSink.write(path) { sink ->
-            NodeExport.write(walked.root, appVersion, nowMs, sink)
-            walked.skipped
-        }
-    }
+        shell: me.raddatz.veyq.mobile.navigation.ShellModel, ref: me.raddatz.veyq.mobile.navigation.NodeAt, deletedName: String,
+        nowMs: Long, path: String,
+    ): List<NodeExport.Skipped>? = withContext(Dispatchers.Default) { shell.download(ref, deletedName, nowMs, path) }
 }

@@ -535,18 +535,19 @@ final class AppModel {
         let message: String
         /// The header whose trash this is, while core offers its undo (core ends the offer after its window).
         var header: NodeHeaderModel? = nil
-        /// A move's undo: the node moved back the same way, to where it was (the web's `moveRun` Undo).
-        var moveBack: MoveBack? = nil
+        /// The move sheet whose undo this is, while core offers it (core ends the offer after its window, as a trash's).
+        var move: MoveSheet? = nil
     }
 
     private(set) var trashNotice: TrashNotice?
-    @ObservationIgnored private var undoWatch: NodeHeaderModel.Watch?
+    /// Stops the watch on the undo the notice offers (a header's trash, a move sheet's move).
+    @ObservationIgnored private var undoWatch: (() -> Void)?
 
     /// Moves `header`'s node with everything under it to the space's trash (core's: a page whose node went leaves for its
     /// parent, an open Pot of it closes); the bottom of the shell says so, with its Undo for as long as core offers it.
     func trash(_ header: NodeHeaderModel) async {
         guard let said = try? await header.trash() else { return }
-        undoWatch?.stop()
+        undoWatch?()
         guard header.current.undo != nil else {
             trashNotice = TrashNotice(message: say(notice: said))
             return
@@ -554,25 +555,44 @@ final class AppModel {
         let notice = TrashNotice(message: say(notice: said), header: header)
         trashNotice = notice
         let id = notice.id
-        undoWatch = header.watch { @Sendable state in
+        let watch = header.watch { @Sendable state in
             guard state.undo == nil else { return }
             Task { @MainActor [weak self] in self?.dismissTrashNotice(id) }
         }
+        undoWatch = { watch.stop() }
     }
 
     /// The Undo of the notice at the bottom: a move moved back, or the last delete's node back from the trash under its name.
     func undoTrash() async {
-        if let back = trashNotice?.moveBack {
+        if let move = trashNotice?.move {
             trashNotice = nil
-            if await move(back.ref, to: back.to, toName: nil, from: nil) != .moved {
-                trashNotice = TrashNotice(message: say(.moveUndoFailed, back.ref.name))
-            }
+            undoWatch?()
+            if let failed = try? await move.undo() { trashNotice = TrashNotice(message: say(notice: failed)) }
             return
         }
         guard let header = trashNotice?.header else { return }
         trashNotice = nil
-        undoWatch?.stop()
+        undoWatch?()
         if let failed = try? await header.undoTrash() { trashNotice = TrashNotice(message: say(notice: failed)) }
+    }
+
+    /// What a move or copy said once `sheet` is done, at the bottom of the shell: a move's Undo for as long as core offers it
+    /// (the header CR's D4: a trash's window).
+    func moved(_ sheet: MoveSheet) {
+        guard let done = sheet.current.done else { return }
+        undoWatch?()
+        guard sheet.current.undo != nil else {
+            trashNotice = TrashNotice(message: say(notice: done))
+            return
+        }
+        let notice = TrashNotice(message: say(notice: done), move: sheet)
+        trashNotice = notice
+        let id = notice.id
+        let watch = sheet.watch { @Sendable state in
+            guard state.undo == nil else { return }
+            Task { @MainActor [weak self] in self?.dismissTrashNotice(id) }
+        }
+        undoWatch = { watch.stop() }
     }
 
     func dismissTrashNotice(_ id: UUID) { if trashNotice?.id == id { trashNotice = nil } }
@@ -691,18 +711,6 @@ final class AppModel {
         syncPot()
     }
 
-    // MARK: A move (core's NodeMove)
-
-    /// Where a move's undo puts the node back.
-    struct MoveBack {
-        let ref: NodeAt
-        let to: String?
-    }
-
-    /// Each kind's placement, as the move browser and the move ask it.
-    let placement = KindPlacement()
-
-    /// Every node of `scopeId` this device opens: what the move browser walks.
     /// Memory or chapter `nodeId`'s gallery (`MemoryMedia.list`); nil when it could not be read.
     func memoryGallery(scopeId: String, nodeId: String) async -> MemoryMedia.Gallery? {
         guard let t = tenantSession else { return nil }
@@ -785,38 +793,24 @@ final class AppModel {
         return MemoryMedia.shared.reader(tenant: t, item: item, blob: item.original)
     }
 
+    /// Every node of `scopeId` this device opens (a Memory's chapters).
     func scopeNodes(_ scopeId: String) async -> [NodeRef] {
         (try? await shellModel?.scopeNodes(scopeId: scopeId)) ?? []
     }
 
-    /// Moves `ref` under `to` (nil: the space's root), its name kept; the lists are read anew. With `toName`, the bottom of
-    /// the shell says where it went and offers its undo back to `from`.
-    func move(_ ref: NodeAt, to: String?, toName: String?, from: String?) async -> NodeMove.Outcome {
-        guard let m = shellModel else { return .failed }
-        let r = try? await m.move(ref: ref, to: to)
-        applyShell(start: false)
-        await readDetails(m.tenant)
-        let outcome = r?.result.outcome ?? .failed
-        if outcome == .moved, let toName {
-            trashNotice = TrashNotice(
-                message: say(.moveMoved, ref.name, toName), moveBack: MoveBack(ref: ref, to: from)
-            )
-        }
-        return outcome
-    }
+    // MARK: The move and copy sheet (core's MoveSheet)
 
-    /// Copies the open Pot `ref` to `to` (nil: the space's root) in its space (uc.platform.copy-node): a new Pot under fresh
-    /// keys with its people, live entries and receipts; the lists are read anew and the shell says where it went.
-    func copyPot(_ ref: NodeAt, to: String?, toName: String) async -> PotCopy.Outcome {
-        guard let pots = potModel, let shellModel, let open = pot?.ref, open.nodeId == ref.nodeId else { return .failed }
-        let r = try? await pots.duplicate(shell: shellModel, ref: open, to: to, deletedName: say(.potDeletedPerson), uuid: { @Sendable in UUID().uuidString.lowercased() })
-        applyShell(start: false)
-        await readDetails(shellModel.tenant)
-        let outcome = r?.outcome ?? .failed
-        if outcome == .copied {
-            trashNotice = TrashNotice(message: say(.theCopyDone, ref.name, toName))
+    /// The move or copy sheet of `node` (core's `MoveSheet` over the shell: its browser, the guest folder's confirm, the
+    /// kind's copy — a Pot by the open Pot —, the storage check, the move's undo); each write reads the lists anew.
+    func moveSheet(_ node: NodeAt, copying: Bool) -> MoveSheet? {
+        guard let m = shellModel else { return nil }
+        return m.moveSheet(node: node, copying: copying, pot: potModel, deletedName: say(.potDeletedPerson)) { @Sendable in
+            Task { @MainActor [weak self] in
+                guard let self, let t = self.tenantSession else { return }
+                self.applyShell(start: false)
+                await self.readDetails(t)
+            }
         }
-        return outcome
     }
 
     /// How a kind folds a name to its slug token's input: the composition root's answer (`AppKinds`, the web's
@@ -1317,53 +1311,18 @@ final class AppModel {
         return written == nil ? nil : url
     }
 
-    /// Why a node was left out of a download or a copy, in the web's words (`export.reason.*`, `node.copy.reason.*`).
-    private static func leftOutLine(_ s: NodeExport.Skipped) -> String { say(notice: Notices.shared.leftOut(s: s)) }
-
-    /// Folder `ref` with everything under it as the web's ZIP in a temporary file (core's `NodeExport`, the kinds the
-    /// composition root exports), and what it left out as lines to say; nil when it did not finish.
+    /// Folder `ref` with everything under it as the web's ZIP in a temporary file (core's `ShellModel.download` into its
+    /// `FileSink`, which removes a download that did not finish), and what it left out; nil when it did not finish.
     func downloadFolder(_ ref: NodeAt) async -> Downloaded? {
-        guard let t = tenantSession else { return nil }
+        guard let m = shellModel else { return nil }
         let dir = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
         guard (try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)) != nil else { return nil }
         let url = dir.appendingPathComponent(NodeExport.shared.fileName(name: ref.name))
         let skipped = try? await FileDownloads.shared.subtree(
-            tenant: t, scopeId: ref.scopeId, nodeId: ref.nodeId, kinds: AppKinds.shared.exports(deletedName: say(.potDeletedPerson)),
-            appVersion: String(VeyqAccount.companion.MAJOR), nowMs: Int64(Date().timeIntervalSince1970 * 1000), path: url.path
+            shell: m, ref: ref, deletedName: say(.potDeletedPerson), nowMs: Int64(Date().timeIntervalSince1970 * 1000), path: url.path
         )
         guard let skipped else { return nil }
-        return Downloaded(url: url, leftOut: skipped.map(Self.leftOutLine))
-    }
-
-    /// What a copy of folder `ref` would make (its kinds) and leave out (as lines to say), before anything is written.
-    func copyPreview(_ ref: NodeAt) async -> (kinds: Set<String>, leftOut: [String]) {
-        guard let t = tenantSession,
-              let p = try? await SubtreeCopy.shared.preview(tenant: t, scopeId: ref.scopeId, rootId: ref.nodeId,
-                                                           kinds: AppKinds.shared.copies(deletedName: "", uuid: { @Sendable in "" })) else { return ([], []) }
-        return (p.kinds, p.leftOut.map(Self.leftOutLine))
-    }
-
-    /// Copies folder `ref` with everything under it to `to` (nil: the space's top) in its space (core's `SubtreeCopy`): a new
-    /// folder tree under fresh keys, each Pot by Expenses' copy; the lists are read anew and the shell says where it went.
-    /// Why not, or nil once copied.
-    /// Why a copy of `ref` cannot go: the tenant has no room for its bytes (`StorageFit.noRoomForCopy`); nil where it fits.
-    func copyNoRoom(_ ref: NodeAt) async -> String? {
-        guard let t = tenantSession,
-              let bytes = try? await StorageFit.shared.noRoomForCopy(
-                tenant: t, scopeId: ref.scopeId, nodeId: ref.nodeId, kinds: AppKinds.shared.exports(deletedName: say(.potDeletedPerson))
-              ) else { return nil }
-        let size = ByteCountFormatter.string(fromByteCount: bytes.int64Value, countStyle: .file)
-        return say(.theCopyNoRoom, size)
-    }
-
-    func copyFolder(_ ref: NodeAt, to: String?, toName: String) async -> String? {
-        guard let m = shellModel else { return say(.theCopyFailed) }
-        let refused = try? await m.duplicate(ref: ref, to: to, deletedName: say(.potDeletedPerson), uuid: { @Sendable in UUID().uuidString.lowercased() })
-        applyShell(start: false)
-        await readDetails(m.tenant)
-        if let refused { return say(notice: refused) }
-        trashNotice = TrashNotice(message: say(.theCopyDone, ref.name, toName))
-        return nil
+        return Downloaded(url: url, leftOut: skipped)
     }
 
     func openReceipt(_ receiptId: String) async -> Data? {
