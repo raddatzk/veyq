@@ -79,7 +79,7 @@ struct EntryEditorSheet: View {
                 TextField(f.kind == .transfer ? say(.edNote) : say(.entryTitle), text: bind({ model.editorState?.form.title ?? "" }) { EditorChange.Title(text: $0) })
                 problem(shown(s, "title"))
                 DatePicker(say(.edDate), selection: Binding(
-                    get: { PickedDay.date(model.editorState?.form.date ?? "") ?? Date.now },
+                    get: { PickedDay.date(model.editorState?.form.date ?? "") ?? PickedDay.date(model.today) ?? .distantPast },
                     set: { model.edit(EditorChange.Day(iso: PickedDay.iso($0))) }
                 ), displayedComponents: .date)
                 problem(shown(s, "date"))
