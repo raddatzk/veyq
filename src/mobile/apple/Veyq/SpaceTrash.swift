@@ -50,7 +50,13 @@ struct SpaceTrashSheet: View {
                 titleVisibility: .visible,
                 presenting: st.purging
             ) { row in
-                Button(say(.trashPurge), role: .destructive) { Task { try? await sheet?.purge() } }
+                // the dialog's binding clears the row asked about before this action runs: it is asked about again first
+                Button(say(.trashPurge), role: .destructive) {
+                    Task {
+                        sheet?.askPurge(row: row)
+                        try? await sheet?.purge()
+                    }
+                }
                 Button(say(.signinCancel), role: .cancel) {}
             } message: { row in
                 Text(say(.trashPurgeConfirm, row.name))
