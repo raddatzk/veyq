@@ -3745,7 +3745,7 @@ def ask_veyq(run: InitRun, cluster: ClusterView) -> None:
                                 given=args.gateway_class or known.get("gateway_class"))
     # Traefik's data-plane pods are its own Deployment's: offered from the cluster when the class is Traefik's.
     traefik_ns = ""
-    if dict(classes).get(run.gateway_class, "").startswith("traefik.io/"):
+    if dict(classes).get(run.gateway_class, "").split("/", 1)[0] == "traefik.io":  # the controller's domain
         found = host.run(cluster.kubectl + ["get", "deploy", "-A", "-l", "app.kubernetes.io/name=traefik", "-o",
                                             "jsonpath={.items[0].metadata.namespace}"], check=False)
         traefik_ns = (found.stdout or "").strip() if not found.returncode else ""
@@ -4290,13 +4290,13 @@ def gitops_tls(args: argparse.Namespace, host: Host, g: GitOps) -> int:
             host.sleep(10)
         listed = host.run(k + ["get", "certificates", "-o",
                                "jsonpath={range .items[*]}{.spec.secretName}{\"\\n\"}{end}"], check=False).stdout or ""
-        secrets_ = sorted({line.strip() for line in listed.splitlines() if line.strip()})
-        if secrets_:
-            print(f"\n   The test certificates: {', '.join(secrets_)} (namespace {namespace}).", flush=True)
+        certificate_names = sorted({line.strip() for line in listed.splitlines() if line.strip()})
+        if certificate_names:  # the Secrets' names: what holds each certificate, nothing of their content
+            print(f"\n   The test certificates: {', '.join(certificate_names)} (namespace {namespace}).", flush=True)
             if not args.yes and host.confirm("Delete them so production ones are issued? This cannot be undone, and "
                                              "the sites have no certificate until the new ones arrive") is not True:
                 raise Refused("the test certificates stay for now; run `veyqctl tls production` again to replace them")
-            host.run(k + ["delete", "secret", *secrets_])
+            host.run(k + ["delete", "secret", *certificate_names])
         while True:
             states = host.run(k + ["get", "certificates", "-o", "jsonpath={range .items[*]}{.metadata.name} "
                                    "{.status.conditions[?(@.type==\"Ready\")].status}{\"\\n\"}{end}"],
