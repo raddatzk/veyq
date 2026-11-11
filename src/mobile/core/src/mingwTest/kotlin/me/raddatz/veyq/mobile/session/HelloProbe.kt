@@ -17,7 +17,7 @@ import kotlin.time.TimeSource
 
 /**
  * The Hello half of [WindowsDeviceKeys], which no unattended test can run: a Hello prompt needs the person at the
- * console, never an agent (the CR's D3, O2). `run.py hello-probe` starts it in the logged-on session (the scheduled task
+ * console, never an agent (a PIN is never typed by an agent). `run.py hello-probe` starts it in the logged-on session (the scheduled task
  * `veyq-app`) with `VEYQ_HELLO_PROBE` naming its outcome file; without that variable (`run.py test`) it does nothing.
  *
  * It seals under a Passport key of its own (`<SID>//veyq//probe`, never the app's), then, as a new start would, opens

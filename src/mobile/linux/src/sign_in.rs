@@ -96,7 +96,7 @@ impl SignIn {
         for row in [server.upcast_ref::<gtk::Widget>(), email.upcast_ref(), password.upcast_ref(), secret_key.upcast_ref()] {
             fields.add(row);
         }
-        // Staying signed in is no longer chosen here: the core offers it after the sign-in (D7), drawn in Phase 7
+        // Staying signed in is no longer chosen here: the core offers it after the sign-in (ADR 0123 decision 8), drawn by `Offer`
         let error = error_label();
         let submit = gtk::Button::builder().label(words::signin_submit()).halign(gtk::Align::Center).build();
         submit.add_css_class("suggested-action");
@@ -263,7 +263,7 @@ pub fn offer_choices(levels: &[StaySignedIn]) -> Vec<(Choice, String, String)> {
     choices
 }
 
-/// The offer to stay signed in (the CR device-trust-on-linux-and-windows, D7), shown while the core's `Gate.Signed`
+/// The offer to stay signed in (ADR 0123 decision 8), shown while the core's `Gate.Signed`
 /// carries one: a page of the way in, the sign-in's column, its answers activatable rows each with the line that says
 /// what it means — GNOME's way to choose among described options (an `AdwAlertDialog`'s responses are bare labels, and
 /// the choice continues the sign-in rather than interrupting the shell). Each row is one call; the core answers with the

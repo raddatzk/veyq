@@ -1,4 +1,4 @@
-// What the device trust's screens say (the CR device-trust-on-linux-and-windows, D5, D7), the core's answers drawn: what
+// What the device trust's screens say (ADR 0123 decision 8), the core's answers drawn: what
 // the unlock of a trusted account says (by its record's method and, for a remembered one, by its record's level), what
 // the offer to stay signed in lists, how "Manage servers" names a server's trust and which changes it lists. Linux's
 // sign_in::unlock_words, offer_choices and manage::changes. No rule here: each answer is the core's; this only picks its

@@ -45,7 +45,7 @@ interface KeychainBridge {
 /**
  * [DeviceKeys] over the Keychain (ADR 0123 decision 8). The Keychain holds the key bytes and asks the person; the suite
  * does the cryptography: a bind key is 64 random bytes whose HMAC is the DEVICE factor, an unlock key 32 random bytes
- * under which the DEVICE_KEY wraps are AES-256-GCM sealed — one per level (D7): the [StaySignedIn.PRESENCE] item behind
+ * under which the DEVICE_KEY wraps are AES-256-GCM sealed — one per level: the [StaySignedIn.PRESENCE] item behind
  * `.userPresence`, the [StaySignedIn.LOGIN] item without it but bound to the passcode (this device only, read without
  * asking while the device is unlocked).
  */
@@ -123,7 +123,7 @@ class AppleDeviceKeys(private val keychain: KeychainBridge, private val prompt: 
         get() = if (LAContext().canEvaluatePolicy(LAPolicyDeviceOwnerAuthentication, null)) setOf(StaySignedIn.PRESENCE, StaySignedIn.LOGIN) else emptySet()
 
     private companion object {
-        /** The presence item, the one unlock key there was before the levels (D7): its seals still open. */
+        /** The presence item, the one unlock key there was before the levels: its seals still open. */
         const val UNLOCK = "veyq.unlock"
         const val UNLOCK_LOGIN = "veyq.unlock.login"
     }

@@ -3,7 +3,7 @@
 // button. The person's input goes to the core as one call; the core decides what it means and answers with the next
 // gate. Linux's sign_in.rs, in Fluent.
 //
-// No "Stay signed in" here any more (the CR device-trust-on-linux-and-windows, D7): every sign-in holds the password
+// No "Stay signed in" here any more (ADR 0123 decision 8): every sign-in holds the password
 // trust, and the core offers staying signed in after it (Gate.Signed.offer, OfferView).
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Automation;

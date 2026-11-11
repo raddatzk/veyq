@@ -32,7 +32,7 @@ import kotlin.coroutines.resumeWithException
  *
  *  - a bind key per password-trusted account, an HMAC-SHA256 key whose MAC over `veyq/v1/device-bind` is the DEVICE
  *    wrap's factor;
- *  - an AES-256-GCM unlock key per level for the remembered accounts (D7): the [StaySignedIn.PRESENCE] one usable for
+ *  - an AES-256-GCM unlock key per level for the remembered accounts (ADR 0123 decision 8): the [StaySignedIn.PRESENCE] one usable for
  *    [VALIDITY_SECONDS] after the person authenticated with a strong biometric or the device's own code, and
  *    invalidated by a new biometric enrolment (a finger someone adds later does not open what was sealed before); the
  *    [StaySignedIn.LOGIN] one without user authentication, opened by the unlocked device itself;
@@ -185,7 +185,7 @@ class KeystoreDeviceKeys(context: Context, private val host: () -> Activity?) : 
     private companion object {
         const val STORE = "AndroidKeyStore"
         const val AES_GCM = "AES/GCM/NoPadding"
-        /** The presence key's alias, the one unlock key there was before the levels (D7): its seals still open. */
+        /** The presence key's alias, the one unlock key there was before the levels: its seals still open. */
         const val UNLOCK = "veyq.unlock"
         const val UNLOCK_LOGIN = "veyq.unlock.login"
         const val SECRETS = "veyq.secrets"

@@ -30,7 +30,7 @@ import kotlin.test.assertTrue
 import kotlin.time.Duration.Companion.minutes
 
 /**
- * A change of this device's trust while signed in (the CR device-trust-on-linux-and-windows, D7), over a server the
+ * A change of this device's trust while signed in (ADR 0123 decision 8), over a server the
  * test plays and the fake's keys: from one level to the other (the wrap replaced, the old level's key gone, the resume
  * at the new level), a cancelled presence prompt (nothing changed), and back to the password trust (a wrong password
  * told apart, the right one a DEVICE wrap that opens with it). Through [AccountDoor], which maps each outcome.

@@ -1,5 +1,5 @@
-// An account this device trusts (ADR 0123 decision 8; SessionModel.Gate.Unlock; the CR device-trust-on-linux-and-windows,
-// D5), drawn as Windows' own sign-in screen draws a known account: its picture and name, the password where it opens
+// An account this device trusts (ADR 0123 decision 8; SessionModel.Gate.Unlock; ADR 0123's
+// Consequences, the device trust), drawn as Windows' own sign-in screen draws a known account: its picture and name, the password where it opens
 // with one (a password-trusted account), one accent button, and the way to another account as a link under it. For a
 // remembered account the button asks the core again, which raises Windows Hello's prompt itself ("" crosses, nothing
 // typed); without Hello (LOGIN) it says the resume failed and tries again (TrustWords.Unlock). Linux's sign_in::Unlock.

@@ -1,8 +1,8 @@
-// "Manage servers" (owner 2026-11-08; the CR device-trust-on-linux-and-windows, D5), Fluent's way: a ContentDialog opened
+// "Manage servers" (owner 2026-11-08; ADR 0123's Consequences, the device trust), Fluent's way: a ContentDialog opened
 // from the switcher, laid out as Windows' Settings lays out a group of settings. One section per server signed in to —
 // its name, how this device trusts it as the line under it, each tenant an Expander whose header carries its name and the
 // ToggleSwitch that shows or hides it in the switcher, its spaces' ToggleSwitches inside; then "Sign out of this server",
-// the changes of its trust (the CR's D7: each other level the device offers, "Back to your password", which asks for
+// the changes of its trust (ADR 0123 decision 8: each other level the device offers, "Back to your password", which asks for
 // the password in a field shown in place — a ContentDialog opens no second one over it) and "Stop trusting this device"
 // — and "Add server" last. What it shows is the core's (Watched.Manage,
 // SessionModel.managed); each switch and button is one call. Linux's manage.rs (an AdwPreferencesDialog), Apple's

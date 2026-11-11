@@ -6,7 +6,7 @@ import VeyqCore
 /// The Keychain for core's `AppleDeviceKeys` (ADR 0123 decision 8): generic-password items of this app, on this device
 /// only, never in a backup or iCloud. A protected item (the presence level's unlock key of the accounts the person stays
 /// signed in to) carries `.userPresence` — Face ID, Touch ID or the passcode — and exists only while a passcode is set.
-/// A passcode item (the login level's unlock key, the CR device-trust-on-linux-and-windows' D7) asks nothing but exists
+/// A passcode item (the login level's unlock key, ADR 0123 decision 8) asks nothing but exists
 /// only while a passcode is set, readable while the device is unlocked.
 ///
 /// Reading a protected item first asks the person through LocalAuthentication, once per start (`reuse`), and hands the

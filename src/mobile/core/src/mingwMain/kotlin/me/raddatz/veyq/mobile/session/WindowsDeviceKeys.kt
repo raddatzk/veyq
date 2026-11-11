@@ -50,7 +50,7 @@ import kotlin.time.TimeMark
 import kotlin.time.TimeSource
 
 /**
- * [DeviceKeys] on Windows (the CR device-trust-on-linux-and-windows, D1, D7). The person chooses the level (owner
+ * [DeviceKeys] on Windows (ADR 0127's Consequences; ADR 0123 decision 8). The person chooses the level (owner
  * 2026-11-11):
  *
  *  - **bind keys and secrets: DPAPI** for the current user, never with UI. The device store keeps the protected blobs;
@@ -92,7 +92,7 @@ class WindowsDeviceKeys internal constructor(
             (hello as? PassportGuard)?.prompt = value
         }
 
-    /** Whether Windows Hello is set up for this user: the presence level is offered only then (D7). */
+    /** Whether Windows Hello is set up for this user: the presence level is offered only then (ADR 0123 decision 8). */
     val helloAvailable: Boolean get() = helloSetUp()
 
     /** Both where Hello is set up, else DPAPI's alone, which the Windows sign-in opens. DPAPI is always there. */
@@ -226,13 +226,13 @@ class WindowsDeviceKeys internal constructor(
     }
 }
 
-/** The status codes D1 maps: a prompt the person cancelled, and the smart-card stack's word for the same. */
+/** The status codes mapped here: a prompt the person cancelled, and the smart-card stack's word for the same. */
 internal const val NTE_USER_CANCELLED = 0x80090036.toInt()
 internal const val SCARD_W_CANCELLED_BY_USER = 0x8010006E.toInt()
 internal const val NTE_NO_KEY = 0x8009000D.toInt()
 internal const val NTE_BAD_KEYSET = 0x80090016.toInt()
 
-/** A Windows status as the trust's failure (D1): a cancelled prompt is `cancelled`, anything else — a missing key
+/** A Windows status as the trust's failure: a cancelled prompt is `cancelled`, anything else — a missing key
  *  included — is not. */
 internal fun authFailure(status: Int, what: String): DeviceAuthFailed =
     DeviceAuthFailed(
@@ -308,7 +308,7 @@ internal class PassportGuard(private val name: String, private val window: Long)
 internal object Hello {
     /**
      * Set up: Hello has a default decryption key for this user (cryptngc's `NgcGetDefaultDecryptionKeyName`, none
-     * without a PIN) and the Passport provider opens. `dsregcmd`'s NgcSet is no test on a local account (the CR's R6).
+     * without a PIN) and the Passport provider opens. `dsregcmd`'s NgcSet is no test on a local account (it said NO with a PIN set, measured 2026-11-11).
      */
     fun available(): Boolean = runCatching {
         val sid = sid() ?: return false

@@ -178,7 +178,7 @@ class LiveBridgeTest {
     }
 
     /**
-     * The device trust through calls (CR device-trust-on-linux-and-windows, Phases 3 and 6), over core's
+     * The device trust through calls (ADR 0123 decision 8; its Consequences, the device trust), over core's
      * [SoftwareDeviceKeys] whose prompt the test plays and a device store the host keeps across bridges — each new bridge
      * the app started again. The sign-in holds the password trust and carries the offer; LOGIN taken, a fresh bridge
      * resumes with nothing asked; changed to PRESENCE in Manage servers, a fresh bridge resumes after the person's

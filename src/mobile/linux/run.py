@@ -30,15 +30,16 @@ Verbs:
                              session bus of its own with gnome-keyring-daemon, and the home's data directory (the device
                              store, the keyring and the password it opens with) is the volume `veyq-linux-home`, so a
                              second start finds what the first kept; `--no-secret-service` runs with neither, where
-                             "Stay signed in" is hidden and every start signs in. LANGUAGE and
+                             nothing is offered after the sign-in and every start signs in. LANGUAGE and
                              ADW_DEBUG_COLOR_SCHEME, when set, reach the app, VEYQ_LOCALE as its LANG (default
                              en_US.UTF-8; `VEYQ_LOCALE=de_DE.UTF-8 LANGUAGE=de` for German words and German
                              money). With VEYQ_LIVE the app reaches the dev origin under its own name (as `test`
                              does); `--devlogin` (needs VEYQ_LIVE) hands the debug build the seeded principal of the
                              env file as VEYQ_DEV_*, and it signs in through its own sign-in — the values go to
                              `docker run` through its environment, never on its command line. `--fill` only fills the
-                             sign-in, for the pass to turn "Stay signed in" and press it; `--unlock` hands the password
-                             alone, which the unlock of a password-trusted account takes.
+                             sign-in, for the pass to press Sign in; `--unlock` hands the password alone, which the
+                             unlock of a password-trusted account takes, and Manage's way back to the password fills
+                             its field with it once.
   lock                       `cargo update`: writes Cargo.lock anew from Cargo.toml (the one way it changes).
 
 cargo's registry and target directory live in the Docker volumes `veyq-linux-cargo` and `veyq-linux-target`, so a
@@ -112,7 +113,7 @@ def test(pattern: str | None) -> int:
     filter_arg = " " + shlex.quote(f"--ktest_filter={pattern}") if pattern else ""
     script = prelude + SECRET_SERVICE.format(tests=f"/veyq/bin/test.kexe{filter_arg}")
     if not pattern:
-        # The store where none answers (the CR's Phase 2): libsecret there but no session bus, then libsecret moved away.
+        # The store where none answers: libsecret there but no session bus, then libsecret moved away.
         probe = "/veyq/bin/test.kexe --ktest_filter='*SecretServiceProbeTest*'"
         script += (f"; rc=$?; [ $rc -ne 0 ] && exit $rc; "
                    f"echo '+ the Secret Service probe without a session bus'; "
@@ -124,7 +125,7 @@ def test(pattern: str | None) -> int:
     return in_container(docker_platform, mounts, env, script, docker_args=["--cap-add=IPC_LOCK"])
 
 
-# The Secret Service the core's LinuxDeviceKeys contract runs over (the CR device-trust-on-linux-and-windows, D3): a
+# The Secret Service the core's LinuxDeviceKeys contract runs over (`DeviceKeysContract`): a
 # session bus of its own, gnome-keyring-daemon on it with its login collection made and unlocked by a password drawn
 # here, in the container, per run — a throwaway test value, never printed, never leaving the container. `{tests}` runs
 # inside that session with VEYQ_SECRET_SERVICE=present; the script's exit code is its.
@@ -237,7 +238,7 @@ def build() -> int:
 def dev_principal(unlock: bool = False, fill: bool = False) -> dict[str, str]:
     """The seeded dev principal as the debug build's VEYQ_DEV_* (DevLogin.swift's names): the server is VEYQ_LIVE's
     origin, the rest the env file's (VEYQ_ENV_FILE, else `.run/.env`). With [unlock] the password alone, as
-    VEYQ_DEV_UNLOCK_PASSWORD (Android's `--unlock`); with [fill] the app fills its sign-in and leaves the switch and the
+    VEYQ_DEV_UNLOCK_PASSWORD (Android's `--unlock`); with [fill] the app fills its sign-in and leaves the
     button to the pass (VEYQ_DEV_FILL). Nothing of it is printed."""
     live = os.environ.get("VEYQ_LIVE")
     if not live:
@@ -257,7 +258,7 @@ def dev_principal(unlock: bool = False, fill: bool = False) -> dict[str, str]:
     return principal | ({"VEYQ_DEV_FILL": "1"} if fill else {})
 
 
-# What the app keeps between two `run`s (the CR device-trust-on-linux-and-windows, Phase 4): the home's data directory
+# What the app keeps between two `run`s: the home's data directory
 # as a named volume — the device store (`veyq/device-store.json`), gnome-keyring's login collection (`keyrings/`) and
 # the throwaway password that collection opens with (`veyq-run/keyring`, drawn in the container at the first start,
 # never printed). A test value beside the keyring it opens: this keyring holds a dev instance's trust and nothing else.

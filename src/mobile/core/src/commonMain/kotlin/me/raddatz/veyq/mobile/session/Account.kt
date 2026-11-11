@@ -683,7 +683,7 @@ class VeyqAccount private constructor(
  * Keeps a remembered account's rotated refresh token. The refresh itself succeeded, so a store that fails here (a Secret
  * Service gone, DPAPI refusing: `DeviceAuthFailed(false)`) never fails the call that refreshed: the session goes on, and
  * the next start's resume finds the old token refused and asks for a sign-in (SESSION_ENDED) — the honest outcome
- * (CR device-trust-on-linux-and-windows, Phase 3; `RefreshKeptTest`).
+ * (ADR 0123 decision 8; `RefreshKeptTest`).
  */
 private fun ThisDevice.keepRefresh(alias: String, token: String) {
     runCatching { keys.putSecret(alias, token) }

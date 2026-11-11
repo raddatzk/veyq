@@ -23,7 +23,7 @@ import kotlin.test.assertFailsWith
  * Staying signed in whose refresh token the device's store refuses to keep (a Secret Service gone, DPAPI refusing):
  * the DEVICE_KEY wrap just added on the server could never be opened, since no start can resume without the token, so
  * the enrolment deletes it before it fails — and the caller's fallback to the password trust leaves nothing orphaned
- * (CR device-trust-on-linux-and-windows, Phase 4). Over a server the test plays.
+ * (ADR 0123 decision 8). Over a server the test plays.
  */
 class RememberEnrolTest {
     private val p = testPrimitives

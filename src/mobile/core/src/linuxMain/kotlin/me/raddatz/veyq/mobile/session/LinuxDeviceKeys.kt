@@ -27,12 +27,12 @@ import me.raddatz.veyq.mobile.secret.veyq_secret_service
 import me.raddatz.veyq.mobile.secret.veyq_secret_store
 
 /**
- * [DeviceKeys] on Linux (the CR device-trust-on-linux-and-windows, D2): everything is an item of the Secret Service's
+ * [DeviceKeys] on Linux (ADR 0127's Consequences): everything is an item of the Secret Service's
  * default collection under the schema `me.raddatz.veyq.DeviceKey`, told apart by its attribute `alias` — each bind key,
  * the one unlock key and each small secret. HMAC and AES-GCM run in libsodium, so a key's bytes are in memory while in
  * use: Apple's level for the bind key.
  *
- * **The one level is [StaySignedIn.LOGIN]** (owner 2026-11-11, Q1; D7): the Secret Service has no presence check. Its
+ * **The one level is [StaySignedIn.LOGIN]** (owner 2026-11-11; ADR 0123 decision 8): the Secret Service has no presence check. Its
  * collection is unlocked by the desktop sign-in, and that login session is the authentication — the web's level. So
  * nothing here prompts, [DeviceAuthFailed] is never `cancelled`, and [StaySignedIn.PRESENCE] is neither offered nor
  * kept: a seal or an open at it is refused (`DeviceAuthFailed(false)`), never made at the login level instead.
@@ -59,7 +59,7 @@ class LinuxDeviceKeys internal constructor(
      */
     val secretServiceAvailable: Boolean get() = service?.answers() == true
 
-    /** The login level (the collection opens with the desktop sign-in; no presence check, Q1), or none without a service. */
+    /** The login level (the collection opens with the desktop sign-in; no presence check, owner 2026-11-11), or none without a service. */
     override val staySignedIn: Set<StaySignedIn>
         get() = if (secretServiceAvailable) setOf(StaySignedIn.LOGIN) else emptySet()
 

@@ -37,8 +37,8 @@ Verbs:
                              principal of the env file (VEYQ_ENV_FILE, else `.run/.env`) as VEYQ_DEV_*, inside the
                              launch file Veyq.Drive deletes on reading — never on a command line —, and it signs in
                              through its own sign-in once (DevLogin.cs). `--fill` only fills the sign-in, for the pass to
-                             check "Stay signed in" and press it; `--unlock` hands the password alone, which the unlock of
-                             a password-trusted account takes.
+                             press Sign in; `--unlock` hands the password alone, which the unlock of a password-trusted
+                             account takes, and Manage's way back to the password fills its field with it once.
   drive <step>...            runs Veyq.Drive's steps (its Program.cs: tree, invoke, select, set, type, key, press,
                              size, maximize, wait, sleep, shot) against the running app through the scheduled task
                              `veyq-drive`, and prints the app's log first, then what each step saw. `shot <name>.png`

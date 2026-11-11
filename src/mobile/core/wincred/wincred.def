@@ -1,4 +1,4 @@
-# Windows' key stores for mingwX64 (the CR device-trust-on-linux-and-windows, D1): DPAPI (crypt32) and the Microsoft
+# Windows' key stores for mingwX64 (ADR 0127's Consequences): DPAPI (crypt32) and the Microsoft
 # Passport Key Storage Provider (ncrypt), reached through veyq_wincred.h's helpers alone; the header and its directory
 # are handed in by core/build.gradle.kts. Only that header's declarations are exposed, so windows.h's types stay
 # platform.windows'.

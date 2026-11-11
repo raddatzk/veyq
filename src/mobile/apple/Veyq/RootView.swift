@@ -32,7 +32,7 @@ struct RootView: View {
             .background(Role.bg)
         case .signed:
             ShellView(model: model)
-                // the offer to stay signed in a sign-in left open (D7), over the shell until it is answered
+                // the offer to stay signed in a sign-in left open (ADR 0123 decision 8), over the shell until it is answered
                 .sheet(isPresented: Binding(get: { model.offer != nil }, set: { _ in })) {
                     OfferSheet(levels: model.offer?.levels ?? [], working: model.trustWorking, onAnswer: model.answerOffer)
                 }

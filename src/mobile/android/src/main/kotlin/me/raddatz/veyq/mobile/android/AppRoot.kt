@@ -165,7 +165,7 @@ fun UnlockScreen(state: Screen.Unlock, onUnlock: (String) -> Unit, onOther: () -
 }
 
 /**
- * The offer to stay signed in after a sign-in (D7 of the CR device-trust-on-linux-and-windows): a full-screen step, as
+ * The offer to stay signed in after a sign-in (ADR 0123 decision 8): a full-screen step, as
  * Android's own setup asks for a screen lock or a fingerprint after an account was added — each level the core offers
  * ([offer], in its order) with the line that says what it means, then "Not now", and where to change it later. A
  * cancelled prompt keeps it (the core's rule); back does not skip it, "Not now" does.

@@ -15,7 +15,7 @@ import kotlin.test.assertTrue
 expect val testPrimitives: Primitives
 
 /**
- * What every [DeviceKeys] does, read only through the interface (the CR device-trust-on-linux-and-windows, D3): the flows
+ * What every [DeviceKeys] does, read only through the interface (ADR 0123's Consequences, the device trust): the flows
  * of `Account` and `SessionModel` rely on exactly this, so a platform's store passes it or the flows break there. A
  * store's subclass gives a fresh store per test ([keys]); one that asks the person must authenticate without asking, as
  * the fake does, or run only its unattended half here (Windows' DPAPI half in `mingwTest`; Hello's is the probe's).

@@ -1,7 +1,7 @@
 /*
  * Windows' key stores for the core's WindowsDeviceKeys (mingwMain, session/WindowsDeviceKeys.kt): DPAPI for the bind
  * keys, the secrets and the unlock key where Windows Hello is not set up; the Microsoft Passport Key Storage Provider
- * (NCrypt) for the unlock key behind Windows Hello (the CR device-trust-on-linux-and-windows, D1).
+ * (NCrypt) for the unlock key behind Windows Hello (ADR 0127's Consequences).
  *
  * Every Windows call is made here, in C, and only plain integers, byte buffers and UTF-16 strings cross into Kotlin:
  * the interop exposes this header alone (wincred.def's headerFilter), so none of windows.h's types meets

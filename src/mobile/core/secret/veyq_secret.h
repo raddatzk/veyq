@@ -1,6 +1,6 @@
 /*
- * The Secret Service for the core's LinuxDeviceKeys (linuxMain, session/LinuxDeviceKeys.kt; the CR
- * device-trust-on-linux-and-windows, D2): the bind keys, the unlock key and the small secrets are items of the default
+ * The Secret Service for the core's LinuxDeviceKeys (linuxMain, session/LinuxDeviceKeys.kt; ADR 0127's
+ * Consequences): the bind keys, the unlock key and the small secrets are items of the default
  * collection under one schema, `me.raddatz.veyq.DeviceKey`, told apart by its one attribute, `alias`.
  *
  * libsecret is reached by dlopen, never linked: the library links against Kotlin/Native's old sysroot with no glib or

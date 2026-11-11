@@ -120,7 +120,7 @@ fun ManageScreen(servers: List<ManagedServer>, model: AppModel) {
                             Spacer(Modifier.size(6.dp))
                             Text(stringResource(R.string.manage_sign_out))
                         }
-                        // How this device trusts the account, the changes to it (D7: the other level, back to the
+                        // How this device trusts the account, the changes to it (ADR 0123 decision 8: the other level, back to the
                         // password), and the way to end it (the next sign-in asks for the Secret Key).
                         server.trusted?.let { method ->
                             Text(

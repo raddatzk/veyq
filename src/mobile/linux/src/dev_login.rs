@@ -3,8 +3,8 @@
 //!
 //! - `run.py run --devlogin` hands the seeded dev principal of `.run/.env` to the app's environment (`VEYQ_DEV_SERVER`,
 //!   `VEYQ_DEV_EMAIL`, `VEYQ_DEV_PASSWORD`, `VEYQ_DEV_SECRET_KEY`). The app fills its real sign-in with them once, when
-//!   the core first asks for one, and signs in through it — with "Stay signed in" as the switch stands, off unless
-//!   `VEYQ_DEV_FILL` is set: then it only fills the form, and the pass turns the switch and presses Sign in itself.
+//!   the core first asks for one, and signs in through it — unless `VEYQ_DEV_FILL` is set: then it only fills the form,
+//!   and the pass presses Sign in itself.
 //! - `run.py run --devlogin --unlock` hands the password alone (`VEYQ_DEV_UNLOCK_PASSWORD`, Android's `--unlock`,
 //!   Apple's variable): the unlock of a password-trusted account takes it once, when the core shows that unlock; and
 //!   "Manage servers"' way back to the password trust fills its password field with it once (fill only: the pass

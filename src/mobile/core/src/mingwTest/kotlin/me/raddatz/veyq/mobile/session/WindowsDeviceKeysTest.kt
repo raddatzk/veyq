@@ -22,7 +22,7 @@ private object NoHello : UnlockGuard {
     override fun delete() = fail("Hello reached")
 }
 
-/** The DPAPI half, the real one: Windows' own DPAPI in session 0 (the CR's D3). */
+/** The DPAPI half, the real one: Windows' own DPAPI in session 0 (`DeviceKeysContract`). */
 private fun dpapiKeys(store: DeviceStore = MemoryDeviceStore(), time: TimeSource = TimeSource.Monotonic) = WindowsDeviceKeys(
     store, LibsodiumPrimitives, NoHello, DpapiGuard(WindowsDeviceKeys.UNLOCK_ENTROPY), { false }, time,
 )

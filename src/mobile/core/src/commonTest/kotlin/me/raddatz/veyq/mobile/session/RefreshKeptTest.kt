@@ -26,7 +26,7 @@ import kotlin.test.assertEquals
 
 /**
  * A remembered account's rotated refresh token that the device's store fails to keep (a Secret Service gone, DPAPI
- * refusing) never fails the call that refreshed (CR device-trust-on-linux-and-windows, Phase 3): neither the resume at a
+ * refusing) never fails the call that refreshed (ADR 0123 decision 8): neither the resume at a
  * start nor an API call's refresh after a 401. The session goes on; the store keeps the old token, which the next start
  * finds refused (SESSION_ENDED, a sign-in). Over a server the test plays.
  */

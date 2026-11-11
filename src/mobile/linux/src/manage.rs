@@ -1,7 +1,7 @@
-//! "Manage servers" (owner 2026-11-08; the CR device-trust-on-linux-and-windows, D5), GNOME's way: an
+//! "Manage servers" (owner 2026-11-08; ADR 0123's Consequences, the device trust), GNOME's way: an
 //! `AdwPreferencesDialog` opened from the switcher. One group per server signed in to — each tenant an expander row
 //! whose switch shows or hides it in the switcher, its spaces switch rows inside; how this device trusts the server as
-//! the group's line, and its change (the CR's D7): each other level the device offers, "Back to your password" (which
+//! the group's line, and its change (ADR 0123 decision 8): each other level the device offers, "Back to your password" (which
 //! asks for it in an `AdwAlertDialog` over this one), "Stop trusting this device"; sign out — and "Add server" last. What
 //! it shows is the core's (`Watched.Manage`, `SessionModel.managed`); each switch and button is one call.
 use std::cell::{Cell, RefCell};

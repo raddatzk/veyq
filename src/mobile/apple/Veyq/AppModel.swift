@@ -192,7 +192,7 @@ final class AppModel {
         }
     }
 
-    // MARK: Staying signed in (D7 of the CR device-trust-on-linux-and-windows)
+    // MARK: Staying signed in (ADR 0123 decision 8)
 
     /// The offer to stay signed in a sign-in left open (core's `Gate.Signed.offer`), a sheet over the shell; nil once answered.
     private(set) var offer: SessionModelOffer?

@@ -156,7 +156,7 @@ struct UnlockView: View {
     }
 }
 
-/// What the device trust's screens say on Apple (the CR device-trust-on-linux-and-windows, D7): the presence level named
+/// What the device trust's screens say on Apple (ADR 0123 decision 8): the presence level named
 /// as this device asks — Face ID, Touch ID, or its passcode where it has neither —, the level without a check, how
 /// "Manage servers" names a server's trust and which changes it lists (Windows' `TrustWords`, Linux's `manage::changes`).
 /// No rule here: the levels are the core's; this picks their words.
@@ -213,7 +213,7 @@ enum TrustWords {
     }
 }
 
-/// The offer to stay signed in after a sign-in (D7): a sheet, as iOS apps ask whether to use Face ID once an account
+/// The offer to stay signed in after a sign-in (ADR 0123 decision 8): a sheet, as iOS apps ask whether to use Face ID once an account
 /// signed in — each level the core offers (in its order; the first the prominent one) with the line that says what it
 /// means, then "Not Now", and where to change it later. It is answered, never swiped away; a cancelled prompt keeps it.
 struct OfferSheet: View {

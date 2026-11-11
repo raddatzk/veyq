@@ -48,7 +48,7 @@ public sealed partial class MainWindow : Window
         Start started;
         try
         {
-            // the window owns Windows Hello's prompt, in the app's words (the CR device-trust-on-linux-and-windows, D1)
+            // the window owns Windows Hello's prompt, in the app's words (ADR 0127's Consequences)
             var hwnd = WinRT.Interop.WindowNative.GetWindowHandle(this).ToInt64();
             started = Core.Start(new Config { device = Environment.MachineName, window = hwnd, prompt = Words.DeviceUnlockPrompt() }, store);
         }
@@ -133,7 +133,7 @@ public sealed partial class MainWindow : Window
                     Act.Send(new Call.SessionUnlock { password = password });
                 }
                 break;
-            // the offer to stay signed in stands over the shell until it is answered (D7)
+            // the offer to stay signed in stands over the shell until it is answered (ADR 0123 decision 8)
             case Gate.Signed { offer: { } offer }:
                 _offer ??= new OfferView(message => (_shell ??= NewShell()).Say(false, message));
                 _offer.Show(offer);

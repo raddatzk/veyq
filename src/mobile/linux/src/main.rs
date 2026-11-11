@@ -69,7 +69,7 @@ impl Screens {
                     bridge::send(Call::SessionUnlock { password });
                 }
             }
-            // the offer to stay signed in stands over the shell until it is answered (D7)
+            // the offer to stay signed in stands over the shell until it is answered (ADR 0123 decision 8)
             Gate::Signed { offer: Some(offer), .. } => {
                 self.offer.show(&offer.levels);
                 self.face(&self.offer.page);
@@ -116,7 +116,7 @@ fn activate(app: &adw::Application) {
         eprintln!("veyq: the device store did not open ({e}); this start keeps nothing");
         DeviceStore::in_memory()
     });
-    // no window owns a prompt here: the Secret Service asks nothing of its own (the CR device-trust-on-linux-and-windows, D2)
+    // no window owns a prompt here: the Secret Service asks nothing of its own (ADR 0127's Consequences)
     let config = Config { device: glib::host_name().to_string(), window: 0, prompt: String::new() };
     match bridge::start(&config, store) {
         Start::Started | Start::AlreadyStarted => {}

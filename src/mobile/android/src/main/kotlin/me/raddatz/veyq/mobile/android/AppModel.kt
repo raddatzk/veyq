@@ -181,7 +181,7 @@ class AppModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
-    // ---- staying signed in (D7 of the CR device-trust-on-linux-and-windows) ----
+    // ---- staying signed in (ADR 0123 decision 8) ----
 
     private val _trustWorking = MutableStateFlow(false)
 

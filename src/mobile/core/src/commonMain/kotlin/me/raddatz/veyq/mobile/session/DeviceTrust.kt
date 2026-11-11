@@ -58,7 +58,7 @@ interface DeviceKeys {
 
     /**
      * The levels staying signed in can take on this device now, asked of the store itself (never a host's own probe): what
-     * the offer after a sign-in and "Manage servers" offer (the CR device-trust-on-linux-and-windows, D7). Empty where
+     * the offer after a sign-in and "Manage servers" offer (ADR 0123 decision 8). Empty where
      * nothing staying signed in needs can be kept: no offer. May reach the platform (D-Bus, cryptngc, the keyguard), so
      * it is asked when an offer is made, not on every frame.
      */
@@ -66,7 +66,7 @@ interface DeviceKeys {
 }
 
 /**
- * A level of staying signed in (the CR device-trust-on-linux-and-windows, D7, owner 2026-11-11): the person chooses
+ * A level of staying signed in (ADR 0123 decision 8, owner 2026-11-11): the person chooses
  * among the levels their device offers ([DeviceKeys.staySignedIn]), after the sign-in or later in "Manage servers". The
  * same meaning on every platform; the words a platform gives each are its own.
  */
@@ -111,7 +111,7 @@ data class TrustedDevice(
     enum class Method { DEVICE, DEVICE_KEY }
 
     /**
-     * The level whose unlock key opens this DEVICE_KEY wrap, null for DEVICE. A record kept before the levels (D7) is
+     * The level whose unlock key opens this DEVICE_KEY wrap, null for DEVICE. A record kept before the levels (ADR 0123 decision 8) is
      * [StaySignedIn.PRESENCE]: Android and Apple sealed every one behind the person's authentication.
      */
     val unlockLevel: StaySignedIn?
@@ -146,7 +146,7 @@ class ThisDevice(val store: DeviceStore, val keys: DeviceKeys, val label: String
     internal fun forget(key: String) = store.write(TRUSTED, JSON.encodeToString(trusted().filter { it.key != key }))
 
     /**
-     * Whether the person answered the offer to stay signed in for account [key] with "Not now" on this device (D7): it
+     * Whether the person answered the offer to stay signed in for account [key] with "Not now" on this device (ADR 0123 decision 8): it
      * is asked once per account and device. Not secret: whether someone chose to stay signed in is not content.
      */
     fun declined(key: String): Boolean = key in declinedKeys()

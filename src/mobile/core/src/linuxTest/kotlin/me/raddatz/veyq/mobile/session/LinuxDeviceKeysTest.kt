@@ -19,7 +19,7 @@ import kotlin.test.assertTrue
 
 /**
  * A store of its own in the real Secret Service: `run.py test` runs the binary under `dbus-run-session` with
- * gnome-keyring-daemon, its login collection unlocked by a password drawn in the container (the CR's D3). Each store's
+ * gnome-keyring-daemon, its login collection unlocked by a password drawn in the container (`DeviceKeysContract`, ADR 0123's Consequences, the device trust). Each store's
  * items carry a namespace of their own, so one test's unlock key is never another's.
  */
 private fun ownKeys(): LinuxDeviceKeys = LinuxDeviceKeys(

@@ -16,8 +16,8 @@ import kotlin.test.assertTrue
 import kotlin.time.Duration.Companion.minutes
 
 /**
- * The device trust against a running dev instance, as the seeded principal (`VEYQ_LIVE`), as D7 (the CR
- * device-trust-on-linux-and-windows) enrols it: the sign-in holds the password trust (DEVICE), which opens with the
+ * The device trust against a running dev instance, as the seeded principal (`VEYQ_LIVE`), as ADR 0123
+ * decision 8 enrols it: the sign-in holds the password trust (DEVICE), which opens with the
  * password alone and survives sign-out; staying signed in is taken afterwards, at a level — LOGIN resumes with nothing
  * asked, PRESENCE after the person authenticates; a change of level replaces the wrap and the old level's key; the way
  * back to the password trust checks the password first; sign-out ends staying signed in. Every unlock names the device

@@ -77,7 +77,7 @@ class SessionModel<A : Connection, T : Any>(
     }
 
     /**
-     * The offer to stay signed in after a sign-in (D7): the levels this device's store offers ([StaySignedIn], in that
+     * The offer to stay signed in after a sign-in (ADR 0123 decision 8): the levels this device's store offers ([StaySignedIn], in that
      * order) for the account of connection [connection]. Answered by [stay] or [notNow]; the shell is open beneath it.
      */
     @Serializable
@@ -135,7 +135,7 @@ class SessionModel<A : Connection, T : Any>(
     private val connections = Connections<A>()
 
     /**
-     * The levels staying signed in can take on this device now (D7): what an offer and "Manage servers" offer, none where
+     * The levels staying signed in can take on this device now (ADR 0123 decision 8): what an offer and "Manage servers" offer, none where
      * nothing can be kept. Asked of the device's store each time.
      */
     val staySignedIn: Set<StaySignedIn> get() = door.staySignedIn()
@@ -180,7 +180,7 @@ class SessionModel<A : Connection, T : Any>(
     /**
      * The full sign-in, then this device trusted with the account by the password (DEVICE), then — where the device
      * offers a level and the person never said "Not now" for this account here — the offer to stay signed in
-     * ([Gate.Signed.offer], D7). A trust that cannot be enrolled leaves the sign-in standing: the next start then asks for
+     * ([Gate.Signed.offer], ADR 0123 decision 8). A trust that cannot be enrolled leaves the sign-in standing: the next start then asks for
      * the Secret Key again.
      */
     suspend fun signIn(server: String, email: String, password: String, secretKey: String): Opened<A, T>? {
@@ -259,7 +259,7 @@ class SessionModel<A : Connection, T : Any>(
     }
 
     /**
-     * Staying signed in with [account] at [level], from the offer or "Manage servers" (D7): the device's DEVICE_KEY wrap
+     * Staying signed in with [account] at [level], from the offer or "Manage servers" (ADR 0123 decision 8): the device's DEVICE_KEY wrap
      * for it at that level, replacing the trust it had (the other level's wrap and, unused, its key). A level the device
      * does not offer is [TrustChange.FAILED] without asking anyone; the level it has already is [TrustChange.DONE]. A
      * prompt the person cancelled ([TrustChange.CANCELLED]) leaves an offer standing; any other answer ends it, and a
@@ -277,7 +277,7 @@ class SessionModel<A : Connection, T : Any>(
         return change
     }
 
-    /** The offer's "Not now": the password trust stays, and this account is not offered again on this device (D7).
+    /** The offer's "Not now": the password trust stays, and this account is not offered again on this device (ADR 0123 decision 8).
      *  False without an offer. */
     fun notNow(): Boolean {
         val o = offer ?: return false
@@ -287,7 +287,7 @@ class SessionModel<A : Connection, T : Any>(
     }
 
     /**
-     * "Manage servers"' way back from staying signed in to the password trust for [account] (D7): a DEVICE wrap under
+     * "Manage servers"' way back from staying signed in to the password trust for [account] (ADR 0123 decision 8): a DEVICE wrap under
      * [password], which is checked first, replacing the DEVICE_KEY one. Already password-trusted, nothing changes.
      */
     suspend fun trustWithPassword(account: A, password: String): TrustChange {
@@ -359,7 +359,7 @@ class SessionModel<A : Connection, T : Any>(
 
     /**
      * Ends this device's trust in [account]: the next sign-in on this device asks for the Secret Key again, and offers to
-     * stay signed in again — an earlier "Not now" ends with the trust it was said for (D7).
+     * stay signed in again — an earlier "Not now" ends with the trust it was said for (ADR 0123 decision 8).
      */
     suspend fun forgetDevice(account: A) {
         runCatching { door.forgetDevice(account) }
@@ -554,6 +554,6 @@ class AccountDoor(
     override fun setDeclined(account: VeyqAccount, declined: Boolean) = device.setDeclined(account.key, declined)
 }
 
-/** What a change of this device's trust came to (D7): [DONE]; the person [CANCELLED] the prompt (an offer stays); the
+/** What a change of this device's trust came to (ADR 0123 decision 8): [DONE]; the person [CANCELLED] the prompt (an offer stays); the
  *  password was not the account's; or it [FAILED] otherwise — the trust the account had stands in every case but DONE. */
 enum class TrustChange { DONE, CANCELLED, WRONG_PASSWORD, FAILED }

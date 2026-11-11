@@ -37,7 +37,7 @@ struct ManageView: View {
                             Label(say(.manageSignOut), systemImage: "rectangle.portrait.and.arrow.right")
                         }
                         if let trusted = server.trusted {
-                            // the changes to the trust (D7): the other level, back to the password
+                            // the changes to the trust (ADR 0123 decision 8): the other level, back to the password
                             ForEach(Array(TrustWords.changes(trusted, server.level, server.levels).enumerated()), id: \.offset) { _, change in
                                 if let change {
                                     Button { model.stayAt(server.account, change) } label: {

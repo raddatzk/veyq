@@ -1,4 +1,4 @@
-// The offer to stay signed in (the CR device-trust-on-linux-and-windows, D7), shown while the core's Gate.Signed carries
+// The offer to stay signed in (ADR 0123 decision 8), shown while the core's Gate.Signed carries
 // one: a page of the way in, drawn as Windows' own sign-in setup draws its offer after a sign-in ("Use Windows Hello"):
 // the sign-in's centred column, a title, each answer a full-width button with the line that says what it means — the
 // strongest the core lists first and accented —, and where to change it later. A ContentDialog's three buttons carry no
