@@ -237,6 +237,51 @@ internal sealed class Call {
 
     /** "Delete forever" of the row the person confirmed (`TrashSheet.purge(row)`): the host asks first. */
     @Serializable @SerialName("Trash.Purge") data class TrashPurge(val trash: Long, val row: String) : Call()
+
+    /**
+     * The share sheet of [node] (`ShellModel.shareSheet`, core's `ShareSheet`, its links read at once), answered with its
+     * id ([Answer.ShareOpened]) for [Watched.Share]. It stays until [ShareClose] or the tenant closes.
+     */
+    @Serializable @SerialName("Share.Open") data class ShareOpen(val node: NodeAt) : Call()
+    @Serializable @SerialName("Share.Close") data class ShareClose(val share: Long) : Call()
+
+    /** "New link": the form opens (`addLink`). */
+    @Serializable @SerialName("Share.Add") data class ShareAdd(val share: Long) : Call()
+
+    /** "Edit" on the link listed as [link] (its share id): the form opens with its settings (`edit`). */
+    @Serializable @SerialName("Share.Edit") data class ShareEdit(val share: Long, val link: String) : Call()
+
+    /** The form's changes as the person made them, one each (`LinkForm.with…` through the sheet), and its close. */
+    @Serializable @SerialName("Share.Role") data class ShareRole(val share: Long, val role: String) : Call()
+    @Serializable @SerialName("Share.Label") data class ShareLabel(val share: Long, val label: String) : Call()
+    @Serializable @SerialName("Share.LockOn") data class ShareLockOn(val share: Long, val on: Boolean) : Call()
+
+    /** The link's password as typed, on its way to the core; the state says only whether it is long enough. */
+    @Serializable @SerialName("Share.Password") data class SharePassword(val share: Long, val password: String) : Call()
+    @Serializable @SerialName("Share.EndOn") data class ShareEndOn(val share: Long, val on: Boolean) : Call()
+
+    /** The end as a local day, days since 1970-01-01 ([ShareShown.ShownForm.ShownEnd.day]). */
+    @Serializable @SerialName("Share.EndDay") data class ShareEndDay(val share: Long, val day: Long) : Call()
+    @Serializable @SerialName("Share.CancelForm") data class ShareCancelForm(val share: Long) : Call()
+
+    /** The form sent (`save`): [Answer.Said] with why it did not go through, or none. */
+    @Serializable @SerialName("Share.Save") data class ShareSave(val share: Long) : Call()
+
+    /** The address shown once was seen ("Done", `freshSeen`). */
+    @Serializable @SerialName("Share.FreshSeen") data class ShareFreshSeen(val share: Long) : Call()
+
+    /** "Renew link" / "Delete link" on [link]: asked first (`askRenew`, `askDelete`), the question the sheet's state. */
+    @Serializable @SerialName("Share.AskRenew") data class ShareAskRenew(val share: Long, val link: String) : Call()
+    @Serializable @SerialName("Share.AskDelete") data class ShareAskDelete(val share: Long, val link: String) : Call()
+    @Serializable @SerialName("Share.CancelAsk") data class ShareCancelAsk(val share: Long) : Call()
+
+    /** The question answered (`renew`, `delete`): [Answer.Said] with what it left to say. */
+    @Serializable @SerialName("Share.Renew") data class ShareRenew(val share: Long) : Call()
+    @Serializable @SerialName("Share.Delete") data class ShareDelete(val share: Long) : Call()
+
+    /** "Revoke" and "Switch on again" on [link], at once (`switchOff`, `reactivate`): [Answer.Said]. */
+    @Serializable @SerialName("Share.SwitchOff") data class ShareSwitchOff(val share: Long, val link: String) : Call()
+    @Serializable @SerialName("Share.Reactivate") data class ShareReactivate(val share: Long, val link: String) : Call()
 }
 
 /** A call's one answer; what the call changed arrives as the watched states' updates. */
@@ -282,6 +327,7 @@ internal sealed class Answer {
      */
     @Serializable @SerialName("MoveSent") data class MoveSent(val done: Notice?, val undoable: Boolean, val confirming: Boolean, val problem: Notice?) : Answer()
     @Serializable @SerialName("MoveOpened") data class MoveOpened(val move: Long) : Answer()
+    @Serializable @SerialName("ShareOpened") data class ShareOpened(val share: Long) : Answer()
 
     /** A download: whether the file was written, what it says (done or failed) and what it left out, or null. */
     @Serializable @SerialName("Downloaded") data class Downloaded(val written: Boolean, val notice: Notice, val leftOut: Notice?) : Answer()
@@ -291,7 +337,7 @@ internal sealed class Answer {
 
     enum class Why {
         NOT_A_CALL, NO_TENANT_OPEN, NO_SUCH_CONNECTION, NO_SUCH_TENANT, NO_SUCH_POT, NO_SUCH_READER, NO_PICTURE, NOTHING_TO_DOWNLOAD,
-        NO_SUCH_HEADER, NO_SUCH_TRASH, NO_SUCH_ROW, NO_SUCH_MOVE,
+        NO_SUCH_HEADER, NO_SUCH_TRASH, NO_SUCH_ROW, NO_SUCH_MOVE, NO_SUCH_SHARE,
 
         /** A change of trust (`TrustChange`): no offer to answer; the person cancelled the prompt; not enrolled; the
          *  password was not the account's. */
@@ -319,6 +365,9 @@ internal sealed class Watched {
 
     /** A move or copy sheet opened by [Call.MoveOpen]. */
     @Serializable @SerialName("Move") data class Move(val move: Long) : Watched()
+
+    /** A share sheet opened by [Call.ShareOpen]. */
+    @Serializable @SerialName("Share") data class Share(val share: Long) : Watched()
 }
 
 /** One state a watch delivers: the first at once, then each change. */
@@ -351,6 +400,9 @@ internal sealed class Update {
 
     /** A move or copy sheet; null once it was closed. */
     @Serializable @SerialName("Move") data class Move(val move: Long, val shown: MoveShown?) : Update()
+
+    /** A share sheet; null once it was closed. */
+    @Serializable @SerialName("Share") data class Share(val share: Long, val shown: ShareShown?) : Update()
 }
 
 /**
@@ -419,6 +471,86 @@ internal class MoveShown(
 
     /** A place listed: its node, and why it cannot be opened ([blocked]: the node itself, or below it; null: it can). */
     @Serializable class MovePlace(val nodeId: String, val kind: String, val name: String, @Serializable(with = MsgKey::class) val blocked: Msg?)
+}
+
+/**
+ * A share sheet as the host draws it (`ShareSheet`), each field one core function's answer: the node, the sheet's title
+ * and intro in its kind's words, whether "New link" is offered; the links (null while the first read runs) each with its
+ * row's words and what may be done with it ([ShownLink], `LinkRow`); the row a write runs on, what the last one said
+ * ([notice]); the form while it is open ([form]: the link it edits in [editing], its button's words, [saving], why it did
+ * not go through in [problem]); the address minted or renewed, shown once until [Call.ShareFreshSeen] ([freshAddress]); the
+ * link whose renew or delete is asked and each question.
+ *
+ * A link's address carries its key in its fragment (`#k=`): it crosses outward because it is what the person copies and
+ * hands out, in [freshAddress] and [ShownLink.address] alone (`SecretFreeSchemaTest`'s one named allowance for it).
+ */
+@Serializable
+internal class ShareShown(
+    val node: NodeAt,
+    @Serializable(with = MsgKey::class) val title: Msg,
+    @Serializable(with = MsgKey::class) val intro: Msg,
+    val canMint: Boolean,
+    val links: List<ShownLink>?,
+    val failed: Boolean,
+    val busy: String?,
+    val notice: Notice?,
+    val form: ShownForm?,
+    val editing: String?,
+    @Serializable(with = MsgKey::class) val submit: Msg,
+    val saving: Boolean,
+    val problem: Notice?,
+    val freshAddress: String?,
+    val renewing: String?,
+    val deleting: String?,
+    @Serializable(with = MsgKey::class) val renewQuestion: Msg,
+    @Serializable(with = MsgKey::class) val deleteQuestion: Msg,
+) {
+    /**
+     * One link: its id, its title (its label, else its role), its badges, the instants it was made and ends (the host says
+     * their local day), its address where it may be copied ([canCopy]; null otherwise), and what this member may do with it.
+     */
+    @Serializable class ShownLink(
+        val shareId: String,
+        val title: Piece,
+        val badges: List<Notice>,
+        val createdAt: String,
+        val expiresAt: String?,
+        val address: String?,
+        val canCopy: Boolean,
+        val canEdit: Boolean,
+        val canRenew: Boolean,
+        val canSwitchOff: Boolean,
+        val canReactivate: Boolean,
+        val canDelete: Boolean,
+    )
+
+    /**
+     * The form (`LinkForm`): the roles to pick from with their words (empty: the role is fixed), the role and its hint, the
+     * name field ([namesIt], its label, the text), the password's switch ([lock]) and the end's ([end]), and whether it may
+     * be sent. The password itself never comes back: the host's entry holds what was typed.
+     */
+    @Serializable class ShownForm(
+        val roles: List<ShownRole>,
+        val role: String,
+        @Serializable(with = MsgKey::class) val hint: Msg,
+        val namesIt: Boolean,
+        @Serializable(with = MsgKey::class) val nameLabel: Msg,
+        val label: String,
+        val lock: ShownLock,
+        val end: ShownEnd,
+        val canSave: Boolean,
+    ) {
+        @Serializable class ShownRole(val role: String, @Serializable(with = MsgKey::class) val word: Msg)
+
+        /**
+         * The password's switch: on, whether it may be turned off (a rule holds it), whether a blank entry keeps the link's
+         * old one ([kept]), whether what was typed is too short, and what it says under it.
+         */
+        @Serializable class ShownLock(val on: Boolean, val optional: Boolean, val kept: Boolean, val tooShort: Boolean, val hint: Notice)
+
+        /** The end's switch: on, whether it may be turned off, the day picked, today and the last day a pick may take (local days since 1970-01-01), and what it says under it. */
+        @Serializable class ShownEnd(val on: Boolean, val optional: Boolean, val day: Long, val today: Long, val lastDay: Long?, val hint: Notice)
+    }
 }
 
 /**

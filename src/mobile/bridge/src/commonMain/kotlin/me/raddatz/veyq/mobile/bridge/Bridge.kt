@@ -32,10 +32,12 @@ import me.raddatz.veyq.mobile.navigation.NodeAt
 import me.raddatz.veyq.mobile.navigation.NodeHeaderModel
 import me.raddatz.veyq.mobile.navigation.TrashSheet
 import me.raddatz.veyq.mobile.navigation.MoveSheet
+import me.raddatz.veyq.mobile.navigation.ShareSheet
 import me.raddatz.veyq.mobile.export.NodeExport
 import me.raddatz.veyq.mobile.session.NodeMove
 import me.raddatz.veyq.mobile.words.Notices
 import me.raddatz.veyq.mobile.words.Notice
+import me.raddatz.veyq.mobile.words.Msg
 import me.raddatz.veyq.mobile.navigation.RecentUses
 import me.raddatz.veyq.mobile.navigation.ShellModel
 import me.raddatz.veyq.mobile.navigation.ShellWords
@@ -98,6 +100,8 @@ internal class Tenant(
     val move: ((node: NodeAt, copying: Boolean, pot: PotModel?, deletedName: String) -> MoveSheet)? = shell?.let { s ->
         { node, copying, pot, deletedName -> s.moveSheet(node, copying, pot, deletedName) {} }
     },
+    /** A node's share sheet (`ShellModel.shareSheet`). */
+    val share: ((node: NodeAt) -> ShareSheet)? = shell?.let { s -> { node -> s.shareSheet(node) {} } },
     /** A node with everything under it into a sink (`ShellModel.download`): what it left out, or null. */
     val download: (suspend (node: NodeAt, deletedName: String, sink: (ByteArray) -> Unit) -> List<NodeExport.Skipped>?)? = shell?.let { s ->
         { node, deletedName, sink -> s.download(node, deletedName, Clock.System.now().toEpochMilliseconds(), sink) }
@@ -148,6 +152,7 @@ internal class Bridge<A : Connection, T : Any>(compose: () -> Composition<A, T>)
     private val headers = Registry<HeldHeader>()
     private val trashes = Registry<TrashSheet>()
     private val moves = Registry<MoveSheet>()
+    private val shares = Registry<ShareSheet>()
 
     /** "Manage servers" while it is open, null while closed; its spaces read by [managing]'s job. */
     private val manage = MutableStateFlow<List<ManagedShown>?>(null)
@@ -321,6 +326,32 @@ internal class Bridge<A : Connection, T : Any>(compose: () -> Composition<A, T>)
             is Call.TrashPurge -> onRow(call.trash, call.row) { sheet, row -> sheet.purge(row) }
             is Call.TrashType -> trashes[call.trash]?.type(call.name).done(Answer.Why.NO_SUCH_TRASH)
             is Call.TrashCancelRename -> trashes[call.trash]?.cancelRename().done(Answer.Why.NO_SUCH_TRASH)
+            is Call.ShareOpen -> tenant.value?.models?.share?.let { make ->
+                val id = ids.incrementAndFetch()
+                val sheet = make(call.node)
+                shares.put(id, sheet)
+                scope.launch { sheet.load() }
+                Answer.ShareOpened(id)
+            } ?: noTenant
+            is Call.ShareClose -> shares.remove(call.share)?.let { Answer.Done } ?: noShare
+            is Call.ShareAdd -> shares[call.share]?.addLink().done(Answer.Why.NO_SUCH_SHARE)
+            is Call.ShareEdit -> shares[call.share]?.edit(call.link).done(Answer.Why.NO_SUCH_SHARE)
+            is Call.ShareRole -> shares[call.share]?.role(call.role).done(Answer.Why.NO_SUCH_SHARE)
+            is Call.ShareLabel -> shares[call.share]?.label(call.label).done(Answer.Why.NO_SUCH_SHARE)
+            is Call.ShareLockOn -> shares[call.share]?.passwordOn(call.on).done(Answer.Why.NO_SUCH_SHARE)
+            is Call.SharePassword -> shares[call.share]?.password(call.password).done(Answer.Why.NO_SUCH_SHARE)
+            is Call.ShareEndOn -> shares[call.share]?.endOn(call.on).done(Answer.Why.NO_SUCH_SHARE)
+            is Call.ShareEndDay -> shares[call.share]?.endDay(call.day).done(Answer.Why.NO_SUCH_SHARE)
+            is Call.ShareCancelForm -> shares[call.share]?.cancelForm().done(Answer.Why.NO_SUCH_SHARE)
+            is Call.ShareSave -> shares[call.share]?.let { Answer.Said(it.save().problem) } ?: noShare
+            is Call.ShareFreshSeen -> shares[call.share]?.freshSeen().done(Answer.Why.NO_SUCH_SHARE)
+            is Call.ShareAskRenew -> shares[call.share]?.askRenew(call.link).done(Answer.Why.NO_SUCH_SHARE)
+            is Call.ShareAskDelete -> shares[call.share]?.askDelete(call.link).done(Answer.Why.NO_SUCH_SHARE)
+            is Call.ShareCancelAsk -> shares[call.share]?.cancelAsk().done(Answer.Why.NO_SUCH_SHARE)
+            is Call.ShareRenew -> shares[call.share]?.let { Answer.Said(it.renew().notice) } ?: noShare
+            is Call.ShareDelete -> shares[call.share]?.let { Answer.Said(it.delete().notice) } ?: noShare
+            is Call.ShareSwitchOff -> shares[call.share]?.let { Answer.Said(it.switchOff(call.link).notice) } ?: noShare
+            is Call.ShareReactivate -> shares[call.share]?.let { Answer.Said(it.reactivate(call.link).notice) } ?: noShare
         }
     }
 
@@ -340,6 +371,7 @@ internal class Bridge<A : Connection, T : Any>(compose: () -> Composition<A, T>)
     private val noHeader = Answer.Refused(Answer.Why.NO_SUCH_HEADER)
     private val noTrash = Answer.Refused(Answer.Why.NO_SUCH_TRASH)
     private val noMove = Answer.Refused(Answer.Why.NO_SUCH_MOVE)
+    private val noShare = Answer.Refused(Answer.Why.NO_SUCH_SHARE)
 
     /** A move sheet's state as a write's answer ([Answer.MoveSent]). */
     private fun sent(s: MoveSheet.State) = Answer.MoveSent(s.done, s.undo != null, s.confirming, s.problem)
@@ -402,6 +434,7 @@ internal class Bridge<A : Connection, T : Any>(compose: () -> Composition<A, T>)
         headers.removeAll()
         trashes.removeAll()
         moves.removeAll()
+        shares.removeAll()
     }
 
     /**
@@ -436,6 +469,8 @@ internal class Bridge<A : Connection, T : Any>(compose: () -> Composition<A, T>)
             ?: flowOf(Update.Trash(w.trash, null))
         is Watched.Move -> moves[w.move]?.let { m -> m.state.map { Update.Move(w.move, shownMove(m, it)) } }
             ?: flowOf(Update.Move(w.move, null))
+        is Watched.Share -> shares[w.share]?.let { sh -> sh.state.map { Update.Share(w.share, shownShare(sh, it)) } }
+            ?: flowOf(Update.Share(w.share, null))
         is Watched.Pot -> {
             val pictures = tenant.value?.models?.pictures ?: flowOf(emptyMap())
             (pots[w.pot]?.state ?: flowOf(null)).combine(pictures) { s, p -> Update.Pot(w.pot, s, if (s == null) emptyList() else p.keys.sorted()) }
@@ -501,6 +536,32 @@ internal class Bridge<A : Connection, T : Any>(compose: () -> Composition<A, T>)
         empty = m.empty.takeIf { s.loaded && s.places.isEmpty() },
         here = m.hereWord(s), problem = s.problem, noRoom = s.noRoom, losses = s.losses.map { Notice(it) }, leftOut = s.leftOut,
         busy = s.busy, canChoose = s.canChoose, confirming = s.confirming, confirmQuestion = m.confirmQuestion, done = s.done, undo = s.undo,
+    )
+
+    /** A share sheet as the host draws it ([ShareShown]), each field the sheet's own answer. */
+    private fun shownShare(sh: ShareSheet, s: ShareSheet.State): ShareShown = ShareShown(
+        node = sh.node, title = sh.words.title, intro = sh.words.intro, canMint = sh.canMint,
+        links = s.links?.let {
+            sh.rows(s).map { r ->
+                val l = r.link
+                ShareShown.ShownLink(
+                    l.shareId, r.title, r.badges.map { Notice(it) }, l.createdAt, l.expiresAt, l.url.takeIf { r.canCopy }, r.canCopy, r.canEdit,
+                    r.canRenew, r.canSwitchOff, r.canReactivate, r.canDelete,
+                )
+            }
+        },
+        failed = s.failed, busy = s.busy, notice = s.notice,
+        form = s.form?.let { f ->
+            ShareShown.ShownForm(
+                f.roles.map { ShareShown.ShownForm.ShownRole(it, sh.words.roleWord(it)) }, f.role, sh.words.hint(f.role), f.namesIt,
+                f.nameLabel, f.label,
+                ShareShown.ShownForm.ShownLock(f.withPassword, f.passwordOptional, f.hadPassword, f.passwordTooShort, sh.passwordHint),
+                ShareShown.ShownForm.ShownEnd(f.withEnd, f.endOptional, f.endDay, f.today, f.lastDay, sh.endHint),
+                f.canSave,
+            )
+        },
+        editing = s.editing, submit = sh.submit(s), saving = s.saving, problem = s.problem, freshAddress = s.fresh,
+        renewing = s.renewing, deleting = s.deleting, renewQuestion = Msg.SHARE_RENEW_CONFIRM, deleteQuestion = sh.words.deleteConfirm,
     )
 
     /** A trash sheet as the host draws it ([TrashShown]), each field the sheet's own answer. */

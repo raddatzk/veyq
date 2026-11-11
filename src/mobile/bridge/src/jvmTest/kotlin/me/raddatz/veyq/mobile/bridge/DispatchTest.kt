@@ -736,7 +736,8 @@ class DispatchTest {
         val trips = NodeAt("s", "trips", "FOLDER", "Trips")
         played.room = 4096
         val full = (b.ask(Call.MoveOpen(trips, true, "deleted")) as Answer.MoveOpened).move
-        val noRoom = b.watching(Watched.Move(full)).until { u -> (u as Update.Move).shown?.takeIf { it.loaded && it.noRoom != null } }
+        // the copy's losses and its storage check arrive each on its own: wait for both
+        val noRoom = b.watching(Watched.Move(full)).until { u -> (u as Update.Move).shown?.takeIf { it.loaded && it.noRoom != null && it.losses.size > 1 } }
         assertEquals(Msg.COPY_NO_ROOM, noRoom.noRoom!!.msg)
         assertEquals(listOf(Msg.COPY_LOSS_ALWAYS, Msg.COPY_LOSS_FOLDER_COVER), noRoom.losses.map { it.msg })
         assertTrue(!noRoom.canChoose)
@@ -767,6 +768,150 @@ class DispatchTest {
         // every sheet closes with its tenant
         assertEquals(Answer.Done, b.ask(Call.SessionSignOut("a.example#u1")))
         assertEquals(Answer.Refused(Answer.Why.NO_SUCH_MOVE), b.ask(Call.MoveUndo(id)), "a sheet outlived its tenant")
+        b.shutdown()
+    }
+
+    /** A share sheet's door the test plays: a server's links, every write recorded. */
+    private class PlayedShare : me.raddatz.veyq.mobile.navigation.ShareSheet.Door {
+        val links = java.util.concurrent.CopyOnWriteArrayList<me.raddatz.veyq.mobile.session.ShareLinks.Link>()
+        val sent = java.util.concurrent.CopyOnWriteArrayList<String>()
+        @Volatile var passwordSent: String? = null
+        @Volatile var rekeys = 0
+        private var next = 0
+        fun link(id: String, enabled: Boolean, at: String) = me.raddatz.veyq.mobile.session.ShareLinks.Link(
+            id, "READ", enabled, true, at, null, "", false, false, "http://t/s/$id#k=key-$id", false, false, !enabled,
+        )
+        override val rules = me.raddatz.veyq.mobile.session.ShareLinks.Rules.UNKNOWN
+        override suspend fun list() = links.sortedByDescending { it.createdAt }
+        override suspend fun mint(role: String, label: String, password: String, expiresAt: String?): me.raddatz.veyq.mobile.session.ShareLinks.Minted {
+            sent += "mint:$role:$label:${expiresAt != null}"
+            passwordSent = password
+            val id = "new${++next}"
+            links += link(id, true, "2026-12-0$next")
+            return me.raddatz.veyq.mobile.session.ShareLinks.Minted(me.raddatz.veyq.mobile.session.ShareLinks.Outcome.CREATED, "http://t/s/$id#k=key-$id")
+        }
+        override suspend fun createDropBox(name: String, password: String, expiresAt: String?) =
+            me.raddatz.veyq.mobile.depot.DropBoxes.Created(me.raddatz.veyq.mobile.depot.DropBoxes.Outcome.FAILED).also { sent += "dropbox:$name" }
+        override suspend fun edit(shareId: String, edit: me.raddatz.veyq.mobile.session.ShareLinkChanges.Edit): me.raddatz.veyq.mobile.session.ShareLinkChanges.Changed {
+            sent += "edit:$shareId:${edit.label}"
+            return me.raddatz.veyq.mobile.session.ShareLinkChanges.Changed(me.raddatz.veyq.mobile.session.ShareLinkChanges.Outcome.DONE)
+        }
+        override suspend fun renew(shareId: String): me.raddatz.veyq.mobile.session.ShareLinkChanges.Changed {
+            sent += "renew:$shareId"
+            links.removeIf { it.shareId == shareId }
+            val id = "renewed${++next}"
+            links += link(id, true, "2026-12-1$next")
+            return me.raddatz.veyq.mobile.session.ShareLinkChanges.Changed(me.raddatz.veyq.mobile.session.ShareLinkChanges.Outcome.DONE, "http://t/s/$id#k=key-$id")
+        }
+        override suspend fun switchOff(shareId: String): me.raddatz.veyq.mobile.session.ShareLinks.Closed {
+            sent += "off:$shareId"
+            turn(shareId, false)
+            return me.raddatz.veyq.mobile.session.ShareLinks.Closed.CLOSED_REKEY_PENDING
+        }
+        override suspend fun reactivate(shareId: String): me.raddatz.veyq.mobile.session.ShareLinkChanges.Changed {
+            sent += "on:$shareId"
+            turn(shareId, true)
+            return me.raddatz.veyq.mobile.session.ShareLinkChanges.Changed(me.raddatz.veyq.mobile.session.ShareLinkChanges.Outcome.DONE)
+        }
+        override suspend fun delete(shareId: String): me.raddatz.veyq.mobile.session.ShareLinkChanges.Changed {
+            sent += "delete:$shareId"
+            links.removeIf { it.shareId == shareId }
+            return me.raddatz.veyq.mobile.session.ShareLinkChanges.Changed(me.raddatz.veyq.mobile.session.ShareLinkChanges.Outcome.DONE)
+        }
+        override fun rekeyed() { rekeys++ }
+        override fun changed() {}
+        private fun turn(id: String, on: Boolean) {
+            val i = links.indexOfFirst { it.shareId == id }
+            links[i] = link(id, on, links[i].createdAt)
+        }
+    }
+
+    @Test
+    fun aLinkIsMintedEditedRenewedSwitchedOffAndOnAndDeletedThroughCalls() = runBlocking {
+        val played = PlayedShare()
+        played.links += played.link("a", true, "2026-11-01")
+        val b = Bridge {
+            val hidden = Hidden({}, emptySet())
+            Composition(SessionModel(Door(), hidden, RecentUses({}, emptyList())), hidden) { _ ->
+                Tenant(
+                    shell = null, pot = null, me = "u1", pictures = pictures, loadPictures = {},
+                    share = { node -> me.raddatz.veyq.mobile.navigation.ShareSheet(node, played, { 1_700_000_000_000L }) },
+                )
+            }
+        }
+        val photos = NodeAt("s", "f", "FOLDER", "Photos")
+        assertEquals(Answer.Refused(Answer.Why.NO_TENANT_OPEN), b.ask(Call.ShareOpen(photos)))
+        b.signedIn()
+        val id = (b.ask(Call.ShareOpen(photos)) as Answer.ShareOpened).share
+        val w = b.watching(Watched.Share(id))
+        val listed = w.until { u -> (u as Update.Share).shown?.takeIf { it.links != null } }
+        assertEquals(Msg.SHARE_FOLDER_TITLE, listed.title)
+        assertEquals(listOf("a"), listed.links!!.map { it.shareId })
+        assertEquals("http://t/s/a#k=key-a", listed.links!!.single().address)
+
+        // mint: the form's changes one call each, the password typed going in and never out, the address shown once
+        assertEquals(Answer.Done, b.ask(Call.ShareAdd(id)))
+        val form = w.until { u -> (u as Update.Share).shown?.form }
+        assertEquals(listOf("READ", "READ_WRITE", "WRITE_ONLY"), form.roles.map { it.role })
+        assertEquals(Answer.Done, b.ask(Call.ShareRole(id, "READ_WRITE")))
+        assertEquals(Answer.Done, b.ask(Call.ShareLabel(id, "Family")))
+        assertEquals(Answer.Done, b.ask(Call.ShareLockOn(id, true)))
+        assertEquals(Answer.Done, b.ask(Call.SharePassword(id, "short")))
+        val short = w.until { u -> (u as Update.Share).shown?.form?.takeIf { it.lock.tooShort } }
+        assertTrue(!short.canSave)
+        assertEquals(Answer.Done, b.ask(Call.SharePassword(id, "long enough now")))
+        assertEquals(Answer.Done, b.ask(Call.ShareEndOn(id, true)))
+        assertEquals(Answer.Done, b.ask(Call.ShareEndDay(id, form.end.today + 2)))
+        w.until { u -> (u as Update.Share).shown?.form?.takeIf { it.canSave && it.end.day == form.end.today + 2 } }
+        assertEquals(Answer.Said(null), b.ask(Call.ShareSave(id)))
+        val minted = w.until { u -> (u as Update.Share).shown?.takeIf { it.freshAddress != null && it.links?.size == 2 } }
+        assertEquals("http://t/s/new1#k=key-new1", minted.freshAddress)
+        assertNull(minted.form)
+        assertEquals("mint:READ_WRITE:Family:true", played.sent.single())
+        assertEquals("long enough now", played.passwordSent)
+        assertEquals(Answer.Done, b.ask(Call.ShareFreshSeen(id)))
+        w.until { u -> (u as Update.Share).shown?.takeIf { it.freshAddress == null } }
+
+        // edit in place
+        assertEquals(Answer.Done, b.ask(Call.ShareEdit(id, "a")))
+        w.until { u -> (u as Update.Share).shown?.takeIf { it.editing == "a" && it.submit == Msg.SHARE_SAVE } }
+        assertEquals(Answer.Done, b.ask(Call.ShareLabel(id, "Renamed")))
+        w.until { u -> (u as Update.Share).shown?.form?.takeIf { it.label == "Renamed" } }
+        assertEquals(Answer.Said(null), b.ask(Call.ShareSave(id)))
+        assertEquals("edit:a:Renamed", played.sent.last())
+
+        // renew, asked first: the new address shown once, the tenant told it re-keyed
+        assertEquals(Answer.Done, b.ask(Call.ShareAskRenew(id, "a")))
+        w.until { u -> (u as Update.Share).shown?.takeIf { it.renewing == "a" } }
+        assertEquals(Answer.Said(null), b.ask(Call.ShareRenew(id)))
+        val renewed = w.until { u -> (u as Update.Share).shown?.takeIf { it.freshAddress != null && it.renewing == null } }
+        assertTrue(renewed.freshAddress!!.startsWith("http://t/s/renewed"))
+        assertEquals(1, played.rekeys)
+        val fresh = renewed.links!!.first { it.shareId.startsWith("renewed") }.shareId
+
+        // off, which says its re-key is still due; on again; off and deleted, asked first
+        assertEquals(Answer.Said(me.raddatz.veyq.mobile.words.Notice(Msg.SHARE_CLOSED_REKEYING)), b.ask(Call.ShareSwitchOff(id, fresh)))
+        val off = w.until { u -> (u as Update.Share).shown?.links?.firstOrNull { it.shareId == fresh }?.takeIf { !it.canCopy } }
+        assertTrue(off.canReactivate && off.canDelete)
+        assertNull(off.address, "a link switched off is not copied")
+        assertEquals(Answer.Said(null), b.ask(Call.ShareReactivate(id, fresh)))
+        w.until { u -> (u as Update.Share).shown?.links?.firstOrNull { it.shareId == fresh }?.takeIf { it.canCopy } }
+        assertEquals(Answer.Said(me.raddatz.veyq.mobile.words.Notice(Msg.SHARE_CLOSED_REKEYING)), b.ask(Call.ShareSwitchOff(id, fresh)))
+        assertEquals(Answer.Done, b.ask(Call.ShareAskDelete(id, fresh)))
+        w.until { u -> (u as Update.Share).shown?.takeIf { it.deleting == fresh } }
+        assertEquals(Answer.Said(null), b.ask(Call.ShareDelete(id)))
+        w.until { u -> (u as Update.Share).shown?.takeIf { s -> s.links?.none { it.shareId == fresh } == true } }
+        assertEquals(listOf("renew:a", "off:$fresh", "on:$fresh", "off:$fresh", "delete:$fresh"), played.sent.drop(2))
+        assertEquals(4, played.rekeys, "each write that may close a link tells the tenant: renew, two offs, the delete")
+
+        // closed: refused, watched as none; every sheet closes with its tenant
+        assertEquals(Answer.Done, b.ask(Call.ShareClose(id)))
+        assertEquals(Update.Share(id, null), b.watching(Watched.Share(id)).next())
+        listOf(Call.ShareAdd(id), Call.ShareSave(id), Call.ShareRenew(id), Call.ShareSwitchOff(id, "x"), Call.ShareClose(id))
+            .forEach { assertEquals(Answer.Refused(Answer.Why.NO_SUCH_SHARE), b.ask(it), "$it") }
+        val again = (b.ask(Call.ShareOpen(photos)) as Answer.ShareOpened).share
+        assertEquals(Answer.Done, b.ask(Call.SessionSignOut("a.example#u1")))
+        assertEquals(Answer.Refused(Answer.Why.NO_SUCH_SHARE), b.ask(Call.ShareAdd(again)), "a sheet outlived its tenant")
         b.shutdown()
     }
 

@@ -22,6 +22,10 @@ import kotlin.test.assertTrue
  *   password, and the password "Manage servers" takes back to the password trust, which cross once and never come back;
  * - an identifier or a catalog key that only shares the word: a connection's key (`host#userId`, it names an account),
  *   a bar place's key (the catalog's name of its words) and a trusted device's wrap id (the server's name for the wrap).
+ *
+ * A guest link's address is a key by its nature — `K_share` rides its fragment (`#k=`) — and still crosses outward,
+ * since it is what the person copies and hands out. That is the one allowance of its kind, written once ([linkAddresses])
+ * and held by name: any outward field named like an address (`url`, `address`) not listed there is refused.
  */
 class SecretFreeSchemaTest {
     private val typedIn = mapOf(
@@ -29,6 +33,12 @@ class SecretFreeSchemaTest {
         "Session.SignIn.secretKey" to "the Secret Key the person typed, on its way to the core",
         "Session.Unlock.password" to "the password the person typed at the unlock, on its way to the core",
         "Manage.PasswordTrust.password" to "the password the person typed to go back to the password trust, on its way to the core",
+        "Share.Password.password" to "the password a guest link is to ask for, as the person typed it, on its way to the core",
+    )
+    /** The outward fields that carry a guest link's address, its key in the fragment, each with why. */
+    private val linkAddresses = mapOf(
+        "me.raddatz.veyq.mobile.bridge.ShareShown.ShownLink.address" to "an open link's address, which the person copies or shares from its row",
+        "me.raddatz.veyq.mobile.bridge.ShareShown.freshAddress" to "the address just minted or renewed, shown once to copy or share",
     )
     private val identifiers = mapOf(
         "Signed.connectionKey" to "a connection's id, host#userId: it names an account and opens nothing",
@@ -39,6 +49,28 @@ class SecretFreeSchemaTest {
     @Test
     fun nothingTheCoreSendsCarriesAKeyASealATokenASecretOrBytes() {
         assertEquals(emptyList(), leaks(Roots.outward, identifiers))
+        assertEquals(emptyList(), addresses(Roots.outward, linkAddresses))
+        // each listed address is a field the wire has
+        val fields = Schema(Roots.all).let { s -> s.types.values.flatMap { t -> s.fields(t).map { "${it.owner}.${it.name}" } } }.toSet()
+        assertEquals(emptySet(), linkAddresses.keys - fields)
+    }
+
+    /** The address check against what it must refuse: an outward `url` or `…Address` not listed is red, a listed one is not. */
+    @Test
+    fun anAddressNotListedIsRefused() {
+        assertEquals(listOf("Addressed.url: a link's address", "Addressed.shareAddress: a link's address"), addresses(listOf(Addressed.serializer()), linkAddresses))
+        assertEquals(emptyList(), addresses(listOf(Addressed.serializer()), mapOf("Addressed.url" to "t", "Addressed.shareAddress" to "t")))
+    }
+
+    @Serializable @kotlinx.serialization.SerialName("Addressed")
+    class Addressed(val name: String, val url: String?, val shareAddress: String)
+
+    private fun addresses(roots: List<KSerializer<*>>, allowed: Map<String, String>): List<String> {
+        val schema = Schema(roots)
+        return schema.types.values.flatMap { t -> schema.fields(t) }.distinctBy { it.owner to it.name }
+            .map { "${it.owner}.${it.name}" to it.name }
+            .filter { (at, name) -> ADDRESS.containsMatchIn(name) && at !in allowed }
+            .map { (at, _) -> "$at: a link's address" }
     }
 
     @Test
@@ -113,5 +145,6 @@ class SecretFreeSchemaTest {
 
     companion object {
         private val SECRET = Regex("key|seal|token|secret|passw|private|wrap", RegexOption.IGNORE_CASE)
+        private val ADDRESS = Regex("url|address", RegexOption.IGNORE_CASE)
     }
 }

@@ -565,6 +565,126 @@ class LiveBridgeTest {
     }
 
     /**
+     * The share sheet through calls (the header CR's Phase 4), over the real core: a folder "App share <n>" made beside the
+     * seeded Pot Amsterdam; a link minted on it through the form (its address shown once), edited in place (its label read
+     * back), renewed (a new address, the old one gone from the list), switched off and on again (its address kept), switched
+     * off and deleted — each read back from the sheet's list. The folder is trashed and purged at the end, its links with it.
+     */
+    @Test
+    fun aLinkIsMintedEditedRenewedSwitchedOffAndOnAndDeletedThroughCalls() = runBlocking {
+        val origin = System.getenv("VEYQ_LIVE") ?: return@runBlocking
+        val envFile = System.getenv("VEYQ_ENV_FILE")?.let(::File) ?: File(System.getProperty("veyq.repoRoot"), ".run/.env")
+        val env = envFile.readLines()
+            .mapNotNull { l -> l.substringBefore('=', "").takeIf { it.isNotBlank() }?.let { it.trim() to l.substringAfter('=').trim().trim('"', '\'') } }
+            .toMap()
+        val b = Bridge.live(BouncyCastlePrimitives, { block -> HttpClient(OkHttp, block) }, Config("bridge share test"), hostStore(ConcurrentHashMap()), { NoDeviceKeys }, JvmFiles)
+        val gate = b.watching(Watched.Session)
+        assertEquals(Answer.Done, b.ask(Call.SessionStart))
+        gate.until { (it as Update.Session).gate as? Gate.SignIn }
+        assertEquals(Answer.Done, b.ask(Call.SessionSignIn(origin, env.getValue("VEYQ_EMAIL"), env.getValue("VEYQ_PASSWORD"), env.getValue("VEYQ_SECRET_KEY")), timeout = 2.minutes))
+        gate.until(2.minutes) { (it as Update.Session).gate as? Gate.Signed }
+        val first = b.watching(Watched.Shell).until(1.minutes) { (it as Update.Shell).takeIf { u -> u.state?.lists?.objects?.any { o -> o.name == "Amsterdam" } == true } }
+        val amsterdam = first.state!!.lists.objects.first { it.name == "Amsterdam" }
+        val scope = amsterdam.scopeId
+        val home = first.state.lists.nodes.first { it.nodeId == amsterdam.nodeId }.parentId
+        suspend fun fresh(): Update.Shell {
+            assertEquals(Answer.Done, b.ask(Call.ShellRefresh, timeout = 1.minutes))
+            return b.watching(Watched.Shell).next() as Update.Shell
+        }
+        fun nodes(u: Update.Shell) = u.state!!.lists.nodes.filter { it.scopeId == scope }
+        fun at(n: me.raddatz.veyq.mobile.navigation.NodeRef) = me.raddatz.veyq.mobile.navigation.NodeAt(n.scopeId, n.nodeId, n.kind, n.name)
+
+        assertEquals(Answer.Done, b.ask(Call.ShellChoose(null)))
+        assertEquals(Answer.Done, b.ask(Call.ShellSwitchSpace(scope)))
+        home?.let { h -> nodes(first).first { it.nodeId == h }.asFolder()?.let { assertEquals(Answer.Done, b.ask(Call.ShellEnter(it))) } }
+        val n = System.currentTimeMillis() % 100_000
+        val name = "App share $n"
+        assertEquals(Answer.Said(null), b.ask(Call.ShellCreateFolder(name), timeout = 1.minutes))
+        val folder = assertNotNull(nodes(fresh()).firstOrNull { it.name == name && it.parentId == home }, "the new folder is not listed")
+        println("made $name")
+        try {
+            val id = (b.ask(Call.ShareOpen(at(folder))) as Answer.ShareOpened).share
+            val w = b.watching(Watched.Share(id))
+            suspend fun now(): ShareShown = b.watching(Watched.Share(id)).until(1.minutes) { u -> (u as Update.Share).shown?.takeIf { it.links != null && it.busy == null && !it.saving } }
+            val empty = w.until(1.minutes) { u -> (u as Update.Share).shown?.takeIf { it.links != null } }
+            assertEquals(emptyList(), empty.links)
+            assertTrue(empty.canMint, "links are off in this tenant")
+
+            // mint: the form as the tenant's rules have it (a password, an end where they require one), the address shown once
+            assertEquals(Answer.Done, b.ask(Call.ShareAdd(id)))
+            val form = w.until { u -> (u as Update.Share).shown?.form }
+            assertEquals(Answer.Done, b.ask(Call.ShareLabel(id, "App label")))
+            if (!form.lock.optional) assertEquals(Answer.Done, b.ask(Call.SharePassword(id, "app link password $n")))
+            w.until { u -> (u as Update.Share).shown?.form?.takeIf { it.label == "App label" && it.canSave } }
+            assertEquals(Answer.Said(null), b.ask(Call.ShareSave(id), timeout = 1.minutes))
+            val minted = now().also { assertNotNull(it.freshAddress, "no address was shown") }
+            val link = minted.links!!.single()
+            assertEquals(minted.freshAddress, link.address)
+            assertTrue(link.address!!.startsWith("$origin/s/${link.shareId}#k="))
+            assertEquals(me.raddatz.veyq.mobile.words.Piece.Plain("App label"), link.title)
+            assertEquals(Answer.Done, b.ask(Call.ShareFreshSeen(id)))
+            println("minted ${link.shareId}")
+
+            // edited in place: the label read back, the address kept
+            assertEquals(Answer.Done, b.ask(Call.ShareEdit(id, link.shareId)))
+            w.until { u -> (u as Update.Share).shown?.takeIf { it.editing == link.shareId } }
+            assertEquals(Answer.Done, b.ask(Call.ShareLabel(id, "App label edited")))
+            w.until { u -> (u as Update.Share).shown?.form?.takeIf { it.label == "App label edited" } }
+            assertEquals(Answer.Said(null), b.ask(Call.ShareSave(id), timeout = 1.minutes))
+            val edited = now().links!!.single()
+            assertEquals(me.raddatz.veyq.mobile.words.Piece.Plain("App label edited"), edited.title)
+            assertEquals(link.address, edited.address)
+            println("edited ${link.shareId}")
+
+            // renewed: a new address, the old link gone from the list (the folder re-keyed)
+            assertEquals(Answer.Done, b.ask(Call.ShareAskRenew(id, link.shareId)))
+            w.until { u -> (u as Update.Share).shown?.takeIf { it.renewing == link.shareId } }
+            assertEquals(Answer.Said(null), b.ask(Call.ShareRenew(id), timeout = 3.minutes))
+            val renewedState = now()
+            val renewed = renewedState.links!!.single()
+            assertTrue(renewed.shareId != link.shareId, "the renewed link kept its id")
+            assertEquals(renewedState.freshAddress, renewed.address)
+            assertEquals(me.raddatz.veyq.mobile.words.Piece.Plain("App label edited"), renewed.title, "the renew did not carry the label")
+            assertEquals(Answer.Done, b.ask(Call.ShareFreshSeen(id)))
+            println("renewed ${link.shareId} as ${renewed.shareId}")
+
+            // switched off (re-keyed), on again at its old address, off again and deleted
+            val offSaid = b.ask(Call.ShareSwitchOff(id, renewed.shareId), timeout = 3.minutes)
+            assertEquals(Answer.Said(null), offSaid)
+            val off = now().links!!.single()
+            assertTrue(!off.canCopy && off.canReactivate && off.canDelete, "switched off, it is not offered again or for deletion")
+            assertEquals(Answer.Said(null), b.ask(Call.ShareReactivate(id, renewed.shareId), timeout = 3.minutes))
+            val on = now().links!!.single()
+            assertEquals(renewed.address, on.address, "switched on again at another address")
+            println("switched ${renewed.shareId} off and on")
+            assertEquals(Answer.Said(null), b.ask(Call.ShareSwitchOff(id, renewed.shareId), timeout = 3.minutes))
+            now()
+            assertEquals(Answer.Done, b.ask(Call.ShareAskDelete(id, renewed.shareId)))
+            w.until { u -> (u as Update.Share).shown?.takeIf { it.deleting == renewed.shareId } }
+            assertEquals(Answer.Said(null), b.ask(Call.ShareDelete(id), timeout = 1.minutes))
+            assertEquals(emptyList(), now().links)
+            println("deleted ${renewed.shareId}")
+            b.ask(Call.ShareClose(id))
+        } finally {
+            // the folder made goes to the trash and is purged, and an "App share" folder a run stopped by force left there
+            val h = (b.ask(Call.HeaderOpen(at(folder), me.raddatz.veyq.mobile.AppKinds.Facts(), 2)) as Answer.HeaderOpened).header
+            println("trash $name: ${(b.ask(Call.HeaderTrash(h), timeout = 1.minutes) as? Answer.Trashed)?.notice?.msg}")
+            b.ask(Call.HeaderClose(h))
+            val t = (b.ask(Call.TrashOpen(scope)) as Answer.TrashOpened).trash
+            val tw = b.watching(Watched.Trash(t))
+            val rows = tw.until(1.minutes) { u -> (u as Update.Trash).shown?.rows }
+            for (row in rows.filter { r -> r.id == folder.nodeId || (r.kind == "FOLDER" && Regex("App share \\d+").matches(r.name)) }) {
+                val purged = b.ask(Call.TrashPurge(t, row.id), timeout = 1.minutes)
+                println("purge ${row.name}: $purged")
+                if (purged == Answer.Done) tw.until(1.minutes) { u -> (u as Update.Trash).shown?.takeIf { s -> s.busy == null && s.rows?.none { it.id == row.id } == true } }
+            }
+            b.ask(Call.TrashClose(t))
+            assertTrue(nodes(fresh()).none { it.nodeId == folder.nodeId }, "the folder made was left")
+        }
+        b.shutdown()
+    }
+
+    /**
      * A copy the tenant has no room for, through calls: run with `VEYQ_LIVE_NO_ROOM=1` while the core's
      * `DepotLiveTest.aCopyOrAFolder*` holds the tenant's quota at one byte (`VEYQ_LIVE_STORAGE_FIT`,
      * `VEYQ_LIVE_STORAGE_FIT_HOLD_S`; it puts the quota back however it ends). Amsterdam's copy sheet says so with the
