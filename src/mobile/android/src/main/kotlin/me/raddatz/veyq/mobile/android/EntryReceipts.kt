@@ -43,73 +43,69 @@ import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-import me.raddatz.veyq.mobile.expenses.EntryForm
-import me.raddatz.veyq.mobile.expenses.PotSession
+import me.raddatz.veyq.mobile.expenses.EntryEditor
 import me.raddatz.veyq.mobile.expenses.PotView
 import me.raddatz.veyq.mobile.expenses.Receipts
 
-/** A picked file read whole (a receipt is at most 10 MiB): its bytes, type, name and modification; null when unreadable. */
-private fun readPicked(context: Context, uri: Uri): PotSession.PendingReceipt? = runCatching {
+/** A picked file as the editor judges it: at most [Receipts.READ_LIMIT] of its bytes (core refuses a larger one), its
+ *  type and name; no bytes where it did not read. */
+private fun readPicked(context: Context, uri: Uri): EntryEditor.Picked {
     val resolver = context.contentResolver
     var name: String? = null
-    var size = -1L
-    resolver.query(uri, arrayOf(OpenableColumns.DISPLAY_NAME, OpenableColumns.SIZE), null, null, null)?.use { c ->
-        if (c.moveToFirst()) {
-            name = c.getString(0)
-            size = if (c.isNull(1)) -1 else c.getLong(1)
-        }
+    runCatching {
+        resolver.query(uri, arrayOf(OpenableColumns.DISPLAY_NAME), null, null, null)?.use { c -> if (c.moveToFirst()) name = c.getString(0) }
     }
-    if (size > Receipts.MAX_BYTES) return null
-    val bytes = resolver.openInputStream(uri)?.use { it.readBytes() } ?: return null
-    PotSession.PendingReceipt(java.util.UUID.randomUUID().toString(), bytes, resolver.getType(uri).orEmpty(), name, null)
-}.getOrNull()
+    val bytes = runCatching { resolver.openInputStream(uri)?.use { readAtMost(it, Receipts.READ_LIMIT.toInt()) } }.getOrNull()
+    return EntryEditor.Picked(bytes, resolver.getType(uri).orEmpty(), name, null)
+}
+
+/** At most [limit] bytes of [input] (`readNBytes` is API 33's). */
+private fun readAtMost(input: java.io.InputStream, limit: Int): ByteArray {
+    val out = java.io.ByteArrayOutputStream()
+    val buf = ByteArray(1 shl 16)
+    while (out.size() < limit) {
+        val n = input.read(buf, 0, minOf(buf.size, limit - out.size()))
+        if (n < 0) break
+        out.write(buf, 0, n)
+    }
+    return out.toByteArray()
+}
 
 /**
- * An entry's receipts in the editor (`EntryReceipts.vue`): the ones the entry keeps, each opened by its bytes or taken
- * off (the save drops it), and those picked meanwhile, uploaded only when the entry is saved. Images and PDFs are
- * offered; what a receipt IS, the bytes decide when it is opened.
+ * An entry's receipts in the editor (`EntryReceipts.vue`): the ones the entry keeps ([kept]), each opened by its bytes or
+ * taken off (the save drops it), and those picked meanwhile ([state]'s pending), uploaded only when the entry is saved.
+ * Images and PDFs are offered; which are taken, and how many, is core's [EntryEditor]; what a receipt IS, the bytes decide
+ * when it is opened.
  */
 @Composable
-internal fun EntryReceipts(view: PotView, model: AppModel, form: EntryForm, pending: List<PotSession.PendingReceipt>, onForm: (EntryForm) -> Unit, onPending: (List<PotSession.PendingReceipt>) -> Unit) {
+internal fun EntryReceipts(view: PotView, model: AppModel, state: EntryEditor.State, onPick: (List<EntryEditor.Picked>) -> Unit, onDrop: (String) -> Unit) {
     val context = LocalContext.current
-    var refused by remember { mutableStateOf(false) }
     var viewing by remember { mutableStateOf<String?>(null) }
     val pick = rememberLauncherForActivityResult(ActivityResultContracts.OpenMultipleDocuments()) { uris ->
-        var held = form.receipts.size + pending.size
-        val added = ArrayList<PotSession.PendingReceipt>()
-        refused = false
-        for (uri in uris) {
-            val r = readPicked(context, uri)
-            if (r == null || !view.receiptAllowed(r.size, r.type, r.name, held)) {
-                refused = true
-                continue
-            }
-            added += r
-            held++
-        }
-        onPending(pending + added)
+        if (uris.isNotEmpty()) onPick(uris.map { readPicked(context, it) })
     }
     val palette = LocalPalette.current
-    val editable = LocalEditable.current
+    val editable = state.editable
+    val kept = state.form.receipts
     Text(stringResource(R.string.receipts_title), fontWeight = FontWeight.SemiBold)
-    if (form.receipts.isEmpty() && pending.isEmpty()) Text(stringResource(R.string.receipts_none), color = role(palette.muted))
-    for (id in form.receipts) {
+    if (kept.isEmpty() && state.pending.isEmpty()) Text(stringResource(R.string.receipts_none), color = role(palette.muted))
+    for (id in kept) {
         val r = view.receipt(id)
         Row(verticalAlignment = Alignment.CenterVertically) {
             TextButton(onClick = { viewing = id }, enabled = r != null && !r.blocked, modifier = Modifier.weight(1f)) {
                 Text(Receipts.downloadName(r?.name, r?.type), Modifier.fillMaxWidth())
             }
-            if (editable) IconButton(onClick = { onForm(form.copy(receipts = form.receipts - id)) }) { Icon(Icons.Outlined.Close, stringResource(R.string.receipts_remove)) }
+            if (editable) IconButton(onClick = { onDrop(id) }) { Icon(Icons.Outlined.Close, stringResource(R.string.receipts_remove)) }
         }
     }
-    for (p in pending) {
+    for (p in state.pending) {
         Row(verticalAlignment = Alignment.CenterVertically) {
-            Text(Receipts.downloadName(p.name, p.type), Modifier.weight(1f).padding(start = 12.dp), color = role(palette.muted))
-            if (editable) IconButton(onClick = { onPending(pending - p) }) { Icon(Icons.Outlined.Close, stringResource(R.string.receipts_remove)) }
+            Text(p.name, Modifier.weight(1f).padding(start = 12.dp), color = role(palette.muted))
+            if (editable) IconButton(onClick = { onDrop(p.id) }) { Icon(Icons.Outlined.Close, stringResource(R.string.receipts_remove)) }
         }
     }
-    if (refused) Text(stringResource(R.string.receipts_refused), color = MaterialTheme.colorScheme.error)
-    if (editable && form.receipts.size + pending.size < Receipts.MAX_PER_ENTRY) {
+    if (state.refusedPick) Text(stringResource(R.string.receipts_refused), color = MaterialTheme.colorScheme.error)
+    if (state.canAddReceipt) {
         TextButton(onClick = { pick.launch(arrayOf("image/*", "application/pdf")) }) { Text(stringResource(R.string.receipts_add)) }
     }
     viewing?.let { id -> ReceiptViewer(view, model, id) { viewing = null } }

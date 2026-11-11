@@ -142,7 +142,7 @@ private fun personName(name: String?) = piece(PotView.person(name))
 @Composable
 private fun Entries(view: PotView, state: me.raddatz.veyq.mobile.expenses.PotModel.State, model: AppModel) {
     var adding by rememberSaveable { mutableStateOf(false) }
-    var editing by remember { mutableStateOf<Pair<String, PotView.Editing>?>(null) }
+    var editing by remember { mutableStateOf<String?>(null) }
     var viewing by remember { mutableStateOf<PotView.EntryRow?>(null) }
     val palette = LocalPalette.current
     val hero = LocalNodeHero.current
@@ -153,7 +153,7 @@ private fun Entries(view: PotView, state: me.raddatz.veyq.mobile.expenses.PotMod
             items(view.entries, key = { it.id }) { e ->
                 // Every viewer opens an entry: a writer to edit it, a reader to read it (one dialog, inbox #401).
                 Row(
-                    Modifier.fillMaxWidth().clickable { view.editing(e.id, separator(), java.time.LocalDate.now().toString())?.let { editing = e.id to it } }
+                    Modifier.fillMaxWidth().clickable { editing = e.id }
                         .padding(horizontal = 16.dp, vertical = 10.dp),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
@@ -184,7 +184,7 @@ private fun Entries(view: PotView, state: me.raddatz.veyq.mobile.expenses.PotMod
             }
         }
     }
-    if (adding) EntryEditor(view, state, model, null) { adding = false }
+    if (adding) EntryEditorSheet(view, model, null) { adding = false }
     // Files shared to veyq and placed here: a new expense with them as its receipts (ADR 0129), where entries may be added.
     var shared by remember { mutableStateOf<List<me.raddatz.veyq.mobile.expenses.PotSession.PendingReceipt>?>(null) }
     val incoming by model.incoming.collectAsStateWithLifecycle()
@@ -196,12 +196,12 @@ private fun Entries(view: PotView, state: me.raddatz.veyq.mobile.expenses.PotMod
     // Its editor closed unsaved: the files wait again in the pick mode, for this Pot or another.
     shared?.let { files ->
         var saved by remember { mutableStateOf(false) }
-        EntryEditor(view, state, model, null, initialPending = files, onSaved = { saved = true; model.shareSaved() }) {
+        EntryEditorSheet(view, model, null, initialPending = files, onSaved = { saved = true; model.shareSaved() }) {
             shared = null
             if (!saved) model.returnShare()
         }
     }
-    editing?.let { EntryEditor(view, state, model, it) { editing = null } }
+    editing?.let { EntryEditorSheet(view, model, it) { editing = null } }
     viewing?.let { DeletedEntrySheet(view, state, model, it) { viewing = null } }
 }
 
@@ -235,7 +235,7 @@ private fun Overview(view: PotView, state: me.raddatz.veyq.mobile.expenses.PotMo
                     Text(say(view.pays(t)), Modifier.weight(1f))
                     Text(money(t.amount, view.currency, view.minorUnits), fontWeight = FontWeight.SemiBold)
                     if (view.canWrite) {
-                        TextButton(onClick = { model.potWrite({ it.recordPayments(listOf(t), java.time.LocalDate.now().toString()) }) }, enabled = !state.saving) {
+                        TextButton(onClick = { model.potWrite({ it.recordPayments(listOf(t), model.today()) }) }, enabled = !state.saving) {
                             Text(stringResource(R.string.balances_record))
                         }
                     }
@@ -243,7 +243,7 @@ private fun Overview(view: PotView, state: me.raddatz.veyq.mobile.expenses.PotMo
             }
             if (view.canRecordAll) {
                 item {
-                    TextButton(onClick = { model.potWrite({ it.recordPayments(view.settleUp, java.time.LocalDate.now().toString()) }) }, enabled = !state.saving) {
+                    TextButton(onClick = { model.potWrite({ it.recordPayments(view.settleUp, model.today()) }) }, enabled = !state.saving) {
                         Text(stringResource(R.string.balances_record_all))
                     }
                 }

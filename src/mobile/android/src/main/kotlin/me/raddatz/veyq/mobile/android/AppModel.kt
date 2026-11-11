@@ -1067,9 +1067,15 @@ class AppModel(app: Application) : AndroidViewModel(app) {
         potModel?.clearCreating()
     }
 
-    /** One unit of [currency] in the open Pot's base from today's table, or null: the rate is typed then. */
-    suspend fun rateFor(currency: String): me.raddatz.veyq.mobile.expenses.ExchangeRates.Filled? =
-        potModel?.rateFor(currency, java.time.LocalDate.now().toString())
+    /** Today by the core's clock (`yyyy-MM-dd`): what a payment recorded now is dated. */
+    fun today(): String = potModel?.today().orEmpty()
+
+    /**
+     * The entry editor of [entryId] in the open Pot (null: a new entry), core's [me.raddatz.veyq.mobile.expenses.EntryEditor]
+     * over the Pot's model; [pending] what another app shared as its receipts. Null when the Pot cannot take one.
+     */
+    fun entryEditor(entryId: String?, separator: Char, pending: List<PotSession.PendingReceipt> = emptyList()): me.raddatz.veyq.mobile.expenses.EntryEditor? =
+        potModel?.editor(entryId, separator, pending)
 
     /** A receipt of the open Pot opened to its bytes, or null (blocked, or it did not read). */
     /**
@@ -1104,8 +1110,6 @@ class AppModel(app: Application) : AndroidViewModel(app) {
 
     suspend fun openReceipt(receiptId: String): ByteArray? = potModel?.openReceipt(receiptId)
 
-    /** The receipts the last save left out for want of room (the entry was saved). */
-    fun skippedReceipts(): List<String> = potModel?.skippedReceipts.orEmpty()
 
     /** Forgets the open Pot's last refusal (a dialog closed). */
     fun clearPotMessage() {

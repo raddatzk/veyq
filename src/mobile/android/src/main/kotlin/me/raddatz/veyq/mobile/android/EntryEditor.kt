@@ -13,6 +13,7 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Close
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.DatePicker
@@ -47,7 +48,10 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
+import kotlinx.coroutines.launch
+import me.raddatz.veyq.mobile.expenses.EditorChange
 import me.raddatz.veyq.mobile.expenses.EntryForm
+import me.raddatz.veyq.mobile.expenses.EntryEditor as EditorModel
 import me.raddatz.veyq.mobile.expenses.EntryForm.FormSplit
 import me.raddatz.veyq.mobile.expenses.EntryForm.Kind
 import me.raddatz.veyq.mobile.expenses.EntryForm.Mode
@@ -68,14 +72,14 @@ internal fun problemText(problem: String): String = say(me.raddatz.veyq.mobile.w
 /**
  * The entry editor (the web's `EntryEditor.vue` and `EntrySplit.vue`): an expense, a refund or a transfer; payers with
  * their amounts (an expense's amount is their sum), items with exact amounts and their own splits, the rest by its split
- * (by shares, percent or amount, "everyone equally" as one line), another currency with its typed rate, and the shares in
- * the base currency as the save seals them. Every rule is core's [EntryForm]; a refusal is shown at its field.
- * [editing] null adds a new entry.
+ * (by shares, percent or amount, "everyone equally" as one line), another currency with its rate, and the shares in the
+ * base currency as the save seals them. Every rule and the editor's state are core's [EditorModel] (opened by the Pot's
+ * model); this draws it and sends the edits. [entryId] null adds a new entry.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun EntryEditor(
-    view: PotView, state: me.raddatz.veyq.mobile.expenses.PotModel.State, model: AppModel, editing: Pair<String, PotView.Editing>?,
+fun EntryEditorSheet(
+    view: PotView, model: AppModel, entryId: String?,
     /** Receipts it starts with: what another app shared to this Pot (ADR 0129). */
     initialPending: List<me.raddatz.veyq.mobile.expenses.PotSession.PendingReceipt> = emptyList(),
     /** Runs once the entry was saved, before [onClose] (a share's new expense hands back that it landed). */
@@ -83,37 +87,42 @@ fun EntryEditor(
     onClose: () -> Unit,
 ) {
     val sep = remember { separator() }
-    val editable = view.canWrite
-    val people = editing?.second?.people ?: view.people
-    val ids = people.map { it.id }
-    var form by remember {
-        mutableStateOf(editing?.second?.form ?: view.blankForm(java.time.LocalDate.now().toString(), sep)!!)
+    val editor = remember(entryId) { model.entryEditor(entryId, sep, initialPending) }
+    if (editor == null) {
+        androidx.compose.runtime.LaunchedEffect(Unit) { onClose() }
+        return
     }
-    var tried by remember { mutableStateOf(false) }
-    var pending by remember { mutableStateOf(initialPending) }
+    androidx.compose.runtime.DisposableEffect(editor) { onDispose { editor.close() } }
+    // Set at once after each edit (a text field's value must not lag what was typed) and from the model's flow (the rate).
+    var s by remember(editor) { mutableStateOf(editor.current) }
+    androidx.compose.runtime.LaunchedEffect(editor) { editor.state.collect { s = it } }
+    fun edit(c: EditorChange) {
+        editor.change(c)
+        s = editor.current
+    }
+    val scope = androidx.compose.runtime.rememberCoroutineScope()
     val context = androidx.compose.ui.platform.LocalContext.current
-    val refusal = view.check(form)
-    val shown = refusal.takeIf { tried }
-    fun at(field: String, item: Int? = null) = shown?.takeIf { it.at == field && it.item == item }
+    val form = s.form
+    val editable = s.editable
+    val people = s.people
+    fun at(field: String, item: Int? = null) = s.refusal?.takeIf { it.at == field && it.item == item }
     val nameOf = people.associate { it.id to it.name }
 
-    ModalBottomSheet(onDismissRequest = { model.clearPotMessage(); onClose() }, sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)) {
+    ModalBottomSheet(onDismissRequest = onClose, sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)) {
         androidx.compose.runtime.CompositionLocalProvider(LocalEditable provides editable) {
         Column(
             Modifier.fillMaxWidth().verticalScroll(rememberScrollState()).padding(horizontal = 16.dp).padding(bottom = 24.dp).imePadding(),
             verticalArrangement = Arrangement.spacedBy(10.dp),
         ) {
             Text(
-                stringResource(when { editing == null -> R.string.ed_new_title; editable -> R.string.ed_edit_title; else -> R.string.ed_view_title }),
+                stringResource(when { s.isNew -> R.string.ed_new_title; editable -> R.string.ed_edit_title; else -> R.string.ed_view_title }),
                 style = MaterialTheme.typography.titleLarge,
             )
-            if (editing?.second?.status == me.raddatz.veyq.mobile.expenses.Ledger.Status.INVALID) {
-                Text(stringResource(R.string.ed_invalid), color = MaterialTheme.colorScheme.error)
-            }
+            if (s.invalid) Text(stringResource(R.string.ed_invalid), color = MaterialTheme.colorScheme.error)
             SingleChoiceSegmentedButtonRow(Modifier.fillMaxWidth()) {
                 Kind.entries.forEachIndexed { i, k ->
                     SegmentedButton(
-                        selected = form.kind == k, onClick = { form = form.withKind(k, sep) }, enabled = editable,
+                        selected = form.kind == k, onClick = { edit(EditorChange.Kind(k)) }, enabled = editable,
                         shape = SegmentedButtonDefaults.itemShape(i, Kind.entries.size),
                     ) {
                         Text(stringResource(when (k) { Kind.EXPENSE -> R.string.ed_expense; Kind.REFUND -> R.string.ed_refund; Kind.TRANSFER -> R.string.pot_transfer }))
@@ -121,40 +130,25 @@ fun EntryEditor(
                 }
             }
             OutlinedTextField(
-                form.title, { form = form.copy(title = it) }, singleLine = true, modifier = Modifier.fillMaxWidth(), enabled = editable,
+                form.title, { edit(EditorChange.Title(it)) }, singleLine = true, modifier = Modifier.fillMaxWidth(), enabled = editable,
                 label = { Text(stringResource(if (form.kind == Kind.TRANSFER) R.string.ed_note else R.string.entry_title)) },
                 isError = at("title") != null, supportingText = at("title")?.let { { Text(problemText(it.problem)) } },
             )
-            DateField(form.date, at("date")?.problem) { form = form.copy(date = it) }
-            if (form.kind != Kind.TRANSFER) CategoryField(view, form.category) { form = form.copy(category = it) }
-            // Another currency with an empty rate: the day's table fills it (one request a device and day, at most).
-            var rateNote by remember { mutableStateOf<RateNote?>(null) }
-            androidx.compose.runtime.LaunchedEffect(form.currency) {
-                val code = form.currency
-                if (!me.raddatz.veyq.mobile.expenses.ExchangeRates.wanted(view.ratesOffered, view.currency, code, form.rate)) {
-                    rateNote = null
-                    return@LaunchedEffect
-                }
-                rateNote = RateNote.Loading
-                val filled = model.rateFor(code)
-                if (form.currency != code) return@LaunchedEffect
-                val fill = me.raddatz.veyq.mobile.expenses.ExchangeRates.fill(filled, form.rate, sep)
-                fill.rate?.let { form = form.copy(rate = it) }
-                rateNote = fill.filledOn?.let { RateNote.Filled(it) } ?: if (fill.missing) RateNote.Missing(code) else null
-            }
-            CurrencyField(view, form, at("rate")?.problem, rateNote) { form = it }
+            DateField(form.date, at("date")?.problem) { edit(EditorChange.Day(it)) }
+            if (form.kind != Kind.TRANSFER) CategoryField(view, form.category) { edit(EditorChange.Category(it)) }
+            CurrencyField(view, form, at("rate")?.problem, s.rate, ::edit)
 
             if (form.kind == Kind.TRANSFER) {
                 OutlinedTextField(
-                    form.amount, { form = form.copy(amount = it) }, singleLine = true, modifier = Modifier.fillMaxWidth(), enabled = editable,
+                    form.amount, { edit(EditorChange.Amount(it)) }, singleLine = true, modifier = Modifier.fillMaxWidth(), enabled = editable,
                     label = { Text(stringResource(R.string.entry_amount)) }, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
                     isError = at("amount") != null, supportingText = at("amount")?.let { { Text(problemText(it.problem)) } },
                 )
-                PersonField(stringResource(R.string.ed_from), people, form.from) { form = form.copy(from = it) }
-                PersonField(stringResource(R.string.ed_to), people, form.to) { form = form.copy(to = it) }
+                PersonField(stringResource(R.string.ed_from), people, form.from) { edit(EditorChange.From(it)) }
+                PersonField(stringResource(R.string.ed_to), people, form.to) { edit(EditorChange.To(it)) }
                 at("transfer")?.let { Text(problemText(it.problem), color = MaterialTheme.colorScheme.error) }
             } else {
-                Payers(form, people, at("payers")?.problem, sep) { form = it }
+                Payers(form, people, at("payers")?.problem, ::edit)
                 Text(
                     stringResource(R.string.entry_amount) + ": " + money(form.payersTotal, form.currency, form.minorUnits),
                     fontWeight = FontWeight.SemiBold,
@@ -163,74 +157,79 @@ fun EntryEditor(
                     HorizontalDivider()
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         OutlinedTextField(
-                            item.label, { v -> form = form.copy(items = form.items.toMutableList().also { it[i] = item.copy(label = v) }) },
+                            item.label, { v -> edit(EditorChange.ItemLabel(i, v)) },
                             singleLine = true, label = { Text(stringResource(R.string.ed_item)) }, modifier = Modifier.weight(1f), enabled = editable,
                         )
                         OutlinedTextField(
-                            item.amount, { v -> form = form.copy(items = form.items.toMutableList().also { it[i] = item.copy(amount = v) }) },
+                            item.amount, { v -> edit(EditorChange.ItemAmount(i, v)) },
                             singleLine = true, label = { Text(stringResource(R.string.entry_amount)) }, modifier = Modifier.width(120.dp).padding(start = 8.dp),
                             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal), enabled = editable,
                         )
-                        if (editable) IconButton(onClick = { form = form.copy(items = form.items.toMutableList().also { it.removeAt(i) }) }) {
+                        if (editable) IconButton(onClick = { edit(EditorChange.RemoveItem(i)) }) {
                             Icon(Icons.Outlined.Close, stringResource(R.string.ed_remove_item))
                         }
                     }
-                    SplitEditor(item.split, people, form.itemAmount(item), form, sep) { s ->
-                        form = form.copy(items = form.items.toMutableList().also { it[i] = item.copy(split = s) })
-                    }
+                    SplitEditor(item.split, i, people, form.itemAmount(item), form, sep, ::edit)
                     at("item", i)?.let { Text(problemText(it.problem), color = MaterialTheme.colorScheme.error) }
                 }
-                if (editable) TextButton(onClick = { form = form.copy(items = form.items + EntryForm.emptyItem(ids)) }) { Text(stringResource(R.string.ed_add_item)) }
+                if (editable) TextButton(onClick = { edit(EditorChange.AddItem) }) { Text(stringResource(R.string.ed_add_item)) }
                 at("items")?.let { Text(problemText(it.problem), color = MaterialTheme.colorScheme.error) }
                 if (form.showsRest) {
                     HorizontalDivider()
                     Text(stringResource(if (form.items.isEmpty()) R.string.ed_whole else R.string.ed_rest), fontWeight = FontWeight.SemiBold)
-                    SplitEditor(form.rest, people, form.restLeft, form, sep) { form = form.copy(rest = it) }
+                    SplitEditor(form.rest, null, people, form.restLeft, form, sep, ::edit)
                     at("rest")?.let { Text(problemText(it.problem), color = MaterialTheme.colorScheme.error) }
                 }
-                Preview(view, form, nameOf)
+                Preview(view, form, s.preview, nameOf)
             }
             HorizontalDivider()
-            EntryReceipts(view, model, form, pending, onForm = { form = it }, onPending = { pending = it })
-            shown?.takeIf { it.at == null }?.let { Text(problemText(it.problem), color = MaterialTheme.colorScheme.error) }
-            state.message?.let { Text(entryRefusal(it), color = MaterialTheme.colorScheme.error) }
-            if (editing != null) {
+            EntryReceipts(view, model, s, onPick = { editor.addReceipts(it); s = editor.current }, onDrop = { editor.dropReceipt(it); s = editor.current })
+            s.refusal?.takeIf { it.at == null }?.let { Text(problemText(it.problem), color = MaterialTheme.colorScheme.error) }
+            s.notice?.let { Text(say(it), color = MaterialTheme.colorScheme.error) }
+            if (entryId != null) {
                 HorizontalDivider()
-                EntryHistory(view, editing.first)
+                EntryHistory(view, entryId)
             }
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End, verticalAlignment = Alignment.CenterVertically) {
-                if (editing != null && editable) {
-                    TextButton(onClick = { model.potWrite({ it.deleteEntry(editing.first, editing.second.basedOn) }) { onClose() } }, enabled = !state.saving) {
+                if (!s.isNew && editable) {
+                    TextButton(onClick = { editor.askDelete(); s = editor.current }, enabled = !s.saving) {
                         Text(stringResource(R.string.entry_delete), color = MaterialTheme.colorScheme.error)
                     }
                     androidx.compose.foundation.layout.Spacer(Modifier.weight(1f))
                 }
-                TextButton(onClick = { model.clearPotMessage(); onClose() }) { Text(stringResource(if (editable) R.string.entry_cancel else R.string.receipts_close)) }
+                TextButton(onClick = onClose) { Text(stringResource(if (editable) R.string.entry_cancel else R.string.receipts_close)) }
                 if (editable) Button(
                     onClick = {
-                        tried = true
-                        if (refusal == null) {
-                            val picked = pending
-                            model.potWrite({ it.saveEntry(editing?.first, form, editing?.second?.basedOn, picked) }) {
+                        scope.launch {
+                            val saved = editor.save()
+                            s = editor.current
+                            if (saved.done) {
                                 // A receipt the space's storage had no room for was left out; the entry is saved.
-                                me.raddatz.veyq.mobile.words.Notices.receiptsSkipped(model.skippedReceipts())?.let {
-                                    android.widget.Toast.makeText(context, context.text(it), android.widget.Toast.LENGTH_LONG).show()
-                                }
+                                saved.notice?.let { android.widget.Toast.makeText(context, context.text(it), android.widget.Toast.LENGTH_LONG).show() }
                                 onSaved()
                                 onClose()
                             }
                         }
                     },
-                    enabled = !state.saving,
+                    enabled = !s.saving,
                 ) { Text(stringResource(R.string.entry_save)) }
             }
         }
         }
     }
+    if (s.asking) {
+        AlertDialog(
+            onDismissRequest = { editor.cancelAsk(); s = editor.current },
+            text = { Text(stringResource(R.string.entry_delete_confirm)) },
+            confirmButton = {
+                TextButton(onClick = { scope.launch { if (editor.delete()) onClose() else s = editor.current } }) {
+                    Text(stringResource(R.string.entry_delete), color = MaterialTheme.colorScheme.error)
+                }
+            },
+            dismissButton = { TextButton(onClick = { editor.cancelAsk(); s = editor.current }) { Text(stringResource(R.string.entry_cancel)) } },
+        )
+    }
 }
-
-@Composable
-private fun entryRefusal(outcome: String): String = say(me.raddatz.veyq.mobile.words.Notices.entryRefused(outcome))
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -289,23 +288,21 @@ private fun CategoryField(view: PotView, selected: String, onSelect: (String) ->
 }
 
 @Composable
-private fun CurrencyField(view: PotView, form: EntryForm, problem: String?, note: RateNote?, onChange: (EntryForm) -> Unit) {
+private fun CurrencyField(view: PotView, form: EntryForm, problem: String?, note: EditorModel.Rate?, edit: (EditorChange) -> Unit) {
     val base = view.currency ?: return
     Row(verticalAlignment = Alignment.Top) {
-        Dropdown(stringResource(R.string.ed_currency), currencies.map { it to it }, form.currency, Modifier.width(140.dp)) { code ->
-            onChange(form.withCurrency(code, minorUnitsOf(code), me.raddatz.veyq.mobile.expenses.Ledger.BaseCurrency(base, view.minorUnits)))
-        }
+        Dropdown(stringResource(R.string.ed_currency), currencies.map { it to it }, form.currency, Modifier.width(140.dp)) { code -> edit(EditorChange.Currency(code)) }
         if (form.currency != base) {
             OutlinedTextField(
-                form.rate, { onChange(form.copy(rate = it)) }, singleLine = true, modifier = Modifier.weight(1f).padding(start = 8.dp), enabled = LocalEditable.current,
+                form.rate, { edit(EditorChange.RateTyped(it)) }, singleLine = true, modifier = Modifier.weight(1f).padding(start = 8.dp), enabled = LocalEditable.current,
                 label = { Text(stringResource(R.string.ed_rate, form.currency, base)) }, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
                 isError = problem != null,
                 supportingText = {
                     Text(
-                        problem?.let { problemText(it) } ?: when (note) {
-                            RateNote.Loading -> stringResource(R.string.ed_rate_loading)
-                            is RateNote.Filled -> stringResource(R.string.ed_rate_filled, localDay(note.date))
-                            is RateNote.Missing -> stringResource(R.string.ed_rate_missing, note.currency)
+                        problem?.let { problemText(it) } ?: when (note?.state) {
+                            EditorModel.RateState.FILLING -> stringResource(R.string.ed_rate_loading)
+                            EditorModel.RateState.FILLED -> stringResource(R.string.ed_rate_filled, localDay(note.day.orEmpty()))
+                            EditorModel.RateState.MISSING -> stringResource(R.string.ed_rate_missing, form.currency)
                             null -> stringResource(R.string.ed_rate_hint)
                         },
                     )
@@ -316,46 +313,42 @@ private fun CurrencyField(view: PotView, form: EntryForm, problem: String?, note
 }
 
 @Composable
-private fun Payers(form: EntryForm, people: List<PotView.Person>, problem: String?, sep: Char, onChange: (EntryForm) -> Unit) {
+private fun Payers(form: EntryForm, people: List<PotView.Person>, problem: String?, edit: (EditorChange) -> Unit) {
     Text(stringResource(if (form.kind == Kind.REFUND) R.string.ed_received_by else R.string.entry_paid_by), fontWeight = FontWeight.SemiBold)
     form.payers.forEachIndexed { i, p ->
         Row(verticalAlignment = Alignment.CenterVertically) {
-            PersonField(stringResource(R.string.ed_person), people, p.participant, Modifier.weight(1f)) { id ->
-                onChange(form.copy(payers = form.payers.toMutableList().also { it[i] = p.copy(participant = id) }))
-            }
+            PersonField(stringResource(R.string.ed_person), people, p.participant, Modifier.weight(1f)) { id -> edit(EditorChange.Payer(i, id)) }
             OutlinedTextField(
-                p.amount, { v -> onChange(form.copy(payers = form.payers.toMutableList().also { it[i] = p.copy(amount = v) })) },
+                p.amount, { v -> edit(EditorChange.Paid(i, v)) },
                 singleLine = true, label = { Text(stringResource(R.string.entry_amount)) }, modifier = Modifier.width(120.dp).padding(start = 8.dp),
                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal), enabled = LocalEditable.current,
             )
             if (form.canRemovePayer && LocalEditable.current) {
-                IconButton(onClick = { onChange(form.copy(payers = form.payers.toMutableList().also { it.removeAt(i) })) }) {
+                IconButton(onClick = { edit(EditorChange.RemovePayer(i)) }) {
                     Icon(Icons.Outlined.Close, stringResource(R.string.ed_remove_payer, people.firstOrNull { it.id == p.participant }?.name ?: ""))
                 }
             }
         }
     }
     problem?.let { Text(problemText(it), color = MaterialTheme.colorScheme.error) }
-    val unused = form.nextPayer(people.map { it.id })
-    if (unused != null && LocalEditable.current) {
-        TextButton(onClick = { onChange(form.copy(payers = form.payers + EntryForm.Payer(unused, ""))) }) { Text(stringResource(R.string.ed_add_payer)) }
+    if (form.nextPayer(people.map { it.id }) != null && LocalEditable.current) {
+        TextButton(onClick = { edit(EditorChange.AddPayer) }) { Text(stringResource(R.string.ed_add_payer)) }
     }
 }
 
-/** A split: one line while it is everyone equally, else its mode and one row per person (`EntrySplit.vue`). */
+/** A split ([item]'s, or the rest's for null): one line while it is everyone equally, else its mode and one row per person (`EntrySplit.vue`). */
 @Composable
-private fun SplitEditor(split: FormSplit, people: List<PotView.Person>, part: Long, form: EntryForm, sep: Char, onChange: (FormSplit) -> Unit) {
-    val ids = people.map { it.id }
+private fun SplitEditor(split: FormSplit, item: Int?, people: List<PotView.Person>, part: Long, form: EntryForm, sep: Char, edit: (EditorChange) -> Unit) {
     if (!split.expanded) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Text(say(EntryForm.collapsedWords(split, people)), Modifier.weight(1f))
-            if (LocalEditable.current) TextButton(onClick = { onChange(split.copy(expanded = true)) }) { Text(stringResource(R.string.ed_adjust)) }
+            if (LocalEditable.current) TextButton(onClick = { edit(EditorChange.Expand(item)) }) { Text(stringResource(R.string.ed_adjust)) }
         }
         return
     }
     SingleChoiceSegmentedButtonRow(Modifier.fillMaxWidth()) {
         Mode.entries.forEachIndexed { i, m ->
-            SegmentedButton(selected = split.mode == m, onClick = { onChange(split.copy(mode = m)) }, enabled = LocalEditable.current, shape = SegmentedButtonDefaults.itemShape(i, Mode.entries.size)) {
+            SegmentedButton(selected = split.mode == m, onClick = { edit(EditorChange.SplitMode(item, m)) }, enabled = LocalEditable.current, shape = SegmentedButtonDefaults.itemShape(i, Mode.entries.size)) {
                 Text(stringResource(when (m) { Mode.SHARES -> R.string.ed_by_shares; Mode.PERCENT -> R.string.ed_by_percent; Mode.AMOUNTS -> R.string.ed_by_amount }))
             }
         }
@@ -363,14 +356,12 @@ private fun SplitEditor(split: FormSplit, people: List<PotView.Person>, part: Lo
     for (p in people) {
         val row = split.rows.firstOrNull { it.participant == p.id }
         Row(verticalAlignment = Alignment.CenterVertically) {
-            Checkbox(row != null, { on ->
-                onChange(EntryForm.toggled(split, p.id, on, ids))
-            }, enabled = LocalEditable.current)
+            Checkbox(row != null, { on -> edit(EditorChange.Toggle(item, p.id, on)) }, enabled = LocalEditable.current)
             Text(p.name, Modifier.weight(1f))
             if (row != null) {
                 val value = when (split.mode) { Mode.SHARES -> row.shares; Mode.PERCENT -> row.percent; Mode.AMOUNTS -> row.amount }
                 OutlinedTextField(
-                    value, { v -> onChange(EntryForm.typed(split, p.id, v)) },
+                    value, { v -> edit(EditorChange.Share(item, p.id, v)) },
                     singleLine = true, modifier = Modifier.width(110.dp), enabled = LocalEditable.current,
                     keyboardOptions = KeyboardOptions(keyboardType = if (split.mode == Mode.SHARES) KeyboardType.Number else KeyboardType.Decimal),
                     suffix = { if (split.mode == Mode.PERCENT) Text("%") },
@@ -379,13 +370,12 @@ private fun SplitEditor(split: FormSplit, people: List<PotView.Person>, part: Lo
         }
     }
     EntryForm.splitHint(split, part, form.currency, form.minorUnits, sep)?.let { Text(say(it), style = MaterialTheme.typography.bodySmall) }
-    if (LocalEditable.current) TextButton(onClick = { onChange(EntryForm.everyoneEqually(split, ids)) }) { Text(stringResource(R.string.ed_everyone_equally)) }
+    if (LocalEditable.current) TextButton(onClick = { edit(EditorChange.Equally(item)) }) { Text(stringResource(R.string.ed_everyone_equally)) }
 }
 
 /** The shares in the base currency as the save seals them (`sharesPreview`). */
 @Composable
-private fun Preview(view: PotView, form: EntryForm, nameOf: Map<String, String>) {
-    val rows = view.preview(form)
+private fun Preview(view: PotView, form: EntryForm, rows: List<PotView.ShareRow>, nameOf: Map<String, String>) {
     if (rows.isEmpty()) return
     HorizontalDivider()
     Text(stringResource(R.string.ed_shares_in, view.currency ?: ""), fontWeight = FontWeight.SemiBold)
@@ -396,13 +386,6 @@ private fun Preview(view: PotView, form: EntryForm, nameOf: Map<String, String>)
             Text(money(r.share, view.currency, view.minorUnits), fontWeight = FontWeight.SemiBold)
         }
     }
-}
-
-/** What the editor says under a filled or missing rate. */
-internal sealed interface RateNote {
-    data object Loading : RateNote
-    data class Filled(val date: String) : RateNote
-    data class Missing(val currency: String) : RateNote
 }
 
 private fun localDay(iso: String): String = runCatching {
