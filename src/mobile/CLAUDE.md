@@ -15,6 +15,18 @@ A Gradle build of its own, run through its own wrapper.
   core attachment, and how a file's page shows it; `memories/`: a Memory's gallery, each medium under the key its origin
   fixes), which
   uses core's session and is never used by it; an application's spec is generated into `api.<application>`.
+- **The device trust** ([ADR 0123](../../docs/decisions/0123-the-apps-share-a-kotlin-multiplatform-core-under-native-ui.md)
+  decision 8; what each store guarantees is security-model § What a trusted device rests on): the flows are core's
+  (`session/Account.kt`, `SessionModel.kt`: every sign-in enrols the password trust, `Gate.Signed.offer` offers staying
+  signed in at each level the store has, `stay(level)`, `notNow()`, Manage's `stay(account, level)` and
+  `trustWithPassword`), over the `DeviceKeys` interface (`session/DeviceTrust.kt`; `StaySignedIn` is a level, `PRESENCE`
+  or `LOGIN`, and `DeviceKeys.staySignedIn` the set a store offers). The stores: Android `KeystoreDeviceKeys`, Apple
+  `AppleDeviceKeys` (`appleMain`) over `KeychainStore.swift`, Windows `WindowsDeviceKeys` (`mingwMain`, the cinterop
+  `core/wincred/`: DPAPI and the Passport key storage provider), Linux `LinuxDeviceKeys` (`linuxMain`, the cinterop
+  `core/secret/`: libsecret `dlopen`ed, never linked). `DeviceKeysContract` (`commonTest`) is what every store meets,
+  read only through the interface: a new store gets a subclass of it, run on its platform. `SoftwareDeviceKeys`
+  (`core/src/testDevice/`, compiled into core's `commonTest` and `:bridge`'s `jvmTest`) is the test store; its
+  `prompts`/`authenticates` counters are the flows' tests' extras, not the contract.
 - `android/` — the Android app (Compose). `devlogin.py` signs a debug build on a running emulator in as the seeded dev
   principal (`.run/.env`).
 - `apple/` — the Apple app (SwiftUI, iOS and macOS). `xcodegen` in that directory writes `Veyq.xcodeproj` from
@@ -130,8 +142,10 @@ A Gradle build of its own, run through its own wrapper.
     `ADW_DEBUG_COLOR_SCHEME=prefer-dark` gives dark. It runs under a session bus with gnome-keyring-daemon, its home's
     data (the device store, the keyring and the password it opens with) on the volume `veyq-linux-home`, so a second
     start resumes what the first trusted; `docker volume rm veyq-linux-home` starts from nothing. `--no-secret-service`
-    runs without both ("Stay signed in" hidden, every start signs in). `--fill` only fills the sign-in, for a pass to
-    turn the switch and press it; `--unlock` hands the password alone to a password-trusted account's unlock.
+    runs without both (nothing offered after the sign-in, every start signs in). `--fill` only fills the sign-in, for
+    a pass to press it; `--unlock` hands the password alone to a password-trusted account's unlock and fills Manage's
+    way back to the password once (the pass presses its button). The app's stderr says `session <gate>, offer: […]`,
+    `offer answered: …` and `manage …: Done`/`Refused …`: read it before each shot.
   - `lock` writes `Cargo.lock` anew.
 
   With `VEYQ_LIVE=http://veyq.localhost:8080`, `test --tests '*LiveSignInTest*'` and `bridge` sign in as the seeded
@@ -150,9 +164,17 @@ A Gradle build of its own, run through its own wrapper.
   - `build` generates the C#, the words and the theme, gates every NuGet package (`dotnet package list --deprecated`
     and `--vulnerable`, here), runs `Veyq.Bridge.Tests` here, and there builds the app and `Veyq.Drive` and runs
     `Veyq.Bridge.Tests` and `Veyq.Tests` as x64 processes.
-  - `run [--width W --height H] [--devlogin]` builds the app, starts it in the host's logged-on session and holds the
-    tunnel to the backend until Ctrl+C (run it in the background). `VEYQ_LANGUAGE` (`en-US`, `de-DE`) and `VEYQ_THEME`
-    (`light`, `dark`) set a debug build's.
+  - `run [--width W --height H] [--devlogin [--fill|--unlock]]` builds the app, starts it in the host's logged-on
+    session and holds the tunnel to the backend until Ctrl+C (run it in the background). `VEYQ_LANGUAGE` (`en-US`,
+    `de-DE`) and `VEYQ_THEME` (`light`, `dark`) set a debug build's. `--fill` and `--unlock` are Linux's. The log says
+    `session <gate>, offer: …`, `offer answered: …`, `level: …` beside an unlock and `manage servers: <method per
+    server>`.
+  - `hello-probe [--check] [--timeout S]` runs `WindowsDeviceKeys`' Hello half (`mingwTest`'s `HelloProbe`) in the
+    logged-on session: a seal and an open each ask for the PIN, which **the person at the host's console enters — an
+    agent never types one**; then an open within the 15 s window (not asked), one after it (press Cancel: `cancelled =
+    true`), and the key deleted. It waits for the probe's process, never a clock sized for a machine, and fetches the
+    outcome last (`build/windows/hello-probe.txt`). `--check` stops before the first key: Hello's availability in that
+    session, no prompt. Brief the person on every prompt the run may raise first, the uncertain ones marked.
   - `drive <step>...` prints the app's log, then runs `Veyq.Drive`'s steps (`tree`, `invoke <id>`, `select <id>`,
     `set <id> <text>`, `key`, `type <id> <text>` and `press <id> [keys]` (a system dialog's entry and button), `size`,
     `maximize`, `wait`, `sleep`, `shot <name>.png`) and prints what each saw. Read the log and the tree first; a `shot`
@@ -169,7 +191,11 @@ A Gradle build of its own, run through its own wrapper.
   `--tests '*MemberLiveSignInTest*'` signs in as the seeded second member (`VEYQ_USER2_*`), whose TENANT grant the
   owner signed, so it opens only through the key check; the owner starts that run, since that password may be one a
   person chose. `--tests '*DeviceTrustLiveTest*'` walks the device trust (ADR 0123 decision 8) as the seeded principal:
-  password-trusted, staying signed in, the register's join, sign-out; it removes what it enrolled.
+  the password trust, the login level (nothing asked), a resume, the presence level (the login wrap gone), a resume
+  asked once and a cancel, the way back to the password trust (a wrong password refused), the register's join,
+  sign-out; it removes what it enrolled. The core's JVM tests read the principal from `VEYQ_ENV_FILE` (a worktree:
+  `<main checkout>/.run/.env`); with a missing file they are red, which tells a live run from a skipped one. A
+  store change runs it with `:bridge:jvmTest --tests '*LiveBridgeTest*'` (the same walk through the bridge's calls).
   `--tests '*PotLiveTest*'` opens every seeded Pot and checks its revisions open, its ledger check passes, its balances
   sum to zero and its space's members read by name; with `VEYQ_LIVE_POT_WRITE=<pot name>` it adds one expense there
   ("App check"), which the web's Pot page then shows — the check that both clients read and write one format. It leaves
@@ -260,8 +286,11 @@ A Gradle build of its own, run through its own wrapper.
   '*DevSecondTenantTest*'` — dev seeding, not a check: gives the seeded principal a second tenant (the seeder births only
   one), through the app's own suite, so the switcher has two to switch between. Skipped when it already exists.
 - `./gradlew :android:assembleDebug` — the Android app; on an emulator, `python3 android/devlogin.py` signs it in
-  (`--remember` staying signed in, `--unlock` with only the password for the unlock screen of a trusted account; a
-  fresh start, since Android hands a running task no new extras). Apple's `devlogin.py <device>` takes the same flags.
+  (`--remember` answers the offer after the sign-in with the presence level, as a person would — the emulator then asks
+  for its screen lock; `--unlock` hands only the password, for the unlock screen of a password-trusted account, and
+  fills Manage's way back to the password once; a fresh start, since Android hands a running task no new extras).
+  Apple's `devlogin.py <device>` takes the same flags. Both read the principal from `VEYQ_ENV_FILE` (a worktree:
+  `<main checkout>/.run/.env`). The steps go to logcat (`veyq-trust`) and to Apple's unified log (`veyq-trust:`).
   Neither stops a running app (an install does): one still running keeps the tree it read, so what the web changed
   meanwhile is not there — `adb shell am force-stop me.raddatz.veyq` first.
   A share to veyq (ADR 0129) is tried from a real sender — the Files app (`com.google.android.documentsui`): long-press,
@@ -327,7 +356,9 @@ first in each of its scrolls — `LocalNodeHero.current(inset)` (Android) / `Nod
 - The trust marks (the pin store's revision, each scope's floor and held key, `session/TrustMarks.kt`) are the device's
   own, in SharedPreferences / UserDefaults, keyed by a derivation of the Master Key; clearing the app's data is the
   web's no-mark case (a fresh device), never a lockout.
-- Staying signed in needs a screen lock: the unlock key cannot exist without one. On the emulator `adb shell
+- Staying signed in needs a screen lock or passcode on Android and Apple: the store offers neither level without one
+  (the presence key cannot exist, and the login level would open for anyone holding the phone), so no offer shows. On
+  the emulator `adb shell
   locksettings set-pin <pin>` sets one and the prompt takes it by `adb shell input text`; it also needs the
   `USE_BIOMETRIC` permission, without which the prompt throws a `SecurityException`. The iOS Simulator stores a
   `.userPresence` item but does not enforce it (measured 2026-11-08), which is why `KeychainStore` asks through
@@ -359,7 +390,13 @@ first in each of its scrolls — `LocalNodeHero.current(inset)` (Android) / `Nod
 - A Swift closure handed to core is called on core's threads (after a request answered, Ktor's), never only on the main
   one: written in the `@MainActor` model it is inferred main-actor isolated, and Swift 6 traps on the first call from
   elsewhere (`_dispatch_assert_queue_fail`, measured 2026-11-09: the re-key's rekey id). Mark it `@Sendable` and reach
-  nothing of the model in it (`AppModel.tokenInputFor` is `nonisolated static` for that).
+  nothing of the model in it (`AppModel.tokenInputFor` is `nonisolated static` for that). A persist closure is one too:
+  `RecentUses`' and `Hidden`'s crashed the sign-out of the last server (`RecentUses.clear` runs on a core thread,
+  measured 2026-11-11), which only a pass that signs out of its last account reaches — so an Apple pass ends that way.
+- `simctl launch --stdout` wrote no file (measured 2026-11-11): the Apple app's lines are read from the unified log
+  (`NSLog`, read with `log show`), Android's from logcat — text before every screenshot.
+- Kotlin initialises properties in declaration order: a flow a collector in `init` writes is declared above that
+  `init`, or the first value meets a null field (Android's `_offer`, the first start crashed, measured 2026-11-11).
 - A `SurfaceView` inside a Compose `Dialog` got no surface (measured 2026-11-09, the lightbox's video: the player stayed
   unprepared, black): draw a player there into a `TextureView`.
 - Android's photo picker hands a photo over with its GPS zeroed and under a name of its own (`34.jpg`, measured
@@ -496,13 +533,29 @@ first in each of its scrolls — `LocalNodeHero.current(inset)` (Android) / `Nod
   system's. The container's working directory is the read-only source mount, where GTK's dialog opens — a write there
   is the failure case, not a bug.
 - The container runs with `--rm`: what the app keeps outside `~/.local/share` (the volume `veyq-linux-home`) is gone at
-  the next `run.py run`, and with `--no-secret-service` all of it, Recent included. A pass that shows Recent there opens
+  the next `run.py run`, and with `--no-secret-service` all of it, Recent included. The device store, gnome-keyring's
+  `keyrings/` and the collection's password live on that volume, so a second start resumes what the first trusted;
+  without the volume every start would find no store. A pass that trusted something ends with Stop trusting, and
+  `docker volume rm veyq-linux-home` starts from nothing. A pass that shows Recent there opens
   its objects first in that run (remembered from the bridge's Linux pass, 2026-11-11).
 - The browser pane, hidden, showed a Broadway switch unturned after a click that had turned it (measured 2026-11-11, the
   device trust's Linux pass): the frames lag, not the input. A pass whose pane is hidden drives Broadway from headless
   system Chrome through the workspace's Playwright (`channel: 'chrome'`), one connection per run of steps, and reads
   each state from the app's stderr before its screenshot. `run.py run`'s app is stopped by closing its window: `docker
   stop` ends it by SIGKILL after the timeout (exit 137).
+- Windows Hello, as measured 2026-11-11 on the VM (a local account, Windows 11 26H2, x64 under Prism):
+  - `dsregcmd /status` is no test for Hello on a local account: `NgcSet : NO` with a PIN set. The core asks cryptngc's
+    `NgcGetDefaultDecryptionKeyName` (`WindowsDeviceKeys`' `available`).
+  - Enrolment asks for the PIN: creating the Passport key (`NCryptFinalizeKey`) prompts, then each open does. A pass's
+    brief to the person lists every prompt.
+  - A cancelled prompt is `0x80090036` (`NTE_USER_CANCELLED`) or the smart-card stack's `SCARD_W_CANCELLED_BY_USER`,
+    `DeviceAuthFailed(cancelled = true)`, and keeps the screen. A prompt nobody answered stays open, possibly behind
+    the app, until Windows closes it (about 17 minutes once) and reads as a failure, not a cancel: the generic line.
+  - The prompt is owned by the app's window (`Config.window`, the HWND, `NCRYPT_WINDOW_HANDLE_PROPERTY`); a prompt
+    without an owner may open behind the app.
+- WinUI shows one `ContentDialog` at a time: a password asked from inside Manage servers is a field in place, not a
+  second dialog. A control's content reused under a new parent after its dialog closed crashed the second open of
+  Manage servers: build a dialog's content per open, and a pass opens every dialog twice in one run.
 - The common file dialog on Windows cannot be pressed through UI Automation: its Save invoked by UIA arrives as an
   input-synchronous call and the dialog cannot reach the file broker (`RPC_E_CANTCALLOUT_ININPUTSYNCCALL`, nothing
   written), and a file name set as a UIA `Value` shows in the tree but is not read. `Veyq.Drive`'s `type` and `press`
@@ -517,6 +570,9 @@ first in each of its scrolls — `LocalNodeHero.current(inset)` (Android) / `Nod
 - A watch delivers a state once per change. A test that waits on one watch for one fact misses a later fact that
   arrived meanwhile (the pictures' update came while `LiveBridgeTest` waited for the open object): read a fresh watch,
   which delivers the state as it is now.
+- A pass ends in the state the next one needs, not only "no trust": the device trust's passes end with Stop trusting
+  (which also forgets "Not now", so the next sign-in offers again) and, on Apple, a sign-out. A "Not now" left behind
+  once hid the offer the next pass's first step looked for (2026-11-11).
 - An app is refused at sign-in by a backend of another major (`server major 1, app 0`): a branch whose `VERSION` lags
   the running dev backend's cannot run a live pass until `main` is merged into it.
 - A download's failure on Windows is shown with a nearly full volume (a small FAT VHD filled to one free cluster): the
