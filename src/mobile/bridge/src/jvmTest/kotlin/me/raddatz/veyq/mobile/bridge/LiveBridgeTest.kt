@@ -685,6 +685,37 @@ class LiveBridgeTest {
     }
 
     /**
+     * A desktop pass's read-back for the web's guest page: with `VEYQ_LIVE_SHARE_LIST=<folder name>` (a folder at a space's
+     * top) and `VEYQ_LIVE_LINKS_OUT=<file>`, that folder's share sheet is opened through calls and each link's id and
+     * address — where it may be copied — written to the file, one line each (a dev link names the backend's port, 8080:
+     * open it on Vite's). Writes nothing on the server.
+     */
+    @Test
+    fun theLinksOfAFolderAreWrittenOutForTheWebsGuestPage() = runBlocking {
+        val origin = System.getenv("VEYQ_LIVE") ?: return@runBlocking
+        val name = System.getenv("VEYQ_LIVE_SHARE_LIST") ?: return@runBlocking
+        val out = File(System.getenv("VEYQ_LIVE_LINKS_OUT") ?: error("VEYQ_LIVE_LINKS_OUT names no file"))
+        val envFile = System.getenv("VEYQ_ENV_FILE")?.let(::File) ?: File(System.getProperty("veyq.repoRoot"), ".run/.env")
+        val env = envFile.readLines()
+            .mapNotNull { l -> l.substringBefore('=', "").takeIf { it.isNotBlank() }?.let { it.trim() to l.substringAfter('=').trim().trim('"', '\'') } }
+            .toMap()
+        val b = Bridge.live(BouncyCastlePrimitives, { block -> HttpClient(OkHttp, block) }, Config("bridge share list"), hostStore(ConcurrentHashMap()), { NoDeviceKeys }, JvmFiles)
+        val gate = b.watching(Watched.Session)
+        assertEquals(Answer.Done, b.ask(Call.SessionStart))
+        gate.until { (it as Update.Session).gate as? Gate.SignIn }
+        assertEquals(Answer.Done, b.ask(Call.SessionSignIn(origin, env.getValue("VEYQ_EMAIL"), env.getValue("VEYQ_PASSWORD"), env.getValue("VEYQ_SECRET_KEY")), timeout = 2.minutes))
+        gate.until(2.minutes) { (it as Update.Session).gate as? Gate.Signed }
+        val shell = b.watching(Watched.Shell).until(1.minutes) { (it as Update.Shell).takeIf { u -> u.state?.lists?.nodes?.any { n -> n.name == name && n.parentId == null } == true } }
+        val folder = shell.state!!.lists.nodes.first { it.name == name && it.parentId == null }
+        val id = (b.ask(Call.ShareOpen(me.raddatz.veyq.mobile.navigation.NodeAt(folder.scopeId, folder.nodeId, folder.kind, folder.name))) as Answer.ShareOpened).share
+        val links = b.watching(Watched.Share(id)).until(1.minutes) { u -> (u as Update.Share).shown?.links }
+        out.writeText(links.joinToString("") { "${it.shareId} ${it.address ?: "-"}\n" })
+        println("$name: ${links.size} links written to $out")
+        b.ask(Call.ShareClose(id))
+        b.shutdown()
+    }
+
+    /**
      * A copy the tenant has no room for, through calls: run with `VEYQ_LIVE_NO_ROOM=1` while the core's
      * `DepotLiveTest.aCopyOrAFolder*` holds the tenant's quota at one byte (`VEYQ_LIVE_STORAGE_FIT`,
      * `VEYQ_LIVE_STORAGE_FIT_HOLD_S`; it puts the quota back however it ends). Amsterdam's copy sheet says so with the
