@@ -314,6 +314,65 @@ D4: the calls, `Config.window`, `platformDeviceKeys`, the generated Rust and C#.
 - `DeviceTrustLiveTest` runs over the contract (D3) and is still green.
 - Both `run.py bridge` are green.
 
+**Built (Phase 3):**
+- **The core's answer, `StaySignedIn`** (`session/DeviceTrust.kt`): `PRESENCE` (the store makes the person confirm:
+  Windows Hello's key, Android's screen lock, Apple's `.userPresence`; Windows labels it "with Windows Hello"), `LOGIN`
+  (the desktop sign-in opens it: DPAPI without Hello, the Secret Service), `NONE` (nothing staying signed in needs can be
+  kept: the switch is hidden). `DeviceKeys.staySignedIn` asks each store: Windows `helloAvailable` → PRESENCE else LOGIN,
+  Linux `secretServiceAvailable` → LOGIN else NONE, Android `KeyguardManager.isDeviceSecure` and Apple
+  `LAContext.canEvaluatePolicy(DeviceOwnerAuthentication)` → PRESENCE else NONE (neither app reads it yet).
+  `SessionModel.staySignedIn` asks it through the door.
+- **The refresh rule** (`Account.kt`, `keepRefresh`): a rotated refresh token the store fails to keep is logged, never
+  thrown — at an API call's refresh after a 401 and at the resume alike (the refresh succeeded both times; failing the
+  resume would have lost this start as well as the next). The next start's resume then finds the old token refused
+  (SESSION_ENDED). Held by `RefreshKeptTest` (`commonTest`, over a server MockEngine plays and a `SoftwareDeviceKeys`
+  whose `putSecret` throws).
+- **The wire** (`Wire.kt`): `Session.SignIn.remember`, `Session.Unlock(password)`, `Session.OtherAccount`,
+  `Session.ForgetDevice(connection)`, `Session.AddServer`, `Session.CancelAdd`, `Manage.Open`/`Manage.Close`;
+  `Watched.Manage` → `Update.Manage(servers)` (null while closed: each server's connection, label, `trusted` method and
+  tenants as `SessionModel.managed` has them, each tenant's spaces with their names as they read); `Update.Session` gains
+  `staySignedIn`, asked of the store only beside a `Gate.SignIn` (null beside the others: the probe may reach D-Bus or
+  cryptngc). `Config` gains `window` (HWND as a number) and `prompt` (Hello's words, the host's `device_unlock_prompt`).
+- **`Bridge.live`** takes the keys over the host's store: `platformDeviceKeys(config, store)`, an `expect` in
+  `bridgedMain` (`LinuxDeviceKeys()`; `WindowsDeviceKeys(store, window, prompt)`); a JVM test hands its own.
+- **`SoftwareDeviceKeys`** moved to `core/src/testDevice/`, compiled into core's `commonTest` and `:bridge`'s `jvmTest`,
+  so the bridge's tests run over the same fake.
+- **The hosts:** Rust and C# regenerated; the call sites send `remember: false` (the switch is Phases 4 and 5's), Windows'
+  `MainWindow` sends its HWND and the prompt's words, Linux `0` and `""`; `smoke.c`'s sign-ins carry `remember`.
+
+**Met (2026-11-11, commits `a22a727cb`, `a7274d33b`):**
+- [x] `./gradlew :bridge:jvmTest` → green, `DispatchTest` 12 (4 new, over a door whose trust goes through
+  `SoftwareDeviceKeys`: remember off then the password unlock; remember on, a resume, a cancelled prompt staying on the
+  unlock, the device key's unlock; "Another account", "Add server", cancel, and the switch's answer following the keys;
+  Manage servers with each server's trust, Stop trusting, close), `SecretFreeSchemaTest` with `Session.Unlock.password`
+  let through as typed inward. **Bites**, each red then restored: that allowance dropped (`whatTheHostSends…` red);
+  `remember` hard-coded false (two red); the switch's answer hard-coded PRESENCE (one red); Manage not refreshed after
+  Stop trusting (one red, timed out).
+- [x] `RefreshKeptTest` → green; **bites**: the 401 path's `putSecret` unguarded (red at `respond`), the resume's
+  unguarded (red, `SignInFailure`).
+- [x] `VEYQ_LIVE=http://veyq.localhost:8080 VEYQ_ENV_FILE=<main>/.run/.env ./gradlew :bridge:jvmTest --rerun` → both
+  `LiveBridgeTest` cases green: the new one signs in with `remember` over `SoftwareDeviceKeys`, a fresh bridge resumes,
+  a cancelled prompt stays on the unlock, the device key unlocks, Manage says DEVICE_KEY, sign-out; then the password
+  trust, a fresh bridge unlocks with the password, Stop trusting, and the next start signs in.
+- [x] `DeviceTrustLiveTest` ran: same variables, `./gradlew :core:jvmTest --tests '*DeviceTrustLiveTest*' --rerun` →
+  green; with `VEYQ_ENV_FILE=/nonexistent` it is red (`FileNotFoundException`), so it ran live. The core's JVM tests
+  take `VEYQ_ENV_FILE` now.
+- [x] `linux/run.py build` → clippy, `cargo test`, build green; `linux/run.py bridge` → exports and smoke green (the
+  container has no bus: `"staySignedIn":"NONE"` beside the sign-in); `linux/run.py test` → `PASSED 200`, then `no-bus`
+  and `absent` `PASSED 1` each.
+- [x] `windows/run.py build` → green (`Veyq.Bridge.Tests` here and there, `Veyq.Tests`, the app and `Veyq.Drive`).
+- [x] `windows/run.py bridge` → the export gate and the smoke green; the real `WindowsDeviceKeys` answered
+  `"staySignedIn":"PRESENCE"` beside the sign-in in session 0 (the VM has a PIN), no prompt raised.
+  `windows/run.py test` → `PASSED 201` (200 + `RefreshKeptTest`).
+- [x] `./gradlew :core:jvmTest --rerun :core:macosArm64Test --rerun :bridge:jvmTest --rerun
+  :core:compileBridgedMainKotlinMetadata --warning-mode all` → `BUILD SUCCESSFUL`, no deprecation (354 and 190 test
+  cases, none failed); `ANDROID_HOME=$HOME/Library/Android/sdk ./gradlew :android:compileDebugKotlin` → `BUILD
+  SUCCESSFUL`. No dependency added, so no verification-metadata write.
+- **Left for Phases 4 and 5:** "Manage servers"' hide switches have no call yet (`Hidden.setTenantHidden` /
+  `setSpaceHidden` and the shell's rebuild after them); the wire carries what they show. A live `run.py bridge` on
+  Windows (`VEYQ_LIVE`) now enrols the password trust under DPAPI and leaves its wrap on the dev instance, since the
+  smoke never stops trusting.
+
 ### Phase 4 — Linux's screens
 
 D5 on Linux.
@@ -380,5 +439,11 @@ D5 on Windows.
 - **Phase 2, execution: gnome-keyring in a container failed twice before it ran,** both times with the daemon falling
   back to a prompter: as root it aborts unless the container may lock memory, and `--unlock` makes no login collection
   without `~/.local/share/keyrings`. Each was one probe run; both are in `src/mobile/CLAUDE.md` § Traps.
+- **Phase 3, execution: the bites' restore went through an interactive `cp`** (this Mac's alias): the first restore was
+  refused, so the next bite ran over the previous one; caught by checking the file after the loop. `command cp` restores
+  since. Phase 3 asked no new question of a machine; the new calls held at the first run, and each bite turned red.
+- **Phase 3, design: "staying signed in" got its answer from the store, not a host**, and the value named what it means
+  everywhere (`PRESENCE`/`LOGIN`/`NONE`) rather than Windows' word (`HELLO`): Android and Apple without a screen lock
+  then answer `NONE` honestly, which is the case Phase 2 found Linux in.
 - **Next time:** a verb that waits for a person waits for the process it started and fetches its outcome whatever
   ended the wait; its brief to the owner lists every prompt the run may raise, the uncertain ones marked so.
