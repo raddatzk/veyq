@@ -1,8 +1,9 @@
 //! The shell (ADR 0122; ADR 0123's Consequences, the Linux app), GNOME's way: an `AdwNavigationSplitView` whose sidebar is an
 //! `AdwSidebar` — Home, Favorites, Recent, the applications — under a header bar whose title is the one switcher (the
 //! space shown, its tenant and server; spaces and tenants in its menu), with New beside it and Search under it (Ctrl+F),
-//! and Settings pinned at its foot. The content side shows what the core's shell says is open: Home, an application's
-//! list, a Pot, or an object this app does not draw yet. Below 600sp the split view collapses to a navigation stack.
+//! and Settings pinned at its foot; the switcher shows the signed-in member's picture beside the tenant. The content
+//! side shows what the core's shell says is open: Home, an application's list, a Pot (its menu at the header's end:
+//! Download), or an object this app does not draw yet. Below 600sp the split view collapses to a navigation stack.
 //!
 //! Every state is the core's (`ShellModel.State` and `ShellShown`); every action one call. What the sidebar selects,
 //! which back the header shows and what the title says follow the state, as Android's and Apple's shells draw it.
@@ -15,7 +16,7 @@ use gtk::{gio, glib};
 use crate::bridge::{self, wire::ApplicationId, wire::Call, wire::ObjectRef, wire::ShellModelState, wire::ShellShown};
 use crate::home::{self, app_icon, app_name, kind_icon};
 use crate::pot::PotPage;
-use crate::{create_action, said, words};
+use crate::{avatars, create_action, said, words};
 
 /// What a sidebar item opens.
 #[derive(Clone)]
@@ -36,6 +37,7 @@ pub struct Shell {
     targets: RefCell<Vec<Option<Target>>>,
     switcher: gtk::MenuButton,
     switcher_title: adw::WindowTitle,
+    me: adw::Avatar,
     switching: adw::Spinner,
     new: gtk::MenuButton,
     space_action: gio::SimpleAction,
@@ -48,6 +50,9 @@ pub struct Shell {
     content_header: adw::HeaderBar,
     content_title: adw::WindowTitle,
     back: gtk::Button,
+    pot_menu: gtk::MenuButton,
+    toasts: adw::ToastOverlay,
+    window: adw::ApplicationWindow,
     pot: RefCell<Option<PotPage>>,
     now: RefCell<Option<(ShellModelState, ShellShown)>>,
     started: Cell<bool>,
@@ -58,7 +63,9 @@ impl Shell {
     pub fn new(window: &adw::ApplicationWindow) -> Rc<Self> {
         let switcher_title = adw::WindowTitle::new("", "");
         let switching = adw::Spinner::builder().visible(false).build();
+        let me = adw::Avatar::new(24, None, true);
         let switcher_child = gtk::Box::new(gtk::Orientation::Horizontal, 6);
+        switcher_child.append(&me);
         switcher_child.append(&switcher_title);
         switcher_child.append(&switching);
         let switcher = gtk::MenuButton::builder().child(&switcher_child).always_show_arrow(true).tooltip_text(words::switcher_open()).build();
@@ -95,9 +102,16 @@ impl Shell {
         let content_header = adw::HeaderBar::new();
         content_header.set_title_widget(Some(&content_title));
         content_header.pack_start(&back);
+        // the open Pot's actions, GNOME's way: a menu at the header bar's end
+        let pot_actions = gio::Menu::new();
+        pot_actions.append(Some(&words::node_download()), Some("win.pot-download"));
+        let pot_menu = gtk::MenuButton::builder().icon_name("view-more-symbolic").tooltip_text(words::node_more()).menu_model(&pot_actions).visible(false).build();
+        content_header.pack_end(&pot_menu);
         let content_view = adw::ToolbarView::new();
         content_view.add_top_bar(&content_header);
-        let content = adw::NavigationPage::new(&content_view, &words::app_name());
+        let toasts = adw::ToastOverlay::new();
+        toasts.set_child(Some(&content_view));
+        let content = adw::NavigationPage::new(&toasts, &words::app_name());
 
         let split = adw::NavigationSplitView::builder().sidebar(&sidebar_page).content(&content).min_sidebar_width(240.0).max_sidebar_width(360.0).build();
         let breakpoint = adw::Breakpoint::new(adw::BreakpointCondition::parse(COLLAPSE_BELOW).expect("a valid condition"));
@@ -116,6 +130,7 @@ impl Shell {
             targets: RefCell::new(Vec::new()),
             switcher,
             switcher_title,
+            me,
             switching,
             new,
             space_action,
@@ -128,6 +143,9 @@ impl Shell {
             content_header,
             content_title,
             back,
+            pot_menu,
+            toasts,
+            window: window.clone(),
             pot: RefCell::new(None),
             now: RefCell::new(None),
             started: Cell::new(false),
@@ -151,6 +169,15 @@ impl Shell {
             s.split.set_show_content(true);
         });
         self.back.connect_clicked(|_| bridge::send(Call::ShellBack));
+        let download = gio::SimpleAction::new("pot-download", None);
+        let weak = Rc::downgrade(self);
+        download.connect_activate(move |_, _| {
+            let Some(s) = weak.upgrade() else { return };
+            if let Some(pot) = s.pot.borrow().as_ref() {
+                pot.download(s.window.upcast_ref(), &s.toasts);
+            }
+        });
+        window.add_action(&download);
 
         let weak = Rc::downgrade(self);
         self.space_action.connect_activate(move |_, scope| {
@@ -230,6 +257,7 @@ impl Shell {
     /// Draws the core's shell: [state] with what the core says it shows beside it.
     pub fn show(self: &Rc<Self>, state: ShellModelState, shown: ShellShown) {
         let first = !self.started.replace(true);
+        avatars::listed(&format!("{}\n{}", shown.connection, shown.tenant.tenant_id), &shown.pictures);
         *self.now.borrow_mut() = Some((state, shown));
         self.draw_switcher();
         self.draw_new();
@@ -252,6 +280,9 @@ impl Shell {
         let Some((state, shown)) = now.as_ref() else { return };
         self.switcher_title.set_title(&said::piece(&shown.space_name));
         self.switcher_title.set_subtitle(&shown.switcher_subtitle);
+        // the signed-in member's picture where the core holds one, else the tenant's initials
+        self.me.set_text(Some(&shown.tenant.name));
+        avatars::show(&self.me, shown.me.as_deref());
         let menu = gio::Menu::new();
         let spaces = gio::Menu::new();
         for s in &shown.spaces {
@@ -365,6 +396,7 @@ impl Shell {
         self.back.set_visible(shown.can_go_back);
         self.content_header.set_show_back_button(!shown.can_go_back);
 
+        self.pot_menu.set_visible(shell.open_object.as_ref().is_some_and(|o| o.kind == "EXPENSES_POT"));
         let body: gtk::Widget = match &shell.open_object {
             Some(o) if o.kind == "EXPENSES_POT" => {
                 let mut pot = self.pot.borrow_mut();
