@@ -2173,6 +2173,13 @@ def test_init_resumes_from_flags(tmp: pathlib.Path) -> None:
 SERVER_IP = "203.0.113.10"
 HOST_KEY = "server.example.org ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIHostKeyOfTheFreshServer"
 AGE_PUBLIC = "age1" + "q" * 58
+DEBIAN_13 = 'PRETTY_NAME="Debian GNU/Linux 13 (trixie)"\nID=debian\nVERSION_ID="13"\nVERSION_CODENAME=trixie\n'
+UBUNTU_2604 = 'PRETTY_NAME="Ubuntu 26.04.1 LTS"\nID=ubuntu\nID_LIKE=debian\nVERSION_CODENAME=resolute\n'
+FEDORA_43 = 'NAME="Fedora Linux"\nID=fedora\nVERSION_ID=43\nPRETTY_NAME="Fedora Linux 43 (Server Edition)"\n'
+# What veyq-server 0.6's roles name in meta/main.yml (two of the seven are enough: veyqctl takes what every role names).
+ROLE_META = ("galaxy_info:\n  role_name: {role}\n  min_ansible_version: \"2.18\"\n  platforms:\n    - name: Debian\n"
+             "      versions:\n        - trixie\n    - name: Ubuntu\n      versions:\n        - noble\n        - resolute\n"
+             "dependencies: []\n")
 TEMPLATE_FILES = {  # a veyq-server release as the stand-in clone checks it out: what Copier renders from it
     "copier.yml": "_subdirectory: template\n",
     "template/.sops.yaml.jinja": "creation_rules: []\n",
@@ -2194,8 +2201,10 @@ class ServerHost(GitOpsHost):
     (a substring of the question → the answer; True when none matches)."""
 
     def __init__(self, *, confirms=None, waits=True, gh=True, tamper_manifest=False, tamper_tree=False,
-                 host_key=HOST_KEY, bootstrapped=False, dns=None, remote_differs=False, **kwargs) -> None:
+                 host_key=HOST_KEY, bootstrapped=False, dns=None, remote_differs=False, os_release=DEBIAN_13,
+                 root_login=True, **kwargs) -> None:
         super().__init__(empty_repo=True, **kwargs)
+        self.os_release, self.root_login = os_release, root_login  # the server's system; whether root takes your key
         self.confirms, self.waits, self.gh = dict(confirms or {}), waits, gh
         self.tamper_manifest, self.tamper_tree, self.host_key = tamper_manifest, tamper_tree, host_key
         self.bootstrapped = bootstrapped
@@ -2314,6 +2323,16 @@ class ServerHost(GitOpsHost):
                 return self.record(cmd, check, 0, f"userknownhostsfile {pathlib.Path.home()}/.ssh/known_hosts\n", env)
             if cmd[-1] == "true":
                 return self.record(cmd, check, 0 if self.bootstrapped else 255, "", env)
+            if cmd[-1] == "cat /etc/os-release":
+                # As ssh does: only a host key the named known_hosts holds (StrictHostKeyChecking=yes); root only before
+                # the bootstrap switches its login off, and only where the image lets root in; the admin user after.
+                user = cmd[-2].split("@")[0]
+                named = next((c.split("=", 1)[1] for c in cmd if c.startswith("UserKnownHostsFile=")), "")
+                known = pathlib.Path(named) if named else None
+                pinned = ("StrictHostKeyChecking=yes" in cmd and known is not None and known.is_file()
+                          and self.host_key in known.read_text())
+                logs_in = pinned and (self.bootstrapped if user != "root" else self.root_login and not self.bootstrapped)
+                return self.record(cmd, check, 0 if logs_in else 255, self.os_release if logs_in else "", env)
             if "cat ~/.kube/config" in cmd:
                 return self.record(cmd, check, 0, KUBECONFIG_K3S, env)
         if tool == "gh":
@@ -2356,6 +2375,8 @@ class ServerHost(GitOpsHost):
                                                     "__RANDOM_16__\nargocd_repo_ssh_private_key: __DEPLOY_KEY__\n",
             "ansible/known_hosts": "# The server's SSH host key, pinned.\n",
             "ansible/requirements.yml": "collections: []\n",
+            "ansible/roles/base/meta/main.yml": ROLE_META.format(role="base"),
+            "ansible/roles/k3s/meta/main.yml": ROLE_META.format(role="k3s"),
             "gitops/root.yaml": f"spec:\n  source:\n    targetRevision: {data['branch']}\n",
             "gitops/apps/kustomization.yaml": "resources:\n  - project.yaml\n  # veyq: `veyqctl init` writes "
                                               "gitops/apps/veyq/ and adds its Application here.\n",
@@ -2444,6 +2465,31 @@ def test_server_path(tmp: pathlib.Path, home: pathlib.Path) -> pathlib.Path:
         check(f"server path: {label} is refused before Copier runs, nothing outside the repository changed",
               rc == 1 and said in out and not host.ran("copier") and not (top / ".copier-answers.yml").exists()
               and outside() == before, out[-500:])
+
+    # the server's system against what the roles set up — after the host key, before anything leaves this machine
+    for label, kw, said in (("a server whose system the roles do not set up (Fedora 43)", {"os_release": FEDORA_43},
+                             "runs Fedora Linux 43 (Server Edition), but veyq-server's roles set up Debian trixie, "
+                             "Ubuntu noble, Ubuntu resolute only"),
+                            ("a fresh server whose root does not take your key (a stock Ubuntu cloud image)",
+                             {"root_login": False}, "authorized_keys")):
+        top = fresh(f"server-os-{len(label)}")
+        host, rc, out = run(top, **kw)
+        check(f"server path: {label} is refused by name after the host key — nothing pushed, nothing run on the "
+              f"server, nothing outside the repository changed",
+              rc == 1 and said in out and vc.pinned_host_key(top) and not host.pushed and not host.ran("ansible-playbook")
+              and outside() == before, out[-500:])
+    top = fresh("server-os-ubuntu")
+    host, rc, out = run(top, os_release=UBUNTU_2604, confirms={"Commit them and push": False})
+    reads = [c for c in host.commands if c[-1:] == ["cat /etc/os-release"]]
+    check("server path: Ubuntu 26.04 is one the roles set up — checked off, read as root with the pinned key only",
+          "✓ system        Ubuntu 26.04.1 LTS" in out and len(reads) == 1 and reads[0][-2] == "root@server.example.org"
+          and "StrictHostKeyChecking=yes" in reads[0] and outside() == before, out[-600:])
+    for meta in (top / "ansible" / "roles").glob("*/meta/main.yml"):
+        meta.write_text(meta.read_text().replace("        - resolute\n", "", 1) if meta.parent.parent.name == "k3s"
+                        else meta.read_text())
+    check("server path: a system is one the roles set up only when EVERY role names it",
+          ("Ubuntu", "resolute") not in vc.role_systems(top) and ("Ubuntu", "noble") in vc.role_systems(top),
+          str(vc.role_systems(top)))
 
     # the host key not confirmed: nothing logs in, nothing pushed, ~/.ssh untouched; then the same command goes on
     top = fresh("server-run")

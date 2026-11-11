@@ -2985,6 +2985,63 @@ def pin_host_key(host: Host, top: Path, address: str) -> str:
     return line
 
 
+# The systems veyq-server's roles set up are the platforms their meta/main.yml name (veyq-server's scripts/systems.py
+# reads the same block, and its release signs that list into its manifest as `systems`). veyqctl reads them from the
+# roles in the checkout — the ones Ansible will run — and compares the server's /etc/os-release before anything leaves
+# this machine: a system the roles were not written for fails here, by name, not halfway through the bootstrap as root.
+OS_RELEASE_FIELD = re.compile(r'(?m)^(ID|VERSION_CODENAME|PRETTY_NAME)="?([^"\n]*)"?\s*$')
+
+
+def role_systems(top: Path) -> list[tuple[str, str]]:
+    """(platform, version) pairs every role under ansible/roles/ names in its meta/main.yml `platforms:` block, in the
+    first role's order — empty when no role names any (a template from before the roles named them)."""
+    common: list[tuple[str, str]] | None = None
+    for meta in sorted((top / "ansible" / "roles").glob("*/meta/main.yml")):
+        block = re.search(r"(?m)^  platforms:\n((?:    .*\n?)*)", meta.read_text())
+        pairs, name = [], ""
+        for line in (block.group(1) if block else "").splitlines():
+            m = re.fullmatch(r"    - name: (\S+)", line) or re.fullmatch(r"        - (\S+)", line)
+            if m and line.startswith("    - name:"):
+                name = m.group(1)
+            elif m and name:
+                pairs.append((name, m.group(1)))
+        common = pairs if common is None else [p for p in common if p in pairs]
+    return common or []
+
+
+def check_server_system(host: Host, top: Path, address: str, admin_user: str) -> None:
+    """The server's /etc/os-release against the systems the roles set up, read over SSH with the pinned host key only:
+    as root on a fresh server, as the admin user on one already set up. Refused, changing nothing, when neither logs in
+    or the system is not one of them."""
+    systems = role_systems(top)
+    if not systems:
+        say("The roles name no system, so the server's is not checked (a veyq-server release before 0.6).")
+        return
+    known = top / SERVER_KNOWN_HOSTS
+    tried = []
+    for user in ("root", admin_user):
+        read = host.run(["ssh", "-o", "BatchMode=yes", "-o", "ConnectTimeout=15", "-o", "ClearAllForwardings=yes",
+                         "-o", f"UserKnownHostsFile={known}", "-o", "StrictHostKeyChecking=yes", f"{user}@{address}",
+                         "cat /etc/os-release"], check=False)
+        if read.returncode == 0:
+            break
+        tried.append(f"{user}: {((read.stderr or '').strip().splitlines() or ['no answer'])[-1]}")
+    else:
+        raise Refused(f"neither root nor {admin_user} logs in to {address} with your key ({'; '.join(tried)}), so its "
+                      f"system cannot be read and the bootstrap could not run. A fresh server lets root log in with "
+                      f"your key; a stock Ubuntu cloud image logs in as `ubuntu` instead: put your key into root's "
+                      f"authorized_keys. Nothing was pushed, and nothing changed on the server.")
+    fields = dict(OS_RELEASE_FIELD.findall(read.stdout or ""))
+    system, codename = fields.get("ID", "").lower(), fields.get("VERSION_CODENAME", "")
+    shown = fields.get("PRETTY_NAME") or f"{system} {codename}".strip() or "a system without /etc/os-release"
+    if not any(name.lower() == system and version == codename for name, version in systems):
+        names = ", ".join(f"{name} {version}" for name, version in systems)
+        raise Refused(f"{address} runs {shown}, but veyq-server's roles set up {names} only (their meta/main.yml). "
+                      f"Install one of those and run the same command again. Nothing was pushed, and nothing changed "
+                      f"on the server.")
+    checked("system", f"{shown}, one veyq-server's roles set up")
+
+
 def list_veyq_application(top: Path, directory: Path) -> None:
     """veyq's Application into the root's gitops/apps/kustomization.yaml, where the template leaves its place."""
     kustomization = top / SERVER_APPS / "kustomization.yaml"
@@ -3217,6 +3274,7 @@ def server_prepare(run: InitRun) -> None:
     m = GITHUB_REPO.fullmatch(run.repo_url)
     run.deploy_key = server_secrets(host, top, answers, m.group(1) if m else top.name, run.age_env())
     run.pinned = pin_host_key(host, top, answers["server_address"])
+    check_server_system(host, top, answers["server_address"], answers["admin_user"])
 
 
 def server_finish(run: InitRun, g: GitOps, repo_url: str) -> None:

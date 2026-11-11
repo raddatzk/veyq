@@ -37,7 +37,7 @@ On the cluster — `init` checks this before it writes anything and names every 
 
 ## From an empty repository: the server too
 
-What you need for it: a freshly installed server of the system [veyq-server's README](https://github.com/raddatzk/veyq-server#the-server-it-needs) names — Debian 13 today, which its Ansible targets — reached as root over SSH with your key (8 GB of memory; 4 GB is
+What you need for it: a freshly installed server of a system [veyq-server's README](https://github.com/raddatzk/veyq-server#the-server-it-needs) names — Debian 13, Ubuntu 24.04 or 26.04 LTS, the platforms its roles are written for — reached as root over SSH with your key (a stock Ubuntu cloud image logs in as `ubuntu`: put your key into root's `authorized_keys` first; 8 GB of memory, 4 GB is
 tight), its provider's firewall open for TCP 22, 80 and 443 only, an **empty Git repository** and its clone on your
 machine, and your DNS. On your machine, besides the programs above: `ssh`, `age-keygen`, `sops`, `copier` and
 `ansible-core` 2.18 or later — `init` names whatever is missing, with Homebrew's command where `brew` is, and waits.
@@ -62,7 +62,9 @@ context). Then, each step said as it comes and every one that changes something 
 2. **The server's secrets**, once: the admin password, its salt and Argo CD's read-only deploy key, encrypted with
    `sops` to your age key. A file that exists is never made again.
 3. **The host key**: `init` shows the server's fingerprint — compare it with your provider's console — and pins it in
-   `ansible/known_hosts` on your yes. A rebuilt server presents a new key; `init` shows both and asks again.
+   `ansible/known_hosts` on your yes. A rebuilt server presents a new key; `init` shows both and asks again. Then,
+   with that key only, it reads the server's `/etc/os-release` (as root, or as the admin user on a server set up
+   already) and refuses a system the roles' `meta/main.yml` do not name — before anything is pushed or run there.
 4. **veyq's half** in `gitops/apps/veyq`, listed for the root Application.
 5. **The deploy key** at GitHub with `gh` on your yes, read-only; otherwise `init` shows it with the page it goes on and
    waits.
