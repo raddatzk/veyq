@@ -2265,6 +2265,7 @@ class ServerHost(GitOpsHost):
         return super().prompt(question, default, hint, yes_no, optional)
 
     def secret(self, question):
+        self.prompted.append(f"(hidden) {question}")
         return ""  # Enter: generated
 
     def sleep(self, seconds):
@@ -2537,6 +2538,10 @@ def test_server_path(tmp: pathlib.Path, home: pathlib.Path) -> pathlib.Path:
     check("server path: the server's name on this computer is not asked — the instance's, kept for a rebuild",
           not any("name for the server" in q for q in host.prompted)
           and setup["server"]["connect_name"] == setup["veyq"]["gitops/apps/veyq"]["name"], json.dumps(setup))
+    order = [next((i for i, q in enumerate(host.prompted) if part in q), -1)
+             for part in ("admin user", "(hidden) your sudo password", "your SSH key")]
+    check("server path: the sudo password is asked right after the admin user, before the SSH key (owner 2026-11-11)",
+          -1 not in order and order == sorted(order), f"{order} {host.prompted}")
     check("server path: the node name is not asked — derived from the address, kept for a rebuild",
           not any("node name" in q for q in host.prompted) and setup["server"]["node_name"] == "server"
           and host.rendered["node_name"] == "server", f"{host.prompted} {setup['server']}")

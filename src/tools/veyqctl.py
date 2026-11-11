@@ -4169,6 +4169,10 @@ def ask_server(run: InitRun) -> None:
                              or derived)
     own = re.sub(r"[^a-z0-9_-]", "", os.environ.get("USER", "").split(".")[0].lower())
     a["admin_user"] = run.ask(Q.ADMIN_USER, own if own not in ("root", "ci") else "")
+    if not (run.top / SERVER_SECRETS).is_file():
+        # The login's password beside the login (owner 2026-11-11). Never kept, never a flag: it goes into the
+        # repository encrypted, only.
+        a["admin_password"] = host.secret(Q.PASSWORD) or ""
     a["admin_ssh_public_key"] = run.ask(Q.SSH_KEY, given=pick_ssh_key(run))
     key_file = age_key_file(run)
     recipient = age_recipient_of(host, key_file)
@@ -4186,9 +4190,6 @@ def ask_server(run: InitRun) -> None:
     a["connect_name"] = run.ask(Q.CONNECT_NAME, given=run.args.connect_name or run.progress.get("server", "connect_name")
                                 or run.name)
     a["make_current"] = run.ask(Q.MAKE_CURRENT, "no")
-    if not (run.top / SERVER_SECRETS).is_file():
-        # Never kept, never a flag: it goes into the repository encrypted, only.
-        a["admin_password"] = host.secret(Q.PASSWORD) or ""
 
 
 def pick_ssh_key(run: InitRun) -> str | None:
