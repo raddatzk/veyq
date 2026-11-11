@@ -14,6 +14,25 @@ End-to-end encrypted. Self-hostable. Free software.
 
 [**Website**](https://veyq.app) · [**Run your own**](https://veyq.app/run/) · [**Security model**](https://veyq.app/security/start-here/) · [**Releases**](https://github.com/raddatzk/veyq/releases) · [Deutsch](https://veyq.app/de/)
 
+</div>
+
+Run your own — fetch `veyqctl`, check its signature, and let it set up an instance (it needs `python3` and
+[`cosign`](https://docs.sigstore.dev/cosign/system_config/installation/) 3.1.3 or later):
+
+```sh
+base=https://github.com/raddatzk/veyq/releases/latest/download
+curl -fsSLO "$base/veyqctl" && curl -fsSLO "$base/veyqctl.bundle"
+cosign verify-blob --bundle veyqctl.bundle veyqctl \
+  --certificate-oidc-issuer https://token.actions.githubusercontent.com \
+  --certificate-identity-regexp '^https://github\.com/raddatzk/veyq/\.github/workflows/release\.yml@refs/heads/(main|release/[0-9]+\.x)$' \
+  && chmod +x veyqctl && ./veyqctl init
+```
+
+It runs only what verifies: if `cosign` refuses, nothing starts. [Run your own](https://veyq.app/run/) says what `init`
+asks, on Docker Compose or Kubernetes.
+
+<div align="center">
+
 [![Checks](https://github.com/raddatzk/veyq/actions/workflows/checks.yml/badge.svg)](https://github.com/raddatzk/veyq/actions/workflows/checks.yml)
 [![CodeQL](https://github.com/raddatzk/veyq/actions/workflows/codeql.yml/badge.svg)](https://github.com/raddatzk/veyq/actions/workflows/codeql.yml)
 
