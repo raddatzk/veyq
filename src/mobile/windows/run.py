@@ -47,8 +47,9 @@ Verbs:
                              session through the scheduled task `veyq-app`. It seals under a Passport key of its own, then
                              asks for the PIN (enter it), opens within the 15 s window without asking, asks once more
                              after it (press Cancel), and deletes the key. Each step's line is printed as the probe
-                             writes it (`<step> asking: …` while a prompt waits); it ends at `done` or after S seconds
-                             (600 by default). The outcome stays in build/windows/hello-probe.txt here. `--check` stops
+                             writes it (`<step> asking: …` while a prompt waits); it waits until the probe ends (`done`,
+                             or its process gone), S seconds at most (3600 by default: a step waits for a person), and
+                             fetches the outcome last, to build/windows/hello-probe.txt here. `--check` stops
                              the probe before its first key: the launch and Hello's availability in that session, no
                              prompt.
   register                   registers the two scheduled tasks, interactive only, as the user ssh logs in as: they run
@@ -609,20 +610,37 @@ def hello_probe(timeout: int, check: bool) -> int:
     if code != 0:
         powershell(f"Remove-Item -Force -ErrorAction SilentlyContinue -Path {ps_quote(str(start))}", quiet=True)
         return code
-    print(f"veyq: the probe runs in the logged-on session; waiting up to {timeout} s for it", flush=True)
+    # Its steps wait for a person at the console (the seal's prompt waited 649 s once, 2026-11-11), so the wait ends when
+    # the probe does — `done`, or its process gone — and the timeout is only a safety net. The outcome is fetched last.
+    pid_file = SMOKE_OUT.parent / "hello-probe.pid"
+    pid = pid_file.read_text().strip() if fetch(str(started), pid_file) else ""
+    alive = f"if (Get-Process -Id {pid} -ErrorAction SilentlyContinue) {{ exit 0 }} else {{ exit 1 }}" if pid.isdigit() else "exit 0"
+    print(f"veyq: the probe (pid {pid or '?'}) runs in the logged-on session; waiting until it ends (at most {timeout} s)",
+          flush=True)
     local_outcome = SMOKE_OUT.parent / "hello-probe.txt"
     local_outcome.unlink(missing_ok=True)
     shown = 0
-    deadline = time.monotonic() + timeout
-    while time.monotonic() < deadline:
+
+    def show() -> list[str]:
+        nonlocal shown
         lines = local_outcome.read_text(encoding="utf-8").splitlines() if fetch(str(outcome), local_outcome) else []
         for line in lines[shown:]:
             print(f"probe: {line}", flush=True)
         shown = max(shown, len(lines))
+        return lines
+
+    deadline = time.monotonic() + timeout
+    while time.monotonic() < deadline:
+        lines = show()
         if lines and lines[-1] == "done":
             return 0
-        time.sleep(2)
-    print(f"veyq: the probe did not finish in {timeout} s", flush=True)
+        if powershell(alive, quiet=True) != 0:
+            show()  # what it wrote before it ended
+            print(f"veyq: the probe ended without `done`; its outcome: {local_outcome}", flush=True)
+            return 4
+        time.sleep(3)
+    show()
+    print(f"veyq: the probe still runs after {timeout} s; what it wrote so far: {local_outcome}", flush=True)
     return 4
 
 
@@ -663,7 +681,7 @@ def main() -> None:
     d.add_argument("steps", nargs="+", help="each a step: tree, invoke <id>, select <id>, set <id> <text>, key <keys>, "
                                             "type <id> <text>, press <id> [keys], size <w> <h>, maximize, wait <id> [s], sleep <ms>, shot <name>.png")
     h = verbs.add_parser("hello-probe", help="run the Hello probe in the logged-on session: the person enters the PIN, then cancels")
-    h.add_argument("--timeout", type=int, default=600)
+    h.add_argument("--timeout", type=int, default=3600)
     h.add_argument("--check", action="store_true", help="stop before the first key: the launch and Hello's availability, no prompt")
     verbs.add_parser("register", help="register the scheduled tasks veyq-app and veyq-drive on the Windows host (owner)")
     args = parser.parse_args()
