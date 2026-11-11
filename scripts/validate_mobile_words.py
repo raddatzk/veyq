@@ -25,14 +25,15 @@
 - **linux-po**: no `.po` / `.pot` file under `src/mobile/linux/`: the catalogs are generated (`generate_words.py
   --gettext`) into the build directory, and a hand-written one would sit beside them until they drifted.
 - **windows-literal**: no XAML file gives a control shown text as a literal with letters — the attributes `Text`,
-  `Content`, `Header`, `PlaceholderText`, `Title`, `Label`, `Description`, `AutomationProperties.Name`,
-  `ToolTipService.ToolTip` (a markup extension, `{x:Bind …}`, passes), nor as an element's content
-  (`<TextBlock>Open</TextBlock>`; a colour such as `#FF5B4DF5` passes) — and no C# file assigns one to those properties
-  (`Text = "…"`, an object initializer's too, a `$"…"` template with letters among them) or hands one to
-  `AutomationProperties.SetName(`, `ToolTipService.SetToolTip(` or `CreateAction.Button(` / `.Menu(`. The words are
-  `Words.<Key>(…)`, generated from the catalog with its .resw catalogs (ADR 0123's Consequences, the Windows app).
-  C# is read with comments blanked (`kotlin_lexer.mask`: C#'s comments are Kotlin's), XAML with its comments removed.
-  The guard fails when it reads no C# source.
+  `Content`, `Header`, `PlaceholderText`, `Title`, `Label`, `Description`, `Message` (an `InfoBar`'s),
+  `AutomationProperties.Name`, `ToolTipService.ToolTip` (a markup extension, `{x:Bind …}`, passes), nor as an element's
+  content (`<TextBlock>Open</TextBlock>`; a colour such as `#FF5B4DF5` passes) — and no C# file assigns one to those
+  properties (`Text = "…"`, an object initializer's too, a `$"…"` template with letters among them) or hands one to
+  `AutomationProperties.SetName(`, `ToolTipService.SetToolTip(`, `CreateAction.Button(` / `.Menu(` or a save picker's
+  `FileTypeChoices.Add(` (the type's label, shown in the system's dialog). The words are `Words.<Key>(…)`, generated
+  from the catalog with its .resw catalogs (ADR 0123's Consequences, the Windows app). C# is read with comments blanked
+  (`kotlin_lexer.mask`: C#'s comments are Kotlin's), XAML with its comments removed. The guard fails when it reads no C#
+  source.
 - **windows-resw**: no `.resw` file under `src/mobile/windows/`: the catalogs are generated (`generate_words.py
   --resw`) into the build directory.
 
@@ -107,7 +108,7 @@ def check_linux(linux: Path) -> list[str]:
 
 
 # The properties a WinUI control shows as text, in XAML (an attribute) and C# (an assignment).
-WINDOWS_SHOWN = ("Text", "Content", "Header", "PlaceholderText", "Title", "Label", "Description")
+WINDOWS_SHOWN = ("Text", "Content", "Header", "PlaceholderText", "Title", "Label", "Description", "Message")
 XAML_SHOWN = re.compile(r'(?<![\w.:])(' + "|".join(WINDOWS_SHOWN) + r'|AutomationProperties\.Name|ToolTipService\.ToolTip)'
                         r'\s*=\s*"([^"]*)"')
 XAML_CONTENT = re.compile(r">([^<>]*)<")
@@ -115,7 +116,8 @@ XAML_COMMENT = re.compile(r"<!--.*?-->", re.S)
 HEX_COLOUR = re.compile(r"#[0-9A-Fa-f]{3,8}")
 CS_SHOWN = re.compile(r'(?<![\w.])(?:\w+\.)?(?:' + "|".join(WINDOWS_SHOWN) + r')\s*=\s*[$@]*"((?:[^"\\]|\\.)*)"'
                       r'|\b(?:AutomationProperties\.SetName|ToolTipService\.SetToolTip)\s*\([^,()]*,\s*[$@]*"((?:[^"\\]|\\.)*)"'
-                      r'|\bCreateAction\.(?:Button|Menu)\s*\(\s*[$@]*"((?:[^"\\]|\\.)*)"')
+                      r'|\bCreateAction\.(?:Button|Menu)\s*\(\s*[$@]*"((?:[^"\\]|\\.)*)"'
+                      r'|\bFileTypeChoices\.Add\s*\(\s*[$@]*"((?:[^"\\]|\\.)*)"')
 
 
 def windows_sources(windows: Path, suffix: str) -> list[Path]:
