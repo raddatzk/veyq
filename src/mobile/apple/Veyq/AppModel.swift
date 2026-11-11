@@ -120,12 +120,14 @@ final class AppModel {
         device = Self.makeDevice(inExtension: inExtension)
         let stored = Shared.defaults.stringArray(forKey: "veyq.recent") ?? []
         recent = RecentUses(
-            persist: { keys in Shared.defaults.set(keys.map { $0.encode() }, forKey: "veyq.recent") },
+            // called on core's threads (a sign-out of the last account clears it there): @Sendable, never main-actor
+            // isolated, or Swift 6 traps (src/mobile/CLAUDE.md § Traps)
+            persist: { @Sendable keys in Shared.defaults.set(keys.map { $0.encode() }, forKey: "veyq.recent") },
             initial: stored.compactMap { UseKey.companion.decode(line: $0) },
             keep: 50
         )
         hidden = Hidden(
-            persist: { keys in Shared.defaults.set(Array(keys), forKey: "veyq.hidden") },
+            persist: { @Sendable keys in Shared.defaults.set(Array(keys), forKey: "veyq.hidden") },
             initial: Set(Shared.defaults.stringArray(forKey: "veyq.hidden") ?? [])
         )
         session = AppleSessions.shared.sessionModel(device: device, hidden: hidden, recent: recent, signInElsewhere: inExtension)
