@@ -3394,6 +3394,11 @@ class Q:
     CONTEXT = Question("context", "kubeconfig context", "The cluster Argo CD runs in.", required=False)
     # 3. Questions: veyq
     DOMAIN = Question("domain", "veyq's domain", "The address veyq is reached at. It cannot be changed later.")
+    BUNDLED_STORE = Question("bundled_store", "use the bundled store for photos and files", "yes: veyq runs its own "
+                             "S3-compatible store (Garage) beside it, on this cluster — it needs a storage domain, and "
+                             "backups keep the files only with a pool. no: you enter an S3-compatible store of your own "
+                             "in the admin console after the install; no tenant before it passed its check.",
+                             ("yes", "no"))
     STORE_DOMAIN = Question("store_domain", "storage domain", "Where photos and files are uploaded to and downloaded "
                             "from.")
     GATEWAY_CLASS = Question("gateway_class", "GatewayClass", "Which Gateway API implementation handles veyq's "
@@ -3454,7 +3459,7 @@ SERVER_INTRO = """
 
 # init's flags that shape what it writes and that it asks no question for (a default, or derived): kept in
 # veyq-setup.json like an answer and taken from it when not given, so a resumed or repeated run writes the same.
-SETTLED_FLAGS = ("no_bundled_store", "namespace", "storage_class", "backup_size", "secret_store_kind", "remote_prefix",
+SETTLED_FLAGS = ("namespace", "storage_class", "backup_size", "secret_store_kind", "remote_prefix",
                  "application_name", "argocd_namespace")
 
 
@@ -3733,7 +3738,7 @@ def ask_veyq(run: InitRun, cluster: ClusterView) -> None:
     host, args = run.host, run.args
     host.section(Step.ASK_VEYQ)
     run.domain = run.ask(Q.DOMAIN)
-    run.garage = not args.no_bundled_store
+    run.garage = run.ask(Q.BUNDLED_STORE, "yes", given="no" if args.no_bundled_store else None) == "yes"
     run.store_domain = run.ask(Q.STORE_DOMAIN, f"store.{run.domain}") if run.garage else ""
     # A veyq-server cluster is not there yet, but what it will be is known: Traefik, in `traefik` — not asked.
     known = {"gateway_class": "traefik", "gateway_namespace": "traefik",

@@ -2067,6 +2067,19 @@ def interrupted(argv: list, host: FakeHost) -> str:
               (top / vc.SETUP_FILE).read_text())["veyq"]["apps/veyq-yn"]["admin_host_access"] == "yes", out[-300:])
     check("yes_or_no: y, Yes, N and no as yes or no, anything else untouched",
           [vc.yes_or_no(a) for a in ("y", "Yes", "N", "no", "maybe")] == ["yes", "yes", "no", "no", "maybe"])
+    class Asked(GitOpsHost):
+        def prompt(self, question, default="", hint="", yes_no=False, optional=False):
+            self.asked = getattr(self, "asked", []) + [question]
+            return super().prompt(question, default, hint, yes_no, optional)
+    host = Asked(top=top, signed=signed, answers={"use the bundled store for photos and files": "n"})
+    rc, out = run_main(["--source", mirror, "init", "--gitops", top / "apps" / "veyq-own-store", "--name", "own-store",
+                        *INIT, "--secrets", "none"], host)
+    own = (top / "apps" / "veyq-own-store" / "values.yaml").read_text() if rc == 0 else ""
+    check("init asks whether to use the bundled store; no: Garage off, no storage domain asked or written, kept",
+          rc == 0 and "garage:\n  enabled: false" in own and "storeDomain" not in own
+          and "use the bundled store for photos and files" in host.asked and "storage domain" not in host.asked
+          and json.loads((top / vc.SETUP_FILE).read_text())["veyq"]["apps/veyq-own-store"]["bundled_store"] == "no",
+          out[-300:] + own[:300])
 
 
 def test_init_resumes(tmp: pathlib.Path) -> None:
