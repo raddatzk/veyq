@@ -92,7 +92,7 @@ class TrashSheet(private val door: Door, private val changed: () -> Unit) {
     /**
      * Erases [row] for good, the one the person confirmed: the row is handed in, never read back from [State.purging],
      * since a dialog may clear its question before its button's action runs (Apple's `confirmationDialog` did, so its
-     * "Delete forever" sent nothing; header CR Phase 1). The question is over either way.
+     * "Delete forever" sent nothing; ADR 0127). The question is over either way.
      */
     suspend fun purge(row: NodeTrash.Trashed) {
         _state.update { it.copy(purging = null, errorRow = null, error = null, busy = row.id) }

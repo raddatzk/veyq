@@ -15,7 +15,6 @@ import me.raddatz.veyq.mobile.crypto.Context
 import me.raddatz.veyq.mobile.crypto.hex
 import me.raddatz.veyq.mobile.crypto.unb64
 import me.raddatz.veyq.mobile.api.infrastructure.HttpResponse
-import me.raddatz.veyq.mobile.session.LivePoll
 import me.raddatz.veyq.mobile.session.NodeEpochWrite
 import me.raddatz.veyq.mobile.session.NodeMetaWrite
 import me.raddatz.veyq.mobile.session.NodeRekey
@@ -92,15 +91,6 @@ class PotSession private constructor(private val tenant: TenantSession, private 
         return moved || receiptsMoved
     }
 
-    /** [poll] as one tick of [cadence]'s loop: skipped while [busy] (a write the screen shows saving); [moved] after a
-     *  tick that changed what is held. For a platform whose tasks cancel Kotlin's coroutines (Android). */
-    suspend fun live(cadence: LivePoll, busy: () -> Boolean, moved: () -> Unit) = cadence.run {
-        when (if (busy()) null else poll()) {
-            null -> LivePoll.Tick.SKIP
-            true -> LivePoll.Tick.DONE.also { moved() }
-            false -> LivePoll.Tick.DONE
-        }
-    }
 
     private val reading = Mutex()
     private val receiptsReading = Mutex()
@@ -288,17 +278,23 @@ class PotSession private constructor(private val tenant: TenantSession, private 
     var skippedReceipts: List<String> = emptyList()
         private set
 
+    /** The ids of the receipts the last save uploaded, whatever it came to: a save again lists them, never uploads them twice. */
+    var uploadedReceipts: List<String> = emptyList()
+        private set
+
     /**
      * Saves the editor's [form] as entry [entryId]: revision 1 of a fresh record when [basedOn] is null, else the next
      * revision on [basedOn], the revision the editor showed — so a revision another device wrote meanwhile is a `409`,
      * answered [WriteOutcome.STALE] and read again, never overwritten unseen. [pending] receipts are uploaded first (one
      * the storage has no room for is left out, [skippedReceipts]; any other failure stops the save); the revision lists
      * the form's receipts and those uploaded, and names the ones it drops ([Receipts.toDrop]). A form that forms no entry
-     * is [WriteOutcome.INVALID] and sends nothing.
+     * is [WriteOutcome.INVALID] and sends nothing. [own] are receipts an earlier save of the same editor uploaded (the drop
+     * rule answers for them as for its own).
      */
     @Throws(Exception::class)
-    suspend fun saveEntry(entryId: String?, form: EntryForm, basedOn: Long?, pending: List<PendingReceipt> = emptyList()): WriteOutcome {
+    suspend fun saveEntry(entryId: String?, form: EntryForm, basedOn: Long?, pending: List<PendingReceipt> = emptyList(), own: Set<String> = emptySet()): WriteOutcome {
         skippedReceipts = emptyList()
+        uploadedReceipts = emptyList()
         val known = ledger?.participants?.map { it.id }?.toSet() ?: return WriteOutcome.INVALID
         if (form.contentOf { it in known }.content == null) return WriteOutcome.INVALID
         if (pending.any { it.bytes.size > Receipts.MAX_BYTES }) return WriteOutcome.INVALID
@@ -314,6 +310,7 @@ class PotSession private constructor(private val tenant: TenantSession, private 
                     pull = { NodeRekey.pull(tenant, node.scopeId, listOf(node.id)) },
                 )
                 uploaded += r.id
+                uploadedReceipts = uploaded.toList()
             } catch (e: ApplicationBlobs.UploadRefused) {
                 if (e.code == "quota_exceeded") skipped += r.name ?: Receipts.downloadName(null, r.type) else return WriteOutcome.REFUSED
             }
@@ -324,7 +321,7 @@ class PotSession private constructor(private val tenant: TenantSession, private 
         if (uploaded.isNotEmpty()) readReceipts()
         val shown = basedOn?.let { b -> held.values.firstOrNull { it.entryId == id && it.revision == b } }
         val on = shown?.let { s -> ((s.body?.content as? MoneyContent)?.receipts.orEmpty()) to s.createdAt }
-        val dropped = Receipts.toDrop(receipts, id, kept, on, uploaded.toSet())
+        val dropped = Receipts.toDrop(receipts, id, kept, on, uploaded.toSet() + own)
         return write(listOf(PotWrite(id, content, basedOn = basedOn, droppedReceipts = dropped))).also { if (it == WriteOutcome.WRITTEN) readReceipts() }
     }
 

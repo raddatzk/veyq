@@ -193,6 +193,10 @@ object AppleSessions {
     fun pendingReceipt(id: String, data: NSData, type: String, name: String?, modifiedAt: Long?): me.raddatz.veyq.mobile.expenses.PotSession.PendingReceipt =
         me.raddatz.veyq.mobile.expenses.PotSession.PendingReceipt(id, data.toByteArray(), type, name, modifiedAt)
 
+    /** A file picked as a receipt for core's entry editor to judge ([data] nil: it did not read). */
+    fun picked(data: NSData?, type: String, name: String?, modifiedAt: Long?): me.raddatz.veyq.mobile.expenses.EntryEditor.Picked =
+        me.raddatz.veyq.mobile.expenses.EntryEditor.Picked(data?.toByteArray(), type, name, modifiedAt)
+
     /** What the bytes of an opened receipt are (an image, a PDF, a download only). */
     fun receiptKind(data: NSData): me.raddatz.veyq.mobile.expenses.Receipts.Kind = me.raddatz.veyq.mobile.expenses.Receipts.kindOf(data.toByteArray())
 }

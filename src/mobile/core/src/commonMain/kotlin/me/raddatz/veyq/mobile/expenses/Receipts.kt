@@ -14,6 +14,9 @@ object Receipts {
     const val ROLE = "EXPENSES_RECEIPT"
     /** The largest receipt a person adds (`RECEIPT_MAX_BYTES`): the server's sealed cap is this plus the frames' overhead. */
     const val MAX_BYTES = 10_485_760L
+    /** How much of a picked file a platform reads at most: one byte past [MAX_BYTES], so the editor refuses a larger one
+     *  ([EntryEditor.addReceipts]) without the device reading it whole. */
+    const val READ_LIMIT = MAX_BYTES + 1
     /** Receipts an entry holds at most (the format's `receipts`, the server's `too_many_blobs`). */
     const val MAX_PER_ENTRY = 100
 

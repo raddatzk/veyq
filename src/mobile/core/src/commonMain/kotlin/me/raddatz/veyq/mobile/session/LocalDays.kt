@@ -27,6 +27,15 @@ object LocalDays {
     /** The local day a server instant (ISO 8601) falls on; null where it does not parse. */
     fun dayOf(instant: String): Long? = runCatching { dayOf(Instant.parse(instant).toEpochMilliseconds()) }.getOrNull()
 
+    /** Local day [day] as an ISO date (`yyyy-MM-dd`), as an entry, a payment and the day's rates are dated. */
+    fun iso(day: Long): String {
+        val (y, m, d) = civil(day)
+        return "${y.toString().padStart(4, '0')}-${m.toString().padStart(2, '0')}-${d.toString().padStart(2, '0')}"
+    }
+
+    /** The local day [epochMs] falls on, as an ISO date: "today" for every app, never a platform's own clock (ADR 0127). */
+    fun isoOf(epochMs: Long): String = iso(dayOf(epochMs))
+
     /** The last millisecond of local day [day], as the instant a link's end is sent as. */
     fun endOf(day: Long): String {
         val (y, m, d) = civil(day)

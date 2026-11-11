@@ -1024,6 +1024,10 @@
     "en": "Delete",
     "de": "Löschen"
   },
+  "entry_delete_confirm": {
+    "en": "Delete this entry? It then counts nowhere and can be restored from the deleted entries.",
+    "de": "Diesen Eintrag löschen? Er zählt dann nirgends und lässt sich aus den gelöschten Einträgen wiederherstellen."
+  },
   "entry_restore": {
     "en": "Restore",
     "de": "Wiederherstellen"
