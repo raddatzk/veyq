@@ -52,7 +52,8 @@ A Gradle build of its own, run through its own wrapper.
   committed and every cargo run `--locked`. `src/lib.rs` is the library: `bridge` (the safe wrapper over the six
   functions, the host function), `words`, `said` (money, days and sizes the desktop's way), `theme`, `create_action`
   and one module per screen (`sign_in` with the unlock, `shell` with Search, `home`, `pot` with its download, `manage`
-  for "Manage servers"; `dev_login` in a debug build only), and `avatars` (`Held`, no widget and tested: the open
+  for "Manage servers"; `header` with `trash`, `move_sheet`, `share_sheet`, `report` and `cover` for a node's header and
+  its sheets; `dev_login` in a debug build only), and `avatars` (`Held`, no widget and tested: the open
   tenant's pictures, asked for again only when the shell's id set changes; drawn as `adw::Avatar`).
   `src/main.rs` is the app. `build.rs` reads the generated bridge, words and theme from `VEYQ_GENERATED` and the
   library from `VEYQ_LIB_DIR`, both set by `run.py`. `Containerfile` (Fedora 44 by digest) is its build and run
@@ -62,7 +63,9 @@ A Gradle build of its own, run through its own wrapper.
   `Veyq.Bridge` (net10.0, no Windows API) is the safe wrapper over the six functions, the host's device store under
   `%LOCALAPPDATA%\veyq\`, and the hand-off to the UI thread; `Veyq.Bridge.Tests` its round trip and the real DLL.
   `Veyq` is the app (WinUI 3, unpackaged, self-contained, `win-x64`; its assembly `Veyq.App`): `App.xaml.cs`,
-  `MainWindow`, one class per screen (`SignInView`, `ShellView` with Search, `HomeView`, `PotPage` with its download),
+  `MainWindow`, one class per screen (`SignInView`, `ShellView` with Search, `HomeView`, `PotPage` with its download;
+  a node's header `NodeHeader` with `HeaderPlan`, and its sheets `TrashDialog`, `MoveDialog`, `ShareDialog` with
+  `ShareDays`, `ReportDialog`, `CoverDialog`, every `ContentDialog` shown through `Dialogs.Show`),
   `AvatarsHeld` (`Held<T>`, no control, Linux's `avatars::Held` rule for rule; `AvatarsTest`) and `Avatars` (decodes
   each picture through `BitmapImage`, sets it on every `PersonPicture` of that id), `Act` (sends a
   call, logs its answer), `Words`/`MrtWords` and `SaidNotice` (the words), `Said` (money, days and sizes the system's
@@ -114,18 +117,24 @@ A Gradle build of its own, run through its own wrapper.
   leaves to another device (`NodeRekeyRulesTest`).
 - `./gradlew :bridge:jvmTest` — the bridge (ADR 0123's Consequences, the bridge):
   - `DispatchTest` covers the way in, over a door the test plays: a reader read backwards in uneven ranges and closed
-    with the tenant, a picture's bytes and its refusal.
+    with the tenant, a picture's bytes and its refusal, and every call of a node's header and its sheets (`Header.*`,
+    `Trash.*`, `Move.*`, `Share.*`, `Report.*`, `Cover.*`), each bitten by making it a no-op.
   - `WireTest` writes and reads back a sample of every variant of every sealed type the wire reaches. The samples go
     to `build/generated/bridge/samples`, which the Rust test reads.
   - `SecretFreeSchemaTest` checks that nothing the core sends has a field named like a key, seal, token, secret or
-    password, and that no byte array travels in JSON (a field, a list's element, a map's value).
+    password, and that no byte array travels in JSON (a field, a list's element, a map's value). An address crosses
+    outward only in a field it names: a share link's, a key by its `#k=` (`linkAddresses`), and a public page's
+    (`publicAddresses`); a new one is added there by name, never as a blanket rule.
   - `BridgeHeaderTest` holds `bridge.h` against Kotlin/Native's headers, Linux's and mingw's.
 
   A root or sealed variant added to the wire is in the samples by derivation. With `VEYQ_LIVE` set,
   `--tests '*LiveBridgeTest*'` signs in through a `Call` and reads the shell, Home's groups, Search and every seeded
   Pot over the real core, the principal's picture through `Avatar.Picture` (its SHA-256 the core's own read's), and
   downloads Amsterdam through `Pot.Download`, every payload to the manifest. It is the only proof of the shell's, Search's and the Pot's dispatch, so a change there
-  runs it live.
+  runs it live. Its header cases (`aFolderIs*`, `aPotIsCopied*`, `aLinkIs*`, `aCover*`) run with `VEYQ_LIVE` alone and
+  clean up what they made; `aReport*` needs `VEYQ_LIVE_REPORT_BRIDGE=1` (it leaves one report: run it once),
+  `aCopyWithoutRoom*` `VEYQ_LIVE_NO_ROOM=1` while `DepotLiveTest` holds the one-byte quota, and `theLinksOfAFolder*`
+  writes a desktop pass's links out for the web's guest page — each case's doc says what it reads.
 - `python3 linux/run.py <verb>` — everything Linux. From the repository root the launcher runs the same verbs as
   `./gradlew linux:coreTest`, `linux:bridge`, `linux:build` and `linux:run`. The Kotlin is cross-compiled here by this
   build's Gradle, and the rest runs in the Fedora 44 image (Docker). Each verb is in `run.py`'s docstring:
@@ -151,7 +160,9 @@ A Gradle build of its own, run through its own wrapper.
   With `VEYQ_LIVE=http://veyq.localhost:8080`, `test --tests '*LiveSignInTest*'` and `bridge` sign in as the seeded
   principal, and `run --devlogin` signs the debug build in through its own sign-in. The backend picks the tenant from
   the Host, so the container keeps the origin's name: socat forwards it to the host. The principal comes from
-  `.run/.env`, which a worktree does not have: give `VEYQ_ENV_FILE=<main checkout>/.run/.env`.
+  `.run/.env`, which a worktree does not have: give `VEYQ_ENV_FILE=<main checkout>/.run/.env`. A pass that moves a
+  blob (a cover, a receipt) sets `VEYQ_LIVE_STORE` to the object store's public endpoint, a dev instance's Vite origin
+  (`http://veyq.localhost:8081`), whose port is forwarded too; without it no blob goes up from the container.
 - `python3 windows/run.py <verb>` — everything Windows; from the repository root `./gradlew windows:coreTest`,
   `windows:bridge`, `windows:build` and `windows:run`. The Kotlin is cross-compiled here; what needs Windows runs on the
   Windows host over ssh (`VEYQ_WINDOWS_SSH`, by default the test VM of native-apps § Open), into `F:\veyq\` there,
@@ -183,8 +194,9 @@ A Gradle build of its own, run through its own wrapper.
     step: a persistent change on a machine.
 
   With `VEYQ_LIVE=http://veyq.localhost:8080`, `test --tests '*LiveSignInTest*'` and `bridge` sign in over WinHTTP, and
-  `run --devlogin` signs the debug build in through its own sign-in; the principal comes from `VEYQ_ENV_FILE` as for
-  Linux. A pass starts from a state it sets (`select home`), never the one the app reopened.
+  `run --devlogin` signs the debug build in through its own sign-in; the principal comes from `VEYQ_ENV_FILE` and a
+  blob's way from `VEYQ_LIVE_STORE` (tunnelled beside the backend's port) as for Linux. A pass starts from a state it
+  sets (`select home`), never the one the app reopened.
 - `VEYQ_LIVE=http://veyq.localhost:8080 ./gradlew :core:jvmTest :core:macosArm64Test --tests '*LiveSignInTest*'` —
   signs in to a running dev instance as the seeded principal on both paths and reads its spaces, objects and
   favorites (`./gradlew backend:seed` at the repository root first). With `VEYQ_LIVE_MEMBER=1` as well,
@@ -314,14 +326,19 @@ menu on iOS. On Linux the GNOME HIG's way, as libadwaita draws it: the creating 
 overlaid on a view (GNOME has no floating action button); the same guard holds it. On Windows Fluent's way, as
 Windows' own Settings and Explorer draw it: the creating action is New, the first command of the content's
 `CommandBar`, built only in `windows/Veyq/CreateAction.cs`, never a button laid over a view; the same guard holds it.
-WinUI's own chrome (the pane's button, back, the scroll bar) speaks the system's language whatever the app's words
-are, as on every Windows app; a built-in item that shows a word of its own (`NavigationView`'s Settings) is replaced
+WinUI's own chrome (the pane's button, back, the scroll bar, a `ToggleSwitch`'s On/Off) speaks the system's language
+whatever the app's words are, as on every Windows app, so a switch carries no words of its own: its header says what it
+turns on; a built-in item that shows a word of its own (`NavigationView`'s Settings) is replaced
 by one carrying the catalog's.
 
 A node's header is core's, for every kind (ADR 0123, the web's `NodePage` + `NodeHeader`): core's `navigation/NodeHeader.kt`
 plans it (`NodeHeaderTest`), each app's `NodeHeaderActions` draws it and owns every dialog behind it, and a kind only
 registers its page — `KindPages` (Android) / `KindPage` (Apple): it brings a share sheet, takes a cover, contributes a
-subtitle, its rights narrowing, its copy and download doors and own actions, and draws its body. A new kind registers
+subtitle, its rights narrowing, its copy and download doors and own actions, and draws its body. The header's state and
+actions are core's `NodeHeaderModel` and its sheets core's `TrashSheet`, `MoveSheet`, `ShareSheet` and `ReportSheet`
+(ADR 0127's Consequences): an app draws them and decides nothing. Linux (`header.rs`) and Windows (`NodeHeader.cs`)
+draw the same plan, but only the ids in `header::DRAWN` / `HeaderPlan.Drawn`: an action whose screen a desktop lacks
+is left out, never drawn as a control that answers "not yet"; a slice that draws it adds its id. A new kind registers
 there and its header order in `AppKinds.headerOrder`; it never builds header actions of its own. Its body places core's head
 first in each of its scrolls — `LocalNodeHero.current(inset)` (Android) / `NodeHeroRow()` (Apple) —, never a cover of its own.
 
@@ -387,14 +404,27 @@ first in each of its scrolls — `LocalNodeHero.current(inset)` (Android) / `Nod
   a method name that STARTS with `copy`, `new`, `alloc` or `init`: Objective-C's ownership rule makes Kotlin export it as
   `doCopyTo(…)` (measured 2026-11-09: `PotCopy.copyTo`, now `duplicate`). An enum entry's Swift name takes `the` instead: the
   catalog's `COPY_HINT` is `Msg.theCopyHint` in Swift (measured 2026-11-09).
+  A SwiftUI view must not take a core class's name either: a view `ShareSheet` shadowed core's, so the view is
+  `NodeShareSheet`. The bridge's generated C# and Rust take a wire class's simple name too: `Action` clashed with
+  `System.Action` (now `PlanAction`), so a wire class avoids the platforms' common type names.
+- A SwiftUI alert or confirmation dialog whose binding cancels on dismissal runs that cancel BEFORE the button's action:
+  Apple's "Delete forever" in the space's trash sent nothing, its row already cleared (measured 2026-11-11). A question
+  that is a core sheet's state is cancelled only by its Cancel button, and the action hands the row it confirmed
+  (`TrashSheet.purge(row)`).
+- A SwiftUI view that observes a core model it does not own follows it through a watch its owner holds, never one
+  tied to the view's lifecycle: a rename hands the view another header, and a box started on appear kept the old one
+  (Report vanished from the menu). The header redraws on `AppModel.headerRevision`, which a watch on every handed-out
+  header moves.
 - A Swift closure handed to core is called on core's threads (after a request answered, Ktor's), never only on the main
   one: written in the `@MainActor` model it is inferred main-actor isolated, and Swift 6 traps on the first call from
   elsewhere (`_dispatch_assert_queue_fail`, measured 2026-11-09: the re-key's rekey id). Mark it `@Sendable` and reach
-  nothing of the model in it (`AppModel.tokenInputFor` is `nonisolated static` for that). A persist closure is one too:
+  nothing of the model in it. A persist closure is one too (`AppModel.init`'s, which say so):
   `RecentUses`' and `Hidden`'s crashed the sign-out of the last server (`RecentUses.clear` runs on a core thread,
   measured 2026-11-11), which only a pass that signs out of its last account reaches — so an Apple pass ends that way.
 - `simctl launch --stdout` wrote no file (measured 2026-11-11): the Apple app's lines are read from the unified log
   (`NSLog`, read with `log show`), Android's from logcat — text before every screenshot.
+- A screen model that decrypts or walks a tree runs it off its caller's thread (`withContext(Dispatchers.Default)`, as
+  `MoveSheet` does): the copy's preview in Android's `LaunchedEffect` stopped the slow emulator answering (2026-11-11).
 - Kotlin initialises properties in declaration order: a flow a collector in `init` writes is declared above that
   `init`, or the first value meets a null field (Android's `_offer`, the first start crashed, measured 2026-11-11).
 - A `SurfaceView` inside a Compose `Dialog` got no surface (measured 2026-11-09, the lightbox's video: the player stayed
@@ -408,7 +438,12 @@ first in each of its scrolls — `LocalNodeHero.current(inset)` (Android) / `Nod
 - A value a sheet shows that its presenter loads after the sheet opened did not reach it on iOS (measured 2026-11-09, the
   lightbox's uploader): the sheet loads what it shows itself, in its own `.task`.
 - The Simulator tool's tap does not reliably flip a SwiftUI `Toggle`: a short swipe across it does (measured
-  2026-11-09, the report's good-faith switch). A Compose radio or checkbox row is tapped as the row only once the row
+  2026-11-09, the report's good-faith switch). A tap with `duration: 0.15` registers where a plain one is often lost.
+  The tool cannot type text ("iOS on this simulator does not take a paste from the Mac", 2026-11-11): a pass leaves a
+  field empty or fills it through `devlogin.py`. Its screenshots lag 2–3 s, so a 6 s Undo is out of its reach (the tap
+  lands on the row below once the toast is gone): a timed flow is proven on Android and in `commonTest`, and Apple's
+  Undo is named open (native-apps § Open). An emulator under load is no clock either: a screencap took ~6 s on the
+  swiftshader AVD, so a window is measured from logcat's timestamps, never from screenshots. A Compose radio or checkbox row is tapped as the row only once the row
   is `selectable`/`toggleable` (`ReportSheet`): a bare control's label takes no tap, for a person either.
 - Every file of `apple/Veyq/` but `VeyqApp.swift` and `DevLogin.swift` is also compiled into the share extension, which
   builds with `APPLICATION_EXTENSION_API_ONLY`: no `UIApplication.shared` or other API an extension may not use there,
@@ -451,6 +486,12 @@ first in each of its scrolls — `LocalNodeHero.current(inset)` (Android) / `Nod
   `crate::LOCALE` while it does.
 - Money in the Linux app is glibc's locale data, which knows only the locale's own currency symbol. Any other currency
   is written by its code (`EUR 1,234.56` under en_US), where Android and Apple write `€1,234.56` (native-apps § Open).
+- A GTK dialog's state that only weak handlers reach is dropped at once: Linux's first cover dialog did nothing on
+  "Choose a picture", every `Weak` upgrading to nothing. A dialog module holds its state until the dialog's `closed`
+  (`cover.rs`, `share_sheet.rs`).
+- Broadway hands the app's clipboard to no browser: a Linux pass reads a link's address back through the bridge
+  (`LiveBridgeTest.theLinksOfAFolder*`, `VEYQ_LIVE_SHARE_LIST`) for the web's guest page; the copy is proven by its
+  toast and stderr.
 - `include!` takes no inner attribute, so the generated `bridge.rs` carries none. The app's `wire` module holds the
   lints' allowances.
 - Broadway in the browser pane takes a click only after the pointer has moved there: hover first, then click.
@@ -512,7 +553,9 @@ first in each of its scrolls — `LocalNodeHero.current(inset)` (Android) / `Nod
 - A width-capped column straight in a `ScrollViewer` sits off centre and clips (the Pot's amounts were cut off, measured
   2026-11-11): a list fills the width, a capped column sits inside a stretching `Grid`. Under LeftMinimal the pane's
   button and back lie over the content's top left, so the title takes a left inset there (`DisplayModeChanged`). Two
-  defects of this kind showed only in a screenshot, never in the tree: take each form's shot early.
+  defects of this kind showed only in a screenshot, never in the tree: take each form's shot early. A third: a frame
+  sized from its layout inside a `ContentDialog`'s scroller collapsed to 480×2 (the cover's): a drawing surface there
+  has a size of its own.
 - A XAML comment may not contain `--` (WMC9997), and generated C# carries its own `#nullable enable` (CS8669).
 - mingw's `fopen` reads its path in the ANSI code page: a UTF-8 name is not refused but written under mojibake
   (`Büro € 中文.bin` became `BÃ¼ro â‚¬ ä¸­æ–‡.bin` on the German VM, measured 2026-11-11), and a round trip through the
@@ -559,7 +602,12 @@ first in each of its scrolls — `LocalNodeHero.current(inset)` (Android) / `Nod
 - The common file dialog on Windows cannot be pressed through UI Automation: its Save invoked by UIA arrives as an
   input-synchronous call and the dialog cannot reach the file broker (`RPC_E_CANTCALLOUT_ININPUTSYNCCALL`, nothing
   written), and a file name set as a UIA `Value` shows in the tree but is not read. `Veyq.Drive`'s `type` and `press`
-  focus the element and send real keys (`SendInput`). The picker is a window of the app's own process.
+  focus the element and send real keys (`SendInput`). The picker is a window of the app's own process. The open
+  picker takes a typed name only once it has finished loading (the first `type` landed nowhere): a pass reads the name
+  box's value in the tree before it presses Open.
+- Windows' share sheet, used once, came back as a stale window in later screenshots while UI Automation drove the
+  `ContentDialog` beneath, until the app restarted (2026-11-11; whether a person sees it is open, native-apps § Open):
+  a pass that shares does it last, or restarts the app after.
 - `PersonPicture` is not in UIA's control view: a tree tells no picture from initials. The app's log says each decode
   (`a member's picture decoded: <bytes> B, <w>×<h>`); a shot is the proof.
 - A picture replaced under the same user id keeps the id set, so no update tells a host to ask again. Nothing reads
@@ -570,9 +618,16 @@ first in each of its scrolls — `LocalNodeHero.current(inset)` (Android) / `Nod
 - A watch delivers a state once per change. A test that waits on one watch for one fact misses a later fact that
   arrived meanwhile (the pictures' update came while `LiveBridgeTest` waited for the open object): read a fresh watch,
   which delivers the state as it is now.
+- An answer can arrive before the watch's update its call caused: Linux's first trash toast had no Undo, read from a
+  state the update had not reached yet. A write's answer carries what the host needs at once (`Trashed.undoable`,
+  `MoveSent`), and a host ends an Undo only on the state's change from offered to not, so an update from before the
+  write ends nothing.
 - A pass ends in the state the next one needs, not only "no trust": the device trust's passes end with Stop trusting
   (which also forgets "Not now", so the next sign-in offers again) and, on Apple, a sign-out. A "Not now" left behind
   once hid the offer the next pass's first step looked for (2026-11-11).
+- A dev origin is the backend, not the web: the address the core builds for a page (`NodeReport.privacyUrl`,
+  `<origin>/privacy#reporter-contact`) is right where one origin serves both, but on the dev stack it opens the
+  backend's 404 (Windows' Edge) — check the page on Vite's origin (8081), as a dev link's guest page is.
 - An app is refused at sign-in by a backend of another major (`server major 1, app 0`): a branch whose `VERSION` lags
   the running dev backend's cannot run a live pass until `main` is merged into it.
 - A download's failure on Windows is shown with a nearly full volume (a small FAT VHD filled to one free cluster): the
