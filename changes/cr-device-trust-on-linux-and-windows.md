@@ -786,6 +786,77 @@ Their switch replaced by the offer; their stores' level without a check.
 level and "Not now", unchanged elsewhere; `./gradlew :core:jvmTest :core:macosArm64Test`, `:android:assembleDebug` and the
 Apple build green.
 
+**Built (Phase 8):**
+- **The core (orchestrator's decision):** `SessionModel.forgetDevice` clears the account's "Not now" mark, so the next full
+  sign-in offers again (Phase 7 found the mark outliving Stop trusting). `SessionModelTest.stop_trusting_forgets_not_now_…`.
+- **The words** (`words.json`, EN and DE): `offer_presence` + `offer_presence_hint` ("Sign in with fingerprint or screen
+  lock", `apple_en`/`apple_de` Face ID), `offer_touch_id`(`_hint`) and `offer_passcode`(`_hint`) (Apple where the device
+  has Touch ID, or neither biometry), `offer_login_hint_phone` (the LOGIN line, "this phone" / Apple "this device"),
+  `manage_trusted_presence` / `_touch_id` / `_passcode`; `apple_en` Title Case for `signin_remember` ("Stay Signed In"),
+  `offer_not_now` ("Not Now"), `manage_password_trust` ("Back to Your Password"). **Removed:** `signin_remember_hint`;
+  `signin_remember` stays (every platform's LOGIN title).
+- **Android** (`AppRoot.kt`, `ManageScreen.kt`, `AppModel.kt`): the sign-in's switch and Phase 6's stop-gap gone. The offer
+  is **a full-screen step** over the shell while `Gate.Signed.offer` stands, as Android's own setup asks for a screen lock
+  after an account was added: icon, title, each answer a `ListItem` (headline + supporting line, leading icon), the footer;
+  back does not skip it. Manage: the line by method and level, each change a `TextButton` (`trustChanges`, the desktops'
+  pick), "Back to your password" an `AlertDialog` with its password field (OK disabled while empty; a wrong one is the
+  field's error), Stop trusting. The unlock's line and button follow `record.unlockLevel` (`unlock_login_hint` +
+  `unlock_retry` at LOGIN). `trust_failed` is the shell's snackbar. The steps go to logcat (`veyq-trust`).
+- **Apple** (`SignInView.swift`: `TrustWords`, `OfferSheet`; `ManageView.swift`, `RootView.swift`, `AppModel.swift`): the
+  toggle and stop-gap gone. The offer is **a sheet** over the shell (`interactiveDismissDisabled`), as iOS apps ask about
+  Face ID once an account signed in: the level's SF Symbol, title, the first level `.borderedProminent`, the next
+  `.bordered`, "Not Now" plain, each with its line, the footer. Presence words by `LAContext`: biometrics evaluable →
+  `biometryType` (Face ID / Touch ID), else the passcode. Manage: the footer by method and level, each change a row with
+  its symbol, "Back to Your Password" an `.alert` with a `SecureField` on the `Form` (the section trap), a wrong password
+  a red line in the server's footer. Unlock words as Android's. The steps go to the unified log (`veyq-trust:`).
+- **Debug:** both `devlogin.py` take `VEYQ_ENV_FILE`; `--remember` answers the offer with PRESENCE after the sign-in, as a
+  person would; `--unlock`'s password also fills Manage's password field once (Linux's and Windows' hook).
+- **A defect the pass found (Apple, pre-existing):** signing out of the last server crashed the app — `RecentUses`' and
+  `Hidden`'s persist closures were main-actor isolated and `RecentUses.clear` runs on a core thread
+  (`_dispatch_assert_queue_fail`, three `.ips` reports). Fixed in `1779403b0` (`@Sendable`), then signed out cleanly.
+
+**Met (2026-11-11, commits `35662a213`, `ca6f0cc72`, `82009b29c`, `1779403b0`):**
+- [x] **Core:** `SessionModelTest` 19, `stop_trusting_forgets_not_now_so_the_next_sign_in_offers_again` new; **bite:** the
+  clear dropped → that test red, restored.
+- [x] **Android pass** on a throwaway AVD `veyq_trust` (android-36 google_apis arm64, pixel_8), a generated test PIN set by
+  `locksettings set-pin`, against the dev instance; each state read from `uiautomator dump` and logcat first:
+  - devlogin → `gate Signed, offer: [PRESENCE, LOGIN]`, three items (en light); "Sign in with fingerprint or screen lock" →
+    the BiometricPrompt ("Unlock veyq") → test PIN → the shell;
+  - restart (force-stop + start, past the 15 s window) → the prompt → PIN → `gate Signed`; restart → back on the prompt →
+    `gate Unlock, DEVICE_KEY, level: PRESENCE`, "Confirm it is you…" + Unlock; Unlock → prompt → PIN → shell;
+  - Manage `DEVICE_KEY/PRESENCE` ("…with your fingerprint or screen lock.") → "Stay signed in" → `manage stay signed in
+    LOGIN: DONE`, no prompt; restart → `gate Signed`, no prompt;
+  - `devlogin.py --unlock` → Manage "Back to your password", field filled → `manage back to the password: DONE`,
+    `DEVICE/null`; restart (de dark) → the password unlock; `--unlock` → `offer: [PRESENCE, LOGIN]` (Q5) → "Nicht jetzt"
+    → `NotNow`; the next password unlock → `offer: null`;
+  - Manage → "Angemeldet bleiben" → `DEVICE_KEY/LOGIN`; the way back with `x` → `WRONG_PASSWORD`, "Das Passwort stimmt
+    nicht." under the field, the trust unchanged;
+  - Stop trusting → `null/null`; sign out; devlogin → offer → "Nicht jetzt"; Stop trusting (no level taken) → sign out →
+    devlogin → **`offer: [PRESENCE, LOGIN]` again** (the core fix, live); LOGIN → Stop trusting → sign out.
+  - The AVD was deleted after (`avdmanager delete avd -n veyq_trust`); `veyq_pixel` untouched; no fingerprint enrolled.
+- [x] **Apple pass** on a throwaway simulator `veyq-trust` (iPhone 18 Pro, iOS 27.0; CoreSimulator works under Xcode 27.2
+  now), a signed simulator build (`xcodebuild -scheme Veyq -destination id=…`), Face ID enrolled and answered by
+  `notifyutil`; each state read from the unified log first:
+  - devlogin → the sheet "Mit Face ID anmelden" / "Angemeldet bleiben" / "Nicht jetzt" (de light) → Face ID → match →
+    shell;
+  - relaunch → Face ID → match → shell; relaunch → `nomatch` → Abbrechen → `gate Unlock, DEVICE_KEY, level: PRESENCE`,
+    "Entsperren" stays → Face ID → match → `gate Signed`;
+  - Manage (footer "…mit Face ID an.") → "Angemeldet bleiben" → `LOGIN: DONE`, no prompt; relaunch → `gate Signed`, no
+    Face ID;
+  - `--unlock` → "Zurück zum Passwort", the alert's field filled → `DONE`, `DEVICE/none`; LOGIN again, the way back with an
+    empty field → `WRONG_PASSWORD`, the red line (OK is disabled while empty since);
+  - Stop trusting; sign out; devlogin → "Nicht jetzt"; `--unlock` → `Unlock, DEVICE` → `Signed, offer: none`; Stop
+    trusting; sign out; devlogin → **`offer: [PRESENCE, LOGIN]`** (dark); LOGIN; Stop trusting; sign out (after the fix:
+    `gate SignIn`, no crash).
+  - The simulator was deleted after. English was not run on Apple (the simulator's language is German); en words are
+    held by the catalog and Android's en pass.
+- [x] `./gradlew :core:jvmTest --rerun :core:macosArm64Test --rerun :bridge:jvmTest --rerun` → `BUILD SUCCESSFUL`, 374, 210
+  and 26 cases, none failed; `ANDROID_HOME=… ./gradlew :android:assembleDebug` → exit 0; the signed simulator
+  `xcodebuild -scheme Veyq` → `BUILD SUCCEEDED`.
+- [x] `linux/run.py build` → clippy, `cargo test` 16, build green; `windows/run.py build` → green, `Veyq.Tests` 13.
+- [x] `validate_mobile_words.py` → OK; `validate_mobile_platform_guidelines.py` → OK.
+- [x] No trust left: each pass ended with Stop trusting then sign-out, on a device that was deleted after.
+
 ### Phase 9 — The docs
 
 - D6: the security model's rows, both levels per platform.
@@ -805,6 +876,10 @@ Apple build green.
 - The device register's own screen. It is written by every unlock and enrolment (ADR 0058) and shown on the web.
 
 ## Owner questions
+
+- **Q8 (open, Phase 8): Apple's words where no biometry is enrolled** — "Sign In with Passcode" / "Mit dem Gerätecode
+  anmelden", "At each start veyq asks for this device's passcode." / "Beim Start fragt veyq nach dem Code dieses
+  Geräts.", Manage "…with its passcode." — and the Touch ID forms; drafted after the approved Face ID ones.
 
 - **Q4 (settled, owner 2026-11-11: no): Android and Apple without a screen lock offer nothing,** not `LOGIN`, as Phase 6
   built it; the password trust stays. LOGIN's guarantee is the device's own sign-in, which no lock means nobody's.
@@ -866,5 +941,16 @@ Apple build green.
 - **Phase 7, design: WinUI shows one `ContentDialog` at a time,** so Windows' password field for the way back sits in
   Manage's own section, while Linux stacks an `AdwAlertDialog` over Manage — each platform's own way, decided before
   building rather than found by a crash.
+- **Phase 8, execution: the first Android start crashed** — `_offer` was declared below the `init` that collects the
+  gate, so the first gate met a null field. Kotlin's property order is initialisation order; a flow a collector in
+  `init` writes is declared above it.
+- **Phase 8, execution: Apple's sign-out of the last server had crashed since before this CR,** a main-actor closure the
+  core calls on its thread — the trap `src/mobile/CLAUDE.md` names, in a closure nobody had passed since. Only a pass that
+  signs out of the last account reaches it; Apple's passes now end that way.
+- **Phase 8, execution: `simctl launch --stdout` wrote no file,** so the app's lines went to the unified log (`NSLog`)
+  and were read with `log show`, Android's with logcat — text before every screenshot.
+- **Phase 8, design: Apple's presence words have three forms,** not two: a device with a passcode and no enrolled biometry
+  (a Mac without Touch ID, a simulator before enrolment) would otherwise have been told "Face ID". Its words are drafted,
+  not yet the owner's (open question below).
 - **Next time:** a verb that waits for a person waits for the process it started and fetches its outcome whatever
   ended the wait; its brief to the owner lists every prompt the run may raise, the uncertain ones marked so.
