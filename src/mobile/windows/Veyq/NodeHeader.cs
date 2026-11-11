@@ -3,7 +3,9 @@
 // buttons as the CommandBar's primary commands (the heart as Favorite), the rest as its secondary ones behind its own
 // More, the menu's last group after a separator —, rename and delete asked in a ContentDialog (Dialogs), the trash's
 // Undo an InfoBar's action held for exactly as long as the core offers it (it closes when the state's undo does: no
-// timer here). What is offered, in which order and with which words is the core's (HeaderPlan: what this phase draws).
+// timer here). The move and the copy open core's sheet (MoveDialog); a folder's download goes where the save picker says
+// (Header.Download, under the core's archive name), a Pot's through its page (Pot.Download). What is offered, in which
+// order and with which words is the core's (HeaderPlan: what is drawn so far, and the bar's groups).
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -112,28 +114,20 @@ internal sealed class NodeHeader : IDisposable
     }
 
     /// <summary>The header's commands for the bar: its primary ones (the plan's buttons) and its secondary ones (the
-    /// menu, a separator, the last group), each one this phase draws (HeaderPlan).</summary>
-    public (List<ICommandBarElement> Primary, List<ICommandBarElement> Secondary) Commands(Action download)
+    /// menu, a separator, the last group), from the plan's groups (HeaderPlan). <paramref name="potDownload"/> is a Pot
+    /// page's download.</summary>
+    public (List<ICommandBarElement> Primary, List<ICommandBarElement> Secondary) Commands(Action potDownload)
     {
         var primary = new List<ICommandBarElement>();
         var secondary = new List<ICommandBarElement>();
         if (Shown is not { gone: false, plan: { } plan } s) return (primary, secondary);
         var kind = s.node.kind;
-        foreach (var a in plan.buttons)
-        {
-            if (HeaderPlan.IsDrawn(a.id, kind)) primary.Add(Command(a, s, download));
-        }
-        foreach (var a in plan.menu)
-        {
-            if (HeaderPlan.IsDrawn(a.id, kind)) secondary.Add(Command(a, s, download));
-        }
-        var last = plan.last.Where(a => HeaderPlan.IsDrawn(a.id, kind)).ToList();
-        if (last.Count > 0 && secondary.Count > 0) secondary.Add(new AppBarSeparator());
-        foreach (var a in last) secondary.Add(Command(a, s, download));
+        foreach (var a in HeaderPlan.Primary(plan, kind)) primary.Add(Command(a, s, potDownload));
+        foreach (var a in HeaderPlan.Secondary(plan, kind)) secondary.Add(a is null ? new AppBarSeparator() : Command(a, s, potDownload));
         return (primary, secondary);
     }
 
-    private AppBarButton Command(PlanAction a, HeaderShown s, Action download)
+    private AppBarButton Command(PlanAction a, HeaderShown s, Action potDownload)
     {
         var label = a.word is { } w ? Veyq.Said.Key(w) : a.id;
         var icon = a.id switch
@@ -142,6 +136,8 @@ internal sealed class NodeHeader : IDisposable
             "download" => new SymbolIcon(Symbol.Download),
             "rename" => new SymbolIcon(Symbol.Rename),
             "delete" => new SymbolIcon(Symbol.Delete),
+            "move" => new SymbolIcon(Symbol.MoveToFolder),
+            "copy" => new SymbolIcon(Symbol.Copy),
             _ => new SymbolIcon(Symbol.More),
         };
         var button = new AppBarButton { Icon = icon, Label = label };
@@ -153,10 +149,46 @@ internal sealed class NodeHeader : IDisposable
                 case "favorite": Pin(); break;
                 case "rename": Rename(s.node.name, null); break;
                 case "delete": Delete(); break;
-                case "download": download(); break;
+                case "download" when s.node.kind == "EXPENSES_POT": potDownload(); break;
+                case "download": Download(); break;
+                case "move": MoveDialog.Open(_window, s.node, copy: false, UndoBar); break;
+                case "copy": MoveDialog.Open(_window, s.node, copy: true, UndoBar); break;
             }
         };
         return button;
+    }
+
+    /// <summary>The node as the web's ZIP: the save picker suggests the core's name, the core writes the file it chose and
+    /// removes it when it did not finish; what the core said (with what it left out) under the bar.</summary>
+    private async void Download()
+    {
+        if (_id is not { } header || Shown is not { } s) return;
+        var name = s.node.name;
+        try
+        {
+            var picker = new Windows.Storage.Pickers.FileSavePicker { SuggestedStartLocation = Windows.Storage.Pickers.PickerLocationId.Downloads, SuggestedFileName = s.archiveName };
+            picker.FileTypeChoices.Add(Words.DownloadTypeZip(), [System.IO.Path.GetExtension(s.archiveName)]);
+            WinRT.Interop.InitializeWithWindow.Initialize(picker, WinRT.Interop.WindowNative.GetWindowHandle(_window));
+            var file = await picker.PickSaveFileAsync();
+            if (file is null) return;
+            switch (await Ask(new Call.HeaderDownload { header = header, path = file.Path, deletedName = Words.PotDeletedPerson() }))
+            {
+                case Answer.Downloaded { written: var written, notice: var n, leftOut: var left }:
+                    Log.Write($"header download: {n.msg}, left out: {left is not null}");
+                    _say(written, string.Join(" ", new[] { n, left }.OfType<Notice>().Select(Veyq.Said.Notice)));
+                    break;
+                case var other:
+                    Log.Write($"Header.Download answered {other?.GetType().Name}");
+                    _say(false, Words.DownloadFailed(name));
+                    break;
+            }
+        }
+        catch (Exception e)
+        {
+            // an exception out of an async void would end the app in combase, with nothing in the log
+            Log.Write($"the download failed: {e.GetType().Name}: {e.Message}");
+            _say(false, Words.DownloadFailed(name));
+        }
     }
 
     private async void Pin()
