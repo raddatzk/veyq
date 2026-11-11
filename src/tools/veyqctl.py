@@ -3404,8 +3404,9 @@ class Q:
     TLS = Question("tls", "TLS: acme, shared or none", "acme: certificates from Let's Encrypt, one per address (needs "
                    "cert-manager). shared: one certificate of yours. none: TLS ends in front of the cluster.",
                    ("acme", "shared", "none"))
-    ACME_EMAIL = Question("acme_email", "email for Let's Encrypt", "Let's Encrypt writes here when a certificate is "
-                          "about to expire.")
+    ACME_EMAIL = Question("acme_email", "email for Let's Encrypt", "The ACME account's contact. Since June 2025 Let's "
+                          "Encrypt sends no expiry mails and keeps no address with the account; it passes the address "
+                          "to ISRG's general mailing list. cert-manager renews by itself.")
     ACME_DIRECTORY = Question("acme_directory", "Let's Encrypt: staging or production", "Start with staging: test "
                               "certificates, without production's limits. Switch later with `veyqctl tls production`.",
                               tuple(ACME_DIRECTORIES))
