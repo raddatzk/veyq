@@ -17,6 +17,7 @@ public sealed partial class MainWindow : Window
     private Watch? _manageWatch;
     private SignInView? _signIn;
     private UnlockView? _unlock;
+    private OfferView? _offer;
     private ManageDialog? _manage;
     private ShellView? _shell;
 
@@ -97,8 +98,8 @@ public sealed partial class MainWindow : Window
         if (!ReferenceEquals(Faces.Content, face)) Faces.Content = face;
     }
 
-    /// <summary>What the log says of the trust beside a gate: the offer a sign-in left open (drawn in Phase 7 of the CR
-    /// device-trust-on-linux-and-windows), a remembered account's level at its unlock.</summary>
+    /// <summary>What the log says of the trust beside a gate: the offer a sign-in left open, a remembered account's level
+    /// at its unlock.</summary>
     private static string TrustNote(Gate gate) => gate switch
     {
         Gate.Signed { offer: { } offer } => $", offer: {string.Join(" ", offer.levels)}",
@@ -131,6 +132,12 @@ public sealed partial class MainWindow : Window
                 {
                     Act.Send(new Call.SessionUnlock { password = password });
                 }
+                break;
+            // the offer to stay signed in stands over the shell until it is answered (D7)
+            case Gate.Signed { offer: { } offer }:
+                _offer ??= new OfferView(message => (_shell ??= NewShell()).Say(false, message));
+                _offer.Show(offer);
+                Face(_offer.Page);
                 break;
             case Gate.Signed signed:
                 _shell ??= NewShell();

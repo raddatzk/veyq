@@ -4,7 +4,7 @@
 // gate. Linux's sign_in.rs, in Fluent.
 //
 // No "Stay signed in" here any more (the CR device-trust-on-linux-and-windows, D7): every sign-in holds the password
-// trust, and the core offers staying signed in after it (Gate.Signed.offer), drawn in Phase 7.
+// trust, and the core offers staying signed in after it (Gate.Signed.offer, OfferView).
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Automation;
 using Microsoft.UI.Xaml.Controls;
@@ -54,7 +54,6 @@ internal sealed class SignInView
             e.Handled = true;
             Ask();
         };
-        // Staying signed in is no longer chosen here: the core offers it after the sign-in (D7), drawn in Phase 7
         _cancel = new Button { Content = Words.SigninCancel(), HorizontalAlignment = HorizontalAlignment.Stretch, Visibility = Visibility.Collapsed };
         AutomationProperties.SetAutomationId(_cancel, "signin-cancel");
         _cancel.Click += (_, _) => Act.Send(new Call.SessionCancelAdd());

@@ -432,7 +432,7 @@ internal sealed class ShellView
     }
 
     /// <summary>How an action went, under the bar until it is closed or the object leaves.</summary>
-    private void Say(bool done, string message)
+    public void Say(bool done, string message)
     {
         _said.Severity = done ? InfoBarSeverity.Success : InfoBarSeverity.Error;
         _said.Message = message;

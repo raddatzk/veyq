@@ -6,7 +6,9 @@
 //   stands (off) — unless VEYQ_DEV_FILL is set (`--fill`): then it only fills the form, and the pass turns "Stay signed
 //   in" and presses Sign in itself.
 // - `run.py run --devlogin --unlock` hands the password alone (VEYQ_DEV_UNLOCK_PASSWORD, Android's `--unlock`, Apple's
-//   variable): the unlock of a password-trusted account takes it once, when the core shows that unlock.
+//   variable): the unlock of a password-trusted account takes it once, when the core shows that unlock; and "Manage
+//   servers"' way back to the password trust fills its password field with it once (fill only: the pass presses the
+//   button), so the agent never types it.
 using System;
 
 namespace Veyq;
@@ -19,6 +21,8 @@ internal static class DevLogin
 #if DEBUG
     private static bool _taken;
     private static bool _unlockTaken;
+    private static bool _passwordTrustTaken;
+    private static string? _password;
 
     private static readonly string[] Names = ["VEYQ_DEV_SERVER", "VEYQ_DEV_EMAIL", "VEYQ_DEV_PASSWORD", "VEYQ_DEV_SECRET_KEY"];
 #endif
@@ -46,17 +50,43 @@ internal static class DevLogin
     }
 
     /// <summary>The password for a password-trusted account's unlock, once per process; null in a release build, without
-    /// VEYQ_DEV_UNLOCK_PASSWORD, or after it was taken. Taken, it leaves the process's environment.</summary>
+    /// VEYQ_DEV_UNLOCK_PASSWORD, or after it was taken.</summary>
     public static string? TakeUnlock()
     {
 #if DEBUG
-        if (_unlockTaken || Environment.GetEnvironmentVariable("VEYQ_DEV_UNLOCK_PASSWORD") is not { Length: > 0 } password) return null;
+        if (_unlockTaken || Password() is not { } password) return null;
         _unlockTaken = true;
-        Environment.SetEnvironmentVariable("VEYQ_DEV_UNLOCK_PASSWORD", null);
         Log.Write("unlocking with the dev principal's password (debug build)");
         return password;
 #else
         return null;
 #endif
     }
+
+    /// <summary>The password for "Manage servers"' way back to the password trust, once per process, apart from
+    /// <see cref="TakeUnlock"/>'s; null in a release build, without VEYQ_DEV_UNLOCK_PASSWORD, or after it was taken.</summary>
+    public static string? TakePasswordTrust()
+    {
+#if DEBUG
+        if (_passwordTrustTaken || Password() is not { } password) return null;
+        _passwordTrustTaken = true;
+        Log.Write("filling the password field with the dev principal's password (debug build)");
+        return password;
+#else
+        return null;
+#endif
+    }
+
+#if DEBUG
+    /// <summary>VEYQ_DEV_UNLOCK_PASSWORD, read once: it leaves the process's environment then.</summary>
+    private static string? Password()
+    {
+        if (_password is null && Environment.GetEnvironmentVariable("VEYQ_DEV_UNLOCK_PASSWORD") is { Length: > 0 } v)
+        {
+            _password = v;
+            Environment.SetEnvironmentVariable("VEYQ_DEV_UNLOCK_PASSWORD", null);
+        }
+        return _password;
+    }
+#endif
 }
