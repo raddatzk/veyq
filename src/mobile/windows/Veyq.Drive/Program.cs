@@ -1,7 +1,8 @@
 // Veyq.Drive (ADR 0123's Consequences, the Windows app). Two modes, each what one scheduled task runs in the logged-on
 // session (an ssh command runs in session 0, which has no desktop):
-//   --launch <file>   reads the app's start from <file> — {"exe": …, "env": {…}} — deletes it at once, and starts the
-//                     app with that environment (a secret in it never reaches a command line). Writes <file>.started.
+//   --launch <file>   reads the app's start from <file> — {"exe": …, "args": […], "env": {…}}, args optional — deletes
+//                     it at once, and starts the app with that environment (a secret in it never reaches a command
+//                     line). Writes <file>.started. `run.py hello-probe` starts the core's test binary so, with args.
 //   --drive <file>    runs the steps in <file>, one a line, against the app's window, writes what each did to
 //                     <file>.out (UTF-8) and then <file>.done. A step that fails ends the run, said in the output.
 // Steps:
@@ -60,6 +61,10 @@ internal static class Program
         using var start = JsonDocument.Parse(text);
         var info = new ProcessStartInfo(start.RootElement.GetProperty("exe").GetString()!) { UseShellExecute = false };
         info.WorkingDirectory = Path.GetDirectoryName(info.FileName)!;
+        if (start.RootElement.TryGetProperty("args", out var arguments))
+        {
+            foreach (var a in arguments.EnumerateArray()) info.ArgumentList.Add(a.GetString()!);
+        }
         if (start.RootElement.TryGetProperty("env", out var env))
         {
             foreach (var v in env.EnumerateObject()) info.Environment[v.Name] = v.Value.GetString();

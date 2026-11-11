@@ -41,6 +41,16 @@ Verbs:
                              size, maximize, wait, sleep, shot) against the running app through the scheduled task
                              `veyq-drive`, and prints the app's log first, then what each step saw. `shot <name>.png`
                              lands in src/mobile/build/windows/shots here.
+  hello-probe [--timeout S]  the Hello half of the core's WindowsDeviceKeys, which needs the person at the Windows host's
+                             console (a PIN is never typed by an agent): links the core's test binary, rebuilds
+                             Veyq.Drive there (as `build` does), and starts the binary's `HelloProbe` in the logged-on
+                             session through the scheduled task `veyq-app`. It seals under a Passport key of its own, then
+                             asks for the PIN (enter it), opens within the 15 s window without asking, asks once more
+                             after it (press Cancel), and deletes the key. Each step's line is printed as the probe
+                             writes it (`<step> asking: …` while a prompt waits); it ends at `done` or after S seconds
+                             (600 by default). The outcome stays in build/windows/hello-probe.txt here. `--check` stops
+                             the probe before its first key: the launch and Hello's availability in that session, no
+                             prompt.
   register                   registers the two scheduled tasks, interactive only, as the user ssh logs in as: they run
                              on demand in the logged-on session, which an ssh command (session 0) cannot reach. Run once
                              per Windows host, by its owner (a persistent change on that machine).
@@ -75,6 +85,7 @@ import shutil
 import subprocess
 import sys
 import tarfile
+import time
 from pathlib import Path, PureWindowsPath
 from urllib.parse import urlsplit
 
@@ -567,6 +578,54 @@ def drive(steps: list[str]) -> int:
     return 1 if failed else 0
 
 
+def hello_probe(timeout: int, check: bool) -> int:
+    run("./gradlew", ":core:linkDebugTestMingwX64", cwd=repo_layout.MOBILE)
+    if not TEST_BINARY.exists():
+        sys.exit(f"no test binary at {TEST_BINARY}")
+    # Veyq.Drive's launch takes the binary's arguments ("args"), which an older build there ignores: rebuilt first
+    dll = generate()
+    for project in PROJECTS:
+        dotnet("restore", "--locked-mode", project)
+    push_tree(dll)
+    code = powershell(host_script(BUILD_DRIVE))
+    if code != 0:
+        return code
+    remote = REMOTE_DIR / "probe"
+    outcome = remote / "hello-probe.txt"
+    powershell(f"Remove-Item -Force -ErrorAction SilentlyContinue -Path {ps_quote(str(outcome))}", quiet=True)
+    copy_to([TEST_BINARY], remote)
+    start = REMOTE_RUN / "app.json"
+    started = REMOTE_RUN / "app.json.started"
+    local = SMOKE_OUT.parent / "app.json"
+    local.parent.mkdir(parents=True, exist_ok=True)
+    local.write_text(json.dumps({"exe": str(remote / TEST_BINARY.name), "args": ["--ktest_filter=*HelloProbe*"],
+                                 "env": {"VEYQ_HELLO_PROBE": str(outcome)} | ({"VEYQ_HELLO_PROBE_CHECK": "1"} if check else {})}))
+    powershell(f"New-Item -ItemType Directory -Force -Path {ps_quote(str(REMOTE_RUN))} | Out-Null; "
+               f"Remove-Item -Force -ErrorAction SilentlyContinue -Path {ps_quote(str(started))}", quiet=True)
+    copy_to([local], REMOTE_RUN)
+    local.unlink(missing_ok=True)
+    # a Veyq.Drive just rebuilt took 33 s to start the binary (measured 2026-11-11): the app's 30 s is too short here
+    code = run_task("veyq-app", started, 120)
+    if code != 0:
+        powershell(f"Remove-Item -Force -ErrorAction SilentlyContinue -Path {ps_quote(str(start))}", quiet=True)
+        return code
+    print(f"veyq: the probe runs in the logged-on session; waiting up to {timeout} s for it", flush=True)
+    local_outcome = SMOKE_OUT.parent / "hello-probe.txt"
+    local_outcome.unlink(missing_ok=True)
+    shown = 0
+    deadline = time.monotonic() + timeout
+    while time.monotonic() < deadline:
+        lines = local_outcome.read_text(encoding="utf-8").splitlines() if fetch(str(outcome), local_outcome) else []
+        for line in lines[shown:]:
+            print(f"probe: {line}", flush=True)
+        shown = max(shown, len(lines))
+        if lines and lines[-1] == "done":
+            return 0
+        time.sleep(2)
+    print(f"veyq: the probe did not finish in {timeout} s", flush=True)
+    return 4
+
+
 def register() -> int:
     """Registers the scheduled tasks Veyq.Drive runs in the logged-on session (interactive only, as the ssh user, on
     demand: no trigger). The host owner's step: a key-authenticated ssh logon can register them, but it is theirs to."""
@@ -603,6 +662,9 @@ def main() -> None:
     d = verbs.add_parser("drive", help="drive the running app by UI Automation (Veyq.Drive's steps) and print what it saw")
     d.add_argument("steps", nargs="+", help="each a step: tree, invoke <id>, select <id>, set <id> <text>, key <keys>, "
                                             "type <id> <text>, press <id> [keys], size <w> <h>, maximize, wait <id> [s], sleep <ms>, shot <name>.png")
+    h = verbs.add_parser("hello-probe", help="run the Hello probe in the logged-on session: the person enters the PIN, then cancels")
+    h.add_argument("--timeout", type=int, default=600)
+    h.add_argument("--check", action="store_true", help="stop before the first key: the launch and Hello's availability, no prompt")
     verbs.add_parser("register", help="register the scheduled tasks veyq-app and veyq-drive on the Windows host (owner)")
     args = parser.parse_args()
     if args.verb == "test":
@@ -615,6 +677,8 @@ def main() -> None:
         sys.exit(run_app(args.width, args.height, args.devlogin))
     if args.verb == "drive":
         sys.exit(drive(args.steps))
+    if args.verb == "hello-probe":
+        sys.exit(hello_probe(args.timeout, args.check))
     if args.verb == "register":
         sys.exit(register())
 
