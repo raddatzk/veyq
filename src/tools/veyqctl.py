@@ -726,7 +726,7 @@ def upgrade_target(listed: list[Listed], running: tuple[int, int], chosen: Liste
                   f"{gate.release} was never tested, and {running_release} may have database changes {gate.release} "
                   f"lacks. A later release of major {major + 1} will be entered from {running_release} or after: "
                   + (f"select `{major + 1}` for the newest one, or wait for it." if gate is chosen and chosen != newest_of(listed, major + 1)
-                     else f"wait for it — none is listed yet.")
+                     else "wait for it — none is listed yet.")
                   + " Nothing was stopped.")
 
 
@@ -1355,7 +1355,7 @@ def cmd_start(args: argparse.Namespace, host: Host) -> int:
 def cmd_stop(args: argparse.Namespace, host: Host) -> int:
     state = read_state(Path(args.home))
     host.run([*by_project(state.project), "stop"], stream=True)
-    say(f"stopped. `veyqctl start` starts it again.")
+    say("stopped. `veyqctl start` starts it again.")
     return 0
 
 
@@ -1970,7 +1970,7 @@ def cmd_rollback(args: argparse.Namespace, host: Host) -> int:
                   "config", "--quiet"])
         host.run([sys.executable, str(tool.path), "verify", str(capture_dir), "--key-from", str(key_from),
                   "--against-store", "--docker-network", facts.network, *erasures], env=tool.env, stream=True)
-        say(f"the backup matches the store: every file it needs is there")
+        say("the backup matches the store: every file it needs is there")
         sure = True if args.yes else host.confirm(
             f"EMPTY the database of {state.project} (release {state.release}) and restore {capture_dir.name} under "
             f"release {target}? This cannot be undone")
@@ -3518,7 +3518,7 @@ def server_secrets(host: Host, top: Path, answers: dict[str, str], repo_name: st
         raise Refused(f"sops did not encrypt {SERVER_SECRETS}: check the rules in .sops.yaml")
     target.parent.mkdir(parents=True, exist_ok=True)
     target.write_text(encrypted)
-    say(f"encrypted your sudo password" + (" (generated)" if not answers.get("admin_password") else "")
+    say("encrypted your sudo password" + (" (generated)" if not answers.get("admin_password") else "")
         + f" and Argo CD's deploy key into {SERVER_SECRETS}")
     return public
 
@@ -3779,7 +3779,6 @@ def server_prepare(args: argparse.Namespace, host: Host, top: Path, answers: dic
                    repo_url: str, branch: str) -> None:
     """The server half into the checkout, before veyq's: veyq-server verified and rendered (once), its secrets
     encrypted (once), the host key pinned (asked)."""
-    progress = getattr(host, "progress", None)
     host.section("4. Setting up: veyq-server")
     if not (top / ".copier-answers.yml").is_file():
         with tempfile.TemporaryDirectory(prefix="veyqctl-veyq-server-") as tmp:
@@ -3954,7 +3953,7 @@ def gitops_check(args: argparse.Namespace, host: Host, g: GitOps) -> int:
     differs = running_differs(host, source, listed, g)
     if differs:
         say(f"NOT RELEASE {running}: {GITOPS_FILE} pins " + "; ".join(differs) + " — `upgrade` refuses until it pins "
-            f"what that release signed")
+            "what that release signed")
     else:
         say(f"the pins in {GITOPS_FILE} are release {running}'s, as it was signed")
     drift = drift + differs
@@ -4057,7 +4056,7 @@ class server_tunnel:
             self.host.sleep(3)  # the forward is up before the first read
         return self
 
-    def __exit__(self, *exc):
+    def __exit__(self, *_exc):
         if self.process is not None:
             self.process.terminate()
         return False
