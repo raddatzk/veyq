@@ -498,7 +498,14 @@ implementation exists but what holds it to the first.
   at a folder's level, whose title keeps the room), the rest one "more" menu — and owns every dialog behind it once
   (`NodeHeaderActions`). A kind's page only contributes (`KindPage`, the web's `KindRegistration`: it brings a share sheet,
   it takes a cover, a subtitle, its rights narrowing, its copy and download doors, actions of its own) and draws its body
-  (`NodeHeaderTest`, each rule a case; the heart moved after the application's actions turns three red).
+  (`NodeHeaderTest`, each rule a case; the heart moved after the application's actions turns three red). Its state and
+  sheets became core models on 2026-11-11/12 (ADR 0127's Consequences), and both apps were run unchanged on throwaway
+  devices, read as text first (`uiautomator dump`, the unified log): Android the header, pin, trash with Undo, the
+  space's trash, rename, New folder, move and copy with Undo, a folder's download, and the share sheet whole; Apple the
+  header, pin, trash (from a Pot opened at the top too), the space's trash with the purge of the confirmed row, rename,
+  New folder, a copy and the share sheet whole (2026-11-11, iOS 27; not the move or a download). Not met on Apple: tapping
+  Undo — the simulator tool's screenshots lag 2–3 s behind the 6 s window, so the tap landed after the toast was gone
+  (the core's test and Android hold it); its report and cover after the move are compiled and the core's tests only.
 - **The core on Linux** ([ADR 0127](0127-an-apps-logic-is-the-kotlin-cores-each-platform-draws-only-its-own-ui.md)
   decision 4, 2026-11-10). `core` gains `linuxArm64` and `linuxX64`, cross-compiled from the developer's arm64 Mac; no
   Linux host builds it. Decision 3's libsodium (`LibsodiumPrimitives`, the `sodium` cinterop) moved from `appleMain` to
@@ -615,6 +622,19 @@ implementation exists but what holds it to the first.
       `NO_PICTURE` and `NOTHING_TO_DOWNLOAD`.
     - The generated layer copies the payload once: Rust's `payload(bytes, len) -> Option<Vec<u8>>`, C#'s
       `Native.Payload(byte*, nuint) -> byte[]?`; `bridge::call` and `Core.CallAsync` answer the answer and its payload.
+  - **A node's header and its sheets** (2026-11-11/12, ADR 0127's Consequences for the models): `Header.*`, `Trash.*`,
+    `Move.*`, `Share.*`, `Report.*` and `Cover.*` calls, each model watched by an id the bridge holds
+    (`Watched.Header/Trash/Move/Share/Report`), as Pots are, never by ref: a rename changes the ref, and a header outlives
+    its page while its Undo stands. An answer may arrive before the watch's update it caused, so a write's answer says
+    what the host needs at once (`Trashed.undoable`, `MoveSent`), and a host ends an Undo only on the state's change from
+    offered to not. A cover goes in as the path of the JPEG the host encoded to `Cover.Fit` (`Header.CoverSave`, read by
+    the core's `FileSource`), the stored one comes out as `Answer.Bytes` (`Header.CoverPicture`: at most 2048 px, one
+    payload), and its frame is asked of the core per change (`Cover.Pose`: the pose, the drawn size, the crop), so no
+    host mirrors `CoverFrame`'s math. A folder's download is `Header.Download` by path. Outward, a share link's address
+    is a key by nature (its `#k=`): `SecretFreeSchemaTest` lets it cross in `ShareShown.freshAddress` and
+    `ShownLink.address` alone (`linkAddresses`), the privacy passage's in `ReportShown.privacyUrl` (`publicAddresses`),
+    each by name and bitten; any other outward `url`/`address` is refused. A link's password and a report's typed
+    reason and contact cross inward only.
 
   Measured 2026-11-10 (the channels 2026-11-11, ADR 0128's Consequences):
   - `./gradlew :bridge:jvmTest` runs four checks:
@@ -687,6 +707,20 @@ implementation exists but what holds it to the first.
     Overview balances, and the signed-in member's beside the tenant in the switcher. The content header's menu
     (`view-more-symbolic`) holds Download: `Pot.ArchiveName`, `gtk::FileDialog` (the portal where one runs) in Downloads,
     `Pot.Download`, an `AdwToast` saying it is done or failed; a dismissed dialog says nothing.
+  - **A node's header and its actions** (built 2026-11-11/12; a folder's and a Pot's, the models ADR 0127's
+    Consequences). `header.rs` draws core's plan in the content's header bar, the rest in its More menu; only the ids in
+    `header::DRAWN` are drawn, so an action no screen answers is never a dead control. Rename, delete and New folder are
+    `AdwAlertDialog`s (asked again with the core's problem); a trash's and a move's Undo an `AdwToast` held until the
+    state ends it. `trash.rs`: the space's trash an `AdwDialog` from the switcher's menu. `move_sheet.rs`: an
+    `AdwDialog` around an `AdwNavigationView` whose pages follow the core's trail (back is up), Move here / Copy here
+    in its bottom bar, the guest folder's question an `AdwAlertDialog`; a folder's download through GTK's save dialog.
+    `share_sheet.rs`: the links as `AdwActionRow`s with Copy and a More menu, the form (`AdwComboRow`, `AdwEntryRow`,
+    `AdwSwitchRow` with `AdwPasswordEntryRow`, a `gtk::Calendar` popover for the end), renew and delete asked; GNOME
+    has no share sheet, so copy is the share (`gdk::Clipboard`). `report.rs`: an `AdwDialog`, the privacy passage
+    opened through `gtk::UriLauncher`, the receipt after. `cover.rs`: an `AdwDialog` with GTK's open dialog, a 16:9
+    `gtk::DrawingArea` (a drag pans, a `gtk::Scale` zooms), `gdk::Texture`'s decode, cairo's scale to `Cover.Fit`'s
+    size and gdk-pixbuf's JPEG saver at the core's quality. A server instant is said as the local day or moment
+    (`said::instant_day`, `instant_moment`), never raw.
 
   Measured 2026-11-10:
   - `python3 src/mobile/linux/run.py build` is green: `cargo clippy -- -D warnings`, and `cargo test` (the round
@@ -702,6 +736,16 @@ implementation exists but what holds it to the first.
     into the container's home, 6,089 B, its CSV to the manifest, then imported by the web as the same Pot; a save into
     the read-only source mount answered `Failed`, the failed toast, nothing left. WebP decodes through glycin's loaders
     (`glycin-loaders` removed: "No image loaders are configured", the decode test red).
+  - 2026-11-11/12, the header and its actions (`run.py build`: clippy, `cargo test` 23 with `header::tests`,
+    `move_sheet`'s `sync`, `report::tests` and `cover::tests` — the last three bitten 2026-11-12, each mutation red; a
+    pass under Broadway driven from headless Chrome, English light and German dark, on folders made for it and on Sri
+    Lanka, each state read from stderr first): New folder, pin, rename, trash with Undo and with its window left to end,
+    the space's trash restoring and purging; a move into Reisen and back with Undo, a folder's and a Pot's copy, no room
+    under `DepotLiveTest`'s held one-byte quota ("Copy here" insensitive), a folder's download read back; a link minted
+    with a label, a role and an end, copied, edited, renewed, switched off and on and deleted, the web's guest page
+    opening the minted one and after the renew only the new; a cover picked (4000×2250, encoded at 2048×1152, quality
+    85), zoomed and dragged, read back by `CoverCropLiveTest` to the crop, framed anew (the same blob) and removed; a
+    report sent once. The privacy row's `UriLauncher` answered "Operation not supported": the container has no browser.
 - **The Windows app** (ADR 0127 decision 5; `src/mobile/windows/`). WinUI 3 in C# on .NET 10, `win-x64`, unpackaged
   and self-contained, the Windows App SDK included, so its build output runs where it is copied. Built 2026-11-10/11.
   - **Packages.** `Microsoft.WindowsAppSDK.WinUI` and `.Foundation` 2.6.5 and `Microsoft.Windows.SDK.BuildTools`, not the
@@ -745,6 +789,19 @@ implementation exists but what holds it to the first.
     HWND through `InitializeWithWindow`, an unpackaged app's need; Downloads; one type, `download_type_zip`),
     `Pot.Download`, an `InfoBar` saying it is done or failed. `Veyq.Drive` gained `type <id> <text>` and `press <id>
     [keys]`, which focus an element and send real keys (`SendInput`), for the system's dialog.
+  - **A node's header and its actions** (built 2026-11-11/12, Linux's set; the models ADR 0127's Consequences).
+    `NodeHeader.cs` draws core's plan as the content `CommandBar`'s primary commands and the rest as its secondary ones,
+    grouped as the plan groups them (`HeaderPlan.Primary`/`Secondary`), only the ids in `HeaderPlan.Drawn`. Every sheet is
+    a `ContentDialog` through `Dialogs.Show`, one at a time, so a question inside one is asked in place: rename, delete,
+    New folder, the space's trash (`TrashDialog.cs`), move and copy (`MoveDialog.cs`: a `BreadcrumbBar` over the places,
+    the primary button the write, kept open until the core answered), the share sheet (`ShareDialog.cs`: cards with Copy
+    link, Share — Windows' share sheet through `IDataTransferManagerInterop.ShowShareUIForWindow` for the app's HWND — and
+    a More flyout; the form with `RadioButtons`, `ToggleSwitch`es with a `PasswordBox` and a `CalendarDatePicker`, its day
+    the core's through `ShareDays`), the report (`ReportDialog.cs`, the privacy passage through
+    `Launcher.LaunchUriAsync`) and the cover (`CoverDialog.cs`: the open picker, WIC's `BitmapDecoder` at `Cover.Fit`'s
+    size upright by EXIF, a fixed 480×270 frame — a manipulation pans, a `Slider` zooms —, `BitmapEncoder`'s JPEG at the
+    core's quality). A trash's and a move's Undo are the `InfoBar`'s action; a folder's download goes through the save
+    picker. `Said.InstantDay` and `InstantMoment` say a server instant in the culture's words.
 
   Measured 2026-11-10 and 2026-11-11, on the ARM64 VM under x64 emulation:
   - `python3 src/mobile/windows/run.py build` is green: the gate, the round trip, and `Veyq.Tests` — every key in
@@ -763,6 +820,15 @@ implementation exists but what holds it to the first.
     imported by the web as the same Pot; an 8 MB FAT volume filled to one free cluster answered `Failed`, the error
     `InfoBar`, nothing left; a dismissed picker said nothing. WebP decodes only with the Store's Webp Image Extensions
     (removed: the decode test red, `COMException`).
+  - 2026-11-11/12, the header and its actions (`run.py build`: `Veyq.Tests` 17 with `HeaderPlanTest` and `SaidTest`'s
+    instant day and moment, `HeaderPlanTest`'s plan groups bitten in Phase 3 and its report and cover ids with
+    `InstantMoment` bitten 2026-11-12, each mutation red; a pass by `run.py drive`, English light and German dark, on
+    folders made for it and on Sri Lanka, ended with Stop trusting): Linux's set — pin, rename, trash and Undo, the
+    space's trash, New folder; a move with the `InfoBar`'s Undo, both copies, no room under the held quota, a folder's
+    download read back; a link minted, copied, shared once through Windows' share sheet, edited, renewed, switched off
+    and on and deleted, the web's guest page checked after each; a cover picked through the open picker, zoomed, read
+    back by `CoverCropLiveTest`, framed anew and removed; a report sent once, its privacy link opened in Edge. Not
+    driven: the cover's pan (`Veyq.Drive` has no drag; zoom framed it) and a move's Undo left to its window.
 - **The device trust on every app** (decision 8 as changed 2026-11-11; [ADR 0127](0127-an-apps-logic-is-the-kotlin-cores-each-platform-draws-only-its-own-ui.md)'s
   Consequences for the desktops' stores). The flows are the core's alone — `session/Account.kt` and `SessionModel.kt`
   enrol, offer, resume, unlock, change the level, sign out and stop trusting through the `DeviceKeys` interface

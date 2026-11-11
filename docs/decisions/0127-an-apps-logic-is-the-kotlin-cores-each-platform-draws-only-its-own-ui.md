@@ -5,7 +5,8 @@
   under GTK's Broadway backend, not yet in a desktop session or as a Flatpak; decision 5 for Windows' first slice, the
   same one: the core as a `mingwX64` DLL behind the same bridge, its C# types generated, a WinUI 3 app run unpackaged on
   an ARM64 Windows 11 VM under x64 emulation, not yet on an x64 PC or as an MSIX; on both, the device trust with the
-  core reaching the secure store itself (2026-11-11, the Consequences). Measured 2026-11-10 and 2026-11-11
+  core reaching the secure store itself (2026-11-11), and a node's header with every action on it, its sheets' models
+  moved into the core first (2026-11-12; the Consequences). Measured 2026-11-10 to 2026-11-12
   (`src/mobile/linux/run.py` and `src/mobile/windows/run.py`, each `test`, `bridge` and `build`, `./gradlew
   :bridge:jvmTest`, a browser pass on Linux, a UI Automation pass on Windows): ADR 0123's Consequences, the core on
   Linux and on Windows, the bridge, the Linux app and the Windows app
@@ -128,6 +129,44 @@ four times.
 - **When the members' pictures are read is the core's** (`session/AvatarsModel`, decision 1): Android and Apple had
   each synced them when a tenant opened, a rule in two apps before a third and fourth copy. They now watch the core's
   model, and Linux and Windows read its id set through the bridge (ADR 0128 decision 1).
+- **A node's header and its sheets are core screen models** (2026-11-11/12, before Linux and Windows drew them; decision
+  2's shape, each rule a `commonTest` case killed by a mutation; what the desktops built and measured is ADR 0123's
+  Consequences, the Linux app and the Windows app). Android and Apple held each of these in their app models and draw
+  them from the core now:
+  - `navigation/NodeHeaderModel` (built per node by `ShellModel.header`): the rights composed from pinned, links on, the
+    identity folder, a kind's doors (`AppKinds.doors`, a Pot's copy and cover only while writable) and whether a report
+    is offered — read once per tenant, and asked again by the next header after a failed read, not kept as "not
+    offered" as both apps did (a report is a legal duty: the safe side); the plan and its words; pin with its optimistic
+    state, its revert and notice; trash with its undo, which the core holds open for `TRASH_UNDO_MS` (6 s) and then
+    drops, so a host shows Undo until the state ends it and keeps no clock; rename; and the cover: its frame read when a
+    kind that takes one opens, `saveCover`, `removeCover`.
+  - `navigation/TrashSheet.purge(row)` takes the row the person confirmed (Apple's confirmation binding had cleared the
+    row before the button's action, so "Delete forever" sent nothing).
+  - `navigation/MoveSheet`: move and copy through one browser (the place's block, the guest folder's confirm, the copy's
+    way by kind — a Pot by its open model, the rest `SubtreeCopy` —, no room as a notice with the copy's size, the
+    left-out lines). **A move's undo is the core's 6 s window, as a trash's**: Android had shown it as a long snackbar,
+    Apple for 6 s — a technical unification, open to the owner's veto. A move that ended a guest's folder (out of a drop
+    box) offers no undo: the server refuses putting it back, which Apple's offered undo always met.
+  - `ShellModel.download` writes a node's ZIP into `blob/FileSink`, removing a half-written one.
+  - `navigation/ShareSheet`: the links, the form (`LinkForm` held as the sheet's state), mint, edit, renew, off and on,
+    delete, the confirms, the fresh address, a folder's "Add files only". A link's end is a local day turned into an
+    instant by the core (`session/LocalDays`). Its tests play the server's links at the sheet's door;
+    `ShareLinks`' and `ShareLinkChanges`' HTTP and crypto are held by the live tests alone (a played tenant's scope keys
+    and tree were judged not worth their size).
+  - **The re-key's resume starts in the core** when a tenant is shown (`SessionModel.Door.opened`, never `open`, which
+    "Manage servers" also calls for a tenant read only for its spaces); `TenantSession.rekeyed` then refreshes the shell,
+    forgets the tree and re-reads an open Pot — not each row's details, as both apps did: a re-key changes keys, not
+    what a row shows. No app starts it.
+  - `navigation/ReportSheet`: offered or not, the form's rules (`NodeReport`), one send, and the privacy passage's
+    address built by the core (`NodeReport.privacyUrl`), no longer by each app.
+  - The cover's spec is `NodeCover`'s constants (long edge, quality, thumbnail edge, `encodedSize`) beside its diff
+    (`NodeCover.changes`); decoding, cropping by hand and encoding stay the platform's, the crop's math `CoverFrame`'s.
+    **Android and Apple still write a cover through `NodeCover` themselves**, not through the header model's cover
+    calls, which Linux and Windows use: deliberate — the move took only the spec and the diff, and their cover screens
+    had nothing left to decide. Moving them onto the header model is open, never needed for a rule.
+  - Where the shell decided differently by accident, the core settled it on every app: an object opened at the top and
+    trashed leaves for its application's list (`Shell.leave`, `ShellModel.afterTrash`; it stayed open on a closed model),
+    and a renamed open object keeps its place and `top` (`ShellModel.afterRename`).
 - The repository's Rust (`src/mobile/linux/`) is held to the no-deprecated rule by reading: cargo has no deprecation
   gate, as the JavaScript install has.
   The repository's C# (`src/mobile/windows/`) has one: `run.py build` is red on any NuGet package `dotnet package list`
