@@ -1309,9 +1309,9 @@ def cmd_install(args: argparse.Namespace, host: Host) -> int:
     given = parse_sets(args.set)
     selector = check_selector(given.get(RELEASE_KEY, "latest"))
     spec = source_spec(args, home)
-    source = open_source(spec)
-    chosen = select(source.releases(), selector, source.describe())
-    say(f"{RELEASE_KEY}={selector} takes release {chosen.release} from {source.describe()}")
+    p = plan(host, spec, selector, unsigned_local=args.unsigned_local)
+    source, chosen = p.source, p.selection
+    say_selection(p)
     manifest = fetch_manifest(host, source, chosen, args.unsigned_local)
     verify_images(host, manifest, args.unsigned_local)
 
@@ -1393,10 +1393,10 @@ def selected(args: argparse.Namespace, home: Path) -> str:
 def cmd_verify(args: argparse.Namespace, host: Host) -> int:
     home = Path(args.home)
     selector = selected(args, home)
-    source = open_source(source_spec(args, home))
-    chosen = select(source.releases(), selector, source.describe())
-    say(f"{RELEASE_KEY}={selector} takes release {chosen.release} from {source.describe()}")
-    manifest = fetch_manifest(host, source, chosen, args.unsigned_local)
+    p = plan(host, source_spec(args, home), selector, unsigned_local=args.unsigned_local)
+    chosen = p.selection
+    say_selection(p)
+    manifest = fetch_manifest(host, p.source, chosen, args.unsigned_local)
     verify_images(host, manifest, args.unsigned_local)
     say(f"release {chosen.release}: " + ("NOT VERIFIED (--unsigned-local)" if args.unsigned_local
                                           else "manifest and both images verified. Nothing was downloaded."))
@@ -1414,33 +1414,67 @@ def entry_note(selector: str, chosen: Listed, target: Listed, then: str) -> str:
             f"its manifest names: {then} enters major {target.major + 1}")
 
 
+class Plan(NamedTuple):
+    """What a selector means against what runs (ADR 0096 decision 5, step 1) — one resolution for every verb."""
+    source: Source
+    listed: list[Listed]
+    selector: str
+    selection: Listed                            # what the selector selects
+    running: str                                 # the release that runs, "" before the first install
+    relation: str                                # "fresh", "same", "older" (no downgrade) or "newer"
+    target: Listed | None                        # where an upgrade goes now: an entry on the way, else the selection
+    manifest_of: Callable[[Listed], Manifest]    # the verified manifest of a release, read once
+
+
+def plan(host: Host, source_spec: str | None, selector: str, running: str = "", unsigned_local: bool = False) -> Plan:
+    """The releases the source lists, what `selector` selects, and — against `running` — where an upgrade goes: never
+    below what runs, and into a later major only through the release its manifest names as its entry."""
+    source = open_source(source_spec)
+    listed = source.releases()
+    selection = select(listed, selector, source.describe())
+    manifest_of = manifest_reader(host, source, unsigned_local)
+    current = tuple(int(x) for x in running.split(".")) if running else None
+    if current is None:
+        relation, target = "fresh", selection
+    elif (selection.major, selection.minor) == current:
+        relation, target = "same", None
+    elif (selection.major, selection.minor) < current:
+        relation, target = "older", None
+    else:
+        relation = "newer"
+        target = upgrade_target(listed, current, selection, source.describe(), lambda r: manifest_of(r).major_entry)
+    return Plan(source, listed, selector, selection, running, relation, target, manifest_of)
+
+
+def say_selection(p: Plan) -> None:
+    say(f"release {p.selection.release} ({RELEASE_KEY}={p.selector}), from {p.source.describe()}")
+
+
+def say_check(p: Plan, runs: str) -> None:
+    """What `check` reports, on every target: what `upgrade` would do, and a newer major beyond the selection.
+    `runs` is how the target says a release is in place ("running", "installed")."""
+    if p.relation == "same":
+        say(f"release {p.running} is {runs} already ({RELEASE_KEY}={p.selector}): `upgrade` has nothing to do")
+    elif p.relation == "older":
+        say(f"{RELEASE_KEY}={p.selector} selects {p.selection.release}, older than the {runs} {p.running}: `upgrade` "
+            f"would refuse")
+    else:
+        say(f"`upgrade` would take release {p.target.release}" + (f" ({runs}: {p.running}" if p.running else " (")
+            + f"{'; ' if p.running else ''}{RELEASE_KEY}={p.selector})")
+        if p.target != p.selection:
+            say(entry_note(p.selector, p.selection, p.target, "the `upgrade` after that one"))
+    beyond = newer_major(p.listed, p.selection)
+    if beyond:
+        say(f"a newer major exists: {beyond.release} — read its release notes before you select it")
+
+
 def cmd_check(args: argparse.Namespace, host: Host) -> int:
     home = Path(args.home)
-    selector = selected(args, home)
-    source = open_source(source_spec(args, home))
-    listed = source.releases()
-    chosen = select(listed, selector, source.describe())
     try:
         running = read_state(home).release
     except Refused:
         running = ""
-    current = tuple(int(x) for x in running.split(".")) if running else None
-    if running == chosen.release:
-        say(f"release {chosen.release} is running already ({RELEASE_KEY}={selector}): `upgrade` has nothing to do")
-    elif current and (chosen.major, chosen.minor) < current:
-        say(f"{RELEASE_KEY}={selector} selects {chosen.release}, older than the running {running}: `upgrade` would "
-            f"refuse")
-    else:
-        manifest_of = manifest_reader(host, source, args.unsigned_local)
-        target = (upgrade_target(listed, current, chosen, source.describe(), lambda r: manifest_of(r).major_entry)
-                  if current and (chosen.major, chosen.minor) > current else chosen)
-        say(f"`upgrade` would take release {target.release}" + (f" (running: {running})" if running else "")
-            + f" ({RELEASE_KEY}={selector})")
-        if target != chosen:
-            say(entry_note(selector, chosen, target, "the `upgrade` after that one"))
-    beyond = newer_major(listed, chosen)
-    if beyond:
-        say(f"a newer major exists: {beyond.release} — read its release notes before you select it")
+    say_check(plan(host, source_spec(args, home), selected(args, home), running, args.unsigned_local), "running")
     return 0
 
 
@@ -1780,27 +1814,24 @@ def cmd_upgrade(args: argparse.Namespace, host: Host) -> int:
 
     # 1. the release VEYQ_RELEASE selects; stop if it is the running one
     spec = source_spec(args, home)
-    source = open_source(spec)
-    listed = source.releases()
-    selection = select(listed, selector, source.describe())
-    running = tuple(int(x) for x in state.release.split("."))
-    if (selection.major, selection.minor) == running:
+    p = plan(host, spec, selector, state.release, args.unsigned_local)
+    source, selection = p.source, p.selection
+    if p.relation == "same":
         say(f"release {selection.release} is running already ({RELEASE_KEY}={selector}): nothing to upgrade")
         return 0
-    if (selection.major, selection.minor) < running:
+    if p.relation == "older":
         raise Refused(f"{RELEASE_KEY}={selector} selects {selection.release}, older than the running {state.release}. "
                       f"There is no downgrade: to go back, restore a backup taken under that release "
                       f"(`veyqctl rollback`). Nothing was stopped.")
-    manifest_of = manifest_reader(host, source, args.unsigned_local)
-    chosen = upgrade_target(listed, running, selection, source.describe(), lambda r: manifest_of(r).major_entry)
-    say(f"step 1 of 4: release {chosen.release} ({RELEASE_KEY}={selector}; running: {state.release})"
+    manifest_of, target = p.manifest_of, p.target
+    say(f"step 1 of 4: release {target.release} ({RELEASE_KEY}={selector}; running: {state.release})"
         + (f" — {selection.release} is in a later major, which is entered only from the release its manifest names"
-           if chosen != selection else ""))
+           if target != selection else ""))
 
     # 2. its manifest verified, both images verified by the manifest's digests, then its assets into releases/<release>/
-    manifest = manifest_of(chosen)
+    manifest = manifest_of(target)
     verify_images(host, manifest, args.unsigned_local)
-    directory = fetch_release(source, chosen, manifest, home)
+    directory = fetch_release(source, target, manifest, home)
     say(f"step 2 of 4: release {manifest.release} downloaded and " + ("NOT verified (--unsigned-local)"
                                                                      if args.unsigned_local
                                                                      else "verified (manifest and both images)"))
@@ -1855,8 +1886,8 @@ def cmd_upgrade(args: argparse.Namespace, host: Host) -> int:
     say(f"downtime: {time.monotonic() - stopped:.0f} s, from stopping veyq until release {manifest.release} was healthy")
     say(f"release {manifest.release} is running; release {state.release} stays in {release_dir(home, state.release)} "
         f"for a rollback")
-    if chosen != selection:
-        say(entry_note(selector, selection, chosen, "the next `upgrade`"))
+    if target != selection:
+        say(entry_note(selector, selection, target, "the next `upgrade`"))
     return 0
 
 
@@ -3904,11 +3935,10 @@ def running_differs(host: Host, source: Source, listed: list[Listed], g: GitOps)
 
 
 def gitops_verify(args: argparse.Namespace, host: Host, g: GitOps) -> int:
-    source = open_source(args.source or g.doc.get("source") or None)
-    selector = check_selector(args.release or g.doc["release"])
-    chosen = select(source.releases(), selector, source.describe())
-    say(f"{RELEASE_KEY}={selector} takes release {chosen.release} from {source.describe()}")
-    verify_gitops_release(host, fetch_manifest(host, source, chosen, False), g.doc["chart"])
+    p = plan(host, args.source or g.doc.get("source") or None, check_selector(args.release or g.doc["release"]))
+    chosen = p.selection
+    say_selection(p)
+    verify_gitops_release(host, fetch_manifest(host, p.source, chosen, False), g.doc["chart"])
     say(f"release {chosen.release}: manifest, three images and chart verified. Nothing was written.")
     return 0
 
@@ -3930,26 +3960,10 @@ def gitops_drift(g: GitOps) -> list[str]:
 
 
 def gitops_check(args: argparse.Namespace, host: Host, g: GitOps) -> int:
-    source = open_source(args.source or g.doc.get("source") or None)
-    selector = check_selector(args.release or g.doc["release"])
-    listed = source.releases()
-    chosen = select(listed, selector, source.describe())
-    running = g.doc["running"]
-    current = tuple(int(x) for x in running.split("."))
-    if chosen.release == running:
-        say(f"release {running} is installed already ({RELEASE_KEY}={selector}): `upgrade` has nothing to do")
-    elif (chosen.major, chosen.minor) < current:
-        say(f"{RELEASE_KEY}={selector} selects {chosen.release}, older than the installed {running}: `upgrade` would "
-            f"refuse")
-    else:
-        manifest_of = manifest_reader(host, source, False)
-        target = upgrade_target(listed, current, chosen, source.describe(), lambda r: manifest_of(r).major_entry)
-        say(f"`upgrade` would take release {target.release} (installed: {running}; {RELEASE_KEY}={selector})")
-        if target != chosen:
-            say(entry_note(selector, chosen, target, "the `upgrade` after that one"))
-    beyond = newer_major(listed, chosen)
-    if beyond:
-        say(f"a newer major exists: {beyond.release} — read its release notes before you select it")
+    p = plan(host, args.source or g.doc.get("source") or None, check_selector(args.release or g.doc["release"]),
+             g.doc["running"])
+    source, listed, running = p.source, p.listed, p.running
+    say_check(p, "installed")
     drift = gitops_drift(g)
     for line in drift:
         say(f"DRIFT: {line}, not what {GITOPS_FILE} records")
@@ -3988,20 +4002,15 @@ def gitops_upgrade(args: argparse.Namespace, host: Host, g: GitOps) -> int:
     if args.key_into or args.objects_to:  # --unsigned-local is refused in main() already
         raise Refused("--unsigned-local, --key-into and --objects-to are for Compose: on a GitOps instance veyq backs "
                       "itself up before the new release starts")
-    source = open_source(args.source or g.doc.get("source") or None)
-    selector = check_selector(g.doc["release"])
-    listed = source.releases()
-    chosen = select(listed, selector, source.describe())
-    running = g.doc["running"]
-    current = tuple(int(x) for x in running.split("."))
-    if chosen.release == running:
+    p = plan(host, args.source or g.doc.get("source") or None, check_selector(g.doc["release"]), g.doc["running"])
+    source, listed, selector, selection, running = p.source, p.listed, p.selector, p.selection, p.running
+    if p.relation == "same":
         say(f"release {running} is installed already ({RELEASE_KEY}={selector}): nothing to do")
         return 0
-    if (chosen.major, chosen.minor) < current:
-        raise Refused(f"{RELEASE_KEY}={selector} selects {chosen.release}, older than the installed {running}: there is "
-                      f"no downgrade (going back means restoring a backup). Nothing was changed.")
-    manifest_of = manifest_reader(host, source, False)
-    target = upgrade_target(listed, current, chosen, source.describe(), lambda r: manifest_of(r).major_entry)
+    if p.relation == "older":
+        raise Refused(f"{RELEASE_KEY}={selector} selects {selection.release}, older than the installed {running}: "
+                      f"there is no downgrade (going back means restoring a backup). Nothing was changed.")
+    manifest_of, target = p.manifest_of, p.target
     drift = gitops_drift(g)
     if drift:
         raise Refused("the files no longer match what " + GITOPS_FILE + " records: " + "; ".join(drift)
@@ -4035,8 +4044,8 @@ def gitops_upgrade(args: argparse.Namespace, host: Host, g: GitOps) -> int:
     git(host, top, "add", "--", *paths)
     git(host, top, "commit", "-m", f"veyq {target.release}: upgraded from {running} by veyqctl", "--", *paths)
     say(f"release {target.release} pinned and committed (was {running}); veyq backs up before the new release starts")
-    if target != chosen:
-        say(entry_note(selector, chosen, target, "the next `upgrade`"))
+    if target != selection:
+        say(entry_note(selector, selection, target, "the next `upgrade`"))
     if args.push:
         git(host, top, "push")
         say("pushed: Argo CD applies it at its next sync")
