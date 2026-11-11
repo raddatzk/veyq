@@ -205,6 +205,49 @@ and Windows Hello with DPAPI, so the key never leaves the library and never cros
   sitting.
 - Android, Apple and Linux are unchanged and green.
 
+**Built (Phase 1):**
+- **The cinterop `wincred`** (`core/wincred/wincred.def`, `veyq_wincred.h`): only the header's C helpers are exposed, so
+  windows.h's types stay platform.windows'; every Windows call is made in C, and only integers, bytes and UTF-16 strings
+  cross. It declares the provider's name itself (R7) and links ncrypt, crypt32, advapi32 and ole32. The header is
+  declared the cinterop task's input (an include directory is not one).
+- **`WindowsDeviceKeys`** (`mingwMain/…/session/WindowsDeviceKeys.kt`), as D1 says:
+  - bind keys and secrets under DPAPI (current user, `CRYPTPROTECT_UI_FORBIDDEN`, an entropy per use, so a bind blob
+    never opens as a secret);
+  - the unlock key behind an RSA-2048 key `<SID>//veyq//unlock` in the Passport provider, created with NgcCacheType
+    AUTH_MANDATORY; the 32 bytes encrypted with `NCryptEncrypt` (PKCS#1 v1.5, the padding the provider is known to
+    take; OAEP untried), decrypted with the HWND, the Use Context and `PinCacheIsGestureRequired` set;
+  - DPAPI where Hello is not set up; the path kept as `veyq.wincred.unlock.path`; 15 s held behind a mutex;
+  - `helloAvailable` (D5's capability): cryptngc's `NgcGetDefaultDecryptionKeyName` names a key and the provider opens.
+    That is KeePassWinHello's check, an undocumented export loaded at run time; R6's registry key is not read.
+- **D3:** `DeviceKeysContract` (`commonTest`) over `SoftwareDeviceKeys` on every target (`testPrimitives`, an `expect`
+  with jvmTest/nativeTest actuals) and over the DPAPI half in `mingwTest`. `DeviceTrustLiveTest` asserts the dropped
+  bind key through `bindHmac` and the deleted unlock key through a canary seal; the fake's maps are private.
+- **The probe:** `mingwTest`'s `HelloProbe` (inert without `VEYQ_HELLO_PROBE`) and `run.py hello-probe [--check]`,
+  which starts the core's test binary through `veyq-app`; Veyq.Drive's launch takes `"args"`. It waits until the probe
+  ends, never for a clock: a step waits for a person.
+
+**Met (2026-11-11, commits `7c12cc50f`, `c872e839d`, `a9546d0d0`, `758f3ce5e`):**
+- [x] `/usr/bin/python3 src/mobile/windows/run.py test` → `200 tests from 44 test cases ran`, `PASSED 200`, the
+  contract over the DPAPI half included. **Bites**, each red then restored: `deleteBindKey` a no-op (the contract), the
+  SCARD code dropped from the mapping, a 30 s window, the path chosen by today's availability instead of the kept one,
+  the secrets' DPAPI entropy the bind keys', a cancel swallowed into `false` (each its own test); on the JVM a no-op
+  `deleteUnlockKey` in the fake turned the contract red.
+- [x] The Hello half, with the owner at the VM's console (O2):
+  `/usr/bin/python3 src/mobile/windows/run.py hello-probe` → `hello-available true`, `seal ok 649415` (`path hello`),
+  `open ok 4022`, `open-in-window ok 0`, `open-after-window DeviceAuthFailed(cancelled=true) Passport decrypt:
+  0x80090036`, `open-after-delete DeviceAuthFailed(cancelled=false) no unlock key`, `passport-key-after-delete
+  DeviceAuthFailed(cancelled=false) Passport key open: 0x8009000d`, `done`. D1's first measurement holds: an unpackaged
+  x64 process under Prism, of a local account, creates the Passport key, and its decryption prompts in session 1.
+  **`NCryptFinalizeKey` asks for the PIN too:** enrolment asks once (the seal), which `sealUnlockable` allows ("may
+  ask"); Phase 5's pass expects it.
+- [x] "Hello available" answers `true` in session 0 (`run.py test`, `helloAvailabilityIsAnswered`) and in session 1
+  (`run.py hello-probe --check`). The "not set up" answer is unmeasured: the VM has a PIN.
+- [x] Unchanged elsewhere: `./gradlew :core:jvmTest :core:macosArm64Test` → `BUILD SUCCESSFUL`;
+  `/usr/bin/python3 src/mobile/linux/run.py test` → `PASSED 189`; `windows/run.py bridge` → the export gate and the
+  smoke green. The verification-metadata write from an empty Gradle home left the file unchanged.
+- [ ] Not run: `DeviceTrustLiveTest` against the dev instance (a worktree has no `.run/.env`); it compiles. Phase 3
+  runs it.
+
 ### Phase 2 — Linux's DeviceKeys in the core (`linuxMain`)
 
 D2: the `dlopen` layer and its header, the store, the absent-store case. The image gains `libsecret` and
@@ -281,3 +324,13 @@ D5 on Windows.
     a PIN, policies that turn Hello off, and VMs are common enough.
 
 ## Retrospective
+
+- **Phase 1, execution: `run.py hello-probe` timed the person out.** The first version waited 600 s on the Mac, as
+  `drive` waits for a machine; the owner reached the console after the seal's prompt had waited 649 s, the wait ended,
+  and the outcome was fetched by hand, though the probe had finished on the VM. Root cause: a wait sized for a program
+  was put in front of a person. Fixed in `758f3ce5e` (wait for the probe's end, fetch last).
+- **Phase 1, planning: whether creating a Passport key prompts was left open** until the probe; it does, so enrolment
+  asks for the PIN once. Cheap to have asked of the probe's design explicitly, so the owner's brief said "two PINs, then
+  Cancel" up front.
+- **Next time:** a verb that waits for a person waits for the process it started and fetches its outcome whatever
+  ended the wait; its brief to the owner lists every prompt the run may raise, the uncertain ones marked so.
