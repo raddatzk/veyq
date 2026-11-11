@@ -4458,78 +4458,121 @@ class server_tunnel:
 
 # What each directory's certificates are, for the operator: what a switch gives, and what it costs while it runs.
 TLS_KIND = {"production": "real", "staging": "test"}
+# The one Issuer every chart up to release 1.66 rendered for any directory; later ones name it per directory
+# (`veyq.acmeIssuer`).
+LEGACY_ACME_ISSUER = "veyq-acme"
+
+
+def certificates_by_directory(host: Host, k: list[str]) -> dict[str, tuple[str, str, bool]]:
+    """Each Certificate: (its Secret, the host of the ACME directory its current revision was ordered from — "" when no
+    order says — and whether it is Ready). The directory is read from the ACME order of the revision's request
+    (`<certificate>-<revision>`): a certificate stays Ready under a switched Issuer and is never re-ordered by itself,
+    so the Issuer alone does not tell which directory a served certificate came from (raddatz.me, 2026-11-11)."""
+    listed = host.run(k + ["get", "certificates", "-o", "jsonpath={range .items[*]}{.metadata.name} {.spec.secretName} "
+                           "{.status.revision} {.status.conditions[?(@.type==\"Ready\")].status}{\"\\n\"}{end}"],
+                      check=False).stdout or ""
+    orders = host.run(k + ["get", "orders", "-o", "jsonpath={range .items[*]}{.metadata.ownerReferences[0].name} "
+                           "{.status.url}{\"\\n\"}{end}"], check=False).stdout or ""
+    ordered_at = {}
+    for line in orders.splitlines():
+        parts = line.split()
+        if len(parts) == 2:
+            ordered_at[parts[0]] = urllib.parse.urlparse(parts[1]).netloc
+    found = {}
+    for line in listed.splitlines():
+        parts = line.split()
+        if len(parts) >= 2:
+            name, secret = parts[0], parts[1]
+            revision = parts[2] if len(parts) > 2 and parts[2].isdigit() else ""
+            found[name] = (secret, ordered_at.get(f"{name}-{revision}", "") if revision else "", parts[-1] == "True")
+    return found
 
 
 def gitops_tls(args: argparse.Namespace, host: Host, g: GitOps) -> int:
     """`tls production` / `tls staging`: the values' Let's Encrypt directory switched (ADR 0126) — rewritten, rendered,
-    committed and pushed on confirmation; once Argo CD applied the Issuer, the certificates the other directory issued
-    are deleted on confirmation (it cannot be undone), so cert-manager orders new ones; then waited for. Back to staging
-    is for test rebuilds that would spend production's rate limits; nothing trusts its certificates."""
+    committed and pushed on confirmation — then the cluster waited for until every certificate's ACME order is from
+    the new directory. A chart that names its Issuer per directory (`veyq-acme-<directory>`, ADR 0064 as amended)
+    renames it on the switch, and cert-manager re-orders by itself, serving the old certificates until then; under an
+    older chart's one `veyq-acme` nothing re-orders, so the old directory's certificates are deleted on confirmation
+    (it cannot be undone). Run again, it finishes what an earlier run left. Back to staging is for test rebuilds that
+    would spend production's rate limits; nothing trusts its certificates."""
     target = args.directory
     source = "staging" if target == "production" else "production"
     want, have = ACME_DIRECTORIES[target], ACME_DIRECTORIES[source]
+    wanted_host = urllib.parse.urlparse(want).netloc
     text = g.values.read_text()
-    if f"server: {want}" in text and have not in text:
-        say(f"The values name Let's Encrypt's {target} directory already: nothing to do.")
-        return 0
-    if f"server: {have}" not in text:
-        raise Refused(f"{g.values} does not use Let's Encrypt's {TLS_KIND[source]} certificates: nothing to switch")
-    top = repository_of(host, g.directory)
-    if git(host, top, "diff", "--quiet", "HEAD", "--", str(g.values), check=False).returncode:
-        raise Refused(f"{g.values} has uncommitted changes: commit or undo them first, as `tls {target}` commits "
-                      f"only its own. Nothing was changed.")
+    switch = f"server: {have}" in text
+    if not switch and f"server: {want}" not in text:
+        raise Refused(f"{g.values} does not use Let's Encrypt's certificates: nothing to switch")
     heading(f"veyq {instance_label(g.directory)}: from Let's Encrypt's {TLS_KIND[source]} certificates to "
             f"{TLS_KIND[target]} ones")
     if target == "staging":
         say("Nothing trusts staging's certificates: every site warns in the browser, and the admin console's store "
             "check fails, until `veyqctl tls production` switches back.")
-    switched = rewrite_once(text, f"server: {have}", f"server: {want}", g.doc["values"])
+    top = repository_of(host, g.directory)
     namespace = g.namespace
-    render(host, g.doc["chart"], g.doc["pins"]["chart"], namespace, switched)
-    branch = (git(host, top, "rev-parse", "--abbrev-ref", "HEAD", check=False).stdout or "").strip()
-    if not args.yes and host.confirm(f"Switch to Let's Encrypt {target}? This commits {g.doc['values']} and pushes to "
-                                     f"origin {branch}?") is not True:
-        raise Refused("not switched, nothing was changed (without a terminal, pass --yes)")
-    g.values.write_text(switched)
-    paths = [str(g.values)]
-    setup = read_setup(top)
-    rel = g.directory.relative_to(top).as_posix()
-    if rel in (setup.get("veyq") or {}):  # a rebuild from veyq-setup.json starts on this directory from now on
-        setup["veyq"][rel]["acme_directory"] = target
-        atomic_write(top / SETUP_FILE, json.dumps(setup, indent=2, sort_keys=True) + "\n")
-        paths.append(str(top / SETUP_FILE))
-    git(host, top, "add", "--", *paths)
-    git(host, top, "commit", "-m", f"veyq: TLS from Let's Encrypt {target}, by veyqctl tls {target}", "--", *paths)
-    git(host, top, "push")
-    checked("committed", "and pushed: Argo CD applies the Issuer's new directory at its next sync")
-    heading("Waiting for Argo CD and the new certificates")
+    if switch:
+        if git(host, top, "diff", "--quiet", "HEAD", "--", str(g.values), check=False).returncode:
+            raise Refused(f"{g.values} has uncommitted changes: commit or undo them first, as `tls {target}` commits "
+                          f"only its own. Nothing was changed.")
+        switched = rewrite_once(text, f"server: {have}", f"server: {want}", g.doc["values"])
+        render(host, g.doc["chart"], g.doc["pins"]["chart"], namespace, switched)
+        branch = (git(host, top, "rev-parse", "--abbrev-ref", "HEAD", check=False).stdout or "").strip()
+        if not args.yes and host.confirm(f"Switch to Let's Encrypt {target}? This commits {g.doc['values']} and pushes "
+                                         f"to origin {branch}?") is not True:
+            raise Refused("not switched, nothing was changed (without a terminal, pass --yes)")
+        g.values.write_text(switched)
+        paths = [str(g.values)]
+        setup = read_setup(top)
+        rel = g.directory.relative_to(top).as_posix()
+        if rel in (setup.get("veyq") or {}):  # a rebuild from veyq-setup.json starts on this directory from now on
+            setup["veyq"][rel]["acme_directory"] = target
+            atomic_write(top / SETUP_FILE, json.dumps(setup, indent=2, sort_keys=True) + "\n")
+            paths.append(str(top / SETUP_FILE))
+        git(host, top, "add", "--", *paths)
+        git(host, top, "commit", "-m", f"veyq: TLS from Let's Encrypt {target}, by veyqctl tls {target}", "--", *paths)
+        git(host, top, "push")
+        checked("committed", "and pushed: Argo CD applies the Issuer's new directory at its next sync")
+    else:
+        say(f"The values name Let's Encrypt's {target} directory already; the certificates are checked.")
+    heading("The Issuer and the certificates")
     k = kubectl(g.doc.get("context") or None) + ["-n", namespace]
     with server_tunnel(host, top):
         deadline = time.monotonic() + args.timeout
-        while (host.run(k + ["get", "issuer", "veyq-acme", "-o", "jsonpath={.spec.acme.server}"], check=False).stdout
-               or "").strip() != want:
+        while True:  # the Issuer that names the directory: `veyq-acme-<directory>`, or an older chart's `veyq-acme`
+            issuers = host.run(k + ["get", "issuers", "-o", "jsonpath={range .items[*]}{.metadata.name} "
+                                    "{.spec.acme.server}{\"\\n\"}{end}"], check=False).stdout or ""
+            issuer = next((line.split()[0] for line in issuers.splitlines() if line.split()[1:] == [want]), "")
+            if issuer:
+                break
             if time.monotonic() > deadline:
-                raise Refused(f"the Issuer veyq-acme does not name the {target} directory after {int(args.timeout)} s: "
-                              f"has Argo CD synced yet? Run the same command again (the change is pushed already).")
+                raise Refused(f"no Issuer names the {target} directory after {int(args.timeout)} s: has Argo CD synced "
+                              f"yet? Run the same command again (the change is pushed already).")
             host.sleep(10)
-        listed = host.run(k + ["get", "certificates", "-o",
-                               "jsonpath={range .items[*]}{.spec.secretName}{\"\\n\"}{end}"], check=False).stdout or ""
-        certificate_names = sorted({line.strip() for line in listed.splitlines() if line.strip()})
-        if certificate_names:  # the Secrets' names: what holds each certificate, nothing of their content
-            say(f"The {TLS_KIND[source]} certificates: {', '.join(certificate_names)} (namespace {namespace}).")
+        checked("Issuer", f"{issuer} names Let's Encrypt {target}")
+        found = certificates_by_directory(host, k)
+        stale = sorted(secret for secret, ordered, _ in found.values() if ordered and ordered != wanted_host)
+        if stale and issuer != LEGACY_ACME_ISSUER:  # renamed: cert-manager re-orders them by itself
+            say(f"Still from Let's Encrypt {source}: {', '.join(stale)}. cert-manager re-orders them from {target}; "
+                f"they are served until the new ones are Ready.")
+        elif stale:  # an older chart's one Issuer: nothing re-orders them but their deletion
+            say(f"Still from Let's Encrypt {source}: {', '.join(stale)} (namespace {namespace}). This chart names its "
+                f"Issuer {LEGACY_ACME_ISSUER} for every directory, so cert-manager does not re-order them by itself.")
             if not args.yes and host.confirm(
                     f"Delete them so {target} ones are issued? This cannot be undone, and the sites have no "
                     f"certificate until the new ones arrive" + (" — then browsers warn" if target == "staging" else "")
             ) is not True:
                 raise Refused(f"the {TLS_KIND[source]} certificates stay for now; run `veyqctl tls {target}` again to "
                               f"replace them")
-            host.run(k + ["delete", "secret", *certificate_names])
+            host.run(k + ["delete", "secret", *stale])
+        elif not switch and found and all(ready for _, _, ready in found.values()):
+            say("Every certificate is from there already: nothing to do.")
+            return 0
         while True:
-            states = host.run(k + ["get", "certificates", "-o", "jsonpath={range .items[*]}{.metadata.name} "
-                                   "{.status.conditions[?(@.type==\"Ready\")].status}{\"\\n\"}{end}"],
-                              check=False).stdout or ""
-            pending = [line.split()[0] for line in states.splitlines() if line.split() and line.split()[-1] != "True"]
-            if states.strip() and not pending:
+            found = certificates_by_directory(host, k)
+            pending = sorted(name for name, (_, ordered, ready) in found.items()
+                             if not ready or (ordered and ordered != wanted_host))
+            if found and not pending:
                 checked("certificates", f"every one issued by Let's Encrypt {target}")
                 return 0
             if time.monotonic() > deadline:

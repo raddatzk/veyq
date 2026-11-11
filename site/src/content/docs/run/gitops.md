@@ -93,9 +93,12 @@ veyqctl tls production
 ```
 
 It commits the values' new directory (and `veyq-setup.json`'s answer) and pushes on your yes, waits until Argo CD has
-applied the Issuer, deletes the certificates staging issued on your yes — this cannot be undone, and until the new
-ones are issued those hosts serve none — and waits until every production certificate is Ready. `veyq-setup.json` records the switch, so a
-rebuild from it starts on production. `veyqctl tls staging` goes back the same way — for test rebuilds that would
+applied the Issuer, and waits until every certificate was ordered from production (it reads each one's ACME order) and
+is Ready. The chart names its Issuer per directory, so the switch renames it and cert-manager re-orders every certificate
+by itself, serving the staging ones until then. A chart from release 1.66 or earlier names it `veyq-acme` for both, and
+nothing re-orders: there `tls` deletes the staging certificates on your yes — this cannot be undone, and until the new
+ones are issued those hosts serve none. Run again, it finishes what an earlier run left. `veyq-setup.json` records the
+switch, so a rebuild from it starts on production. `veyqctl tls staging` goes back the same way — for test rebuilds that would
 spend production's rate limits; it says first that browsers warn and the store check fails until you switch again.
 
 ## Write the instance: `init`

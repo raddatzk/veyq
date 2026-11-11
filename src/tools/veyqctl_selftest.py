@@ -1688,7 +1688,7 @@ class GitOpsHost(FakeHost):
         if cmd[0] == "kubectl":
             for key, answer in self.cluster.items():
                 if key in joined:
-                    return answer
+                    return answer(self) if callable(answer) else answer  # a callable: the cluster as it is now
             return 0, ""
         if cmd[0] == "helm" and cmd[1] == "show":
             digest = cmd[3].rsplit("@", 1)[1]
@@ -2635,50 +2635,90 @@ def test_server_path(tmp: pathlib.Path, home: pathlib.Path) -> pathlib.Path:
     return top
 
 
+def tls_cluster(issuer: str, served: str, legacy: bool = True) -> dict:
+    """The cluster `tls` reads: one Issuer naming `issuer`'s directory — `veyq-acme` as every chart up to 1.66 named it
+    (`legacy`), else `veyq-acme-<directory>` — and two Certificates whose current revision was ordered from `served`'s.
+    Under the legacy name nothing re-orders them but a `delete secret`, and the first read after it still shows the old
+    ones (cert-manager has not reacted yet); under a per-directory name cert-manager re-orders by itself, the old ones
+    shown, Ready, for the first two reads. So a run that stops at the first Ready is caught either way."""
+    name = vc.LEGACY_ACME_ISSUER if legacy else f"veyq-acme-{issuer}"
+
+    def reissued(host):
+        if legacy:
+            return getattr(host, "reads_after_delete", 0) > 1
+        return getattr(host, "certificate_reads", 0) > 2
+
+    def certificates(host):
+        host.certificate_reads = getattr(host, "certificate_reads", 0) + 1
+        if host.ran("delete", "secret"):
+            host.reads_after_delete = getattr(host, "reads_after_delete", 0) + 1
+        revision = 2 if reissued(host) else 1
+        return 0, f"veyq-app veyq-app {revision} True\nveyq-garage veyq-garage {revision} True\n"
+
+    def orders(host):
+        replaced = reissued(host)
+        base = vc.ACME_DIRECTORIES[issuer if replaced else served].rsplit("/", 1)[0]
+        revision = 2 if replaced else 1
+        return 0, f"veyq-app-{revision} {base}/acme/order/1/1\nveyq-garage-{revision} {base}/acme/order/1/2\n"
+    return {"get issuer": (0, f"{name} {vc.ACME_DIRECTORIES[issuer]}\n"), "secretName": certificates,
+            "ownerReferences": orders}
+
+
 def test_tls_production(tmp: pathlib.Path, top: pathlib.Path) -> None:
-    """`tls production` on the instance the server path set up on staging: each confirmation's no changes nothing, no
-    certificate is deleted while the Issuer still names staging, and a second run has nothing to do."""
+    """`tls production` and `tls staging` on the instance the server path set up on staging: each confirmation's no
+    changes nothing, no certificate is deleted while the Issuer still names the old directory, the certificates are
+    judged by the directory their ACME order came from, a run after values-only finishes the job, and a second run
+    has nothing to do."""
     values = top / "gitops/apps/veyq/values.yaml"
     check("server path: TLS starts on Let's Encrypt staging (asked, offered so), recorded in veyq-setup.json",
           f"server: {vc.ACME_DIRECTORIES['staging']}" in values.read_text() and json.loads(
               (top / vc.SETUP_FILE).read_text())["veyq"]["gitops/apps/veyq"]["acme_directory"] == "staging")
-    certs = {"get issuer": (0, vc.ACME_DIRECTORIES["production"]), "secretName": (0, "veyq-app\nveyq-garage\n"),
-             "Ready": (0, "veyq-app True\nveyq-garage True\n")}
+    certs = tls_cluster("production", "staging")
     staged_values = values.read_text()
     host = ServerHost(top=top, cluster=certs, confirms={"Switch to Let's Encrypt production": False})
-    rc, out = run_main(["--instance", "server-run", "tls", "production"], host)
+    rc, out = run_main(["--instance", "server-run", "tls", "production", "--timeout", "3"], host)
     check("tls production declined: nothing changed, nothing committed or pushed",
           rc == 1 and values.read_text() == staged_values and not host.ran("commit") and not host.ran("push"),
           out[-300:])
     host = ServerHost(top=top, cluster=certs, confirms={"Delete them": False})
-    rc, out = run_main(["--instance", "server-run", "tls", "production"], host)
+    rc, out = run_main(["--instance", "server-run", "tls", "production", "--timeout", "3"], host)
     check("tls production: rendered, committed with veyq-setup.json and pushed; the certificates' deletion declined "
           "deletes nothing", rc == 1 and f"server: {vc.ACME_DIRECTORIES['production']}" in values.read_text()
           and host.ran("helm", "template") and host.ran("push") and not host.ran("delete", "secret")
           and json.loads((top / vc.SETUP_FILE).read_text())["veyq"]["gitops/apps/veyq"]["acme_directory"]
           == "production", out[-300:])
+    # raddatz.me, 2026-11-11: the values were switched and pushed, the staging certificates stayed — Ready, so
+    # cert-manager never re-orders them. The same command again finds them by their orders and replaces them.
+    host = ServerHost(top=top, cluster=certs)
+    rc, out = run_main(["--instance", "server-run", "tls", "production", "--timeout", "3"], host)
+    deleted = host.ran("delete", "secret")
+    check("tls production again after a values-only run: no commit, the certificates still ordered from staging "
+          "found by their ACME orders, deleted (asked) and waited for, through a tunnel it closes",
+          rc == 0 and not host.ran("commit") and deleted and host.commands[deleted[0]][-2:] == ["veyq-app", "veyq-garage"]
+          and "Still from Let's Encrypt staging" in out and host.ran("ssh", "-N", "server-run", "&")
+          and getattr(host, "reads_after_delete", 0) >= 2
+          and host.tunnels == ["closed"] and "issued by Let's Encrypt production" in out, out[-400:])
     (top / "gitops/apps/veyq/values.yaml").write_text(staged_values)  # as if the run before had stopped earlier
-    host = ServerHost(top=top, cluster=dict(certs, **{"get issuer": (0, vc.ACME_DIRECTORIES["staging"])}))
+    host = ServerHost(top=top, cluster=dict(certs, **{"get issuer": (0, f"veyq-acme {vc.ACME_DIRECTORIES['staging']}\n")}))
     rc, out = run_main(["--instance", "server-run", "tls", "production", "--timeout", "0"], host)
     check("tls production: while the Issuer still names staging (Argo CD not synced), no certificate is deleted",
-          rc == 1 and "does not name the production directory" in out and not host.ran("delete", "secret"),
+          rc == 1 and "no Issuer names the production directory" in out and not host.ran("delete", "secret"),
           out[-300:])
     (top / "gitops/apps/veyq/values.yaml").write_text(staged_values)
     host = ServerHost(top=top, cluster=certs)
-    rc, out = run_main(["--instance", "server-run", "tls", "production"], host)
-    deleted = host.ran("delete", "secret")
-    check("tls production: once the Issuer names production, the certificates staging issued deleted (asked), "
-          "waited for, through a tunnel it closes", rc == 0 and deleted and host.commands[deleted[0]][-2:] ==
-          ["veyq-app", "veyq-garage"] and host.ran("ssh", "-N", "server-run", "&") and host.tunnels == ["closed"]
-          and "issued by Let's Encrypt production" in out, out[-400:])
-    rc, out = run_main(["--instance", "server-run", "tls", "production"], ServerHost(top=top, cluster=certs))
-    check("tls production on production: nothing to do", rc == 0 and "nothing to do" in out, out[-200:])
+    rc, out = run_main(["--instance", "server-run", "tls", "production", "--timeout", "3"], host)
+    check("tls production in one run: switched, pushed, the staging certificates replaced, production's waited for",
+          rc == 0 and host.ran("push") and host.ran("delete", "secret") and "issued by Let's Encrypt production" in out,
+          out[-400:])
+    rc, out = run_main(["--instance", "server-run", "tls", "production", "--timeout", "3"],
+                       ServerHost(top=top, cluster=tls_cluster("production", "production")))
+    check("tls production on production, every certificate from there: nothing to do", rc == 0 and "nothing to do" in out,
+          out[-200:])
 
     # back to staging (owner 2026-11-11: for test rebuilds), the same mechanics the other way, then forth again
     produced = values.read_text()
-    staging_certs = dict(certs, **{"get issuer": (0, vc.ACME_DIRECTORIES["staging"])})
-    host = ServerHost(top=top, cluster=staging_certs, confirms={"Delete them": False})
-    rc, out = run_main(["--instance", "server-run", "tls", "staging"], host)
+    host = ServerHost(top=top, cluster=tls_cluster("staging", "production"), confirms={"Delete them": False})
+    rc, out = run_main(["--instance", "server-run", "tls", "staging", "--timeout", "3"], host)
     check("tls staging: says browsers warn and the store check fails; rendered, committed with veyq-setup.json and "
           "pushed; the real certificates' deletion declined deletes nothing",
           rc == 1 and "every site warns in the browser" in out and "store check fails" in out
@@ -2686,19 +2726,30 @@ def test_tls_production(tmp: pathlib.Path, top: pathlib.Path) -> None:
           and not host.ran("delete", "secret") and json.loads((top / vc.SETUP_FILE).read_text())["veyq"][
               "gitops/apps/veyq"]["acme_directory"] == "staging", out[-400:])
     values.write_text(produced)
-    host = ServerHost(top=top, cluster=staging_certs)
-    rc, out = run_main(["--instance", "server-run", "tls", "staging"], host)
-    deleted = host.ran("delete", "secret")
+    host = ServerHost(top=top, cluster=tls_cluster("staging", "production"))
+    rc, out = run_main(["--instance", "server-run", "tls", "staging", "--timeout", "3"], host)
     check("tls staging: once the Issuer names staging, the real certificates deleted (asked), staging's waited for",
-          rc == 0 and deleted and "issued by Let's Encrypt staging" in out
+          rc == 0 and host.ran("delete", "secret") and "issued by Let's Encrypt staging" in out
           and any("then browsers warn" in q for q in host.confirmed), out[-400:])
-    rc, out = run_main(["--instance", "server-run", "tls", "staging"], ServerHost(top=top, cluster=staging_certs))
+    rc, out = run_main(["--instance", "server-run", "tls", "staging", "--timeout", "3"],
+                       ServerHost(top=top, cluster=tls_cluster("staging", "staging")))
     check("tls staging on staging: nothing to do", rc == 0 and "nothing to do" in out, out[-200:])
-    rc, out = run_main(["--instance", "server-run", "tls", "production"], ServerHost(top=top, cluster=certs))
+    rc, out = run_main(["--instance", "server-run", "tls", "production", "--timeout", "3"],
+                       ServerHost(top=top, cluster=tls_cluster("production", "staging")))
     check("tls production after staging: back on production", rc == 0 and f"server: "
           f"{vc.ACME_DIRECTORIES['production']}" in values.read_text(), out[-300:])
     compose_home = tmp / "server-compose-home"
     compose_home.mkdir()
+    # a chart that names its Issuer per directory (ADR 0064 as amended 2026-11-11): the switch renames it, cert-manager
+    # re-orders by itself, nothing is deleted, the old certificates served until the new are Ready
+    values.write_text(staged_values)
+    host = ServerHost(top=top, cluster=tls_cluster("production", "staging", legacy=False))
+    rc, out = run_main(["--instance", "server-run", "tls", "production", "--timeout", "3"], host)
+    check("tls production on a per-directory Issuer: switched and pushed, nothing deleted, cert-manager's re-orders "
+          "waited for until every certificate is from production",
+          rc == 0 and host.ran("push") and not host.ran("delete", "secret") and "veyq-acme-production names" in out
+          and "re-orders them from production" in out and getattr(host, "certificate_reads", 0) >= 3
+          and "issued by Let's Encrypt production" in out, out[-500:])
     rc, out = run_main(["--home", compose_home, "tls", "production"], FakeHost())
     check("tls on a Compose home is refused, naming where Compose takes its directory", rc == 1
           and "GitOps instance only" in out, out[-200:])
