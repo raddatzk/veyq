@@ -2109,10 +2109,9 @@ COMPOSE_ONLY = {
     "stop": "Argo CD runs the workloads (switch the Application's automated sync off to stop it changing them)",
     "status": "Argo CD shows the Application's health (`kubectl -n <namespace> get pods` the pods')",
     "logs": "`kubectl -n <namespace> logs deploy/veyq-app`",
-    "backup": "the chart's backup gate captures before every release change, and `backup.request` asks for one "
-              "(ADR 0098)",
-    "restore": "the chart's restore Job (Run area: Backup and restore, under Helm)",
-    "rollback": "the chart's restore Job onto the previous release, pinned back (ADR 0098 decision 9)",
+    "backup": "veyq backs itself up before every release change, and the chart's `backup.request` asks for one",
+    "restore": "the chart's restore Job (the docs: Backup and restore, under Helm)",
+    "rollback": "the chart's restore Job, onto the previous release pinned back",
     "self-update": "fetch the release's veyqctl as Verify a release says; a GitOps instance holds no release's files",
 }
 
@@ -2150,7 +2149,7 @@ def write_registry(registry: dict) -> None:
 
 def target_of(path: Path) -> str:
     """The instance's target, read from the instance (ADR 0126 decision 2): its own file says GitOps; anything else —
-    a Compose home, or a home not created yet — is Compose."""
+    a Compose home, or a home not created yet — is Compose. `TARGETS[target_of(home)]` acts on it."""
     return "gitops" if (path / GITOPS_FILE).is_file() else "compose"
 
 
@@ -4291,11 +4290,80 @@ def gitops_tls(args: argparse.Namespace, host: Host, g: GitOps) -> int:
             host.sleep(10)
 
 
-def compose_tls(args: argparse.Namespace, host: Host) -> int:
-    raise Refused("`tls` works on a GitOps instance only. Under Compose, set the certificate directory in .env")
+# ---- the targets: one set of verbs, each target doing its own or refusing (ADR 0126 decision 2) ---------------------
+
+class Target:
+    """One kind of instance. A verb runs in main()'s order: refused when this target has no such verb (naming what
+    does its job here), refused for another target's flag, its programs checked, then run. A third target — plain Helm,
+    say — is one more subclass in TARGETS and a value `target_of` reads."""
+    name = ""
+    REFUSES: dict[str, str] = {}        # verb -> what does its job on this target
+    FOREIGN_FLAGS: dict[str, str] = {}  # args dest -> the refusal: another target's flag
+
+    def __init__(self, args: argparse.Namespace, host: Host, home: Path) -> None:
+        self.args, self.host, self.home = args, host, home
+
+    def run(self, verb: str) -> int:
+        if verb in self.REFUSES:
+            raise Refused(self.REFUSES[verb])
+        for dest, why in self.FOREIGN_FLAGS.items():
+            if getattr(self.args, dest, False):
+                raise Refused(why)
+        programs = self.programs(verb)
+        if programs:
+            require_programs(self.host, programs, self.what(verb))
+        return self.verb(verb)
+
+    def programs(self, verb: str) -> list[str]:
+        raise NotImplementedError
+
+    def what(self, verb: str) -> str:
+        return f"`{verb}`"
+
+    def verb(self, verb: str) -> int:
+        raise NotImplementedError
 
 
-GITOPS_VERBS = {"verify": gitops_verify, "check": gitops_check, "upgrade": gitops_upgrade, "tls": gitops_tls}
+class ComposeTarget(Target):
+    """veyq on Docker Compose in a home directory (ADR 0096): every verb is its cmd_* function."""
+    name = "compose"
+    REFUSES = {"tls": "`tls` works on a GitOps instance only. Under Compose, set the certificate directory in .env"}
+
+    def __init__(self, args: argparse.Namespace, host: Host, home: Path) -> None:
+        super().__init__(args, host, home)
+        self.FOREIGN_FLAGS = {"push": f"--push is for a GitOps instance, and {home} runs on Compose"}
+
+    def programs(self, verb: str) -> list[str]:
+        return [] if verb == "self-update" else compose_programs(verb, bool(getattr(self.args, "unsigned_local", False)))
+
+    def verb(self, verb: str) -> int:
+        return self.args.func(self.args, self.host)
+
+
+class GitOpsTarget(Target):
+    """veyq's files in a repository an Argo CD syncs (ADR 0126): a verb's result is a commit, never a restart."""
+    name = "gitops"
+    FOREIGN_FLAGS = {"unsigned_local": "--unsigned-local is for Compose: a GitOps instance installs only what verifies"}
+    VERBS = {"verify": gitops_verify, "check": gitops_check, "upgrade": gitops_upgrade, "tls": gitops_tls}
+
+    def __init__(self, args: argparse.Namespace, host: Host, home: Path) -> None:
+        super().__init__(args, host, home)
+        self.REFUSES = {verb: f"`{verb}` is for Compose, and {home} is a GitOps instance: {instead}"
+                        for verb, instead in COMPOSE_ONLY.items()}
+
+    def programs(self, verb: str) -> list[str]:
+        return list(GITOPS_PROGRAMS[verb])
+
+    def what(self, verb: str) -> str:
+        return f"`{verb}` of a GitOps instance"
+
+    def verb(self, verb: str) -> int:
+        # Resolved: git names the checkout by its real path (macOS' /var is /private/var), and every path veyqctl
+        # compares with it or hands to `git add` must be the same one.
+        return self.VERBS[verb](self.args, self.host, read_gitops(self.home.resolve()))
+
+
+TARGETS: dict[str, type[Target]] = {"compose": ComposeTarget, "gitops": GitOpsTarget}
 
 
 # ---- main ------------------------------------------------------------------------------------------------------
@@ -4379,7 +4447,7 @@ def parser() -> argparse.ArgumentParser:
     tls.add_argument("directory", choices=("production",), help="the certificates to switch to")
     tls.add_argument("--yes", action="store_true", help="don't ask before committing, pushing and deleting the test certificates")
     tls.add_argument("--timeout", type=float, default=900.0, help="how long to wait for Argo CD and the new certificates, in seconds")
-    tls.set_defaults(func=compose_tls)
+    tls.set_defaults(func=None)  # a verb of the targets: GitOps runs it, Compose refuses it
 
     connected = sub.add_parser("connect", help="connect this computer to your server again (SSH tunnel and kubectl "
                                "context), e.g. after a rebuild")
@@ -4472,21 +4540,7 @@ def main(argv: list[str] | None = None, host: Host | None = None) -> int:
         home = resolve_home(args)
         args.home = str(home)
         host.workdir = home
-        if target_of(home) == "gitops":
-            if args.command in COMPOSE_ONLY:
-                raise Refused(f"`{args.command}` is for Compose, and {home} is a GitOps instance: {COMPOSE_ONLY[args.command]}")
-            if getattr(args, "unsigned_local", False):
-                raise Refused("--unsigned-local is for Compose: a GitOps instance installs only what verifies")
-            require_programs(host, GITOPS_PROGRAMS[args.command], f"`{args.command}` of a GitOps instance")
-            # Resolved: git names the checkout by its real path (macOS' /var is /private/var), and every path veyqctl
-            # compares with it or hands to `git add` must be the same one.
-            return GITOPS_VERBS[args.command](args, host, read_gitops(home.resolve()))
-        if getattr(args, "push", False):
-            raise Refused(f"--push is for a GitOps instance, and {home} runs on Compose")
-        if args.command not in ("self-update", "tls"):
-            require_programs(host, compose_programs(args.command, bool(getattr(args, "unsigned_local", False))),
-                             f"`{args.command}`")
-        return args.func(args, host)
+        return TARGETS[target_of(home)](args, host, home).run(args.command)
     except Refused as e:
         say(f"REFUSED: {e}")
         return 1
