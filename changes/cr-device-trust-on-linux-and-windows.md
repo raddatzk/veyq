@@ -1,7 +1,7 @@
 ---
 id: cr-device-trust-on-linux-and-windows
 title: Device trust on Linux and Windows — the core holds the Secret Service and Windows Hello itself, the key never crossing the bridge
-status: planned
+status: in-progress
 satisfies: []
 adrs: ["0123", "0127", "0128", "0005", "0058"]
 invariants:
