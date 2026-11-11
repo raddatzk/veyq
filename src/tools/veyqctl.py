@@ -1,221 +1,54 @@
 #!/usr/bin/env python3
-"""veyqctl — install, run, upgrade and back up a veyq instance from its releases: on Docker Compose (ADR 0096), or as
-veyq's half of an Argo CD repository (ADR 0126).
+"""veyqctl — set up, run, upgrade and back up a veyq instance from its signed releases: on Docker Compose (ADR 0096),
+or through Argo CD on Kubernetes (ADR 0126), optionally with a new server beneath it (veyq-server).
 
     veyqctl [--home DIR | --instance NAME] [--source SRC] <command> …
 
-    init [--compose | --gitops DIR] [--name N] …     create an instance, list it and make it current (GitOps: below)
-    connect [--connect-name N] [--make-current yes]  the SSH host and kubeconfig context of a set-up server, again
-    tls production [--yes]                           GitOps: from Let's Encrypt staging to production
-    instances | use NAME                             the instances listed in ~/.config/veyq, and which is current
-    install [--set KEY=VALUE …] [--unsigned-local]   fetch the release VEYQ_RELEASE selects, verify it, write .env, up
-    start | stop | status                            the stack, addressed by the project the recipe names
-    logs [-f] [--tail N] [SERVICE …]                 its logs
-    verify [--release SEL] [--unsigned-local]        the signatures of the selected release, and nothing else
-    check [--release SEL] [--unsigned-local]         which release `upgrade` would take, and a newer major beyond it
-    upgrade --key-into FILE [--objects-to P] [--unsigned-local]   toward what VEYQ_RELEASE selects (decision 5's order)
-    backup --key-into FILE [--objects-to P]          the three legs, by the running release's `instance_backup.py`
-    backup prune                                     every capture under backups/ older than B (a daily timer's)
-    restore DIR --domain D (--key-from F | --without-key) [--objects-from P]   onto this instance, which holds no data
-    rollback DIR --key-from F [--yes]                back to the release a capture was taken under, in place
-    self-update                                      this file, replaced by the installed release's `veyqctl`
+    init                                             set up a new instance; asks everything first, then sets it up
+    connect [--connect-name N] [--make-current yes]  this computer's SSH tunnel and kubectl context, again
+    tls production [--yes]                           GitOps: from Let's Encrypt's test certificates to real ones
+    instances | use NAME                             your instances, and which one is current
+    install [--set KEY=VALUE …] [--unsigned-local]   Compose: download, verify and start what VEYQ_RELEASE selects
+    start | stop | status | logs                     Compose: the running stack
+    verify | check [--release SEL]                   the selected release's signatures; what `upgrade` would take
+    upgrade [--key-into FILE] [--push]               Compose: back up, then switch; GitOps: a commit
+    backup [prune] --key-into FILE                   Compose: the database, the store's index and the key
+    restore DIR --domain D --key-from F | rollback DIR --key-from F   Compose: from a backup
+    self-update                                      Compose: this file, replaced by the installed release's
 
-**Which instance** (ADR 0126 decision 2): `--home DIR` names one by its path; else `--instance NAME` one listed in
-`~/.config/veyq/instances.json` (`$XDG_CONFIG_HOME/veyq` if set), which `init` writes and `use` switches; else the
-current one there; else `/opt/veyq` — so a host with one Compose instance needs no list, and a run under `sudo`, whose
-home differs, still finds it. The TARGET is read from the instance, never given: a directory holding `veyqctl.json` is
-a GitOps instance, anything else a Compose home. `init` asks which to create (or takes `--compose` / `--gitops DIR`).
-
-**A GitOps instance** is a directory in a checkout of the repository an Argo CD syncs: `application.yaml` (the chart by
-digest, `oci://<registry>/<owner>/charts/veyq`), `values.yaml` (the three images by tag and digest, the domains, the
-gateway, the Secrets' names), `resources/` (the namespace, the backup gate's claim, the Secrets from the provider
-chosen — `sops` encrypted through the repository's `.sops.yaml`, `external-secrets` as ExternalSecrets on a named store,
-`sealed-secrets` through `kubeseal`, or `none`) and `veyqctl.json` (the selector, the provider, the running release and
-its four pins). `init --gitops DIR` checks the cluster against what veyq's half assumes (Argo CD, Gateway API v1.5+ and
-its class, a StorageClass, cert-manager 1.21+ for the chart's ACME issuer; `--no-cluster-check` skips it), resolves and
-verifies the release — its manifest, the three images (`images.tools` too), and the chart: the manifest does not name it,
-so its tag is resolved to a digest at the registry (`Host.oci_digest`), that digest verified under the release identity,
-and its Chart.yaml version read back (`helm show chart`) — renders the chart with the values (`helm template`), and only
-then writes the directory. Every value is generated once: under `sops` encrypted into the repository, under every other
-provider handed over once in `~/.config/veyq/<name>.secrets.json` (0600, never overwritten); a directory that is not
-empty is refused, so nothing is generated twice — unless this checkout's `init` wrote it: every question comes before
-the first step (the answers that decide the programs, the programs — waited for, never installed — then the rest), every
-answer is kept in the repository's `veyq-setup.json` and every step done in `~/.config/veyq/init-<hash>.json` the moment
-it exists (class `Progress`), and the same command continues there, reusing what it handed over — and a veyq half
-written by hand is refused too: for one, the operator writes `veyqctl.json` beside it (the Run page's *A veyq half that
-exists already*). **With the server set up too** (`--server yes`, offered in an empty repository; ADR 0126 decision 6),
-`init` asks the server's questions as well, verifies veyq-server's newest release (its manifest under veyq-server's
-release workflow, the commit it names checked out and its tree's sha256 compared), renders it with Copier, encrypts the
-server's secrets (the admin password, Argo CD's deploy key) once, pins the host key on confirmation, writes veyq's half
-into `gitops/apps/veyq`, enters the deploy key with `gh` when allowed (else shows it and waits), waits for the DNS
-records, commits and pushes on confirmation, runs the bootstrap playbook on confirmation (not when the admin user logs
-in already), connects this machine (`connect`) and waits until Argo CD reports everything Synced and Healthy. `verify` and `check` work as under Compose;
-`check` also names drift (a pin the files no longer hold), whether the pins `veyqctl.json` records are the running
-release's as it was signed, and whether the Secrets exist with every key. `upgrade` resolves as decision 5 step 1 does,
-refuses drift, uncommitted changes and a running release whose pins do not verify — it stands on that release — then
-verifies the new one, rewrites each pin it finds
-exactly once and the three tags, renders, then commits its three files alone (`--push` pushes). Nothing else: Argo CD
-applies the commit, and the chart's backup gate captures before the new release migrates (ADR 0098). The Compose
-lifecycle verbs refuse on a GitOps instance, each naming what does its job there.
+`veyqctl <command> --help` has every flag.
 
 One file, Python 3.9 and the standard library only, because an operator fetches it with `curl` onto a host that
 already needs `python3` for backups: no `pip`, no virtualenv (ADR 0096 decision 2). It manages the instance's
-lifecycle on the HOST and holds no Admin API credential — administration stays in admin-web (decision 1).
+lifecycle on the HOST and holds no Admin API credential — administration stays in admin-web (decision 1). Every
+program it starts goes through `Host`, the seam the self-test replaces, and nothing unverified is pulled, written or
+started. Its parts, in the order of the file — each says what it does at the head of its section:
 
-**An instance lives in `--home`** (default `/opt/veyq`, decision 6):
+    constants, Refused, Host        what every command shares; the identity constants scripts/ guards read by name
+    sources, which release, plan    where releases come from; what a selector means against what runs
+    programs, verification          the programs a command needs; cosign over the manifest and every image
+    .env, the instance              Compose's home: `.env` from the template, `docker compose` aimed at it
+    backup tool, upgrade, restore   Compose's lifecycle, in ADR 0096 decision 5's order
+    instances                       which instance a command acts on
+    the GitOps target               veyq's files in an Argo CD repository: the texts, verified pins, render
+    the server path                 veyq-server verified and rendered, the host key, the bootstrap, connect
+    init                            every question (Q) before the first step, kept in veyq-setup.json (InitRun)
+    the GitOps verbs                verify, check, upgrade and tls on a GitOps instance
+    the targets, main               Target: one set of verbs, each target doing its own or refusing
 
-    .env                   0600, the instance's values, written from the running release's `env.example`
-    compose.override.yml   optional: the operator's own Compose overlay, laid over the recipe on every command
-    state.json             the running release, the Compose project it runs as, the source, how it was verified
-    releases/<release>/    that release's assets, each checked against the sha256 its manifest names
-    backups/               the captures an upgrade or `backup` takes: the database and the store's index each
+What proves it — a host tool, not a coverage surface (ADR 0040): `src/tools/veyqctl_selftest.py`, without Docker or
+a cluster, drives every command and every refusal against stand-ins for each program it starts; `cosign verify-blob`
+in the exact form it runs verified cosign's own signed release files (cr-signed-release-manifest) and veyq's releases
+since 1.0 (the live GitOps runs of 2026-11-10); the live runs of cr-veyqctl installed, upgraded and restored an
+instance from a mirror; and the stack lane (`scripts/run_stack_e2e.py`, ADR 0090) installs every candidate it boots
+with this file's `install --unsigned-local`.
 
-Every Compose command is `docker compose -p <project> -f releases/<release>/docker-compose.prod.yml
-[-f compose.override.yml] --env-file .env`: the override file is Compose's own extension point, so an operator's
-additions (a port, a network, a CA) survive an upgrade instead of being edited into a recipe the next release
-replaces. `.env` keeps every key the template does not name, for the same reason. The project is what Compose names
-at `install` — the recipe's `name:`, or a `COMPOSE_PROJECT_NAME` in `.env` — recorded in `state.json` and passed by
-name from then on; a `COMPOSE_*` variable in the operator's shell is dropped from every command veyqctl runs, and
-every command runs in the home, so neither a shell variable nor a compose file in the current directory can point
-it at another stack.
-
-**A release is the source's three answers** — which releases exist, what one's manifest says, give me one asset — and
-three sources answer them the same way: the GitHub Releases of `raddatzk/veyq` (the default), an HTTP mirror and a
-local directory, both in the mirror layout `scripts/release_assets.py` produces (`releases.json`, `<tag>/<asset>`).
-Every source is verified the same way (below), so choosing a mirror is a decision about availability and freshness,
-never about what a release contains (decision 7). Prereleases are never installed, and an asset name with a directory
-in it (`../`) is refused: a release's assets are flat names, by construction of the producer.
-
-**`VEYQ_RELEASE` in `.env` selects the release** (decision 4): `<major>.<minor>` pins one, `<major>` takes the newest
-of that major, `latest` the newest of all. `install` takes it from `--set VEYQ_RELEASE=…`, else `latest`, and writes
-it into `.env`. `upgrade` (and `check`, which says what `upgrade` would take) enters a major only from the release that
-major's release names as its entry (decision 5 step 1, `upgrade_target`): `majorEntry` in its signed manifest, the
-newest release of the previous major when it was cut — the one its upgrade proof ran from (ADR 0085 decision 10) — and
-never more than the next major per run. So `latest` from 1.3, with 2.5 entered from 1.9, goes to 1.9, and from 1.9
-with 3.1 listed to the newest of major 2; a pin inside the next major is reached directly from its entry. A fix release
-of the old major cut after it (1.10) is no way in: 2.5 was never proved from it, and from 1.10 only a later release of
-major 2 (entered from 1.10) is taken, else the upgrade is refused. A next major with no release (only prereleases, or a
-mirror that lacks it) is refused, since going past it would cross two. Reading an entry fetches and verifies that
-release's manifest, so `check` verifies too.
-
-**Nothing unverified is pulled or started** (ADR 0057). First the manifest: the publish signs it with `cosign
-sign-blob` into `manifest.json.bundle`, an asset beside it, and `fetch_manifest` — the one entry that reads a manifest
-from a source — runs the host's `cosign verify-blob` on the manifest's exact bytes against that bundle and the one
-identity that releases veyq (GitHub's OIDC issuer and `release.yml` of `raddatzk/veyq` on `main` or a
-`release/<major>.x` branch — the promotion's workflow, never `publish.yml`, whose signature only says "snapshot" (ADR 0091
-decision 5) — the identity the Run area's *Verify a release* page documents, and `scripts/validate_release_identity.py`
-assertion 7 holds both to what signs) BEFORE a single field of it is read — so no sha256 and no digest in it is
-trusted unless veyq's release signed it, whether it came from GitHub, a mirror or a directory. A missing bundle is
-refused, and so is a cosign older than `COSIGN_MIN_VERSION` (3.1.3: every cosign up to 3.1.2 accepts a forged
-legacy-format bundle without checking its identity, GHSA-fx35-mq7g-6g98). Then the images: the manifest names both by
-`tag@digest`, and each is checked with `cosign verify` against the same identity, before a single image is pulled.
-`--unsigned-local` is the one way past both, for a release produced from a local `docker build`: no bundle is fetched
-and it is refused unless BOTH image references are a bare `name:tag` with no registry host and no digest, refused for
-an image that is not on this host (a bare name would otherwise be pulled from Docker Hub's `library/`), and every line
-the run prints says that nothing was verified.
-
-**`.env` from the template.** `install` copies the release's `.env` template (`env.example`: the tree's
-`infra/docker/.env.example`, published without the leading period a GitHub Release asset cannot keep) line by line: the four
-secrets it knows are generated, the two image lines come from the manifest, and every other value the template assigns is the
-operator's — given with `--set KEY=VALUE`, or asked for at a terminal, the template's value shown as the example;
-without a terminal a missing one is refused, named. A `--set` key the template does not assign is kept below it.
-Written `0600`, in a home created `0700`.
-
-**`upgrade` runs only by hand, in ADR 0096 decision 5's order, and nothing stops before step 4:**
-  1. resolve the release `.env`'s `VEYQ_RELEASE` selects; nothing to do when it is the running one, refused when it is
-     an older one (there is no downgrade: going back is restoring a backup, ADR 0056 §6); one beyond the running
-     major is entered from its predecessor's last release, one major per run (above), and a run that stops on the way
-     ends by saying that the next `upgrade` enters the next major;
-  2. verify its manifest, then both images (as `install` does), then fetch its assets into `releases/<release>/`;
-  3. fill the new template from `.env` (`upgrade_values`): the image lines are the new release's, a key `.env` has
-     keeps its value, a secret veyqctl knows how to make is made — and every other key the new template assigns, and
-     every `${VAR:?…}` the new recipe or the override leaves unset, is refused, named; the result is staged as
-     `.env.next` and Compose itself checks it (`config --quiet`);
-  4. with an object pool named, copy the store's objects into it while the app still runs (`copy-objects`; a failure
-     stops nothing); stop the app (the capture is cold, ADR 0056 §2: the database and the store keep running), back up
-     the three legs into `backups/<stamp>-before-<release>/` — the database and the store's index, the pool topped up
-     with what arrived since and pruned to its kept captures — and check the capture, then switch `.env` and the
-     recipe, `up`, and wait until healthy. A failed backup switches nothing and starts the running release again.
-     `--key-into` is required and refused before anything else runs.
-The previous release's directory stays, so the diff and the way back are both on disk.
-
-**`backup` and `restore` are the running release's own `instance_backup.py`** — shipped beside `veyqctl` as an asset,
-checked against its manifest's sha256 before it runs — so the tool that captured is the tool its release documents.
-veyqctl gives it what the operator gave it by hand: the database password, the bundled store's endpoint and admin
-token (read from the instance's interpolated recipe, so through the environment, never an argv), the store's network,
-and Compose pointed at THIS instance (`COMPOSE_PROJECT_NAME`, `COMPOSE_ENV_FILES`). A store of the operator's own
-(`VEYQ_BACKUP_STORE_*` in the shell) passes through, as the tool documents. Where `compose.override.yml` leaves the
-bundled store out (no `garage` in the composed recipe, ADR 0064), that shell pair is the only one: the rclone container
-runs on Docker's default network, no bundled pair is passed, and a run that reaches the store is refused before
-anything stops while `VEYQ_BACKUP_STORE_ENDPOINT` / `_ACCESS_KEY` / `_SECRET_KEY` are not set. Leg (c) lives on a volume under Docker's
-data root, which a host cannot always read (Docker Desktop keeps it in a VM) and which needs root where it can: so the
-key comes out of the stopped app container with `docker cp`, into a `0700` directory in the home for as long as the
-tool needs it, and a restored key goes back in through a one-off container of the `app` service running as the
-image's own user — born the application's, `0600`, without root (the alternative `instance_backup.py`'s own refusal
-names). `--key-into` is required for `backup` and `upgrade`, and refused when it exists or lies inside `backups/`.
-
-**A capture holds the database and the store's index, not the objects** (ADR 0056 §3). The objects stay in the store;
-an **object pool** keeps copies only when one is named — `.env`'s `VEYQ_BACKUP_OBJECTS_TO` (an absolute directory, never
-inside `releases/`, or `s3:<bucket>[/<prefix>]` with `VEYQ_BACKUP_POOL_*` beside it, which reach the tool through its
-environment), or `--objects-to` for one run of `backup` or `upgrade`. With a pool, both run the tool's `copy-objects`
-before the app stops, so the cold top-up is short, and the capture with `--objects-to`. `restore` writes objects only
-when told where from (`--objects-from`, never implied by `.env`): without it the tool checks every object the rows
-require in the live store and writes none — the way back from an upgrade; with it, onto a fresh instance's empty store.
-`status`, and `install` at its end, warn while the store in use (the tool's `store-in-use`) is the bundled one — or none
-yet — and no pool is named: Garage keeps no object versions, so a lost store volume loses every object whatever
-`backups/` holds. The warning never changes an exit code.
-
-**Every capture is kept at most B days** (ADR 0056 decision 8): B is the instance setting the Server Owner sets in
-admin-web or with `veyq-admin backup-retention set` (30 until set), and the running release's tool reads it from the
-database (`instance_backup.py prune`, 30 when it cannot). `backup`, `upgrade` and `start` prune every capture under
-`backups/` older than B, the newest included; `backup prune` does only that, for the daily timer the Run page gives; and
-`status` warns while no capture younger than B is there (the tool's `retention`), never changing its exit code. A copy
-moved off the host is the operator's to delete by B.
-
-**The erasure ledger travels with leg (c)** (ADR 0056 decision 8): `erasures.log`, beside the key in the app's volume,
-which no restore touches. `restore` and `rollback` read it out of that volume through a one-off container of the `app`
-service — as they put the key in — and hand it to the tool (`--erasures`, `verify --against-store` too), so an object
-erased after the capture reads as erased, not missing; with none there the check runs as before and the tool says so. The
-application re-applies the ledger itself at its next start, before it serves.
-
-**`rollback` is in place** (ADR 0096, the owner's O1 (a) of 2026-10-17): after a failed upgrade, the capture it began
-with holds the database and the index, and its objects are still in this instance's store, which an upgrade never
-rewrites. So `rollback <capture> --key-from F` refuses unless the capture's release is still in `releases/` and the
-capture verifies against the live store, and asks before it empties the database (`--yes` without a terminal); then it
-stops the app, empties the database (the tool's `empty-database`), switches `.env`'s image lines and `state.json` back to
-that release (`upgrade_values` over its template), starts it once so it migrates the empty schema, stops it, restores
-with the check only, places the key and starts. The store is never written; objects uploaded under the failed release
-stay as orphans with no reclaim row, which the app's bucket reconcile counts and — after its grace, once the Server Owner
-confirms the bucket again (the restore emptied that confirmation) — puts on the reclaim list (ADR 0062).
-
-**`self-update`** replaces this file with the installed release's `veyqctl` after checking it against that release's
-manifest — and, because it replaces the verifier itself, it first verifies that manifest on disk against the
-`manifest.json.bundle` kept beside it, with the same `cosign verify-blob`; a manifest edited in the home, or one whose
-bundle is gone, is refused and nothing is replaced. A release installed `--unsigned-local` has no bundle, and
-`self-update` says it is NOT VERIFIED. `veyqctl.bundle`, the publish's signature of `veyqctl` alone, is for the copy an
-operator fetches by hand, before any manifest is checked; `install` and `upgrade` do not fetch it, since the signed
-manifest binds `veyqctl` by its sha256 like every other asset.
-
-**What proves it** — it is a host tool, not a coverage surface (ADR 0040; the use-case
-`uc.admin.install-and-upgrade-instance` stays `planned` for that reason): `src/tools/veyqctl_selftest.py`, without
-Docker, holds the resolver, the manifest's signature and parse, the template merge, `upgrade`'s order and every
-refusal, with a stand-in for cosign; `cosign verify-blob` in the exact form it runs was run against cosign's own
-signed release files (cr-signed-release-manifest), never against a veyq release, none being published; the live
-runs of cr-veyqctl installed, stopped and started an instance from a mirror directory with images built from the tree,
-upgraded it from one commit's release to the next with a Memory in it, and restored the upgrade's backup onto a fresh
-install; and the stack lane (`scripts/run_stack_e2e.py`, ADR 0090) installs every candidate it boots with this file's
-`install --unsigned-local`, its overlay as the override file — `install`, the override and `.env` from the template,
-on every run (`start`, `stop`, `upgrade`, `backup` and `restore` are not on that path).
-
-Its limits: on Kubernetes it writes an Argo CD repository and starts nothing (ADR 0126; ADR 0096 decision 8 is replaced),
-and the cluster it sets up with the server is veyq-server's (ADR 0126 decision 6); the source still decides
-WHICH releases exist — `releases.json` and the GitHub listing are unsigned, so a mirror can withhold a newer release or
-keep serving an older signed one (a freeze; `upgrade` refuses to go below the running release, and nothing here
-proves freshness), though it can no longer serve a forged one; `backup` and `restore` check the release's
-`instance_backup.py` against the manifest on disk, verified when it was fetched, and do not verify it again (cosign,
-and perhaps the network, during a disaster restore would be a new dependency); it does not check that the Docker it
-talks to is the host's own; and an instance that was never set up has no tenant, so the backup tool refuses it and
-`upgrade` with it — such an instance is reinstalled.
+Its limits: the source still decides WHICH releases exist — `releases.json` and the GitHub listing are unsigned, so a
+mirror can withhold a newer release or keep serving an older signed one (a freeze; `upgrade` refuses to go below the
+running release, nothing here proves freshness), though it cannot serve a forged one; `backup` and `restore` check
+the release's `instance_backup.py` against the manifest on disk and do not verify it again (cosign, and perhaps the
+network, during a disaster restore would be a new dependency); it does not check that the Docker it talks to is the
+host's own; an instance that was never set up has no tenant, so the backup tool refuses it and `upgrade` with it.
 """
 from __future__ import annotations  # `str | None` below — the repo's scripts run on Python 3.9
 
@@ -520,6 +353,14 @@ class Host:
 
 # ---- sources: which releases exist, a manifest, an asset -------------------------------------------------------
 
+# A release is the source's three answers — which releases exist, what one's manifest says, give me one asset — and
+# three sources answer them the same way: the GitHub Releases of `raddatzk/veyq` (the default), an HTTP mirror and a
+# local directory, both in the mirror layout `scripts/release_assets.py` produces (`releases.json`, `<tag>/<asset>`).
+# Every source is verified the same way (below), so choosing a mirror is a decision about availability and freshness,
+# never about what a release contains (decision 7). Prereleases are never installed, and an asset name with a
+# directory in it (`../`) is refused: a release's assets are flat names, by construction of the producer.
+
+
 class Listed(NamedTuple):
     tag: str
     major: int
@@ -674,6 +515,19 @@ def open_source(spec: str | None) -> Source:
 
 
 # ---- which release ---------------------------------------------------------------------------------------------
+
+# `VEYQ_RELEASE` in `.env` selects the release (decision 4): `<major>.<minor>` pins one, `<major>` takes the newest of
+# that major, `latest` the newest of all. `install` takes it from `--set VEYQ_RELEASE=…`, else `latest`, and writes it
+# into `.env`. `upgrade` (and `check`, which says what `upgrade` would take) enters a major only from the release that
+# major's release names as its entry (decision 5 step 1, `upgrade_target`): `majorEntry` in its signed manifest, the
+# newest release of the previous major when it was cut — the one its upgrade proof ran from (ADR 0085 decision 10) —
+# and never more than the next major per run. So `latest` from 1.3, with 2.5 entered from 1.9, goes to 1.9, and from
+# 1.9 with 3.1 listed to the newest of major 2; a pin inside the next major is reached directly from its entry. A fix
+# release of the old major cut after it (1.10) is no way in: 2.5 was never proved from it, and from 1.10 only a later
+# release of major 2 (entered from 1.10) is taken, else the upgrade is refused. A next major with no release (only
+# prereleases, or a mirror that lacks it) is refused, since going past it would cross two. Reading an entry fetches
+# and verifies that release's manifest, so `check` verifies too.
+
 
 def check_selector(selector: str) -> str:
     if not SELECTOR.match(selector or ""):
@@ -976,6 +830,23 @@ def require_programs(host: Host, names: Iterable[str], what: str, wait: bool = F
 
 # ---- verification ---------------------------------------------------------------------------------------------
 
+# Nothing unverified is pulled or started (ADR 0057). First the manifest: the publish signs it with `cosign sign-blob`
+# into `manifest.json.bundle`, an asset beside it, and `fetch_manifest` — the one entry that reads a manifest from a
+# source — runs the host's `cosign verify-blob` on the manifest's exact bytes against that bundle and the one identity
+# that releases veyq (GitHub's OIDC issuer and `release.yml` of `raddatzk/veyq` on `main` or a `release/<major>.x`
+# branch — the promotion's workflow, never `publish.yml`, whose signature only says "snapshot" (ADR 0091 decision 5) —
+# the identity the Run area's *Verify a release* page documents, and `scripts/validate_release_identity.py` assertion
+# 7 holds both to what signs) BEFORE a single field of it is read — so no sha256 and no digest in it is trusted unless
+# veyq's release signed it, whether it came from GitHub, a mirror or a directory. A missing bundle is refused, and so
+# is a cosign older than `COSIGN_MIN_VERSION` (3.1.3: every cosign up to 3.1.2 accepts a forged legacy-format bundle
+# without checking its identity, GHSA-fx35-mq7g-6g98). Then the images: the manifest names both by `tag@digest`, and
+# each is checked with `cosign verify` against the same identity, before a single image is pulled. `--unsigned-local`
+# is the one way past both, for a release produced from a local `docker build`: no bundle is fetched and it is refused
+# unless BOTH image references are a bare `name:tag` with no registry host and no digest, refused for an image that is
+# not on this host (a bare name would otherwise be pulled from Docker Hub's `library/`), and every line the run prints
+# says that nothing was verified.
+
+
 def require_cosign(host: Host) -> str:
     cosign = host.which("cosign")
     if not cosign:
@@ -1117,6 +988,14 @@ def read_release_manifest(home: Path, release: str) -> Manifest:
 
 # ---- .env ------------------------------------------------------------------------------------------------------
 
+# `.env` from the template. `install` copies the release's `.env` template (`env.example`: the tree's
+# `infra/docker/.env.example`, published without the leading period a GitHub Release asset cannot keep) line by line:
+# the four secrets it knows are generated, the two image lines come from the manifest, and every other value the
+# template assigns is the operator's — given with `--set KEY=VALUE`, or asked for at a terminal, the template's value
+# shown as the example; without a terminal a missing one is refused, named. A `--set` key the template does not assign
+# is kept below it. Written `0600`, in a home created `0700`.
+
+
 def env_values(text: str) -> dict[str, str]:
     """`KEY=value` lines, in order; a later one wins, as Compose reads it."""
     values: dict[str, str] = {}
@@ -1229,6 +1108,24 @@ def write_private(path: Path, text: str) -> None:
 
 
 # ---- the instance ----------------------------------------------------------------------------------------------
+
+# An instance lives in `--home` (default `/opt/veyq`, decision 6):
+#
+#     .env                   0600, the instance's values, written from the running release's `env.example`
+#     compose.override.yml   optional: the operator's own Compose overlay, laid over the recipe on every command
+#     state.json             the running release, the Compose project it runs as, the source, how it was verified
+#     releases/<release>/    that release's assets, each checked against the sha256 its manifest names
+#     backups/               the captures an upgrade or `backup` takes: the database and the store's index each
+#
+# Every Compose command is `docker compose -p <project> -f releases/<release>/docker-compose.prod.yml [-f
+# compose.override.yml] --env-file .env`: the override file is Compose's own extension point, so an operator's
+# additions (a port, a network, a CA) survive an upgrade instead of being edited into a recipe the next release
+# replaces. `.env` keeps every key the template does not name, for the same reason. The project is what Compose names
+# at `install` — the recipe's `name:`, or a `COMPOSE_PROJECT_NAME` in `.env` — recorded in `state.json` and passed by
+# name from then on; a `COMPOSE_*` variable in the operator's shell is dropped from every command veyqctl runs, and
+# every command runs in the home, so neither a shell variable nor a compose file in the current directory can point it
+# at another stack.
+
 
 class State(NamedTuple):
     release: str
@@ -1486,6 +1383,47 @@ def cmd_check(args: argparse.Namespace, host: Host) -> int:
 
 
 # ---- the running release's backup tool (ADR 0056) -------------------------------------------------------------
+
+# `backup` and `restore` are the running release's own `instance_backup.py` — shipped beside `veyqctl` as an asset,
+# checked against its manifest's sha256 before it runs — so the tool that captured is the tool its release documents.
+# veyqctl gives it what the operator gave it by hand: the database password, the bundled store's endpoint and admin
+# token (read from the instance's interpolated recipe, so through the environment, never an argv), the store's
+# network, and Compose pointed at THIS instance (`COMPOSE_PROJECT_NAME`, `COMPOSE_ENV_FILES`). A store of the
+# operator's own (`VEYQ_BACKUP_STORE_*` in the shell) passes through, as the tool documents. Where
+# `compose.override.yml` leaves the bundled store out (no `garage` in the composed recipe, ADR 0064), that shell pair
+# is the only one: the rclone container runs on Docker's default network, no bundled pair is passed, and a run that
+# reaches the store is refused before anything stops while `VEYQ_BACKUP_STORE_ENDPOINT` / `_ACCESS_KEY` /
+# `_SECRET_KEY` are not set. Leg (c) lives on a volume under Docker's data root, which a host cannot always read
+# (Docker Desktop keeps it in a VM) and which needs root where it can: so the key comes out of the stopped app
+# container with `docker cp`, into a `0700` directory in the home for as long as the tool needs it, and a restored key
+# goes back in through a one-off container of the `app` service running as the image's own user — born the
+# application's, `0600`, without root (the alternative `instance_backup.py`'s own refusal names). `--key-into` is
+# required for `backup` and `upgrade`, and refused when it exists or lies inside `backups/`.
+#
+# A capture holds the database and the store's index, not the objects (ADR 0056 §3). The objects stay in the store; an
+# object pool keeps copies only when one is named — `.env`'s `VEYQ_BACKUP_OBJECTS_TO` (an absolute directory, never
+# inside `releases/`, or `s3:<bucket>[/<prefix>]` with `VEYQ_BACKUP_POOL_*` beside it, which reach the tool through
+# its environment), or `--objects-to` for one run of `backup` or `upgrade`. With a pool, both run the tool's `copy-
+# objects` before the app stops, so the cold top-up is short, and the capture with `--objects-to`. `restore` writes
+# objects only when told where from (`--objects-from`, never implied by `.env`): without it the tool checks every
+# object the rows require in the live store and writes none — the way back from an upgrade; with it, onto a fresh
+# instance's empty store. `status`, and `install` at its end, warn while the store in use (the tool's `store-in-use`)
+# is the bundled one — or none yet — and no pool is named: Garage keeps no object versions, so a lost store volume
+# loses every object whatever `backups/` holds. The warning never changes an exit code.
+#
+# Every capture is kept at most B days (ADR 0056 decision 8): B is the instance setting the Server Owner sets in
+# admin-web or with `veyq-admin backup-retention set` (30 until set), and the running release's tool reads it from the
+# database (`instance_backup.py prune`, 30 when it cannot). `backup`, `upgrade` and `start` prune every capture under
+# `backups/` older than B, the newest included; `backup prune` does only that, for the daily timer the Run page gives;
+# and `status` warns while no capture younger than B is there (the tool's `retention`), never changing its exit code.
+# A copy moved off the host is the operator's to delete by B.
+#
+# The erasure ledger travels with leg (c) (ADR 0056 decision 8): `erasures.log`, beside the key in the app's volume,
+# which no restore touches. `restore` and `rollback` read it out of that volume through a one-off container of the
+# `app` service — as they put the key in — and hand it to the tool (`--erasures`, `verify --against-store` too), so an
+# object erased after the capture reads as erased, not missing; with none there the check runs as before and the tool
+# says so. The application re-applies the ledger itself at its next start, before it serves.
+
 
 class Facts(NamedTuple):
     """What the backup tool needs, read from the instance's own interpolated recipe — never from key names here."""
@@ -1787,6 +1725,25 @@ def read_ledger(host: Host, home: Path, state: State, key_path: str, into: Path)
 
 # ---- upgrade (ADR 0096 decision 5) ------------------------------------------------------------------------------
 
+# `upgrade` runs only by hand, in ADR 0096 decision 5's order, and nothing stops before step 4:
+#   1. resolve the release `.env`'s `VEYQ_RELEASE` selects; nothing to do when it is the running one, refused when
+#      it is an older one (there is no downgrade: going back is restoring a backup, ADR 0056 §6); one beyond the
+#      running major is entered from its predecessor's last release, one major per run (above), and a run that stops
+#      on the way ends by saying that the next `upgrade` enters the next major;
+#   2. verify its manifest, then both images (as `install` does), then fetch its assets into `releases/<release>/`;
+#   3. fill the new template from `.env` (`upgrade_values`): the image lines are the new release's, a key `.env` has
+#      keeps its value, a secret veyqctl knows how to make is made — and every other key the new template assigns,
+#      and every `${VAR:?…}` the new recipe or the override leaves unset, is refused, named; the result is staged as
+#      `.env.next` and Compose itself checks it (`config --quiet`);
+#   4. with an object pool named, copy the store's objects into it while the app still runs (`copy-objects`; a
+#      failure stops nothing); stop the app (the capture is cold, ADR 0056 §2: the database and the store keep
+#      running), back up the three legs into `backups/<stamp>-before-<release>/` — the database and the store's
+#      index, the pool topped up with what arrived since and pruned to its kept captures — and check the capture,
+#      then switch `.env` and the recipe, `up`, and wait until healthy. A failed backup switches nothing and starts
+#      the running release again. `--key-into` is required and refused before anything else runs. The previous
+#      release's directory stays, so the diff and the way back are both on disk.
+
+
 def upgrade_values(template: str, manifest: Manifest, old: dict[str, str]) -> tuple[dict[str, str], list[str]]:
     """The next `.env`: the new template, filled from the running one — and what only the operator can give.
 
@@ -1899,6 +1856,26 @@ def cmd_upgrade(args: argparse.Namespace, host: Host) -> int:
 
 
 # ---- backup, restore, self-update ---------------------------------------------------------------------------------
+
+# `rollback` is in place (ADR 0096, the owner's O1 (a) of 2026-10-17): after a failed upgrade, the capture it began
+# with holds the database and the index, and its objects are still in this instance's store, which an upgrade never
+# rewrites. So `rollback <capture> --key-from F` refuses unless the capture's release is still in `releases/` and the
+# capture verifies against the live store, and asks before it empties the database (`--yes` without a terminal); then
+# it stops the app, empties the database (the tool's `empty-database`), switches `.env`'s image lines and `state.json`
+# back to that release (`upgrade_values` over its template), starts it once so it migrates the empty schema, stops it,
+# restores with the check only, places the key and starts. The store is never written; objects uploaded under the
+# failed release stay as orphans with no reclaim row, which the app's bucket reconcile counts and — after its grace,
+# once the Server Owner confirms the bucket again (the restore emptied that confirmation) — puts on the reclaim list
+# (ADR 0062).
+#
+# `self-update` replaces this file with the installed release's `veyqctl` after checking it against that release's
+# manifest — and, because it replaces the verifier itself, it first verifies that manifest on disk against the
+# `manifest.json.bundle` kept beside it, with the same `cosign verify-blob`; a manifest edited in the home, or one
+# whose bundle is gone, is refused and nothing is replaced. A release installed `--unsigned-local` has no bundle, and
+# `self-update` says it is NOT VERIFIED. `veyqctl.bundle`, the publish's signature of `veyqctl` alone, is for the copy
+# an operator fetches by hand, before any manifest is checked; `install` and `upgrade` do not fetch it, since the
+# signed manifest binds `veyqctl` by its sha256 like every other asset.
+
 
 def cmd_backup(args: argparse.Namespace, host: Host) -> int:
     home = Path(args.home)
@@ -2103,6 +2080,14 @@ def cmd_self_update(args: argparse.Namespace, host: Host) -> int:
 
 # ---- instances: which one a command acts on (ADR 0126 decision 2) ----------------------------------------------
 
+# Which instance (ADR 0126 decision 2): `--home DIR` names one by its path; else `--instance NAME` one listed in
+# `~/.config/veyq/instances.json` (`$XDG_CONFIG_HOME/veyq` if set), which `init` writes and `use` switches; else the
+# current one there; else `/opt/veyq` — so a host with one Compose instance needs no list, and a run under `sudo`,
+# whose home differs, still finds it. The TARGET is read from the instance, never given: a directory holding
+# `veyqctl.json` is a GitOps instance, anything else a Compose home. `init` asks which to create (or takes `--compose`
+# / `--gitops DIR`).
+
+
 GITOPS_FILE = "veyqctl.json"  # a GitOps instance's own file: target, selector, secrets provider, paths, pins
 REGISTRY_FILE = "instances.json"  # in config_dir(): the instances a user manages, and which is current
 INSTANCE_NAME = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,62}$")
@@ -2198,6 +2183,22 @@ def cmd_use(args: argparse.Namespace, host: Host) -> int:
 
 
 # ---- the GitOps target: veyq's half of an Argo CD repository (ADR 0126 decisions 3-5 and 7) ---------------------
+
+# A GitOps instance is a directory in a checkout of the repository an Argo CD syncs: `application.yaml` (the chart by
+# digest), `values.yaml` (the three images by tag and digest, the domains, the gateway, the Secrets' names),
+# `resources/` (the namespace, the backup gate's claim, the two Secrets from the chosen provider: `sops`, `external-
+# secrets`, `sealed-secrets` or `none`) and `veyqctl.json` (the selector, the provider, the running release and its
+# four pins). The chart is not named by a release's manifest: its tag is resolved to a digest at the registry
+# (`Host.oci_digest`), that digest verified under the release identity, and its Chart.yaml version read back. Every
+# generated value is made once: encrypted into the repository under `sops`, else handed over once in
+# `~/.config/veyq/<name>.secrets.json` (0600, never overwritten). A directory with files `init` did not write is
+# refused; files written by hand are taken over by writing `veyqctl.json` beside them (the Run page's *A veyq half
+# that exists already*). `check` also names drift (a pin the files no longer hold), whether the recorded pins are the
+# running release's as signed, and whether the Secrets exist with every key; `upgrade` refuses drift, uncommitted
+# changes and a running release whose pins do not verify, then verifies the new release, rewrites each pin found
+# exactly once and the three tags, renders, and commits its three files alone (`--push` pushes). Argo CD applies the
+# commit; the chart's backup gate captures before the new release migrates (ADR 0098).
+
 
 PROVIDERS = ("sops", "external-secrets", "sealed-secrets", "none")
 # Let's Encrypt's two ACME directories (the chart's gateway.tls.acme.server): staging's certificates are not
