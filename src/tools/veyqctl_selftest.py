@@ -1928,6 +1928,9 @@ def test_gitops_init(tmp: pathlib.Path) -> None:
           setup["veyq"]["apps/veyq"].get("domain") == "veyq.example.org"
           and setup["veyq"]["apps/veyq"].get("secrets") == "external-secrets"
           and not any(k in json.dumps(setup) for k in ("mariadbPassword", "rpcSecret")), json.dumps(setup))
+    check("init --gitops with external-secrets keeps the store's kind and the key prefix, which only it uses",
+          setup["veyq"]["apps/veyq"].get("secret_store_kind") == "ClusterSecretStore"
+          and setup["veyq"]["apps/veyq"].get("remote_prefix") == "veyq-", json.dumps(setup["veyq"]))
     before = tree_text(top)
     rc, out = run_main(["--source", mirror, "init", "--gitops", d, *INIT, "--secrets", "none"], GitOpsHost(top=top, signed=signed))
     check("a second init into the written directory with an answer that differs is refused, naming it, and changes "
@@ -2124,6 +2127,24 @@ def test_init_resumes(tmp: pathlib.Path) -> None:
           rc == 0 and "domain: resume.example.org" in values and f"(from {vc.SETUP_FILE})" in out
           and "A previous run stopped here" in out and vc.read_registry()["instances"].get("resumed") == str(d.resolve())
           and not progress.path.exists(), out[-600:])
+    kept = json.loads((top / vc.SETUP_FILE).read_text())["veyq"]["apps/veyq"]
+    check("without external-secrets no store kind or key prefix is kept or shown, and a default kept is not "
+          "announced as taken from veyq-setup.json (raddatz.me, 2026-11-11)",
+          "secret_store_kind" not in kept and "remote_prefix" not in kept and "--secret-store-kind" not in out
+          and "--namespace: veyq " not in out and "--backup-size: " not in out, json.dumps(kept) + out[-300:])
+
+    # an earlier run's store flags in veyq-setup.json, on a run without external-secrets: dropped
+    top3 = tmp / "resume-stale"
+    top3.mkdir()
+    (top3 / vc.SETUP_FILE).write_text(json.dumps({"veyq": {"apps/veyq": {"secret_store_kind": "SecretStore",
+                                                                           "remote_prefix": "mine-"}}}))
+    rc, out = run_main(["--source", mirror, "init", "--gitops", top3 / "apps" / "veyq"],
+                       GitOpsHost(top=top3, signed=signed, answers=dict(answers, **{"instance name": "stale"})))
+    kept = json.loads((top3 / vc.SETUP_FILE).read_text())["veyq"]["apps/veyq"]
+    check("an earlier run's store kind and key prefix (not the defaults) are neither shown nor kept once the secrets "
+          "are not external-secrets", rc == 0 and "secret_store_kind" not in kept and "remote_prefix" not in kept
+          and kept.get("secrets") == "none" and "--secret-store-kind" not in out and "--remote-prefix" not in out,
+          json.dumps(kept) + out[-300:])
 
     # stopped after the values were handed over and the files written: the same values, the files not rewritten
     top2 = tmp / "resume2"

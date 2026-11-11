@@ -3401,6 +3401,19 @@ class Progress:
         value = {"veyq": self.answers, "server": self.server, "local": self.doc["local"]}[section].get(key)
         return value if isinstance(value, str) and value else None
 
+    def drop(self, section: str, *keys: str) -> None:
+        """Forget repository answers that no longer apply (veyq-setup.json written only when one was there)."""
+        kept = self.answers if section == "veyq" else self.server
+        if not any(k in kept for k in keys):
+            return
+        for k in keys:
+            kept.pop(k, None)
+        if section == "veyq":
+            self.setup["veyq"][self.rel] = kept
+        else:
+            self.setup["server"] = kept
+        atomic_write(self.setup_path, json.dumps(self.setup, indent=2, sort_keys=True) + "\n")
+
     def put(self, section: str, key: str, value: str) -> None:
         """Keep an answer the moment it is given: the repository's sections in veyq-setup.json, `local` here."""
         if section == "local":
@@ -3611,6 +3624,10 @@ SERVER_INTRO = """
 # veyq-setup.json like an answer and taken from it when not given, so a resumed or repeated run writes the same.
 SETTLED_FLAGS = ("namespace", "storage_class", "backup_size", "secret_store_kind", "remote_prefix",
                  "application_name", "argocd_namespace")
+# Those that mean something only with --secrets external-secrets: settled once the secrets answer is known, and kept
+# only then — a sops or a Secret-less instance neither records nor shows a store it has none of (raddatz.me,
+# 2026-11-11: "ClusterSecretStore" shown on a sops run, never asked).
+EXTERNAL_SECRETS_FLAGS = ("secret_store_kind", "remote_prefix")
 
 
 def init_defaults() -> dict:
@@ -3691,19 +3708,30 @@ class InitRun:
             print(f"   {shown}: {value}   (from {SETUP_FILE})", flush=True)
         return value
 
-    def settle(self) -> None:
-        """SETTLED_FLAGS: a flag given is kept; one left at its default takes what veyq-setup.json keeps."""
-        for key in SETTLED_FLAGS:
+    def settle(self, keys: Iterable[str] | None = None) -> None:
+        """SETTLED_FLAGS (or `keys` of them): a flag given is kept; one left at its default takes what veyq-setup.json
+        keeps, and says so only where that differs from the default — a default kept is no news."""
+        for key in (keys if keys is not None else [k for k in SETTLED_FLAGS if k not in EXTERNAL_SECRETS_FLAGS]):
             given, default = getattr(self.args, key), self.defaults[key]
             if given == default:
                 kept = self.progress.get("veyq", key)
                 if kept is not None:
                     given = (kept == "true") if isinstance(default, bool) else kept
                     setattr(self.args, key, given)
-                    print(f"   --{key.replace('_', '-')}: {kept}   (from {SETUP_FILE})", flush=True)
+                    shown_default = ("true" if default else "false") if isinstance(default, bool) else str(default)
+                    if str(kept) != shown_default:
+                        print(f"   --{key.replace('_', '-')}: {kept}   (from {SETUP_FILE})", flush=True)
             if given not in (None, ""):
                 self.progress.put("veyq", key, ("true" if given else "false") if isinstance(default, bool)
                                   else str(given))
+
+    def settle_secrets(self) -> None:
+        """The external-secrets flags, once the secrets answer is known: settled for external-secrets, else dropped
+        from veyq-setup.json where an earlier run kept them."""
+        if self.provider == "external-secrets":
+            self.settle(EXTERNAL_SECRETS_FLAGS)
+        else:
+            self.progress.drop("veyq", *EXTERNAL_SECRETS_FLAGS)
 
     def age_env(self) -> dict[str, str]:
         """The environment of a command that decrypts: the age key file this machine keeps for the repository."""
@@ -3849,6 +3877,7 @@ def ask_setup(run: InitRun) -> None:
     if run.provider == "sops" and not has_sops:
         raise Refused(f"--secrets sops needs a .sops.yaml (in {run.top} or above {run.directory}) that names your keys. "
                       f"{NOTHING_WRITTEN}")
+    run.settle_secrets()
 
 
 class ClusterView(NamedTuple):
