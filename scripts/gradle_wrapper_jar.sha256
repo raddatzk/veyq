@@ -15,4 +15,5 @@
 #
 # Format: `<gradle version> <sha256>`, one per line. A wrapper upgrade adds the new line; the old one may go once
 # no tracked JAR hashes to it.
+9.8.2 3b8a25775a69158b5ad2b1d17a80a88dc7b40a352a73eb27d06c612a7ce68e98
 9.9.0 621008afc4f5d59357fcf06ffa644dd5aade5e091bdc363742710445f73cdaf8
