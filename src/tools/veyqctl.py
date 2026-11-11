@@ -221,6 +221,7 @@ from __future__ import annotations  # `str | None` below — the repo's scripts 
 
 import argparse
 import base64
+import contextlib
 import datetime
 import errno
 import hashlib
@@ -312,6 +313,13 @@ RELEASE_KEY = "VEYQ_RELEASE"
 KEPT_HEADER = "# ---- kept by veyqctl: values this release's template does not assign ----"
 
 
+# How a refusal ends: what it left untouched, in the same words everywhere.
+NOTHING_STOPPED = "Nothing was stopped."
+NOTHING_WRITTEN = "Nothing was written."
+NOTHING_CHANGED = "Nothing was changed."
+NOTHING_PULLED = "Nothing was pulled, written or started."
+
+
 class Refused(Exception):
     """A refusal: the message is the whole explanation, printed as is."""
 
@@ -357,6 +365,15 @@ class Host:
     # While `init` only looks around to ask well (git, kubectl reads), its commands are not echoed: the questions are
     # what the operator reads then. Everything that verifies, renders or writes is echoed as always.
     quiet = False
+
+    @contextlib.contextmanager
+    def quietly(self):
+        """Commands that only look around (to ask well) are not echoed; the questions are what the operator reads."""
+        quiet, self.quiet = self.quiet, True
+        try:
+            yield
+        finally:
+            self.quiet = quiet
 
     def run(self, cmd: list[str], *, check: bool = True, stream: bool = False,
             env: dict[str, str] | None = None, stdin: bytes | None = None) -> subprocess.CompletedProcess:
@@ -967,17 +984,8 @@ def verify_images(host: Host, manifest: Manifest, unsigned_local: bool) -> None:
             say(f"{role} image {ref}: a local build, NOT VERIFIED")
         return
     targets = {role: cosign_target(role, ref) for role, ref in refs.items()}
-    cosign = require_cosign(host)
     for role, target in targets.items():
-        result = host.run([cosign, "verify", target, "--certificate-oidc-issuer", COSIGN_OIDC_ISSUER,
-                           "--certificate-identity-regexp", COSIGN_IDENTITY_REGEXP], check=False)
-        if result.returncode != 0:
-            raise Refused(
-                f"the {role} image {target} does not verify against the identity that publishes veyq "
-                f"({COSIGN_IDENTITY_REGEXP}): {(result.stderr or '').strip()[-800:]}\n"
-                f"Nothing was pulled, written or started."
-            )
-        say(f"{role} image {target}: signature verified")
+        cosign_verify_ref(host, f"{role} image", target, NOTHING_PULLED)
 
 
 # ---- a release on disk ----------------------------------------------------------------------------------------
@@ -2205,8 +2213,7 @@ def suggested_gitops_directory(host: Host) -> str:
     """Where veyq's half fits the repository this runs in, relative to the current directory: beside the Argo CD
     Applications the repository already holds — `<their common parent>/veyq` when each sits in a directory of its own
     under one parent (`gitops/apps/traefik/application.yaml` → `gitops/apps/veyq`) — else `apps/veyq`."""
-    result = host.run(["git", "rev-parse", "--show-toplevel"], check=False)
-    top = Path((result.stdout or "").strip()).resolve() if result.returncode == 0 and (result.stdout or "").strip() else None
+    top = checkout_top(host)
     if top is None or not top.is_dir():
         return "apps/veyq"
     parents: set[Path] = set()
@@ -2397,11 +2404,8 @@ def cmd_init(args: argparse.Namespace, host: Host) -> int:
     resume: tuple[Path, str] | None = None
     if not args.compose and host.which("git"):
         # A GitOps run started here before and stopped? Its answers are in the checkout's veyq-setup.json.
-        quiet, host.quiet = host.quiet, True
-        here = host.run(["git", "rev-parse", "--show-toplevel"], check=False)
-        host.quiet = quiet
-        found = (here.stdout or "").strip() if here.returncode == 0 else ""
-        top_here = Path(found).resolve() if found else None
+        with host.quietly():
+            top_here = checkout_top(host)
         rel = setup_directory(top_here) if top_here and not args.gitops else None
         if rel:
             attach_progress(host, top_here, rel)
@@ -2447,9 +2451,9 @@ def cmd_init(args: argparse.Namespace, host: Host) -> int:
         raise Refused(f"--server {args.server}: yes or no")
     offered = suggested_gitops_directory(host)
     if args.server == "yes":
-        found = host.run(["git", "rev-parse", "--show-toplevel"], check=False)
-        if not found.returncode and (found.stdout or "").strip():
-            offered = os.path.relpath(Path(found.stdout.strip()).resolve() / SERVER_APPS / "veyq", Path.cwd().resolve())
+        top_here = checkout_top(host)
+        if top_here:
+            offered = os.path.relpath(top_here / SERVER_APPS / "veyq", Path.cwd().resolve())
     directory = args.gitops or host.prompt(
         "directory", offered, "Where in your repository veyq's files go.") or offered
     if not directory:
@@ -2506,6 +2510,10 @@ class GitOps(NamedTuple):
     @property
     def values(self) -> Path:
         return self.directory / self.doc["values"]
+
+    @property
+    def namespace(self) -> str:
+        return self.doc.get("namespace") or "veyq"
 
 
 def read_gitops(directory: Path) -> GitOps:
@@ -2597,14 +2605,15 @@ def chart_repository(app_ref: str) -> str:
     return f"{m.group('name').rsplit('/', 1)[0]}/charts/veyq"
 
 
-def cosign_verify_ref(host: Host, role: str, target: str) -> None:
-    cosign = require_cosign(host)
-    result = host.run([cosign, "verify", target, "--certificate-oidc-issuer", COSIGN_OIDC_ISSUER,
+def cosign_verify_ref(host: Host, what: str, target: str, untouched: str) -> None:
+    """`cosign verify` of one image or chart by digest, under the identity that publishes veyq; refused otherwise,
+    saying what it left untouched."""
+    result = host.run([require_cosign(host), "verify", target, "--certificate-oidc-issuer", COSIGN_OIDC_ISSUER,
                        "--certificate-identity-regexp", COSIGN_IDENTITY_REGEXP], check=False)
     if result.returncode != 0:
-        raise Refused(f"the {role} {target} does not verify against the identity that releases veyq "
-                      f"({COSIGN_IDENTITY_REGEXP}): {(result.stderr or '').strip()[-800:]}\nNothing was written.")
-    say(f"{role} {target}: signature verified")
+        raise Refused(f"the {what} {target} does not verify against the identity that publishes veyq "
+                      f"({COSIGN_IDENTITY_REGEXP}): {(result.stderr or '').strip()[-800:]}\n{untouched}")
+    say(f"{what} {target}: signature verified")
 
 
 def verify_gitops_release(host: Host, manifest: Manifest, chart: str) -> dict[str, str]:
@@ -2616,9 +2625,9 @@ def verify_gitops_release(host: Host, manifest: Manifest, chart: str) -> dict[st
                       f"for its backups: this release cannot be installed through Argo CD")
     verify_images(host, manifest, False)
     tools = cosign_target("tools", manifest.tools)
-    cosign_verify_ref(host, "tools image", tools)
+    cosign_verify_ref(host, "tools image", tools, NOTHING_WRITTEN)
     digest = host.oci_digest(f"{chart}:{manifest.release}")
-    cosign_verify_ref(host, "chart", f"{chart}@{digest}")
+    cosign_verify_ref(host, "chart", f"{chart}@{digest}", NOTHING_WRITTEN)
     shown = host.run(["helm", "show", "chart", f"oci://{chart}@{digest}"], check=False)
     version = re.search(r"(?m)^version:\s*\"?([^\"\s]+)\"?\s*$", shown.stdout or "") if not shown.returncode else None
     if version is None or version.group(1) != manifest.release:
@@ -2628,19 +2637,30 @@ def verify_gitops_release(host: Host, manifest: Manifest, chart: str) -> dict[st
     return {"chart": digest, "app": pin(manifest.app), "admin": pin(manifest.admin), "tools": pin(manifest.tools)}
 
 
-def render(host: Host, chart: str, digest: str, namespace: str, values: Path) -> None:
-    """`helm template` of the pinned chart with these values: the check that what veyqctl wrote is the chart's input."""
-    cmd = ["helm", "template", "veyq", f"oci://{chart}@{digest}", "-n", namespace, "-f", str(values)]
-    for api in HELM_API_VERSIONS:
-        cmd += ["--api-versions", api]
-    result = host.run(cmd, check=False)
+def render(host: Host, chart: str, digest: str, namespace: str, values: str) -> None:
+    """`helm template` of the pinned chart with these values (the text of a values.yaml, before it is written): the
+    check that what veyqctl writes is the chart's input."""
+    with tempfile.TemporaryDirectory(prefix="veyqctl-values-") as tmp:
+        staged = Path(tmp) / "values.yaml"
+        staged.write_text(values)
+        cmd = ["helm", "template", "veyq", f"oci://{chart}@{digest}", "-n", namespace, "-f", str(staged)]
+        for api in HELM_API_VERSIONS:
+            cmd += ["--api-versions", api]
+        result = host.run(cmd, check=False)
     if result.returncode != 0:
-        raise Refused(f"`helm template` of the chart with {values.name} failed: {(result.stderr or '').strip()[-800:]}")
-    say(f"the chart renders with your {values.name}")
+        raise Refused(f"`helm template` of the chart with your values.yaml failed: {(result.stderr or '').strip()[-800:]}")
+    say("the chart renders with your values.yaml")
 
 
 def git(host: Host, top: Path, *cmd: str, check: bool = True) -> subprocess.CompletedProcess:
     return host.run(["git", "-C", str(top), *cmd], check=check)
+
+
+def checkout_top(host: Host) -> Path | None:
+    """The Git checkout the current directory is in (its real path), or None outside one."""
+    found = host.run(["git", "rev-parse", "--show-toplevel"], check=False)
+    top = (found.stdout or "").strip() if found.returncode == 0 else ""
+    return Path(top).resolve() if top else None
 
 
 def repository_of(host: Host, directory: Path) -> Path:
@@ -2915,6 +2935,22 @@ spec:
 {data}"""
 
 
+# KSOPS: decrypts the two SOPS files in Argo CD's repo server (the server path's and `--secrets sops`).
+KSOPS_GENERATOR = """# KSOPS: decrypts the listed SOPS files in Argo CD's repo server.
+apiVersion: viaduct.ai/v1
+kind: ksops
+metadata:
+  name: veyq-secrets
+  annotations:
+    config.kubernetes.io/function: |
+      exec:
+        path: ksops
+files:
+  - secrets.sops.yaml
+  - config-secret-key.sops.yaml
+"""
+
+
 def hand_over(name: str, namespace: str, values: dict[str, dict[str, str]], remote: dict[str, str] | None) -> Path:
     """The generated values, once, in a file only the operator can read — outside the repository, never overwritten."""
     path = config_dir() / f"{name}.secrets.json"
@@ -3185,19 +3221,7 @@ def gitops_init(args: argparse.Namespace, host: Host, directory: Path) -> int:
             if not encrypted or "ENC[" not in encrypted:
                 raise Refused(f"sops did not encrypt {file}: check the rules in {top}/.sops.yaml. Nothing was written.")
             files[f"resources/{file}"] = encrypted
-        files["resources/secret-generator.yaml"] = """# KSOPS: decrypts the listed SOPS files in Argo CD's repo server.
-apiVersion: viaduct.ai/v1
-kind: ksops
-metadata:
-  name: veyq-secrets
-  annotations:
-    config.kubernetes.io/function: |
-      exec:
-        path: ksops
-files:
-  - secrets.sops.yaml
-  - config-secret-key.sops.yaml
-"""
+        files["resources/secret-generator.yaml"] = KSOPS_GENERATOR
         generators.append("secret-generator.yaml")
     elif provider == "sealed-secrets":
         for secret, file in ((SECRETS_SECRET, "secrets.sealed.yaml"), (CONFIG_SECRET, "config-secret-key.sealed.yaml")):
@@ -3222,10 +3246,7 @@ files:
                            "namespace": namespace, "context": context or "", "source": args.source or "",
                            "running": chosen.release, "pins": pins})
 
-    with tempfile.TemporaryDirectory(prefix="veyqctl-values-") as tmp:
-        staged = Path(tmp) / "values.yaml"
-        staged.write_text(files["values.yaml"])
-        render(host, chart, pins["chart"], namespace, staged)
+    render(host, chart, pins["chart"], namespace, files["values.yaml"])
     if provider != "sops":
         remote = ({remote_key(remote_prefix, k): v for keys in values.values() for k, v in keys.items()}
                   if provider == "external-secrets" else None)
@@ -3865,8 +3886,7 @@ def cmd_connect(args: argparse.Namespace, host: Host) -> int:
     """This machine's SSH host and kubeconfig context for the server the current checkout's veyq-setup.json describes:
     what `init` does at its end, again at any time (a rebuild's new cluster certificate, another machine)."""
     require_programs(host, ["git", "ssh", "kubectl"], "`connect`")
-    found = host.run(["git", "rev-parse", "--show-toplevel"], check=False)
-    top = Path((found.stdout or "").strip()).resolve() if not found.returncode and (found.stdout or "").strip() else None
+    top = checkout_top(host)
     setup = read_setup(top) if top else {}
     server = setup.get("server") or {}
     if not server.get("server_address") or not server.get("admin_user"):
@@ -3974,7 +3994,7 @@ def gitops_check(args: argparse.Namespace, host: Host, g: GitOps) -> int:
     else:
         say(f"the pins in {GITOPS_FILE} are release {running}'s, as it was signed")
     drift = drift + differs
-    namespace = g.doc.get("namespace") or "veyq"
+    namespace = g.namespace
     k = kubectl(g.doc.get("context") or None)
     if host.run(k + ["get", "namespace", namespace, "-o", "name"], check=False).returncode:
         say(f"the cluster or the namespace {namespace} is not reachable, so the Secrets were not checked")
@@ -4034,10 +4054,7 @@ def gitops_upgrade(args: argparse.Namespace, host: Host, g: GitOps) -> int:
     for role in ("app", "admin", "tools"):
         values_text = rewrite_once(values_text, old[role], pins[role], g.doc["values"])
     values_text = rewrite_tags(values_text, running, target.release, g.doc["values"])
-    with tempfile.TemporaryDirectory(prefix="veyqctl-values-") as tmp:
-        staged = Path(tmp) / "values.yaml"
-        staged.write_text(values_text)
-        render(host, g.doc["chart"], pins["chart"], g.doc.get("namespace") or "veyq", staged)
+    render(host, g.doc["chart"], pins["chart"], g.namespace, values_text)
     g.application.write_text(app_text)
     g.values.write_text(values_text)
     write_gitops(g._replace(doc={**g.doc, "running": target.release, "pins": pins}))
@@ -4090,11 +4107,8 @@ def gitops_tls(args: argparse.Namespace, host: Host, g: GitOps) -> int:
         raise Refused(f"{g.values} has uncommitted changes: commit or undo them first, as `tls production` commits "
                       f"only its own. Nothing was changed.")
     switched = rewrite_once(text, f"server: {staging}", f"server: {production}", g.doc["values"])
-    namespace = g.doc.get("namespace") or "veyq"
-    with tempfile.TemporaryDirectory(prefix="veyqctl-values-") as tmp:
-        staged = Path(tmp) / "values.yaml"
-        staged.write_text(switched)
-        render(host, g.doc["chart"], g.doc["pins"]["chart"], namespace, staged)
+    namespace = g.namespace
+    render(host, g.doc["chart"], g.doc["pins"]["chart"], namespace, switched)
     branch = (git(host, top, "rev-parse", "--abbrev-ref", "HEAD", check=False).stdout or "").strip()
     if not args.yes and host.confirm(f"Switch to Let's Encrypt production? This commits {g.doc['values']} and pushes to "
                                      f"origin {branch}?") is not True:
