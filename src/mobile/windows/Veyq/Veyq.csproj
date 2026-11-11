@@ -29,6 +29,9 @@
     <EnableWindowsTargeting>true</EnableWindowsTargeting>
     <VeyqWords>$(VeyqGenerated)words/windows/</VeyqWords>
     <VeyqTheme>$(VeyqGenerated)theme/windows/</VeyqTheme>
+    <!-- The exe's own icon (Explorer, the taskbar's pinned entry); the window sets the same file as its own. After
+         VeyqTheme: a property reads only those set above it. -->
+    <ApplicationIcon>$(VeyqTheme)veyq.ico</ApplicationIcon>
   </PropertyGroup>
   <ItemGroup>
     <PackageReference Include="Microsoft.WindowsAppSDK.WinUI" />
@@ -42,11 +45,12 @@
     <Compile Include="$(VeyqWords)Words.g.cs" Link="Words.g.cs" />
     <PRIResource Include="$(VeyqWords)Strings/**/*.resw" Link="Strings/%(RecursiveDir)%(Filename)%(Extension)" />
     <Page Include="$(VeyqTheme)Theme.xaml" Link="Theme.xaml" />
+    <Content Include="$(VeyqTheme)veyq.ico" Link="veyq.ico" CopyToOutputDirectory="PreserveNewest" />
     <None Include="$(VeyqNative)" Link="veyq.dll" CopyToOutputDirectory="PreserveNewest" Condition="'$(VeyqNative)' != ''" />
   </ItemGroup>
   <Target Name="VeyqAppGenerated" BeforeTargets="PrepareForBuild">
-    <Error Condition="!Exists('$(VeyqWords)Words.g.cs') Or !Exists('$(VeyqTheme)Theme.xaml')"
-           Text="No generated words or theme under $(VeyqGenerated): run windows/run.py build." />
+    <Error Condition="!Exists('$(VeyqWords)Words.g.cs') Or !Exists('$(VeyqTheme)Theme.xaml') Or !Exists('$(VeyqTheme)veyq.ico')"
+           Text="No generated words, theme or icon under $(VeyqGenerated): run windows/run.py build." />
     <Error Condition="'$(VeyqNative)' == '' Or !Exists('$(VeyqNative)')"
            Text="VeyqNative names no veyq.dll ('$(VeyqNative)'): windows/run.py build passes the core's DLL." />
   </Target>

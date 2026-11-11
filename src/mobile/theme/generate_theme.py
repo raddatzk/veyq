@@ -16,12 +16,17 @@ Outputs (each optional, each a directory this script owns and rewrites whole):
                         the app icon (`<DIR>/AppIcon.appiconset`: light, dark, tinted), rendered by macOS' Quick Look.
   --gtk DIR             the Linux app's (ADR 0123's Consequences, the Linux app): `style.css`, libadwaita's own colour
                         variables set from the web's roles (`GTK_ROLES`), dark under `prefers-color-scheme: dark`, and
-                        the app icon `icons/scalable/apps/me.raddatz.veyq.svg` with its symbolic variant; the app bundles
-                        DIR as its GResource, from whose base path libadwaita loads `style.css` itself.
+                        the app icon `icons/scalable/apps/me.raddatz.veyq.svg` with its symbolic variant (GNOME's: a
+                        full-colour icon and a `-symbolic` one, by the application id) and the desktop entry
+                        `me.raddatz.veyq.desktop` (`Icon=me.raddatz.veyq`); the app bundles DIR as its GResource, from
+                        whose base path libadwaita loads `style.css` itself and GtkApplication adds `icons/` to the
+                        icon theme, where the window's icon name finds it. A Flatpak installs the same files to hicolor.
   --winui DIR           the Windows app's (ADR 0123's Consequences, the Windows app): `Theme.xaml`, one
                         ResourceDictionary that makes the web's brand role (`accent`) the app's accent — `SystemAccentColor`
                         and each of its light and dark steps (`WINUI_ACCENT_KEYS`) — under `ThemeDictionaries`, light and
-                        dark; everything else is Fluent's own. No icon: an `.ico` and MSIX's PNGs are the packaging's.
+                        dark; everything else is Fluent's own; and the app icon `veyq.ico` (`WINDOWS_ICON_PX`, a PNG frame
+                        each, rendered by Quick Look as Apple's are), the exe's and the window's. MSIX's PNG assets are
+                        the packaging's.
 
 A role the apps paint with that base.css no longer sets is red (exit 1), never a fallback.
 """
@@ -255,13 +260,16 @@ def write_apple(out: Path, pal: dict[str, dict[str, tuple]]) -> None:
     ], "info": info, "properties": {"preserves-vector-representation": True}}, indent=2))
 
 
-def _icon_svg(logo: Path, background: str | None, mono: str | None = None, mac: bool = False) -> str:
+def _icon_svg(logo: Path, background: str | None, mono: str | None = None, mac: bool = False,
+              plate_px: int | None = None) -> str:
     """A 1024 square: the mark centred over `background` (None: transparent). iOS masks the square itself; a macOS
-    icon carries its own rounded square (824 on the 1024 grid, Apple's macOS icon template) and its own margin."""
+    icon carries its own rounded square (824 on the 1024 grid, Apple's macOS icon template) and its own margin.
+    `plate_px` is Windows': a rounded plate of `background` (896 on the grid, a 1/16 margin) with a one-pixel edge at
+    that frame's size, so the plate holds its edge from 16 px to 256 on a light taskbar as on a dark one."""
     ET.register_namespace("", SVG[1:-1])
     root = ET.parse(logo).getroot()
     _, _, vw, vh = [float(n) for n in root.get("viewBox").split()]
-    side = 1024 * (0.46 if mac else 0.58)
+    side = 1024 * (0.46 if mac else 0.80 if plate_px else 0.58)  # Windows' mark fills its plate: it must read at 16 px
     w, h = (side, side * vh / vw) if vw >= vh else (side * vw / vh, side)
     root.set("x", f"{(1024 - w) / 2:.2f}")
     root.set("y", f"{(1024 - h) / 2:.2f}")
@@ -274,6 +282,11 @@ def _icon_svg(logo: Path, background: str | None, mono: str | None = None, mac: 
     if mac:
         bg = (f'<rect x="100" y="100" width="824" height="824" rx="185" fill="{background}" '
               f'stroke="#000000" stroke-opacity="0.06" stroke-width="2"/>')
+    elif plate_px:
+        edge = 1024 / plate_px
+        bg = (f'<rect x="{64 + edge / 2:.2f}" y="{64 + edge / 2:.2f}" width="{896 - edge:.2f}" height="{896 - edge:.2f}" '
+              f'rx="{144 - edge / 2:.2f}" fill="{background}" stroke="#000000" stroke-opacity="0.16" '
+              f'stroke-width="{edge:.2f}"/>')
     else:
         bg = f'<rect width="1024" height="1024" fill="{background}"/>' if background else ""
     return f'<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024">{bg}{inner}</svg>'
@@ -348,6 +361,14 @@ def css_colour(c: tuple) -> str:
     return f"rgb({round(r)} {round(g)} {round(b)} / {round(a * 100)}%)" if a < 1 else "#{:02x}{:02x}{:02x}".format(round(r), round(g), round(b))
 
 
+def desktop_entry() -> str:
+    """The app's desktop entry: its name the catalog's (`app_name`, one word in every language), its icon the theme's
+    by the application id, which is also the file's name — how GNOME's shell matches the running window to it."""
+    name = json.loads((repo_layout.MOBILE / "words" / "words.json").read_text())["app_name"]["en"]
+    return "\n".join(["[Desktop Entry]", "Type=Application", f"Name={name}", "Exec=veyq", f"Icon={APP_ID}",
+                      "Terminal=false", "Categories=Utility;", "StartupNotify=true", ""])
+
+
 def write_gtk(out: Path, pal: dict[str, dict[str, tuple]]) -> None:
     """libadwaita's style.css (one file: 1.9 deprecates style-dark.css for a media query) and the app icon."""
     missing = sorted({role for role in GTK_ROLES.values() if role not in REQUIRED})
@@ -365,6 +386,7 @@ def write_gtk(out: Path, pal: dict[str, dict[str, tuple]]) -> None:
         "style.css": "\n".join(css),
         f"icons/scalable/apps/{APP_ID}.svg": _icon_svg(BRAND / "logo-light.svg", None) + "\n",
         f"icons/symbolic/apps/{APP_ID}-symbolic.svg": _icon_svg(BRAND / "logo-light.svg", None, mono="#241f31") + "\n",
+        f"{APP_ID}.desktop": desktop_entry(),
     }
     for rel, text in files.items():
         f = out / rel
@@ -386,9 +408,50 @@ def xaml_colour(c: tuple) -> str:
     return "#{:02X}{:02X}{:02X}{:02X}".format(round(c[3] * 255), round(c[0]), round(c[1]), round(c[2]))
 
 
+# The sizes Windows draws an app's icon at (the shell's 100 to 400 % scales of 16, 24, 32 and 48: the title bar, the
+# taskbar, Start, Explorer's views); a frame each, so no size is a downscale Windows makes itself.
+WINDOWS_ICON_PX = (16, 20, 24, 32, 40, 48, 64, 256)
+
+
+def ico(frames: dict[int, bytes]) -> bytes:
+    """An ICO container around PNG frames (Windows Vista on reads PNG in every frame): the 6-byte header, a 16-byte
+    entry per frame (width and height 0 meaning 256, 32 bits per pixel), then each PNG as it is."""
+    import struct
+
+    head = struct.pack("<HHH", 0, 1, len(frames))
+    offset = len(head) + 16 * len(frames)
+    entries, data = b"", b""
+    for px, png in sorted(frames.items()):
+        entries += struct.pack("<BBBBHHII", px % 256, px % 256, 0, 0, 1, 32, len(png), offset + len(data))
+        data += png
+    return head + entries + data
+
+
+def write_windows_icon(out: Path, pal: dict[str, dict[str, tuple]]) -> None:
+    """`veyq.ico`: the light mark on a plate of the web's light surface, each frame rendered at its own size by macOS'
+    Quick Look. One ICO cannot follow the taskbar's theme, and the light mark's grey stroke has no contrast on a dark
+    taskbar nor the dark mark's deep purple on one: the plate keeps the mark on the background it was drawn for."""
+    import subprocess
+    import tempfile
+
+    hexrgb = lambda c: "#{:02x}{:02x}{:02x}".format(*(round(v) for v in c[:3]))  # noqa: E731
+    frames = {}
+    with tempfile.TemporaryDirectory() as tmp:
+        for px in WINDOWS_ICON_PX:
+            src = Path(tmp) / f"veyq-{px}.svg"
+            src.write_text(_icon_svg(BRAND / "logo-light.svg", hexrgb(pal["light"]["surface"]), plate_px=px))
+            subprocess.run(["qlmanage", "-t", "-s", str(px), "-o", tmp, str(src)], check=True, capture_output=True)
+            png = (Path(tmp) / f"{src.name}.png").read_bytes()
+            if png[:8] != b"\x89PNG\r\n\x1a\n" or png[16:24] != px.to_bytes(4, "big") * 2:
+                sys.exit(f"Quick Look rendered no {px} px PNG for the Windows icon")
+            frames[px] = png
+    (out / "veyq.ico").write_bytes(ico(frames))
+
+
 def write_winui(out: Path, pal: dict[str, dict[str, tuple]]) -> None:
     shutil.rmtree(out, ignore_errors=True)
     out.mkdir(parents=True)
+    write_windows_icon(out, pal)
 
     def theme(key: str, mode: str) -> list[str]:
         return [f'    <ResourceDictionary x:Key="{key}">',
