@@ -8,6 +8,7 @@ import java.io.File
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
+import kotlin.test.assertFalse
 import kotlin.test.assertNotEquals
 import kotlin.test.assertNotNull
 import kotlin.test.assertNull
@@ -18,7 +19,9 @@ import kotlin.time.Duration.Companion.minutes
  * The device trust against a running dev instance, as the seeded principal (`VEYQ_LIVE`): password-trusted (DEVICE)
  * opens with the password alone and survives sign-out; remembered (DEVICE_KEY) resumes with nothing typed after the
  * person authenticates, keeps the rotated refresh token, refuses without the authentication, and is gone after sign-out;
- * every unlock names the device in the account's register. Each run removes what it enrolled.
+ * every unlock names the device in the account's register. Each run removes what it enrolled. What it asserts of the
+ * keys is `DeviceKeys`' observable behaviour (DeviceKeysContract's), so it holds over any store; only [SoftwareDeviceKeys.prompts]
+ * and [SoftwareDeviceKeys.authenticates], the fake's extras, play and count the person.
  */
 class DeviceTrustLiveTest {
     private val p = BouncyCastlePrimitives
@@ -59,7 +62,7 @@ class DeviceTrustLiveTest {
         assertEquals(VeyqAccount.TrustOutcome.REMEMBERED, second.trustThisDevice(null, stayingSignedIn = true))
         val remembered = assertNotNull(device.trusted(second.key))
         assertEquals(TrustedDevice.Method.DEVICE_KEY, remembered.method)
-        assertTrue(keys.bindKeys.isEmpty(), "the password trust's key was kept")
+        assertNull(keys.bindHmac(trusted.alias, "veyq/v1/device-bind".encodeToByteArray()), "the password trust's key was kept")
         val tokenAtEnrol = keys.secret(remembered.refreshAlias)
         second.http.close() // the app is closed, not signed out
 
@@ -82,9 +85,11 @@ class DeviceTrustLiveTest {
 
         // Signing out ends staying signed in: the record, the token and the unlock key go, and the wrap on the server.
         val fourth = VeyqAccount.resume(p, remembered, device, client)
+        val canary = keys.sealUnlockable(byteArrayOf(1), ByteArray(0))
         fourth.signOut()
         assertNull(device.trusted(remembered.key))
         assertNull(keys.secret(remembered.refreshAlias))
-        assertNull(keys.unlockKey)
+        val gone = assertFailsWith<DeviceAuthFailed> { keys.openUnlockable(canary.first, canary.second, ByteArray(0)) }
+        assertFalse(gone.cancelled, "the unlock key survived the sign-out")
     }
 }

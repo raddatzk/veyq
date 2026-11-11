@@ -3,13 +3,14 @@ package me.raddatz.veyq.mobile.session
 import me.raddatz.veyq.mobile.crypto.Primitives
 
 /**
- * [DeviceKeys] in memory, for tests only: the platforms' keys are the Keystore's and the Keychain's, which no test on
- * a JVM reaches. [authenticates] plays the person at the unlock key's prompt; [prompts] counts how often they were asked.
+ * [DeviceKeys] in memory, for tests only: the platforms' keys are the Keystore's, the Keychain's, DPAPI's and Hello's,
+ * which no test on a JVM reaches. It passes [DeviceKeysContract] as every store does. Its extras, for the flows' own
+ * tests: [authenticates] plays the person at the unlock key's prompt; [prompts] counts how often they were asked.
  */
 class SoftwareDeviceKeys(private val p: Primitives) : DeviceKeys {
-    val bindKeys = HashMap<String, ByteArray>()
-    var unlockKey: ByteArray? = null
-    val secrets = HashMap<String, String>()
+    private val bindKeys = HashMap<String, ByteArray>()
+    private var unlockKey: ByteArray? = null
+    private val secrets = HashMap<String, String>()
     var authenticates = true
     var prompts = 0
 
