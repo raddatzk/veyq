@@ -320,7 +320,7 @@ None. Everything runs on this Mac, the container and the disposable VMs.
   → 185 tests, `PASSED` on both. Android and the Apple app are untouched (the core only gained two `PotModel` functions
   and a public constructor).
 
-### Phase 3 — Linux: avatars and the Pot's download
+### Phase 3 — Linux: avatars and the Pot's download — done (2026-11-11)
 
 **Done when** a pass in the container (Broadway, the browser pane) has run against the dev instance:
 - the people with their pictures, the letter where none;
@@ -328,6 +328,56 @@ None. Everything runs on this Mac, the container and the disposable VMs.
 - the download through GTK's save dialog into the container's home, copied out and imported by the web (D6);
 - German and English, light and dark, the narrow and the wide form;
 - `run.py build` (clippy `-D warnings`, `cargo test` with a test of the payload's copy), and both guards green.
+
+**Built (Phase 3):**
+- **`linux/src/avatars.rs`:** `Held` (no widget, tested) keeps the pictures of the tenant open; the shell's update feeds it
+  `ShellShown.pictures` with the tenant (`connection` + `tenantId`). Another tenant drops everything; a set that differs
+  from the last is asked for whole (`Avatar.Picture` each, so a picture changed along with the set is read anew); the
+  same set asks nothing; an answer of an earlier round, or for an id no longer listed, is dropped. The Pot's
+  `Update.Pot.pictures` is the same flow's keys (and empty while nothing is open), so it feeds nothing. A person is an
+  `adw::Avatar` (initials), its custom image the decoded `gdk::Texture::from_bytes`, set again on every avatar bound to
+  that id when its picture arrives or goes.
+- **Where:** the Pot's Settings people and Overview balances (as Android's `PotSettings`/`PotScreen`), and the switcher:
+  the signed-in member's picture (`ShellShown.me`) beside the tenant, the tenant's initials where there is none (Apple's
+  `TenantAvatar` draws the tenant's letter there).
+- **The download:** the content header carries the open Pot's menu (`view-more-symbolic`, "More") at its end, with
+  Download (`win.pot-download`). `PotPage::download` asks `Pot.ArchiveName`, opens `gtk::FileDialog` (the portal where
+  there is one; GTK's own dialog in the container) with that name, in Downloads when it exists, then
+  `Pot.Download(pot, path, words::pot_deleted_person())`; an `AdwToast` says `download_done` or `download_failed` with the
+  Pot's name. A dismissed dialog says nothing. No new word: `node_download`, `node_more`, `download_done`/`_failed` were
+  there.
+- **The guard:** `validate_mobile_words.py`'s linux-literal reads a `gio::Menu` item's label (`.append(` / `.prepend(`),
+  which it missed.
+
+**Met (2026-11-11, commits `b8f856cad`, `40956c9b7`):**
+- [x] `linux/run.py build` → clippy `-D warnings` clean, `cargo test` 11 passed, `cargo build`. New: `avatars::tests` —
+  `a_set_is_asked_for_once_and_again_only_when_it_changes`, `another_tenant_drops_what_was_held_and_a_late_answer_is_not_kept`,
+  `a_picture_as_the_web_writes_it_decodes` (a 1×1 lossless WebP through `gdk::Texture::from_bytes`). **Bites:** without
+  the same-set check → the first red (`left: ["a","b"], right: []`); without dropping on a tenant change → the second red;
+  without the round check → the second red (a late t1 answer kept); `rpm -e --nodeps glycin-loaders` in the container →
+  the decode red ("No image loaders are configured"). Each restored, green. The payload's copy test is Phase 2's
+  (`an_answers_payload_is_copied_before_the_callback_returns`), still green.
+- [x] Both guards green (`/usr/bin/python3 scripts/validate_mobile_words.py`, `…/validate_mobile_platform_guidelines.py`).
+  **Bite:** the Pot menu's label as `Some("Download")` → linux-literal red at `shell.rs:107`; the guard before this
+  change → green over the same tree; restored, green.
+- [x] The pass (`VEYQ_LIVE=http://veyq.localhost:8080 VEYQ_ENV_FILE=<main>/.run/.env linux/run.py run --port 8097
+  --devlogin`; 8095 was another session's container), Broadway in the browser pane, stderr read first (`session Signed`,
+  then only the answers below):
+  - "App link": Kevin Raddatz's row on Settings and Overview shows the picture (the blue disc), the switcher the same disc
+    beside "Familie R…"; Amsterdam's Anna and Ben show `A` and `B`.
+  - Download of Amsterdam: GTK's save dialog titled Download, `Amsterdam.zip` suggested. Saved first into the
+    read-only `/veyq/src` → stderr `Pot.Download answered Ok(Failed { error: "IllegalStateException" })`, the toast
+    "“Amsterdam” could not be downloaded…", nothing at the path (`docker exec … ls`). Saved into Home → "“Amsterdam” is
+    downloaded."; `docker cp <container>:/root/Amsterdam.zip` → 6,089 B (as Phase 2's `LiveBridgeTest`), its one payload
+    `Amsterdam/Amsterdam.csv` (365 B) to the manifest's size and SHA-256 (`0ea097cc…`). The check is a script reading
+    `.veyq/manifest.json` (every object with a `sha256` against its file); **bite:** the CSV's last byte changed → BAD,
+    exit 1. In German, dark: "App link.zip" the same way, "„App link“ ist heruntergeladen.", its CSV to the manifest.
+  - **The web's import was not run:** no web dev server was up (8081, 8089, 5173 answered nothing); the manifest check
+    is the proof.
+  - English light and German dark (`LANGUAGE=de VEYQ_LOCALE=de_DE.UTF-8 ADW_DEBUG_COLOR_SCHEME=prefer-dark`), each wide
+    (800 px) and narrow (420 px, collapsed: the menu in the content header, the picture on the row).
+  - Recent (commit `0825552d6`): after "App link" was opened, Expenses' list shows a Recent group above the rest
+    (Favorites, Recent, then all); after Amsterdam both. No Linux code for it.
 
 ### Phase 4 — Windows: the same
 
@@ -394,4 +444,16 @@ to the owner's veto before "go".
 - **Open for Phase 3/4:** a picture replaced under the same user id keeps the id set, so no update tells the host to
   ask again. Nothing does this today (`AvatarsModel.peopleRead` still has no caller: the people are read once per open);
   the first caller of `peopleRead` owes the host that signal (a revision per id, say).
+
+### Phase 3 (2026-11-11)
+
+- **The Pot's update carries the pictures too, but the shell's alone may feed the cache:** `Update.Pot.pictures` is empty
+  while nothing is open, so feeding it would drop every picture held and ask them all again when the shell's update came.
+- **GTK 4.22 decodes WebP through glycin, not gdk-pixbuf's loaders:** the image has `glycin-loaders` through gtk4 and no
+  WebP pixbuf loader, and the decode works (stderr says "Glycin running without sandbox" in the container). A Flatpak's
+  runtime must carry glycin's loaders; without them every person shows initials, with one line on stderr.
+- **GTK's own dialog shows GTK's English in the container under `LANGUAGE=de`** (Home, Cancel, Save): the Fedora image
+  carries no gtk4 catalogs. Our words in it (its title) are German. A desktop's portal dialog is the system's.
+- **The container's working directory is the read-only source mount:** GTK's dialog opens there, which made the failed
+  path easy to show (nothing left, the failed toast). On a desktop the dialog opens in Downloads.
 
