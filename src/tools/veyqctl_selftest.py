@@ -2233,6 +2233,7 @@ class ServerHost(GitOpsHost):
         self.dns = dns if dns is not None else {}
         self.waited: list[str] = []
         self.prompted: list[str] = []
+        self.confirmed: list[str] = []  # every confirmation's question, in order
         self.tunnels: list = []
         # git's state outlives a run, as a repository's does: kept beside the checkout
         self.state = self.top.parent / f"{self.top.name}.git-state"
@@ -2254,6 +2255,7 @@ class ServerHost(GitOpsHost):
         return "v0.1", raw, bundle
 
     def confirm(self, prompt):
+        self.confirmed.append(prompt)
         return next((v for k, v in self.confirms.items() if k in prompt), True)
 
     def wait(self, prompt):
@@ -2671,6 +2673,30 @@ def test_tls_production(tmp: pathlib.Path, top: pathlib.Path) -> None:
           and "issued by Let's Encrypt production" in out, out[-400:])
     rc, out = run_main(["--instance", "server-run", "tls", "production"], ServerHost(top=top, cluster=certs))
     check("tls production on production: nothing to do", rc == 0 and "nothing to do" in out, out[-200:])
+
+    # back to staging (owner 2026-11-11: for test rebuilds), the same mechanics the other way, then forth again
+    produced = values.read_text()
+    staging_certs = dict(certs, **{"get issuer": (0, vc.ACME_DIRECTORIES["staging"])})
+    host = ServerHost(top=top, cluster=staging_certs, confirms={"Delete them": False})
+    rc, out = run_main(["--instance", "server-run", "tls", "staging"], host)
+    check("tls staging: says browsers warn and the store check fails; rendered, committed with veyq-setup.json and "
+          "pushed; the real certificates' deletion declined deletes nothing",
+          rc == 1 and "every site warns in the browser" in out and "store check fails" in out
+          and f"server: {vc.ACME_DIRECTORIES['staging']}" in values.read_text() and host.ran("push")
+          and not host.ran("delete", "secret") and json.loads((top / vc.SETUP_FILE).read_text())["veyq"][
+              "gitops/apps/veyq"]["acme_directory"] == "staging", out[-400:])
+    values.write_text(produced)
+    host = ServerHost(top=top, cluster=staging_certs)
+    rc, out = run_main(["--instance", "server-run", "tls", "staging"], host)
+    deleted = host.ran("delete", "secret")
+    check("tls staging: once the Issuer names staging, the real certificates deleted (asked), staging's waited for",
+          rc == 0 and deleted and "issued by Let's Encrypt staging" in out
+          and any("then browsers warn" in q for q in host.confirmed), out[-400:])
+    rc, out = run_main(["--instance", "server-run", "tls", "staging"], ServerHost(top=top, cluster=staging_certs))
+    check("tls staging on staging: nothing to do", rc == 0 and "nothing to do" in out, out[-200:])
+    rc, out = run_main(["--instance", "server-run", "tls", "production"], ServerHost(top=top, cluster=certs))
+    check("tls production after staging: back on production", rc == 0 and f"server: "
+          f"{vc.ACME_DIRECTORIES['production']}" in values.read_text(), out[-300:])
     compose_home = tmp / "server-compose-home"
     compose_home.mkdir()
     rc, out = run_main(["--home", compose_home, "tls", "production"], FakeHost())

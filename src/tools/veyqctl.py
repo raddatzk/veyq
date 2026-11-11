@@ -6,7 +6,7 @@ or through Argo CD on Kubernetes (ADR 0126), optionally with a new server beneat
 
     init                                             set up a new instance; asks everything first, then sets it up
     connect [--connect-name N] [--make-current yes]  this computer's SSH tunnel and kubectl context, again
-    tls production [--yes]                           GitOps: from Let's Encrypt's test certificates to real ones
+    tls production|staging [--yes]                   GitOps: Let's Encrypt's real certificates, or back to its test ones
     instances | use NAME                             your instances, and which one is current
     install [--set KEY=VALUE …] [--unsigned-local]   Compose: download, verify and start what VEYQ_RELEASE selects
     start | stop | status | logs                     Compose: the running stack
@@ -4456,39 +4456,50 @@ class server_tunnel:
         return False
 
 
+# What each directory's certificates are, for the operator: what a switch gives, and what it costs while it runs.
+TLS_KIND = {"production": "real", "staging": "test"}
+
+
 def gitops_tls(args: argparse.Namespace, host: Host, g: GitOps) -> int:
-    """`tls production`: from Let's Encrypt's staging directory to production (ADR 0126). The values' ACME server
-    rewritten, rendered, committed and pushed on confirmation; once Argo CD applied the Issuer, the certificates staging
-    issued are deleted on confirmation (it cannot be undone), so cert-manager orders production ones; then waited for."""
-    staging, production = ACME_DIRECTORIES["staging"], ACME_DIRECTORIES["production"]
+    """`tls production` / `tls staging`: the values' Let's Encrypt directory switched (ADR 0126) — rewritten, rendered,
+    committed and pushed on confirmation; once Argo CD applied the Issuer, the certificates the other directory issued
+    are deleted on confirmation (it cannot be undone), so cert-manager orders new ones; then waited for. Back to staging
+    is for test rebuilds that would spend production's rate limits; nothing trusts its certificates."""
+    target = args.directory
+    source = "staging" if target == "production" else "production"
+    want, have = ACME_DIRECTORIES[target], ACME_DIRECTORIES[source]
     text = g.values.read_text()
-    if f"server: {production}" in text and staging not in text:
-        say("The values name Let's Encrypt's production directory already: nothing to do.")
+    if f"server: {want}" in text and have not in text:
+        say(f"The values name Let's Encrypt's {target} directory already: nothing to do.")
         return 0
-    if f"server: {staging}" not in text:
-        raise Refused(f"{g.values} does not use Let's Encrypt's test certificates: nothing to switch")
+    if f"server: {have}" not in text:
+        raise Refused(f"{g.values} does not use Let's Encrypt's {TLS_KIND[source]} certificates: nothing to switch")
     top = repository_of(host, g.directory)
     if git(host, top, "diff", "--quiet", "HEAD", "--", str(g.values), check=False).returncode:
-        raise Refused(f"{g.values} has uncommitted changes: commit or undo them first, as `tls production` commits "
+        raise Refused(f"{g.values} has uncommitted changes: commit or undo them first, as `tls {target}` commits "
                       f"only its own. Nothing was changed.")
-    heading(f"veyq {instance_label(g.directory)}: from Let's Encrypt's test certificates to real ones")
-    switched = rewrite_once(text, f"server: {staging}", f"server: {production}", g.doc["values"])
+    heading(f"veyq {instance_label(g.directory)}: from Let's Encrypt's {TLS_KIND[source]} certificates to "
+            f"{TLS_KIND[target]} ones")
+    if target == "staging":
+        say("Nothing trusts staging's certificates: every site warns in the browser, and the admin console's store "
+            "check fails, until `veyqctl tls production` switches back.")
+    switched = rewrite_once(text, f"server: {have}", f"server: {want}", g.doc["values"])
     namespace = g.namespace
     render(host, g.doc["chart"], g.doc["pins"]["chart"], namespace, switched)
     branch = (git(host, top, "rev-parse", "--abbrev-ref", "HEAD", check=False).stdout or "").strip()
-    if not args.yes and host.confirm(f"Switch to Let's Encrypt production? This commits {g.doc['values']} and pushes to "
+    if not args.yes and host.confirm(f"Switch to Let's Encrypt {target}? This commits {g.doc['values']} and pushes to "
                                      f"origin {branch}?") is not True:
         raise Refused("not switched, nothing was changed (without a terminal, pass --yes)")
     g.values.write_text(switched)
     paths = [str(g.values)]
     setup = read_setup(top)
     rel = g.directory.relative_to(top).as_posix()
-    if rel in (setup.get("veyq") or {}):  # a rebuild from veyq-setup.json starts on production from now on
-        setup["veyq"][rel]["acme_directory"] = "production"
+    if rel in (setup.get("veyq") or {}):  # a rebuild from veyq-setup.json starts on this directory from now on
+        setup["veyq"][rel]["acme_directory"] = target
         atomic_write(top / SETUP_FILE, json.dumps(setup, indent=2, sort_keys=True) + "\n")
         paths.append(str(top / SETUP_FILE))
     git(host, top, "add", "--", *paths)
-    git(host, top, "commit", "-m", "veyq: TLS from Let's Encrypt production, by veyqctl tls production", "--", *paths)
+    git(host, top, "commit", "-m", f"veyq: TLS from Let's Encrypt {target}, by veyqctl tls {target}", "--", *paths)
     git(host, top, "push")
     checked("committed", "and pushed: Argo CD applies the Issuer's new directory at its next sync")
     heading("Waiting for Argo CD and the new certificates")
@@ -4496,19 +4507,22 @@ def gitops_tls(args: argparse.Namespace, host: Host, g: GitOps) -> int:
     with server_tunnel(host, top):
         deadline = time.monotonic() + args.timeout
         while (host.run(k + ["get", "issuer", "veyq-acme", "-o", "jsonpath={.spec.acme.server}"], check=False).stdout
-               or "").strip() != production:
+               or "").strip() != want:
             if time.monotonic() > deadline:
-                raise Refused(f"the Issuer veyq-acme does not name the production directory after {int(args.timeout)} s: has "
-                              f"Argo CD synced yet? Run the same command again (the change is pushed already).")
+                raise Refused(f"the Issuer veyq-acme does not name the {target} directory after {int(args.timeout)} s: "
+                              f"has Argo CD synced yet? Run the same command again (the change is pushed already).")
             host.sleep(10)
         listed = host.run(k + ["get", "certificates", "-o",
                                "jsonpath={range .items[*]}{.spec.secretName}{\"\\n\"}{end}"], check=False).stdout or ""
         certificate_names = sorted({line.strip() for line in listed.splitlines() if line.strip()})
         if certificate_names:  # the Secrets' names: what holds each certificate, nothing of their content
-            print(f"\n   The test certificates: {', '.join(certificate_names)} (namespace {namespace}).", flush=True)
-            if not args.yes and host.confirm("Delete them so production ones are issued? This cannot be undone, and "
-                                             "the sites have no certificate until the new ones arrive") is not True:
-                raise Refused("the test certificates stay for now; run `veyqctl tls production` again to replace them")
+            say(f"The {TLS_KIND[source]} certificates: {', '.join(certificate_names)} (namespace {namespace}).")
+            if not args.yes and host.confirm(
+                    f"Delete them so {target} ones are issued? This cannot be undone, and the sites have no "
+                    f"certificate until the new ones arrive" + (" — then browsers warn" if target == "staging" else "")
+            ) is not True:
+                raise Refused(f"the {TLS_KIND[source]} certificates stay for now; run `veyqctl tls {target}` again to "
+                              f"replace them")
             host.run(k + ["delete", "secret", *certificate_names])
         while True:
             states = host.run(k + ["get", "certificates", "-o", "jsonpath={range .items[*]}{.metadata.name} "
@@ -4516,7 +4530,7 @@ def gitops_tls(args: argparse.Namespace, host: Host, g: GitOps) -> int:
                               check=False).stdout or ""
             pending = [line.split()[0] for line in states.splitlines() if line.split() and line.split()[-1] != "True"]
             if states.strip() and not pending:
-                checked("certificates", "every one issued by Let's Encrypt production")
+                checked("certificates", f"every one issued by Let's Encrypt {target}")
                 return 0
             if time.monotonic() > deadline:
                 raise Refused(f"not issued after {int(args.timeout)} s: {', '.join(pending) or 'no certificate'} — "
@@ -4690,8 +4704,9 @@ def parser() -> argparse.ArgumentParser:
                       help="new server: how long to wait for everything to run, in seconds (default 1800)")
     init.set_defaults(func=cmd_init)
 
-    tls = sub.add_parser("tls", help="switch from Let's Encrypt's test certificates to real ones")
-    tls.add_argument("directory", choices=("production",), help="the certificates to switch to")
+    tls = sub.add_parser("tls", help="switch between Let's Encrypt's test certificates and real ones")
+    tls.add_argument("directory", choices=("production", "staging"), help="the certificates to switch to: "
+                     "production's real ones, or back to staging's test ones (for test rebuilds)")
     tls.add_argument("--yes", action="store_true", help="don't ask before committing, pushing and deleting the test certificates")
     tls.add_argument("--timeout", type=float, default=900.0, help="how long to wait for Argo CD and the new certificates, in seconds")
     tls.set_defaults(func=None)  # a verb of the targets: GitOps runs it, Compose refuses it
