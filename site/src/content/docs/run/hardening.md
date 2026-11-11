@@ -11,6 +11,7 @@ sources:
   - docs/decisions/0121-a-received-share-is-browsed-in-place-through-its-own-api.md
   - docs/crosscutting/cc.security.rate-limit.md
   - docs/decisions/0094-a-clients-address-is-the-hop-the-network-vouches-for.md
+  - docs/crosscutting/security-model.md
 ---
 
 Most of veyq's hardening is in the recipes and needs nothing from you except not undoing it. This page lists it by
@@ -125,6 +126,27 @@ per account. The buckets live in memory: they are per application instance, and 
 NAT every client shares one bucket
 ([cc.security.rate-limit](https://github.com/raddatzk/veyq/blob/main/docs/crosscutting/cc.security.rate-limit.md)).
 Neither recipe passes a setting for them.
+
+## A web application firewall is yours to add
+
+Neither recipe puts a web application firewall (WAF) in front of the instance: Traefik, the Compose recipe's gateway,
+has none built in, and on Kubernetes the gateway is your cluster's. veyq leaves it out on purpose. The content of a
+request body is ciphertext, so a generic rule set such as the OWASP Core Rule Set finds no attack in it and can refuse
+a legitimate upload whose random bytes happen to match a rule. What it can still read — paths, query strings,
+headers — carries opaque IDs, and the application checks every request against its API contract; the
+[API fuzzing](/security/how-veyq-is-tested/) tests that it refuses what the contract does not allow
+([security-model § Threat model](https://github.com/raddatzk/veyq/blob/main/docs/crosscutting/security-model.md#threat-model--trust-boundaries)).
+
+If your policy requires one anyway:
+
+- **It does not widen what you can read.** It sees what your gateway already sees: ciphertext, opaque metadata and
+  the client's address.
+- **Keep bodies out of its inspection**, at least uploads and the store's route
+  ([Networking](/run/networking/)), and keep its paranoia level low. The rules on paths, query strings and headers
+  remain.
+- **Route only the public port through it**, as any proxy of yours ([above](#keep-the-admin-listener-local)).
+- **On Traefik, the OWASP rules come only as a plugin**, Coraza compiled to WebAssembly, which Traefik loads as an
+  experimental feature. A proxy of your own in front of the gateway works on both targets.
 
 ## How far this is proven
 
