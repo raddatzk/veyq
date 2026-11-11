@@ -442,8 +442,7 @@ struct Bar: View {
 
     /// The head of the node on screen (core's, for every kind): its body places it first in its list.
     private func hero(_ node: NodeAt) -> NodeHero {
-        let page = KindPage.of(node.kind)
-        return NodeHero(model: model, node: node, canSet: page?.takesCover == true && page?.header(node, model)?.cover != false)
+        NodeHero(model: model, node: node, canSet: AppKinds.shared.coverSettable(kind: node.kind, facts: KindPage.of(node.kind)?.header(node, model)?.facts))
     }
 
     @ViewBuilder private func content(_ key: String) -> some View {

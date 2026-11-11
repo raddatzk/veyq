@@ -67,7 +67,8 @@ struct DropBoxScreen: View {
         .alert(say(.dropboxDeleteFolder, deleting?.label ?? ""), isPresented: Binding(get: { deleting != nil }, set: { if !$0 { deleting = nil } }), presenting: deleting) { f in
             Button(say(.peopleDeleteAccept), role: .destructive) {
                 Task {
-                    await model.trash(NodeAt(scopeId: f.node.scopeId, nodeId: f.node.id, kind: f.node.kind, name: f.label))
+                    let node = NodeAt(scopeId: f.node.scopeId, nodeId: f.node.id, kind: f.node.kind, name: f.label)
+                    if let header = model.header(node, facts: AppKinds.Facts(canWrite: true, hasContent: true)) { await model.trash(header) }
                     folders = await model.dropBoxFolders(scopeId: ref.scopeId, nodeId: ref.nodeId)
                 }
             }

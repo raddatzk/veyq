@@ -324,6 +324,7 @@ final class AppModel {
                 managing = nil
                 shellWatch?.stop()
                 shellModel = nil
+                headers = [:]
             } else if managing != nil {
                 managing = managed()
             }
@@ -372,11 +373,10 @@ final class AppModel {
             Task { @MainActor [weak self] in self?.syncPot() }
         }
         pot = nil
-        reportOffered = false
-        Task { await readReportOffered() }
         let model = ShellModel(tenant: t, hidden: hidden, recent: recent, now: { @Sendable in KotlinLong(value: Int64(Date().timeIntervalSince1970 * 1000)) })
         shellWatch?.stop()
         shellModel = model
+        headers = [:]
         try await model.load(openLastUsed: incoming == nil)
         shellWatch = model.watch { @Sendable _ in
             Task { @MainActor [weak self] in self?.applyShell(start: false) }
@@ -484,19 +484,31 @@ final class AppModel {
 
     // MARK: Core's actions on a node
 
-    /// Whether `ref` is pinned; nil while its space's pin set is not loaded (no heart is offered then).
-    /// Whether `ref` is a guest's identity folder or lies in one (core's answer over the tree last read).
-    func inIdentityFolder(_ ref: NodeAt) -> Bool { tenantSession?.inIdentityFolder(scopeId: ref.scopeId, nodeId: ref.nodeId) ?? false }
+    /// The headers handed out, one per node and name (core's `NodeHeaderModel`): a view's body asks again on each update.
+    @ObservationIgnored private var headers: [String: NodeHeaderModel] = [:]
 
-    func isFavorite(_ ref: NodeAt) -> Bool? { tenantSession?.isFavorite(scopeId: ref.scopeId, nodeId: ref.nodeId)?.boolValue }
-
-    /// Pins or unpins `ref`, then the lists are read anew; false when it was not stored (the heart goes back).
-    func toggleFavorite(_ ref: NodeAt) async -> Bool {
-        guard let m = shellModel else { return false }
-        let stored = (try? await m.toggleFavorite(ref: ref))?.boolValue ?? false
-        await readDetails(m.tenant)
-        applyShell(start: false)
-        return stored
+    /// The header of `node` (core's `NodeHeaderModel` over the shell), its kind's page knowing `facts`: an open Pot of the
+    /// node closes once it went to the trash, and each write reads the lists and the rows' details anew.
+    func header(_ node: NodeAt, facts: AppKinds.Facts?) -> NodeHeaderModel? {
+        guard let m = shellModel else { return nil }
+        let key = "\(node.scopeId)/\(node.nodeId)/\(node.name)"
+        if let held = headers[key] { return held }
+        let made = m.header(node: node, facts: facts, closeOpen: { @Sendable ref in
+            let id = ref.nodeId
+            Task { @MainActor [weak self] in
+                guard let self, let open = self.pot?.ref, open.nodeId == id else { return }
+                self.potModel?.close(ref: open)
+                self.syncPot()
+            }
+        }, changed: { @Sendable in
+            Task { @MainActor [weak self] in
+                guard let self, let t = self.tenantSession else { return }
+                self.applyShell(start: false)
+                await self.readDetails(t)
+            }
+        })
+        headers[key] = made
+        return made
     }
 
     private func refreshLists(_ t: TenantSession) async {
@@ -505,56 +517,55 @@ final class AppModel {
         await readDetails(t)
     }
 
-    /// What a delete says at the bottom of the shell: moved to the trash, with the node as it was for its Undo; or why not.
+    /// What a delete says at the bottom of the shell: moved to the trash, with its Undo while core offers it; or why not.
     struct TrashNotice: Identifiable {
         let id = UUID()
         let message: String
-        let node: OpenNode?
+        /// The header whose trash this is, while core offers its undo (core ends the offer after its window).
+        var header: NodeHeaderModel? = nil
         /// A move's undo: the node moved back the same way, to where it was (the web's `moveRun` Undo).
         var moveBack: MoveBack? = nil
     }
 
     private(set) var trashNotice: TrashNotice?
+    @ObservationIgnored private var undoWatch: NodeHeaderModel.Watch?
 
-    /// Moves `ref` with everything under it to the space's trash; a page whose node went leaves for its parent.
-    func trash(_ ref: NodeAt) async {
-        guard let m = shellModel, let r = try? await m.trash(ref: ref) else { return }
-        if r.gone, let open = pot?.ref, open.nodeId == ref.nodeId { potModel?.close(ref: open); syncPot() }
-        applyShell(start: false)
-        await readDetails(m.tenant)
-        trashNotice = TrashNotice(message: say(notice: r.notice), node: r.undoable ? r.before : nil)
+    /// Moves `header`'s node with everything under it to the space's trash (core's: a page whose node went leaves for its
+    /// parent, an open Pot of it closes); the bottom of the shell says so, with its Undo for as long as core offers it.
+    func trash(_ header: NodeHeaderModel) async {
+        guard let said = try? await header.trash() else { return }
+        undoWatch?.stop()
+        guard header.current.undo != nil else {
+            trashNotice = TrashNotice(message: say(notice: said))
+            return
+        }
+        let notice = TrashNotice(message: say(notice: said), header: header)
+        trashNotice = notice
+        let id = notice.id
+        undoWatch = header.watch { @Sendable state in
+            guard state.undo == nil else { return }
+            Task { @MainActor [weak self] in self?.dismissTrashNotice(id) }
+        }
     }
 
-    /// The Undo of the last delete: the node back from the trash under its name, as it was.
+    /// The Undo of the notice at the bottom: a move moved back, or the last delete's node back from the trash under its name.
     func undoTrash() async {
         if let back = trashNotice?.moveBack {
             trashNotice = nil
             if await move(back.ref, to: back.to, toName: nil, from: nil) != .moved {
-                trashNotice = TrashNotice(message: say(.moveUndoFailed, back.ref.name), node: nil)
+                trashNotice = TrashNotice(message: say(.moveUndoFailed, back.ref.name))
             }
             return
         }
-        guard let notice = trashNotice, let node = notice.node, let m = shellModel else { return }
+        guard let header = trashNotice?.header else { return }
         trashNotice = nil
-        var failed: VeyqCore.Notice?
-        do { failed = try await m.undoTrash(node: node) } catch { failed = Notices.shared.trashUndoFailed(name: node.name) }
-        applyShell(start: false)
-        await readDetails(m.tenant)
-        if let failed { trashNotice = TrashNotice(message: say(notice: failed), node: nil) }
+        undoWatch?.stop()
+        if let failed = try? await header.undoTrash() { trashNotice = TrashNotice(message: say(notice: failed)) }
     }
 
     func dismissTrashNotice(_ id: UUID) { if trashNotice?.id == id { trashNotice = nil } }
 
     // MARK: A report (core's NodeReport)
-
-    /// Whether the tenant's server takes reports (it publishes a moderation key): Report is offered only then.
-    private(set) var reportOffered = false
-
-    /// Asks the server once per tenant whether it takes reports.
-    func readReportOffered() async {
-        guard let t = tenantSession else { return }
-        reportOffered = ((try? await NodeReport.shared.published(tenant: t)) ?? nil) != nil
-    }
 
     /// Reports `ref` to the moderators: whole or by its name, in `category` for `reason`, `contact` optional.
     func report(_ ref: NodeAt, scope: NodeReport.Scope, category: String, reason: String, contact: String) async -> NodeReport.Sent {
@@ -776,7 +787,7 @@ final class AppModel {
         let outcome = r?.result.outcome ?? .failed
         if outcome == .moved, let toName {
             trashNotice = TrashNotice(
-                message: say(.moveMoved, ref.name, toName), node: nil, moveBack: MoveBack(ref: ref, to: from)
+                message: say(.moveMoved, ref.name, toName), moveBack: MoveBack(ref: ref, to: from)
             )
         }
         return outcome
@@ -791,19 +802,9 @@ final class AppModel {
         await readDetails(shellModel.tenant)
         let outcome = r?.outcome ?? .failed
         if outcome == .copied {
-            trashNotice = TrashNotice(message: say(.theCopyDone, ref.name, toName), node: nil, moveBack: nil)
+            trashNotice = TrashNotice(message: say(.theCopyDone, ref.name, toName))
         }
         return outcome
-    }
-
-    /// Renames `ref` to `name` (core's `NodeRename`: the placement, then its open links' names); the lists are read anew
-    /// and an open page follows the node under its new name. Why it did not land, in core's words, or nil once renamed;
-    /// `linksFailed` says a link kept the old name (the rename stands).
-    func rename(_ ref: NodeAt, to name: String) async -> (problem: String?, linksFailed: Bool) {
-        guard let m = shellModel, let r = try? await m.rename(ref: ref, name: name) else { return (say(.nodeSaveFailed), false) }
-        applyShell(start: false)
-        await readDetails(m.tenant)
-        return (r.notice.map { say(notice: $0) }, r.linksFailed)
     }
 
     /// How a kind folds a name to its slug token's input: the composition root's answer (`AppKinds`, the web's
@@ -1177,11 +1178,11 @@ final class AppModel {
         return outcome == .done
     }
 
-    /// Creates a folder named `name` in the space and folder on screen, core's folder (the web's `FolderNameDialog`); the
+    /// Creates a folder named `name` where the shell is (core's `createFolderHere`) (the web's `FolderNameDialog`); the
     /// lists are read anew. Why not, in the web's words, or nil once created.
     func createFolder(name: String) async -> String? {
-        guard let m = shellModel, let scopeId = shell.space else { return say(.folderFailed) }
-        let refused = try? await m.createFolder(scopeId: scopeId, parentId: shell.folder?.nodeId, name: name)
+        guard let m = shellModel else { return say(.folderFailed) }
+        let refused = try? await m.createFolderHere(name: name)
         applyShell(start: false)
         await readDetails(m.tenant)
         return refused.map { say(notice: $0) }
@@ -1349,7 +1350,7 @@ final class AppModel {
         applyShell(start: false)
         await readDetails(m.tenant)
         if let refused { return say(notice: refused) }
-        trashNotice = TrashNotice(message: say(.theCopyDone, ref.name, toName), node: nil, moveBack: nil)
+        trashNotice = TrashNotice(message: say(.theCopyDone, ref.name, toName))
         return nil
     }
 

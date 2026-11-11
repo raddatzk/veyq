@@ -347,7 +347,6 @@ class AppModel(app: Application) : AndroidViewModel(app) {
         potWatch = viewModelScope.launch { pots.state.collect { _pot.value = it } }
         creatingWatch?.cancel()
         creatingWatch = viewModelScope.launch { pots.creating.collect { _creating.value = it } }
-        readReportOffered()
         val model = me.raddatz.veyq.mobile.navigation.ShellModel(t, hidden, recent, System::currentTimeMillis)
         shellWatch?.cancel()
         shellModel = model
@@ -390,16 +389,17 @@ class AppModel(app: Application) : AndroidViewModel(app) {
 
     // ---- core's actions on a node ----
 
-    /** Whether [ref] is a guest's identity folder or lies in one (core's answer over the tree last read). */
-    fun inIdentityFolder(ref: me.raddatz.veyq.mobile.navigation.NodeAt): Boolean = shellModel?.inIdentityFolder(ref) ?: false
-
-    /** Whether [ref] is pinned; null while its space's pin set is not loaded (no heart is offered then). */
-    fun isFavorite(ref: me.raddatz.veyq.mobile.navigation.NodeAt): Boolean? = shellModel?.isFavorite(ref)
-
-    /** Pins or unpins [ref], then the lists are read anew; false when it was not stored (the heart goes back). */
-    suspend fun toggleFavorite(ref: me.raddatz.veyq.mobile.navigation.NodeAt): Boolean {
-        val m = shellModel ?: return false
-        return m.toggleFavorite(ref).also { readRowDetails(m.tenant) }
+    /**
+     * The header of [node] (core's `NodeHeaderModel` over the shell), its kind's page knowing [facts]: an open Pot of the
+     * node closes once it went to the trash, and each write reads the rows' details anew.
+     */
+    fun header(node: me.raddatz.veyq.mobile.navigation.NodeAt, facts: me.raddatz.veyq.mobile.AppKinds.Facts?): me.raddatz.veyq.mobile.navigation.NodeHeaderModel? {
+        val m = shellModel ?: return null
+        return m.header(
+            node, facts,
+            closeOpen = { ref -> _pot.value?.ref?.takeIf { it.nodeId == ref.nodeId }?.let { potModel?.close(it) } },
+            changed = { viewModelScope.launch { readRowDetails(m.tenant) } },
+        )
     }
 
     /** The lists read anew (core's shell), with each row's facts. */
@@ -409,48 +409,12 @@ class AppModel(app: Application) : AndroidViewModel(app) {
     }
 
     /**
-     * Moves [ref] with everything under it to the space's trash (core's shell: a page whose node went leaves for its
-     * parent); an open Pot of it closes. What came of it, and the node as it was before (what an undo restores).
-     */
-    suspend fun trash(ref: me.raddatz.veyq.mobile.navigation.NodeAt): me.raddatz.veyq.mobile.navigation.ShellModel.Trashed? {
-        val m = shellModel ?: return null
-        val r = m.trash(ref)
-        if (r.gone) _pot.value?.ref?.takeIf { it.nodeId == ref.nodeId }?.let { potModel?.close(it) }
-        readRowDetails(m.tenant)
-        return r
-    }
-
-    /** Brings [node] back from the trash under its name (the undo of [trash]); false when it could not be. */
-    suspend fun restore(node: me.raddatz.veyq.mobile.session.OpenNode): Boolean {
-        val m = shellModel ?: return false
-        return (m.undoTrash(node) == null).also { readRowDetails(m.tenant) }
-    }
-
-    /** Renames [ref] to [name] (core's shell: an open page follows it under its new name). What came of it. */
-    suspend fun rename(ref: me.raddatz.veyq.mobile.navigation.NodeAt, name: String): me.raddatz.veyq.mobile.session.NodeRename.Result {
-        val m = shellModel ?: return me.raddatz.veyq.mobile.session.NodeRename.Result(me.raddatz.veyq.mobile.session.NodeRename.Outcome.FAILED)
-        return m.rename(ref, name).result.also { readRowDetails(m.tenant) }
-    }
-
-    /**
      * How a kind folds a name to its slug token's input: the composition root's answer (`AppKinds`, the web's
      * `registry.tokenInputFor`). Null for a kind the app does not know: nothing is placed under it.
      */
     private fun tokenInputFor(kind: String, name: String): String? = me.raddatz.veyq.mobile.AppKinds.tokenInput(kind, name)
 
     // ---- a report (core's NodeReport) ----
-
-    private val _reportOffered = MutableStateFlow(false)
-    /** Whether the tenant's server takes reports (it publishes a moderation key): Report is offered only then. */
-    val reportOffered: StateFlow<Boolean> = _reportOffered.asStateFlow()
-
-    /** Asks the server once per tenant whether it takes reports. */
-    fun readReportOffered() {
-        val t = tenantSession ?: return
-        viewModelScope.launch {
-            _reportOffered.value = runCatching { me.raddatz.veyq.mobile.session.NodeReport.published(t) != null }.getOrDefault(false)
-        }
-    }
 
     /** Reports [ref] to the moderators: whole or by its name, in [category] for [reason], [contact] optional. */
     suspend fun report(ref: me.raddatz.veyq.mobile.navigation.NodeAt, scope: me.raddatz.veyq.mobile.session.NodeReport.Scope, category: String, reason: String, contact: String): me.raddatz.veyq.mobile.session.NodeReport.Sent {
@@ -1119,13 +1083,13 @@ class AppModel(app: Application) : AndroidViewModel(app) {
     }
 
     /**
-     * Creates a folder named [name] in [scopeId] under [parentId] (null: the space's root), core's folder (the web's
-     * `FolderNameDialog`): the lists are read anew. Why not, in the web's words, or null once created.
+     * Creates a folder named [name] where the shell is (core's `createFolderHere`, the web's `FolderNameDialog`): the lists
+     * are read anew. Why not, in the web's words, or null once created.
      */
-    suspend fun createFolder(scopeId: String, parentId: String?, name: String): String? {
+    suspend fun createFolder(name: String): String? {
         val app = getApplication<Application>()
         val m = shellModel ?: return app.text(me.raddatz.veyq.mobile.words.Notices.folderRefused(null))
-        return m.createFolder(scopeId, parentId, name)?.let { app.text(it) }.also { readRowDetails(m.tenant) }
+        return m.createFolderHere(name)?.let { app.text(it) }.also { readRowDetails(m.tenant) }
     }
 
     /** What the drawer's "New" asked Home to create ("folder" or "pot"), until Home opens its dialog. */

@@ -55,26 +55,24 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.async
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import me.raddatz.veyq.mobile.navigation.NodeAt
 import me.raddatz.veyq.mobile.navigation.NodeHeader as Plan
 import me.raddatz.veyq.mobile.session.NodeMove
 
 /**
- * What a kind's page hands core's header (the web's `contributeNodeHeader`, its rights function and the page's doors): a
- * subtitle under the name, the application's narrowing of core's rights, its doors (a copy, a download — absent: not
- * offered) and actions of its own. Core builds the rest, the same for every kind (`NodeHeader`).
+ * What a kind's page hands core's header (the web's `contributeNodeHeader` and the page's doors): a subtitle under the name,
+ * what the page knows of its object that the kind's doors wait on ([facts]: core's `AppKinds.doors` decides), the doors
+ * themselves (a copy, a download; core's rights say whether each is offered) and actions of its own. Core's
+ * `NodeHeaderModel` composes the rest, the same for every kind.
  */
 internal class HeaderContribution(
     /** The line under the node's name (a Pot's currency); null: none. */
     val subtitle: String? = null,
-    /** Whether the application lets this node's cover change here (a Pot of a switched-off Expenses: no). */
-    val cover: Boolean = true,
-    /** Whether the kind is renamed at all (a drop box never is: Depot's rights). */
-    val rename: Boolean = true,
-    /** The delete's title and question in the kind's words (`deleteTitle`, `deleteQuestion.ts`). */
-    val deleteTitle: String,
-    val deleteQuestion: String,
+    /** What the page knows of its object (a Pot's write right, a file's content): the kind's doors follow it in core. */
+    val facts: me.raddatz.veyq.mobile.AppKinds.Facts = me.raddatz.veyq.mobile.AppKinds.Facts(),
     /** The copy door: copies to the folder chosen (null: the space's top), answers why not, or null once copied. */
     val copy: (suspend (to: String?) -> String?)? = null,
     /** What the copy dialog says before anything is written: what does not come along and what is left out (the web's). */
@@ -96,11 +94,11 @@ internal class OwnAction(val id: String, val label: String, val icon: ImageVecto
 
 /**
  * Core's header actions on a node of any kind (the web's `NodeHeader` with `coreNodeActions.ts` and `standardNodeActions`,
- * ADR 0110): core's `NodeHeader.plan` decides what is offered and where, from the node's rights, the kind's order
- * (`AppKinds.headerOrder`) and [contribution]; up to [maxButtons] are icon buttons in the bar (Material 3: a top app bar
- * holds a few actions, the rest in its overflow), the rest one "more" menu whose last group, after a divider, holds the move,
- * the copy, the report and the delete — the delete last, in the danger role, asked first. Every dialog behind an action is
- * core's one: the share sheet, the move and copy browser, the cover sheet, the rename, the report, the delete and its undo.
+ * ADR 0110): core's `NodeHeaderModel` composes the rights and plans what is offered and where, from the node, the kind's
+ * order and [contribution]; up to [maxButtons] are icon buttons in the bar (Material 3: a top app bar holds a few actions,
+ * the rest in its overflow), the rest one "more" menu whose last group, after a divider, holds the move, the copy, the
+ * report and the delete — the delete last, in the danger role, asked first. Every dialog behind an action is core's one:
+ * the share sheet, the move and copy browser, the cover sheet, the rename, the report, the delete and its undo.
  */
 @Composable
 internal fun NodeHeaderActions(
@@ -111,21 +109,16 @@ internal fun NodeHeaderActions(
 ) {
     val context = LocalContext.current
     val palette = LocalPalette.current
-    val reportOffered by model.reportOffered.collectAsStateWithLifecycle()
     val covers by model.covers.collectAsStateWithLifecycle()
-    // The heart turns at once (the web's optimistic toggle) and turns back when the write did not land.
-    var pinned by remember(node.nodeId) { mutableStateOf(model.isFavorite(node)) }
+    val header = remember(node) { model.header(node, contribution.facts) } ?: return
+    androidx.compose.runtime.SideEffect { header.update(contribution.facts) }
+    val state by header.state.collectAsStateWithLifecycle()
+    val pinned = state.pinned
     var menu by remember { mutableStateOf(false) }
     var dialog by remember(node.nodeId) { mutableStateOf<String?>(null) }
-    val page = KindPages.of(node.kind)
-    val rights = Plan.rights(
-        node.kind, favoriteKnown = pinned != null, shareable = page?.shareable == true, linksOn = model.linkRules().on,
-        rename = contribution.rename, takesCover = page?.takesCover == true, coverOffered = contribution.cover,
-        copy = contribution.copy != null, download = contribution.download != null, report = reportOffered,
-        inGuestFolder = model.inIdentityFolder(node),
-    )
-    val plan = Plan.plan(rights, me.raddatz.veyq.mobile.AppKinds.headerOrder(node.kind), maxButtons, contribution.actions.map { Plan.Action(it.id, it.slot) })
+    val plan = header.plan(maxButtons, contribution.actions.map { Plan.Action(it.id, it.slot) }) ?: return
     val own = contribution.actions.associateBy { it.id }
+    val hasCover = covers.containsKey(node.nodeId)
 
     // the download goes where the person picks (the system's "create document"), streamed there as it is written
     val downloadFailed = stringResource(R.string.download_failed, node.name)
@@ -150,18 +143,10 @@ internal fun NodeHeaderActions(
             )
         }
     }
-    val favoriteFailed = stringResource(R.string.node_favorite_failed)
     fun run(id: String) {
         when (id) {
-            Plan.FAVORITE -> {
-                pinned = pinned?.not()
-                scope.launch {
-                    if (!model.toggleFavorite(node)) {
-                        pinned = model.isFavorite(node)
-                        snackbar.showSnackbar(favoriteFailed)
-                    }
-                }
-            }
+            // the heart turns at once and back when the write did not land (core's)
+            Plan.FAVORITE -> scope.launch { header.toggleFavorite()?.let { snackbar.showSnackbar(context.text(it)) } }
             Plan.DOWNLOAD -> saveTo.launch(contribution.downloadName ?: me.raddatz.veyq.mobile.export.NodeExport.fileName(node.name))
             in own -> own.getValue(id).onClick()
             else -> dialog = id
@@ -172,9 +157,9 @@ internal fun NodeHeaderActions(
         IconButton(onClick = { run(id) }) {
             when (id) {
                 Plan.FAVORITE ->
-                    if (pinned == true) Icon(Icons.Filled.Favorite, stringResource(R.string.node_unfavorite), tint = role(palette.favorite))
-                    else Icon(Icons.Outlined.FavoriteBorder, stringResource(R.string.node_favorite))
-                else -> Icon(iconOf(id, own), labelOf(id, node, contribution, covers.containsKey(node.nodeId), pinned))
+                    if (pinned == true) Icon(Icons.Filled.Favorite, labelOf(id, header, contribution, hasCover), tint = role(palette.favorite))
+                    else Icon(Icons.Outlined.FavoriteBorder, labelOf(id, header, contribution, hasCover))
+                else -> Icon(iconOf(id, own), labelOf(id, header, contribution, hasCover))
             }
         }
     }
@@ -182,13 +167,13 @@ internal fun NodeHeaderActions(
         IconButton(onClick = { menu = true }) { Icon(Icons.Outlined.MoreVert, stringResource(R.string.node_more)) }
         DropdownMenu(menu, { menu = false }) {
             for (id in plan.menu) DropdownMenuItem(
-                text = { Text(labelOf(id, node, contribution, covers.containsKey(node.nodeId), pinned)) },
+                text = { Text(labelOf(id, header, contribution, hasCover)) },
                 onClick = { menu = false; run(id) },
             )
             if (plan.menu.isNotEmpty() && plan.last.isNotEmpty()) HorizontalDivider()
             for (id in plan.last) DropdownMenuItem(
                 text = {
-                    val label = labelOf(id, node, contribution, covers.containsKey(node.nodeId), pinned)
+                    val label = labelOf(id, header, contribution, hasCover)
                     if (id == Plan.DELETE) Text(label, color = MaterialTheme.colorScheme.error) else Text(label)
                 },
                 onClick = { menu = false; run(id) },
@@ -202,11 +187,10 @@ internal fun NodeHeaderActions(
         Plan.REPORT -> ReportSheet(node, model, close)
         Plan.COVER -> CoverSheet(node, model, close)
         Plan.RENAME -> RenameDialog(node.name, onRename = { name ->
-            val r = model.rename(node, name)
-            val problem = renameProblem(context, r)
+            val r = header.rename(name)
             // renamed; a link that kept the old name is said (the rename stands)
-            if (problem == null && r.links?.failed?.isNotEmpty() == true) scope.launch { snackbar.showSnackbar(context.getString(R.string.share_name_reseal_failed)) }
-            problem
+            r.notice?.let { scope.launch { snackbar.showSnackbar(context.text(it)) } }
+            r.problem?.let { context.text(it) }
         }, onClose = close)
         Plan.MOVE -> NodeMoveSheet(node, rootName, model, onMoved = { to, from ->
             scope.launch {
@@ -222,10 +206,10 @@ internal fun NodeHeaderActions(
         }, copy = contribution.copy, notes = contribution.copyNotes, onClose = close)
         Plan.DELETE -> AlertDialog(
             onDismissRequest = close,
-            title = { Text(contribution.deleteTitle) },
-            text = { Text(contribution.deleteQuestion) },
+            title = { Text(say(header.deleteTitle)) },
+            text = { Text(context.text(header.deleteQuestion())) },
             confirmButton = {
-                TextButton(onClick = { close(); trash(node, model, snackbar, scope, context) }) {
+                TextButton(onClick = { close(); trash(header, snackbar, scope, context) }) {
                     Text(stringResource(R.string.entry_delete), color = MaterialTheme.colorScheme.error)
                 }
             },
@@ -234,22 +218,24 @@ internal fun NodeHeaderActions(
     }
 }
 
-/** The delete into the trash, with the web's undo for as long as the web offers it (`TRASH_UNDO_MS`), or a refusal. */
-private fun trash(node: NodeAt, model: AppModel, snackbar: SnackbarHostState, scope: CoroutineScope, context: android.content.Context) {
+/**
+ * The delete into the trash (core's), its undo shown for as long as core offers it (`TRASH_UNDO_MS`), or a refusal. It runs
+ * in the shell's [scope]: the page has left by the time the trash answered.
+ */
+internal fun trash(header: me.raddatz.veyq.mobile.navigation.NodeHeaderModel, snackbar: SnackbarHostState, scope: CoroutineScope, context: android.content.Context) {
     scope.launch {
-        val r = model.trash(node) ?: return@launch
-        val said = context.text(r.notice)
-        val before = r.before
-        if (!r.undoable || before == null) {
+        val said = context.text(header.trash())
+        if (header.current.undo == null) {
             snackbar.showSnackbar(said)
             return@launch
         }
-        val answer = kotlinx.coroutines.withTimeoutOrNull(me.raddatz.veyq.mobile.navigation.ShellModel.TRASH_UNDO_MS) {
-            snackbar.showSnackbar(said, actionLabel = context.getString(R.string.trash_undo), duration = SnackbarDuration.Indefinite)
+        val answer = kotlinx.coroutines.coroutineScope {
+            val shown = async { snackbar.showSnackbar(said, actionLabel = context.getString(R.string.trash_undo), duration = SnackbarDuration.Indefinite) }
+            // core ends the offer after its window: the snackbar goes with it
+            val window = launch { header.state.first { it.undo == null }; shown.cancel() }
+            runCatching { shown.await() }.getOrNull().also { window.cancel() }
         }
-        if (answer == SnackbarResult.ActionPerformed && !model.restore(before)) {
-            snackbar.showSnackbar(context.text(me.raddatz.veyq.mobile.words.Notices.trashUndoFailed(node.name)))
-        }
+        if (answer == SnackbarResult.ActionPerformed) header.undoTrash()?.let { snackbar.showSnackbar(context.text(it)) }
     }
 }
 
@@ -260,9 +246,8 @@ private fun iconOf(id: String, own: Map<String, OwnAction>): ImageVector = when 
 }
 
 @Composable
-private fun labelOf(id: String, node: NodeAt, contribution: HeaderContribution, hasCover: Boolean, pinned: Boolean?): String =
-    Plan.label(id, node.kind, pinned, hasCover)?.let { say(it) }
-        ?: if (id == Plan.DELETE) contribution.deleteTitle else contribution.actions.firstOrNull { it.id == id }?.label ?: id
+private fun labelOf(id: String, header: me.raddatz.veyq.mobile.navigation.NodeHeaderModel, contribution: HeaderContribution, hasCover: Boolean): String =
+    header.label(id, hasCover)?.let { say(it) } ?: contribution.actions.firstOrNull { it.id == id }?.label ?: id
 
 /**
  * Core's head of a node's page (the web's `NodeHeader` leading visual, ADR 0110): what the shell hands the body of the node on

@@ -257,7 +257,7 @@ fun ShellScreen(s: Screen.Signed, model: AppModel) {
                 ?: shell.space?.takeIf { shell.application == null && !shell.searching }?.let { shell.folderAt(it) }
             val pagedContribution = paged?.let { KindPages.of(it.kind)?.header?.invoke(it, model) }
             val hero: @Composable (androidx.compose.ui.unit.Dp) -> Unit = { inset ->
-                if (paged != null) NodeCoverHero(paged, model, canSet = KindPages.of(paged.kind)?.takesCover == true && pagedContribution?.cover != false, inset = inset)
+                if (paged != null) NodeCoverHero(paged, model, canSet = me.raddatz.veyq.mobile.AppKinds.coverSettable(paged.kind, pagedContribution?.facts), inset = inset)
             }
             androidx.compose.foundation.layout.Row(Modifier.padding(padding).fillMaxSize()) {
             if (rail) {
@@ -414,7 +414,7 @@ private fun HomeScreen(s: Screen.Signed, model: AppModel, onEnter: (me.raddatz.v
         }
     }
     }
-    if (naming) FolderNameDialog(onClose = { naming = false }) { name -> model.createFolder(s.shell.space!!, s.shell.folder?.nodeId, name) }
+    if (naming) FolderNameDialog(onClose = { naming = false }) { name -> model.createFolder(name) }
     if (creatingPot) PotCreateSheet(s, model) { creatingPot = false }
 }
 
@@ -794,10 +794,6 @@ private fun tabLabel(tab: BarTab, kind: String?): String = say(me.raddatz.veyq.m
 
 /** What each object's row says beside its name, by node id (`AppModel.rowDetails`). */
 internal val LocalRowDetails = androidx.compose.runtime.compositionLocalOf<Map<String, List<String>>> { emptyMap() }
-
-/** Why a rename did not land, in core's words (`nodeNameErrorText`); null once renamed. */
-internal fun renameProblem(context: android.content.Context, r: me.raddatz.veyq.mobile.session.NodeRename.Result): String? =
-    me.raddatz.veyq.mobile.words.Notices.renameRefused(r)?.let { context.text(it) }
 
 /** Whether the shell is picking a place for what another app shared (ADR 0129). */
 internal val LocalPicking = androidx.compose.runtime.compositionLocalOf { false }

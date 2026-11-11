@@ -2,19 +2,15 @@ import PhotosUI
 import SwiftUI
 import VeyqCore
 
-/// What a kind's page hands core's header (the web's `contributeNodeHeader`, its rights function and the page's doors): a
-/// subtitle under the name, the application's narrowing of core's rights, its doors (a copy, a download — absent: not
-/// offered) and actions of its own. Core builds the rest, the same for every kind (`NodeHeaderActions`).
+/// What a kind's page hands core's header (the web's `contributeNodeHeader` and the page's doors): a subtitle under the
+/// name, what the page knows of its object that the kind's doors wait on (`facts`: core's `AppKinds.doors` decides), the
+/// doors themselves (a copy, a download; core's rights say whether each is offered) and actions of its own. Core's
+/// `NodeHeaderModel` composes the rest, the same for every kind.
 struct HeaderContribution {
     /// The line under the node's name (a Pot's currency); nil: none.
     var subtitle: String?
-    /// Whether the application lets this node's cover change here (a Pot of a switched-off Expenses: no).
-    var cover = true
-    /// Whether the kind is renamed at all (a drop box never is: Depot's rights).
-    var rename = true
-    /// The delete's title and question in the kind's words (`deleteTitle`, `deleteQuestion.ts`).
-    let deleteTitle: String
-    let deleteQuestion: String
+    /// What the page knows of its object (a Pot's write right, a file's content): the kind's doors follow it in core.
+    var facts = AppKinds.Facts(canWrite: true, hasContent: true)
     /// The copy door: copies to the folder chosen (nil: the space's top; then its name), answers why not, or nil once copied.
     var copy: ((String?, String) async -> String?)?
     /// What the copy dialog says before anything is written: what does not come along and what is left out (the web's).
@@ -40,12 +36,6 @@ struct Downloaded {
 /// What a copy of nodes of `kinds` leaves behind, in their kinds' words (core's `AppKinds.lossesOfCopy`).
 func copyLosses(_ kinds: [String]) -> [String] { AppKinds.shared.lossesOfCopy(kinds: kinds).map { say($0) } }
 
-/// A kind's delete words and rename from core's registry (`AppKinds.header`).
-private func kindHeader(_ node: NodeAt) -> (title: String, question: String, renames: Bool) {
-    guard let h = AppKinds.shared.header(kind: node.kind) else { return (say(.folderDelete), say(.folderDeleteConfirm, node.name), true) }
-    return (say(h.deleteTitle), say(notice: h.deleteQuestion(name: node.name)), h.renames)
-}
-
 /// An action of the application's own on its node's header.
 struct OwnAction {
     let id: String
@@ -55,15 +45,11 @@ struct OwnAction {
     let run: () -> Void
 }
 
-/// A kind's page as the app registers it (the web's `KindRegistration` of `app.kind`): what core's header reads of the kind
-/// (it brings a share sheet, it takes a cover), what the kind's page contributes to that header (nil while the page cannot
-/// tell yet) and the page's body under it (nil: not built; a folder's is core's level). Core draws the header for every
-/// kind, never an application.
+/// A kind's page as the app registers it (the web's `KindRegistration` of `app.kind`): what the kind's page contributes to
+/// core's header (nil while the page cannot tell yet) and the page's body under it (nil: not built; a folder's is core's
+/// level). What the header offers is core's (`NodeHeaderModel`, `AppKinds`); core draws it for every kind, never an
+/// application.
 struct KindPage {
-    /// What core's registry says of the kind (`AppKinds.header`).
-    let kind: String
-    var shareable: Bool { AppKinds.shared.header(kind: kind)?.shareable == true }
-    var takesCover: Bool { AppKinds.shared.header(kind: kind)?.takesCover == true }
     let header: @MainActor (NodeAt, AppModel) -> HeaderContribution?
     /// The body of an object of the kind on its bar tab (`key`).
     var body: (@MainActor (ObjectRef, String, AppModel) -> AnyView)?
@@ -82,15 +68,10 @@ struct KindPage {
 
     /// Depot's drop box: its guests' folders (`DropBoxScreen`); never renamed; its cover; its ZIP and its copy (a plain folder).
     /// Memories' Memory and chapter: their gallery (`MemoryScreen`); their cover is core's.
-    private static let memory = KindPage(kind: "MEMORY", header: { node, _ in
-        HeaderContribution(deleteTitle: kindHeader(node).title, deleteQuestion: kindHeader(node).question)
-    }, body: { ref, _, model in AnyView(MemoryScreen(model: model, ref: ref)) })
+    private static let memory = KindPage(header: { _, _ in HeaderContribution() }, body: { ref, _, model in AnyView(MemoryScreen(model: model, ref: ref)) })
 
-    private static let dropBox = KindPage(kind: DepotFiles.shared.DROPBOX, header: { node, model in
+    private static let dropBox = KindPage(header: { node, model in
         HeaderContribution(
-            rename: kindHeader(node).renames,
-            deleteTitle: kindHeader(node).title,
-            deleteQuestion: kindHeader(node).question,
             copy: { to, toName in await model.copyFolder(node, to: to, toName: toName) },
             copyNotes: {
                 let p = await model.copyPreview(node)
@@ -101,15 +82,14 @@ struct KindPage {
     }, body: { ref, _, model in AnyView(DropBoxScreen(model: model, ref: ref)) })
 
     /// Depot's file: its download under its own name, its replace (or first upload), its page (`FileScreen`).
-    private static let file = KindPage(kind: DepotFiles.shared.FILE, header: { node, model in
+    private static let file = KindPage(header: { node, model in
         let has = model.files[node.nodeId]?.hasContent == true
         return HeaderContribution(
-            deleteTitle: kindHeader(node).title,
-            deleteQuestion: kindHeader(node).question,
+            facts: AppKinds.Facts(canWrite: true, hasContent: has),
             // a copy is read here and uploaded again under a fresh key (the web's `importFile` for a copy)
-            copy: has ? { to, toName in await model.copyFolder(node, to: to, toName: toName) } : nil,
+            copy: { to, toName in await model.copyFolder(node, to: to, toName: toName) },
             copyNotes: { CopyNotes(losses: []) },
-            download: has ? { await model.downloadFile(node) } : nil,
+            download: { await model.downloadFile(node) },
             actions: [OwnAction(id: "replace", label: say(DepotFiles.shared.replaceWord(f: model.files[node.nodeId])), systemImage: "square.and.arrow.down.on.square") {
                 model.replacing = node.nodeId
             }] + sendAction(node, model, has)
@@ -117,10 +97,8 @@ struct KindPage {
     }, body: { ref, _, model in AnyView(FileScreen(model: model, ref: ref)) })
 
     /// Core's folder: its ZIP and its copy with everything under it the build exports and copies (`NodeExport`, `SubtreeCopy`).
-    private static let folder = KindPage(kind: "FOLDER", header: { node, model in
+    private static let folder = KindPage(header: { node, model in
         HeaderContribution(
-            deleteTitle: kindHeader(node).title,
-            deleteQuestion: kindHeader(node).question,
             copy: { to, toName in await model.copyFolder(node, to: to, toName: toName) },
             copyNotes: {
                 let p = await model.copyPreview(node)
@@ -131,19 +109,16 @@ struct KindPage {
     })
 
     /// Expenses' Pot: its currency under its name, its cover and copy while Expenses is on, its ZIP.
-    private static let pot = KindPage(kind: PotSession.companion.KIND, header: { node, model in
+    private static let pot = KindPage(header: { node, model in
         guard let state = model.pot, state.ref.nodeId == node.nodeId, let view = state.view else { return nil }
-        // a cover and a copy write: offered where Expenses is on (the web's `canCopy`, `expensesRights`)
-        let writable = view.canWrite
         let ref = state.ref
         return HeaderContribution(
             subtitle: view.subtitle.map { say(notice: $0) },
-            cover: writable,
-            deleteTitle: kindHeader(node).title,
-            deleteQuestion: kindHeader(node).question,
-            copy: writable ? { to, toName in
+            // a cover and a copy write: core offers them where Expenses is on (the web's `canCopy`, `expensesRights`)
+            facts: AppKinds.Facts(canWrite: view.canWrite, hasContent: true),
+            copy: { to, toName in
                 Notices.shared.potCopyRefused(outcome: await model.copyPot(node, to: to, toName: toName)).map { say(notice: $0) }
-            } : nil,
+            },
             copyNotes: { CopyNotes(losses: copyLosses([PotSession.companion.KIND])) },
             download: { await model.downloadPot(ref).map { Downloaded(url: $0) } }
         )
@@ -161,18 +136,17 @@ struct KindPage {
 }
 
 /// Core's header actions on a node of any kind (the web's `NodeHeader` with `coreNodeActions.ts` and `standardNodeActions`,
-/// ADR 0110): core's `NodeHeader.plan` decides what is offered and where, from the node's rights, the kind's order
-/// (`AppKinds.headerOrder`) and the contribution; up to `maxButtons` are toolbar buttons, the rest one "More" menu whose last
-/// section holds the move, the copy, the report and the delete — the delete last and destructive, asked first. Every dialog
-/// behind an action is core's one: the share sheet, the move and copy browser, the cover sheet, the rename, the report, the
-/// delete.
+/// ADR 0110): core's `NodeHeaderModel` composes the rights and plans what is offered and where, from the node, the kind's
+/// order and the contribution; up to `maxButtons` are toolbar buttons, the rest one "More" menu whose last section holds
+/// the move, the copy, the report and the delete — the delete last and destructive, asked first. Every dialog behind an
+/// action is core's one: the share sheet, the move and copy browser, the cover sheet, the rename, the report, the delete.
 struct NodeHeaderActions: View {
     @Bindable var model: AppModel
     let node: NodeAt
     let contribution: HeaderContribution
     /// How many actions are toolbar buttons: a level's bar keeps its room for its title (0: one "More" menu).
     var maxButtons: Int32 = 2
-    @State private var pinned: Bool?
+    @State private var box = HeaderBox()
     @State private var dialog: String?
     @State private var asking = false
     @State private var renaming = false
@@ -184,41 +158,42 @@ struct NodeHeaderActions: View {
     /// What the last download left out, said once its file is saved.
     @State private var leftOut: [String] = []
 
-    private var plan: NodeHeader.Plan {
-        let page = KindPage.of(node.kind)
-        // core's rights (a guest's folder and what lies in it narrowed there: moved out, never renamed, shared, covered)
-        let rights = NodeHeader.shared.rights(
-            kind: node.kind, favoriteKnown: pinned != nil, shareable: page?.shareable == true, linksOn: model.linkRules().on,
-            rename: contribution.rename, takesCover: page?.takesCover == true, coverOffered: contribution.cover,
-            copy: contribution.copy != nil, download: contribution.download != nil, report: model.reportOffered,
-            inGuestFolder: model.inIdentityFolder(node)
-        )
-        return NodeHeader.shared.plan(
-            rights: rights, order: AppKinds.shared.headerOrder(kind: node.kind), maxButtons: maxButtons,
-            own: contribution.actions.map { NodeHeader.Action(id: $0.id, slot: $0.slot) }
-        )
+    /// Core's header of the node (one per node and name, held by the app model).
+    private var header: NodeHeaderModel? { model.header(node, facts: contribution.facts) }
+
+    /// Core's plan; read through `box.state`, so each change of the header redraws it.
+    private var plan: NodeHeader.Plan? {
+        _ = box.state
+        return header?.plan(maxButtons: maxButtons, own: contribution.actions.map { NodeHeader.Action(id: $0.id, slot: $0.slot) })
     }
 
+    private var pinned: Bool? { (box.state ?? header?.current)?.pinned?.boolValue }
+
     var body: some View {
-        let plan = plan
         HStack {
-            ForEach(plan.buttons, id: \.self) { id in
-                Button { run(id) } label: { label(id) }
-                    .labelStyle(.iconOnly)
-            }
-            if plan.hasMenu {
-                Menu {
-                    ForEach(plan.menu, id: \.self) { id in Button { run(id) } label: { label(id) } }
-                    if !plan.menu.isEmpty, !plan.last.isEmpty { Divider() }
-                    ForEach(plan.last, id: \.self) { id in
-                        Button(role: id == NodeHeader.shared.DELETE ? .destructive : nil) { run(id) } label: { label(id) }
+            if let plan {
+                ForEach(plan.buttons, id: \.self) { id in
+                    Button { run(id) } label: { label(id) }
+                        .labelStyle(.iconOnly)
+                }
+                if plan.hasMenu {
+                    Menu {
+                        ForEach(plan.menu, id: \.self) { id in Button { run(id) } label: { label(id) } }
+                        if !plan.menu.isEmpty, !plan.last.isEmpty { Divider() }
+                        ForEach(plan.last, id: \.self) { id in
+                            Button(role: id == NodeHeader.shared.DELETE ? .destructive : nil) { run(id) } label: { label(id) }
+                        }
+                    } label: {
+                        if downloading { ProgressView() } else { Label(say(.nodeMore), systemImage: "ellipsis.circle") }
                     }
-                } label: {
-                    if downloading { ProgressView() } else { Label(say(.nodeMore), systemImage: "ellipsis.circle") }
                 }
             }
         }
-        .onAppear { pinned = model.isFavorite(node) }
+        .onAppear { if let header { box.start(header) } }
+        // renamed: the header of the node under its new name
+        .onChange(of: node.name) { if let header { box.start(header) } }
+        .onDisappear { box.stop() }
+        .onChange(of: contribution.facts) { header?.update(facts: contribution.facts) }
         .sheet(isPresented: shown(NodeHeader.shared.SHARE)) { ShareSheet(model: model, ref: node) }
         .sheet(isPresented: shown(NodeHeader.shared.REPORT)) { ReportSheet(model: model, ref: node) }
         .sheet(isPresented: shown(NodeHeader.shared.COVER)) { CoverSheet(model: model, node: node) }
@@ -228,24 +203,32 @@ struct NodeHeaderActions: View {
         .fileMover(isPresented: Binding(get: { downloaded != nil }, set: { if !$0 { cleanUpDownload() } }), file: downloaded) { _ in
             cleanUpDownload()
         }
-        .alert(contribution.deleteTitle, isPresented: $asking) {
-            Button(say(.peopleDeleteAccept), role: .destructive) { Task { await model.trash(node) } }
+        .alert(header.map { say($0.deleteTitle) } ?? "", isPresented: $asking) {
+            Button(say(.peopleDeleteAccept), role: .destructive) {
+                if let header { Task { await model.trash(header) } }
+            }
             Button(say(.signinCancel), role: .cancel) {}
         } message: {
-            Text(contribution.deleteQuestion)
+            if let header { Text(say(notice: header.deleteQuestion())) }
         }
         // Core's name dialog (`FolderNameDialog`): the name as it is, trimmed on save; a refusal says why and asks again.
         .alert(say(.nodeRename), isPresented: $renaming) {
             TextField(say(.peopleName), text: $newName)
             Button(say(.entrySave)) {
                 let name = newName
+                guard let header else { return }
                 Task {
-                    let (problem, linksFailed) = await model.rename(node, to: name)
-                    if let problem {
-                        renameProblem = problem
+                    guard let r = try? await header.rename(name: name) else {
+                        renameProblem = say(.nodeSaveFailed)
                         renaming = true
-                    } else if linksFailed {
-                        failed = say(.shareNameResealFailed)
+                        return
+                    }
+                    if let problem = r.problem {
+                        renameProblem = say(notice: problem)
+                        renaming = true
+                    } else if let notice = r.notice {
+                        // renamed; a link that kept the old name is said (the rename stands)
+                        failed = say(notice: notice)
                     }
                 }
             }
@@ -267,14 +250,9 @@ struct NodeHeaderActions: View {
     private func run(_ id: String) {
         switch id {
         case NodeHeader.shared.FAVORITE:
-            guard let pinned else { return }
-            self.pinned = !pinned
-            Task {
-                if await !model.toggleFavorite(node) {
-                    self.pinned = model.isFavorite(node)
-                    failed = say(.nodeFavoriteFailed)
-                }
-            }
+            // the heart turns at once and back when the write did not land (core's)
+            guard let header else { return }
+            Task { if let notice = try? await header.toggleFavorite() { failed = say(notice: notice) } }
         case NodeHeader.shared.RENAME:
             newName = node.name
             renameProblem = nil
@@ -288,9 +266,9 @@ struct NodeHeaderActions: View {
         }
     }
 
-    /// A core action's words (core's `NodeHeader.label`).
+    /// A core action's words (core's `NodeHeaderModel.label`).
     private func word(_ id: String) -> String {
-        NodeHeader.shared.label(id: id, kind: node.kind, pinned: pinned.map { KotlinBoolean(value: $0) }, hasCover: model.covers[node.nodeId] != nil).map { say($0) } ?? id
+        header?.label(id: id, hasCover: model.covers[node.nodeId] != nil).map { say($0) } ?? id
     }
 
     @ViewBuilder private func label(_ id: String) -> some View {
@@ -305,7 +283,7 @@ struct NodeHeaderActions: View {
         case NodeHeader.shared.COVER: Label(word(id), systemImage: "photo")
         case NodeHeader.shared.DOWNLOAD: Label(word(id), systemImage: "arrow.down.circle")
         case NodeHeader.shared.REPORT: Label(word(id), systemImage: "flag")
-        case NodeHeader.shared.DELETE: Label(contribution.deleteTitle, systemImage: "trash")
+        case NodeHeader.shared.DELETE: Label(word(id), systemImage: "trash")
         default:
             if let own = contribution.actions.first(where: { $0.id == id }) { Label(own.label, systemImage: own.systemImage) }
         }
@@ -554,8 +532,8 @@ struct CoverSheet: View {
     }
 }
 
-/// What a delete into the trash says, at the bottom of the shell: "“x” moved to the trash." with its Undo for as long as the
-/// web offers it (`TRASH_UNDO_MS`, 6 s), or a refusal; it goes by itself.
+/// What a delete into the trash says, at the bottom of the shell: "“x” moved to the trash." with its Undo for as long as core
+/// offers it (`NodeHeaderModel`, `TRASH_UNDO_MS`, 6 s), or a refusal; it goes by itself.
 struct TrashNotice: View {
     @Bindable var model: AppModel
 
@@ -564,7 +542,7 @@ struct TrashNotice: View {
             HStack(spacing: 12) {
                 Text(notice.message).font(.subheadline).foregroundStyle(Role.text)
                 Spacer(minLength: 0)
-                if notice.node != nil || notice.moveBack != nil {
+                if notice.header != nil || notice.moveBack != nil {
                     Button(say(.trashUndo)) { Task { await model.undoTrash() } }.fontWeight(.semibold)
                 }
             }
@@ -575,9 +553,38 @@ struct TrashNotice: View {
             .padding(.horizontal, 16)
             .padding(.bottom, 96)
             .task(id: notice.id) {
+                // a trash's undo goes when core ends its offer; any other notice after the same time
+                guard notice.header == nil else { return }
                 try? await Task.sleep(for: .milliseconds(ShellModel.companion.TRASH_UNDO_MS))
                 model.dismissTrashNotice(notice.id)
             }
         }
+    }
+}
+
+/// Core's header held for SwiftUI: its state mirrored on the main actor as it changes.
+@MainActor
+@Observable
+final class HeaderBox {
+    private(set) var state: NodeHeaderModel.State?
+    @ObservationIgnored private var header: NodeHeaderModel?
+    @ObservationIgnored private var watch: NodeHeaderModel.Watch?
+
+    func start(_ header: NodeHeaderModel) {
+        guard self.header !== header else { return }
+        watch?.stop()
+        self.header = header
+        state = header.current
+        watch = header.watch { @Sendable _ in
+            Task { @MainActor [weak self] in
+                if let current = self?.header?.current { self?.state = current }
+            }
+        }
+    }
+
+    func stop() {
+        watch?.stop()
+        watch = nil
+        header = nil
     }
 }

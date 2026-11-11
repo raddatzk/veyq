@@ -120,7 +120,7 @@ internal fun DropBoxScreen(ref: ObjectRef, model: AppModel) {
             confirmButton = {
                 TextButton(onClick = {
                     deleting = null
-                    scope.launch { model.trash(me.raddatz.veyq.mobile.navigation.NodeAt(f.node.scopeId, f.node.id, f.node.kind, f.label)) }
+                    scope.launch { model.header(me.raddatz.veyq.mobile.navigation.NodeAt(f.node.scopeId, f.node.id, f.node.kind, f.label), me.raddatz.veyq.mobile.AppKinds.Facts())?.trash() }
                 }) { Text(stringResource(R.string.entry_delete), color = MaterialTheme.colorScheme.error) }
             },
             dismissButton = { TextButton(onClick = { deleting = null }) { Text(stringResource(R.string.entry_cancel)) } },
