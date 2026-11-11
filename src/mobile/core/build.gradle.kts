@@ -240,6 +240,11 @@ kotlin {
             kotlin.srcDir(generatedTheme)
             kotlin.srcDir(generatedWords)
         }
+        // The in-memory device keys and device of the flows' tests (`SoftwareDeviceKeys`, `testDevice`): a directory of
+        // their own, so :bridge's JVM tests compile the same fake (bridge/build.gradle.kts) and no copy drifts.
+        commonTest {
+            kotlin.srcDir("src/testDevice/kotlin")
+        }
         commonMain.dependencies {
             implementation(libs.coroutines.core)
             implementation(libs.serialization.json)
@@ -282,6 +287,8 @@ tasks.withType<Test>().configureEach {
     System.getenv("VEYQ_LIVE")?.let { environment("VEYQ_LIVE", it) }
     System.getenv("VEYQ_SEED_TENANT")?.let { environment("VEYQ_SEED_TENANT", it) }
     System.getenv("VEYQ_ADMIN_BASE")?.let { environment("VEYQ_ADMIN_BASE", it) }
+    // `.run/.env` of another checkout (a worktree has none): read by DeviceTrustLiveTest.
+    System.getenv("VEYQ_ENV_FILE")?.let { environment("VEYQ_ENV_FILE", it) }
     testLogging { showStandardStreams = System.getenv("VEYQ_LIVE") != null }
     inputs.file(vectors).withPropertyName("vectors")
 }

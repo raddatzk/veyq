@@ -378,7 +378,7 @@ class VeyqAccount private constructor(
                 tokens.refresh = pair.refreshToken
                 val kept = trusted
                 if (kept?.method == TrustedDevice.Method.DEVICE_KEY && pair.refreshToken != null) {
-                    device.keys.putSecret(kept.refreshAlias, pair.refreshToken)
+                    device.keepRefresh(kept.refreshAlias, pair.refreshToken)
                 }
             }
         }
@@ -616,7 +616,7 @@ class VeyqAccount private constructor(
                 val pair = r.body()
                 c.tokens.access = pair.accessToken
                 c.tokens.refresh = pair.refreshToken
-                pair.refreshToken?.let { device.keys.putSecret(record.refreshAlias, it) }
+                pair.refreshToken?.let { device.keepRefresh(record.refreshAlias, it) }
                 val material = keyMaterial(c)
                 val wrap = material.wraps.firstOrNull { it.method == MasterKeyWrap.Method.DEVICE_KEY && it.id == record.wrapId }
                     ?: throw SignInFailure(SignInFailure.Reason.DEVICE_NOT_TRUSTED, "wrap not served")
@@ -631,6 +631,17 @@ class VeyqAccount private constructor(
             }
         }
     }
+}
+
+/**
+ * Keeps a remembered account's rotated refresh token. The refresh itself succeeded, so a store that fails here (a Secret
+ * Service gone, DPAPI refusing: `DeviceAuthFailed(false)`) never fails the call that refreshed: the session goes on, and
+ * the next start's resume finds the old token refused and asks for a sign-in (SESSION_ENDED) — the honest outcome
+ * (CR device-trust-on-linux-and-windows, Phase 3; `RefreshKeptTest`).
+ */
+private fun ThisDevice.keepRefresh(alias: String, token: String) {
+    runCatching { keys.putSecret(alias, token) }
+        .onFailure { println("veyq: the rotated sign-in token was not kept; the next start signs in: $it") }
 }
 
 /** One tenant of an account, opened: what the shell lists (ADR 0122). */
