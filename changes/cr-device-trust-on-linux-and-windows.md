@@ -681,6 +681,88 @@ The switch of Phases 4 and 5 replaced by the offer on Linux and Windows; Manage'
 and start (Cancel: the unlock stays), "Stay signed in" chosen in Manage instead (no prompt at the next start), "Not now",
 Stop trusting; de/en, light/dark; builds and guards green.
 
+**Built (Phase 7):**
+- **The words** (`words.json`, EN and DE; the owner approved them as drafted, 2026-11-11, "Texte passen so"):
+  `offer_title`, `offer_hello` + `offer_hello_hint` (Windows' PRESENCE), `offer_login_hint` (under `signin_remember`,
+  reused for LOGIN: the same words), `offer_not_now` + `offer_not_now_hint`, `offer_footer` (its `{1}` the existing
+  `switcher_manage`), `trust_failed`; Manage's `manage_trusted_hello`, `manage_password_trust`,
+  `manage_password_trust_hint`, `manage_wrong_password`. **Removed:** `signin_remember_hint_login`,
+  `signin_remember_hello`, `signin_remember_hint_hello` (no platform used them since Phase 6). `signin_remember` and
+  `signin_remember_hint` stay: Android's and Apple's switch use them until Phase 8.
+- **Linux** (`sign_in::Offer`, `manage.rs`): the offer is **a page of the way in**, the sign-in's column, each answer an
+  activatable `AdwActionRow` with its line as subtitle and a chevron, the footer under them. **Why not an
+  `AdwAlertDialog`:** its responses are bare labels, and each answer here needs the line that says what it means; GNOME
+  chooses among described options with rows (Settings, Initial Setup), and the choice continues the sign-in rather than
+  interrupting the shell. `offer_choices` lists the core's levels that have words here, then "Not now"; PRESENCE has
+  none on Linux (no store here offers it) and is left out, never drawn as LOGIN's. Manage: the line by the trust
+  (`trust_line`), then `changes` (each offered level the server is not at; "Back to your password" from DEVICE_KEY) as
+  `AdwButtonRow`s; the way back asks in an **`AdwAlertDialog` over Manage** with an `AdwPasswordEntryRow` (confirm
+  disabled while empty; Enter takes it); a wrong password or a change not kept is a toast in Manage. A level the offer
+  could not keep is a toast in the shell (`Shell::say`): the offer has ended then.
+- **Windows** (`OfferView`, `ManageDialog`, `TrustWords`): the offer is **a page of the way in**, drawn as Windows' own
+  sign-in setup offers Hello after a sign-in: title, each answer a full-width button (title + line), the first (the
+  strongest the core lists) accented, the footer. **Why not a `ContentDialog`:** its three buttons carry no line each.
+  Manage names PRESENCE "You sign in on this device with Windows Hello." and lists the changes as buttons; "Back to your
+  password" opens its `PasswordBox` **in place** in that server's section (WinUI shows one `ContentDialog` at a time), the
+  wrong password said under it. `TrustWords.Offer`/`Changes` are the pure picks (`TrustWordsTest`).
+- **A cancelled Hello prompt keeps the offer** as the core does: both hosts disable the answers while the call runs and
+  draw whatever gate follows; `TRUST_CANCELLED` says nothing.
+- **Debug:** `--devlogin --unlock`'s `VEYQ_DEV_UNLOCK_PASSWORD` also fills Manage's password field once (fill only, the
+  pass presses the button): `dev_login::take_password_trust` / `DevLogin.TakePasswordTrust`, apart from the unlock's.
+- The unlock's words already followed `record.level` (Phase 6); unchanged.
+
+**Met (2026-11-11, commits `bc6efedf2`, `08877996c`):**
+- [x] **Linux pass** in the container against the dev instance (`linux/run.py run --port 8097 --devlogin [--unlock]`, the
+  Secret Service on the volume), driven from headless system Chrome, the log read before each shot:
+  - the offer after the sign-in: `session Signed, offer: [Login]`, two rows, LOGIN and "Not now" (en light, de dark);
+  - LOGIN → `offer answered: Stay(Login)`; window closed; `run` → `session Starting`, `session Signed`: resumed, no
+    prompt; Manage `Some(DeviceKey)`, "Back to your password";
+  - Manage: "Back to your password" → the dialog, filled by the debug hook → `manage back to the password: Done`, Manage
+    `Some(Device)`; "Stay signed in" → `manage stay signed in Login: Done`, `Some(DeviceKey)`; a wrong one (`x`, typed)
+    → `Refused WrongPassword`, the toast "Das Passwort stimmt nicht.", the trust unchanged;
+  - Stop trusting → Manage `None`;
+  - "Not now": `run --devlogin` → the offer → `offer answered: NotNow`; closed; `run --devlogin --unlock` → `session
+    Unlock`, the password unlock, `session Signed` with **no offer**; Manage `Some(Device)` (en light), Stop trusting →
+    `None`. The volume `veyq-linux-home` was removed after.
+- [x] **Windows, everything without a PIN**, on the VM (`windows/run.py run --devlogin [--unlock]`, `run.py drive`), the
+  log read before each tree and shot:
+  - the offer: `session Signed, offer: Presence Login`, the tree `#offer-presence`, `#offer-login`, `#offer-not-now`
+    (en light, de light, en dark) — "Sign in with Windows Hello" was never pressed;
+  - LOGIN → `offer answered: Login`; closed; `run` → `session Starting`, `session Signed`: no prompt;
+  - Manage `DeviceKey` ("Auf diesem Gerät bleibst du angemeldet.", "Mit Windows Hello anmelden", "Zurück zum Passwort");
+    the way back, filled by the debug hook → `Done`, `Device`; "Angemeldet bleiben" → `DeviceKey`; a wrong one (`x`) →
+    `Refused WrongPassword`, "Das Passwort stimmt nicht." under the field; Stop trusting → `None`; Manage opened a
+    second time in the same run;
+  - "Not now" → `offer answered: NotNow`; the next start's password unlock → `session Signed`, **no offer**; Stop
+    trusting → `None`.
+  - Left as found: no trust on the VM or the dev instance (the last run took LOGIN, which clears "Not now"'s mark, then
+    Stop trusting → `None`), so the Hello pass starts from the offer.
+- [ ] **The Hello pass (O2)** — waits for the owner at the VM's console (the script below). Not ticked.
+- [x] `/usr/bin/python3 src/mobile/linux/run.py build` → clippy, `cargo test` 16 (`the_offer_lists_what_the_core_offers_then_not_now`,
+  `manage_offers_each_other_level_and_the_way_back` new), build green. **Bites**, red then restored: PRESENCE given LOGIN's
+  words, and Manage offering the level the server is at → both tests red.
+- [x] `/usr/bin/python3 src/mobile/windows/run.py build` → green, `Veyq.Tests` 13 (`TheOfferListsWhatTheCoreOffersThenNotNow`,
+  `ManageListsEachOtherLevelAndTheWayBack` new). **Bites**, red then restored: "Not now" dropped from the offer, Manage
+  offering the level the server is at → both red (`failed: 2`).
+- [x] `validate_mobile_words.py` → OK; `validate_mobile_platform_guidelines.py` → OK.
+- [x] `./gradlew :bridge:jvmTest --rerun` → 26 cases, none failed (no bridge change in this phase).
+
+**The Hello pass (O2), for the owner at the VM's console.** From the worktree, `E=VEYQ_LIVE=http://veyq.localhost:8080
+VEYQ_ENV_FILE=<main checkout>/.run/.env`; one `run` (and its tunnel) at a time, stopped by its PID before the next.
+1. `env $E VEYQ_LANGUAGE=de-DE VEYQ_THEME=light /usr/bin/python3 src/mobile/windows/run.py run --devlogin` (background);
+   `run.py drive tree` → the offer's three buttons.
+2. `run.py drive "invoke offer-presence"` → **Hello asks (the enrolment's PIN; possibly twice: creating the Passport key
+   asks, and the seal may — Phase 1 saw one)**. The owner enters the PIN. Log: `offer answered: Presence`, `session
+   Signed`; Manage line "Auf diesem Gerät meldest du dich mit Windows Hello an."
+3. `run.py drive "invoke Close"`; stop the run; `run.py run` (no devlogin) → **Hello asks (PIN)** → `session Signed`.
+4. `invoke Close`; stop; `run.py run` → **Hello asks: the owner presses Cancel** → `session Unlock, level: Presence`,
+   the unlock's "Entsperren" stays; `run.py drive "invoke unlock-submit"` → **Hello asks (PIN)** → `session Signed`.
+5. `run.py drive "invoke switcher" "sleep 800" "invoke switcher-manage" "sleep 1500" "invoke manage-login:veyq.localhost"`
+   → **no prompt expected (uncertain: deleting the Passport key has not been seen to ask)** → `manage stay signed in
+   Login: Done`, the line "Auf diesem Gerät bleibst du angemeldet."
+6. `invoke Close`; stop; `run.py run` → no prompt, `session Signed`.
+7. Manage → `invoke manage-forget:veyq.localhost` → `manage servers: None`; close; stop the tunnel.
+
 ### Phase 8 — Android and Apple
 
 Their switch replaced by the offer; their stores' level without a check.
@@ -710,13 +792,14 @@ Apple build green.
 
 ## Owner questions
 
-- **Q4 (open, Phase 6): Android and Apple without a screen lock offer nothing,** not `LOGIN`. Built so because LOGIN's
-  guarantee is the device's own sign-in; the web offers its checkbox on any browser, so the owner may prefer `LOGIN`
-  there. One line per store to change.
-- **Q5 (open, Phase 6): the offer also follows a password unlock,** so accounts password-trusted before D7 are asked
-  once. Say if it should follow the full sign-in only.
-- **Q6 (open, for Phase 7): Manage's way back to the password trust asks for the password** (ADR 0005 §9, Phase 6's
-  retro); its check is a login, so it counts as one at the server (a new session family, revoked at once).
+- **Q4 (settled, owner 2026-11-11: no): Android and Apple without a screen lock offer nothing,** not `LOGIN`, as Phase 6
+  built it; the password trust stays. LOGIN's guarantee is the device's own sign-in, which no lock means nobody's.
+- **Q5 (settled: decided by the orchestrator, technical, as Phase 6 built it): the offer also follows a password
+  unlock,** so accounts password-trusted before D7 are asked once.
+- **Q6 (settled: decided by the orchestrator, technical, as Phase 6 built it): Manage's way back to the password trust
+  asks for the password** (ADR 0005 §9, Phase 6's retro); its check is a login, so it counts as one at the server (a new
+  session family, revoked at once). Phase 7 draws the field.
+- **Q7 (settled, owner 2026-11-11, "Texte passen so"): the offer's words** as Phase 7 drafted them are final.
 - **Q3 (settled, owner 2026-11-11): the enrolment after the sign-in, every level offered, all four apps in this CR** — D7.
   It supersedes Q1+Q2's rule below for the choice; their reading of each level (what a check is, the web's level) stands.
 - **Q1 + Q2 (settled, owner 2026-11-11, "passt so"; the choice superseded by Q3): one rule for both desktops — "Stay
@@ -762,5 +845,12 @@ Apple build green.
   password.
 - **Phase 6, design: the level had to live in the record,** not only the store: with two servers at different levels
   both keys exist at once, so an open must be told which. "Kept beside the key" (Windows' path) was a one-key idea.
+- **Phase 7, execution: "Not now"'s mark outlived Stop trusting on the VM,** as Phase 6 built it (only a level taken
+  clears it), so a later fresh sign-in showed no offer and the next drive step found no button. Caught by the log before
+  the tree; cleared through the app (Manage: a level, then Stop trusting), so the Hello pass starts from the offer. A
+  pass that ends must leave the state the next one needs, not only "no trust".
+- **Phase 7, design: WinUI shows one `ContentDialog` at a time,** so Windows' password field for the way back sits in
+  Manage's own section, while Linux stacks an `AdwAlertDialog` over Manage — each platform's own way, decided before
+  building rather than found by a crash.
 - **Next time:** a verb that waits for a person waits for the process it started and fetches its outcome whatever
   ended the wait; its brief to the owner lists every prompt the run may raise, the uncertain ones marked so.
