@@ -267,6 +267,71 @@ Android and Apple thinned.
 - Bridge + both desktops' pass: move and undo; copy of a Pot and a folder; no room (`VEYQ_LIVE_STORAGE_FIT`'s one-byte
   quota, put back however the pass ends); a folder's download, read back by `VEYQ_LIVE_EXPORT`'s checks.
 
+**Status: built (2026-11-11); the Windows pass is open** — the VM rebooted at 19:31 and sits at its sign-in screen, so
+the scheduled task that starts the app in the logged-on session cannot run (`veyq-app wrote no app.json.started`); an
+agent never types its password. Someone logs on at the VM's console, then the pass below runs.
+
+**Built:**
+- core, fix first: `Shell.leave()` and `ShellModel.afterTrash(shell, nodeId)` — an object opened at the top
+  (`openAtTop`) and trashed leaves for its application's list (it stayed open on a closed model, "Loading"); its undo
+  brings it back to that list. Every app follows (the shell is the core's).
+- core `navigation/MoveSheet.kt` (ADR 0127 decision 2): state (`loaded`, `at`, `trail` of `Crumb`s, `places`, `block`,
+  `problem`, `noRoom` as `Notice(COPY_NO_ROOM, Bytes)`, `losses`, `leftOut`, `busy`, `confirming`, `done`, `undo`,
+  `canChoose`), `watch`, `load`, `go`, `up`, `choose`, `confirm`, `cancelConfirm`, `undo`, the words (`title`, `hint`,
+  `submit`, `empty`, `confirmQuestion`, `hereWord`). The copy's way is `AppKinds.copiesByOpenModel` (a Pot by its open
+  `PotModel.duplicate`, the rest `SubtreeCopy`); the move's undo runs for `TRASH_UNDO_MS` (D4). Its reads and writes run
+  on `Dispatchers.Default`. `ShellModel.moveSheet(node, copying, pot, deletedName, changed)` builds it (UUIDs from the
+  suite's randomness, `NodeCreate.uuid`); `ShellModel.download(ref, deletedName, nowMs, sink)` writes a node's ZIP, and
+  `nativeMain`'s `ShellModel.download(…, path)` into `FileSink` (a half-written archive removed). `Notices.downloaded`,
+  `downloadLeftOut`.
+- Android and Apple thinned: `NodeMoveSheet` draws the core's sheet (Apple's `MoveBox` mirrors it); gone from the app
+  models and the kinds' contributions: the placement, the move, both copies, the copy's notes and no-room text, Apple's
+  `MoveBack` and its timer, Android's `rootName`, `CopyNotes`. Android's move undo is the shell's snackbar held for the
+  core's window through the trash's `offerUndo` (D4); Apple's is its shell notice watched on the sheet's `undo`. A
+  folder's download is `ShellModel.download` (Apple `FileDownloads.subtree`).
+- bridge: `Move.Open(node, copy, deletedName)` → `MoveOpened`, `Move.Close/Go/Up/Here/Confirm/CancelConfirm/Undo`;
+  `Here`/`Confirm` answer `MoveSent(done, undoable, confirming, problem)`; `Watched.Move(id)` → `MoveShown`;
+  `Header.Download(header, path, deletedName)` → `Downloaded(written, notice, leftOut)`; `HeaderShown.archiveName`. A
+  Pot's copy takes the Pot model the host opened for it.
+- Linux (`move_sheet.rs`): an `AdwDialog` holding an `AdwNavigationView` whose pages follow the core's trail (back is
+  up; `sync` tested), the bottom bar's reason and Move here / Copy here, the guest folder's `AdwAlertDialog`, the
+  move's Undo an `AdwToast` held for the core's window; a folder's download through GTK's save dialog.
+- Windows (`MoveDialog.cs`): a `ContentDialog` with a `BreadcrumbBar`, the places as buttons, the primary button the
+  write (kept open until the core answered), the guest folder's confirm in place, the move's Undo the `InfoBar`'s
+  action; a folder's download through the save picker. Fix 2: the bar's secondary commands come from the plan's groups
+  (`HeaderPlan.Primary`/`Secondary`), so a folder's More and a Pot's are alike.
+
+**Met:**
+- `./gradlew :core:jvmTest :core:macosArm64Test :bridge:jvmTest` green. `MoveSheetTest` (5) on both targets, each rule
+  bitten by a script (place's block, guest folder's confirm, copy's kind, no room, undo window — each mutation red,
+  restored). `ShellModelTest`'s top-trash case bitten (`leave()` back to `goBack()` → red). `DispatchTest` (17) drives
+  every new call; bitten: `Move.Undo` and `Move.Here` made no-ops, and a failed download kept → red.
+- `VEYQ_LIVE=… VEYQ_ENV_FILE=<main>/.run/.env ./gradlew :bridge:jvmTest --tests '*LiveBridgeTest.aPotIsCopied*' --rerun`:
+  "App move <n>" made, Amsterdam copied by its open Pot model, the copy moved in and undone (read back), moved again
+  with the undo left to the window (offered 6011 ms), the folder copied with the Pot in it, the folder downloaded and
+  read back (every payload to its SHA-256), a path that does not open failed with nothing written; all purged.
+- No room: `DepotLiveTest.aCopyOrAFolder*` with `VEYQ_LIVE_STORAGE_FIT="Reisen/AppUpUi"` and `…_HOLD_S` held the
+  one-byte quota (put back, exit 0) while `VEYQ_LIVE_NO_ROOM=1 … --tests '*LiveBridgeTest.aCopyWithoutRoom*'` saw
+  Amsterdam's copy said not to fit (`Bytes(365)`), "Copy here" not choosable, nothing written.
+- `linux/run.py build` green (clippy `-D warnings`, `cargo test` 19); `windows/run.py build` green (Veyq.Tests 16,
+  `HeaderPlanTest` bitten: the separator's rule and the download's kind mutated → both cases red).
+- `:android:assembleDebug` green; `xcodebuild -target Veyq -sdk macosx CODE_SIGNING_ALLOWED=NO` and a signed iOS 27
+  simulator build green. Both guards green.
+- Android (throwaway AVD `veyq_p3`, deleted): the folder's More (Download, Rename, Set cover | Move to…, Copy to…,
+  Report, Delete folder), the move sheet at the folder's place ("It is already here.", the folder itself "the item
+  itself"), moved into Reisen and back with Undo (read back), the undo's snackbar ended by the core's window (logcat: the
+  offer to the snackbar's end 4.8 s after the recomposition), a folder's copy ("What does not come along" with its
+  lines) and a Pot's (its two losses), both trashed after, a folder's download through the system's save dialog
+  (`App folder.zip` read back with `unzip -l`).
+- Linux (container, Broadway on 8097, headless system Chrome): move into Reisen with the toast and its Undo, back to the
+  root through the navigation view's back and undone (log `move undo: Said(None)`), a folder's and a Pot's copy, no
+  room under the held quota ("…for this copy (75 bytes)…", Copy here insensitive), a folder's download through GTK's
+  save dialog read back from the container; en/light and de/dark ("Hierher kopieren", "Rückgängig").
+- Apple: the throwaway iPhone 18 Pro's signed build installed and signed in (`devlogin.py`) up to the offer to stay
+  signed in; the simulator tool's access was not granted and `simctl` cannot tap, so nothing past the offer was driven
+  on Apple — the sheet's rules are the core's tests', the Swift its compile.
+- Not met: the Windows pass (see the status).
+
 ### Phase 4 — Share links and the re-key's resume: `ShareSheet`, R4's tests, the core-run resume
 
 Android and Apple thinned.
@@ -347,3 +412,25 @@ is copy, since GNOME has no share sheet (D3).
   outlive its page while its Undo stands. The header's state carries no undo deadline: the host shows Undo until the
   core's state ends it, so there is no second clock. The `Trash.Type`/`Retry` pair carries the new name through the core
   (its `retryable` rule) rather than a `Restore(row, name)`.
+
+### Phase 3 (2026-11-11)
+
+- **The two apps disagreed beyond D4 once, and the core settled it:** Apple's notice offered Undo after a guest's
+  folder was moved out of a drop box, which always failed (nothing brings it back into the drop box; the server refuses
+  the placement). The core offers no undo for a move that ended a guest's folder; Apple shows its notice without Undo,
+  Android (whose drop-box page said nothing) is unchanged.
+- **Decrypting on the main thread:** the copy's preview and storage walk ran in Android's `LaunchedEffect`, as the old
+  app model's did, and the slow emulator stopped answering; a screen model that decrypts runs off its caller's thread
+  (`withContext(Dispatchers.Default)`).
+- **An emulator under load is no clock:** a screencap took ~6 s on the swiftshader AVD, so a 6 s toast is measured from
+  logcat timestamps, never from screenshots.
+- **`DepotLiveTest`'s storage check read only `<repo>/.run/.env`**, which a worktree lacks: it reads `VEYQ_ENV_FILE`
+  first now. Its quota hold is what a parallel pass needs (`VEYQ_LIVE_NO_ROOM` in the bridge test, the desktops' copy).
+- **The bridge test's own leftovers:** its clean-up first purged every "App move <n>" row in the trash, which also took
+  two Pots `VEYQ_LIVE_MOVE` leaves trashed on purpose; it now purges only folders of its own name form.
+- **Windows' separator:** the folder's More lacked the separator its Pot's had (Phase 2's shot); the bar now builds its
+  secondary commands from the plan's groups (`HeaderPlan.Secondary`, tested). Its look on the VM is unverified until
+  the pass runs.
+- **Deviations:** a Pot's copy is found by the bridge among the Pot models the host opened (no `pot` field on
+  `Move.Open`); the sheet's UUIDs come from the suite (`NodeCreate.uuid`), not the platform's; `Answer.Downloaded`
+  carries `written` so a host never reads a word's key for its severity.
