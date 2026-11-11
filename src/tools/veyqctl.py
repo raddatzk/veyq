@@ -877,7 +877,7 @@ def require_programs(host: Host, names: Iterable[str], what: str, wait: bool = F
         missing = [name for name in names if not host.which(name)]
         problem = ""
         if missing:
-            problem = (f"{what} needs {', '.join(missing)}, not on PATH. Nothing was written or started. "
+            problem = (f"{what}: {', '.join(missing)} {'is' if len(missing) == 1 else 'are'} not installed. "
                        f"Install:" + "".join(f"\n  {name}: {PROGRAMS[name]}" for name in missing))
         elif "cosign" in names:
             try:
@@ -893,7 +893,7 @@ def require_programs(host: Host, names: Iterable[str], what: str, wait: bool = F
         if formulas and host.which("brew"):
             verb = "upgrade" if missing == ["cosign"] and host.which("cosign") else "install"
             shown += f"\nWith Homebrew: brew {verb} {' '.join(dict.fromkeys(formulas))}"
-        if not host.wait(shown + "\nInstall, then press Enter to look again (Ctrl-C: later — the same command goes on)"):
+        if not host.wait(shown + "\nPress Enter once installed (Ctrl-C to stop; run the same command again later)"):
             raise Refused(shown)
 
 
@@ -2132,7 +2132,7 @@ def register(name: str, path: Path) -> None:
     registry["instances"][name] = str(path)
     registry["current"] = name
     write_registry(registry)
-    say(f"instance {name} ({target_of(path)}, {path}) is listed in {config_dir() / REGISTRY_FILE} and is current")
+    say(f"{name} is now this computer's current instance (`veyqctl instances` lists them)")
 
 
 def resolve_home(args: argparse.Namespace) -> Path:
@@ -2324,11 +2324,9 @@ def attach_progress(host: Host, checkout: Path, rel: str) -> bool:
     terminal: the point of resuming is that nothing need be typed again). Returns whether it resumes."""
     progress = Progress(checkout, rel)
     if progress.resumed:
-        host.section("veyqctl init — a run here stopped before it finished")
-        kept = ", ".join(f"{k}={v}" for k, v in progress.answers.items())
-        print(f"   Its answers ({kept or 'none yet'}) are in {progress.setup_path}, its steps in {progress.path}.",
-              flush=True)
-        if host.confirm("Continue it (no: start over, asking everything again)?") is False:
+        host.section("A previous run stopped here")
+        print(f"   Your answers so far are in {progress.setup_path}.", flush=True)
+        if host.confirm("Continue where it stopped (no: start over and answer everything again)?") is False:
             progress.start_over()
     host.progress = progress
     return progress.resumed
@@ -2356,15 +2354,15 @@ veyqctl init — sets up a veyq instance: on Docker Compose on this host, or via
   1. Setup      what to create, and where
   2. Programs   check what tools are missing
   3. Questions  how you want to configure your veyq instance
-  4. Action     perform the actions to set up your veyq instance
+  4. Setting up perform the actions to set up your veyq instance
 
-Your desired configuration is kept in the repository's veyq-setup.json so you can rebuild your whole environment"""
+Your desired configuration is kept in the repository's veyq-setup.json so you can rebuild your whole environment with
+this file"""
 SERVER_INTRO = """
-   With the server, after the questions: veyq-server's newest release verified and rendered into the repository ·
-   the server's secrets encrypted · its host key (you compare the fingerprint with your provider's console) · veyq's
-   half · Argo CD's deploy key at your forge · the DNS records · commit and push · the bootstrap, as root on the
-   server · this machine connected (SSH tunnel and kubeconfig context) · the wait until Argo CD reports everything
-   synced and healthy."""
+   With a new server, veyqctl does this after your answers: it adds veyq-server to your repository, encrypts the
+   server's passwords, asks you to confirm the server's fingerprint, adds veyq, gives Argo CD read access to your
+   repository, waits for your DNS records, commits and pushes, sets up the server, connects this computer and waits
+   until everything runs. Steps that cannot be undone are asked first."""
 
 
 def cmd_init(args: argparse.Namespace, host: Host) -> int:
@@ -2387,7 +2385,7 @@ def cmd_init(args: argparse.Namespace, host: Host) -> int:
     if target is None:
         host.section("1. Setup")
         answer = (host.prompt("compose or gitops", hint="compose: veyq on Docker Compose on this host. gitops: via Argo "
-                              "CD in a kubernetes cluster.") or "").strip().lower()
+                              "CD in a Kubernetes cluster.") or "").strip().lower()
         if answer not in ("compose", "gitops"):
             raise Refused("`init` needs a target: --compose (Docker Compose on this host) or --gitops DIR (veyq's "
                           "directory in an Argo CD repository's checkout); without a terminal, pass one")
@@ -2418,10 +2416,9 @@ def cmd_init(args: argparse.Namespace, host: Host) -> int:
         # Offered `yes` in a repository with nothing committed yet: the server path starts from an empty one.
         here = host.run(["git", "ls-files"], check=False)
         fresh = not here.returncode and not (here.stdout or "").strip()
-        args.server = (host.prompt("set up the server too: yes or no", "yes" if fresh else "no",
-                                   "yes: a fresh server and its cluster (k3s, Argo CD, Traefik, cert-manager) "
-                                   "from veyq-server, then veyq on it. no: veyq's half for a cluster Argo CD runs "
-                                   "already.") or ("yes" if fresh else "no")).strip().lower()
+        args.server = (host.prompt("set up a new server too: yes or no", "yes" if fresh else "no",
+                                   "yes: veyqctl sets up a fresh server with everything veyq needs. no: you already "
+                                   "run a Kubernetes cluster with Argo CD.") or ("yes" if fresh else "no")).strip().lower()
     if args.server not in ("yes", "no"):
         raise Refused(f"--server {args.server}: yes or no")
     offered = suggested_gitops_directory(host)
@@ -2430,8 +2427,7 @@ def cmd_init(args: argparse.Namespace, host: Host) -> int:
         if not found.returncode and (found.stdout or "").strip():
             offered = os.path.relpath(Path(found.stdout.strip()).resolve() / SERVER_APPS / "veyq", Path.cwd().resolve())
     directory = args.gitops or host.prompt(
-        "directory", offered, "veyq's directory in your checkout of the repository Argo CD syncs; offered beside the "
-        "Applications it already holds.") or offered
+        "directory", offered, "Where in your repository veyq's files go.") or offered
     if not directory:
         raise Refused("`init --gitops DIR` needs the directory veyq's half goes into, inside a Git checkout")
     path = Path(directory).expanduser().resolve()
@@ -2958,9 +2954,9 @@ def gitops_init(args: argparse.Namespace, host: Host, directory: Path) -> int:
                       f"{EXISTING_HALF_DOCS} says, then run `veyqctl check`. Nothing was written.")
     settle_flags(args, host)
     name = option(args, host, "name", "instance name", top.name,
-                  "How this machine lists it (`veyqctl instances`); not the cluster's.")
+                  "How this computer names the instance (`veyqctl instances`).")
     name_is_free(name, directory)
-    server = option(args, host, "server", "set up the server too: yes or no", "no") == "yes"
+    server = option(args, host, "server", "set up a new server too: yes or no", "no") == "yes"
     if server:
         print(SERVER_INTRO, flush=True)
         # veyq-server's repository encrypts with SOPS (KSOPS in Argo CD), and its root syncs gitops/apps/.
@@ -2974,8 +2970,8 @@ def gitops_init(args: argparse.Namespace, host: Host, directory: Path) -> int:
     has_sops = server or any((p / ".sops.yaml").is_file() for p in [directory, *directory.parents]
                              if p == top or top in p.parents)
     provider = option(args, host, "secrets", f"secrets: {', '.join(PROVIDERS)}", "sops" if has_sops else "",
-                      "Where the chart's two Secrets come from"
-                      + (" (this repository has a .sops.yaml)." if has_sops and not server else "."))
+                      "Where veyq's passwords and keys are kept."
+                      + (" Your repository has a .sops.yaml, so sops fits." if has_sops and not server else ""))
     if provider not in PROVIDERS:
         raise Refused(f"--secrets {provider}: one of {', '.join(PROVIDERS)}")
     if provider == "sops" and not has_sops:
@@ -2987,9 +2983,9 @@ def gitops_init(args: argparse.Namespace, host: Host, directory: Path) -> int:
     needed = [*GITOPS_PROGRAMS["init"], *({"sops": ["sops"], "sealed-secrets": ["kubeseal"]}.get(provider, [])),
               *(SERVER_PROGRAMS if server else ())]
     require_programs(host, needed, "`init --gitops`", wait=True)
-    print(f"   all there: {', '.join(dict.fromkeys(needed))}", flush=True)
+    print(f"   All installed: {', '.join(dict.fromkeys(needed))}", flush=True)
     if server and not host.which("gh"):
-        print("   gh: not there — optional: without it you enter Argo CD's deploy key at GitHub yourself", flush=True)
+        print("   gh is not installed (optional): you will add Argo CD's deploy key on GitHub yourself.", flush=True)
 
     if server:
         args._server = server_questions(args, host, top, name)
@@ -3003,12 +2999,11 @@ def gitops_init(args: argparse.Namespace, host: Host, directory: Path) -> int:
         # k3s gives its first node 10.42.0.0/24 (measured on a veyq-server cluster, 2026-11-10).
         args.admin_host_source = args.admin_host_source or node_gateway("10.42.0.0/24")
     else:
-        host.section("3. The cluster")
+        host.section("3. Questions: your cluster")
     # Asked, with kubectl's current context offered, so the cluster `init` checks is seen before it does.
     current = "" if server else (host.run(["kubectl", "config", "current-context"], check=False).stdout or "").strip()
     context = recorded(host, "context", args.context or resumed_answer(host, "context", "kubeconfig context")
-                       or host.prompt("kubeconfig context", current, "The cluster Argo CD runs in: init checks it, "
-                                      "`check` reads the Secrets there.") or current)
+                       or host.prompt("kubeconfig context", current, "The cluster Argo CD runs in.") or current)
     k = kubectl(context)
     reachable = not args.no_cluster_check
     classes: list[tuple[str, str]] = []
@@ -3021,15 +3016,15 @@ def gitops_init(args: argparse.Namespace, host: Host, directory: Path) -> int:
         cert_manager = not host.run(k + ["get", "crd", "certificates.cert-manager.io", "-o", "name"],
                                     check=False).returncode
 
-    host.section("4. veyq")
+    host.section("3. Questions: veyq")
     domain = option(args, host, "domain", "veyq's domain", "",
-                    "Its own address: mailed links point here; it cannot be changed later. Needs an A record.")
+                    "The address veyq is reached at. It cannot be changed later.")
     garage = not args.no_bundled_store
-    store_domain = option(args, host, "store_domain", "the bundled store's host", f"store.{domain}",
-                          "Where uploads and downloads go, for every tenant. Needs an A record too.") if garage else ""
+    store_domain = option(args, host, "store_domain", "storage domain", f"store.{domain}",
+                          "Where photos and files are uploaded to and downloaded from.") if garage else ""
     gateway_class = option(args, host, "gateway_class", "GatewayClass", classes[0][0] if len(classes) == 1 else "",
-                           "The Gateway API implementation the chart's Gateway is handed to"
-                           + (f" (the cluster's: {', '.join(c for c, _ in classes)})." if classes else "."))
+                           "Which Gateway API implementation handles veyq's traffic"
+                           + (f" (in your cluster: {', '.join(c for c, _ in classes)})." if classes else "."))
     controller = dict(classes).get(gateway_class, "")
     # Traefik's data-plane pods are its own Deployment's: offered from the cluster when the class is Traefik's.
     traefik_ns = ""
@@ -3037,46 +3032,43 @@ def gitops_init(args: argparse.Namespace, host: Host, directory: Path) -> int:
         found = host.run(k + ["get", "deploy", "-A", "-l", "app.kubernetes.io/name=traefik", "-o",
                               "jsonpath={.items[0].metadata.namespace}"], check=False)
         traefik_ns = (found.stdout or "").strip() if not found.returncode else ""
-    peer_namespace = option(args, host, "gateway_namespace", "its data-plane pods' namespace", traefik_ns,
-                            "The pods that proxy the traffic: the only peers the NetworkPolicy lets reach veyq.")
-    peer_label = option(args, host, "gateway_pod_label", "a label those pods carry (key=value)",
+    peer_namespace = option(args, host, "gateway_namespace", "namespace of its proxy pods", traefik_ns,
+                            "Only these pods may reach veyq.")
+    peer_label = option(args, host, "gateway_pod_label", "a label of those pods (key=value)",
                         "app.kubernetes.io/name=traefik" if traefik_ns else "")
     if "=" not in peer_label:
         raise Refused(f"--gateway-pod-label {peer_label}: `<key>=<value>`")
     tls = recorded(host, "tls", args.tls or ("acme" if args.acme_email else "") or option(
         args, host, "tls", "TLS: acme, shared or none", "acme" if cert_manager or server else "",
-        "acme: certificates per host from Let's Encrypt through the chart's cert-manager issuer"
-        + (" (cert-manager runs)" if cert_manager else "") + "; shared: one Secret of yours; none: TLS ends before "
-        "the cluster."))
+        "acme: certificates from Let's Encrypt, one per address (needs cert-manager). shared: one certificate of "
+        "yours. none: TLS ends in front of the cluster."))
     if tls not in ("acme", "shared", "none"):
         raise Refused(f"--tls {tls}: acme (the chart's cert-manager issuer), shared (one Secret) or none")
     own_email = (git(host, top, "config", "user.email", check=False).stdout or "").strip()
-    acme_email = option(args, host, "acme_email", "ACME contact", own_email,
-                        "Where Let's Encrypt sends expiry and revocation notices.") if tls == "acme" else ""
+    acme_email = option(args, host, "acme_email", "email for Let's Encrypt", own_email,
+                        "Let's Encrypt writes here when a certificate is about to expire.") if tls == "acme" else ""
     acme_directory = option(
         args, host, "acme_directory", "Let's Encrypt: staging or production", "staging" if server else "production",
-        "staging: certificates no browser trusts, without production's rate limits — where a new instance starts; "
-        "`veyqctl tls production` switches once everything runs.") if tls == "acme" else "production"
+        "Start with staging: test certificates, without production's limits. Switch later with "
+        "`veyqctl tls production`.") if tls == "acme" else "production"
     if acme_directory not in ACME_DIRECTORIES:
         raise Refused(f"--acme-directory {acme_directory}: staging or production")
-    tls_secret = option(args, host, "tls_secret", "the TLS Secret for every host") if tls == "shared" else ""
+    tls_secret = option(args, host, "tls_secret", "name of your TLS Secret") if tls == "shared" else ""
     namespace = args.namespace or "veyq"
     argocd_nodeport = reachable and (host.run(k + ["-n", args.argocd_namespace, "get", "svc", "argocd-server", "-o",
                                                    "jsonpath={.spec.type}"], check=False).stdout or "").strip() == "NodePort"
-    admin_host = option(args, host, "admin_host_access", "veyq's administration through the tunnel: yes or no",
+    admin_host = option(args, host, "admin_host_access", "veyq's admin page through an SSH tunnel: yes or no",
                         "yes" if argocd_nodeport else "no",
-                        f"A host-only NodePort ({ADMIN_HOST_PORT}) beside Argo CD's, for a server whose firewall keeps "
-                        "NodePorts off the public side (veyq-server's)" + (" — Argo CD's is one here." if argocd_nodeport
-                                                                            else "; without it, `kubectl port-forward`."))
+                        "Recommended on a server set up by veyq-server: the page stays invisible from the internet."
+                        + ("" if argocd_nodeport else " Without it, reach it with `kubectl port-forward`."))
     if admin_host not in ("yes", "no"):
         raise Refused(f"--admin-host-access {admin_host}: yes or no")
     admin_source = ""
     if admin_host == "yes":
         cidr = (host.run(k + ["get", "nodes", "-o", "jsonpath={.items[0].spec.podCIDR}"], check=False).stdout or "") \
             if reachable else ""
-        admin_source = option(args, host, "admin_host_source", "the node's pod-network gateway (a /32)",
-                              node_gateway(cidr), "Where a NodePort's traffic reaches the pod from; the NetworkPolicy "
-                              "admits it alone.")
+        admin_source = option(args, host, "admin_host_source", "the node's pod network gateway (a /32)",
+                              node_gateway(cidr), "Where the tunnel's traffic comes from. The offer is usually right.")
 
     if not args.no_cluster_check:
         host.quiet = False
@@ -3089,14 +3081,14 @@ def gitops_init(args: argparse.Namespace, host: Host, directory: Path) -> int:
     projects = [line.split("/", 1)[-1] for line in (listed_projects.stdout or "").split()
                 if not listed_projects.returncode]
     own = [p for p in projects if p != "default"]
-    host.section("5. Argo CD and the release")
+    host.section("3. Questions: Argo CD and updates")
     own_project = re.sub(r"[^a-z0-9.-]", "-", name.lower()).strip("-.") or "server"
     project = option(args, host, "project", "Argo CD project",
                      own_project if server else own[0] if len(own) == 1 else "default",
-                     "The project the Application joins: one of your own limits its sources and destinations.")
+                     "The Argo CD project veyq belongs to.")
     store = remote_prefix = store_kind = ""
     if provider == "external-secrets":
-        store = option(args, host, "secret_store", "the SecretStore the ExternalSecrets read from")
+        store = option(args, host, "secret_store", "name of the SecretStore")
         store_kind = args.secret_store_kind
         remote_prefix = args.remote_prefix
     repo_url = args.repo_url or resumed_answer(host, "repo_url", "repository URL") or (
@@ -3120,16 +3112,17 @@ def gitops_init(args: argparse.Namespace, host: Host, directory: Path) -> int:
     # Which releases `upgrade` follows: offered as the newest release's major, so a new major is entered only when
     # its owner sets `latest` or the next major, knowingly (ADR 0085: a major removes something).
     newest = select(listed, "latest", source.describe())
-    selector = check_selector(option(args, host, "release", "selector", str(newest.major),
-                                     "Which releases `upgrade` follows: <major>.<minor> pinned, <major> its newest, "
-                                     "latest the newest of all. A new major removes something: enter it knowingly."))
+    selector = check_selector(option(args, host, "release", "updates", str(newest.major),
+                                     f"Which versions `veyqctl upgrade` installs: {newest.major} stays on version "
+                                     f"{newest.major}, latest always takes the newest, {newest.major}.{newest.minor} "
+                                     f"stays exactly there."))
     host.quiet = False
     if server:  # every question is answered: the steps begin, the server half first (veyq's encrypts with its rules)
         server_prepare(args, host, top, args._server, project, repo_url, revision)
         args._domains = [domain] + ([store_domain] if garage else [])
-        host.section("7. veyq's half")
+    host.section("4. Setting up: veyq")
     chosen = select(listed, selector, source.describe())
-    say(f"{RELEASE_KEY}={selector} takes release {chosen.release} from {source.describe()}")
+    say(f"release {chosen.release} (updates: {selector}), from {source.describe()}")
     manifest = fetch_manifest(host, source, chosen, False)
     chart = chart_repository(manifest.app)
     pins = verify_gitops_release(host, manifest, chart)
@@ -3221,7 +3214,7 @@ files:
     for relative, text in files.items():
         (directory / relative).write_text(text)
     write_gitops(g)
-    say(f"wrote veyq's half into {directory}: {', '.join(sorted(files))} and {GITOPS_FILE} (release {chosen.release})")
+    say(f"wrote veyq's files into {directory.relative_to(top)} (release {chosen.release})")
     if progress:
         progress.mark("written")
     return gitops_init_finish(args, host, directory, top, g)
@@ -3246,10 +3239,10 @@ def gitops_init_finish(args: argparse.Namespace, host: Host, directory: Path, to
                else "create the two Secrets from it in the namespace, " if provider == "none"
                else "they are sealed into the repository; ")
             + "then move the file off this machine")
-    say(f"KEEP THE CONFIG-SECRET KEY in a password manager as well (`{CONFIG_SECRET_KEY}` of {CONFIG_SECRET}): without "
-        f"it no backup can be read (ADR 0050)"
-        + (f" — `sops decrypt --extract '[\"stringData\"][\"{CONFIG_SECRET_KEY}\"]' "
-           f"{directory / 'resources/config-secret-key.sops.yaml'}`" if provider == "sops" else ""))
+    say("keep veyq's config-secret key in your password manager too: without it, no backup can be read"
+        + (f". Read it with: sops decrypt --extract '[\"stringData\"][\"{CONFIG_SECRET_KEY}\"]' "
+           f"{(directory / 'resources/config-secret-key.sops.yaml').relative_to(top)}" if provider == "sops"
+           else f" (`{CONFIG_SECRET_KEY}` in the Secret {CONFIG_SECRET})"))
     if getattr(args, "_server", None):
         server_finish(args, host, top, directory, args._server, g, repo_url, (progress.answer("revision") if progress
                       else None) or args.revision, args._domains)
@@ -3344,20 +3337,20 @@ def age_recipient_of(host: Host, key_file: Path) -> str:
 def server_questions(args: argparse.Namespace, host: Host, top: Path, name: str) -> dict[str, str]:
     """The server's questions (what a setup script asked), each recorded in veyq-setup.json's `server` section; the
     age key's path is this machine's and kept in the progress file. No action happens here but a new age key."""
-    host.section("3. The server")
+    host.section("3. Questions: the server")
     answers: dict[str, str] = {}
     answers["server_address"] = server_option(
-        args, host, "server_address", "server address (DNS name or IPv4)", "",
-        "A freshly installed server of the system veyq-server's README names, reachable as root over SSH with your "
-        "key.", f"{HOSTNAME_RE}|{IPV4_RE}")
+        args, host, "server_address", "server address", "",
+        "The new server's DNS name or IP address. You log in to it as root with your SSH key; veyq-server's README says "
+        "which system it needs.", f"{HOSTNAME_RE}|{IPV4_RE}")
     address = answers["server_address"]
     answers["node_name"] = server_option(
         args, host, "node_name", "node name", "server" if address[0].isdigit() else address.split(".")[0],
-        "The cluster's node.", r"[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?")
+        "A short name for the server inside Kubernetes.", r"[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?")
     own = re.sub(r"[^a-z0-9_-]", "", os.environ.get("USER", "").split(".")[0].lower())
     answers["admin_user"] = server_option(
         args, host, "admin_user", "admin user", own if own not in ("root", "ci") else "",
-        "The account the bootstrap creates; root's SSH login is switched off.", r"(?!root$|ci$)[a-z_][a-z0-9_-]{0,31}")
+        "Your login on the server. Logging in as root is switched off.", r"(?!root$|ci$)[a-z_][a-z0-9_-]{0,31}")
     progress = getattr(host, "progress", None)
     if not (args.admin_ssh_public_key or (progress and progress.server_answer("admin_ssh_public_key"))):
         candidates = ssh_key_candidates(host)
@@ -3365,8 +3358,8 @@ def server_questions(args: argparse.Namespace, host: Host, top: Path, name: str)
             print("\n   Your public SSH keys:", flush=True)
             for i, (key, label) in enumerate(candidates, 1):
                 print(f"   {i}) {key.split()[0]} …{key.split()[1][-12:]}  {label}", flush=True)
-        picked = host.prompt("admin SSH key: a number, or paste a public key", "1" if len(candidates) == 1 else "",
-                             "The key the admin user logs in with.") or ""
+        picked = host.prompt("your SSH key: its number, or paste a public key", "1" if len(candidates) == 1 else "",
+                             "The key you log in to the server with.") or ""
         if picked.isdigit() and 1 <= int(picked) <= len(candidates):
             args.admin_ssh_public_key = candidates[int(picked) - 1][0]
         elif picked:
@@ -3374,7 +3367,7 @@ def server_questions(args: argparse.Namespace, host: Host, top: Path, name: str)
     if args.admin_ssh_public_key:  # the key alone: its comment is the operator's, not the server's
         m = re.match(SSH_PUBLIC_KEY_RE, args.admin_ssh_public_key.strip())
         args.admin_ssh_public_key = m.group(0) if m else args.admin_ssh_public_key
-    answers["admin_ssh_public_key"] = server_option(args, host, "admin_ssh_public_key", "admin SSH public key",
+    answers["admin_ssh_public_key"] = server_option(args, host, "admin_ssh_public_key", "your SSH public key",
                                                     pattern=SSH_PUBLIC_KEY_RE)
     # The age key: the one SOPS encrypts the repository's secrets to. Its private half stays on this machine (and in
     # the owner's password manager); only its public half is in the repository.
@@ -3384,9 +3377,8 @@ def server_questions(args: argparse.Namespace, host: Host, top: Path, name: str)
     if key_file is None and (top / AGE_KEY_FILE).is_file():
         key_file = top / AGE_KEY_FILE
     if key_file is None:
-        answer = host.prompt("age key file (Enter: create a new one in .age/key.txt)", "",
-                             "The key the repository's secrets are encrypted to; keep its only other copy in a "
-                             "password manager.")
+        answer = host.prompt("age key file (Enter: create a new one)", "",
+                             "The key that encrypts your repository's secrets. Keep a copy in your password manager.")
         if answer:
             key_file = Path(answer).expanduser()
         elif answer is None:
@@ -3397,12 +3389,13 @@ def server_questions(args: argparse.Namespace, host: Host, top: Path, name: str)
             key_file.parent.mkdir(mode=0o700, exist_ok=True)
             host.run(["age-keygen", "-o", str(key_file)])
             key_file.chmod(0o600)
-            say(f"made a new age key in {key_file} (0600, gitignored). Put a copy into your password manager now: "
-                f"without it nothing in the repository can be decrypted, and no lost server set up again.")
-            if not host.wait("Kept it in your password manager? Press Enter"):
+            say(f"created a new age key in {key_file}. Copy it into your password manager now: without it, nothing in "
+                f"your repository can be decrypted, and a lost server cannot be set up again.")
+            if not host.wait("Press Enter once it is in your password manager"):
                 raise Refused(f"the new age key in {key_file} needs a copy in your password manager first")
     key_file = key_file.resolve()
     recipient = age_recipient_of(host, key_file)
+    print(f"\n   Using the age key in {key_file}.", flush=True)
     kept = progress.server_answer("age_recipient") if progress else None
     if kept and kept != recipient:
         raise Refused(f"{key_file} is the age key of {recipient}, and {SETUP_FILE} names {kept}: the repository's "
@@ -3412,14 +3405,15 @@ def server_questions(args: argparse.Namespace, host: Host, top: Path, name: str)
         progress.record_server("age_recipient", recipient)
         progress.record_local("age_key_file", str(key_file))
     answers["host_access"] = server_option(
-        args, host, "host_access", "Argo CD and veyq's administration through the SSH tunnel: yes or no", "yes",
-        "Host-only NodePorts the server's firewall keeps off the public side.", "yes|no")
+        args, host, "host_access", "reach Argo CD and veyq's admin page through an SSH tunnel: yes or no", "yes",
+        "Recommended: both stay invisible from the internet.", "yes|no")
     answers["connect_name"] = server_option(
-        args, host, "connect_name", "this machine's name for the server (SSH host and kubeconfig context)", name,
-        "What `ssh -N <name>` opens the tunnel with and `kubectl --context <name>` reaches the cluster by.",
+        args, host, "connect_name", "name for the server on this computer", name,
+        "Used for `ssh -N <name>` and `kubectl --context <name>`.",
         r"[A-Za-z0-9._-]+")
     current = (progress.local("make_current") if progress else None) or args.make_current or (
-        host.prompt("make it kubectl's current context: yes or no", "no") or "no")
+        host.prompt("make it kubectl's default context: yes or no", "no",
+                    "yes: plain `kubectl` talks to this server from now on. no: use `--context <name>`.") or "no")
     if current not in ("yes", "no"):
         raise Refused(f"--make-current {current}: yes or no")
     answers["make_current"] = current
@@ -3427,7 +3421,7 @@ def server_questions(args: argparse.Namespace, host: Host, top: Path, name: str)
         progress.record_local("make_current", current)
     if not (top / SERVER_SECRETS).is_file():
         # Never recorded, never a flag: it goes into the repository encrypted, only.
-        answers["admin_password"] = host.secret("admin user's sudo password (hidden, Enter: generate one)") or ""
+        answers["admin_password"] = host.secret("your sudo password on the server (hidden, Enter: generate one)") or ""
     return answers
 
 
@@ -3535,8 +3529,8 @@ def server_secrets(host: Host, top: Path, answers: dict[str, str], repo_name: st
         raise Refused(f"sops did not encrypt {SERVER_SECRETS} (no ENC[…] in its output): check .sops.yaml")
     target.parent.mkdir(parents=True, exist_ok=True)
     target.write_text(encrypted)
-    say(f"wrote {SERVER_SECRETS}: the admin password" + (" (generated)" if not answers.get("admin_password") else "")
-        + ", its salt and Argo CD's deploy key, encrypted to the age key")
+    say(f"encrypted your sudo password" + (" (generated)" if not answers.get("admin_password") else "")
+        + f" and Argo CD's deploy key into {SERVER_SECRETS}")
     return public
 
 
@@ -3562,12 +3556,11 @@ def pin_host_key(host: Host, top: Path, address: str) -> str:
         raise Refused(f"{address} did not answer on port 22 (ssh-keyscan): is the server up and reachable? The same "
                       f"command goes on from here.")
     if pinned:  # a rebuilt server under the same address presents a new key
-        print(f"\n   {address} presents {fingerprint(host, line)} (ED25519), and ansible/known_hosts pins "
-              f"{fingerprint(host, pinned)}: a rebuilt server?", flush=True)
+        print(f"\n   The server shows the fingerprint {fingerprint(host, line)} (ED25519), but "
+              f"{fingerprint(host, pinned)} was saved before. Was the server reinstalled?", flush=True)
     else:
-        print(f"\n   {address} presents {fingerprint(host, line)} (ED25519).", flush=True)
-    if host.confirm("Does it match the fingerprint in your provider's console (or the server's first-boot log)? "
-                    "Yes pins it in ansible/known_hosts, and in ~/.ssh/known_hosts before the bootstrap") is not True:
+        print(f"\n   The server shows the fingerprint {fingerprint(host, line)} (ED25519).", flush=True)
+    if host.confirm("Is this the fingerprint your provider shows for the server?") is not True:
         raise Refused(f"the host key of {address} was not confirmed: nothing logs in to it. Compare it in your "
                       f"provider's console and run the same command again.")
     known = top / SERVER_KNOWN_HOSTS
@@ -3598,19 +3591,20 @@ def deploy_key_at_forge(host: Host, repo_url: str, public: str) -> None:
                                                   check=False).returncode:
         listed = host.run(["gh", "repo", "deploy-key", "list", "--repo", repo], check=False).stdout or ""
         if public.split()[1] in listed:
-            say(f"Argo CD's deploy key is entered at {repo} already")
+            say(f"Argo CD's deploy key is on {repo} already")
             return
-        if host.confirm(f"Enter Argo CD's deploy key at {repo}, read-only, with gh?") is True:
+        if host.confirm(f"Add Argo CD's deploy key to {repo} on GitHub (read-only)?") is True:
             with tempfile.TemporaryDirectory(prefix="veyqctl-key-") as tmp:
                 pub = Path(tmp) / "key.pub"
                 pub.write_text(public + "\n")
                 host.run(["gh", "repo", "deploy-key", "add", str(pub), "--repo", repo, "--title",
                           f"{public.split()[-1]} (read-only)"])
-            say(f"entered Argo CD's deploy key at {repo}, read-only")
+            say(f"added Argo CD's deploy key to {repo}, read-only")
             return
     where = f"https://github.com/{repo}/settings/keys/new" if repo else f"your forge's settings of {repo_url}"
-    print(f"\n   Enter this deploy key at {where}, read-only (write access off):\n\n   {public}\n", flush=True)
-    if not host.wait("Press Enter once it is entered"):
+    print(f"\n   Add this as a deploy key at {where}, read-only (leave write access off):\n\n   {public}\n",
+          flush=True)
+    if not host.wait("Press Enter once it is added"):
         raise Refused(f"Argo CD's deploy key is to be entered at {where} first: {public}")
 
 
@@ -3624,8 +3618,8 @@ def await_dns(host: Host, address: str, names: list[str]) -> None:
             say(f"DNS: {', '.join(names)} resolve to {', '.join(sorted(want))}")
             return
         target = ", ".join(sorted(want)) or address
-        message = (f"Set an A record for each of {', '.join(wrong)} to {target} (no AAAA: the cluster is IPv4 only).\n"
-                   f"Press Enter to look again (Ctrl-C: later — the same command goes on)")
+        message = (f"Create an A record for {', '.join(wrong)} pointing to {target} (no AAAA record: the cluster "
+                   f"speaks IPv4 only).\nPress Enter to check again (Ctrl-C to stop; run the same command again later)")
         if not host.wait(message):
             raise Refused(f"{', '.join(wrong)} do not resolve to {target} yet: set the A records and run the same "
                           f"command again")
@@ -3639,13 +3633,13 @@ def commit_and_push(host: Host, top: Path, branch: str, message: str) -> None:
     if changed:
         print(f"\n   {len(changed)} new or changed: " + ", ".join(changed[:8]) + (" …" if len(changed) > 8 else ""),
               flush=True)
-        if host.confirm(f"Commit them ({message!r}) and push to origin {branch}?") is not True:
+        if host.confirm(f"Commit them and push to origin/{branch}?") is not True:
             raise Refused("not committed: the bootstrap needs everything on the remote. The same command asks again.")
         git(host, top, "add", "--all")
         git(host, top, "commit", "--quiet", "-m", message)
         git(host, top, "push", "--quiet", "-u", "origin", branch)
     elif git(host, top, "rev-parse", "--verify", "--quiet", f"origin/{branch}", check=False).returncode:
-        if host.confirm(f"Push to origin {branch}?") is not True:
+        if host.confirm(f"Push to origin/{branch}?") is not True:
             raise Refused("not pushed: the bootstrap needs everything on the remote. The same command asks again.")
         git(host, top, "push", "--quiet", "-u", "origin", branch)
     git(host, top, "fetch", "--quiet", "origin", branch)
@@ -3672,7 +3666,7 @@ def trust_host_key(host: Host, address: str, line: str) -> None:
         host.run(["ssh-keygen", "-R", address, "-f", str(known)], check=False)
     with open(known, "a") as f:
         f.write(line + "\n")
-    say(f"{known}: {address}'s {kind} key is the pinned one")
+    say(f"saved the server's fingerprint in {known}")
 
 
 def ansible_core(host: Host) -> tuple[int, ...]:
@@ -3694,8 +3688,9 @@ def bootstrap(host: Host, top: Path, answers: dict[str, str], pinned: str) -> No
     if ansible_core(host) < ANSIBLE_CORE_FLOOR:
         raise Refused(f"ansible-core {'.'.join(map(str, ANSIBLE_CORE_FLOOR))} or later is needed (the playbooks "
                       f"assert it); `ansible-playbook --version` names an older one first on PATH")
-    if host.confirm(f"Run the bootstrap: as root on {address} it creates {answers['admin_user']}, switches root's and "
-                    f"password logins off, sets the firewall, installs k3s and Argo CD?") is not True:
+    if host.confirm(f"Set up the server now? This logs in to {address} as root, creates {answers['admin_user']}, "
+                    f"switches off root and password logins, and installs the firewall, Kubernetes and Argo CD. It "
+                    f"cannot be undone") is not True:
         raise Refused("the bootstrap was not run. The same command asks again.")
     workdir, host.workdir = host.workdir, top / "ansible"
     try:
@@ -3735,7 +3730,7 @@ def connect(host: Host, name: str, address: str, admin_user: str, argocd: bool, 
                        "  ServerAliveInterval 30", f"# <<< {name}"]) + "\n"
     config.parent.mkdir(mode=0o700, exist_ok=True)
     write_private(config, block + ("\n" + rest.lstrip("\n") if rest.strip() else ""))
-    say(f"{config}: `Host {name}` — `ssh -N {name}` opens the tunnel")
+    say(f"added `Host {name}` to {config}")
 
     remote = host.run(["ssh", "-o", "BatchMode=yes", "-o", "ClearAllForwardings=yes", name, "cat ~/.kube/config"]).stdout
     renamed = re.sub(r"(?m)^(\s*(?:- )?(?:name|cluster|user|current-context): )default$", rf"\g<1>{name}", remote)
@@ -3754,7 +3749,7 @@ def connect(host: Host, name: str, address: str, admin_user: str, argocd: bool, 
         paths = f"{kubeconfig}:{fresh}" if kubeconfig.is_file() else str(fresh)
         merged = host.run(["kubectl", "config", "view", "--flatten"], env={"KUBECONFIG": paths}).stdout
     write_private(kubeconfig, merged)
-    say(f"{kubeconfig}: context {name} (through the tunnel, https://127.0.0.1:{CONNECT_PORTS['api']})")
+    say(f"added the kubectl context {name} to {kubeconfig} (it works while the tunnel is open)")
     if make_current:
         host.run(["kubectl", "config", "use-context", name], env={"KUBECONFIG": str(kubeconfig)})
 
@@ -3776,7 +3771,7 @@ def await_synced(host: Host, name: str, application: str, timeout: float) -> Non
                                               i.get("status", {}).get("health", {}).get("status", "?")) for i in items}
             pending = {n: s for n, s in states.items() if s != ("Synced", "Healthy")}
             if application in states and not pending:
-                say(f"Argo CD: {', '.join(sorted(states))} Synced and Healthy")
+                say(f"everything runs: Argo CD reports {', '.join(sorted(states))} Synced and Healthy")
                 return
             shown = ", ".join(f"{n} {'/'.join(s)}" for n, s in sorted(pending.items())) or "no application yet"
             if shown != last:
@@ -3796,13 +3791,13 @@ def server_prepare(args: argparse.Namespace, host: Host, top: Path, answers: dic
     """The server half into the checkout, before veyq's: veyq-server verified and rendered (once), its secrets
     encrypted (once), the host key pinned (asked)."""
     progress = getattr(host, "progress", None)
-    host.section("6. veyq-server")
+    host.section("4. Setting up: veyq-server")
     if not (top / ".copier-answers.yml").is_file():
         with tempfile.TemporaryDirectory(prefix="veyqctl-veyq-server-") as tmp:
             template = Path(tmp) / "veyq-server"
             release = verify_server_template(host, template)
             render_server(host, top, template, release["commit"], answers, project, repo_url, branch)
-        say(f"rendered veyq-server {release['release']} into {top}")
+        say(f"added veyq-server {release['release']} to your repository")
         if progress:
             progress.mark("rendered", release["release"])
     else:
@@ -3819,30 +3814,31 @@ def server_finish(args: argparse.Namespace, host: Host, top: Path, directory: Pa
     and the wait until Argo CD reports everything Synced and Healthy."""
     name = answers["connect_name"]
     list_veyq_application(top, directory)
-    host.section("7. The deploy key")
+    host.section("4. Setting up: Argo CD's access to your repository")
     deploy_key_at_forge(host, repo_url, args._deploy_key)
-    host.section("8. DNS")
+    host.section("4. Setting up: DNS")
     await_dns(host, answers["server_address"], domains)
-    host.section("9. Commit and push")
+    host.section("4. Setting up: commit and push")
     commit_and_push(host, top, branch, f"veyq-server and veyq {g.doc['running']}, set up by veyqctl init")
-    host.section("10. Bootstrap")
+    host.section("4. Setting up: the server")
     bootstrap(host, top, answers, args._pinned)
-    host.section("11. Connect")
+    host.section("4. Setting up: this computer")
     connect(host, name, answers["server_address"], answers["admin_user"], answers["host_access"] == "yes",
             (directory / "resources" / "admin-host-access.yaml").is_file(), answers["make_current"] == "yes")
     await_synced(host, name, args.application_name, args.sync_timeout)
     host.section("Done")
-    tunnel = f"`ssh -N {name}` opens the tunnel"
-    say(f"{tunnel}; Argo CD's first password: `kubectl --context {name} -n argocd get secret "
-        f"argocd-initial-admin-secret -o jsonpath='{{.data.password}}' | base64 -d` — sign in as admin at "
-        + (f"https://localhost:{CONNECT_PORTS['argocd']}" if answers["host_access"] == "yes"
-           else f"`kubectl --context {name} -n argocd port-forward svc/argocd-server 8080:443`")
-        + ", change it, then delete that Secret")
+    lines = [f"Open the tunnel: ssh -N {name}",
+             "Argo CD: " + (f"https://localhost:{CONNECT_PORTS['argocd']}" if answers["host_access"] == "yes"
+                            else f"kubectl --context {name} -n argocd port-forward svc/argocd-server 8080:443")
+             + ", user admin. Its first password: kubectl --context " + name + " -n argocd get secret "
+             "argocd-initial-admin-secret -o jsonpath='{.data.password}' | base64 -d — change it, then delete that "
+             "Secret."]
     if (directory / "resources" / "admin-host-access.yaml").is_file():
-        say(f"the Server Owner: veyq's administration at http://localhost:{CONNECT_PORTS['admin']} (through the tunnel)")
-    say(f"the admin user's sudo password: `sops decrypt --extract '[\"admin_password\"]' {top / SERVER_SECRETS}`")
-    say(f"KEEP THE AGE KEY ({sops_env(host).get('SOPS_AGE_KEY_FILE', 'its file')}) in your password manager: with it "
-        f"and this repository the server is set up again by `veyqctl init`")
+        lines.append(f"veyq's admin page: http://localhost:{CONNECT_PORTS['admin']} — create the Server Owner there.")
+    lines.append(f"Your sudo password: sops decrypt --extract '[\"admin_password\"]' {top / SERVER_SECRETS}")
+    lines.append(f"Keep the age key ({sops_env(host).get('SOPS_AGE_KEY_FILE', 'its file')}) in your password manager. "
+                 f"With it and this repository, `veyqctl init` sets the server up again.")
+    print("\n".join(f"   {line}" for line in lines), flush=True)
 
 
 def cmd_connect(args: argparse.Namespace, host: Host) -> int:
@@ -4103,7 +4099,7 @@ def gitops_tls(args: argparse.Namespace, host: Host, g: GitOps) -> int:
         staged.write_text(switched)
         render(host, g.doc["chart"], g.doc["pins"]["chart"], namespace, staged)
     branch = (git(host, top, "rev-parse", "--abbrev-ref", "HEAD", check=False).stdout or "").strip()
-    if not args.yes and host.confirm(f"Switch to Let's Encrypt production: commit {g.doc['values']} and push to "
+    if not args.yes and host.confirm(f"Switch to Let's Encrypt production? This commits {g.doc['values']} and pushes to "
                                      f"origin {branch}?") is not True:
         raise Refused("not switched: nothing was changed (without a terminal, pass --yes)")
     g.values.write_text(switched)
@@ -4131,9 +4127,9 @@ def gitops_tls(args: argparse.Namespace, host: Host, g: GitOps) -> int:
                                "jsonpath={range .items[*]}{.spec.secretName}{\"\\n\"}{end}"], check=False).stdout or ""
         secrets_ = sorted({line.strip() for line in listed.splitlines() if line.strip()})
         if secrets_:
-            print(f"\n   The certificates staging issued: {', '.join(secrets_)} (namespace {namespace}).", flush=True)
-            if not args.yes and host.confirm("Delete them, so cert-manager orders production ones? This cannot be "
-                                             "undone; until the new ones are issued, those hosts serve none") is not True:
+            print(f"\n   The test certificates: {', '.join(secrets_)} (namespace {namespace}).", flush=True)
+            if not args.yes and host.confirm("Delete them so production ones are issued? This cannot be undone, and "
+                                             "the sites have no certificate until the new ones arrive") is not True:
                 raise Refused("the staging certificates stay until they renew; `veyqctl tls production` deletes them "
                               "when you run it again")
             host.run(k + ["delete", "secret", *secrets_])

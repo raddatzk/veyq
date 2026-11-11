@@ -1750,7 +1750,7 @@ def test_programs_checked_first(tmp: pathlib.Path) -> None:
     rc, out = run_main(["init", "--gitops", top / "apps" / "veyq", *INIT, "--secrets", "none"], host)
     check("init --gitops without kubectl and helm: after the setup answers, both named with where to get them, "
           "waited for, refused without a terminal — no cluster question, no command but git's",
-          rc == 1 and "kubectl, helm, not on PATH" in out and vc.PROGRAMS["helm"] in out
+          rc == 1 and "kubectl, helm are not installed" in out and vc.PROGRAMS["helm"] in out
           and vc.PROGRAMS["kubectl"] in out and host.waited == [{"kubectl", "helm"}]
           and "kubeconfig context" not in host.asked and all(c[0] == "git" for c in host.commands)
           and "brew install kubernetes-cli helm" in out, out[-400:])
@@ -1758,7 +1758,7 @@ def test_programs_checked_first(tmp: pathlib.Path) -> None:
     (top / ".sops.yaml").write_text("creation_rules: []\n")
     rc, out = run_main(["init", "--gitops", top / "apps" / "veyq-sops", *INIT], host)
     check("the secrets answer decides the programs: sops chosen and missing is named in the one check",
-          rc == 1 and "needs sops, not on PATH" in out and "kubeconfig context" not in host.asked, out[-400:])
+          rc == 1 and "sops is not installed" in out and "kubeconfig context" not in host.asked, out[-400:])
     (top / ".sops.yaml").unlink()
     mirror = gitops_mirror(tmp / "programs-mirror", ("v1.0", None))
     host = Missing({"helm"}, installs=True, signed=gitops_signed("1.0"))
@@ -1774,7 +1774,7 @@ def test_programs_checked_first(tmp: pathlib.Path) -> None:
     host = Missing({"git"}, answers={"compose or gitops": "gitops"})
     rc, out = run_main(["init"], host)
     check("init with gitops chosen at its prompt and no git is refused before the next question",
-          rc == 1 and "needs git, not on PATH" in out and host.asked == ["compose or gitops"], out[-400:])
+          rc == 1 and "git is not installed" in out and host.asked == ["compose or gitops"], out[-400:])
     host = Missing(set(), cosign_version="v3.1.2")
     rc, out = run_main(["init", "--gitops", top / "apps" / "veyq", *INIT, "--secrets", "none"], host)
     check("init --gitops with a cosign below the floor is refused after the setup answers, before the cluster's",
@@ -1785,11 +1785,11 @@ def test_programs_checked_first(tmp: pathlib.Path) -> None:
     host = Missing({"helm"})
     rc, out = run_main(["--home", home, "upgrade"], host)
     check("a GitOps verb without helm is refused naming it, before reading the instance",
-          rc == 1 and "`upgrade` of a GitOps instance needs helm" in out and not host.commands, out[-400:])
+          rc == 1 and "`upgrade` of a GitOps instance: helm is not installed" in out and not host.commands, out[-400:])
     host = Missing({"docker", "cosign"})
     rc, out = run_main(["--home", tmp / "programs-compose", "install"], host)
     check("a Compose install without docker and cosign is refused naming both, before any command or file",
-          rc == 1 and "`install` needs docker, cosign, not on PATH" in out and not host.commands
+          rc == 1 and "`install`: docker, cosign are not installed" in out and not host.commands
           and not (tmp / "programs-compose").exists(), out[-400:])
     host = Missing({"cosign"})
     rc, out = run_main(["--home", tmp / "programs-compose", "status"], host)
@@ -1806,7 +1806,7 @@ def test_gitops_init(tmp: pathlib.Path) -> None:
     rc, out = run_main(["--source", mirror, "init", "--gitops", d, "--release", "1.0", *INIT, "--secrets",
                         "external-secrets", "--secret-store", "vault"], host)
     files = {p.relative_to(d).as_posix() for p in d.rglob("*") if p.is_file()}
-    check("init without the server shows no server outline", "With the server, after the questions" not in out
+    check("init without the server shows no server outline", "With a new server, veyqctl does this" not in out
           and "sets up a veyq instance" in out, out[:300])
     check("init --gitops: writes the Application, the values, resources/ with ExternalSecrets, and veyqctl.json",
           rc == 0 and files == {"application.yaml", "values.yaml", vc.GITOPS_FILE, "resources/kustomization.yaml",
@@ -2033,7 +2033,7 @@ def test_init_resumes(tmp: pathlib.Path) -> None:
     values = (d / "values.yaml").read_text() if (d / "values.yaml").exists() else ""
     check("the same command continues: nothing asked again, the answers taken (and shown), the instance written",
           rc == 0 and "domain: resume.example.org" in values and f"(from {vc.SETUP_FILE})" in out
-          and "a run here stopped" in out and vc.read_registry()["instances"].get("resumed") == str(d.resolve())
+          and "A previous run stopped here" in out and vc.read_registry()["instances"].get("resumed") == str(d.resolve())
           and not progress.path.exists(), out[-600:])
 
     # stopped after the values were handed over and the files written: the same values, the files not rewritten
@@ -2306,9 +2306,9 @@ def test_server_path(tmp: pathlib.Path) -> None:
         mirror, signed = tmp / "g-mirror", gitops_signed("1.0", "1.1", "2.0")
         age_key = tmp / "server-age.txt"
         age_key.write_text("AGE-SECRET-KEY-1STANDIN\n")
-        answers = {"compose or gitops": "gitops", "server address (DNS name or IPv4)": "server.example.org",
+        answers = {"compose or gitops": "gitops", "server address": "server.example.org",
                    "veyq's domain": "raddatz.me",
-                   "admin user": "kevin", "admin SSH key: a number, or paste a public key": "1"}
+                   "admin user": "kevin", "your SSH key: its number, or paste a public key": "1"}
 
         def fresh(name):
             top = tmp / name
@@ -2342,12 +2342,12 @@ def test_server_path(tmp: pathlib.Path) -> None:
 
         # the host key not confirmed: nothing logs in, nothing pushed, ~/.ssh untouched; then the same command goes on
         top = fresh("server-run")
-        host, rc, out = run(top, confirms={"provider's console": False})
+        host, rc, out = run(top, confirms={"your provider shows": False})
         check("server path: a host key not confirmed is refused — not pinned, nothing pushed, ~/.ssh and ~/.kube "
               "untouched", rc == 1 and "not confirmed" in out and not vc.pinned_host_key(top) and not host.pushed
               and outside() == before and not host.ran("ansible-playbook"), out[-500:])
         check("init begins by saying what it does, and the server path adds its steps' outline",
-              out.index("sets up a veyq instance") < out.index("1. Setup") and "With the server, after the questions"
+              out.index("sets up a veyq instance") < out.index("1. Setup") and "With a new server, veyqctl does this"
               in out, out[:600])
         rendered = (top / ".copier-answers.yml").read_text()
         secrets_file = (top / vc.SERVER_SECRETS).read_text()
@@ -2372,7 +2372,7 @@ def test_server_path(tmp: pathlib.Path) -> None:
               and not [c for c in host.commands if c[:2] == ["ansible-playbook", "playbooks/bootstrap.yml"]],
               out[-400:])
 
-        host, rc, out = run(top, confirms={"Run the bootstrap": False})
+        host, rc, out = run(top, confirms={"Set up the server now": False})
         check("server path: pushed, then the bootstrap declined: ansible-playbook never ran, ~/.ssh/config untouched",
               rc == 1 and host.pushed and not [c for c in host.commands if c[0] == "ansible-playbook" and
                                                "--version" not in c]
@@ -2399,9 +2399,9 @@ def test_server_path(tmp: pathlib.Path) -> None:
               and not [c for c in host.commands if c[:2] == ["ansible-playbook", "playbooks/bootstrap.yml"]],
               f"rc={rc} copier={host.ran('copier')} commit={host.ran('commit')} " + out[-300:])
 
-        host, rc, out = run(top, host_key=HOST_KEY.replace("Fresh", "Rebuilt"), confirms={"provider's console": False})
+        host, rc, out = run(top, host_key=HOST_KEY.replace("Fresh", "Rebuilt"), confirms={"your provider shows": False})
         check("server path: a rebuilt server's new host key is shown beside the pinned one and, unconfirmed, refused",
-              rc == 1 and "a rebuilt server?" in out and vc.pinned_host_key(top) == HOST_KEY, out[-500:])
+              rc == 1 and "Was the server reinstalled?" in out and vc.pinned_host_key(top) == HOST_KEY, out[-500:])
 
         top2 = fresh("server-dns")
         host, rc, out = run(top2, waits=False, gh=False, dns={"raddatz.me": set()})
