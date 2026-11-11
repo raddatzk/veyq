@@ -3364,7 +3364,8 @@ class Q:
     SERVER = Question("server", "set up a new server too", "yes: veyqctl sets up a fresh server with "
                       "everything veyq needs. no: you already run a Kubernetes cluster with Argo CD.", ("yes", "no"))
     DIRECTORY = Question("gitops", "directory", "Where in your repository veyq's files go.")
-    NAME = Question("name", "instance name", "How this computer names the instance (`veyqctl instances`).")
+    NAME = Question("name", "instance name", "How this computer names the instance (`veyqctl instances`); with a new "
+                    "server, also its SSH host and kubectl context (`ssh -N <name>`, `kubectl --context <name>`).")
     SECRETS = Question("secrets", f"secrets: {', '.join(PROVIDERS)}", "Where veyq's passwords and keys are kept.",
                        PROVIDERS)
     # 3. Questions: the server
@@ -3384,7 +3385,8 @@ class Q:
     HOST_ACCESS = Question("host_access", "reach Argo CD and veyq's admin page through an SSH tunnel",
                            "Recommended: both stay invisible from the internet.", ("yes", "no"), section="server")
     CONNECT_NAME = Question("connect_name", "name for the server on this computer", "Used for `ssh -N <name>` and "
-                            "`kubectl --context <name>`.", pattern=r"[A-Za-z0-9._-]+", section="server")
+                            "`kubectl --context <name>`. Not asked: the instance's name.", pattern=r"[A-Za-z0-9._-]+",
+                            section="server")
     MAKE_CURRENT = Question("make_current", "make it kubectl's default context", "yes: plain `kubectl` "
                             "talks to this server from now on. no: use `--context <name>`.", ("yes", "no"),
                             section="local")
@@ -3997,7 +3999,10 @@ def ask_server(run: InitRun) -> None:
     run.progress.put("server", "age_recipient", recipient)
     run.progress.put("local", "age_key_file", str(key_file))
     a["host_access"] = run.ask(Q.HOST_ACCESS, "yes")
-    a["connect_name"] = run.ask(Q.CONNECT_NAME, run.name)
+    # Not asked: one repository, one server, one instance — the server takes the instance's name as its SSH host
+    # and kubectl context. --connect-name or an earlier answer wins.
+    a["connect_name"] = run.ask(Q.CONNECT_NAME, given=run.args.connect_name or run.progress.get("server", "connect_name")
+                                or run.name)
     a["make_current"] = run.ask(Q.MAKE_CURRENT, "no")
     if not (run.top / SERVER_SECRETS).is_file():
         # Never kept, never a flag: it goes into the repository encrypted, only.

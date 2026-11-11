@@ -2432,6 +2432,9 @@ def test_server_path(tmp: pathlib.Path, home: pathlib.Path) -> pathlib.Path:
           and f"_src_path: {vc.SERVER_TEMPLATE_URL}" in rendered and host.rendered["repo_url"] ==
           "git@github.com:owner/raddatz.me.git" and host.rendered["admin_ssh_public_key"].endswith("Key")
           and host.rendered["age_recipient"] == AGE_PUBLIC, json.dumps(setup))
+    check("server path: the server's name on this computer is not asked — the instance's, kept for a rebuild",
+          not any("name for the server" in q for q in host.prompted)
+          and setup["server"]["connect_name"] == setup["veyq"]["gitops/apps/veyq"]["name"], json.dumps(setup))
     check("server path: the node name is not asked — derived from the address, kept for a rebuild",
           not any("node name" in q for q in host.prompted) and setup["server"]["node_name"] == "server"
           and host.rendered["node_name"] == "server", f"{host.prompted} {setup['server']}")
