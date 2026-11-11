@@ -95,6 +95,25 @@ internal sealed partial class AppWindow(string process)
             case "key":
                 Keys.Type(Handle(Window()), string.Join(' ', parts.Skip(1)));
                 return "";
+            case "type":
+            {
+                // a system dialog's entry (the save picker's file name) takes what is typed into it: a Value set through
+                // UIA showed there and was not read (the picker saved under the name it had)
+                var e = Find(parts[1]);
+                e.SetFocus();
+                Keys.Text(TopLevel(e), parts.Length > 2 ? parts[2] : "");
+                return "";
+            }
+            case "press":
+            {
+                // a system dialog's button (the save picker's) on a real key: UIA's Invoke reaches it as an
+                // input-synchronous call, out of which the dialog cannot call the file broker (RPC_E_CANTCALLOUT_ININPUTSYNCCALL)
+                var e = Find(parts[1]);
+                e.SetFocus();
+                Keys.Type(TopLevel(e), parts.Length > 2 ? parts[2] : "enter");
+                Thread.Sleep(300);
+                return "";
+            }
             case "size":
                 Size(Window(), int.Parse(parts[1], CultureInfo.InvariantCulture), int.Parse(parts[2], CultureInfo.InvariantCulture));
                 return "";
@@ -164,6 +183,16 @@ internal sealed partial class AppWindow(string process)
     }
 
     private static nint Handle(AutomationElement window) => window.Current.NativeWindowHandle;
+
+    /// <summary>The window <paramref name="e"/> lies in: its nearest ancestor (or itself) with a window handle.</summary>
+    private static nint TopLevel(AutomationElement e)
+    {
+        for (var at = e; at is not null; at = TreeWalker.RawViewWalker.GetParent(at))
+        {
+            if (at.Current.ControlType == ControlType.Window && at.Current.NativeWindowHandle != 0) return at.Current.NativeWindowHandle;
+        }
+        throw new InvalidOperationException($"{e.Current.AutomationId} lies in no window");
+    }
 
     private static void Size(AutomationElement window, int width, int height)
     {

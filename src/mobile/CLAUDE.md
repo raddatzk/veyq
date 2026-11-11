@@ -127,8 +127,9 @@ A Gradle build of its own, run through its own wrapper.
     tunnel to the backend until Ctrl+C (run it in the background). `VEYQ_LANGUAGE` (`en-US`, `de-DE`) and `VEYQ_THEME`
     (`light`, `dark`) set a debug build's.
   - `drive <step>...` prints the app's log, then runs `Veyq.Drive`'s steps (`tree`, `invoke <id>`, `select <id>`,
-    `set <id> <text>`, `key`, `size`, `maximize`, `wait`, `sleep`, `shot <name>.png`) and prints what each saw. Read the
-    log and the tree first; a `shot` (to `build/windows/shots/`) is the proof, not the probe.
+    `set <id> <text>`, `key`, `type <id> <text>` and `press <id> [keys]` (a system dialog's entry and button), `size`,
+    `maximize`, `wait`, `sleep`, `shot <name>.png`) and prints what each saw. Read the log and the tree first; a `shot`
+    (to `build/windows/shots/`) is the proof, not the probe.
   - `register` registers the scheduled tasks `veyq-app` and `veyq-drive` once per Windows host. It is the host owner's
     step: a persistent change on a machine.
 

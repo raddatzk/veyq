@@ -37,10 +37,10 @@ Verbs:
                              principal of the env file (VEYQ_ENV_FILE, else `.run/.env`) as VEYQ_DEV_*, inside the
                              launch file Veyq.Drive deletes on reading — never on a command line —, and it signs in
                              through its own sign-in once (DevLogin.cs).
-  drive <step>...            runs Veyq.Drive's steps (its Program.cs: tree, invoke, select, set, key, size, maximize,
-                             wait, sleep, shot) against the running app through the scheduled task `veyq-drive`, and
-                             prints the app's log first, then what each step saw. `shot <name>.png` lands in
-                             src/mobile/build/windows/shots here.
+  drive <step>...            runs Veyq.Drive's steps (its Program.cs: tree, invoke, select, set, type, key, press,
+                             size, maximize, wait, sleep, shot) against the running app through the scheduled task
+                             `veyq-drive`, and prints the app's log first, then what each step saw. `shot <name>.png`
+                             lands in src/mobile/build/windows/shots here.
   register                   registers the two scheduled tasks, interactive only, as the user ssh logs in as: they run
                              on demand in the logged-on session, which an ssh command (session 0) cannot reach. Run once
                              per Windows host, by its owner (a persistent change on that machine).
@@ -602,7 +602,7 @@ def main() -> None:
     r.add_argument("--devlogin", action="store_true", help="sign the debug build in as the seeded principal of the env file")
     d = verbs.add_parser("drive", help="drive the running app by UI Automation (Veyq.Drive's steps) and print what it saw")
     d.add_argument("steps", nargs="+", help="each a step: tree, invoke <id>, select <id>, set <id> <text>, key <keys>, "
-                                            "size <w> <h>, maximize, wait <id> [s], sleep <ms>, shot <name>.png")
+                                            "type <id> <text>, press <id> [keys], size <w> <h>, maximize, wait <id> [s], sleep <ms>, shot <name>.png")
     verbs.add_parser("register", help="register the scheduled tasks veyq-app and veyq-drive on the Windows host (owner)")
     args = parser.parse_args()
     if args.verb == "test":

@@ -1,5 +1,5 @@
 // Keys typed into the app's window through SendInput: `ctrl+e`, `enter`, `tab`, `escape`, a letter or a digit, each
-// chord of a step separated by a space.
+// chord of a step separated by a space; or a text, character by character.
 using System;
 using System.Collections.Generic;
 using System.Runtime.InteropServices;
@@ -36,6 +36,23 @@ internal static partial class Keys
         }
     }
 
+    /// <summary><paramref name="text"/> typed into <paramref name="window"/> as characters (KEYEVENTF_UNICODE), as a
+    /// person types it: a system dialog's entry reads typed text, never one set through UI Automation's Value.</summary>
+    public static void Text(nint window, string text)
+    {
+        SetForegroundWindow(window);
+        Thread.Sleep(200);
+        foreach (var c in text)
+        {
+            Input[] pair = [Input.Unicode(c, false), Input.Unicode(c, true)];
+            if (SendInput(2, pair, Marshal.SizeOf<Input>()) != 2)
+            {
+                throw new InvalidOperationException($"SendInput sent not all of {c} ({Marshal.GetLastPInvokeError()})");
+            }
+        }
+        Thread.Sleep(100);
+    }
+
     private static ushort Key(string name)
     {
         if (Named.TryGetValue(name, out var vk)) return vk;
@@ -51,6 +68,8 @@ internal static partial class Keys
         private readonly long _pad; // the union's size is a MOUSEINPUT's
 
         public static Input Of(ushort vk, bool up) => new() { Type = 1, Ki = new KeyboardInput { Vk = vk, Flags = up ? 2u : 0u } };
+
+        public static Input Unicode(char c, bool up) => new() { Type = 1, Ki = new KeyboardInput { Scan = c, Flags = 4u | (up ? 2u : 0u) } };
     }
 
     [StructLayout(LayoutKind.Sequential)]
