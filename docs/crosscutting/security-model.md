@@ -767,6 +767,58 @@ operator lacks can.
 records why): the operator ships the code that consumes whatever the unlock produces. Unlock convenience and
 client integrity are orthogonal.
 
+### What a trusted device rests on, per platform
+
+The boundary above is the operator's. A trusted device answers another adversary: **someone who holds the device**.
+Every client trusts a device in the web's two ways ([ADR 0005](../decisions/0005-unlock-methods-and-device-trust.md),
+[ADR 0123](../decisions/0123-the-apps-share-a-kotlin-multiplatform-core-under-native-ui.md) decision 8), one
+convenience wrap per device (ADR 0005 §9):
+- **The password trust** (`DEVICE`): the Master Key under Argon2id over the password and a factor that a bind key on
+  the device computes. A thief needs the veyq password as well; the Secret Key is never asked for again there.
+- **Staying signed in** (`DEVICE_KEY`): the Master Key sealed under an unlock key the device keeps, the refresh token
+  kept beside it without asking. In the apps it has **two levels**, the person's choice after a sign-in (owner
+  2026-11-11): **PRESENCE**, whose unlock key opens only after the person authenticated to the device, and **LOGIN**,
+  whose unlock key opens without asking, the device's own sign-in being the authentication. The web has one level,
+  LOGIN's ("remember me"). What a thief gets is what the level's authentication gives them: at LOGIN, the device's
+  sign-in opens the Master Key.
+
+What each platform's store holds, as built 2026-11-11. Where a store offers neither level, the password trust stays
+(where a bind key can be kept), and staying signed in is not offered at all.
+
+| Client | The bind key and the refresh token | PRESENCE | LOGIN | Neither level offered |
+|---|---|---|---|---|
+| Android | Keystore keys that never leave it: an HMAC key per account, an AES-256-GCM key without user authentication sealing the token in preferences | A Keystore AES-256-GCM key usable for 15 s after a strong biometric or the device credential, **enforced by the Keystore** (its secure hardware, the TEE, on a device that has one: remembered, only the emulator's was measured), voided by a new biometric enrolment | A second Keystore AES-256-GCM key without user authentication: still non-exportable, opened by the unlocked device | Without a secure screen lock: LOGIN's guarantee is the device's sign-in, which then authenticates nobody (owner 2026-11-11) |
+| Apple (iOS, macOS) | Keychain items of this device only, never in a backup; the HMAC and the GCM run in libsodium, so **the bytes enter the app's memory while in use** | A Keychain item behind `.userPresence` (Face ID, Touch ID or the passcode), asked through LocalAuthentication first; the device's Keychain enforces the item's access control (the Simulator stores it and does not, measured 2026-11-08) | A Keychain item without `.userPresence`, `kSecAttrAccessibleWhenPasscodeSetThisDeviceOnly`: read without asking while the device is unlocked, removed with the passcode | Without a passcode, for Android's reason |
+| Windows | DPAPI (the current user, no UI) protects the bytes the device store keeps; the HMAC runs in libsodium, so the bytes enter memory while in use. A domain's roaming profile carries DPAPI's master key to another PC, and the trust with it | The 32 bytes encrypted to an RSA-2048 key in the **Microsoft Passport key storage provider** (Windows Hello's container, TPM-backed where a TPM is), created as `AUTH_MANDATORY`: **Windows refuses the decryption without Hello**, a prompt the app cannot skip, not a dialog it shows. Creating that key asks for Hello too, so enrolment prompts | The unlock key under DPAPI | Never: LOGIN is always offered, PRESENCE only where Hello is set up |
+| Linux | Items of the Secret Service's default collection (schema `me.raddatz.veyq.DeviceKey`), which the desktop sign-in unlocks; HMAC and GCM in libsodium, the bytes in memory while in use. **Any process of the user's session reads them**: the Secret Service has no per-application access | Not offered: the Secret Service has no presence check, and a fingerprint reader (fprintd, polkit) has no standard way to a key, so none is planned | The unlock key an item of that collection: the desktop sign-in is the authentication (owner 2026-11-11) | Without a Secret Service on the session bus, or without libsecret: then no bind key can be kept either, so every start signs in with the Secret Key |
+| Web | A non-extractable WebCrypto HMAC key in IndexedDB | — | A non-extractable WebCrypto key in IndexedDB, **no presence check at all** | Where WebCrypto or IndexedDB is missing, or the operator switched `core.remember-device.passwordless` (or its parent) off |
+
+What the rows rest on:
+- **The contract each store meets** (`DeviceKeysContract`, the same cases over every store): `./gradlew :core:jvmTest
+  :core:macosArm64Test` from `src/mobile/` over the test store; `/usr/bin/python3 src/mobile/linux/run.py test` over
+  gnome-keyring in a Fedora 44 container, which then runs again with no session bus and with libsecret moved away;
+  `/usr/bin/python3 src/mobile/windows/run.py test` over DPAPI on the Windows host. **Windows Hello's half runs only with
+  a person at the console** (an agent never types a PIN): `/usr/bin/python3 src/mobile/windows/run.py hello-probe`,
+  measured 2026-11-11 on an ARM64 Windows 11 VM under x64 emulation, a local account with a PIN — the seal, the open,
+  a cancel told apart from a failure.
+- **Each app's pass** (2026-11-11, against the dev instance): Android on an emulator with a test PIN, Apple on a
+  simulator with Face ID enrolled, Linux in that container with gnome-keyring, Windows on that VM with the owner
+  answering Hello. ADR 0123's Consequences, the device trust, records each.
+
+**Residuals, written here so nothing implies more:**
+- **Windows, a local account without a password:** the Windows sign-in authenticates nobody, so LOGIN opens the Master
+  Key for anyone at the PC. The app does not ask whether the account has a password, so LOGIN is offered there too
+  (not measured on such an account: the VM's has one).
+- **Windows, an unseen Hello prompt:** the prompt is owned by the app's window, yet it can sit behind the app unnoticed
+  until Windows closes it — measured once, about 17 minutes, reported as the generic failure, not as a cancel. The
+  next try prompts again.
+- **Linux:** the items are open to every process of the session while the collection is unlocked; KWallet, KeePassXC
+  and a collection that stays locked on a real desktop are untried ([native-apps](native-apps.md) § Open).
+- **Apple, Windows and Linux** hold the key bytes in the app's memory while sealing or opening; Android's never leave
+  the Keystore.
+- **Every level keeps the refresh token without asking,** so whoever opens the device's store can resume the session
+  (a session, not content: the Master Key still needs the unlock key or the password).
+
 ## Recovery — no escrow
 
 A memories product must not turn "forgot password" into permanent loss, yet there is **no escrow** — the

@@ -88,29 +88,57 @@ implementation exists but what holds it to the first.
    tile are taken. Icons are each platform's own symbols drawn with the web's motifs (`images`, `file`, `inbox`,
    `wallet`, `folder`), not Lucide.
 
-8. **A device is trusted as the web trusts one, and staying signed in waits behind the person** (owner 2026-11-08:
-   the web's two tiers, plus the platform's biometrics). After a sign-in with the Secret Key the app enrols one of the
-   web's two device wraps of the Master Key ([ADR 0005](0005-unlock-methods-and-device-trust.md), `POST /api/account/wraps`),
-   one per account per device, the new one recorded before the old one is deleted:
-   - **By default a `DEVICE` wrap:** the KEK is Argon2id over the device factor and the password, the factor the HMAC
-     of `veyq/v1/device-bind` under a key the Android Keystore or the Keychain holds and never hands out. The next
-     start needs the password, never again the Secret Key. A signed-in session is not kept: each start logs in.
-   - **"Stay signed in" is an explicit choice** (ADR 0005 § 13, said with what it costs): a `DEVICE_KEY` wrap, the
-     Master Key AES-256-GCM sealed under one unlock key of the app that opens only after the person authenticated —
-     a strong biometric or the device's code (Android: `setUserAuthenticationParameters`, a new biometric enrolment
-     voids it; Apple: `.userPresence`, asked through LocalAuthentication first) — with the iv as the wrap's
-     `kdfParams` and the web's associated data. The refresh token, which reaches the server and nothing sealed, is
-     kept without asking (Keystore-sealed preferences, the Keychain), and each rotated one at once. One
-     authentication within a short window resumes every remembered account of a start.
-   What a device keeps per account is a record (server, email, account, method, the wrap's id, its key's alias): the
-   wrap is found among the served ones by its id, and a wrap the server withholds is no reason to forget it (the
-   person signs in with the Secret Key instead). A refresh the server refuses ends the remembered session on the
-   device; one it cannot answer keeps it. Signing out ends staying signed in (its wrap deleted, its token and key
-   gone) and keeps the password trust, as on the web; "Stop trusting this device" ends either. Every unlock and every
-   enrolment names the device in the account's device register (write moments 1 and 2 of en.account.device-register,
-   its label the device's model), so a person's other device can find this one's saved key and remove it
-   ([ADR 0058](0058-revoke-never-takes-key-material.md)). iOS keeps Keychain items when an app is deleted: a first start
-   after an installation removes them.
+8. **A device is trusted as the web trusts one; staying signed in is the person's choice after the sign-in, at the
+   level they pick** (owner 2026-11-08: the web's two tiers, plus the platform's biometrics; changed by the owner
+   2026-11-11: the choice moves from a switch at the sign-in to an offer after it, every level the device has offered,
+   for all four apps). Each enrols one of the web's two device wraps of the Master Key
+   ([ADR 0005](0005-unlock-methods-and-device-trust.md), `POST /api/account/wraps`), **one convenience wrap per device**
+   (ADR 0005 § 9), the new one recorded before the old one is deleted:
+   - **Every sign-in enrols a `DEVICE` wrap:** the KEK is Argon2id over the device factor and the password, the factor
+     the HMAC of `veyq/v1/device-bind` under a bind key the device's secure store keeps. The next start needs the
+     password, never again the Secret Key. A signed-in session is not kept: each start logs in. The sign-in has no
+     "Stay signed in" switch.
+   - **Right after it, an offer** of what this device can do (as banking and password-manager apps ask after a first
+     sign-in), and after a password unlock too, so accounts trusted before the offer existed are asked once:
+     - **the presence level** (`PRESENCE`, "Sign in with Windows Hello", Face ID, Touch ID, "fingerprint or screen
+       lock" — the platform's word): a `DEVICE_KEY` wrap, the Master Key AES-256-GCM sealed under an unlock key that
+       opens **only after the person authenticated** to the device (Android: `setUserAuthenticationParameters`, a new
+       biometric enrolment voids it; Apple: `.userPresence`, asked through LocalAuthentication first; Windows: a key of
+       Windows Hello's Passport provider);
+     - **the login level** (`LOGIN`, "Stay signed in"): a `DEVICE_KEY` wrap whose unlock key opens without asking, the
+       device's own sign-in the authentication (a Keystore key without user authentication, a Keychain item bound to the
+       passcode, DPAPI, the Secret Service). **Offered beside the presence level, not only where it is missing:** a
+       device with a fingerprint reader must not force anyone to use it (owner 2026-11-11);
+     - **"Not now":** the password trust stays. It is remembered for the account on this device (not secret), so the
+       offer does not return at every sign-in; Stop trusting forgets it, so the next sign-in offers again.
+
+     Which levels a device offers is its store's answer (`DeviceKeys.staySignedIn`), never a screen's own probe. A store
+     with no screen lock or passcode (Android, Apple) offers neither: the login level's guarantee is the device's sign-in,
+     which then authenticates nobody (owner 2026-11-11). Where nothing is offered there is no offer.
+   - **"Manage servers" changes it** per server: to the other level, or back to the password trust. The way back
+     re-creates the `DEVICE` wrap, which needs the password, so it asks for it and checks it by a login whose session is
+     revoked at once. Choosing the other level replaces the wrap and its key. Every failure keeps the trust the account
+     had and never signs out.
+   - **The level lives in the device's record**, not only beside the key: two servers may sit at different levels, so
+     both keys exist at once and an open must know which. Each level has one unlock key, shared by every account
+     remembered at it, deleted once no record uses it. A record kept before the levels reads as the presence level.
+
+   The refresh token, which reaches the server and nothing sealed, is kept without asking (Keystore-sealed preferences,
+   the Keychain, DPAPI, the Secret Service), and each rotated one at once; **a rotated token the store fails to keep is
+   logged, never thrown**: the refresh succeeded, and failing it would lose this start as well as the next. One
+   authentication within a short window resumes every remembered account of a start. **A trust that fails never fails
+   the sign-in**; an enrolment whose token cannot be kept deletes the wrap it just added, so nothing is left on the
+   server. What a device keeps per account is a record (server, email, account, method, level, the wrap's id, its key's
+   alias): the wrap is found among the served ones by its id, and a wrap the server withholds is no reason to forget it
+   (the person signs in with the Secret Key instead). A refresh the server refuses ends the remembered session on the
+   device; one it cannot answer keeps it. Signing out ends staying signed in (its wrap deleted, its token and, if no
+   other record uses it, its key gone) and keeps the password trust, as on the web; "Stop trusting this device" ends
+   either. Every unlock and every enrolment names the device in the account's device register (write moments 1 and 2
+   of en.account.device-register, its label the device's model), so a person's other device can find this one's saved
+   key and remove it ([ADR 0058](0058-revoke-never-takes-key-material.md)). iOS keeps Keychain items when an app is
+   deleted: a first start after an installation removes them. What each store guarantees at each level is
+   [security-model](../crosscutting/security-model.md) § What a trusted device rests on; the web keeps its checkbox, its
+   one level the login level's.
 
 9. **Each platform's guidelines win over a uniform look** (owner 2026-11-09: Apple's Human Interface Guidelines and
    Material 3 as far as they go; decision 7's theme is the colours, not the layout). Where the web, Android and Apple
@@ -566,9 +594,9 @@ implementation exists but what holds it to the first.
     Beside the shell's state goes `ShellShown`: what both apps ask core functions for while they draw (the switcher's
     tenants, the space's name, Home's groups, the bar's places).
   - **No key, seal or token crosses outward.** Inward only the typed password and Secret Key do, on their way to the
-    core. So `DeviceKeys` is the bridge's own `NoDeviceKeys` and forwards nothing, because its calls carry the Master
-    Key to seal and the refresh token to keep. A host behind the bridge cannot hold the device trust until the core
-    reaches the secure store itself ([native-apps](../crosscutting/native-apps.md) § Open).
+    core (and the password Manage's way back to the password trust takes). `DeviceKeys`' calls carry the Master Key to
+    seal and the refresh token to keep, so they are never a host request: the core reaches each desktop's secure store
+    itself (`platformDeviceKeys`, below: the device trust), and `NoDeviceKeys` is left for tests and a JVM host.
   - **Linked with `-Wl,--exclude-libs,ALL`.** Without the flag the library defined 11,348 symbols, OpenSSL's whole API
     among them, which a host loading its own libcrypto would bind against. With it the library defines the six and
     Kotlin/Native's own.
@@ -735,6 +763,64 @@ implementation exists but what holds it to the first.
     imported by the web as the same Pot; an 8 MB FAT volume filled to one free cluster answered `Failed`, the error
     `InfoBar`, nothing left; a dismissed picker said nothing. WebP decodes only with the Store's Webp Image Extensions
     (removed: the decode test red, `COMException`).
+- **The device trust on every app** (decision 8 as changed 2026-11-11; [ADR 0127](0127-an-apps-logic-is-the-kotlin-cores-each-platform-draws-only-its-own-ui.md)'s
+  Consequences for the desktops' stores). The flows are the core's alone — `session/Account.kt` and `SessionModel.kt`
+  enrol, offer, resume, unlock, change the level, sign out and stop trusting through the `DeviceKeys` interface
+  (`session/DeviceTrust.kt`), and a platform adds a store and screens, no rule:
+  - **The stores.** Android `KeystoreDeviceKeys` and Apple `AppleDeviceKeys` (over `KeychainStore.swift`) gained the
+    login level (a second Keystore key without user authentication; a Keychain item without `.userPresence`, bound to
+    the passcode). Windows `WindowsDeviceKeys` (`mingwMain`): DPAPI for the bind keys, the secrets and the login level,
+    a Passport key for the presence level. Linux `LinuxDeviceKeys` (`linuxMain`): the Secret Service, the login level
+    alone. Each answers `staySignedIn`, the set it offers: Android and Apple both with a screen lock or passcode, else
+    none; Windows both with Hello set up, else the login level; Linux the login level with a Secret Service, else none.
+    What each guarantees is [security-model](../crosscutting/security-model.md) § What a trusted device rests on.
+  - **One contract over every store** (`DeviceKeysContract`, `commonTest`), read only through the interface: a bind
+    HMAC is deterministic, replaced and gone after delete; secrets round-trip; each offered level seals and opens under
+    its associated data and fails under another; each level is a key of its own; a level the store does not offer is
+    refused, never sealed at the other. It runs over the test store (`SoftwareDeviceKeys`, in `core/src/testDevice/`,
+    shared with `:bridge`'s tests; and a login-only one), over gnome-keyring in the container and over Windows' DPAPI
+    half. Windows Hello's half needs a person: `run.py hello-probe`.
+  - **The bridge** carries the trust's calls, nothing secret outward: `Session.StaySignedIn(level)`, `Session.NotNow`,
+    `Session.Unlock(password)` (`""` for a remembered account, where the core prompts), `Session.OtherAccount`,
+    `Session.ForgetDevice`, `Session.AddServer`/`CancelAdd`, `Manage.Open`/`Close`, `Manage.StaySignedIn`,
+    `Manage.PasswordTrust(connection, password)`, `Manage.HideTenant`/`HideSpace`; the offer rides `Gate.Signed.offer`,
+    a remembered unlock's words follow `record.level`. `Config` carries the host's window (Windows' HWND, the owner of
+    Hello's prompt) and the prompt's words. `Bridge.live` builds `platformDeviceKeys(config, store)`, an `expect` in
+    `bridgedMain`.
+  - **The screens,** each platform's way: the offer is a full-screen step on Android, a sheet on Apple
+    (`interactiveDismissDisabled`), a page of the way in on Linux (`AdwActionRow`s, each with its line) and on Windows
+    (one full-width button per answer, the first accented); "Manage servers" names the trust per server and lists each
+    change (Android `ManageScreen`, Apple `ManageView`, Linux an `AdwPreferencesDialog`, Windows a `ContentDialog`),
+    the way back asking for the password (an `AlertDialog`, an `.alert`, an `AdwAlertDialog` over Manage, a
+    `PasswordBox` in place, since WinUI shows one `ContentDialog` at a time); the unlock screen words itself by the
+    record's level. Apple's presence words follow `LAContext`: Face ID, Touch ID, or the passcode where no biometry
+    is enrolled. Every word is `words.json`'s; the owner approved the offer's and Manage's words as drafted, the
+    Face ID ones and then the Touch ID and passcode ones (2026-11-11, "Texte passen so", "passen so").
+
+  Measured 2026-11-11:
+  - `./gradlew :core:jvmTest --rerun :core:macosArm64Test --rerun :bridge:jvmTest --rerun` from `src/mobile/`: green,
+    the contract over both test stores, `SessionModelTest` (the offer appears only where offered and not declined,
+    each answer, "Not now" remembered until a level is taken or the device is no longer trusted, a cancel keeping the
+    offer, a failure ending it without signing out), `StayLevelTest` (a level changed replaces the wrap and drops the
+    old key; the way back tells a wrong password apart and revokes its check's session), `RefreshKeptTest`,
+    `RememberEnrolTest`, `DispatchTest` and `SecretFreeSchemaTest` with the password allowances; each rule bitten red.
+  - `/usr/bin/python3 src/mobile/linux/run.py test`: the contract over gnome-keyring; then without a session bus and
+    with `libsecret-1.so.0` moved away, both answering "nothing offered", nothing failing. `readelf -d libveyq.so` and
+    of the test binary: no `NEEDED` libsecret.
+  - `/usr/bin/python3 src/mobile/windows/run.py test`: the contract over DPAPI in session 0. `run.py hello-probe`, the
+    owner at the console: Hello available, a seal (it asked the PIN), an open (asked), an open within the window (not
+    asked), a cancel as `cancelled = true`, an open after delete as not cancelled.
+  - With `VEYQ_LIVE` and `VEYQ_ENV_FILE`, `DeviceTrustLiveTest` and `LiveBridgeTest` walk the password trust, each
+    level, a resume, the change in Manage, the way back, "Not now" and Stop trusting against the dev instance, twice in
+    a row with nothing left behind.
+  - A pass per app against the dev instance, each state read from the app's log first: Linux in the container (the
+    offer, the login level resumed with no prompt, Manage's changes, a wrong password, "Not now", Stop trusting; the
+    app without a Secret Service signing in at every start); Windows on the VM, the owner answering Hello (the offer,
+    the enrolment's PIN, a resume's PIN, a cancel staying on the unlock, the login level chosen in Manage resuming
+    with no prompt, Stop trusting); Android on a throwaway emulator with a test PIN (BiometricPrompt, both levels, the
+    way back, "Not now", the offer again after Stop trusting); Apple on a throwaway simulator with Face ID enrolled and
+    answered by `notifyutil`. English and German, light and dark on each but Apple (German only; its English is the
+    catalog's).
 - **Not built yet:** every other write (another kind's node), the
   other applications' views behind the bar, a CI job for the apps. The grant check is held by `GrantTrustTest` against a server the test plays — each refusal killed by
   a mutation of the rule it pins, but for three a second rule also holds (a pending or self-naming signer, and a cycle

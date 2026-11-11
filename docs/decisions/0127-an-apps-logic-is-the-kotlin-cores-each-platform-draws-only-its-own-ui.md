@@ -4,7 +4,8 @@
   decision 4 for Linux's first slice (sign-in, the shell, Home, a Pot read only, Search), run in a Fedora 44 container
   under GTK's Broadway backend, not yet in a desktop session or as a Flatpak; decision 5 for Windows' first slice, the
   same one: the core as a `mingwX64` DLL behind the same bridge, its C# types generated, a WinUI 3 app run unpackaged on
-  an ARM64 Windows 11 VM under x64 emulation, not yet on an x64 PC or as an MSIX. Measured 2026-11-10 and 2026-11-11
+  an ARM64 Windows 11 VM under x64 emulation, not yet on an x64 PC or as an MSIX; on both, the device trust with the
+  core reaching the secure store itself (2026-11-11, the Consequences). Measured 2026-11-10 and 2026-11-11
   (`src/mobile/linux/run.py` and `src/mobile/windows/run.py`, each `test`, `bridge` and `build`, `./gradlew
   :bridge:jvmTest`, a browser pass on Linux, a UI Automation pass on Windows): ADR 0123's Consequences, the core on
   Linux and on Windows, the bridge, the Linux app and the Windows app
@@ -90,12 +91,28 @@ four times.
 - The Windows app cannot be built on the developer's Mac: everything Kotlin cross-compiles there, and the C# without a
   Windows API builds and tests there, but the WinUI build, the core's tests and the app run on a Windows host
   (`src/mobile/windows/run.py` drives one over ssh), and the apps' CI job (still open) needs a Windows runner.
-- **The bridge carries no key, so a platform behind it does not hold the device trust as decision 1 has a platform hold
-  the secure store** (found building it, 2026-11-10). `DeviceKeys`' calls carry the Master Key to seal and the refresh
-  token to keep; forwarded to the host, both would cross the bridge. The Linux app therefore keeps no device trust yet,
-  and every start signs in. Its Secret Service is reached by the core itself — libsecret through cinterop, the key
-  never leaving the library — or the bridge's rule is revisited; never a host request that carries a key. Windows'
-  DPAPI meets the same choice, and its app keeps no device trust either.
+- **The bridge carries no key, so on Linux and Windows the core reaches the secure store itself** (found building the
+  bridge, 2026-11-10; built 2026-11-11). Decision 1 has a platform hold the secure store, but `DeviceKeys`' calls carry
+  the Master Key to seal and the refresh token to keep; forwarded to a host, both would cross the bridge. So the store
+  is the core's own code, in `linuxMain` and `mingwMain`, and **the key never crosses the bridge**: the host hands the
+  core only its window (Windows' HWND, the owner of Hello's prompt) and the prompt's words.
+  - **Linux: the Secret Service through libsecret, reached by `dlopen`** (`core/secret/`, `LinuxDeviceKeys`). A small
+    header of our own declares the few functions and `SecretSchema` it calls (`secret_password_store_sync`,
+    `lookup_sync`, `clear_sync`, `secret_service_get_sync` for the capability), so `libveyq.so` has no `NEEDED`
+    libsecret, no glib or libsecret header enters the Mac's build, and the app runs where libsecret is absent, offering
+    nothing (decision 4). Every key is an item of the default collection; the unlock key has no presence check (the
+    Secret Service has none), so Linux offers the login level alone. A Flatpak runtime must carry libsecret.
+  - **Windows: DPAPI and the Passport key storage provider through cinterop** (`core/wincred/`, `WindowsDeviceKeys`):
+    only the header's C helpers are exposed, so windows.h's types stay the platform library's and only integers, bytes
+    and UTF-16 strings cross. DPAPI (`CryptProtectData`, the current user, no UI) keeps the bind keys, the secrets and
+    the login level's unlock key; the presence level's 32 bytes are encrypted to an RSA key in the Microsoft Passport
+    key storage provider (NCrypt), whose decryption Windows refuses without Hello. Hello's availability is cryptngc's
+    `NgcGetDefaultDecryptionKeyName` (an undocumented export loaded at run time, as KeePassWinHello checks it), not
+    `dsregcmd`, whose `NgcSet` says NO on a local account with a PIN. Rejected: `UserConsentVerifier`, a dialog only,
+    which leaves the bytes open without it; `KeyCredentialManager`, WinRT, which Kotlin/Native reaches only through
+    raw COM activation.
+  - What each store guarantees is [security-model](../crosscutting/security-model.md) § What a trusted device rests on;
+    what was built and measured, ADR 0123's Consequences, the device trust.
 - **Every primitive on Windows is libsodium's, AES-256-GCM among them** (owner 2026-11-10: one source per platform, as
   Apple's and Linux's). libsodium's AES-GCM needs AES-NI, PCLMUL and AVX. An x64 CPU without AVX, and a Windows-on-ARM
   PC whose x64 emulation does not show AVX, are refused at start, as a CPU without AES instructions is on Linux. CNG for
