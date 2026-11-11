@@ -3065,10 +3065,11 @@ def gitops_init(args: argparse.Namespace, host: Host, directory: Path) -> int:
         host.quiet = True
     # The Argo CD project the Application joins: offered from the cluster — the one project besides `default` when
     # there is exactly one (a project that limits sources and destinations, which `default` does not), else `default`.
-    listed_projects = subprocess.CompletedProcess([], 1, "", "") if server else host.run(
-        k + ["-n", args.argocd_namespace, "get", "appprojects", "-o", "name"], check=False)
-    projects = [line.split("/", 1)[-1] for line in (listed_projects.stdout or "").split()
-                if not listed_projects.returncode]
+    projects: list[str] = []
+    if not server:  # a cluster veyq-server sets up does not exist yet: nothing to offer from it
+        listed_projects = host.run(k + ["-n", args.argocd_namespace, "get", "appprojects", "-o", "name"], check=False)
+        projects = [line.split("/", 1)[-1] for line in (listed_projects.stdout or "").split()
+                    if not listed_projects.returncode]
     own = [p for p in projects if p != "default"]
     host.section("3. Questions: Argo CD and updates")
     own_project = re.sub(r"[^a-z0-9.-]", "-", name.lower()).strip("-.") or "server"
@@ -3614,7 +3615,7 @@ def await_dns(host: Host, address: str, names: list[str]) -> None:
 
 
 def commit_and_push(host: Host, top: Path, branch: str, message: str) -> None:
-    """Everything init wrote, committed and pushed on confirmation; then the push check `play` made: the bootstrap
+    """Everything init wrote, committed and pushed on confirmation; then a check that the remote has it: the bootstrap
     applies the AppProject and root from this checkout, and the root's first sync takes the remote's copy over them."""
     status = git(host, top, "status", "--porcelain", check=False).stdout or ""
     changed = [line[3:] for line in status.splitlines() if line.strip()]
@@ -3786,8 +3787,6 @@ def server_prepare(args: argparse.Namespace, host: Host, top: Path, answers: dic
             release = verify_server_template(host, template)
             render_server(host, top, template, release["commit"], answers, project, repo_url, branch)
         say(f"added veyq-server {release['release']} to your repository")
-        if progress:
-            progress.mark("rendered", release["release"])
     else:
         say(f"veyq-server is rendered in {top} already (.copier-answers.yml)")
     m = GITHUB_REPO.fullmatch(repo_url)
@@ -3796,7 +3795,7 @@ def server_prepare(args: argparse.Namespace, host: Host, top: Path, answers: dic
 
 
 def server_finish(args: argparse.Namespace, host: Host, top: Path, directory: Path, answers: dict[str, str],
-                  g: "GitOps", repo_url: str, branch: str, domains: list[str]) -> None:
+                  g: GitOps, repo_url: str, branch: str, domains: list[str]) -> None:
     """What follows the written halves on the server path, each step said as it comes: veyq's Application listed for
     the root, the deploy key at the forge, the DNS records, commit and push, the bootstrap, this machine connected,
     and the wait until Argo CD reports everything Synced and Healthy."""
@@ -3984,7 +3983,7 @@ def gitops_check(args: argparse.Namespace, host: Host, g: GitOps) -> int:
 
 def gitops_upgrade(args: argparse.Namespace, host: Host, g: GitOps) -> int:
     """ADR 0126 decision 3: ADR 0096 decision 5's resolve and verify, then a commit instead of a restart."""
-    if args.unsigned_local or args.key_into or args.objects_to:
+    if args.key_into or args.objects_to:  # --unsigned-local is refused in main() already
         raise Refused("--unsigned-local, --key-into and --objects-to are for Compose: on a GitOps instance veyq backs "
                       "itself up before the new release starts")
     source = open_source(args.source or g.doc.get("source") or None)
@@ -4319,9 +4318,9 @@ def main(argv: list[str] | None = None, host: Host | None = None) -> int:
                 raise Refused(f"`{args.command}` is for Compose, and {home} is a GitOps instance: {COMPOSE_ONLY[args.command]}")
             if getattr(args, "unsigned_local", False):
                 raise Refused("--unsigned-local is for Compose: a GitOps instance installs only what verifies")
+            require_programs(host, GITOPS_PROGRAMS[args.command], f"`{args.command}` of a GitOps instance")
             # Resolved: git names the checkout by its real path (macOS' /var is /private/var), and every path veyqctl
             # compares with it or hands to `git add` must be the same one.
-            require_programs(host, GITOPS_PROGRAMS[args.command], f"`{args.command}` of a GitOps instance")
             return GITOPS_VERBS[args.command](args, host, read_gitops(home.resolve()))
         if getattr(args, "push", False):
             raise Refused(f"--push is for a GitOps instance, and {home} runs on Compose")

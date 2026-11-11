@@ -681,7 +681,7 @@ def test_status() -> None:
     check("status: a project with no containers is not healthy", not healthy())
 
 
-# ---- phase 3: upgrade, backup, restore, self-update ---------------------------------------------------------------
+# ---- upgrade, backup, restore, self-update ----------------------------------------------------------------------
 
 INSTALL_SETS = ["--set", "VEYQ_DOMAIN=veyq.test", "--set", "VEYQ_ACME_EMAIL=ops@veyq.test", "--set", "PLAIN_REQUIRED=1",
                 "--set", "QUOTED=q", "--set", "ADMIN_PORT=18081"]
@@ -2112,7 +2112,6 @@ class ServerHost(GitOpsHost):
         self.bootstrapped = bootstrapped
         self.remote_differs = remote_differs  # origin's gitops/ is not this checkout's after the push
         self.dns = dns if dns is not None else {}
-        self.asked_confirm: list[str] = []
         self.waited: list[str] = []
         self.tunnels: list = []
         # git's state outlives a run, as a repository's does: kept beside the checkout
@@ -2135,7 +2134,6 @@ class ServerHost(GitOpsHost):
         return "v0.1", raw, bundle
 
     def confirm(self, prompt):
-        self.asked_confirm.append(prompt)
         return next((v for k, v in self.confirms.items() if k in prompt), True)
 
     def wait(self, prompt):
@@ -2542,7 +2540,7 @@ def test_gitops_upgrade(tmp: pathlib.Path) -> None:
     check("upgrade below the pinned release is refused (no downgrade)", rc == 1 and "older than the installed" in out, out[-300:])
 
 
-ADOPTED_VALUES = """# hand-written, as affenbande's
+ADOPTED_VALUES = """# hand-written, as an operator's own
 domain: cloud.example.org
 image:
   # renovate: datasource=docker depName=ghcr.io/raddatzk/veyq
@@ -2568,7 +2566,7 @@ ADOPTED_APPLICATION = """spec:
 
 
 def hand_written(d: pathlib.Path, pins: dict, files_admin: str, running: str = "1.0") -> None:
-    """A veyq half written by hand, as affenbande's, and the veyqctl.json its owner wrote beside it (the Run page's
+    """A veyq half written by hand, as an operator might, and the veyqctl.json its owner wrote beside it (the Run page's
     *A veyq half that exists already*): the files pin `pins` but for the admin image, which they pin `files_admin`."""
     d.mkdir(parents=True, exist_ok=True)
     (d / "application.yaml").write_text(ADOPTED_APPLICATION.format(**pins))
@@ -2603,7 +2601,7 @@ def test_gitops_hand_written(tmp: pathlib.Path) -> None:
     rc, out = run_main(["--home", d, "--source", mirror, "upgrade"], host)
     values, application = (d / "values.yaml").read_text(), (d / "application.yaml").read_text()
     check("a hand-written layout upgrades like a written one: its comments kept, the Renovate hint moved with it",
-          rc == 0 and "# hand-written, as affenbande's" in values and values.count('tag: "1.1"') == 3
+          rc == 0 and "# hand-written, as an operator's own" in values and values.count('tag: "1.1"') == 3
           and "version=1.1" in application and pin_of("1.1", "chart") in application and host.ran("git", "commit"),
           out[-400:] + values)
     rc, out = run_main(["--source", mirror, "init", "--gitops", d, "--secrets", "sops", *INIT],
