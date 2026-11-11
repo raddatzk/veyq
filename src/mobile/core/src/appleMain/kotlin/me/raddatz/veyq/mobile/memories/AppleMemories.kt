@@ -5,17 +5,14 @@ import kotlinx.cinterop.addressOf
 import kotlinx.cinterop.usePinned
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import me.raddatz.veyq.mobile.blob.FileSink
 import me.raddatz.veyq.mobile.blob.FileUploadSource
 import me.raddatz.veyq.mobile.blob.RangeReader
 import me.raddatz.veyq.mobile.session.TenantSession
 import platform.Foundation.NSData
 import platform.Foundation.NSURL
 import platform.Foundation.create
-import platform.posix.fclose
-import platform.posix.fopen
-import platform.posix.fwrite
 import platform.posix.memcpy
-import platform.posix.remove
 
 /**
  * Memories' media for the Apple app, what Swift cannot do with core's types itself: a tier's plaintext as `NSData`, read
@@ -63,22 +60,10 @@ object AppleMemories {
     /** The picked file [source] is (an upload job's): where the app's deriver reads it. */
     fun urlOf(source: me.raddatz.veyq.mobile.blob.UploadSource): NSURL? = (source as? FileUploadSource)?.url
 
-    /** Writes [item]'s original to [path] as it is read; false (and nothing left at [path]) when it did not finish. */
+    /** Writes [item]'s original to [path] as it is read (core's [FileSink]); false (and nothing left at [path]) when it did not finish. */
     @Throws(Exception::class)
     suspend fun download(tenant: TenantSession, item: MemoryMedia.Item, path: String): Boolean = withContext(Dispatchers.Default) {
-        val out = fopen(path, "wb") ?: return@withContext false
-        var done = false
-        try {
-            done = MemoryMedia.stream(tenant, item, item.original) { bytes ->
-                if (bytes.isNotEmpty()) {
-                    val n = bytes.usePinned { fwrite(it.addressOf(0), 1u, bytes.size.toULong(), out) }
-                    if (n != bytes.size.toULong()) throw IllegalStateException("short write to $path")
-                }
-            }
-        } finally {
-            fclose(out)
-            if (!done) remove(path)
-        }
-        done
+        val out = FileSink.open(path) ?: return@withContext false
+        out.fill(kept = { it }) { sink -> MemoryMedia.stream(tenant, item, item.original) { sink(it) } }
     }
 }

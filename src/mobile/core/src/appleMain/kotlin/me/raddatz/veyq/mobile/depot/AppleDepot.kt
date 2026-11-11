@@ -6,15 +6,12 @@ import kotlinx.cinterop.usePinned
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import me.raddatz.veyq.mobile.AppKinds
+import me.raddatz.veyq.mobile.blob.FileSink
 import me.raddatz.veyq.mobile.blob.FileUploadSource
 import me.raddatz.veyq.mobile.session.TenantSession
 import platform.Foundation.NSData
 import platform.Foundation.NSURL
 import platform.Foundation.create
-import platform.posix.fclose
-import platform.posix.fopen
-import platform.posix.fwrite
-import platform.posix.remove
 
 /**
  * Depot's files for the Apple app: what Swift cannot hand core itself (a suspending reader), done here over a file — an
@@ -54,24 +51,14 @@ object AppleDepot {
         tenant: TenantSession, file: DepotFiles.File, url: NSURL, name: String, size: Long, type: String, modifiedAt: Long?, expectedBlobId: String?,
     ): DepotFiles.ReplaceJob = DepotFiles.ReplaceJob(tenant, file, FileUploadSource(url, null, name, size, type, modifiedAt), expectedBlobId, name)
 
-    /** Writes [file]'s content to [path] as it is read; false (and nothing left at [path]) when it did not finish. */
+    /** Writes [file]'s content to [path] as it is read (core's [FileSink]); false (and nothing left at [path]) when it did not finish. */
     @Throws(Exception::class)
     suspend fun download(tenant: TenantSession, file: DepotFiles.File, path: String): Boolean = withContext(Dispatchers.Default) {
-        val out = fopen(path, "wb") ?: return@withContext false
-        var done = false
-        try {
-            DepotFiles.read(tenant, file) { bytes ->
-                if (bytes.isNotEmpty()) {
-                    val n = bytes.usePinned { fwrite(it.addressOf(0), 1u, bytes.size.toULong(), out) }
-                    if (n != bytes.size.toULong()) throw IllegalStateException("short write to $path")
-                }
-            }
-            done = true
-        } finally {
-            fclose(out)
-            if (!done) remove(path)
+        val out = FileSink.open(path) ?: return@withContext false
+        out.fill { sink ->
+            DepotFiles.read(tenant, file) { sink(it) }
+            true
         }
-        done
     }
 
     /** What a file's page shows: the decision (`FileView`) and what it needs read — an image's bytes, a text's characters. */

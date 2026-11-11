@@ -159,12 +159,18 @@ kotlin {
     // The targets reached through the bridge (ADR 0127 decision 5), Linux and Windows, share `bridgedMain`/`bridgedTest`
     // between `nativeMain` and their own sets: `nfc`/`nfkd` over utf8proc and the wall clock over kotlinx-datetime. The
     // default template is extended, not replaced; only the HTTP engine differs (`linuxMain` Curl, `mingwMain` WinHttp).
+    // Apple and Linux share `posixMain` beside it: a file opened by its path as the bytes it is (`blob/Files.posix.kt`),
+    // where Windows takes the path as UTF-16 (`mingwMain`).
     @OptIn(ExperimentalKotlinGradlePluginApi::class)
     applyHierarchyTemplate(KotlinHierarchyTemplate.default) {
         group("native") {
             group("bridged") {
                 group("linux")
                 group("mingw")
+            }
+            group("posix") {
+                group("apple")
+                group("linux")
             }
         }
     }
