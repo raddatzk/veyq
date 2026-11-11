@@ -42,8 +42,8 @@ HTTP boots and serves pages, then silently breaks **Stay signed in on this devic
 
 **Docker Compose.** Traefik obtains a Let's Encrypt certificate per domain over the HTTP-01 challenge and redirects
 port 80 to HTTPS. For that, port 80 must reach the host from the internet, and every domain must resolve to it
-**before** it is used, the tenants' included: creating a tenant is its certificate order. Set `VEYQ_ACME_EMAIL`; while
-testing, point `VEYQ_ACME_CASERVER` at Let's Encrypt's staging directory, and switch back before anyone uses the
+**before** it is used, the tenants' included: creating a tenant is its certificate order. No account e-mail is needed (Let's Encrypt keeps
+none since June 2025). While testing, point `VEYQ_ACME_CASERVER` at Let's Encrypt's staging directory, and switch back before anyone uses the
 instance (staging certificates are not trusted). Let's Encrypt locks a hostname out for an hour after five failed
 validations, and issues at most 50 certificates per registered domain per week, which a burst of test tenants reaches.
 If Traefik's log shows `permission denied` on `/acme`, the certificate volume is not owned by Traefik's user; the

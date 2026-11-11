@@ -174,7 +174,7 @@ MARIADB_PASSWORD=
 MARIADB_ROOT_PASSWORD=
 GARAGE_RPC_SECRET=
 GARAGE_ADMIN_TOKEN=
-VEYQ_ACME_EMAIL=
+OPERATOR_EMAIL=
 #   ADMIN_PORT=8081
 """
 COMPOSE = """# Every value is REQUIRED: `${VAR:?…}` fails the `up` (a comment, as the recipe's own header says it)
@@ -550,7 +550,7 @@ def test_assets_on_disk(tmp: pathlib.Path) -> None:
 
 def test_template(tmp: pathlib.Path) -> None:
     m = vc.parse_manifest(manifest_bytes(), "v1.12")
-    given = {"VEYQ_DOMAIN": "veyq.test", "VEYQ_ACME_EMAIL": "ops@veyq.test", "ADMIN_PORT": "18081"}
+    given = {"VEYQ_DOMAIN": "veyq.test", "OPERATOR_EMAIL": "ops@veyq.test", "ADMIN_PORT": "18081"}
     values = vc.install_values(TEMPLATE, m, given, lambda k, e: None)
     check("template: the image lines come from the manifest",
           (values["VEYQ_IMAGE"], values["VEYQ_ADMIN_IMAGE"]) == (SIGNED_APP, SIGNED_ADMIN))
@@ -569,12 +569,12 @@ def test_template(tmp: pathlib.Path) -> None:
           lines.index(vc.KEPT_HEADER) < lines.index("ADMIN_PORT=18081") and "VEYQ_RELEASE=latest" in lines)
     check("template: render → read is the identity on the values", vc.env_values(rendered) == values)
 
-    asked = vc.install_values(TEMPLATE, m, {"VEYQ_ACME_EMAIL": "x@y"}, lambda k, e: f"asked-{k}-{e}")
+    asked = vc.install_values(TEMPLATE, m, {"OPERATOR_EMAIL": "x@y"}, lambda k, e: f"asked-{k}-{e}")
     check("template: a value not given is asked, with the template's as the example",
           asked["VEYQ_DOMAIN"] == "asked-VEYQ_DOMAIN-veyq.example.org")
     message = refused(vc.install_values, TEMPLATE, m, {"VEYQ_DOMAIN": "veyq.test"}, lambda k, e: None)
     check("template: an operator value neither given nor asked is refused, named",
-          "VEYQ_ACME_EMAIL" in message and "--set VEYQ_ACME_EMAIL" in message, message)
+          "OPERATOR_EMAIL" in message and "--set OPERATOR_EMAIL" in message, message)
     check("template: the image lines cannot be --set",
           "release's to write" in refused(vc.install_values, TEMPLATE, m, {**given, "VEYQ_IMAGE": "x"}, lambda k, e: None))
 
@@ -642,7 +642,7 @@ def test_install(tmp: pathlib.Path) -> None:
     out = io.StringIO()
     with contextlib.redirect_stdout(out):
         rc = vc.main(["--home", str(home), "--source", str(mirror), "install", "--unsigned-local",
-                      "--set", "VEYQ_DOMAIN=veyq.test", "--set", "VEYQ_ACME_EMAIL=ops@veyq.test",
+                      "--set", "VEYQ_DOMAIN=veyq.test", "--set", "OPERATOR_EMAIL=ops@veyq.test",
                       "--set", "PLAIN_REQUIRED=1", "--set", "QUOTED=q", "--set", "VEYQ_RELEASE=1"], host)
     check("install: exits 0 on the stand-in host", rc == 0, out.getvalue()[-800:])
     lines = [l for l in out.getvalue().splitlines() if l]
@@ -697,7 +697,7 @@ def test_install(tmp: pathlib.Path) -> None:
     host = FakeHost(local_images={"veyq:local", "veyq-admin:local"})
     with contextlib.redirect_stdout(io.StringIO()):
         rc = vc.main(["--home", str(missing_home), "--source", str(mirror), "install", "--unsigned-local",
-                      "--set", "VEYQ_DOMAIN=veyq.test", "--set", "VEYQ_ACME_EMAIL=ops@veyq.test"], host)
+                      "--set", "VEYQ_DOMAIN=veyq.test", "--set", "OPERATOR_EMAIL=ops@veyq.test"], host)
     check("install: a variable the recipe requires and nothing gives is refused before `up`",
           rc == 1 and not host.ran("up") and not (missing_home / vc.ENV_FILE).exists())
 
@@ -719,7 +719,7 @@ def test_status() -> None:
 
 # ---- upgrade, backup, restore, self-update ----------------------------------------------------------------------
 
-INSTALL_SETS = ["--set", "VEYQ_DOMAIN=veyq.test", "--set", "VEYQ_ACME_EMAIL=ops@veyq.test", "--set", "PLAIN_REQUIRED=1",
+INSTALL_SETS = ["--set", "VEYQ_DOMAIN=veyq.test", "--set", "OPERATOR_EMAIL=ops@veyq.test", "--set", "PLAIN_REQUIRED=1",
                 "--set", "QUOTED=q", "--set", "ADMIN_PORT=18081"]
 
 
@@ -1699,7 +1699,7 @@ def gitops_signed(*releases: str, without: tuple = ()) -> set:
     return {f"{names[role]}@{pin_of(r, role)}" for r in releases for role in names if (r, role) not in without}
 
 
-INIT = ["--domain", "veyq.example.org", "--gateway-class", "traefik", "--acme-email", "ops@example.org",
+INIT = ["--domain", "veyq.example.org", "--gateway-class", "traefik", "--tls", "acme",
         "--gateway-namespace", "traefik", "--gateway-pod-label", "app.kubernetes.io/name=traefik"]
 
 
@@ -1870,7 +1870,7 @@ def test_gitops_init(tmp: pathlib.Path) -> None:
           values + application)
     check("the values name the Secrets, the gateway, ACME and the data-plane peer the operator gave",
           "existingSecret: veyq-secrets" in values and "existingSecret: veyq-config-secret-key" in values
-          and "className: traefik" in values and "mode: per-domain" in values and "email: ops@example.org" in values
+          and "className: traefik" in values and "mode: per-domain" in values and "email:" not in values
           and "kubernetes.io/metadata.name: traefik" in values and "storeDomain: store.veyq.example.org" in values)
     external = (d / "resources" / "secrets.external.yaml").read_text()
     check("external-secrets: each key read from a remote key under the prefix, through the named store",
@@ -2022,7 +2022,7 @@ def test_gitops_init(tmp: pathlib.Path) -> None:
           rc == 0 and "className: traefik" in values and "kubernetes.io/metadata.name: traefik" in values
           and "app.kubernetes.io/name: traefik" in values and "mode: per-domain" in values
           and "storeDomain: store.veyq.example.org" in values
-          and "email: owner@example.org" in values
+          and "email:" not in values and "owner@example.org" not in values  # no ACME contact, not even git's
           and json.loads((d6 / vc.GITOPS_FILE).read_text())["secrets"] == "sops", out[-500:])
     d7 = top / "apps" / "veyq-admin-host"
     host = GitOpsHost(top=top, signed=signed, answers={"veyq's domain": "veyq.example.org"}, cluster={
@@ -2123,9 +2123,9 @@ def test_init_resumes_from_flags(tmp: pathlib.Path) -> None:
     values = (d / "values.yaml").read_text() if (d / "values.yaml").exists() else ""
     claim = (d / "resources/backup-pvc.yaml").read_text() if (d / "resources/backup-pvc.yaml").exists() else ""
     application = (d / "application.yaml").read_text() if (d / "application.yaml").exists() else ""
-    check("continued with no flag: TLS derived from --acme-email, the store left out, the claim's size, the namespace "
+    check("continued with no flag: TLS acme kept, the store left out, the claim's size, the namespace "
           "and the branch are the first run's",
-          rc == 0 and "ops@example.org" in values and "store." not in values and "storage: 5Gi" in claim
+          rc == 0 and "enabled: true" in values and "store." not in values and "storage: 5Gi" in claim
           and "namespace: web" in claim and "targetRevision: live" in application, out[-500:] + values[:300])
     before = tree_text(top)
     host = GitOpsHost(top=top, signed=signed)

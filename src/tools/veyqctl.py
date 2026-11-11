@@ -2439,7 +2439,7 @@ def sops_run(host: Host, cmd: list[str], target: Path, **kwargs) -> subprocess.C
 
 
 def stack_values(release: str, pins: dict[str, str], *, domain: str, store_domain: str, garage: bool,
-                 gateway_class: str, tls: str, acme_email: str, tls_secret: str, peer_namespace: str,
+                 gateway_class: str, tls: str, tls_secret: str, peer_namespace: str,
                  peer_label: str, provider: str, acme_directory: str = "production") -> str:
     label_key, _, label_value = peer_label.partition("=")
     lines = [
@@ -2482,8 +2482,7 @@ def stack_values(release: str, pins: dict[str, str], *, domain: str, store_domai
         "  tls:",
     ]
     if tls == "acme":
-        lines += ["    mode: per-domain", "    acme:", "      enabled: true", f"      email: {acme_email}",
-                  f"      server: {ACME_DIRECTORIES[acme_directory]}"]
+        lines += ["    mode: per-domain", "    acme:", "      enabled: true", f"      server: {ACME_DIRECTORIES[acme_directory]}"]
     elif tls == "shared":
         lines += ["    mode: shared", f"    secretName: {tls_secret}"]
     else:
@@ -3404,9 +3403,6 @@ class Q:
     TLS = Question("tls", "TLS: acme, shared or none", "acme: certificates from Let's Encrypt, one per address (needs "
                    "cert-manager). shared: one certificate of yours. none: TLS ends in front of the cluster.",
                    ("acme", "shared", "none"))
-    ACME_EMAIL = Question("acme_email", "email for Let's Encrypt", "The ACME account's contact. Since June 2025 Let's "
-                          "Encrypt sends no expiry mails and keeps no address with the account; it passes the address "
-                          "to ISRG's general mailing list. cert-manager renews by itself.")
     ACME_DIRECTORY = Question("acme_directory", "Let's Encrypt: staging or production", "Start with staging: test "
                               "certificates, without production's limits. Switch later with `veyqctl tls production`.",
                               tuple(ACME_DIRECTORIES))
@@ -3486,7 +3482,7 @@ class InitRun:
         self.server_answers: dict[str, str] = {}
         # 3. Questions: the cluster and veyq
         self.context = self.domain = self.store_domain = self.gateway_class = self.peer_namespace = ""
-        self.peer_label = self.tls = self.acme_email = self.acme_directory = self.tls_secret = ""
+        self.peer_label = self.tls = self.acme_directory = self.tls_secret = ""
         self.admin_host, self.admin_source, self.garage = "no", "", True
         # 3. Questions: Argo CD and updates
         self.project = self.secret_store = self.repo_url = self.revision = self.selector = ""
@@ -3757,12 +3753,8 @@ def ask_veyq(run: InitRun, cluster: ClusterView) -> None:
                                  given=args.gateway_namespace or known.get("gateway_namespace"))
     run.peer_label = run.ask(Q.GATEWAY_POD_LABEL, "app.kubernetes.io/name=traefik" if traefik_ns else "",
                              given=args.gateway_pod_label or known.get("gateway_pod_label"))
-    # --acme-email alone means TLS acme.
-    run.tls = run.ask(Q.TLS, "acme" if cluster.cert_manager or run.server else "",
-                      given=args.tls or ("acme" if args.acme_email else None))
-    if run.tls == "acme":
-        own_email = (git(host, run.top, "config", "user.email", check=False).stdout or "").strip()
-        run.acme_email = run.ask(Q.ACME_EMAIL, own_email)
+    run.tls = run.ask(Q.TLS, "acme" if cluster.cert_manager or run.server else "")
+    if run.tls == "acme":  # no account e-mail: Let's Encrypt keeps no contact since June 2025
         run.acme_directory = run.ask(Q.ACME_DIRECTORY, "staging" if run.server else "production")
     else:
         run.acme_directory = "production"
@@ -3871,7 +3863,7 @@ def gitops_files(run: InitRun, pins: dict[str, str], chart: str, values: dict[st
                                              values="values.yaml"),
         "values.yaml": stack_values(run.release_plan.selection.release, pins, domain=run.domain,
                                     store_domain=run.store_domain, garage=run.garage, gateway_class=run.gateway_class,
-                                    tls=run.tls, acme_email=run.acme_email, tls_secret=run.tls_secret,
+                                    tls=run.tls, tls_secret=run.tls_secret,
                                     peer_namespace=run.peer_namespace, peer_label=run.peer_label,
                                     provider=run.provider, acme_directory=run.acme_directory),
         "resources/namespace.yaml": namespace_text(namespace),
@@ -4447,7 +4439,6 @@ def parser() -> argparse.ArgumentParser:
                                                                          "(acme), one of yours (shared), or none")
     init.add_argument("--acme-directory", choices=tuple(ACME_DIRECTORIES),
                       help="GitOps: Let's Encrypt's test (staging) or real (production) certificates")
-    init.add_argument("--acme-email", help="GitOps: your email for Let's Encrypt (implies --tls acme)")
     init.add_argument("--tls-secret", help="GitOps --tls shared: the name of your TLS Secret")
     init.add_argument("--gateway-namespace", help="GitOps: the namespace of the gateway's proxy pods")
     init.add_argument("--gateway-pod-label", help="GitOps: a KEY=VALUE label of those pods")

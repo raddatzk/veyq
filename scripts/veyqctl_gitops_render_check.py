@@ -43,8 +43,8 @@ def main() -> int:
                 values = Path(tmp) / f"values-{tls}-{directory}-{garage}.yaml"
                 values.write_text(vc.stack_values(
                     "1.0", PINS, domain="veyq.example.org", store_domain="store.veyq.example.org" if garage else "",
-                    garage=garage, gateway_class="traefik", tls=tls, acme_email="ops@example.org",
-                    tls_secret="veyq-tls", peer_namespace="traefik", peer_label="app.kubernetes.io/name=traefik",
+                    garage=garage, gateway_class="traefik", tls=tls, tls_secret="veyq-tls", peer_namespace="traefik",
+                    peer_label="app.kubernetes.io/name=traefik",
                     provider="none", acme_directory=directory))
                 result = subprocess.run(["helm", "template", "veyq", str(repo_layout.CHART_DIR), "-n", "veyq", "-f",
                                          str(values), *API_VERSIONS], capture_output=True, text=True)

@@ -330,7 +330,6 @@ APP_PROPERTIES = "application.properties"
 # must name. `mode=shared` carries a secretName so the refusal cannot be the `shared` rule's instead.
 CONTRADICTIONS = [
     (["--set", "gateway.tls.mode=shared", "--set", "gateway.tls.secretName=x"], "/gateway/tls/mode"),
-    (["--set", "gateway.tls.acme.email="], "/gateway/tls/acme/email"),
     (["--set", "gateway.annotations.cert-manager\\.io/cluster-issuer=x"], "cert-manager.io~1cluster-issuer"),
 ]
 

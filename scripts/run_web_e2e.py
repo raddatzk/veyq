@@ -1329,10 +1329,8 @@ def production_compose_env() -> dict[str, str]:
     """
     required = sorted(set(re.findall(r"\$\{([A-Z0-9_]+):\?", PROD_COMPOSE_FILE.read_text())))
     env = {name: "prod-project-rehearsal-placeholder" for name in required}
-    # The three Compose or its consumers parse as a shape rather than merely read as present.
-    for name, value in (("VEYQ_IMAGE", "ghcr.io/veyq/veyq:1.0"),
-                        ("VEYQ_DOMAIN", DECOY_DOMAIN),
-                        ("VEYQ_ACME_EMAIL", f"rehearsal@{DECOY_DOMAIN}")):
+    # The two Compose or its consumers parse as a shape rather than merely read as present.
+    for name, value in (("VEYQ_IMAGE", "ghcr.io/veyq/veyq:1.0"), ("VEYQ_DOMAIN", DECOY_DOMAIN)):
         if name in env:
             env[name] = value
     return env

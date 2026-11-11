@@ -19,7 +19,7 @@ Then point DNS at the address your Gateway API implementation gives the Gateway 
 {{- end }}
 {{- if (.Values.gateway.tls.acme | default dict).enabled }}
 
-TLS: this release templates the cert-manager Issuer `veyq-acme` (ACME HTTP-01, account {{ .Values.gateway.tls.acme.email }})
+TLS: this release templates the cert-manager Issuer `veyq-acme` (ACME HTTP-01)
 against {{ .Values.gateway.tls.acme.server }}
 and stamps it on the Gateway and every tenant ListenerSet — a tenant created later is a certificate order of its own.
 It works only if:

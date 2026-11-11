@@ -88,7 +88,7 @@ value that exists is never generated again, and the config-secret key — withou
 manager besides wherever the provider holds it.
 
 **6. With no cluster, `init` sets one up from `veyq-server`.** Asked first whether to set up the server too;
-if so, it asks what `veyq-server` needs (the server's address, the admin user and key, the domains, the ACME contact,
+if so, it asks what `veyq-server` needs (the server's address, the admin user and key, the domains,
 the age key) and renders the server half into the same repository with **Copier**, from a **verified** `veyq-server`
 release: each release names its commit and the sha256 of its tree in a manifest signed keylessly by `veyq-server`'s
 own release workflow, and `veyqctl` checks out that commit and compares the tree before Copier reads it — the server

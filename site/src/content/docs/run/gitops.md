@@ -95,7 +95,7 @@ ones are issued those hosts serve none — and waits until every production cert
 
 ```sh
 veyqctl init --gitops <checkout>/apps/veyq \
-  --domain veyq.example.org --gateway-class traefik --acme-email ops@example.org \
+  --domain veyq.example.org --gateway-class traefik --tls acme \
   --gateway-namespace traefik --gateway-pod-label app.kubernetes.io/name=traefik \
   --secrets external-secrets --secret-store vault --context my-cluster
 ```

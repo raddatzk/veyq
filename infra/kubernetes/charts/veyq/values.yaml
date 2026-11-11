@@ -14,7 +14,7 @@
 # What is required and has no default:  domain · gateway.className ·
 # the database keys under secrets (or secrets.existingSecret) · storeDomain and the two Garage keys under secrets
 # when garage.enabled · externalDatabase.jdbcUrl when mariadb.enabled=false ·
-# gateway.tls.secretName when gateway.tls.mode=shared · gateway.tls.acme.email when gateway.tls.acme.enabled ·
+# gateway.tls.secretName when gateway.tls.mode=shared ·
 # networkPolicy.ingressFrom while networkPolicy.enabled (the default) · backup.existingClaim, or backup.enabled: false.
 
 # The instance's bootstrap domain — what VEYQ_DOMAIN is under compose. Routed statically by the chart's own
@@ -288,12 +288,13 @@ gateway:
     # Required by `shared`; ignored by the other modes. The backend refuses `shared` without it — loud and
     # disabled, never a failed boot — so an install that forgets it routes nothing rather than half.
     secretName: ""
-    # The chart's ACME issuer — what VEYQ_ACME_EMAIL / VEYQ_ACME_CASERVER configure under compose. Enabled, the
+    # The chart's ACME issuer — what Traefik's resolver (and VEYQ_ACME_CASERVER) is under compose. Enabled, the
     # chart templates ONE namespaced cert-manager Issuer, `veyq-acme` (HTTP-01 through the Gateway's :80
     # listener), and stamps `cert-manager.io/issuer: veyq-acme` plus `acme.cert-manager.io/http01-parentreffallback`
     # on the Gateway and every tenant ListenerSet, so a tenant created at runtime is a certificate order with no
     # chart edit and no restart. Requires `mode: per-domain` (ACME is how per-domain certificates are obtained,
-    # not a fourth mode) and an e-mail; the schema refuses either missing rather than overriding you.
+    # not a fourth mode); the schema refuses another mode rather than overriding you. No account e-mail: Let's
+    # Encrypt sends no expiry notices and keeps no contact since June 2025, so the issuer registers without one.
     #
     # Preconditions you meet, not the chart: cert-manager 1.21 or later in the cluster (the parent-ref fallback
     # is 1.21's), with its Gateway API support AND its ListenerSet support on — ListenerSet support is ALPHA:
@@ -303,9 +304,6 @@ gateway:
     # tenant's DNS pointing here BEFORE the tenant is created — each creation is an order.
     acme:
       enabled: false
-      # The ACME account contact — where the CA sends expiry and revocation notices. Required when enabled,
-      # exactly as compose requires VEYQ_ACME_EMAIL.
-      email: ""
       # The CA's ACME directory. Let's Encrypt production by default, as under compose; any ACME CA works (an
       # internal step-ca is one URL). While you test a deployment, use Let's Encrypt staging:
       #   https://acme-staging-v02.api.letsencrypt.org/directory

@@ -138,8 +138,8 @@ Under `per-domain` and `shared` the chart also redirects port 80 to `https` with
 (`veyq-https-redirect`). Its `scheme` field is a Gateway API *Extended* feature (`HTTPRouteSchemeRedirect`):
 Traefik 3.7 supports it, and an implementation that does not leaves port 80 unredirected while HTTPS still serves.
 
-**The ACME opt-in: the chart's counterpart of `VEYQ_ACME_EMAIL`.** Set `gateway.tls.acme.enabled: true`, an
-`email` and `mode: per-domain`, and the chart templates one namespaced cert-manager `Issuer`, `veyq-acme` (ACME
+**The ACME opt-in: the chart's counterpart of Traefik's resolver under Compose.** Set `gateway.tls.acme.enabled:
+true` and `mode: per-domain` — no account e-mail: Let's Encrypt keeps no contact since June 2025 — and the chart templates one namespaced cert-manager `Issuer`, `veyq-acme` (ACME
 HTTP-01, its solver route on the `Gateway`'s port-80 listener), and adds `cert-manager.io/issuer: veyq-acme` and
 `acme.cert-manager.io/http01-parentreffallback: "true"` to the annotation map — so they reach every tenant
 `ListenerSet` the app projects later, exactly as a resolver reference does under compose, and each tenant's

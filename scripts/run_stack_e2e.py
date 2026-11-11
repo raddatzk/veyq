@@ -13,7 +13,7 @@ the recipe:
   1. **assets** — the candidate becomes a release: `scripts/release_assets.py` (the publish's producer) writes it into
      the run's mirror directory `src/` — the recipe set it derives from the compose file (`garage.toml` included),
      `veyqctl`, `instance_backup.py` and the manifest naming both images. What is installed is what a release ships.
-     A value this run gives as a template value (`VEYQ_DOMAIN`, `VEYQ_ACME_EMAIL`) that the release's template
+     A value this run gives as a template value (`VEYQ_DOMAIN`) that the release's template
      (`env.example`) no longer assigns is red here.
   1b. **client port** — the release's own Traefik and client-address plugin (ADR 0094 decision 7), read from the
      release's compose file — the image digest, the `--experimental.*` flags, the plugin's two read-only mounts, the
@@ -208,7 +208,7 @@ CERT_SECS = int(os.environ.get("VEYQ_STACK_CERT_SECS", "120"))
 ASSIGNMENT = re.compile(r"^([A-Z][A-Z0-9_]*)=(.*)$")
 # The operator's values the release's template assigns and this run gives (`--set`); `veyqctl` generates the secrets
 # and writes the image lines from the manifest. A template that stops assigning one of these is red at `assets`.
-TEMPLATE_VALUES = {"VEYQ_DOMAIN": DOMAIN, "VEYQ_ACME_EMAIL": f"e2e@{DOMAIN}"}
+TEMPLATE_VALUES = {"VEYQ_DOMAIN": DOMAIN}
 # What the sweeps read in the recipe's instance. The database is the one the recipe names (`MARIADB_DATABASE: veyq`,
 # the app's JDBC URL); the bucket is the backend's default `veyq.bundled-store.bucket`, which the recipe does not
 # override; the store is reached the way the backup tool reaches it, by its internal name on the network the recipe

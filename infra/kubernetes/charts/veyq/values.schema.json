@@ -128,7 +128,7 @@
               "type": "object",
               "properties": {
                 "enabled": { "type": "boolean" },
-                "email": { "type": "string" },
+                "email": { "type": "string", "$comment": "Ignored: no ACME account contact since Let's Encrypt keeps none (June 2025). Still accepted, so values written before render unchanged." },
                 "server": { "type": "string", "pattern": "^https://[^\\s]+$" }
               }
             }
@@ -137,7 +137,7 @@
           "then": { "properties": { "secretName": { "$ref": "#/$defs/nonEmpty" } }, "required": ["secretName"] }
         }
       },
-      "$comment": "The ACME opt-in's contradictions are refused here, never resolved in a template: an acme issuer obtains per-domain certificates, so any other mode is an operator's explicit choice the chart must not override; the e-mail is required as compose requires VEYQ_ACME_EMAIL; and an operator's own issuer annotation beside the chart's would leave cert-manager to pick one. The annotation keys are forbidden as `false` schemas so the refusal names the key.",
+      "$comment": "The ACME opt-in's contradictions are refused here, never resolved in a template: an acme issuer obtains per-domain certificates, so any other mode is an operator's explicit choice the chart must not override; and an operator's own issuer annotation beside the chart's would leave cert-manager to pick one. The annotation keys are forbidden as `false` schemas so the refusal names the key.",
       "if": {
         "required": ["tls"],
         "properties": { "tls": { "required": ["acme"], "properties": { "acme": { "required": ["enabled"], "properties": { "enabled": { "const": true } } } } } }
@@ -147,7 +147,7 @@
           "tls": {
             "properties": {
               "mode": { "const": "per-domain" },
-              "acme": { "required": ["email", "server"], "properties": { "email": { "$ref": "#/$defs/nonEmpty" }, "server": { "$ref": "#/$defs/nonEmpty" } } }
+              "acme": { "required": ["server"], "properties": { "server": { "$ref": "#/$defs/nonEmpty" } } }
             }
           },
           "annotations": {

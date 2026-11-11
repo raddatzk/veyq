@@ -21,7 +21,6 @@ metadata:
 spec:
   acme:
     server: {{ required "gateway.tls.acme.server is required" .Values.gateway.tls.acme.server | quote }}
-    email: {{ required "gateway.tls.acme.email is required" .Values.gateway.tls.acme.email | quote }}
     privateKeySecretRef:
       name: veyq-acme-account-key
     solvers:
