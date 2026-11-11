@@ -565,6 +565,113 @@ flows' tests cover the offer, each choice, "Not now" remembered, a level changed
 gone), each bitten; `DispatchTest` and `LiveBridgeTest` (live: sign in, take each level, resume) green; Android and Apple
 compile against the changed interface with their old behaviour (their offer is Phase 8).
 
+**Built (Phase 6):**
+- **`DeviceKeys` per level** (`session/DeviceTrust.kt`): `sealUnlockable`/`openUnlockable(…, level: StaySignedIn)` and
+  `deleteUnlockKey(level)`, one key per level shared by every account remembered at it. **Deviations from the plan:**
+  the level is the enum, not `presence: Boolean`; `deleteUnlockKey` takes the level, and `Account.releaseUnlockKeys`
+  deletes each level's key once no DEVICE_KEY record uses it (two servers may sit at different levels, so one delete for
+  both would end the other's trust). **The level is kept in the record** (`TrustedDevice.level`), not only in the store:
+  with both keys present an open must know which; a record kept before D7 reads as `PRESENCE` (`ThisDevice.trusted()`
+  fills it in, so a host always sees it). A level the store does not offer is refused (`DeviceAuthFailed(false)`), never
+  sealed at the other.
+- **`StaySignedIn`** is the level (`PRESENCE`, `LOGIN`; `NONE` gone); `DeviceKeys.staySignedIn` is the **set** offered:
+  - Windows (`WindowsDeviceKeys`): Hello set up → both, else `LOGIN`. PRESENCE is Hello's Passport key, LOGIN DPAPI, each
+    kept apart (`veyq.wincred.unlock.presence` / `.login`), each with its own 15 s window; no DPAPI fallback for a
+    presence seal without Hello. The old single `unlock` + `unlock.path` keys are not migrated (only the dev VM had one;
+    Phase 5 ended with Stop trusting).
+  - Linux (`LinuxDeviceKeys`): Secret Service → `LOGIN`, else none; PRESENCE refused (the item `unlock` is the LOGIN key).
+  - Android (`KeystoreDeviceKeys`): secure lock screen → both, else none. The LOGIN key is a second Keystore AES-256-GCM
+    key (`veyq.unlock.login`) without user authentication; the presence key keeps its alias. **Why none without a lock:**
+    LOGIN's guarantee is that the device's own sign-in authenticates; with no lock nothing does, and the Master Key would
+    open for anyone holding the phone. The password trust stays (open question 1).
+  - Apple (`AppleDeviceKeys`, `KeychainStore.swift`): passcode → both, else none, for the same reason. The LOGIN item
+    (`veyq.unlock.login`) has no `.userPresence` but is `kSecAttrAccessibleWhenPasscodeSetThisDeviceOnly`
+    (`KeychainBridge.store(…, passcode)`): removing the passcode removes it.
+  - `SoftwareDeviceKeys`: both by default (`staySignedIn` settable), a key per level; `prompts`/`authenticates` count and
+    play the PRESENCE level only; `hasUnlockKey(level)` for the flows' tests. `NoDeviceKeys`: none.
+- **The flows** (`Account.kt`, `SessionModel.kt`):
+  - `signIn(…)` has no `remember`: `Door.trust(account, password)` always enrols the password trust (DEVICE).
+  - **The offer** is `Gate.Signed.offer` (`SessionModel.Offer(connection, levels)`): set after a sign-in **and after a
+    password unlock** (a sign-in to the person; it reaches the accounts password-trusted before D7) where the store
+    offers a level, the account is not staying signed in and was not declined here; never in the share extension. It
+    stands over tenant switches, goes with its account's sign-out, and a later sign-in's offer (or none) replaces it.
+  - `stay(level)` answers it, `stay(account, level)` is Manage's; both through `Door.stay` → `trustThisDevice(null,
+    level)` (renamed from `stayingSignedIn`): a level not offered is `TrustChange.FAILED` without asking; the level held
+    is `DONE`; `CANCELLED` keeps the offer; any other answer ends it. A level taken forgets an earlier "Not now".
+  - `notNow()` marks the account declined in the device store (`ThisDevice.declined`, `veyq.stay-signed-in-declined`,
+    not secret); only "Not now" marks, so a cancelled or failed enrolment, a sign-out of a remembered account or Stop
+    trusting offer again at the next sign-in.
+  - **Back to the password trust** (`trustWithPassword(account, password)`): ADR 0005 §9 keeps one convenience wrap per
+    device, so DEVICE is re-created, not kept beside DEVICE_KEY — which needs the password. `VeyqAccount.isPassword`
+    checks it first by a login (challenge, verify) whose new session family is revoked at once; a wrong one is
+    `WRONG_PASSWORD` and changes nothing.
+  - Every failure keeps the trust the account had and never signs out (`AccountDoor.changed`).
+- **The bridge** (`Wire.kt`, `Bridge.kt`): `Session.SignIn` without `remember`; `Session.StaySignedIn(level)`,
+  `Session.NotNow`, `Manage.StaySignedIn(connection, level)`, `Manage.PasswordTrust(connection, password)` (let through
+  by `SecretFreeSchemaTest` as typed inward); answers `Done` or `Refused` with `NO_OFFER`, `TRUST_CANCELLED`,
+  `TRUST_FAILED`, `WRONG_PASSWORD`. `ManagedShown` gains `level` and `levels`. **Deviation:** `Update.Session.staySignedIn`
+  is gone — the offer rides the gate and a remembered unlock words itself by `record.level` (Phase 5's
+  `wordedByStaySignedIn` removed).
+- **The hosts:** Rust and C# regenerated; both sign-ins **drop their switch now** (it could do nothing without
+  `remember`; the offer is Phase 7's), the unlock's words take `record.level`, the logs say `offer: [...]` beside
+  `Signed` and `level: …` beside `Unlock`. `smoke.c` signs in without `remember`. Android's and Apple's `AppModel.signIn`
+  sign in, then `stay(PRESENCE)` when their switch is on (their old behaviour; off, the offer stays unanswered, unseen).
+
+**Met (2026-11-11, commits `bea91c830`, `7ca2b8c25`):**
+- [x] **The contract (D3), both levels:** `DeviceKeysContract` runs each offered level's seal/open/AAD/delete, "each level
+  is a key of its own" where both are offered, and "a level the store does not offer is refused and never falls back".
+  Over `SoftwareDeviceKeys` (both) and a LOGIN-only fake (`LoginOnlySoftwareDeviceKeysContractTest`), on the JVM and
+  `macosArm64`; over gnome-keyring: `/usr/bin/python3 src/mobile/linux/run.py test` → `PASSED 221`, then `no-bus` and
+  `absent` `PASSED 1` each (the probe asserts the offered set: `{LOGIN}` present, empty absent); over Windows' DPAPI half
+  (Hello not set up in the test's store, so PRESENCE refused before Hello): `/usr/bin/python3 src/mobile/windows/run.py
+  test` → `PASSED 222`. **No Hello prompt was raised:** the mingw tests run over `NoHello`/`PlayedHello`, never the
+  Passport provider; the probe was not run (Phase 1 stays its proof).
+- [x] **The flows' tests** (`commonTest`): `SessionModelTest` (18; 7 new: the offer appears only where the store offers
+  and the account was not asked, each answer, "Not now" remembered across a sign-out and sign-in until a level is taken
+  in Manage, a cancelled prompt keeps the offer and a failed one ends it without signing out, a level not offered refused
+  unasked, the offer over a switch and gone with its account, Manage's level change and way back);
+  `StayLevelTest` (3, through `AccountDoor` over a played server: LOGIN → PRESENCE replaces the wrap, drops the login key
+  and the old token, the next resume asks once; a cancelled presence prompt changes nothing; back to the password trust
+  — a wrong password told apart, the check's session revoked, the DEVICE_KEY wrap and unlock key gone, the password alone
+  opens the next start).
+- [x] **Bites**, each red then restored: `releaseUnlockKeys` a no-op (two `StayLevelTest` red); `isPassword` taking a
+  401 for true (`WRONG_PASSWORD` expected, `DONE`); the declined mark ignored (three `SessionModelTest` red); a cancel
+  ending the offer; the resume at PRESENCE whatever the record's level (three red); the previous wrap kept (two red: one
+  wrap per device); the check's session not revoked; the not-offered check dropped; a level taken keeping "Not now"; the
+  fake's two levels sharing one key (`eachLevelIsAKeyOfItsOwn`); the fake sealing a level it does not offer (the
+  LOGIN-only contract); Linux's PRESENCE refusal dropped (`LinuxDeviceKeysContractTest.aLevelTheStoreDoesNotOffer…` red
+  in the container); Windows' "no presence key without Hello" dropped (the contract reached `NoHello`: red, as did
+  `presenceIsHellos…`); Windows' LOGIN given Hello's guard (three red). Bridge: `Session.StaySignedIn`'s level
+  hard-coded (three `DispatchTest` red), `TRUST_CANCELLED` answered as `TRUST_FAILED`, the
+  `Manage.PasswordTrust.password` allowance dropped (`SecretFreeSchemaTest` red), Manage not refreshed after the way
+  back (red, timed out).
+- [x] `./gradlew :core:jvmTest --rerun :core:macosArm64Test --rerun :bridge:jvmTest --rerun
+  :core:compileTestKotlinMingwX64 :core:compileTestKotlinLinuxX64 :core:compileTestKotlinLinuxArm64
+  :core:compileBridgedMainKotlinMetadata --warning-mode all` → `BUILD SUCCESSFUL`: 373, 209 and 26 cases, none failed;
+  `DispatchTest` 14 (the trust's rewritten: "Not now" and the unlock by password, the offer at PRESENCE with a cancel,
+  the unlock's level, the offer following the store, Manage's level change / way back / Stop trusting).
+- [x] Live: `VEYQ_LIVE=http://veyq.localhost:8080 VEYQ_ENV_FILE=<main>/.run/.env ./gradlew :core:jvmTest --tests
+  '*DeviceTrustLiveTest*' --rerun :bridge:jvmTest --tests '*LiveBridgeTest*' --rerun` → green twice in a row (the
+  second run proves nothing was left behind); with `VEYQ_ENV_FILE=/nonexistent` all three red (`FileNotFoundException`),
+  so they ran live. `DeviceTrustLiveTest`: password trust → LOGIN (nothing asked) → resume → PRESENCE (the login wrap no
+  longer served, its key gone) → resume asked once, a cancel refused → back to the password trust (a wrong password
+  `false`) → LOGIN → sign-out. `LiveBridgeTest`: sign in (the offer), LOGIN, a fresh bridge resumes unasked; Manage
+  changes it to PRESENCE; a fresh bridge resumes asked; a cancel stays on the unlock, the device key opens; Manage's way
+  back (`WRONG_PASSWORD`, then done); a fresh bridge unlocks with the password, the offer follows, "Not now"; Stop
+  trusting; the next start signs in; no unlock key left.
+- [x] `ANDROID_HOME=$HOME/Library/Android/sdk ./gradlew :android:assembleDebug :android:testDebugUnitTest` → `BUILD
+  SUCCESSFUL` (the app has no unit tests: `NO-SOURCE`). `./gradlew :core:assembleVeyqCoreDebugXCFramework` then
+  `xcodebuild -project src/mobile/apple/Veyq.xcodeproj -target Veyq -sdk iphonesimulator build CODE_SIGNING_ALLOWED=NO`
+  → `BUILD SUCCEEDED`.
+- [x] `linux/run.py build` → clippy, `cargo test` (14: the switch's test went with the switch), build green;
+  `linux/run.py bridge` → 12 symbols, the smoke green. `windows/run.py build` → green (`Veyq.Tests` 11: the switch's
+  test went); `windows/run.py bridge` → the export gate and the smoke green.
+- [x] `validate_mobile_words.py` → OK; `validate_mobile_platform_guidelines.py` → OK. No dependency added, so no
+  verification-metadata write.
+- **Left for Phase 7:** the offer's screens and Manage's level change (with a password field for the way back) on both
+  desktops; the words `signin_remember*` the switch used are unused there now. **For Phase 8:** Android's and Apple's
+  offer in place of their switch.
+
 ### Phase 7 — The desktops' offer
 
 The switch of Phases 4 and 5 replaced by the offer on Linux and Windows; Manage's level change.
@@ -603,6 +710,13 @@ Apple build green.
 
 ## Owner questions
 
+- **Q4 (open, Phase 6): Android and Apple without a screen lock offer nothing,** not `LOGIN`. Built so because LOGIN's
+  guarantee is the device's own sign-in; the web offers its checkbox on any browser, so the owner may prefer `LOGIN`
+  there. One line per store to change.
+- **Q5 (open, Phase 6): the offer also follows a password unlock,** so accounts password-trusted before D7 are asked
+  once. Say if it should follow the full sign-in only.
+- **Q6 (open, for Phase 7): Manage's way back to the password trust asks for the password** (ADR 0005 §9, Phase 6's
+  retro); its check is a login, so it counts as one at the server (a new session family, revoked at once).
 - **Q3 (settled, owner 2026-11-11): the enrolment after the sign-in, every level offered, all four apps in this CR** — D7.
   It supersedes Q1+Q2's rule below for the choice; their reading of each level (what a check is, the web's level) stands.
 - **Q1 + Q2 (settled, owner 2026-11-11, "passt so"; the choice superseded by Q3): one rule for both desktops — "Stay
@@ -641,5 +755,12 @@ Apple build green.
 - **Phase 5, execution: Manage servers crashed the app on its second open,** a XAML element reused under a new parent
   (the first `ContentDialog` kept it). The first open had passed every check; only opening it again in one run found it.
   Next time a dialog's pass opens it twice.
+- **Phase 6, design: "back to the password trust" needed the password,** which the plan's "keep or re-create DEVICE"
+  left open. Keeping DEVICE beside DEVICE_KEY would break ADR 0005 §9 (one convenience wrap per device); re-creating it
+  needs the password, and nothing but a login can check one, so the way back logs in and revokes that session. Cheap
+  to have asked at the plan: any change of trust while signed in from a resume holds the Master Key but never the
+  password.
+- **Phase 6, design: the level had to live in the record,** not only the store: with two servers at different levels
+  both keys exist at once, so an open must be told which. "Kept beside the key" (Windows' path) was a one-key idea.
 - **Next time:** a verb that waits for a person waits for the process it started and fetches its outcome whatever
   ended the wait; its brief to the owner lists every prompt the run may raise, the uncertain ones marked so.
