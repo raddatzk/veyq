@@ -169,6 +169,35 @@ object AppKinds {
         else -> null
     }
 
+    /**
+     * What a kind's page knows of its open object that its header's doors wait on (the web's page doors and its kind's
+     * rights function): whether the object takes writes (a Pot of a switched-off Expenses reads only, `expensesRights`) and
+     * whether a file has content to download and copy.
+     */
+    data class Facts(val canWrite: Boolean = true, val hasContent: Boolean = true)
+
+    /** A kind's doors on its header: its cover offered here, its copy and its download (absent: not offered). */
+    data class Doors(val coverOffered: Boolean, val copies: Boolean, val downloads: Boolean)
+
+    /**
+     * The doors a node of [kind] opens, given what its page knows ([facts]): a folder and a drop box copy and download
+     * whole; a Pot downloads, and takes a cover and a copy only while it takes writes (the web's `canCopy`); a file copies and
+     * downloads only with content; a Memory and a chapter neither (yet). A kind this build does not know opens none.
+     */
+    fun doors(kind: String, facts: Facts): Doors = when (kind) {
+        FOLDER, DROPBOX -> Doors(coverOffered = true, copies = true, downloads = true)
+        PotSession.KIND -> Doors(coverOffered = facts.canWrite, copies = facts.canWrite, downloads = true)
+        FILE -> Doors(coverOffered = true, copies = facts.hasContent, downloads = facts.hasContent)
+        MEMORY, CHAPTER -> Doors(coverOffered = true, copies = false, downloads = false)
+        else -> Doors(coverOffered = false, copies = false, downloads = false)
+    }
+
+    /**
+     * Whether a node's page lets its cover change from its head (a tap on the cover): the kind takes one and its doors offer
+     * it ([facts] null while the page cannot tell: as a writable one).
+     */
+    fun coverSettable(kind: String, facts: Facts?): Boolean = header(kind)?.takesCover == true && doors(kind, facts ?: Facts()).coverOffered
+
     /** What a copy of nodes of [kinds] leaves behind (the web descriptor's `copyLosses`), each said once, by kind in order. */
     fun lossesOfCopy(kinds: List<String>): List<me.raddatz.veyq.mobile.words.Msg> = kinds.sorted().flatMap { kind ->
         when (kind) {

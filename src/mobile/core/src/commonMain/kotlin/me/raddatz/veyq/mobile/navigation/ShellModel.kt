@@ -16,6 +16,7 @@ import me.raddatz.veyq.mobile.session.FolderCreate
 import me.raddatz.veyq.mobile.session.NodeCreate
 import me.raddatz.veyq.mobile.session.NodeMove
 import me.raddatz.veyq.mobile.session.NodeRename
+import me.raddatz.veyq.mobile.session.NodeReport
 import me.raddatz.veyq.mobile.session.NodeTrash
 import me.raddatz.veyq.mobile.session.OpenNode
 import me.raddatz.veyq.mobile.session.TenantSession
@@ -246,6 +247,35 @@ class ShellModel(
     suspend fun purge(row: NodeTrash.Trashed): NodeTrash.Purged =
         runCatching { NodeTrash.purge(tenant, row.scopeId, row.id) }.getOrDefault(NodeTrash.Purged.FAILED)
 
+    /**
+     * The header of [node] over this shell ([NodeHeaderModel]), its kind's page knowing [facts] (null: not yet); [closeOpen]
+     * closes an open object of a node gone to the trash, [changed] runs after each write that went through.
+     */
+    fun header(node: NodeAt, facts: me.raddatz.veyq.mobile.AppKinds.Facts?, closeOpen: (NodeAt) -> Unit, changed: () -> Unit): NodeHeaderModel =
+        NodeHeaderModel(node, facts, object : NodeHeaderModel.Door {
+            override fun isFavorite(ref: NodeAt) = this@ShellModel.isFavorite(ref)
+            override fun inIdentityFolder(ref: NodeAt) = this@ShellModel.inIdentityFolder(ref)
+            override fun linksOn() = tenant.linkRules.on
+            override suspend fun reportOffered() = this@ShellModel.reportOffered()
+            override suspend fun toggleFavorite(ref: NodeAt) = this@ShellModel.toggleFavorite(ref)
+            override suspend fun trash(ref: NodeAt) = this@ShellModel.trash(ref)
+            override suspend fun undoTrash(node: OpenNode) = this@ShellModel.undoTrash(node)
+            override suspend fun rename(ref: NodeAt, name: String) = this@ShellModel.rename(ref, name)
+            override fun closeOpen(ref: NodeAt) = closeOpen(ref)
+            override fun changed() = changed()
+        })
+
+    private var reportKnown: Boolean? = null
+    private val reportReading = Mutex()
+
+    /**
+     * Whether the tenant's server takes reports (it publishes a moderation key, ADR 0093): asked once per tenant, Report
+     * offered only then. A read that failed is asked again by the next header (the duty is the law's).
+     */
+    suspend fun reportOffered(): Boolean = reportReading.withLock {
+        reportKnown ?: runCatching { NodeReport.published(tenant) != null }.getOrNull()?.also { reportKnown = it } ?: false
+    }
+
     /** The trash sheet of [scopeId] over this shell; [changed] after each write that went through. */
     fun trashSheet(scopeId: String, changed: () -> Unit): TrashSheet = TrashSheet(object : TrashSheet.Door {
         override suspend fun list() = trashOf(scopeId)
@@ -300,6 +330,13 @@ class ShellModel(
             is NodeCreate.Result.Refused -> Notices.folderRefused(r.reason)
             null -> Notices.folderRefused(null)
         }
+    }
+
+    /** A new folder [name] where the shell is: in its space, under the folder Home shows; why not, or null once made. */
+    suspend fun createFolderHere(name: String): Notice? {
+        val s = shell
+        val space = s?.space ?: return Notices.folderRefused(null)
+        return createFolder(space, s.folder?.nodeId, name)
     }
 
     /**
