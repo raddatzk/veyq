@@ -9,7 +9,7 @@ invariants:
   - the flows stay the core's — enrol, resume, unlock, sign-out and stop-trusting are Account/SessionModel's as on Android and Apple; a desktop adds a DeviceKeys and screens, no rule
   - a trust that fails never fails the sign-in, and with no secure store the app works as today, signing in at every start (ADR 0127 decision 4)
   - every guarantee a desktop store gives less of than Android's Keystore is written down where the security model is, never implied
-  - Android, the Apple app and the web behave as before; `./gradlew :core:jvmTest :core:macosArm64Test` and both desktops' `run.py test` stay green in every phase
+  - the web behaves as before; Android and the Apple app behave as before until Phase 8, which changes their trust offer as D7 says (owner 2026-11-11); `./gradlew :core:jvmTest :core:macosArm64Test` and both desktops' `run.py test` stay green in every phase
 ---
 
 ## Goal
@@ -176,6 +176,41 @@ and Windows Hello with DPAPI, so the key never leaves the library and never cros
   - Linux: Secret Service, unlocked by the login, no presence (or none, per Q1);
   - web: non-extractable, no presence.
 - ADR 0123 decision 8's Consequences say the same, as built.
+
+### D7 — The person chooses, after the sign-in, among what the device offers (owner 2026-11-11; supersedes D5's switch and Q1+Q2's "strongest the device has")
+
+The owner changed the enrolment for **all four apps** (the web keeps its checkbox: it has no presence level):
+- **The sign-in has no "Stay signed in" switch.** Email, Secret Key and password; every sign-in then holds the password
+  trust (`DEVICE`), as a sign-in without the switch does today, so this device never asks for the Secret Key again.
+- **Right after it, an offer** of what this device can do, as banking and password-manager apps ask after the first
+  sign-in:
+  - **"Sign in with Windows Hello"** (Face ID, Touch ID, fingerprint — the platform's word), where the store has a
+    presence check: a `DEVICE_KEY` whose unlock key opens only after the person authenticated;
+  - **"Stay signed in"**: a `DEVICE_KEY` whose unlock key opens without asking, the device's own sign-in the
+    authentication (Windows DPAPI, the Secret Service, Android Keystore with no user authentication, a Keychain item
+    without `.userPresence`). **Offered beside the presence level, not only where it is missing:** a device with a
+    fingerprint reader must not force anyone to use it (owner 2026-11-11);
+  - **"Not now"**: the password trust stays; every start asks for the veyq password.
+  - With no secure store (`NONE`) there is no offer.
+- **Later:** Manage servers changes it per server (from either level to the other, or back to the password trust).
+- **One `DEVICE_KEY` wrap per device stays** (ADR 0005 §9): choosing the other level replaces the wrap and its key.
+- **Asked once per account and device:** "Not now" is remembered in the device store (not secret), so the offer does
+  not return at every sign-in; Manage servers stays the way to it.
+
+What it takes:
+- **The core:**
+  - `DeviceKeys` seals an unlock key **per level** (`sealUnlockable(…, presence: Boolean)`). The level is kept beside
+    the key, as Windows' `hello`/`dpapi` path already is, so an open uses the level its seal used.
+  - `StaySignedIn` becomes **the set of levels the store offers** (`PRESENCE`, `LOGIN`, both, or none).
+  - `SessionModel` gains the action "stay signed in now, at level X", taken while signed in (the Master Key is held), and
+    the "asked" mark.
+  - Account's enrolment moves from the sign-in to that action; the sign-in's `remember` goes.
+  - Android's and Apple's `DeviceKeys` gain the level without a check: a second Keystore AES key without
+    `setUserAuthenticationRequired`, a Keychain item without `.userPresence`.
+- **ADR 0123 decision 8 changes:** the unlock key opens after authentication **at the presence level**; the level without
+  a check is the person's choice. The security model (D6) writes both levels per platform.
+- **The screens:** the desktops' switch from Phases 4 and 5 is replaced by the offer; Android and Apple gain it in place of
+  their switch.
 
 ## Owner steps (each an approval)
 
@@ -515,13 +550,44 @@ against the dev instance with `run.py run` / `run.py drive`, the log read before
   dropped → that test red, restored.
 - [x] `/usr/bin/python3 src/mobile/windows/run.py test` → `PASSED 202`.
 - [x] `validate_mobile_words.py` → OK; `validate_mobile_platform_guidelines.py` → OK.
-- [ ] **The Hello pass (O2):** sign in with "Stay signed in with Windows Hello" (the enrolment's PIN), quit and start (the
-  resume's PIN, the shell), quit and start again (Cancel: the unlock stays), then Stop trusting. Waits for the owner.
+- [ ] ~~**The Hello pass (O2)**~~ — **moved to Phase 7:** D7 (owner 2026-11-11) replaced the sign-in's switch before the
+  pass ran, so it runs over the offer instead. The checkbox built here goes in Phase 7.
 
-### Phase 6 — The docs
+### Phase 6 — The core: levels and the offer (D7)
 
-- D6: the security model's row.
-- ADR 0123 decision 8's Consequences.
+`DeviceKeys` per level (`presence`), the kept level, `StaySignedIn` as the offered set, the action "stay signed in now at
+level X" with the "asked" mark, the enrolment moved out of the sign-in, `Session.SignIn` without `remember`; Windows' and
+Linux's stores answer both levels (Windows: Hello and DPAPI; Linux: `LOGIN` alone); the bridge's calls (the offer as
+`Gate`-side state, `Session.StaySignedIn(level)`, `Session.NotNow`, Manage's change of level).
+
+**Done when:** the contract (D3) covers both levels over `SoftwareDeviceKeys`, Linux's store and Windows' DPAPI half; the
+flows' tests cover the offer, each choice, "Not now" remembered, a level changed in Manage (the wrap replaced, the old key
+gone), each bitten; `DispatchTest` and `LiveBridgeTest` (live: sign in, take each level, resume) green; Android and Apple
+compile against the changed interface with their old behaviour (their offer is Phase 8).
+
+### Phase 7 — The desktops' offer
+
+The switch of Phases 4 and 5 replaced by the offer on Linux and Windows; Manage's level change.
+
+**Done when** a pass on each has run: Linux in the container (`LOGIN` and "Not now"); Windows on the VM — **the Hello pass
+(O2)**: the offer, "Sign in with Windows Hello" (the enrolment's PIN), quit and start (the resume's PIN, the shell), quit
+and start (Cancel: the unlock stays), "Stay signed in" chosen in Manage instead (no prompt at the next start), "Not now",
+Stop trusting; de/en, light/dark; builds and guards green.
+
+### Phase 8 — Android and Apple
+
+Their switch replaced by the offer; their stores' level without a check.
+
+**Done when** both apps run the same pass on the emulator and the simulator (Android: a throwaway AVD with a screen lock,
+`veyq_pixel`'s PIN being unknown; Apple: Face ID enrolled and answered by `notifyutil`, `src/mobile/CLAUDE.md`'s traps), each
+level and "Not now", unchanged elsewhere; `./gradlew :core:jvmTest :core:macosArm64Test`, `:android:assembleDebug` and the
+Apple build green.
+
+### Phase 9 — The docs
+
+- D6: the security model's rows, both levels per platform.
+- ADR 0123 decision 8 changed (D7) and its Consequences.
+- The use cases `uc.account.trust-device` and `uc.account.remember-this-device`.
 - ADR 0127's Consequences: the Secret Service and DPAPI as built.
 - `src/mobile/CLAUDE.md`: the stores, the traps, the contract test.
 - native-apps: the rows, and § Open (KWallet and KeePassXC still untried, D2's ABI on another distribution).
@@ -537,8 +603,10 @@ against the dev instance with `run.py run` / `run.py drive`, the log read before
 
 ## Owner questions
 
-- **Q1 + Q2 (settled, owner 2026-11-11, "passt so"): one rule for both desktops — "Stay signed in" uses the strongest
-  the device has.**
+- **Q3 (settled, owner 2026-11-11): the enrolment after the sign-in, every level offered, all four apps in this CR** — D7.
+  It supersedes Q1+Q2's rule below for the choice; their reading of each level (what a check is, the web's level) stands.
+- **Q1 + Q2 (settled, owner 2026-11-11, "passt so"; the choice superseded by Q3): one rule for both desktops — "Stay
+  signed in" uses the strongest the device has.**
   - Windows with Hello: Hello's key.
   - Windows without Hello, and Linux: the desktop sign-in as the authentication (DPAPI, the Secret Service), the web's
     level.
