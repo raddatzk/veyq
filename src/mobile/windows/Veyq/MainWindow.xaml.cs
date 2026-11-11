@@ -105,7 +105,7 @@ public sealed partial class MainWindow : Window
                 Face(_signIn.Page);
                 break;
             case Gate.Signed signed:
-                _shell ??= new ShellView();
+                _shell ??= new ShellView(this);
                 _shell.Switching(signed.switching);
                 Face(_shell.Page);
                 break;
@@ -120,7 +120,7 @@ public sealed partial class MainWindow : Window
     private void ShellUpdate(Update update)
     {
         if (update is not Update.Shell { state: { } state, shown: { } shown }) return;
-        _shell ??= new ShellView();
+        _shell ??= new ShellView(this);
         _shell.Show(state, shown);
     }
 }

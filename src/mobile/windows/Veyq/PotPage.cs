@@ -1,15 +1,19 @@
 // An open Pot, read only (ADR 0122 decision 4: Expenses' places are the open Pot's Entries, Overview and Settings, as
 // the web's Pot has them). The Pot is a model of its own in the core (Pot.Open), watched while it is on screen and closed
 // when it leaves; what each row says — its line, its badge, a balance's words and tone, who pays whom — is the core's
-// (PotView.Shown). This lays it out and writes money. Linux's pot.rs, in Fluent: a SelectorBar over the places' lists.
+// (PotView.Shown). This lays it out and writes money. Linux's pot.rs, in Fluent: a SelectorBar over the places' lists,
+// each person with their picture (Avatars). Its download (Pot.Download) goes where the system's save picker says, under
+// the name the core gives (Pot.ArchiveName); the core writes the file (the bridge CR's D3).
 using System;
 using System.Collections.Generic;
+using System.IO;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Automation;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Media;
 using Veyq.Bridge;
 using Veyq.Bridge.Wire;
+using Windows.Storage.Pickers;
 
 namespace Veyq;
 
@@ -76,6 +80,46 @@ internal sealed class PotPage : IDisposable
         _id = null;
     }
 
+    /// <summary>
+    /// Downloads this Pot as the web's ZIP: the system's save picker (owned by <paramref name="window"/>, the handle an
+    /// unpackaged app gives it) suggests the core's name in Downloads, the core writes the file the picker chose, and
+    /// <paramref name="said"/> says how it went — true when done. A dismissed picker says nothing.
+    /// </summary>
+    public async void Download(nint window, Action<bool, string> said)
+    {
+        if (_id is not { } pot) return;
+        var name = Ref.name;
+        try
+        {
+            var (named, _) = await Core.CallAsync(new Call.PotArchiveName { pot = pot });
+            if (named is not Answer.Name { name: var suggested })
+            {
+                Log.Write($"Pot.ArchiveName answered {named.GetType().Name}");
+                said(false, Words.DownloadFailed(name));
+                return;
+            }
+            var picker = new FileSavePicker { SuggestedStartLocation = PickerLocationId.Downloads, SuggestedFileName = suggested };
+            picker.FileTypeChoices.Add(Words.DownloadTypeZip(), [Path.GetExtension(suggested)]);
+            WinRT.Interop.InitializeWithWindow.Initialize(picker, window);
+            var file = await picker.PickSaveFileAsync();
+            if (file is null) return;
+            var (answer, _) = await Core.CallAsync(new Call.PotDownload { pot = pot, path = file.Path, deletedName = Words.PotDeletedPerson() });
+            if (answer is Answer.Done)
+            {
+                said(true, Words.DownloadDone(name));
+                return;
+            }
+            Log.Write($"Pot.Download answered {(answer is Answer.Failed f ? $"Failed ({f.error})" : answer.GetType().Name)}");
+            said(false, Words.DownloadFailed(name));
+        }
+        catch (Exception e)
+        {
+            // an exception out of an async void would end the app in combase, with nothing in the log
+            Log.Write($"the download failed: {e.GetType().Name}: {e.Message}");
+            said(false, Words.DownloadFailed(name));
+        }
+    }
+
     /// <summary>The places the shell offers for this Pot and the one selected (Shell.barTabs, selectedTab).</summary>
     public void Places(IReadOnlyList<ShownTab> tabs, BarTab? selected)
     {
@@ -94,6 +138,9 @@ internal sealed class PotPage : IDisposable
         }
         return true;
     }
+
+    /// <summary>A person's picture on a row, as Linux draws it (32 px).</summary>
+    private const double PersonSize = 32;
 
     private static Brush Brush(string key) => (Brush)Application.Current.Resources[key];
 
@@ -192,11 +239,24 @@ internal sealed class PotPage : IDisposable
     }
 
     /// <summary>A row of a place: a title, a line under it, and what stands at its end (a badge, an amount).</summary>
-    private static Grid Row(string title, string? line, string automationId, params UIElement[] trailing)
+    private static Grid Row(string title, string? line, string automationId, params UIElement[] trailing) =>
+        LedRow(null, title, line, automationId, trailing);
+
+    /// <summary>A row led by <paramref name="leading"/> (a person's picture) where there is one.</summary>
+    private static Grid LedRow(UIElement? leading, string title, string? line, string automationId, UIElement[] trailing)
     {
         var row = new Grid { ColumnSpacing = 12, Padding = new Thickness(12, 8, 12, 8), MinHeight = 44 };
+        var column = 0;
+        if (leading is FrameworkElement lead)
+        {
+            row.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+            lead.VerticalAlignment = VerticalAlignment.Center;
+            row.Children.Add(lead);
+            column = 1;
+        }
         row.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
         var words = new StackPanel { VerticalAlignment = VerticalAlignment.Center };
+        Grid.SetColumn(words, column++);
         words.Children.Add(new TextBlock { Text = title, TextTrimming = TextTrimming.CharacterEllipsis });
         if (!string.IsNullOrEmpty(line))
         {
@@ -209,7 +269,6 @@ internal sealed class PotPage : IDisposable
             });
         }
         row.Children.Add(words);
-        var column = 1;
         foreach (var t in trailing)
         {
             row.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
@@ -280,7 +339,9 @@ internal sealed class PotPage : IDisposable
                 Tone.Owed => "SystemFillColorSuccessBrush",
                 _ => "TextFillColorSecondaryBrush",
             };
-            content.Children.Add(Row(Said.Piece(b.name), Said.Line(b.facts), $"balance:{b.row.id}", Trailing(Said.Notice(b.balance.notice), tone)));
+            var name = Said.Piece(b.name);
+            content.Children.Add(LedRow(Avatars.Person(name, b.row.userId, PersonSize), name, Said.Line(b.facts), $"balance:{b.row.id}",
+                [Trailing(Said.Notice(b.balance.notice), tone)]));
         }
         if (view.settleUp.Count > 0)
         {
@@ -303,7 +364,10 @@ internal sealed class PotPage : IDisposable
         Heading(content, Words.PotBaseCurrency());
         content.Children.Add(Row(view.currency ?? "—", null, "currency"));
         Heading(content, Words.PotPeople());
-        foreach (var p in view.people) content.Children.Add(Row(p.entry.name, Said.Line(p.facts), $"person:{p.entry.id}"));
+        foreach (var p in view.people)
+        {
+            content.Children.Add(LedRow(Avatars.Person(p.entry.name, p.entry.userId, PersonSize), p.entry.name, Said.Line(p.facts), $"person:{p.entry.id}", []));
+        }
         if (view.deletedPeople > 0) content.Children.Add(Note(Words.PeopleDeletedSummary(view.deletedPeople), "people-deleted"));
     }
 }

@@ -1,9 +1,10 @@
 // The shell (ADR 0122; ADR 0123's Consequences, the Windows app), Fluent's way, as Windows' own Settings and Explorer
 // draw theirs: a NavigationView whose pane is Left, LeftCompact or LeftMinimal by the window's width (its own
-// thresholds), holding the one switcher (spaces and tenants) as its header, Search as its AutoSuggestBox (Ctrl+E,
-// Ctrl+F), Home, Favorites, Recent and the applications as its items, and Settings at its foot. The content shows
-// what the core's shell says is open — Home, an application's list, a Pot, or an object this app does not draw yet —
-// under its title and a CommandBar whose first command is New.
+// thresholds), holding the one switcher (spaces and tenants; the signed-in member's picture beside them) as its header,
+// Search as its AutoSuggestBox (Ctrl+E, Ctrl+F), Home, Favorites, Recent and the applications as its items, and Settings
+// at its foot. The content shows what the core's shell says is open — Home, an application's list, a Pot, or an object
+// this app does not draw yet — under its title and a CommandBar whose first command is New; an open Pot's Download is
+// among its secondary commands (the bar's own More), and an InfoBar under the bar says how a download went.
 //
 // Every state is the core's (ShellModel.State and ShellShown); every action one call. Which item is selected, whether
 // back is enabled and what the title says follow the state, as Linux's shell.rs draws it.
@@ -31,6 +32,9 @@ internal sealed class ShellView
     private readonly AutoSuggestBox _search;
     private readonly TextBlock _title;
     private readonly CommandBar _commands;
+    private readonly PersonPicture _me;
+    private readonly InfoBar _said;
+    private readonly Window _window;
     private readonly ContentControl _body;
     private readonly NavigationViewItem _settings;
     private PotPage? _pot;
@@ -43,8 +47,9 @@ internal sealed class ShellView
     private static readonly Thickness Head = new(16, 8, 8, 4);
     private static readonly Thickness MinimalHead = new(100, 8, 8, 4);
 
-    public ShellView()
+    public ShellView(Window window)
     {
+        _window = window;
         _switcherTitle = new TextBlock { Style = (Style)Application.Current.Resources["BodyStrongTextBlockStyle"], TextTrimming = TextTrimming.CharacterEllipsis };
         _switcherSubtitle = new TextBlock
         {
@@ -56,7 +61,11 @@ internal sealed class ShellView
         var label = new StackPanel();
         label.Children.Add(_switcherTitle);
         label.Children.Add(_switcherSubtitle);
+        // the signed-in member's picture where the core holds one, else the tenant's initials (as Linux's switcher)
+        _me = new PersonPicture { Width = 24, Height = 24, VerticalAlignment = VerticalAlignment.Center };
+        AutomationProperties.SetAutomationId(_me, "me");
         var switcherContent = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8 };
+        switcherContent.Children.Add(_me);
         switcherContent.Children.Add(label);
         switcherContent.Children.Add(_switching);
         _switcher = new DropDownButton
@@ -97,12 +106,17 @@ internal sealed class ShellView
         head.Children.Add(_title);
         Grid.SetColumn(_commands, 1);
         head.Children.Add(_commands);
+        _said = new InfoBar { IsOpen = false, IsClosable = true, Margin = new Thickness(12, 0, 12, 4) };
+        AutomationProperties.SetAutomationId(_said, "said");
         _body = new ContentControl { HorizontalContentAlignment = HorizontalAlignment.Stretch, VerticalContentAlignment = VerticalAlignment.Stretch };
         var content = new Grid();
         content.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+        content.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
         content.RowDefinitions.Add(new RowDefinition { Height = new GridLength(1, GridUnitType.Star) });
         content.Children.Add(head);
-        Grid.SetRow(_body, 1);
+        Grid.SetRow(_said, 1);
+        content.Children.Add(_said);
+        Grid.SetRow(_body, 2);
         content.Children.Add(_body);
 
         _nav = new NavigationView
@@ -262,6 +276,7 @@ internal sealed class ShellView
     {
         var first = !_started;
         _started = true;
+        Avatars.Listed($"{shown.connection}\n{shown.tenant.tenantId}", shown.pictures);
         DrawSwitcher(state, shown);
         DrawPane(state, shown);
         DrawContent(state, shown);
@@ -276,6 +291,8 @@ internal sealed class ShellView
     {
         _switcherTitle.Text = Said.Piece(shown.spaceName);
         _switcherSubtitle.Text = shown.switcherSubtitle;
+        _me.DisplayName = shown.tenant.name;
+        Avatars.Show(_me, shown.me);
         var menu = new MenuFlyout { Placement = Microsoft.UI.Xaml.Controls.Primitives.FlyoutPlacementMode.BottomEdgeAlignedLeft };
         foreach (var s in shown.spaces)
         {
@@ -376,6 +393,8 @@ internal sealed class ShellView
                 shown.creates.Select(w => (Said.Key(w), $"new:{w}", (Action)(() => { })))));
         }
 
+        // the open Pot's actions beyond New: the CommandBar's secondary commands, behind its own More
+        _commands.SecondaryCommands.Clear();
         UIElement body;
         if (shell.openObject is { kind: "EXPENSES_POT" } pot)
         {
@@ -383,12 +402,19 @@ internal sealed class ShellView
             {
                 _pot?.Dispose();
                 _pot = new PotPage(pot);
+                _said.IsOpen = false;
             }
+            var download = new AppBarButton { Icon = new SymbolIcon(Symbol.Download), Label = Words.NodeDownload() };
+            AutomationProperties.SetAutomationId(download, "pot-download");
+            var page = _pot;
+            download.Click += (_, _) => page.Download(WinRT.Interop.WindowNative.GetWindowHandle(_window), Say);
+            _commands.SecondaryCommands.Add(download);
             _pot.Places(shown.tabs, shown.selectedTab);
             body = _pot.Page;
         }
         else
         {
+            if (_pot is not null) _said.IsOpen = false;
             _pot?.Dispose();
             _pot = null;
             body = shell.openObject is { } other ? NotBuilt(other)
@@ -396,6 +422,14 @@ internal sealed class ShellView
                 : HomeView.Home(state, shown);
         }
         if (!ReferenceEquals(_body.Content, body)) _body.Content = body;
+    }
+
+    /// <summary>How an action went, under the bar until it is closed or the object leaves.</summary>
+    private void Say(bool done, string message)
+    {
+        _said.Severity = done ? InfoBarSeverity.Success : InfoBarSeverity.Error;
+        _said.Message = message;
+        _said.IsOpen = true;
     }
 
     private static UIElement NotBuilt(ObjectRef o)

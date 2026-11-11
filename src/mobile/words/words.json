@@ -1824,6 +1824,10 @@
     "en": "“{1}” could not be downloaded. Please try again.",
     "de": "„{1}“ konnte nicht heruntergeladen werden. Bitte versuche es noch einmal."
   },
+  "download_type_zip": {
+    "en": "ZIP archive",
+    "de": "ZIP-Archiv"
+  },
   "receipts_save_gallery": {
     "en": "Save to gallery",
     "de": "In Galerie speichern"
