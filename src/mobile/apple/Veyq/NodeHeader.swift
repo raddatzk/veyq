@@ -146,7 +146,6 @@ struct NodeHeaderActions: View {
     let contribution: HeaderContribution
     /// How many actions are toolbar buttons: a level's bar keeps its room for its title (0: one "More" menu).
     var maxButtons: Int32 = 2
-    @State private var box = HeaderBox()
     @State private var dialog: String?
     @State private var asking = false
     @State private var renaming = false
@@ -161,13 +160,16 @@ struct NodeHeaderActions: View {
     /// Core's header of the node (one per node and name, held by the app model).
     private var header: NodeHeaderModel? { model.header(node, facts: contribution.facts) }
 
-    /// Core's plan; read through `box.state`, so each change of the header redraws it.
+    /// Core's plan; read with the app model's `headerRevision`, so each change of the header redraws it.
     private var plan: NodeHeader.Plan? {
-        _ = box.state
+        _ = model.headerRevision
         return header?.plan(maxButtons: maxButtons, own: contribution.actions.map { NodeHeader.Action(id: $0.id, slot: $0.slot) })
     }
 
-    private var pinned: Bool? { (box.state ?? header?.current)?.pinned?.boolValue }
+    private var pinned: Bool? {
+        _ = model.headerRevision
+        return header?.current.pinned?.boolValue
+    }
 
     var body: some View {
         HStack {
@@ -189,10 +191,6 @@ struct NodeHeaderActions: View {
                 }
             }
         }
-        .onAppear { if let header { box.start(header) } }
-        // renamed: the header of the node under its new name
-        .onChange(of: node.name) { if let header { box.start(header) } }
-        .onDisappear { box.stop() }
         .onChange(of: contribution.facts) { header?.update(facts: contribution.facts) }
         .sheet(isPresented: shown(NodeHeader.shared.SHARE)) { ShareSheet(model: model, ref: node) }
         .sheet(isPresented: shown(NodeHeader.shared.REPORT)) { ReportSheet(model: model, ref: node) }
@@ -562,29 +560,3 @@ struct TrashNotice: View {
     }
 }
 
-/// Core's header held for SwiftUI: its state mirrored on the main actor as it changes.
-@MainActor
-@Observable
-final class HeaderBox {
-    private(set) var state: NodeHeaderModel.State?
-    @ObservationIgnored private var header: NodeHeaderModel?
-    @ObservationIgnored private var watch: NodeHeaderModel.Watch?
-
-    func start(_ header: NodeHeaderModel) {
-        guard self.header !== header else { return }
-        watch?.stop()
-        self.header = header
-        state = header.current
-        watch = header.watch { @Sendable _ in
-            Task { @MainActor [weak self] in
-                if let current = self?.header?.current { self?.state = current }
-            }
-        }
-    }
-
-    func stop() {
-        watch?.stop()
-        watch = nil
-        header = nil
-    }
-}

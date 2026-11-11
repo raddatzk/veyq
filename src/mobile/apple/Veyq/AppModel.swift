@@ -324,7 +324,7 @@ final class AppModel {
                 managing = nil
                 shellWatch?.stop()
                 shellModel = nil
-                headers = [:]
+                dropHeaders()
             } else if managing != nil {
                 managing = managed()
             }
@@ -376,7 +376,7 @@ final class AppModel {
         let model = ShellModel(tenant: t, hidden: hidden, recent: recent, now: { @Sendable in KotlinLong(value: Int64(Date().timeIntervalSince1970 * 1000)) })
         shellWatch?.stop()
         shellModel = model
-        headers = [:]
+        dropHeaders()
         try await model.load(openLastUsed: incoming == nil)
         shellWatch = model.watch { @Sendable _ in
             Task { @MainActor [weak self] in self?.applyShell(start: false) }
@@ -484,15 +484,24 @@ final class AppModel {
 
     // MARK: Core's actions on a node
 
-    /// The headers handed out, one per node and name (core's `NodeHeaderModel`): a view's body asks again on each update.
-    @ObservationIgnored private var headers: [String: NodeHeaderModel] = [:]
+    /// The headers handed out, one per node and name (core's `NodeHeaderModel`), each watched: a view's body asks again on
+    /// each update.
+    @ObservationIgnored private var headers: [String: (model: NodeHeaderModel, watch: NodeHeaderModel.Watch)] = [:]
+
+    /// Moves on with every change of a header's state: what a header's view reads to be drawn anew.
+    private(set) var headerRevision = 0
+
+    private func dropHeaders() {
+        headers.values.forEach { $0.watch.stop() }
+        headers = [:]
+    }
 
     /// The header of `node` (core's `NodeHeaderModel` over the shell), its kind's page knowing `facts`: an open Pot of the
     /// node closes once it went to the trash, and each write reads the lists and the rows' details anew.
     func header(_ node: NodeAt, facts: AppKinds.Facts?) -> NodeHeaderModel? {
         guard let m = shellModel else { return nil }
         let key = "\(node.scopeId)/\(node.nodeId)/\(node.name)"
-        if let held = headers[key] { return held }
+        if let held = headers[key] { return held.model }
         let made = m.header(node: node, facts: facts, closeOpen: { @Sendable ref in
             let id = ref.nodeId
             Task { @MainActor [weak self] in
@@ -507,7 +516,10 @@ final class AppModel {
                 await self.readDetails(t)
             }
         })
-        headers[key] = made
+        let watch = made.watch { @Sendable _ in
+            Task { @MainActor [weak self] in self?.headerRevision += 1 }
+        }
+        headers[key] = (made, watch)
         return made
     }
 
