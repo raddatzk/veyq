@@ -212,6 +212,16 @@ kotlin {
         }
     }
 
+    // Windows' device keys (session/WindowsDeviceKeys.kt): DPAPI and the Passport key storage provider, through the
+    // helpers of wincred/veyq_wincred.h; Windows' own import libraries, so no library of ours. The header is declared the
+    // task's input, as libraryInput declares a static library: its includeDirs is not one.
+    mingwX64().compilations.getByName("main").cinterops.create("wincred") {
+        definitionFile.set(file("wincred/wincred.def"))
+        includeDirs(file("wincred"))
+        val header = file("wincred/veyq_wincred.h")
+        tasks.matching { it.name == interopProcessingTaskName }.configureEach { inputs.file(header).withPropertyName("header") }
+    }
+
     sourceSets {
         commonMain {
             kotlin.srcDir(generatedApi.map { it.dir("src/commonMain/kotlin") })
