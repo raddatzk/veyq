@@ -36,6 +36,11 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -51,7 +56,11 @@ import androidx.compose.ui.unit.dp
 @Composable
 fun ManageScreen(servers: List<ManagedServer>, model: AppModel) {
     val palette = LocalPalette.current
+    val trustWorking by model.trustWorking.collectAsStateWithLifecycle()
+    // the server whose way back to the password trust asks for the password now
+    var askPassword by remember { mutableStateOf<me.raddatz.veyq.mobile.session.VeyqAccount?>(null) }
     BackHandler { model.closeManage() }
+    askPassword?.let { account -> PasswordTrustDialog(account, model) { askPassword = null } }
     Scaffold(
         containerColor = MaterialTheme.colorScheme.background,
         topBar = {
@@ -111,18 +120,30 @@ fun ManageScreen(servers: List<ManagedServer>, model: AppModel) {
                             Spacer(Modifier.size(6.dp))
                             Text(stringResource(R.string.manage_sign_out))
                         }
-                        // How this device trusts the account, and the way to end it (the next sign-in asks for the Secret Key).
+                        // How this device trusts the account, the changes to it (D7: the other level, back to the
+                        // password), and the way to end it (the next sign-in asks for the Secret Key).
                         server.trusted?.let { method ->
                             Text(
-                                stringResource(
-                                    if (method == me.raddatz.veyq.mobile.session.TrustedDevice.Method.DEVICE_KEY) R.string.manage_trusted_remembered
-                                    else R.string.manage_trusted_password,
-                                ),
+                                stringResource(trustedLine(method, server.level)),
                                 style = MaterialTheme.typography.bodySmall, color = role(palette.muted),
                                 modifier = Modifier.padding(horizontal = 16.dp),
                             )
+                            for (change in trustChanges(method, server.level, server.levels)) {
+                                androidx.compose.material3.TextButton(
+                                    onClick = { if (change == null) askPassword = server.account else model.stayAt(server.account, change) },
+                                    enabled = !trustWorking,
+                                    modifier = Modifier.padding(horizontal = 8.dp),
+                                ) {
+                                    Text(stringResource(when (change) {
+                                        me.raddatz.veyq.mobile.session.StaySignedIn.PRESENCE -> R.string.offer_presence
+                                        me.raddatz.veyq.mobile.session.StaySignedIn.LOGIN -> R.string.signin_remember
+                                        null -> R.string.manage_password_trust
+                                    }))
+                                }
+                            }
                             androidx.compose.material3.TextButton(
                                 onClick = { model.forgetDevice(server.account) },
+                                enabled = !trustWorking,
                                 modifier = Modifier.padding(horizontal = 8.dp),
                             ) { Text(stringResource(R.string.manage_forget_device), color = role(palette.danger)) }
                         }
@@ -145,6 +166,72 @@ fun ManageScreen(servers: List<ManagedServer>, model: AppModel) {
             }
         }
     }
+}
+
+/** "Manage servers"' line for how this device trusts a server, by its method and, staying signed in, its level. */
+private fun trustedLine(method: me.raddatz.veyq.mobile.session.TrustedDevice.Method, level: me.raddatz.veyq.mobile.session.StaySignedIn?): Int = when {
+    method != me.raddatz.veyq.mobile.session.TrustedDevice.Method.DEVICE_KEY -> R.string.manage_trusted_password
+    level == me.raddatz.veyq.mobile.session.StaySignedIn.LOGIN -> R.string.manage_trusted_remembered
+    else -> R.string.manage_trusted_presence
+}
+
+/**
+ * The changes "Manage servers" lists for a server trusted by [method] at [level], the device offering [levels]: each
+ * offered level it is not at, then the way back to the password (null) from staying signed in — the desktops' pick
+ * (Windows' `TrustWords.Changes`, Linux's `manage::changes`). No rule: the levels are the core's.
+ */
+internal fun trustChanges(
+    method: me.raddatz.veyq.mobile.session.TrustedDevice.Method,
+    level: me.raddatz.veyq.mobile.session.StaySignedIn?,
+    levels: List<me.raddatz.veyq.mobile.session.StaySignedIn>,
+): List<me.raddatz.veyq.mobile.session.StaySignedIn?> {
+    val remembered = method == me.raddatz.veyq.mobile.session.TrustedDevice.Method.DEVICE_KEY
+    return levels.filter { !(remembered && it == level) } + if (remembered) listOf(null) else emptyList()
+}
+
+/**
+ * "Back to your password": the password, checked by the core before the trust changes (a wrong one says so and changes
+ * nothing). A Material dialog with its field, as Android asks for a password to confirm a change.
+ */
+@Composable
+private fun PasswordTrustDialog(account: me.raddatz.veyq.mobile.session.VeyqAccount, model: AppModel, onClose: () -> Unit) {
+    val trustWorking by model.trustWorking.collectAsStateWithLifecycle()
+    var password by remember { mutableStateOf(model.takeDevPasswordTrust().orEmpty()) }
+    var wrong by remember { mutableStateOf(false) }
+    androidx.compose.material3.AlertDialog(
+        onDismissRequest = { if (!trustWorking) onClose() },
+        title = { Text(stringResource(R.string.manage_password_trust)) },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                Text(stringResource(R.string.manage_password_trust_hint))
+                androidx.compose.material3.OutlinedTextField(
+                    password, { password = it; wrong = false },
+                    label = { Text(stringResource(R.string.signin_password)) }, singleLine = true,
+                    isError = wrong,
+                    supportingText = if (wrong) ({ Text(stringResource(R.string.manage_wrong_password)) }) else null,
+                    visualTransformation = androidx.compose.ui.text.input.PasswordVisualTransformation(),
+                    keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(keyboardType = androidx.compose.ui.text.input.KeyboardType.Password),
+                    modifier = Modifier.fillMaxWidth(),
+                )
+            }
+        },
+        confirmButton = {
+            androidx.compose.material3.TextButton(
+                onClick = {
+                    model.backToPassword(account, password) { change ->
+                        when (change) {
+                            me.raddatz.veyq.mobile.session.TrustChange.WRONG_PASSWORD -> wrong = true
+                            else -> onClose()
+                        }
+                    }
+                },
+                enabled = password.isNotEmpty() && !trustWorking,
+            ) { Text(stringResource(R.string.ok)) }
+        },
+        dismissButton = {
+            androidx.compose.material3.TextButton(onClick = onClose, enabled = !trustWorking) { Text(stringResource(R.string.signin_cancel)) }
+        },
+    )
 }
 
 @Composable

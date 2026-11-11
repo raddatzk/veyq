@@ -5,9 +5,9 @@ import android.content.Intent
 /**
  * Debug builds only — the app's counterpart of the web's `?devlogin` (src/web/CLAUDE.md): the seeded dev principal's
  * credentials arrive as launch extras (`src/mobile/android/devlogin.py` reads them from `.run/.env` and hands them to
- * `adb`), and the app signs in with them through the real sign-in — staying signed in with `veyq.devRemember` — or, with
- * `veyq.devUnlockPassword` alone, unlocks the password-trusted account its unlock screen shows. A release build has no
- * such door (src/release).
+ * `adb`), and the app signs in with them through the real sign-in — its offer to stay signed in answered with the
+ * presence level with `veyq.devRemember` — or, with `veyq.devUnlockPassword` alone, unlocks the password-trusted account
+ * its unlock screen shows and fills "Manage servers"' password field once. A release build has no such door (src/release).
  */
 object DevLogin {
     fun from(intent: Intent?): Credentials? {

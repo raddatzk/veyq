@@ -245,10 +245,28 @@
     "en": "You sign in on this device with Windows Hello.",
     "de": "Auf diesem Gerät meldest du dich mit Windows Hello an."
   },
+  "manage_trusted_presence": {
+    "note": "Manage servers' line for a server staying signed in at the level with a check (StaySignedIn PRESENCE) on Android, and on Apple where the device has Face ID",
+    "en": "You sign in on this device with your fingerprint or screen lock.",
+    "de": "Auf diesem Gerät meldest du dich mit Fingerabdruck oder Displaysperre an.",
+    "apple_en": "You sign in on this device with Face ID.",
+    "apple_de": "Auf diesem Gerät meldest du dich mit Face ID an."
+  },
+  "manage_trusted_touch_id": {
+    "note": "Apple only: manage_trusted_presence where the device has Touch ID",
+    "en": "You sign in on this device with Touch ID.",
+    "de": "Auf diesem Gerät meldest du dich mit Touch ID an."
+  },
+  "manage_trusted_passcode": {
+    "note": "Apple only: manage_trusted_presence where the device has a passcode but neither Face ID nor Touch ID",
+    "en": "You sign in on this device with its passcode.",
+    "de": "Auf diesem Gerät meldest du dich mit dem Gerätecode an."
+  },
   "manage_password_trust": {
     "note": "Manage servers' way back from staying signed in to the password trust; it asks for the password",
     "en": "Back to your password",
-    "de": "Zurück zum Passwort"
+    "de": "Zurück zum Passwort",
+    "apple_en": "Back to Your Password"
   },
   "manage_password_trust_hint": {
     "note": "the line beside the password field manage_password_trust opens",
@@ -261,15 +279,10 @@
     "de": "Das Passwort stimmt nicht."
   },
   "signin_remember": {
-    "note": "Android's and Apple's sign-in switch until their offer (Phase 8 of the CR device-trust-on-linux-and-windows); the desktops' offer and Manage servers name the level without a check (StaySignedIn LOGIN) by it",
+    "note": "the level without a check (StaySignedIn LOGIN) in the offer after a sign-in and in Manage servers, on every platform",
     "en": "Stay signed in",
-    "de": "Angemeldet bleiben"
-  },
-  "signin_remember_hint": {
-    "en": "Opens with your fingerprint, face or the device code. Anyone who can unlock this phone can open your content. Off, the app asks for your password, never again for the Secret Key.",
-    "de": "Öffnet mit Fingerabdruck, Gesicht oder dem Gerätecode. Wer dieses Handy entsperren kann, kann deine Inhalte öffnen. Aus fragt die App nach deinem Passwort, aber nie wieder nach dem Secret Key.",
-    "apple_en": "Opens with Face ID, Touch ID or the device passcode. Anyone who can unlock this device can open your content. Off, the app asks for your password, never again for the Secret Key.",
-    "apple_de": "Öffnet mit Face ID, Touch ID oder dem Gerätecode. Wer dieses Gerät entsperren kann, kann deine Inhalte öffnen. Aus fragt die App nach deinem Passwort, aber nie wieder nach dem Secret Key."
+    "de": "Angemeldet bleiben",
+    "apple_en": "Stay Signed In"
   },
   "offer_title": {
     "note": "the offer after a sign-in (D7): how this device signs in from now on",
@@ -286,15 +299,59 @@
     "en": "At each start Windows asks for your face, fingerprint or PIN.",
     "de": "Beim Start fragt Windows nach Gesicht, Fingerabdruck oder PIN."
   },
+  "offer_presence": {
+    "note": "the offer's and Manage servers' level with a check (StaySignedIn PRESENCE) on Android, and on Apple where the device has Face ID",
+    "en": "Sign in with fingerprint or screen lock",
+    "de": "Mit Fingerabdruck oder Displaysperre anmelden",
+    "apple_en": "Sign In with Face ID",
+    "apple_de": "Mit Face ID anmelden"
+  },
+  "offer_presence_hint": {
+    "note": "the line under offer_presence",
+    "en": "At each start your phone asks for your face, fingerprint or screen lock.",
+    "de": "Beim Start fragt dein Telefon nach Gesicht, Fingerabdruck oder Displaysperre.",
+    "apple_en": "At each start veyq asks for Face ID.",
+    "apple_de": "Beim Start fragt veyq nach Face ID."
+  },
+  "offer_touch_id": {
+    "note": "Apple only: offer_presence where the device has Touch ID",
+    "en": "Sign in with Touch ID",
+    "de": "Mit Touch ID anmelden",
+    "apple_en": "Sign In with Touch ID"
+  },
+  "offer_touch_id_hint": {
+    "note": "the line under offer_touch_id",
+    "en": "At each start veyq asks for Touch ID.",
+    "de": "Beim Start fragt veyq nach Touch ID."
+  },
+  "offer_passcode": {
+    "note": "Apple only: offer_presence where the device has a passcode but neither Face ID nor Touch ID",
+    "en": "Sign in with the device passcode",
+    "de": "Mit dem Gerätecode anmelden",
+    "apple_en": "Sign In with Passcode"
+  },
+  "offer_passcode_hint": {
+    "note": "the line under offer_passcode",
+    "en": "At each start veyq asks for this device's passcode.",
+    "de": "Beim Start fragt veyq nach dem Code dieses Geräts."
+  },
   "offer_login_hint": {
     "note": "the line under the offer's \"Stay signed in\" (signin_remember; StaySignedIn LOGIN): the desktop sign-in is what opens it",
     "en": "veyq asks nothing at the start. Anyone signed in to this computer can open your content.",
     "de": "Beim Start fragt veyq nichts. Wer an diesem Computer angemeldet ist, kann deine Inhalte öffnen."
   },
+  "offer_login_hint_phone": {
+    "note": "offer_login_hint on Android and Apple: unlocking the phone is what opens it",
+    "en": "veyq asks nothing at the start. Anyone who can unlock this phone can open your content.",
+    "de": "Beim Start fragt veyq nichts. Wer dieses Telefon entsperren kann, kann deine Inhalte öffnen.",
+    "apple_en": "veyq asks nothing at the start. Anyone who can unlock this device can open your content.",
+    "apple_de": "Beim Start fragt veyq nichts. Wer dieses Gerät entsperren kann, kann deine Inhalte öffnen."
+  },
   "offer_not_now": {
     "note": "the offer's third answer: the password trust stays, the offer does not come back on this device",
     "en": "Not now",
-    "de": "Nicht jetzt"
+    "de": "Nicht jetzt",
+    "apple_en": "Not Now"
   },
   "offer_not_now_hint": {
     "note": "the line under offer_not_now",

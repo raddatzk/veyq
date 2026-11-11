@@ -2,12 +2,13 @@
 """Signs the debug app on a running emulator in as the seeded dev principal (the app's `?devlogin`, src/web/CLAUDE.md).
 
 Reads VEYQ_EMAIL, VEYQ_PASSWORD, VEYQ_SECRET_KEY and VEYQ_TENANT_DOMAIN from the repository's `.run/.env` (written by
-`./gradlew backend:seed`) and hands them to the debug build as launch extras; nothing is printed. The debug build
+`./gradlew backend:seed`; `VEYQ_ENV_FILE` names another, e.g. the main checkout's from a worktree) and hands them to the debug build as launch extras; nothing is printed. The debug build
 resolves the `*.localhost` tenant to the developer's machine (DevDns), so the server is `<tenant domain>:<port>`.
 
 Usage: devlogin.py [port] [--remember] [--unlock]   (port default 8080, the dev backend)
-  --remember  sign in staying signed in (the DEVICE_KEY trust; the emulator asks for its screen lock)
-  --unlock    hand only the password, for the unlock screen of a password-trusted account
+  --remember  answer the offer after the sign-in with the presence level (the emulator asks for its screen lock)
+  --unlock    hand only the password, for the unlock screen of a password-trusted account; it also fills "Manage
+              servers"' password field once (the way back to the password trust), for the pass to press
 """
 from __future__ import annotations
 
@@ -23,7 +24,8 @@ ADB = Path(os.environ.get("ANDROID_HOME", Path.home() / "Library/Android/sdk")) 
 
 def env() -> dict[str, str]:
     out: dict[str, str] = {}
-    for line in (ROOT / ".run/.env").read_text().splitlines():
+    path = Path(os.environ["VEYQ_ENV_FILE"]) if os.environ.get("VEYQ_ENV_FILE") else ROOT / ".run/.env"
+    for line in path.read_text().splitlines():
         if "=" in line and not line.lstrip().startswith("#"):
             k, v = line.split("=", 1)
             out[k.strip()] = v.strip().strip('"').strip("'")

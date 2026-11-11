@@ -126,11 +126,22 @@ class AppModel(app: Application) : AndroidViewModel(app) {
     private val _screen = MutableStateFlow<Screen>(Screen.Starting)
     val screen: StateFlow<Screen> = _screen.asStateFlow()
 
+    private val _offer = MutableStateFlow<me.raddatz.veyq.mobile.session.SessionModel.Offer?>(null)
+
+    /** The offer to stay signed in a sign-in left open (core's `Gate.Signed.offer`), drawn over the shell; null once answered. */
+    val offer: StateFlow<me.raddatz.veyq.mobile.session.SessionModel.Offer?> = _offer.asStateFlow()
+
     init {
         viewModelScope.launch { session.gate.collect(::gateChanged) }
     }
 
     private fun gateChanged(g: me.raddatz.veyq.mobile.session.SessionModel.Gate) {
+        _offer.value = (g as? me.raddatz.veyq.mobile.session.SessionModel.Gate.Signed)?.offer
+        trustLog("gate ${g::class.simpleName}" + when (g) {
+            is me.raddatz.veyq.mobile.session.SessionModel.Gate.Signed -> ", offer: ${g.offer?.levels}"
+            is me.raddatz.veyq.mobile.session.SessionModel.Gate.Unlock -> ", ${g.record.method}, level: ${g.record.unlockLevel}"
+            else -> ""
+        })
         when (g) {
             is me.raddatz.veyq.mobile.session.SessionModel.Gate.SignIn -> _screen.value = Screen.SignIn(g.working, g.error, g.adding, g.server, g.email)
             is me.raddatz.veyq.mobile.session.SessionModel.Gate.Unlock -> _screen.value = Screen.Unlock(g.record, g.working, g.error)
@@ -159,17 +170,88 @@ class AppModel(app: Application) : AndroidViewModel(app) {
     }
 
     /**
-     * The full sign-in, which holds the password trust, then — when [remember] — staying signed in at the presence level
-     * (which asks the person to authenticate; declined, the password trust stays). Until this app draws the core's offer
-     * (the CR device-trust-on-linux-and-windows, Phase 8), its switch answers it so; off, the offer stays unanswered.
+     * The full sign-in, which holds the password trust; the core's offer to stay signed in follows it ([offer]). [then]
+     * runs once it opened — the debug build's `--remember` answers the offer there, as a person would.
      */
-    fun signIn(server: String, email: String, password: String, secretKey: String, remember: Boolean = false) {
+    fun signIn(server: String, email: String, password: String, secretKey: String, then: (suspend () -> Unit)? = null) {
         viewModelScope.launch {
             val opened = session.signIn(server, email, password, secretKey) ?: return@launch
-            if (remember) session.stay(me.raddatz.veyq.mobile.session.StaySignedIn.PRESENCE)
             show(opened)
+            then?.invoke()
         }
     }
+
+    // ---- staying signed in (D7 of the CR device-trust-on-linux-and-windows) ----
+
+    private val _trustWorking = MutableStateFlow(false)
+
+    /** A change of this device's trust is under way (the offer's answer, Manage's): its controls wait. */
+    val trustWorking: StateFlow<Boolean> = _trustWorking.asStateFlow()
+
+    /**
+     * The offer's answer: staying signed in at [level], or "Not now" (null). A cancelled prompt leaves the offer standing
+     * (the core's rule); a level this device could not keep ends it, said in the shell.
+     */
+    fun answerOffer(level: me.raddatz.veyq.mobile.session.StaySignedIn?) {
+        if (level == null) {
+            session.notNow()
+            trustLog("offer answered: NotNow")
+            return
+        }
+        viewModelScope.launch {
+            val change = trusting { session.stay(level) }
+            trustLog("offer answered: $level -> $change")
+            if (change == me.raddatz.veyq.mobile.session.TrustChange.FAILED) trustFailed()
+        }
+    }
+
+    /** "Manage servers": [account] staying signed in at [level], replacing the trust it had; [done] gets the outcome. */
+    fun stayAt(account: VeyqAccount, level: me.raddatz.veyq.mobile.session.StaySignedIn, done: (me.raddatz.veyq.mobile.session.TrustChange) -> Unit = {}) {
+        viewModelScope.launch {
+            val change = trusting { session.stay(account, level) }
+            trustLog("manage stay signed in $level: $change")
+            refreshManaged()
+            if (change == me.raddatz.veyq.mobile.session.TrustChange.FAILED) trustFailed()
+            done(change)
+        }
+    }
+
+    /** "Manage servers"' way back to the password trust for [account] with [password]; [done] gets the outcome. */
+    fun backToPassword(account: VeyqAccount, password: String, done: (me.raddatz.veyq.mobile.session.TrustChange) -> Unit) {
+        viewModelScope.launch {
+            val change = trusting { session.trustWithPassword(account, password) }
+            trustLog("manage back to the password: $change")
+            refreshManaged()
+            if (change == me.raddatz.veyq.mobile.session.TrustChange.FAILED) trustFailed()
+            done(change)
+        }
+    }
+
+    private suspend fun <R> trusting(block: suspend () -> R): R {
+        _trustWorking.value = true
+        try {
+            return block()
+        } finally {
+            _trustWorking.value = false
+        }
+    }
+
+    /** The device trust's steps in logcat (`veyq-trust`), for a pass to read before it looks: never a key or a password. */
+    private fun trustLog(line: String) {
+        android.util.Log.i("veyq-trust", line)
+    }
+
+    private fun trustFailed() = notify(Notice(getApplication<Application>().getString(R.string.trust_failed)))
+
+    /** The debug build's `--unlock` password, for "Manage servers"' password field once (never typed by a pass). */
+    private var devPasswordTrust: String? = null
+
+    fun devFillPasswordTrust(password: String) {
+        devPasswordTrust = password
+    }
+
+    /** The debug password for "Manage servers"' field, once; null in a release build and after it was taken. */
+    fun takeDevPasswordTrust(): String? = devPasswordTrust.also { devPasswordTrust = null }
 
     /** The trusted account's unlock: its password (DEVICE), or the person's authentication again (DEVICE_KEY). */
     fun unlock(password: String) {
@@ -195,6 +277,7 @@ class AppModel(app: Application) : AndroidViewModel(app) {
     fun openManage() {
         viewModelScope.launch { session.loadSpaces { refreshManaged() } }
         _screen.update { s -> if (s is Screen.Signed) s.copy(managing = session.managed()) else s }
+        trustLog("manage servers: " + session.managed().joinToString { "${it.trusted}/${it.level}" })
     }
 
     fun closeManage() = _screen.update { s -> if (s is Screen.Signed) s.copy(managing = null) else s }
@@ -235,11 +318,16 @@ class AppModel(app: Application) : AndroidViewModel(app) {
     fun forgetDevice(account: VeyqAccount) {
         viewModelScope.launch {
             session.forgetDevice(account)
+            trustLog("manage stop trusting")
             refreshManaged()
         }
     }
 
-    private fun refreshManaged() = _screen.update { s -> if (s is Screen.Signed && s.managing != null) s.copy(managing = session.managed()) else s }
+    private fun refreshManaged() = _screen.update { s ->
+        if (s is Screen.Signed && s.managing != null) s.copy(managing = session.managed().also { m ->
+            trustLog("manage servers: " + m.joinToString { "${it.trusted}/${it.level}" })
+        }) else s
+    }
 
     // ---- the current tenant ----
 
