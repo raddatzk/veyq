@@ -5,8 +5,10 @@
 //! offers it (no timer here: the toast goes when the state's `undo` does). What is offered, in which order and with which
 //! words is the core's; this lays it out.
 //!
-//! The move, the copy, the share, the report, the cover and a folder's download are the CR's later phases: their ids
-//! are not drawn yet ([DRAWN]), never shown as a control that answers "not yet".
+//! The move and the copy open core's sheet ([crate::move_sheet]); a folder's download goes where GTK's save dialog says
+//! (`Header.Download`, under the core's archive name), a Pot's through its page (`Pot.Download`). The share, the report
+//! and the cover are the CR's later phases: their ids are not drawn yet ([DRAWN]), never shown as a control that answers
+//! "not yet".
 use std::cell::{Cell, RefCell};
 use std::rc::{Rc, Weak};
 
@@ -19,17 +21,18 @@ use crate::{said, words};
 /// The most buttons the content's header bar holds beside its title (GNOME: a few, the rest in the menu).
 pub const MAX_BUTTONS: i32 = 2;
 
-/// The header's ids this phase draws; every other id of the plan is left out until its phase.
-pub const DRAWN: &[&str] = &["favorite", "rename", "delete", "download"];
+/// The header's ids drawn so far; every other id of the plan is left out until its phase.
+pub const DRAWN: &[&str] = &["favorite", "rename", "delete", "download", "move", "copy"];
 
-/// Whether [id] is drawn for a node of [kind]: a download only where this app writes one (a Pot's, `Pot.Download`).
+/// Whether [id] is drawn for a node of [kind]: a download where it is the node's archive (a file's is its own bytes,
+/// Depot's page).
 pub fn drawn(id: &str, kind: &str) -> bool {
-    DRAWN.contains(&id) && (id != "download" || kind == "EXPENSES_POT")
+    DRAWN.contains(&id) && (id != "download" || kind != "FILE")
 }
 
 /// The window's action an id fires (`win.header-<id>`; a Pot's download is the Pot page's `win.pot-download`).
-pub fn action_of(id: &str) -> String {
-    if id == "download" { "win.pot-download".into() } else { format!("win.header-{id}") }
+pub fn action_of(id: &str, kind: &str) -> String {
+    if id == "download" && kind == "EXPENSES_POT" { "win.pot-download".into() } else { format!("win.header-{id}") }
 }
 
 /// The header of one node, opened in the core when made and closed when dropped.
@@ -141,6 +144,54 @@ impl Header {
         });
     }
 
+    /// The move ([copy] false) or copy sheet over [parent] (core's `MoveSheet`, [crate::move_sheet]).
+    pub fn move_sheet(&self, parent: &impl IsA<gtk::Widget>, copy: bool) {
+        crate::move_sheet::open(parent, &self.node, copy, &self.inner.toasts);
+    }
+
+    /// Downloads the node as the web's ZIP: GTK's save dialog (the file chooser portal where there is one) suggests the
+    /// core's name, the core writes the file the dialog chose and removes it when it did not finish, and a toast says what
+    /// the core said (with what it left out).
+    pub fn download(&self, parent: &gtk::Window) {
+        let Some(header) = self.inner.id.get() else { return };
+        let Some(suggested) = self.inner.shown.borrow().as_ref().map(|s| s.archive_name.clone()) else { return };
+        let (name, parent, toasts) = (self.node.name.clone(), parent.clone(), self.inner.toasts.clone());
+        glib::spawn_future_local(async move {
+            let failed = || adw::Toast::new(&words::download_failed(&name));
+            let dialog = gtk::FileDialog::builder().title(words::node_download()).initial_name(suggested).modal(true).build();
+            if let Some(downloads) = glib::user_special_dir(glib::UserDirectory::Downloads).filter(|d| d.is_dir()) {
+                dialog.set_initial_folder(Some(&gio::File::for_path(downloads)));
+            }
+            let file = match dialog.save_future(Some(&parent)).await {
+                Ok(file) => file,
+                Err(e) if e.matches(gtk::DialogError::Dismissed) || e.matches(gtk::DialogError::Cancelled) => return,
+                Err(e) => {
+                    eprintln!("veyq: the save dialog failed: {e}");
+                    toasts.add_toast(failed());
+                    return;
+                }
+            };
+            // the core opens the path itself; one that is no UTF-8 does not cross the wire
+            let Some(path) = file.path().and_then(|p| p.to_str().map(str::to_owned)) else {
+                eprintln!("veyq: the save dialog chose no local UTF-8 path");
+                toasts.add_toast(failed());
+                return;
+            };
+            let call = Call::HeaderDownload { header, path, deleted_name: words::pot_deleted_person() };
+            match bridge::call(&call).await.map(|(answer, _)| answer) {
+                Ok(Answer::Downloaded { notice, left_out, .. }) => {
+                    eprintln!("veyq: header download: {}, left out: {}", notice.msg, left_out.is_some());
+                    let said = [Some(&notice), left_out.as_ref()].into_iter().flatten().map(said::notice).collect::<Vec<_>>().join(" ");
+                    toasts.add_toast(adw::Toast::new(&said));
+                }
+                other => {
+                    eprintln!("veyq: Header.Download answered {other:?}");
+                    toasts.add_toast(failed());
+                }
+            }
+        });
+    }
+
     /// The delete: asked first, with the kind's title and the core's question; then to the trash, its Undo offered.
     pub fn delete(&self, parent: &impl IsA<gtk::Widget>) {
         let Some(header) = self.inner.id.get() else { return };
@@ -223,16 +274,16 @@ impl Inner {
             let label = a.word.as_deref().map(said::key).unwrap_or_default();
             let button = if a.id == "favorite" {
                 let icon = if s.pinned == Some(true) { "starred-symbolic" } else { "non-starred-symbolic" };
-                gtk::Button::builder().icon_name(icon).tooltip_text(&label).action_name(action_of(&a.id)).build()
+                gtk::Button::builder().icon_name(icon).tooltip_text(&label).action_name(action_of(&a.id, kind)).build()
             } else {
-                gtk::Button::builder().icon_name(icon_of(&a.id)).tooltip_text(&label).action_name(action_of(&a.id)).build()
+                gtk::Button::builder().icon_name(icon_of(&a.id)).tooltip_text(&label).action_name(action_of(&a.id, kind)).build()
             };
             button.update_property(&[gtk::accessible::Property::Label(&label)]);
             self.bar.append(&button);
         }
         for (group, ids) in [(&first, &plan.menu), (&last, &plan.last)] {
             for a in ids.iter().filter(|a| drawn(&a.id, kind)) {
-                group.append(a.word.as_deref().map(said::key).as_deref(), Some(&action_of(&a.id)));
+                group.append(a.word.as_deref().map(said::key).as_deref(), Some(&action_of(&a.id, kind)));
             }
         }
         menu.append_section(None, &first);
@@ -284,6 +335,8 @@ fn clear(bar: &gtk::Box) {
 pub fn icon_of(id: &str) -> &'static str {
     match id {
         "download" => "folder-download-symbolic",
+        "move" => "folder-symbolic",
+        "copy" => "edit-copy-symbolic",
         "rename" => "document-edit-symbolic",
         "delete" => "user-trash-symbolic",
         _ => "view-more-symbolic",
@@ -352,16 +405,17 @@ mod tests {
     use super::*;
 
     #[test]
-    fn only_this_phases_actions_are_drawn_and_a_download_only_where_the_app_writes_one() {
-        for id in ["favorite", "rename", "delete"] {
+    fn the_phases_actions_so_far_are_drawn_and_a_download_where_it_is_the_nodes_archive() {
+        for id in ["favorite", "rename", "delete", "move", "copy", "download"] {
             assert!(drawn(id, "FOLDER") && drawn(id, "EXPENSES_POT"), "{id}");
         }
-        assert!(drawn("download", "EXPENSES_POT"));
-        assert!(!drawn("download", "FOLDER"), "a folder's download is Phase 3's");
-        for id in ["share", "move", "copy", "report", "cover", "an-applications-own"] {
+        assert!(!drawn("download", "FILE"), "a file's download is its own bytes");
+        for id in ["share", "report", "cover", "an-applications-own"] {
             assert!(!drawn(id, "FOLDER") && !drawn(id, "EXPENSES_POT"), "{id} drawn before its phase");
         }
-        assert_eq!(action_of("download"), "win.pot-download");
-        assert_eq!(action_of("rename"), "win.header-rename");
+        assert_eq!(action_of("download", "EXPENSES_POT"), "win.pot-download");
+        assert_eq!(action_of("download", "FOLDER"), "win.header-download");
+        assert_eq!(action_of("move", "EXPENSES_POT"), "win.header-move");
+        assert_eq!(action_of("rename", "FOLDER"), "win.header-rename");
     }
 }
