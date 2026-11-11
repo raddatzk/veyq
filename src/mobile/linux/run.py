@@ -49,7 +49,9 @@ Live runs: `VEYQ_LIVE=http://veyq.localhost:8080 run.py test --tests '*LiveSignI
 as the seeded principal of `.run/.env` (VEYQ_ENV_FILE names another file, e.g. the main checkout's from a worktree).
 The backend picks the tenant from the Host header, so the container keeps the origin's name: a `*.localhost` origin
 resolves to the container's own loopback there, where socat forwards its port to the host (`host.docker.internal`),
-and every tenant of the account (each a `*.localhost` name on that port) arrives under its own name.
+and every tenant of the account (each a `*.localhost` name on that port) arrives under its own name. A blob's way up or
+down (a cover, a receipt) goes to the object store's public endpoint, a dev instance's Vite origin: VEYQ_LIVE_STORE
+(e.g. http://veyq.localhost:8081) forwards its port the same way.
 
 Docker must answer `docker build` / `docker run`; the image is `veyq-linux-dev`, rebuilt from its layer cache each run.
 """
@@ -159,12 +161,18 @@ def in_container(docker_platform: str, mounts: dict[Path, str], env: dict[str, s
             sys.exit(f"VEYQ_LIVE needs the seeded principal's {env_file} (VEYQ_ENV_FILE names another)")
         mounts = mounts | {env_file: "/veyq/env"}
         env = env | {"VEYQ_LIVE": live, "VEYQ_ENV_FILE": "/veyq/env"}
-        origin = urlsplit(live)
-        if origin.hostname and (origin.hostname == "localhost" or origin.hostname.endswith(".localhost")):
-            port = origin.port or (443 if origin.scheme == "https" else 80)
-            docker += ["--add-host", f"{origin.hostname}:127.0.0.1"]
-            prelude += (f"socat TCP-LISTEN:{port},bind=127.0.0.1,fork,reuseaddr TCP:host.docker.internal:{port} & "
-                       f"for _ in $(seq 50); do (exec 3<>/dev/tcp/127.0.0.1/{port}) 2>/dev/null && break; sleep 0.1; done; ")
+        # the origin, and the object store's public endpoint where a blob goes up or comes down (VEYQ_LIVE_STORE: a
+        # dev instance's is Vite's origin, http://veyq.localhost:8081), each reachable under its own name
+        hosts: set[str] = set()
+        for address in [live, os.environ.get("VEYQ_LIVE_STORE")]:
+            origin = urlsplit(address or "")
+            if origin.hostname and (origin.hostname == "localhost" or origin.hostname.endswith(".localhost")):
+                port = origin.port or (443 if origin.scheme == "https" else 80)
+                if origin.hostname not in hosts:
+                    docker += ["--add-host", f"{origin.hostname}:127.0.0.1"]
+                    hosts.add(origin.hostname)
+                prelude += (f"socat TCP-LISTEN:{port},bind=127.0.0.1,fork,reuseaddr TCP:host.docker.internal:{port} & "
+                           f"for _ in $(seq 50); do (exec 3<>/dev/tcp/127.0.0.1/{port}) 2>/dev/null && break; sleep 0.1; done; ")
     for host_path, container_path in mounts.items():
         docker += ["-v", f"{host_path}:{container_path}:ro"]
     for k, v in env.items():

@@ -195,6 +195,11 @@ pub fn open(parent: &impl IsA<gtk::Widget>, header: i64, node: &NodeAt, stored: 
             i.remove(&t);
         }
     });
+    // the dialog holds its state while it is open; every handler reaches it weakly
+    let held = RefCell::new(Some(inner.clone()));
+    dialog.connect_closed(move |_| {
+        held.borrow_mut().take();
+    });
     dialog.present(Some(parent));
 
     // the stored cover: its picture asked of the core, framed as stored
