@@ -50,6 +50,8 @@ import me.raddatz.veyq.mobile.navigation.ObjectRef
 internal fun DropBoxScreen(ref: ObjectRef, model: AppModel) {
     val palette = LocalPalette.current
     val scope = rememberCoroutineScope()
+    val notices = LocalShellNotices.current
+    val context = androidx.compose.ui.platform.LocalContext.current
     val details by model.rowDetails.collectAsStateWithLifecycle()
     // read again whenever the lists are (the row details move with every refresh)
     var folders by remember { mutableStateOf<List<DropBoxes.GuestFolder>?>(null) }
@@ -120,7 +122,9 @@ internal fun DropBoxScreen(ref: ObjectRef, model: AppModel) {
             confirmButton = {
                 TextButton(onClick = {
                     deleting = null
-                    scope.launch { model.header(me.raddatz.veyq.mobile.navigation.NodeAt(f.node.scopeId, f.node.id, f.node.kind, f.label), me.raddatz.veyq.mobile.AppKinds.Facts())?.trash() }
+                    // core's trash, its undo offered for core's window as the header's delete does (Apple's notice did already)
+                    val header = model.header(me.raddatz.veyq.mobile.navigation.NodeAt(f.node.scopeId, f.node.id, f.node.kind, f.label), me.raddatz.veyq.mobile.AppKinds.Facts())
+                    if (header != null) notices?.let { trash(header, it.snackbar, it.scope, context) } ?: scope.launch { header.trash() }
                 }) { Text(stringResource(R.string.entry_delete), color = MaterialTheme.colorScheme.error) }
             },
             dismissButton = { TextButton(onClick = { deleting = null }) { Text(stringResource(R.string.entry_cancel)) } },

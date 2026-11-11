@@ -164,7 +164,7 @@ fun ShellScreen(s: Screen.Signed, model: AppModel) {
     }
 
     val covers by model.covers.collectAsStateWithLifecycle()
-    androidx.compose.runtime.CompositionLocalProvider(LocalRowDetails provides rowDetails, LocalAvatars provides avatars, LocalPicking provides (incoming != null), LocalCovers provides covers) {
+    androidx.compose.runtime.CompositionLocalProvider(LocalRowDetails provides rowDetails, LocalAvatars provides avatars, LocalPicking provides (incoming != null), LocalCovers provides covers, LocalShellNotices provides ShellNotices(snackbar, scope)) {
     val drawerContent: @Composable () -> Unit = {
         Drawer(
             s,
@@ -794,6 +794,11 @@ private fun tabLabel(tab: BarTab, kind: String?): String = say(me.raddatz.veyq.m
 
 /** What each object's row says beside its name, by node id (`AppModel.rowDetails`). */
 internal val LocalRowDetails = androidx.compose.runtime.compositionLocalOf<Map<String, List<String>>> { emptyMap() }
+
+/** The shell's snackbar and its scope, where a page's action says what it did after the page itself may have left. */
+internal class ShellNotices(val snackbar: androidx.compose.material3.SnackbarHostState, val scope: kotlinx.coroutines.CoroutineScope)
+
+internal val LocalShellNotices = androidx.compose.runtime.staticCompositionLocalOf<ShellNotices?> { null }
 
 /** Whether the shell is picking a place for what another app shared (ADR 0129). */
 internal val LocalPicking = androidx.compose.runtime.compositionLocalOf { false }
