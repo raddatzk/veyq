@@ -1006,19 +1006,19 @@ def test_pool(tmp: pathlib.Path) -> None:
             ("unhealthy, bundled, no pool: exit 1 and the warning", {"ps": unhealthy}, None, 1, True),
     ):
         rc, out = run_quiet(["--home", str(home), "status"], FakeHost(project="veyq-proof", **host_kw))
-        check(f"status: {label}", rc == rc_want and ("keeps no object versions" in out) == warns
+        check(f"status: {label}", rc == rc_want and ("keeps no older versions" in out) == warns
               and (host_kw.get("store_in_use", "") is not None or "could not be read" in out), out[-400:])
     pooled = installed(tmp, "home-status-pool", mirror, "1.3", "1.3")
     with_env(pooled, VEYQ_BACKUP_OBJECTS_TO=str(tmp / "pool"))
     for label, ps, rc_want in (("healthy", FakeHost.HEALTHY, 0), ("unhealthy", unhealthy, 1)):
         rc, out = run_quiet(["--home", str(pooled), "status"], FakeHost(project="veyq-proof", ps=ps))
         check(f"status (control): a pool named in .env, {label} — no warning, exit {rc_want}",
-              rc == rc_want and "keeps no object versions" not in out, out[-300:])
+              rc == rc_want and "keeps no older versions" not in out, out[-300:])
     host = FakeHost(local_images=all_images(), project="veyq-proof")
     rc, out = run_quiet(["--home", str(tmp / "home-install-warn"), "--source", str(mirror), "install",
                          "--unsigned-local", *INSTALL_SETS, "--set", "VEYQ_RELEASE=1.3"], host)
     check("install: ends with the same warning while no pool is named",
-          rc == 0 and "keeps no object versions" in out.splitlines()[-1], out[-300:])
+          rc == 0 and "keeps no older versions" in out.splitlines()[-1], out[-300:])
 
     # V2 — backup: the early copy before the stop, the capture after it into the same pool.
     home = installed(tmp, "home-pool-backup", mirror, "1.3", "1.3")
@@ -1218,7 +1218,7 @@ def test_retention_and_ledger(tmp: pathlib.Path) -> None:
                                 ("B unreadable: says so, no warning", None, False)):
         rc, out = run_quiet(["--home", str(home), "status"], FakeHost(project="veyq-proof", fresh=fresh))
         check(f"status: {label}, exit code the health verdict",
-              rc == 0 and ("is younger than B" in out) == warns and (fresh is not None or "could not be read" in out),
+              rc == 0 and ("is younger than the retention period" in out) == warns and (fresh is not None or "could not be read" in out),
               out[-400:])
 
     capture_dir = tmp / "a-capture-b"
@@ -1885,10 +1885,10 @@ def test_gitops_init(tmp: pathlib.Path) -> None:
     stray.rmdir()
     rc, out = run_main(["--instance", "repo", "--source", mirror, "verify"], GitOpsHost(top=top, signed=signed))
     check("verify on a GitOps instance: manifest, three images and chart", rc == 0 and "chart" in out
-          and "nothing was written" in out, out[-400:])
+          and "Nothing was written" in out, out[-400:])
     rc, out = run_main(["--instance", "repo", "--source", mirror, "check"], GitOpsHost(top=top, signed=signed))
     check("check on a GitOps instance: the pinned release, and the Secrets with every key",
-          rc == 0 and "pinned already" in out and "exist with every key" in out, out[-500:])
+          rc == 0 and "installed already" in out and "exist with every key" in out, out[-500:])
     rc, out = run_main(["--instance", "repo", "--source", mirror, "check"], GitOpsHost(top=top, signed=signed, cluster={
         "get secret veyq-config-secret-key": (1, "")}))
     check("check: a Secret the provider did not create is named, exit 1", rc == 1 and "veyq-config-secret-key (missing)"
