@@ -379,12 +379,80 @@ None. Everything runs on this Mac, the container and the disposable VMs.
   - Recent (commit `0825552d6`): after "App link" was opened, Expenses' list shows a Recent group above the rest
     (Favorites, Recent, then all); after Amsterdam both. No Linux code for it.
 
-### Phase 4 — Windows: the same
+### Phase 4 — Windows: the same — done (2026-11-11)
 
 **Done when** the same pass has run on the VM:
 - WinUI's `FileSavePicker`, given the window's handle (`InitializeWithWindow`, an unpackaged app's need);
 - the ZIP copied back to the Mac and imported by the web;
 - `run.py build` and both guards green.
+
+**Built (Phase 4):**
+- **`Veyq/AvatarsHeld.cs`:** `Held<T>` (no control), Linux's `avatars::Held` rule for rule — another tenant drops
+  everything, a set that differs is asked for whole, the same set asks nothing, an answer of an earlier round or for an id
+  no longer listed (or one that did not decode) is dropped. **`Veyq/Avatars.cs`** feeds it from the shell's
+  `ShellShown.pictures` with the tenant (`connection` + `tenantId`), asks `Avatar.Picture` per id, decodes the payload
+  through `BitmapImage.SetSourceAsync` over an `InMemoryRandomAccessStream`, and sets `ProfilePicture` on every
+  `PersonPicture` bound to that id (weakly held); without one the `PersonPicture` draws the initials of its
+  `DisplayName`. The log says each decode (`a member's picture decoded: <bytes> B, <w>×<h>`, never whose).
+- **Where:** the Pot's Settings people and Overview balances (a 32 px `PersonPicture` leading the row), and the switcher:
+  the signed-in member's picture (`ShellShown.me`, 24 px) before the space and tenant, the tenant's initials where there
+  is none.
+- **The download:** while a Pot is open the content's `CommandBar` carries Download (`Symbol.Download`,
+  `node_download`) among its secondary commands, behind the bar's own More (`MoreButton`, WinUI's word, as its chrome
+  is). `PotPage.Download` asks `Pot.ArchiveName`, opens `FileSavePicker` (`InitializeWithWindow` with the window's
+  HWND; Downloads; the core's name; one type, its extension the name's), then `Pot.Download(pot, path,
+  Words.PotDeletedPerson())`; an `InfoBar` under the bar says `download_done` (Success) or `download_failed` (Error)
+  with the Pot's name until closed or another object opens. A dismissed picker says nothing. **New word:**
+  `download_type_zip` ("ZIP archive" / "ZIP-Archiv"), the picker's type label, which `FileTypeChoices` requires.
+- **The guard:** `validate_mobile_words.py`'s windows-literal reads `Message` (an `InfoBar`'s) and
+  `FileTypeChoices.Add(`'s label, which it missed.
+- **`Veyq.Drive`:** `type <id> <text>` and `press <id> [keys]` (focus, then `SendInput`: Unicode characters, or a
+  chord) for the system dialog — see the retro.
+
+**Met (2026-11-11, commits `e8dafef85`, `3c494cb14`, `06a587f07`):**
+- [x] `windows/run.py build` → no package deprecated or vulnerable; Veyq.Bridge.Tests here 3 + 1 skipped, on the VM
+  4/4; Veyq.Tests 9/9 (6 + `AvatarsTest`'s 3). Both guards green (`/usr/bin/python3 scripts/validate_mobile_words.py`,
+  `…/validate_mobile_platform_guidelines.py`).
+- [x] `AvatarsTest` (Veyq.Tests, on the VM): `ASetIsAskedForOnceAndAgainOnlyWhenItChanges`,
+  `AnotherTenantDropsWhatWasHeldAndALateAnswerIsNotKept`, `APictureAsTheWebWritesItDecodes` (Linux's 1×1 lossless WebP
+  through WIC's `BitmapDecoder`, the codec `BitmapImage` decodes with: `WebpDecoderId`, 1×1). **Bites** (each variant of
+  `AvatarsHeld.cs` copied into the VM's built tree, `dotnet test --project Veyq.Tests`): without the same-set check →
+  the first red (`Assert.AreEqual(0, held.Listed("t1", ["a", "b"]).Ask.Count)`); without dropping on a tenant change →
+  the second red; without the round check → the second red (the late t1 answer kept); the Webp Image Extensions package
+  removed for the user (`Remove-AppxPackage`) → the decode red (`COMException`). Each restored (the package
+  re-registered by family name from the logged-on session — over ssh the registration is refused, `0x80070005`), 9/9.
+- [x] Guard **bite:** `FileTypeChoices.Add("ZIP archive", …)` and `_said.Message = "Downloaded"` → windows-literal red at
+  both lines; the guard before this change → green over the same tree; restored, green.
+- [x] The pass (`VEYQ_LIVE=http://veyq.localhost:8080 VEYQ_ENV_FILE=<main>/.run/.env windows/run.py run --devlogin`,
+  then `windows/run.py drive …`), the log read first each time (`session Signed`, then only the lines below; no
+  exception):
+  - The log: `a member's picture decoded: 2628 B, 256×256` — the principal's WebP (Phase 2's 2,628 B), decoded by
+    `BitmapImage`.
+  - "App link": Kevin Raddatz's row on Settings (`Group "Kevin Raddatz, settled" #person:9cb7…`) and Overview
+    (`#balance:9cb7…`) shows the picture (the blue disc), the switcher the same disc before "Familie Raddatz";
+    Amsterdam's Anna and Ben show `A` and `B`. `PersonPicture` is not in UIA's control view, so the shots are the
+    proof of picture against initials, the tree of the rows and the log of the decode.
+  - Download of Amsterdam (en-US, dark): `invoke MoreButton`, `invoke pot-download` → the system's "Speichern unter"
+    as a window of the app (`#1001` value `Amsterdam`, the type `ZIP archive`, the address Downloads); `press 1` →
+    the `InfoBar` "“Amsterdam” is downloaded."; `C:\Users\kevin\Downloads\Amsterdam.zip` 6,089 B (as on Linux and in
+    `LiveBridgeTest`), `scp`'d to the Mac: `check_zip.py` → `OK Amsterdam/Amsterdam.csv 365 0ea097cc…`, 1 payload, 0
+    bad. In German, light: "App link.zip" the same way (the type `ZIP-Archiv`), "„App link“ ist heruntergeladen.",
+    1,438 B, its CSV (75 B) to the manifest.
+  - The failure: an 8 MB FAT volume (`diskpart`, a VHD as `T:`) filled to one free 2 KiB cluster; the picker's name
+    typed as `T:\Amsterdam.zip` → log `Pot.Download answered Failed (IllegalStateException)`, the `InfoBar` "“Amsterdam”
+    could not be downloaded. Please try again.", and `T:\` holds only the filler: nothing left behind. The VHD was
+    detached and deleted after.
+  - A dismissed picker (`invoke 2`, Abbrechen): no `InfoBar`, nothing in the log.
+  - Recent (commit `0825552d6`): Expenses' list shows Favoriten, Zuletzt (Amsterdam, App link), then Fluent's divider
+    (`95d13921d`) before the rest; no Windows code for it.
+  - en-US dark and de-DE light (`VEYQ_LANGUAGE`, `VEYQ_THEME`), each maximized (1290 × 848) and 500 wide (LeftMinimal;
+    the More, the row's picture or initials in place).
+  - Shots (`src/mobile/build/windows/shots/`): `en-dark-download-done.png`, `en-dark-amsterdam-settings.png`,
+    `en-dark-applink-overview.png`, `en-dark-applink-settings-500.png`, `en-dark-download-failed.png`,
+    `de-light-expenses-recent.png`, `de-light-applink-overview.png`, `de-light-picker.png`,
+    `de-light-download-done.png`, `de-light-amsterdam-settings-500.png`.
+  - **The web's import was not run:** no web dev server was up (8081, 8089, 5173 answered nothing), as in Phase 3; the
+    manifest check is the proof.
 
 ### Phase 5 — The docs
 
@@ -456,4 +524,22 @@ to the owner's veto before "go".
   carries no gtk4 catalogs. Our words in it (its title) are German. A desktop's portal dialog is the system's.
 - **The container's working directory is the read-only source mount:** GTK's dialog opens there, which made the failed
   path easy to show (nothing left, the failed toast). On a desktop the dialog opens in Downloads.
+
+### Phase 4 (2026-11-11)
+
+- **The save picker cannot be pressed through UI Automation.** Its Save, invoked by UIA, arrives as an
+  input-synchronous call, and the dialog then cannot call out to the file broker: "Ein ausgehender Aufruf kann nicht
+  ausgeführt werden, da die Anwendung einen eingabe-synchronisierten Aufruf weiterleitet"
+  (`RPC_E_CANTCALLOUT_ININPUTSYNCCALL`), nothing written. A `Value` set on its file name showed in the tree but was not
+  read (the picker asked to replace the Downloads file). `Veyq.Drive` now focuses the element and sends real keys
+  (`press`, `type`); the picker is a window of the app's own process, so `Find` already reached it.
+- **WebP on Windows is a Store package's codec** (Webp Image Extensions), not the OS image's own WIC: on an image
+  without it the decode throws (the test's bite), so every person would show initials and the log a failed decode. MSIX
+  packaging (CR 6) has to name it, or the app decode WebP itself. Its registration is refused over ssh (`0x80070005`)
+  and needs the logged-on session.
+- **A full disk is the honest failure on Windows:** the common file dialog refuses a folder the user cannot write to
+  before the core is called (remembered, not measured here), so Linux's read-only folder has no counterpart; a nearly
+  full volume fails the core's write itself (measured above).
+- **`PersonPicture` is not in UIA's control view**, so a tree tells no picture from initials; the log's decode line and
+  the shots do.
 
