@@ -1724,6 +1724,16 @@ def test_instances(tmp: pathlib.Path) -> None:
                         "--unsigned-local", *INSTALL_SETS], FakeHost(local_images=all_images()))
     check("init: a name listed for another path is refused before anything is installed",
           rc == 1 and "already an instance named" in out and not (tmp / "elsewhere").exists(), out[-400:])
+    gone = tmp / "moved-away"
+    registry = vc.read_registry()
+    registry["instances"]["gone-instance"] = str(gone)
+    vc.write_registry(registry)
+    rc, out = run_main(["--home", tmp / "takes-the-name", "--source", mirror, "init", "--compose", "--name",
+                        "gone-instance", "--unsigned-local", *INSTALL_SETS, "--set", "VEYQ_RELEASE=1.3"],
+                       FakeHost(local_images=all_images(), project="veyq-proof"))
+    check("init: a name listed for a directory that no longer exists (moved or deleted) is free again, and says so",
+          rc == 0 and "no longer exists" in out
+          and vc.read_registry()["instances"]["gone-instance"] == str(tmp / "takes-the-name"), out[-400:])
     gitops_home = tmp / "inst-gitops"
     gitops_home.mkdir()
     (gitops_home / vc.GITOPS_FILE).write_text("{}")

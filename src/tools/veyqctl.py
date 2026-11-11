@@ -2131,9 +2131,15 @@ def target_of(path: Path) -> str:
 
 
 def name_is_free(name: str, path: Path) -> None:
+    """Refused while the name lists another instance that is still there; one whose directory is gone (moved or
+    deleted) gives its name up — `register` then lists this one under it."""
     listed = read_registry()["instances"].get(check_instance_name(name))
-    if listed is not None and Path(listed) != path:
-        raise Refused(f"there is already an instance named {name} ({listed}): choose another name with --name")
+    if listed is None or Path(listed) == path:
+        return
+    if not Path(listed).exists():
+        say(f"the instance named {name} was at {listed}, which no longer exists: this one takes its name")
+        return
+    raise Refused(f"there is already an instance named {name} ({listed}): choose another name with --name")
 
 
 def register(name: str, path: Path) -> None:
