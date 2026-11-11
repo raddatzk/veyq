@@ -3,20 +3,10 @@ using Veyq.Bridge.Wire;
 
 namespace Veyq.Tests;
 
-/// <summary>What the device trust's screens say (TrustWords.cs), by the core's answers: Linux's remember_words and
-/// unlock_words, with Windows Hello's own label.</summary>
+/// <summary>What the device trust's screens say (TrustWords.cs), by the core's answers: Linux's unlock_words.</summary>
 [TestClass]
 public sealed class TrustWordsTest
 {
-    [TestMethod]
-    public void TheSwitchSaysWhatItUsesAndHidesWhereNothingIsKept()
-    {
-        Assert.IsNull(TrustWords.Remember(StaySignedIn.None));
-        Assert.IsNull(TrustWords.Remember(null));
-        Assert.AreEqual((Words.SigninRememberHello(), Words.SigninRememberHintHello()), TrustWords.Remember(StaySignedIn.Presence));
-        Assert.AreEqual((Words.SigninRemember(), Words.SigninRememberHintLogin()), TrustWords.Remember(StaySignedIn.Login));
-    }
-
     [TestMethod]
     public void ARememberedUnlockSaysWhatOpensIt()
     {

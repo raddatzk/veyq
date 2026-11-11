@@ -19,6 +19,7 @@ import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonNull
 import kotlinx.serialization.json.int
 import me.raddatz.veyq.mobile.session.DeviceStore
+import me.raddatz.veyq.mobile.session.SessionModel
 import me.raddatz.veyq.mobile.session.SoftwareDeviceKeys
 import me.raddatz.veyq.mobile.session.StaySignedIn
 import me.raddatz.veyq.mobile.session.ThisDevice
@@ -69,7 +70,7 @@ class LiveBridgeTest {
 
         assertEquals(Answer.Done, b.ask(Call.SessionStart))
         assertIs<Gate.SignIn>(gate.until { (it as Update.Session).gate.takeIf { g -> g is Gate.SignIn } })
-        val signIn = Call.SessionSignIn(origin, env.getValue("VEYQ_EMAIL"), env.getValue("VEYQ_PASSWORD"), env.getValue("VEYQ_SECRET_KEY"), remember = false)
+        val signIn = Call.SessionSignIn(origin, env.getValue("VEYQ_EMAIL"), env.getValue("VEYQ_PASSWORD"), env.getValue("VEYQ_SECRET_KEY"))
         assertEquals(Answer.Done, b.ask(signIn, timeout = 2.minutes))
         val signed = gate.until(2.minutes) { (it as Update.Session).gate as? Gate.Signed }
         println("signed in: $signed")
@@ -177,38 +178,62 @@ class LiveBridgeTest {
     }
 
     /**
-     * The device trust through calls (CR device-trust-on-linux-and-windows, Phase 3), over core's [SoftwareDeviceKeys]
-     * whose prompt the test plays and a device store the host keeps across bridges — each new bridge the app started
-     * again. Staying signed in: the sign-in carries what it uses, a fresh bridge resumes, a cancelled prompt stays on the
-     * unlock, the unlock by the device key opens, Manage servers says how, and the sign-out ends it. The password trust:
-     * a fresh bridge unlocks with the password, and "Stop trusting" ends it. Everything enrolled is removed again.
+     * The device trust through calls (CR device-trust-on-linux-and-windows, Phases 3 and 6), over core's
+     * [SoftwareDeviceKeys] whose prompt the test plays and a device store the host keeps across bridges — each new bridge
+     * the app started again. The sign-in holds the password trust and carries the offer; LOGIN taken, a fresh bridge
+     * resumes with nothing asked; changed to PRESENCE in Manage servers, a fresh bridge resumes after the person's
+     * confirmation, a cancelled prompt stays on the unlock, the device key opens it; back to the password trust (a wrong
+     * password said so), a fresh bridge unlocks with the password and the offer follows, answered "Not now"; "Stop
+     * trusting" ends it, and the next start signs in. Everything enrolled is removed again.
      */
     @Test
-    fun staySignedInResumesAFreshBridgeAndTheUnlockOpensByTheDeviceKeyAndByThePassword() = runBlocking {
+    fun theOfferAndManageTakeEachLevelAndTheWayBackAndAFreshBridgeResumesAtEach() = runBlocking {
         val origin = System.getenv("VEYQ_LIVE") ?: return@runBlocking
         val envFile = System.getenv("VEYQ_ENV_FILE")?.let(::File) ?: File(System.getProperty("veyq.repoRoot"), ".run/.env")
         val env = envFile.readLines()
             .mapNotNull { l -> l.substringBefore('=', "").takeIf { it.isNotBlank() }?.let { it.trim() to l.substringAfter('=').trim().trim('"', '\'') } }
             .toMap()
+        val password = env.getValue("VEYQ_PASSWORD")
         val kept = ConcurrentHashMap<String, String>()
         val keys = SoftwareDeviceKeys(BouncyCastlePrimitives)
         fun started() = Bridge.live(BouncyCastlePrimitives, { block -> HttpClient(OkHttp, block) }, Config("bridge trust test"), hostStore(kept), { keys }, JvmFiles)
-        fun signIn(remember: Boolean) = Call.SessionSignIn(origin, env.getValue("VEYQ_EMAIL"), env.getValue("VEYQ_PASSWORD"), env.getValue("VEYQ_SECRET_KEY"), remember)
+        val signIn = Call.SessionSignIn(origin, env.getValue("VEYQ_EMAIL"), password, env.getValue("VEYQ_SECRET_KEY"))
+        val both = listOf(StaySignedIn.PRESENCE, StaySignedIn.LOGIN)
 
-        // signed in staying signed in; beside the sign-in, what it uses (the fake's: the person's confirmation)
+        // signed in: the password trust, and the offer of the fake's levels; LOGIN taken, nothing asked
         val first = started()
         val gate = first.watching(Watched.Session)
         assertEquals(Answer.Done, first.ask(Call.SessionStart))
-        assertEquals(StaySignedIn.PRESENCE, gate.until { (it as Update.Session).takeIf { u -> u.gate is Gate.SignIn }?.staySignedIn })
-        assertEquals(Answer.Done, first.ask(signIn(remember = true), timeout = 2.minutes))
-        val connection = gate.until(2.minutes) { (it as Update.Session).gate as? Gate.Signed }.connectionKey
-        assertEquals(1, keys.prompts, "staying signed in did not ask the person")
+        assertEquals(Answer.Done, first.ask(signIn, timeout = 2.minutes))
+        val signed = gate.until(2.minutes) { (it as Update.Session).gate as? Gate.Signed }
+        val connection = signed.connectionKey
+        assertEquals(SessionModel.Offer(connection, both), signed.offer)
+        assertEquals(Answer.Done, first.ask(Call.SessionStaySignedIn(StaySignedIn.LOGIN), timeout = 2.minutes))
+        assertNull((first.gateNow() as Gate.Signed).offer, "the offer outlived its answer")
+        assertEquals(0, keys.prompts, "the login level asked the person")
         first.shutdown() // the app closed, not signed out
 
-        // started again: resumed, nothing typed
+        // started again: resumed, nothing asked; Manage servers says LOGIN and changes it to PRESENCE (the person asked)
         started().apply {
             assertEquals(Answer.Done, ask(Call.SessionStart, timeout = 2.minutes))
-            assertIs<Gate.Signed>(gateNow(), "a remembered account did not resume")
+            assertEquals(Gate.Signed(connection, signed.tenantId), gateNow(), "a remembered account did not resume, or offered again")
+            assertEquals(0, keys.prompts)
+            val manage = watching(Watched.Manage)
+            assertEquals(Answer.Done, ask(Call.ManageOpen))
+            val atLogin = manage.until { (it as Update.Manage).servers?.single { s -> s.connection == connection } }
+            assertEquals(TrustedDevice.Method.DEVICE_KEY, atLogin.trusted)
+            assertEquals(StaySignedIn.LOGIN, atLogin.level)
+            assertEquals(both, atLogin.levels)
+            assertEquals(Answer.Done, ask(Call.ManageStaySignedIn(connection, StaySignedIn.PRESENCE), timeout = 2.minutes))
+            manage.until { (it as Update.Manage).servers?.single { s -> s.connection == connection }?.takeIf { s -> s.level == StaySignedIn.PRESENCE } }
+            assertEquals(1, keys.prompts, "the presence level did not ask the person at enrolment")
+            assertEquals(Answer.Done, ask(Call.ManageClose))
+        }.shutdown()
+
+        // started again: resumed after the person's confirmation
+        started().apply {
+            assertEquals(Answer.Done, ask(Call.SessionStart, timeout = 2.minutes))
+            assertIs<Gate.Signed>(gateNow(), "the presence level did not resume")
         }.shutdown()
         assertEquals(2, keys.prompts)
 
@@ -218,31 +243,34 @@ class LiveBridgeTest {
         assertEquals(Answer.Done, third.ask(Call.SessionStart, timeout = 2.minutes))
         val unlock = assertIs<Gate.Unlock>(third.gateNow())
         assertEquals(TrustedDevice.Method.DEVICE_KEY, unlock.record.method)
+        assertEquals(StaySignedIn.PRESENCE, unlock.record.level)
         assertEquals(Answer.Done, third.ask(Call.SessionUnlock(""), timeout = 2.minutes))
         assertEquals(Gate.Unlock(unlock.record), third.gateNow(), "a cancelled prompt left the unlock")
         keys.authenticates = true
         assertEquals(Answer.Done, third.ask(Call.SessionUnlock(""), timeout = 2.minutes))
         assertIs<Gate.Signed>(third.gateNow(), "the device key did not unlock")
 
-        // Manage servers says how this device trusts the server; the sign-out ends staying signed in
+        // back to the password trust in Manage servers: a wrong password said so, the right one replaces the wrap
         val manage = third.watching(Watched.Manage)
         assertEquals(Answer.Done, third.ask(Call.ManageOpen))
-        assertEquals(TrustedDevice.Method.DEVICE_KEY, manage.until { (it as Update.Manage).servers?.single { s -> s.connection == connection } }.trusted)
+        manage.until { (it as Update.Manage).servers?.single { s -> s.connection == connection } }
+        assertEquals(Answer.Refused(Answer.Why.WRONG_PASSWORD), third.ask(Call.ManagePasswordTrust(connection, password + "x"), timeout = 2.minutes))
+        assertEquals(Answer.Done, third.ask(Call.ManagePasswordTrust(connection, password), timeout = 2.minutes))
+        val back = manage.until { (it as Update.Manage).servers?.single { s -> s.connection == connection }?.takeIf { s -> s.trusted == TrustedDevice.Method.DEVICE } }
+        assertNull(back.level)
         assertEquals(Answer.Done, third.ask(Call.ManageClose))
-        assertEquals(Answer.Done, third.ask(Call.SessionSignOut(connection)))
-        assertIs<Gate.SignIn>(third.gateNow(), "the sign-out left a remembered account")
-
-        // the password trust: started again, the unlock asks for the password alone
-        assertEquals(Answer.Done, third.ask(signIn(remember = false), timeout = 2.minutes))
-        assertIs<Gate.Signed>(third.gateNow())
         third.shutdown()
+        val prompts = keys.prompts
+
+        // started again: the unlock asks for the password alone; the offer follows it and is answered "Not now"
         val fourth = started()
         assertEquals(Answer.Done, fourth.ask(Call.SessionStart, timeout = 2.minutes))
         val byPassword = assertIs<Gate.Unlock>(fourth.gateNow())
         assertEquals(TrustedDevice.Method.DEVICE, byPassword.record.method)
-        assertEquals(Answer.Done, fourth.ask(Call.SessionUnlock(env.getValue("VEYQ_PASSWORD")), timeout = 2.minutes))
-        assertIs<Gate.Signed>(fourth.gateNow(), "the password did not unlock")
-        val prompts = keys.prompts
+        assertEquals(Answer.Done, fourth.ask(Call.SessionUnlock(password), timeout = 2.minutes))
+        assertEquals(SessionModel.Offer(connection, both), assertIs<Gate.Signed>(fourth.gateNow(), "the password did not unlock").offer)
+        assertEquals(Answer.Done, fourth.ask(Call.SessionNotNow))
+        assertNull((fourth.gateNow() as Gate.Signed).offer)
 
         // "Stop trusting this device": Manage servers shows no trust, and the next start signs in
         val managed = fourth.watching(Watched.Manage)
@@ -258,6 +286,7 @@ class LiveBridgeTest {
             assertIs<Gate.SignIn>(gateNow(), "a device no longer trusted did not sign in")
         }.shutdown()
         assertEquals(prompts, keys.prompts, "the password trust asked for the person")
+        for (level in StaySignedIn.entries) assertTrue(!keys.hasUnlockKey(level), "the $level unlock key outlived every trust")
     }
 
     /** A device store the test's host keeps in [kept], answering from its own thread as a UI loop does. */

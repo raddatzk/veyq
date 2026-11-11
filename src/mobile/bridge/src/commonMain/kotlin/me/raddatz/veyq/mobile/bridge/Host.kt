@@ -106,13 +106,13 @@ internal object NoDeviceKeys : DeviceKeys {
     override fun createBindKey(alias: String) = throw UnsupportedOperationException("this device keeps no keys")
     override fun bindHmac(alias: String, message: ByteArray): ByteArray? = null
     override fun deleteBindKey(alias: String) {}
-    override suspend fun sealUnlockable(plaintext: ByteArray, aad: ByteArray): Pair<ByteArray, ByteArray> =
+    override suspend fun sealUnlockable(plaintext: ByteArray, aad: ByteArray, level: StaySignedIn): Pair<ByteArray, ByteArray> =
         throw DeviceAuthFailed(cancelled = false, detail = "this device keeps no keys")
-    override suspend fun openUnlockable(iv: ByteArray, ciphertext: ByteArray, aad: ByteArray): ByteArray =
+    override suspend fun openUnlockable(iv: ByteArray, ciphertext: ByteArray, aad: ByteArray, level: StaySignedIn): ByteArray =
         throw DeviceAuthFailed(cancelled = false, detail = "this device keeps no keys")
-    override fun deleteUnlockKey() {}
+    override fun deleteUnlockKey(level: StaySignedIn) {}
     override fun putSecret(alias: String, value: String) = throw UnsupportedOperationException("this device keeps no keys")
     override fun secret(alias: String): String? = null
     override fun deleteSecret(alias: String) {}
-    override val staySignedIn = StaySignedIn.NONE
+    override val staySignedIn = emptySet<StaySignedIn>()
 }

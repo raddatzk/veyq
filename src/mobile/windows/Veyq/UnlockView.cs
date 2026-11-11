@@ -86,14 +86,14 @@ internal sealed class UnlockView
     }
 
     /// <summary>Draws <paramref name="gate"/>: whose account, the password where it opens with one, what opens it
-    /// (<paramref name="stay"/>, beside a remembered account's unlock), working or not, the core's error.</summary>
-    public void Show(Gate.Unlock gate, StaySignedIn? stay)
+    /// (the record's level), working or not, the core's error.</summary>
+    public void Show(Gate.Unlock gate)
     {
         var record = gate.record;
         _email.Text = record.email;
         _server.Text = record.server;
         _picture.DisplayName = record.email;
-        var (hint, button) = TrustWords.Unlock(record.method, stay);
+        var (hint, button) = TrustWords.Unlock(record.method, record.level);
         _hint.Text = hint;
         _submit.Content = button;
         _password.Visibility = record.method == Method.Device ? Visibility.Visible : Visibility.Collapsed;

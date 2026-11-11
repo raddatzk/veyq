@@ -5,7 +5,7 @@ use std::rc::Rc;
 
 use adw::prelude::*;
 use gtk::glib;
-use veyq::bridge::wire::{Answer, Call, Config, Gate, Method, StaySignedIn, Update, Watched};
+use veyq::bridge::wire::{Answer, Call, Config, Gate, Method, Update, Watched};
 use veyq::bridge::{self, DeviceStore, Start};
 use veyq::shell::Shell;
 use veyq::manage::Manage;
@@ -41,14 +41,14 @@ impl Screens {
         }
     }
 
-    fn gate(&self, gate: &Gate, stay: Option<StaySignedIn>) {
+    fn gate(&self, gate: &Gate) {
         if !matches!(gate, Gate::Signed { .. }) {
             self.manage.close();
         }
         match gate {
             Gate::Starting => self.face(&self.status),
             Gate::SignIn { working, error, .. } => {
-                self.sign_in.show(gate, stay);
+                self.sign_in.show(gate);
                 self.face(&self.sign_in.page);
                 if !working
                     && error.is_none()
@@ -58,7 +58,7 @@ impl Screens {
                 }
             }
             Gate::Unlock { record, working, error } => {
-                self.unlock.show(gate, stay);
+                self.unlock.show(gate);
                 self.face(&self.unlock.page);
                 if record.method == Method::Device
                     && !working
@@ -140,9 +140,9 @@ fn activate(app: &adw::Application) {
         let _watch = session_watch;
         while let Ok(update) = gates.recv().await {
             match update {
-                Ok(Update::Session { gate, stay_signed_in }) => {
-                    eprintln!("veyq: session {}{}", kind(&gate), stay_signed_in.map(|s| format!(", stay signed in: {s:?}")).unwrap_or_default());
-                    s.gate(&gate, stay_signed_in);
+                Ok(Update::Session { gate }) => {
+                    eprintln!("veyq: session {}{}", kind(&gate), trust_note(&gate));
+                    s.gate(&gate);
                 }
                 Ok(_) => {}
                 Err(e) => eprintln!("veyq: a session update did not read: {:?}", e.0),
@@ -180,6 +180,16 @@ fn activate(app: &adw::Application) {
 }
 
 /// A gate's kind alone, for stderr (its fields are no one's business there).
+/// What the log says of the trust beside a gate: the offer a sign-in left open, a remembered account's level at its
+/// unlock (the offer itself is drawn in Phase 7 of the CR device-trust-on-linux-and-windows).
+fn trust_note(gate: &Gate) -> String {
+    match gate {
+        Gate::Signed { offer: Some(offer), .. } => format!(", offer: {:?}", offer.levels),
+        Gate::Unlock { record, .. } => record.level.map(|l| format!(", level: {l:?}")).unwrap_or_default(),
+        _ => String::new(),
+    }
+}
+
 fn kind(gate: &Gate) -> String {
     serde_json::to_value(gate).ok().and_then(|v| v["type"].as_str().map(str::to_owned)).unwrap_or_default()
 }

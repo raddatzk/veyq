@@ -8,23 +8,12 @@ use crate::bridge::{self, wire::Call, wire::Gate, wire::Method, wire::StaySigned
 use crate::dev_login::DevSignIn;
 use crate::{said, theme, words};
 
-/// What "Stay signed in" says on this device, the core's answer drawn (the CR device-trust-on-linux-and-windows, D5): its
-/// label and the line under it, or None where nothing can be kept and the switch is hidden. `LOGIN` is the desktop
-/// sign-in opening it with no further question, `PRESENCE` a store that asks the person (Linux never answers it).
-pub fn remember_words(stay: StaySignedIn) -> Option<(String, String)> {
-    match stay {
-        StaySignedIn::None => None,
-        StaySignedIn::Login => Some((words::signin_remember(), words::signin_remember_hint_login())),
-        StaySignedIn::Presence => Some((words::signin_remember(), words::signin_remember_hint())),
-    }
-}
-
-/// What the unlock of [method]'s record says, its line and its button, by what staying signed in uses here ([stay],
-/// the core's answer beside a remembered account's unlock): the password's line for a password-trusted account; for a
-/// remembered one the presence line where the store asks the person, else (`LOGIN`: nothing is asked, so the unlock
-/// shows only after a resume that failed) the line that says so and "Try again" (owner 2026-11-11).
-pub fn unlock_words(method: Method, stay: Option<StaySignedIn>) -> (String, String) {
-    match (method, stay) {
+/// What the unlock of [method]'s record says, its line and its button, by the level its key is ([level], the record's
+/// own, the core's): the password's line for a password-trusted account; for a remembered one the presence line where
+/// the key asks the person, else (`LOGIN`: nothing is asked, so the unlock shows only after a resume that failed) the
+/// line that says so and "Try again" (owner 2026-11-11).
+pub fn unlock_words(method: Method, level: Option<StaySignedIn>) -> (String, String) {
+    match (method, level) {
         (Method::Device, _) => (words::unlock_password_hint(), words::unlock_submit()),
         (Method::DeviceKey, Some(StaySignedIn::Login)) => (words::unlock_login_hint(), words::unlock_retry()),
         (Method::DeviceKey, _) => (words::unlock_remembered_hint(), words::unlock_submit()),
@@ -80,8 +69,6 @@ pub struct SignIn {
     email: adw::EntryRow,
     password: adw::PasswordEntryRow,
     secret_key: adw::PasswordEntryRow,
-    remember_group: adw::PreferencesGroup,
-    remember: adw::SwitchRow,
     submit: gtk::Button,
     cancel: gtk::Button,
     spinner: adw::Spinner,
@@ -105,10 +92,7 @@ impl SignIn {
         for row in [server.upcast_ref::<gtk::Widget>(), email.upcast_ref(), password.upcast_ref(), secret_key.upcast_ref()] {
             fields.add(row);
         }
-        // Staying signed in is an explicit choice, never the default (ADR 0005 § 13): off, and its line says what it costs
-        let remember = adw::SwitchRow::new();
-        let remember_group = adw::PreferencesGroup::builder().visible(false).build();
-        remember_group.add(&remember);
+        // Staying signed in is no longer chosen here: the core offers it after the sign-in (D7), drawn in Phase 7
         let error = error_label();
         let submit = gtk::Button::builder().label(words::signin_submit()).halign(gtk::Align::Center).build();
         submit.add_css_class("suggested-action");
@@ -117,9 +101,9 @@ impl SignIn {
         cancel.add_css_class("flat");
         let spinner = adw::Spinner::builder().visible(false).build();
         let heading = gtk::Label::new(Some(&words::signin_title()));
-        let page = page(&heading, &[fields.upcast_ref(), remember_group.upcast_ref(), error.upcast_ref(), submit.upcast_ref(), cancel.upcast_ref(), spinner.upcast_ref()]);
+        let page = page(&heading, &[fields.upcast_ref(), error.upcast_ref(), submit.upcast_ref(), cancel.upcast_ref(), spinner.upcast_ref()]);
 
-        let s = Self { page, heading, server, email, password, secret_key, remember_group, remember, submit, cancel, spinner, error };
+        let s = Self { page, heading, server, email, password, secret_key, submit, cancel, spinner, error };
         let ask = s.asker();
         let on_click = ask.clone();
         s.submit.connect_clicked(move |_| on_click());
@@ -129,24 +113,21 @@ impl SignIn {
         s
     }
 
-    /// The sign-in the form holds, sent: "Stay signed in" only where it shows.
+    /// The sign-in the form holds, sent.
     fn asker(&self) -> impl Fn() + Clone + 'static {
         let (server, email, password, secret_key) = (self.server.clone(), self.email.clone(), self.password.clone(), self.secret_key.clone());
-        let (remember, group) = (self.remember.clone(), self.remember_group.clone());
         move || {
             bridge::send(Call::SessionSignIn {
                 server: server.text().trim().to_string(),
                 email: email.text().trim().to_string(),
                 password: password.text().to_string(),
                 secret_key: secret_key.text().trim().to_string(),
-                remember: group.is_visible() && remember.is_active(),
             });
         }
     }
 
-    /// Draws [gate] (a `Gate.SignIn`): the server and the email it knows, working or not, the core's error, and "Stay
-    /// signed in" as [stay] says — hidden where the device keeps nothing.
-    pub fn show(&self, gate: &Gate, stay: Option<StaySignedIn>) {
+    /// Draws [gate] (a `Gate.SignIn`): the server and the email it knows, working or not, the core's error.
+    pub fn show(&self, gate: &Gate) {
         let Gate::SignIn { working, error, server, email, adding } = gate else { return };
         if let Some(server) = server.as_deref().filter(|_| self.server.text().is_empty()) {
             self.server.set_text(server);
@@ -157,15 +138,6 @@ impl SignIn {
         self.heading.set_label(&if *adding { words::signin_add_title() } else { words::signin_title() });
         self.cancel.set_visible(*adding);
         self.cancel.set_sensitive(!working);
-        match stay.and_then(remember_words) {
-            Some((label, hint)) => {
-                self.remember.set_title(&label);
-                self.remember_group.set_description(Some(&hint));
-                self.remember_group.set_visible(true);
-            }
-            None => self.remember_group.set_visible(false),
-        }
-        self.remember.set_sensitive(!working);
         self.submit.set_sensitive(!working);
         self.spinner.set_visible(*working);
         show_error(&self.error, error);
@@ -238,15 +210,15 @@ impl Unlock {
         s
     }
 
-    /// Draws [gate] (a `Gate.Unlock`): whose account, the password where it opens with one, what opens it ([stay]),
-    /// working or not, the error.
-    pub fn show(&self, gate: &Gate, stay: Option<StaySignedIn>) {
+    /// Draws [gate] (a `Gate.Unlock`): whose account, the password where it opens with one, what opens it (the record's
+    /// level), working or not, the error.
+    pub fn show(&self, gate: &Gate) {
         let Gate::Unlock { record, working, error } = gate else { return };
         self.account.set_title(&record.email);
         self.account.set_subtitle(&record.server);
         let remembered = record.method == Method::DeviceKey;
         self.password.set_visible(!remembered);
-        let (hint, button) = unlock_words(record.method, stay);
+        let (hint, button) = unlock_words(record.method, record.level);
         self.group.set_description(Some(&hint));
         self.submit.set_label(&button);
         self.submit.set_sensitive(!working);
@@ -265,17 +237,6 @@ impl Default for Unlock {
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    #[test]
-    fn the_switch_is_hidden_where_nothing_is_kept_and_says_what_it_uses_elsewhere() {
-        assert_eq!(remember_words(StaySignedIn::None), None);
-        let (login, login_hint) = remember_words(StaySignedIn::Login).expect("shown");
-        let (presence, presence_hint) = remember_words(StaySignedIn::Presence).expect("shown");
-        assert_eq!(login, words::signin_remember());
-        assert_eq!(presence, words::signin_remember());
-        assert_eq!(login_hint, words::signin_remember_hint_login());
-        assert_ne!(login_hint, presence_hint, "the login's switch says the person is asked");
-    }
 
     #[test]
     fn a_remembered_unlock_says_what_opens_it() {

@@ -43,7 +43,7 @@ public sealed class CoreTest
             watch.Dispose();
             var before = gates.Count;
             // a sign-in nobody answers moves the gate, which no ended watch may report
-            await Core.CallAsync(new Call.SessionSignIn { server = "http://127.0.0.1:9", email = "a@b.c", password = "x", secretKey = "x", remember = false }).WaitAsync(Wait);
+            await Core.CallAsync(new Call.SessionSignIn { server = "http://127.0.0.1:9", email = "a@b.c", password = "x", secretKey = "x" }).WaitAsync(Wait);
             await Task.Delay(300);
             Assert.AreEqual(before, gates.Count, "an ended watch got an update");
         }

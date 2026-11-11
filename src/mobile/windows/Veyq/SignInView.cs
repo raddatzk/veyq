@@ -3,10 +3,8 @@
 // button. The person's input goes to the core as one call; the core decides what it means and answers with the next
 // gate. Linux's sign_in.rs, in Fluent.
 //
-// "Stay signed in" (the CR device-trust-on-linux-and-windows, D5) is a CheckBox above the button, not a ToggleSwitch:
-// Fluent keeps a toggle switch for a setting that takes effect at once and a check box for a choice a submit button
-// applies, and Windows' own sign-ins ("Remember me") draw it so. Its label and line are the core's StaySignedIn's
-// (TrustWords.Remember): "with Windows Hello" where Hello is set up, the plain one otherwise, hidden where nothing keeps.
+// No "Stay signed in" here any more (the CR device-trust-on-linux-and-windows, D7): every sign-in holds the password
+// trust, and the core offers staying signed in after it (Gate.Signed.offer), drawn in Phase 7.
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Automation;
 using Microsoft.UI.Xaml.Controls;
@@ -27,8 +25,6 @@ internal sealed class SignInView
     private readonly ProgressRing _working;
     private readonly TextBlock _error;
     private readonly TextBlock _heading;
-    private readonly CheckBox _remember;
-    private readonly TextBlock _rememberHint;
     private readonly Button _cancel;
 
     public UIElement Page { get; }
@@ -58,18 +54,7 @@ internal sealed class SignInView
             e.Handled = true;
             Ask();
         };
-        // Staying signed in is an explicit choice, never the default (ADR 0005 § 13): unchecked, its line says what it costs
-        _remember = new CheckBox { IsChecked = false, Visibility = Visibility.Collapsed };
-        AutomationProperties.SetAutomationId(_remember, "signin-remember");
-        _rememberHint = new TextBlock
-        {
-            Style = (Style)Application.Current.Resources["CaptionTextBlockStyle"],
-            Foreground = (Brush)Application.Current.Resources["TextFillColorSecondaryBrush"],
-            TextWrapping = TextWrapping.Wrap,
-            Visibility = Visibility.Collapsed,
-            Margin = new Thickness(28, -12, 0, 0),
-        };
-        AutomationProperties.SetAutomationId(_rememberHint, "signin-remember-hint");
+        // Staying signed in is no longer chosen here: the core offers it after the sign-in (D7), drawn in Phase 7
         _cancel = new Button { Content = Words.SigninCancel(), HorizontalAlignment = HorizontalAlignment.Stretch, Visibility = Visibility.Collapsed };
         AutomationProperties.SetAutomationId(_cancel, "signin-cancel");
         _cancel.Click += (_, _) => Act.Send(new Call.SessionCancelAdd());
@@ -80,7 +65,7 @@ internal sealed class SignInView
         AutomationProperties.SetAutomationId(_heading, "signin-title");
         AutomationProperties.SetHeadingLevel(_heading, Microsoft.UI.Xaml.Automation.Peers.AutomationHeadingLevel.Level1);
         var column = new StackPanel { Spacing = 16, MaxWidth = 420, Padding = new Thickness(24), VerticalAlignment = VerticalAlignment.Center };
-        foreach (var child in new UIElement[] { _heading, _server, _email, _password, _secretKey, _remember, _rememberHint, _error, _submit, _cancel, _working }) column.Children.Add(child);
+        foreach (var child in new UIElement[] { _heading, _server, _email, _password, _secretKey, _error, _submit, _cancel, _working }) column.Children.Add(child);
         // a width-capped column straight in a ScrollViewer sat off centre once the window was resized (measured): the
         // ScrollViewer's child stretches, the column centres in it
         var stretch = new Grid();
@@ -107,30 +92,17 @@ internal sealed class SignInView
         email = _email.Text.Trim(),
         password = _password.Password,
         secretKey = _secretKey.Password.Trim(),
-        // only where it shows: a hidden box keeps nothing
-        remember = _remember.Visibility == Visibility.Visible && _remember.IsChecked == true,
     });
 
     /// <summary>Draws <paramref name="gate"/>: the server and the email it knows, adding a server or not, working or
-    /// not, the core's error, and "Stay signed in" as <paramref name="stay"/> says.</summary>
-    public void Show(Gate.SignIn gate, StaySignedIn? stay)
+    /// not, the core's error.</summary>
+    public void Show(Gate.SignIn gate)
     {
         if (gate.server is { } server && _server.Text.Length == 0) _server.Text = server;
         if (gate.email is { } email && _email.Text.Length == 0) _email.Text = email;
         _heading.Text = gate.adding ? Words.SigninAddTitle() : Words.SigninTitle();
         _cancel.Visibility = gate.adding ? Visibility.Visible : Visibility.Collapsed;
         _cancel.IsEnabled = !gate.working;
-        if (TrustWords.Remember(stay) is { } remember)
-        {
-            _remember.Content = remember.Label;
-            _rememberHint.Text = remember.Hint;
-            _remember.Visibility = _rememberHint.Visibility = Visibility.Visible;
-        }
-        else
-        {
-            _remember.Visibility = _rememberHint.Visibility = Visibility.Collapsed;
-        }
-        _remember.IsEnabled = !gate.working;
         _submit.IsEnabled = !gate.working;
         _working.IsActive = gate.working;
         _working.Visibility = gate.working ? Visibility.Visible : Visibility.Collapsed;

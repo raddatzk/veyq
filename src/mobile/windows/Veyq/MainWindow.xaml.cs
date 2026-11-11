@@ -97,10 +97,19 @@ public sealed partial class MainWindow : Window
         if (!ReferenceEquals(Faces.Content, face)) Faces.Content = face;
     }
 
+    /// <summary>What the log says of the trust beside a gate: the offer a sign-in left open (drawn in Phase 7 of the CR
+    /// device-trust-on-linux-and-windows), a remembered account's level at its unlock.</summary>
+    private static string TrustNote(Gate gate) => gate switch
+    {
+        Gate.Signed { offer: { } offer } => $", offer: {string.Join(" ", offer.levels)}",
+        Gate.Unlock { record.level: { } level } => $", level: {level}",
+        _ => "",
+    };
+
     private void ShowGate(Update update)
     {
-        if (update is not Update.Session { gate: var gate, staySignedIn: var stay }) return;
-        Log.Write($"session {gate.GetType().Name}{(stay is { } s ? $", stay signed in: {s}" : "")}");
+        if (update is not Update.Session { gate: var gate }) return;
+        Log.Write($"session {gate.GetType().Name}{TrustNote(gate)}");
         if (gate is not Gate.Signed) _manage?.Close();
         switch (gate)
         {
@@ -110,13 +119,13 @@ public sealed partial class MainWindow : Window
                 break;
             case Gate.SignIn signIn:
                 _signIn ??= new SignInView();
-                _signIn.Show(signIn, stay);
+                _signIn.Show(signIn);
                 Face(_signIn.Page);
                 if (!signIn.working && signIn.error is null && DevLogin.Take() is { } dev) _signIn.Dev(dev);
                 break;
             case Gate.Unlock unlock:
                 _unlock ??= new UnlockView();
-                _unlock.Show(unlock, stay);
+                _unlock.Show(unlock);
                 Face(_unlock.Page);
                 if (unlock.record.method == Method.Device && !unlock.working && unlock.error is null && DevLogin.TakeUnlock() is { } password)
                 {

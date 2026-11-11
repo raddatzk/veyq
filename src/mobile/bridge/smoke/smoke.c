@@ -199,7 +199,7 @@ int main(void) {
         quote(email, e);
         quote(password, p);
         quote(secret, k);
-        snprintf(req, sizeof req, "{\"type\":\"Session.SignIn\",\"server\":\"%s\",\"email\":\"%s\",\"password\":\"%s\",\"secretKey\":\"%s\",\"remember\":false}", live, e, p, k);
+        snprintf(req, sizeof req, "{\"type\":\"Session.SignIn\",\"server\":\"%s\",\"email\":\"%s\",\"password\":\"%s\",\"secretKey\":\"%s\"}", live, e, p, k);
         uint64_t shell = veyq_watch("{\"type\":\"Shell\"}", "shell", on_update);
         call(req);
         expect(wait_for(&last_answer, "{\"type\":\"Done\"}", 120), "Session.SignIn is answered Done");
@@ -223,7 +223,7 @@ int main(void) {
     veyq_unwatch(gate);
     int before = updates;
     /* a sign-in nobody answers moves the gate (working, then unreachable), which no watch may report now */
-    call("{\"type\":\"Session.SignIn\",\"server\":\"http://127.0.0.1:9\",\"email\":\"a@b.c\",\"password\":\"x\",\"secretKey\":\"x\",\"remember\":false}");
+    call("{\"type\":\"Session.SignIn\",\"server\":\"http://127.0.0.1:9\",\"email\":\"a@b.c\",\"password\":\"x\",\"secretKey\":\"x\"}");
     wait_for(&last_answer, "Done", 30);
     usleep(300000);
     expect(updates == before, "an ended watch gets no more updates");

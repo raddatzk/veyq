@@ -38,7 +38,7 @@ import me.raddatz.veyq.mobile.session.DeviceStore
 import me.raddatz.veyq.mobile.session.SessionModel
 import me.raddatz.veyq.mobile.session.TenantSession
 import me.raddatz.veyq.mobile.session.ThisDevice
-import me.raddatz.veyq.mobile.session.TrustedDevice
+import me.raddatz.veyq.mobile.session.TrustChange
 import me.raddatz.veyq.mobile.session.VeyqAccount
 import kotlin.concurrent.atomics.AtomicLong
 import kotlin.concurrent.atomics.AtomicReference
@@ -149,7 +149,9 @@ internal class Bridge<A : Connection, T : Any>(compose: () -> Composition<A, T>)
         val shell = tenant.value?.models?.shell
         return when (call) {
             Call.SessionStart -> opened(session.start())
-            is Call.SessionSignIn -> opened(session.signIn(call.server, call.email, call.password, call.secretKey, call.remember)).also { managed(parts) }
+            is Call.SessionSignIn -> opened(session.signIn(call.server, call.email, call.password, call.secretKey)).also { managed(parts) }
+            is Call.SessionStaySignedIn -> (session.stay(call.level)?.answer() ?: Answer.Refused(Answer.Why.NO_OFFER)).also { managed(parts) }
+            Call.SessionNotNow -> if (session.notNow()) Answer.Done else Answer.Refused(Answer.Why.NO_OFFER)
             is Call.SessionUnlock -> opened(session.unlock(call.password))
             Call.SessionOtherAccount -> Answer.Done.also { session.otherAccount() }
             Call.SessionAddServer -> Answer.Done.also { session.addServer() }
@@ -177,6 +179,14 @@ internal class Bridge<A : Connection, T : Any>(compose: () -> Composition<A, T>)
                 hiddenTurned.value++ // the switcher's tenants are read beside the shell's state, which did not change
                 managed(parts)
                 Answer.Done
+            }
+            is Call.ManageStaySignedIn -> {
+                val account = session.accounts.firstOrNull { it.key == call.connection } ?: return Answer.Refused(Answer.Why.NO_SUCH_CONNECTION)
+                session.stay(account, call.level).answer().also { managed(parts) }
+            }
+            is Call.ManagePasswordTrust -> {
+                val account = session.accounts.firstOrNull { it.key == call.connection } ?: return Answer.Refused(Answer.Why.NO_SUCH_CONNECTION)
+                session.trustWithPassword(account, call.password).answer().also { managed(parts) }
             }
             is Call.ManageHideSpace -> {
                 parts.hidden.setSpaceHidden(call.scopeId, call.hidden)
@@ -257,7 +267,7 @@ internal class Bridge<A : Connection, T : Any>(compose: () -> Composition<A, T>)
 
     /** `SessionModel.managed`, each field the core's own ([ManagedShown]). */
     private fun shownManaged(parts: Composition<A, T>): List<ManagedShown> = parts.session.managed().map { m ->
-        ManagedShown(m.account.key, m.label, m.trusted, m.tenants.map { t ->
+        ManagedShown(m.account.key, m.label, m.trusted, m.level, m.levels, m.tenants.map { t ->
             ManagedShown.Tenant(t.tenant, t.hidden, t.current, t.shown, t.switchable, t.subtitle, t.spaces?.map { s ->
                 ManagedShown.Space(s.space, ShellWords.space(s.space), s.hidden, s.canHide)
             })
@@ -265,6 +275,14 @@ internal class Bridge<A : Connection, T : Any>(compose: () -> Composition<A, T>)
     }
 
     private fun Unit?.done(why: Answer.Why = Answer.Why.NO_TENANT_OPEN): Answer = if (this == null) Answer.Refused(why) else Answer.Done
+
+    /** A change of trust's outcome as the call's answer. */
+    private fun TrustChange.answer(): Answer = when (this) {
+        TrustChange.DONE -> Answer.Done
+        TrustChange.CANCELLED -> Answer.Refused(Answer.Why.TRUST_CANCELLED)
+        TrustChange.WRONG_PASSWORD -> Answer.Refused(Answer.Why.WRONG_PASSWORD)
+        TrustChange.FAILED -> Answer.Refused(Answer.Why.TRUST_FAILED)
+    }
 
     /**
      * A tenant the session opened becomes the open one: its shell read and shown, its pictures read in the background
@@ -301,11 +319,7 @@ internal class Bridge<A : Connection, T : Any>(compose: () -> Composition<A, T>)
     }
 
     private suspend fun updates(w: Watched): Flow<Update> = when (w) {
-        Watched.Session -> parts.await().session.let { session ->
-            // asked of the store only where a screen words itself by it, since it may reach the platform (D-Bus,
-            // cryptngc): the sign-in's switch, and the unlock of a remembered account, whose line says what opens it
-            session.gate.map { Update.Session(it, if (it.wordedByStaySignedIn()) session.staySignedIn else null) }
-        }
+        Watched.Session -> parts.await().session.gate.map { Update.Session(it) }
         Watched.Manage -> manage.map { Update.Manage(it) }
         Watched.Shell -> {
             val parts = parts.await()
@@ -395,8 +409,3 @@ internal class Bridge<A : Connection, T : Any>(compose: () -> Composition<A, T>)
         const val HIDDEN = "veyq.hidden"
     }
 }
-
-/** A gate whose screen says what staying signed in uses here: the sign-in's switch, a remembered account's unlock. */
-private fun SessionModel.Gate.wordedByStaySignedIn(): Boolean =
-    this is SessionModel.Gate.SignIn ||
-        (this is SessionModel.Gate.Unlock && record.method == TrustedDevice.Method.DEVICE_KEY)

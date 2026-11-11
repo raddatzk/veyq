@@ -53,11 +53,21 @@ internal sealed class Call {
     @Serializable @SerialName("Session.Start") data object SessionStart : Call()
 
     /**
-     * The full sign-in, then this device trusted: staying signed in when [remember] (what it uses is
-     * [Update.Session.staySignedIn]), else the password trust.
+     * The full sign-in, which holds the password trust; where the device offers a level, the shell's gate then carries
+     * the offer to stay signed in (`Gate.Signed.offer`), answered by [SessionStaySignedIn] or [SessionNotNow].
      */
     @Serializable @SerialName("Session.SignIn")
-    data class SessionSignIn(val server: String, val email: String, val password: String, val secretKey: String, val remember: Boolean) : Call()
+    data class SessionSignIn(val server: String, val email: String, val password: String, val secretKey: String) : Call()
+
+    /**
+     * The offer's answer: stay signed in at [level], one of the offer's. [Answer.Done]; [Answer.Why.TRUST_CANCELLED] when
+     * the person cancelled the prompt (the offer stands); [Answer.Why.TRUST_FAILED] when it was not enrolled (the offer
+     * ends, the password trust stays); [Answer.Why.NO_OFFER] without an offer.
+     */
+    @Serializable @SerialName("Session.StaySignedIn") data class SessionStaySignedIn(val level: StaySignedIn) : Call()
+
+    /** The offer's "Not now": the password trust stays and the account is not offered again on this device. */
+    @Serializable @SerialName("Session.NotNow") data object SessionNotNow : Call()
 
     /**
      * The unlock of the trusted account `Gate.Unlock` shows: its [password] for a DEVICE record; for DEVICE_KEY `""`, the
@@ -94,6 +104,18 @@ internal sealed class Call {
      */
     @Serializable @SerialName("Manage.HideTenant") data class ManageHideTenant(val connection: String, val tenantId: String, val hidden: Boolean) : Call()
     @Serializable @SerialName("Manage.HideSpace") data class ManageHideSpace(val scopeId: String, val hidden: Boolean) : Call()
+
+    /**
+     * "Manage servers"' change of trust for the connection whose key is [connection]: stay signed in at [level] (one of
+     * [ManagedShown.levels]), replacing how this device trusts it. Answered as [SessionStaySignedIn] is.
+     */
+    @Serializable @SerialName("Manage.StaySignedIn") data class ManageStaySignedIn(val connection: String, val level: StaySignedIn) : Call()
+
+    /**
+     * Back to the password trust for the connection whose key is [connection]: the person's [password], checked first
+     * ([Answer.Why.WRONG_PASSWORD]) — what they typed, on its way to the core, as `Session.SignIn`'s is.
+     */
+    @Serializable @SerialName("Manage.PasswordTrust") data class ManagePasswordTrust(val connection: String, val password: String) : Call()
 
     @Serializable @SerialName("Shell.Choose") data class ShellChoose(val application: ApplicationId?) : Call()
     @Serializable @SerialName("Shell.SwitchSpace") data class ShellSwitchSpace(val scopeId: String) : Call()
@@ -163,7 +185,13 @@ internal sealed class Answer {
      */
     @Serializable @SerialName("Reader") data class Reader(val reader: Long, val size: Long, val mediaType: String?) : Answer()
 
-    enum class Why { NOT_A_CALL, NO_TENANT_OPEN, NO_SUCH_CONNECTION, NO_SUCH_TENANT, NO_SUCH_POT, NO_SUCH_READER, NO_PICTURE, NOTHING_TO_DOWNLOAD }
+    enum class Why {
+        NOT_A_CALL, NO_TENANT_OPEN, NO_SUCH_CONNECTION, NO_SUCH_TENANT, NO_SUCH_POT, NO_SUCH_READER, NO_PICTURE, NOTHING_TO_DOWNLOAD,
+
+        /** A change of trust (`TrustChange`): no offer to answer; the person cancelled the prompt; not enrolled; the
+         *  password was not the account's. */
+        NO_OFFER, TRUST_CANCELLED, TRUST_FAILED, WRONG_PASSWORD,
+    }
 }
 
 /** What a watch observes ([veyq_watch]): one screen model's state. */
@@ -183,13 +211,11 @@ internal sealed class Watched {
 @Serializable
 internal sealed class Update {
     /**
-     * The way in. Beside a `Gate.SignIn`, [staySignedIn] is what its "Stay signed in" would use on this device, the
-     * core's store's own answer (`SessionModel.staySignedIn`): `NONE` hides the switch, `LOGIN` is the plain one,
-     * `PRESENCE` the one the person confirms (Windows: "with Windows Hello"). Beside a `Gate.Unlock` of a
-     * `DEVICE_KEY` record it is the same answer, by which the unlock words what opens the account (a `LOGIN` store asks
-     * nothing, so its unlock shows only after a resume that failed). Null beside every other gate.
+     * The way in. The offer to stay signed in rides `Gate.Signed.offer` (its levels the store's own answer); a
+     * `Gate.Unlock` of a `DEVICE_KEY` record names its level (`TrustedDevice.level`), by which the unlock words what opens
+     * the account (a `LOGIN` key asks nothing, so its unlock shows only after a resume that failed).
      */
-    @Serializable @SerialName("Session") data class Session(val gate: SessionModel.Gate, val staySignedIn: StaySignedIn? = null) : Update()
+    @Serializable @SerialName("Session") data class Session(val gate: SessionModel.Gate) : Update()
 
     /** "Manage servers": every server signed in to, null while it is closed. */
     @Serializable @SerialName("Manage") data class Manage(val servers: List<ManagedShown>?) : Update()
@@ -254,10 +280,18 @@ internal class ShellShown(
 /**
  * One server on "Manage servers", as Android's `ManageScreen` and Apple's `ManageView` read it from the core
  * (`SessionModel.managed`): its connection's key and label, how this device trusts it ([trusted]: null when it does not,
- * DEVICE with the password, DEVICE_KEY staying signed in), and its tenants.
+ * DEVICE with the password, DEVICE_KEY staying signed in at [level]), the levels it may change to ([levels], the
+ * device's: [Call.ManageStaySignedIn]; back to the password trust is [Call.ManagePasswordTrust]), and its tenants.
  */
 @Serializable
-internal class ManagedShown(val connection: String, val label: String, val trusted: TrustedDevice.Method?, val tenants: List<Tenant>) {
+internal class ManagedShown(
+    val connection: String,
+    val label: String,
+    val trusted: TrustedDevice.Method?,
+    val level: StaySignedIn?,
+    val levels: List<StaySignedIn>,
+    val tenants: List<Tenant>,
+) {
     /**
      * A tenant: [shown] its switch (on while shown; the current one always is), [switchable] whether it may be turned,
      * [subtitle] the line under its name; [spaces] null while they read.

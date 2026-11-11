@@ -20,6 +20,7 @@ import me.raddatz.veyq.mobile.session.SessionModel
 import me.raddatz.veyq.mobile.session.SessionModel.Gate
 import me.raddatz.veyq.mobile.session.SignInFailure
 import me.raddatz.veyq.mobile.session.StaySignedIn
+import me.raddatz.veyq.mobile.session.TrustChange
 import me.raddatz.veyq.mobile.session.TrustedDevice
 import me.raddatz.veyq.mobile.words.Msg
 import kotlin.concurrent.thread
@@ -57,14 +58,18 @@ class DispatchTest {
         }
         override suspend fun unlockOnDevice(record: TrustedDevice, password: String) = error("no trusted device")
         override suspend fun resume(record: TrustedDevice) = error("no trusted device")
-        override suspend fun trust(account: Acc, password: String, remember: Boolean) {}
+        override suspend fun trust(account: Acc, password: String) {}
+        override suspend fun stay(account: Acc, level: StaySignedIn) = TrustChange.FAILED
+        override suspend fun trustWithPassword(account: Acc, password: String) = TrustChange.FAILED
         override fun defaultTenant(account: Acc) = account.tenants.firstOrNull()
-        override fun trustedMethod(account: Acc): TrustedDevice.Method? = null
+        override fun trustedBy(account: Acc): TrustedDevice? = null
         override suspend fun open(account: Acc, tenant: TenantRef) = "${account.key}/${tenant.tenantId}"
         override suspend fun spaces(session: String) = listOf(SpaceRef(session, "SHARED", session))
         override suspend fun signOut(account: Acc) {}
         override suspend fun forgetDevice(account: Acc) {}
-        override fun staySignedIn() = StaySignedIn.PRESENCE
+        override fun staySignedIn() = emptySet<StaySignedIn>() // no offer: the way in alone
+        override fun declined(account: Acc) = false
+        override fun setDeclined(account: Acc, declined: Boolean) {}
     }
 
     private fun bridge() = Bridge {
@@ -87,7 +92,7 @@ class DispatchTest {
     private suspend fun Bridge<*, *>.signedIn() {
         val gate = watching(Watched.Session)
         assertEquals(Answer.Done, ask(Call.SessionStart))
-        assertEquals(Answer.Done, ask(Call.SessionSignIn("a.example", "p@a.example", "right", "A3-SECRET", remember = false)))
+        assertEquals(Answer.Done, ask(Call.SessionSignIn("a.example", "p@a.example", "right", "A3-SECRET")))
         gate.until { (it as Update.Session).gate as? Gate.Signed }
         unwatch(gate.id)
     }
@@ -169,14 +174,14 @@ class DispatchTest {
         assertEquals(Update.Session(Gate.Starting), gate.next())
 
         assertEquals(Answer.Done, b.ask(Call.SessionStart))
-        assertEquals(Update.Session(Gate.SignIn(), StaySignedIn.PRESENCE), gate.until { (it as Update.Session).takeIf { u -> u.gate is Gate.SignIn } })
+        assertEquals(Update.Session(Gate.SignIn()), gate.until { (it as Update.Session).takeIf { u -> u.gate is Gate.SignIn } })
 
-        assertEquals(Answer.Done, b.ask(Call.SessionSignIn("a.example", "p@a.example", "wrong", "A3-SECRET", remember = false)))
+        assertEquals(Answer.Done, b.ask(Call.SessionSignIn("a.example", "p@a.example", "wrong", "A3-SECRET")))
         assertEquals(
             Gate.SignIn(error = Msg.SIGNIN_ERROR_CREDENTIALS, server = "a.example", email = "p@a.example"),
             gate.until { (it as Update.Session).gate.takeIf { g -> g is Gate.SignIn && g.error != null } },
         )
-        assertEquals(Answer.Done, b.ask(Call.SessionSignIn("a.example", "p@a.example", "right", "A3-SECRET", remember = false)))
+        assertEquals(Answer.Done, b.ask(Call.SessionSignIn("a.example", "p@a.example", "right", "A3-SECRET")))
         assertEquals(Gate.Signed("a.example#u1", "ta"), gate.until { (it as Update.Session).gate as? Gate.Signed })
         // what the person typed reaches the core unchanged, the server as typed made an origin by the core
         assertEquals(listOf("https://a.example", "p@a.example", "right", "A3-SECRET"), signIns.last())
@@ -193,20 +198,21 @@ class DispatchTest {
 
     /**
      * What a device keeps across starts, as its store and its keys would: the trusted records, the DEVICE_KEY wraps as the
-     * server holds them, and [keys] — core's [SoftwareDeviceKeys], whose prompt the test plays. A new bridge over the same
-     * [Kept] is the app started again.
+     * server holds them, the accounts whose offer the person declined, and [keys] — core's [SoftwareDeviceKeys], whose
+     * prompt the test plays. A new bridge over the same [Kept] is the app started again.
      */
     private class Kept {
         val keys = SoftwareDeviceKeys(BouncyCastlePrimitives)
         val records = java.util.concurrent.CopyOnWriteArrayList<TrustedDevice>()
         val sealed = java.util.concurrent.ConcurrentHashMap<String, Pair<ByteArray, ByteArray>>()
-        val remembers = java.util.concurrent.CopyOnWriteArrayList<Boolean>()
+        val declined = java.util.concurrent.ConcurrentHashMap.newKeySet<String>()
+        val passwords = java.util.concurrent.CopyOnWriteArrayList<String>()
     }
 
     /**
-     * A door whose trust goes through [Kept.keys] as `AccountDoor`'s does through a platform's: staying signed in seals
-     * under the unlock key (the person asked), a resume opens it (asked again; a cancel is `DEVICE_AUTH_CANCELLED`), and
-     * "Stay signed in"'s answer is the keys' own.
+     * A door whose trust goes through [Kept.keys] as `AccountDoor`'s does through a platform's: the sign-in holds the
+     * password trust; staying signed in seals under the level's unlock key (the person asked at PRESENCE), a resume opens
+     * it at the record's level (asked again; a cancel is `DEVICE_AUTH_CANCELLED`); the levels offered are the keys' own.
      */
     private class TrustingDoor(private val kept: Kept) : SessionModel.Door<Acc, String> {
         private val account = Acc("a.example#u1", listOf(TenantRef("ta", "A", "a.example"), TenantRef("ta2", "A2", "a2.example")))
@@ -221,30 +227,42 @@ class DispatchTest {
         override suspend fun resume(record: TrustedDevice): Acc {
             val (iv, sealed) = kept.sealed[record.key] ?: throw SignInFailure(SignInFailure.Reason.DEVICE_NOT_TRUSTED)
             try {
-                kept.keys.openUnlockable(iv, sealed, aad)
+                kept.keys.openUnlockable(iv, sealed, aad, record.unlockLevel!!)
             } catch (e: DeviceAuthFailed) {
                 throw SignInFailure(if (e.cancelled) SignInFailure.Reason.DEVICE_AUTH_CANCELLED else SignInFailure.Reason.DEVICE_NOT_TRUSTED)
             }
             return account
         }
-        override suspend fun trust(account: Acc, password: String, remember: Boolean) {
-            kept.remembers += remember
-            val method = if (!remember) TrustedDevice.Method.DEVICE else try {
-                kept.sealed[account.key] = kept.keys.sealUnlockable(masterKey, aad)
-                TrustedDevice.Method.DEVICE_KEY
-            } catch (e: DeviceAuthFailed) {
-                TrustedDevice.Method.DEVICE
-            }
+        private fun keep(account: Acc, method: TrustedDevice.Method, level: StaySignedIn?) {
             kept.records.removeIf { it.key == account.key }
-            kept.records.add(0, TrustedDevice("https://a.example", "p@a.example", "u1", method, "w1", "alias"))
+            kept.records.add(0, TrustedDevice("https://a.example", "p@a.example", "u1", method, "w1", "alias", level))
+        }
+        override suspend fun trust(account: Acc, password: String) = keep(account, TrustedDevice.Method.DEVICE, null)
+        override suspend fun stay(account: Acc, level: StaySignedIn): TrustChange {
+            kept.sealed[account.key] = try {
+                kept.keys.sealUnlockable(masterKey, aad, level)
+            } catch (e: DeviceAuthFailed) {
+                return if (e.cancelled) TrustChange.CANCELLED else TrustChange.FAILED
+            }
+            keep(account, TrustedDevice.Method.DEVICE_KEY, level)
+            return TrustChange.DONE
+        }
+        override suspend fun trustWithPassword(account: Acc, password: String): TrustChange {
+            kept.passwords += password
+            if (password != "right") return TrustChange.WRONG_PASSWORD
+            kept.sealed.remove(account.key)
+            keep(account, TrustedDevice.Method.DEVICE, null)
+            return TrustChange.DONE
         }
         override fun defaultTenant(account: Acc) = account.tenants.firstOrNull()
-        override fun trustedMethod(account: Acc) = kept.records.firstOrNull { it.key == account.key }?.method
+        override fun trustedBy(account: Acc) = kept.records.firstOrNull { it.key == account.key }
         override suspend fun open(account: Acc, tenant: TenantRef) = "${account.key}/${tenant.tenantId}"
         override suspend fun spaces(session: String) = listOf(SpaceRef(session, "SHARED", session))
         override suspend fun signOut(account: Acc) { kept.records.removeIf { it.key == account.key && it.method == TrustedDevice.Method.DEVICE_KEY } }
         override suspend fun forgetDevice(account: Acc) { kept.records.removeIf { it.key == account.key } }
         override fun staySignedIn() = kept.keys.staySignedIn
+        override fun declined(account: Acc) = account.key in kept.declined
+        override fun setDeclined(account: Acc, declined: Boolean) { if (declined) kept.declined += account.key else kept.declined -= account.key }
     }
 
     /** The app started over what [kept] holds. */
@@ -253,50 +271,70 @@ class DispatchTest {
         Composition(SessionModel(TrustingDoor(kept), hidden, RecentUses({}, emptyList())), hidden) { null }
     }
 
-    private suspend fun Bridge<*, *>.signIn(remember: Boolean) {
+    private val both = listOf(StaySignedIn.PRESENCE, StaySignedIn.LOGIN)
+
+    /** Signs in and answers the offer the gate carries: at [level], or "Not now" for null. */
+    private suspend fun Bridge<*, *>.signIn(level: StaySignedIn?) {
         val gate = watching(Watched.Session)
         assertEquals(Answer.Done, ask(Call.SessionStart))
-        assertEquals(Answer.Done, ask(Call.SessionSignIn("a.example", "p@a.example", "right", "A3-SECRET", remember)))
-        gate.until { (it as Update.Session).gate as? Gate.Signed }
+        assertEquals(Answer.Done, ask(Call.SessionSignIn("a.example", "p@a.example", "right", "A3-SECRET")))
+        val signed = gate.until { (it as Update.Session).gate as? Gate.Signed }
+        assertEquals(SessionModel.Offer("a.example#u1", both), signed.offer, "the sign-in did not carry the offer")
+        assertEquals(Answer.Done, ask(if (level == null) Call.SessionNotNow else Call.SessionStaySignedIn(level)))
+        assertEquals(Gate.Signed("a.example#u1", "ta"), gate.until { ((it as Update.Session).gate as? Gate.Signed)?.takeIf { s -> s.offer == null } })
         unwatch(gate.id)
     }
 
     @Test
-    fun rememberOffTrustsWithThePasswordAndTheNextStartUnlocksWithIt() = runBlocking {
+    fun notNowKeepsThePasswordTrustTheNextStartUnlocksWithItAndNoOfferReturns() = runBlocking {
         val kept = Kept()
-        started(kept).apply { signIn(remember = false) }.shutdown()
-        assertEquals(listOf(false), kept.remembers, "the sign-in's remember did not reach the core")
+        started(kept).apply { signIn(level = null) }.shutdown()
         val record = kept.records.single()
         assertEquals(TrustedDevice.Method.DEVICE, record.method)
+        assertEquals(setOf("a.example#u1"), kept.declined, "Not now was not remembered")
 
         val b = started(kept)
         val gate = b.watching(Watched.Session)
         assertEquals(Answer.Done, b.ask(Call.SessionStart))
-        // beside the unlock no "Stay signed in" is asked of the keys: only a sign-in shows the switch
-        assertEquals(Update.Session(Gate.Unlock(record), null), gate.until { (it as Update.Session).takeIf { u -> u.gate is Gate.Unlock } })
+        assertEquals(Update.Session(Gate.Unlock(record)), gate.until { (it as Update.Session).takeIf { u -> u.gate is Gate.Unlock } })
         assertEquals(Answer.Done, b.ask(Call.SessionUnlock("wrong")))
         assertEquals(Gate.Unlock(record, error = Msg.SIGNIN_ERROR_CREDENTIALS), b.gateNow())
         assertEquals(Answer.Done, b.ask(Call.SessionUnlock("right")))
-        assertEquals(Gate.Signed("a.example#u1", "ta"), b.gateNow())
+        assertEquals(Gate.Signed("a.example#u1", "ta"), b.gateNow(), "the declined offer came back")
         assertEquals(0, kept.keys.prompts, "a password unlock asked for the person")
+        assertEquals(Answer.Refused(Answer.Why.NO_OFFER), b.ask(Call.SessionNotNow))
+        assertEquals(Answer.Refused(Answer.Why.NO_OFFER), b.ask(Call.SessionStaySignedIn(StaySignedIn.LOGIN)))
         b.shutdown()
     }
 
     @Test
-    fun rememberOnResumesTheNextStartAndACancelledPromptStaysOnTheUnlock() = runBlocking {
+    fun theOfferAtPresenceResumesTheNextStartAndACancelledPromptKeepsTheOfferThenTheUnlock() = runBlocking {
         val kept = Kept()
-        started(kept).apply { signIn(remember = true) }.shutdown()
-        assertEquals(listOf(true), kept.remembers)
+        // the offer's prompt cancelled: refused as such, the offer stands; taken then
+        started(kept).apply {
+            val gate = watching(Watched.Session)
+            assertEquals(Answer.Done, ask(Call.SessionStart))
+            assertEquals(Answer.Done, ask(Call.SessionSignIn("a.example", "p@a.example", "right", "A3-SECRET")))
+            gate.until { (it as Update.Session).gate as? Gate.Signed }
+            kept.keys.authenticates = false
+            assertEquals(Answer.Refused(Answer.Why.TRUST_CANCELLED), ask(Call.SessionStaySignedIn(StaySignedIn.PRESENCE)))
+            assertEquals(SessionModel.Offer("a.example#u1", both), (gateNow() as Gate.Signed).offer, "a cancelled prompt ended the offer")
+            assertEquals(TrustedDevice.Method.DEVICE, kept.records.single().method)
+            kept.keys.authenticates = true
+            assertEquals(Answer.Done, ask(Call.SessionStaySignedIn(StaySignedIn.PRESENCE)))
+            assertNull((gateNow() as Gate.Signed).offer)
+        }.shutdown()
         val record = kept.records.single()
         assertEquals(TrustedDevice.Method.DEVICE_KEY, record.method)
-        assertEquals(1, kept.keys.prompts, "staying signed in did not ask the person at enrolment")
+        assertEquals(StaySignedIn.PRESENCE, record.level)
+        assertEquals(2, kept.keys.prompts, "staying signed in at presence did not ask the person at enrolment")
 
-        // started again: resumed, the person asked once, nothing typed
+        // started again: resumed, the person asked once, nothing typed, no offer
         started(kept).apply {
             assertEquals(Answer.Done, ask(Call.SessionStart))
             assertEquals(Gate.Signed("a.example#u1", "ta"), gateNow())
         }.shutdown()
-        assertEquals(2, kept.keys.prompts)
+        assertEquals(3, kept.keys.prompts)
 
         // started again, the prompt cancelled: the unlock shows, and a cancel there keeps it
         kept.keys.authenticates = false
@@ -305,76 +343,100 @@ class DispatchTest {
         assertEquals(Gate.Unlock(record), b.gateNow())
         assertEquals(Answer.Done, b.ask(Call.SessionUnlock("")))
         assertEquals(Gate.Unlock(record), b.gateNow(), "a cancelled prompt left the unlock")
-        assertEquals(4, kept.keys.prompts)
 
         // the unlock by the device key: the core asks the person itself, nothing typed crosses
         kept.keys.authenticates = true
         assertEquals(Answer.Done, b.ask(Call.SessionUnlock("")))
         assertEquals(Gate.Signed("a.example#u1", "ta"), b.gateNow())
-        assertEquals(5, kept.keys.prompts)
         b.shutdown()
     }
 
     @Test
-    fun aRememberedAccountsUnlockCarriesWhatStayingSignedInUses() = runBlocking {
+    fun aRememberedAccountsUnlockCarriesItsLevel() = runBlocking {
         val kept = Kept()
-        started(kept).apply { signIn(remember = true) }.shutdown()
+        started(kept).apply { signIn(StaySignedIn.LOGIN) }.shutdown()
         val record = kept.records.single()
-        // a store that asks nothing (Windows without Hello, Linux) still reaches the unlock when the resume fails
-        kept.keys.authenticates = false
-        kept.keys.staySignedIn = StaySignedIn.LOGIN
+        assertEquals(StaySignedIn.LOGIN, record.level)
+        assertEquals(0, kept.keys.prompts, "the login level asked the person")
+        // a login key that no longer opens (a keyring reset): the unlock shows, saying which level it is
+        kept.keys.deleteUnlockKey(StaySignedIn.LOGIN)
         val b = started(kept)
         val gate = b.watching(Watched.Session)
         assertEquals(Answer.Done, b.ask(Call.SessionStart))
-        assertEquals(Update.Session(Gate.Unlock(record), StaySignedIn.LOGIN), gate.until { (it as Update.Session).takeIf { u -> u.gate is Gate.Unlock } })
+        val unlock = gate.until { (it as Update.Session).gate as? Gate.Unlock }
+        assertEquals(StaySignedIn.LOGIN, unlock.record.level)
         b.shutdown()
     }
 
     @Test
-    fun theSignInCarriesWhatStayingSignedInUsesAndOtherAccountAndAddServerReachIt() = runBlocking {
+    fun theOfferFollowsTheStoreAndOtherAccountAndAddServerReachTheSignIn() = runBlocking {
         val kept = Kept()
-        started(kept).apply { signIn(remember = false) }.shutdown()
+        kept.keys.staySignedIn = setOf(StaySignedIn.LOGIN)
         val b = started(kept)
         val gate = b.watching(Watched.Session)
         assertEquals(Answer.Done, b.ask(Call.SessionStart))
-        gate.until { (it as Update.Session).gate as? Gate.Unlock }
+        assertEquals(Answer.Done, b.ask(Call.SessionSignIn("a.example", "p@a.example", "right", "A3-SECRET")))
+        assertEquals(SessionModel.Offer("a.example#u1", listOf(StaySignedIn.LOGIN)), gate.until { ((it as Update.Session).gate as? Gate.Signed)?.offer })
+        // a level the device does not offer is refused, and ends the offer
+        assertEquals(Answer.Refused(Answer.Why.TRUST_FAILED), b.ask(Call.SessionStaySignedIn(StaySignedIn.PRESENCE)))
+        assertEquals(Gate.Signed("a.example#u1", "ta"), b.gateNow())
 
-        // "Another account": the sign-in, with the keys' own answer beside it
-        assertEquals(Answer.Done, b.ask(Call.SessionOtherAccount))
-        assertEquals(Update.Session(Gate.SignIn(), StaySignedIn.PRESENCE), gate.until { (it as Update.Session).takeIf { u -> u.gate is Gate.SignIn } })
-        assertEquals(Answer.Done, b.ask(Call.SessionSignIn("a.example", "p@a.example", "right", "A3-SECRET", remember = false)))
-        gate.until { (it as Update.Session).gate as? Gate.Signed }
-
-        // "Add server" asks the keys again: a device whose store went away hides the switch now
-        kept.keys.staySignedIn = StaySignedIn.NONE
+        // "Add server": the sign-in again, a store that keeps nothing now offers nothing after it
+        kept.keys.staySignedIn = emptySet()
         assertEquals(Answer.Done, b.ask(Call.SessionAddServer))
-        assertEquals(Update.Session(Gate.SignIn(adding = true), StaySignedIn.NONE), gate.until { (it as Update.Session).takeIf { u -> u.gate is Gate.SignIn } })
-        kept.keys.staySignedIn = StaySignedIn.LOGIN
+        assertEquals(Update.Session(Gate.SignIn(adding = true)), gate.until { (it as Update.Session).takeIf { u -> u.gate is Gate.SignIn } })
         assertEquals(Answer.Done, b.ask(Call.SessionCancelAdd))
         assertEquals(Gate.Signed("a.example#u1", "ta"), gate.until { (it as Update.Session).gate as? Gate.Signed })
         assertEquals(Answer.Done, b.ask(Call.SessionAddServer))
-        assertEquals(StaySignedIn.LOGIN, gate.until { (it as Update.Session).takeIf { u -> u.gate is Gate.SignIn }?.staySignedIn })
+        gate.until { (it as Update.Session).gate as? Gate.SignIn }
+        assertEquals(Answer.Done, b.ask(Call.SessionSignIn("a.example", "p@a.example", "right", "A3-SECRET")))
+        assertNull(gate.until { (it as Update.Session).gate as? Gate.Signed }.offer)
         b.shutdown()
+
+        // "Another account" from the unlock
+        val c = started(kept)
+        val gate2 = c.watching(Watched.Session)
+        assertEquals(Answer.Done, c.ask(Call.SessionStart))
+        gate2.until { (it as Update.Session).gate as? Gate.Unlock }
+        assertEquals(Answer.Done, c.ask(Call.SessionOtherAccount))
+        assertEquals(Update.Session(Gate.SignIn()), gate2.until { (it as Update.Session).takeIf { u -> u.gate is Gate.SignIn } })
+        c.shutdown()
     }
 
     @Test
-    fun manageServersShowsEachServersTrustAndForgetDeviceEndsIt() = runBlocking {
+    fun manageServersShowsEachServersLevelChangesItGoesBackToThePasswordTrustAndForgetDeviceEndsIt() = runBlocking {
         val kept = Kept()
         val b = started(kept)
         val manage = b.watching(Watched.Manage)
         assertEquals(Update.Manage(null), manage.next())
-        b.signIn(remember = true)
+        b.signIn(StaySignedIn.PRESENCE)
 
         assertEquals(Answer.Done, b.ask(Call.ManageOpen))
         val open = manage.until { (it as Update.Manage).servers?.takeIf { s -> s.single().tenants.all { t -> t.spaces != null } } }
         val server = open.single()
         assertEquals("a.example#u1", server.connection)
         assertEquals(TrustedDevice.Method.DEVICE_KEY, server.trusted)
+        assertEquals(StaySignedIn.PRESENCE, server.level)
+        assertEquals(both, server.levels)
         assertEquals(listOf("ta", "ta2"), server.tenants.map { it.tenant.tenantId })
         val (current, other) = server.tenants
         assertTrue(current.current && current.shown && !current.switchable)
         assertTrue(!other.current && other.shown && other.switchable)
         assertEquals(listOf("a.example#u1/ta"), current.spaces!!.map { it.space.scopeId })
+
+        // to the other level
+        assertEquals(Answer.Refused(Answer.Why.NO_SUCH_CONNECTION), b.ask(Call.ManageStaySignedIn("b.example#u2", StaySignedIn.LOGIN)))
+        assertEquals(Answer.Done, b.ask(Call.ManageStaySignedIn("a.example#u1", StaySignedIn.LOGIN)))
+        manage.until { (it as Update.Manage).servers?.single()?.takeIf { s -> s.level == StaySignedIn.LOGIN } }
+        assertEquals(StaySignedIn.LOGIN, kept.records.single().level)
+
+        // back to the password trust: the password reaches the core, a wrong one is said so
+        assertEquals(Answer.Refused(Answer.Why.NO_SUCH_CONNECTION), b.ask(Call.ManagePasswordTrust("b.example#u2", "right")))
+        assertEquals(Answer.Refused(Answer.Why.WRONG_PASSWORD), b.ask(Call.ManagePasswordTrust("a.example#u1", "wrong")))
+        assertEquals(Answer.Done, b.ask(Call.ManagePasswordTrust("a.example#u1", "right")))
+        assertEquals(listOf("wrong", "right"), kept.passwords)
+        val back = manage.until { (it as Update.Manage).servers?.single()?.takeIf { s -> s.trusted == TrustedDevice.Method.DEVICE } }
+        assertNull(back.level)
 
         assertEquals(Answer.Refused(Answer.Why.NO_SUCH_CONNECTION), b.ask(Call.SessionForgetDevice("b.example#u2")))
         assertEquals(Answer.Done, b.ask(Call.SessionForgetDevice("a.example#u1")))
