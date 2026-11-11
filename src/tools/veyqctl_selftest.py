@@ -316,7 +316,7 @@ class FakeHost(vc.Host):
     def wait(self, prompt):
         return False  # no terminal: a missing program is refused
 
-    def prompt(self, question, default="", hint=""):
+    def prompt(self, question, default="", hint="", yes_no=False):
         """A terminal where each question gets its answer from `answers`, else Enter (the default, or nothing)."""
         return self.answers.get(question) or default or None
 
@@ -1784,10 +1784,10 @@ def test_programs_checked_first(tmp: pathlib.Path) -> None:
                 self.missing = set()
             return self.installs
 
-        def prompt(self, question, default="", hint=""):
+        def prompt(self, question, default="", hint="", yes_no=False):
             self.asked.append(question)
             self.asked_at.append(len(self.commands))  # how many commands had run when it was asked
-            return super().prompt(question, default, hint)
+            return super().prompt(question, default, hint, yes_no)
 
     host = Missing({"kubectl", "helm"})
     rc, out = run_main(["init", "--gitops", top / "apps" / "veyq", *INIT, "--secrets", "none"], host)
@@ -2056,6 +2056,14 @@ def interrupted(argv: list, host: FakeHost) -> str:
     except KeyboardInterrupt:
         return out.getvalue()
     raise AssertionError("the run was not interrupted")
+    d_yn = top / "apps" / "veyq-yn"
+    rc, out = run_main(["--source", mirror, "init", "--gitops", d_yn, "--name", "yes-no", *INIT, "--secrets", "none"],
+                       GitOpsHost(top=top, signed=signed, answers={"veyq's admin page through an SSH tunnel": "y"}))
+    check("a yes/no question answered `y` is taken as yes, and kept as `yes`",
+          rc == 0 and (d_yn / "resources/admin-host-access.yaml").is_file() and json.loads(
+              (top / vc.SETUP_FILE).read_text())["veyq"]["apps/veyq-yn"]["admin_host_access"] == "yes", out[-300:])
+    check("yes_or_no: y, Yes, N and no as yes or no, anything else untouched",
+          [vc.yes_or_no(a) for a in ("y", "Yes", "N", "no", "maybe")] == ["yes", "yes", "no", "no", "maybe"])
 
 
 def test_init_resumes(tmp: pathlib.Path) -> None:

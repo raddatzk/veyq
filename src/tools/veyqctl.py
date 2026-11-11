@@ -187,6 +187,11 @@ def clean_env(extra: dict[str, str] | None = None) -> dict[str, str]:
     return env
 
 
+def yes_or_no(answer: str) -> str:
+    """y, yes, n and no — in any case — as `yes` or `no`; anything else as it was typed."""
+    return {"y": "yes", "yes": "yes", "n": "no", "no": "no"}.get(answer.strip().lower(), answer)
+
+
 class Host:
     """Docker, cosign and the terminal, behind one seam the self-test replaces. Secrets never reach an argv here.
 
@@ -239,17 +244,21 @@ class Host:
     def section(self, title: str) -> None:
         print(f"\n== {title}", flush=True)
 
-    def prompt(self, question: str, default: str = "", hint: str = "") -> str | None:
+    def prompt(self, question: str, default: str = "", hint: str = "", yes_no: bool = False) -> str | None:
         """A question at a terminal, as setup scripts ask: the hint above it, `[default]` that Enter takes, asked again
-        while an answer is needed and none is given. None without a terminal (the caller then needs the flag)."""
+        while an answer is needed and none is given. None without a terminal (the caller then needs the flag).
+        `yes_no`: shown as every confirmation is, `[Y/n]` or `[y/N]`, and answered `yes` or `no` (y and n too)."""
         if not sys.stdin.isatty():
             return None
         print()
         if hint:
             print(f"   {hint}")
+        shown = ({"yes": " [Y/n]", "no": " [y/N]"}.get(default, " [y/n]") if yes_no
+                 else f" [{default}]" if default else "")
         while True:
             try:
-                answer = input(f"   {question}{f' [{default}]' if default else ''}: ").strip()
+                answer = yes_or_no(input(f"   {question}{shown}: ").strip()) if yes_no else input(
+                    f"   {question}{shown}: ").strip()
             except EOFError:  # the input ended: the offer, or nothing (the caller refuses, naming the flag)
                 print()
                 return default or None
@@ -3332,6 +3341,10 @@ class Question(NamedTuple):
     def option(self) -> str:
         return self.flag or f"--{self.key.replace('_', '-')}"
 
+    @property
+    def yes_no(self) -> bool:
+        return self.choices == ("yes", "no")
+
     def accepts(self, value: str) -> bool:
         return (not self.choices or value in self.choices) and (not self.pattern or bool(re.fullmatch(self.pattern,
                                                                                                         value)))
@@ -3346,7 +3359,7 @@ class Q:
     # 1. Setup: what decides the programs the run needs
     TARGET = Question("target", "compose or gitops", "compose: veyq on Docker Compose on this host. gitops: via Argo "
                       "CD in a Kubernetes cluster.", ("compose", "gitops"))
-    SERVER = Question("server", "set up a new server too: yes or no", "yes: veyqctl sets up a fresh server with "
+    SERVER = Question("server", "set up a new server too", "yes: veyqctl sets up a fresh server with "
                       "everything veyq needs. no: you already run a Kubernetes cluster with Argo CD.", ("yes", "no"))
     DIRECTORY = Question("gitops", "directory", "Where in your repository veyq's files go.")
     NAME = Question("name", "instance name", "How this computer names the instance (`veyqctl instances`).")
@@ -3365,11 +3378,11 @@ class Q:
                        pattern=SSH_PUBLIC_KEY_RE, section="server", flag="--admin-ssh-key")
     AGE_KEY = Question("age_key", "age key file (Enter: create a new one)", "The key that encrypts your repository's "
                        "secrets. Keep a copy in your password manager.")
-    HOST_ACCESS = Question("host_access", "reach Argo CD and veyq's admin page through an SSH tunnel: yes or no",
+    HOST_ACCESS = Question("host_access", "reach Argo CD and veyq's admin page through an SSH tunnel",
                            "Recommended: both stay invisible from the internet.", ("yes", "no"), section="server")
     CONNECT_NAME = Question("connect_name", "name for the server on this computer", "Used for `ssh -N <name>` and "
                             "`kubectl --context <name>`.", pattern=r"[A-Za-z0-9._-]+", section="server")
-    MAKE_CURRENT = Question("make_current", "make it kubectl's default context: yes or no", "yes: plain `kubectl` "
+    MAKE_CURRENT = Question("make_current", "make it kubectl's default context", "yes: plain `kubectl` "
                             "talks to this server from now on. no: use `--context <name>`.", ("yes", "no"),
                             section="local")
     PASSWORD = "your sudo password on the server (hidden, Enter: generate one)"  # never kept: encrypted, only
@@ -3392,7 +3405,7 @@ class Q:
                               "certificates, without production's limits. Switch later with `veyqctl tls production`.",
                               tuple(ACME_DIRECTORIES))
     TLS_SECRET = Question("tls_secret", "name of your TLS Secret")
-    ADMIN_HOST_ACCESS = Question("admin_host_access", "veyq's admin page through an SSH tunnel: yes or no",
+    ADMIN_HOST_ACCESS = Question("admin_host_access", "veyq's admin page through an SSH tunnel",
                                  "Recommended on a server set up by veyq-server: the page stays invisible from the "
                                  "internet.", ("yes", "no"))
     ADMIN_HOST_SOURCE = Question("admin_host_source", "the node's pod network gateway (a /32)", "Where the tunnel's "
@@ -3494,10 +3507,12 @@ class InitRun:
                     print(f"   {q.text}: {kept}   (from {SETUP_FILE})", flush=True)
         tries = 0
         while not value:
-            answer = self.host.prompt(q.text, default, hint or q.hint)
+            answer = self.host.prompt(q.text, default, hint or q.hint, yes_no=q.yes_no)
             if answer is None:  # no terminal, or the input ended: the offer, if any
                 value = default
                 break
+            if q.yes_no:
+                answer = yes_or_no(answer)
             if q.accepts(answer) or tries == 2:
                 value = answer
                 break
@@ -3587,7 +3602,7 @@ def cmd_init(args: argparse.Namespace, host: Host) -> int:
         # Offered `yes` in a repository with nothing committed yet: the server path starts from an empty one.
         listed = host.run(["git", "ls-files"], check=False)
         offer = "yes" if not listed.returncode and not (listed.stdout or "").strip() else "no"
-        args.server = (host.prompt(Q.SERVER.text, offer, Q.SERVER.hint) or offer).strip().lower()
+        args.server = yes_or_no(host.prompt(Q.SERVER.text, offer, Q.SERVER.hint, yes_no=True) or offer)
     if args.server not in Q.SERVER.choices:
         raise Refused(f"{Q.SERVER.option} {args.server}: {Q.SERVER.expects()}")
     offered = suggested_gitops_directory(host)
