@@ -62,6 +62,7 @@ impl Screens {
 }
 
 fn activate(app: &adw::Application) {
+    veyq::theme::use_app_icon();
     let status_page = adw::StatusPage::builder().icon_name(APP_ID).title(words::app_name()).description(words::starting()).build();
     let status = adw::ToolbarView::new();
     status.add_top_bar(&adw::HeaderBar::new());
