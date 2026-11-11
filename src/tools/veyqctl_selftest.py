@@ -2074,7 +2074,7 @@ def test_gitops_init(tmp: pathlib.Path) -> None:
     d_yn = top / "apps" / "veyq-yn"
     rc, out = run_main(["--source", mirror, "init", "--gitops", d_yn, "--name", "yes-no", *INIT, "--secrets", "none",
                         "--admin-host-source", "10.42.0.1/32"],
-                       GitOpsHost(top=top, signed=signed, answers={"veyq's admin page through an SSH tunnel": "y"}))
+                       GitOpsHost(top=top, signed=signed, answers={"veyq's admin page on a server-only port, for an SSH tunnel": "y"}))
     check("a yes/no question answered `y` is taken as yes, and kept as `yes`",
           rc == 0 and (d_yn / "resources/admin-host-access.yaml").is_file() and json.loads(
               (top / vc.SETUP_FILE).read_text())["veyq"]["apps/veyq-yn"]["admin_host_access"] == "yes", out[-300:])
