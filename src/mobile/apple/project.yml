@@ -33,7 +33,7 @@ targets:
         optional: true
         buildPhase: resources
     dependencies:
-      # The share extension (ADR 0126), embedded in the iOS app only.
+      # The share extension (ADR 0129), embedded in the iOS app only.
       - target: VeyqShare
         destinationFilters: [iOS]
     preBuildScripts:
@@ -59,7 +59,7 @@ targets:
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: me.raddatz.veyq
-        # iOS shares the app group and a keychain access group with the share extension (ADR 0126); macOS has none yet.
+        # iOS shares the app group and a keychain access group with the share extension (ADR 0129); macOS has none yet.
         "CODE_SIGN_ENTITLEMENTS[sdk=iphone*]": Veyq/Veyq-iOS.entitlements
         PRODUCT_NAME: veyq
         GENERATE_INFOPLIST_FILE: YES
@@ -80,7 +80,7 @@ targets:
         # Merged into the generated Info.plist: plain http to the developer's *.localhost instance only.
         INFOPLIST_FILE: Veyq/Info.plist
   VeyqShare:
-    # The share extension (ADR 0126): the app's views and model, in the extension role, under its own controller. It
+    # The share extension (ADR 0129): the app's views and model, in the extension role, under its own controller. It
     # compiles the app's sources but its entry point and the dev sign-in, and builds VeyqCore as the app does.
     type: app-extension
     platform: iOS

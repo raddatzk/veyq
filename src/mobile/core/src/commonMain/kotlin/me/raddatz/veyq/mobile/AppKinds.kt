@@ -179,7 +179,7 @@ object AppKinds {
         }
     }.distinct()
 
-    /** Whether an object of [kind] can be chosen as the place for files shared to veyq (ADR 0126 decision 1): a Pot. */
+    /** Whether an object of [kind] can be chosen as the place for files shared to veyq (ADR 0129 decision 1): a Pot. */
     fun takesShared(kind: String): Boolean = kind == PotSession.KIND
 
     private const val FOLDER = "FOLDER"

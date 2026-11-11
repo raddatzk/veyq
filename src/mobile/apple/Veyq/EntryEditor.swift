@@ -91,7 +91,7 @@ struct EntryEditor: View {
     @State var form: FormState
     /// The entry does not add up (core's `Ledger.Status.INVALID`): said above it, as the web's editor says it.
     var invalid = false
-    /// Receipts it starts with: what another app shared to this Pot (ADR 0126).
+    /// Receipts it starts with: what another app shared to this Pot (ADR 0129).
     var initialPending: [PotSession.PendingReceipt] = []
     /// Runs once the entry was saved (a share's new expense hands back that it landed).
     var onSaved: (() -> Void)? = nil

@@ -694,7 +694,7 @@ private val LocalCovers = androidx.compose.runtime.staticCompositionLocalOf<Map<
 @Composable
 private fun ObjectRow(ref: ObjectRef, onOpen: (ObjectRef) -> Unit) {
     val details = LocalRowDetails.current[ref.nodeId].orEmpty()
-    // Picking a place for what was shared: only a kind that takes it can be chosen (ADR 0126 decision 1).
+    // Picking a place for what was shared: only a kind that takes it can be chosen (ADR 0129 decision 1).
     val takes = !LocalPicking.current || me.raddatz.veyq.mobile.AppKinds.takesShared(ref.kind)
     ListItem(
         headlineContent = { Text(ref.name, fontWeight = androidx.compose.ui.text.font.FontWeight.Bold) },
@@ -799,7 +799,7 @@ internal val LocalRowDetails = androidx.compose.runtime.compositionLocalOf<Map<S
 internal fun renameProblem(context: android.content.Context, r: me.raddatz.veyq.mobile.session.NodeRename.Result): String? =
     me.raddatz.veyq.mobile.words.Notices.renameRefused(r)?.let { context.text(it) }
 
-/** Whether the shell is picking a place for what another app shared (ADR 0126). */
+/** Whether the shell is picking a place for what another app shared (ADR 0129). */
 internal val LocalPicking = androidx.compose.runtime.compositionLocalOf { false }
 
 /** The pick mode's banner: what waits and where it can go, with its cancel. */

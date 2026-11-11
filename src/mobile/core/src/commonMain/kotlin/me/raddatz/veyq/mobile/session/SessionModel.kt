@@ -35,7 +35,7 @@ class SessionModel<A : Connection, T : Any>(
     private val door: Door<A, T>,
     private val hidden: Hidden,
     private val recent: RecentUses,
-    /** The share extension (ADR 0126): it resumes and unlocks, but never signs in — the app does. */
+    /** The share extension (ADR 0129): it resumes and unlocks, but never signs in — the app does. */
     private val signInElsewhere: Boolean = false,
 ) {
     /** What the model does with an account, the platform's suite and HTTP client behind it. */
@@ -63,7 +63,7 @@ class SessionModel<A : Connection, T : Any>(
         @Serializable @SerialName("Starting")
         object Starting : Gate()
 
-        /** The share extension with no account it can open: the app signs in (ADR 0126). */
+        /** The share extension with no account it can open: the app signs in (ADR 0129). */
         @Serializable @SerialName("NeedsApp")
         object NeedsApp : Gate()
 

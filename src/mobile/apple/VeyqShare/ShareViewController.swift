@@ -2,7 +2,7 @@ import SwiftUI
 import UIKit
 import VeyqCore
 
-/// veyq's share extension (ADR 0126): what another app shares goes to the place picked in veyq's own navigation. The
+/// veyq's share extension (ADR 0129): what another app shares goes to the place picked in veyq's own navigation. The
 /// extension is the app's views on the app's model in the extension role: it signs in only from what the app left
 /// (decision 5), and the chosen Pot's new expense takes the files as its receipts (decision 2).
 final class ShareViewController: UIViewController {
