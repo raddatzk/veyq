@@ -4,7 +4,7 @@ import ImageIO
 import UniformTypeIdentifiers
 
 /// A cover's pictures on an Apple device, through ImageIO on iOS and macOS alike: the JPEG a cover is uploaded as (the web's
-/// `COVER_SPEC`: its long edge at most 2048, quality 0.85, turned upright as the picture's orientation says), and a list's
+/// `COVER_SPEC`, core's `NodeCover.LONG_EDGE` and `QUALITY`, turned upright as the picture's orientation says), and a list's
 /// small picture of one.
 enum CoverImages {
     /// The picture `data` at most `maxPixels` on its long edge, upright; nil when it is no picture ImageIO decodes.

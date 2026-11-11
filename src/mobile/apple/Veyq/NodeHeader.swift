@@ -425,7 +425,7 @@ struct CoverSheet: View {
             guard let chosen else { return }
             item = nil
             Task {
-                guard let data = try? await chosen.loadTransferable(type: Data.self), let picture = CoverImages.image(data, maxPixels: 2048) else {
+                guard let data = try? await chosen.loadTransferable(type: Data.self), let picture = CoverImages.image(data, maxPixels: Int(NodeCover.shared.LONG_EDGE)) else {
                     problem = say(.coverUnreadable)
                     return
                 }

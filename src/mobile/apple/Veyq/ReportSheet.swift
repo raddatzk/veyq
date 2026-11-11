@@ -10,22 +10,18 @@ struct ReportSheet: View {
     let ref: NodeAt
     @Environment(\.dismiss) private var dismiss
     @Environment(\.openURL) private var openURL
-    @State private var category: String?
-    @State private var reason = ""
-    @State private var goodFaith = false
-    @State private var contact = ""
-    @State private var whole = true
-    @State private var sending = false
-    @State private var error: String?
-    @State private var sent: NodeReport.Sent?
+    @State private var box = ReportBox()
 
-    /// The categories a report names, in the web's order (`REPORT_CATEGORIES`), with their words.
-    private static var categories: [(String, String)] { NodeReport.shared.CATEGORIES.map { ($0.token, say($0.word)) } }
+    private var sending: Bool { box.state?.sending ?? false }
 
     var body: some View {
         NavigationStack {
             Group {
-                if let sent { receipt(sent) } else { form }
+                if let sheet = box.sheet, let st = box.state {
+                    if let sent = st.sent { receipt(sent) } else { form(sheet, st) }
+                } else {
+                    ProgressView()
+                }
             }
             .navigationTitle(say(.reportAction))
             #if os(iOS)
@@ -34,6 +30,11 @@ struct ReportSheet: View {
             .toolbar { ToolbarItem(placement: .cancellationAction) { Button(say(.signinCancel)) { dismiss() }.disabled(sending) } }
         }
         .interactiveDismissDisabled(sending)
+        .task {
+            guard box.sheet == nil, let made = model.reportSheet(ref) else { return }
+            box.start(made)
+        }
+        .onDisappear { box.stop() }
     }
 
     private func receipt(_ sent: NodeReport.Sent) -> some View {
@@ -47,83 +48,72 @@ struct ReportSheet: View {
         }
     }
 
-    private var form: some View {
+    private func form(_ sheet: VeyqCore.ReportSheet, _ st: VeyqCore.ReportSheet.State) -> some View {
         Form {
             Section {
                 Text(say(.reportIntro))
                     .font(.subheadline).foregroundStyle(Role.muted)
             }
             Section(say(.reportScope)) {
-                Picker(say(.reportScope), selection: $whole) {
+                Picker(say(.reportScope), selection: Binding(get: { st.whole }, set: { sheet.whole(on: $0) })) {
                     Text(say(.reportScopeWhole)).tag(true)
                     Text(say(.reportScopeName)).tag(false)
                 }
                 .pickerStyle(.segmented)
                 .labelsHidden()
-                Text(whole ? say(.reportScopeWholeHint)
-                     : say(.reportScopeNameHint))
+                Text(say(st.scopeHint))
                     .font(.caption).foregroundStyle(Role.muted)
             }
             Section(say(.reportCategory)) {
-                ForEach(Self.categories, id: \.0) { token, words in
-                    Button { category = token } label: {
+                ForEach(sheet.categories, id: \.token) { c in
+                    Button { sheet.category(token: c.token) } label: {
                         HStack {
-                            Text(words).foregroundStyle(Role.text)
+                            Text(say(c.word)).foregroundStyle(Role.text)
                             Spacer()
-                            if category == token { Image(systemName: "checkmark").foregroundStyle(Role.accent) }
+                            if st.category == c.token { Image(systemName: "checkmark").foregroundStyle(Role.accent) }
                         }
                         .contentShape(Rectangle())
                     }
                     .buttonStyle(.plain)
                 }
-                if let note = NodeReport.shared.note(category: category) {
+                if let note = st.note {
                     Text(say(note)).font(.caption).foregroundStyle(Role.accent)
                 }
             }
             Section {
-                TextField(say(.reportReason), text: $reason, axis: .vertical)
+                TextField(say(.reportReason), text: Binding(get: { sheet.current.reason }, set: { sheet.reason(text: $0) }), axis: .vertical)
                     .lineLimit(4...8)
-                    .onChange(of: reason) { _, new in let cut = NodeReport.shared.reason(text: new); if cut != new { reason = cut } }
-                Toggle(say(.reportGoodFaith), isOn: $goodFaith)
+                Toggle(say(.reportGoodFaith), isOn: Binding(get: { st.goodFaith }, set: { sheet.goodFaith(on: $0) }))
                     .font(.footnote)
             } footer: {
                 Text(say(.reportReasonHint))
             }
             Section {
-                TextField(say(.reportContact), text: $contact)
+                TextField(say(.reportContact), text: Binding(get: { sheet.current.contact }, set: { sheet.contact(text: $0) }))
                     .textContentType(.emailAddress)
                     #if os(iOS)
                     .keyboardType(.emailAddress)
                     .textInputAutocapitalization(.never)
                     #endif
                     .autocorrectionDisabled()
-                    .onChange(of: contact) { _, new in let cut = NodeReport.shared.contact(text: new); if cut != new { contact = cut } }
-                // GDPR Art. 13 applies where a contact is taken: the notice's passage on it
-                if let url = URL(string: model.privacyLink(NodeReport.shared.PRIVACY_ANCHOR)) {
+                // GDPR Art. 13 applies where a contact is taken: the notice's passage on it (core's URL)
+                if let url = URL(string: sheet.privacyUrl) {
                     Button(say(.reportPrivacy)) { openURL(url) }.font(.footnote)
                 }
             } footer: {
                 Text(say(.reportContactHint))
             }
-            if let error { Section { Text(error).foregroundStyle(Role.danger) } }
+            if let problem = st.problem { Section { Text(say(notice: problem)).foregroundStyle(Role.danger) } }
             Section {
                 Button {
-                    Task { await send() }
+                    Task { _ = try? await sheet.send() }
                 } label: {
-                    HStack { Spacer(); if sending { ProgressView() } else { Text(say(.reportSend)).fontWeight(.semibold) }; Spacer() }
+                    HStack { Spacer(); if st.sending { ProgressView() } else { Text(say(.reportSend)).fontWeight(.semibold) }; Spacer() }
                 }
-                .disabled(sending || !NodeReport.shared.canSend(category: category, reason: reason, goodFaith: goodFaith))
+                .disabled(!st.canSend)
             }
         }
-    }
-
-    private func send() async {
-        guard let category else { return }
-        sending = true
-        error = nil
-        let r = await model.report(ref, scope: whole ? .whole : .name, category: category, reason: reason, contact: contact)
-        sending = false
-        if r.outcome == .sent { sent = r } else { error = Notices.shared.reportRefused(outcome: r.outcome).map { say(notice: $0) } }
+        .disabled(st.sending)
     }
 
     private static func time(_ instant: String?) -> String {
@@ -132,4 +122,24 @@ struct ReportSheet: View {
         let date = instant.flatMap { parse.date(from: $0) ?? ISO8601DateFormatter().date(from: $0) }
         return date.map { $0.formatted(date: .abbreviated, time: .shortened) } ?? (instant ?? "")
     }
+}
+
+/// Core's report sheet as SwiftUI observes it: its state, moved by the sheet's watch onto the main actor.
+@MainActor @Observable
+final class ReportBox {
+    private(set) var sheet: VeyqCore.ReportSheet?
+    private(set) var state: VeyqCore.ReportSheet.State?
+    @ObservationIgnored private var watch: VeyqCore.ReportSheet.Watch?
+
+    func start(_ sheet: VeyqCore.ReportSheet) {
+        self.sheet = sheet
+        state = sheet.current
+        watch = sheet.watch { @Sendable _ in
+            Task { @MainActor [weak self] in
+                if let current = self?.sheet?.current { self?.state = current }
+            }
+        }
+    }
+
+    func stop() { watch?.stop() }
 }

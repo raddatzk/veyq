@@ -595,19 +595,10 @@ final class AppModel {
 
     func dismissTrashNotice(_ id: UUID) { if trashNotice?.id == id { trashNotice = nil } }
 
-    // MARK: A report (core's NodeReport)
+    // MARK: A report (core's ReportSheet)
 
-    /// Reports `ref` to the moderators: whole or by its name, in `category` for `reason`, `contact` optional.
-    func report(_ ref: NodeAt, scope: NodeReport.Scope, category: String, reason: String, contact: String) async -> NodeReport.Sent {
-        let failed = NodeReport.Sent(outcome: .failed, reference: nil, receivedAt: nil)
-        guard let t = tenantSession else { return failed }
-        return (try? await NodeReport.shared.report(
-            tenant: t, scopeId: ref.scopeId, nodeId: ref.nodeId, scope: scope, category: category, reason: reason, contact: contact
-        )) ?? failed
-    }
-
-    /// The server's privacy notice at `anchor` (`privacyLink`): the page every place that takes personal data points to.
-    func privacyLink(_ anchor: String) -> String { "\(tenantSession?.origin ?? "")/privacy#\(anchor)" }
+    /// The report of `node` to the tenant's moderators (core's `ReportSheet`: the form's rules, the send, the privacy URL).
+    func reportSheet(_ node: NodeAt) -> VeyqCore.ReportSheet? { shellModel?.reportSheet(node: node) }
 
     // MARK: Guest links (core's ShareLinks)
 
@@ -1043,7 +1034,7 @@ final class AppModel {
         var next = covers.filter { changes.keep.contains($0.key) }
         for (nodeId, key) in changes.open {
             if let opened = (try? await AppleSessions.shared.openFramedCover(tenant: t, nodeId: nodeId)) ?? nil,
-               let whole = CoverImages.image(opened.data as Data, maxPixels: 384),
+               let whole = CoverImages.image(opened.data as Data, maxPixels: Int(NodeCover.shared.THUMBNAIL_EDGE)),
                let image = Self.framed(whole, opened.crop) {
                 next[nodeId] = (key, image)
             }
@@ -1057,11 +1048,11 @@ final class AppModel {
         return image.cropping(to: CGRect(x: Int(r.get(index: 0)), y: Int(r.get(index: 1)), width: Int(r.get(index: 2)), height: Int(r.get(index: 3))))
     }
 
-    /// Sets the picture `data` as the cover of `ref`, framed by `crop`: made the web's cover JPEG on the device (long edge
-    /// 2048, quality 0.85, `COVER_SPEC`) — the whole picture, the crop stored beside it as the web stores it —, uploaded and
+    /// Sets the picture `data` as the cover of `ref`, framed by `crop`: made the web's cover JPEG on the device (core's
+    /// `NodeCover.LONG_EDGE` and `QUALITY`, the web's `COVER_SPEC`) — the whole picture, the crop stored beside it as the web stores it —, uploaded and
     /// attached (core's `NodeCover`); false when it did not land.
     func setCover(_ ref: NodeAt, data: Data, crop: NodeCover.Crop = NodeCover.CropCompanion.shared.FULL) async -> Bool {
-        guard let t = tenantSession, let jpeg = CoverImages.jpeg(data, maxPixels: 2048, quality: 0.85) else { return false }
+        guard let t = tenantSession, let jpeg = CoverImages.jpeg(data, maxPixels: Int(NodeCover.shared.LONG_EDGE), quality: NodeCover.shared.QUALITY) else { return false }
         let outcome = try? await AppleSessions.shared.setCover(tenant: t, scopeId: ref.scopeId, nodeId: ref.nodeId, jpeg: jpeg, crop: crop)
         await refreshLists(t)
         return outcome == .done
@@ -1070,7 +1061,7 @@ final class AppModel {
     /// `ref`'s cover as it is stored — the whole picture and its crop — for the cover sheet to frame anew; nil: none.
     func coverSource(_ ref: NodeAt) async -> (image: CGImage, crop: NodeCover.Crop)? {
         guard let t = tenantSession, let opened = (try? await AppleSessions.shared.openFramedCover(tenant: t, nodeId: ref.nodeId)) ?? nil,
-              let image = CoverImages.image(opened.data as Data, maxPixels: 2048) else { return nil }
+              let image = CoverImages.image(opened.data as Data, maxPixels: Int(NodeCover.shared.LONG_EDGE)) else { return nil }
         return (image, opened.crop)
     }
 
