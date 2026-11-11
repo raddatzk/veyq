@@ -36,6 +36,9 @@ public sealed class SaidTest
         Assert.AreEqual("10.11.2026", Said.InstantDay("2026-11-10T12:00:00.016Z", CultureInfo.GetCultureInfo("de-DE")));
         Assert.AreEqual("11/10/2026", Said.InstantDay("2026-11-10T12:00:00Z", CultureInfo.GetCultureInfo("en-US")));
         Assert.AreEqual("2026-11-10", Said.InstantDay("2026-11-10 or so", CultureInfo.GetCultureInfo("de-DE")));
+        // a report's receipt: the instant's local date and time (the host's zone is W. Europe Standard Time, UTC+1 in November)
+        Assert.AreEqual("10.11.2026 13:00", Said.InstantMoment("2026-11-10T12:00:00.5Z", CultureInfo.GetCultureInfo("de-DE")));
+        Assert.AreEqual("received", Said.InstantMoment("received", CultureInfo.GetCultureInfo("de-DE")));
     }
 
     [TestMethod]

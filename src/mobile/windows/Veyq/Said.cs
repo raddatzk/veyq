@@ -55,6 +55,13 @@ public static partial class Said
             ? DateOnly.FromDateTime(at.ToLocalTime().DateTime).ToString("d", culture ?? CultureInfo.CurrentCulture)
             : instant[..Math.Min(10, instant.Length)];
 
+    /// <summary>A server's instant (ISO 8601) in the local zone as the culture's short date and time (a report's receipt);
+    /// the instant itself where it does not read.</summary>
+    public static string InstantMoment(string instant, CultureInfo? culture = null) =>
+        DateTimeOffset.TryParse(instant, CultureInfo.InvariantCulture, DateTimeStyles.RoundtripKind, out var at)
+            ? at.ToLocalTime().DateTime.ToString("g", culture ?? CultureInfo.CurrentCulture)
+            : instant;
+
     /// <summary>A size as Explorer writes one (<c>StrFormatByteSizeEx</c>, rounded to its shown digits), in the person's
     /// locale: Windows reads it for the process, not per thread (measured: SetThreadUILanguage and SetThreadLocale change
     /// nothing), so a size has no culture to pass.</summary>
