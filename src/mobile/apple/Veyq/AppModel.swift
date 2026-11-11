@@ -296,12 +296,13 @@ final class AppModel {
             Task { @MainActor [weak self] in self?.applyShell(start: false) }
         }
         await readDetails(t, reset: true)
-        // The pictures the directory names a revision for, in the background; the letters show meanwhile.
+        // The members' pictures as core reads them (when is core's rule); the letters show meanwhile.
         avatars = [:]
-        Task {
-            let pictures = (try? await AppleSessions.shared.syncAvatars(tenant: t)) ?? [:]
-            if tenantSession === t { avatars = pictures }
+        avatarsWatch?.stop()
+        avatarsWatch = t.pictures.watch { @Sendable _ in
+            Task { @MainActor [weak self] in self?.syncAvatars() }
         }
+        Task { try? await t.pictures.load() }
         self.tenant = tenant
         server = account.label
         applyShell(start: true)
@@ -1118,8 +1119,15 @@ final class AppModel {
         return outcome == .done
     }
 
-    /// The members' pictures this device opened, by user id (core's `MemberAvatars`): the letter for everyone else.
+    /// The members' pictures this device opened, by user id (core's `AvatarsModel`): the letter for everyone else.
     private(set) var avatars: [String: Data] = [:]
+    @ObservationIgnored private var avatarsWatch: AvatarsModel.Watch?
+
+    /// The open tenant's pictures as core's model holds them now.
+    private func syncAvatars() {
+        guard let t = tenantSession else { return }
+        avatars = AppleSessions.shared.pictures(tenant: t)
+    }
 
     /// Opens and reads the Pot `ref` unless it is the one shown.
     func loadPot(_ ref: ObjectRef) {

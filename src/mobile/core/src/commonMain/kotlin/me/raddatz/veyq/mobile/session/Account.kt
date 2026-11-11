@@ -666,6 +666,9 @@ class TenantSession internal constructor(
     /** The members' profile pictures, synced from [people]'s revisions (`MemberAvatars`). */
     val avatars: MemberAvatars by lazy { MemberAvatars(this) }
 
+    /** The members' pictures a UI shows, and the rule of when they are synced ([AvatarsModel]). */
+    val pictures: AvatarsModel by lazy { AvatarsModel.of(this) }
+
     override suspend fun spaces(): List<SpaceRef> = scopes.map { SpaceRef(it.summary.id, it.summary.kind.value, it.name) }
 
     private var tree: Map<String, List<OpenNode>>? = null

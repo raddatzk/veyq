@@ -19,7 +19,7 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 
-/** The members' pictures this device opened, by user id (core's `MemberAvatars`, published by `AppModel.avatars`). */
+/** The members' pictures this device opened, by user id (core's `AvatarsModel`, published by `AppModel.avatars`). */
 internal val LocalAvatars = compositionLocalOf<Map<String, ByteArray>> { emptyMap() }
 
 /**

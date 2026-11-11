@@ -1,7 +1,7 @@
 import SwiftUI
 
 extension EnvironmentValues {
-    /// The members' pictures this device opened, by user id (core's `MemberAvatars`, published by `AppModel.avatars`).
+    /// The members' pictures this device opened, by user id (core's `AvatarsModel`, published by `AppModel.avatars`).
     @Entry var avatars: [String: Data] = [:]
 }
 

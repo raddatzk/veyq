@@ -260,7 +260,7 @@ class AppModel(app: Application) : AndroidViewModel(app) {
         model.load(openLastUsed = shareInbox.waiting.value == null)
         shellWatch = viewModelScope.launch { model.state.collect { it?.let(::publish) } }
         readRowDetails(t)
-        syncAvatars(t)
+        watchAvatars(t)
     }
 
     // ---- what another app shared (ADR 0126) ----
@@ -509,17 +509,17 @@ class AppModel(app: Application) : AndroidViewModel(app) {
     private val _rowDetails = MutableStateFlow<Map<String, List<String>>>(emptyMap())
     val rowDetails: StateFlow<Map<String, List<String>>> = _rowDetails.asStateFlow()
 
-    /** The members' pictures this device opened, by user id (core's `MemberAvatars`): the letter for everyone else. */
+    /** The members' pictures this device opened, by user id (core's `AvatarsModel`): the letter for everyone else. */
     private val _avatars = MutableStateFlow<Map<String, ByteArray>>(emptyMap())
     val avatars: StateFlow<Map<String, ByteArray>> = _avatars.asStateFlow()
+    private var avatarsWatch: kotlinx.coroutines.Job? = null
 
-    /** Fetches the pictures the tenant's directory names a revision for, in the background; the letters show meanwhile. */
-    private fun syncAvatars(t: me.raddatz.veyq.mobile.session.TenantSession) {
+    /** Shows the tenant's pictures as core reads them (when is core's rule); the letters show meanwhile. */
+    private fun watchAvatars(t: me.raddatz.veyq.mobile.session.TenantSession) {
+        avatarsWatch?.cancel()
         _avatars.value = emptyMap()
-        viewModelScope.launch {
-            runCatching { t.avatars.sync(t.people.values) }
-            if (tenantSession === t) _avatars.value = t.avatars.pictures()
-        }
+        avatarsWatch = viewModelScope.launch { t.pictures.state.collect { _avatars.value = it } }
+        viewModelScope.launch { t.pictures.load() }
     }
 
     /** What the rows read last (core's `RowDetails`): a part that does not read next time keeps these. */
