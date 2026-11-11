@@ -37,6 +37,7 @@ internal sealed class ShellView
     private readonly Window _window;
     private readonly ContentControl _body;
     private readonly NavigationViewItem _settings;
+    private readonly Action _manage;
     private PotPage? _pot;
     private IReadOnlyList<ObjectRef>? _hits;
     private bool _started;
@@ -47,9 +48,10 @@ internal sealed class ShellView
     private static readonly Thickness Head = new(16, 8, 8, 4);
     private static readonly Thickness MinimalHead = new(100, 8, 8, 4);
 
-    public ShellView(Window window)
+    public ShellView(Window window, Action manage)
     {
         _window = window;
+        _manage = manage;
         _switcherTitle = new TextBlock { Style = (Style)Application.Current.Resources["BodyStrongTextBlockStyle"], TextTrimming = TextTrimming.CharacterEllipsis };
         _switcherSubtitle = new TextBlock
         {
@@ -286,7 +288,7 @@ internal sealed class ShellView
     }
 
     /// <summary>The switcher: the space shown and its tenant and server; the spaces, then each server's tenants in its
-    /// menu, then Manage servers (not in this slice: shown, as on the other apps, and not offered yet).</summary>
+    /// menu, then Manage servers (ManageDialog).</summary>
     private void DrawSwitcher(ShellModelState state, ShellShown shown)
     {
         _switcherTitle.Text = Said.Piece(shown.spaceName);
@@ -325,8 +327,13 @@ internal sealed class ShellView
             }
         }
         menu.Items.Add(new MenuFlyoutSeparator());
-        var manage = new MenuFlyoutItem { Text = Words.SwitcherManage(), IsEnabled = false };
+        var manage = new MenuFlyoutItem { Text = Words.SwitcherManage() };
         AutomationProperties.SetAutomationId(manage, "switcher-manage");
+        manage.Click += (_, _) =>
+        {
+            _manage();
+            ClosePaneIfOverlay();
+        };
         menu.Items.Add(manage);
         _switcher.Flyout = menu;
     }

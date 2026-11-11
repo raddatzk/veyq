@@ -27,7 +27,7 @@ Verbs:
                              the DLL and of Veyq.Tests against the app's .pri — the words in English and German, money and
                              days in two cultures, sizes in the host's — each an x64 process (`--arch x64`; an ARM64 host
                              runs it under emulation with the x64 .NET runtime).
-  run [--width W --height H] [--devlogin]
+  run [--width W --height H] [--devlogin [--fill|--unlock]]
                              builds the app as `build` does (without its tests), stops a running one, puts it in
                              `<dir>\app` and starts it in the logged-on session through the scheduled task `veyq-app`
                              (Veyq.Drive's launch); W × H resizes its window. Then it holds the tunnel to the backend
@@ -36,7 +36,9 @@ Verbs:
                              de-DE) from this host's environment. `--devlogin` hands the debug build the seeded
                              principal of the env file (VEYQ_ENV_FILE, else `.run/.env`) as VEYQ_DEV_*, inside the
                              launch file Veyq.Drive deletes on reading — never on a command line —, and it signs in
-                             through its own sign-in once (DevLogin.cs).
+                             through its own sign-in once (DevLogin.cs). `--fill` only fills the sign-in, for the pass to
+                             check "Stay signed in" and press it; `--unlock` hands the password alone, which the unlock of
+                             a password-trusted account takes.
   drive <step>...            runs Veyq.Drive's steps (its Program.cs: tree, invoke, select, set, type, key, press,
                              size, maximize, wait, sleep, shot) against the running app through the scheduled task
                              `veyq-drive`, and prints the app's log first, then what each step saw. `shot <name>.png`
@@ -476,22 +478,27 @@ def launch(env: dict[str, str]) -> int:
     return code
 
 
-def dev_principal(live: str) -> dict[str, str]:
+def dev_principal(live: str, unlock: bool = False, fill: bool = False) -> dict[str, str]:
     """The seeded dev principal as the debug build's VEYQ_DEV_* (Linux's and DevLogin.swift's names): the server is
-    [live], the rest the env file's (VEYQ_ENV_FILE, else `.run/.env`). Nothing of it is printed; it reaches the Windows
-    host only inside the launch file, which Veyq.Drive deletes on reading."""
+    [live], the rest the env file's (VEYQ_ENV_FILE, else `.run/.env`). With [unlock] the password alone, as
+    VEYQ_DEV_UNLOCK_PASSWORD (Android's `--unlock`); with [fill] the app fills its sign-in and leaves "Stay signed in"
+    and the button to the pass (VEYQ_DEV_FILL). Nothing of it is printed; it reaches the Windows host only inside the
+    launch file, which Veyq.Drive deletes on reading."""
     values: dict[str, str] = {}
     for line in env_file().read_text().splitlines():
         if "=" in line and not line.lstrip().startswith("#"):
             k, v = line.split("=", 1)
             values[k.strip()] = v.strip().strip('"').strip("'")
-    return {"VEYQ_DEV_SERVER": live, "VEYQ_DEV_EMAIL": values["VEYQ_EMAIL"], "VEYQ_DEV_PASSWORD": values["VEYQ_PASSWORD"],
-            "VEYQ_DEV_SECRET_KEY": values["VEYQ_SECRET_KEY"]}
+    if unlock:
+        return {"VEYQ_DEV_UNLOCK_PASSWORD": values["VEYQ_PASSWORD"]}
+    principal = {"VEYQ_DEV_SERVER": live, "VEYQ_DEV_EMAIL": values["VEYQ_EMAIL"], "VEYQ_DEV_PASSWORD": values["VEYQ_PASSWORD"],
+                 "VEYQ_DEV_SECRET_KEY": values["VEYQ_SECRET_KEY"]}
+    return principal | ({"VEYQ_DEV_FILL": "1"} if fill else {})
 
 
-def run_app(width: int | None, height: int | None, devlogin: bool = False) -> int:
+def run_app(width: int | None, height: int | None, devlogin: bool = False, unlock: bool = False, fill: bool = False) -> int:
     live_origin = os.environ.get("VEYQ_LIVE", "http://veyq.localhost:8080")
-    secrets = dev_principal(live_origin) if devlogin else {}
+    secrets = dev_principal(live_origin, unlock, fill) if devlogin else {}
     dll = generate()
     for project in PROJECTS:
         dotnet("restore", "--locked-mode", project)
@@ -677,6 +684,8 @@ def main() -> None:
     r.add_argument("--width", type=int)
     r.add_argument("--height", type=int)
     r.add_argument("--devlogin", action="store_true", help="sign the debug build in as the seeded principal of the env file")
+    r.add_argument("--fill", action="store_true", help="with --devlogin: only fill the sign-in; the pass presses it")
+    r.add_argument("--unlock", action="store_true", help="with --devlogin: the password alone, for a password-trusted unlock")
     d = verbs.add_parser("drive", help="drive the running app by UI Automation (Veyq.Drive's steps) and print what it saw")
     d.add_argument("steps", nargs="+", help="each a step: tree, invoke <id>, select <id>, set <id> <text>, key <keys>, "
                                             "type <id> <text>, press <id> [keys], size <w> <h>, maximize, wait <id> [s], sleep <ms>, shot <name>.png")
@@ -692,7 +701,11 @@ def main() -> None:
     if args.verb == "build":
         sys.exit(build())
     if args.verb == "run":
-        sys.exit(run_app(args.width, args.height, args.devlogin))
+        if (args.fill or args.unlock) and not args.devlogin:
+            sys.exit("--fill and --unlock go with --devlogin")
+        if args.fill and args.unlock:
+            sys.exit("--fill and --unlock exclude each other")
+        sys.exit(run_app(args.width, args.height, args.devlogin, args.unlock, args.fill))
     if args.verb == "drive":
         sys.exit(drive(args.steps))
     if args.verb == "hello-probe":

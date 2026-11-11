@@ -6,7 +6,7 @@
 //   --drive <file>    runs the steps in <file>, one a line, against the app's window, writes what each did to
 //                     <file>.out (UTF-8) and then <file>.done. A step that fails ends the run, said in the output.
 // Steps:
-//   tree                      the window's UIA tree as text: control type, name, AutomationId, value, enabled, bounds;
+//   tree                      the window's UIA tree as text: control type, name, AutomationId, value, on/off, enabled, bounds;
 //                             then each other top-level window of the app (a flyout, a menu, a suggestion list)
 //   invoke <id>               the element's Invoke (a button), or its Toggle or ExpandCollapse where it has no Invoke;
 //                             the id is the rest of the line (it may hold a name's spaces)

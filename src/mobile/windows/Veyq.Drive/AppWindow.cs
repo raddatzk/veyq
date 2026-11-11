@@ -172,6 +172,8 @@ internal sealed partial class AppWindow(string process)
         if (!string.IsNullOrEmpty(c.AutomationId)) text.Append(" #").Append(c.AutomationId);
         if (e.TryGetCurrentPattern(ValuePattern.Pattern, out var value)) text.Append(" value=\"").Append(((ValuePattern)value).Current.Value).Append('"');
         if (e.TryGetCurrentPattern(SelectionItemPattern.Pattern, out var item) && ((SelectionItemPattern)item).Current.IsSelected) text.Append(" selected");
+        // a check box's or switch's state, so a pass reads it before its shot
+        if (e.TryGetCurrentPattern(TogglePattern.Pattern, out var toggle)) text.Append(((TogglePattern)toggle).Current.ToggleState == ToggleState.On ? " on" : " off");
         if (!c.IsEnabled) text.Append(" disabled");
         var b = c.BoundingRectangle;
         if (!b.IsEmpty) text.Append(CultureInfo.InvariantCulture, $" [{b.X:0},{b.Y:0} {b.Width:0}x{b.Height:0}]");
