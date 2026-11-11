@@ -268,5 +268,7 @@ Kubernetes, run the same command with `kubectl -n veyq exec deploy/veyq-admin --
 | `operator show` / `operator set --<value> <text>` / `operator clear` | Print the operator details, every value present and `null` where none is set (published as *not stated by this operator*); change the values given (`none` clears one) and keep the rest — `--recipients '<name>\|<kind>\|<country>; …'` replaces the privacy notice's whole list (the kind `hosting`, `object-storage`, `mail-relay`, `backup` or `other:<what they do>`; the country a two-letter ISO 3166-1 code such as `DE`), `--data-protection-officer` sets the officer; clear them all. The notification address's code is typed into the console, never the CLI |
 
 Output is JSON on standard output. A failure prints one line, `veyq-admin: <reason>`, to standard error and exits
-`1`. `veyq-admin --help` prints the usage. Setup is deliberately not a command: it creates key material and an
-Emergency Kit, which belong on a screen where a person can save the kit.
+`1`. `veyq-admin --help` lists the command groups, `veyq-admin <group> --help` a group's commands, and
+`veyq-admin <group> <command> --help` one command in full, with its flags; none of them signs in. Setup is
+deliberately not a command: it creates key material and an Emergency Kit, which belong on a screen where a person can
+save the kit.

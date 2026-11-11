@@ -17,4 +17,4 @@
 //                                 is the thing ADR 0065 exists to avoid.
 import { run } from './cli'
 
-process.exitCode = await run(process.argv.slice(2), process.env)
+process.exitCode = await run(process.argv.slice(2), process.env, console.log, console.error, process.stdout.columns)

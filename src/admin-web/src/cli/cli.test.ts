@@ -97,6 +97,7 @@ vi.mock('../api/client', async (importOriginal) => ({
 vi.mock('./adminSession', () => ({ signIn: vi.fn().mockResolvedValue(undefined) }))
 
 import { run } from './cli'
+import { COMMANDS, GROUPS, SUMMARY_MAX } from './commands'
 import { signIn } from './adminSession'
 import * as tenants from '../features/tenants/tenants'
 import { getInstanceRelease } from '../features/instance/release'
@@ -1117,26 +1118,100 @@ describe('veyq-admin — an account’s erasure (uc.account.erase-account)', () 
 })
 
 describe('veyq-admin — usage and refusals', () => {
-  it('--help lists every command and exits 0 without signing in', async () => {
+  it('--help lists every group, one line each, and no command — the screen it fits on is the point', async () => {
     const r = await invoke(['--help'])
     expect(r.code).toBe(0)
-    for (const c of ['tenant create', 'tenant change-domain', 'tenant reactivate', 'tenant quota', 'release', 'config-secret', 'store show', 'store set', 'store check', 'store discard', 'store reconcile', 'capabilities list', 'capabilities off <id>', 'capabilities on <id>', 'capabilities require <id>', 'services list', 'services set <id>', 'services unset <id>', 'moderator list', 'moderator appoint --address', 'moderator remove --address', 'moderation rotate --reason', 'moderation proposals', 'moderation decline --proposal', 'account block --address', 'account unblock --address', 'account erase --address', 'account stop-erasure --address', 'account erasures', 'tenant delete --tenant-id', 'tenant stop-deletion --tenant-id', 'tenant invite-owner --tenant-id','order remove --share', 'order preserve --share', 'order inform --share', 'operator show', 'operator set', 'operator clear']) {
-      expect(r.out).toContain(c)
-    }
+    for (const [group, line] of Object.entries(GROUPS)) expect(r.out).toContain(`  ${group.padEnd(18)}  ${line}`)
+    expect(r.out).not.toContain('tenant create')
+    expect(r.out).toContain('VEYQ_ADMIN_PASSWORD')
+    expect(r.out.split('\n').every((l) => l.length <= 80)).toBe(true)
     // Help must not cost an Argon2id derivation, nor require a credential to be present at all.
+    expect(signIn).not.toHaveBeenCalled()
+  })
+
+  it('every command has a group, every group a command, and every summary is one short line', () => {
+    const groups = new Set(Object.keys(COMMANDS).map((n) => n.split(' ')[0]))
+    expect([...groups].sort()).toEqual(Object.keys(GROUPS).sort())
+    for (const [name, c] of Object.entries(COMMANDS)) {
+      expect(c.summary.length, name).toBeLessThanOrEqual(SUMMARY_MAX)
+      expect(c.summary, name).not.toContain('\n')
+    }
+  })
+
+  it("a group's --help lists each of its commands with its summary, and only its own", async () => {
+    for (const group of Object.keys(GROUPS)) {
+      const r = await invoke([group, '--help'])
+      expect(r.code, group).toBe(0)
+      const own = Object.entries(COMMANDS).filter(([n]) => n.split(' ')[0] === group)
+      // A one-command group is that command's help, which prints its whole text instead of the summary.
+      const flat = r.out.replace(/\s+/g, ' ')
+      for (const [, c] of own) expect(flat, group).toContain(own.length === 1 ? (c.details ?? c.summary) : c.summary)
+      if (group !== 'tenant') expect(r.out, group).not.toContain(COMMANDS['tenant create'].summary)
+    }
+    expect(signIn).not.toHaveBeenCalled()
+  })
+
+  it("a command's --help prints its usage, its whole text and every flag, and runs nothing", async () => {
+    for (const [name, c] of Object.entries(COMMANDS)) {
+      const r = await invoke([...name.split(' '), '--help'], {})
+      expect(r.code, name).toBe(0)
+      const flat = r.out.replace(/\s+/g, ' ')
+      expect(flat, name).toContain(`veyq-admin ${c.usage}`)
+      expect(flat, name).toContain(c.details ?? c.summary)
+      for (const flag of Object.keys(c.flags)) expect(r.out, name).toContain(`--${flag}`)
+      if (c.operand) expect(r.out, name).toContain(`<${c.operand.name}>`)
+    }
+    // `-h` after a destructive command's flags is still help, never the step.
+    const r = await invoke(['tenant', 'delete', '--tenant-id', 't1', '--domain', 'f.example.com', '-h'])
+    expect(r.code).toBe(0)
+    expect(signIn).not.toHaveBeenCalled()
+    expect(tenants.deleteTenant).not.toHaveBeenCalled()
+  })
+
+  it('help is wrapped to the terminal it is printed on, never wider than 100', async () => {
+    const lines = async (columns: number) => {
+      const c = capture()
+      await run(['tenant', 'suspend', '--help'], ENV, c.sinks[0], c.sinks[1], columns)
+      return c.out.join('\n').split('\n')
+    }
+    expect((await lines(60)).every((l) => l.length <= 60)).toBe(true)
+    expect(Math.max(...(await lines(300)).map((l) => l.length))).toBeLessThanOrEqual(100)
+    expect(Math.max(...(await lines(300)).map((l) => l.length))).toBeGreaterThan(80)
+  })
+
+  it('a group alone prints its commands and exits non-zero, as no arguments do', async () => {
+    const r = await invoke(['tenant'])
+    expect(r.code).toBe(1)
+    expect(r.out).toContain(COMMANDS['tenant suspend'].summary)
+    expect(signIn).not.toHaveBeenCalled()
+  })
+
+  it('a typo is answered with the likely command, not the whole help', async () => {
+    const r = await invoke(['rleease'])
+    expect(r.code).toBe(1)
+    expect(r.err).toContain("unknown command 'rleease' — did you mean 'release'?")
+    expect(r.err).not.toContain('tenant create')
+    const t = await invoke(['tenant', 'lsit'])
+    expect(t.err).toContain("did you mean 'tenant list'?")
+    const far = await invoke(['frobnicate'])
+    expect(far.err).not.toContain('did you mean')
+    expect(far.err).toContain("Run 'veyq-admin --help'")
     expect(signIn).not.toHaveBeenCalled()
   })
 
   it('no arguments prints usage and exits non-zero — nothing was asked, so nothing succeeded', async () => {
     const r = await invoke([])
     expect(r.code).toBe(1)
-    expect(r.out).toContain('tenant list')
+    expect(r.out).toContain(GROUPS.tenant)
   })
 
   it('an unknown command names what it did not understand and exits 1', async () => {
     const r = await invoke(['tenant', 'explode'])
     expect(r.code).toBe(1)
     expect(r.err).toContain("unknown command 'tenant explode'")
+    // Its group is known, so its commands are listed — and only those.
+    expect(r.err).toContain(COMMANDS['tenant quota'].summary)
+    expect(r.err).not.toContain(COMMANDS['store show'].summary)
     expect(signIn).not.toHaveBeenCalled()
   })
 
