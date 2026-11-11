@@ -842,7 +842,69 @@ def manifest_reader(host: Host, source: Source, unsigned_local: bool) -> Callabl
     return read
 
 
-# ---- verification ---------------------------------------------------------------------------------------------
+# ---- what a selector means against what runs: one plan for every verb ----------------------------------------
+
+def entry_note(selector: str, chosen: Listed, target: Listed, then: str) -> str:
+    """What a run that stops short of `chosen` says: the selected release, the rule, and the major `then` enters."""
+    return (f"{RELEASE_KEY}={selector} selects {chosen.release}, but a new major is entered only from the release "
+            f"its manifest names: {then} enters major {target.major + 1}")
+
+
+class Plan(NamedTuple):
+    """What a selector means against what runs (ADR 0096 decision 5, step 1) — one resolution for every verb."""
+    source: Source
+    listed: list[Listed]
+    selector: str
+    selection: Listed                            # what the selector selects
+    running: str                                 # the release that runs, "" before the first install
+    relation: str                                # "fresh", "same", "older" (no downgrade) or "newer"
+    target: Listed | None                        # where an upgrade goes now: an entry on the way, else the selection
+    manifest_of: Callable[[Listed], Manifest]    # the verified manifest of a release, read once
+
+
+def plan(host: Host, source_spec: str | None, selector: str, running: str = "", unsigned_local: bool = False) -> Plan:
+    """The releases the source lists, what `selector` selects, and — against `running` — where an upgrade goes: never
+    below what runs, and into a later major only through the release its manifest names as its entry."""
+    source = open_source(source_spec)
+    listed = source.releases()
+    selection = select(listed, selector, source.describe())
+    manifest_of = manifest_reader(host, source, unsigned_local)
+    current = tuple(int(x) for x in running.split(".")) if running else None
+    if current is None:
+        relation, target = "fresh", selection
+    elif (selection.major, selection.minor) == current:
+        relation, target = "same", None
+    elif (selection.major, selection.minor) < current:
+        relation, target = "older", None
+    else:
+        relation = "newer"
+        target = upgrade_target(listed, current, selection, source.describe(), lambda r: manifest_of(r).major_entry)
+    return Plan(source, listed, selector, selection, running, relation, target, manifest_of)
+
+
+def say_selection(p: Plan) -> None:
+    say(f"release {p.selection.release} (selected by `{p.selector}`), from {p.source.describe()}")
+
+
+def say_check(p: Plan, runs: str) -> None:
+    """What `check` reports, on every target: what `upgrade` would do, and a newer major beyond the selection.
+    `runs` is how the target says a release is in place ("running", "installed")."""
+    if p.relation == "same":
+        say(f"release {p.running} is {runs} already ({RELEASE_KEY}={p.selector}): `upgrade` has nothing to do")
+    elif p.relation == "older":
+        say(f"{RELEASE_KEY}={p.selector} selects {p.selection.release}, older than the {runs} {p.running}: `upgrade` "
+            f"would refuse")
+    else:
+        say(f"`upgrade` would take release {p.target.release}" + (f" ({runs}: {p.running}" if p.running else " (")
+            + f"{'; ' if p.running else ''}{RELEASE_KEY}={p.selector})")
+        if p.target != p.selection:
+            say(entry_note(p.selector, p.selection, p.target, "the `upgrade` after that one"))
+    beyond = newer_major(p.listed, p.selection)
+    if beyond:
+        say(f"a newer major exists: {beyond.release} — read its release notes before you select it")
+
+
+# ---- the programs a command starts: checked before its first question ------------------------------------
 
 # Every program a command starts, with where to get it. Checked before the command's first question, all at once and
 # by name (cr-veyqctl-server-path): an operator learns what to install before answering anything, not halfway through.
@@ -911,6 +973,8 @@ def require_programs(host: Host, names: Iterable[str], what: str, wait: bool = F
         if not host.wait(shown + "\nPress Enter once installed (Ctrl-C to stop; run the same command again later)"):
             raise Refused(shown)
 
+
+# ---- verification ---------------------------------------------------------------------------------------------
 
 def require_cosign(host: Host) -> str:
     cosign = host.which("cosign")
@@ -1411,71 +1475,6 @@ def cmd_verify(args: argparse.Namespace, host: Host) -> int:
     return 0
 
 
-# What a restore leaves to the Server Owner to check (ADR 0056 § 5): what tells a restore from a hope.
-AFTER_RESTORE = ("Now check it: as the Server Owner, the admin console's Server → Config-secret key must say OK; look at "
-                 "the store; and open a Memory with photos.")
-
-
-def entry_note(selector: str, chosen: Listed, target: Listed, then: str) -> str:
-    """What a run that stops short of `chosen` says: the selected release, the rule, and the major `then` enters."""
-    return (f"{RELEASE_KEY}={selector} selects {chosen.release}, but a new major is entered only from the release "
-            f"its manifest names: {then} enters major {target.major + 1}")
-
-
-class Plan(NamedTuple):
-    """What a selector means against what runs (ADR 0096 decision 5, step 1) — one resolution for every verb."""
-    source: Source
-    listed: list[Listed]
-    selector: str
-    selection: Listed                            # what the selector selects
-    running: str                                 # the release that runs, "" before the first install
-    relation: str                                # "fresh", "same", "older" (no downgrade) or "newer"
-    target: Listed | None                        # where an upgrade goes now: an entry on the way, else the selection
-    manifest_of: Callable[[Listed], Manifest]    # the verified manifest of a release, read once
-
-
-def plan(host: Host, source_spec: str | None, selector: str, running: str = "", unsigned_local: bool = False) -> Plan:
-    """The releases the source lists, what `selector` selects, and — against `running` — where an upgrade goes: never
-    below what runs, and into a later major only through the release its manifest names as its entry."""
-    source = open_source(source_spec)
-    listed = source.releases()
-    selection = select(listed, selector, source.describe())
-    manifest_of = manifest_reader(host, source, unsigned_local)
-    current = tuple(int(x) for x in running.split(".")) if running else None
-    if current is None:
-        relation, target = "fresh", selection
-    elif (selection.major, selection.minor) == current:
-        relation, target = "same", None
-    elif (selection.major, selection.minor) < current:
-        relation, target = "older", None
-    else:
-        relation = "newer"
-        target = upgrade_target(listed, current, selection, source.describe(), lambda r: manifest_of(r).major_entry)
-    return Plan(source, listed, selector, selection, running, relation, target, manifest_of)
-
-
-def say_selection(p: Plan) -> None:
-    say(f"release {p.selection.release} (selected by `{p.selector}`), from {p.source.describe()}")
-
-
-def say_check(p: Plan, runs: str) -> None:
-    """What `check` reports, on every target: what `upgrade` would do, and a newer major beyond the selection.
-    `runs` is how the target says a release is in place ("running", "installed")."""
-    if p.relation == "same":
-        say(f"release {p.running} is {runs} already ({RELEASE_KEY}={p.selector}): `upgrade` has nothing to do")
-    elif p.relation == "older":
-        say(f"{RELEASE_KEY}={p.selector} selects {p.selection.release}, older than the {runs} {p.running}: `upgrade` "
-            f"would refuse")
-    else:
-        say(f"`upgrade` would take release {p.target.release}" + (f" ({runs}: {p.running}" if p.running else " (")
-            + f"{'; ' if p.running else ''}{RELEASE_KEY}={p.selector})")
-        if p.target != p.selection:
-            say(entry_note(p.selector, p.selection, p.target, "the `upgrade` after that one"))
-    beyond = newer_major(p.listed, p.selection)
-    if beyond:
-        say(f"a newer major exists: {beyond.release} — read its release notes before you select it")
-
-
 def cmd_check(args: argparse.Namespace, host: Host) -> int:
     home = Path(args.home)
     try:
@@ -1925,6 +1924,11 @@ def cmd_backup(args: argparse.Namespace, host: Host) -> int:
     return 0
 
 
+# What a restore leaves to the Server Owner to check (ADR 0056 § 5): what tells a restore from a hope.
+AFTER_RESTORE = ("Now check it: as the Server Owner, the admin console's Server → Config-secret key must say OK; look at "
+                 "the store; and open a Memory with photos.")
+
+
 def cmd_restore(args: argparse.Namespace, host: Host) -> int:
     """The running release's tool restores onto THIS instance, which must hold no data yet (ADR 0056 §4, A5)."""
     home = Path(args.home)
@@ -2102,18 +2106,6 @@ def cmd_self_update(args: argparse.Namespace, host: Host) -> int:
 GITOPS_FILE = "veyqctl.json"  # a GitOps instance's own file: target, selector, secrets provider, paths, pins
 REGISTRY_FILE = "instances.json"  # in config_dir(): the instances a user manages, and which is current
 INSTANCE_NAME = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,62}$")
-# What does a Compose verb's job on a GitOps instance, said when it refuses there.
-COMPOSE_ONLY = {
-    "install": "`init` writes a GitOps instance; `install` is Compose's",
-    "start": "Argo CD runs the workloads",
-    "stop": "Argo CD runs the workloads (switch the Application's automated sync off to stop it changing them)",
-    "status": "Argo CD shows the Application's health (`kubectl -n <namespace> get pods` the pods')",
-    "logs": "`kubectl -n <namespace> logs deploy/veyq-app`",
-    "backup": "veyq backs itself up before every release change, and the chart's `backup.request` asks for one",
-    "restore": "the chart's restore Job (the docs: Backup and restore, under Helm)",
-    "rollback": "the chart's restore Job, onto the previous release pinned back",
-    "self-update": "fetch the release's veyqctl as Verify a release says; a GitOps instance holds no release's files",
-}
 
 
 def config_dir() -> Path:
@@ -2203,146 +2195,6 @@ def cmd_use(args: argparse.Namespace, host: Host) -> int:
     say(f"{args.name} is now the current instance ({target_of(Path(registry['instances'][args.name]))}, "
         f"{registry['instances'][args.name]})")
     return 0
-
-
-ARGO_APPLICATION = re.compile(r"(?m)^apiVersion:\s*argoproj\.io/v1alpha1\s*$[\s\S]*?^kind:\s*Application\s*$")
-
-
-def suggested_gitops_directory(host: Host) -> str:
-    """Where veyq's half fits the repository this runs in, relative to the current directory: beside the Argo CD
-    Applications the repository already holds — `<their common parent>/veyq` when each sits in a directory of its own
-    under one parent (`gitops/apps/traefik/application.yaml` → `gitops/apps/veyq`) — else `apps/veyq`."""
-    top = checkout_top(host)
-    if top is None or not top.is_dir():
-        return "apps/veyq"
-    parents: set[Path] = set()
-    for path in top.rglob("*.yaml"):
-        relative = path.relative_to(top)
-        if len(relative.parts) > 5 or any(part.startswith(".") or part == "node_modules" for part in relative.parts):
-            continue
-        try:
-            if ARGO_APPLICATION.search(path.read_text(errors="replace")[:4000]) and len(relative.parts) >= 3:
-                parents.add(path.parent.parent)
-        except OSError:
-            continue
-    if len(parents) != 1:
-        return "apps/veyq"
-    target = parents.pop() / "veyq"
-    try:
-        return os.path.relpath(target, Path.cwd().resolve())
-    except ValueError:
-        return str(target)
-
-
-SETUP_FILE = "veyq-setup.json"
-
-
-class Progress:
-    """What a GitOps `init` asked and did, written the moment it is answered or done (ADR 0126: every question before
-    the first step; the same command continues an interrupted run, asking nothing twice).
-
-    The answers are the repository's: `veyq-setup.json` at the checkout's root, veyq's half keyed by its directory —
-    committed with what they produced, so `init` asks nothing again in that checkout, here or on another machine. Never
-    a secret: generated values go into the repository encrypted, or into the hand-over file. Which steps are done is this
-    machine's: a file in config_dir(), keyed by checkout and directory, never inside the repository."""
-
-    def __init__(self, checkout: Path, rel: str) -> None:
-        self.checkout, self.rel = checkout, rel
-        self.setup_path = checkout / SETUP_FILE
-        key = f"{checkout}\0{rel}".encode()
-        self.path = config_dir() / f"init-{hashlib.sha256(key).hexdigest()[:16]}.json"
-        self.setup = read_setup(checkout)
-        self.answers: dict[str, str] = dict(self.setup.setdefault("veyq", {}).get(rel) or {})
-        try:
-            doc = json.loads(self.path.read_text()) if self.path.is_file() else {}
-        except (OSError, ValueError):
-            doc = {}
-        self.server: dict[str, str] = dict(self.setup.get("server") or {})
-        # What is this machine's, not the repository's: the age key file's path, the steps done.
-        self.doc = {"checkout": str(checkout), "directory": rel, "steps": dict(doc.get("steps") or {}),
-                    "local": dict(doc.get("local") or {})}
-        # A run to go on with: answers or steps, and veyq's half not written yet.
-        self.resumed = bool(self.answers or self.doc["steps"]) and not (checkout / rel / GITOPS_FILE).is_file()
-
-    def get(self, section: str, key: str) -> str | None:
-        """A kept answer: from veyq-setup.json's `veyq` (this directory's) or `server` section, or this machine's
-        `local` values."""
-        value = {"veyq": self.answers, "server": self.server, "local": self.doc["local"]}[section].get(key)
-        return value if isinstance(value, str) and value else None
-
-    def put(self, section: str, key: str, value: str) -> None:
-        """Keep an answer the moment it is given: the repository's sections in veyq-setup.json, `local` here."""
-        if section == "local":
-            self.doc["local"][key] = value
-            config_dir().mkdir(parents=True, exist_ok=True)
-            atomic_write(self.path, json.dumps(self.doc, indent=2) + "\n")
-            return
-        kept = self.answers if section == "veyq" else self.server
-        if kept.get(key) != value:
-            kept[key] = value
-            if section == "veyq":
-                self.setup["veyq"][self.rel] = kept
-            else:
-                self.setup["server"] = kept
-            atomic_write(self.setup_path, json.dumps(self.setup, indent=2, sort_keys=True) + "\n")
-
-    def answer(self, key: str) -> str | None:
-        return self.get("veyq", key)
-
-    def done(self, step: str):
-        return self.doc["steps"].get(step)
-
-    def mark(self, step: str, data: object = True) -> None:
-        self.doc["steps"][step] = data
-        config_dir().mkdir(parents=True, exist_ok=True)
-        atomic_write(self.path, json.dumps(self.doc, indent=2) + "\n")
-
-    def clear_steps(self) -> None:
-        """The steps done, once the run finished; what is this machine's (the age key's path) stays."""
-        self.doc["steps"] = {}
-        if self.doc["local"]:
-            atomic_write(self.path, json.dumps(self.doc, indent=2) + "\n")
-        else:
-            self.path.unlink(missing_ok=True)
-
-    def start_over(self) -> None:
-        """Forget this directory's answers and steps (the person said no to going on)."""
-        self.path.unlink(missing_ok=True)
-        self.doc["steps"], self.doc["local"], self.answers, self.server = {}, {}, {}, {}
-        dropped = [self.setup["veyq"].pop(self.rel, None), self.setup.pop("server", None)]
-        if any(part is not None for part in dropped):
-            atomic_write(self.setup_path, json.dumps(self.setup, indent=2, sort_keys=True) + "\n")
-        self.resumed = False
-
-
-def atomic_write(path: Path, text: str) -> None:
-    tmp = path.with_name(path.name + ".tmp")
-    tmp.write_text(text)
-    tmp.replace(path)
-
-
-def read_setup(checkout: Path) -> dict:
-    """The checkout's veyq-setup.json, or an empty one; refused when it is there and not an object of sections."""
-    path = checkout / SETUP_FILE
-    if not path.is_file():
-        return {}
-    try:
-        doc = json.loads(path.read_text())
-    except ValueError as e:
-        raise Refused(f"{path} is not valid JSON ({e}). It holds your answers: fix it, or move it away and answer again")
-    if not isinstance(doc, dict) or not isinstance(doc.get("veyq", {}), dict):
-        raise Refused(f"{path} is not init's answers (an object with a `veyq` section by directory)")
-    return doc
-
-
-def setup_directory(checkout: Path) -> str | None:
-    """veyq's directory veyq-setup.json answers for that `init` with no argument takes: the one a run did not finish,
-    else the only one there is (written: init says so and writes nothing)."""
-    answered = list(read_setup(checkout).get("veyq") or {})
-    open_ = [rel for rel in answered if not (checkout / rel / GITOPS_FILE).is_file()]
-    if len(open_) == 1:
-        return open_[0]
-    return answered[0] if len(answered) == 1 and not open_ else None
 
 
 # ---- the GitOps target: veyq's half of an Argo CD repository (ADR 0126 decisions 3-5 and 7) ---------------------
@@ -3317,6 +3169,146 @@ def cmd_connect(args: argparse.Namespace, host: Host) -> int:
 
 # ---- init: every question before the first step, then the steps (ADR 0126) ----------------------------------------
 
+ARGO_APPLICATION = re.compile(r"(?m)^apiVersion:\s*argoproj\.io/v1alpha1\s*$[\s\S]*?^kind:\s*Application\s*$")
+
+
+def suggested_gitops_directory(host: Host) -> str:
+    """Where veyq's half fits the repository this runs in, relative to the current directory: beside the Argo CD
+    Applications the repository already holds — `<their common parent>/veyq` when each sits in a directory of its own
+    under one parent (`gitops/apps/traefik/application.yaml` → `gitops/apps/veyq`) — else `apps/veyq`."""
+    top = checkout_top(host)
+    if top is None or not top.is_dir():
+        return "apps/veyq"
+    parents: set[Path] = set()
+    for path in top.rglob("*.yaml"):
+        relative = path.relative_to(top)
+        if len(relative.parts) > 5 or any(part.startswith(".") or part == "node_modules" for part in relative.parts):
+            continue
+        try:
+            if ARGO_APPLICATION.search(path.read_text(errors="replace")[:4000]) and len(relative.parts) >= 3:
+                parents.add(path.parent.parent)
+        except OSError:
+            continue
+    if len(parents) != 1:
+        return "apps/veyq"
+    target = parents.pop() / "veyq"
+    try:
+        return os.path.relpath(target, Path.cwd().resolve())
+    except ValueError:
+        return str(target)
+
+
+SETUP_FILE = "veyq-setup.json"
+
+
+class Progress:
+    """What a GitOps `init` asked and did, written the moment it is answered or done (ADR 0126: every question before
+    the first step; the same command continues an interrupted run, asking nothing twice).
+
+    The answers are the repository's: `veyq-setup.json` at the checkout's root, veyq's half keyed by its directory —
+    committed with what they produced, so `init` asks nothing again in that checkout, here or on another machine. Never
+    a secret: generated values go into the repository encrypted, or into the hand-over file. Which steps are done is this
+    machine's: a file in config_dir(), keyed by checkout and directory, never inside the repository."""
+
+    def __init__(self, checkout: Path, rel: str) -> None:
+        self.checkout, self.rel = checkout, rel
+        self.setup_path = checkout / SETUP_FILE
+        key = f"{checkout}\0{rel}".encode()
+        self.path = config_dir() / f"init-{hashlib.sha256(key).hexdigest()[:16]}.json"
+        self.setup = read_setup(checkout)
+        self.answers: dict[str, str] = dict(self.setup.setdefault("veyq", {}).get(rel) or {})
+        try:
+            doc = json.loads(self.path.read_text()) if self.path.is_file() else {}
+        except (OSError, ValueError):
+            doc = {}
+        self.server: dict[str, str] = dict(self.setup.get("server") or {})
+        # What is this machine's, not the repository's: the age key file's path, the steps done.
+        self.doc = {"checkout": str(checkout), "directory": rel, "steps": dict(doc.get("steps") or {}),
+                    "local": dict(doc.get("local") or {})}
+        # A run to go on with: answers or steps, and veyq's half not written yet.
+        self.resumed = bool(self.answers or self.doc["steps"]) and not (checkout / rel / GITOPS_FILE).is_file()
+
+    def get(self, section: str, key: str) -> str | None:
+        """A kept answer: from veyq-setup.json's `veyq` (this directory's) or `server` section, or this machine's
+        `local` values."""
+        value = {"veyq": self.answers, "server": self.server, "local": self.doc["local"]}[section].get(key)
+        return value if isinstance(value, str) and value else None
+
+    def put(self, section: str, key: str, value: str) -> None:
+        """Keep an answer the moment it is given: the repository's sections in veyq-setup.json, `local` here."""
+        if section == "local":
+            self.doc["local"][key] = value
+            config_dir().mkdir(parents=True, exist_ok=True)
+            atomic_write(self.path, json.dumps(self.doc, indent=2) + "\n")
+            return
+        kept = self.answers if section == "veyq" else self.server
+        if kept.get(key) != value:
+            kept[key] = value
+            if section == "veyq":
+                self.setup["veyq"][self.rel] = kept
+            else:
+                self.setup["server"] = kept
+            atomic_write(self.setup_path, json.dumps(self.setup, indent=2, sort_keys=True) + "\n")
+
+    def answer(self, key: str) -> str | None:
+        return self.get("veyq", key)
+
+    def done(self, step: str):
+        return self.doc["steps"].get(step)
+
+    def mark(self, step: str, data: object = True) -> None:
+        self.doc["steps"][step] = data
+        config_dir().mkdir(parents=True, exist_ok=True)
+        atomic_write(self.path, json.dumps(self.doc, indent=2) + "\n")
+
+    def clear_steps(self) -> None:
+        """The steps done, once the run finished; what is this machine's (the age key's path) stays."""
+        self.doc["steps"] = {}
+        if self.doc["local"]:
+            atomic_write(self.path, json.dumps(self.doc, indent=2) + "\n")
+        else:
+            self.path.unlink(missing_ok=True)
+
+    def start_over(self) -> None:
+        """Forget this directory's answers and steps (the person said no to going on)."""
+        self.path.unlink(missing_ok=True)
+        self.doc["steps"], self.doc["local"], self.answers, self.server = {}, {}, {}, {}
+        dropped = [self.setup["veyq"].pop(self.rel, None), self.setup.pop("server", None)]
+        if any(part is not None for part in dropped):
+            atomic_write(self.setup_path, json.dumps(self.setup, indent=2, sort_keys=True) + "\n")
+        self.resumed = False
+
+
+def atomic_write(path: Path, text: str) -> None:
+    tmp = path.with_name(path.name + ".tmp")
+    tmp.write_text(text)
+    tmp.replace(path)
+
+
+def read_setup(checkout: Path) -> dict:
+    """The checkout's veyq-setup.json, or an empty one; refused when it is there and not an object of sections."""
+    path = checkout / SETUP_FILE
+    if not path.is_file():
+        return {}
+    try:
+        doc = json.loads(path.read_text())
+    except ValueError as e:
+        raise Refused(f"{path} is not valid JSON ({e}). It holds your answers: fix it, or move it away and answer again")
+    if not isinstance(doc, dict) or not isinstance(doc.get("veyq", {}), dict):
+        raise Refused(f"{path} is not init's answers (an object with a `veyq` section by directory)")
+    return doc
+
+
+def setup_directory(checkout: Path) -> str | None:
+    """veyq's directory veyq-setup.json answers for that `init` with no argument takes: the one a run did not finish,
+    else the only one there is (written: init says so and writes nothing)."""
+    answered = list(read_setup(checkout).get("veyq") or {})
+    open_ = [rel for rel in answered if not (checkout / rel / GITOPS_FILE).is_file()]
+    if len(open_) == 1:
+        return open_[0]
+    return answered[0] if len(answered) == 1 and not open_ else None
+
+
 class Question(NamedTuple):
     """One question `init` asks. Its key is the flag's dest AND the answer's key where it is kept — veyq-setup.json's
     `veyq` or `server` section, or this machine's progress file (`local`): renaming one loses committed answers."""
@@ -4034,6 +4026,8 @@ def age_key_file(run: InitRun) -> Path:
     return key_file.resolve()
 
 
+# ---- the GitOps verbs: verify, check, upgrade, tls --------------------------------------------------------------
+
 def values_digests(text: str) -> dict[str, str]:
     """The image digests under values.yaml's `image:`, `admin:` and `backup:` (the line under each block's `image`),
     by role — what `init` writes, and a half written by hand must hold."""
@@ -4291,6 +4285,20 @@ def gitops_tls(args: argparse.Namespace, host: Host, g: GitOps) -> int:
 
 
 # ---- the targets: one set of verbs, each target doing its own or refusing (ADR 0126 decision 2) ---------------------
+
+# What does a Compose verb's job on a GitOps instance, said when it refuses there.
+COMPOSE_ONLY = {
+    "install": "`init` writes a GitOps instance; `install` is Compose's",
+    "start": "Argo CD runs the workloads",
+    "stop": "Argo CD runs the workloads (switch the Application's automated sync off to stop it changing them)",
+    "status": "Argo CD shows the Application's health (`kubectl -n <namespace> get pods` the pods')",
+    "logs": "`kubectl -n <namespace> logs deploy/veyq-app`",
+    "backup": "veyq backs itself up before every release change, and the chart's `backup.request` asks for one",
+    "restore": "the chart's restore Job (the docs: Backup and restore, under Helm)",
+    "rollback": "the chart's restore Job, onto the previous release pinned back",
+    "self-update": "fetch the release's veyqctl as Verify a release says; a GitOps instance holds no release's files",
+}
+
 
 class Target:
     """One kind of instance. A verb runs in main()'s order: refused when this target has no such verb (naming what
