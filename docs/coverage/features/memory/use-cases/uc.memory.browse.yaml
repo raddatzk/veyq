@@ -40,7 +40,7 @@ acceptanceCriteria:
           - src/features/depot/levelRows.test.ts
           - src/shared/formatBytes.test.ts
   - id: application-tabs
-    text: Where the level offers two or more application tabs, a tab bar `All | <one tab per application>` filters the current folder's level (its folders, then every other node by name, whatever its kind) to one application's nodes (sub-folders stay in every tab, no subtree search; a tab is offered where its kinds have a node or the viewer may add one); the selection is a persisted setting per signed-in account (and one for the share-guest pages), shown as `All` without being overwritten where the level lacks that tab; a share guest gets the same bar (inbox #348).
+    text: Where the level offers two or more application tabs, a tab bar `All | <one tab per application>` filters the current folder's level (its folders, then every other node by name, whatever its kind) to one application's nodes (sub-folders stay in every tab, no subtree search; a tab is offered where its kinds have a node or the viewer may add one); the selection is a persisted setting per signed-in account (and one for the share-guest pages), shown as `All` without being overwritten where the level lacks that tab; the "New" menu offers "New folder" and only the shown tab's entries, and a dropped upload under another tab shows the tab of the application that took it, a dropped download's "Upload as a file" too - not on a drag, a refused drop or an import (owner 2026-11-09); a share guest gets the same bar (inbox #348).
     coverage:
       web:
         unit:

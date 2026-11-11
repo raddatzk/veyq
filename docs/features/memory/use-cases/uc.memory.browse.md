@@ -97,8 +97,13 @@
   id), and every share-guest page in the browser shares one separate value (`veyq:level-tab:guest`), so a guest tab never
   flips a member's choice and two accounts on one browser never share one. It stays per **browser** — it is not synced
   to the account (a synced preference would need a sealed per-user store of its own). A stored tab that a level does not have is shown as `All` without overwriting the setting, so
-  the next level that has it shows it again. The view switch offers the presentations of what the tab shows. A share
-  guest gets the same bar: the guest's page is this very view.
+  the next level that has it shows it again. The view switch offers the presentations of what the tab shows, and the
+  **"New" menu what the tab adds** (owner 2026-11-09): "New folder" in every tab, beside it only the shown application's
+  own entries; a kind with no tab (a bookmark) is offered under `All` only. Files or a folder **dropped** onto the level
+  are still taken under any tab, and an upload that ran shows the tab of the application that took it (`All` for a kind
+  with no tab), stored like a click on it - on the drop, never on a drag over the level, and never for a refused drop or a
+  dropped download, which is offered as an import (its "Upload as a file" uploads it, and then shows that tab too). Which tabs are offered still counts every entry the viewer may use,
+  not the filtered menu. A share guest gets the same bar: the guest's page is this very view.
 - <a id="live-refresh"></a>**An open level stays current** (inbox #408). While a page of the tree is on screen and the tab
   is visible — a folder level, or an opened node's page of any kind (a Memory, a file, Depot's drop box with its guests'
   folders and their files; inbox #503) — core re-reads the level about every 5 s (jittered; doubling to 2 min after errors; at once when the tab

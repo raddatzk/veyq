@@ -33,6 +33,9 @@ CREATE TABLE veyq_server_setup (
 -- email_confirmed_at is a fact about the address, not a permission: nothing is gated on it (ADR 0074).
 -- secret_key_proof_public_key is the Ed25519 public key rotation, change-password and recovery are signed under
 -- (ADR 0060, ADR 0054).
+-- donation_banner_dismissed: whether the holder dismissed veyq's donation banner (uc.platform.support-the-project,
+-- ADR 0124), account-global like require_group_add_consent. Low-sensitivity server-visible operational metadata,
+-- never content; served only to the account holder.
 CREATE TABLE veyq_user (
     id                           UUID NOT NULL PRIMARY KEY,
     server_role                  VARCHAR(32) NOT NULL,
@@ -43,7 +46,8 @@ CREATE TABLE veyq_user (
     email                        VARCHAR(254) NOT NULL,
     require_group_add_consent    BOOLEAN NOT NULL DEFAULT FALSE,
     secret_key_proof_public_key  TEXT NULL,
-    email_confirmed_at           DATETIME(3) NULL
+    email_confirmed_at           DATETIME(3) NULL,
+    donation_banner_dismissed    BOOLEAN NOT NULL DEFAULT FALSE
 );
 CREATE UNIQUE INDEX ux_veyq_user_email ON veyq_user (email);
 

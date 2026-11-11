@@ -439,6 +439,9 @@ def wait_mailbox(timeout: int = 30) -> None:
     )
 
 
+LAST_NOT_YET = ""  # the store's last "not yet" answer, named when a deadline runs out
+
+
 def store_is_provisioned() -> bool:
     """Is the store usable — the bucket present, with the key alias [fresh_bucket] grants against on it?
 
@@ -459,10 +462,14 @@ def store_is_provisioned() -> bool:
     (measured on the pinned v2.0.0, 2026-11-05: 503 on a fresh node, 404 right after `ApplyClusterLayout`). Neither
     the compose file's `--wait` nor Garage's own `/health` can say the layout is there — `/health` answers 200 on a
     layout-less node, which is exactly why the chart probes it (no readiness may wait on the backend's bring-up). So
-    a 503 is read as "not provisioned" only when the node demonstrably has no layout role ([store_has_layout]); a
-    503 from a node that has one is a store that is broken, and still refused. Reading the 503 as a refusal outright
-    failed the first CI run on its first look at a cold store (`run_api_fuzz.provision_store` asks before booting).
+    a 503 is read as "not provisioned" while the node has no layout role ([store_has_layout]). **A node that has one
+    still answers 503 for a moment** — right after `ApplyClusterLayout`, before the node serves the layout it applied
+    (`Could not reach quorum of 1 (sets=None)`; Checks run 42814912370, 2026-11-10, where reading it as a broken store
+    failed the run) — so that 503 is "not yet" too, and kept in [LAST_NOT_YET]: a store that stays broken still fails,
+    at the caller's deadline, whose message names it. Reading the 503 as a refusal outright failed the first CI run on
+    its first look at a cold store (`run_api_fuzz.provision_store` asks before booting).
     """
+    global LAST_NOT_YET
     request = urllib.request.Request(
         f"{GARAGE_ADMIN}/v2/GetBucketInfo?globalAlias={STORE_BUCKET}",
         headers={"Authorization": f"Bearer {GARAGE_ADMIN_TOKEN}"},
@@ -474,8 +481,9 @@ def store_is_provisioned() -> bool:
         if e.code == 404:
             return False  # the ordinary state of a cold store — not an error
         said = _admin_error(e)
-        if e.code == 503 and not store_has_layout():
-            return False  # a node with no layout yet: the provisioner's first step has not run
+        if e.code == 503:
+            LAST_NOT_YET = f"{e.code} {said}" + ("" if store_has_layout() else " (no layout role yet)")
+            return False  # no layout yet, or one applied and not served yet: the caller's deadline decides
         raise SystemExit(f"[e2e] STORE ADMIN API REFUSED: {GARAGE_ADMIN} answered {e.code} for {STORE_BUCKET}: {said}")
     except (urllib.error.URLError, OSError) as e:
         raise SystemExit(f"[e2e] STORE ADMIN API UNREACHABLE at {GARAGE_ADMIN}: {e}") from e
@@ -556,6 +564,7 @@ def provision_store(workdir: Path, timeout: int = 120) -> None:
             f"[e2e] STORE NOT PROVISIONED: bucket `{STORE_BUCKET}` still has no `{STORE_KEY_ALIAS}` owner grant "
             f"{timeout}s after the backend became ready. The backend is the only thing that provisions the store "
             f"now (ADR 0067) — the boot log above names the step that failed."
+            + (f" The store's last answer: {LAST_NOT_YET}." if LAST_NOT_YET else "")
         )
     finally:
         kill(proc)

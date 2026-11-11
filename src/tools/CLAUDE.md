@@ -11,6 +11,11 @@ docstring owns what it does. Loaded in addition to the root `CLAUDE.md` when wor
 - **Each file ships alone** — fetched with `curl` onto an operator's host, or copied flat into the image's `/opt/veyq/`.
   So: Python 3.9 and the standard library only, and no import of anything under `scripts/`. A path into the checkout
   (`instance_backup.py`'s two defaults) is spelled in the file, and its selftest holds it to `scripts/repo_layout.py`.
+- **A stand-in refuses what the real program refuses.** `veyqctl_selftest.py`'s `FakeHost` answers for git, cosign,
+  helm, kubectl and the rest; an answer more lenient than the program hides a defect: `init --gitops` ran `git -C` on a
+  directory not created yet, which the stand-in answered and git refuses — found only by the live run
+  (2026-11-10). Make the stand-in check what the program would (here: `-C` names an existing directory), and run a new
+  path once against the real tools before calling it proved.
 - **`scripts/` reaches the tools through `repo_layout`**: `VEYQCTL`, `INSTANCE_BACKUP`, and `tools_importable()` before
   an `import`. A new reader there does the same, never spells `src/tools/`.
 

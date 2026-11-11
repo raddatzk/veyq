@@ -232,6 +232,9 @@ database is up.
 
 ## Deploying with Argo CD
 
+[`veyqctl`](/run/gitops/) writes veyq's part of the repository Argo CD syncs — the `Application`, the values, the
+namespace, the backup claim and the Secrets — with everything below already set, and upgrades it by commit.
+
 Argo CD renders the chart with `helm template` and applies the result itself, so two things differ from `helm
 install` (both seen on Argo CD 3.5.7, 2026-11-05):
 

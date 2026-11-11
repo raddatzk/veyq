@@ -91,7 +91,7 @@ What had to move, measured on this tree (Gradle 9.8.2, Kotlin 2.4.10, Quarkus 3.
   loud one above (`Unsupported class file major version`).
 - The upgrade proof builds its predecessor commit with that commit's own toolchain, so until this change is its
   predecessor it needs a JDK 21 beside the 25 `setup-java` installs (remembered: GitHub's Ubuntu runners preinstall
-  Temurin 21; locally `/usr/libexec/java_home -V` lists 21.0.13). The job is disabled until the first release.
+  Temurin 21; locally `/usr/libexec/java_home -V` lists 21.0.13). The job runs since the first release, v0.2480, which is itself on Java 25.
 - Unverified: an amd64 build of the image and an amd64 L1 (everything above ran on arm64), and the first CI run of the
   workflows' `setup-java` 25 and CodeQL's new step.
 

@@ -29,7 +29,7 @@ Both targets run the same images and the same procedures; every page in this are
 | Network isolation | Separate container networks | A NetworkPolicy set, enforced only if your CNI enforces NetworkPolicy |
 | Database | The bundled MariaDB | The bundled MariaDB, or your own (`mariadb.enabled: false`, `externalDatabase.jdbcUrl`) |
 | Backup and restore | Rehearsed with the backup tool | The chart's backup gate captures the database and an index of the store before every release change; a restore is a one-off Job; both run once on a kind cluster |
-| Proven | Every stack-lane run installs the hardened recipe through `veyqctl` from a release built on the host; nothing published has been installed | The rendered chart is checked on every run; one kind cluster ran it once, for the backup gate, without a Gateway implementation |
+| Proven | Every stack-lane run installs the hardened recipe through `veyqctl` from a release built on the host; no published release installed through `veyqctl` yet | The rendered chart is checked on every run; one kind cluster ran it once, for the backup gate, without a Gateway implementation |
 
 If you have no cluster, Compose is the smaller and better-proven choice
 ([ADR 0064](https://github.com/raddatzk/veyq/blob/main/docs/decisions/0064-kubernetes-helm-deployment-target.md)).
@@ -84,10 +84,10 @@ stored object once, growing by the new uploads at each backup and pruned to what
 
 | Domain | Docker Compose | Kubernetes | Notes |
 |---|---|---|---|
-| The instance (`VEYQ_DOMAIN` / `domain`) | Required | Required | Written into every invitation and recovery link; changing it later is not supported, and a restore must target the same domain |
+| The instance (`VEYQ_DOMAIN` / `domain`) | Required | Required | The bootstrap domain: routed from configuration, so the instance is reachable before any tenant exists. Changing it later is untested |
 | The bundled object store | — (served under the instance's own origin) | `storeDomain`, required with `garage.enabled`, a host of its own | Presigned uploads and downloads go straight from the browser to this origin; a store of your own has its own address |
 | The admin surface (`ADMIN_DOMAIN` / `admin.domain`) | Optional, unset by default | Optional, unset by default | Leave it unset and reach the console over an SSH tunnel or a port-forward; if you set it, only after the Server Owner exists, and choose a name you publish nowhere |
-| Each tenant's own domain | Required per tenant | Required per tenant | One domain per tenant, routed when the tenant is created, with no restart |
+| Each tenant's own domain | Required per tenant | Required per tenant | One domain per tenant, routed when the tenant is created, with no restart. Written into every invitation and recovery link the tenant's members get; the Server Owner can move a tenant to another domain ([Tenants](/run/first-run/#tenants)), which stops the old one answering at once, so a link mailed before the move no longer opens. A restore targets the domain the backup holds ([Backup and restore](/run/backup-and-restore/)) |
 
 Every domain must resolve to the instance **before** it is used, and port 80 must reach the instance from the
 internet for Let's Encrypt's HTTP-01 challenge. Each new tenant domain is a certificate order: test against Let's

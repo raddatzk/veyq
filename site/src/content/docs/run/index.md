@@ -50,7 +50,7 @@ Kubernetes the application may manage `HTTPRoute`s and `ListenerSet`s in its own
 
 ## The honest state, first
 
-**There is no supported production deployment yet.** veyq is pre-V1, and no release has been published. There
+**v1.0 is the first stable release** (2026-11-10). There
 is a production Compose recipe (the application, its separate administration surface, MariaDB, the Garage object
 store unless you leave it out, and a Traefik that terminates TLS in front of them), installed and upgraded by `veyqctl`, and a Helm chart for
 Kubernetes. Without the store there
@@ -61,14 +61,13 @@ Every procedure in this area says how far it has been proven. In short:
 
 | Procedure | Rehearsed | Not rehearsed |
 |---|---|---|
-| [Set up a new instance](/run/new-instance/) | `veyqctl install` of a release produced from the tree, images built on the host and unverified, on every run of the stack lane | An install from a published release |
+| [Set up a new instance](/run/new-instance/) | `veyqctl install` of a release produced from the tree, images built on the host and unverified, on every run of the stack lane; under Helm, v1.0 by digest on the maintainer's single-node k3s (2026-11-10) | `veyqctl install` of a published release |
 | [Backup and restore](/run/backup-and-restore/) | Capture, destroy, restore and a test suite against the result, on every run of the end-to-end orchestrator; `veyqctl`'s capture inside an upgrade and its restore onto a fresh install, once | `veyqctl backup` on its own; a capture or restore under Helm |
 | [Upgrade](/run/upgrade/) | `veyqctl upgrade` between two releases produced from the tree, once, with a Memory open after it; the data half: the upgrade proof seals content with the previous build, restores it under this one, lets it migrate and reads it back — from jars, not images | Pulling a published image, an upgrade that migrates through `veyqctl`, a rollback; `helm upgrade` in a cluster |
-| [Kubernetes](/run/kubernetes/) | The rendered chart, and what a chart upgrade could not apply (`chart_meta_check.py`, `chart_upgrade_check.py`) | An install, an upgrade or a backup in a cluster |
-| [Verify a release](/run/verify-a-release/) | The commands against another keyless-signed image, the chart half against a local registry, `cosign verify-blob` with a key of its own | A real veyq release |
+| [Kubernetes](/run/kubernetes/) | The rendered chart, and what a chart upgrade could not apply (`chart_meta_check.py`, `chart_upgrade_check.py`); v1.0 installed by digest through Argo CD on single-node k3s, its schema migrated and both hosts certified (2026-11-10) | An upgrade or a backup in a cluster |
+| [Verify a release](/run/verify-a-release/) | Every command on the page against v1.0 as written, and `veyqctl verify --release 1.0` (2026-11-10) | — |
 
-None of this has run in CI: the repository has no remote yet, so every rehearsal above is a run on a developer
-machine. The shape of the risk is fixed: veyq migrates its database on start with no way back, so moving to a
+Where a row says "every run", it is a pipeline stage on GitHub (since 2026-11-05); the rest ran once, by hand. The shape of the risk is fixed: veyq migrates its database on start with no way back, so moving to a
 newer version means taking a backup first and restoring it if the new version does not work out.
 
 So running veyq still means making your own operational decisions. Please do not put memories you cannot afford

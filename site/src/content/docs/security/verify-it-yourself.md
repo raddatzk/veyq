@@ -18,16 +18,13 @@ malicious operator: that boundary is set by
 and its rule applies here too: a check the server runs never closes a row of that table, because the operator
 is the server.
 
-:::caution[Nothing here has run in CI in this repository]
-veyq was imported into a fresh repository on 2026-08-06 and has had no remote since
-([ADR 0040](https://github.com/raddatzk/veyq/blob/main/docs/decisions/0040-coverage-gaps-and-http-not-a-surface.md)),
-so no workflow has executed in it. Two jobs have never run anywhere: `packages/crypto`'s and `admin-web`'s
-`pnpm run check`
-([architecture § 11](https://github.com/raddatzk/veyq/blob/main/docs/architecture/README.md#11-risks-and-technical-debt)).
-No release has been built or published
+:::note[Where this runs]
+The repository is on GitHub since 2026-11-05, and every commit to `main` runs the pipeline there
+([How veyq is tested](/security/how-veyq-is-tested/) is its stage map). Releases are published from it since
+2026-11-10: v0.2480, the last of major 0, and v1.0, the first stable one
 ([ADR 0057](https://github.com/raddatzk/veyq/blob/main/docs/decisions/0057-release-identity-and-deployment-recipe.md)).
-Everything on this page that is described as passing passes on a developer machine. The project's own rule is
-that a test no CI run executes makes no coverage claim.
+A command on this page described as passing passes on a developer machine unless it names a pipeline stage. The
+project's own rule is that a test no CI run executes makes no coverage claim.
 :::
 
 ## At a glance
@@ -312,8 +309,7 @@ The step-by-step check — resolve each tag to a digest once, verify each signat
 identity that publishes veyq, then deploy by digest — is on
 [Verify a release](/run/verify-a-release/).
 
-**Nothing on the publish side has been observed yet.** The repository has no remote and no workflow has ever
-executed. Every statement about what a publish *does* is therefore a statement about a file, not about a run.
-What can be proven locally is the tree-side half: deriving the version, building the images, producing the
+**The publish side has run on GitHub:** snapshots since 2026-11-06, and the promotions of v0.2480 and v1.0 on
+2026-11-10, whose signatures [Verify a release](/run/verify-a-release/) checked as written. What can be proven locally is the tree-side half: deriving the version, building the images, producing the
 release's assets from the tree, and installing an instance from them with `veyqctl`, as the stack end-to-end run
 does (ADR 0057 § Consequences).

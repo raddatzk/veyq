@@ -1,9 +1,10 @@
 # ADR 0096 — `veyqctl` manages an instance from immutable releases
 
 - Status: Accepted
-- Built: partly (not built: decision 3's immutable-releases setting and the first published release)
+- Built: yes
 - Date: 2026-10-16
 - Model: [release-and-deployment](../crosscutting/release-and-deployment.md)
+- Replaced in part: decision 8 by ADR 0126 (not built)
 
 ## Context
 
@@ -116,4 +117,5 @@ and keeps current with its own GitOps tooling; veyq ships no in-cluster operator
 
 - Run area of the docs site, each page carrying what `veyqctl` runs: [Set up a new instance](../../site/src/content/docs/run/new-instance.mdx),
   [Upgrade](../../site/src/content/docs/run/upgrade.mdx), [Backup and restore](../../site/src/content/docs/run/backup-and-restore.md),
-  [Verify a release](../../site/src/content/docs/run/verify-a-release.md)
+  [Verify a release](../../site/src/content/docs/run/verify-a-release.md), and for the GitOps target ADR 0126 added,
+  [Argo CD with veyqctl](../../site/src/content/docs/run/gitops.md)

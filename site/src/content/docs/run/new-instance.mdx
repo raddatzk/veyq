@@ -11,15 +11,18 @@ sources:
 import { Tabs, TabItem } from '@astrojs/starlight/components';
 
 :::note[How far this is proven]
-No published release has been installed on either target yet. On Compose, every run of the stack lane
+On Compose, no published release has been installed through `veyqctl` yet; every run of the stack lane
 (`scripts/run_stack_e2e.py`) installs its candidate exactly as below, from a release produced from the tree with images
-built on the host, with `--unsigned-local` in place of the signature check; it has run on a developer machine only (the
-repository has no remote). The recipe's hardening is checked by `scripts/validate_compose_posture.py`, and the rendered
+built on the host, with `--unsigned-local` in place of the signature check — a pipeline stage on GitHub since
+2026-11-05. The recipe's hardening is checked by `scripts/validate_compose_posture.py`, and the rendered
 chart by `scripts/chart_meta_check.py`. On Kubernetes, the owner installed the signed pre-release snapshot
 `0.2265-SNAPSHOT` once from the published chart by digest (2026-11-05: single-node k3s, Traefik, cert-manager, Argo
 CD): the `Gateway` was programmed, both hosts got certificates, the app migrated and set up the bundled store. That run
 found what this tab and [Kubernetes](/run/kubernetes/) now say about Traefik's ports and Argo CD, and an admin surface
-that could not reach the app, fixed in the chart after that snapshot.
+that could not reach the app, fixed in the chart after that snapshot. The same cluster runs v1.0 since 2026-11-10,
+installed fresh from the published chart by digest, each digest verified as [Verify a release](/run/verify-a-release/)
+says: Argo CD synced it healthy, the app applied the three baselines to an empty database, and both hosts got
+certificates.
 :::
 
 ## Install

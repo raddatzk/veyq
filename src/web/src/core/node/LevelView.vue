@@ -49,7 +49,8 @@
 // preference (`shared/state/useLevelTab`: per account, one for share guests), used only where this level has it, else `All`,
 // and never rewritten. A tab with nothing says so in its application's own words (`list.emptyText`); a level with nothing at
 // all says so ONCE, in plain text composed from what the viewer may create ("Nothing here yet. Choose New to add something
-// (New folder, New Memory, Upload files)") - no create tile.
+// (New folder, New Memory, Upload files)") - no create tile. The "New" menu follows the shown tab (owner 2026-11-09): core's
+// folder entry in every tab, beside it only the entries of the shown tab's kinds (a kind with no tab under `All` only).
 //
 // **The view mode is the shared one** (`shared/state/useViewMode`), but the LEVEL decides which mode it shows (inbox #404):
 // the stored preference where something on screen offers it, else the grid (`effectiveViewMode`) - the stored value stays as
@@ -62,6 +63,9 @@
 // (`acceptsDrop` on a kind's `levelActions`, a handler with `drop`: Depot's "Upload files") and a dropped directory to the one
 // that takes directories (a handler with `dropDirectory`: Depot's "Upload folder…", inbox #424), only while that action is
 // allowed AND enabled - a drop is never more than the "New" menu entry would be. Nothing in a share guest's READ view takes one.
+// The drop is taken under ANY tab, and once its upload ran the level shows the tab of the kind that took it (`revealTabOf`):
+// what was dropped is never uploaded out of sight - a dropped download's "Upload as a file" too. Never on a drag over the
+// level, a refused drop or an import.
 // A veyq download among them - a ZIP, or one unpacked into a directory - is recognised by its content and, for a member who may
 // create here, offered as the import (ADR 0082 decision 7); there is no import entry of its own in the "New" menu.
 //
@@ -171,6 +175,10 @@ const hideEmptyTabs = computed(() => inIdentityFolder.value)
 // function says yes (member and guest alike; a READ guest gets none, so no menu button). An application action (Depot's
 // upload) runs the handler its row source registered (`levelActions.ts`) - registered for the level's whole life, whichever
 // tab is shown; an entry whose handler says it is not ready (keys still locked) is disabled, never a click that does nothing.
+// The menu follows the shown TAB like the list does (owner 2026-11-09): under an application's tab only that application's
+// entries, by the kind that declared each (`kindVisible`), plus core's folder entry, which - like the folders - is in every
+// tab; a kind with no tab (core's bookmark) is offered under `All` only. Which tabs are offered still reads every ALLOWED
+// entry (`creatable`), never this filtered list.
 const levelActions = createLevelActions()
 const FOLDER_ENTRY: LevelMenuItem = { id: 'create:FOLDER', create: FOLDER_KIND, label: 'node.folderCreate', icon: 'folder', order: 0, allowed: () => true, kind: FOLDER_KIND }
 const registryMenu = registry.levelMenu()
@@ -183,7 +191,7 @@ const menuCtx = computed<LevelActionContext>(() => ({
 // A create entry needs the page's create door; an application action its own handler.
 const menuEntries = computed(() => [
   ...(rights.value.createFolder && host.createChild ? [FOLDER_ENTRY] : []),
-  ...registryMenu.filter((e) => (e.create === undefined || !!host.createChild) && e.allowed(menuCtx.value)),
+  ...registryMenu.filter((e) => (e.create === undefined || !!host.createChild) && e.allowed(menuCtx.value) && visible(e.kind)),
 ])
 const menuItems = computed<VeyqMenuItem[]>(() =>
   menuEntries.value.map((e) => {
@@ -612,14 +620,25 @@ function screenDirectory(dir: DirectoryInput): boolean {
 }
 
 /** The handlers a drop may reach: those of the level actions that take a drop, while each is allowed AND enabled (a drop is
- *  never more than the menu entry). */
+ *  never more than the menu entry), each with the kind whose entry declared it. Every tab's: a drop is taken whichever tab is
+ *  shown, and then shows its tab (`revealTabOf`). */
 function dropHandlers() {
   return registryMenu.flatMap((entry) => {
     if (entry.create !== undefined || !entry.acceptsDrop || !entry.allowed(menuCtx.value)) return []
     if (entry.enabled && !entry.enabled(menuCtx.value)) return []
     const handler = levelActions.get(entry.id)
-    return handler?.enabled() ? [handler] : []
+    return handler?.enabled() ? [{ handler, kind: entry.kind }] : []
   })
+}
+
+/** A dropped upload under a tab that does not show its kind switches to the tab that does (owner 2026-11-09), or to `All` for
+ *  a kind with no tab - so what was dropped is on screen, never uploaded out of sight. Only once a drop's upload RAN - at the
+ *  drop, or later from a dropped download's "Upload as a file": never on a drag or hover, never for an import (it creates
+ *  nodes of every kind, which `All` shows), never for a refused drop. It is the viewer's choice like a click on the tab, so
+ *  it is stored. */
+function revealTabOf(kind: NodeKind): void {
+  if (visible(kind)) return
+  setLevelTab(tabs.value.find((tab) => tab.kinds.includes(kind))?.id ?? ALL_TAB)
 }
 
 /** The level takes a drop from the operating system anywhere on it; a drag of nodes only where a target took it. */
@@ -634,8 +653,11 @@ async function onDrop(e: DragEvent): Promise<void> {
   const all = [...(e.dataTransfer?.files ?? [])]
   if (all.length === 0) return
   const handlers = dropHandlers()
-  const upload = handlers.find((h) => h.drop)?.drop ?? null
-  const uploadFolder = handlers.find((h) => h.dropDirectory)?.dropDirectory ?? null
+  const fileTaker = handlers.find((h) => h.handler.drop) ?? null
+  const folderTaker = handlers.find((h) => h.handler.dropDirectory) ?? null
+  // The dropped files' upload, which shows its tab - also when it runs later, from a dropped download's "Upload as a file".
+  const take = fileTaker?.handler.drop
+  const upload = fileTaker && take ? (files: File[]) => { take(files); revealTabOf(fileTaker.kind) } : null
   // A dropped directory: the download unpacked (`.veyq/manifest.json` at its root) is offered as an import - one per drop;
   // any other is the folder upload (inbox #424), where this level takes one.
   const directories = entries.filter((x): x is DroppedEntry => !!x?.isDirectory) as DroppedDirectory[]
@@ -645,8 +667,9 @@ async function onDrop(e: DragEvent): Promise<void> {
     if (!offered && importReady.value && (await holdsManifest(dir))) {
       offered = true
       host.importArchive?.({ input: await readDroppedDirectory(dir) })
-    } else if (uploadFolder) {
-      uploadFolder(await readDroppedDirectory(dir))
+    } else if (folderTaker?.handler.dropDirectory) {
+      folderTaker.handler.dropDirectory(await readDroppedDirectory(dir))
+      revealTabOf(folderTaker.kind)
     }
   }
   if (files.length === 0) return

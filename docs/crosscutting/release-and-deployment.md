@@ -12,8 +12,8 @@
 
 **Built, first run on GitHub.** Everything below is in the tree unless it stands under
 [§ Decided, not built](#decided-not-built). The repository has a remote since 2026-11-05 and the pipeline has run there; no
-release exists yet: `VERSION` is `0`, git holds no `v*` tag, and `scripts/applied_migrations.sha256` says
-`release: none`. A statement about what CI or a publish *does* is a statement about
+first release is `v0.2480` (2026-11-10), the last of major 0; `VERSION` is `1` since, and
+`scripts/applied_migrations.sha256` says `release: 202611070833` (the three baselines, frozen). A statement about what CI or a publish *does* is a statement about
 [`checks.yml`](../../.github/workflows/checks.yml) (the pipeline) and [`publish.yml`](../../.github/workflows/publish.yml)
 (the snapshot), held by `scripts/validate_release_identity.py`; what a run on GitHub has shown is inbox #471's list,
 and a local run goes through `scripts/run_pipeline.py`, which reads checks.yml and runs what this machine can.
@@ -191,8 +191,8 @@ rules, and `scripts/chart_upgrade_check.py` renders the predecessor's chart and 
 fails on a change to a field Kubernetes refuses to change, or an operator's values the new schema refuses. With
 `--upgrade-major-entry` it renders the same comparison from the release's major entry
 ([ADR 0085](../decisions/0085-one-major-moved-on-a-yearly-train.md) decision 10), and says why and passes when there is
-none or it is the default predecessor. It renders, never installs; until the first release it informs and gates
-nothing.
+none or it is the default predecessor. It renders, never installs; since the first release (v0.2480) a red gates
+the publish.
 
 **The bundled database upgrades its own data directory.** When a release moves the bundled MariaDB to a newer version
 (2026-11-07: 11.4 to 12.3), its first start on the older directory backs the system tables up into that directory and
@@ -220,11 +220,27 @@ there; the environment only bootstraps ([ADR 0089](../decisions/0089-instance-se
 The backend serves the web client's shell itself ([ADR 0069](../decisions/0069-backend-serves-the-web-app-shell.md)).
 Management — the instance's lifecycle on the host — is `veyqctl`'s, and neither holds the other's access.
 
-## `veyqctl` (Compose)
+## `veyqctl`
 
 One Python file, standard library only ([`src/tools/veyqctl.py`](../../src/tools/veyqctl.py), its docstring the
-command reference; [ADR 0096](../decisions/0096-veyqctl-manages-an-instance-from-immutable-releases.md)). An instance
-lives in `--home` (default `/opt/veyq`): `releases/<release>/`, `.env`, `backups/`, and the operator's
+command reference; [ADR 0096](../decisions/0096-veyqctl-manages-an-instance-from-immutable-releases.md)), managing an
+instance on either target ([ADR 0126](../decisions/0126-veyqctl-writes-a-gitops-repository-and-veyq-server-sets-up-its-cluster.md)
+decision 2). `init` creates one and lists it in `~/.config/veyq/instances.json`; `instances`, `use` and `--instance`
+pick one, `--home` names one by its path, and `/opt/veyq` is the fallback. The target is read from the instance: a
+directory holding `veyqctl.json` is a GitOps instance, anything else a Compose home.
+
+- **GitOps** (veyq's half of an Argo CD repository, the operator's page [Argo CD with veyqctl](../../site/src/content/docs/run/gitops.md)):
+  `init --gitops DIR` checks the cluster contract (decision 4), verifies the release — manifest, three images, and the
+  chart, resolved by tag at the registry, verified by its own signature, its `Chart.yaml` version read back, since the
+  manifest does not name it — renders, and only then writes the `Application`, the values, `resources/` with the Secrets
+  of the provider chosen (decision 5) and `veyqctl.json`; a non-empty directory is refused — a half written by hand is
+  managed once its owner writes `veyqctl.json` beside it. `check` and `upgrade` verify that its pins are the running
+  release's as signed (`upgrade` refuses otherwise: it stands on that release); `upgrade` keeps decision 5's resolution
+  below, rewrites the pins it finds once, renders and commits its three files (`--push` pushes); `check` also names
+  drift and missing Secret keys. The Compose lifecycle verbs refuse there.
+  `scripts/veyqctl_gitops_render_check.py` renders what `init` writes with the real Helm in the `chart` job.
+
+**Compose.** An instance lives in its home (`/opt/veyq` by default): `releases/<release>/`, `.env`, `backups/`, and the operator's
 `compose.override.yml`, laid over the recipe on every command.
 
 - **Which release:** `.env`'s `VEYQ_RELEASE` — an exact release (pinned), a major (its newest release) or `latest`.
@@ -306,10 +322,13 @@ check is logged and retried with a back-off, and blocks nothing.
 - **Lanes L2 and L3 and the backup archive** (ADR 0091 decisions 3 and 6): the previous release upgraded in place
   with `veyqctl upgrade`, and every archived backup of the major, with its object pool, restored into the candidate.
   When they gate, the jar-level upgrade proof retires (decision 7; replaces ADR 0057 § 7).
-- **Immutable releases and the first release** (ADR 0096 decision 3): the repository setting is the owner's, before
-  the first promotion. What the first runs on GitHub must show is inbox #471.
 - **The window of majors a client speaks** ([ADR 0085](../decisions/0085-one-major-moved-on-a-yearly-train.md)
   decision 5). The yearly train, its release order and the previous major's release branch (decisions 2, 3 and 10)
   are a procedure, written in [`infra/README.md`](../../infra/README.md) § Cutting a release, and no train has left.
+- **`veyq-server`** ([ADR 0126](../decisions/0126-veyqctl-writes-a-gitops-repository-and-veyq-server-sets-up-its-cluster.md)
+  decision 6): a repository of its own that sets up the server and cluster beneath a GitOps instance, rendered by
+  Copier from a verified release, which `init` offers in an empty repository. Built: the template and its checks in
+  `github.com/raddatzk/veyq-server` (cr-veyq-server-template), and `init`'s server path, self-tested against
+  stand-ins (cr-veyqctl-server-path phase 3). Not yet: veyq-server's first release, and a run on a real server.
 - **L3's archive holding the major entry** (ADR 0085 decision 10, inbox #461): the major entry's backup in the
   archive lane L3 restores.

@@ -17,9 +17,10 @@
 # gateway.tls.secretName when gateway.tls.mode=shared · gateway.tls.acme.email when gateway.tls.acme.enabled ·
 # networkPolicy.ingressFrom while networkPolicy.enabled (the default) · backup.existingClaim, or backup.enabled: false.
 
-# The instance's bootstrap domain — what VEYQ_DOMAIN is under compose. Written into every invitation and
-# recovery link the instance mails, routed statically by the chart's own HTTPRoute (the backend never projects
-# it a second time), and the domain a restore targets. Changing it later is not supported.
+# The instance's bootstrap domain — what VEYQ_DOMAIN is under compose. Routed statically by the chart's own
+# HTTPRoute (the backend never projects it a second time). The links the instance mails carry each tenant's own
+# registered domain, which the Server Owner can move (`tenant change-domain`), and a restore targets the tenant
+# domain its capture holds (ADR 0056 §4), not this one. Changing this value later is untested.
 domain: ""
 
 # The bundled store's OWN host — required with garage.enabled, read by nothing without it. A second HTTPRoute, not

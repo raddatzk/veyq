@@ -71,6 +71,6 @@ a table of attacks with the state of each today, followed by a list of what stay
 
 ## Supported versions
 
-veyq is pre-V1. There are no released versions and no backported fixes: fixes land on `main`.
+Supported: the newest 1.x release. A fix lands on `main` and ships in the next 1.x release; there are no backports to older 1.x releases. Major `0` (up to v0.2480) was a pre-release and gets no fixes.
 
 To check a claim yourself before reporting, see [Verify it yourself](/security/verify-it-yourself/).
