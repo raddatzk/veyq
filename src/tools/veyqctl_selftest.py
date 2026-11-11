@@ -2347,6 +2347,9 @@ def test_server_path(tmp: pathlib.Path) -> None:
         # the host key not confirmed: nothing logs in, nothing pushed, ~/.ssh untouched; then the same command goes on
         top = fresh("server-run")
         host, rc, out = run(top, confirms={"your provider shows": False})
+        check("server path: the cluster veyq-server sets up is not there yet — nothing is read from it before the "
+              "bootstrap, and init does not check it", not host.ran("gatewayclass") and not host.ran("appprojects")
+              and not host.ran("get", "crd"), str([c for c in host.commands if c[0] == "kubectl"][:3]))
         check("server path: a host key not confirmed is refused — not pinned, nothing pushed, ~/.ssh and ~/.kube "
               "untouched", rc == 1 and "not confirmed" in out and not vc.pinned_host_key(top) and not host.pushed
               and outside() == before and not host.ran("ansible-playbook"), out[-500:])
