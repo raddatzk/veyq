@@ -1870,7 +1870,8 @@ def test_gitops_init(tmp: pathlib.Path) -> None:
           values + application)
     check("the values name the Secrets, the gateway, ACME and the data-plane peer the operator gave",
           "existingSecret: veyq-secrets" in values and "existingSecret: veyq-config-secret-key" in values
-          and "className: traefik" in values and "mode: per-domain" in values and "email:" not in values
+          and "className: traefik" in values and "mode: per-domain" in values
+          and "email: owner@example.org" in values  # release 1.0's chart requires an ACME e-mail (ACME_EMAIL_UNTIL)
           and "kubernetes.io/metadata.name: traefik" in values and "storeDomain: store.veyq.example.org" in values)
     external = (d / "resources" / "secrets.external.yaml").read_text()
     check("external-secrets: each key read from a remote key under the prefix, through the named store",
@@ -1903,6 +1904,12 @@ def test_gitops_init(tmp: pathlib.Path) -> None:
           and meta["chart"] == "ghcr.io/raddatzk/charts/veyq", str(meta))
     check("init --gitops lists the instance under the repository's name and makes it current",
           vc.read_registry() == {"current": "repo", "instances": {"repo": str(d.resolve())}})
+    host_later = GitOpsHost(top=top, signed=signed)
+    rc, out = run_main(["--source", mirror, "init", "--gitops", top / "apps" / "veyq-later", "--name", "later",
+                        "--release", "1.1", *INIT, "--secrets", "none"], host_later)
+    later = (top / "apps" / "veyq-later" / "values.yaml").read_text() if rc == 0 else ""
+    check("a release after 1.0 gets no ACME e-mail: not asked, not written (its chart registers without one)",
+          rc == 0 and "email" not in later and "enabled: true" in later, out[-300:])
     setup = json.loads((top / vc.SETUP_FILE).read_text())
     check("init --gitops kept every answer in the repository's veyq-setup.json, by veyq's directory, no secret",
           setup["veyq"]["apps/veyq"].get("domain") == "veyq.example.org"

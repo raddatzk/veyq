@@ -2220,6 +2220,9 @@ def cmd_use(args: argparse.Namespace, host: Host) -> int:
 PROVIDERS = ("sops", "external-secrets", "sealed-secrets", "none")
 # Let's Encrypt's two ACME directories (the chart's gateway.tls.acme.server): staging's certificates are not
 # browser-trusted, and it has none of production's tight rate limits — where a new instance starts (ADR 0126).
+# The last release whose chart still requires an ACME account e-mail (`gateway.tls.acme.email`, a non-empty string
+# in its schema). Later charts register without one — Let's Encrypt keeps no contact since June 2025 — and ignore it.
+ACME_EMAIL_UNTIL = (1, 0)
 ACME_DIRECTORIES = {"production": "https://acme-v02.api.letsencrypt.org/directory",
                     "staging": "https://acme-staging-v02.api.letsencrypt.org/directory"}
 # What a veyq half written by hand must look like, and its veyqctl.json: the Run page, named where `init` refuses one.
@@ -2439,7 +2442,7 @@ def sops_run(host: Host, cmd: list[str], target: Path, **kwargs) -> subprocess.C
 
 
 def stack_values(release: str, pins: dict[str, str], *, domain: str, store_domain: str, garage: bool,
-                 gateway_class: str, tls: str, tls_secret: str, peer_namespace: str,
+                 gateway_class: str, tls: str, tls_secret: str, peer_namespace: str, acme_email: str = "",
                  peer_label: str, provider: str, acme_directory: str = "production") -> str:
     label_key, _, label_value = peer_label.partition("=")
     lines = [
@@ -2482,7 +2485,10 @@ def stack_values(release: str, pins: dict[str, str], *, domain: str, store_domai
         "  tls:",
     ]
     if tls == "acme":
-        lines += ["    mode: per-domain", "    acme:", "      enabled: true", f"      server: {ACME_DIRECTORIES[acme_directory]}"]
+        lines += ["    mode: per-domain", "    acme:", "      enabled: true"]
+        if acme_email:  # a release up to ACME_EMAIL_UNTIL: its chart requires one
+            lines.append(f"      email: {acme_email}")
+        lines.append(f"      server: {ACME_DIRECTORIES[acme_directory]}")
     elif tls == "shared":
         lines += ["    mode: shared", f"    secretName: {tls_secret}"]
     else:
@@ -3407,6 +3413,9 @@ class Q:
                               "certificates, without production's limits. Switch later with `veyqctl tls production`.",
                               tuple(ACME_DIRECTORIES))
     TLS_SECRET = Question("tls_secret", "name of your TLS Secret")
+    ACME_EMAIL = Question("acme_email", "email for Let's Encrypt", "The release you chose still requires one in its "
+                          "chart; later releases do not. Let's Encrypt keeps no address with the account since June "
+                          "2025, so it only reaches ISRG's general mailing list.")
     ADMIN_HOST_ACCESS = Question("admin_host_access", "veyq's admin page through an SSH tunnel",
                                  "Recommended on a server set up by veyq-server: the page stays invisible from the "
                                  "internet.", ("yes", "no"))
@@ -3482,7 +3491,7 @@ class InitRun:
         self.server_answers: dict[str, str] = {}
         # 3. Questions: the cluster and veyq
         self.context = self.domain = self.store_domain = self.gateway_class = self.peer_namespace = ""
-        self.peer_label = self.tls = self.acme_directory = self.tls_secret = ""
+        self.peer_label = self.tls = self.acme_directory = self.tls_secret = self.acme_email = ""
         self.admin_host, self.admin_source, self.garage = "no", "", True
         # 3. Questions: Argo CD and updates
         self.project = self.secret_store = self.repo_url = self.revision = self.selector = ""
@@ -3814,6 +3823,10 @@ def ask_argo(run: InitRun, cluster: ClusterView) -> None:
         f"{newest.selection.minor} stays exactly there.")))
     run.release_plan = newest._replace(selector=run.selector, selection=select(newest.listed, run.selector,
                                                                              newest.source.describe()))
+    selection = run.release_plan.selection
+    if run.tls == "acme" and (selection.major, selection.minor) <= ACME_EMAIL_UNTIL:
+        own_email = (git(host, run.top, "config", "user.email", check=False).stdout or "").strip()
+        run.acme_email = run.ask(Q.ACME_EMAIL, own_email)
 
 
 def write_half(run: InitRun) -> GitOps:
@@ -3863,7 +3876,7 @@ def gitops_files(run: InitRun, pins: dict[str, str], chart: str, values: dict[st
                                              values="values.yaml"),
         "values.yaml": stack_values(run.release_plan.selection.release, pins, domain=run.domain,
                                     store_domain=run.store_domain, garage=run.garage, gateway_class=run.gateway_class,
-                                    tls=run.tls, tls_secret=run.tls_secret,
+                                    tls=run.tls, tls_secret=run.tls_secret, acme_email=run.acme_email,
                                     peer_namespace=run.peer_namespace, peer_label=run.peer_label,
                                     provider=run.provider, acme_directory=run.acme_directory),
         "resources/namespace.yaml": namespace_text(namespace),
@@ -4439,6 +4452,8 @@ def parser() -> argparse.ArgumentParser:
                                                                          "(acme), one of yours (shared), or none")
     init.add_argument("--acme-directory", choices=tuple(ACME_DIRECTORIES),
                       help="GitOps: Let's Encrypt's test (staging) or real (production) certificates")
+    init.add_argument("--acme-email", help="GitOps: an e-mail for Let's Encrypt — only for a release up to 1.0, whose "
+                                           "chart requires one")
     init.add_argument("--tls-secret", help="GitOps --tls shared: the name of your TLS Secret")
     init.add_argument("--gateway-namespace", help="GitOps: the namespace of the gateway's proxy pods")
     init.add_argument("--gateway-pod-label", help="GitOps: a KEY=VALUE label of those pods")
