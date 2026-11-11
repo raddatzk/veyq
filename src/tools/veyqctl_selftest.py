@@ -2577,6 +2577,26 @@ def test_server_path(tmp: pathlib.Path, home: pathlib.Path) -> pathlib.Path:
           host.ran("age-keygen", "-o") and (top3 / ".age" / "key.txt").is_file()
           and any("password manager" in w for w in host.waited) and rc == 1 and not host.ran("copier"), out[-400:])
 
+    # A fresh start in the same checkout (raddatz.me, 2026-11-11): the key an earlier run kept on this machine is gone.
+    top4 = fresh("server-age-gone")
+    enter = dict(answers, **{"age key file (Enter: create a new one)": ""})
+
+    def init_in(top_dir, host):
+        cwd = os.getcwd()
+        os.chdir(top_dir)
+        try:
+            return run_main(["--source", mirror, "init", "--release", "1.0"], host)
+        finally:
+            os.chdir(cwd)
+    init_in(top4, ServerHost(top=top4, signed=signed, answers=dict(enter), confirms={"your provider shows": False}))
+    (top4 / ".age" / "key.txt").unlink()
+    host = ServerHost(top=top4, signed=signed, waits=False, answers=dict(enter))
+    rc, out = init_in(top4, host)
+    check("init again after the kept age key was deleted: says it is gone and asks again (Enter: a new one), never "
+          "refuses the gone file as one holding no key",
+          "is gone: name one, or create a new one" in out and "holds no age key" not in out
+          and any("age key file" in q for q in host.prompted) and host.ran("age-keygen", "-o"), out[-500:])
+
     top2 = fresh("server-dns")
     host, rc, out = run(top2, waits=False, gh=False, dns={"raddatz.me": set()})
     check("server path: without gh the deploy key is shown with GitHub's page and waited for (no terminal: "

@@ -2839,6 +2839,9 @@ def ssh_key_candidates(host: Host) -> list[tuple[str, str]]:
 
 
 def age_recipient_of(host: Host, key_file: Path) -> str:
+    if not key_file.is_file():
+        raise Refused(f"{key_file} does not exist: name the age key file you keep (--age-key), or run `init` at a "
+                      f"terminal, where Enter creates a new one")
     result = host.run(["age-keygen", "-y", str(key_file)], check=False)
     recipient = (result.stdout or "").strip()
     if result.returncode or not re.fullmatch(AGE_RECIPIENT_RE, recipient):
@@ -4183,8 +4186,12 @@ def age_key_file(run: InitRun) -> Path:
     manager. Its private half stays on this machine; only its public half is in the repository."""
     host = run.host
     key_file = Path(run.args.age_key).expanduser() if run.args.age_key else None
-    if key_file is None and run.progress.get("local", "age_key_file"):
-        key_file = Path(run.progress.get("local", "age_key_file"))
+    kept = run.progress.get("local", "age_key_file")
+    if key_file is None and kept:
+        if Path(kept).is_file():
+            key_file = Path(kept)
+        else:  # an earlier run's key, deleted since (a fresh start): asked again, not refused
+            say(f"The age key an earlier run used, {kept}, is gone: name one, or create a new one.")
     if key_file is None and (run.top / AGE_KEY_FILE).is_file():
         key_file = run.top / AGE_KEY_FILE
     if key_file is None:
