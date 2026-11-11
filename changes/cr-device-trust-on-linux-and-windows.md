@@ -62,7 +62,7 @@ and Windows Hello with DPAPI, so the key never leaves the library and never cros
 | R3 | **What each platform's store guarantees.** **Android:** Keystore HMAC and AES-GCM keys, non-exportable; the unlock key needs `BIOMETRIC_STRONG\|DEVICE_CREDENTIAL` with a 15 s window and is invalidated by a new enrolment. **Apple:** the bytes are Keychain items, the bind key plain and the unlock key under `.userPresence`; HMAC and GCM run in libsodium, so the bytes enter memory. **Web:** non-extractable WebCrypto keys in IndexedDB, **no presence check at all**. | `KeystoreDeviceKeys.kt`, `Apple.kt:46-106`, `KeychainStore.swift`, `src/web/…/rememberMe/deviceKeyWrap.ts` |
 | R4 | The bridge today: `Session.SignIn` hard-codes `remember = false` (`Bridge.kt`) and `Bridge.live` builds `ThisDevice(store, NoDeviceKeys, …)` (`Host.kt:104`). There is no Unlock, OtherAccount, ForgetDevice or Manage call. `Gate.Unlock(record)` already serializes, and its record is non-secret. | `Wire.kt`, `Bridge.kt` |
 | R5 | `DeviceTrustLiveTest` asserts on the fake's own fields (`SoftwareDeviceKeys.bindKeys`, `.prompts`, `.authenticates`, `.unlockKey`), so it cannot run over a real store as written. | `core/jvmTest/…/DeviceTrustLiveTest.kt`, `core/commonTest/…/TestDevice.kt` |
-| R6 | **The Windows VM:** Windows Hello is **not set up** (`dsregcmd /status`: `NgcSet : NO`, local account, no Entra ID). The key storage providers are present: `Microsoft Passport Key Storage Provider`, `Microsoft Platform Crypto Provider`, `Microsoft Software Key Storage Provider` (`certutil -csplist`). There is a TPM 2.0 (`Win32_Tpm`, SpecVersion 2.0). | ssh on the VM |
+| R6 | **The Windows VM:** Windows Hello was not set up at first; the owner set a PIN (O1, 2026-11-11). **`dsregcmd /status` is no test for it on a local account:** it said `NgcSet : NO` before and after. The PIN credential provider's per-user key is: `HKLM:\…\Credential Providers\{D6886603-9D2F-4EB2-B667-1971041FA96B}\<SID>` exists with `LogonCredsAvailable : 1` once a PIN is set. There is no Entra ID. The key storage providers are present: `Microsoft Passport Key Storage Provider`, `Microsoft Platform Crypto Provider`, `Microsoft Software Key Storage Provider` (`certutil -csplist`). There is a TPM 2.0 (`Win32_Tpm`, SpecVersion 2.0). | ssh on the VM |
 | R7 | Kotlin/Native's mingw sysroot carries `dpapi.h`, `wincrypt.h`, `ncrypt.h`, `libcrypt32.a` and `libncrypt.a`. `ncrypt.h` has no `MS_NGC_KEY_STORAGE_PROVIDER` define: the provider's name is a string the cinterop declares. | `find ~/.konan/dependencies/msys2-mingw-w64-x86_64-2` |
 | R8 | **Fedora 44:** `libsecret-devel` 0.21.8 and `gnome-keyring` 50.0 are available and not in the build image (`veyq-linux-dev`). native-apps § Open measured the Fedora VM's oo7 0.7.0: `pam_oo7` unlocks the login collection at sign-in, and a libsecret item stores and reads **with no prompt**. | `docker run veyq-linux-dev dnf list …`; native-apps |
 | R9 | `docs/crosscutting/security-model.md` has no device-trust row in "What holds today on a client the operator does not serve". | read |
@@ -92,9 +92,10 @@ and Windows Hello with DPAPI, so the key never leaves the library and never cros
   - `KeyCredentialManager` is WinRT, which Kotlin/Native reaches only through raw COM activation.
   - The Passport KSP is plain C (NCrypt), in the sysroot already (R7), and Windows itself refuses the private key's use
     without Hello.
-- **No Hello set up:** the key cannot be created, so `DeviceAuthFailed(false)` is raised and the sign-in falls back to
-  the password trust (R2). That is Android's "no screen lock" case, unchanged in the core. Q2 asks whether a DPAPI-only
-  staying signed in should exist instead.
+- **No Hello set up (owner 2026-11-11, Q2): the unlock key falls back to DPAPI.** No presence check: the Windows sign-in
+  is the authentication, Linux's level (D2) and the web's. "Stay signed in uses the strongest the device has." The switch
+  says which one it is (D5), so the weaker trust is never silent. Which path a key took is kept beside it in the device
+  store (`hello` / `dpapi`), so an open uses the path its seal used. A Hello set up later applies from the next enrolment.
 - **The host's window handle** goes to the core as a number in `Config` (`window`), not a secret. A prompt without an
   owner may open behind the app.
 - **Phase 1's first measurement:** with the owner's PIN set (O1), an unpackaged x64 process under Prism, of a local
@@ -106,9 +107,9 @@ and Windows Hello with DPAPI, so the key never leaves the library and never cros
 - **Bind key, unlock key and secrets** are items of the default collection under one schema
   (`me.raddatz.veyq.DeviceKey`, attribute `alias`). HMAC and GCM run in libsodium in process. **This is Apple's level
   for the bind key** (R3).
-- **The unlock key has no presence check:** the Secret Service has no such concept. Its collection is unlocked by the
-  desktop sign-in, so the login session is the authentication (R8). Q1 asks whether that is staying signed in on Linux
-  (the web's level, written down) or whether Linux keeps the password trust only.
+- **The unlock key has no presence check (owner 2026-11-11, Q1: allowed, written down):** the Secret Service has no
+  such concept. Its collection is unlocked by the desktop sign-in, and the login session is the authentication (R8), the
+  web's level. D6 writes it into the security model.
 - **libsecret is reached by `dlopen("libsecret-1.so.0")`,** with its few functions and its `SecretSchema` declared by a
   small header of our own in the cinterop (opaque `GError`/`GCancellable`). No link-time dependency, so:
   - The bridge library still links against Kotlin/Native's old sysroot. No glib or libsecret headers or stubs are
@@ -153,8 +154,10 @@ and Windows Hello with DPAPI, so the key never leaves the library and never cros
 
 ### D5 — The screens, as Android and Apple draw them, to each desktop's guideline
 
-- **The sign-in:** a "Stay signed in" switch (`AdwSwitchRow` on Linux; a `ToggleSwitch` on Windows, its label "Stay
-  signed in with Windows Hello" where Hello exists), off by default as on the apps.
+- **The sign-in:** a "Stay signed in" switch (`AdwSwitchRow` on Linux; a `ToggleSwitch` on Windows), off by default as
+  on the apps. **Its label says what it uses:** "Stay signed in with Windows Hello" where Hello is set up, plain "Stay
+  signed in" otherwise. Which one is the core's answer (`DeviceKeys`' capability, sent beside the sign-in gate), never a
+  host's own probe.
 - **The unlock screen** (`Gate.Unlock`), with "Another account":
   - for a DEVICE record, the password field;
   - for DEVICE_KEY, one button that asks the core, which raises Hello's prompt;
@@ -169,14 +172,14 @@ and Windows Hello with DPAPI, so the key never leaves the library and never cros
 - `security-model.md` gains a device-trust row (R9) per platform, with the guarantee of each key:
   - Android: hardware, presence enforced;
   - Apple: Keychain, presence enforced, bytes in memory;
-  - Windows: DPAPI bind key; unlock key behind Hello's key, enforced;
+  - Windows: DPAPI bind key; unlock key behind Hello's key, enforced, or DPAPI with no presence where Hello is not set up;
   - Linux: Secret Service, unlocked by the login, no presence (or none, per Q1);
   - web: non-extractable, no presence.
 - ADR 0123 decision 8's Consequences say the same, as built.
 
 ## Owner steps (each an approval)
 
-- **O1 — Set up Windows Hello on the Windows VM:** Settings → Accounts → Sign-in options → PIN (Windows Hello), at the
+- **O1 — Set up Windows Hello on the Windows VM (done, owner 2026-11-11):** Settings → Accounts → Sign-in options → PIN (Windows Hello), at the
   VM's console. An agent never sets or types a PIN. Needed before Phase 1's first measurement.
 - **O2 — Answer the Hello prompt during the Windows pass** (Phase 5), when the driver says it is waiting. An agent
   reads the result, never the PIN.
@@ -268,21 +271,13 @@ D5 on Windows.
 
 ## Owner questions
 
-- **Q1 — Staying signed in on Linux, without a presence check?** The Secret Service opens with the desktop sign-in and
-  never asks again (R8). Staying signed in there would resume the account on the next start with no prompt. That is the
-  web's level (R3), below Android and Apple, which ask for a fingerprint or the device code.
-  - **Recommendation: allow it, and write it down (D6).**
-    - The person's login is the authentication there, as it is for the web in their browser profile.
-    - Every Linux desktop app that keeps a session works this way.
-    - The alternative leaves Linux with the password trust only, so every start asks for the password.
-  - The other option is to withhold it on Linux: enrolment falls back to the password trust (D2 raises
-    `DeviceAuthFailed(false)` for the unlock key).
-- **Q2 — Windows without Windows Hello: password trust only, or staying signed in under DPAPI alone?** DPAPI opens for
-  the logged-on user without asking: Linux's level.
-  - **Recommendation: password trust only.** Hello is on almost every Windows 11 PC, and Windows offers it at setup.
-    Where someone turned it off, a DPAPI-only stay-signed-in would be a weaker trust than the same app gives with
-    Hello, silently.
-  - Q1's reasoning would allow it. The two answers may differ, because Windows has the stronger path and Linux has
-    none.
+- **Q1 + Q2 (settled, owner 2026-11-11, "passt so"): one rule for both desktops — "Stay signed in" uses the strongest
+  the device has.**
+  - Windows with Hello: Hello's key.
+  - Windows without Hello, and Linux: the desktop sign-in as the authentication (DPAPI, the Secret Service), the web's
+    level.
+  - The switch's label tells which (D5), and the security model writes it down (D6).
+  - The refine's premise that "almost every Windows 11 PC has Hello" was unmeasured and withdrawn: local accounts without
+    a PIN, policies that turn Hello off, and VMs are common enough.
 
 ## Retrospective
