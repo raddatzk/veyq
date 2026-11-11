@@ -133,6 +133,7 @@ object AppKinds {
     }
 
     /** What "New" creates at a level (the web's menu); each app wires each to its own dialog or picker. */
+    @kotlinx.serialization.Serializable
     enum class Create(val word: me.raddatz.veyq.mobile.words.Msg) {
         FOLDER(me.raddatz.veyq.mobile.words.Msg.FOLDER_NEW),
         POT(me.raddatz.veyq.mobile.words.Msg.CREATE_POT),
@@ -174,6 +175,7 @@ object AppKinds {
      * rights function): whether the object takes writes (a Pot of a switched-off Expenses reads only, `expensesRights`) and
      * whether a file has content to download and copy.
      */
+    @kotlinx.serialization.Serializable
     data class Facts(val canWrite: Boolean = true, val hasContent: Boolean = true)
 
     /** A kind's doors on its header: its cover offered here, its copy and its download (absent: not offered). */

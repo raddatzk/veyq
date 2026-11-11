@@ -78,7 +78,8 @@ class WireTest {
         applicationWords = listOf(ShellShown.ShownApplication(ApplicationId.EXPENSES, Msg.APP_EXPENSES)),
         groups = listOf(Home.Group(true, lists.nodes.take(1), null)), list = lists.drawer,
         tabs = listOf(ShellShown.ShownTab(BarTab("expenses.entries"), Msg.TAB_EXPENSES_ENTRIES)), selectedTab = BarTab("expenses.entries"),
-        canGoBack = true, isHome = false, drawerOpensAtStart = false, creates = listOf(Msg.FOLDER_NEW),
+        canGoBack = true, isHome = false, drawerOpensAtStart = false, creates = listOf(ShellShown.ShownCreate(me.raddatz.veyq.mobile.AppKinds.Create.FOLDER, Msg.FOLDER_NEW)),
+        canCreateHere = true, headed = me.raddatz.veyq.mobile.navigation.NodeAt("scope-1", "folder-1", "FOLDER", "Holidays"),
         me = "user-1", pictures = listOf("user-1", "user-2"),
     )
     private val record = TrustedDevice("http://veyq.localhost:8080", "p@example.org", "user-1", TrustedDevice.Method.DEVICE, "wrap-1", "veyq.device.ab")
@@ -98,14 +99,20 @@ class WireTest {
             Call.HomeGroups, Call.SearchQuery("lyon"), Call.PotOpen(ref), Call.PotRefresh(3), Call.PotClose(3),
             Call.PotDownload(3, "/home/p/Downloads/Trip to Lyon.zip", "deleted person"), Call.PotArchiveName(3), Call.AvatarPicture("user-1"),
             Call.ReaderRead(5, 262_144, 65_536), Call.ReaderClose(5),
+            Call.HeaderOpen(me.raddatz.veyq.mobile.navigation.NodeAt("scope-1", "node-1", "EXPENSES_POT", "Trip to Lyon"), me.raddatz.veyq.mobile.AppKinds.Facts(canWrite = false), 2), Call.HeaderOpen(me.raddatz.veyq.mobile.navigation.NodeAt("scope-1", "node-1", "EXPENSES_POT", "Trip to Lyon"), null, 0),
+            Call.HeaderFacts(7, me.raddatz.veyq.mobile.AppKinds.Facts()), Call.HeaderClose(7), Call.HeaderPin(7), Call.HeaderTrash(7), Call.HeaderUndo(7),
+            Call.HeaderRename(7, "Trip to Lyon 2"), Call.ShellCreateFolder("Plans"), Call.TrashOpen("scope-1"), Call.TrashClose(8),
+            Call.TrashRestore(8, "node-1"), Call.TrashType(8, "Trip 2"), Call.TrashRetry(8, "node-1"), Call.TrashCancelRename(8), Call.TrashPurge(8, "node-1"),
         ),
-        Watched.serializer() to listOf(Watched.Session, Watched.Shell, Watched.Pot(3), Watched.Manage),
+        Watched.serializer() to listOf(Watched.Session, Watched.Shell, Watched.Pot(3), Watched.Manage, Watched.Header(7), Watched.Trash(8)),
         HostReply.serializer() to listOf(HostReply.Value("s\tn\t1"), HostReply.Value(null), HostReply.Done, HostReply.Failed("disk full")),
         Answer.serializer() to listOf(
             Answer.Done, Answer.Refused(Answer.Why.NO_TENANT_OPEN), Answer.Refused(Answer.Why.TRUST_CANCELLED), Answer.Failed("IllegalStateException"),
             Answer.Groups(listOf(Home.Group(true, lists.nodes.take(1), Msg.HOME_GROUP_FOLDERS), Home.Group(false, lists.nodes.drop(1), null))),
             Answer.Hits(listOf(ref)), Answer.PotOpened(3), Answer.Name("Trip to Lyon.zip"), Answer.Bytes("image/png"), Answer.Bytes(null),
             Answer.Reader(5, 9_000_000_000, "video/mp4"), Answer.Reader(6, 0, null),
+            Answer.HeaderOpened(7), Answer.TrashOpened(8), Answer.Said(Notice(Msg.TRASH_MOVED, listOf("Trip"))), Answer.Said(null),
+            Answer.Renamed(Notice(Msg.NODE_SLUG_TAKEN), null), Answer.Renamed(null, Notice(Msg.SHARE_NAME_RESEAL_FAILED)), Answer.Refused(Answer.Why.NO_SUCH_ROW),
         ),
         Update.serializer() to listOf(
             Update.Session(Gate.Starting), Update.Session(Gate.NeedsApp), Update.Session(Gate.SignIn(error = Msg.SIGNIN_ERROR_CREDENTIALS, server = "veyq.localhost:8080")),
@@ -114,6 +121,14 @@ class WireTest {
             Update.Session(Gate.Unlock(record)), Update.Session(Gate.Unlock(record.copy(method = TrustedDevice.Method.DEVICE_KEY, level = StaySignedIn.LOGIN))), Update.Session(Gate.Signed("veyq.localhost#user-1", "t", switching = true)),
             Update.Shell(ShellModel.State(shell, lists), shown), Update.Shell(null),
             Update.Pot(3, PotModel.State(ref, failed = false, saving = true, message = "REFUSED"), listOf("user-1")), Update.Pot(4, null),
+            Update.Header(7, HeaderShown(me.raddatz.veyq.mobile.navigation.NodeAt("scope-1", "node-1", "EXPENSES_POT", "Trip to Lyon"), pinned = true,
+                plan = HeaderShown.Plan(listOf(HeaderShown.Action("favorite", Msg.NODE_UNFAVORITE)), listOf(HeaderShown.Action("own", null)), listOf(HeaderShown.Action("delete", Msg.POT_DELETE))),
+                deleteQuestion = Notice(Msg.POT_DELETE_CONFIRM, listOf("Trip to Lyon")), undo = Notice(Msg.TRASH_MOVED, listOf("Trip to Lyon")), gone = true)),
+            Update.Header(7, HeaderShown(me.raddatz.veyq.mobile.navigation.NodeAt("scope-1", "node-1", "EXPENSES_POT", "Trip to Lyon"), pinned = null, plan = null, deleteQuestion = Notice(Msg.POT_DELETE_CONFIRM, listOf("x")), undo = null, gone = false)),
+            Update.Header(9, null),
+            Update.Trash(8, TrashShown(listOf(TrashShown.Row("node-1", "FOLDER", "Trip", "2026-11-01T00:00:00Z", "2026-12-01T00:00:00Z", restorable = true, retryable = false)),
+                failed = false, busy = "node-1", errorRow = "node-1", error = Msg.NODE_SLUG_TAKEN, renaming = "node-1", retryName = "Trip 2")),
+            Update.Trash(8, TrashShown(null, failed = true, busy = null, errorRow = null, error = null, renaming = null, retryName = "")), Update.Trash(9, null),
             Update.Manage(null), Update.Manage(listOf(
                 ManagedShown("veyq.localhost#user-1", "veyq.localhost:8080", TrustedDevice.Method.DEVICE_KEY, StaySignedIn.LOGIN, listOf(StaySignedIn.PRESENCE, StaySignedIn.LOGIN), listOf(
                     ManagedShown.Tenant(tenant, hidden = false, current = true, shown = true, switchable = false, subtitle = Piece.Said(Notice(Msg.MANAGE_CURRENT)),

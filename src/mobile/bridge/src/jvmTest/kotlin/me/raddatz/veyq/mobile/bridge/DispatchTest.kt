@@ -11,6 +11,8 @@ import me.raddatz.veyq.mobile.navigation.ApplicationId
 import me.raddatz.veyq.mobile.navigation.BarTab
 import me.raddatz.veyq.mobile.navigation.Connection
 import me.raddatz.veyq.mobile.navigation.FolderRef
+import me.raddatz.veyq.mobile.navigation.NodeAt
+import me.raddatz.veyq.mobile.AppKinds
 import me.raddatz.veyq.mobile.navigation.Hidden
 import me.raddatz.veyq.mobile.navigation.ObjectRef
 import me.raddatz.veyq.mobile.navigation.RecentUses
@@ -478,6 +480,184 @@ class DispatchTest {
         val shownAgain = manage.until { u -> tenant(u, "ta2")?.takeIf { t -> t.shown && t.spaces?.single()?.hidden == false } }
         assertTrue(!shownAgain.hidden)
         assertEquals(emptySet(), kept.last())
+        b.shutdown()
+    }
+
+    /** What the played header's and trash's doors were asked, and how they answer. */
+    private inner class Played : me.raddatz.veyq.mobile.navigation.NodeHeaderModel.Door, me.raddatz.veyq.mobile.navigation.TrashSheet.Door {
+        var pinned: Boolean? = false
+        var pinStores = true
+        val restored = java.util.concurrent.CopyOnWriteArrayList<String>()
+        val renamedTo = java.util.concurrent.CopyOnWriteArrayList<String>()
+        var renameOutcome = me.raddatz.veyq.mobile.session.NodeRename.Outcome.RENAMED
+        val closed = java.util.concurrent.CopyOnWriteArrayList<NodeAt>()
+        val folders = java.util.concurrent.CopyOnWriteArrayList<String>()
+        val rows = java.util.concurrent.CopyOnWriteArrayList(listOf(trashed("t1", "Old"), trashed("t2", "Older")))
+        val purged = java.util.concurrent.CopyOnWriteArrayList<String>()
+        val restoredNames = java.util.concurrent.CopyOnWriteArrayList<String?>()
+        var takenOnce = true
+
+        override fun isFavorite(ref: NodeAt) = pinned
+        override fun inIdentityFolder(ref: NodeAt) = false
+        override fun linksOn() = true
+        override suspend fun reportOffered() = true
+        override suspend fun toggleFavorite(ref: NodeAt): Boolean {
+            if (pinStores) pinned = pinned?.not()
+            return pinStores
+        }
+        override suspend fun trash(ref: NodeAt) = me.raddatz.veyq.mobile.navigation.ShellModel.Trashed(
+            me.raddatz.veyq.mobile.session.NodeTrash.Deleted.TRASHED,
+            me.raddatz.veyq.mobile.words.Notices.trashed(me.raddatz.veyq.mobile.session.NodeTrash.Deleted.TRASHED, ref.name),
+            me.raddatz.veyq.mobile.session.OpenNode(ref.scopeId, ref.nodeId, null, ref.kind, ref.name, ByteArray(32)),
+        )
+        override suspend fun undoTrash(node: me.raddatz.veyq.mobile.session.OpenNode): me.raddatz.veyq.mobile.words.Notice? { restored += node.id; return null }
+        override suspend fun rename(ref: NodeAt, name: String): me.raddatz.veyq.mobile.navigation.ShellModel.Renamed {
+            renamedTo += name
+            val r = me.raddatz.veyq.mobile.session.NodeRename.Result(renameOutcome)
+            return me.raddatz.veyq.mobile.navigation.ShellModel.Renamed(r, me.raddatz.veyq.mobile.words.Notices.renameRefused(r))
+        }
+        override fun closeOpen(ref: NodeAt) { closed += ref }
+        override fun changed() {}
+
+        override suspend fun list() = rows.toList()
+        override fun canRestore(row: me.raddatz.veyq.mobile.session.NodeTrash.Trashed) = row.kind == "FOLDER"
+        override suspend fun restore(row: me.raddatz.veyq.mobile.session.NodeTrash.Trashed, newName: String?): me.raddatz.veyq.mobile.session.NodeTrash.Restored {
+            restoredNames += newName
+            if (takenOnce) { takenOnce = false; return me.raddatz.veyq.mobile.session.NodeTrash.Restored.NAME_TAKEN }
+            rows.removeIf { it.id == row.id }
+            return me.raddatz.veyq.mobile.session.NodeTrash.Restored.RESTORED
+        }
+        override suspend fun purge(row: me.raddatz.veyq.mobile.session.NodeTrash.Trashed): me.raddatz.veyq.mobile.session.NodeTrash.Purged {
+            purged += row.id
+            rows.removeIf { it.id == row.id }
+            return me.raddatz.veyq.mobile.session.NodeTrash.Purged.PURGED
+        }
+    }
+
+    private fun trashed(id: String, name: String) = me.raddatz.veyq.mobile.session.NodeTrash.Trashed("s", id, null, "FOLDER", name, 1, 1, 1, "2026-11-01T00:00:00Z", "2026-12-01T00:00:00Z", false)
+
+    /** A bridge whose tenant's header, trash and new folder are played over [played]. */
+    private fun bridgeWithHeader(played: Played) = Bridge {
+        val hidden = Hidden({}, emptySet())
+        Composition(SessionModel(Door(), hidden, RecentUses({}, emptyList())), hidden) { _ ->
+            Tenant(
+                shell = null, pot = null, me = "u1", pictures = pictures, loadPictures = {},
+                header = { node, facts, closeOpen ->
+                    me.raddatz.veyq.mobile.navigation.NodeHeaderModel(node, facts, object : me.raddatz.veyq.mobile.navigation.NodeHeaderModel.Door by played {
+                        // the bridge's own closeOpen is what the header calls: the played door records it too
+                        override fun closeOpen(ref: NodeAt) { closeOpen(ref); played.closeOpen(ref) }
+                    })
+                },
+                trash = { _ -> me.raddatz.veyq.mobile.navigation.TrashSheet(played) {} },
+                createFolder = { name -> played.folders += name; if (name.isBlank()) me.raddatz.veyq.mobile.words.Notice(Msg.FOLDER_NAME_EMPTY) else null },
+            )
+        }
+    }
+
+    @Test
+    fun aHeaderIsOpenedWatchedPinnedRenamedTrashedAndUndoneThroughCalls() = runBlocking {
+        val played = Played()
+        val b = bridgeWithHeader(played)
+        val folder = NodeAt("s", "f1", "FOLDER", "Trip")
+        assertEquals(Answer.Refused(Answer.Why.NO_TENANT_OPEN), b.ask(Call.HeaderOpen(folder, AppKinds.Facts(), 2)))
+        b.signedIn()
+        val id = (b.ask(Call.HeaderOpen(folder, AppKinds.Facts(), 2)) as Answer.HeaderOpened).header
+        val w = b.watching(Watched.Header(id))
+        // the plan with each action's words, once the report's offer was read
+        val shown = w.until { u -> (u as Update.Header).shown?.takeIf { it.plan != null && it.plan.last.any { a -> a.id == "report" } } }
+        assertEquals(folder, shown.node)
+        assertEquals(false, shown.pinned)
+        assertEquals(listOf("favorite" to Msg.NODE_FAVORITE, "share" to me.raddatz.veyq.mobile.session.ShareWords.of("FOLDER").title), shown.plan!!.buttons.map { it.id to it.word })
+        assertEquals("delete" to Msg.FOLDER_DELETE, shown.plan.last.last().let { it.id to it.word })
+        assertEquals(Msg.FOLDER_DELETE_CONFIRM, shown.deleteQuestion.msg)
+
+        // pin: turned, its word follows; a pin not stored turns back with its notice
+        assertEquals(Answer.Said(null), b.ask(Call.HeaderPin(id)))
+        val pinned = w.until { u -> (u as Update.Header).shown?.takeIf { it.pinned == true } }
+        assertEquals(Msg.NODE_UNFAVORITE, pinned.plan!!.buttons.first().word)
+        played.pinStores = false
+        assertEquals(Msg.NODE_FAVORITE_FAILED, (b.ask(Call.HeaderPin(id)) as Answer.Said).notice!!.msg)
+        assertEquals(true, (b.watching(Watched.Header(id)).next() as Update.Header).shown!!.pinned)
+
+        // rename: a refusal is the dialog's problem, a rename that landed says nothing
+        played.renameOutcome = me.raddatz.veyq.mobile.session.NodeRename.Outcome.NAME_TAKEN
+        val refused = b.ask(Call.HeaderRename(id, "Taken")) as Answer.Renamed
+        assertTrue(refused.problem != null && refused.notice == null)
+        played.renameOutcome = me.raddatz.veyq.mobile.session.NodeRename.Outcome.RENAMED
+        assertEquals(Answer.Renamed(null, null), b.ask(Call.HeaderRename(id, "Trip 2")))
+        assertEquals(listOf("Taken", "Trip 2"), played.renamedTo)
+
+        // trash: said, gone, its undo offered in the state; the bridge's closeOpen ran; the undo brings it back
+        val said = (b.ask(Call.HeaderTrash(id)) as Answer.Said).notice!!
+        assertEquals(Msg.TRASH_MOVED, said.msg)
+        val offered = w.until { u -> (u as Update.Header).shown?.takeIf { it.undo != null } }
+        assertTrue(offered.gone)
+        assertEquals(listOf(folder), played.closed)
+        assertEquals(Answer.Said(null), b.ask(Call.HeaderUndo(id)))
+        val undone = w.until { u -> (u as Update.Header).shown?.takeIf { it.undo == null } }
+        assertTrue(!undone.gone)
+        assertEquals(listOf("f1"), played.restored)
+        // nothing to undo any more
+        assertEquals(Answer.Said(null), b.ask(Call.HeaderUndo(id)))
+        assertEquals(listOf("f1"), played.restored)
+
+        // a Pot not read: no plan until its facts come
+        val potId = (b.ask(Call.HeaderOpen(NodeAt("s", "p1", "EXPENSES_POT", "Rome"), null, 2)) as Answer.HeaderOpened).header
+        assertNull((b.watching(Watched.Header(potId)).next() as Update.Header).shown!!.plan)
+        assertEquals(Answer.Done, b.ask(Call.HeaderFacts(potId, AppKinds.Facts(canWrite = false))))
+        val pot = b.watching(Watched.Header(potId)).until { u -> (u as Update.Header).shown?.plan }
+        assertTrue(pot.last.none { it.id == "copy" }, "a read-only Pot offered its copy")
+
+        // closed: refused, watched as none; and every header closes with its tenant
+        assertEquals(Answer.Done, b.ask(Call.HeaderClose(potId)))
+        assertEquals(Update.Header(potId, null), b.watching(Watched.Header(potId)).next())
+        listOf(Call.HeaderPin(potId), Call.HeaderTrash(potId), Call.HeaderUndo(potId), Call.HeaderRename(potId, "x"), Call.HeaderFacts(potId, null), Call.HeaderClose(potId))
+            .forEach { assertEquals(Answer.Refused(Answer.Why.NO_SUCH_HEADER), b.ask(it), "$it") }
+        assertEquals(Answer.Done, b.ask(Call.SessionSignOut("a.example#u1")))
+        assertEquals(Answer.Refused(Answer.Why.NO_SUCH_HEADER), b.ask(Call.HeaderPin(id)), "a header outlived its tenant")
+        b.shutdown()
+    }
+
+    @Test
+    fun aNewFolderAndASpacesTrashAreDrivenThroughCalls() = runBlocking {
+        val played = Played()
+        val b = bridgeWithHeader(played)
+        assertEquals(Answer.Refused(Answer.Why.NO_TENANT_OPEN), b.ask(Call.ShellCreateFolder("New")))
+        assertEquals(Answer.Refused(Answer.Why.NO_TENANT_OPEN), b.ask(Call.TrashOpen("s")))
+        b.signedIn()
+        assertEquals(Answer.Said(null), b.ask(Call.ShellCreateFolder("Plans")))
+        assertEquals(Msg.FOLDER_NAME_EMPTY, (b.ask(Call.ShellCreateFolder(" ")) as Answer.Said).notice!!.msg)
+        assertEquals(listOf("Plans", " "), played.folders)
+
+        val id = (b.ask(Call.TrashOpen("s")) as Answer.TrashOpened).trash
+        val w = b.watching(Watched.Trash(id))
+        val listed = w.until { u -> (u as Update.Trash).shown?.rows }
+        assertEquals(listOf("t1" to true, "t2" to true), listed.map { it.id to it.restorable })
+        assertEquals("2026-11-01T00:00:00Z", listed.first().deletedAt)
+
+        // a restore whose name was taken asks for another: typed, retried under it
+        assertEquals(Answer.Done, b.ask(Call.TrashRestore(id, "t1")))
+        val asking = w.until { u -> (u as Update.Trash).shown?.takeIf { it.renaming == "t1" } }
+        assertEquals(Msg.NODE_SLUG_TAKEN, asking.error)
+        assertEquals(Answer.Done, b.ask(Call.TrashType(id, "  ")))
+        assertTrue(w.until { u -> (u as Update.Trash).shown?.takeIf { it.retryName == "  " } }.rows!!.none { it.retryable })
+        assertEquals(Answer.Done, b.ask(Call.TrashType(id, "Old 2")))
+        assertTrue(w.until { u -> (u as Update.Trash).shown?.takeIf { it.retryName == "Old 2" } }.rows!!.single { it.id == "t1" }.retryable)
+        assertEquals(Answer.Done, b.ask(Call.TrashRetry(id, "t1")))
+        assertEquals(listOf(null, "Old 2"), played.restoredNames)
+        w.until { u -> (u as Update.Trash).shown?.rows?.takeIf { r -> r.map { it.id } == listOf("t2") } }
+
+        // "Delete forever" of the row named, with no question asked in the core first
+        assertEquals(Answer.Done, b.ask(Call.TrashPurge(id, "t2")))
+        assertEquals(listOf("t2"), played.purged)
+        w.until { u -> (u as Update.Trash).shown?.rows?.takeIf { it.isEmpty() } }
+        assertEquals(Answer.Refused(Answer.Why.NO_SUCH_ROW), b.ask(Call.TrashPurge(id, "t2")))
+        assertEquals(Answer.Done, b.ask(Call.TrashCancelRename(id)))
+
+        assertEquals(Answer.Done, b.ask(Call.TrashClose(id)))
+        assertEquals(Update.Trash(id, null), b.watching(Watched.Trash(id)).next())
+        listOf(Call.TrashRestore(id, "t1"), Call.TrashRetry(id, "t1"), Call.TrashPurge(id, "t1"), Call.TrashType(id, "x"), Call.TrashCancelRename(id), Call.TrashClose(id))
+            .forEach { assertEquals(Answer.Refused(Answer.Why.NO_SUCH_TRASH), b.ask(it), "$it") }
         b.shutdown()
     }
 

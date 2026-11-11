@@ -20,6 +20,7 @@ data class ObjectRef(
 
 /** A node an action is about, of any kind (an object, a folder): where it is, what kind it is, what it is called. Core's
  *  node actions (favorite, rename, move, copy, delete, cover, report) take one, whoever owns the node. */
+@kotlinx.serialization.Serializable
 data class NodeAt(val scopeId: String, val nodeId: String, val kind: String, val name: String)
 
 /** When this device last opened an object (ADR 0122 decision 6: Recent is per install, never synced). */

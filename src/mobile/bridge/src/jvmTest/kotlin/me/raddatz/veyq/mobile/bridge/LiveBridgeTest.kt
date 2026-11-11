@@ -15,6 +15,7 @@ import kotlin.test.assertIs
 import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
 import kotlin.time.Duration.Companion.minutes
+import kotlin.time.Duration.Companion.seconds
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonNull
 import kotlinx.serialization.json.int
@@ -287,6 +288,130 @@ class LiveBridgeTest {
         }.shutdown()
         assertEquals(prompts, keys.prompts, "the password trust asked for the person")
         for (level in StaySignedIn.entries) assertTrue(!keys.hasUnlockKey(level), "the $level unlock key outlived every trust")
+    }
+
+    /**
+     * A node's header and the space's trash through calls (the header CR, Phase 2): in the personal space's root, New
+     * folder makes "App header <n>"; its header pins and unpins it, renames it, trashes it and undoes that, trashes it
+     * again; the space's trash restores it, then it is trashed and purged. Each step is read back by a fresh read of the
+     * server (`Shell.Refresh`, a fresh watch; the trash opened anew), and nothing is left behind: the folder is purged.
+     */
+    @Test
+    fun aFolderIsMadePinnedRenamedTrashedUndoneRestoredAndPurgedThroughCalls() = runBlocking {
+        val origin = System.getenv("VEYQ_LIVE") ?: return@runBlocking
+        val envFile = System.getenv("VEYQ_ENV_FILE")?.let(::File) ?: File(System.getProperty("veyq.repoRoot"), ".run/.env")
+        val env = envFile.readLines()
+            .mapNotNull { l -> l.substringBefore('=', "").takeIf { it.isNotBlank() }?.let { it.trim() to l.substringAfter('=').trim().trim('"', '\'') } }
+            .toMap()
+        val b = Bridge.live(BouncyCastlePrimitives, { block -> HttpClient(OkHttp, block) }, Config("bridge header test"), hostStore(ConcurrentHashMap()), { NoDeviceKeys }, JvmFiles)
+        val gate = b.watching(Watched.Session)
+        assertEquals(Answer.Done, b.ask(Call.SessionStart))
+        gate.until { (it as Update.Session).gate as? Gate.SignIn }
+        assertEquals(Answer.Done, b.ask(Call.SessionSignIn(origin, env.getValue("VEYQ_EMAIL"), env.getValue("VEYQ_PASSWORD"), env.getValue("VEYQ_SECRET_KEY")), timeout = 2.minutes))
+        gate.until(2.minutes) { (it as Update.Session).gate as? Gate.Signed }
+        val first = b.watching(Watched.Shell).until(1.minutes) { (it as Update.Shell).takeIf { u -> u.state?.lists?.spaces?.isNotEmpty() == true } }
+        val personal = first.state!!.lists.spaces.first { it.kind == "PERSONAL" }
+
+        /** The shell as the server has it now: the lists read anew, then a fresh watch's first state. */
+        suspend fun fresh(): Update.Shell {
+            assertEquals(Answer.Done, b.ask(Call.ShellRefresh, timeout = 1.minutes))
+            return b.watching(Watched.Shell).next() as Update.Shell
+        }
+        fun node(u: Update.Shell, name: String) = u.state!!.lists.nodes.firstOrNull { it.scopeId == personal.scopeId && it.name == name && it.parentId == null }
+
+        // Home on the personal space's root, where New offers a folder
+        assertEquals(Answer.Done, b.ask(Call.ShellChoose(null)))
+        assertEquals(Answer.Done, b.ask(Call.ShellSwitchSpace(personal.scopeId)))
+        val home = b.watching(Watched.Shell).until { u -> (u as Update.Shell).takeIf { it.state?.shell?.space == personal.scopeId && it.state.shell.path.isEmpty() && it.state.shell.openObject == null } }
+        assertTrue(home.shown!!.canCreateHere)
+        assertTrue(home.shown.creates.any { it.create == me.raddatz.veyq.mobile.AppKinds.Create.FOLDER })
+        val name = "App header ${System.currentTimeMillis() % 100_000}"
+        assertEquals(Answer.Said(null), b.ask(Call.ShellCreateFolder(name), timeout = 1.minutes))
+        val made = assertNotNull(node(fresh(), name), "the new folder is not listed")
+        println("made $name")
+        val at = me.raddatz.veyq.mobile.navigation.NodeAt(made.scopeId, made.nodeId, made.kind, made.name)
+
+        val header = (b.ask(Call.HeaderOpen(at, me.raddatz.veyq.mobile.AppKinds.Facts(), 2)) as Answer.HeaderOpened).header
+        val watched = b.watching(Watched.Header(header))
+        val plan = watched.until { u -> (u as Update.Header).shown?.takeIf { it.pinned != null }?.plan }
+        println("plan: " + listOf(plan.buttons, plan.menu, plan.last).joinToString(" | ") { g -> g.joinToString { it.id } })
+        assertEquals("delete", plan.last.last().id)
+
+        // pinned and unpinned, each read back
+        // a fresh read: the lists (and the pin set) read anew, a fresh header asked whether it is pinned
+        suspend fun pinnedNow(): Boolean? {
+            fresh()
+            val h = (b.ask(Call.HeaderOpen(at, me.raddatz.veyq.mobile.AppKinds.Facts(), 2)) as Answer.HeaderOpened).header
+            return ((b.watching(Watched.Header(h)).next() as Update.Header).shown!!.pinned).also { b.ask(Call.HeaderClose(h)) }
+        }
+        assertEquals(false, pinnedNow())
+        assertEquals(Answer.Said(null), b.ask(Call.HeaderPin(header), timeout = 1.minutes))
+        assertEquals(true, pinnedNow(), "the pin did not land")
+        assertEquals(Answer.Said(null), b.ask(Call.HeaderPin(header), timeout = 1.minutes))
+        assertEquals(false, pinnedNow(), "the unpin did not land")
+        println("pinned and unpinned")
+
+        // renamed, read back under the new name; a header of the renamed node from now on (the host opens one per name)
+        val renamed = "$name renamed"
+        assertEquals(Answer.Renamed(null, null), b.ask(Call.HeaderRename(header, renamed), timeout = 1.minutes))
+        assertNotNull(node(fresh(), renamed), "the rename did not land")
+        assertEquals(Answer.Done, b.ask(Call.HeaderClose(header)))
+        val at2 = at.copy(name = renamed)
+        val h2 = (b.ask(Call.HeaderOpen(at2, me.raddatz.veyq.mobile.AppKinds.Facts(), 2)) as Answer.HeaderOpened).header
+        val w2 = b.watching(Watched.Header(h2))
+        println("renamed to $renamed")
+
+        // trashed, its undo offered; undone, read back where it was
+        assertEquals(me.raddatz.veyq.mobile.words.Msg.TRASH_MOVED, (b.ask(Call.HeaderTrash(h2), timeout = 1.minutes) as Answer.Said).notice!!.msg)
+        w2.until { u -> (u as Update.Header).shown?.takeIf { it.undo != null && it.gone } }
+        assertNull(node(fresh(), renamed), "the trash did not land")
+        assertEquals(Answer.Said(null), b.ask(Call.HeaderUndo(h2), timeout = 1.minutes))
+        assertNotNull(node(fresh(), renamed), "the undo did not bring it back")
+        println("trashed and undone")
+
+        // trashed again, its undo left to the core's window (6 s): the offer ends by itself
+        assertEquals(me.raddatz.veyq.mobile.words.Msg.TRASH_MOVED, (b.ask(Call.HeaderTrash(h2), timeout = 1.minutes) as Answer.Said).notice!!.msg)
+        val offeredAt = System.currentTimeMillis()
+        w2.until { u -> (u as Update.Header).shown?.takeIf { it.undo != null } }
+        w2.until(30.seconds) { u -> (u as Update.Header).shown?.takeIf { it.undo == null } }
+        val held = System.currentTimeMillis() - offeredAt
+        println("the undo was offered for ${held} ms")
+        assertTrue(held >= me.raddatz.veyq.mobile.navigation.ShellModel.TRASH_UNDO_MS - 500, "the undo ended early")
+        assertNull(node(fresh(), renamed))
+
+        // the space's trash: listed, restored, read back; trashed once more, purged, gone from the trash
+        suspend fun trashRows(): List<TrashShown.Row> {
+            val t = (b.ask(Call.TrashOpen(personal.scopeId)) as Answer.TrashOpened).trash
+            val rows = b.watching(Watched.Trash(t)).until(1.minutes) { u -> (u as Update.Trash).shown?.takeIf { s -> s.rows != null || s.failed } }
+            assertTrue(!rows.failed, "the trash did not read")
+            assertEquals(Answer.Done, b.ask(Call.TrashClose(t)))
+            return rows.rows!!
+        }
+        val t = (b.ask(Call.TrashOpen(personal.scopeId)) as Answer.TrashOpened).trash
+        val tw = b.watching(Watched.Trash(t))
+        val row = tw.until(1.minutes) { u -> (u as Update.Trash).shown?.rows?.firstOrNull { it.id == at.nodeId } }
+        assertTrue(row.restorable)
+        assertEquals(renamed, row.name)
+        assertEquals(Answer.Done, b.ask(Call.TrashRestore(t, row.id), timeout = 1.minutes))
+        tw.until(1.minutes) { u -> (u as Update.Trash).shown?.takeIf { s -> s.busy == null && s.rows?.none { it.id == at.nodeId } == true } }
+        assertNotNull(node(fresh(), renamed), "the restore did not land")
+        assertTrue(trashRows().none { it.id == at.nodeId })
+        println("restored from the space's trash")
+
+        val h3 = (b.ask(Call.HeaderOpen(at2, me.raddatz.veyq.mobile.AppKinds.Facts(), 2)) as Answer.HeaderOpened).header
+        assertEquals(me.raddatz.veyq.mobile.words.Msg.TRASH_MOVED, (b.ask(Call.HeaderTrash(h3), timeout = 1.minutes) as Answer.Said).notice!!.msg)
+        assertEquals(Answer.Done, b.ask(Call.TrashClose(t)))
+        val t2 = (b.ask(Call.TrashOpen(personal.scopeId)) as Answer.TrashOpened).trash
+        val tw2 = b.watching(Watched.Trash(t2))
+        tw2.until(1.minutes) { u -> (u as Update.Trash).shown?.rows?.firstOrNull { it.id == at.nodeId } }
+        assertEquals(Answer.Done, b.ask(Call.TrashPurge(t2, at.nodeId), timeout = 1.minutes))
+        val after = tw2.until(1.minutes) { u -> (u as Update.Trash).shown?.takeIf { s -> s.busy == null && s.rows?.none { it.id == at.nodeId } == true } }
+        assertNull(after.error)
+        assertTrue(trashRows().none { it.id == at.nodeId }, "the purge did not land")
+        assertNull(node(fresh(), renamed))
+        println("trashed and purged: nothing left")
+        assertEquals(Answer.Done, b.ask(Call.TrashClose(t2)))
+        b.shutdown()
     }
 
     /** A device store the test's host keeps in [kept], answering from its own thread as a UI loop does. */

@@ -10,6 +10,8 @@ import me.raddatz.veyq.mobile.navigation.ArrangedList
 import me.raddatz.veyq.mobile.navigation.BarTab
 import me.raddatz.veyq.mobile.navigation.FolderRef
 import me.raddatz.veyq.mobile.navigation.Home
+import me.raddatz.veyq.mobile.navigation.NodeAt
+import me.raddatz.veyq.mobile.AppKinds
 import me.raddatz.veyq.mobile.navigation.ObjectRef
 import me.raddatz.veyq.mobile.navigation.ShellModel
 import me.raddatz.veyq.mobile.navigation.SpaceRef
@@ -19,6 +21,7 @@ import me.raddatz.veyq.mobile.session.StaySignedIn
 import me.raddatz.veyq.mobile.session.TrustedDevice
 import me.raddatz.veyq.mobile.words.Msg
 import me.raddatz.veyq.mobile.words.MsgKey
+import me.raddatz.veyq.mobile.words.Notice
 import me.raddatz.veyq.mobile.words.Piece
 
 /**
@@ -156,6 +159,48 @@ internal sealed class Call {
     /** [length] bytes of reader [reader] from [position] ([Answer.Bytes]): fewer only at the end, none past it. */
     @Serializable @SerialName("Reader.Read") data class ReaderRead(val reader: Long, val position: Long, val length: Int) : Call()
     @Serializable @SerialName("Reader.Close") data class ReaderClose(val reader: Long) : Call()
+
+    /**
+     * The header of [node] (`ShellModel.header`, core's `NodeHeaderModel`) as a model of its own, answered with its id
+     * ([Answer.HeaderOpened]) for [Watched.Header]: its kind's page knowing [facts] (null: not yet — a Pot not read), its
+     * bar holding at most [maxButtons] buttons (the platform's answer, `NodeHeader.plan`). A header stays until
+     * [HeaderClose] or the tenant closes, so a trash's undo outlives the page that left.
+     */
+    @Serializable @SerialName("Header.Open") data class HeaderOpen(val node: NodeAt, val facts: AppKinds.Facts?, val maxButtons: Int) : Call()
+
+    /** What the kind's page knows now (`NodeHeaderModel.update`). */
+    @Serializable @SerialName("Header.Facts") data class HeaderFacts(val header: Long, val facts: AppKinds.Facts?) : Call()
+    @Serializable @SerialName("Header.Close") data class HeaderClose(val header: Long) : Call()
+
+    /** Pins or unpins (`toggleFavorite`): [Answer.Said] with the failure's notice, or none. */
+    @Serializable @SerialName("Header.Pin") data class HeaderPin(val header: Long) : Call()
+
+    /** To the trash (`trash`): [Answer.Said] with what it says; its undo stands in the header's state while offered. */
+    @Serializable @SerialName("Header.Trash") data class HeaderTrash(val header: Long) : Call()
+
+    /** The trash's undo while offered (`undoTrash`): [Answer.Said] with why it failed, or none. */
+    @Serializable @SerialName("Header.Undo") data class HeaderUndo(val header: Long) : Call()
+
+    /** Renames the node (`rename`): [Answer.Renamed]. */
+    @Serializable @SerialName("Header.Rename") data class HeaderRename(val header: Long, val name: String) : Call()
+
+    /** A new folder where the shell is (`ShellModel.createFolderHere`): [Answer.Said] with why not, or none. */
+    @Serializable @SerialName("Shell.CreateFolder") data class ShellCreateFolder(val name: String) : Call()
+
+    /** A space's trash sheet (`ShellModel.trashSheet`, read at once), answered with its id ([Answer.TrashOpened]). */
+    @Serializable @SerialName("Trash.Open") data class TrashOpen(val scopeId: String) : Call()
+    @Serializable @SerialName("Trash.Close") data class TrashClose(val trash: Long) : Call()
+
+    /** Restore of the row listed as [row] (`TrashSheet.restore`); where its name was taken the row asks for another. */
+    @Serializable @SerialName("Trash.Restore") data class TrashRestore(val trash: Long, val row: String) : Call()
+
+    /** The asking row's new name as typed (`TrashSheet.type`), and its restore under it (`retry`); or no new name. */
+    @Serializable @SerialName("Trash.Type") data class TrashType(val trash: Long, val name: String) : Call()
+    @Serializable @SerialName("Trash.Retry") data class TrashRetry(val trash: Long, val row: String) : Call()
+    @Serializable @SerialName("Trash.CancelRename") data class TrashCancelRename(val trash: Long) : Call()
+
+    /** "Delete forever" of the row the person confirmed (`TrashSheet.purge(row)`): the host asks first. */
+    @Serializable @SerialName("Trash.Purge") data class TrashPurge(val trash: Long, val row: String) : Call()
 }
 
 /** A call's one answer; what the call changed arrives as the watched states' updates. */
@@ -185,8 +230,18 @@ internal sealed class Answer {
      */
     @Serializable @SerialName("Reader") data class Reader(val reader: Long, val size: Long, val mediaType: String?) : Answer()
 
+    @Serializable @SerialName("HeaderOpened") data class HeaderOpened(val header: Long) : Answer()
+    @Serializable @SerialName("TrashOpened") data class TrashOpened(val trash: Long) : Answer()
+
+    /** What an action says: its notice, or null where it says nothing (it went through). */
+    @Serializable @SerialName("Said") data class Said(val notice: Notice?) : Answer()
+
+    /** A rename: why it did not land ([problem]: the dialog asks again), or what to say once it did ([notice]). */
+    @Serializable @SerialName("Renamed") data class Renamed(val problem: Notice?, val notice: Notice?) : Answer()
+
     enum class Why {
         NOT_A_CALL, NO_TENANT_OPEN, NO_SUCH_CONNECTION, NO_SUCH_TENANT, NO_SUCH_POT, NO_SUCH_READER, NO_PICTURE, NOTHING_TO_DOWNLOAD,
+        NO_SUCH_HEADER, NO_SUCH_TRASH, NO_SUCH_ROW,
 
         /** A change of trust (`TrustChange`): no offer to answer; the person cancelled the prompt; not enrolled; the
          *  password was not the account's. */
@@ -205,6 +260,12 @@ internal sealed class Watched {
 
     /** "Manage servers" while it is open ([Call.ManageOpen]). */
     @Serializable @SerialName("Manage") data object Manage : Watched()
+
+    /** A header opened by [Call.HeaderOpen]. */
+    @Serializable @SerialName("Header") data class Header(val header: Long) : Watched()
+
+    /** A space's trash opened by [Call.TrashOpen]. */
+    @Serializable @SerialName("Trash") data class Trash(val trash: Long) : Watched()
 }
 
 /** One state a watch delivers: the first at once, then each change. */
@@ -228,6 +289,59 @@ internal sealed class Update {
      * ids whose picture the core holds ([Call.AvatarPicture]); a person whose member id is not among them shows the letter.
      */
     @Serializable @SerialName("Pot") data class Pot(val pot: Long, val state: PotModel.State?, val pictures: List<String> = emptyList()) : Update()
+
+    /** A header's state; null once it was closed (or an id the bridge does not hold). */
+    @Serializable @SerialName("Header") data class Header(val header: Long, val shown: HeaderShown?) : Update()
+
+    /** A space's trash sheet; null once it was closed. */
+    @Serializable @SerialName("Trash") data class Trash(val trash: Long, val shown: TrashShown?) : Update()
+}
+
+/**
+ * A node's header as the host draws it (`NodeHeaderModel`), each field one core function's answer: the node, whether it
+ * is pinned (null while its pin set is not read: no heart), the plan with each action's words (`plan`, `label`; null while
+ * the kind's page cannot tell yet), the delete's question (`deleteQuestion`), the trash's undo while the core offers it
+ * (`State.undo`: the host shows its Undo until this is null again — the window is the core's, never a host's timer) and
+ * whether the node went to the trash.
+ */
+@Serializable
+internal class HeaderShown(
+    val node: NodeAt,
+    val pinned: Boolean?,
+    val plan: Plan?,
+    val deleteQuestion: Notice,
+    val undo: Notice?,
+    val gone: Boolean,
+) {
+    /** `NodeHeader.Plan`: the bar's buttons, the menu, and the menu's last group after a separator. */
+    @Serializable class Plan(val buttons: List<Action>, val menu: List<Action>, val last: List<Action>)
+
+    /** One action: its id (`NodeHeader`'s, or an application's own) and its words (null: an application's own). */
+    @Serializable class Action(val id: String, @Serializable(with = MsgKey::class) val word: Msg?)
+}
+
+/**
+ * A space's trash as the host draws it (`TrashSheet.State`): its rows (null while the first read runs), each with what
+ * the sheet offers on it; the row a write runs on, the row an error stands under and the error, the row that asks for
+ * another name and the name typed.
+ */
+@Serializable
+internal class TrashShown(
+    val rows: List<Row>?,
+    val failed: Boolean,
+    val busy: String?,
+    val errorRow: String?,
+    @Serializable(with = MsgKey::class) val error: Msg?,
+    val renaming: String?,
+    val retryName: String,
+) {
+    /**
+     * A row: the deleted subtree's root, its kind and name, when it was deleted and when it goes for good (the server's
+     * ISO instants, said as days), [restorable] whether Restore is offered (`canRestore`), [retryable] whether the restore
+     * under the typed name is (`State.retryable`).
+     */
+    @Serializable
+    class Row(val id: String, val kind: String, val name: String, val deletedAt: String, val purgeAfter: String, val restorable: Boolean, val retryable: Boolean)
 }
 
 /**
@@ -261,8 +375,12 @@ internal class ShellShown(
     val canGoBack: Boolean,
     val isHome: Boolean,
     val drawerOpensAtStart: Boolean,
-    /** What the sidebar's New offers (`AppKinds.drawerCreates`' words). */
-    val creates: List<@Serializable(with = MsgKey::class) Msg>,
+    /** What the sidebar's New offers (`AppKinds.drawerCreates`), each with its words. */
+    val creates: List<ShownCreate>,
+    /** Whether New is offered where the shell is (`ShellModel.canCreateHere`: never in a guest's folder). */
+    val canCreateHere: Boolean,
+    /** The node the content heads (`Shell.openObject`, else the folder Home shows: `Shell.folderAt`); null on a space's root. */
+    val headed: NodeAt?,
     /** The signed-in member's user id, whose picture the switcher shows when [pictures] holds it. */
     val me: String?,
     /**
@@ -275,6 +393,7 @@ internal class ShellShown(
     @Serializable class ShownSpace(val space: SpaceRef, val name: Piece)
     @Serializable class ShownApplication(val application: ApplicationId, @Serializable(with = MsgKey::class) val word: Msg)
     @Serializable class ShownTab(val tab: BarTab, @Serializable(with = MsgKey::class) val word: Msg)
+    @Serializable class ShownCreate(val create: AppKinds.Create, @Serializable(with = MsgKey::class) val word: Msg)
 }
 
 /**

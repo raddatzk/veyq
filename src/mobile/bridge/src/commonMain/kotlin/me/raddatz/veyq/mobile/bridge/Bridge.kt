@@ -28,6 +28,10 @@ import me.raddatz.veyq.mobile.AppKinds
 import me.raddatz.veyq.mobile.navigation.ApplicationId
 import me.raddatz.veyq.mobile.navigation.Connection
 import me.raddatz.veyq.mobile.navigation.Hidden
+import me.raddatz.veyq.mobile.navigation.NodeAt
+import me.raddatz.veyq.mobile.navigation.NodeHeaderModel
+import me.raddatz.veyq.mobile.navigation.TrashSheet
+import me.raddatz.veyq.mobile.words.Notice
 import me.raddatz.veyq.mobile.navigation.RecentUses
 import me.raddatz.veyq.mobile.navigation.ShellModel
 import me.raddatz.veyq.mobile.navigation.ShellWords
@@ -75,7 +79,21 @@ internal class Tenant(
     val me: String?,
     val pictures: StateFlow<Map<String, ByteArray>>,
     val loadPictures: suspend () -> Unit,
+    /**
+     * A node's header over this tenant (`ShellModel.header`), whose `closeOpen` the bridge hands in (it closes the open
+     * Pots of a node gone to the trash); a test's tenant plays one over a door of its own.
+     */
+    val header: ((node: NodeAt, facts: AppKinds.Facts?, closeOpen: (NodeAt) -> Unit) -> NodeHeaderModel)? = shell?.let { s ->
+        { node, facts, closeOpen -> s.header(node, facts, closeOpen) {} }
+    },
+    /** A space's trash sheet (`ShellModel.trashSheet`). */
+    val trash: ((scopeId: String) -> TrashSheet)? = shell?.let { s -> { scopeId -> s.trashSheet(scopeId) {} } },
+    /** A new folder where the shell is (`ShellModel.createFolderHere`): why not, or null. */
+    val createFolder: (suspend (name: String) -> Notice?)? = shell?.let { s -> { name -> s.createFolderHere(name) } },
 )
+
+/** A header the host opened, with the most buttons its bar holds. */
+internal class HeldHeader(val model: NodeHeaderModel, val maxButtons: Int)
 
 /**
  * A file on the device the host named by its path, as its save dialog gave it (ADR 0128 decision 3): the core opens and
@@ -115,6 +133,8 @@ internal class Bridge<A : Connection, T : Any>(compose: () -> Composition<A, T>)
     private val pots = Registry<PotModel>()
     private val readers = Registry<RangeReader>()
     private val watches = Registry<Job>()
+    private val headers = Registry<HeldHeader>()
+    private val trashes = Registry<TrashSheet>()
 
     /** "Manage servers" while it is open, null while closed; its spaces read by [managing]'s job. */
     private val manage = MutableStateFlow<List<ManagedShown>?>(null)
@@ -243,6 +263,31 @@ internal class Bridge<A : Connection, T : Any>(compose: () -> Composition<A, T>)
                 Answer.Bytes(null)
             } ?: Answer.Refused(Answer.Why.NO_SUCH_READER)
             is Call.ReaderClose -> readers.remove(call.reader)?.let { Answer.Done } ?: Answer.Refused(Answer.Why.NO_SUCH_READER)
+            is Call.HeaderOpen -> tenant.value?.models?.header?.let { make ->
+                val id = ids.incrementAndFetch()
+                headers.put(id, HeldHeader(make(call.node, call.facts, ::closeOpen), call.maxButtons))
+                Answer.HeaderOpened(id)
+            } ?: noTenant
+            is Call.HeaderFacts -> headers[call.header]?.model?.update(call.facts).done(Answer.Why.NO_SUCH_HEADER)
+            is Call.HeaderClose -> headers.remove(call.header)?.let { Answer.Done } ?: Answer.Refused(Answer.Why.NO_SUCH_HEADER)
+            is Call.HeaderPin -> headers[call.header]?.let { Answer.Said(it.model.toggleFavorite()) } ?: noHeader
+            is Call.HeaderTrash -> headers[call.header]?.let { Answer.Said(it.model.trash()) } ?: noHeader
+            is Call.HeaderUndo -> headers[call.header]?.let { Answer.Said(it.model.undoTrash()) } ?: noHeader
+            is Call.HeaderRename -> headers[call.header]?.let { it.model.rename(call.name).let { r -> Answer.Renamed(r.problem, r.notice) } } ?: noHeader
+            is Call.ShellCreateFolder -> tenant.value?.models?.createFolder?.let { Answer.Said(it(call.name)) } ?: noTenant
+            is Call.TrashOpen -> tenant.value?.models?.trash?.let { make ->
+                val id = ids.incrementAndFetch()
+                val sheet = make(call.scopeId)
+                trashes.put(id, sheet)
+                scope.launch { sheet.load() }
+                Answer.TrashOpened(id)
+            } ?: noTenant
+            is Call.TrashClose -> trashes.remove(call.trash)?.let { Answer.Done } ?: noTrash
+            is Call.TrashRestore -> onRow(call.trash, call.row) { sheet, row -> sheet.restore(row) }
+            is Call.TrashRetry -> onRow(call.trash, call.row) { sheet, row -> sheet.retry(row) }
+            is Call.TrashPurge -> onRow(call.trash, call.row) { sheet, row -> sheet.purge(row) }
+            is Call.TrashType -> trashes[call.trash]?.type(call.name).done(Answer.Why.NO_SUCH_TRASH)
+            is Call.TrashCancelRename -> trashes[call.trash]?.cancelRename().done(Answer.Why.NO_SUCH_TRASH)
         }
     }
 
@@ -259,6 +304,21 @@ internal class Bridge<A : Connection, T : Any>(compose: () -> Composition<A, T>)
     }
 
     private val noTenant = Answer.Refused(Answer.Why.NO_TENANT_OPEN)
+    private val noHeader = Answer.Refused(Answer.Why.NO_SUCH_HEADER)
+    private val noTrash = Answer.Refused(Answer.Why.NO_SUCH_TRASH)
+
+    /** [act] on the row of trash sheet [trash] listed as [rowId] (`TrashSheet.row`). */
+    private suspend fun onRow(trash: Long, rowId: String, act: suspend (TrashSheet, me.raddatz.veyq.mobile.session.NodeTrash.Trashed) -> Unit): Answer {
+        val sheet = trashes[trash] ?: return noTrash
+        val row = sheet.row(rowId) ?: return Answer.Refused(Answer.Why.NO_SUCH_ROW)
+        act(sheet, row)
+        return Answer.Done
+    }
+
+    /** The open Pots of a node gone to the trash close (a header's `closeOpen`). */
+    private fun closeOpen(ref: NodeAt) {
+        pots.values().filter { it.current?.ref?.nodeId == ref.nodeId }.forEach { it.close() }
+    }
 
     /** "Manage servers" as the core has it now, when it is open (after a call that changed the servers or their trust). */
     private fun managed(parts: Composition<A, T>) {
@@ -302,6 +362,8 @@ internal class Bridge<A : Connection, T : Any>(compose: () -> Composition<A, T>)
         tenant.value = null
         pots.removeAll().forEach { it.close() }
         readers.removeAll()
+        headers.removeAll()
+        trashes.removeAll()
     }
 
     /**
@@ -330,6 +392,10 @@ internal class Bridge<A : Connection, T : Any>(compose: () -> Composition<A, T>)
                 } ?: flowOf(Update.Shell(null))
             }
         }
+        is Watched.Header -> headers[w.header]?.let { h -> h.model.state.map { Update.Header(w.header, shownHeader(h)) } }
+            ?: flowOf(Update.Header(w.header, null))
+        is Watched.Trash -> trashes[w.trash]?.let { t -> t.state.map { Update.Trash(w.trash, shownTrash(t, it)) } }
+            ?: flowOf(Update.Trash(w.trash, null))
         is Watched.Pot -> {
             val pictures = tenant.value?.models?.pictures ?: flowOf(emptyMap())
             (pots[w.pot]?.state ?: flowOf(null)).combine(pictures) { s, p -> Update.Pot(w.pot, s, if (s == null) emptyList() else p.keys.sorted()) }
@@ -363,11 +429,34 @@ internal class Bridge<A : Connection, T : Any>(compose: () -> Composition<A, T>)
             canGoBack = shell.canGoBack,
             isHome = shell.isHome,
             drawerOpensAtStart = shell.drawerOpensAtStart,
-            creates = AppKinds.drawerCreates.map { it.word },
+            creates = AppKinds.drawerCreates.map { ShellShown.ShownCreate(it, it.word) },
+            canCreateHere = open.models.shell?.canCreateHere == true,
+            headed = shell.openObject?.at ?: shell.space?.let(shell::folderAt),
             me = open.models.me,
             pictures = pictures.sorted(),
         )
     }
+
+    /** A header as the host draws it ([HeaderShown]), each field the model's own answer. */
+    private fun shownHeader(h: HeldHeader): HeaderShown {
+        val m = h.model
+        val s = m.current
+        fun actions(ids: List<String>) = ids.map { HeaderShown.Action(it, m.label(it, hasCover = false)) }
+        return HeaderShown(
+            node = m.node,
+            pinned = s.pinned,
+            plan = m.plan(h.maxButtons)?.let { p -> HeaderShown.Plan(actions(p.buttons), actions(p.menu), actions(p.last)) },
+            deleteQuestion = m.deleteQuestion(),
+            undo = s.undo,
+            gone = s.gone,
+        )
+    }
+
+    /** A trash sheet as the host draws it ([TrashShown]), each field the sheet's own answer. */
+    private fun shownTrash(sheet: TrashSheet, s: TrashSheet.State): TrashShown = TrashShown(
+        rows = s.rows?.map { TrashShown.Row(it.id, it.kind, it.name, it.deletedAt, it.purgeAfter, sheet.canRestore(it), s.retryable(it)) },
+        failed = s.failed, busy = s.busy, errorRow = s.errorRow, error = s.error, renaming = s.renaming, retryName = s.retryName,
+    )
 
     fun unwatch(id: Long) {
         watches.remove(id)?.cancel()
