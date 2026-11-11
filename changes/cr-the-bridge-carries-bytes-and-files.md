@@ -247,7 +247,7 @@ None. Everything runs on this Mac, the container and the disposable VMs.
     `veyq_pixel` was locked with a PIN no file names, so the Android pass ran on a throwaway AVD of the same image
     (`veyq_check`, deleted after).
 
-### Phase 2 — The bridge: the three channels
+### Phase 2 — The bridge: the three channels — done (2026-11-11)
 
 - **Wire:** `Answer.Bytes`, `Answer.Reader`, `Reader.Read` / `Reader.Close`, `Avatar.Picture`, `Pot.Download`,
   `Pot.ArchiveName`. `ShellShown` and the Pot's people carry the picture ids.
@@ -266,6 +266,59 @@ None. Everything runs on this Mac, the container and the disposable VMs.
   - downloads Amsterdam through `Pot.Download` into a temp path, read back by the same checks as `VEYQ_LIVE_EXPORT`:
     every payload's SHA-256 against the manifest.
 - `linux/run.py bridge` and `windows/run.py bridge` are green (exports unchanged), and their C smoke still signs in.
+
+**Built (Phase 2):**
+- **Wire** (`Wire.kt`): `Pot.Download(pot, path, deletedName)`, `Pot.ArchiveName(pot)`, `Avatar.Picture(userId)`,
+  `Reader.Read(reader, position, length)`, `Reader.Close(reader)`; `Answer.Name`, `Answer.Bytes(mediaType)`,
+  `Answer.Reader(reader, size, mediaType)`; `Why` gains `NO_SUCH_READER`, `NO_PICTURE`, `NOTHING_TO_DOWNLOAD`.
+  `ShellShown` gains `me` (the signed-in member's user id, for the switcher) and `pictures` (the ids whose picture the
+  core holds), `Update.Pot` gains `pictures` (the same ids; empty while nothing is open).
+- **The payload** (`Bridge.call`): a call's answer is `(json, payload)`; the payload is non-null exactly for
+  `Answer.Bytes` (an empty one included), null for everything else. `Exports.kt` hands an empty payload as a pointer to
+  a byte never read with length 0, so NULL means "no payload" and a host needs no JSON to tell. Inward, nothing is read.
+- **The core does the work, the dispatch one line each:** `PotModel.download(deletedName, sink)` and
+  `PotModel.archiveName()` (`NodeExport.fileName`) are new in the core; `Pot.Download` writes through a `DeviceFiles`
+  door — core's `FileSink.write(path, kept)` in `bridgedMain`, a JVM stand-in in `LiveBridgeTest` (FileSink is
+  `nativeMain`, `Bridge.kt` `commonMain`). `Avatar.Picture` answers from `AvatarsModel.state` with `Sniff.image`'s type.
+- **The tenant's parts** (`Tenant`): `shell` and `pot` nullable (a test's tenant has neither), `me`, `pictures`
+  (`AvatarsModel.state`) and `loadPictures` (`AvatarsModel.load`), launched as the tenant opens.
+- **The reader registry**: `Bridge.openReader(RangeReader, mediaType)` is the door the opening calls of Depot and
+  Memories will use and the test uses now; `closeTenant` empties it with the Pots. `RangeReader`'s constructor is public.
+- **D7** (`Bindings.kt`): from bridge.h's callbacks that carry `const uint8_t *`, `size_t`, the generator writes Rust's
+  `payload(bytes, len) -> Option<Vec<u8>>` (the `Option<&[u8]>` copied) and C#'s `Native.Payload(byte*, nuint) ->
+  byte[]?` (the span copied). `bridge::call` answers `Result<(Answer, Option<Vec<u8>>), Unreadable>`, `Core.CallAsync`
+  `Task<(Answer Answer, byte[]? Payload)>`; the screens' four call sites each drop the payload.
+
+**Met (2026-11-11, commits `76451f3e8`, `f0f0d1d5c`, `626c7980d`):**
+- [x] `./gradlew :bridge:jvmTest` → `BUILD SUCCESSFUL`: BridgeHeaderTest 4, DispatchTest 8, SecretFreeSchemaTest 4,
+  WireTest 2, LiveBridgeTest 1, no failure. WireTest's samples hold every new variant (its variant check is the proof).
+  `git diff bridge/bridge.h` empty; BridgeHeaderTest green against both Kotlin/Native headers.
+- [x] SecretFreeSchemaTest's new case refuses a byte array as a field, a list's element and a map's value. **Bites:**
+  `Answer.Bytes` given a field `image: ByteArray` → `nothingTheCoreSendsCarriesAKeyASealATokenASecretOrBytes` red; the
+  check without its descent into lists and maps → the new case red; each restored, green.
+- [x] DispatchTest over the played door: a reader of 3 frames + 12,345 B read from the end to the start in ranges of 1,
+  7, 65,537, a frame + 1, 100,003, 3 and a frame − 1 bytes → the same bytes; fewer at the end, an empty payload past
+  it; closed, a switch and a sign-out each leave `NO_SUCH_READER`. A member's picture answers `Bytes` with its sniffed
+  type and the bytes; none answers `NO_PICTURE`; Pot.Download/ArchiveName refuse `NO_SUCH_POT`. **Bites:** `closeTenant`
+  without `readers.removeAll()` → the reader case red; `opened` without `loadPictures` → the picture case red; restored.
+- [x] `VEYQ_LIVE=http://veyq.localhost:8080 VEYQ_ENV_FILE=<main>/.run/.env ./gradlew :bridge:jvmTest --tests
+  '*LiveBridgeTest*' --rerun` → green: the principal's picture through `Avatar.Picture`, 2,628 B `image/webp`, SHA-256
+  `d040a7ee…edeff3`, equal to a sign-in of the core's own (`tenant.avatars.sync`, `pictureOf`); "App link"'s update holds
+  the principal among its people and its id among the pictures; `Pot.ArchiveName` → `Amsterdam.zip`; Amsterdam through
+  `Pot.Download` → 6,089 B of ZIP, its one payload (the CSV; no receipt) to the manifest's size and SHA-256; a path whose
+  directory is missing → `Failed`, nothing written. **Bite:** the picture's last byte cut in the dispatch → red
+  ("the bridge's picture is not the core's"), restored.
+- [x] `linux/run.py bridge` and `windows/run.py bridge` with `VEYQ_LIVE` → green: 12 symbols (Linux), 7 exports
+  (Windows), "the library answered every step" through the sign-in on both.
+- [x] `linux/run.py build` → clippy `-D warnings`, `cargo test` 8 passed, among them
+  `an_answers_payload_is_copied_before_the_callback_returns` (the core's buffer cleared and dropped after the callback,
+  NULL → None, an empty payload → `Some([])`). **Bite:** an empty payload read as None → red (`left: None, right:
+  Some([])`), restored. `windows/run.py build` → no package deprecated or vulnerable; Veyq.Bridge.Tests here 3 + 1
+  skipped (CoreTest is Windows-only), on the VM 4/4; Veyq.Tests 6/6. `PayloadTest` is the C# copy's test. **Bite:** the
+  generated `Payload` null for length 0 → red here, restored.
+- [x] `./gradlew :core:jvmTest :core:macosArm64Test` → `BUILD SUCCESSFUL`; `linux/run.py test` and `windows/run.py test`
+  → 185 tests, `PASSED` on both. Android and the Apple app are untouched (the core only gained two `PotModel` functions
+  and a public constructor).
 
 ### Phase 3 — Linux: avatars and the Pot's download
 
@@ -324,5 +377,21 @@ to the owner's veto before "go".
   named them, R4 only the first.
 - **The branch cannot sign in to `main`'s backend** (VERSION 0 against major 1): a live phase of this CR needs `main`
   merged into the branch first, or each live run rebuilds with `VERSION` 1 as Phase 1 did. Phase 2's `LiveBridgeTest`
-  and Phase 3/4's passes meet it.
+  and Phase 3/4's passes meet it. (Merged before Phase 2: `ed45847d9`.)
+
+### Phase 2 (2026-11-11)
+
+- **`Pot.Download` needs the host's word for an erased person:** the CSV carries it and the words are the platform's,
+  so the call is `Pot.Download(pot, path, deletedName)`, not the CR's `(pot, path)` — as Android and Apple pass
+  `pot_deleted_person` to `PotExport` today.
+- **`type` is the wire's tag**, so `Answer.Bytes`' and `Answer.Reader`'s media type is `mediaType`: kotlinx refuses a
+  variant whose field shares the class discriminator's name.
+- **An empty payload is still one.** A range past the end is no bytes, not no answer: `Exports.kt` hands a pointer with
+  length 0, and both hosts' tests hold `Some([])`/an empty array apart from NULL.
+- **A state the host watches arrives once per change, so a test that reads a watch for a later fact misses it** — the
+  pictures' update came while `LiveBridgeTest` waited for the open object; it reads a fresh watch, which delivers the
+  state now.
+- **Open for Phase 3/4:** a picture replaced under the same user id keeps the id set, so no update tells the host to
+  ask again. Nothing does this today (`AvatarsModel.peopleRead` still has no caller: the people are read once per open);
+  the first caller of `peopleRead` owes the host that signal (a revision per id, say).
 
