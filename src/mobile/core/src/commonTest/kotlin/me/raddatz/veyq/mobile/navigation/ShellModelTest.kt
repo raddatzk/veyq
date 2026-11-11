@@ -14,6 +14,28 @@ class ShellModelTest {
     private fun folder(id: String, parent: String?, name: String = id) = NodeRef("t", id, parent, NodeRef.FOLDER, name)
 
     @Test
+    fun an_applications_list_holds_its_favorites_then_its_recent_then_the_rest() {
+        val rome = ObjectRef("t", "rome", "EXPENSES_POT", ApplicationId.EXPENSES, "Rome")
+        val oslo = ObjectRef("t", "oslo", "EXPENSES_POT", ApplicationId.EXPENSES, "Oslo")
+        val album = ObjectRef("t", "album", "MEMORY", ApplicationId.MEMORIES, "Album")
+        val objects = listOf(pot, rome, oslo, album)
+        val lists = ShellModel.Lists(
+            listOf(tenantSpace), emptyList(), objects, favorites = listOf(pot),
+            applications = ApplicationId.entries, filters = listOf(null), drawer = ArrangedList(emptyList(), emptyList(), emptyList()),
+            uses = listOf(Use(album, 30), Use(oslo, 20), Use(pot, 10)),
+        )
+        val expenses = lists.applicationList(ApplicationId.EXPENSES)
+        assertEquals(listOf(pot), expenses.favorites)
+        // its own Recent: Oslo was opened, the Memory is another application's, the favorite is listed once
+        assertEquals(listOf(oslo), expenses.recent)
+        assertEquals(listOf(rome), expenses.all)
+        // nothing opened: no Recent, the rest by name
+        val fresh = ShellModel.Lists(listOf(tenantSpace), emptyList(), objects, emptyList(), ApplicationId.entries, listOf(null), ArrangedList(emptyList(), emptyList(), emptyList()))
+        assertEquals(emptyList(), fresh.applicationList(ApplicationId.EXPENSES).recent)
+        assertEquals(listOf(oslo, rome, pot), fresh.applicationList(ApplicationId.EXPENSES).all)
+    }
+
+    @Test
     fun the_app_starts_on_the_object_last_used_else_on_the_default_space() {
         val onPot = ShellModel.next(null, listOf(personal, tenantSpace), pot)
         assertEquals(pot, onPot.openObject)

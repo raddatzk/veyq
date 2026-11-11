@@ -23,6 +23,7 @@ data class ObjectRef(
 data class NodeAt(val scopeId: String, val nodeId: String, val kind: String, val name: String)
 
 /** When this device last opened an object (ADR 0122 decision 6: Recent is per install, never synced). */
+@Serializable
 data class Use(val ref: ObjectRef, val lastUsedEpochMs: Long)
 
 /** One list arranged by ADR 0122 decision 5. */

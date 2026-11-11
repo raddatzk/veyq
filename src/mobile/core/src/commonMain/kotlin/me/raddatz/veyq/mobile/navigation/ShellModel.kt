@@ -48,10 +48,15 @@ class ShellModel(
         val applications: List<ApplicationId>,
         val filters: List<ApplicationId?>,
         val drawer: ArrangedList,
+        /** What this device opened, of [objects] (Recent): an application's own list arranges by it too. */
+        val uses: List<Use> = emptyList(),
     ) {
-        /** The chosen application's own list, by the one rule (ADR 0122 decision 5). */
+        /**
+         * The chosen application's own list, by the one rule (ADR 0122 decision 5): its Favorites, its Recent, the rest —
+         * each by last use. Its Recent was once left empty here, so on every app the list showed no Recent at all.
+         */
         fun applicationList(app: ApplicationId): ArrangedList =
-            arrange(favorites.filter { it.application == app }, emptyList(), objects.filter { it.application == app })
+            arrange(favorites.filter { it.application == app }, uses.filter { it.ref.application == app }, objects.filter { it.application == app })
 
         /** Home's level: the shown folder's children in the shown space, under the shown filter. */
         fun level(shell: Shell): List<NodeRef> = shell.space?.let { Home.level(nodes, it, shell.folder?.nodeId, shell.filter) }.orEmpty()
@@ -122,6 +127,7 @@ class ShellModel(
             applications = drawerApplications(r.off).map { it.id },
             filters = Home.filters(r.off),
             drawer = drawer(objects, favorites),
+            uses = recent.resolve(objects),
         )
         _state.update { prior ->
             State(next(prior?.shell.takeUnless { start }, spaces, if (openLastUsed) recent.lastUsed(objects) else null), lists)
@@ -157,7 +163,7 @@ class ShellModel(
 
     private fun opened(ref: ObjectRef, move: (Shell) -> Shell) {
         recent.record(ref, now())
-        _state.update { s -> s?.let { State(move(it.shell), Lists(it.lists.spaces, it.lists.nodes, it.lists.objects, it.lists.favorites, it.lists.applications, it.lists.filters, drawer(it.lists.objects, it.lists.favorites))) } }
+        _state.update { s -> s?.let { State(move(it.shell), Lists(it.lists.spaces, it.lists.nodes, it.lists.objects, it.lists.favorites, it.lists.applications, it.lists.filters, drawer(it.lists.objects, it.lists.favorites), recent.resolve(it.lists.objects))) } }
     }
 
     /** Every node of [scopeId] this device opens: what the move browser walks. */

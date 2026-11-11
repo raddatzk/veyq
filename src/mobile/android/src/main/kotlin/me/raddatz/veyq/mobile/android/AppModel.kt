@@ -75,6 +75,8 @@ sealed interface Screen {
         val nodes: List<NodeRef>,
         val objects: List<ObjectRef>,
         val favorites: List<ObjectRef>,
+        /** What this device opened (core's `Lists.uses`): an application's list shows its Recent from it. */
+        val uses: List<me.raddatz.veyq.mobile.navigation.Use> = emptyList(),
         val switching: Boolean = false,
         /** "Manage servers" is open over the shell. */
         val managing: List<ManagedServer>? = null,
@@ -91,7 +93,7 @@ sealed interface Screen {
 
         /** The lists as core's shell holds them, for its rules. */
         private val lists: me.raddatz.veyq.mobile.navigation.ShellModel.Lists
-            get() = me.raddatz.veyq.mobile.navigation.ShellModel.Lists(spaces, nodes, objects, favorites, applications, filters, drawer)
+            get() = me.raddatz.veyq.mobile.navigation.ShellModel.Lists(spaces, nodes, objects, favorites, applications, filters, drawer, uses)
     }
 }
 
@@ -1232,6 +1234,7 @@ class AppModel(app: Application) : AndroidViewModel(app) {
             nodes = l.nodes,
             objects = l.objects,
             favorites = l.favorites,
+            uses = l.uses,
             switching = gate.switching,
             managing = if (start) null else prior?.managing,
         )
