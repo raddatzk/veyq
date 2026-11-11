@@ -316,9 +316,12 @@ class FakeHost(vc.Host):
     def wait(self, prompt):
         return False  # no terminal: a missing program is refused
 
-    def prompt(self, question, default="", hint="", yes_no=False):
-        """A terminal where each question gets its answer from `answers`, else Enter (the default, or nothing)."""
-        return self.answers.get(question) or default or None
+    def prompt(self, question, default="", hint="", yes_no=False, optional=False):
+        """A terminal where each question gets its answer from `answers` (an empty one: Enter, where the question
+        allows it), else Enter on the default — and no answer at all (None) where there is none."""
+        if question in self.answers and (self.answers[question] or optional):
+            return self.answers[question]
+        return default or None
 
     def ran(self, *words: str) -> list[int]:
         """The indexes of every recorded command containing all of `words`."""
@@ -1784,10 +1787,10 @@ def test_programs_checked_first(tmp: pathlib.Path) -> None:
                 self.missing = set()
             return self.installs
 
-        def prompt(self, question, default="", hint="", yes_no=False):
+        def prompt(self, question, default="", hint="", yes_no=False, optional=False):
             self.asked.append(question)
             self.asked_at.append(len(self.commands))  # how many commands had run when it was asked
-            return super().prompt(question, default, hint, yes_no)
+            return super().prompt(question, default, hint, yes_no, optional)
 
     host = Missing({"kubectl", "helm"})
     rc, out = run_main(["init", "--gitops", top / "apps" / "veyq", *INIT, "--secrets", "none"], host)
@@ -2192,9 +2195,9 @@ class ServerHost(GitOpsHost):
         self.waited.append(prompt)
         return self.waits
 
-    def prompt(self, question, default="", hint="", yes_no=False):
+    def prompt(self, question, default="", hint="", yes_no=False, optional=False):
         self.prompted.append(question)
-        return super().prompt(question, default, hint, yes_no)
+        return super().prompt(question, default, hint, yes_no, optional)
 
     def secret(self, question):
         return ""  # Enter: generated
@@ -2475,6 +2478,20 @@ def test_server_path(tmp: pathlib.Path, home: pathlib.Path) -> pathlib.Path:
     host, rc, out = run(top, host_key=HOST_KEY.replace("Fresh", "Rebuilt"), confirms={"your provider shows": False})
     check("server path: a rebuilt server's new host key is shown beside the pinned one and, unconfirmed, refused",
           rc == 1 and "Was the server reinstalled?" in out and vc.pinned_host_key(top) == HOST_KEY, out[-500:])
+
+    top3 = fresh("server-new-age-key")
+    host = ServerHost(top=top3, signed=signed, waits=False,
+                      answers=dict(answers, **{"age key file (Enter: create a new one)": ""}))
+    cwd = os.getcwd()
+    os.chdir(top3)
+    try:
+        rc, out = run_main(["--source", mirror, "init", "--release", "1.0"], host)
+    finally:
+        os.chdir(cwd)
+    check("server path: Enter on the age key question creates a new key in .age/key.txt and waits for its copy in a "
+          "password manager (no terminal: refused before anything is rendered)",
+          host.ran("age-keygen", "-o") and (top3 / ".age" / "key.txt").is_file()
+          and any("password manager" in w for w in host.waited) and rc == 1 and not host.ran("copier"), out[-400:])
 
     top2 = fresh("server-dns")
     host, rc, out = run(top2, waits=False, gh=False, dns={"raddatz.me": set()})

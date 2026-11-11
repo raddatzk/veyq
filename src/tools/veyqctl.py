@@ -244,10 +244,12 @@ class Host:
     def section(self, title: str) -> None:
         print(f"\n== {title}", flush=True)
 
-    def prompt(self, question: str, default: str = "", hint: str = "", yes_no: bool = False) -> str | None:
+    def prompt(self, question: str, default: str = "", hint: str = "", yes_no: bool = False,
+               optional: bool = False) -> str | None:
         """A question at a terminal, as setup scripts ask: the hint above it, `[default]` that Enter takes, asked again
         while an answer is needed and none is given. None without a terminal (the caller then needs the flag).
-        `yes_no`: shown as every confirmation is, `[Y/n]` or `[y/N]`, and answered `yes` or `no` (y and n too)."""
+        `yes_no`: shown as every confirmation is, `[Y/n]` or `[y/N]`, and answered `yes` or `no` (y and n too).
+        `optional`: Enter is an answer too (""), which the question names — "Enter: create a new one"."""
         if not sys.stdin.isatty():
             return None
         print()
@@ -262,7 +264,7 @@ class Host:
             except EOFError:  # the input ended: the offer, or nothing (the caller refuses, naming the flag)
                 print()
                 return default or None
-            if answer or default:
+            if answer or default or optional:
                 return answer or default
             print("   An answer is needed here.")
 
@@ -4034,7 +4036,7 @@ def age_key_file(run: InitRun) -> Path:
     if key_file is None and (run.top / AGE_KEY_FILE).is_file():
         key_file = run.top / AGE_KEY_FILE
     if key_file is None:
-        answer = host.prompt(Q.AGE_KEY.text, "", Q.AGE_KEY.hint)
+        answer = host.prompt(Q.AGE_KEY.text, "", Q.AGE_KEY.hint, optional=True)
         if answer:
             key_file = Path(answer).expanduser()
         elif answer is None:
