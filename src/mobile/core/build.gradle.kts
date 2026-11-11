@@ -222,6 +222,17 @@ kotlin {
         tasks.matching { it.name == interopProcessingTaskName }.configureEach { inputs.file(header).withPropertyName("header") }
     }
 
+    // Linux's device keys (session/LinuxDeviceKeys.kt): the Secret Service through libsecret, which secret/veyq_secret.h
+    // loads with dlopen at run time, so no library here and none at link time. The header is the task's input, as above.
+    listOf(linuxArm64(), linuxX64()).forEach { target ->
+        target.compilations.getByName("main").cinterops.create("secret") {
+            definitionFile.set(file("secret/secret.def"))
+            includeDirs(file("secret"))
+            val header = file("secret/veyq_secret.h")
+            tasks.matching { it.name == interopProcessingTaskName }.configureEach { inputs.file(header).withPropertyName("header") }
+        }
+    }
+
     sourceSets {
         commonMain {
             kotlin.srcDir(generatedApi.map { it.dir("src/commonMain/kotlin") })

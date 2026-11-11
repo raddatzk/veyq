@@ -119,7 +119,9 @@ A Gradle build of its own, run through its own wrapper.
   build's Gradle, and the rest runs in the Fedora 44 image (Docker). Each verb is in `run.py`'s docstring:
   - `test [--tests <pattern>]` runs the core's Linux test binary. That is the whole common suite, the conformance over
     libsodium, `NormalizationTest` and `WallClockTest`; any change to the suite, to `nfc`/`nfkd` or to the wall clock
-    runs it.
+    runs it. It runs inside a session bus of its own with gnome-keyring-daemon, whose login collection a password drawn
+    in the container unlocks, so `LinuxDeviceKeys`' contract runs over a real Secret Service; without `--tests` the
+    Secret Service probe runs twice more, without a session bus and with `libsecret-1.so.0` moved away.
   - `bridge` checks `libveyq.so`'s exports and runs the C smoke.
   - `build` generates the bridge's Rust, the words and the theme, then runs `cargo clippy -- -D warnings`,
     `cargo test` and `cargo build` (remembered: about 25 s after a Rust edit alone).
@@ -384,6 +386,14 @@ first in each of its scrolls — `LocalNodeHero.current(inset)` (Android) / `Nod
   `Nfc.bridged.kt` calls `utf8proc_map` with the length.
 - `libveyq.so` needs `libcrypt.so.1` (Ktor's statically linked libcurl), which Fedora 44 has only with
   `libxcrypt-compat`. The `Containerfile` installs it; a Flatpak runtime must carry it.
+- libsecret is never linked: `core/secret/veyq_secret.h` `dlopen`s `libsecret-1.so.0` and declares the few types and
+  functions it calls itself, so `libveyq.so` has no `NEEDED` entry for it and runs without it (`LinuxDeviceKeys` then
+  keeps nothing). `dlopen` is libdl's in Kotlin/Native's sysroot (glibc 2.19/2.25), which Kotlin/Native links already.
+  A Flatpak runtime must carry libsecret for staying signed in.
+- gnome-keyring-daemon in the container aborts as root ("error dropping process capabilities") unless the container
+  may lock memory (`--cap-add=IPC_LOCK`), and `--unlock` creates the login collection only where
+  `~/.local/share/keyrings` exists; otherwise it asks gcr's prompter, which has no display there (measured 2026-11-11).
+  `run.py test` does both.
 - The bridge library is linked with `-Wl,--exclude-libs,ALL`. Without it, libcurl's, OpenSSL's, libsodium's and
   utf8proc's symbols are exported (11,348, measured 2026-11-10), and a host that loads its own libcrypto binds to
   ours. `run.py bridge` is red on any symbol beyond `bridge.h`'s six and Kotlin/Native's own.
