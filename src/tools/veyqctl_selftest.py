@@ -363,7 +363,7 @@ def test_resolver(tmp: pathlib.Path) -> None:
           "selects no release" in refused(vc.select, listed, "2", "the mirror"))
     check("resolver: a pin that is not in the source is refused", "not in" in refused(vc.select, listed, "3.1", "x"))
     for bad in ("1.x", "v1.3", "", "1.2.3", "newest"):
-        check(f"resolver: selector {bad!r} is refused", "selects nothing" in refused(vc.check_selector, bad))
+        check(f"resolver: selector {bad!r} is refused", "is not valid" in refused(vc.check_selector, bad))
     check("check: the newer major beyond `0`", vc.newer_major(listed, vc.select(listed, "0", "x")).release == "1.12")
     check("check: no newer major beyond `1` (2.0 is a prerelease)",
           vc.newer_major(listed, vc.select(listed, "1", "x")) is None)
@@ -441,10 +441,10 @@ def test_major_entry() -> None:
 
     message = refused(lambda: goes(two, "1.9", "latest", {}))
     check("major entry: a next-major release whose manifest names no entry is refused, never crossed",
-          "names no release major 2 is entered from" in message, message)
+          "does not name the release major 2 is entered from" in message, message)
     message = refused(lambda: goes(listed("1.3", "2.5"), "1.3", "latest", at19))
     check("major entry: an entry the source does not list is refused, naming it",
-          "lists no release 1.9" in message, message)
+          "does not list 1.9" in message, message)
 
 
 def test_manifest() -> None:
@@ -566,18 +566,18 @@ def test_signature_gate() -> None:
 
     host = FakeHost(local_images={"veyq:local", "veyq-admin:local"})
     message = refused(vc.verify_images, host, signed, True)
-    check("gate: --unsigned-local with registry references is refused", "no registry host and no digest" in message)
+    check("gate: --unsigned-local with registry references is refused", "without registry or digest" in message)
     check("gate: --unsigned-local with ONE registry reference is refused, naming it",
           "admin `ghcr.io" in refused(vc.verify_images, host, mixed, True))
     check("gate: --unsigned-local for an image not on the host is refused (never pulled from Docker Hub)",
-          "not on this host" in refused(vc.verify_images, FakeHost(local_images={"veyq:local"}), local, True))
+          "not on this computer" in refused(vc.verify_images, FakeHost(local_images={"veyq:local"}), local, True))
     check("gate: --unsigned-local with two local builds on the host passes", refused(vc.verify_images, host, local, True) == "")
     check("gate: a local build without --unsigned-local is refused",
           "--unsigned-local" in refused(vc.verify_images, FakeHost(), local, False))
     check("gate: a registry reference without a digest is refused",
           "pinned by digest" in refused(vc.verify_images, FakeHost(),
                                         signed._replace(app="ghcr.io/raddatzk/veyq:1.12"), False))
-    check("gate: no cosign on PATH is refused", "cosign is not on PATH" in refused(vc.verify_images, FakeHost(cosign=False),
+    check("gate: no cosign on PATH is refused", "cosign is not installed" in refused(vc.verify_images, FakeHost(cosign=False),
                                                                                   signed, False))
 
     app_target = f"ghcr.io/raddatzk/veyq@{DIGEST_A}"
@@ -824,7 +824,7 @@ def test_upgrade_refusals(tmp: pathlib.Path) -> None:
           and not host.commands)
     host = FakeHost(local_images=all_images())
     rc, out = upgrade(home, host, "--unsigned-local", "--key-into", str(home / vc.BACKUPS_DIR / "k.key"))
-    check("upgrade: --key-into inside backups/ (beside the dumps) is refused", rc == 1 and "beside the dumps" in out
+    check("upgrade: --key-into inside backups/ (beside the dumps) is refused", rc == 1 and "next to the backups" in out
           and not host.commands)
     if os.geteuid() != 0:  # root searches whatever the mode
         shut = tmp / "shut-keys"
@@ -1148,7 +1148,7 @@ def test_rollback(tmp: pathlib.Path) -> None:
           and (home / "releases/1.12").is_dir() and not (home / ".env.rollback").exists(), str(values))
 
     for label, argv_extra, host_kw, prep, said in (
-            ("the capture's release no longer in releases/", ["--yes"], {}, "drop-release", "no longer in the home"),
+            ("the capture's release no longer in releases/", ["--yes"], {}, "drop-release", "no longer on disk"),
             ("a capture that does not verify against the live store", ["--yes"], {"fail_tool": "verify"}, None,
              "verify"),
             ("no terminal to confirm and no --yes", [], {}, None, "pass --yes"),
@@ -1434,7 +1434,7 @@ def test_manifest_signature(tmp: pathlib.Path) -> None:
     rc, out = run_main(["--home", tmp / "home-local-signed", "--source", mirror, "install", "--unsigned-local",
                         *INSTALL_SETS], host)
     check("control: --unsigned-local with registry references is refused as today",
-          rc == 1 and "no registry host and no digest" in out, out[-300:])
+          rc == 1 and "without registry or digest" in out, out[-300:])
 
     # `verify` names the manifest too
     host = FakeHost(signed=SIGNED_TARGETS)
@@ -1690,7 +1690,7 @@ def test_instances(tmp: pathlib.Path) -> None:
     rc, out = run_main(["--home", tmp / "elsewhere", "--source", mirror, "init", "--compose", "--name", "test",
                         "--unsigned-local", *INSTALL_SETS], FakeHost(local_images=all_images()))
     check("init: a name listed for another path is refused before anything is installed",
-          rc == 1 and "listed already" in out and not (tmp / "elsewhere").exists(), out[-400:])
+          rc == 1 and "already an instance named" in out and not (tmp / "elsewhere").exists(), out[-400:])
     gitops_home = tmp / "inst-gitops"
     gitops_home.mkdir()
     (gitops_home / vc.GITOPS_FILE).write_text("{}")
@@ -1701,7 +1701,7 @@ def test_instances(tmp: pathlib.Path) -> None:
         host = FakeHost()
         rc, out = run_main(argv, host)
         check(f"a GitOps instance refuses `{verb}`, names what does it there, and runs nothing",
-              rc == 1 and "is Compose's" in out and vc.COMPOSE_ONLY[verb][:20] in out and not host.commands, out)
+              rc == 1 and "is for Compose" in out and vc.COMPOSE_ONLY[verb][:20] in out and not host.commands, out)
     rc, out = run_main(["--instance", "nope", "status"], FakeHost())
     check("--instance of no listed name is refused, naming `veyqctl instances`", rc == 1 and "instances" in out, out)
     rc, out = run_main(["use", "nope"], FakeHost())
@@ -2448,7 +2448,7 @@ def test_server_path(tmp: pathlib.Path) -> None:
         compose_home.mkdir()
         rc, out = run_main(["--home", compose_home, "tls", "production"], FakeHost())
         check("tls on a Compose home is refused, naming where Compose takes its directory", rc == 1
-              and "GitOps instance's" in out, out[-200:])
+              and "GitOps instance only" in out, out[-200:])
 
         (home / ".ssh" / "config").write_text((home / ".ssh" / "config").read_text() + "\nHost other\n  User x\n")
         cwd = os.getcwd()
@@ -2519,14 +2519,14 @@ def test_gitops_upgrade(tmp: pathlib.Path) -> None:
     (d4 / vc.GITOPS_FILE).write_text(json.dumps({**meta, "release": "1"}))
     before = snapshot(d4)
     cases = [
-        ("uncommitted changes", GitOpsHost(top=top, signed=signed, dirty=True), None, "not committed"),
+        ("uncommitted changes", GitOpsHost(top=top, signed=signed, dirty=True), None, "uncommitted changes"),
         ("a chart that does not verify", GitOpsHost(top=top, signed=gitops_signed(
             "1.0", "1.1", "2.0", without=(("1.1", "chart"),))), None, "does not verify"),
         ("a chart of another version", GitOpsHost(top=top, signed=signed, chart_version="1.0"), None, "not 1.1"),
         ("a render that fails", GitOpsHost(top=top, signed=signed, render_fails=True), None, "helm template"),
         ("a digest edited by hand (drift)", GitOpsHost(top=top, signed=signed),
          lambda: (d4 / "values.yaml").write_text((d4 / "values.yaml").read_text().replace(pin_of("1.0", "admin"),
-                                                                                          DIGEST_B)), "no longer pin"),
+                                                                                          DIGEST_B)), "no longer match"),
     ]
     for label, host, edit, words in cases:
         if edit:
@@ -2539,7 +2539,7 @@ def test_gitops_upgrade(tmp: pathlib.Path) -> None:
         (d4 / name).write_bytes(data)
     (d4 / vc.GITOPS_FILE).write_text(json.dumps({**meta, "release": "1.0", "running": "1.1"}))
     rc, out = run_main(["--instance", "refusals", "--source", mirror, "upgrade"], GitOpsHost(top=top, signed=signed))
-    check("upgrade below the pinned release is refused (no downgrade)", rc == 1 and "below the pinned" in out, out[-300:])
+    check("upgrade below the pinned release is refused (no downgrade)", rc == 1 and "older than the installed" in out, out[-300:])
 
 
 ADOPTED_VALUES = """# hand-written, as affenbande's

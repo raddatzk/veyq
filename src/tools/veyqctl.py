@@ -660,9 +660,8 @@ def open_source(spec: str | None) -> Source:
 
 def check_selector(selector: str) -> str:
     if not SELECTOR.match(selector or ""):
-        raise Refused(f"{RELEASE_KEY}={selector!r} selects nothing: it is `<major>.<minor>` (pinned), `<major>` (the "
-                      f"newest of that major) or `latest` (the newest; `upgrade` enters each major from the release "
-                      f"it names as its entry)")
+        raise Refused(f"{RELEASE_KEY}={selector!r} is not valid: use `<major>.<minor>` (stay on that release), `<major>` "
+                      f"(the newest of that major) or `latest` (the newest)")
     return selector
 
 
@@ -706,27 +705,26 @@ def upgrade_target(listed: list[Listed], running: tuple[int, int], chosen: Liste
         return chosen
     gate = chosen if chosen.major == major + 1 else newest_of(listed, major + 1)
     if gate is None:
-        raise Refused(f"{chosen.release} lies beyond major {major + 1}, and {where} lists no release of major "
-                      f"{major + 1} to enter it from: a run never crosses more than one major (ADR 0096 decision 5). "
-                      f"Nothing was stopped.")
+        raise Refused(f"{chosen.release} is more than one major ahead, and {where} lists no release of major {major + 1} "
+                      f"to go through: an upgrade crosses one major at a time. Nothing was stopped.")
     entry = entry_of(gate)
     if entry is None:
-        raise Refused(f"the manifest of {gate.tag} names no release major {major + 1} is entered from (`majorEntry`), so "
-                      f"no upgrade into it from major {major} was proved (ADR 0096 decision 5). Nothing was stopped.")
+        raise Refused(f"the manifest of {gate.tag} does not name the release major {major + 1} is entered from "
+                      f"(`majorEntry`), so no upgrade into it from major {major} was tested. Nothing was stopped.")
     at = tuple(int(x) for x in entry.split("."))
     if at == running:
         return gate
     if at > running:
         stop = next((r for r in listed if (r.major, r.minor) == at and not r.prerelease), None)
         if stop is None:
-            raise Refused(f"{gate.release} is entered from {entry} (its manifest's `majorEntry`), and {where} lists no "
-                          f"release {entry} to go through (ADR 0096 decision 5). Nothing was stopped.")
+            raise Refused(f"{gate.release} is entered from {entry} (its manifest's `majorEntry`), but {where} does not "
+                          f"list {entry}. Nothing was stopped.")
         return stop
     running_release = f"{running[0]}.{running[1]}"
-    raise Refused(f"{gate.release} is entered from {entry} (its manifest's `majorEntry`), and this instance runs "
-                  f"{running_release}, a later release of major {major}: no upgrade from {running_release} into "
-                  f"{gate.release} was proved, and {running_release} may carry migrations {gate.release} lacks (ADR "
-                  f"0096 decision 5). A later release of major {major + 1} is entered from {running_release} or after: "
+    raise Refused(f"{gate.release} is entered from {entry} (its manifest's `majorEntry`), but this instance runs "
+                  f"{running_release}, a later release of major {major}: an upgrade from {running_release} into "
+                  f"{gate.release} was never tested, and {running_release} may have database changes {gate.release} "
+                  f"lacks. A later release of major {major + 1} will be entered from {running_release} or after: "
                   + (f"select `{major + 1}` for the newest one, or wait for it." if gate is chosen and chosen != newest_of(listed, major + 1)
                      else f"wait for it — none is listed yet.")
                   + " Nothing was stopped.")
@@ -807,10 +805,10 @@ def fetch_manifest(host: Host, source: Source, chosen: Listed, unsigned_local: b
     try:
         bundle = source.fetch(chosen.tag, MANIFEST_BUNDLE_ASSET)
     except Refused as e:
-        raise Refused(f"{source.describe()} serves no {MANIFEST_BUNDLE_ASSET} for {chosen.tag} ({e}) — the manifest's "
-                      f"signature, without which nothing it names is trusted. A mirror copies it like any other file of "
-                      f"the release; a release produced locally from `docker build` has none and is installed with "
-                      f"--unsigned-local. Nothing was pulled, written or started.") from None
+        raise Refused(f"{source.describe()} has no {MANIFEST_BUNDLE_ASSET} for {chosen.tag} ({e}): without this "
+                      f"signature nothing in the release is trusted. A mirror must copy it like every other file; a "
+                      f"release you built locally has none — install it with --unsigned-local. Nothing was pulled, "
+                      f"written or started.") from None
     verify_manifest(host, cosign, raw, bundle, f"the manifest of {chosen.tag} from {source.describe()}")
     return parse_manifest(raw, chosen.tag)._replace(bundle=bytes(bundle))
 
@@ -900,8 +898,8 @@ def require_programs(host: Host, names: Iterable[str], what: str, wait: bool = F
 def require_cosign(host: Host) -> str:
     cosign = host.which("cosign")
     if not cosign:
-        raise Refused("cosign is not on PATH, and nothing is pulled or started unverified "
-                      "(https://docs.sigstore.dev/cosign/system_config/installation/)")
+        raise Refused("cosign is not installed, and veyqctl downloads and starts nothing unverified. Install it: "
+                      "https://docs.sigstore.dev/cosign/system_config/installation/")
     return cosign
 
 
@@ -913,11 +911,9 @@ def check_cosign_version(host: Host, cosign: str) -> None:
     floor = tuple(int(x) for x in COSIGN_MIN_VERSION.split("."))
     if have is None or have < floor:
         shown = ".".join(map(str, have)) if have else "a version `cosign version` does not state"
-        raise Refused(f"cosign {shown} is older than {COSIGN_MIN_VERSION}, the oldest veyqctl verifies a manifest with: "
-                      f"the publish signs it into a Sigstore bundle, which cosign 3 reads by default, and every cosign "
-                      f"up to 3.1.2 accepts a forged bundle in the legacy format without checking its identity "
-                      f"(GHSA-fx35-mq7g-6g98) — a source could hand exactly that one. Install cosign "
-                      f"{COSIGN_MIN_VERSION} or later. Nothing was pulled, written or started.")
+        raise Refused(f"cosign {shown} is older than {COSIGN_MIN_VERSION}, which veyqctl needs: every cosign up to 3.1.2 "
+                      f"accepts a forged signature bundle (GHSA-fx35-mq7g-6g98). Install cosign {COSIGN_MIN_VERSION} "
+                      f"or later. Nothing was pulled, written or started.")
 
 
 def verify_manifest(host: Host, cosign: str, raw: bytes, bundle: bytes, what: str,
@@ -947,10 +943,10 @@ def cosign_target(role: str, ref: str) -> str:
     if m:
         return f"{m.group('name')}@{m.group('digest')}"
     if LOCAL_REF.match(ref):
-        raise Refused(f"the {role} image `{ref}` is a local build with no digest, so there is no signature to check. "
-                      f"Pass --unsigned-local to run it knowingly unverified.")
-    raise Refused(f"the {role} image `{ref}` is not a registry reference pinned by digest "
-                  f"(`<registry>/<path>:<tag>@sha256:<digest>`), so it cannot be verified (ADR 0057)")
+        raise Refused(f"the {role} image `{ref}` is a local build without a digest, so it has no signature to check. "
+                      f"To run it anyway, unverified, pass --unsigned-local.")
+    raise Refused(f"the {role} image `{ref}` is not pinned by digest "
+                  f"(`<registry>/<path>:<tag>@sha256:<digest>`), so it cannot be verified")
 
 
 def verify_images(host: Host, manifest: Manifest, unsigned_local: bool) -> None:
@@ -960,14 +956,14 @@ def verify_images(host: Host, manifest: Manifest, unsigned_local: bool) -> None:
         foreign = [f"{role} `{ref}`" for role, ref in refs.items() if not LOCAL_REF.match(ref)]
         if foreign:
             raise Refused(
-                f"--unsigned-local is for a release produced from a local `docker build` only: both image references "
-                f"must be a bare `name:tag`, with no registry host and no digest. This release names "
-                f"{' and '.join(foreign)} — run it without the flag, and it is verified."
+                f"--unsigned-local is only for a release you built locally: both images must be a plain "
+                f"`name:tag`, without registry or digest. This release names {' and '.join(foreign)} — run it "
+                f"without the flag, and it is verified."
             )
         for role, ref in refs.items():
             if host.run(["docker", "image", "inspect", "--format", "{{.Id}}", ref], check=False).returncode != 0:
-                raise Refused(f"the {role} image `{ref}` is not on this host. A local reference is never pulled — "
-                              f"a bare name would come from Docker Hub's `library/` — so build it first")
+                raise Refused(f"the {role} image `{ref}` is not on this computer. veyqctl never downloads a local name (it "
+                              f"would come from Docker Hub), so build it first")
             say(f"{role} image {ref}: a local build, NOT VERIFIED")
         return
     targets = {role: cosign_target(role, ref) for role, ref in refs.items()}
@@ -1175,8 +1171,7 @@ def read_state(home: Path) -> State:
         doc = json.loads(path.read_text())
         return State(doc["release"], doc["project"], doc.get("source") or "", bool(doc.get("unsignedLocal")))
     except FileNotFoundError:
-        raise Refused(f"{home} holds no instance ({STATE_FILE} is missing) — `veyqctl install` first, or pass "
-                      f"--home") from None
+        raise Refused(f"{home} holds no instance ({STATE_FILE} is missing): run `veyqctl init` first, or pass --home") from None
     except (OSError, ValueError, KeyError) as e:
         raise Refused(f"{path} cannot be read: {e}") from None
 
@@ -1277,7 +1272,7 @@ def up(host: Host, base: list[str], project: str, *extra: str) -> None:
     result = host.run([*base, "up", "-d", "--wait", "--wait-timeout", str(WAIT_SECS), *extra], check=False, stream=True)
     healthy = report(host, project)
     if result.returncode != 0 or not healthy:
-        raise Refused(f"the stack is not healthy (`up --wait` exited {result.returncode}); `veyqctl logs` says why")
+        raise Refused(f"veyq is not healthy (`up --wait` exited {result.returncode}): `veyqctl logs` shows why")
 
 
 def admin_address(host: Host, project: str) -> str:
@@ -1310,7 +1305,7 @@ def cmd_install(args: argparse.Namespace, host: Host) -> int:
     home = Path(args.home)
     for existing in (home / STATE_FILE, home / ENV_FILE):
         if existing.exists():
-            raise Refused(f"{existing} exists — {home} already holds an instance; `veyqctl upgrade` moves it on")
+            raise Refused(f"{home} already holds an instance ({existing} exists): `veyqctl upgrade` updates it")
     given = parse_sets(args.set)
     selector = check_selector(given.get(RELEASE_KEY, "latest"))
     spec = source_spec(args, home)
@@ -1329,7 +1324,7 @@ def cmd_install(args: argparse.Namespace, host: Host) -> int:
     values[RELEASE_KEY] = selector
     missing = unset_required(values, (directory / COMPOSE_ASSET).read_text(), override_text(home))
     if missing:
-        raise Refused(f"the recipe requires {', '.join(missing)}, which nothing gave a value: pass "
+        raise Refused(f"the release needs {', '.join(missing)}, which have no value yet: pass "
                       + " ".join(f"--set {k}=…" for k in missing))
     write_private(home / ENV_FILE, render_env(template, values))
     say(f"created {home / ENV_FILE} (readable by you only) and generated {', '.join(k for k in SECRETS if k not in given)}")
@@ -1473,8 +1468,8 @@ def stack_facts(host: Host, base: list[str]) -> Facts:
     def env(service: str, key: str) -> str:
         value = ((services.get(service) or {}).get("environment") or {}).get(key)
         if not value:
-            raise Refused(f"the recipe gives `{service}` no {key}, which the backup reads — this release's recipe "
-                          f"is not one this veyqctl knows how to back up")
+            raise Refused(f"the release's compose file gives `{service}` no {key}, which the backup needs: this veyqctl "
+                          f"cannot back up this release")
         return str(value)
 
     if "garage" not in services:
@@ -1485,8 +1480,7 @@ def stack_facts(host: Host, base: list[str]) -> Facts:
                      env("mariadb", "MARIADB_ROOT_PASSWORD"))
     store_networks = list((services.get("garage") or {}).get("networks") or {})
     if not store_networks:
-        raise Refused("the recipe puts the store (`garage`) on no network, so the backup's rclone container cannot "
-                      "reach it")
+        raise Refused("the release's compose file puts the store (`garage`) on no network, so the backup cannot reach it")
     network = ((doc.get("networks") or {}).get(store_networks[0]) or {}).get("name") or store_networks[0]
     return Facts(env("app", "VEYQ_SECURITY_CONFIG_SECRET_FILE"), network, env("app", "VEYQ_BUNDLED_STORE_ENDPOINT"),
                  env("app", "VEYQ_BUNDLED_STORE_ADMIN_TOKEN"), env("mariadb", "MARIADB_ROOT_PASSWORD"))
@@ -1512,17 +1506,16 @@ def verified_asset(home: Path, release: str, name: str) -> Path:
     path = release_dir(home, release) / name
     want = manifest.assets.get(name)
     if not want or not path.is_file() or sha256(path.read_bytes()) != want:
-        raise Refused(f"{path} is not the {name} release {release}'s manifest names — a file of an installed "
-                      f"release changed on disk, and veyqctl does not run it")
+        raise Refused(f"{path} is not the {name} release {release}'s manifest names: a file of an installed "
+                      f"release was changed on disk, so veyqctl does not run it")
     return path
 
 
 def key_destination(home: Path, raw: str | None, why: str) -> Path:
     """`--key-into`: required, new, on an existing directory, and never beside the captures (ADR 0056 §1)."""
     if not raw:
-        raise Refused(f"{why} needs --key-into FILE: the backup's leg (c), the config-secret key, goes to a medium of "
-                      f"its own — the dump plus the key opens every tenant's SMTP password (ADR 0056 §1). Nothing "
-                      f"was stopped.")
+        raise Refused(f"{why} needs --key-into FILE: where the config-secret key goes. Keep it apart from the backup "
+                      f"— together they reveal every tenant's SMTP password. Nothing was stopped.")
     path = Path(raw).expanduser().absolute()
     # Not `path.exists()`: since Python 3.14 that answers False for a path it cannot look at, and this check would pass
     # a key it cannot see, for the capture to trip over after the app has stopped. The 3.13 rule, spelled out.
@@ -1540,7 +1533,7 @@ def key_destination(home: Path, raw: str | None, why: str) -> Path:
         raise Refused(f"--key-into {path}: its directory does not exist")
     backups = (home / BACKUPS_DIR).absolute()
     if path == backups or backups in path.parents:
-        raise Refused(f"--key-into {path} is inside {backups}, beside the dumps — the one place leg (c) must not go")
+        raise Refused(f"--key-into {path} is inside {backups}, next to the backups — the one place the key must not go")
     return path
 
 
@@ -1567,10 +1560,10 @@ def require_own_store_pair(facts: Facts) -> None:
         return
     absent = [key for key in OWN_STORE_KEYS if not os.environ.get(key, "").strip()]
     if absent:
-        raise Refused(f"this instance's recipe runs no bundled store (compose.override.yml leaves `garage` out), so the "
-                      f"backup reaches a store of your own with the endpoint and key pair from this shell — and "
-                      f"{', '.join(absent)} {'is' if len(absent) == 1 else 'are'} not set (the pair the console holds is "
-                      f"sealed under the key the backup never reads). Export them and run it again. Nothing was stopped.")
+        raise Refused(f"this instance uses a store of your own (compose.override.yml leaves `garage` out), and the backup "
+                      f"reaches it with the endpoint and keys from this shell — but {', '.join(absent)} "
+                      f"{'is' if len(absent) == 1 else 'are'} not set (the console's copy is encrypted). Export them "
+                      f"and run it again. Nothing was stopped.")
 
 
 def backup_tool(host: Host, home: Path, state: State, *, store: bool = True) -> BackupTool:
@@ -1793,8 +1786,8 @@ def cmd_upgrade(args: argparse.Namespace, host: Host) -> int:
         return 0
     if (selection.major, selection.minor) < running:
         raise Refused(f"{RELEASE_KEY}={selector} selects {selection.release}, older than the running {state.release}. "
-                      f"An upgrade migrates the schema and there is no downgrade: going back is restoring a backup "
-                      f"taken under that release (ADR 0056 §6). Nothing was stopped.")
+                      f"There is no downgrade: to go back, restore a backup taken under that release "
+                      f"(`veyqctl rollback`). Nothing was stopped.")
     manifest_of = manifest_reader(host, source, args.unsigned_local)
     chosen = upgrade_target(listed, running, selection, source.describe(), lambda r: manifest_of(r).major_entry)
     say(f"step 1 of 4: release {chosen.release} ({RELEASE_KEY}={selector}; running: {state.release})"
@@ -1815,9 +1808,9 @@ def cmd_upgrade(args: argparse.Namespace, host: Host) -> int:
     missing += [k for k in unset_required(values, (directory / COMPOSE_ASSET).read_text(), override_text(home))
                 if k not in missing]
     if missing:
-        raise Refused(f"release {manifest.release} requires {', '.join(missing)}, which {home / ENV_FILE} does not "
-                      f"give: add " + ", ".join(f"`{k}=…`" for k in missing) + " to it (the new template, "
-                      f"{directory / TEMPLATE_ASSET}, says what each is) and run `upgrade` again. Nothing was stopped.")
+        raise Refused(f"release {manifest.release} needs {', '.join(missing)}, which {home / ENV_FILE} does not set: "
+                      f"add " + ", ".join(f"`{k}=…`" for k in missing) + " to it (the new "
+                      f"{directory / TEMPLATE_ASSET} explains each) and run `upgrade` again. Nothing was stopped.")
     staged = home / f"{ENV_FILE}.next"
     write_private(staged, render_env(template, values))
     try:
@@ -1853,10 +1846,9 @@ def cmd_upgrade(args: argparse.Namespace, host: Host) -> int:
     try:
         up(host, compose(home, manifest.release, state.project), state.project)
     except Refused as e:
-        raise Refused(f"{e}\nRelease {manifest.release} is switched in but not healthy. The way back is on disk: "
-                      f"release {state.release}'s recipe in {release_dir(home, state.release)}, and the backup "
-                      f"{backup} with its key at {key_into} — `veyqctl rollback {backup} --key-from {key_into}` "
-                      f"restores it in place under release {state.release}.") from None
+        raise Refused(f"{e}\nRelease {manifest.release} is switched in but not healthy. To go back to release "
+                      f"{state.release} (still in {release_dir(home, state.release)}): "
+                      f"`veyqctl rollback {backup} --key-from {key_into}`.") from None
     say(f"downtime: {time.monotonic() - stopped:.0f} s, from stopping veyq until release {manifest.release} was healthy")
     say(f"release {manifest.release} is running; release {state.release} stays in {release_dir(home, state.release)} "
         f"for a rollback")
@@ -1946,9 +1938,9 @@ def cmd_rollback(args: argparse.Namespace, host: Host) -> int:
         raise Refused(f"{capture_dir} names no release it was taken under (manifest app.version), so there is no "
                       f"release to roll back to. Nothing was stopped.")
     if not (release_dir(home, target) / MANIFEST_ASSET).is_file():
-        raise Refused(f"the capture was taken under release {target}, whose directory {release_dir(home, target)} is no "
-                      f"longer in the home — install it as a new instance and restore onto that ({BACKUPS_DIR}/ keeps "
-                      f"the capture). Nothing was stopped.")
+        raise Refused(f"the backup was taken under release {target}, which is no longer on disk "
+                      f"({release_dir(home, target)}). Install that release as a new instance and restore onto it; "
+                      f"the backup stays in {BACKUPS_DIR}/. Nothing was stopped.")
     key_from = Path(args.key_from).absolute()
     if not key_from.is_file():
         raise Refused(f"--key-from {key_from} is not a file. Nothing was stopped.")
@@ -1983,7 +1975,7 @@ def cmd_rollback(args: argparse.Namespace, host: Host) -> int:
             f"EMPTY the database of {state.project} (release {state.release}) and restore {capture_dir.name} under "
             f"release {target}? This cannot be undone")
         if sure is None:
-            raise Refused("the rollback empties the database; without a terminal to confirm it, pass --yes. Nothing "
+            raise Refused("the rollback empties the database: without a terminal to confirm it, pass --yes. Nothing "
                           "was stopped.")
         if not sure:
             raise Refused("not confirmed. Nothing was stopped.")
@@ -2037,9 +2029,8 @@ def cmd_self_update(args: argparse.Namespace, host: Host) -> int:
         try:
             raw, bundle = (directory / MANIFEST_ASSET).read_bytes(), (directory / MANIFEST_BUNDLE_ASSET).read_bytes()
         except OSError as e:
-            raise Refused(f"release {state.release} on disk has no verifiable manifest ({e}): its "
-                          f"{MANIFEST_BUNDLE_ASSET} is kept beside the manifest at `install` and `upgrade`, and "
-                          f"without it the `veyqctl` the manifest names is not trusted. Nothing was replaced.") from None
+            raise Refused(f"release {state.release} on disk has no manifest that verifies ({e}), so its `veyqctl` cannot "
+                          f"be trusted. Nothing was replaced.") from None
         verify_manifest(host, require_cosign(host), raw, bundle, f"the manifest of release {state.release} in {directory}")
     asset = verified_asset(home, state.release, SELF_ASSET)
     target = SELF.resolve()
@@ -2124,7 +2115,7 @@ def target_of(path: Path) -> str:
 def name_is_free(name: str, path: Path) -> None:
     listed = read_registry()["instances"].get(check_instance_name(name))
     if listed is not None and Path(listed) != path:
-        raise Refused(f"an instance named {name} is listed already, at {listed} — pick another with --name")
+        raise Refused(f"there is already an instance named {name} ({listed}): choose another name with --name")
 
 
 def register(name: str, path: Path) -> None:
@@ -2144,8 +2135,7 @@ def resolve_home(args: argparse.Namespace) -> Path:
     if args.instance:
         listed = registry["instances"].get(args.instance)
         if listed is None:
-            raise Refused(f"no instance named {args.instance} in {config_dir() / REGISTRY_FILE}: `veyqctl instances` "
-                          f"lists them")
+            raise Refused(f"there is no instance named {args.instance}: `veyqctl instances` lists them")
         return Path(listed)
     if registry["current"]:
         return Path(registry["instances"][registry["current"]])
@@ -2303,7 +2293,7 @@ def read_setup(checkout: Path) -> dict:
     try:
         doc = json.loads(path.read_text())
     except ValueError as e:
-        raise Refused(f"{path} is not JSON ({e}): it holds init's answers — fix it, or move it away to answer again")
+        raise Refused(f"{path} is not valid JSON ({e}). It holds your answers: fix it, or move it away and answer again")
     if not isinstance(doc, dict) or not isinstance(doc.get("veyq", {}), dict):
         raise Refused(f"{path} is not init's answers (an object with a `veyq` section by directory)")
     return doc
@@ -2387,8 +2377,8 @@ def cmd_init(args: argparse.Namespace, host: Host) -> int:
         answer = (host.prompt("compose or gitops", hint="compose: veyq on Docker Compose on this host. gitops: via Argo "
                               "CD in a Kubernetes cluster.") or "").strip().lower()
         if answer not in ("compose", "gitops"):
-            raise Refused("`init` needs a target: --compose (Docker Compose on this host) or --gitops DIR (veyq's "
-                          "directory in an Argo CD repository's checkout); without a terminal, pass one")
+            raise Refused("`init` needs to know where veyq runs: --compose (Docker Compose on this host) or --gitops DIR "
+                          "(through Argo CD; DIR is where in your repository veyq's files go)")
         target = answer
     if target == "compose":
         home = Path(args.home or DEFAULT_HOME)
@@ -2403,7 +2393,7 @@ def cmd_init(args: argparse.Namespace, host: Host) -> int:
             register(name, home)
         return result
     if args.unsigned_local:
-        raise Refused("--unsigned-local is Compose's: a GitOps instance runs only what verifies (ADR 0126 decision 3)")
+        raise Refused("--unsigned-local is for Compose: through Argo CD, veyq installs only what verifies")
     # git finds the checkout, before any other question: the one program checked ahead of the rest.
     require_programs(host, ["git"], "`init --gitops`", wait=True)
     host.quiet = True
@@ -2429,7 +2419,7 @@ def cmd_init(args: argparse.Namespace, host: Host) -> int:
     directory = args.gitops or host.prompt(
         "directory", offered, "Where in your repository veyq's files go.") or offered
     if not directory:
-        raise Refused("`init --gitops DIR` needs the directory veyq's half goes into, inside a Git checkout")
+        raise Refused("`init --gitops DIR` needs DIR: where in your Git repository veyq's files go")
     path = Path(directory).expanduser().resolve()
     if getattr(host, "progress", None) is None:
         top = repository_of(host, path)
@@ -2558,8 +2548,8 @@ def check_cluster(host: Host, context: str | None, gateway_class: str, storage_c
                 missing.append(f"cert-manager {'.'.join(map(str, CERT_MANAGER_MIN))} or later for the chart's ACME "
                                f"issuer (found {label.stdout.strip() or 'no version label'})")
     if missing:
-        raise Refused("the cluster does not meet what veyq's half assumes (ADR 0126 decision 4): " + "; ".join(missing)
-                      + ". Nothing was written. (--no-cluster-check writes a repository for a cluster set up later.)")
+        raise Refused("your cluster lacks what veyq needs: " + "; ".join(missing)
+                      + ". Nothing was written. (For a cluster you set up later: --no-cluster-check.)")
     say("your cluster has what veyq needs: Argo CD, the Gateway API and its class, a StorageClass"
         + (", cert-manager" if acme else ""))
 
@@ -2588,8 +2578,8 @@ def verify_gitops_release(host: Host, manifest: Manifest, chart: str) -> dict[st
     images, and the chart its tag resolves to, verified by its own signature and its Chart.yaml version read back —
     the manifest does not name the chart (cr-veyqctl-gitops-target § Decisions)."""
     if not manifest.tools:
-        raise Refused(f"the manifest of {manifest.release} names no tools image (`images.tools`), which the chart's "
-                      f"backup gate runs — a GitOps instance installs no release without it")
+        raise Refused(f"the manifest of {manifest.release} names no tools image (`images.tools`), which the chart needs "
+                      f"for its backups: this release cannot be installed through Argo CD")
     verify_images(host, manifest, False)
     tools = cosign_target("tools", manifest.tools)
     cosign_verify_ref(host, "tools image", tools)
@@ -2626,8 +2616,7 @@ def repository_of(host: Host, directory: Path) -> Path:
         probe = probe.parent
     result = host.run(["git", "-C", str(probe), "rev-parse", "--show-toplevel"], check=False)
     if result.returncode != 0 or not (result.stdout or "").strip():
-        raise Refused(f"{directory} is not inside a Git checkout: a GitOps instance is a directory of the repository "
-                      f"Argo CD syncs")
+        raise Refused(f"{directory} is not inside a Git repository: veyq's files go into the repository Argo CD syncs")
     top = Path(result.stdout.strip()).resolve()
     try:
         directory.relative_to(top)
@@ -2896,8 +2885,8 @@ def hand_over(name: str, namespace: str, values: dict[str, dict[str, str]], remo
     """The generated values, once, in a file only the operator can read — outside the repository, never overwritten."""
     path = config_dir() / f"{name}.secrets.json"
     if path.exists():
-        raise Refused(f"{path} exists: an earlier `init` handed values over there. Nothing was written — move it "
-                      f"away once its values are where they belong, then run `init` again")
+        raise Refused(f"{path} exists from an earlier `init`. Nothing was written: once its values are stored where "
+                      f"they belong, move the file away and run `init` again")
     config_dir().mkdir(parents=True, exist_ok=True)
     doc = {"namespace": namespace, "secrets": values}
     if remote:
@@ -2929,7 +2918,7 @@ def gitops_init(args: argparse.Namespace, host: Host, directory: Path) -> int:
     top = repository_of(host, directory)
     rel = directory.relative_to(top).as_posix()
     if rel in ("", "."):
-        raise Refused("veyq's half goes into a directory of its own inside the checkout, never its root")
+        raise Refused("veyq's files need a directory of their own in your repository, not its top level")
     progress = getattr(host, "progress", None)
     if progress and progress.answers and (directory / GITOPS_FILE).is_file():
         differs = [f"--{key.replace('_', '-')} {getattr(args, key)} (answered: {value})"
@@ -2937,9 +2926,9 @@ def gitops_init(args: argparse.Namespace, host: Host, directory: Path) -> int:
                    if getattr(args, key, None) and getattr(args, key) != SETTLED_FLAGS.get(key)  # given, not a default
                    and str(getattr(args, key)) != value]
         if differs:
-            raise Refused(f"{directory} is written from {SETUP_FILE}'s answers, and {'; '.join(differs)} differs: init "
-                          f"does not change a written half — `upgrade` moves its release, anything else is an edit of "
-                          f"its files. Nothing was written.")
+            raise Refused(f"{directory} is set up already, and {'; '.join(differs)} differs from your earlier answer. "
+                          f"`init` does not change it: `upgrade` installs a newer release; anything else, edit the "
+                          f"files. Nothing was written.")
         if not progress.done("written"):
             say(f"veyq's half is in {directory}, written from {SETUP_FILE}'s answers: nothing to write")
         if progress.answer("server") == "yes":  # the server's steps are this machine's: they run again if not done
@@ -2949,9 +2938,9 @@ def gitops_init(args: argparse.Namespace, host: Host, directory: Path) -> int:
             args._domains = [d for d in (progress.answer("domain"), progress.answer("store_domain")) if d]
         return gitops_init_finish(args, host, directory, top, read_gitops(directory))
     if directory.exists() and any(directory.iterdir()):
-        raise Refused(f"{directory} holds files already: `init` writes a fresh directory and never overwrites. To have "
-                      f"veyqctl manage a veyq half that exists, write {GITOPS_FILE} beside it as "
-                      f"{EXISTING_HALF_DOCS} says, then run `veyqctl check`. Nothing was written.")
+        raise Refused(f"{directory} holds files already, and `init` never overwrites. To let veyqctl manage veyq files "
+                      f"you wrote yourself, add a {GITOPS_FILE} as {EXISTING_HALF_DOCS} explains, then run "
+                      f"`veyqctl check`. Nothing was written.")
     settle_flags(args, host)
     name = option(args, host, "name", "instance name", top.name,
                   "How this computer names the instance (`veyqctl instances`).")
@@ -2961,12 +2950,12 @@ def gitops_init(args: argparse.Namespace, host: Host, directory: Path) -> int:
         print(SERVER_INTRO, flush=True)
         # veyq-server's repository encrypts with SOPS (KSOPS in Argo CD), and its root syncs gitops/apps/.
         if args.secrets not in (None, "sops"):
-            raise Refused(f"--secrets {args.secrets}: with the server set up, the secrets are SOPS's (veyq-server's "
-                          f"repository decrypts with KSOPS)")
+            raise Refused(f"--secrets {args.secrets}: with a new server, the secrets are encrypted with sops (the server "
+                          f"decrypts them with KSOPS)")
         args.secrets = "sops"
         if (top / SERVER_APPS) not in directory.parents:
-            raise Refused(f"with the server set up, veyq's half goes under {top / SERVER_APPS}, which the root "
-                          f"Application syncs (e.g. {top / SERVER_APPS / 'veyq'})")
+            raise Refused(f"with a new server, veyq's files go under {top / SERVER_APPS}, which Argo CD reads (e.g. "
+                          f"{top / SERVER_APPS / 'veyq'})")
     has_sops = server or any((p / ".sops.yaml").is_file() for p in [directory, *directory.parents]
                              if p == top or top in p.parents)
     provider = option(args, host, "secrets", f"secrets: {', '.join(PROVIDERS)}", "sops" if has_sops else "",
@@ -2975,8 +2964,8 @@ def gitops_init(args: argparse.Namespace, host: Host, directory: Path) -> int:
     if provider not in PROVIDERS:
         raise Refused(f"--secrets {provider}: one of {', '.join(PROVIDERS)}")
     if provider == "sops" and not has_sops:
-        raise Refused(f"--secrets sops needs a .sops.yaml in {top} or a directory above {directory} naming the "
-                      f"repository's keys: sops encrypts with its creation rules. Nothing was written.")
+        raise Refused(f"--secrets sops needs a .sops.yaml (in {top} or above {directory}) that names your keys. "
+                      f"Nothing was written.")
 
     # Every program the run starts, now that the answers above decided which (ADR 0126): waited for, never installed.
     host.section("2. Programs")
@@ -3043,7 +3032,7 @@ def gitops_init(args: argparse.Namespace, host: Host, directory: Path) -> int:
         "acme: certificates from Let's Encrypt, one per address (needs cert-manager). shared: one certificate of "
         "yours. none: TLS ends in front of the cluster."))
     if tls not in ("acme", "shared", "none"):
-        raise Refused(f"--tls {tls}: acme (the chart's cert-manager issuer), shared (one Secret) or none")
+        raise Refused(f"--tls {tls}: acme (Let's Encrypt), shared (one certificate of yours) or none")
     own_email = (git(host, top, "config", "user.email", check=False).stdout or "").strip()
     acme_email = option(args, host, "acme_email", "email for Let's Encrypt", own_email,
                         "Let's Encrypt writes here when a certificate is about to expire.") if tls == "acme" else ""
@@ -3098,13 +3087,13 @@ def gitops_init(args: argparse.Namespace, host: Host, directory: Path) -> int:
         repo_url = f"git@github.com:{github.group(1)}.git"
     recorded(host, "repo_url", repo_url)
     if not repo_url:
-        raise Refused("--repo-url is required: the URL Argo CD reads this repository from (no `origin` remote)")
+        raise Refused("--repo-url is required: the URL Argo CD reads your repository from (there is no `origin` remote)")
     revision = args.revision or resumed_answer(host, "revision", "branch") or (
         git(host, top, "rev-parse", "--abbrev-ref", "HEAD", check=False).stdout or "").strip()
     if revision == "HEAD" or not revision:  # an empty repository: the branch its first commit goes to
         revision = (git(host, top, "symbolic-ref", "--short", "HEAD", check=False).stdout or "").strip()
     if not revision or revision == "HEAD":
-        raise Refused("--revision is required: the branch Argo CD follows (the checkout is on none)")
+        raise Refused("--revision is required: the branch Argo CD follows (your checkout is on no branch)")
     recorded(host, "revision", revision)
 
     source = open_source(args.source)
@@ -3159,8 +3148,7 @@ def gitops_init(args: argparse.Namespace, host: Host, directory: Path) -> int:
             encrypted = sops_run(host, ["sops", "encrypt", "--filename-override", str(target), "--input-type",
                                         "yaml", "--output-type", "yaml", "/dev/stdin"], target, stdin=plain).stdout
             if not encrypted or "ENC[" not in encrypted:
-                raise Refused(f"sops did not encrypt {file} (no ENC[…] in its output): check {top}/.sops.yaml's "
-                              f"creation rules. Nothing was written.")
+                raise Refused(f"sops did not encrypt {file}: check the rules in {top}/.sops.yaml. Nothing was written.")
             files[f"resources/{file}"] = encrypted
         files["resources/secret-generator.yaml"] = """# KSOPS: decrypts the listed SOPS files in Argo CD's repo server.
 apiVersion: viaduct.ai/v1
@@ -3382,8 +3370,8 @@ def server_questions(args: argparse.Namespace, host: Host, top: Path, name: str)
         if answer:
             key_file = Path(answer).expanduser()
         elif answer is None:
-            raise Refused("--age-key is required (the age key file the secrets are encrypted to): pass it, or run "
-                          "`init` at a terminal, where Enter creates one")
+            raise Refused("--age-key is required (the age key file that encrypts your secrets): pass it, or run `init` "
+                          "at a terminal, where Enter creates one")
         else:
             key_file = top / AGE_KEY_FILE
             key_file.parent.mkdir(mode=0o700, exist_ok=True)
@@ -3392,14 +3380,14 @@ def server_questions(args: argparse.Namespace, host: Host, top: Path, name: str)
             say(f"created a new age key in {key_file}. Copy it into your password manager now: without it, nothing in "
                 f"your repository can be decrypted, and a lost server cannot be set up again.")
             if not host.wait("Press Enter once it is in your password manager"):
-                raise Refused(f"the new age key in {key_file} needs a copy in your password manager first")
+                raise Refused(f"copy the new age key ({key_file}) into your password manager first, then run the same command again")
     key_file = key_file.resolve()
     recipient = age_recipient_of(host, key_file)
     print(f"\n   Using the age key in {key_file}.", flush=True)
     kept = progress.server_answer("age_recipient") if progress else None
     if kept and kept != recipient:
-        raise Refused(f"{key_file} is the age key of {recipient}, and {SETUP_FILE} names {kept}: the repository's "
-                      f"secrets are encrypted to that one — give its key file (--age-key)")
+        raise Refused(f"{key_file} is not the age key your repository's secrets are encrypted to ({SETUP_FILE} names "
+                      f"{kept}, this file is {recipient}): pass the right key file with --age-key")
     answers["age_recipient"] = recipient
     if progress:
         progress.record_server("age_recipient", recipient)
@@ -3463,8 +3451,8 @@ def verify_server_template(host: Host, into: Path) -> dict[str, str]:
     host.run(["git", "-C", str(into), "-c", "advice.detachedHead=false", "checkout", "--quiet", commit])
     found = tree_sha256(into)
     if found != tree:
-        raise Refused(f"veyq-server {release}'s commit {commit[:12]} checked out to a tree whose sha256 is {found}, and "
-                      f"its signed manifest says {tree}. Nothing was rendered.")
+        raise Refused(f"veyq-server {release} does not match its signed manifest: commit {commit[:12]} has the tree "
+                      f"sha256 {found}, its signed manifest says {tree}. Nothing was added to your repository.")
     say(f"veyq-server {release}: commit {commit[:12]}, tree verified")
     return {"release": release, "commit": commit}
 
@@ -3521,12 +3509,12 @@ def server_secrets(host: Host, top: Path, answers: dict[str, str], repo_name: st
     text = text.replace("__DEPLOY_KEY__", "|\n" + "".join(f"  {line}\n" for line in private.splitlines()).rstrip("\n"))
     left = re.findall(r"__[A-Z0-9_]+__", text)
     if left:
-        raise Refused(f"{SERVER_SECRETS_TEMPLATE} holds markers veyqctl does not fill ({', '.join(left)}): a veyq-server "
-                      f"release newer than this veyqctl? Nothing was encrypted.")
+        raise Refused(f"{SERVER_SECRETS_TEMPLATE} asks for values this veyqctl does not know ({', '.join(left)}): "
+                      f"veyq-server is newer than this veyqctl. Update veyqctl. Nothing was encrypted.")
     encrypted = sops_run(host, ["sops", "encrypt", "--filename-override", str(target), "--input-type", "yaml",
                                 "--output-type", "yaml", "/dev/stdin"], target, stdin=text.encode()).stdout
     if not encrypted or "ENC[" not in encrypted:
-        raise Refused(f"sops did not encrypt {SERVER_SECRETS} (no ENC[…] in its output): check .sops.yaml")
+        raise Refused(f"sops did not encrypt {SERVER_SECRETS}: check the rules in .sops.yaml")
     target.parent.mkdir(parents=True, exist_ok=True)
     target.write_text(encrypted)
     say(f"encrypted your sudo password" + (" (generated)" if not answers.get("admin_password") else "")
@@ -3553,15 +3541,15 @@ def pin_host_key(host: Host, top: Path, address: str) -> str:
     if pinned and (not line or line.split()[1:3] == pinned.split()[1:3]):
         return pinned  # the pinned key, or the server not answering now: nothing to decide
     if not line:
-        raise Refused(f"{address} did not answer on port 22 (ssh-keyscan): is the server up and reachable? The same "
-                      f"command goes on from here.")
+        raise Refused(f"{address} does not answer on port 22: is the server running and reachable? Then run the same "
+                      f"command again.")
     if pinned:  # a rebuilt server under the same address presents a new key
         print(f"\n   The server shows the fingerprint {fingerprint(host, line)} (ED25519), but "
               f"{fingerprint(host, pinned)} was saved before. Was the server reinstalled?", flush=True)
     else:
         print(f"\n   The server shows the fingerprint {fingerprint(host, line)} (ED25519).", flush=True)
     if host.confirm("Is this the fingerprint your provider shows for the server?") is not True:
-        raise Refused(f"the host key of {address} was not confirmed: nothing logs in to it. Compare it in your "
+        raise Refused(f"the fingerprint of {address} was not confirmed, so veyqctl does not log in. Compare it with your "
                       f"provider's console and run the same command again.")
     known = top / SERVER_KNOWN_HOSTS
     kept = [l for l in known.read_text().splitlines() if not l.strip() or l.lstrip().startswith("#")] \
@@ -3605,7 +3593,7 @@ def deploy_key_at_forge(host: Host, repo_url: str, public: str) -> None:
     print(f"\n   Add this as a deploy key at {where}, read-only (leave write access off):\n\n   {public}\n",
           flush=True)
     if not host.wait("Press Enter once it is added"):
-        raise Refused(f"Argo CD's deploy key is to be entered at {where} first: {public}")
+        raise Refused(f"add Argo CD's deploy key at {where} first, then run the same command again: {public}")
 
 
 def await_dns(host: Host, address: str, names: list[str]) -> None:
@@ -3621,7 +3609,7 @@ def await_dns(host: Host, address: str, names: list[str]) -> None:
         message = (f"Create an A record for {', '.join(wrong)} pointing to {target} (no AAAA record: the cluster "
                    f"speaks IPv4 only).\nPress Enter to check again (Ctrl-C to stop; run the same command again later)")
         if not host.wait(message):
-            raise Refused(f"{', '.join(wrong)} do not resolve to {target} yet: set the A records and run the same "
+            raise Refused(f"{', '.join(wrong)} do not point to {target} yet: create the A records, then run the same "
                           f"command again")
 
 
@@ -3634,19 +3622,19 @@ def commit_and_push(host: Host, top: Path, branch: str, message: str) -> None:
         print(f"\n   {len(changed)} new or changed: " + ", ".join(changed[:8]) + (" …" if len(changed) > 8 else ""),
               flush=True)
         if host.confirm(f"Commit them and push to origin/{branch}?") is not True:
-            raise Refused("not committed: the bootstrap needs everything on the remote. The same command asks again.")
+            raise Refused("not committed: the server is set up from what is pushed. Run the same command again when ready.")
         git(host, top, "add", "--all")
         git(host, top, "commit", "--quiet", "-m", message)
         git(host, top, "push", "--quiet", "-u", "origin", branch)
     elif git(host, top, "rev-parse", "--verify", "--quiet", f"origin/{branch}", check=False).returncode:
         if host.confirm(f"Push to origin/{branch}?") is not True:
-            raise Refused("not pushed: the bootstrap needs everything on the remote. The same command asks again.")
+            raise Refused("not pushed: the server is set up from what is pushed. Run the same command again when ready.")
         git(host, top, "push", "--quiet", "-u", "origin", branch)
     git(host, top, "fetch", "--quiet", "origin", branch)
     if git(host, top, "diff", "--quiet", "HEAD", f"origin/{branch}", "--", "gitops", ".sops.yaml",
            check=False).returncode:
-        raise Refused(f"origin/{branch} differs from this checkout under gitops/: push first — Argo CD's first sync "
-                      f"takes the remote's copy over what the bootstrap applied")
+        raise Refused(f"origin/{branch} differs from your checkout under gitops/: push first — Argo CD takes what is "
+                      f"pushed, not what is here")
 
 
 def trust_host_key(host: Host, address: str, line: str) -> None:
@@ -3686,12 +3674,12 @@ def bootstrap(host: Host, top: Path, answers: dict[str, str], pinned: str) -> No
         say(f"{answers['admin_user']} logs in to {address} already: the server is bootstrapped, nothing to run")
         return
     if ansible_core(host) < ANSIBLE_CORE_FLOOR:
-        raise Refused(f"ansible-core {'.'.join(map(str, ANSIBLE_CORE_FLOOR))} or later is needed (the playbooks "
-                      f"assert it); `ansible-playbook --version` names an older one first on PATH")
+        raise Refused(f"ansible-core {'.'.join(map(str, ANSIBLE_CORE_FLOOR))} or later is needed, but "
+                      f"`ansible-playbook --version` shows an older one")
     if host.confirm(f"Set up the server now? This logs in to {address} as root, creates {answers['admin_user']}, "
                     f"switches off root and password logins, and installs the firewall, Kubernetes and Argo CD. It "
                     f"cannot be undone") is not True:
-        raise Refused("the bootstrap was not run. The same command asks again.")
+        raise Refused("the server was not set up. Run the same command again when ready.")
     workdir, host.workdir = host.workdir, top / "ansible"
     try:
         host.run(["ansible-galaxy", "collection", "install", "-r", "requirements.yml", "-p", "collections"])
@@ -3715,7 +3703,7 @@ def connect(host: Host, name: str, address: str, admin_user: str, argocd: bool, 
     old = next((m for m in SSH_BLOCK.finditer(text) if m.group("name") == name), None)
     rest = (text[:old.start()] + text[old.end():]) if old else text
     if re.search(rf"(?mi)^\s*Host\s+(\S+\s+)*{re.escape(name)}(\s|$)", rest):
-        raise Refused(f"{config} has a `Host {name}` of its own: veyqctl never shadows it — choose another name "
+        raise Refused(f"{config} has a `Host {name}` of its own, which veyqctl does not touch: choose another name "
                       f"(--connect-name)")
     kept = [line for line in (old.group("body").splitlines()[1:] if old else []) if line.strip()
             and not SSH_OWNED.match(line)]
@@ -3778,9 +3766,9 @@ def await_synced(host: Host, name: str, application: str, timeout: float) -> Non
                 say(f"waiting for Argo CD: {shown}")
                 last = shown
             if time.monotonic() > deadline:
-                raise Refused(f"Argo CD did not report everything Synced and Healthy within {int(timeout)} s ({shown}). "
-                              f"Look with `kubectl --context {name} -n argocd get applications` through `ssh -N {name}`; "
-                              f"the same command goes on waiting.")
+                raise Refused(f"not everything runs after {int(timeout)} s ({shown}). Look with `kubectl --context {name} -n "
+                              f"argocd get applications` while `ssh -N {name}` is open, or run the same command again "
+                              f"to keep waiting.")
             host.sleep(10)
     finally:
         tunnel.terminate()
@@ -3850,8 +3838,8 @@ def cmd_connect(args: argparse.Namespace, host: Host) -> int:
     setup = read_setup(top) if top else {}
     server = setup.get("server") or {}
     if not server.get("server_address") or not server.get("admin_user"):
-        raise Refused(f"`connect` runs in a checkout whose {SETUP_FILE} describes a server (`veyqctl init` with the "
-                      f"server set up writes it); {top or 'this directory'} has none")
+        raise Refused(f"run `connect` in the repository of a server veyqctl set up ({top or 'this directory'} has no "
+                      f"server in its {SETUP_FILE})")
     name = args.connect_name or server.get("connect_name") or top.name
     if not re.fullmatch(r"[A-Za-z0-9._-]+", name):
         raise Refused(f"--connect-name {name}: letters, digits, `.`, `_` and `-`")
@@ -3890,8 +3878,8 @@ def application_pin(text: str) -> tuple[str, str]:
 def rewrite_once(text: str, old: str, new: str, what: str) -> str:
     count = text.count(old)
     if count != 1:
-        raise Refused(f"{what}: {old} appears {count} times, not once — veyqctl rewrites a pin only where it finds it "
-                      f"exactly once. Nothing was changed.")
+        raise Refused(f"{what}: {old} appears {count} times, not once, so veyqctl cannot tell which to change. Nothing "
+                      f"was changed.")
     return text.replace(old, new)
 
 
@@ -3997,8 +3985,8 @@ def gitops_check(args: argparse.Namespace, host: Host, g: GitOps) -> int:
 def gitops_upgrade(args: argparse.Namespace, host: Host, g: GitOps) -> int:
     """ADR 0126 decision 3: ADR 0096 decision 5's resolve and verify, then a commit instead of a restart."""
     if args.unsigned_local or args.key_into or args.objects_to:
-        raise Refused("--unsigned-local, --key-into and --objects-to are Compose's: on a GitOps instance the chart's "
-                      "backup gate captures before the new release starts (ADR 0098)")
+        raise Refused("--unsigned-local, --key-into and --objects-to are for Compose: on a GitOps instance veyq backs "
+                      "itself up before the new release starts")
     source = open_source(args.source or g.doc.get("source") or None)
     selector = check_selector(g.doc["release"])
     listed = source.releases()
@@ -4009,24 +3997,24 @@ def gitops_upgrade(args: argparse.Namespace, host: Host, g: GitOps) -> int:
         say(f"release {running} is installed already ({RELEASE_KEY}={selector}): nothing to do")
         return 0
     if (chosen.major, chosen.minor) < current:
-        raise Refused(f"{RELEASE_KEY}={selector} selects {chosen.release}, below the pinned {running}: there is no "
-                      f"downgrade (going back is a restore, ADR 0098). Nothing was changed.")
+        raise Refused(f"{RELEASE_KEY}={selector} selects {chosen.release}, older than the installed {running}: there is "
+                      f"no downgrade (going back means restoring a backup). Nothing was changed.")
     manifest_of = manifest_reader(host, source, False)
     target = upgrade_target(listed, current, chosen, source.describe(), lambda r: manifest_of(r).major_entry)
     drift = gitops_drift(g)
     if drift:
-        raise Refused("the files no longer pin what " + GITOPS_FILE + " records: " + "; ".join(drift)
-                      + ". Nothing was changed: put them back, or record the new ones in " + GITOPS_FILE + ".")
+        raise Refused("the files no longer match what " + GITOPS_FILE + " records: " + "; ".join(drift)
+                      + ". Nothing was changed: put them back, or record the new values in " + GITOPS_FILE + ".")
     top = repository_of(host, g.directory)
     paths = [str(g.application), str(g.values), str(g.directory / GITOPS_FILE)]
     if git(host, top, "diff", "--quiet", "HEAD", "--", *paths, check=False).returncode:
-        raise Refused("the Application, the values or veyqctl.json have changes not committed: an upgrade commits "
-                      "only its own. Nothing was changed.")
+        raise Refused("application.yaml, values.yaml or veyqctl.json have uncommitted changes: commit or undo them "
+                      "first, as `upgrade` commits only its own. Nothing was changed.")
     differs = running_differs(host, source, listed, g)
     if differs:
-        raise Refused(f"{GITOPS_FILE} says release {running} runs, and pins what it did not sign: " + "; ".join(differs)
-                      + f". Nothing was changed: an upgrade starts from a running release that verifies "
-                      f"({EXISTING_HALF_DOCS}).")
+        raise Refused(f"{GITOPS_FILE} says release {running} is installed, but pins what that release did not sign: "
+                      + "; ".join(differs) + f". Nothing was changed: an upgrade starts only from a release that "
+                      f"verifies ({EXISTING_HALF_DOCS}).")
     manifest = manifest_of(target)
     pins = verify_gitops_release(host, manifest, g.doc["chart"])
     old = g.doc["pins"]
@@ -4086,12 +4074,11 @@ def gitops_tls(args: argparse.Namespace, host: Host, g: GitOps) -> int:
         say("the values name Let's Encrypt's production directory already: nothing to do")
         return 0
     if f"server: {staging}" not in text:
-        raise Refused(f"{g.values} names no Let's Encrypt staging directory under gateway.tls.acme (TLS acme with "
-                      f"`server: {staging}`): nothing to switch")
+        raise Refused(f"{g.values} does not use Let's Encrypt's test certificates: nothing to switch")
     top = repository_of(host, g.directory)
     if git(host, top, "diff", "--quiet", "HEAD", "--", str(g.values), check=False).returncode:
-        raise Refused(f"{g.values} has changes not committed: `tls production` commits only its own. Nothing was "
-                      f"changed.")
+        raise Refused(f"{g.values} has uncommitted changes: commit or undo them first, as `tls production` commits "
+                      f"only its own. Nothing was changed.")
     switched = rewrite_once(text, f"server: {staging}", f"server: {production}", g.doc["values"])
     namespace = g.doc.get("namespace") or "veyq"
     with tempfile.TemporaryDirectory(prefix="veyqctl-values-") as tmp:
@@ -4101,7 +4088,7 @@ def gitops_tls(args: argparse.Namespace, host: Host, g: GitOps) -> int:
     branch = (git(host, top, "rev-parse", "--abbrev-ref", "HEAD", check=False).stdout or "").strip()
     if not args.yes and host.confirm(f"Switch to Let's Encrypt production? This commits {g.doc['values']} and pushes to "
                                      f"origin {branch}?") is not True:
-        raise Refused("not switched: nothing was changed (without a terminal, pass --yes)")
+        raise Refused("not switched, nothing was changed (without a terminal, pass --yes)")
     g.values.write_text(switched)
     paths = [str(g.values)]
     setup = read_setup(top)
@@ -4120,8 +4107,8 @@ def gitops_tls(args: argparse.Namespace, host: Host, g: GitOps) -> int:
         while (host.run(k + ["get", "issuer", "veyq-acme", "-o", "jsonpath={.spec.acme.server}"], check=False).stdout
                or "").strip() != production:
             if time.monotonic() > deadline:
-                raise Refused(f"the Issuer veyq-acme does not name the production directory after {int(args.timeout)} s:"
-                              f" has Argo CD synced? The same command goes on (it is pushed already).")
+                raise Refused(f"the Issuer veyq-acme does not name the production directory after {int(args.timeout)} s: has "
+                              f"Argo CD synced yet? Run the same command again (the change is pushed already).")
             host.sleep(10)
         listed = host.run(k + ["get", "certificates", "-o",
                                "jsonpath={range .items[*]}{.spec.secretName}{\"\\n\"}{end}"], check=False).stdout or ""
@@ -4130,8 +4117,7 @@ def gitops_tls(args: argparse.Namespace, host: Host, g: GitOps) -> int:
             print(f"\n   The test certificates: {', '.join(secrets_)} (namespace {namespace}).", flush=True)
             if not args.yes and host.confirm("Delete them so production ones are issued? This cannot be undone, and "
                                              "the sites have no certificate until the new ones arrive") is not True:
-                raise Refused("the staging certificates stay until they renew; `veyqctl tls production` deletes them "
-                              "when you run it again")
+                raise Refused("the test certificates stay for now; run `veyqctl tls production` again to replace them")
             host.run(k + ["delete", "secret", *secrets_])
         while True:
             states = host.run(k + ["get", "certificates", "-o", "jsonpath={range .items[*]}{.metadata.name} "
@@ -4142,13 +4128,13 @@ def gitops_tls(args: argparse.Namespace, host: Host, g: GitOps) -> int:
                 say("every certificate is issued by Let's Encrypt production")
                 return 0
             if time.monotonic() > deadline:
-                raise Refused(f"not issued within {int(args.timeout)} s: {', '.join(pending) or 'no certificate'} — "
-                              f"`kubectl describe certificate` tells why")
+                raise Refused(f"not issued after {int(args.timeout)} s: {', '.join(pending) or 'no certificate'} — "
+                              f"`kubectl describe certificate` shows why")
             host.sleep(10)
 
 
 def compose_tls(args: argparse.Namespace, host: Host) -> int:
-    raise Refused("`tls` is a GitOps instance's: under Compose, Traefik's ACME resolver takes its directory from .env")
+    raise Refused("`tls` works on a GitOps instance only. Under Compose, set the certificate directory in .env")
 
 
 GITOPS_VERBS = {"verify": gitops_verify, "check": gitops_check, "upgrade": gitops_upgrade, "tls": gitops_tls}
@@ -4330,15 +4316,15 @@ def main(argv: list[str] | None = None, host: Host | None = None) -> int:
         host.workdir = home
         if target_of(home) == "gitops":
             if args.command in COMPOSE_ONLY:
-                raise Refused(f"`{args.command}` is Compose's, and {home} is a GitOps instance: {COMPOSE_ONLY[args.command]}")
+                raise Refused(f"`{args.command}` is for Compose, and {home} is a GitOps instance: {COMPOSE_ONLY[args.command]}")
             if getattr(args, "unsigned_local", False):
-                raise Refused("--unsigned-local is Compose's: a GitOps instance pins only what verifies")
+                raise Refused("--unsigned-local is for Compose: a GitOps instance installs only what verifies")
             # Resolved: git names the checkout by its real path (macOS' /var is /private/var), and every path veyqctl
             # compares with it or hands to `git add` must be the same one.
             require_programs(host, GITOPS_PROGRAMS[args.command], f"`{args.command}` of a GitOps instance")
             return GITOPS_VERBS[args.command](args, host, read_gitops(home.resolve()))
         if getattr(args, "push", False):
-            raise Refused(f"--push is a GitOps instance's, and {home} is a Compose home")
+            raise Refused(f"--push is for a GitOps instance, and {home} runs on Compose")
         if args.command not in ("self-update", "tls"):
             require_programs(host, compose_programs(args.command, bool(getattr(args, "unsigned_local", False))),
                              f"`{args.command}`")
