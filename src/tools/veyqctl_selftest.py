@@ -758,6 +758,12 @@ def test_upgrade_selector(tmp: pathlib.Path) -> None:
     rc, out = upgrade(home, host, "--unsigned-local", "--key-into", str(keys / "down.key"))
     check("upgrade: VEYQ_RELEASE pinned BELOW the running release is refused (no downgrade), nothing run",
           rc == 1 and "older than the running" in out and not host.commands, out[-300:])
+    out = io.StringIO()
+    with contextlib.redirect_stdout(out):
+        rc = vc.main(["--home", str(home), "check", "--unsigned-local"],
+                     FakeHost(local_images=all_images(), project="veyq-proof"))
+    check("check: VEYQ_RELEASE below the running release says `upgrade` would refuse, as `upgrade` does",
+          rc == 0 and "would refuse" in out.getvalue() and "would take" not in out.getvalue(), out.getvalue()[-300:])
 
 
 def test_upgrade_order(tmp: pathlib.Path) -> None:

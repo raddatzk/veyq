@@ -1424,10 +1424,13 @@ def cmd_check(args: argparse.Namespace, host: Host) -> int:
         running = read_state(home).release
     except Refused:
         running = ""
+    current = tuple(int(x) for x in running.split(".")) if running else None
     if running == chosen.release:
         say(f"release {chosen.release} is running already ({RELEASE_KEY}={selector}): `upgrade` has nothing to do")
+    elif current and (chosen.major, chosen.minor) < current:
+        say(f"{RELEASE_KEY}={selector} selects {chosen.release}, older than the running {running}: `upgrade` would "
+            f"refuse")
     else:
-        current = tuple(int(x) for x in running.split(".")) if running else None
         manifest_of = manifest_reader(host, source, args.unsigned_local)
         target = (upgrade_target(listed, current, chosen, source.describe(), lambda r: manifest_of(r).major_entry)
                   if current and (chosen.major, chosen.minor) > current else chosen)
