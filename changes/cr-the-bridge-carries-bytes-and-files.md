@@ -1,7 +1,7 @@
 ---
 id: cr-the-bridge-carries-bytes-and-files
 title: The bridge carries what the UI shows as bytes, a blob's ranges, and files by path — proved by avatars and a Pot's download on Linux and Windows
-status: planned
+status: in-progress
 satisfies: []
 adrs: ["0127", "0123", "0122"]
 invariants:
@@ -180,7 +180,7 @@ None. Everything runs on this Mac, the container and the disposable VMs.
 
 ## Phases
 
-### Phase 1 — The core: files by path, the pictures' rule
+### Phase 1 — The core: files by path, the pictures' rule — done (2026-11-11)
 
 - D4's measurement first: the UTF-16 path on the VM, its bite through plain `fopen`.
 - `blob/FileSink.kt` and `blob/FileSource.kt` in `nativeMain`, with `posix` and `mingw` actuals where the call
@@ -195,6 +195,57 @@ None. Everything runs on this Mac, the container and the disposable VMs.
   set), bitten.
 - Android (emulator) and the Apple app (simulator) show the same avatars as before on a Pot's people
   (`VEYQ_LIVE_AVATARS=1` once to make sure the dev instance has a picture).
+
+**Built (Phase 1):**
+- **`posixMain` joins the hierarchy** (`core/build.gradle.kts`: `group("posix") { apple; linux }` beside `bridged`): the
+  one call that differs sits behind `blob/Files.kt`'s `openFile`/`removeFile`/`seekFile` — `Files.posix.kt` (`fopen`,
+  `remove`, `fseeko`) and `Files.mingw.kt` (`_wfopen`/`_wremove` over `wcstr`, `_fseeki64`). Everything else of a file is
+  `nativeMain`. No new dependency: the compiles resolved nothing the verification metadata lacked (`verify-metadata`
+  true, every metadata compile green), so no cold metadata write was run.
+- **`FileSink`** (`open(path)`, `write`, `close(keep)`, `fill(kept, produce)`, `write(path, kept, produce)`): a
+  producer that throws, or an answer `kept` refuses, leaves nothing at the path. **`FileSource`** is an open class;
+  Apple's `FileUploadSource` subclasses it and holds the security scope in its `opening`/`closing` hooks.
+- **Every Apple `fopen` went, not only `AppleDepot`'s:** `export/FileDownloads.kt` (a Pot, a subtree) and
+  `AppleMemories.download` wrote the same loop; all three are `FileSink` now, Swift's calls unchanged.
+- **D5 is `session/AvatarsModel.kt`, held as `TenantSession.pictures`:** `load()` syncs over the people read at open,
+  `peopleRead(people)` syncs again only when the (member, revision) set differs from the last synced one; `state` and
+  `watch` per ADR 0127 decision 2. Nothing reads the people anew today (`TenantSession.people` is read once at open), so
+  `peopleRead` has no caller yet: it is the door Phase 2's shell update uses. A sync that fails is not retried for an
+  unchanged set — as before, where each app synced once per tenant open.
+- **Android** observes `t.pictures.state` and starts `load()` (`AppModel.watchAvatars`); **Apple** watches it and reads
+  `AppleSessions.pictures(tenant)` (its `syncAvatars` is gone).
+
+**Met (2026-11-11, commits `b2d976338`, `bcfb4aa22`):**
+- [x] Green: `./gradlew :core:jvmTest :core:macosArm64Test :android:assembleDebug :android:testDebugUnitTest` →
+  `BUILD SUCCESSFUL`; `/usr/bin/python3 src/mobile/linux/run.py test` → `184 tests from 40 test cases ran`, `PASSED 184`;
+  `/usr/bin/python3 src/mobile/windows/run.py test` → the same 184, `PASSED`. `xcodebuild -project apple/Veyq.xcodeproj
+  -target Veyq -sdk iphonesimulator build CODE_SIGNING_ALLOWED=NO` → `BUILD SUCCEEDED`.
+- [x] D4 first: `windows/run.py test --tests '*FilesTest*'` → 4 passed on the VM. **Bite:** `Files.mingw.kt` over plain
+  `fopen`/`remove` → red, `Expected <[Büro € 中文.bin]>, actual <[BÃ¼ro â‚¬ ä¸­æ–‡.bin]>` (the UTF-8 bytes read as
+  CP-1252 on the German VM; the file was written and listed under the other name), restored, green.
+- [x] `FilesTest` (`nativeTest`, its directory listed by the platform's own calls — `opendir`/`readdir`, Win32's
+  `FindFirstFileW` — never the calls under test) on all three: macOS (`:core:macosArm64Test --tests '*FilesTest*'`, 4/4),
+  Linux (`linux/run.py test --tests '*FilesTest*'`, 4/4), Windows (above): uneven frames (1 B … 128 KiB, one empty)
+  written, read backwards in growing pieces, whole and past the end, through `Büro € 中文.bin`; a sink that throws
+  mid-way and an answer not kept leave the directory empty. **Bite:** `FileSink.close` without its `removeFile` → both
+  leave-nothing cases red on macOS, restored, green.
+- [x] `AvatarsModelTest` (`commonTest`, 4 cases: synced on open, again after a change — a picture set, removed, a member
+  joined —, not for the same set read again or reordered, a throwing sync shows the letters). **Bites:** without the
+  unchanged-set check → `anUnchangedSetIsNotSyncedTwice` red; `load()` without its sync → the open and change cases red;
+  each restored, green (`./gradlew :core:jvmTest --tests '*AvatarsModelTest*'`).
+- [x] Android and Apple show the picture on a Pot's people, against the dev instance (`veyq.localhost:8080`):
+  - The instance had no picture (`veyq_tenant_profile`: revision 2, `sealed_avatar` NULL), so one was set through the
+    web (Settings, your profile: a blue disc on white, headless Chrome) → revision 3. The Pot "App link" had no people:
+    the seeded principal was added there as a member (Android's Add member), so a person row carries a user id.
+  - Android (`uiautomator dump`): Amsterdam's Anna and Ben keep their letters (`A`, `B`: no member behind them); "App
+    link"'s `Kevin Raddatz` row has no letter, its avatar an image — the screenshot shows the disc. Apple (iPhone 18 Pro
+    simulator, `apple/devlogin.py`): the same row, the same disc; Personen in German.
+  - **How it ran, not as briefed:** the branch's `VERSION` is 0, `main`'s backend (the only dev backend; none was
+    running, one was started from the main checkout and stopped after) is major 1, so every app from this branch is
+    refused at sign-in (`server major 1, app 0`). The two apps were built once with `VERSION` set to 1 in the working
+    tree (reverted right after the build, never committed); no contract differs between the merge base and `main`.
+    `veyq_pixel` was locked with a PIN no file names, so the Android pass ran on a throwaway AVD of the same image
+    (`veyq_check`, deleted after).
 
 ### Phase 2 — The bridge: the three channels
 
@@ -263,3 +314,15 @@ None open. The cut and its order are the owner's (2026-11-11, "passt"). D1–D7 
 to the owner's veto before "go".
 
 ## Retrospective
+
+### Phase 1 (2026-11-11)
+
+- **D4 held, and it is not a failure but a wrong name.** Plain `fopen` on mingw did not refuse `Büro € 中文.bin`: it wrote
+  and would have read back a file named in CP-1252 mojibake. A round trip through the same call would have passed; the
+  test is only a test because it reads the directory through Windows' own wide listing.
+- **The hoist found three copies, not one** (`AppleDepot`, `FileDownloads`, `AppleMemories`): the CR's inventory grep
+  named them, R4 only the first.
+- **The branch cannot sign in to `main`'s backend** (VERSION 0 against major 1): a live phase of this CR needs `main`
+  merged into the branch first, or each live run rebuilds with `VERSION` 1 as Phase 1 did. Phase 2's `LiveBridgeTest`
+  and Phase 3/4's passes meet it.
+
