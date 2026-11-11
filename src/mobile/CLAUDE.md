@@ -77,8 +77,12 @@ A Gradle build of its own, run through its own wrapper.
   passes over a catalog that never loaded.
 - `theme/generate_theme.py` — the web's colour roles and brand mark for every platform (ADR 0123 decision 7): the
   builds run it (`:core:generateTheme`, `:android:generateThemeRes`, the Apple project's pre-build step, and `--gtk`,
-  libadwaita's `style.css` and the icon, in `run.py build`; `--winui`, WinUI's `Theme.xaml`, in `windows/run.py
-  build`); its output is never committed. A colour or the logo changes in `src/web/`, never here.
+  libadwaita's `style.css`, the icon and the desktop entry, in `run.py build`; `--winui`, WinUI's `Theme.xaml` and
+  `veyq.ico`, in `windows/run.py build`); its output is never committed. The icons render on the Mac (Quick Look), so
+  the `.ico` travels to the Windows host with the tree. The Linux icon resolves through the GResource's `icons/`, which
+  GtkApplication adds to the icon theme (`theme::use_app_icon` says so on stderr); the Windows exe carries the `.ico`
+  as `ApplicationIcon` and the window sets it with `AppWindow.SetIcon`. A colour or the logo changes in `src/web/`,
+  never here.
 
 ## Prove your work
 

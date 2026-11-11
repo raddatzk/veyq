@@ -90,7 +90,7 @@ Apple's toolbar button and list — measured 2026-11-09 (the list behind Apple's
 - Windows beyond its first slice (the next slice is Linux's and Windows' together, owner 2026-11-10):
   - **The device trust:** DPAPI with Windows Hello, reached by the core itself through cinterop — the key never crosses
     the bridge (ADR 0127's Consequences), as libsecret on Linux.
-  - **Packaging:** MSIX with its signing and its PNG assets, and the app's icon. It must depend on the Store's Webp
+  - **Packaging:** MSIX with its signing and its PNG assets (the app's `.ico` is the build's already: `generate_theme.py --winui`). It must depend on the Store's Webp
     Image Extensions, or the app decodes WebP itself: without the package every member's picture is drawn as initials
     (measured 2026-11-11, the decode test's bite). Whether a packaged app's picked path still opens in the core is
     checked there (ADR 0128).
@@ -117,7 +117,7 @@ Apple's toolbar button and list — measured 2026-11-09 (the list behind Apple's
     store`/`lookup`/`clear` over ssh into the session bus) — `pam_oo7` unlocks the `login` collection at sign-in; the
     session is Wayland; Flathub offers `org.gnome.Platform`/`Sdk` 49, 50 and 51 for aarch64 (`flatpak remote-ls
     --runtime --arch=aarch64 flathub`); and Fedora 45 lacks `libcrypt.so.1` as Fedora 44 does (`ldd` of the app).
-  - **The Flatpak** on the GNOME runtime. It must carry GTK 4.22 and libadwaita 1.9, `libcrypt.so.1`, a CA bundle and
+  - **The Flatpak** on the GNOME runtime. It installs the generated icon and desktop entry (`generate_theme.py --gtk`) to hicolor and `applications/`. It must carry GTK 4.22 and libadwaita 1.9, `libcrypt.so.1`, a CA bundle and
     the zoneinfo, and glycin's loaders, through which GTK 4.22 decodes WebP (without them every member's picture is
     drawn as initials, measured 2026-11-11). Whether the document portal's path opens in the core is checked there
     (ADR 0128). The app's build and tests move into that runtime's SDK (`org.gnome.Sdk`), replacing the Fedora 44
