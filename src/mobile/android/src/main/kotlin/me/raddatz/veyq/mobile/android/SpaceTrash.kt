@@ -104,7 +104,7 @@ internal fun SpaceTrashSheet(scopeId: String, model: AppModel, onClose: () -> Un
             title = { Text(stringResource(R.string.trash_purge_confirm_title)) },
             text = { Text(stringResource(R.string.trash_purge_confirm, row.name)) },
             confirmButton = {
-                TextButton(onClick = { scope.launch { sheet.purge() } }) { Text(stringResource(R.string.trash_purge), color = role(palette.danger)) }
+                TextButton(onClick = { scope.launch { sheet.purge(row) } }) { Text(stringResource(R.string.trash_purge), color = role(palette.danger)) }
             },
             dismissButton = { TextButton(onClick = { sheet.cancelPurge() }) { Text(stringResource(R.string.trash_cancel)) } },
         )

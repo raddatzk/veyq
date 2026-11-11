@@ -89,9 +89,12 @@ class TrashSheet(private val door: Door, private val changed: () -> Unit) {
     fun askPurge(row: NodeTrash.Trashed) = _state.update { it.copy(purging = row) }
     fun cancelPurge() = _state.update { it.copy(purging = null) }
 
-    /** Erases the row asked about for good. */
-    suspend fun purge() {
-        val row = current.purging ?: return
+    /**
+     * Erases [row] for good, the one the person confirmed: the row is handed in, never read back from [State.purging],
+     * since a dialog may clear its question before its button's action runs (Apple's `confirmationDialog` did, so its
+     * "Delete forever" sent nothing; header CR Phase 1). The question is over either way.
+     */
+    suspend fun purge(row: NodeTrash.Trashed) {
         _state.update { it.copy(purging = null, errorRow = null, error = null, busy = row.id) }
         when (door.purge(row)) {
             NodeTrash.Purged.PURGED -> {
@@ -103,4 +106,7 @@ class TrashSheet(private val door: Door, private val changed: () -> Unit) {
         }
         _state.update { it.copy(busy = null) }
     }
+
+    /** The row listed under [id], for a host that names rows by id (the bridge); null once it left the list. */
+    fun row(id: String): NodeTrash.Trashed? = current.rows?.firstOrNull { it.id == id }
 }

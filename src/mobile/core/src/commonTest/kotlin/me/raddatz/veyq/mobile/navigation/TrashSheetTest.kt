@@ -57,23 +57,39 @@ class TrashSheetTest {
     }
 
     @Test
-    fun delete_forever_asks_first_and_a_row_gone_meanwhile_is_read_again() = runTest {
+    fun delete_forever_erases_the_row_handed_in_and_a_row_gone_meanwhile_is_read_again() = runTest {
         val a = row("a")
         val door = Door(mutableListOf(a, row("b")))
         val sheet = TrashSheet(door) {}
         sheet.load()
-        sheet.purge() // nothing asked: nothing erased
-        assertEquals(2, sheet.current.rows!!.size)
         sheet.askPurge(a)
         door.purged = NodeTrash.Purged.FAILED
-        sheet.purge()
+        sheet.purge(a)
         assertEquals("a" to Msg.TRASH_PURGE_FAILED, sheet.current.errorRow to sheet.current.error)
+        assertNull(sheet.current.purging, "the question outlived its answer")
         door.purged = NodeTrash.Purged.GONE
         door.rows!!.removeAll { it.id == "b" } // someone else restored b meanwhile
-        sheet.askPurge(a)
-        sheet.purge()
+        sheet.purge(a)
         assertEquals(emptyList(), sheet.current.rows!!.map { it.id })
         assertNull(sheet.current.error)
+    }
+
+    @Test
+    fun the_row_confirmed_is_erased_though_its_question_was_cleared_first() = runTest {
+        // Apple's confirmationDialog cleared the question (cancelPurge) before its button's action ran
+        val a = row("a")
+        var changes = 0
+        val door = Door(mutableListOf(a, row("b")))
+        val sheet = TrashSheet(door) { changes++ }
+        sheet.load()
+        sheet.askPurge(a)
+        sheet.cancelPurge()
+        sheet.purge(a)
+        assertEquals(listOf("b"), door.rows!!.map { it.id }, "the confirmed row was not erased")
+        assertEquals(listOf("b"), sheet.current.rows!!.map { it.id })
+        assertEquals(1, changes)
+        assertNull(sheet.row("a"))
+        assertEquals("b", sheet.row("b")?.id)
     }
 
     @Test
