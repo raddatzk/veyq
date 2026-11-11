@@ -166,6 +166,38 @@ Android and Apple thinned onto it.
 - Android and Apple: the header, pin, trash with undo, the space's trash, rename and New folder unchanged on a device,
   read as text first.
 
+**Status: done (2026-11-11).**
+
+**Built:**
+- core `navigation/NodeHeaderModel.kt`: state (`pinned`, `rights`, `undo`, `gone`), `watch`, `update(facts)`, `plan`,
+  `label`, `deleteTitle`/`deleteQuestion`, `toggleFavorite`, `trash`, `undoTrash`, `rename`; over a `Door` that
+  `ShellModel.header(node, facts, closeOpen, changed)` builds. `AppKinds.Facts`/`Doors`/`doors`/`coverSettable` hold a
+  kind's doors; `ShellModel.reportOffered()` reads the moderation key once per tenant (a failed read is asked again by the
+  next header); `ShellModel.createFolderHere(name)` takes the shell's place.
+- Android and Apple draw the header from it. Gone from `AppModel.kt`/`.swift`: `isFavorite`, `toggleFavorite`,
+  `inIdentityFolder`, `trash`/`restore`, `rename`, `reportOffered`/`readReportOffered`; from `NodeHeader.kt`/`.swift` and
+  `KindPages`: the rights' composition, the optimistic heart, the undo timer, the delete's words, the contribution's
+  `cover`/`rename`/`deleteTitle`/`deleteQuestion`. A kind's page hands only `facts` and its doors' closures.
+- Apple: the header's view redraws on `AppModel.headerRevision`, which a watch on each handed-out header moves.
+
+**Met:**
+- `NodeHeaderModelTest` (5 cases), each rule bitten (removed → its case red → restored): a Pot's copy only while
+  writable (`AppKinds.doors`), pin's revert, the undo window's end, `closeOpen` after a trash, rename's
+  `SHARE_NAME_RESEAL_FAILED` — measured with a script over `./gradlew :core:jvmTest --tests '*NodeHeaderModelTest*'`.
+- `./gradlew :core:jvmTest :core:macosArm64Test :bridge:jvmTest` green (NodeHeaderModelTest 5/5 on both targets).
+- `ANDROID_HOME=$HOME/Library/Android/sdk ./gradlew :android:assembleDebug` green; `xcodebuild -scheme Veyq` for an iOS 27
+  simulator (signed) and `-target Veyq -sdk macosx CODE_SIGNING_ALLOWED=NO` green.
+- `linux/run.py build` and `windows/run.py build` green (Windows: Veyq.Tests 13/13).
+- `scripts/validate_mobile_words.py`, `validate_mobile_platform_guidelines.py` green.
+- Android (throwaway AVD `veyq_hdr`, deleted), read through `uiautomator dump`: New folder (and its "name taken"), the
+  folder's plan (Favorite, Share | Download, Rename, Set cover | Move, Copy, Report, Delete folder) and a Pot's, pin and
+  unpin read back by a fresh header, rename (a sibling's name refused in the dialog; the title follows), trash with
+  Undo restoring it, trash left to its window (the snackbar gone), the space's trash: restore, then purge.
+- Apple (throwaway iPhone 18 Pro / iOS 27, deleted): New folder, the level's one "More" menu with Report, pin and unpin,
+  rename twice (Report kept), trash with its notice and "Rückgängig" gone after the window, restore and purge from the
+  space's trash. Undo itself was not tapped in time on the simulator (the tool's round trip exceeds 6 s; Android's
+  pass and the core's test hold it).
+
 ### Phase 2 — Bridge and desktops: the header, pin, trash, rename, New folder, the trash sheet
 
 **Done when:**
@@ -228,3 +260,19 @@ None open. D4 unifies the move's undo to the core's 6 s window, technical and op
 is copy, since GNOME has no share sheet (D3).
 
 ## Retrospective
+
+### Phase 1 (2026-11-11)
+
+- **Two Apple defects the pass found.** (1) The first Apple thinning followed the header through a box started on
+  appear; a rename hands the view another header (keyed by name), the box kept the old one, and Report vanished from the
+  menu until the page was reopened. A view observing a core model it does not own needs a watch the owner holds (now
+  `AppModel.headerRevision`), not one tied to the view's lifecycle. (2) Pre-existing: "Delete forever" in Apple's space
+  trash sent nothing — the confirmation dialog's binding ran `cancelPurge()` before the button's action, so `purge()`
+  found no row. Fixed in Swift by asking about the row again in the action; a core `purge(row)` would make it
+  structural (Phase 2's bridge call could take the row too).
+- **The apps disagree on a guest's folder removed from a drop box's page**: Apple's notice offers Undo, Android says
+  nothing. Not a header rule; both kept as they were (now both through `NodeHeaderModel.trash`). Worth one rule later.
+- **Simulator taps**: `tap` with `duration: 0.15` registered reliably where a plain tap was often lost; a 6 s window
+  is out of reach of the tool's round trip, so timed flows are proven on Android and in `commonTest`.
+- **Deviation:** the report's offer is cached only once read; a failed read is asked again by the next header (both
+  apps kept a failure as "not offered" for the whole tenant). Report is a legal duty, so the safe side.
