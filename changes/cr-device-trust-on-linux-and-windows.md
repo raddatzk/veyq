@@ -737,7 +737,21 @@ Stop trusting; de/en, light/dark; builds and guards green.
     trusting → `None`.
   - Left as found: no trust on the VM or the dev instance (the last run took LOGIN, which clears "Not now"'s mark, then
     Stop trusting → `None`), so the Hello pass starts from the offer.
-- [ ] **The Hello pass (O2)** — waits for the owner at the VM's console (the script below). Not ticked.
+- [x] **The Hello pass (O2), 2026-11-11 14:47–15:31, the owner answering each prompt at the VM's console** (`run.py run
+  --devlogin`, then `run.py run` per start, `run.py drive`, the log read first):
+  - the offer `session Signed, offer: Presence Login` → "Mit Windows Hello anmelden" → the enrolment's PIN →
+    `offer answered: Presence`;
+  - quit, start → Hello's prompt → PIN → `session Starting`, `session Signed`;
+  - quit, start → **Cancel** → `session Unlock, level: Presence`, "Willkommen zurück" with "Bestätige, dass du es bist…"
+    (`trust-unlock-hello-de-light.png`); "Entsperren" → PIN → `session Signed`;
+  - Manage → "Angemeldet bleiben" → `manage stay signed in Login: Done`, **no prompt**; quit, start → `session Starting`,
+    `session Signed` with no prompt;
+  - Stop trusting → `manage servers: None`. No trust left on the VM or the dev instance; the tunnel stopped.
+  - **Found:** the first "Entsperren" after the Cancel showed a prompt the owner did not notice; it stayed open until
+    Windows closed it ~17 min later (15:08 → 15:25), which the app reported as the generic "Die Anmeldung hat nicht
+    geklappt", not as a cancel. The retry prompted at once and opened. A prompt that times out is not a cancel the
+    person chose, so the generic line stands; that a Hello prompt can sit unseen behind the app is a residual for
+    Phase 9's docs (the prompt is owned by the app's window, `NCRYPT_WINDOW_HANDLE_PROPERTY`).
 - [x] `/usr/bin/python3 src/mobile/linux/run.py build` → clippy, `cargo test` 16 (`the_offer_lists_what_the_core_offers_then_not_now`,
   `manage_offers_each_other_level_and_the_way_back` new), build green. **Bites**, red then restored: PRESENCE given LOGIN's
   words, and Manage offering the level the server is at → both tests red.
