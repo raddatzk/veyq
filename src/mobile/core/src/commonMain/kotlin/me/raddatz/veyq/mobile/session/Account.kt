@@ -284,7 +284,16 @@ class VeyqAccount private constructor(
             val refresh = tokens.refresh ?: throw SignInFailure(SignInFailure.Reason.PROTOCOL, "no refresh token to keep")
             val (iv, sealed) = device.keys.sealUnlockable(masterKey, DEVICE_KEY_AAD)
             val id = addWrap(AddWrapRequest.Method.DEVICE_KEY, sealed, iv) ?: return TrustOutcome.NOT_OFFERED
-            TrustedDevice(server, email, userId, TrustedDevice.Method.DEVICE_KEY, id, alias).also { device.keys.putSecret(it.refreshAlias, refresh) }
+            TrustedDevice(server, email, userId, TrustedDevice.Method.DEVICE_KEY, id, alias).also {
+                try {
+                    device.keys.putSecret(it.refreshAlias, refresh)
+                } catch (e: Exception) {
+                    // a store that cannot keep the token cannot resume: the wrap just added would open nothing, ever, so
+                    // it goes before the caller falls back to the password trust (`RememberEnrolTest`)
+                    runCatching { respond { AccountWrapsApi(server, http).deleteAccountWrap(id) } }
+                    throw e
+                }
+            }
         } else {
             requireNotNull(password) { "a password-trusted device needs the password" }
             device.keys.createBindKey(alias)
