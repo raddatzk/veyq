@@ -37,7 +37,7 @@ On the cluster — `init` checks this before it writes anything and names every 
 
 ## From an empty repository: the server too
 
-What you need for it: a fresh **Debian 13** server you reach as root over SSH with your key (8 GB of memory; 4 GB is
+What you need for it: a freshly installed server of the system [veyq-server's README](https://github.com/raddatzk/veyq-server#the-server-it-needs) names — Debian 13 today, which its Ansible targets — reached as root over SSH with your key (8 GB of memory; 4 GB is
 tight), its provider's firewall open for TCP 22, 80 and 443 only, an **empty Git repository** and its clone on your
 machine, and your DNS. On your machine, besides the programs above: `ssh`, `age-keygen`, `sops`, `copier` and
 `ansible-core` 2.18 or later — `init` names whatever is missing, with Homebrew's command where `brew` is, and waits.

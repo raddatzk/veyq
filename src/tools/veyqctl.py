@@ -2351,15 +2351,14 @@ def recorded(host: Host, key: str, value: str) -> str:
 
 
 INIT_INTRO = """
-veyqctl init — sets up a veyq instance: on Docker Compose on this host, or as veyq's half of a Git repository an
-Argo CD syncs; in an empty repository, with the server and its cluster too (veyq-server: k3s, Argo CD, Traefik,
-cert-manager).
+veyqctl init — sets up a veyq instance: on Docker Compose on this host, or via a Git repository an Argo CD syncs.
 
   1. Setup      what to create, and where
-  2. Programs   what it needs on this machine: anything missing is named, with how to install it, and waited for
-  3. Questions  everything else, at once; every answer is kept (in the repository's veyq-setup.json)
-  Then the steps, each said as it comes. Whatever changes something outside the repository or cannot be undone
-  is asked first. Stopped, or the terminal closed? The same command goes on where it stopped, asking nothing twice."""
+  2. Programs   check what tools are missing
+  3. Questions  how you want to configure your veyq instance
+  4. Action     perform the actions to set up your veyq instance
+
+Your desired configuration is kept in the repository's veyq-setup.json so you can rebuild your whole environment"""
 SERVER_INTRO = """
    With the server, after the questions: veyq-server's newest release verified and rendered into the repository ·
    the server's secrets encrypted · its host key (you compare the fingerprint with your provider's console) · veyq's
@@ -2387,8 +2386,8 @@ def cmd_init(args: argparse.Namespace, host: Host) -> int:
             target, resume = "gitops", (top_here, rel)
     if target is None:
         host.section("1. Setup")
-        answer = (host.prompt("compose or gitops", hint="compose: veyq on Docker Compose on this host. gitops: veyq's "
-                              "half of a repository an Argo CD syncs, upgraded by commit.") or "").strip().lower()
+        answer = (host.prompt("compose or gitops", hint="compose: veyq on Docker Compose on this host. gitops: via Argo "
+                              "CD in a kubernetes cluster.") or "").strip().lower()
         if answer not in ("compose", "gitops"):
             raise Refused("`init` needs a target: --compose (Docker Compose on this host) or --gitops DIR (veyq's "
                           "directory in an Argo CD repository's checkout); without a terminal, pass one")
@@ -2420,7 +2419,7 @@ def cmd_init(args: argparse.Namespace, host: Host) -> int:
         here = host.run(["git", "ls-files"], check=False)
         fresh = not here.returncode and not (here.stdout or "").strip()
         args.server = (host.prompt("set up the server too: yes or no", "yes" if fresh else "no",
-                                   "yes: a fresh Debian server and its cluster (k3s, Argo CD, Traefik, cert-manager) "
+                                   "yes: a fresh server and its cluster (k3s, Argo CD, Traefik, cert-manager) "
                                    "from veyq-server, then veyq on it. no: veyq's half for a cluster Argo CD runs "
                                    "already.") or ("yes" if fresh else "no")).strip().lower()
     if args.server not in ("yes", "no"):
@@ -3349,7 +3348,8 @@ def server_questions(args: argparse.Namespace, host: Host, top: Path, name: str)
     answers: dict[str, str] = {}
     answers["server_address"] = server_option(
         args, host, "server_address", "server address (DNS name or IPv4)", "",
-        "A fresh Debian 13 server, reachable as root over SSH with your key.", f"{HOSTNAME_RE}|{IPV4_RE}")
+        "A freshly installed server of the system veyq-server's README names, reachable as root over SSH with your "
+        "key.", f"{HOSTNAME_RE}|{IPV4_RE}")
     address = answers["server_address"]
     answers["node_name"] = server_option(
         args, host, "node_name", "node name", "server" if address[0].isdigit() else address.split(".")[0],
@@ -4223,7 +4223,7 @@ def parser() -> argparse.ArgumentParser:
     init.add_argument("--argocd-namespace", default="argocd", help="GitOps: Argo CD's namespace (default argocd)")
     init.add_argument("--server", choices=("yes", "no"),
                       help="GitOps: set up the server and its cluster too (veyq-server; ADR 0126 decision 6)")
-    init.add_argument("--server-address", help="server path: the server's DNS name or IPv4 (a fresh Debian 13)")
+    init.add_argument("--server-address", help="server path: the server's DNS name or IPv4 (freshly installed)")
     init.add_argument("--node-name", help="server path: the cluster node's name")
     init.add_argument("--admin-user", help="server path: the account the bootstrap creates")
     init.add_argument("--admin-ssh-key", dest="admin_ssh_public_key", help="server path: its SSH public key")
