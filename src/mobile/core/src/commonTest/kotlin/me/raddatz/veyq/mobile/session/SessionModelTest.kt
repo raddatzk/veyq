@@ -340,6 +340,20 @@ class SessionModelTest {
     }
 
     @Test
+    fun stop_trusting_forgets_not_now_so_the_next_sign_in_offers_again() = runTest {
+        val d = door()
+        val m = model(d)
+        m.start()
+        m.signIn("a.example", "e", "pw", "sk")
+        m.notNow()
+        m.forgetDevice(a)
+        assertTrue(!d.declined(a), "Stop trusting kept the Not now")
+        m.signOut(a)
+        m.signIn("a.example", "e", "pw", "sk")
+        assertEquals(SessionModel.Offer(a.key, both), (m.current as Gate.Signed).offer, "the next sign-in after Stop trusting offered nothing")
+    }
+
+    @Test
     fun a_cancelled_prompt_keeps_the_offer_and_a_failed_enrolment_ends_it_unasked_without_signing_out() = runTest {
         val d = door()
         val m = model(d)

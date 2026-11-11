@@ -357,9 +357,13 @@ class SessionModel<A : Connection, T : Any>(
         }
     }
 
-    /** Ends this device's trust in [account]: the next sign-in on this device asks for the Secret Key again. */
+    /**
+     * Ends this device's trust in [account]: the next sign-in on this device asks for the Secret Key again, and offers to
+     * stay signed in again — an earlier "Not now" ends with the trust it was said for (D7).
+     */
     suspend fun forgetDevice(account: A) {
         runCatching { door.forgetDevice(account) }
+        door.setDeclined(account, false)
     }
 
     /** A space on "Manage servers". */
