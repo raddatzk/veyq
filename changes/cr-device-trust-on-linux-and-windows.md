@@ -258,6 +258,51 @@ D2: the `dlopen` layer and its header, the store, the absent-store case. The ima
 - An absent `libsecret-1.so.0` (the library moved away) answers `DeviceAuthFailed(false)` on enrol and nothing breaks.
 - The bridge library's exports are unchanged (`run.py bridge`).
 
+**Built (Phase 2):**
+- **The cinterop `secret`** (`core/secret/secret.def`, `veyq_secret.h`), for `linuxArm64` and `linuxX64`: C helpers
+  `dlopen("libsecret-1.so.0")` and `dlsym` what they call; only integers and UTF-8 strings cross. The header declares
+  GError's leading fields and `SecretSchema` whole itself; no glib or libsecret header. **Deviation from D2's ABI list:**
+  the variadic `secret_password_store_sync`/`lookup_sync`/`clear_sync` (attributes as a NULL-terminated list) instead of
+  the `…v_sync` ones, so no `g_hash_table_*`; and `secret_service_get_sync` with `OPEN_SESSION` plus `g_object_unref`
+  for the capability. `dlopen` is libdl's in Kotlin/Native's sysroot (glibc 2.19 x86-64, 2.25 arm64); its Linux
+  link flags carry `-ldl` already, and `secret.def` names it. The header is the cinterop task's input.
+- **`LinuxDeviceKeys`** (`linuxMain/…/session/LinuxDeviceKeys.kt`), as D2 says: items `bind/<alias>`, `secret/<alias>`
+  and `unlock` (labels "veyq device key", "veyq sign-in token", "veyq unlock key"), base64 where bytes; no prompt, so
+  never `cancelled`. Absent library, no Secret Service, a refused store: creation and `putSecret` raise
+  `DeviceAuthFailed(false)`, a read gives null, a delete does nothing (it never fails sign-out or stop trusting).
+- **The capability `secretServiceAvailable`:** libsecret loaded and a session opened with the service (no item read,
+  so a locked collection is not asked to open). **Phase 3 hides the switch where it is false.** Android and Apple show
+  it without a screen lock because the enrolment still falls back to the password trust; on Linux without a Secret
+  Service the bind key cannot be kept either, so the switch would do nothing. A locked collection the person does not
+  open fails the enrolment, which falls back as everywhere.
+- **The tests (`linuxTest`):** `LinuxDeviceKeysContractTest` (D3 over the real service, each store in a namespace of
+  its own), `LinuxDeviceKeysTest` (an absent soname, namespaces apart, a key outliving its object, the service
+  answers) and `SecretServiceProbeTest` (the app's own `LinuxDeviceKeys()`, held to `VEYQ_SECRET_SERVICE`).
+- **`run.py test`:** the image gains `libsecret gnome-keyring dbus-daemon`; the binary runs under `dbus-run-session` with
+  `gnome-keyring-daemon --unlock`, fed `head -c 32 /dev/urandom | base64` inside the container (never printed); the
+  container gets `--cap-add=IPC_LOCK` (the daemon aborts as root without it). Without `--tests`, the probe runs again
+  with no session bus (`no-bus`) and with `libsecret-1.so.0*` moved away (`absent`).
+
+**Met (2026-11-11, commits `9c5f14630`, `76913341e`):**
+- [x] `/usr/bin/python3 src/mobile/linux/run.py test` → `PASSED 199` (189 before), the contract over gnome-keyring
+  included; then `no-bus` → `Secret Service available: false`, `PASSED 1`; then `absent` → `libsecret absent`,
+  `PASSED 1`; exit 0. The items are the service's: `secret-tool search --all xdg:schema me.raddatz.veyq.DeviceKey`
+  in the container listed the bind key, unlock key and token under `attribute.alias = test.<ns>/…`, in `login.keyring`.
+- [x] Absent library: enrol's `sealUnlockable` and `createBindKey` answer `DeviceAuthFailed(cancelled=false)`, reads
+  null, deletes quiet, the capability false — in-process (an absent soname) and with the real library moved away.
+- [x] `/usr/bin/python3 src/mobile/linux/run.py bridge` → the export check and the smoke green. `readelf -d
+  libveyq.so` (release, arm64): NEEDED is libresolv, libm, libpthread, libutil, libcrypt, librt, libz, libdl,
+  libgcc_s, libc, ld-linux — no libsecret (libdl was Kotlin/Native's default `-ldl` already). The bridge does not call
+  `LinuxDeviceKeys` until Phase 3, so the same was read of `test.kexe`, which does: 11 NEEDED, none libsecret.
+- [x] Unchanged: `./gradlew :core:jvmTest --rerun :core:macosArm64Test --rerun` → `BUILD SUCCESSFUL`;
+  `:core:linkDebugTestLinuxX64 :core:compileLinuxMainKotlinMetadata --warning-mode all` → green, no deprecation;
+  `/usr/bin/python3 src/mobile/windows/run.py test` → `PASSED 200`. No dependency added, so no verification-metadata write.
+- [x] **Bites**, each red then restored: the C store ignoring the alias (3 contract tests red); the absent path
+  throwing `IllegalStateException` instead of `DeviceAuthFailed(false)` (`withoutLibsecret…` and the probe red); the
+  namespace ignored (`…KeepsNothingOfAnotherNamespace` and the contract red); `deleteUnlockKey` a no-op alone
+  (`anOpenWithoutAnUnlockKeyFailsAsNotCancelled` red); the capability answering true without a service (the `no-bus`
+  probe red, `run.py test` exit 1).
+
 ### Phase 3 — The bridge
 
 D4: the calls, `Config.window`, `platformDeviceKeys`, the generated Rust and C#.
@@ -332,5 +377,8 @@ D5 on Windows.
 - **Phase 1, planning: whether creating a Passport key prompts was left open** until the probe; it does, so enrolment
   asks for the PIN once. Cheap to have asked of the probe's design explicitly, so the owner's brief said "two PINs, then
   Cancel" up front.
+- **Phase 2, execution: gnome-keyring in a container failed twice before it ran,** both times with the daemon falling
+  back to a prompter: as root it aborts unless the container may lock memory, and `--unlock` makes no login collection
+  without `~/.local/share/keyrings`. Each was one probe run; both are in `src/mobile/CLAUDE.md` § Traps.
 - **Next time:** a verb that waits for a person waits for the process it started and fetches its outcome whatever
   ended the wait; its brief to the owner lists every prompt the run may raise, the uncertain ones marked so.
