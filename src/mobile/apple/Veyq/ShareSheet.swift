@@ -43,8 +43,8 @@ struct NodeShareSheet: View {
             try? await made.load()
         }
         .onDisappear { box.stop() }
-        // the question is the sheet's state: a binding that cancelled on dismissal would run before the button's action (Phase
-        // 1's purge), so only Cancel cancels
+        // the question is the sheet's state: a binding that cancelled on dismissal would run before the button's action (the
+        // trash's purge once sent nothing so, ADR 0127), so only Cancel cancels
         .alert(say(.shareRenew), isPresented: Binding(get: { box.state?.renewing != nil }, set: { _ in })) {
             Button(say(.shareRenew)) { Task { _ = try? await box.sheet?.renew() } }
             Button(say(.signinCancel), role: .cancel) { box.sheet?.cancelAsk() }

@@ -7,16 +7,11 @@ struct PotScreen: View {
     @Bindable var model: AppModel
     let ref: ObjectRef
     let tab: String
-    /// The editor's sheet: a new entry (`entryId` nil) or one being edited.
+    /// The editor's sheet: a new entry (`entryId` nil) or one being edited; core's editor is the app model's
+    /// (`openEditor`), opened before the sheet shows.
     struct Editing: Identifiable {
         let id = UUID()
         let entryId: String?
-        let basedOn: Int64?
-        let people: [PotView.Person]
-        let form: EntryForm
-        var invalid = false
-        /// What another app shared, as the new expense's receipts (ADR 0129).
-        var pending: [PotSession.PendingReceipt] = []
         var fromShare = false
     }
 
@@ -38,13 +33,9 @@ struct PotScreen: View {
                         case "expenses.overview": OverviewList(model: model, view: view)
                         case "expenses.settings": PotSettings(model: model, view: view)
                         default: EntriesList(view: view, onAdd: {
-                            if let f = view.blankForm(date: FormState.dayString(Date()), separator: decimalSeparator) {
-                                editing = Editing(entryId: nil, basedOn: nil, people: view.people, form: f)
-                            }
+                            if model.openEditor(nil) { editing = Editing(entryId: nil) }
                         }, onOpen: { id in
-                            if let e = view.editing(entryId: id, separator: decimalSeparator, today: FormState.dayString(Date())) {
-                                editing = Editing(entryId: id, basedOn: e.basedOn, people: e.people, form: e.form, invalid: e.status == .invalid)
-                            }
+                            if model.openEditor(id) { editing = Editing(entryId: id) }
                         }, onOpenDeleted: { viewing = $0 })
                         }
                     }
@@ -68,19 +59,18 @@ struct PotScreen: View {
         .task(id: ShareKey(waiting: model.incoming != nil, loaded: model.pot?.ref == ref && model.pot?.view != nil)) {
             // Only while the shell still shows this Pot: files given back (its editor closed unsaved) move the shell Home first.
             guard model.incoming != nil, model.shell.openObject == ref, model.pot?.ref == ref, let view = model.pot?.view, model.inbox.goesInto(view: view),
-                  let f = view.blankForm(date: FormState.dayString(Date()), separator: decimalSeparator), let files = model.takeShare() else { return }
-            editing = Editing(entryId: nil, basedOn: nil, people: view.people, form: f, pending: files, fromShare: true)
+                  view.currency != nil, let files = model.takeShare() else { return }
+            guard model.openEditor(nil, pending: files) else { model.returnShare(); return }
+            editing = Editing(entryId: nil, fromShare: true)
             sharing = true
         }
         .sheet(item: $editing, onDismiss: {
+            model.closeEditor()
             // A share's editor closed without its save: its files wait again in the pick mode (a save ended the share).
             if sharing { sharing = false; model.returnShare() }
         }) { e in
             if let view = model.pot?.view {
-                EntryEditor(
-                    model: model, view: view, entryId: e.entryId, basedOn: e.basedOn, people: e.people, form: FormState(e.form), invalid: e.invalid,
-                    initialPending: e.pending, onSaved: e.fromShare ? { sharing = false; model.shareSaved() } : nil
-                )
+                EntryEditorSheet(model: model, view: view, entryId: e.entryId, onSaved: e.fromShare ? { sharing = false; model.shareSaved() } : nil)
             }
         }
         .sheet(item: $viewing) { row in
@@ -218,7 +208,7 @@ private struct OverviewList: View {
     let view: PotView
 
     private func record(_ payments: [PotView.SettleRow]) {
-        let day = FormState.dayString(Date())
+        let day = model.today
         Task { await model.potWrite { try await $0.recordPayments(payments: payments, date: day) } }
     }
 

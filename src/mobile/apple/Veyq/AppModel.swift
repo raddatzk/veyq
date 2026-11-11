@@ -1187,10 +1187,70 @@ final class AppModel {
 
     func clearCreatingPot() { potModel?.clearCreating(); creatingPot = CreatingPot() }
 
-    /// One unit of `currency` in the open Pot's base from today's table, or nil: the rate is typed then.
-    func rateFor(_ currency: String) async -> ExchangeRates.Filled? {
-        (try? await potModel?.rateFor(currency: currency, day: FormState.dayString(Date()))) ?? nil
+    /// The entry editor open in the app (core's `EntryEditor` over the Pot's model), watched by this model, not by its
+    /// sheet: what the sheet draws is `editorState`, set at once after each edit (a field never lags what was typed) and
+    /// from the watch for what the core changes itself (the rate's fill).
+    @ObservationIgnored private var editor: EntryEditor?
+    @ObservationIgnored private var editorWatch: EntryEditor.Watch?
+    private(set) var editorState: EntryEditor.State?
+
+    /// Opens the editor of `entryId` in the open Pot (nil: a new entry) with `pending` as its receipts; false when the
+    /// Pot cannot take one.
+    func openEditor(_ entryId: String?, pending: [PotSession.PendingReceipt] = []) -> Bool {
+        closeEditor()
+        guard let e = potModel?.editor(entryId: entryId, separator: decimalSeparator, pending: pending) else { return false }
+        editor = e
+        editorState = e.current
+        editorWatch = e.watch { @Sendable _ in
+            Task { @MainActor [weak self] in self?.editorState = self?.editor?.current }
+        }
+        return true
     }
+
+    func edit(_ change: EditorChange) {
+        editor?.change(change: change)
+        editorState = editor?.current
+    }
+
+    func addReceipts(_ picked: [EntryEditor.Picked]) {
+        editor?.addReceipts(picked: picked)
+        editorState = editor?.current
+    }
+
+    func dropReceipt(_ id: String) {
+        editor?.dropReceipt(id: id)
+        editorState = editor?.current
+    }
+
+    /// Saves the entry: done (close the editor, saying what the answer says), or not (the editor says why).
+    func saveEntry() async -> EntryEditor.Saved? {
+        guard let e = editor else { return nil }
+        let saved = try? await e.save()
+        editorState = e.current
+        return saved
+    }
+
+    func askDelete() { editor?.askDelete(); editorState = editor?.current }
+    func cancelAsk() { editor?.cancelAsk(); editorState = editor?.current }
+
+    /// Deletes the entry once asked; true when it was.
+    func deleteEntry() async -> Bool {
+        guard let e = editor else { return false }
+        let done = (try? await e.delete())?.boolValue ?? false
+        editorState = e.current
+        return done
+    }
+
+    func closeEditor() {
+        editorWatch?.stop()
+        editorWatch = nil
+        editor?.close()
+        editor = nil
+        editorState = nil
+    }
+
+    /// Today by the core's clock (`yyyy-MM-dd`): what a payment recorded now is dated.
+    var today: String { potModel?.today() ?? "" }
 
     /// A receipt of the open Pot opened to its bytes, or nil (blocked, or it did not read).
     /// Downloads the open Pot `ref` as the web's ZIP (uc.platform.export-import, ADR 0082) into a file of its own in the
@@ -1225,8 +1285,6 @@ final class AppModel {
         return (try? await AppleSessions.shared.openReceipt(pot: session, receiptId: receiptId)) ?? nil
     }
 
-    /// The receipts the last save left out for want of room (the entry was saved).
-    var skippedReceipts: [String] { potModel?.skippedReceipts ?? [] }
 
     /// Forgets the open Pot's last refusal (a sheet closed).
     func clearPotMessage() { potModel?.clearMessage(); syncPot() }
