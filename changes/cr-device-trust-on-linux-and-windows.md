@@ -392,7 +392,9 @@ D5 on Linux.
     (`sign_in::remember_words`, drawing the core's `StaySignedIn`: `LOGIN` the new `signin_remember_hint_login`, EN and
     DE; `PRESENCE` the apps' hint; `NONE` hides it); "Add server" titles the sign-in so and gives it Cancel;
   - `Gate.Unlock` is a page of its own: the account, the password row for DEVICE (none for DEVICE_KEY, whose button
-    sends `""`), Unlock, "Use another account";
+    sends `""`), Unlock, "Use another account"; **amended in Phase 5:** a DEVICE_KEY record's line and button are chosen
+    by `StaySignedIn` (`sign_in::unlock_words`; the bridge now sends it beside such an unlock), `LOGIN` saying the resume
+    failed with "Try again" (owner 2026-11-11);
   - "Manage servers" is an `AdwPreferencesDialog` from the switcher: a group per server (its trust as the line), each
     tenant an `AdwExpanderRow` with its shown switch and its spaces' `AdwSwitchRow`s, "Sign out of this server" and
     "Stop trusting this device" as `AdwButtonRow`s, "Add server" last. It closes when the way in leaves the shell.
@@ -460,6 +462,62 @@ D5 on Windows.
 - de/en, light/dark;
 - `run.py build` and both guards are green.
 
+**Built (Phase 5):**
+- **The screens** (`windows/Veyq/`), as D5 says, Fluent's way; their words picked by `TrustWords` (no rule: each answer
+  the core's):
+  - the sign-in's "Stay signed in" is a **`CheckBox`** above the button, unchecked, its line under it — **deviation from
+    D5's `ToggleSwitch`:** Fluent keeps a toggle switch for a setting that takes effect at once and a check box for a
+    choice a submit button applies, as Windows' own sign-ins ("Remember me") draw it. `PRESENCE` labels it with the new
+    `signin_remember_hello` ("Stay signed in with Windows Hello") and `signin_remember_hint_hello`, `LOGIN` the plain one
+    with `signin_remember_hint_login`, `NONE` hides it; "Add server" titles the sign-in so and gives it Cancel;
+  - `Gate.Unlock` is `UnlockView`, drawn as Windows' own sign-in screen draws a known account: the picture, the email and
+    server, the line, the password for DEVICE, one accent button, "Use another account" as a link;
+  - "Manage servers" is `ManageDialog`, a `ContentDialog` from the switcher's (now enabled) entry: per server its name and
+    trust line, each tenant an `Expander` whose header carries its `ToggleSwitch`, its spaces' switches inside (the
+    expanded ones kept across the redraw each switch brings), "Sign out of this server", "Stop trusting this device",
+    then the hint and "Add server"; closed by `share_done` (Apple's ManageView's word). It closes when the way in leaves
+    the shell.
+- **The unlock without a presence check (owner 2026-11-11, "passt so"):** `unlock_login_hint` ("Your session couldn't be
+  continued just now.") and `unlock_retry` ("Try again"), EN and DE, for a DEVICE_KEY record under `LOGIN`; the
+  `PRESENCE` screen keeps its words, and both buttons send the same `Session.Unlock("")`. The bridge sends
+  `staySignedIn` beside a DEVICE_KEY record's `Gate.Unlock` too (`Bridge.kt`, `wordedByStaySignedIn`), so Windows and
+  Linux (`sign_in::unlock_words`, Phase 4 amended) choose by it. Chosen by `StaySignedIn`, not the record's kept path: a
+  key sealed under DPAPI before Hello was set up then reads as `PRESENCE` (the button still opens it, unasked).
+- **Debug:** `run.py run --devlogin [--fill|--unlock]` (Linux's flags: `VEYQ_DEV_FILL`, `VEYQ_DEV_UNLOCK_PASSWORD`);
+  `DevLogin.Take` fills the form and signs in unless fill-only, `TakeUnlock` answers a DEVICE record's unlock once.
+  `Veyq.Drive`'s tree prints a toggle's `on`/`off`.
+- **The app's log** says `session <gate>, stay signed in: <answer>` and `manage servers: <method per server>`.
+
+**Met (2026-11-11, commits `9642555d0`, `ec42da0c7`, `d46501ad0`, `80b20e45b`), the part needing no PIN:** driven on the VM
+against the dev instance with `run.py run` / `run.py drive`, the log read before each tree and each tree before a shot
+(13 shots under `src/mobile/build/windows/shots/trust-*.png`, not committed).
+- [x] **The switch's label on the VM (Hello set up):** `session SignIn, stay signed in: Presence`; the tree shows
+  `CheckBox "Mit Windows Hello angemeldet bleiben" #signin-remember off` with the Hello hint (de-DE light), `"Stay signed in
+  with Windows Hello"` (en-US dark). `LOGIN` and `NONE` are unreachable on this VM; held by `TrustWordsTest`.
+- [x] **The password trust:** `run --devlogin --fill`, Sign in pressed with the box off → `session Signed`, Manage `Device`.
+  The next start → `session Unlock`, the password field, "Dieses Gerät ist vertraut: Dein Passwort genügt."; "Anderes Konto
+  verwenden" → `session SignIn` with an empty form. `run --devlogin --unlock` (en-US dark) → `session Unlock`, `unlocking
+  with the dev principal's password (debug build)`, `session Signed`.
+- [x] **Manage servers and the hide switches:** Turnverein's switch off and Persönlich's off → the switcher lists one space
+  and one tenant; both on (in the next run, en-US: "Personal") → both back. The tenant shown now and its own space are
+  disabled (`switchable`/`canHide` false). The expanded tenant stayed expanded across each redraw.
+- [x] **Add server:** "Server hinzufügen" / "Add a server" with Cancel, which returns to `session Signed`.
+- [x] **Stop trusting:** → `manage servers: None`, the button gone; the next start → `session SignIn` first.
+- [x] **A defect the pass found:** Manage servers opened a second time crashed the app (its content panel still the closed
+  dialog's ScrollViewer's child); fixed in `80b20e45b` (a panel per open), then opened twice in one run.
+- [x] `/usr/bin/python3 src/mobile/windows/run.py build` → green: `Veyq.Bridge.Tests` here and there, `Veyq.Tests` 12
+  (`TrustWordsTest` 3 new: the switch, the unlock, Manage's line). **Bite:** the `LOGIN` unlock given the presence words →
+  `ARememberedUnlockSaysWhatOpensIt` red, restored.
+- [x] `/usr/bin/python3 src/mobile/linux/run.py build` → clippy, `cargo test` 15 (`a_remembered_unlock_says_what_opens_it`
+  new), build green. **Bite:** the same → red, restored.
+- [x] `./gradlew :bridge:jvmTest --rerun` → 26 cases, none failed, `DispatchTest` 14
+  (`aRememberedAccountsUnlockCarriesWhatStayingSignedInUses` new). **Bite:** the unlock arm of `wordedByStaySignedIn`
+  dropped → that test red, restored.
+- [x] `/usr/bin/python3 src/mobile/windows/run.py test` → `PASSED 202`.
+- [x] `validate_mobile_words.py` → OK; `validate_mobile_platform_guidelines.py` → OK.
+- [ ] **The Hello pass (O2):** sign in with "Stay signed in with Windows Hello" (the enrolment's PIN), quit and start (the
+  resume's PIN, the shell), quit and start again (Cancel: the unlock stays), then Stop trusting. Waits for the owner.
+
 ### Phase 6 — The docs
 
 - D6: the security model's row.
@@ -512,5 +570,8 @@ D5 on Windows.
   a trap in `src/mobile/CLAUDE.md`.
 - **Phase 4, design: the brief's smoke leftover was Windows', not Linux's.** Measured before the fix: `run.py bridge` on
   Linux has no session bus, so its trust failed before any wrap was added. The fix is the same for both and proved on both.
+- **Phase 5, execution: Manage servers crashed the app on its second open,** a XAML element reused under a new parent
+  (the first `ContentDialog` kept it). The first open had passed every check; only opening it again in one run found it.
+  Next time a dialog's pass opens it twice.
 - **Next time:** a verb that waits for a person waits for the process it started and fetches its outcome whatever
   ended the wait; its brief to the owner lists every prompt the run may raise, the uncertain ones marked so.
