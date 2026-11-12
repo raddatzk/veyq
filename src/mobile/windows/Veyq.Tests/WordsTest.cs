@@ -37,6 +37,8 @@ public sealed class WordsTest
 
     private static string Expect(string text, IReadOnlyList<object> args)
     {
+        // words.json writes a percent sign "%%" for Android's and Apple's format strings; the catalogs hold one
+        text = text.Replace("%%", "%");
         for (var i = 0; i < args.Count; i++)
         {
             text = text.Replace($"{{{i + 1}}}", args[i].ToString()).Replace($"{{{i + 1}:int}}", args[i].ToString());

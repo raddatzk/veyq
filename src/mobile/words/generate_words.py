@@ -210,7 +210,14 @@ RUST_KEYWORDS = {
 }
 
 
+def desktop_text(t: str) -> str:
+    """A word as the desktops' catalogs hold it: words.json writes a percent sign `%%`, as Android's and Apple's format
+    strings read it; gettext's and Windows' catalogs are not format strings, so there it is one `%`."""
+    return t.replace("%%", "%")
+
+
 def po_quote(t: str) -> str:
+    t = desktop_text(t)
     return '"' + t.replace("\\", "\\\\").replace('"', '\\"').replace("\n", "\\n").replace("\t", "\\t") + '"'
 
 
@@ -256,6 +263,7 @@ def gettext_catalogs(words: dict, out: Path) -> None:
 
 
 def rust_str(t: str) -> str:
+    t = desktop_text(t)
     return '"' + t.replace("\\", "\\\\").replace('"', '\\"').replace("\n", "\\n").replace("\t", "\\t") + '"'
 
 
@@ -332,7 +340,7 @@ CSHARP_KEYWORDS = {
 
 
 def xml_text(t: str) -> str:
-    return t.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+    return desktop_text(t).replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
 
 
 def resw_forms(entry: dict, lang: str, key: str) -> list:
@@ -378,6 +386,7 @@ def resw(words: dict, out: Path) -> None:
 
 
 def cs_str(t: str) -> str:
+    t = desktop_text(t)
     return '"' + t.replace("\\", "\\\\").replace('"', '\\"').replace("\n", "\\n").replace("\t", "\\t") + '"'
 
 

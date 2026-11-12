@@ -118,7 +118,8 @@ mod tests {
     }
 
     fn expect(text: &str, args: &[Arg]) -> String {
-        let mut t = text.to_string();
+        // words.json writes a percent sign `%%` for Android's and Apple's format strings; the catalogs hold one
+        let mut t = text.replace("%%", "%");
         for (i, a) in args.iter().enumerate() {
             let v = match a {
                 Arg::Text(s) => s.to_string(),
