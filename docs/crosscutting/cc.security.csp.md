@@ -338,7 +338,8 @@ every header of the admin origin.
   Trusted Types message in the console; with `decoders/` removed all three drew blank. That server typed `.js` itself;
   the backend's own typing is `AppShellSliceTest.pdfJsImageDecodersAreServedAsJavaScript` (a decoder under
   `assets/pdfjs-<version>/decoders/` is answered as `text/javascript;charset=UTF-8` with `nosniff`, measured 2026-11-12;
-  bitten by an unsatisfiable type predicate). Not shown by either: the Depot viewer around the renderer.
+  bitten by an unsatisfiable type predicate). Through the app: the owner uploaded the same three PDFs to a Depot and
+  saw each drawn on its file page (2026-11-12).
 - [`src/web/scripts/assert-csp-policy-in-dist.mjs`](../../src/web/scripts/assert-csp-policy-in-dist.mjs)
   (`pnpm run verify:csp`, run by `pnpm run check` and by the `Dockerfile`'s frontend stage) fails a `dist` that
   has no emitted policy or whose `index.html` carries a CSP `<meta>`, whose policy lacks the two Trusted Types
