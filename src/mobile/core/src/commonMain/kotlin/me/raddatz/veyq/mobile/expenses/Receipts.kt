@@ -64,6 +64,17 @@ object Receipts {
         return Sniff.image(head)?.mime ?: if (Sniff.pdf(head)) "application/pdf" else null
     }
 
+    /**
+     * A file picked by its [path] (a desktop's open dialog, ADR 0128 decision 3) as the editor takes it: [bytes] what the
+     * device read of it (null: it did not open, or held more than [MAX_BYTES]), named by the path's last part (`/` or `\`),
+     * its type what the bytes are ([mediaTypeOf]) — no platform names one there, so bytes that are no image and no PDF are
+     * refused ([claims] by type).
+     */
+    fun picked(path: String, bytes: ByteArray?): EntryEditor.Picked {
+        val name = path.substringAfterLast('/').substringAfterLast('\\').ifEmpty { null }
+        return EntryEditor.Picked(bytes, bytes?.let(::mediaTypeOf) ?: "application/octet-stream", name)
+    }
+
     fun kindOf(bytes: ByteArray): Kind {
         val head = if (bytes.size > 4096) bytes.copyOfRange(0, 4096) else bytes
         return when {

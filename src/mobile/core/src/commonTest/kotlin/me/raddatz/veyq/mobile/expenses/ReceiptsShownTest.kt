@@ -29,6 +29,20 @@ class ReceiptsShownTest {
     }
 
     @Test
+    fun aFilePickedByItsPathIsNamedByItsLastPartAndTypedByItsBytes() {
+        val photo = Receipts.picked("/home/anna/Bilder/Quittung März.jpg", jpeg)
+        assertEquals("Quittung März.jpg" to "image/jpeg", photo.name to photo.type)
+        val scan = Receipts.picked("C:\\Users\\Ben\\Documents\\scan.bin", pdf)
+        assertEquals("scan.bin" to "application/pdf", scan.name to scan.type)
+        // no platform names a type here: bytes that are no receipt are refused whatever the name says
+        val notes = Receipts.picked("/tmp/notes.jpg", text)
+        assertEquals("notes.jpg", notes.name)
+        assertFalse(Receipts.claims(notes.type, notes.name))
+        assertTrue(Receipts.claims(photo.type, photo.name))
+        assertNull(Receipts.picked("/tmp/gone.pdf", null).bytes)
+    }
+
+    @Test
     fun aPdfViewerShowsTwentyPagesAndSaysWhenThereAreMore() {
         assertEquals(20, Receipts.PDF_PAGES_SHOWN)
         assertEquals(3, Receipts.pagesShown(3))

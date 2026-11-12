@@ -63,6 +63,9 @@ class PotModel internal constructor(
 
         /** One unit of [currency] in the base from [day]'s table ([PotSession.rateFor]), or null: the rate is typed then. */
         suspend fun rateFor(currency: String, day: String): ExchangeRates.Filled? = null
+
+        /** A receipt's bytes ([PotSession.openReceipt]), or null: blocked, not held, or it did not read. */
+        suspend fun openReceipt(receiptId: String): ByteArray? = null
     }
 
     /**
@@ -116,6 +119,7 @@ class PotModel internal constructor(
         }
         override suspend fun deleteEntry(entryId: String, basedOn: Long) = session.deleteEntry(entryId, basedOn)
         override suspend fun rateFor(currency: String, day: String) = session.rateFor(currency, day)
+        override suspend fun openReceipt(receiptId: String) = session.openReceipt(receiptId)
     }
 
     /**
@@ -339,7 +343,7 @@ class PotModel internal constructor(
     suspend fun rateFor(currency: String, day: String): ExchangeRates.Filled? = opened?.let { runCatching { it.rateFor(currency, day) }.getOrNull() }
 
     /** A receipt of the open Pot opened to its bytes, or null (blocked, or it did not read). */
-    suspend fun openReceipt(receiptId: String): ByteArray? = session?.let { runCatching { it.openReceipt(receiptId) }.getOrNull() }
+    suspend fun openReceipt(receiptId: String): ByteArray? = opened?.let { runCatching { it.openReceipt(receiptId) }.getOrNull() }
 
     /**
      * The open Pot downloaded as the web's ZIP into [sink] (`PotExport.download`), or null when nothing is open or it has
