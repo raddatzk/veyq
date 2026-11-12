@@ -102,6 +102,17 @@ class PotLiveTest {
             println("[$potName] Cleo added and paid 30.00 for everyone: settle=${pot.ledger!!.settleUp}")
             assertTrue(pot.ledger!!.settleUp.size > 1, "$potName still settles in one payment")
         }
+        System.getenv("VEYQ_LIVE_POT_EDIT")?.let { target ->
+            // Another device edits an entry a desktop pass has open in its editor: "<pot name>|<entry title>" is retitled
+            // "<entry title> (elsewhere)" on its latest revision, so the pass's save is stale (D5 of the Expenses CR).
+            val (potName, title) = target.split('|', limit = 2)
+            val ref = pots.first { it.name == potName }
+            val pot = PotSession.open(tenant, ref.scopeId, ref.nodeId)!!
+            val entry = pot.ledger!!.entries.first { it.status == Ledger.Status.LIVE && (it.content as? MoneyContent)?.let { c -> (c as? Expense)?.title ?: (c as? Refund)?.title ?: (c as? Transfer)?.title } == title }
+            val edited = PotView(pot).editing(entry.id)!!
+            assertEquals(PotSession.WriteOutcome.WRITTEN, pot.saveEntry(entry.id, edited.form.copy(title = "$title (elsewhere)"), edited.basedOn))
+            println("[$potName] \"$title\" retitled \"$title (elsewhere)\" by another device")
+        }
         System.getenv("VEYQ_LIVE_RECEIPT")?.let { potName ->
             // An entry saved with a receipt (uploaded to the store before the revision), read back to the byte, then dropped.
             val ref = pots.first { it.name == potName }
