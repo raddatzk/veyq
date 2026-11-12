@@ -3,8 +3,9 @@
 // and in its PDF. The format is en.account.key-model § The Emergency Kit, pinned by contracts/crypto/vectors/v1.json
 // § emergency_kit_token, which the native apps' reader is held to as well.
 //
-// It lives here, not in the two packages that use it, because it has two writers and one reader: `admin-web`
-// writes the Server Owner's kit at setup, `web` writes a member's kit and is the only reader, at unlock. Each
+// It lives here, not in the two packages that use it, because it has two writers and a reader: `admin-web`
+// writes the Server Owner's kit at setup, `web` writes a member's kit and reads it at unlock (the native apps' reader
+// is the Kotlin core's, `src/mobile/core/.../crypto/EmergencyKit.kt`, held to the same vector). Each
 // package once carried its own byte-identical copy, and each test suite round-tripped only its own — so a change
 // to one copy kept every test green and broke the kits the other package wrote. The PDF writer stays per
 // package: this package depends on `@noble/*` alone, and jspdf/qrcode must not become the shared package's.

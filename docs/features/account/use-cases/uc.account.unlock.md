@@ -21,7 +21,10 @@
    or **imported from the Emergency Kit** — uploading the kit file (the PDF, also one re-saved, printed to PDF, or
    photographed or scanned into a PDF, or a picture of its QR), scanning its QR code, or pasting its
    machine-readable token in place of the key, all decoded **on-device** (the token never leaves the device). This is **one control**,
-   not a per-screen affordance — see *One Secret-Key control* under Quality notes.
+   not a per-screen affordance — see *One Secret-Key control* under Quality notes. The native apps' sign-in, which asks
+   for the server, the email, the password and the Secret Key at once, holds the same control: the kit file opened from
+   the device's files and, wherever the app has a camera, its QR scanned; the kit then fills the email and the server
+   (the server still editable) and its Secret Key is held by the sign-in, so only the password is typed.
 2. The client retrieves its **PASSWORD `MasterKeyWrap`** (the wrapped key + its KDF parameters/salt) from
    the server.
 3. The client checks the wrap's KDF profile is the one it writes (E3), then derives the **Unlock KEK**
@@ -113,8 +116,8 @@ stateDiagram-v2
   other screens that ask for a Secret Key — the recovery reset ([uc.account.recover-access](uc.account.recover-access.md)),
   the authenticated password change ([uc.account.change-password](uc.account.change-password.md)), the key
   rotation ([uc.account.rotate-keys](uc.account.rotate-keys.md)) and a tenant-invite acceptance by someone who
-  already has an account ([uc.admin.create-tenant](../../admin/use-cases/uc.admin.create-tenant.md)) — offer
-  the *same* import, because a person opening their Emergency Kit under stress must meet what they already
+  already has an account ([uc.admin.create-tenant](../../admin/use-cases/uc.admin.create-tenant.md)) — and, on
+  the native apps, the sign-in offer the *same* import, because a person opening their Emergency Kit under stress must meet what they already
   know. It is one component for a second reason too: a screen that renders a bare input instead is
   indistinguishable from one that simply has not been built yet, which is how the import came to exist on
   exactly one of five screens while three use-cases asserted it everywhere.

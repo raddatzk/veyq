@@ -268,7 +268,7 @@ From `src/mobile` unless named:
 
 ## Phases
 
-- [ ] **1 docs — the refined state first.** `en.account.key-model` § The Emergency Kit: the kit has two writers and
+- [x] **1 docs — the refined state first.** `en.account.key-model` § The Emergency Kit: the kit has two writers and
   **two readers** — the web and the apps, the apps' read in the core; the apps' order with step (d) (the first address
   field, only where the token has no `srv`; fields 2 and 3 never read; the printed text never read); the scan wherever an
   app has a camera. `uc.account.unlock`'s step 1 names the apps' sign-in beside the web's screens as a place the one control holds.
@@ -276,14 +276,48 @@ From `src/mobile` unless named:
   · Done when: the two docs say it; `for f in scripts/validate_*.py; do /usr/bin/python3 "$f" || echo "RED $f"; done`
   (guard_gaps skipped) shows no new red against its run before the edit on a detached worktree of `HEAD`.
 
-- [ ] **2 core — the token codec.** D1: `EmergencyKit.read`, the origin check, `Conformance` reading
+  **Status: done (2026-11-13).**
+  **Built:** `en.account.key-model` § The Emergency Kit — two writers and **two readers** (the web; the apps, their read
+  in the core, ADR 0129 decision 1), and a bullet with the apps' order (a)–(d): step (d) only where the token has no
+  `srv`, fields 2 and 3 never read, the printed text never read, the scan wherever an app has a camera, the platform only
+  picks, draws and runs the camera. `uc.account.unlock` step 1 names the apps' sign-in as a place the one control holds
+  (file and scan, email and server filled, the key held) and *One Secret-Key control* lists it. Beside the two, from the
+  inventory's last locator: `docs/crosscutting/keys-grants-and-trust.md`'s birth row ("two writers and two readers") and
+  the header comment of `src/packages/crypto/src/emergencyKit.ts` ("the only reader" was no longer true). No site page.
+  **Met:** the guard loop (`for f in scripts/validate_*.py; do /usr/bin/python3 "$f" || echo "RED $f"; done`, guard_gaps
+  skipped) showed no RED before the edit (this worktree at `089980f3a`, clean) and none after;
+  `git grep -n -iE "one reader|only .web. reads|reads it, at unlock|is the only reader" -- docs site src/packages` → only
+  ADR 0131's unrelated "one reader" (a picture reader).
+
+- [x] **2 core — the token codec.** D1: `EmergencyKit.read`, the origin check, `Conformance` reading
   `emergency_kit_token`'s cases and refused tokens on the JVM (BouncyCastle) and over libsodium.
   · Done when: `./gradlew :core:jvmTest :core:macosArm64Test` green, `python3 linux/run.py test --tests '*Conformance*'`
   green. **Bites:** (B1) the origin check made to accept anything → the refused `srv` vectors red; (B2) `v == 3`
   dropped → "version 2" red; (B3) a valid token whose `sk` has a wrong check symbol, a case of its own, red when
   `SecretKeyText.read` is bypassed. Each bite by a one-line edit in a detached worktree, reverted by snapshot.
 
-- [ ] **3 core — the PDF reader and the order (steps 1, 2, 4).** D2 with a `KitPictures` and a decoder function both
+  **Status: done (2026-11-13).**
+  **Built:** core `crypto/EmergencyKit.kt`: `Kit(email, secretKey, server)` (the key's bytes, `wipe()`, a `toString`
+  without them) and `EmergencyKit.read(p, text)` — the first `veyqkit:` token, base64url read as `atob` reads it, UTF-8
+  read strictly, then `parseKit`'s checks in order (`v` 3, a non-empty string `email`, `srv` an origin where present —
+  JSON `null` refused —, `sk` through `SecretKeyText.read`); the decoded buffer zeroed. `EmergencyKit.isServer`: the
+  origin check by hand (scheme, host, port re-checked against their serialization: lower-case ASCII, no path/slash/
+  userinfo/query, no default port or leading zero, IPv4 dotted-decimal, IPv6 compressed as the standard writes it).
+  **Deviation:** a domain label is held to `a-z 0-9 - _` (the URL standard lets a few more symbols through that no
+  server name carries) and an `xn--` label is not punycode-validated — both stricter or equal on every real origin; said
+  in the function's comment. `Conformance.emergencyKitToken()`: the reader half (each case read back to its three
+  values, each refused token refused) plus one case of its own, B3's — the third case rebuilt with its key's last check
+  symbol changed (and, as its control, rebuilt unchanged and read). `commonTest` `EmergencyKitTest`: the first token in
+  any text and only the first, the JSON's shapes, 9 origins taken and 23 refused.
+  **Met:** `./gradlew :core:jvmTest :core:macosArm64Test` green (`ConformanceTest` 3/3, `EmergencyKitTest` 4/4 on both;
+  `LibsodiumConformanceTest` 2/2); `python3 linux/run.py test --tests '*Conformance*:*EmergencyKit*'` 6/6 passed.
+  **Bites** (scratchpad `bite.py`, one edit at a time, `/bin/cp -f` restore, `:core:jvmTest --tests
+  '*ConformanceTest.bouncyCastle*'`): B1 `isServer` answering true for any non-empty text → red, "refuses a server with a
+  path / trailing slash / default port / upper case / without a scheme / of another scheme" (the empty one still refused
+  by the mutant itself); B2 the `v` check removed → red, "refuses version 2"; B3 `SecretKeyText.read(p, sk) ?: ByteArray(32)`
+  → red, "refuses a Secret Key with a wrong check symbol". The file compared equal to its copy after the run.
+
+- [x] **3 core — the PDF reader and the order (steps 1, 2, 4).** D2 with a `KitPictures` and a decoder function both
   played in the test; D3's `KitPdf` and `inflate` (`expect`/`actual`). **First measurement:** `inflate` over a known
   stream in `mingwX64Test` (`./gradlew windows:coreTest` from the repo root) — if `platform.zlib` does not link into the
   DLL, stop and hand back with the measured error.
@@ -304,6 +338,48 @@ From `src/mobile` unless named:
   compressed case red; (B8) "later wins" reversed → the incremental case red; (B9) the inflate cap removed → the bomb
   case red (the cap a parameter, the bomb small); (B10) the page limit raised to 4 with a played QR on page 4 → found,
   red.
+
+  **Status: done (2026-11-13; step 3's decoder played, as planned).**
+  **Built:** core `blob/Inflate.kt` (`expect fun inflate(bytes, cap): ByteArray?`; `jvmMain` over `java.util.zip.Inflater`,
+  `nativeMain` over `platform.zlib` — commonized for all six native targets, so one actual —, null on a broken or
+  truncated stream and as soon as the output would pass the cap). `account/KitPdf.kt` (D3): one linear pass over the top
+  level (`N G obj` by the last two integers, a stream skipped by a `/Length` that lands on `endstream`, else by searching
+  it; `trailer` dictionaries), then each `/Type /ObjStm` `/FlateDecode` stream in file order under `INFLATE_CAP` (8 MiB),
+  an object inside one losing to a later plain definition; xref streams count as trailers; `encrypted`, `keywords()`,
+  `field(name)` (fully qualified through `/Kids`, cycles and 10 000 nodes bounded); strings with every escape, hex
+  (odd padded), UTF-16BE/UTF-8 BOMs, else Latin-1. `account/KitImport.kt` (D2): `Luma`, `KitPictures`,
+  `KitImport.read(p, bytes, pictures, qr)` with `FILE_CAP` 32 MiB, `PICTURE_PIXELS` 2400, `PDF_PAGES` 3, `Found(kit,
+  serverFrom)`; step 1 scans the bytes for the first `veyqkit:` with symbols (no whole-file string), the PDF parsed lazily
+  only after step 1 misses, each drawn picture zeroed after its decode, a foreign QR passed. Tests: `commonTest`
+  `KitImportTest` (16, synthetic PDFs built in the test; the Flate streams written as Python-`zlib` hex, commonTest having
+  no deflate) and `InflateTest` (3); `KitFixtureCases` over the web's three fixtures, run by `jvmTest` `KitFixtureTest`
+  and `appleTest` `KitFixtureNativeTest`; `core/build.gradle.kts` declares the fixtures directory an input of every test
+  task (`kitFixtures`).
+  **Deviations:** (1) `qr` is a parameter `(Luma) -> String?` *until `cr-core-qr-decoder` lands* (phase 5 replaces it with
+  the decoder; `Luma` may then become that CR's type). (2) The fixture cases run on the JVM and Apple, not in the Linux and
+  Windows test binaries: their runners mount/copy only the vectors and set no `VEYQ_REPO_ROOT`; every synthetic case, the
+  object stream through each platform's zlib included, runs on all four. (3) Step 4 lower-cases the typed field before
+  `SessionModel.origin` (a host is case-blind; "Familie.example.org" would otherwise fail the origin check). (4) The files
+  sit in a new package `account/` (D3's name) and `blob/` (inflate, not kit-specific).
+  **Met:** first measurement — `python3 windows/run.py test --tests '*InflateTest*:*KitImportTest*'` 19/19 passed on the VM;
+  the mingw test binary imports no zlib DLL (`objdump -p core/build/bin/mingwX64/debugTest/test.exe | grep "DLL Name"`:
+  ADVAPI32, CRYPT32, KERNEL32, WINHTTP, msvcrt, ncrypt, ole32; `inflateInit_` in its symbols) — `platform.zlib` links
+  statically (its klib's `linkerOpts=-Wl,-Bstatic -lz`). `./gradlew :core:jvmTest :core:macosArm64Test` green
+  (`KitImportTest` 16, `KitFixtureTest`/`KitFixtureNativeTest` 2, `InflateTest` 3 on each), `python3 linux/run.py test`
+  344 passed (+ both Secret Service probes), `python3 windows/run.py test` 345 passed. The fixture case also holds the
+  core's reader to a real viewer's save: `kit-pdfkit-saved.pdf`'s `Keywords` carry the token and its `address1` reads
+  `familie.example.org`. **Bites** (`bite.py`, one edit each, `/bin/cp -f` restore, files compared equal after; jvmTest
+  unless said): B4 the `srv` early return removed → `aTokensServerWinsOverTheField` red; B5 `fromPictures` called before
+  step 1 → `aRawTokenEndsTheReadWithoutAPageDrawn` and the PDFKit fixture case red; B6 the UTF-16 branch removed →
+  `keywordsAsAUtf16HexString` red, hex strings refused → it, the object stream and incremental cases red; B7 object
+  streams not scanned → `keywordsInsideAFlateObjectStream` red; B8 the first definition kept → `anIncrementalUpdates…` red;
+  B9 the object stream inflated uncapped → `anObjectStreamThatInflatesPastTheCapIsSkipped` red, and the native inflate's
+  cap check removed → `InflateTest.aStreamPastTheCapIsRefused` red on macosArm64; B10 `PDF_PAGES` 4 →
+  `theQrIsLookedForOnTheFirstThreePagesAtTheWebsWidth` red.
+  **For phase 4+:** `KitImport.read` takes a `Primitives` (the key's check is `SecretKeyText.read`'s) and answers a `Kit`
+  whose `secretKey` the caller owns and must `wipe()`; `veyq.dll`/`libveyq.so` reference no inflate yet, so phase 8's
+  `run.py bridge` is the first link of it into the libraries (Linux's klib links `-lz` dynamically: expect a `NEEDED
+  libz.so.1`, remembered from the klib manifest, not measured).
 
 - [ ] **4 core — the sign-in holds the kit.** D4 in `SessionModel`: `readKit`, `clearKit`, `Gate.SignIn.kit`, the held
   key used, replaced, cleared and zeroed; a pasted token; the other-server notice. `SessionModelTest` over its played
