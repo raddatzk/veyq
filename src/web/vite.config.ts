@@ -200,7 +200,7 @@ function licenseSourcesPlugin(): Plugin {
 // (`PDF_DECODER_FILES`, ADR 0128), named, never a listing of that directory: it also holds pdf.js' WebAssembly, which does
 // not ship (`useWasm: false`, inbox #837), and `quickjs-eval.js`, an interpreter nothing here may load. pdf.js' worker
 // `import()`s a decoder, and a module import refuses a non-script type, so dev serves those two as `text/javascript`
-// (production's static handler types a `.js` by its name, as for the worker). `verify:pdf-worker` holds the directory.
+// (production's static handler types a `.js` by its name, as for the worker - `AppShellSliceTest` pins it). `verify:pdf-worker` holds the directory.
 const PDFJS_DATA_DIRS = ['cmaps', 'standard_fonts', 'iccs'] as const
 function pdfjsPackage(): { root: string; version: string } {
   const pkg = createRequire(import.meta.url).resolve('pdfjs-dist/package.json')
