@@ -97,7 +97,7 @@
 // (the host's, `crumbDropTarget`), takes it exactly where the move dialog would enable "Move here" (`dropTakes`), lit only
 // then; the drop is the page's `moveTo` - the dialogs' own run (`moveRun.ts`). A drag of nodes carries its own type and is
 // never an upload: the level takes only a drag from the operating system anywhere on it, and no folder lights for one.
-import { computed, onBeforeUnmount, ref, useId, watch } from 'vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, useId, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import VeyqButton from '../../shared/ui/VeyqButton.vue'
 import VeyqMenu from '../../shared/ui/VeyqMenu.vue'
@@ -130,6 +130,7 @@ import CoverEditor from './cover/components/CoverEditor.vue'
 import ViewModeToggle from './ViewModeToggle.vue'
 import NodeHeader from './components/NodeHeader.vue'
 import LevelRowItem from './components/LevelRowItem.vue'
+import { bringIntoView } from './returnTo'
 import LevelNotices from './components/LevelNotices.vue'
 import { standardNodeActions, standardNodeRename } from './nodeHeader'
 import { canCopy } from '../export/copyActions'
@@ -155,6 +156,9 @@ const props = defineProps<{
   spaceName?: string
   /** The host's live-refresh count (`useLevelLive`, inbox #408), handed to every row source as `LevelRowsContext.liveTick`. */
   liveTick?: number
+  /** The child the view just came up from (`returnTo.ts` `useReturnTo`: a breadcrumb or Back to this level): its row is
+   *  brought back into sight and holds the focus, instead of the level opening at its top. */
+  returnTo?: string | null
 }>()
 // The page's doors (`nodeHost.ts`): open a node; create one - FOLDER from the "New" menu's folder entry (core's
 // `FolderNameDialog`), an application's own kind otherwise (its `createDialog`); rename, move and delete a node (the folder on
@@ -504,6 +508,27 @@ watch(canSelect, (can) => {
 })
 watch(levelItems, (now) => selection.retain(now.keys()))
 
+// --- back to where the view came from (a breadcrumb or Back) ------------------------------------------------------------
+// The host names the child it came up from; its row comes back into sight and takes the focus, its ring shown (`is-returned`)
+// until the focus leaves it - a mouse click on a crumb gives no `:focus-visible`. Once per arrival: a re-render under the same
+// place (a live poll) moves nothing. A row the shown tab or a presentation hides is not looked for.
+const root = ref<HTMLElement | null>(null)
+const returned = ref<string | null>(null)
+async function revealReturn() {
+  returned.value = null
+  const id = props.returnTo
+  if (!id) return
+  await nextTick()
+  const row = [...(root.value?.querySelectorAll<HTMLElement>('[data-node-id]') ?? [])].find((el) => el.dataset.nodeId === id)
+  if (!row || !bringIntoView(row)) return
+  returned.value = id
+  row.addEventListener('focusout', () => {
+    if (returned.value === id) returned.value = null
+  }, { once: true })
+}
+onMounted(() => void revealReturn())
+watch([() => props.returnTo, () => props.folder?.id ?? null], () => void revealReturn())
+
 // --- drag and drop (inbox #421, owner 2026-11-04; `nodeDrag.ts`) ----------------------------------------------------------
 // A second way to move, beside the dialog, through the page's `moveTo` door (the dialogs' own run). A row or tile drags only
 // where its node may be moved - its part in a selection (`LevelRow.selection.move`; a folder's is core's `folderRights`) and
@@ -681,7 +706,7 @@ async function onDrop(e: DragEvent): Promise<void> {
 </script>
 
 <template>
-  <div class="veyq-level-view" @dragover="onLevelDragOver" @drop.prevent="onDrop">
+  <div ref="root" class="veyq-level-view" @dragover="onLevelDragOver" @drop.prevent="onDrop">
     <!-- The level's head (owner 2026-11-01, tidied 2026-11-04): the header and "New" in ONE row, the name first; where both
          do not fit, "New" wraps below the name, which it never shortens. Name first in the DOM too, so the Tab order is the
          reading order. -->
@@ -846,6 +871,8 @@ async function onDrop(e: DragEvent): Promise<void> {
             :can-drag="canDrag(item)"
             :dragging="!!dragged?.has(item.key)"
             :drop-target="dropOver === item.key"
+            :node-id="item.key"
+            :returned="returned === item.key"
             @toggle-select="selection.toggle(item.key)"
             @dragstart="onDragStart($event, item)"
             @dragend="onDragEnd"

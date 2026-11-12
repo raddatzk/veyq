@@ -1121,6 +1121,8 @@
   display: grid;
   min-width: 0;
   color: var(--app-text);
+  /* Brought back into sight below the sticky top bar (`core/node/returnTo.ts`), never under it. */
+  scroll-margin-top: var(--app-sticky-top, 0px);
 }
 
 .veyq-level-item-main {
@@ -1140,7 +1142,9 @@ div.veyq-level-item-main,
   cursor: default;
 }
 
-.veyq-level-item-main:focus-visible {
+/* The row the view came up from (`is-returned`, a breadcrumb or Back) holds the focus and shows it as the keyboard does. */
+.veyq-level-item-main:focus-visible,
+.veyq-level-item.is-returned .veyq-level-item-main:focus {
   outline: 2px solid var(--app-focus);
   outline-offset: 2px;
   border-radius: var(--app-radius-sm);
@@ -1244,7 +1248,8 @@ div.veyq-level-item-main,
 }
 
 /* The card's open button fills it, so its focus ring follows the card's corners. */
-.veyq-level-item.is-grid:not(.is-compact) .veyq-level-item-main:focus-visible {
+.veyq-level-item.is-grid:not(.is-compact) .veyq-level-item-main:focus-visible,
+.veyq-level-item.is-grid.is-returned:not(.is-compact) .veyq-level-item-main:focus {
   border-radius: var(--app-radius);
 }
 

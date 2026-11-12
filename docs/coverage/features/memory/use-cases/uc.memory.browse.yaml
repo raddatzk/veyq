@@ -16,6 +16,15 @@ acceptanceCriteria:
     text: The breadcrumb + current level are derived client-side from the local tree (the blind server computes no navigation).
     coverage:
       web: { unit: [src/core/node/browse.test.ts, src/core/node/location.test.ts] }
+  - id: return-to-place
+    text: Coming back up the tree (a crumb, a crumb further up, the browser's Back) brings the row the member came through back into sight - unmoved when already in sight, centred when not - and gives it the focus and its ring until the focus leaves it, once per arrival; a step down or into another space hands the level nothing. A share guest's crumbs do the same.
+    coverage:
+      web:
+        unit:
+          - src/core/node/returnTo.test.ts
+          - src/core/node/LevelView.returnTo.test.ts
+          - src/views/SpaceView.test.ts
+          - src/core/sharing/ShareTreePage.breadcrumb.test.ts
   - id: view-modes
     text: The current level is shown via one app-wide, persisted display toggle — grid (cards, default) / list / map. In grid and list the level's folders and its contents are two groups, each its own list, headed "Folders" / "Contents" (each an `h2` naming its section) only where both have something under the shown tab; map ("Karte", browse-only, cr-0071) plots the current folder's subtree of located Memories/Chapters as clickable pins from each node's sealed `location` (unsealed on device from listNodes, no locations API, behind the ADR 0018 tiles opt-in), a pin click opening that Memory. The preference persists across surfaces (localStorage), one per signed-in account and one for the share-guest pages, never one for the whole browser (inbox #408).
     coverage:

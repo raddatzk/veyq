@@ -69,6 +69,7 @@ import { markdownHtml, vSafeHtml } from '../../shared/security/trustedTypes'
 import NodeDialogs from '../node/components/NodeDialogs.vue'
 import { useNodeDialogs } from '../node/nodeDialogs'
 import { provideNodeHost, type NodeHost } from '../node/nodeHost'
+import { useReturnTo } from '../node/returnTo'
 import { useLevelLive } from '../node/useLevelLive'
 import { sameKeyOr } from '../node/tree'
 import StatementNotice from '../../features/moderation/statement/StatementNotice.vue'
@@ -120,6 +121,8 @@ const currentId = computed<string | null>(() => {
   return typeof q === 'string' && tr.node(q) ? q : tr.rootId
 })
 const current = computed(() => (tree.value && currentId.value ? tree.value.node(currentId.value) : null))
+// Up to a level (a crumb, Back): the child the guest came from, brought back into sight by the level (as a member's).
+const returnTo = useReturnTo(() => currentId.value, () => tree.value)
 const atFolder = computed(() => current.value?.kind === FOLDER_KIND)
 const NO_LEVEL: Level = { folders: [], byKind: new Map() }
 const level = computed<Level>(() => (tree.value && currentId.value ? childrenOf([...tree.value.nodes], currentId.value) : NO_LEVEL))
@@ -263,6 +266,7 @@ function createError(e: unknown): string {
       :tree="tree"
       :folder-name="tree.nameOf(current.id)"
       :live-tick="liveTick"
+      :return-to="returnTo"
     />
     <!-- The member's detail of the node's kind, for a guest: what it offers is its rights and its data source. -->
     <NodePage

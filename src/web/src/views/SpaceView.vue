@@ -46,6 +46,7 @@ import { useNodeDialogs } from '../core/node/nodeDialogs'
 import { provideNodeHost, type NodeHost } from '../core/node/nodeHost'
 import { provideSearchContributions } from '../core/search/contribution'
 import LevelView from '../core/node/LevelView.vue'
+import { useReturnTo } from '../core/node/returnTo'
 import PersonProfile from '../core/people/PersonProfile.vue'
 import { loadTenantPeople, personNow } from '../core/people/directory'
 import { registry } from '../core/applications/registry'
@@ -164,6 +165,9 @@ const tree = memberTreeSource({
   epochs: () => epochs.value,
   scope: () => currentScope.value,
 })
+// Up to a level (a breadcrumb, Back, the parent after a delete): the child the member came from, which the level brings
+// back into sight instead of opening at its top. Within one scope only.
+const returnTo = useReturnTo(() => currentNodeId.value, () => tree, () => currentScope.value)
 // Core's dialogs behind the member's doors (see the header), and the page's host: every door. A rename, move, copy or
 // delete remembers what was on screen, which the write may give a new path (`stayOn`); the node a page is about, deleted
 // from its header, leaves the page for its parent once it went.
@@ -348,6 +352,7 @@ function stayOn(shown: string | null) {
         :folder-name="currentFolderName"
         :space-name="rootLabel"
         :live-tick="liveTick"
+        :return-to="returnTo"
       />
     </template>
     <NodeDialogs :dialogs="dialogs" />
