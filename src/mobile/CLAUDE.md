@@ -132,7 +132,7 @@ A Gradle build of its own, run through its own wrapper.
   Pot over the real core, the principal's picture through `Avatar.Picture` (its SHA-256 the core's own read's), and
   downloads Amsterdam through `Pot.Download`, every payload to the manifest. It is the only proof of the shell's, Search's and the Pot's dispatch, so a change there
   runs it live. Its header cases (`aFolderIs*`, `aPotIsCopied*`, `aLinkIs*`, `aCover*`) run with `VEYQ_LIVE` alone and
-  clean up what they made; `aReport*` needs `VEYQ_LIVE_REPORT_BRIDGE=1` (it leaves one report: run it once),
+  clean up what they made (`aPotIsPolled*` too: an `App pot <n>` copy polled, settled and restored, then purged); `aReport*` needs `VEYQ_LIVE_REPORT_BRIDGE=1` (it leaves one report: run it once),
   `aCopyWithoutRoom*` `VEYQ_LIVE_NO_ROOM=1` while `DepotLiveTest` holds the one-byte quota, and `theLinksOfAFolder*`
   writes a desktop pass's links out for the web's guest page — each case's doc says what it reads.
 - `python3 linux/run.py <verb>` — everything Linux. From the repository root the launcher runs the same verbs as
@@ -214,6 +214,8 @@ A Gradle build of its own, run through its own wrapper.
   that entry behind in the dev instance. `VEYQ_LIVE_POT_PEOPLE=<pot name>` adds a person there, renames, deactivates and
   removes them (only the erasure record stays); `VEYQ_LIVE_POT_SETTINGS=<pot name>` (a Pot without money entries) switches its
   currency and back and adds an own category ("App category renamed", which stays: categories are never removed).
+  `VEYQ_LIVE_POT_THIRD=<pot name>` adds a person "Cleo" who pays 30.00 for everyone, so that Pot settles in more than
+  one payment (a desktop pass's Record all); both stay.
   `VEYQ_LIVE_POT_CREATE=1` creates a Pot ("App pot <time>") with a name and a member, checks its name is taken then, and
   that a Pot the web created collides with the app's of its name (the slug token is the web's), and moves it to the trash.
   `VEYQ_LIVE_RATES=1` asks the tenant's exchange-rate service (a third party: Frankfurter on a dev instance) for today's table once.

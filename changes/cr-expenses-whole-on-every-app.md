@@ -424,6 +424,63 @@ yet, native-apps § Open; `HeaderShown.cover`, `Header.CoverPicture` and `NodeCo
   copy): an entry added on the web appears without a refresh while the window is active and not while another window
   is; Refresh; settle-up one and all, asked; an entry's history; a deleted entry restored; the copy purged.
 
+**Status: done (2026-11-12).**
+
+**Built:**
+- core `PotModel.live()` waits for the Pot's read when started while it opens and ends when that Pot closes or another
+  opens (a poll never reads a Pot no screen shows); `refusal()` (a write's refusal as `Notices.potRefused`, a write
+  refused before it was sent a plain refusal), for a platform that says it from the answer; a public constructor over a
+  played Pot (`Opened`) and a public `PotView.Source`, the bridge's test seam; `PotView.Shown` gains `deleted` and
+  `canRecordAll`. `PotModelTest` +3.
+- bridge: `Watched.PotLive` (`PotModel.live` inside the watch's own job: a dropped watch stops it), `Pot.Record` and
+  `Pot.Restore` (`Said` with the refusal), `Pot.History` → `EntryHistory` (rows with `historyLine`, writer, time;
+  deleted; restorable on the core's clock; until), `Cover.Cut` → `CoverCut` (`CoverFrame.pixels`), `NO_SUCH_ENTRY`.
+  `DispatchTest.aPotIsPolledWhileWatchedRefreshedSettledAndRestoredThroughCalls` over a played Pot and
+  `aCoversCutIsTheCoresPixels`; `WireTest` samples; `LiveBridgeTest.aPotIsPolledSettledAndRestoredThroughCalls`.
+- Linux: `pot.rs` — the poll watched while the page is mapped and the window active, Refresh (header bar,
+  `win.pot-refresh`, F5 / Ctrl+R), settle-up rows' Record and Record all asked by an `AdwAlertDialog`, deleted entries,
+  every row opening `entry_history.rs` (an `AdwDialog`: the history, a deleted entry's window and Restore), one
+  `ScrolledWindow` kept across redraws; `header.rs` draws the head (`Header::hero`: `Header.CoverPicture`, `Cover.Cut`,
+  cairo, 16:9 by the width given), placed first in each place's scroll.
+- Windows: `PotPage` — the poll watched while loaded and `Window.Activated` not `Deactivated`, Refresh (CommandBar,
+  F5 / Ctrl+R accelerators), settle-up asked by `Dialogs.Ask` (the action the default), deleted entries, rows opening
+  `EntryHistoryDialog` (Restore its primary button), the scroll kept; `NodeHeader.Hero` (WIC `BitmapTransform.Bounds`
+  of `Cover.Cut`). `Veyq.Drive` types F5.
+- Words: `balances_record_question`, `balances_record_hint`, `balances_record_all_question`, `balances_record_all_hint`
+  (plural), `pot_refresh`, `history_by` (en, de).
+- `PotLiveTest` reads `VEYQ_ENV_FILE` (a worktree has no `.run/.env`) and `VEYQ_LIVE_POT_THIRD=<pot>` adds Cleo, who
+  pays for everyone (a Pot that settles in two payments).
+
+**Met:**
+- 12 mutations, each its case red and restored by `scratchpad/e3/bite.py` (`/bin/cp -f`), all bit: `Pot.Refresh`,
+  `Pot.Record`, `Pot.Restore` a no-op; `Pot.History`'s restorable not the core's clock; `PotLive` a no-op; `PotLive` left
+  running after its unwatch (launched outside the watch's job); `Cover.Cut` not the core's pixels; `live()` giving up
+  on a Pot still opening (core and bridge); `live()` outliving its Pot; a refusal before sending a plain refusal (core
+  and bridge).
+- `./gradlew :core:jvmTest :core:macosArm64Test :bridge:jvmTest` green; with `VEYQ_LIVE`,
+  `LiveBridgeTest.aPotIsPolledSettledAndRestoredThroughCalls` green: Amsterdam copied as `App pot 8604`, the other
+  device's entry seen through the poll after 20.3 s, one settle-up row and all recorded (every balance settled), the
+  entry deleted by the other device, its history (Deleted, Live check · €7.00, by name) and restore, the copy purged.
+- `linux/run.py build` (clippy `-D warnings`, `cargo test` 23 passed) and `windows/run.py build` (Veyq.Bridge.Tests,
+  Veyq.Tests passed) green; `:android:assembleDebug`, `xcodebuild -target Veyq -sdk macosx CODE_SIGNING_ALLOWED=NO`
+  and `xcodebuild -scheme Veyq` signed for the iPhone 18 Pro simulator green.
+- `validate_mobile_words.py`, `validate_mobile_platform_guidelines.py`, `validate_changes.py` green.
+- Linux (container, Broadway on 8097, headless Chrome), en/light then de/dark, on `Linux pot` (Amsterdam copied by the
+  header's Copy, renamed): its cover set by `CoverCropLiveTest` kept, Cleo by `VEYQ_LIVE_POT_THIRD`, entries written
+  elsewhere by `PotLiveTest` (`VEYQ_LIVE_POT_WRITE`, `VEYQ_LIVE_POLL`). With the download's save dialog open (the main
+  window inactive, stderr "pot live poll off") an entry written elsewhere did not show for 40 s; the dialog cancelled
+  ("on"), it showed at once (the poll catches up). Refresh by button, F5 and Ctrl+R (stderr "pot refresh"); a live
+  entry's history; the deleted "Poll check" (its window "until 12/12/2026", history Deleted / Poll check · EUR 2.00)
+  restored; one settle-up row asked and recorded, then Record all (2 transfers) asked and recorded, every balance
+  "settled"; the head 16:9 with the crop's right half (blue, white disc); the scroll kept across an F5. The copy
+  trashed and deleted forever. Shots: `scratchpad/e3/lx/`.
+- Windows (VM, `run.py run --devlogin --unlock`, `drive`), en-US/light then de-DE/dark, on `Windows pot` (the same
+  way): with the save picker open ("pot live poll off" in the log) an entry written at 03:06:38 did not arrive until
+  the picker was cancelled at 03:07:22, then at once ("pot update: 15 entries"); Refresh by command, Ctrl+R and F5;
+  an entry's history; the deleted entry restored; one row and all recorded; the head. The copy trashed and deleted
+  forever; the pass ended with "Stop trusting" (the "Not now" its first start answered forgotten). Shots:
+  `scratchpad/e3/win/`.
+
 ### Phase 4 — Bridge and desktops: the entry editor (every kind, payers, items, split modes, currency and rate, refusals, preview, stale, delete)
 
 **Done when:**
@@ -569,3 +626,42 @@ owner's veto. D4's renderers (poppler-glib on Linux, `Windows.Data.Pdf` on Windo
   trash, removed for good on Dec 12, 2026. Deleting them forever was refused by this session's permission classifier
   (irreversible deletion); the owner purges them from the trash, or the server does on that day.
 
+### Phase 3 (2026-11-12)
+
+- **The live poll is a watch whose job is the poll** (D3 as decided): `flow { pot.live() }` emits nothing; the bitten
+  alternative — a poll launched beside the watch — kept polling after its unwatch. The poll had two holes a desktop
+  meets and a phone did not: started before the open's answer it returned at once (a desktop watches the poll as its
+  page appears), and it kept polling a Pot closed under it. Both are `PotModel.live()`'s now (`commonTest` and the
+  bridge's case, bitten). Decided here.
+- **A write of the Pot's screens answers with what it says** (`Said`: the refusal, or none), never left to the watched
+  message, which may arrive after the answer (CR 3a's trap); `PotModel.refusal()` maps a write refused before it was sent
+  (nothing to record, a reader) to a plain refusal rather than nothing.
+- **An entry's history is a call, not part of the view** (`Pot.History`): restorable is judged on the core's clock at
+  the moment it is asked, and the history of every entry would bloat each update of the live poll. The deleted entries
+  are in the view (`PotView.Shown.deleted`). Every live entry's row opens its history in this phase; Phase 4 opens the
+  editor there and takes the history as its page (D5). Decided here.
+- **Settle-up is asked on the desktops** (D5), where the phones record on a tap: new words for the question and for
+  what is recorded (a transfer dated today; all: their count). Fluent's primary button is the default there
+  (`Dialogs.Ask`); `Dialogs.Confirm` stays the destructive one.
+- **The head is drawn from `Cover.Cut`**, a new call over `CoverFrame.pixels` (the math the core's): Linux cuts the
+  downloaded texture into a cairo surface on a `DrawingArea` sized 16:9 from its width (a `GtkAspectFrame` gave the
+  picture no height-for-width, and a height set inside `resize` was ignored until set on the next turn of the loop);
+  Windows decodes with WIC's `BitmapTransform.Bounds`. A cover set from another device shows on the page's next open:
+  the header reads it when it opens, as before (and on every platform).
+- **A redraw must not lose the scroll** once updates arrive unasked: both desktops rebuilt their scroll on every state,
+  so each live update jumped to the top (seen in the Linux pass). Both keep one scroll now; another place starts at
+  its top.
+- **The live tests need a third person for "Record all"** (the seeded Pots settle in one payment): `PotLiveTest`'s
+  `VEYQ_LIVE_POT_THIRD`; and `PotLiveTest` read only `.run/.env`, which a worktree lacks — it reads `VEYQ_ENV_FILE` now.
+- **Deviations:** the change elsewhere came from the core's live tests (another session, `PotLiveTest`) rather than the
+  web (the web wants a password typed); "another window active" was each desktop's own save dialog (Broadway's GTK
+  file dialog, Windows' save picker), the window the pass can raise. Times in the Linux container read UTC (its zone is
+  not set for `run`; `run.py test` sets Berlin) — not changed here. The Windows pass's first start answered the offer
+  with "Not now" (an offer stood open) and its end forgot it with "Stop trusting".
+- **Phase 7 harvests:** `src/mobile/CLAUDE.md` names `VEYQ_LIVE_POT_THIRD` and `aPotIsPolled*` already; the traps above
+  (a live update must keep the scroll; GTK's picture has no height-for-width; a size asked inside `resize`) and the
+  watch-as-poll shape go there and to ADR 0123's Consequences.
+- **Left in the dev instance by my runs:** nothing of this phase — `App pot 62903`, `App pot 4660`, `App pot 8604`,
+  `Linux pot` and `Windows pot` were each trashed and deleted forever. Other sessions' `windows/run.py run` processes
+  (PIDs 61912, 64097, 64732, 66678, started 2026-11-11 23:57–00:10) and a Linux container on 8095 were running and left
+  alone.
