@@ -18,7 +18,7 @@ import me.raddatz.veyq.mobile.session.LocalDays
 import me.raddatz.veyq.mobile.session.TenantSession
 
 /**
- * The Pot open in the app (ADR 0127 decision 2): its session and what its screens show ([PotView]) — loading, failed,
+ * The Pot open in the app (ADR 0129 decision 2): its session and what its screens show ([PotView]) — loading, failed,
  * saving a write and that write's refusal —, its live poll while a screen runs it (skipped while a write is saving), a
  * pull to refresh, the writes, and a new Pot's creation. Both apps observe [state] (or [watch]); what they draw is theirs.
  */
@@ -291,7 +291,7 @@ class PotModel internal constructor(
 
     /**
      * The entry editor of entry [entryId] of the open Pot (null: a new entry, dated the core's today), the reader's
-     * decimal [separator] handed for typed amounts, [pending] receipts it starts with (what another app shared, ADR 0129);
+     * decimal [separator] handed for typed amounts, [pending] receipts it starts with (what another app shared, ADR 0131);
      * null when no Pot is read, it has no base currency yet, or holds no such entry. Its saves and deletes are this
      * model's writes (saving, the live poll skipped); it says their outcome itself.
      */

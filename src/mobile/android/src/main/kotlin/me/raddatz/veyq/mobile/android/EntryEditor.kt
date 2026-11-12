@@ -80,7 +80,7 @@ internal fun problemText(problem: String): String = say(me.raddatz.veyq.mobile.w
 @Composable
 fun EntryEditorSheet(
     view: PotView, model: AppModel, entryId: String?,
-    /** Receipts it starts with: what another app shared to this Pot (ADR 0129). */
+    /** Receipts it starts with: what another app shared to this Pot (ADR 0131). */
     initialPending: List<me.raddatz.veyq.mobile.expenses.PotSession.PendingReceipt> = emptyList(),
     /** Runs once the entry was saved, before [onClose] (a share's new expense hands back that it landed). */
     onSaved: () -> Unit = {},

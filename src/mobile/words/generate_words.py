@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Generates every platform's words from the apps' one catalog (ADR 0127 decision 3).
+"""Generates every platform's words from the apps' one catalog (ADR 0129 decision 3).
 
 `words.json` beside this script is the source: per key its English (`en`) and German (`de`) text — a plural is an
 object of CLDR categories (`one`, `other`) — and an optional `note` for translators. A placeholder is `{n}` (a string)

@@ -5,7 +5,7 @@ import kotlin.test.assertEquals
 import kotlin.test.assertNull
 import kotlin.test.assertSame
 
-/** Shared files from arrival to where they went (ADR 0129), both apps' one state machine. */
+/** Shared files from arrival to where they went (ADR 0131), both apps' one state machine. */
 class ShareInboxTest {
     private val file = PotSession.PendingReceipt("r1", byteArrayOf(1), "image/jpeg", "a.jpg", null)
 

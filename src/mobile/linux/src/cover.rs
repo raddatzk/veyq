@@ -1,10 +1,10 @@
-//! A node's cover (the spec and the frame core's, ADR 0127's Consequences; the web's `CoverDialog` around its 16:9 cropper), GNOME's way: an `AdwDialog`
+//! A node's cover (the spec and the frame core's, ADR 0129's Consequences; the web's `CoverDialog` around its 16:9 cropper), GNOME's way: an `AdwDialog`
 //! with Cancel and Save in its header bar over the 16:9 frame, a zoom slider under it, "Choose a picture" (GTK's file
 //! dialog, the portal's where there is one) and, where the node has a cover, "Remove cover". A drag pans the picture.
 //!
-//! The device's part is the platform's (ADR 0127 decision 1): GTK decodes the picked picture (`gdk::Texture`, glycin's
+//! The device's part is the platform's (ADR 0129 decision 1): GTK decodes the picked picture (`gdk::Texture`, glycin's
 //! loaders), cairo scales it to the size the core names (`Cover.Fit`, the web's `COVER_SPEC`) and draws it, gdk-pixbuf
-//! encodes the JPEG at the core's quality into a file the core reads (`Header.CoverSave` by path, ADR 0128 decision 3),
+//! encodes the JPEG at the core's quality into a file the core reads (`Header.CoverSave` by path, ADR 0130 decision 3),
 //! which is removed after. Where the picture sits is the core's math (`Cover.Pose`, `CoverFrame`), asked per change: the
 //! answer of the latest ask is drawn, an older one that arrives after it is dropped.
 use std::cell::{Cell, RefCell};

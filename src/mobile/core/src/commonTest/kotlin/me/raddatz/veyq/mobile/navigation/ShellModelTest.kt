@@ -5,7 +5,7 @@ import kotlin.test.assertEquals
 import kotlin.test.assertNull
 import kotlin.test.assertSame
 
-/** The shell's rules after a read and after a folder on Home's path changed, both apps' once (ADR 0127). */
+/** The shell's rules after a read and after a folder on Home's path changed, both apps' once (ADR 0129). */
 class ShellModelTest {
     private val tenantSpace = SpaceRef("t", "TENANT", "Family")
     private val personal = SpaceRef("p", "PERSONAL", "Mine")

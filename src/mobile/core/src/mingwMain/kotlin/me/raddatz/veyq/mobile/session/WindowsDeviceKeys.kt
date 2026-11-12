@@ -50,7 +50,7 @@ import kotlin.time.TimeMark
 import kotlin.time.TimeSource
 
 /**
- * [DeviceKeys] on Windows (ADR 0127's Consequences; ADR 0123 decision 8). The person chooses the level (owner
+ * [DeviceKeys] on Windows (ADR 0129's Consequences; ADR 0123 decision 8). The person chooses the level (owner
  * 2026-11-11):
  *
  *  - **bind keys and secrets: DPAPI** for the current user, never with UI. The device store keeps the protected blobs;

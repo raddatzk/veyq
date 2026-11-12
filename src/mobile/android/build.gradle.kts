@@ -28,7 +28,7 @@ val generateThemeRes = tasks.register<GenerateThemeRes>("generateThemeRes") {
     brand.set(rootDir.resolve("../web/src/assets/brand"))
 }
 
-// Every word the app shows (ADR 0127 decision 3), generated from src/mobile/words/words.json: the resources under their
+// Every word the app shows (ADR 0129 decision 3), generated from src/mobile/words/words.json: the resources under their
 // keys, and `Context.words(Msg, …)` for what the core raises. The app writes no word of its own.
 abstract class GenerateWords : DefaultTask() {
     @get:InputFile abstract val script: RegularFileProperty

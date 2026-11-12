@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """Guard that the veyq app writes no word of its own on any platform: every word it shows comes from the one catalog
-`src/mobile/words/words.json` (ADR 0127 decision 3).
+`src/mobile/words/words.json` (ADR 0129 decision 3).
 
 **What it asserts.** Seven rules, over the app's sources (`src/mobile/android/src`, `src/mobile/apple`, no `build/`;
 `src/mobile/linux`, no `target/`; `src/mobile/windows`, no `bin/` or `obj/`):
@@ -38,7 +38,7 @@
   --resw`) into the build directory.
 
 **The defect that bought it.** The Apple app had no German at all: ~480 English literals, while Android carried its
-own copy of the same words in German (owner 2026-11-09, ADR 0127). A word added on one platform alone is how they
+own copy of the same words in German (owner 2026-11-09, ADR 0129). A word added on one platform alone is how they
 drifted apart.
 
 **Its limit.** It reads literals where they are shown, not where they come from: a sentence built in a helper and

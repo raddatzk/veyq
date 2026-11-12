@@ -1,4 +1,4 @@
-// What the host holds of the members' pictures and what it asks for (ADR 0128 decision 1) — no control, so
+// What the host holds of the members' pictures and what it asks for (ADR 0130 decision 1) — no control, so
 // Veyq.Tests reads it; Avatars.cs draws it. Linux's avatars::Held, rule for rule: when the pictures are read is the
 // core's (AvatarsModel), and the shell's state names the user ids whose picture the core holds (ShellShown.pictures).
 // The host asks for each with Avatar.Picture whenever that set changes, keeps them per tenant open, and drops an answer

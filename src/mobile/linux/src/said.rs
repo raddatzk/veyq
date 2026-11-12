@@ -1,6 +1,6 @@
 //! What the core says, written the way this desktop writes it (ADR 0123's Consequences, the Linux app): a `Notice` by its key
 //! and arguments through [words::say], a `Piece` piece by piece — a day, a size, a moment and an amount of money in the
-//! person's locale, as glibc and GLib hold it. Nothing here decides what is said; that is the core's (ADR 0127
+//! person's locale, as glibc and GLib hold it. Nothing here decides what is said; that is the core's (ADR 0129
 //! decision 1). The same as Android's `NoticeText.kt` and Apple's `say(notice)`.
 use std::ffi::{CStr, c_char};
 

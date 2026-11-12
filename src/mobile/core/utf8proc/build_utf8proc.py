@@ -2,7 +2,7 @@
 """Builds utf8proc for the Linux and Windows targets `core` compiles to, as static libraries Kotlin/Native links, and fetches the
 Unicode NormalizationTest.txt of the version it implements.
 
-Linux's and Windows' `nfc`/`nfkd` are utf8proc's (ADR 0123's Consequences, the core on Linux; ADR 0127 decision 5):
+Linux's and Windows' `nfc`/`nfkd` are utf8proc's (ADR 0123's Consequences, the core on Linux; ADR 0129 decision 5):
 JuliaStrings' maintained, MIT-licensed C library, one C file plus its tables, reached from Kotlin through cinterop
 (`utf8proc_map`). Its slices are compiled by Kotlin/Native's own clang against the C library it links the core against
 (`core/konan_toolchain.py` says why).

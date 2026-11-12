@@ -1,4 +1,4 @@
-// A space's trash (ADR 0127 decision 2; core's TrashSheet, the web's SpaceTrashDialog.vue), Fluent's way: a
+// A space's trash (ADR 0129 decision 2; core's TrashSheet, the web's SpaceTrashDialog.vue), Fluent's way: a
 // ContentDialog from the switcher's menu, each deleted subtree's root a row with Restore and "Delete forever". WinUI
 // shows one ContentDialog at a time, so "Delete forever?" is asked in place under its row, as is another name where a
 // row's own was taken meanwhile. Every state is the core's (Trash.*, watched while the dialog is open).

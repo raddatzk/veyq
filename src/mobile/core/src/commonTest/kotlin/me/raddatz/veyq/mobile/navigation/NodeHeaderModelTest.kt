@@ -22,7 +22,7 @@ import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
-/** A node's header both apps drew (ADR 0127 decision 2): its rights, pin, trash with its undo, rename — over a door the test plays. */
+/** A node's header both apps drew (ADR 0129 decision 2): its rights, pin, trash with its undo, rename — over a door the test plays. */
 class NodeHeaderModelTest {
     private val folder = NodeAt("s", "f", "FOLDER", "Trip")
     private val pot = NodeAt("s", "p", "EXPENSES_POT", "Rome")

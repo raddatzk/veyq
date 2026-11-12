@@ -3,11 +3,11 @@ id: cr-depot-whole-on-every-app
 title: Depot whole on Linux and Windows — the file page, uploads and drop boxes moved into the core first, then bridged and drawn
 status: in-progress
 satisfies: []
-adrs: ["0127", "0128", "0123", "0122", "0047"]
+adrs: ["0129", "0130", "0123", "0122", "0047"]
 invariants:
-  - every rule is the core's (ADR 0127 decision 1) — what Android's and Apple's Depot screens still decide (the file page's states, the image edge, the header's file actions and their facts, the upload's settle and replace offer, the folder walk's rule and its preparing, the drop box page, the top-level "Add files only" form, the tray's acknowledge timer) moves into core screen models first, both apps thinned in the same phase and unchanged on a device (decision 2)
+  - every rule is the core's (ADR 0129 decision 1) — what Android's and Apple's Depot screens still decide (the file page's states, the image edge, the header's file actions and their facts, the upload's settle and replace offer, the folder walk's rule and its preparing, the drop box page, the top-level "Add files only" form, the tray's acknowledge timer) moves into core screen models first, both apps thinned in the same phase and unchanged on a device (decision 2)
   - no plaintext at rest but where the person saves it (ADR 0047's rule, carried to every app) — a file is shown from memory or streamed through the core's `RangeReader`; no app writes a decrypted file to view or play it; the one other place a decrypted copy is written is a phone's "Send a copy", which the person asked for, and it is swept
-  - the bridge only carries — each call one line onto a core model, no key, seal or token outward (SecretFreeSchemaTest); a file goes in as a path the host's picker or drop gave and out to a save dialog's path, shown bytes ride beside the JSON, a medium is read through a reader by id (ADR 0128)
+  - the bridge only carries — each call one line onto a core model, no key, seal or token outward (SecretFreeSchemaTest); a file goes in as a path the host's picker or drop gave and out to a save dialog's path, shown bytes ride beside the JSON, a medium is read through a reader by id (ADR 0130)
   - no word in a desktop but from src/mobile/words/words.json; each desktop follows its platform's guideline (ADR 0123 decision 9)
   - no new dependency that is deprecated, vendor-locked or closed (root CLAUDE.md), each checked and recorded where it is added
   - Android, the Apple app and the web behave as before, except where a rule they disagreed on is made one (D9); `./gradlew :core:jvmTest :core:macosArm64Test :bridge:jvmTest` and both desktops' `run.py build` stay green in every phase
@@ -38,7 +38,7 @@ bridge and the two desktops slice by slice, then the docs, the harvest and the C
   header, move sheet and share sheet and CR 3b's open dialog (`Editor.AddReceipts`), PDF renderers and `receipt_viewer`
   are this CR's floor.
 - **Read first:**
-  - ADR 0127 (decisions 1, 2 and 6), ADR 0128 (all four decisions), ADR 0047 (no plaintext at rest, ranges through
+  - ADR 0129 (decisions 1, 2 and 6), ADR 0130 (all four decisions), ADR 0047 (no plaintext at rest, ranges through
     the holder of the key), ADR 0123 decision 9;
   - `src/mobile/CLAUDE.md` whole: the bridge, the traps (an answer overtaking an update, one `ContentDialog` at a time,
     decrypting off the caller's thread, a payload's NULL vs empty, Broadway's clipboard and hover, the common file dialog
@@ -111,7 +111,7 @@ storage items with a `Path`, unpackaged.
 
 ### D1 — A file's page is a core screen model, `FileModel`
 
-ADR 0127 decision 2's shape, tested in `commonTest` over a played door:
+ADR 0129 decision 2's shape, tested in `commonTest` over a played door:
 - **State:** loading; the decided view (`FileView.decide`, unchanged): an image's bytes (whole, ≤ `IMAGE_CAP`), a
   text's decoded first `TEXT_CAP` bytes and whether it was cut, a PDF's bytes (whole, ≤ `PDF_CAP`), a medium's
   `RangeReader` with its size and sniffed type, or the message (too large, empty, unsupported); the facts (size, type,
@@ -163,7 +163,7 @@ ADR 0047's rule, now every app's:
   `FileSink`; iOS keeps `.fileMover` (it has no other way to a place the person picks) with its temporary directory
   swept at every start, as Android's `cacheDir/shared` is. **Send a copy** writes the copy the person sends, swept at start
   on both phones.
-- **The desktops:** an image, a text and a PDF arrive as `Answer.Bytes` (ADR 0128 decision 1), a medium through a reader
+- **The desktops:** an image, a text and a PDF arrive as `Answer.Bytes` (ADR 0130 decision 1), a medium through a reader
   (decision 2), a copy is written only to the save dialog's path through `FileSink` (decision 3).
 - **Saving a large file is cancellable:** `File.Save(file, path)` answers a save id at once; `Watched.Save(id)` reports
   bytes written and the end; `Save.Cancel(id)` stops it and `FileSink` removes the partial file (native-apps § Open, "Cancelling a
@@ -188,7 +188,7 @@ ADR 0047's rule, now every app's:
 - **Answers say what the host acts on at once** (CR 3a's trap): `Upload.*` answers with the batch it queued or the
   refusal, never only through a later update.
 - **A reader's lifetime is its page's:** a host closes its readers with the page; every reader closes with the tenant
-  (ADR 0128 decision 2). A medium's read blocks only the player's own thread on the bridge's answer, never the UI thread
+  (ADR 0130 decision 2). A medium's read blocks only the player's own thread on the bridge's answer, never the UI thread
   (GTK's main loop, WinUI's dispatcher), and a bridge answer never needs that thread to arrive.
 - `SecretFreeSchemaTest` holds unchanged.
 
@@ -322,7 +322,7 @@ Android and Apple thinned.
 **Status: done (2026-11-12).**
 
 **Built:**
-- core `depot/FileModel.kt` (ADR 0127 decision 2): state (`shown` — `Loading`, `Failed`, `NotUploaded`, `Message(kind)`,
+- core `depot/FileModel.kt` (ADR 0129 decision 2): state (`shown` — `Loading`, `Failed`, `NotUploaded`, `Message(kind)`,
   `Image(bytes, mediaType, edge)`, `Text(text, truncated)`, `Pdf(bytes, pages)`, `Media(reader, mediaType)` —, `facts`,
   `uploader`, `header`), `watch`, `reload` (the file read anew, its content only where the blob changed), `close`,
   `replace(source)` (expected over the blob shown); over a `Door` (file, inIdentityFolder, read, reader, uploader,
@@ -396,7 +396,7 @@ Android and Apple thinned.
 **Status: done (2026-11-12).**
 
 **Built:**
-- core `depot/DepotUploads.kt` (ADR 0127 decision 2, over the app's `UploadQueue`): `upload(scope, parent, label, sources)`,
+- core `depot/DepotUploads.kt` (ADR 0129 decision 2, over the app's `UploadQueue`): `upload(scope, parent, label, sources)`,
   `uploadFolder(scope, parent, shownName, path, found)` (`preparing` while the folders are made, the walk's left-out entries
   and the outcome said in Depot's words), `replace(fileModel, source)`, each Depot item's settle (`Door.changed`, the offer
   read anew — `offerAfter`/`take` moved here from `DepotFiles` —, the item out of the tray), what it says one at a time
@@ -585,9 +585,9 @@ Android and Apple thinned.
 
 ### Phase 8 — The docs
 
-- ADR 0127's Consequences: Depot's screen models moved (`FileModel`, `DepotUploads`, `DropBoxPage`, the top level's
+- ADR 0129's Consequences: Depot's screen models moved (`FileModel`, `DepotUploads`, `DropBoxPage`, the top level's
   sheet, the header's file actions); its Built line.
-- ADR 0128's Consequences: the first reader opened (`File.Reader`), the first cancelled write (`Save.Cancel`), uploads by
+- ADR 0130's Consequences: the first reader opened (`File.Reader`), the first cancelled write (`Save.Cancel`), uploads by
   path at any offset, `listDirectory`.
 - ADR 0047's Consequences: the rule carried to every app (D4).
 - ADR 0123's Consequences: Depot on the desktops; D7's players and what Phase 4 measured; D8's drop.

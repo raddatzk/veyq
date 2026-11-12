@@ -15,7 +15,7 @@ import kotlin.test.assertIs
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
-/** The way in both apps share (ADR 0127): the start, the sign-in, the unlock, the switcher and the sign-out, over a door the test plays. */
+/** The way in both apps share (ADR 0129): the start, the sign-in, the unlock, the switcher and the sign-out, over a door the test plays. */
 class SessionModelTest {
     private data class Acc(override val key: String, override val tenants: List<TenantRef>) : Connection {
         override val label: String get() = key.substringBefore('#')

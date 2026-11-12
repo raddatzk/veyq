@@ -48,7 +48,7 @@ public sealed partial class MainWindow : Window
         Start started;
         try
         {
-            // the window owns Windows Hello's prompt, in the app's words (ADR 0127's Consequences)
+            // the window owns Windows Hello's prompt, in the app's words (ADR 0129's Consequences)
             var hwnd = WinRT.Interop.WindowNative.GetWindowHandle(this).ToInt64();
             started = Core.Start(new Config { device = Environment.MachineName, window = hwnd, prompt = Words.DeviceUnlockPrompt() }, store);
         }
@@ -145,7 +145,7 @@ public sealed partial class MainWindow : Window
                 Face(_shell.Page);
                 break;
             default:
-                // only the share extension reaches it (NeedsApp, ADR 0129), which this app has none of: said in the log,
+                // only the share extension reaches it (NeedsApp, ADR 0131), which this app has none of: said in the log,
                 // the window stays where it is
                 Log.Write($"the session is at a gate this slice does not draw: {gate.GetType().Name}");
                 break;

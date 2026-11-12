@@ -9,7 +9,7 @@ import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
-/** What the shell says, finds and creates, both apps' once (ADR 0127); the two had drifted on two tab words. */
+/** What the shell says, finds and creates, both apps' once (ADR 0129); the two had drifted on two tab words. */
 class ShellWordsTest {
     @Test
     fun the_switcher_names_the_tenant_under_a_space_unless_it_is_the_tenants_own() {

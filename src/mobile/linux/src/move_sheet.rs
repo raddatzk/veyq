@@ -1,4 +1,4 @@
-//! A node's move and copy sheet (ADR 0127 decision 2; core's `MoveSheet`, the web's `MoveNodeDialog` and
+//! A node's move and copy sheet (ADR 0129 decision 2; core's `MoveSheet`, the web's `MoveNodeDialog` and
 //! `CopyNodesDialog`), GNOME's way: an `AdwDialog` holding an `AdwNavigationView` of places, one page per place of the
 //! core's trail (back goes up, as Files' location does), each page listing the places one may go into — the node itself and
 //! what lies below it listed but not to be opened —, its bottom bar saying why the place takes nothing (or a copy's

@@ -1448,7 +1448,7 @@ class DispatchTest {
     }
 
     /**
-     * An entry's receipts through calls (ADR 0128): files added by the paths an open dialog gave — one that does not open,
+     * An entry's receipts through calls (ADR 0130): files added by the paths an open dialog gave — one that does not open,
      * one too large, one that is no receipt refused, the 101st refused —, one taken off, the save handed what was picked
      * and saying what a full storage left out; a kept receipt opened as bytes beside the JSON with what they are, a PDF's
      * page cap, and a receipt saved to a path (nothing left there when it does not open or the file does not write).

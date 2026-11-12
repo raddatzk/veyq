@@ -10,7 +10,7 @@ namespace Veyq.Bridge;
 /// <summary>
 /// The device's store (the core's <c>DeviceStore</c>: its trust marks, the trusted accounts, this device's id): names and
 /// values, kept in one JSON file under the user's own <c>%LOCALAPPDATA%\veyq\</c>, written whole on each change, as Linux's
-/// is. No secret is in it: the bridge carries no key (ADR 0127's Consequences).
+/// is. No secret is in it: the bridge carries no key (ADR 0129's Consequences).
 /// </summary>
 public sealed class DeviceStore
 {

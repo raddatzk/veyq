@@ -18,7 +18,7 @@ import me.raddatz.veyq.mobile.words.Notice
 import me.raddatz.veyq.mobile.words.Notices
 
 /**
- * "New pot" (the web's `PotCreateDialog.vue`, ADR 0127 decision 2): the space it goes to (the one shown, else the
+ * "New pot" (the web's `PotCreateDialog.vue`, ADR 0129 decision 2): the space it goes to (the one shown, else the
  * first), the base currency it starts with (the person's language's), its first people — names typed and members of that
  * space, read again when the space changes (a member of another space goes) —, and the create: in the folder shown where
  * the sheet creates in the space shown ([PotCreate.parentIn]), else at the space's root. The name arrives with [create]

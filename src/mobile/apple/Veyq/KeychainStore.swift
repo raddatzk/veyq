@@ -15,7 +15,7 @@ import VeyqCore
 /// 2026-11-08: a `.userPresence` item read with no prompt). Both ask the person; the Keychain's is the one a device's
 /// Secure Enclave holds to. A read blocks the calling thread: core calls it off the main thread.
 ///
-/// On iOS the items are the app's and its share extension's (ADR 0129): the entitlements' first keychain access group is
+/// On iOS the items are the app's and its share extension's (ADR 0131): the entitlements' first keychain access group is
 /// a shared one, where every new item goes. An item an installation from before it kept in the app's own group is moved
 /// there when the app reads it ([movesLegacy]; the extension cannot see it until then).
 final class KeychainStore: NSObject, KeychainBridge {

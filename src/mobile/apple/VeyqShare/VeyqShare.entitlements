@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyLists-1.0.dtd">
-<!-- The share extension reads what the app keeps (ADR 0129): the app group's defaults and the shared access group's
+<!-- The share extension reads what the app keeps (ADR 0131): the app group's defaults and the shared access group's
      Keychain items, the same groups as Veyq-iOS.entitlements, in the same order. -->
 <plist version="1.0">
 <dict>

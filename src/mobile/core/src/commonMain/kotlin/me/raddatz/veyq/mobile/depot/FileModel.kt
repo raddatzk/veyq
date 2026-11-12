@@ -50,7 +50,7 @@ object FileRights {
 }
 
 /**
- * A file's page (Depot's `FileDetail` and `FileViewer`, ADR 0127 decision 2; `docs/apps/depot.md` § The viewer): what it
+ * A file's page (Depot's `FileDetail` and `FileViewer`, ADR 0129 decision 2; `docs/apps/depot.md` § The viewer): what it
  * shows — decided by its first frame's bytes ([FileView]) — and its facts, its uploader, and what its header offers.
  *
  * Nothing decrypted is written to show it (ADR 0047, the CR's D4): an image, a text and a PDF are held in memory, each
@@ -214,7 +214,7 @@ class FileModel(
         }
     }
 
-    /** The bytes a host shows of [shown] beside its state (ADR 0128 decision 1): an image's or a PDF's; null for any other. */
+    /** The bytes a host shows of [shown] beside its state (ADR 0130 decision 1): an image's or a PDF's; null for any other. */
     fun bytes(shown: Shown = current.shown): ByteArray? = when (shown) {
         is Shown.Image -> shown.bytes
         is Shown.Pdf -> shown.bytes

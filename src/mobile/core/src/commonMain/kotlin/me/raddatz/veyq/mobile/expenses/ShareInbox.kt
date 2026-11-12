@@ -5,7 +5,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 
 /**
- * Files another app shared to veyq (ADR 0129), from their arrival to where they went: they wait in the pick mode until a
+ * Files another app shared to veyq (ADR 0131), from their arrival to where they went: they wait in the pick mode until a
  * Pot takes them as its new expense's receipts; the expense's editor closed unsaved gives them back, its save ends the
  * share. Dropped onto an open Pot that takes them, they go to its new expense at once. Each platform reads the files
  * ([Incoming], its own readers, [PotShare.split]'s rule) and moves the shell to Home when they wait.

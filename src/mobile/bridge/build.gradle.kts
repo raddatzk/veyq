@@ -1,4 +1,4 @@
-// The native bridge (ADR 0127 decision 5; ADR 0123's Consequences, the bridge): the core as one shared library,
+// The native bridge (ADR 0129 decision 5; ADR 0123's Consequences, the bridge): the core as one shared library,
 // `libveyq.so` on Linux and `veyq.dll` on Windows, whose only public surface is the six C functions of `bridge.h`. It
 // depends on `:core` as an implementation dependency, so the library exports none of the core's classes — only the
 // `@CName` functions of `src/bridgedMain` (Linux and Windows, as in `:core`; each brings only its HTTP engine). The JVM

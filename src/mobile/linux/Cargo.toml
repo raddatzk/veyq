@@ -1,4 +1,4 @@
-# The veyq app on Linux (ADR 0127 decision 4; ADR 0123's Consequences, the Linux app): GTK 4 and libadwaita drawing what the
+# The veyq app on Linux (ADR 0129 decision 4; ADR 0123's Consequences, the Linux app): GTK 4 and libadwaita drawing what the
 # core's models say, reached through libveyq.so's six functions. Built and run in the Fedora 44 image beside it, only
 # through `run.py` (it sets VEYQ_GENERATED and VEYQ_LIB_DIR, which build.rs reads); never edit Cargo.lock by hand —
 # `run.py lock` writes it.

@@ -25,7 +25,7 @@ import me.raddatz.veyq.mobile.session.ShareLinkChanges
 import me.raddatz.veyq.mobile.session.ShareLinks
 
 /**
- * What a screen says, as the catalog's key and its arguments (ADR 0127 decisions 1 and 3): each platform renders it in
+ * What a screen says, as the catalog's key and its arguments (ADR 0129 decisions 1 and 3): each platform renders it in
  * the person's language. An argument is a `String`, an `Int`, a [Bytes] (a size the platform formats its own way),
  * a [Moment], an [Amount], another [Notice] (a word inside the sentence) or a [Joined] list of those.
  */

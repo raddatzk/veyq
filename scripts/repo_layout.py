@@ -36,7 +36,7 @@ MOBILE_ANDROID = MOBILE / "android"
 MOBILE_APPLE = MOBILE / "apple"
 # The Linux app (ADR 0123's Consequences, the Linux app): a Cargo package, built and run in a container by its `run.py`.
 MOBILE_LINUX = MOBILE / "linux"
-# The Windows app (ADR 0127 decision 5): driven on a Windows host from this one by its `run.py`.
+# The Windows app (ADR 0129 decision 5): driven on a Windows host from this one by its `run.py`.
 MOBILE_WINDOWS = MOBILE / "windows"
 # Every surface, for the guards that iterate them.
 SURFACES = (BACKEND, WEB, ADMIN_WEB, CRYPTO)

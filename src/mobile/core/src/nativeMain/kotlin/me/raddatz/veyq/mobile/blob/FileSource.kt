@@ -15,7 +15,7 @@ import platform.posix.fread
 
 /**
  * A file on the device read for an upload ([UploadSource]) at the path the platform's open dialog handed over, at any
- * offset a frame at a time (ADR 0128 decision 3): opened on its first read and held until [close]. A platform whose
+ * offset a frame at a time (ADR 0130 decision 3): opened on its first read and held until [close]. A platform whose
  * grant must be held while the file is open (Apple's security scope) enters it in [opening] and leaves it in [closing].
  */
 open class FileSource(

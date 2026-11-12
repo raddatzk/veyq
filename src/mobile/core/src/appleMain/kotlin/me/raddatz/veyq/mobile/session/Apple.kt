@@ -18,7 +18,7 @@ import platform.posix.memcpy
 
 /**
  * The device's trust marks and records in UserDefaults: no secret (`TrustMarks`), kept across launches, gone with the app.
- * On iOS they are the app group's ([defaults] its suite), which the share extension reads too (ADR 0129).
+ * On iOS they are the app group's ([defaults] its suite), which the share extension reads too (ADR 0131).
  */
 class UserDefaultsStore(private val defaults: NSUserDefaults) : DeviceStore {
     override fun read(key: String): String? = defaults.stringForKey(key)

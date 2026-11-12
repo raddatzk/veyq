@@ -65,7 +65,7 @@ object Receipts {
     }
 
     /**
-     * A file picked by its [path] (a desktop's open dialog, ADR 0128 decision 3) as the editor takes it: [bytes] what the
+     * A file picked by its [path] (a desktop's open dialog, ADR 0130 decision 3) as the editor takes it: [bytes] what the
      * device read of it (null: it did not open, or held more than [MAX_BYTES]), named by the path's last part (`/` or `\`),
      * its type what the bytes are ([mediaTypeOf]) — no platform names one there, so bytes that are no image and no PDF are
      * refused ([claims] by type).

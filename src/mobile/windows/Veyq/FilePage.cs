@@ -3,7 +3,7 @@
 // the cut said in an InfoBar above it), a PDF (Windows.Data.Pdf, PdfPages.cs: its pages rendered as they come into view
 // and let go when far from it), or what the core says where it shows none — and its facts beneath. Everything is the core's
 // FileModel (File.Open, Watched.File): what shows is decided by the bytes, and an image's and a PDF's bytes come beside the
-// answer (File.Bytes, ADR 0128 decision 1), asked again when the content's revision turns. Nothing decrypted is written
+// answer (File.Bytes, ADR 0130 decision 1), asked again when the content's revision turns. Nothing decrypted is written
 // to show it (ADR 0047).
 //
 // "Save a copy" is the header's download of a file: the save picker names the file, the core writes it there frame by

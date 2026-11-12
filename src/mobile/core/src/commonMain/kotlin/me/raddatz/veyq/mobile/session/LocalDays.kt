@@ -33,7 +33,7 @@ object LocalDays {
         return "${y.toString().padStart(4, '0')}-${m.toString().padStart(2, '0')}-${d.toString().padStart(2, '0')}"
     }
 
-    /** The local day [epochMs] falls on, as an ISO date: "today" for every app, never a platform's own clock (ADR 0127). */
+    /** The local day [epochMs] falls on, as an ISO date: "today" for every app, never a platform's own clock (ADR 0129). */
     fun isoOf(epochMs: Long): String = iso(dayOf(epochMs))
 
     /** The last millisecond of local day [day], as the instant a link's end is sent as. */

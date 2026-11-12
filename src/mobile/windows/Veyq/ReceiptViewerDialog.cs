@@ -1,7 +1,7 @@
 // A receipt opened (the web's ReceiptViewer; Linux's receipt_viewer.rs; ADR 0123's Consequences, Expenses whole), Fluent's way: a
 // ContentDialog titled with the receipt's name — the editor is a page, so this is the one dialog open —, the receipt in
 // its ScrollViewer, "Save a copy" its primary button and Close its close button. The bytes come beside the answer
-// (Receipt.Open, ADR 0128) and are shown from memory, never written to disk: a picture decoded by WIC (BitmapImage), a
+// (Receipt.Open, ADR 0130) and are shown from memory, never written to disk: a picture decoded by WIC (BitmapImage), a
 // PDF by Windows' own renderer (Windows.Data.Pdf, PdfPages.cs) — as many pages as the core says (Receipt.Pages), and what
 // it says when that is not all. A file WIC does not decode (HEIC without the codec) or that is no picture and no PDF is
 // offered for saving only. Save a copy asks the save picker for a path and the core writes the receipt there

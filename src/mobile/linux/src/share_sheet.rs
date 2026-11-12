@@ -1,4 +1,4 @@
-//! A node's share sheet (ADR 0127 decision 2; core's `ShareSheet`, the web's `FolderShareDialog`), GNOME's way: an
+//! A node's share sheet (ADR 0129 decision 2; core's `ShareSheet`, the web's `FolderShareDialog`), GNOME's way: an
 //! `AdwDialog` whose page is the list of links — each an `AdwActionRow` with its copy button and its other actions in a
 //! "More" menu —, the new-link or edit form (an `AdwComboRow` for the role, an `AdwEntryRow` for the label, an
 //! `AdwSwitchRow` with an `AdwPasswordEntryRow` for the password, an `AdwSwitchRow` with a calendar for the end; Cancel and

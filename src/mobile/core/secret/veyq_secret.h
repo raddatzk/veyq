@@ -1,5 +1,5 @@
 /*
- * The Secret Service for the core's LinuxDeviceKeys (linuxMain, session/LinuxDeviceKeys.kt; ADR 0127's
+ * The Secret Service for the core's LinuxDeviceKeys (linuxMain, session/LinuxDeviceKeys.kt; ADR 0129's
  * Consequences): the bind keys, the unlock key and the small secrets are items of the default
  * collection under one schema, `me.raddatz.veyq.DeviceKey`, told apart by its one attribute, `alias`.
  *

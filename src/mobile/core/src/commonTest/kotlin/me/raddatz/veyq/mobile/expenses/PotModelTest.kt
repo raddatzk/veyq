@@ -17,7 +17,7 @@ import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
-/** The open Pot's model (ADR 0127 decision 2): its live poll, its writes' saving and refusal, its editor's today — over a Pot the test plays. */
+/** The open Pot's model (ADR 0129 decision 2): its live poll, its writes' saving and refusal, its editor's today — over a Pot the test plays. */
 @OptIn(ExperimentalCoroutinesApi::class)
 class PotModelTest {
     private val rome = ObjectRef("s", "p", "EXPENSES_POT", ApplicationId.EXPENSES, "Rome")

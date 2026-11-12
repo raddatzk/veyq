@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""The one entry point for everything Windows of the veyq app (ADR 0127 decision 5), run on this host (a Mac or Linux):
+"""The one entry point for everything Windows of the veyq app (ADR 0129 decision 5), run on this host (a Mac or Linux):
 everything Kotlin is cross-compiled here by Gradle (Kotlin/Native's `mingwX64`); what needs Windows runs on a Windows
 host reached over ssh. No Windows host builds Kotlin.
 

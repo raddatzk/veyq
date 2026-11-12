@@ -1,7 +1,7 @@
 package me.raddatz.veyq.mobile.expenses
 
 /**
- * What a Pot takes when something is shared to veyq (ADR 0129 decision 2, owner 2026-11-08): images and PDFs within its
+ * What a Pot takes when something is shared to veyq (ADR 0131 decision 2, owner 2026-11-08): images and PDFs within its
  * receipts' rules, which open the editor of a new expense with them as its receipts. Expenses' answer; the apps' pick mode
  * asks it, core's navigation knows no application.
  */
@@ -13,7 +13,7 @@ object PotShare {
     const val MAX_FILES = Receipts.MAX_PER_ENTRY
 
     /**
-     * What a share holds whole at once, every file taken together (ADR 0129 decision 6): an iOS share extension's memory
+     * What a share holds whole at once, every file taken together (ADR 0131 decision 6): an iOS share extension's memory
      * is bounded, and one rule holds on every app (D8: Android's own 40 MiB read cap became this budget). A file beyond
      * it is left out as a too large one is.
      */

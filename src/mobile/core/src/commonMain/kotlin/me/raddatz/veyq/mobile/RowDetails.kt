@@ -9,7 +9,7 @@ import me.raddatz.veyq.mobile.session.TenantSession
 import me.raddatz.veyq.mobile.words.Piece
 
 /**
- * What a tenant's list rows say beside their names, read in one go after every change both apps make (ADR 0127): a
+ * What a tenant's list rows say beside their names, read in one go after every change both apps make (ADR 0129): a
  * Pot's currency, a file's size and change (or that it is not uploaded), a drop box's guests — and which cover each node
  * names, so the lists' pictures follow too. A part that does not read keeps what the previous [Read] held, so a passing
  * network error empties no row.

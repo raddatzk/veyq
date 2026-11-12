@@ -9,7 +9,7 @@ options:
     macOS: "26.0"
   createIntermediateGroups: true
   # The words' String Catalogs exist before Xcode plans a first build, which reads a catalog's languages before any
-  # script runs; each target's pre-build script keeps its own current (ADR 0127 decision 3).
+  # script runs; each target's pre-build script keeps its own current (ADR 0129 decision 3).
   preGenCommand: python3 ../words/generate_words.py --apple-strings build/generated/app/Words.xcstrings && python3 ../words/generate_words.py --apple-strings build/generated/share/Words.xcstrings
 settings:
   base:
@@ -28,12 +28,12 @@ targets:
     sources:
       - path: Veyq
         excludes: [Info.plist, "*.entitlements"]
-      # Every word the app shows, generated before the build from src/mobile/words/words.json (ADR 0127 decision 3).
+      # Every word the app shows, generated before the build from src/mobile/words/words.json (ADR 0129 decision 3).
       - path: build/generated/app/Words.xcstrings
         optional: true
         buildPhase: resources
     dependencies:
-      # The share extension (ADR 0129), embedded in the iOS app only.
+      # The share extension (ADR 0131), embedded in the iOS app only.
       - target: VeyqShare
         destinationFilters: [iOS]
     preBuildScripts:
@@ -54,12 +54,12 @@ targets:
         basedOnDependencyAnalysis: false
         outputFiles: ["$(SRCROOT)/build/generated/app/Words.xcstrings"]
         script: |
-          # The catalog's English and German as the String Catalog `Words` (ADR 0127 decision 3).
+          # The catalog's English and German as the String Catalog `Words` (ADR 0129 decision 3).
           python3 "$SRCROOT/../words/generate_words.py" --apple-strings "$SRCROOT/build/generated/app/Words.xcstrings"
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: me.raddatz.veyq
-        # iOS shares the app group and a keychain access group with the share extension (ADR 0129); macOS has none yet.
+        # iOS shares the app group and a keychain access group with the share extension (ADR 0131); macOS has none yet.
         "CODE_SIGN_ENTITLEMENTS[sdk=iphone*]": Veyq/Veyq-iOS.entitlements
         PRODUCT_NAME: veyq
         GENERATE_INFOPLIST_FILE: YES
@@ -80,7 +80,7 @@ targets:
         # Merged into the generated Info.plist: plain http to the developer's *.localhost instance only.
         INFOPLIST_FILE: Veyq/Info.plist
   VeyqShare:
-    # The share extension (ADR 0129): the app's views and model, in the extension role, under its own controller. It
+    # The share extension (ADR 0131): the app's views and model, in the extension role, under its own controller. It
     # compiles the app's sources but its entry point and the dev sign-in, and builds VeyqCore as the app does.
     type: app-extension
     platform: iOS
@@ -106,7 +106,7 @@ targets:
         basedOnDependencyAnalysis: false
         outputFiles: ["$(SRCROOT)/build/generated/share/Words.xcstrings"]
         script: |
-          # The catalog's English and German as the String Catalog `Words` (ADR 0127 decision 3).
+          # The catalog's English and German as the String Catalog `Words` (ADR 0129 decision 3).
           python3 "$SRCROOT/../words/generate_words.py" --apple-strings "$SRCROOT/build/generated/share/Words.xcstrings"
     settings:
       base:

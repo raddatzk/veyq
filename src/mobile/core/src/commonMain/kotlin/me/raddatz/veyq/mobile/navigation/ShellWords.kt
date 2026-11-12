@@ -4,7 +4,7 @@ import me.raddatz.veyq.mobile.words.Msg
 import me.raddatz.veyq.mobile.words.Notice
 import me.raddatz.veyq.mobile.words.Piece
 
-/** What the shell says and finds that no application decides, for both apps (ADR 0127). */
+/** What the shell says and finds that no application decides, for both apps (ADR 0129). */
 object ShellWords {
     /** A space's name: the personal and the group space by their words, another by its own name, none as Home. */
     fun space(space: SpaceRef?): Piece = when (space?.kind) {

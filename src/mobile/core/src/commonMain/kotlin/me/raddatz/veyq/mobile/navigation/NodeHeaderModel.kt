@@ -18,7 +18,7 @@ import me.raddatz.veyq.mobile.words.Notice
 import me.raddatz.veyq.mobile.words.Notices
 
 /**
- * The header of one open node, for every kind (the web's `NodePage` + `NodeHeader`, ADR 0127 decision 2): its rights
+ * The header of one open node, for every kind (the web's `NodePage` + `NodeHeader`, ADR 0129 decision 2): its rights
  * composed here — the heart once the pin set is known, a link where the kind shares and the tenant's links are on, the
  * report where the server takes reports (read once per tenant), a guest's folder narrowed, the kind's doors from
  * [AppKinds.doors] over what its page knows ([update]) —, the plan and the words over [NodeHeader], and the actions core

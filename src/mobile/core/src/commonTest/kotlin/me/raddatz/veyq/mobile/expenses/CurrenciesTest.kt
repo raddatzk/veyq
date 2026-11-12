@@ -4,7 +4,7 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
 
-/** The one currency table (ADR 0127): the web's `Intl` codes and digits, whatever the platform's own table says. */
+/** The one currency table (ADR 0129): the web's `Intl` codes and digits, whatever the platform's own table says. */
 class CurrenciesTest {
     @Test
     fun the_codes_are_the_webs_sorted_and_each_a_currency_of_the_format() {

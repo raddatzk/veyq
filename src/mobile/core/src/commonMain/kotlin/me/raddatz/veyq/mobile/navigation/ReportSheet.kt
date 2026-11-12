@@ -16,7 +16,7 @@ import me.raddatz.veyq.mobile.words.Notice
 import me.raddatz.veyq.mobile.words.Notices
 
 /**
- * A node's report to its server's moderators, for every kind (the web's `ReportDialog.vue`, ADR 0093 — a legal duty; ADR 0127
+ * A node's report to its server's moderators, for every kind (the web's `ReportDialog.vue`, ADR 0093 — a legal duty; ADR 0129
  * decision 2): the form's state and its rules ([NodeReport]) —
  *
  * - what is reported: the node whole or only its name ([State.whole]);

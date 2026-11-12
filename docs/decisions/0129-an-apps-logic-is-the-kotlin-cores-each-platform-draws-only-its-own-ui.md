@@ -1,4 +1,4 @@
-# ADR 0127 — An app's logic is the Kotlin core's; each platform draws only its own UI, Windows and Linux among them
+# ADR 0129 — An app's logic is the Kotlin core's; each platform draws only its own UI, Windows and Linux among them
 - Status: Accepted
 - Built: partly — decisions 1 to 3 for Android and Apple (the screens' logic is the core's, the words one catalog);
   decision 4 for Linux's first slice (sign-in, the shell, Home, a Pot read only, Search), run in a Fedora 44 container
@@ -124,13 +124,13 @@ four times.
   clang accepts only under `-mxsave`, so without the flag no CPU had AVX, an x64 PC's neither (measured 2026-11-10; ADR
   0123's Consequences, the core on Windows).
 - **"The platform's side of a file" (decision 1) is read as: the dialog and the grant are the platform's, the bytes the
-  core's** ([ADR 0128](0128-the-bridge-carries-shown-bytes-beside-the-json-ranges-through-a-reader-and-files-by-path.md)
+  core's** ([ADR 0130](0130-the-bridge-carries-shown-bytes-beside-the-json-ranges-through-a-reader-and-files-by-path.md)
   decision 3). The platform's save or open dialog chooses the file and hands over its path; the core opens it and reads
   or writes it (`blob/FileSink`, `blob/FileSource`), removing a download that did not finish. The Apple app did so
   first (`AppleDepot`); Linux and Windows do so through the bridge, where nothing of a file's content crosses.
 - **When the members' pictures are read is the core's** (`session/AvatarsModel`, decision 1): Android and Apple had
   each synced them when a tenant opened, a rule in two apps before a third and fourth copy. They now watch the core's
-  model, and Linux and Windows read its id set through the bridge (ADR 0128 decision 1).
+  model, and Linux and Windows read its id set through the bridge (ADR 0130 decision 1).
 - **A node's header and its sheets are core screen models** (2026-11-11/12, before Linux and Windows drew them; decision
   2's shape, each rule a `commonTest` case killed by a mutation; what the desktops built and measured is ADR 0123's
   Consequences, the Linux app and the Windows app). Android and Apple held each of these in their app models and draw

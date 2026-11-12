@@ -12,7 +12,7 @@ import me.raddatz.veyq.mobile.words.Notice
 import me.raddatz.veyq.mobile.words.Notices
 
 /**
- * An open Pot's settings and people (the web's `SettingsPanel.vue` and `PeoplePanel.vue`, ADR 0127 decision 2): the base
+ * An open Pot's settings and people (the web's `SettingsPanel.vue` and `PeoplePanel.vue`, ADR 0129 decision 2): the base
  * currency, chosen only while the Pot holds no money entry; its own categories, added and renamed; its people added by
  * name or as a member, renamed, (de)activated, and erased only once asked. Each change is one write of the open Pot
  * ([PotModel], saving shown on its state) whose refusal this model says ([State.notice]); the typed text arrives with the

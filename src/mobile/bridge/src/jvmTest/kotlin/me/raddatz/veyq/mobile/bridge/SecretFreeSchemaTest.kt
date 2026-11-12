@@ -101,7 +101,7 @@ class SecretFreeSchemaTest {
     }
 
     /**
-     * Bytes the UI shows ride beside the JSON (`Answer.Bytes`), never in it (ADR 0128 decision 1): a byte array is
+     * Bytes the UI shows ride beside the JSON (`Answer.Bytes`), never in it (ADR 0130 decision 1): a byte array is
      * refused wherever it sits — a field, a list's element, a map's value — and whatever it is named. The members'
      * pictures as the core holds them (`AvatarsModel.state`, a map of user id to bytes) are the shape this catches.
      */

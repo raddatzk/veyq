@@ -39,7 +39,7 @@ import kotlinx.serialization.json.jsonObject
  * The dispatch over the real core (ADR 0123's Consequences, the bridge), as a host drives it, on the JVM's suite and
  * HTTP client: signs in through a call as the seeded principal (`.run/.env`, or `VEYQ_ENV_FILE`), watches the shell
  * open, reads Home's groups, searches a name and opens the hit, and opens a Pot and reads its view to balances that sum
- * to zero. Then ADR 0128's channels: the principal's own picture through `Avatar.Picture`, the same bytes as the core's
+ * to zero. Then ADR 0130's channels: the principal's own picture through `Avatar.Picture`, the same bytes as the core's
  * own read in a session of its own (it needs a picture set: Settings, your profile, in the web); and Amsterdam
  * downloaded through `Pot.Download` into a file, every payload of its ZIP to the SHA-256 its manifest names. The device
  * store is a host this test plays, answering from its own thread, and the files a JVM stand-in for core's `FileSink`.
@@ -1016,7 +1016,7 @@ class LiveBridgeTest {
     }
 
     /**
-     * An entry's receipts through calls (ADR 0128) on an `App pot <n>` copy of Amsterdam: a JPEG and a PDF attached by the
+     * An entry's receipts through calls (ADR 0130) on an `App pot <n>` copy of Amsterdam: a JPEG and a PDF attached by the
      * paths an open dialog would give, saved with the entry, read back from a fresh open, each opened (its payload's SHA-256
      * the file's) and saved to a path and read back; the PDF taken off by an edit and gone. With
      * `VEYQ_LIVE_RECEIPT_NO_ROOM=1` the tenant's quota is set to one byte (the seeded principal is the Server Owner; the

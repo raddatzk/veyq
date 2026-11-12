@@ -22,7 +22,7 @@ import me.raddatz.veyq.mobile.words.Notices
 
 /**
  * The uploads as the shell shows them (the web's `UploadStatusMenu.vue`, Depot's `uploadFile.ts` and `uploadFolder.ts`;
- * ADR 0127 decision 2), a screen model over the app's one [UploadQueue]:
+ * ADR 0129 decision 2), a screen model over the app's one [UploadQueue]:
  *
  * - **files** picked into a level ([upload]) and a **folder** ([uploadFolder]): the walk's entries kept by
  *   [FolderUpload.keeps], what it left out said, the folders made while [State.preparing] names it, then its files queued;

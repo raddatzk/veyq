@@ -1,6 +1,6 @@
 // What the core says, written the way Windows writes it (ADR 0123's Consequences, the Windows app): an amount of money,
 // a day and a size in the person's locale, as the system holds it. Nothing here decides what is said; that is the core's
-// (ADR 0127 decision 1). The same as Android's NoticeText.kt, Apple's say(notice) and Linux's said.rs.
+// (ADR 0129 decision 1). The same as Android's NoticeText.kt, Apple's say(notice) and Linux's said.rs.
 using System;
 using System.Collections.Generic;
 using System.Globalization;

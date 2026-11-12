@@ -1,6 +1,6 @@
 import Foundation
 
-/// What the app and its share extension hold together (ADR 0129): on iOS the app group's defaults — the device's records
+/// What the app and its share extension hold together (ADR 0131): on iOS the app group's defaults — the device's records
 /// and trust marks, its recent and hidden lists — and, through the entitlements' first keychain access group, its
 /// Keychain items (`KeychainStore`). macOS has no extension yet and keeps the app's own.
 enum Shared {

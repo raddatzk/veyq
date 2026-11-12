@@ -12,7 +12,7 @@ import me.raddatz.veyq.mobile.session.NodeTrash
 import me.raddatz.veyq.mobile.words.Msg
 
 /**
- * A space's trash as both apps' sheet shows it (the web's `SpaceTrashDialog.vue`, ADR 0127): the root of each deleted
+ * A space's trash as both apps' sheet shows it (the web's `SpaceTrashDialog.vue`, ADR 0129): the root of each deleted
  * subtree; Restore brings it back complete — where something took its name meanwhile, the row asks for another and
  * restores under it —, "Delete forever" erases it after a question that names it. A row someone else restored or purged
  * meanwhile leaves through a re-read. [changed] runs after each write that went through, for the lists around.
@@ -92,7 +92,7 @@ class TrashSheet(private val door: Door, private val changed: () -> Unit) {
     /**
      * Erases [row] for good, the one the person confirmed: the row is handed in, never read back from [State.purging],
      * since a dialog may clear its question before its button's action runs (Apple's `confirmationDialog` did, so its
-     * "Delete forever" sent nothing; ADR 0127). The question is over either way.
+     * "Delete forever" sent nothing; ADR 0129). The question is over either way.
      */
     suspend fun purge(row: NodeTrash.Trashed) {
         _state.update { it.copy(purging = null, errorRow = null, error = null, busy = row.id) }

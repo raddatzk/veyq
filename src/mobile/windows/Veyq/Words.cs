@@ -1,4 +1,4 @@
-// Every word the app shows (ADR 0127 decision 3): one method per key of src/mobile/words/words.json, generated into
+// Every word the app shows (ADR 0129 decision 3): one method per key of src/mobile/words/words.json, generated into
 // Words.g.cs by `generate_words.py --resw` with the .resw catalogs MRT Core reads from the app's .pri — never a word
 // written here or in a screen (scripts/validate_mobile_words.py). This half is what the generated one calls: the
 // catalog's lookup, a plural's form and the placeholders' filling.

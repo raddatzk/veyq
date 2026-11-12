@@ -10,7 +10,7 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertIs
 
-/** A detail row's label and value as both apps show them, and a Memory's chapters (ADR 0127). */
+/** A detail row's label and value as both apps show them, and a Memory's chapters (ADR 0129). */
 class MediaDetailsShownTest {
     @Test
     fun every_field_has_its_label_and_a_value_shows_in_words_as_a_size_a_moment_or_as_read() {

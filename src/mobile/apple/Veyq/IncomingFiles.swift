@@ -3,7 +3,7 @@ import ImageIO
 import UniformTypeIdentifiers
 import VeyqCore
 
-/// What another app hands veyq — through the share sheet (the extension) or dropped onto the app (ADR 0129) — read once, in
+/// What another app hands veyq — through the share sheet (the extension) or dropped onto the app (ADR 0131) — read once, in
 /// order, into what a Pot's new expense takes as its receipts: an image as JPEG where the sender offers one, a HEIC
 /// re-encoded (decision 7), any other image and a PDF as they are; judged in order by core's `PotShare.Intake` — each a
 /// receipt, at most a Pot's receipts' count, all within one budget (decision 6), one rule on every app. What does not fit

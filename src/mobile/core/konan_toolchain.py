@@ -9,7 +9,7 @@ Nothing here is spelled: the Kotlin version is the version catalog's, the distri
 `$KONAN_DATA_DIR` (default `~/.konan`), and the LLVM and the gcc toolchain are what its `konan.properties` names
 (`llvm.<host>.user`, `toolchainDependency.<target>`). Not a guard and not a script: imported by the two build scripts.
 
-Windows (`mingw_x64`, ADR 0127 decision 5) is built the same way: Kotlin/Native's LLVM against the mingw-w64 toolchain
+Windows (`mingw_x64`, ADR 0129 decision 5) is built the same way: Kotlin/Native's LLVM against the mingw-w64 toolchain
 it links the core against (`toolchainDependency.mingw_x64`, an msys2 distribution that is its own sysroot,
 `targetSysRoot.mingw_x64`). Kotlin/Native's LLVM carries no `llvm-ranlib`; `llvm-ar s` writes the same index.
 """

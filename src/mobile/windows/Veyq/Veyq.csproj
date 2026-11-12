@@ -1,5 +1,5 @@
 <Project Sdk="Microsoft.NET.Sdk">
-  <!-- The veyq app on Windows (ADR 0127 decision 5; ADR 0123's Consequences, the Windows app): WinUI 3 over the core's
+  <!-- The veyq app on Windows (ADR 0129 decision 5; ADR 0123's Consequences, the Windows app): WinUI 3 over the core's
        veyq.dll, unpackaged (MSIX is the packaging's), x64 (Kotlin/Native has no Windows ARM64 target), self-contained
        with the Windows App SDK and .NET, so its build output runs where it is copied. Its words, theme and the bridge's
        types are generated (src/mobile/build/generated, never committed); windows/run.py build writes them first. -->

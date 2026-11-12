@@ -23,7 +23,7 @@ import me.raddatz.veyq.mobile.words.Msg
 import me.raddatz.veyq.mobile.words.MsgKey
 
 /**
- * The app's way in, for every platform (ADR 0123 decision 8, ADR 0127): where it opens — every account the person stays
+ * The app's way in, for every platform (ADR 0123 decision 8, ADR 0129): where it opens — every account the person stays
  * signed in to resumes after one authentication; with none, the most recent password-trusted account asks for its
  * password; with no trusted account, the sign-in —, the full sign-in with this device's password trust after it, the
  * offer to stay signed in that follows a sign-in ([Offer]), the unlock, the switcher, a server added, a sign-out and
@@ -37,7 +37,7 @@ class SessionModel<A : Connection, T : Any>(
     private val door: Door<A, T>,
     private val hidden: Hidden,
     private val recent: RecentUses,
-    /** The share extension (ADR 0129): it resumes and unlocks, but never signs in — the app does. */
+    /** The share extension (ADR 0131): it resumes and unlocks, but never signs in — the app does. */
     private val signInElsewhere: Boolean = false,
 ) {
     /** What the model does with an account, the platform's suite and HTTP client behind it. */
@@ -96,7 +96,7 @@ class SessionModel<A : Connection, T : Any>(
         @Serializable @SerialName("Starting")
         object Starting : Gate()
 
-        /** The share extension with no account it can open: the app signs in (ADR 0129). */
+        /** The share extension with no account it can open: the app signs in (ADR 0131). */
         @Serializable @SerialName("NeedsApp")
         object NeedsApp : Gate()
 

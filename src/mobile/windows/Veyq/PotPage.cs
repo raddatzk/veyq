@@ -11,7 +11,7 @@
 // inside), a deleted one its history and restore (EntryHistoryDialog); "Add entry" is the shell's CommandBar's New
 // (AddEntry). Its download
 // (Pot.Download) goes where the system's save picker says, under the name the core gives (Pot.ArchiveName); the core
-// writes the file (ADR 0128 decision 3).
+// writes the file (ADR 0130 decision 3).
 using System;
 using System.Collections.Generic;
 using System.IO;

@@ -27,7 +27,7 @@ import me.raddatz.veyq.mobile.secret.veyq_secret_service
 import me.raddatz.veyq.mobile.secret.veyq_secret_store
 
 /**
- * [DeviceKeys] on Linux (ADR 0127's Consequences): everything is an item of the Secret Service's
+ * [DeviceKeys] on Linux (ADR 0129's Consequences): everything is an item of the Secret Service's
  * default collection under the schema `me.raddatz.veyq.DeviceKey`, told apart by its attribute `alias` — each bind key,
  * the one unlock key and each small secret. HMAC and AES-GCM run in libsodium, so a key's bytes are in memory while in
  * use: Apple's level for the bind key.
@@ -40,7 +40,7 @@ import me.raddatz.veyq.mobile.secret.veyq_secret_store
  * libsecret is loaded at run time (`dlopen("libsecret-1.so.0")`, `core/secret/veyq_secret.h`), never linked. Where it is
  * absent, where no Secret Service answers on the session bus, or where the collection stays locked, creating a key or
  * keeping a secret raises `DeviceAuthFailed(false)`, a read finds nothing and a delete does nothing: the app then works
- * as without a store (ADR 0127 decision 4), and [secretServiceAvailable] says so beforehand.
+ * as without a store (ADR 0129 decision 4), and [secretServiceAvailable] says so beforehand.
  */
 class LinuxDeviceKeys internal constructor(
     private val service: SecretService?,

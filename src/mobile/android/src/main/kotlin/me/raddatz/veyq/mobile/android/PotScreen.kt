@@ -186,7 +186,7 @@ private fun Entries(view: PotView, state: me.raddatz.veyq.mobile.expenses.PotMod
         }
     }
     if (adding) EntryEditorSheet(view, model, null) { adding = false }
-    // Files shared to veyq and placed here: a new expense with them as its receipts (ADR 0129), where entries may be added.
+    // Files shared to veyq and placed here: a new expense with them as its receipts (ADR 0131), where entries may be added.
     var shared by remember { mutableStateOf<List<me.raddatz.veyq.mobile.expenses.PotSession.PendingReceipt>?>(null) }
     val incoming by model.incoming.collectAsStateWithLifecycle()
     LaunchedEffect(incoming, view.canWrite) {

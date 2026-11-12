@@ -18,7 +18,7 @@ import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
-/** The move and copy sheet both apps drew (ADR 0127 decision 2, the header CR's D1 and D4) — over a door the test plays. */
+/** The move and copy sheet both apps drew (ADR 0129 decision 2, the header CR's D1 and D4) — over a door the test plays. */
 class MoveSheetTest {
     private fun n(id: String, parent: String?, kind: String = "FOLDER", identity: Boolean = false) = NodeRef("s", id, parent, kind, id, identity)
 

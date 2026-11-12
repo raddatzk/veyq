@@ -1,4 +1,4 @@
-// A node's report to its server's moderators (ADR 0127 decision 2; core's ReportSheet, the web's ReportDialog,
+// A node's report to its server's moderators (ADR 0129 decision 2; core's ReportSheet, the web's ReportDialog,
 // ADR 0093), Fluent's way: one ContentDialog — what is reported (the node whole or only its name) and the category as
 // RadioButtons, the reason in a multi-line TextBox, the good-faith confirmation as a CheckBox, the optional contact in a
 // TextBox and the privacy notice's passage on it as a HyperlinkButton (opened in the browser, Launcher.LaunchUriAsync, the

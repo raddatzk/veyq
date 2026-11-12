@@ -24,7 +24,7 @@ import me.raddatz.veyq.mobile.words.Notices
 
 /**
  * A node's share sheet, for every kind that shares (the web's `FolderShareDialog`, a Pot's with Expenses' words, a drop
- * box's `DropBoxShareDialog`; ADR 0127 decision 2): its guest links listed newest first, each row's actions by
+ * box's `DropBoxShareDialog`; ADR 0129 decision 2): its guest links listed newest first, each row's actions by
  * [LinkRow]'s rules, and every write on them —
  *
  * - **mint** through the new-link form ([LinkForm], held here as the sheet's state), the link shown once ([State.fresh]);

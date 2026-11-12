@@ -11,7 +11,7 @@ import me.raddatz.veyq.mobile.expenses.PotShare
 import java.io.ByteArrayOutputStream
 
 /**
- * What another app shared to veyq (ADR 0129 decision 8): `ACTION_SEND` / `ACTION_SEND_MULTIPLE` of images and PDFs, read
+ * What another app shared to veyq (ADR 0131 decision 8): `ACTION_SEND` / `ACTION_SEND_MULTIPLE` of images and PDFs, read
  * at once — the permission to read a shared stream is the receiving activity's and does not outlast it — into the files a
  * Pot takes and those it refuses. A HEIC photo is taken as a JPEG (decision 7), so the receipt reads in every browser.
  */

@@ -16,7 +16,7 @@ import me.raddatz.veyq.mobile.words.Notice
 import me.raddatz.veyq.mobile.words.Notices
 
 /**
- * The entry editor of an open Pot (the web's `EntryEditor.vue`, ADR 0127 decision 2): one entry new or edited — its form
+ * The entry editor of an open Pot (the web's `EntryEditor.vue`, ADR 0129 decision 2): one entry new or edited — its form
  * ([EntryForm], every rule of what may be saved), the refusal said only once a save was tried, the preview in the base
  * currency, another currency's rate filled from the day's table, the receipts picked and held until the save, the save
  * with what it came to (a stale save reads the other writer's version into the form and says so; the receipts a full

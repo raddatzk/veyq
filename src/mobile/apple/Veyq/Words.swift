@@ -1,7 +1,7 @@
 import Foundation
 import VeyqCore
 
-/// `msg` in the person's language (the String Catalog `Words`, generated from `src/mobile/words/words.json`: ADR 0127
+/// `msg` in the person's language (the String Catalog `Words`, generated from `src/mobile/words/words.json`: ADR 0129
 /// decision 3), its placeholders filled from `args` — a plural's count first, as an `Int`.
 func say(_ msg: Msg, _ args: Any...) -> String {
     say(msg, args.map(argument))

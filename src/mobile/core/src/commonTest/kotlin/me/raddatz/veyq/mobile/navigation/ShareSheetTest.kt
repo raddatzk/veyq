@@ -15,7 +15,7 @@ import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 /**
- * A node's share sheet both apps drew (ADR 0127 decision 2, the header CR's D1 and R4): mint, edit, renew, switch off and
+ * A node's share sheet both apps drew (ADR 0129 decision 2, the header CR's D1 and R4): mint, edit, renew, switch off and
  * on, delete — each over a server the test plays (its links, as `ShareLinks` and `ShareLinkChanges` read and change them).
  */
 class ShareSheetTest {

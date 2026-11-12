@@ -8,7 +8,7 @@ A Gradle build of its own, run through its own wrapper.
   `contracts/api`, never edited), the session (`session/`), the navigation model (`navigation/`), a photo's and a video's metadata read from their bytes (`media/`),
   files on the device by the path a platform's dialog gave (`blob/FileSink`, `blob/FileSource`, `nativeMain`: the
   core opens, writes and reads them, and removes a download that did not finish; the one call that differs is
-  `blob/Files.kt`'s, `posixMain` for Apple and Linux, `mingwMain` for Windows; [ADR 0128](../../docs/decisions/0128-the-bridge-carries-shown-bytes-beside-the-json-ranges-through-a-reader-and-files-by-path.md) decision 3), when the members'
+  `blob/Files.kt`'s, `posixMain` for Apple and Linux, `mingwMain` for Windows; [ADR 0130](../../docs/decisions/0130-the-bridge-carries-shown-bytes-beside-the-json-ranges-through-a-reader-and-files-by-path.md) decision 3), when the members'
   pictures are read (`session/AvatarsModel`, held as `TenantSession.pictures`: synced when the tenant opens and when
   `peopleRead` gets a different set; every app watches it), and each
   application's own package (`expenses/`: the web's Expenses domain, a Pot's session and what its views show; `depot/`: Depot's files, each one
@@ -39,9 +39,9 @@ A Gradle build of its own, run through its own wrapper.
 - `apple/` — the Apple app (SwiftUI, iOS and macOS). `xcodegen` in that directory writes `Veyq.xcodeproj` from
   `project.yml`; the project builds `VeyqCore.xcframework` itself before it compiles. `devlogin.py <device>`
   relaunches the installed debug app in a booted simulator, signed in as the seeded dev principal. `VeyqShare/` is the
-  iOS share extension (ADR 0129), embedded in the app: it compiles every file of `Veyq/` but `VeyqApp.swift` (the
+  iOS share extension (ADR 0131), embedded in the app: it compiles every file of `Veyq/` but `VeyqApp.swift` (the
   entry point) and `DevLogin.swift`, under its own `ShareViewController`.
-- `bridge/` — the core as one shared library, `libveyq.so` on Linux and `veyq.dll` on Windows (ADR 0127 decision 5;
+- `bridge/` — the core as one shared library, `libveyq.so` on Linux and `veyq.dll` on Windows (ADR 0129 decision 5;
   what was built and measured is ADR 0123's Consequences, the bridge). `bridge.h` is its whole C surface, six functions written
   by hand and held to Kotlin/Native's own header by `BridgeHeaderTest`. `commonMain` holds the wire (`Wire.kt`: the
   `Call`s, the `HostRequest`s, what the core sends), the dispatch onto the core's models (`Bridge.kt`) and the host's
@@ -50,7 +50,7 @@ A Gradle build of its own, run through its own wrapper.
   `bridge.rs` and `Bridge.g.cs` (`:bridge:generateBindings`, into `build/generated/bridge`, never committed). `smoke/smoke.c` is a C
   host built against `bridge.h` alone. A rule found in the dispatch is a defect to move into the core; a field the UI
   does not draw, and any key, seal or token, is never part of a state the bridge sends (`SecretFreeSchemaTest`).
-  Beside the JSON go three channels ([ADR 0128](../../docs/decisions/0128-the-bridge-carries-shown-bytes-beside-the-json-ranges-through-a-reader-and-files-by-path.md)): bytes a UI shows as `Answer.Bytes`' payload (`Avatar.Picture`; the
+  Beside the JSON go three channels ([ADR 0130](../../docs/decisions/0130-the-bridge-carries-shown-bytes-beside-the-json-ranges-through-a-reader-and-files-by-path.md)): bytes a UI shows as `Answer.Bytes`' payload (`Avatar.Picture`; the
   state names the ids to ask for, an update never carries bytes), a blob's ranges through a reader held by id
   (`Answer.Reader`, `Reader.Read`, `Reader.Close`, closed with the tenant; `Bridge.openReader` the door), and files by
   the path the host's dialog gave, which the core opens (`Pot.Download` and `Receipt.Save` through `DeviceFiles`, core's
@@ -60,7 +60,7 @@ A Gradle build of its own, run through its own wrapper.
   copy `File.Save(file, path)` → `Saving(save)`, followed by `Watched.Save` and stopped by `Save.Cancel`, which answers once
   the partial file is gone; a save outlives its page and stops with its tenant.
   The generated layer copies a payload once (Rust `Option<Vec<u8>>`, C# `byte[]?`); no screen touches a pointer.
-- `linux/` — the Linux app (ADR 0127 decision 4): a Cargo package in Rust (gtk4-rs, libadwaita-rs), with `Cargo.lock`
+- `linux/` — the Linux app (ADR 0129 decision 4): a Cargo package in Rust (gtk4-rs, libadwaita-rs), with `Cargo.lock`
   committed and every cargo run `--locked`. `src/lib.rs` is the library: `bridge` (the safe wrapper over the six
   functions, the host function), `words`, `said` (money, days and sizes the desktop's way), `theme`, `create_action`
   and one module per screen (`sign_in` with the unlock, `shell` with Search, `home`, `pot` with its download,
@@ -75,7 +75,7 @@ A Gradle build of its own, run through its own wrapper.
   library from `VEYQ_LIB_DIR`, both set by `run.py`. `Containerfile` (Fedora 44 by digest) is its build and run
   environment. `run.py` is its one entry point (§ Prove your work); `run.py lock` is the one writer of `Cargo.lock`.
   Crates are held to the no-deprecated rule by reading each one's repository: cargo has no deprecation gate.
-- `windows/` — the Windows app (ADR 0127 decision 5; ADR 0123's Consequences, the Windows app): .NET 10 projects in C#.
+- `windows/` — the Windows app (ADR 0129 decision 5; ADR 0123's Consequences, the Windows app): .NET 10 projects in C#.
   `Veyq.Bridge` (net10.0, no Windows API) is the safe wrapper over the six functions, the host's device store under
   `%LOCALAPPDATA%\veyq\`, and the hand-off to the UI thread; `Veyq.Bridge.Tests` its round trip and the real DLL.
   `Veyq` is the app (WinUI 3, unpackaged, self-contained, `win-x64`; its assembly `Veyq.App`): `App.xaml.cs`,
@@ -96,7 +96,7 @@ A Gradle build of its own, run through its own wrapper.
   nuget.org the only source (`nuget.config`), the SDK in `global.json`. A project must set no property that implies an
   SDK-versioned package (trimming, AOT, `IsAotCompatible`). `run.py` is its one entry point (§ Prove your work).
 
-- `words/` — every word the apps show (ADR 0127 decision 3): `words.json` (English and German, `{n}` / `{n:int}`
+- `words/` — every word the apps show (ADR 0129 decision 3): `words.json` (English and German, `{n}` / `{n:int}`
   placeholders, plurals by CLDR category) is the one source; `generate_words.py` writes the core's `Msg` keys
   (`:core:generateWords`), Android's resources and `Context.words` (`:android:generateWords`; the app has no
   `strings.xml` of its own) and the Apple String Catalog `Words` (the project's `preGenCommand` and pre-build step;
@@ -351,7 +351,7 @@ A Gradle build of its own, run through its own wrapper.
   `<main checkout>/.run/.env`). The steps go to logcat (`veyq-trust`) and to Apple's unified log (`veyq-trust:`).
   Neither stops a running app (an install does): one still running keeps the tree it read, so what the web changed
   meanwhile is not there — `adb shell am force-stop me.raddatz.veyq` first.
-  A share to veyq (ADR 0129) is tried from a real sender — the Files app (`com.google.android.documentsui`): long-press,
+  A share to veyq (ADR 0131) is tried from a real sender — the Files app (`com.google.android.documentsui`): long-press,
   Share, veyq. On iOS from the Photos app: `xcrun simctl addmedia <udid> <image>`, the photo, Share, veyq; the extension
   resumes only an account the app left staying signed in (`devlogin.py <device> --remember`; answer its Face ID) or
   password-trusted, else it says to open veyq first. `adb shell am start -a android.intent.action.SEND --grant-read-uri-permission` with a MediaStore URI reaches
@@ -382,7 +382,7 @@ plans it (`NodeHeaderTest`), each app's `NodeHeaderActions` draws it and owns ev
 registers its page — `KindPages` (Android) / `KindPage` (Apple): it brings a share sheet, takes a cover, contributes a
 subtitle, its rights narrowing, its copy and download doors and own actions, and draws its body. The header's state and
 actions are core's `NodeHeaderModel` and its sheets core's `TrashSheet`, `MoveSheet`, `ShareSheet` and `ReportSheet`
-(ADR 0127's Consequences): an app draws them and decides nothing. Linux (`header.rs`) and Windows (`NodeHeader.cs`)
+(ADR 0129's Consequences): an app draws them and decides nothing. Linux (`header.rs`) and Windows (`NodeHeader.cs`)
 draw the same plan, but only the ids in `header::DRAWN` / `HeaderPlan.Drawn`: an action whose screen a desktop lacks
 is left out, never drawn as a control that answers "not yet"; a slice that draws it adds its id. A new kind registers
 there and its header order in `AppKinds.headerOrder`; it never builds header actions of its own. Its body places core's head
@@ -536,7 +536,7 @@ first in each of its scrolls — `LocalNodeHero.current(inset)` (Android) / `Nod
 - Every file of `apple/Veyq/` but `VeyqApp.swift` and `DevLogin.swift` is also compiled into the share extension, which
   builds with `APPLICATION_EXTENSION_API_ONLY`: no `UIApplication.shared` or other API an extension may not use there,
   and nothing the app alone may do (moving or removing what it keeps) without `AppModel.inExtension` guarding it.
-- On iOS what the share extension needs is shared (ADR 0129): defaults go through `Shared.defaults` (the app group's
+- On iOS what the share extension needs is shared (ADR 0131): defaults go through `Shared.defaults` (the app group's
   suite), never `UserDefaults.standard`, and a Keychain item through `KeychainStore` (the entitlements' first group is the
   shared one). A value only the app reads may stay its own, but nothing the session or the device trust reads.
 - Linux's C libraries (libsodium, utf8proc) are compiled by Kotlin/Native's own toolchain. It is downloaded by

@@ -2,7 +2,7 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
-	<!-- veyq's share extension (ADR 0129): offered for a share of images and PDFs only. -->
+	<!-- veyq's share extension (ADR 0131): offered for a share of images and PDFs only. -->
 	<key>NSExtension</key>
 	<dict>
 		<key>NSExtensionPointIdentifier</key>

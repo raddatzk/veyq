@@ -10,7 +10,7 @@ import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 
 /**
- * The members' pictures a UI shows, by user id (ADR 0127 decision 2), and when they are read — the core's rule, not an
+ * The members' pictures a UI shows, by user id (ADR 0129 decision 2), and when they are read — the core's rule, not an
  * app's: [MemberAvatars] is synced when the tenant opens ([load], over the people read then) and again whenever the
  * people are read anew with another picture to show ([peopleRead]: a member, or a member's revision, changed); a set
  * read anew unchanged asks nothing. The letter shows for everyone not in [state] — meanwhile, and wherever a picture

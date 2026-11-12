@@ -1,4 +1,4 @@
-// The core, reached through veyq.dll's six functions (ADR 0127 decision 5; ADR 0123's Consequences, the bridge): the
+// The core, reached through veyq.dll's six functions (ADR 0129 decision 5; ADR 0123's Consequences, the bridge): the
 // wire's types (Veyq.Bridge.Wire, generated from the core's serial descriptors and bridge.h, never written here), a safe
 // wrapper over the functions, and the host function — the one way the core asks the device for something (its store).
 //

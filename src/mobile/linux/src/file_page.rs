@@ -3,7 +3,7 @@
 //! cut said in an `AdwBanner`), a PDF (its pages rendered by poppler as they come into view, [crate::receipt_viewer]'s
 //! renderer), or what the core says where it shows none (`AdwStatusPage`) — and its facts beneath, one row with the uploader.
 //! Everything is the core's `FileModel` (`File.Open`, `Watched.File`): what shows is decided by the bytes, and an image's
-//! and a PDF's bytes come beside the answer (`File.Bytes`, ADR 0128 decision 1), asked again when the content's revision
+//! and a PDF's bytes come beside the answer (`File.Bytes`, ADR 0130 decision 1), asked again when the content's revision
 //! turns. Nothing decrypted is written to show it (ADR 0047).
 //!
 //! "Save a copy" is the header's download of a file (`win.file-save`): GTK's save dialog names the file, the core writes it

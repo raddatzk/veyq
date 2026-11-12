@@ -10,7 +10,7 @@
 //! recorded (`Pot.Record`, dated the core's today) after an `AdwAlertDialog` asked, one row or all; an entry opens the
 //! entry editor ([crate::entry_editor], which holds its history), a deleted one its history and restore
 //! ([crate::entry_history]); "Add entry" is the shell's header bar's creating action ([PotPage::add_entry]). Its download (`Pot.Download`) goes where GTK's save
-//! dialog says, under the name the core gives (`Pot.ArchiveName`); the core writes the file (ADR 0128 decision 3).
+//! dialog says, under the name the core gives (`Pot.ArchiveName`); the core writes the file (ADR 0130 decision 3).
 use std::cell::{Cell, RefCell};
 use std::rc::{Rc, Weak};
 

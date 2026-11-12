@@ -78,7 +78,7 @@ impl Screens {
                 self.shell.switching(*switching);
                 self.face(&self.shell.split);
             }
-            // Only the share extension reaches it (ADR 0129), which this app has none of: said on stderr, the window
+            // Only the share extension reaches it (ADR 0131), which this app has none of: said on stderr, the window
             // stays where it is.
             Gate::NeedsApp => eprintln!("veyq: the session is at a gate this app does not draw: NeedsApp"),
         }
@@ -116,7 +116,7 @@ fn activate(app: &adw::Application) {
         eprintln!("veyq: the device store did not open ({e}); this start keeps nothing");
         DeviceStore::in_memory()
     });
-    // no window owns a prompt here: the Secret Service asks nothing of its own (ADR 0127's Consequences)
+    // no window owns a prompt here: the Secret Service asks nothing of its own (ADR 0129's Consequences)
     let config = Config { device: glib::host_name().to_string(), window: 0, prompt: String::new() };
     match bridge::start(&config, store) {
         Start::Started | Start::AlreadyStarted => {}

@@ -1,9 +1,9 @@
-// A node's cover (the spec and the frame core's, ADR 0127's Consequences; the web's CoverDialog around its 16:9 cropper), Fluent's way: one ContentDialog
+// A node's cover (the spec and the frame core's, ADR 0129's Consequences; the web's CoverDialog around its 16:9 cropper), Fluent's way: one ContentDialog
 // holding the 16:9 frame, a zoom Slider under it, "Choose a picture" (the file open picker for the app's window) and,
 // where the node has a cover, "Remove cover"; Save the primary button, Cancel the close one. A drag pans the picture.
-// The device's part is the platform's (ADR 0127 decision 1): WIC decodes the picked picture (BitmapDecoder, upright by its
+// The device's part is the platform's (ADR 0129 decision 1): WIC decodes the picked picture (BitmapDecoder, upright by its
 // EXIF orientation) scaled to the size the core names (Cover.Fit, the web's COVER_SPEC) and encodes the JPEG at the core's
-// quality (BitmapEncoder) into a file the core reads (Header.CoverSave by path, ADR 0128 decision 3), removed after.
+// quality (BitmapEncoder) into a file the core reads (Header.CoverSave by path, ADR 0130 decision 3), removed after.
 // Where the picture sits is the core's math (Cover.Pose, CoverFrame), asked per change: the answer of the latest ask is
 // drawn, an older one that arrives after it is dropped.
 using System;

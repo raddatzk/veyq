@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Builds libsodium for the Apple, Linux and Windows targets `core` compiles to (ADR 0123, 0127), as static libraries Kotlin/Native links.
+"""Builds libsodium for the Apple, Linux and Windows targets `core` compiles to (ADR 0123, 0129), as static libraries Kotlin/Native links.
 
 The native platforms' primitives are libsodium's (ML-KEM-768, X25519, Ed25519, Argon2id, HKDF-SHA256, AES-256-GCM,
 SHA-256): one maintained, vendor-neutral C library, reached from Kotlin through cinterop, so the suite's native code is

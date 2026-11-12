@@ -7,7 +7,7 @@ import kotlin.test.assertEquals
 import kotlin.test.assertTrue
 
 /**
- * When the members' pictures are read ([AvatarsModel], ADR 0127 decision 1): synced when the tenant opens, again after
+ * When the members' pictures are read ([AvatarsModel], ADR 0129 decision 1): synced when the tenant opens, again after
  * the people were read anew with a change, never twice for an unchanged set — over a [MemberAvatars] the test plays,
  * counting its syncs. Its bites, each measured red: [AvatarsModel.peopleRead] without its unchanged-set check,
  * [AvatarsModel.load] without its sync.

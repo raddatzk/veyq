@@ -5,7 +5,7 @@ import me.raddatz.veyq.mobile.words.Notice
 import me.raddatz.veyq.mobile.words.Piece
 
 /**
- * One link as a node's share sheet lists it, for both apps (ADR 0127; the web's `FolderShareDialog`,
+ * One link as a node's share sheet lists it, for both apps (ADR 0129; the web's `FolderShareDialog`,
  * `DropBoxShareDialog`): its title, its badges and what this member may do with it. [dropBox]: a drop box's links, which
  * are never edited or renewed (a drop box has its one key; a new link is minted instead).
  */

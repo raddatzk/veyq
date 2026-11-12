@@ -22,7 +22,7 @@ import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 /**
- * The entry editor both apps drew (the web's `EntryEditor.vue`, ADR 0127 decision 2), now core's: the refusal said once
+ * The entry editor both apps drew (the web's `EntryEditor.vue`, ADR 0129 decision 2), now core's: the refusal said once
  * tried, a kind's change carrying the amount, the rate filled and an answer for a currency changed since dropped, the
  * receipts' caps, a stale save read again, the skipped receipts said, the delete only once asked, today the door's —
  * over a door the test plays.

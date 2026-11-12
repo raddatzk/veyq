@@ -2,7 +2,7 @@ package me.raddatz.veyq.mobile.expenses
 
 /**
  * The currencies a Pot or an entry may be kept in and their minor-unit digits (the euro 2, the yen 0, the dinar 3) — one
- * table for every app (ADR 0127), the web's `knownCurrencies` and `minorUnitsOf` (`src/web/src/features/expenses/amounts.ts`),
+ * table for every app (ADR 0129), the web's `knownCurrencies` and `minorUnitsOf` (`src/web/src/features/expenses/amounts.ts`),
  * which ask the browser's `Intl`. A platform's own table differs where ISO 4217 and CLDR do (Android's `java.util.Currency`
  * gives the Iraqi dinar 3 digits, `Intl` 0), so the apps carry this one. The digits a Pot or an entry was written with are
  * sealed in it: a later table never moves a stored amount.

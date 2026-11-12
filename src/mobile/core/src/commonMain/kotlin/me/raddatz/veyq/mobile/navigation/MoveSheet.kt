@@ -22,7 +22,7 @@ import me.raddatz.veyq.mobile.words.Piece
 
 /**
  * The move and copy sheet of one node, for every kind (the web's `MoveNodeDialog` + `MoveBrowser` and `CopyNodesDialog`,
- * ADR 0127 decision 2): the browser over [NodeMove]'s rules — it opens at the node's place, shows one place at a time under
+ * ADR 0129 decision 2): the browser over [NodeMove]'s rules — it opens at the node's place, shows one place at a time under
  * a trail up to the space's root, lists the places one may go into or place into and says why the place shown takes
  * nothing —, the guest folder's confirm before a move ends it, and the write:
  *
