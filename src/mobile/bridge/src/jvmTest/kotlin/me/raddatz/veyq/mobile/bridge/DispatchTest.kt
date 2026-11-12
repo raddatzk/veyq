@@ -2,6 +2,7 @@ package me.raddatz.veyq.mobile.bridge
 
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.async
+import kotlinx.coroutines.cancel
 import kotlinx.coroutines.runBlocking
 import me.raddatz.veyq.mobile.blob.RangeReader
 import me.raddatz.veyq.mobile.crypto.BouncyCastlePrimitives
@@ -1065,8 +1066,14 @@ class DispatchTest {
         @Volatile var hold = false
         val pollCancelled = kotlinx.coroutines.CompletableDeferred<Unit>()
         @Volatile var lunch = false
+        /** The settings' case: whether money fixes the currency, Cleo (settled) is among the people, an own category
+         *  "Snacks" is the Pot's, and who the space's members are. */
+        @Volatile var fixed = true
+        @Volatile var cleo = false
+        @Volatile var own = false
+        @Volatile var members: List<me.raddatz.veyq.mobile.session.Person>? = null
         override val session: me.raddatz.veyq.mobile.expenses.PotSession? = null
-        override fun view() = potView(purgeAfter, lunch, receipts.keys)
+        override fun view() = potView(purgeAfter, lunch, receipts.keys, fixed, cleo, own, members)
         override suspend fun poll(): Boolean {
             polls.incrementAndGet()
             if (hold) {
@@ -1381,6 +1388,203 @@ class DispatchTest {
     }
 
     @Test
+    fun aPotsSettingsAndPeopleAreChangedThroughCalls() = runBlocking {
+        val noon = 1_794_484_800_000L // 2026-11-12T12:00:00Z
+        val pot = PlayedPot(purgeAfter = noon + 86_400_000)
+        pot.fixed = false
+        pot.cleo = true
+        pot.own = true
+        pot.members = listOf(me.raddatz.veyq.mobile.session.Person("u-dana", "dana", "Dana"))
+        val opened = kotlinx.coroutines.CompletableDeferred<Unit>().also { it.complete(Unit) }
+        val b = bridgeWithPot(pot, java.util.concurrent.atomic.AtomicLong(noon), opened)
+        b.signedIn()
+        val id = (b.ask(Call.PotOpen(ObjectRef("s", "p", "EXPENSES_POT", ApplicationId.EXPENSES, "Trip"))) as Answer.PotOpened).pot
+        b.watching(Watched.Pot(id)).untilJson { (it["state"] as? kotlinx.serialization.json.JsonObject)?.get("view") as? kotlinx.serialization.json.JsonObject }
+        val set = (b.ask(Call.PotSettingsOpen(id)) as Answer.PotSettingsOpened).settings
+        suspend fun shown(pick: (PotSettingsShown) -> Boolean = { true }): PotSettingsShown =
+            b.watching(Watched.PotSettings(set)).let { w -> w.until { u -> (u as Update.PotSettings).shown?.takeIf(pick) }.also { b.unwatch(w.id) } }
+        val ops = pot.ops
+        fun stored(notice: me.raddatz.veyq.mobile.words.Notice? = null) = Answer.Stored(notice == null, notice)
+        val nothing = Answer.Stored(false, null)
+
+        // the view's settings, each the core's: the currency chosen while no money fixes it, the own category, the people
+        // with what may be done to each, the space's members still to add
+        val first = shown()
+        assertEquals("EUR" to true, first.currency to first.currencyEditable)
+        assertTrue(first.ready && first.canWrite && first.canAddCategory && first.categoriesShown && !first.currencyFixed && first.settleFirst)
+        assertEquals(listOf("c1" to "Snacks"), first.categories.map { it.id to (it.label as me.raddatz.veyq.mobile.words.Piece.Plain).text })
+        assertEquals(listOf("Anna", "Ben", "Cleo"), first.people.map { it.entry.name })
+        assertEquals(listOf(false, false, true), first.people.map { it.entry.canErase })
+        assertEquals(listOf("u-dana" to "Dana"), first.members.map { it.userId to it.name })
+        assertTrue(me.raddatz.veyq.mobile.expenses.Currencies.known.containsAll(first.currencies) && "CHF" in first.currencies)
+
+        // the base currency: its own is nothing to write; another is written, its digits the core's; once money fixes it,
+        // refused and said, nothing sent
+        assertEquals(stored(), b.ask(Call.PotSettingsCurrency(set, "EUR")))
+        assertTrue(ops.isEmpty(), "the Pot's own currency was written")
+        pot.fixed = true
+        assertEquals(stored(), b.ask(Call.PotSettingsCurrency(set, "JPY")))
+        assertEquals(me.raddatz.veyq.mobile.expenses.PotModel.Op.BaseCurrency("JPY", 0), ops.last())
+        assertTrue(shown().currencyFixed)
+        val fixedNotice = me.raddatz.veyq.mobile.words.Notice(Msg.SETTINGS_CURRENCY_FIXED)
+        assertEquals(stored(fixedNotice), b.ask(Call.PotSettingsCurrency(set, "USD")))
+        assertEquals(1, ops.size, "a fixed currency was written")
+        assertEquals(fixedNotice, shown().notice)
+
+        // a category added and renamed; a person added, a member added, renamed, deactivated — each its write; what may
+        // not be done sends nothing
+        assertEquals(stored(), b.ask(Call.PotSettingsAddCategory(set, "Museum")))
+        assertEquals(me.raddatz.veyq.mobile.expenses.PotModel.Op.AddCategory("Museum"), ops.last())
+        assertNull(shown().notice, "a stored change left the refusal before it")
+        assertEquals(stored(), b.ask(Call.PotSettingsRenameCategory(set, "c1", "Snacks renamed")))
+        assertEquals(me.raddatz.veyq.mobile.expenses.PotModel.Op.RenameCategory("c1", "Snacks renamed"), ops.last())
+        assertEquals(nothing, b.ask(Call.PotSettingsRenameCategory(set, "food", "Essen")))
+        assertEquals(stored(), b.ask(Call.PotSettingsAddPerson(set, "Dora")))
+        assertEquals(me.raddatz.veyq.mobile.expenses.PotModel.Op.AddPerson("Dora"), ops.last())
+        assertEquals(nothing, b.ask(Call.PotSettingsAddPerson(set, "  ")))
+        assertEquals(stored(), b.ask(Call.PotSettingsAddMember(set, "u-dana")))
+        assertEquals(me.raddatz.veyq.mobile.expenses.PotModel.Op.AddMember("u-dana"), ops.last())
+        assertEquals(nothing, b.ask(Call.PotSettingsAddMember(set, "u-zed")))
+        assertEquals(stored(), b.ask(Call.PotSettingsRename(set, CLEO, "Cleo B")))
+        assertEquals(me.raddatz.veyq.mobile.expenses.PotModel.Op.Rename(CLEO, "Cleo B"), ops.last())
+        assertEquals(stored(), b.ask(Call.PotSettingsToggle(set, CLEO)))
+        assertEquals(me.raddatz.veyq.mobile.expenses.PotModel.Op.SetActive(CLEO, false), ops.last())
+        val sent = ops.size
+        assertEquals(nothing, b.ask(Call.PotSettingsToggle(set, BEN)), "an unsettled person was deactivated")
+
+        // an erase only once asked: the question names them, a cancel keeps them, the second ask's answer erases
+        assertEquals(nothing, b.ask(Call.PotSettingsErase(set)))
+        assertEquals(Answer.Done, b.ask(Call.PotSettingsAskErase(set, BEN)))
+        assertNull(shown().asking, "an unsettled person's erase was asked")
+        assertEquals(Answer.Done, b.ask(Call.PotSettingsAskErase(set, CLEO)))
+        assertEquals(Triple(CLEO, "Cleo", false), shown { it.asking != null }.asking!!.let { Triple(it.person, it.name, it.named) })
+        assertEquals(Answer.Done, b.ask(Call.PotSettingsCancelAsk(set)))
+        assertNull(shown().asking)
+        assertEquals(sent, ops.size, "something was written before the erase was answered")
+        assertEquals(Answer.Done, b.ask(Call.PotSettingsAskErase(set, CLEO)))
+        assertEquals(stored(), b.ask(Call.PotSettingsErase(set)))
+        assertEquals(me.raddatz.veyq.mobile.expenses.PotModel.Op.Erase(CLEO), ops.last())
+
+        // a write refused is said in the answer and on the settings, not as the Pot's message
+        pot.outcome = me.raddatz.veyq.mobile.expenses.PotSession.WriteOutcome.STALE
+        val stale = me.raddatz.veyq.mobile.words.Notice(Msg.ENTRY_STALE)
+        assertEquals(stored(stale), b.ask(Call.PotSettingsAddPerson(set, "Eve")))
+        assertEquals(stale, shown { it.notice != null }.notice)
+        pot.outcome = me.raddatz.veyq.mobile.expenses.PotSession.WriteOutcome.WRITTEN
+
+        // closed, they answer no more; a Pot closed closes its settings
+        assertEquals(Answer.Done, b.ask(Call.PotSettingsClose(set)))
+        assertEquals(Answer.Refused(Answer.Why.NO_SUCH_SETTINGS), b.ask(Call.PotSettingsAddPerson(set, "Fay")))
+        val again = (b.ask(Call.PotSettingsOpen(id)) as Answer.PotSettingsOpened).settings
+        assertEquals(Answer.Done, b.ask(Call.PotClose(id)))
+        assertEquals(Answer.Refused(Answer.Why.NO_SUCH_SETTINGS), b.ask(Call.PotSettingsAddPerson(again, "Fay")))
+        assertEquals(Answer.Refused(Answer.Why.NO_SUCH_POT), b.ask(Call.PotSettingsOpen(id)))
+        b.shutdown()
+    }
+
+    /** "New pot" over a door the test plays: the members of each space, and each create as it reached it. */
+    private class PlayedCreate : me.raddatz.veyq.mobile.expenses.PotCreateSheet.Door {
+        val membersOf = mapOf(
+            "s" to listOf(me.raddatz.veyq.mobile.session.Person("u-me", "me", "Me"), me.raddatz.veyq.mobile.session.Person("u-dana", "dana", "Dana")),
+            "t" to listOf(me.raddatz.veyq.mobile.session.Person("u-me", "me", "Me")),
+        )
+        class Created(val scopeId: String, val parentId: String?, val name: String, val base: me.raddatz.veyq.mobile.expenses.Ledger.BaseCurrency, val people: List<String>)
+        val created = java.util.concurrent.CopyOnWriteArrayList<Created>()
+        @Volatile var outcome = me.raddatz.veyq.mobile.expenses.PotCreate.Outcome.CREATED
+        override suspend fun members(scopeId: String) = membersOf[scopeId]
+        override suspend fun create(
+            scopeId: String, parentId: String?, name: String, base: me.raddatz.veyq.mobile.expenses.Ledger.BaseCurrency,
+            people: List<me.raddatz.veyq.mobile.expenses.PotCreate.NewPerson>,
+        ): me.raddatz.veyq.mobile.expenses.PotCreate.Result {
+            created += Created(scopeId, parentId, name, base, people.map { it.userId ?: it.name })
+            val made = outcome == me.raddatz.veyq.mobile.expenses.PotCreate.Outcome.CREATED || outcome == me.raddatz.veyq.mobile.expenses.PotCreate.Outcome.PEOPLE_NOT_ADDED
+            return me.raddatz.veyq.mobile.expenses.PotCreate.Result(outcome, if (made) "new" else null)
+        }
+    }
+
+    @Test
+    fun aNewPotIsFilledAndCreatedThroughCalls() = runBlocking {
+        val door = PlayedCreate()
+        val family = SpaceRef("s", "SHARED", "Familie")
+        val mine = SpaceRef("t", "PERSONAL", "t")
+        // New pressed in folder "Trips" of the space shown
+        val place = me.raddatz.veyq.mobile.navigation.Shell(application = null, space = "s", path = listOf(FolderRef("f-trips", "Trips")))
+        val scope = kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.SupervisorJob() + kotlinx.coroutines.Dispatchers.Default)
+        val languages = java.util.concurrent.CopyOnWriteArrayList<String>()
+        val hidden = Hidden({}, emptySet())
+        val b = Bridge {
+            Composition(SessionModel(Door(), hidden, RecentUses({}, emptyList())), hidden) { _ ->
+                Tenant(shell = null, pot = null, me = "u1", pictures = pictures, loadPictures = {}, createPot = { language ->
+                    languages += language
+                    me.raddatz.veyq.mobile.expenses.PotCreateSheet.open(door, place, listOf(family, mine), language, scope, kotlinx.coroutines.Dispatchers.Default)
+                })
+            }
+        }
+        b.signedIn()
+        val c = (b.ask(Call.PotCreateOpen("de-DE")) as Answer.PotCreateOpened).create
+        assertEquals(listOf("de-DE"), languages)
+        suspend fun shown(pick: (PotCreateShown) -> Boolean = { true }): PotCreateShown =
+            b.watching(Watched.PotCreate(c)).let { w -> w.until { u -> (u as Update.PotCreate).shown?.takeIf(pick) }.also { b.unwatch(w.id) } }
+
+        // it starts on the space shown in the language's currency, the space's members offered once read; no name, no create
+        val first = shown { it.offered.isNotEmpty() }
+        assertEquals("s" to "EUR", first.space to first.currency)
+        assertEquals(listOf("s", "t"), first.spaces.map { it.space.scopeId })
+        assertEquals(listOf("u-me", "u-dana"), first.offered.map { it.userId })
+        assertTrue(!first.canCreate && !first.saving && !first.done && first.people.isEmpty())
+
+        // the name as typed decides Create
+        assertEquals(Answer.Done, b.ask(Call.PotCreateName(c, "Trip")))
+        assertTrue(shown().canCreate)
+        assertEquals(Answer.Done, b.ask(Call.PotCreateName(c, " ")))
+        assertTrue(!shown().canCreate)
+
+        // people typed and members added; a member of a space left goes; a person taken out again
+        assertEquals(Answer.Stored(true, null), b.ask(Call.PotCreateAddTyped(c, "Ben")))
+        assertEquals(Answer.Stored(false, null), b.ask(Call.PotCreateAddTyped(c, " ")))
+        assertEquals(Answer.Done, b.ask(Call.PotCreateAddMember(c, "u-dana")))
+        assertEquals(listOf("Ben" to false, "Dana" to true), shown().people.map { it.name to it.member })
+        assertEquals(listOf("u-me"), shown().offered.map { it.userId })
+        assertEquals(Answer.Done, b.ask(Call.PotCreateSpace(c, "t")))
+        assertEquals(listOf("Ben"), shown { it.space == "t" && it.offered.isNotEmpty() }.people.map { it.name })
+        assertEquals(Answer.Done, b.ask(Call.PotCreateSpace(c, "s")))
+        shown { it.space == "s" && it.offered.size == 2 }
+        assertEquals(Answer.Done, b.ask(Call.PotCreateAddMember(c, "u-dana")))
+        assertEquals(Answer.Done, b.ask(Call.PotCreateRemove(c, 0)))
+        assertEquals(listOf("Dana"), shown().people.map { it.name })
+        assertEquals(Answer.Done, b.ask(Call.PotCreateCurrency(c, "CHF")))
+        assertEquals("CHF", shown().currency)
+
+        // names sent unawaited land in the order typed: the last is the one created
+        repeat(200) { i -> b.call(wire.encodeToString(Call.serializer(), Call.PotCreateName(c, "Trip ${i + 1}"))) { _, _ -> } }
+        assertEquals(Answer.Stored(true, null), b.ask(Call.PotCreateCreate(c, "Cleo")))
+        val made = door.created.single()
+        assertEquals(listOf("s", "f-trips", "Trip 200"), listOf(made.scopeId, made.parentId, made.name))
+        assertEquals("CHF" to 2, made.base.currency to made.base.minorUnits)
+        assertEquals(listOf("u-dana", "Cleo"), made.people)
+        assertTrue(shown().done)
+
+        // a create refused says why, in the answer and on the sheet
+        door.outcome = me.raddatz.veyq.mobile.expenses.PotCreate.Outcome.NAME_TAKEN
+        val other = (b.ask(Call.PotCreateOpen("en")) as Answer.PotCreateOpened).create
+        assertEquals("USD", b.watching(Watched.PotCreate(other)).until { u -> (u as Update.PotCreate).shown }.currency)
+        assertEquals(Answer.Done, b.ask(Call.PotCreateName(other, "Trip")))
+        val taken = me.raddatz.veyq.mobile.words.Notice(Msg.CREATE_POT_NAME_TAKEN)
+        assertEquals(Answer.Stored(false, taken), b.ask(Call.PotCreateCreate(other, "")))
+        assertEquals(taken, b.watching(Watched.PotCreate(other)).until { u -> (u as Update.PotCreate).shown?.takeIf { it.notice != null } }.notice)
+        // the Pot made without its people: stored, and said
+        door.outcome = me.raddatz.veyq.mobile.expenses.PotCreate.Outcome.PEOPLE_NOT_ADDED
+        assertEquals(Answer.Stored(true, me.raddatz.veyq.mobile.words.Notice(Msg.CREATE_POT_PEOPLE_FAILED)), b.ask(Call.PotCreateCreate(other, "")))
+
+        // closed, it answers no more
+        assertEquals(Answer.Done, b.ask(Call.PotCreateClose(other)))
+        assertEquals(Answer.Refused(Answer.Why.NO_SUCH_CREATE), b.ask(Call.PotCreateName(other, "x")))
+        assertEquals(Answer.Refused(Answer.Why.NO_SUCH_CREATE), b.ask(Call.PotCreateCreate(other, "")))
+        b.shutdown()
+        scope.cancel()
+    }
+
+    @Test
     fun aCoversCutIsTheCoresPixels() = runBlocking {
         val b = bridge()
         assertEquals(Answer.CoverCut(320, 0, 320, 360), b.ask(Call.CoverCut(me.raddatz.veyq.mobile.session.NodeCover.Crop(0.5, 0.0, 0.5, 1.0), 640, 360)))
@@ -1472,9 +1676,13 @@ class DispatchTest {
         const val DINNER = "0e000000-0000-4000-9000-000000000001"
         const val TAXI = "0e000000-0000-4000-9000-000000000002"
         const val LUNCH = "0e000000-0000-4000-9000-000000000003"
+        const val CLEO = "0e000000-0000-4000-8000-000000000003"
 
         /** The played Pot's view, as `PotFixture` builds one in the core's tests: from revisions the test writes. */
-        fun potView(purgeAfter: Long, lunch: Boolean, receipts: Set<String> = emptySet()): me.raddatz.veyq.mobile.expenses.PotView {
+        fun potView(
+            purgeAfter: Long, lunch: Boolean, receipts: Set<String> = emptySet(), fixed: Boolean = true, cleo: Boolean = false,
+            own: Boolean = false, members: List<me.raddatz.veyq.mobile.session.Person>? = null,
+        ): me.raddatz.veyq.mobile.expenses.PotView {
             val base = me.raddatz.veyq.mobile.expenses.Ledger.BaseCurrency("EUR", 2)
             // the dinner keeps every receipt the Pot holds
             fun expense(title: String, amount: Long) = me.raddatz.veyq.mobile.expenses.Expense(
@@ -1485,6 +1693,7 @@ class DispatchTest {
             val revs = listOfNotNull(
                 Triple(ANNA, 1L, me.raddatz.veyq.mobile.expenses.ParticipantBody("Anna", true, 1)),
                 Triple(BEN, 1L, me.raddatz.veyq.mobile.expenses.ParticipantBody("Ben", true, 2)),
+                if (cleo) Triple(CLEO, 1L, me.raddatz.veyq.mobile.expenses.ParticipantBody("Cleo", true, 3)) else null,
                 Triple(DINNER, 1L, expense("Dinner", 3000)),
                 Triple(TAXI, 1L, expense("Taxi", 999)),
                 Triple(TAXI, 2L, me.raddatz.veyq.mobile.expenses.Deleted),
@@ -1498,8 +1707,8 @@ class DispatchTest {
             }
             return me.raddatz.veyq.mobile.expenses.PotView(
                 me.raddatz.veyq.mobile.expenses.PotView.Source(
-                    "Trip", me.raddatz.veyq.mobile.expenses.PotMeta(base, emptyList()), me.raddatz.veyq.mobile.expenses.Ledger.build(held, base),
-                    me.raddatz.veyq.mobile.expenses.LedgerCheck.of(held), null, emptySet(), canWrite = true, currencyFixed = true, held = held,
+                    "Trip", me.raddatz.veyq.mobile.expenses.PotMeta(base, if (own) listOf("c1" to "Snacks") else emptyList()), me.raddatz.veyq.mobile.expenses.Ledger.build(held, base),
+                    me.raddatz.veyq.mobile.expenses.LedgerCheck.of(held), members, emptySet(), canWrite = true, currencyFixed = fixed, held = held,
                     ratesOffered = true,
                     receipts = receipts.sorted().map { id ->
                         val listed = me.raddatz.veyq.mobile.blob.ApplicationBlobs.Listed(id, DINNER, me.raddatz.veyq.mobile.expenses.Receipts.ROLE, "b-$id", 1, 10, "", null, null, 1_000L, 1_000L, null, null, false)

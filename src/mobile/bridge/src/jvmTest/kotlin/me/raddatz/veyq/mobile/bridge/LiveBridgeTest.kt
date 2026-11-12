@@ -1024,6 +1024,125 @@ class LiveBridgeTest {
      * `VEYQ_LIVE_STORAGE_FIT`) and put back however the run ends: an entry saved with a picture names it left out. The
      * copy purged.
      */
+    /**
+     * New pot and a Pot's settings through calls (`PotCreate.*`, `PotSettings.*`), in a folder made beside Amsterdam ("App
+     * folder <n>"): "App pot <n>" created there with a member and a person typed, the shell opening it; its base currency
+     * changed while it is empty, a category added and renamed, a person added, renamed, deactivated and erased (asked first),
+     * another member added, an entry saved through the editor and then the currency refused; the Pot copied (CR 3a's path,
+     * `Move.*`) and the copy read back as the original — its people, currency, own category and entry. The folder, with both
+     * Pots, is trashed and purged.
+     */
+    @Test
+    fun aPotIsCreatedSetUpAndCopiedThroughCalls() = runBlocking {
+        val origin = System.getenv("VEYQ_LIVE") ?: return@runBlocking
+        val (b, first) = signedInLive(origin, "bridge live create test")
+        val n = System.currentTimeMillis() % 100_000
+        suspend fun fresh(): Update.Shell {
+            assertEquals(Answer.Done, b.ask(Call.ShellRefresh, timeout = 1.minutes))
+            return b.watching(Watched.Shell).next() as Update.Shell
+        }
+        val made = mutableListOf<String>()
+        withFolder(b, first, "App folder $n", purge = true) { folder ->
+            assertEquals(Answer.Done, b.ask(Call.ShellEnter(me.raddatz.veyq.mobile.navigation.FolderRef(folder.nodeId, folder.name))))
+
+            // New pot in the folder shown: the space shown, English's currency, the space's members offered
+            val c = (b.ask(Call.PotCreateOpen("en-US")) as Answer.PotCreateOpened).create
+            val start = b.watching(Watched.PotCreate(c)).until(1.minutes) { u -> (u as Update.PotCreate).shown?.takeIf { it.offered.size >= 2 } }
+            assertEquals(folder.scopeId to "USD", start.space to start.currency)
+            val (member, other) = start.offered[0] to start.offered[1]
+            val name = "App pot $n"
+            assertEquals(Answer.Done, b.ask(Call.PotCreateName(c, name)))
+            assertEquals(Answer.Done, b.ask(Call.PotCreateAddMember(c, member.userId)))
+            assertTrue(b.watching(Watched.PotCreate(c)).until(1.minutes) { u -> (u as Update.PotCreate).shown?.takeIf { it.people.size == 1 } }.canCreate)
+            assertEquals(Answer.Stored(true, null), b.ask(Call.PotCreateCreate(c, "Anna $n"), timeout = 2.minutes))
+            assertEquals(Answer.Done, b.ask(Call.PotCreateClose(c)))
+            val created = b.watching(Watched.Shell).until(1.minutes) { u -> (u as Update.Shell).state?.shell?.openObject?.takeIf { it.name == name } }
+            made += created.nodeId
+            assertEquals(folder.nodeId, fresh().state!!.lists.nodes.first { it.nodeId == created.nodeId }.parentId, "the Pot is not in the folder shown")
+            println("created $name with ${member.name} and Anna $n")
+
+            val pot = (b.ask(Call.PotOpen(created)) as Answer.PotOpened).pot
+            b.watching(Watched.Pot(pot)).untilJson(1.minutes) { (it["state"] as? JsonObject)?.get("view") as? JsonObject }
+            val set = (b.ask(Call.PotSettingsOpen(pot)) as Answer.PotSettingsOpened).settings
+            suspend fun settings(pick: (PotSettingsShown) -> Boolean): PotSettingsShown =
+                b.watching(Watched.PotSettings(set)).let { w -> w.until(1.minutes) { u -> (u as Update.PotSettings).shown?.takeIf { !it.saving && pick(it) } }.also { b.unwatch(w.id) } }
+            suspend fun stored(call: Call) = b.ask(call, timeout = 2.minutes)
+            val s0 = settings { true }
+            assertEquals(listOf(member.name, "Anna $n"), s0.people.map { it.entry.name })
+            assertEquals("USD" to true, s0.currency to s0.currencyEditable)
+
+            // the base currency while the Pot is empty
+            assertEquals(Answer.Stored(true, null), stored(Call.PotSettingsCurrency(set, "CHF")))
+            settings { it.currency == "CHF" }
+            // a category added and renamed
+            assertEquals(Answer.Stored(true, null), stored(Call.PotSettingsAddCategory(set, "Snacks $n")))
+            val category = settings { it.categories.size == 1 }.categories.single()
+            assertEquals(Answer.Stored(true, null), stored(Call.PotSettingsRenameCategory(set, category.id, "Snacks $n renamed")))
+            settings { s -> s.categories.any { (it.label as? me.raddatz.veyq.mobile.words.Piece.Plain)?.text == "Snacks $n renamed" } }
+            // a person added, renamed, deactivated, asked about and erased
+            assertEquals(Answer.Stored(true, null), stored(Call.PotSettingsAddPerson(set, "Cleo $n")))
+            val cleo = settings { s -> s.people.any { it.entry.name == "Cleo $n" } }.people.first { it.entry.name == "Cleo $n" }.entry
+            assertEquals(Answer.Stored(true, null), stored(Call.PotSettingsRename(set, cleo.id, "Cleo $n B")))
+            assertEquals(Answer.Stored(true, null), stored(Call.PotSettingsToggle(set, cleo.id)))
+            assertEquals(false to "Cleo $n B", settings { s -> s.people.any { it.entry.id == cleo.id && !it.entry.active } }.people.first { it.entry.id == cleo.id }.entry.let { it.active to it.name })
+            assertEquals(Answer.Done, b.ask(Call.PotSettingsAskErase(set, cleo.id)))
+            assertEquals(cleo.id, settings { it.asking != null }.asking!!.person)
+            assertEquals(Answer.Stored(true, null), stored(Call.PotSettingsErase(set)))
+            settings { s -> s.asking == null && s.people.none { it.entry.id == cleo.id } }
+            // another member added
+            assertEquals(Answer.Stored(true, null), stored(Call.PotSettingsAddMember(set, other.userId)))
+            val people = settings { s -> s.people.any { it.entry.userId == other.userId } }.people.map { it.entry.name }
+            println("set up: CHF, Snacks $n renamed, people $people")
+
+            // an entry: the currency is fixed now, and refused
+            val ed = (b.ask(Call.EditorOpen(pot, null, ".")) as Answer.EditorOpened).editor
+            b.watching(Watched.Editor(ed)).until(1.minutes) { u -> (u as Update.Editor).shown }
+            assertEquals(Answer.Done, b.ask(Call.EditorChange(ed, E.Title("Live create $n"))))
+            assertEquals(Answer.Done, b.ask(Call.EditorChange(ed, E.Paid(0, "12"))))
+            val saved = b.ask(Call.EditorSave(ed), timeout = 2.minutes) as Answer.EditorSaved
+            assertTrue(saved.done, "${saved.notice}")
+            b.ask(Call.EditorClose(ed))
+            val fixed = me.raddatz.veyq.mobile.words.Notice(me.raddatz.veyq.mobile.words.Msg.SETTINGS_CURRENCY_FIXED)
+            assertEquals(Answer.Stored(false, fixed), stored(Call.PotSettingsCurrency(set, "EUR")))
+            assertTrue(settings { it.currencyFixed }.let { !it.currencyEditable && it.currency == "CHF" })
+            assertEquals(Answer.Done, b.ask(Call.PotSettingsClose(set)))
+
+            // copied beside itself (CR 3a's path) and read back as the original
+            val at = me.raddatz.veyq.mobile.navigation.NodeAt(created.scopeId, created.nodeId, created.kind, created.name)
+            val before = fresh().state!!.lists.nodes.map { it.nodeId }.toSet()
+            val sheet = (b.ask(Call.MoveOpen(at, true, "deleted person")) as Answer.MoveOpened).move
+            b.watching(Watched.Move(sheet)).until(2.minutes) { u -> (u as Update.Move).shown?.takeIf { it.loaded } }
+            val copied = b.ask(Call.MoveHere(sheet), timeout = 3.minutes) as Answer.MoveSent
+            assertEquals(me.raddatz.veyq.mobile.words.Msg.COPY_DONE, copied.done?.msg, "${copied.problem}")
+            b.ask(Call.MoveClose(sheet))
+            val copy = assertNotNull(fresh().state!!.lists.nodes.firstOrNull { it.kind == created.kind && it.parentId == folder.nodeId && it.nodeId !in before }, "the copy is not listed")
+            made += copy.nodeId
+            suspend fun shownOf(ref: me.raddatz.veyq.mobile.navigation.ObjectRef): Triple<PotSettingsShown, List<String>, Long> {
+                val p = (b.ask(Call.PotOpen(ref)) as Answer.PotOpened).pot
+                val view = b.watching(Watched.Pot(p)).untilJson(1.minutes) { (it["state"] as? JsonObject)?.get("view") as? JsonObject }
+                val titles = view.getValue("entries").jsonArray.map { it.jsonObject.getValue("row").jsonObject.getValue("title").jsonPrimitive.content }
+                val sid = (b.ask(Call.PotSettingsOpen(p)) as Answer.PotSettingsOpened).settings
+                val s = b.watching(Watched.PotSettings(sid)).until(1.minutes) { u -> (u as Update.PotSettings).shown }
+                return Triple(s, titles, p)
+            }
+            val (original, originalTitles, op) = shownOf(created)
+            val (theCopy, copyTitles, cp) = shownOf(me.raddatz.veyq.mobile.navigation.ObjectRef(copy.scopeId, copy.nodeId, copy.kind, created.application, copy.name))
+            fun facts(s: PotSettingsShown) = listOf(s.currency, s.currencyFixed, s.categories.map { (it.label as me.raddatz.veyq.mobile.words.Piece.Plain).text }, s.people.map { it.entry.name to it.entry.active }, s.deletedPeople)
+            assertEquals(facts(original), facts(theCopy))
+            assertEquals(listOf("Live create $n"), originalTitles)
+            assertEquals(originalTitles, copyTitles)
+            println("copied $name as ${copy.name}: ${facts(theCopy)}")
+            listOf(op, cp, pot).forEach { b.ask(Call.PotClose(it)) }
+        }
+        // the folder purged took both Pots with it: neither is listed, nor left in the trash
+        assertTrue(fresh().state!!.lists.nodes.none { it.nodeId in made }, "a Pot made was left")
+        val t = (b.ask(Call.TrashOpen(first.state!!.lists.objects.first { it.name == "Amsterdam" }.scopeId)) as Answer.TrashOpened).trash
+        val rows = b.watching(Watched.Trash(t)).until(1.minutes) { u -> (u as Update.Trash).shown?.rows }
+        assertTrue(rows.none { it.id in made }, "a Pot made was left in the trash")
+        b.ask(Call.TrashClose(t))
+        b.shutdown()
+    }
+
     @Test
     fun aReceiptIsAttachedShownAndSavedThroughCalls() = runBlocking {
         val origin = System.getenv("VEYQ_LIVE") ?: return@runBlocking

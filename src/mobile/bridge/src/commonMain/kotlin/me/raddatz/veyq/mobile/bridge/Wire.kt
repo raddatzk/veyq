@@ -227,6 +227,63 @@ internal sealed class Call {
     @Serializable @SerialName("Receipt.Save") data class ReceiptSave(val pot: Long, val receipt: String, val path: String) : Call()
 
     /**
+     * The settings and people of Pot [pot] (core's `PotSettings`, `PotModel.settings`), answered with their id
+     * ([Answer.PotSettingsOpened]) for [Watched.PotSettings]; refused `NO_SUCH_POT` while the Pot is not read. They close
+     * with [PotSettingsClose] or with their Pot.
+     */
+    @Serializable @SerialName("PotSettings.Open") data class PotSettingsOpen(val pot: Long) : Call()
+    @Serializable @SerialName("PotSettings.Close") data class PotSettingsClose(val settings: Long) : Call()
+
+    /**
+     * Each change of the settings is one write of the open Pot, answered once it ended ([Answer.Stored]: whether it was
+     * stored — a host empties its field on that —, and why not). The typed text comes with the call: no draft is the
+     * core's. The base currency [code] (`setBaseCurrency`: refused once the Pot holds money).
+     */
+    @Serializable @SerialName("PotSettings.Currency") data class PotSettingsCurrency(val settings: Long, val code: String) : Call()
+    @Serializable @SerialName("PotSettings.AddCategory") data class PotSettingsAddCategory(val settings: Long, val name: String) : Call()
+    @Serializable @SerialName("PotSettings.RenameCategory") data class PotSettingsRenameCategory(val settings: Long, val category: String, val name: String) : Call()
+    @Serializable @SerialName("PotSettings.AddPerson") data class PotSettingsAddPerson(val settings: Long, val name: String) : Call()
+    @Serializable @SerialName("PotSettings.AddMember") data class PotSettingsAddMember(val settings: Long, val userId: String) : Call()
+    @Serializable @SerialName("PotSettings.Rename") data class PotSettingsRename(val settings: Long, val person: String, val name: String) : Call()
+
+    /** Person [person] deactivated, or activated again (`toggleActive`). */
+    @Serializable @SerialName("PotSettings.Toggle") data class PotSettingsToggle(val settings: Long, val person: String) : Call()
+
+    /** Person [person]'s erase asked (`askErase`: [PotSettingsShown.asking]); nothing is written until [PotSettingsErase]. */
+    @Serializable @SerialName("PotSettings.AskErase") data class PotSettingsAskErase(val settings: Long, val person: String) : Call()
+    @Serializable @SerialName("PotSettings.Erase") data class PotSettingsErase(val settings: Long) : Call()
+    @Serializable @SerialName("PotSettings.CancelAsk") data class PotSettingsCancelAsk(val settings: Long) : Call()
+
+    /**
+     * "New pot" where the shell is (core's `PotCreateSheet`, `PotModel.createSheet`), its currency the one of [language]
+     * (the host's words' language or locale tag), answered with its id ([Answer.PotCreateOpened]) for [Watched.PotCreate].
+     */
+    @Serializable @SerialName("PotCreate.Open") data class PotCreateOpen(val language: String) : Call()
+    @Serializable @SerialName("PotCreate.Close") data class PotCreateClose(val create: Long) : Call()
+
+    /**
+     * The name as typed, applied the moment the host calls, in the order it called (as an editor's edit): what
+     * [PotCreateShown.canCreate] is judged on and [PotCreateCreate] creates. It is the host's text, never echoed.
+     */
+    @Serializable @SerialName("PotCreate.Name") data class PotCreateName(val create: Long, val name: String) : Call()
+    @Serializable @SerialName("PotCreate.Space") data class PotCreateSpace(val create: Long, val scopeId: String) : Call()
+    @Serializable @SerialName("PotCreate.Currency") data class PotCreateCurrency(val create: Long, val code: String) : Call()
+
+    /** A person's name typed added (`addTyped`): [Answer.Stored] says whether there was one, so the host empties its field. */
+    @Serializable @SerialName("PotCreate.AddTyped") data class PotCreateAddTyped(val create: Long, val name: String) : Call()
+    @Serializable @SerialName("PotCreate.AddMember") data class PotCreateAddMember(val create: Long, val userId: String) : Call()
+
+    /** The person at [index] of [PotCreateShown.people] taken out again. */
+    @Serializable @SerialName("PotCreate.Remove") data class PotCreateRemove(val create: Long, val index: Int) : Call()
+
+    /**
+     * Creates the Pot under the name sent last, a name still [typed] in the people's field taken first (`create`):
+     * [Answer.Stored] — stored, the Pot exists (the host closes; the shell opens it), with what to say where its people
+     * were not added; not stored, why.
+     */
+    @Serializable @SerialName("PotCreate.Create") data class PotCreateCreate(val create: Long, val typed: String) : Call()
+
+    /**
      * Downloads Pot [pot] as the web's ZIP into the file at [path], which the host's save dialog gave (ADR 0128
      * decision 3: the core opens it and writes it; nothing of the file crosses). [deletedName] is the host's word for
      * an erased person (`pot_deleted_person`), which the CSV carries. [Answer.Done], or [Answer.Failed] with nothing
@@ -509,10 +566,22 @@ internal sealed class Answer {
      *  under them when that is not all ([cut], `Receipts.pagesCut`). */
     @Serializable @SerialName("ReceiptPages") data class ReceiptPages(val shown: Int, val cut: Notice?) : Answer()
 
+    /** A Pot's settings opened ([Call.PotSettingsOpen]): their id, for [Watched.PotSettings] and their calls. */
+    @Serializable @SerialName("PotSettingsOpened") data class PotSettingsOpened(val settings: Long) : Answer()
+
+    /** "New pot" opened ([Call.PotCreateOpen]): its id, for [Watched.PotCreate] and its calls. */
+    @Serializable @SerialName("PotCreateOpened") data class PotCreateOpened(val create: Long) : Answer()
+
+    /**
+     * What a settings change or a New pot action came to, read as the call returns: [stored] (the host empties its field,
+     * or closes New pot), and what to say ([notice]: why it was not stored; or, stored, what still went wrong).
+     */
+    @Serializable @SerialName("Stored") data class Stored(val stored: Boolean, val notice: Notice?) : Answer()
+
     enum class Why {
         NOT_A_CALL, NO_TENANT_OPEN, NO_SUCH_CONNECTION, NO_SUCH_TENANT, NO_SUCH_POT, NO_SUCH_READER, NO_PICTURE, NOTHING_TO_DOWNLOAD,
         NO_SUCH_HEADER, NO_SUCH_TRASH, NO_SUCH_ROW, NO_SUCH_MOVE, NO_SUCH_SHARE, NO_SUCH_REPORT, NO_COVER, NO_SUCH_ENTRY, NO_SUCH_EDITOR,
-        NO_RECEIPT, NOT_WRITTEN,
+        NO_RECEIPT, NOT_WRITTEN, NO_SUCH_SETTINGS, NO_SUCH_CREATE,
 
         /** A change of trust (`TrustChange`): no offer to answer; the person cancelled the prompt; not enrolled; the
          *  password was not the account's. */
@@ -538,6 +607,12 @@ internal sealed class Watched {
 
     /** An entry editor opened by [Call.EditorOpen]. */
     @Serializable @SerialName("Editor") data class Editor(val editor: Long) : Watched()
+
+    /** A Pot's settings opened by [Call.PotSettingsOpen]. */
+    @Serializable @SerialName("PotSettings") data class PotSettings(val settings: Long) : Watched()
+
+    /** "New pot" opened by [Call.PotCreateOpen]. */
+    @Serializable @SerialName("PotCreate") data class PotCreate(val create: Long) : Watched()
 
     /** "Manage servers" while it is open ([Call.ManageOpen]). */
     @Serializable @SerialName("Manage") data object Manage : Watched()
@@ -597,7 +672,80 @@ internal sealed class Update {
 
     /** An entry editor; null once it was closed (or an id the bridge does not hold). */
     @Serializable @SerialName("Editor") data class Editor(val editor: Long, val shown: EditorShown?) : Update()
+
+    /** A Pot's settings; null once they were closed (or their Pot was). */
+    @Serializable @SerialName("PotSettings") data class PotSettings(val settings: Long, val shown: PotSettingsShown?) : Update()
+
+    /** "New pot"; null once it was closed. */
+    @Serializable @SerialName("PotCreate") data class PotCreate(val create: Long, val shown: PotCreateShown?) : Update()
 }
+
+/**
+ * A Pot's settings and people as the host draws them (core's `PotSettings` over the open Pot's `PotView`), each field one
+ * core function's answer:
+ * - [ready] (a base currency set), [canWrite], [saving] (a write runs: controls wait), [notice] (the last change's refusal);
+ * - the base [currency] among [currencies] (`Currencies.known`), [currencyEditable] (chosen here) or [currencyFixed] (the
+ *   Pot holds money: say so);
+ * - its own [categories] (each with its words) shown where [categoriesShown], renamed where [canChangeSettings], one added
+ *   where [canAddCategory];
+ * - its [people] with their facts and what may be done to each (`PotView.PersonEntry`), [deletedPeople], [settleFirst]
+ *   (someone still owes: say why some cannot be deactivated or erased), the space's [members] still to add;
+ * - [asking]: an erase asked (`PotSettings.Asked`), answered with [Call.PotSettingsErase] or [Call.PotSettingsCancelAsk].
+ */
+@Serializable
+@SerialName("PotSettingsShown")
+internal class PotSettingsShown(
+    val ready: Boolean,
+    val canWrite: Boolean,
+    val saving: Boolean,
+    val notice: Notice?,
+    val currency: String?,
+    val currencies: List<String>,
+    val currencyEditable: Boolean,
+    val currencyFixed: Boolean,
+    val canChangeSettings: Boolean,
+    val categoriesShown: Boolean,
+    val canAddCategory: Boolean,
+    val categories: List<EditorChoice>,
+    val people: List<PotView.ShownPerson>,
+    val deletedPeople: Int,
+    val settleFirst: Boolean,
+    val members: List<PotMember>,
+    val asking: ErasingPerson?,
+)
+
+/** A member of the space: their user id and the name they read by. */
+@Serializable @SerialName("PotMember")
+internal class PotMember(val userId: String, val name: String)
+
+/** An erase asked: who, by name; [named] — an entry names them, so they are deleted (else removed): the question's words. */
+@Serializable @SerialName("ErasingPerson")
+internal class ErasingPerson(val person: String, val name: String, val named: Boolean)
+
+/**
+ * "New pot" as the host draws it (core's `PotCreateSheet`): the [spaces] it may go to with their names (a picker only for
+ * more than one) and the one chosen ([space]; null: the tenant has none), the base [currency] among [currencies], the
+ * [people] it starts with (a name typed, or a member: [CreatePerson.member]) and the space's members still [offered];
+ * [canCreate] (`canCreate` of the name sent last), [saving], [notice] (why the last create did not land), [done].
+ */
+@Serializable
+@SerialName("PotCreateShown")
+internal class PotCreateShown(
+    val spaces: List<ShellShown.ShownSpace>,
+    val space: String?,
+    val currency: String,
+    val currencies: List<String>,
+    val people: List<CreatePerson>,
+    val offered: List<PotMember>,
+    val canCreate: Boolean,
+    val saving: Boolean,
+    val notice: Notice?,
+    val done: Boolean,
+)
+
+/** One of New pot's people: the name, and whether they are a member of the space (else a name typed). */
+@Serializable @SerialName("CreatePerson")
+internal class CreatePerson(val name: String, val member: Boolean)
 
 /**
  * An entry editor as the host draws it (core's `EntryEditor.State` and its form, `EntryForm`), each field one core

@@ -27,7 +27,9 @@ import me.raddatz.veyq.mobile.crypto.Primitives
 import me.raddatz.veyq.mobile.expenses.Currencies
 import me.raddatz.veyq.mobile.expenses.EntryEditor
 import me.raddatz.veyq.mobile.expenses.EntryForm
+import me.raddatz.veyq.mobile.expenses.PotCreateSheet
 import me.raddatz.veyq.mobile.expenses.PotModel
+import me.raddatz.veyq.mobile.expenses.PotSettings
 import me.raddatz.veyq.mobile.expenses.RevisionFormat
 import me.raddatz.veyq.mobile.AppKinds
 import me.raddatz.veyq.mobile.navigation.ApplicationId
@@ -113,6 +115,11 @@ internal class Tenant(
     val share: ((node: NodeAt) -> ShareSheet)? = shell?.let { s -> { node -> s.shareSheet(node) {} } },
     /** A node's report sheet (`ShellModel.reportSheet`). */
     val report: ((node: NodeAt) -> ReportSheet)? = shell?.let { s -> { node -> s.reportSheet(node) } },
+    /**
+     * "New pot" where the shell is (`PotModel.createSheet` over a Pot model of its own, [language] the host's): null where
+     * the tenant has no shell's lists yet. A test's tenant plays one over a door of its own.
+     */
+    val createPot: ((language: String) -> PotCreateSheet?)? = if (shell != null && pot != null) { language -> pot().createSheet(shell, language) } else null,
     /** A node with everything under it into a sink (`ShellModel.download`): what it left out, or null. */
     val download: (suspend (node: NodeAt, deletedName: String, sink: (ByteArray) -> Unit) -> List<NodeExport.Skipped>?)? = shell?.let { s ->
         { node, deletedName, sink -> s.download(node, deletedName, Clock.System.now().toEpochMilliseconds(), sink) }
@@ -124,6 +131,14 @@ internal class HeldHeader(val model: NodeHeaderModel, val maxButtons: Int)
 
 /** An entry editor the host opened on Pot [pot] ([Call.EditorOpen]), typed in with [separator]. */
 internal class HeldEditor(val pot: Long, val model: EntryEditor, val separator: Char)
+
+/** The settings of Pot [pot] the host opened ([Call.PotSettingsOpen]). */
+internal class HeldSettings(val pot: Long, val model: PotSettings)
+
+/** "New pot" the host opened ([Call.PotCreateOpen]) and the name it sent last ([Call.PotCreateName]), never echoed. */
+internal class HeldCreate(val sheet: PotCreateSheet) {
+    val name = MutableStateFlow("")
+}
 
 /**
  * A file on the device the host named by its path, as its save dialog gave it (ADR 0128 decision 3): the core opens and
@@ -178,6 +193,8 @@ internal class Bridge<A : Connection, T : Any>(compose: () -> Composition<A, T>)
     private val shares = Registry<ShareSheet>()
     private val reports = Registry<ReportSheet>()
     private val editors = Registry<HeldEditor>()
+    private val settings = Registry<HeldSettings>()
+    private val creates = Registry<HeldCreate>()
 
     /** "Manage servers" while it is open, null while closed; its spaces read by [managing]'s job. */
     private val manage = MutableStateFlow<List<ManagedShown>?>(null)
@@ -197,6 +214,7 @@ internal class Bridge<A : Connection, T : Any>(compose: () -> Composition<A, T>)
         val edited = when (call) {
             is Call.EditorChange -> edit(call)
             is Call.EditorDropReceipt -> editors[call.editor]?.model?.dropReceipt(call.receipt).done(Answer.Why.NO_SUCH_EDITOR)
+            is Call.PotCreateName -> named(call)
             else -> null
         }
         scope.launch {
@@ -218,6 +236,9 @@ internal class Bridge<A : Connection, T : Any>(compose: () -> Composition<A, T>)
 
     /** [Call.EditorChange] on its editor: done, or no such editor. */
     private fun edit(c: Call.EditorChange): Answer = editors[c.editor]?.model?.change(c.change).done(Answer.Why.NO_SUCH_EDITOR)
+
+    /** [Call.PotCreateName] held: done, or no such sheet. */
+    private fun named(c: Call.PotCreateName): Answer = creates[c.create]?.name?.let { it.value = c.name }.done(Answer.Why.NO_SUCH_CREATE)
 
     /** One line per call; a call whose answer is [Answer.Bytes] hands its bytes to [payload] first. */
     private suspend fun dispatch(call: Call, payload: (ByteArray) -> Unit): Answer {
@@ -312,7 +333,43 @@ internal class Bridge<A : Connection, T : Any>(compose: () -> Composition<A, T>)
                     view.deletedEntries.any { it.id == call.entry }, pot.restorable(call.entry), view.purgeAfter(call.entry),
                 )
             } ?: noPot
-            is Call.PotClose -> pots.remove(call.pot)?.close().also { editors.removeIf { it.pot == call.pot }.forEach { it.model.close() } }.done(Answer.Why.NO_SUCH_POT)
+            is Call.PotClose -> pots.remove(call.pot)?.close().also {
+                editors.removeIf { it.pot == call.pot }.forEach { it.model.close() }
+                settings.removeIf { it.pot == call.pot }
+            }.done(Answer.Why.NO_SUCH_POT)
+            is Call.PotSettingsOpen -> pots[call.pot]?.settings()?.let { model ->
+                val id = ids.incrementAndFetch()
+                settings.put(id, HeldSettings(call.pot, model))
+                Answer.PotSettingsOpened(id)
+            } ?: noPot
+            is Call.PotSettingsClose -> settings.remove(call.settings)?.model?.clear().done(Answer.Why.NO_SUCH_SETTINGS)
+            is Call.PotSettingsCurrency -> stored(call.settings) { it.setBaseCurrency(call.code) }
+            is Call.PotSettingsAddCategory -> stored(call.settings) { it.addCategory(call.name) }
+            is Call.PotSettingsRenameCategory -> stored(call.settings) { it.renameCategory(call.category, call.name) }
+            is Call.PotSettingsAddPerson -> stored(call.settings) { it.addPerson(call.name) }
+            is Call.PotSettingsAddMember -> stored(call.settings) { it.addMember(call.userId) }
+            is Call.PotSettingsRename -> stored(call.settings) { it.rename(call.person, call.name) }
+            is Call.PotSettingsToggle -> stored(call.settings) { it.toggleActive(call.person) }
+            is Call.PotSettingsAskErase -> settings[call.settings]?.model?.askErase(call.person).done(Answer.Why.NO_SUCH_SETTINGS)
+            is Call.PotSettingsErase -> stored(call.settings) { it.erase() }
+            is Call.PotSettingsCancelAsk -> settings[call.settings]?.model?.cancelAsk().done(Answer.Why.NO_SUCH_SETTINGS)
+            is Call.PotCreateOpen -> tenant.value?.models?.createPot?.let { make ->
+                val sheet = make(call.language) ?: return noTenant
+                val id = ids.incrementAndFetch()
+                creates.put(id, HeldCreate(sheet))
+                Answer.PotCreateOpened(id)
+            } ?: noTenant
+            is Call.PotCreateClose -> creates.remove(call.create)?.sheet?.close().done(Answer.Why.NO_SUCH_CREATE)
+            is Call.PotCreateName -> named(call)
+            is Call.PotCreateSpace -> creates[call.create]?.sheet?.space(call.scopeId).done(Answer.Why.NO_SUCH_CREATE)
+            is Call.PotCreateCurrency -> creates[call.create]?.sheet?.currency(call.code).done(Answer.Why.NO_SUCH_CREATE)
+            is Call.PotCreateAddTyped -> creates[call.create]?.let { Answer.Stored(it.sheet.addTyped(call.name), null) } ?: noCreate
+            is Call.PotCreateAddMember -> creates[call.create]?.sheet?.addMember(call.userId).done(Answer.Why.NO_SUCH_CREATE)
+            is Call.PotCreateRemove -> creates[call.create]?.sheet?.remove(call.index).done(Answer.Why.NO_SUCH_CREATE)
+            is Call.PotCreateCreate -> creates[call.create]?.let { c ->
+                val created = c.sheet.create(c.name.value, call.typed)
+                Answer.Stored(created, c.sheet.current.notice)
+            } ?: noCreate
             is Call.EditorOpen -> pots[call.pot]?.let { pot ->
                 val separator = call.separator.firstOrNull() ?: '.'
                 val model = pot.editor(call.entry, separator) ?: return Answer.Refused(Answer.Why.NO_SUCH_ENTRY)
@@ -490,6 +547,14 @@ internal class Bridge<A : Connection, T : Any>(compose: () -> Composition<A, T>)
     private val noShare = Answer.Refused(Answer.Why.NO_SUCH_SHARE)
     private val noReport = Answer.Refused(Answer.Why.NO_SUCH_REPORT)
     private val noEditor = Answer.Refused(Answer.Why.NO_SUCH_EDITOR)
+    private val noCreate = Answer.Refused(Answer.Why.NO_SUCH_CREATE)
+
+    /** A settings change on [id]'s model, answered once its write ended with whether it was stored and why not. */
+    private suspend fun stored(id: Long, change: suspend (PotSettings) -> Boolean): Answer {
+        val model = settings[id]?.model ?: return Answer.Refused(Answer.Why.NO_SUCH_SETTINGS)
+        val stored = change(model)
+        return Answer.Stored(stored, model.current.notice.takeIf { !stored })
+    }
 
     /** A move sheet's state as a write's answer ([Answer.MoveSent]). */
     private fun sent(s: MoveSheet.State) = Answer.MoveSent(s.done, s.undo != null, s.confirming, s.problem)
@@ -549,6 +614,8 @@ internal class Bridge<A : Connection, T : Any>(compose: () -> Composition<A, T>)
         tenant.value = null
         pots.removeAll().forEach { it.close() }
         editors.removeAll().forEach { it.model.close() }
+        settings.removeAll()
+        creates.removeAll().forEach { it.sheet.close() }
         readers.removeAll()
         headers.removeAll()
         trashes.removeAll()
@@ -597,6 +664,13 @@ internal class Bridge<A : Connection, T : Any>(compose: () -> Composition<A, T>)
         is Watched.PotLive -> flow { pots[w.pot]?.live() }
         is Watched.Editor -> editors[w.editor]?.let { e -> e.model.state.map { Update.Editor(w.editor, shownEditor(e, it)) } }
             ?: flowOf(Update.Editor(w.editor, null))
+        is Watched.PotSettings -> settings[w.settings]?.let { held ->
+            val pot = pots[held.pot]?.state ?: flowOf(null)
+            combine(held.model.state, pot) { s, p -> Update.PotSettings(w.settings, p?.view?.let { shownSettings(s, it, p.saving) }) }
+        } ?: flowOf(Update.PotSettings(w.settings, null))
+        is Watched.PotCreate -> creates[w.create]?.let { held ->
+            combine(held.sheet.state, held.name) { s, name -> Update.PotCreate(w.create, shownCreate(held.sheet, s, name)) }
+        } ?: flowOf(Update.PotCreate(w.create, null))
         is Watched.Pot -> {
             val pictures = tenant.value?.models?.pictures ?: flowOf(emptyMap())
             (pots[w.pot]?.state ?: flowOf(null)).combine(pictures) { s, p -> Update.Pot(w.pot, s, if (s == null) emptyList() else p.keys.sorted()) }
@@ -673,6 +747,28 @@ internal class Bridge<A : Connection, T : Any>(compose: () -> Composition<A, T>)
             canAddReceipt = s.canAddReceipt, refusedPick = s.refusedPick,
         )
     }
+
+    /** A Pot's settings as the host draws them ([PotSettingsShown]), each field one core function's answer. */
+    private fun shownSettings(s: PotSettings.State, view: me.raddatz.veyq.mobile.expenses.PotView, saving: Boolean) = PotSettingsShown(
+        ready = view.ready, canWrite = view.canWrite, saving = saving, notice = s.notice,
+        currency = view.currency, currencies = Currencies.known,
+        currencyEditable = view.currencyEditable, currencyFixed = view.currencyFixed, canChangeSettings = view.canChangeSettings,
+        categoriesShown = view.categoriesShown, canAddCategory = view.canAddCategory,
+        categories = view.ownCategories.map { EditorChoice(it.first, view.categoryLabel(it.first)) },
+        people = view.personEntries.map { me.raddatz.veyq.mobile.expenses.PotView.ShownPerson(it, view.personFacts(it)) },
+        deletedPeople = view.deletedPeople, settleFirst = view.canWrite && view.anyUnsettled,
+        members = view.addableMembers.map { PotMember(it.userId, it.name) },
+        asking = s.asking?.let { ErasingPerson(it.personId, it.name, it.named) },
+    )
+
+    /** "New pot" as the host draws it ([PotCreateShown]), each field one core function's answer. */
+    private fun shownCreate(sheet: PotCreateSheet, s: PotCreateSheet.State, name: String) = PotCreateShown(
+        spaces = s.spaces.map { ShellShown.ShownSpace(it, ShellWords.space(it)) }, space = s.scopeId,
+        currency = s.currency, currencies = Currencies.known,
+        people = s.people.map { CreatePerson(it.name, it.userId != null) },
+        offered = s.offered.map { PotMember(it.userId, it.displayName) },
+        canCreate = sheet.canCreate(name), saving = s.saving, notice = s.notice, done = s.done,
+    )
 
     /** A header as the host draws it ([HeaderShown]), each field the model's own answer. */
     private fun shownHeader(h: HeldHeader): HeaderShown {

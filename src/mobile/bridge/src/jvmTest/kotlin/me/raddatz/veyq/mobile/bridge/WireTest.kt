@@ -133,8 +133,15 @@ class WireTest {
             Call.EditorChange(12, me.raddatz.veyq.mobile.expenses.EditorChange.SplitMode(0, me.raddatz.veyq.mobile.expenses.EntryForm.Mode.PERCENT)), Call.EditorChange(12, me.raddatz.veyq.mobile.expenses.EditorChange.SplitMode(null, me.raddatz.veyq.mobile.expenses.EntryForm.Mode.AMOUNTS)),
             Call.EditorChange(12, me.raddatz.veyq.mobile.expenses.EditorChange.Toggle(null, "p1", false)), Call.EditorChange(12, me.raddatz.veyq.mobile.expenses.EditorChange.Share(0, "p1", "70")),
             Call.EditorChange(12, me.raddatz.veyq.mobile.expenses.EditorChange.Equally(null)), Call.EditorChange(12, me.raddatz.veyq.mobile.expenses.EditorChange.Expand(1)),
+            // a Pot's settings and New pot
+            Call.PotSettingsOpen(3), Call.PotSettingsClose(15), Call.PotSettingsCurrency(15, "CHF"), Call.PotSettingsAddCategory(15, "Snacks"),
+            Call.PotSettingsRenameCategory(15, "c1", "Süßes"), Call.PotSettingsAddPerson(15, "Cleo"), Call.PotSettingsAddMember(15, "u-dana"),
+            Call.PotSettingsRename(15, "p3", "Cleo B"), Call.PotSettingsToggle(15, "p3"), Call.PotSettingsAskErase(15, "p3"), Call.PotSettingsErase(15),
+            Call.PotSettingsCancelAsk(15), Call.PotCreateOpen("de_DE.UTF-8"), Call.PotCreateClose(16), Call.PotCreateName(16, "Rom"),
+            Call.PotCreateSpace(16, "scope-2"), Call.PotCreateCurrency(16, "EUR"), Call.PotCreateAddTyped(16, "Ben"), Call.PotCreateAddMember(16, "u-dana"),
+            Call.PotCreateRemove(16, 0), Call.PotCreateCreate(16, ""), Call.PotCreateCreate(16, "Cleo"),
         ),
-        Watched.serializer() to listOf(Watched.Session, Watched.Shell, Watched.Pot(3), Watched.PotLive(3), Watched.Manage, Watched.Header(7), Watched.Trash(8), Watched.Move(9), Watched.Share(10), Watched.Report(11), Watched.Editor(12)),
+        Watched.serializer() to listOf(Watched.Session, Watched.Shell, Watched.Pot(3), Watched.PotLive(3), Watched.Manage, Watched.Header(7), Watched.Trash(8), Watched.Move(9), Watched.Share(10), Watched.Report(11), Watched.Editor(12), Watched.PotSettings(15), Watched.PotCreate(16)),
         HostReply.serializer() to listOf(HostReply.Value("s\tn\t1"), HostReply.Value(null), HostReply.Done, HostReply.Failed("disk full")),
         Answer.serializer() to listOf(
             Answer.Done, Answer.Refused(Answer.Why.NO_TENANT_OPEN), Answer.Refused(Answer.Why.TRUST_CANCELLED), Answer.Failed("IllegalStateException"),
@@ -155,6 +162,8 @@ class WireTest {
             Answer.Refused(Answer.Why.NO_SUCH_EDITOR),
             Answer.ReceiptPages(20, Notice(Msg.RECEIPTS_PAGES_CUT, listOf(20, 25))), Answer.ReceiptPages(3, null),
             Answer.Refused(Answer.Why.NO_RECEIPT), Answer.Refused(Answer.Why.NOT_WRITTEN),
+            Answer.PotSettingsOpened(15), Answer.PotCreateOpened(16), Answer.Stored(true, null), Answer.Stored(false, Notice(Msg.SETTINGS_CURRENCY_FIXED)),
+            Answer.Stored(true, Notice(Msg.CREATE_POT_PEOPLE_FAILED)), Answer.Refused(Answer.Why.NO_SUCH_SETTINGS), Answer.Refused(Answer.Why.NO_SUCH_CREATE),
         ),
         Update.serializer() to listOf(
             Update.Session(Gate.Starting), Update.Session(Gate.NeedsApp), Update.Session(Gate.SignIn(error = Msg.SIGNIN_ERROR_CREDENTIALS, server = "veyq.localhost:8080")),
@@ -219,6 +228,29 @@ class WireTest {
                 saving = false, notice = null, asking = false, done = true, receipts = emptyList(), canAddReceipt = false, refusedPick = false,
             )),
             Update.Editor(14, null),
+            Update.PotSettings(15, PotSettingsShown(
+                ready = true, canWrite = true, saving = false, notice = Notice(Msg.SETTINGS_CURRENCY_FIXED), currency = "EUR", currencies = listOf("CHF", "EUR"),
+                currencyEditable = false, currencyFixed = true, canChangeSettings = true, categoriesShown = true, canAddCategory = true,
+                categories = listOf(EditorChoice("c1", Piece.Plain("Snacks"))),
+                people = listOf(
+                    PotView.ShownPerson(PotView.PersonEntry("p1", "Anna", PotView.Standing.MEMBER, true, -1500, false, false, false, true, "u-anna"), listOf(Piece.Money(-1500, "EUR", 2))),
+                    PotView.ShownPerson(PotView.PersonEntry("p3", "Cleo", PotView.Standing.NAME, false, 0, true, true, true, false), listOf(Piece.Said(Notice(Msg.PEOPLE_INACTIVE)))),
+                ),
+                deletedPeople = 1, settleFirst = true, members = listOf(PotMember("u-dana", "Dana")), asking = ErasingPerson("p3", "Cleo", named = false),
+            )),
+            Update.PotSettings(16, PotSettingsShown(
+                ready = false, canWrite = false, saving = true, notice = null, currency = null, currencies = emptyList(), currencyEditable = true, currencyFixed = false,
+                canChangeSettings = false, categoriesShown = false, canAddCategory = false, categories = emptyList(), people = emptyList(), deletedPeople = 0,
+                settleFirst = false, members = emptyList(), asking = null,
+            )),
+            Update.PotSettings(17, null),
+            Update.PotCreate(16, PotCreateShown(
+                spaces = listOf(ShellShown.ShownSpace(SpaceRef("scope-1", "SHARED", "Familie"), Piece.Plain("Familie"))), space = "scope-1",
+                currency = "EUR", currencies = listOf("EUR", "USD"), people = listOf(CreatePerson("Ben", member = false), CreatePerson("Dana", member = true)),
+                offered = listOf(PotMember("u-me", "Me")), canCreate = true, saving = false, notice = Notice(Msg.CREATE_POT_NAME_TAKEN), done = false,
+            )),
+            Update.PotCreate(18, PotCreateShown(emptyList(), null, "USD", emptyList(), emptyList(), emptyList(), canCreate = false, saving = true, notice = null, done = true)),
+            Update.PotCreate(19, null),
             Update.Share(10, ShareShown(
                 node = me.raddatz.veyq.mobile.navigation.NodeAt("scope-1", "folder-1", "FOLDER", "Holidays"),
                 title = Msg.SHARE_FOLDER_TITLE, intro = Msg.SHARE_FOLDER_INTRO, canMint = true,
