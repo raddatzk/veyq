@@ -1,6 +1,6 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <!-- The app's words, formats and pictures on Windows (ADR 0123's Consequences, the Windows app): the app's own Words,
-       MrtWords, Said, AvatarsHeld, TypedText and TrustWords sources (the last with the wire's generated types) against the .pri its build compiled (VEYQ_PRI), the system's formatters and
+       MrtWords, Said, AvatarsHeld, TypedText, PdfPages and TrustWords sources (the last with the wire's generated types) against the .pri its build compiled (VEYQ_PRI), the system's formatters and
        its image codecs. Windows only, an x64 process like the app (run.py runs it on the Windows host with arch x64,
        after the app's build). -->
   <PropertyGroup>
@@ -31,6 +31,7 @@
     <Compile Include="../Veyq/HeaderPlan.cs" Link="App/HeaderPlan.cs" />
     <Compile Include="../Veyq/ShareDays.cs" Link="App/ShareDays.cs" />
     <Compile Include="../Veyq/TypedText.cs" Link="App/TypedText.cs" />
+    <Compile Include="../Veyq/PdfPages.cs" Link="App/PdfPages.cs" />
     <Compile Include="$(VeyqGenerated)bridge/Bridge.g.cs" Link="App/Bridge.g.cs" />
     <Compile Include="$(VeyqGenerated)words/windows/Words.g.cs" Link="App/Words.g.cs" />
   </ItemGroup>
