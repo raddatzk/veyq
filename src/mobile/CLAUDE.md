@@ -54,6 +54,7 @@ A Gradle build of its own, run through its own wrapper.
   committed and every cargo run `--locked`. `src/lib.rs` is the library: `bridge` (the safe wrapper over the six
   functions, the host function), `words`, `said` (money, days and sizes the desktop's way), `theme`, `create_action`
   and one module per screen (`sign_in` with the unlock, `shell` with Search, `home`, `pot` with its download,
+  `pot_settings` (a Pot's Settings place, editable in place) and `pot_create` (New pot),
   `entry_editor` (an entry's editor; `typed`: when a text field is set from the state), `receipt_viewer` (a receipt
   shown from memory: a picture through GTK, a PDF through poppler-rs) and `entry_history`, `manage`
   for "Manage servers"; `header` with `trash`, `move_sheet`, `share_sheet`, `report` and `cover` for a node's header and
@@ -72,7 +73,8 @@ A Gradle build of its own, run through its own wrapper.
   `ShareDays`, `ReportDialog`, `CoverDialog`, every `ContentDialog` shown through `Dialogs.Show`),
   `AvatarsHeld` (`Held<T>`, no control, Linux's `avatars::Held` rule for rule; `AvatarsTest`) and `Avatars` (decodes
   each picture through `BitmapImage`, sets it on every `PersonPicture` of that id), `Act` (sends a
-  call, logs its answer), `EntryEditorPage` (an entry's editor, a page in place of the Pot's places) with
+  call, logs its answer), `PotSettingsView` (a Pot's Settings place, editable in place), `PotCreateDialog` (New pot),
+  `EntryEditorPage` (an entry's editor, a page in place of the Pot's places) with
   `ReceiptViewerDialog` and `PdfPages` (a receipt's PDF through `Windows.Data.Pdf`, from memory; `PdfPagesTest`), `TypedText`
   (when a text box is set from the state; `TypedTextTest`), `Words`/`MrtWords` and `SaidNotice` (the words), `Said` (money, days and sizes the system's
   way), `CreateAction`, `Log` (`%LOCALAPPDATA%\veyq\log.txt`), and in a debug build `DevLogin` and `DebugEnv`
@@ -127,8 +129,10 @@ A Gradle build of its own, run through its own wrapper.
     `Trash.*`, `Move.*`, `Share.*`, `Report.*`, `Cover.*`), and a Pot's (`Pot.*`, `Watched.PotLive`) and its entry editor's
     (`Editor.*`, `Watched.Editor`, over a played Pot: edits applied in the order sent, a save answered once its write
     ended) with its receipts (`Editor.AddReceipts`/`DropReceipt`, `Receipt.Open`/`Pages`/`Save`: a path that does not
-    open, a file past the cap read no further, the 101st refused, nothing left at a path on a failure), each bitten by
-    making it a no-op.
+    open, a file past the cap read no further, the 101st refused, nothing left at a path on a failure), its settings
+    (`PotSettings.*`, `Watched.PotSettings`: each change answered `Stored` once its write ended, an erase only once asked,
+    a closed Pot closing them) and New pot (`PotCreate.*`, `Watched.PotCreate` over a played sheet: the name applied in the
+    order sent, the members of the space chosen, the refusal in the answer), each bitten by making it a no-op.
   - `WireTest` writes and reads back a sample of every variant of every sealed type the wire reaches. The samples go
     to `build/generated/bridge/samples`, which the Rust test reads.
   - `SecretFreeSchemaTest` checks that nothing the core sends has a field named like a key, seal, token, secret or
@@ -146,7 +150,10 @@ A Gradle build of its own, run through its own wrapper.
   <n>` copy written through the editor's calls — every kind, the split's modes, a rate filled, a refusal, a stale save, a
   delete — each read back from a fresh open, then purged; `aReceiptIs*`: an `App pot <n>` copy with a JPEG and a PDF
   attached by path, opened and saved to their SHA-256, one taken off, and with `VEYQ_LIVE_RECEIPT_NO_ROOM=1` the tenant's
-  quota set to one byte for a save that names its receipt left out, put back however the run ends); `aReport*` needs `VEYQ_LIVE_REPORT_BRIDGE=1` (it leaves one report: run it once),
+  quota set to one byte for a save that names its receipt left out, put back however the run ends; `aPotIsCreated*`: an
+  `App pot <n>` made by New pot in a folder of its own with a member and a typed person, set up through the settings'
+  calls — currency, a category, a person to its erase, another member, the currency refused after an entry — and copied,
+  the copy read back as the original, the folder with both purged); `aReport*` needs `VEYQ_LIVE_REPORT_BRIDGE=1` (it leaves one report: run it once),
   `aCopyWithoutRoom*` `VEYQ_LIVE_NO_ROOM=1` while `DepotLiveTest` holds the one-byte quota, and `theLinksOfAFolder*`
   writes a desktop pass's links out for the web's guest page — each case's doc says what it reads.
 - `python3 linux/run.py <verb>` — everything Linux. From the repository root the launcher runs the same verbs as
@@ -692,3 +699,19 @@ first in each of its scrolls — `LocalNodeHero.current(inset)` (Android) / `Nod
 - poppler-rs opens a document over bytes in memory only with its `v0_82` feature (`Document::from_bytes`, a
   `glib::Bytes` the document holds); `from_data` borrows a slice that must outlive the document. cairo's `ARgb32` is
   B, G, R, A premultiplied in memory on the targets the app is built for (`gdk::MemoryFormat::B8g8r8a8Premultiplied`).
+- A closed WinUI `ComboBox` takes each type-ahead key as a selection, and a box rebuilt on every update hands the next
+  key to its replacement: "c h f" typed into the settings' base currency wrote CAD (measured 2026-11-12). A box the
+  state updates is kept, only its selection set, and writes on `SelectionChangedTrigger.Committed`
+  (`PotSettingsView`). Even so, a closed box's first key commits, and the Pot page's redraw after that write takes the
+  focus from the box (the place's panel is moved into each redraw), so the next keys land nowhere; in the open list a
+  letter moves to the next item starting with it and further letters move nothing (through `Veyq.Drive`'s keys): a
+  person reaches CHF by Enter, `c` until CHF, Enter.
+- Driving Windows' Pot screens (`Veyq.Drive`): a virtualized `ComboBox` item is chosen by keys — `press <id> enter` opens
+  the list, `key c`, `key enter` — or by `select <id>:<item>` while the list is open (an item not yet realized is not
+  in the tree); Home's rows open by `invoke` (a `select` only selects); `wait` takes an AutomationId, `sleep`
+  milliseconds.
+- Broadway: Enter in an `AdwComboRow`'s search selects nothing; click the item in the same Playwright run that typed the
+  search (a second connection finds the popover closed at its first click).
+- `scripts/validate_mobile_platform_guidelines.py` refuses `list-add-symbolic` anywhere but the create action (a "+" on
+  a settings row is a labelled button) and, on Windows, any button aligned at the bottom (`VerticalAlignment.Bottom`
+  in an initializer or set on a variable): a dialog's or place's actions sit in the flow, not pinned.
