@@ -170,8 +170,9 @@ jobs:
     needs: changes
     if: github.event_name == 'workflow_dispatch' || needs.changes.outputs.crypto == 'true'
     name: Crypto mutation gate
-    # 45 min: both gates run in this one job, and a run without the incremental cache is a full one - measured locally
-    # under load (2026-11-05) at 3.6 min for the shared crypto package and 16.7 min for web's six files.
+    # 45 min: both gates run in this one job, and a run without the incremental cache is a full one. On CI (2026-11-12)
+    # the shared crypto package's took 11 min; web's ran the whole suite and passed 45 min until it was narrowed to
+    # its scope's own tests (src/web/stryker.config.mjs), measured locally at 23 s without the cache.
     runs-on: ubuntu-latest
     timeout-minutes: 45
     steps:
