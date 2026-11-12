@@ -1,10 +1,12 @@
 //! A file's page (Depot's file viewer; the Depot CR's D1, D4 and D10), GNOME's way: the file's content in place — a picture
 //! (`gtk::Picture`, decoded by GTK and held at the core's edge at most), a text (a read-only monospace `gtk::TextView`, the
 //! cut said in an `AdwBanner`), a PDF (its pages rendered by poppler as they come into view, [crate::receipt_viewer]'s
-//! renderer), or what the core says where it shows none (`AdwStatusPage`) — and its facts beneath, one row with the uploader.
+//! renderer), an audio or video played by GTK's own player (`gtk::Video` over a `gtk::MediaFile` reading the core's reader
+//! through [crate::reader_stream], the system's GStreamer decoding it; what it cannot decode is said as not shown here), or
+//! what the core says where it shows none (`AdwStatusPage`) — and its facts beneath, one row with the uploader.
 //! Everything is the core's `FileModel` (`File.Open`, `Watched.File`): what shows is decided by the bytes, and an image's
 //! and a PDF's bytes come beside the answer (`File.Bytes`, ADR 0130 decision 1), asked again when the content's revision
-//! turns. Nothing decrypted is written to show it (ADR 0047).
+//! turns; a medium is read in ranges (`File.Reader`, ADR 0130 decision 2). Nothing decrypted is written to show it (ADR 0047).
 //!
 //! "Save a copy" is the header's download of a file (`win.file-save`): GTK's save dialog names the file, the core writes it
 //! there frame by frame (`File.Save`), and a toast says how far it is with Cancel (`Watched.Save`, `Save.Cancel`); the save
@@ -18,6 +20,7 @@ use gtk::{gdk, glib};
 use crate::bridge::{self, Watch, wire::Answer, wire::Call, wire::Facts, wire::FileShown, wire::FileViewKind, wire::NodeAt,
     wire::SaveEnd, wire::Update, wire::Watched};
 use crate::home::glib_escape;
+use crate::reader_stream::{CoreReader, ReaderStream};
 use crate::{said, words};
 
 /// The width a page of a PDF is laid out at, in logical pixels.
@@ -48,6 +51,8 @@ struct Inner {
     on_facts: RefCell<Option<OnFacts>>,
     /// The PDF shown, its pages rendered as they come into view.
     pdf: RefCell<Option<Rc<PdfPages>>>,
+    /// The medium playing and its stream over the core's reader.
+    media: RefCell<Option<(gtk::MediaFile, ReaderStream)>>,
 }
 
 impl FilePage {
@@ -72,6 +77,7 @@ impl FilePage {
             watch: RefCell::new(None),
             on_facts: RefCell::new(None),
             pdf: RefCell::new(None),
+            media: RefCell::new(None),
         });
         inner.draw();
         let weak = Rc::downgrade(&inner);
@@ -187,6 +193,7 @@ async fn saving(save: i64, toasts: &adw::ToastOverlay) {
 impl Drop for FilePage {
     fn drop(&mut self) {
         self.inner.watch.borrow_mut().take();
+        self.inner.stop_media();
         if let Some(file) = self.inner.id.get() {
             bridge::send(Call::FileClose { file });
         }
@@ -233,6 +240,7 @@ impl Inner {
         }
         *self.drawn.borrow_mut() = Some(now);
         self.pdf.borrow_mut().take();
+        self.stop_media();
         match s.view {
             FileViewKind::Loading => self.replace(&spinner(&s.words.as_deref().map(said::key).unwrap_or_default())),
             FileViewKind::Text => self.replace(&text_view(s.text.as_deref().unwrap_or_default(), s.truncated.as_ref().map(said::notice))),
@@ -253,8 +261,88 @@ impl Inner {
                     None => inner.replace(&message(&words::file_unsupported())),
                 });
             }
+            FileViewKind::Media => {
+                self.replace(&spinner(&words::file_opening()));
+                self.play(s.words.clone());
+            }
             // nothing shows here: what the core says, and Save a copy in the header bar
             _ => self.replace(&message(&s.words.as_deref().map(said::key).unwrap_or_default())),
+        }
+    }
+
+    /// The medium played through a reader the core opened for this page (`File.Reader`): GTK's media file reads it in
+    /// ranges from GStreamer's thread; a medium the system cannot decode says the core's [unplayable] words instead (Save a
+    /// copy stays in the header bar).
+    fn play(self: &Rc<Self>, unplayable: Option<String>) {
+        let Some(file) = self.id.get() else { return };
+        let weak = Rc::downgrade(self);
+        let asked = *self.drawn.borrow();
+        glib::spawn_future_local(async move {
+            let answered = bridge::call(&Call::FileReader { file }).await.map(|(a, _)| a);
+            let inner = weak.upgrade().filter(|inner| *inner.drawn.borrow() == asked);
+            let (reader, size) = match (answered, inner.as_ref()) {
+                (Ok(Answer::Reader { reader, size, media_type }), Some(_)) => {
+                    eprintln!("veyq: file medium: reader {reader}, {size} B, {}", media_type.as_deref().unwrap_or("no type"));
+                    (reader, size)
+                }
+                // the page went or shows another content meanwhile: the reader is let go
+                (Ok(Answer::Reader { reader, .. }), None) => return bridge::send(Call::ReaderClose { reader }),
+                (other, inner) => {
+                    eprintln!("veyq: File.Reader answered {other:?}");
+                    if let Some(inner) = inner {
+                        inner.replace(&message(&words::file_open_failed()));
+                    }
+                    return;
+                }
+            };
+            let Some(inner) = inner else { return };
+            let stream = ReaderStream::new(size.max(0) as u64, CoreReader(reader));
+            let media = gtk::MediaFile::for_input_stream(&stream);
+            let weak = Rc::downgrade(&inner);
+            media.connect_error_notify(move |media| {
+                let Some(error) = media.error() else { return };
+                eprintln!("veyq: the medium does not play here: {error}");
+                let (weak, unplayable) = (weak.clone(), unplayable.clone());
+                // let go of the player once its own signal returned
+                glib::idle_add_local_once(move || {
+                    if let Some(inner) = weak.upgrade() {
+                        inner.stop_media();
+                        inner.replace(&message(&unplayable.as_deref().map(said::key).unwrap_or_else(words::file_unsupported)));
+                    }
+                });
+            });
+            media.connect_prepared_notify(|media| {
+                if media.is_prepared() {
+                    eprintln!("veyq: medium prepared: {} s, video {}, audio {}, seekable {}", media.duration() / 1_000_000,
+                        media.has_video(), media.has_audio(), media.is_seekable());
+                }
+            });
+            // the position on stderr each fifth second, for a pass to read the play and a seek from
+            let logged = Cell::new(-1i64);
+            media.connect_timestamp_notify(move |media| {
+                let at = media.timestamp() / 5_000_000;
+                if at != logged.get() {
+                    logged.set(at);
+                    eprintln!("veyq: medium at {} s of {} s", media.timestamp() / 1_000_000, media.duration() / 1_000_000);
+                }
+            });
+            let video = gtk::Video::builder().media_stream(&media).vexpand(true).build();
+            video.update_property(&[gtk::accessible::Property::Label(&words::tab_depot_file())]);
+            *inner.media.borrow_mut() = Some((media, stream));
+            inner.replace(&video);
+        });
+    }
+
+    /// Stops the medium playing, if one is: the player let go first (its pipeline stopped), then the stream closed, which
+    /// lets the core's reader go.
+    fn stop_media(&self) {
+        let held = self.media.borrow_mut().take();
+        if let Some((media, stream)) = held {
+            media.pause();
+            media.clear();
+            if let Err(e) = stream.close(gtk::gio::Cancellable::NONE) {
+                eprintln!("veyq: the medium's stream did not close: {e}");
+            }
         }
     }
 

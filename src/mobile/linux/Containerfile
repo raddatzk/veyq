@@ -20,8 +20,14 @@ FROM fedora:44@sha256:15da97ed9aa94dd3d92c3925eb89520f6c80e07ea7ee24cba848d1f8b6
 #   password drawn in the container per run (ADR 0129's Consequences); test-only.
 # poppler-glib-devel: a receipt's PDF drawn by GNOME's own PDF stack (poppler-glib through poppler-rs, D4 of the Expenses
 #   CR), from the bytes in memory; a Flatpak's runtime must carry poppler-glib.
+# gstreamer1-plugins-good, gstreamer1-plugins-bad-free, gstreamer1-plugin-openh264: the system's codecs a Depot file's
+#   medium plays with (the Depot CR's D7: GTK 4.22's own media backend is GStreamer, built into libgtk, and plays a
+#   `GInputStream` through `giostreamsrc`, measured 2026-11-12). The app ships no codec: these stand for what a Fedora
+#   desktop carries — Matroska/WebM, MP4, VP8/VP9 and Opus (good, base), AAC (bad-free's fdk-aac), H.264 (Cisco's
+#   openh264). What none of them decodes (ProRes, HEVC) is said as not shown here, with Save a copy.
 RUN dnf install -y --setopt=install_weak_deps=False \
         gtk4-devel libadwaita-devel poppler-glib-devel rust cargo clippy gcc gettext \
+        gstreamer1-plugins-good gstreamer1-plugins-bad-free gstreamer1-plugin-openh264 \
         libxcrypt-compat ca-certificates tzdata glibc-langpack-en glibc-langpack-de socat \
         libsecret gnome-keyring dbus-daemon \
     && dnf clean all

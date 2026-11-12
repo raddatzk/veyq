@@ -79,6 +79,18 @@ pub fn call(call: &Call) -> impl std::future::Future<Output = Result<Answered, U
     async move { rx.recv().await.unwrap_or_else(|_| unreachable!("the answer's sender is dropped only after it sent")) }
 }
 
+/// [call] answered on this thread, which waits for it: only a thread of its own may (a player's streaming thread reading a
+/// medium's range, `reader_stream`), never GTK's main loop — the answer arrives on a core thread, which needs nothing of
+/// the caller's.
+pub fn call_blocking(call: &Call) -> Result<Answered, Unreadable> {
+    let json = CString::new(serde_json::to_string(call).expect("a Call writes")).expect("JSON holds no NUL");
+    let (tx, rx) = async_channel::bounded::<Result<Answered, Unreadable>>(1);
+    let ctx = Box::into_raw(Box::new(tx)).cast::<c_void>();
+    // SAFETY: as [call]'s.
+    unsafe { wire::veyq_call(json.as_ptr(), ptr::null(), 0, ctx, answered) };
+    rx.recv_blocking().unwrap_or_else(|_| unreachable!("the answer's sender is dropped only after it sent"))
+}
+
 unsafe extern "C" fn answered(ctx: *mut c_void, json: *const c_char, bytes: *const u8, len: usize) {
     // SAFETY: ctx is the sender [call] leaked for this one answer; the core answers once.
     let tx = unsafe { Box::from_raw(ctx.cast::<async_channel::Sender<Result<Answered, Unreadable>>>()) };
