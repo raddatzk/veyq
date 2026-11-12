@@ -1464,6 +1464,10 @@
     "en": "“{1}” could not be read and was left out.",
     "de": "„{1}“ ließ sich nicht lesen und wurde ausgelassen."
   },
+  "depot_drop_not_local": {
+    "en": "“{1}” is not on this computer and was not uploaded.",
+    "de": "„{1}“ liegt nicht auf diesem Computer und wurde nicht hochgeladen."
+  },
   "depot_uploading": {
     "en": "Uploading “{1}”…",
     "de": "„{1}“ wird hochgeladen…"
