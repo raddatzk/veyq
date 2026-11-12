@@ -453,7 +453,7 @@ struct Bar: View {
         } else if let app = model.shell.application, app == .expenses {
             ExpensesList(model: model)
         } else if let app = model.shell.application {
-            ArrangedListView(list: model.applicationList(app), onOpen: model.open)
+            ArrangedListView(list: model.applicationList(app), onOpen: model.open, key: "app:\(app)")
                 .navigationTitle(Names.application(app))
         } else {
             HomeView(model: model).environment(\.nodeHero, model.shell.space.flatMap { model.shell.folderAt(scopeId: $0) }.map(hero))
@@ -500,12 +500,19 @@ struct HomeView: View {
         }
     }
 
+    /// This level among the lists whose scroll is kept (`KeepsScroll`).
+    private var levelKey: String { "home:\(model.shell.space ?? "")/\(model.shell.folder?.nodeId ?? "")" }
+
     private var title: String {
         if let folder = model.shell.folder { return folder.name }
         return Names.spaceName(model.space)
     }
 
     var body: some View {
+        level.modifier(KeepsScroll(key: levelKey))
+    }
+
+    private var level: some View {
         List {
             NodeHeroRow()
             if model.filters.count > 1 {
@@ -697,6 +704,8 @@ struct ShareBanner: View {
 struct ArrangedListView: View {
     let list: ArrangedList
     let onOpen: (ObjectRef) -> Void
+    /// Which list this is, for where it was scrolled to (`KeepsScroll`).
+    let key: String
 
     var body: some View {
         if list.favorites.isEmpty && list.recent.isEmpty && list.all.isEmpty {
@@ -708,6 +717,7 @@ struct ArrangedListView: View {
                 if !list.all.isEmpty { Section { rows(list.all) } }
             }
             .scrollContentBackground(.hidden)
+            .modifier(KeepsScroll(key: key))
         }
     }
 
@@ -715,6 +725,121 @@ struct ArrangedListView: View {
         ForEach(refs, id: \.nodeId) { ref in ObjectRow(ref: ref, onOpen: onOpen).listRowBackground(Role.surface) }
     }
 }
+
+/// A list keeps where it was scrolled to across leaving the view tree (the owner's report, 2026-11-12: a Pot opened near the
+/// bottom came back to a list at its top). The bar belongs to the open object (ADR 0122), so opening one replaces the
+/// list's tab and its `NavigationStack`; the list is composed anew on the way back, at its top. `ScrollViewReader.scrollTo`
+/// and `scrollPosition` moved nothing in that list (iOS 27, measured 2026-11-12), so the offset itself is kept per list,
+/// on the list's own `UIScrollView`, which joins the hierarchy a moment after its background does. A Mac shows the list
+/// beside the object in its split view and needs none of it.
+struct KeepsScroll: ViewModifier {
+    let key: String
+
+    func body(content: Content) -> some View {
+        #if os(iOS)
+        content.background(ScrollKeeper(key: key))
+        #else
+        content
+        #endif
+    }
+}
+
+#if os(iOS)
+private struct ScrollKeeper: UIViewRepresentable {
+    let key: String
+
+    func makeUIView(context: UIViewRepresentableContext<ScrollKeeper>) -> ScrollKeeperView { ScrollKeeperView(key: key) }
+    func updateUIView(_ view: ScrollKeeperView, context: UIViewRepresentableContext<ScrollKeeper>) { view.show(key) }
+}
+
+/// Finds the list's scroll view beside it, records its offset per key while shown and puts a kept one back.
+final class ScrollKeeperView: UIView {
+    /// Each list's offset, for the app's run (a place to come back to, not a preference).
+    @MainActor static var offsets: [String: CGFloat] = [:]
+    private var key: String
+    private weak var scroll: UIScrollView?
+    private var watch: NSKeyValueObservation?
+    /// While a kept offset is being put back, the list's own first layouts are not recorded as its offset.
+    private var restoring = false
+
+    init(key: String) {
+        self.key = key
+        super.init(frame: .zero)
+        isUserInteractionEnabled = false
+    }
+
+    required init?(coder: NSCoder) { nil }
+
+    override func didMoveToWindow() {
+        super.didMoveToWindow()
+        // a list leaving the screen is torn down over a few passes, its offset moved meanwhile: nothing of that is kept
+        guard window != nil else {
+            watch?.invalidate()
+            watch = nil
+            scroll = nil
+            return
+        }
+        find(tries: 6)
+    }
+
+    /// The list's scroll view, once it is there: it joins the hierarchy after its background does.
+    private func find(tries: Int) {
+        guard window != nil, scroll == nil else { return }
+        guard let found = Self.nearestScroll(from: self) else {
+            if tries > 0 { DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) { [weak self] in self?.find(tries: tries - 1) } }
+            return
+        }
+        scroll = found
+        watch = found.observe(\.contentOffset) { [weak self] view, _ in
+            let y = view.contentOffset.y
+            MainActor.assumeIsolated {
+                guard let self, !self.restoring, self.window != nil else { return }
+                Self.offsets[self.key] = y
+            }
+        }
+        restore()
+    }
+
+    /// Another list in the same scroll view (Home's next level): its own offset, or its top.
+    func show(_ next: String) {
+        guard next != key else { return }
+        key = next
+        restore()
+    }
+
+    private func restore() {
+        guard let scroll, let y = Self.offsets[key] else { return }
+        restoring = true
+        // the list lays out its rows over a few passes: put the offset back after them, within what it can scroll
+        for delay in [0.0, 0.15, 0.4, 0.8] {
+            DispatchQueue.main.asyncAfter(deadline: .now() + delay) { [weak self, weak scroll] in
+                guard let self, let scroll else { return }
+                let top = -scroll.adjustedContentInset.top
+                let bottom = max(top, scroll.contentSize.height - scroll.bounds.height + scroll.adjustedContentInset.bottom)
+                scroll.setContentOffset(CGPoint(x: scroll.contentOffset.x, y: min(max(y, top), bottom)), animated: false)
+                if delay == 0.8 { self.restoring = false }
+            }
+        }
+    }
+
+    /// The scroll view nearest to `view` among its ancestors' descendants: the list it is the background of.
+    private static func nearestScroll(from view: UIView) -> UIScrollView? {
+        var level: UIView? = view.superview
+        for _ in 0..<6 {
+            guard let here = level else { return nil }
+            if let s = here as? UIScrollView { return s }
+            var queue = here.subviews
+            while !queue.isEmpty {
+                let next = queue.removeFirst()
+                if let s = next as? UIScrollView { return s }
+                queue.append(contentsOf: next.subviews)
+            }
+            level = here.superview
+        }
+        return nil
+    }
+}
+#endif
 
 /// The iPhone's Search tab: its own field over the hits.
 struct SearchList: View {
@@ -760,7 +885,7 @@ struct ExpensesList: View {
     @State private var creating = false
 
     var body: some View {
-        ArrangedListView(list: model.applicationList(.expenses), onOpen: model.open)
+        ArrangedListView(list: model.applicationList(.expenses), onOpen: model.open, key: "app:\(ApplicationId.expenses)")
             .navigationTitle(Names.application(.expenses))
             .createAction(say(.createPot), shown: !model.spaces.isEmpty) { creating = true }
             .sheet(isPresented: $creating) { NewPotSheet(model: model) }
