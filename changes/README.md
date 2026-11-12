@@ -1009,6 +1009,10 @@ on the assertion (§ *a live-defect red can land on the wrong STEP*, below). Mar
 phase, which is the second thing it buys: the live defects run first, against the least-changed tree there will
 ever be.
 
+And the lever exists in the API the same CR defines: cr-webp-encoder-from-libwebp bit its size test "at quality
+1.0 lossless" on an encoder whose API has no lossless mode, and asked for "the decoded size" in a directory with no
+decoder.
+
 ### Where the defect is still live, order it guard → red → fix → green
 
 **The unfixed defect is a stronger bite test than any injection, and it is free.** A forged one proves the guard fires on a shape *you*
@@ -1662,7 +1666,9 @@ the sign-in screen was unreachable without a first-run setup the CR never mentio
 same proof was meant to exercise registers on neither screen. The finding held (the app booted under the policy
 with zero violations), but on a different screen than the one written down, and the worker went unverified. So a
 done-when that names what the browser should show also names what the instance must hold for it (a seeded
-account, a tenant on the browsed host), or it names the screen a bare instance actually reaches.
+account, a tenant on the browsed host), or it names the screen a bare instance actually reaches. A done-when that runs
+lane L1 names the host ports the lane binds (80, 443, the admin port 18081) and checks them with `lsof` at refine:
+cr-webp-encoder-from-libwebp's L1 never started, an ssh tunnel and a neighbour session's process held 18081.
 
 **And a lever that simulates a failure must spare what the proof itself needs.** `cr-one-sign-out-path` asked for
 its E4 check "with the network offline" — but the flow ends in a document load, which devtools' offline mode
