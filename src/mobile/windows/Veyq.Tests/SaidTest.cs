@@ -11,13 +11,17 @@ public sealed class SaidTest
     private const char Nbsp = ' ';
 
     [TestMethod]
-    public void MoneyIsWrittenInTheCulturesOwnWayWithEachCurrencysSymbol()
+    public void MoneyIsWrittenInTheCulturesOwnWayItsOwnCurrencyBySymbolAnyOtherByCode()
     {
         Assert.AreEqual($"1.234,56{Nbsp}€", Said.Money(123456, "EUR", 2, ["de-DE"], "DE"));
-        Assert.AreEqual("€1,234.56", Said.Money(123456, "EUR", 2, ["en-US"], "US"));
         Assert.AreEqual($"-67,34{Nbsp}€", Said.Money(-6734, "EUR", 2, ["de-DE"], "DE"));
-        Assert.AreEqual($"1.234{Nbsp}¥", Said.Money(1234, "JPY", 0, ["de-DE"], "DE"));
         Assert.AreEqual("$1,234.56", Said.Money(123456, "USD", 2, ["en-US"], "US"));
+        // another currency by its code. The code mode off (bitten 2026-11-12), de-DE wrote Canadian dollars "12,50 $" and
+        // en-US euros "€1,234.56"; en-US writes CAD by its code either way
+        Assert.AreEqual($"12,50{Nbsp}CAD", Said.Money(1250, "CAD", 2, ["de-DE"], "DE"));
+        Assert.AreEqual($"1.234{Nbsp}JPY", Said.Money(1234, "JPY", 0, ["de-DE"], "DE"));
+        Assert.AreEqual($"EUR{Nbsp}1,234.56", Said.Money(123456, "EUR", 2, ["en-US"], "US"));
+        Assert.AreEqual($"CAD{Nbsp}1,234.56", Said.Money(123456, "CAD", 2, ["en-US"], "US"));
         Assert.AreEqual("1.234,56", Said.Money(123456, null, 2, ["de-DE"], "DE"));
     }
 

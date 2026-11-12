@@ -5,6 +5,7 @@ using System;
 using System.Collections.Generic;
 using System.Globalization;
 using System.Runtime.InteropServices;
+using Windows.Globalization;
 using Windows.Globalization.NumberFormatting;
 
 namespace Veyq;
@@ -13,9 +14,11 @@ public static partial class Said
 {
     /// <summary>
     /// <paramref name="minor"/> minor units of <paramref name="currency"/> (an ISO 4217 code; null: a number alone) with
-    /// <paramref name="minorUnits"/> digits after the point, as Windows writes money: any currency by its own symbol in the
-    /// person's locale (<see cref="CurrencyFormatter"/>), or in <paramref name="languages"/> and <paramref name="region"/>.
-    /// A code Windows does not know is written after the number.
+    /// <paramref name="minorUnits"/> digits after the point, as Windows writes money (<see cref="CurrencyFormatter"/>) in the
+    /// person's locale, or in <paramref name="languages"/> and <paramref name="region"/>: the region's own currency by its
+    /// symbol, any other by its code (Linux's rule). Windows' symbol alone wrote Canadian dollars "12,50 $" in de-DE, the
+    /// US dollar's sign; Android and Apple write "CA$" there, a code is as unambiguous. A code Windows does not know is
+    /// written after the number.
     /// </summary>
     public static string Money(long minor, string? currency, int minorUnits, IEnumerable<string>? languages = null, string? region = null)
     {
@@ -25,6 +28,7 @@ public static partial class Said
             try
             {
                 var money = languages is null ? new CurrencyFormatter(currency) : new CurrencyFormatter(currency, languages, region);
+                if (currency != OwnCurrency(region)) money.Mode = CurrencyFormatterMode.UseCurrencyCode;
                 money.FractionDigits = minorUnits;
                 money.IsGrouped = true;
                 return money.Format(value);
@@ -39,6 +43,13 @@ public static partial class Said
         number.IsGrouped = true;
         var said = number.Format(value);
         return currency is null ? said : $"{said} {currency}";
+    }
+
+    /// <summary>The currency the region uses (the person's home region where none is given); null where it names none.</summary>
+    private static string? OwnCurrency(string? region)
+    {
+        var place = region is null ? new GeographicRegion() : new GeographicRegion(region);
+        return place.CurrenciesInUse.Count > 0 ? place.CurrenciesInUse[0] : null;
     }
 
     /// <summary>An ISO day (<c>YYYY-MM-DD</c>) as the culture's short date (the person's: the system's regional format);
