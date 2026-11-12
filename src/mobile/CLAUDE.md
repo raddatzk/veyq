@@ -61,6 +61,13 @@ A Gradle build of its own, run through its own wrapper.
   the partial file is gone; a save outlives its page and stops with its tenant. A medium the page shows is opened with
   `File.Reader` (`Answer.Reader`: its size and sniffed type; refused `NO_MEDIUM` elsewhere) and read through `Reader.Read`
   from the player's own thread; the reader closes with `Reader.Close`, with its page (`File.Close`) and with its tenant.
+  Uploads go by path too: `Upload.Files(scopeId, parentId, label, paths)` and `Upload.Folder(scopeId, parentId, path)` hand
+  the core paths a host's dialog gave, which it opens and reads at offsets a frame at a time (core's `PickedPaths`: a file's
+  size, modified time and type claimed by its name, `MediaTypes`; a directory walked by the platform's own listing, a link
+  reported and never followed), answered `Queued(count)` once queued; a file's Replace is `File.ChooseReplace` before the
+  dialog, then `Upload.Replace(file, path)`; the queue is `Watched.Uploads` (`UploadsShown`: the tray's line, each batch and
+  item with its line, Cancel and Retry, what is said once with its action) and `Upload.Cancel/Retry/CancelAll/Acknowledge/
+  TakeOffer/Seen`. A file page's own header actions join its header through `Header.Facts`' `file`.
   The generated layer copies a payload once (Rust `Option<Vec<u8>>`, C# `byte[]?`); no screen touches a pointer.
 - `linux/` — the Linux app (ADR 0129 decision 4): a Cargo package in Rust (gtk4-rs, libadwaita-rs), with `Cargo.lock`
   committed and every cargo run `--locked`. `src/lib.rs` is the library: `bridge` (the safe wrapper over the six
@@ -70,7 +77,9 @@ A Gradle build of its own, run through its own wrapper.
   `entry_editor` (an entry's editor; `typed`: when a text field is set from the state), `receipt_viewer` (a receipt
   shown from memory: a picture through GTK, a PDF through poppler-rs) and `entry_history`, `file_page` (a Depot file's page
   and its Save a copy with its toast; a medium played by `gtk::Video` over a `gtk::MediaFile` reading `reader_stream`, a
-  seekable `gio::InputStream` whose reads are `Reader.Read` ranges, `bridge::call_blocking` on GStreamer's thread), `manage`
+  seekable `gio::InputStream` whose reads are `Reader.Read` ranges, `bridge::call_blocking` on GStreamer's thread), `uploads`
+  (New's Upload files and Upload folder through GTK's `FileDialog`, a file's Replace, the queue's header bar button and
+  popover, what it says as a toast), `manage`
   for "Manage servers"; `header` with `trash`, `move_sheet`, `share_sheet`, `report` and `cover` for a node's header and
   its sheets; `dev_login` in a debug build only), and `avatars` (`Held`, no widget and tested: the open
   tenant's pictures, asked for again only when the shell's id set changes; drawn as `adw::Avatar`).
@@ -90,7 +99,9 @@ A Gradle build of its own, run through its own wrapper.
   call, logs its answer), `PotSettingsView` (a Pot's Settings place, editable in place), `PotCreateDialog` (New pot),
   `FilePage` (a Depot file's page; its Save a copy's `InfoBar` is `ShellView.Saving`; a medium in a `MediaPlayerElement` over
   `MediaSource.CreateFromStream` of `ReaderStream`, a seekable .NET `Stream` whose reads are `Reader.Read` ranges, through
-  `AsRandomAccessStream`; `ReaderStreamTest`), `ListScrolls` (where each list was
+  `AsRandomAccessStream`; `ReaderStreamTest`), `Uploads` (New's Upload files and Upload folder through `FileOpenPicker`
+  and `FolderPicker`, a file's Replace, the queue's `AppBarButton` with its `Flyout`, what it says in an `InfoBar`),
+  `ListScrolls` (where each list was
   scrolled to; `ListScrollsTest`), `EntryEditorPage` (an entry's editor, a page in place of the Pot's places) with
   `ReceiptViewerDialog` and `PdfPages` (a receipt's PDF through `Windows.Data.Pdf`, from memory; `PdfPagesTest`), `TypedText`
   (when a text box is set from the state; `TypedTextTest`), `Words`/`MrtWords` and `SaidNotice` (the words), `Said` (money, days and sizes the system's
@@ -137,18 +148,22 @@ A Gradle build of its own, run through its own wrapper.
   `Money.kt` changes only with the case that pins it; so does one of `expenses/PotWrites.kt` and `LedgerCheck.kt`
   (`PotWritesTest`, over real seals), of `EntryForm.kt` (`EntryFormTest`, over the vectors), of `ExchangeRates.kt` (`ExchangeRatesTest`), of `Currencies.kt` (`CurrenciesTest`: the web's `Intl` codes and digits), of `Receipts.kt` and core's `blob/Sniff.kt` (`ReceiptsTest`), of `PotShare.kt` (`PotShareTest`), of the Pot's screen models over a Pot the test plays (`PotFixture`, `commonTest`) — `expenses/EntryEditor.kt` (`EntryEditorTest`), `PotModel.kt` with its record, restore, live poll and `PotSettings` (`PotModelTest`), `PotCreateSheet.kt` (`PotCreateSheetTest`), what a receipt is shown as (`ReceiptsShownTest`) and every amount said with its currency (`PotViewMoneyTest`) —, of core's `session/LivePoll.kt` (`LivePollTest`, on virtual time), of core's `session/MemberAvatars.kt` (`MemberAvatarsTest`) and `session/ShareNames.kt` (`ShareNamesTest`), of `PotView.kt`'s people, balances and entries, an entry row's line and badge among them (`PotViewPeopleTest`, `PotViewEntriesTest`), of core's `session/NodeEpochWrite.kt` and `session/NodeMetaWrite.kt` (`NodeEpochWriteTest`, `NodeMetaWriteTest`), of
   core's `session/NodeMove.kt` browser rules, a guest's folder's included (`NodeMoveTest`), of `navigation/NodeHeader.kt`'s plan and
-  its narrowing in a guest's folder (`NodeHeaderTest`), of core's `session/CoverFrame.kt` (`CoverFrameTest`), of core's `export/NodeExport.kt` archive (`FolderExportTest`, `ZipTest`) and its streamed `export/Sha256.kt` (`Sha256Test`), of Depot's `depot/FolderUpload.kt` plan (`FolderUploadTest`), of what Depot's rows and file page say (`DepotWordsTest`), of Memories' `memories/MemoryMedia.kt` listed tier and order (`MemoryMediaTest`) and `memories/MediaDetails.kt` (`MediaDetailsTest`, `MediaDetailsShownTest`), of core's `blob/RangeReader.kt` (`RangeReaderTest`), of core's `blob/FileSink.kt`, `FileSource.kt` and `Files.kt` (`FilesTest`, `nativeTest`: on macOS, Linux and Windows, through a non-ASCII name, the directory listed by the platform's own calls), of core's `session/AvatarsModel.kt` (`AvatarsModelTest`), of core's `blob/UploadQueue.kt` (`UploadQueueTest`, the web's `queue.test.ts` rules on virtual time), of core's `session/LinkForm.kt` (`LinkFormTest`: the new-link form's rules) and `session/LinkRow.kt` (`LinkRowTest`: a link's row and what a member may do with it), of Expenses' `expenses/ShareInbox.kt` (`ShareInboxTest`: shared files from arrival to their Pot), of core's `navigation/ShellModel.kt` (`ShellModelTest`: the shell after a read and after a folder on Home's path changed), `navigation/TrashSheet.kt` (`TrashSheetTest`: a space's trash sheet) and `navigation/ShellWords.kt` with `AppKinds`' words (`ShellWordsTest`), of core's `session/SessionModel.kt` (`SessionModelTest`: the start, sign-in, unlock, switcher and sign-out over a door the test plays), of core's `words/Notices.kt` (`NoticesTest`: every outcome's key with as many arguments as its words take), of core's `media/ExifReader.kt` and `media/VideoHeader.kt` and Memories' `memories/MediaMetadata.kt` (`MediaMetadataFixtureTest` over the web's own fixtures, held to what the web's `readExif.fixture.test.ts` and `videoHeader.test.ts` expect; `MediaMetadataNativeTest` on the Apple path; `XmpValueTest`: its XMP reads across line breaks), of `memories/MediaUpload.kt`'s type and core's `crypto/BlobMeta.kt` digest (`MediaUploadTest`), of Depot's `depot/FileView.kt` and core's
+  its narrowing in a guest's folder (`NodeHeaderTest`), of core's `session/CoverFrame.kt` (`CoverFrameTest`), of core's `export/NodeExport.kt` archive (`FolderExportTest`, `ZipTest`) and its streamed `export/Sha256.kt` (`Sha256Test`), of Depot's `depot/FolderUpload.kt` plan (`FolderUploadTest`), of what Depot's rows and file page say (`DepotWordsTest`), of Memories' `memories/MemoryMedia.kt` listed tier and order (`MemoryMediaTest`) and `memories/MediaDetails.kt` (`MediaDetailsTest`, `MediaDetailsShownTest`), of core's `blob/RangeReader.kt` (`RangeReaderTest`), of core's `blob/FileSink.kt`, `FileSource.kt`, `Files.kt` and `PickedPaths.kt` (`FilesTest`, `nativeTest`: on macOS, Linux and Windows, through a non-ASCII name, the directory listed by the platform's own calls; a picked directory walked with its hidden file, a link reported and never followed, an unlistable directory said where the host can make one), of `blob/MediaTypes.kt` (`MediaTypesTest`), of core's `session/AvatarsModel.kt` (`AvatarsModelTest`), of core's `blob/UploadQueue.kt` (`UploadQueueTest`, the web's `queue.test.ts` rules on virtual time), of core's `session/LinkForm.kt` (`LinkFormTest`: the new-link form's rules) and `session/LinkRow.kt` (`LinkRowTest`: a link's row and what a member may do with it), of Expenses' `expenses/ShareInbox.kt` (`ShareInboxTest`: shared files from arrival to their Pot), of core's `navigation/ShellModel.kt` (`ShellModelTest`: the shell after a read and after a folder on Home's path changed), `navigation/TrashSheet.kt` (`TrashSheetTest`: a space's trash sheet) and `navigation/ShellWords.kt` with `AppKinds`' words (`ShellWordsTest`), of core's `session/SessionModel.kt` (`SessionModelTest`: the start, sign-in, unlock, switcher and sign-out over a door the test plays), of core's `words/Notices.kt` (`NoticesTest`: every outcome's key with as many arguments as its words take), of core's `media/ExifReader.kt` and `media/VideoHeader.kt` and Memories' `memories/MediaMetadata.kt` (`MediaMetadataFixtureTest` over the web's own fixtures, held to what the web's `readExif.fixture.test.ts` and `videoHeader.test.ts` expect; `MediaMetadataNativeTest` on the Apple path; `XmpValueTest`: its XMP reads across line breaks), of `memories/MediaUpload.kt`'s type and core's `crypto/BlobMeta.kt` digest (`MediaUploadTest`), of Depot's `depot/FileView.kt` and core's
   `blob/Sniff.kt` and `blob/DownloadName.kt` (`FileViewTest`), of Depot's `depot/FileModel.kt` with its `FileRights` and
   `ShellModel.downloadAs` (a file downloads as itself, any other node as its ZIP) (`FileModelTest`, over a file the test
   plays), of Depot's `depot/DepotUploads.kt` with `DepotFiles.offerFor` and `collision` (`DepotUploadsTest`, over a level the
-  test plays, on virtual time) and `depot/DropBoxPage.kt` (`DropBoxPageTest`), and of core's `session/NodeRekey.kt` frontier and what it
+  test plays, on virtual time; a retry fills the node a failed run made, as the web's job does) and `depot/DropBoxPage.kt` (`DropBoxPageTest`), and of core's `session/NodeRekey.kt` frontier and what it
   leaves to another device (`NodeRekeyRulesTest`).
 - `./gradlew :bridge:jvmTest` — the bridge (ADR 0123's Consequences, the bridge):
   - `DispatchTest` covers the way in, over a door the test plays: a reader read backwards in uneven ranges and closed
     with the tenant, a picture's bytes and its refusal, a file's page and its Save a copy (`File.*`, `Watched.File`/`Save`,
     `Save.Cancel` over a played file: the bytes and type the core's, a save watched as soon as it is answered, a cancelled
     one leaving nothing, a FILE's header download the file itself; `File.Reader` over a played medium: its ranges the
-    file's across a frame's edge and at the end, refused where no medium shows, closed with its page and its tenant), and every call of a node's header and its sheets (`Header.*`,
+    file's across a frame's edge and at the end, refused where no medium shows, closed with its page and its tenant), the
+    uploads by path (`Upload.*`, `File.ChooseReplace`, `Watched.Uploads` over a played level: each path read at offsets a
+    frame at a time, never whole, answered once queued, the core's offer said and taken, a folder walked with its link said,
+    a replace chosen first and answered stale, a cancel, a retry, Cancel all, a batch closed; a file page's Replace in its
+    header's plan), and every call of a node's header and its sheets (`Header.*`,
     `Trash.*`, `Move.*`, `Share.*`, `Report.*`, `Cover.*`), and a Pot's (`Pot.*`, `Watched.PotLive`) and its entry editor's
     (`Editor.*`, `Watched.Editor`, over a played Pot: edits applied in the order sent, a save answered once its write
     ended) with its receipts (`Editor.AddReceipts`/`DropReceipt`, `Receipt.Open`/`Pages`/`Save`: a path that does not
@@ -184,6 +199,10 @@ A Gradle build of its own, run through its own wrapper.
   in the middle and at the end held to the file's, then purged), `aDesktopPassFolder*` with `VEYQ_LIVE_DEPOT_PASS=<name>`
   (not a check: a desktop pass's Depot folder at the personal top level, filled, with `VEYQ_LIVE_DEPOT_PASS_MEDIA=<file>,…`
   media by path beside; `VEYQ_LIVE_DEPOT_PASS_PURGE=1` purges it), and
+  `filesAndAFolderAreUploadedByPath*` with `VEYQ_LIVE_UPLOAD=1` (it moves more than 2 GiB: files and a nested folder by path
+  read back at their SHA-256, a replace offered and taken, one raced by a second session answered stale, a cancel and a retry,
+  a 2 GiB + 1 byte file uploaded and saved back, a folder upload said not to fit under the one-byte quota, put back however it
+  ends; the folder purged), and
   `theLinksOfAFolder*`
   writes a desktop pass's links out for the web's guest page — each case's doc says what it reads.
 - `python3 linux/run.py <verb>` — everything Linux. From the repository root the launcher runs the same verbs as
@@ -516,8 +535,9 @@ first in each of its scrolls — `LocalNodeHero.current(inset)` (Android) / `Nod
   the cancel-before-action trap above (nothing moved); it now cancels only on Cancel.
 - A coroutine that was cancelled fails every suspending call at once, its own clean-up's too: a cancelled Depot upload
   left a "not uploaded yet" file because its abandon's listing and trash ran cancelled. A give-up runs `NonCancellable`
-  (`DepotFiles.upload`, `UploadJob.abandon`). A failed upload whose give-up could not reach the server (offline) leaves its
-  empty file, and the retry then collides with it and offers its replace (measured on the emulator in airplane mode).
+  (`DepotFiles.upload`, `UploadJob.abandon`). A failed upload whose give-up could not reach the server (offline) keeps the
+  node it made, and the next run fills it (`into`, the web's `fileUploadJob`); before, the retry collided with its own empty
+  file and offered its replace (measured on the emulator in airplane mode).
 - A guest's new folder in a drop box shows on the phones only once the tenant's tree is read anew: the tree is cached, and
   nothing polls it; a pass force-stops and relaunches the app (`devlogin.py`) after a guest dropped through the web.
 - Driving the web from a mobile pass (headless system Chrome, `?devlogin`): a level row's `locator.click()` waits forever
@@ -811,6 +831,27 @@ first in each of its scrolls — `LocalNodeHero.current(inset)` (Android) / `Nod
   /tmp/big.bin`, `key Enter`); a 300 MiB save in the container ends in about 3 s, so a Cancel is clicked in the same
   Playwright run. On Windows the save picker's name is typed into `FileNameControlHost` and saved by `press
   FileNameControlHost enter` (a `key enter` goes to the app's window, not the picker's).
+- A screen made before the core started cannot watch it: `bridge::watch` before `veyq_init` answers no watch at all (the
+  Linux shell is built before the core starts; the uploads' button never showed until its watch moved to the shell's first
+  `show`, `Uploads::start`, measured 2026-11-12). A host that watches from a constructor checks when it runs.
+- A server call may answer only after work that grows with a file: a 2 GiB + 1 byte `completeFile` stats all 8,193 chunks
+  and outlived OkHttp's default 10 s read timeout (measured 2026-11-12, the upload failed at its last step). The core's
+  bearer client sets its own (`Account.connect`: connect 30 s, 10 min without a byte, no total). And a presigned URL lapses
+  (600 s): a save of 2 GiB through the container took 18 min, so a read signs its URLs again at each lapse, not twice per
+  read (`ApplicationBlobs.FrameSource`; it failed at 2.07 GB before, measured 2026-11-12).
+- A watch's channel keeps updates that were queued before an action: a test waiting for "the next said" took an update
+  that still carried the said it had just taken. Pass over everything up to the last id taken (`LiveBridgeTest.nextSaid`).
+- Driving uploads on Linux (Broadway): GTK's open dialog takes a whole path in its location (`key Control+l`, `type
+  /tmp/up/big.bin`, `key Enter`) — one file a time: its completion popover over the list kept the list from taking a
+  multi-select; a folder's name with a character Playwright cannot press is completed with `Tab` (`/tmp/up/R` → `Reise ü/`),
+  then Select. An `AdwToastOverlay` shows one toast at a time and a save's progress toast never times out, so what the
+  uploads say waits until a save ended. A path the pass picks lives in the container (`docker exec` writes it; `--rm` drops it).
+- Driving uploads on Windows (`Veyq.Drive`): the open picker opens where it last was; `press 1148 alt+up` climbs, `select <n>`
+  then `press <n> enter` opens a folder's row or picks a file's, `type 1148 "a.jpg" "b.txt"` picks several once the list was
+  navigated. The folder picker takes a path in `#1152` and Enter (into it), then an emptied `#1152` and Enter (choose it). A
+  junction moved across volumes (`Move-Item F:\ C:\`) arrives as a plain directory with its target's files copied in: make it
+  anew with `mklink /J` where it is used.
+
 - GTK 4.22's media backend is GStreamer, built into libgtk (no `media/` module), and plays a `GInputStream` through
   `giostreamsrc`, seeks included (measured 2026-11-12 in the container: a WebM and an MP4 from a memory stream; GNOME/gtk
   #4062's assert is gone). Its reads arrive on GStreamer's streaming thread, where `reader_stream` waits on the core through

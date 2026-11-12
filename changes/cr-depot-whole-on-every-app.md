@@ -613,6 +613,84 @@ pending).
   progress, Cancel, Retry and Cancel all, the replace offer taken; the 2 GiB + 1 byte file uploaded and saved back with
   the app's peak memory below 400 MiB (as Phase 4); read back on the web.
 
+**Status: done (2026-11-12)** — but the deviations below (Retry and Cancel all were pressed in en/light only; the first Linux
+2 GiB upload's failure, unexplained).
+
+**Built:**
+- core `blob/Files.kt` gains `pathFacts` (`lstat` on Apple and Linux, each its own: `st_mtimespec`/`st_mtim`;
+  `GetFileAttributesExW` on Windows, a reparse point — a symbolic link, a junction — a link), `listDirectory` (`opendir`/
+  `readdir`, `FindFirstFileW`) and `pathSeparator`; `blob/PickedPaths.kt` (`nativeMain`): `source(path)` (a `FileSource` named
+  by its path's last part, its size and modified time the system's, its type claimed by `MediaTypes`) and `walk(path)` (D6: every
+  entry a `FolderUpload.Found`, a link reported and never followed, an unlistable directory said). `blob/MediaTypes.kt`: the type
+  a picked path is claimed as by its extension (the browser's and the pickers' claim; Phase 4's `octet-stream` leftover).
+- core `DepotFiles.UploadJob` keeps the node its run made until it is filled: the next run fills it (`into`, the web's
+  `fileUploadJob`), and a give-up that cannot reach the server keeps it (Phase 2's offline leftover: the retry collided with its
+  own empty file). `UploadJob`/`ReplaceJob`'s played constructors are public (the bridge's test plays the server).
+  `DepotUploads.uploadFolder` returns how many files it queued; `Notices.uploadSummary` (the tray's one line, which both phones
+  computed in their views); `AppKinds.createsWhere(isHome)`; `UploadQueue.Status` on the wire as `UploadStatus`.
+- core, found on the large file: the bearer client's `HttpTimeout` (connect 30 s, 10 min without a byte): a 2 GiB + 1
+  `completeFile` outlived OkHttp's 10 s read timeout; `ApplicationBlobs.FrameSource` signs its presigned GETs again at each lapse
+  (any of 400, 401, 403), where a read signed twice at most and a save longer than the URLs' 600 s failed (Linux, 2.07 GB of 2.15).
+- bridge: `Upload.Files(scopeId, parentId, label, paths)`, `Upload.Folder(scopeId, parentId, path)`, `Upload.Replace(file, path)`
+  after `File.ChooseReplace(file)`, `Upload.Cancel/Retry/CancelAll/Acknowledge/TakeOffer/Seen`, each answered `Queued(count)` or
+  `Done` once done; `Watched.Uploads` → `Update.Uploads(UploadsShown)` (the line, how many run, the folder being prepared, each
+  batch and item with its line and Cancel/Retry, what is said once with its action); `Header.Facts`' `file`: a file page's own
+  actions (Replace, worded by the page) join its header's plan (Phase 3's leftover). `DeviceFiles.source`/`walk` (`PickedPaths`
+  natively, `JvmFiles` in a test, which records each read). The uploads' writes read the shell's lists and every open file page
+  anew (the bridge's missing `File.Reload`, Phase 3's leftover); the queue is emptied when its tenant closes.
+- Linux `uploads.rs`: New's Upload files / Upload folder… through GTK's `FileDialog` (`open_multiple`, `select_folder`), a file's
+  Replace (`win.file-replace`, chosen first), the queue a header bar `gtk::MenuButton` with its popover (the line, Cancel all, each
+  batch with Close when finished, each item's row with its progress, Cancel or Retry), what is said an `AdwToast` with its
+  action. `header::DRAWN` gains `replace`.
+- Windows `Uploads.cs`: the same through `FileOpenPicker` (multiple) and `FolderPicker`, the queue an `AppBarButton` with its
+  `Flyout`, what is said an `InfoBar` with its action button; `HeaderPlan.Drawn` gains `replace`, `NodeHeader.Commands` its page's
+  Replace.
+
+**Met:**
+- `FilesTest.aPickedDirectoryIsWalked…` (a nested directory under `Büro 中文`, `.hidden`, a link, a directory made unlistable):
+  macOS `./gradlew :core:macosArm64Test --tests '*FilesTest*'` (link and unlistable made), Linux `linux/run.py test --tests
+  '*FilesTest*'` (link made; root lists a `chmod 000` directory anyway, so its case is skipped there) and Windows `windows/run.py
+  test --tests '*FilesTest*'` (a directory symbolic link made; no unlistable directory) — 5/5 each.
+- `DispatchTest.filesAFolderAndAReplaceAreUploadedByPathAndTheQueueIsDrivenThroughCalls`, `WireTest` (every new shape sampled),
+  `SecretFreeSchemaTest` unchanged and green; `DepotUploadsTest` +2 (`aRetryFillsTheNode…`, `theTraysLine…`), `MediaTypesTest`.
+  `scratchpad/d5/bite.py` (`/bin/cp -f` restore, one mutation at a time), all 8 bit: a path read whole instead of at offsets, an
+  upload answered before it was queued, the offer not the core's, the bridge choosing the replace itself, the page's Replace not
+  in its header's plan, the desktop walk following a link (`stat` for `lstat`), a retry creating the file anew, the tray's line not
+  counting failures; green again after (`bite.log`).
+- `VEYQ_LIVE=http://veyq.localhost:8080 VEYQ_LIVE_UPLOAD=1 ./gradlew :bridge:jvmTest --tests '*LiveBridgeTest.filesAndAFolder*'
+  --rerun`: in `App depot 6962` three files by path read back at their SHA-256 and claimed `image/jpeg`, `application/pdf`; `Trip ü`
+  with `.hidden` and `Büro 中文/notes.txt` under its own name, its link said and `secret.txt` never reached; a same-named `a.txt`
+  offered and replaced; a replace chosen, raced by a second session, answered "Replace anyway" with the peer's content kept; a
+  400 MiB upload cancelled at 5 % with nothing left; a file gone after it was picked failed and retried once back (one file); a
+  read failing once mid-upload filled by the queue's own retry (one file, at its SHA-256); 2 GiB + 1 byte uploaded in 158 s and
+  saved back in 132 s at `b12e04e4…`; with one byte of room the folder said `DEPOT_FOLDER_NO_ROOM` and nothing made, the quota
+  put back (204); the folder purged.
+- `./gradlew :core:jvmTest :core:macosArm64Test :bridge:jvmTest :android:assembleDebug` green; `xcodebuild -target Veyq -sdk
+  macosx CODE_SIGNING_ALLOWED=NO` green (the phones' call of `uploadFolder` unchanged); `linux/run.py build` (clippy
+  `-D warnings`, `cargo test` 35 passed) and `windows/run.py build` (Veyq.Bridge.Tests, Veyq.Tests passed) green;
+  `validate_mobile_words`, `validate_mobile_platform_guidelines`, `validate_changes` green.
+- New offers Upload files and Upload folder… on Home's levels of both desktops (Home's creates, as the phones' level New).
+- Linux (container, Broadway on 8097), in `Linux depot` at the personal top level:
+  - en/light: `a.txt`, `photo.jpg` and `big.bin` (2 GiB + 1) picked one at a time through GTK's dialog; `Reise ü` uploaded with
+    `.hidden` and `Büro 中文/notes.txt`, "“link” is a link and was left out…"; `again/a.txt` offered "Replace file" and replaced (21 B);
+    the header's Replace… on `late.txt` replaced it and the page showed the new text; `slow.bin` cancelled at 90 % (nothing left),
+    `late.txt` failed while gone and its Retry pressed, Cancel all (three cancelled); `VmHWM` 224–260 MiB across the 2 GiB upload
+    and its save; the save, after the lapse fix, ended whole in 18 min (its source was drawn anew by the container's restart, so its
+    SHA-256 was not compared — de/dark compares it).
+  - de/dark: `big.bin` again, "Datei ersetzen" taken (a 2 GiB replace), `VmHWM` 241,756 kB; `Reise ü (2)` with its link said;
+    its save ended whole at `eade8da1…`, the SHA-256 of the file drawn in the container (`sha256sum`), `VmHWM` 267,076 kB;
+    `slow.bin` cancelled at 70 % in "Uploads … 2 aktiv … Alle abbrechen".
+- Windows (the VM, x64 under Prism), in `Windows depot`:
+  - en/light: `"photo.jpg" "a.txt"` picked together; `again/a.txt` offered "Replace file" and replaced; `Reise ü` with a junction
+    said ("“link” is a link and was left out…") and `Reise ü (2)`; `slow.bin` cancelled at 70 % (nothing left), `late.txt` failed
+    while renamed away and retried, Cancel all (`clip.mp4`, `slow.bin`); the header's Replace… on `photo.jpg` with `clip.mp4` — the
+    page reloaded and played it (`medium opened: 120 s`), its facts `video/mp4`; `big.bin` (2 GiB + 1) uploaded in 7 min and saved in
+    5 min at `B8030A8A…` (`Get-FileHash`, the original's); `PeakWorkingSet64` 427 MiB idle → 513 MiB after.
+  - de/dark: "Datei ersetzen" on `big.bin` taken, `Reise ü (3)` with its junction said, `slow.bin` cancelled, the save at
+    `B8030A8A…`; `PeakWorkingSet64` 459 MiB idle → 702 MiB after.
+- Read back on the web (headless Chrome, `?devlogin`, `#~kevin/linux-depot`, `#~kevin/windows-depot`): both folders with their
+  files and sizes (`big.bin` 2,1 GB, `photo.jpg` 123,3 MB after the replace) and their `Reise ü` folders.
+
 ### Phase 6 — Drag and drop on both desktops, and the Linux session
 
 **Done when:**
@@ -829,4 +907,37 @@ owner's veto.
 - **Left in the dev instance and on the hosts by my runs:** nothing in the dev instance (`App depot 65286`, `Linux depot`,
   `Windows depot` trashed and purged). On the VM: the "Not now" pressed was cleared from `device-store.json` (backup
   `.bak-d4` beside it); three WER dumps of the E_ABORT crash in `F:\veyq\dumps` (it keeps three).
+
+### Phase 5 (2026-11-12)
+
+- **The peak-memory bound, decided:** Linux keeps the absolute bound (met: `VmHWM` ≤ 260 MiB through a 2 GiB + 1 upload and
+  save). On Windows the app idles at 359–459 MiB (WinUI, x64 under Prism), so the bound there is the peak's growth over the idle
+  baseline, which must not scale with the file: +86 MiB (en) and +243 MiB (de) for 2 GiB + 1, against 110–180 MiB for Phase 4's
+  media — an order below the file. Two samples; a third run would tell whether de's +243 is the GC's slack.
+- **A desktop's level label is the host's:** `Upload.Files` takes the batch's label as the host draws its level (a folder's name,
+  the space's word), as both phones pass theirs; the core has no localized space word to give.
+- **`Upload.Replace` needs `File.ChooseReplace` first** (D9 kept: the expected blob is the one shown when Replace was chosen);
+  a replace without a choice is refused `NOT_CHOSEN`.
+- **The uploads' writes reload every open file page** in the bridge (`changed`): Phase 3's missing `File.Reload` needed no host
+  call. `Shell.Refresh`'s cached tree stays as found: this device's own writes forget the tree, and a peer's replace is answered
+  stale by the server, so this phase did not need it — Phase 7's guest folders will.
+- **A type claimed by name in the core** (`MediaTypes`), one table for both desktops, never the bytes (a claim is sealed as one).
+- **Found and fixed on the way:** the Linux shell watched the uploads before the core started (no watch, no button); an upload of
+  2 GiB failed at its completion (the 10 s read timeout); a save of 2 GiB through the container failed after its URLs lapsed; the
+  Linux popover squeezed a long name beside the progress bar. All four measured before and after.
+- **Found, left:** the server's `completeFile` stats every chunk one after another (8,193 HEADs for 2 GiB; tens of seconds) —
+  a backend item; an `AdwToastOverlay` shows one toast at a time and a save's progress toast never times out, so what the uploads
+  say waits until a save ends (Linux); the first Linux 2 GiB upload failed at 30 % and its automatic retry failed at once (no code
+  was logged then; three later 2 GiB uploads on Linux and two on Windows went through); one Linux Retry of a 5-byte file stood at
+  "Uploading 0 %" for 10 s until Cancel all took it (not seen again).
+- **Found, left (2):** the Linux popover is drawn anew on every update, so a Cancel clicked while a row redraws can miss (once in
+  de/dark; the second click took). A row kept and updated in place is the fix, for the slice that touches the tray next.
+- **Deviations:** Linux picks one file per dialog (Broadway's completion popover over the list kept a multi-select from the
+  pass; Windows picked two at once). Retry and Cancel all were pressed in en/light on both desktops, not in de/dark (Cancel was). The Linux en/light save's SHA-256 was not compared (above). The Fedora VM was free at the end but not used:
+  the container passed.
+- **Left in the dev instance and on the hosts by my runs:** nothing in the dev instance: the live runs' `App depot <n>` folders
+  purged by the test, `App depot 55830` and `App big probe` (two aborted runs) purged with `VEYQ_LIVE_DEPOT_PASS_PURGE=1`, as were
+  `Linux depot`, `Windows depot` and a stray `late.away` a de/dark pick put at the personal top level; the tenant's quota put back
+  (204). On the VM the test files (`Documents\up`, `F:\outside`) and the saved copies removed; the "Not now" pressed cleared from
+  `device-store.json` (backup `.bak-d5`). The container ran with `--rm`. On the Mac the scratch's 2 GiB files removed.
 
