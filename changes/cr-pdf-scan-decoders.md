@@ -58,7 +58,7 @@ WebAssembly stays inbox #837.
 
 ## Phases
 
-- [ ] **1 client — the decoders ship and pdf.js finds them.**
+- [x] **1 client — the decoders ship and pdf.js finds them.**
   - **Options:** `pdfOpenParameters` sets `wasmUrl: \`${dataBase}decoders/\`` whenever it sets the other data URLs, and
     keeps `useWasm: false`. The directory is `decoders/`, never `wasm/`, so (v)'s refusal of a `wasm` directory keeps its
     meaning. The comment at the top of the module says what the decoders are, where they come from and that WebAssembly is

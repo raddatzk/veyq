@@ -12,22 +12,31 @@
 //  (ii)  exactly one `assets/pdfjsRuntime-*.js` exists, is pdf.js' main library, and references that worker by file name;
 //  (iii) the runtime is reached by a dynamic `import(...)` and by no static import, and the entry chunks (everything
 //        index.html loads) hold none of pdf.js - neither its library nor its worker;
-//  (iv)  neither emitted file builds code from strings: no `new Function(` and no `eval(` (the page has no 'unsafe-eval');
-//  (v)   the same-origin runtime data exists (`assets/pdfjs-<version>/{cmaps,standard_fonts,iccs}/`), and none of pdf.js'
-//        WebAssembly shipped: no `wasm` directory, and the one `.wasm` in dist is the WebP encoder's
-//        (`assets/webp_encoder-<hash>.wasm`, byte for byte `webp-encoder/wasm/webp_encoder.wasm`, ADR 0127). The policy
-//        would compile pdf.js' decoders now ('wasm-unsafe-eval'); they stay off because nobody turned them on - each is
-//        a decision of its own (inbox #837) - and `useWasm: false` (pdfOptions.ts) is what keeps pdf.js from asking.
-//        Bite: copy a `.wasm` of pdfjs-dist's `wasm/` into dist/assets/ and run this - RED.
+//  (iv)  neither emitted file, nor either image decoder (below), builds code from strings: no `new Function(` and no
+//        `eval(` (the page has no 'unsafe-eval'). Bite: append `eval(0)` to an emitted decoder - RED.
+//  (v)   the same-origin runtime data exists (`assets/pdfjs-<version>/{cmaps,standard_fonts,iccs}/`), and its `decoders/`
+//        holds EXACTLY pdf.js' two plain-JavaScript image decoders (`jbig2_nowasm_fallback.js` for JBIG2 and CCITT,
+//        `openjpeg_nowasm_fallback.js` for JPEG 2000; ADR 0128), each byte for byte `pdfjs-dist/wasm/`'s file - so what
+//        the worker imports is what the lockfile pinned, and nothing else of that directory (`quickjs-eval.js`, the
+//        `.wasm`s) rides along. The two names are listed HERE on purpose, not read from the build's list: a third name
+//        added there must turn this red. And none of pdf.js' WebAssembly shipped: no `wasm` directory, and the one
+//        `.wasm` in dist is the WebP encoder's (`assets/webp_encoder-<hash>.wasm`, byte for byte
+//        `webp-encoder/wasm/webp_encoder.wasm`, ADR 0127). The policy would compile pdf.js' WebAssembly
+//        ('wasm-unsafe-eval'); it stays off because nobody turned it on (inbox #837), and `useWasm: false`
+//        (pdfOptions.ts) is what keeps pdf.js from asking. Bites, each RED: copy `pdfjs-dist/wasm/jbig2.wasm` into
+//        `decoders/` (a `.wasm`, and a third file); copy `quickjs-eval.js` there (a third file); flip one byte of an
+//        emitted decoder (not the package's bytes).
 //
-// What it does NOT prove: that a browser starts the worker or that the deployed policy admits it at run time - only a real
-// page with the real header shows that (docs/apps/depot.md names the proof).
+// What it does NOT prove: that a browser starts the worker, that pdf.js finds the decoders (that is `wasmUrl` in
+// pdfOptions.ts, which `pdfEngine.real.test.ts` decodes through), or that the deployed policy admits either at run time -
+// only a real page with the real header shows that (cc.security.csp § pdf.js records the pass).
 //
 // Bite (snapshot-and-restore, never `git checkout`): in `src/shared/pdf/pdfEngine.ts` replace the dynamic import with a static
 // `import { getDocument } from './pdfjsRuntime'`, build, and (iii) goes RED; restore and it is green.
 import { createHash } from 'node:crypto'
 import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs'
-import { join } from 'node:path'
+import { createRequire } from 'node:module'
+import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 const DIST = fileURLToPath(new URL('../dist', import.meta.url))
@@ -39,6 +48,9 @@ const ENCODER_SOURCE = fileURLToPath(new URL('../webp-encoder/wasm/webp_encoder.
 const sha256 = (path) => createHash('sha256').update(readFileSync(path)).digest('hex')
 const RUNTIME = /^pdfjsRuntime-[^/]+\.js$/
 const DATA_DIRS = ['cmaps', 'standard_fonts', 'iccs']
+// pdf.js' plain-JavaScript image decoders (ADR 0128) and the package directory they must equal byte for byte.
+const DECODERS = ['jbig2_nowasm_fallback.js', 'openjpeg_nowasm_fallback.js']
+const PDFJS_WASM_DIR = join(dirname(createRequire(import.meta.url).resolve('pdfjs-dist/package.json')), 'wasm')
 // A file name as a literal inside a RegExp: every metacharacter escaped, the backslash first among them.
 const escapeRegExp = (text) => text.replace(/[\\^$.*+?()[\]{}|]/g, '\\$&')
 
@@ -91,18 +103,28 @@ if (runtimes.length === 1) {
   }
 }
 
-for (const n of [...workers, ...runtimes]) {
+const dataRoots = names.filter((n) => /^pdfjs-\d/.test(n))
+const decoderDir = dataRoots.length === 1 ? join(dataRoots[0], 'decoders') : null
+const decoders = decoderDir && existsSync(join(ASSETS, decoderDir)) ? readdirSync(join(ASSETS, decoderDir)).map((n) => join(decoderDir, n)) : []
+
+for (const n of [...workers, ...runtimes, ...decoders]) {
   const src = text(n)
   if (/new\s+Function\s*\(/.test(src)) failures.push(`(iv) ${n} contains \`new Function(\``)
   if (/(^|[^\w$.])eval\s*\(/.test(src)) failures.push(`(iv) ${n} contains \`eval(\``)
 }
 
-const dataRoots = names.filter((n) => /^pdfjs-\d/.test(n))
 if (dataRoots.length !== 1) failures.push(`(v) expected exactly one assets/pdfjs-<version>/ directory, found ${dataRoots.length}`)
 else {
   for (const d of DATA_DIRS) {
     const dir = join(ASSETS, dataRoots[0], d)
     if (!existsSync(dir) || readdirSync(dir).length === 0) failures.push(`(v) assets/${dataRoots[0]}/${d}/ is missing or empty`)
+  }
+  const shipped = decoders.map((p) => p.slice(decoderDir.length + 1)).sort()
+  if (shipped.join() !== [...DECODERS].sort().join()) {
+    failures.push(`(v) assets/${decoderDir}/ must hold exactly ${DECODERS.join(' and ')}, it holds ${shipped.join(', ') || 'nothing'}`)
+  }
+  for (const name of DECODERS.filter((n) => shipped.includes(n))) {
+    if (sha256(join(ASSETS, decoderDir, name)) !== sha256(join(PDFJS_WASM_DIR, name))) failures.push(`(v) assets/${decoderDir}/${name} is not byte for byte pdfjs-dist's wasm/${name}`)
   }
 }
 const wasm = []
@@ -128,4 +150,6 @@ if (failures.length) {
   for (const f of failures) console.error('  - ' + f)
   process.exit(1)
 }
-console.log(`verify:pdf-worker: ${runtimes[0]} is lazy (dynamic import only), ${workers[0]} is its same-origin worker, no eval/new Function, no WASM but the WebP encoder's, runtime data in ${dataRoots[0]}/.`)
+console.log(
+  `verify:pdf-worker: ${runtimes[0]} is lazy (dynamic import only), ${workers[0]} is its same-origin worker, no eval/new Function, no WASM but the WebP encoder's, runtime data and pdfjs-dist's two image decoders in ${dataRoots[0]}/.`,
+)
