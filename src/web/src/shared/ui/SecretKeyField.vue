@@ -19,6 +19,10 @@
 // different address WARNS — it never blocks and never clears the key. The e-mail in a kit is metadata, an
 // account may have changed address, and only the wrap can judge a key; the alternative to warning here is the
 // generic AEAD failure telling the person their password might be wrong when they picked up the wrong kit.
+//
+// A kit made at another address than this page's says where it was made, for the same reason and as quietly: one
+// account may be reached under several addresses, so the kit's server (en.account.key-model § The Emergency Kit) is a
+// hint, never a check.
 import { computed, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import VeyqInput from './VeyqInput.vue'
@@ -68,6 +72,9 @@ const showSecret = ref(false)
 const scanOpen = ref(false)
 const unreadable = ref(false)
 const mismatchedEmail = ref('')
+/** The host a kit was made at, where that is not this page's; empty for a kit with no server or this one. */
+const otherServer = ref('')
+const here = typeof location !== 'undefined' ? location.host : ''
 
 // A key of the full length whose check symbols disagree was misread or mistyped, and saying so here beats the generic
 // "password or Secret Key didn't match" after a slow derivation. Anything shorter, or outside the alphabet, says
@@ -93,6 +100,7 @@ function applyKit(kit: KitData) {
   const expected = props.expectedEmail?.trim().toLowerCase()
   // Warn, never block: the key stays, the host's submit stays enabled.
   mismatchedEmail.value = expected && kit.email.trim().toLowerCase() !== expected ? kit.email : ''
+  otherServer.value = kit.server !== undefined && kit.server !== location.origin ? new URL(kit.server).host : ''
   emit('kit', kit)
 }
 
@@ -182,6 +190,7 @@ watch(model, (value) => {
   <VeyqMessage v-if="mismatchedEmail" tone="warn">
     {{ t('unlock.kitEmailMismatch', { kitEmail: mismatchedEmail, expected: expectedEmail }) }}
   </VeyqMessage>
+  <VeyqMessage v-if="otherServer" tone="info">{{ t('unlock.kitOtherServer', { server: otherServer, here }) }}</VeyqMessage>
   <input ref="fileInput" type="file" accept="application/pdf,image/*" class="visually-hidden" @change="onUpload" />
   <!-- Teleported: the overlay owns the whole screen, and every host renders this control inside a <label>,
        where a click anywhere in the overlay would also re-focus the input behind it. -->

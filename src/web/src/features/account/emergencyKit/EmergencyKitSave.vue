@@ -27,11 +27,10 @@ watchEffect(() => {
 async function download() {
   failed.value = false
   try {
-    // The address the kit is made on is the one this page was served from: the member's way back in.
+    // The kit's server is the origin this page was served from: the member's way back in.
     const bytes = await renderKitPdf(
-      { email: props.email, secretKey: props.secretKey },
+      { email: props.email, secretKey: props.secretKey, server: location.origin },
       { t: (key, named) => t(key, named ?? {}), locale: locale.value },
-      { createdOn: location.host },
     )
     saveKitPdf(bytes, props.email)
     downloaded.value = true

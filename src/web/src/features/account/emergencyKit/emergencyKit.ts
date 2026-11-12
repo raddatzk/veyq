@@ -9,10 +9,9 @@
 // renderKitPdf so the parse/import path (the common one) stays cheap; pdf.js, which only the import's fallbacks
 // need, is lazier still (`pdfEngine.ts` loads it on the first PDF that does not carry the token raw).
 //
-// The PDF's layout is admin-web's `features/setup/emergencyKit.ts` too, kept as alike as the one difference allows:
-// a member's kit names the address it was made on ("Created at <host>"), the Server Owner's — made on the
-// localhost-only admin surface, whose address means nothing to a member — does not. A shared layout would be UI in
-// `@veyq/crypto`, which holds nothing but crypto (ADR 0065).
+// The PDF's layout is admin-web's `features/setup/emergencyKit.ts` too, line for line: the kit's server (`KitData.server`)
+// fills the first address field, a member's being the address the page was served from, the Server Owner's the one
+// they typed at setup, if any. A shared layout would be UI in `@veyq/crypto`, which holds nothing but crypto (ADR 0065).
 
 import { kitPayload, parseKit, type KitData } from '@veyq/crypto/emergencyKit'
 import { readSecretKey } from '@veyq/crypto/secretKey'
@@ -129,8 +128,8 @@ export type Translate = (key: string, named?: Record<string, unknown>) => string
 /** What the kit is written in: the caller's messages, and the language tag its date is formatted for. */
 export type KitLanguage = { t: Translate; locale: string }
 
-/** The facts of a member's kit beyond its data: the address the kit is made on (`location.host`), and when. */
-export type KitContext = { createdOn: string; now?: Date }
+/** The facts of the kit beyond its data: when it is made. Where is the data's `server`. */
+export type KitContext = { now?: Date }
 
 // The kit's palette, from the brand mark: ink, a muted line, the brand violet and its deep shade, a tint, a rule, and
 // the callout's amber.
@@ -150,10 +149,11 @@ const WHITE: Rgb = [255, 255, 255]
 
 /**
  * Render the Emergency Kit PDF (A4): the human text in the caller's language, the Secret Key in its printed form, the QR,
- * three form fields for the addresses the person signs in at, and the token in the document information. Returns the
+ * three form fields for the addresses the person signs in at (the first holding the kit's server, where it has one), and
+ * the token in the document information. Returns the
  * file's bytes; `saveKitPdf` hands them to the user.
  */
-export async function renderKitPdf(data: KitData, { t, locale }: KitLanguage, { createdOn, now = new Date() }: KitContext): Promise<Uint8Array> {
+export async function renderKitPdf(data: KitData, { t, locale }: KitLanguage, { now = new Date() }: KitContext = {}): Promise<Uint8Array> {
   const read = readSecretKey(data.secretKey)
   if (!read.ok) throw new Error(`renderKitPdf: the Secret Key is ${read.problem}`)
   read.key.fill(0)
@@ -237,17 +237,13 @@ export async function renderKitPdf(data: KitData, { t, locale }: KitLanguage, { 
   font('bold', 16, C.brandDeep, 'courier')
   for (let line = 0; line < 3; line++) doc.text(groups.slice(line * 3, line * 3 + 3).join('-'), M + 18, y + 90 + line * 20)
 
-  // 2 — where you sign in: the address this kit was made on, and three lines (form fields) for the others.
+  // 2 — where you sign in: three lines (form fields) for the addresses, the first holding the kit's server as a person
+  // types it (its host), so it can be corrected like the others.
   y += 162
   section(2, t('kit.pdfWhere'), y)
   y += 20
-  font('normal', 10, C.muted)
-  doc.text(t('kit.pdfCreatedOn'), M, y + 4)
-  font('bold', 12, C.ink)
-  doc.text(createdOn, M + 70, y + 4)
-  y += 20
   font('normal', 9, C.muted)
-  doc.text(t('kit.pdfMoreAddresses'), M, y + 4, { maxWidth: CW })
+  doc.text(t('kit.pdfAddresses'), M, y + 4, { maxWidth: CW })
   draw(C.line)
   doc.setLineWidth(0.8)
   for (let i = 0; i < 3; i++) {
@@ -260,7 +256,7 @@ export async function renderKitPdf(data: KitData, { t, locale }: KitLanguage, { 
     field.width = CW
     field.height = 18
     field.fontSize = 11
-    field.value = ''
+    field.value = i === 0 && data.server !== undefined ? new URL(data.server).host : ''
     doc.addField(field)
   }
 

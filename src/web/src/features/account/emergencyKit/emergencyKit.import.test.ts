@@ -2,9 +2,11 @@
 // The kit import's fallback chain (en.account.key-model § The Emergency Kit), through the REAL pdf.js: a kit whose
 // file no longer carries the `veyqkit:` token raw — re-saved by a viewer, or printed to PDF — is still a kit.
 //
-// The two fixtures are kits the web renderer wrote (fake data: `alex.beispiel@example.org`, the Secret Key of the bytes
-// 0..31), then put through macOS PDFKit, measured 2026-11-06: `kit-pdfkit-saved.pdf` is that kit with its three address
-// fields filled and saved the way Preview saves (PDFKit rewrote the file and kept `/Keywords (veyqkit:…)` raw);
+// The fixtures are a kit the web renderer wrote (fake data: `alex.beispiel@example.org`, the Secret Key of the bytes
+// 0..31, made at `https://familie.example.org`, so its first address field holds that host), then put through macOS
+// PDFKit, measured 2026-11-12 (first 2026-11-06, re-made for the token's version 3): `kit-pdfkit-saved.pdf` is that kit
+// with its two empty address fields filled and saved the way Preview saves (PDFKit read the first field's value as
+// written, rewrote the file and kept `/Keywords (veyqkit:…)` raw);
 // `kit-printed.pdf` is the saved one redrawn page by page into a new Quartz PDF, which is what "Print → Save as PDF"
 // does — the drawing survives, the document information does not. Not measured: the real Preview app, Chrome,
 // Firefox, Acrobat. `kit-photo.pdf` simulates a phone photo of the printed sheet saved by a scanner app (ImageMagick 7,
@@ -23,7 +25,11 @@ import { formatSecretKey } from '@veyq/crypto/secretKey'
 import { readPdf } from '../../../shared/pdf/pdfEngine'
 import { importKitFromFile } from './emergencyKit'
 
-const KIT = { email: 'alex.beispiel@example.org', secretKey: formatSecretKey(Uint8Array.from({ length: 32 }, (_, i) => i)) }
+const KIT = {
+  email: 'alex.beispiel@example.org',
+  secretKey: formatSecretKey(Uint8Array.from({ length: 32 }, (_, i) => i)),
+  server: 'https://familie.example.org',
+}
 
 const fixture = (name: string) => new Uint8Array(readFileSync(fileURLToPath(new URL(`./__fixtures__/${name}`, import.meta.url))))
 const latin1 = (bytes: Uint8Array) => Array.from(bytes, (c) => String.fromCharCode(c)).join('')
