@@ -134,7 +134,8 @@ here; the server is blind.
   `cd ../packages/crypto && pnpm run check`, and `pnpm install` runs from the **repo root**, not from `src/web/`.
   **`pnpm run mutation`** is the assertion-strength gate over the curated crypto-logic scope (StrykerJS, [ADR 0045](../../docs/decisions/0045-mutation-testing-trust-chain-unit-layer.md))
   — a heavier PR-only crypto job, **not** part of `pnpm run check`; scope (the single source of truth, an explicit
-  per-file list) + config in `stryker.mutate.json` + `stryker.config.mjs`, gated in CI by
+  per-file list, and the unit tests that alone may kill its mutants, `tests`) + config in `stryker.mutate.json` +
+  `stryker.config.mjs` (+ `vitest.stryker.config.mjs`, which narrows vitest's collection to those tests), gated in CI by
   [`mutation.yml`](../../.github/workflows/mutation.yml). **There are TWO of those pairs since the package split**
   — `src/web/`'s (the six crypto-logic files that stayed) and `src/packages/crypto/`'s (the shared suite);
   run both, because Stryker's runner is the project's own vitest and neither project sees the other's suites.
