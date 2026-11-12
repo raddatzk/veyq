@@ -2512,6 +2512,21 @@
     "en": "Save a copy to open it.",
     "de": "Speichere eine Kopie, um sie zu öffnen."
   },
+  "receipts_held": {
+    "note": "under a receipt picked in the entry editor and not uploaded yet (a desktop's row)",
+    "en": "Added when the entry is saved",
+    "de": "Wird mit dem Eintrag gespeichert"
+  },
+  "receipts_saved": {
+    "note": "a desktop's notice once a receipt's copy was written where the person chose",
+    "en": "Copy saved.",
+    "de": "Kopie gespeichert."
+  },
+  "receipts_not_saved": {
+    "note": "a desktop's notice when a receipt's copy could not be written",
+    "en": "The copy could not be saved.",
+    "de": "Die Kopie konnte nicht gespeichert werden."
+  },
   "photo_library": {
     "note": "where photos and videos are picked from (the system's photo library)",
     "en": "Photo Library",
