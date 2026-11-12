@@ -258,7 +258,9 @@ A Gradle build of its own, run through its own wrapper.
     session, no prompt. Brief the person on every prompt the run may raise first, the uncertain ones marked.
   - `drive <step>...` prints the app's log, then runs `Veyq.Drive`'s steps (`tree`, `invoke <id>`, `select <id>`,
     `set <id> <text>`, `key`, `type <id> <text>` and `press <id> [keys]` (a system dialog's entry and button), `scroll <id>
-    [percent]` (a ScrollViewer through UIA's ScrollPattern), `size`,
+    [percent]` (a ScrollViewer through UIA's ScrollPattern), `explorer <x> <y> <w> <h> <path>` and `drag <id|@x,y>
+    <name>|<name>…` (an Explorer window placed beside the app, its items dragged with SendInput's mouse onto an element),
+    `hovershot <file>` (the screen while the next drag is held), `click <x> <y>`, `screen <file>`, `droptargets`, `size`,
     `maximize`, `wait`, `sleep`, `shot <name>.png`) and prints what each saw. Read the log and the tree first; a `shot`
     (to `build/windows/shots/`) is the proof, not the probe.
   - `register` registers the scheduled tasks `veyq-app` and `veyq-drive` once per Windows host. It is the host owner's
@@ -887,3 +889,15 @@ first in each of its scrolls — `LocalNodeHero.current(inset)` (Android) / `Nod
   (the arm64 one says "SOS does not support the current target architecture"; `clrstack`, `dso`, `lno`, `verifyheap`),
   and the native stack from WinDbg's `amd64\cdb.exe` (`winget install Microsoft.WinDbg`; `-z <dump>`, `.ecxr; kn`,
   `s -q` to find who holds a pointer).
+- Driving the Fedora VM's GNOME session (no person there, no `ydotool`, no password-less `sudo`): Mutter's RemoteDesktop and
+  ScreenCast D-Bus API from a client of the session bus gives a pointer (`NotifyPointerMotionAbsolute` on a monitor's stream),
+  keysyms and frames (`pipewiresrc path=<node> keepalive-time=100`), with no portal dialog; the session stays unlocked
+  (`lock-enabled false`). Sound is read from the default sink's monitor (`parec -d <sink>.monitor`), unmuted for it. A drag
+  across libadwaita's sidebar activates the row under the pointer (a Pot opened mid-drag, 2026-11-12): cross it on a heading.
+- A Linux debug build run outside its container (the VM) found no catalogs — they lie in the build's directory — and spoke English
+  under `LANGUAGE=de` (measured 2026-11-12): copy `out/locale` beside it and set `VEYQ_LOCALE_DIR`. GTK's file dialog in an app
+  that is not sandboxed is GTK's own; `GDK_DEBUG=portals` takes the portal's, as a Flatpak does.
+- WinUI got no drop from Explorer on the Windows VM (2026-11-12): Explorer's drag started (its drag image shown over Explorer), the
+  app logged no `DragEnter` and none of its windows held an OLE drop target. The VM runs with UAC off, so the app is elevated
+  (`0x3000`) like everything else; Windows App SDK is reported to take no drop into an elevated app (remembered). The drop's rule is
+  held by `DropSortTest`; a visible drop needs a machine with UAC on.

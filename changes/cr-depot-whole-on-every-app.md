@@ -538,8 +538,8 @@ Android and Apple thinned.
   a codec the system lacks says `file_unsupported` with Save a copy. Linux: frames drawn and the position advancing
   under Broadway; audio heard in Phase 6's VM session.
 
-**Status: done (2026-11-12)** — but the Windows peak-memory bound (below, Deviations) and audio heard (Phase 6's session; Windows
-pending).
+**Status: done (2026-11-12)** — but the Windows peak-memory bound (below, Deviations). Audio: Windows heard by the owner, Linux
+measured in Phase 6's session.
 
 **Built:**
 - bridge: `File.Reader(file)` → `Answer.Reader(reader, size, mediaType)`, the first caller of `Bridge.openReader`, over the page's
@@ -707,6 +707,72 @@ pending).
 - Windows' audio: met — the owner heard a medium's sound on the Windows VM (2026-11-12, Phase 4's build); Linux's is
   this phase's, measured on the VM's PipeWire sink monitor (non-silent while a medium plays) since nobody listens there.
 - Builds and guards as Phase 3.
+
+**Status: done (2026-11-12)** — but Windows' visible drop (below: Explorer's drag does not reach the app on the VM; the
+Veyq.Tests case stands for it, as this Done-when allows) and a non-local drop in the Linux session (held by `cargo test`).
+
+**Built:**
+- Linux `drop.rs`: a `gtk::DropTarget` for `gdk::FileList` (`ACTION_COPY`) on Home's level (its scroller) and on each FOLDER
+  row (the theme's own `:drop(active)` outline), taken only where the level's New offers Upload files (`ShellShown.creates`,
+  the core's); `sort` (a directory — a link to one followed — is a folder, any other local UTF-8 path a file, no path refused
+  under its name) and `calls` (the files as one `Upload.Files` batch, one `Upload.Folder` per directory); a refusal is said
+  `depot_drop_not_local` (new, en + de) as a toast; each answer said as New's uploads say theirs (`uploads::queued`).
+- Linux `uploads.rs` (Phase 5's leftover): the popover is built once and its batches' and items' rows are kept by id and
+  updated in place (`changes`: only rows whose ids left go, only new ids are made; order kept by `reorder_child_after` /
+  `ListBox::insert`), so a Cancel clicked during an update lands on the row it was clicked on.
+- Linux `words.rs`: a debug build reads its catalogs from `VEYQ_LOCALE_DIR` in its environment where set (the build's
+  directory exists only in the container: on the VM every word was English under `LANGUAGE=de`, measured).
+- Windows `DropSort.cs` (the one rule, in Veyq.Tests: `UploadLevel`, `DroppedItem`, `Sort`, `Calls`, Linux's rule for rule)
+  and `Drops.cs` (`AllowDrop` on the level's scroller, made hit-testable by a transparent background, and on each FOLDER row,
+  `DragOver` taking `StorageItems` as Copy with the level's name as the caption, the row's background `SubtleFillColorSecondary`
+  while over it, `Drop` reading `GetStorageItemsAsync()`, the row's drop `Handled` so the level beneath does not take it
+  again); `Uploads.Level` became `UploadLevel`; the level's scroller has the AutomationId `level`.
+- `Veyq.Drive`: `explorer <x> <y> <w> <h> <path>` (an Explorer window opened there and placed), `drag <id|@x,y>
+  <name>|<name>…` (the items selected through UIA, then pressed and dragged with SendInput's mouse — `Mouse.cs` — onto an
+  element or a point, its pointer read back), `hovershot <file>` (the screen while a drag is held over its target), `click <x>
+  <y>`, `screen <file>`, `droptargets` (the app's windows and whether OLE holds a drop target for each).
+- The Fedora VM (scratch, not in the repo): `rd.py`, a pointer, keyboard and screen frame through Mutter's RemoteDesktop and
+  ScreenCast D-Bus API (what gnome-remote-desktop uses; no portal dialog, no root), `audio.py` (the default sink's monitor
+  recorded through `parec`, its RMS, peak and frequency by zero crossings), `deploy.py`/`restart.sh` (the container's arm64
+  debug app, its bridge library and catalogs to the VM; `start.sh`'s `dev.env` recipe; the app restarted by PID with its
+  language and the desktop's colour scheme, `GDK_DEBUG=portals`).
+
+**Met:**
+- `cargo test` (`linux/run.py build`, 38 passed): `drop::…a_dropped_file_list_reaches_upload_files_and_upload_folder_with_its_paths`
+  (a `gdk::FileList` of two files and a directory `Reise ü` → one `Upload.Files` with both paths and one `Upload.Folder`),
+  `…a_dropped_item_without_a_local_path_is_refused…` (an `https:` URI refused under its name, nothing sent for it),
+  `uploads::…an_update_keeps_every_row_still_listed…`. `scratchpad/d6/lbite.py` (one mutation at a time, `/bin/cp -f` restore):
+  the directory sent as a file, a URI without a path sent as a file, the folders sent as files, every row drawn anew — all four
+  red, green after (`lbite.log`).
+- Veyq.Tests (`windows/run.py build`, 33 passed): `DropSortTest` 2 (two files and a folder → `Upload.Files` and `Upload.Folder`
+  with their paths; an item without a path refused, nothing sent). `scratchpad/d6/wbite.py` (one at a time through `run.py
+  build`): the folder sent as a file and an item without a path sent as a file — both red (one `DropSortTest` case each), green
+  after (`wbite.log`).
+- **The Linux session, recorded first:** the container's arm64 debug build runs in the Fedora 45 VM's GNOME Wayland session
+  (GTK 4.24.1, libadwaita 1.10.0) against the dev instance through the VM's `forward.py` and the Mac's forwarder; unlocked by
+  `start.sh`'s `dev.env` (deleted on reading). Then, en/light and de/dark, in `Linux depot` (made by the app's New folder):
+  - dragged from Files (Nautilus 51) with the pointer of `rd.py`: `a.txt`, `photo.jpg` and `Reise ü` onto the `Linux depot` row
+    at the personal top level ("dropped onto Linux depot: 2 files, 1 folders, 0 refused", `Reise ü` with `.hidden`, `b.txt`,
+    `sub/c.txt`); `Fotos 2026`, `notes.txt`, `tone.webm` onto the level (the level outlined while over it, `vm/v9.png`);
+    `notes.txt` onto the `Fotos 2026` row (the row outlined, `vm/v10.png`); de/dark: three onto the `Reise ü` row (`vm/x3.png`,
+    read back inside it, `vm/x13.png`) and the folder `Reise ü` onto the level (`Reise ü (2)`, `vm/x6.png`);
+  - the portal's dialogs (`GDK_DEBUG=portals`: GNOME's portal file chooser, titled by the app): Upload files picked
+    `tone.mp4` and `a.txt` (the same-named `a.txt` offered "Replace file" and replaced), Upload folder… picked `Fotos 2026`
+    ("Auswählen"), Save a copy wrote `tone.webm` (en) and `tone.mp4` (de) to Downloads at the originals' SHA-256
+    (`6da5113c…`, `40a13e91…`, `sha256sum` on the VM);
+  - **audio, measured on the default sink's monitor** (`audio.py`, `parec -d <sink>.monitor`, the sink unmuted at 100 % for it
+    and muted again after): `tone.webm` (VP9/Opus, 440 Hz) playing RMS −21.1 dBFS, peak −18.0 dBFS; paused −∞ (silence);
+    `tone.mp4` (H.264/AAC, 550 Hz) playing RMS −21.1 dBFS, peak −18.0 dBFS, ~542 Hz by zero crossings; paused −∞ — the
+    tones' own level (`ffmpeg`'s `sine` at 1/8, −18 dBFS peak), with `veyq` the only stream playing.
+- **Windows, recorded:** `Veyq.Drive drag` presses and drags as a person does (`explorer`, then `drag level a.txt|photo.jpg|Ziel`:
+  the pointer read at the press and the release where it was sent; the same drag onto a point in Explorer shows Explorer's drag
+  image, `d6-hover3`), but the app never sees it: no `a drag entered` line in its log, and no window of the app holds an OLE drop
+  target (`droptargets`: `WinUIDesktopWin32WindowClass`, `InputNonClientPointerSource`, `DesktopChildSiteBridge`,
+  `InputSiteWindowClass`, none). The VM runs with UAC off (`EnableLUA 0`), so every process — Explorer and the app — is at high
+  integrity (`0x3000`, read from each token); Windows App SDK is reported not to take a drop into an elevated app (remembered from
+  a forum thread, not settled). The Veyq.Tests case stands for the visible drop, which stays open for a machine with UAC on.
+- `./gradlew :core:jvmTest :core:macosArm64Test :bridge:jvmTest` green (no Kotlin changed; `words.json` gained `depot_drop_not_local`); `validate_mobile_words`,
+  `validate_mobile_platform_guidelines`, `validate_changes` green.
 
 ### Phase 7 — Bridge and desktops: drop boxes and shares
 
@@ -943,3 +1009,39 @@ owner's veto.
   (204). On the VM the test files (`Documents\up`, `F:\outside`) and the saved copies removed; the "Not now" pressed cleared from
   `device-store.json` (backup `.bak-d5`). The container ran with `--rm`. On the Mac the scratch's 2 GiB files removed.
 
+
+### Phase 6 (2026-11-12)
+
+- **What a drop is sorted into stays the host's, by the CR's D8** (a directory is `Upload.Folder`, a file `Upload.Files`, no local
+  path refused): GTK's `FileList` and WinUI's storage items already know a folder from a file. A core call taking every dropped
+  path and deciding itself (`pathFacts`) was weighed — one rule instead of two — and left: the rule is three lines on each
+  side, both tested and bitten. Decided here.
+- **Where a drop is taken is the core's:** a level takes one where its New offers Upload files (`ShellShown.creates`), and only a
+  FOLDER row takes one (not a drop box's, a Pot's or a guest's). An application's list (Depot's drawer list) takes none: it is no
+  level.
+- **The dropped files go as one batch, each folder as its own** — the same calls New's pickers make, so a drop is said, queued,
+  offered for replace and settled exactly as a pick is (measured: a dropped `a.txt` beside one offered "Replace file").
+- **The Linux tray's rows are kept by id** (Phase 5's leftover, the Cancel lost to a redraw): the popover is built once, rows made
+  only for new ids and dropped only for gone ones; its rule (`uploads::changes`) is tested and bitten, the GTK half is not (no
+  display in `cargo test`).
+- **The Linux pass drove a real GNOME session without a person and without root:** Mutter's RemoteDesktop/ScreenCast D-Bus API
+  (the one gnome-remote-desktop uses; no portal dialog for a client of the session bus) gave a pointer, keys and frames through
+  `pipewiresrc`; audio was read from the sink's monitor. The VM had no `ydotool` and no password-less `sudo`.
+- **Found and fixed on the way:** the Linux app's words were English on the VM under `LANGUAGE=de`: the catalogs' directory is the
+  build's, inside the container. A debug build now reads `VEYQ_LOCALE_DIR`; a release build installing them is packaging's
+  (native-apps § Open, the Flatpak).
+- **Found, not ours:** dragging across libadwaita's sidebar activates the row under the pointer (a Pot opened mid-drag; the pass
+  crosses the sidebar on a heading); GTK's file dialog in a non-sandboxed app is GTK's own unless `GDK_DEBUG=portals` (the
+  portal's path is what a Flatpak takes; on the host the portal returns real paths, so the document portal's path in the core is
+  still the Flatpak's question).
+- **Deviations:** Windows' visible drop is not met (Met: the app gets no drop on the VM, UAC off, every process elevated; the
+  remembered cause is not settled) — Veyq.Tests and the drive's drag stand, and the next machine with UAC on (an x64 PC) tries
+  `drag` again. A non-local drop in the session was not produced: Nautilus's Trash dragged onto the level reached no handler
+  (Nautilus offers no copy out of the trash); `cargo test` holds the refusal. The de/dark Windows pass was not run (the same drag
+  would fail the same way). The en/light Linux drops ran before the locale fix (a build without `words.rs`'s change; nothing
+  else differed).
+- **Left in the dev instance and on the hosts by my runs:** nothing in the dev instance: `Linux depot` and `Windows depot` trashed and purged
+  (`VEYQ_LIVE_DEPOT_PASS_PURGE=1`). On the Fedora VM the drop sources, the saved copies and the trashed file removed, the sink muted
+  at 0 % again, the colour scheme back to default; this branch's debug build stays running there, signed in (password trust), with
+  `rd.py`, `audio.py`, `restart.sh` and the catalogs beside it in `~/veyq-spike`. On the Windows VM the drop sources and shots
+  removed; the run's tunnel stopped, and two orphaned tunnels of earlier phases' runs (from 19:20 and 20:03) ended by PID.
