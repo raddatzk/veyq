@@ -471,20 +471,23 @@ internal sealed class ShellView
         }
     }
 
-    /// <summary>The CommandBar: New first where the shell may create (canCreateHere), then the header's primary commands;
+    /// <summary>The CommandBar: New first where the shell may create (canCreateHere) — on a Pot's page its Add entry
+    /// instead —, then the header's primary commands;
     /// the header's secondary ones behind the bar's own More.</summary>
     private void DrawCommands()
     {
         _commands.PrimaryCommands.Clear();
         _commands.SecondaryCommands.Clear();
         if (_shown is not { } shown) return;
-        if (shown.canCreateHere && shown.creates.Count > 0)
+        var page = _pot;
+        // a Pot's page creates one thing, an entry (as Android's and Apple's Pot screens): the level's New is not offered
+        // beside it — two Add commands side by side would ask which one adds what
+        if (page is null && shown.canCreateHere && shown.creates.Count > 0)
         {
             // a folder is made here; the others are later CRs' (their entry stays disabled)
             _commands.PrimaryCommands.Add(CreateAction.Menu(Words.DrawerNew(), "new",
                 shown.creates.Select(c => (Said.Key(c.word), $"new:{c.create}", c.create == Create.Folder ? (Action?)NewFolder : null))));
         }
-        var page = _pot;
         // an open Pot's "Add entry" is the content's creating action, first, where its places show and it takes writes
         if (page is { CanAdd: true }) _commands.PrimaryCommands.Add(CreateAction.Button(Words.PotAdd(), "pot-add", page.AddEntry));
         if (_header is null) return;
