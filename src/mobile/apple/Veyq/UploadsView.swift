@@ -10,7 +10,7 @@ struct UploadsButton: View {
     @State private var open = false
 
     var body: some View {
-        if let state = model.uploadState, !state.batches.isEmpty {
+        if let state = model.depotState?.queue, !state.batches.isEmpty {
             Button { open = true } label: { glyph(state: state, failed: Int(state.failed)) }
                 .accessibilityLabel(say(.uploadTitle))
                 .accessibilityValue(state.active > 0 ? say(.uploadActive, state.active) : "")
@@ -18,14 +18,6 @@ struct UploadsButton: View {
                     UploadsList(model: model)
                         .frame(minWidth: 340, minHeight: 360)
                         .presentationDetents([.medium, .large])
-                }
-                // a batch all in is acknowledged after a moment; one with a failure waits for its close
-                .task(id: state.batches.map { "\($0.id)/\($0.finished)" }.joined(separator: ",")) {
-                    let clean = state.clean
-                    guard !clean.isEmpty else { return }
-                    try? await Task.sleep(for: .milliseconds(UploadQueue.companion.ACKNOWLEDGE_AFTER_MS))
-                    guard !Task.isCancelled else { return }
-                    for b in clean { model.uploads.acknowledge(batchId: b.id) }
                 }
         }
     }
@@ -56,7 +48,7 @@ private struct UploadsList: View {
     var body: some View {
         NavigationStack {
             List {
-                ForEach(model.uploadState?.batches ?? [], id: \.id) { batch in
+                ForEach(model.depotState?.queue.batches ?? [], id: \.id) { batch in
                     Section {
                         ForEach(batch.items, id: \.id) { item in UploadRow(model: model, item: item) }
                     } header: {
@@ -64,7 +56,7 @@ private struct UploadsList: View {
                             Text(batch.label)
                             Spacer()
                             if batch.finished {
-                                Button(say(.receiptsClose)) { model.uploads.acknowledge(batchId: batch.id) }.font(.footnote)
+                                Button(say(.uploadClose)) { model.depot?.acknowledge(batchId: batch.id) }.font(.footnote)
                             }
                         }
                     }
@@ -76,13 +68,13 @@ private struct UploadsList: View {
             #endif
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
-                    if (model.uploadState?.active ?? 0) > 0 {
-                        Button(say(.uploadCancelAll), role: .destructive) { model.uploads.cancelAll() }
+                    if (model.depotState?.queue.active ?? 0) > 0 {
+                        Button(say(.uploadCancelAll), role: .destructive) { model.depot?.cancelAll() }
                     }
                 }
                 ToolbarItem(placement: .confirmationAction) { Button(say(.shareDone)) { dismiss() } }
             }
-            .onChange(of: model.uploadState?.batches.isEmpty ?? true) { _, empty in if empty { dismiss() } }
+            .onChange(of: model.depotState?.queue.batches.isEmpty ?? true) { _, empty in if empty { dismiss() } }
         }
     }
 }
@@ -104,11 +96,11 @@ private struct UploadRow: View {
             }
             Spacer()
             if item.active {
-                Button { model.uploads.cancel(id: item.id) } label: { Image(systemName: "xmark.circle.fill").foregroundStyle(.secondary) }
+                Button { model.depot?.cancel(id: item.id) } label: { Image(systemName: "xmark.circle.fill").foregroundStyle(.secondary) }
                     .buttonStyle(.borderless)
                     .accessibilityLabel(say(.signinCancel))
             } else if item.retryable {
-                Button { model.uploads.retry(id: item.id) } label: { Image(systemName: "arrow.clockwise") }
+                Button { model.depot?.retry(id: item.id) } label: { Image(systemName: "arrow.clockwise") }
                     .buttonStyle(.borderless)
                     .accessibilityLabel(say(.uploadRetry))
             }

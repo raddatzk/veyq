@@ -361,7 +361,8 @@ struct Bar: View {
         .sheet(item: $trashOf) { SpaceTrashSheet(model: model, scopeId: $0.scopeId) }
         .sheet(item: $uploadShareOf) { TopLevelUploadSheet(model: model, scopeId: $0.scopeId) }
         // what the model says once (an upload's refusal, its "Replace anyway")
-        .alert(model.notice?.text ?? "", isPresented: Binding(get: { model.notice != nil }, set: { if !$0 { model.notice = nil } }), presenting: model.notice) { n in
+        // its dismissal may run before its button's action (ADR 0127's trap): the action is the presented notice's own
+        .alert(model.notice?.text ?? "", isPresented: Binding(get: { model.notice != nil }, set: { if !$0 { model.notice?.done?(); model.notice = nil } }), presenting: model.notice) { n in
             if let action = n.action, let run = n.run {
                 Button(action, role: .destructive) { Task { await run() } }
                 Button(say(.signinCancel), role: .cancel) {}
@@ -394,7 +395,7 @@ struct Bar: View {
             model.replaceFile(file, url: url)
         }
         .overlay(alignment: .top) {
-            if let name = model.preparing {
+            if let name = model.depotState?.preparing {
                 VStack(spacing: 4) {
                     ProgressView()
                     Text(say(.uploadPreparingFolder, name)).font(.footnote).foregroundStyle(Role.muted)

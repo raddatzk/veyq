@@ -166,54 +166,42 @@ private struct LinkRowView: View {
     }
 }
 
-/// The share of a space's top level (the web's `LevelView` `share(null, …)`): no link roots there, so it offers "Add files
-/// only" alone — a drop box at the top, named as typed, with its first link (Depot's `folderUploadShare`), shown once.
+/// The share of a space's top level (the web's `LevelView` `share(null, …)`), drawn from core's `ShareSheet.topLevel`: no
+/// link roots there, so it offers "Add files only" alone — a drop box at the top, named as typed, with its first link,
+/// shown once. Its form, saving, refusal and day are the core's.
 struct TopLevelUploadSheet: View {
     let model: AppModel
     let scopeId: String
     @Environment(\.dismiss) private var dismiss
-    @State private var fresh: String?
-    @State private var form: LinkForm?
-    @State private var saving = false
-    @State private var problem: String?
+    @State private var box = ShareBox()
 
     var body: some View {
         NavigationStack {
             Group {
-                if let fresh {
-                    FreshLinkView(url: fresh) { dismiss() }
-                } else if let form {
-                    NewLinkForm(
-                        form: form, words: ShareWords.companion.of(kind: "FOLDER"), saving: saving, problem: problem, submit: .shareCreate,
-                        change: { self.form = $0(form) }, onCancel: { dismiss() }, onSave: { Task { await save(form) } }
-                    )
-                } else {
-                    ProgressView().onAppear {
-                        form = LinkForm.companion.start(
-                            rules: model.linkRules(), editing: nil, writeOnly: false, uploadOffered: false, uploadOnly: true,
-                            today: LocalDays.shared.dayOf(epochMs: Int64(Date().timeIntervalSince1970 * 1000)), editingEndDay: nil
+                if let sheet = box.sheet, let st = box.state {
+                    if let fresh = st.fresh {
+                        FreshLinkView(url: fresh) { dismiss() }
+                    } else if let form = st.form {
+                        NewLinkForm(
+                            form: form, words: sheet.words, saving: st.saving, problem: st.problem.map { say(notice: $0) },
+                            submit: sheet.submit(state: st), change: { sheet.form(change: $0) }, onCancel: { dismiss() },
+                            onSave: { Task { _ = try? await sheet.save() } }
                         )
                     }
+                } else {
+                    ProgressView()
                 }
             }
-            .navigationTitle(say(.shareRoleUploader))
+            .navigationTitle(box.sheet.map { say($0.title) } ?? "")
             #if os(iOS)
             .navigationBarTitleDisplayMode(.inline)
             #endif
         }
-    }
-
-    private func save(_ f: LinkForm) async {
-        saving = true
-        problem = nil
-        let made = await model.createDropBox(
-            scopeId: scopeId, parentId: nil, name: f.label, password: f.submittedPassword ?? "",
-            expiresAt: f.submittedEndDay.map { LocalDays.shared.endOf(day: $0.int64Value) }
-        )
-        if made.outcome == .created { fresh = made.url } else {
-            problem = say(notice: Notices.shared.dropBoxRefused(outcome: made.outcome) ?? Notices.shared.of(msg: .shareFailed))
+        .task {
+            guard box.sheet == nil, let made = model.topLevelShareSheet(scopeId) else { return }
+            box.start(made)
         }
-        saving = false
+        .onDisappear { box.stop() }
     }
 }
 

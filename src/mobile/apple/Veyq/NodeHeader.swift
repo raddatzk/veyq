@@ -70,7 +70,10 @@ struct KindPage {
                 if a.id == FileModel.companion.SEND {
                     return OwnAction(id: a.id, label: label, systemImage: "paperplane", slot: a.slot) { model.sendingCopy = node }
                 }
-                return OwnAction(id: a.id, label: label, systemImage: "square.and.arrow.down.on.square", slot: a.slot) { model.replacing = file }
+                return OwnAction(id: a.id, label: label, systemImage: "square.and.arrow.down.on.square", slot: a.slot) {
+                    // the content shown now is what the replace expects (core's choice), whatever a reload shows while picking
+                    if file.chooseReplace() { model.replacing = file }
+                }
             }
         )
     }, body: { ref, _, model in AnyView(FileScreen(model: model, ref: ref)) })

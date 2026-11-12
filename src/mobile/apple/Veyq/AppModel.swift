@@ -326,6 +326,7 @@ final class AppModel {
                 managing = nil
                 shellWatch?.stop()
                 shellModel = nil
+                closeDepot()
                 dropHeaders()
                 closeFile()
             } else if managing != nil {
@@ -365,7 +366,6 @@ final class AppModel {
         let t = opened.session
         // the re-key's rules and its background resume are the core's (`AccountDoor.open`/`opened`)
         if let was = tenantSession, was.account !== account || was.tenant.tenantId != tenant.tenantId { uploads.clear() }
-        watchUploads()
         tenantSession = t
         let pots = PotModel(tenant: t, now: { @Sendable in KotlinLong(value: Int64(Date().timeIntervalSince1970 * 1000)) })
         potWatch?.stop()
@@ -377,6 +377,7 @@ final class AppModel {
         let model = ShellModel(tenant: t, hidden: hidden, recent: recent, now: { @Sendable in KotlinLong(value: Int64(Date().timeIntervalSince1970 * 1000)) })
         shellWatch?.stop()
         shellModel = model
+        openDepot(model, t)
         dropHeaders()
         closeFile()
         try await model.load(openLastUsed: incoming == nil)
@@ -623,6 +624,18 @@ final class AppModel {
         }
     }
 
+    /// The share of space `scopeId`'s top level (core's `ShareSheet.topLevel`: "Add files only" alone, a drop box at the top).
+    func topLevelShareSheet(_ scopeId: String) -> VeyqCore.ShareSheet? {
+        guard let m = shellModel else { return nil }
+        return m.topLevelShareSheet(scopeId: scopeId) { @Sendable in
+            Task { @MainActor [weak self] in
+                guard let self, let t = self.tenantSession else { return }
+                self.applyShell(start: false)
+                await self.readDetails(t)
+            }
+        }
+    }
+
     /// Memory or chapter `nodeId`'s gallery (`MemoryMedia.list`); nil when it could not be read.
     func memoryGallery(scopeId: String, nodeId: String) async -> MemoryMedia.Gallery? {
         guard let t = tenantSession else { return nil }
@@ -768,20 +781,8 @@ final class AppModel {
     /// not only when the number of rows moved.
     private(set) var listsRevision = 0
 
-    /// "Add files only" at `parentId` of `scopeId` (nil: the space's top level, the web's level share).
-    func createDropBox(scopeId: String, parentId: String?, name: String, password: String, expiresAt: String?) async -> DropBoxes.Created {
-        guard let t = tenantSession else { return DropBoxes.Created(outcome: .failed, nodeId: nil, url: nil, minted: nil) }
-        let r = (try? await DropBoxes.shared.create(tenant: t, scopeId: scopeId, parentId: parentId, name: name, password: password, expiresAt: expiresAt))
-            ?? DropBoxes.Created(outcome: .failed, nodeId: nil, url: nil, minted: nil)
-        await refreshLists(t)
-        return r
-    }
-
-    /// Drop box `nodeId`'s guests' folders with their files (`DropBoxes.folders`); nil when they could not be read.
-    func dropBoxFolders(scopeId: String, nodeId: String) async -> [DropBoxes.GuestFolder]? {
-        guard let t = tenantSession else { return nil }
-        return try? await DropBoxes.shared.folders(tenant: t, scopeId: scopeId, dropBoxId: nodeId)
-    }
+    /// Drop box `ref`'s page (core's `DropBoxPage`: its guests' folders read anew with the lists, a delete asked first).
+    func dropBoxPage(_ ref: NodeAt) -> DropBoxPage? { shellModel?.dropBoxPage(ref: ref) }
 
     /// What the rows read last (core's `RowDetails`): a part that does not read next time keeps these.
     @ObservationIgnored private var rows = RowDetails.ReadCompanion.shared.EMPTY
@@ -847,6 +848,8 @@ final class AppModel {
         let text: String
         var action: String?
         var run: (() async -> Void)?
+        /// Once it is gone, its action taken or not (the uploads' offer seen).
+        var done: (() -> Void)?
     }
 
     var notice: Notice?
@@ -912,19 +915,48 @@ final class AppModel {
     /// account: a sign-out or a switch of tenant empties it.
     let uploads = UploadQueue()
 
-    /// The queue as it stands, on the main actor (its watch).
-    private(set) var uploadState: UploadQueue.State?
-    @ObservationIgnored private var uploadWatch: UploadQueue.Watch?
+    /// The uploads as the shell shows them (core's `DepotUploads` over `uploads`, one per open tenant): the uploads button
+    /// draws `depotState`, Depot's uploads go through it, and what it says becomes `notice`.
+    private(set) var depot: DepotUploads?
+    private(set) var depotState: DepotUploads.State?
+    @ObservationIgnored private var depotWatch: DepotUploads.Watch?
+    @ObservationIgnored private var depotSaid: Int64?
 
-    /// The name of a picked directory whose folders are being made before its files queue up.
-    private(set) var preparing: String?
-
-    private func watchUploads() {
-        guard uploadWatch == nil else { return }
-        uploadWatch = uploads.watch { @Sendable state in
-            nonisolated(unsafe) let state = state
-            Task { @MainActor [weak self] in self?.uploadState = state }
+    private func openDepot(_ m: ShellModel, _ t: TenantSession) {
+        closeDepot()
+        let d = m.depotUploads(queue: uploads) { @Sendable in
+            Task { @MainActor [weak self] in
+                guard let self, let t = self.tenantSession else { return }
+                await self.refreshLists(t)
+            }
         }
+        depot = d
+        depotState = d.current
+        depotWatch = d.watch { @Sendable _ in
+            Task { @MainActor [weak self] in self?.syncDepot() }
+        }
+    }
+
+    private func closeDepot() {
+        depotWatch?.stop()
+        depotWatch = nil
+        depot?.close()
+        depot = nil
+        depotState = nil
+        depotSaid = nil
+    }
+
+    /// The uploads' state on the main actor; what they say, each once, as the shell's notice (its action takes the offer).
+    private func syncDepot() {
+        guard let d = depot else { return }
+        let st = d.current
+        depotState = st
+        guard let said = st.said, said.id != depotSaid else { return }
+        depotSaid = said.id
+        notice = Notice(
+            text: said.notices.map { say(notice: $0) }.joined(separator: "\n"), action: said.action.map { say($0) },
+            run: said.offer == nil ? nil : { d.take(said: said) }, done: { d.seen(id: said.id) }
+        )
     }
 
     /// A picked file as an upload lists it: its name, size, type, modified time (read inside its security scope).
@@ -950,88 +982,67 @@ final class AppModel {
         shell.folder?.name ?? Names.spaceName(spaces.first { $0.scopeId == shell.space })
     }
 
-    /// Queues the picked `urls` as new files under the level shown (`DepotFiles.UploadJob`): a name a file already holds
-    /// offers its replace (Depot's `replaceConfirm`).
+    /// Queues the picked `urls` as new files under the level shown (core's `DepotUploads.upload`): a name a file already
+    /// holds offers its replace.
     func uploadFiles(_ urls: [URL]) {
-        guard let t = tenantSession, let scopeId = shell.space else { return }
-        let parentId = shell.folder?.nodeId
-        let jobs: [UploadQueueJob] = urls.compactMap { url in
+        guard let d = depot, let scopeId = shell.space else { return }
+        let sources: [UploadSource] = urls.compactMap { url in
             guard let p = Picked(url) else { return nil }
-            return AppleDepot.shared.uploadJob(
-                tenant: t, scopeId: scopeId, parentId: parentId, url: url, name: p.name, size: p.size, type: p.type,
-                modifiedAt: p.modifiedAt.map { KotlinLong(value: $0) }
-            )
+            return AppleDepot.shared.source(url: url, name: p.name, size: p.size, type: p.type, modifiedAt: p.modifiedAt.map { KotlinLong(value: $0) })
         }
-        enqueueDepot(jobs, label: levelLabel, key: parentId ?? scopeId)
+        d.upload(scopeId: scopeId, parentId: shell.folder?.nodeId, label: levelLabel, sources: sources)
     }
 
-    private func enqueueDepot(_ jobs: [UploadQueueJob], label: String, key: String?) {
-        uploads.enqueue(jobs: jobs, label: label, key: key, onSettled: { @Sendable item in
-            nonisolated(unsafe) let item = item
-            Task { @MainActor [weak self] in await self?.depotSettled(item) }
-        }, onFinished: nil)
-    }
-
-    /// A Depot item settled: the lists read anew; a name a file holds offers that file's replace, content someone replaced
-    /// meanwhile "Replace anyway" — each said once, the item taken out of the tray (its notice says it).
-    private func depotSettled(_ item: UploadQueue.Item) async {
-        guard let t = tenantSession else { return }
-        await refreshLists(t)
-        guard let offer = try? await DepotFiles.shared.offerAfter(tenant: t, item: item) else { return }
-        uploads.remove(id: item.id)
-        notice = Notice(text: say(notice: offer.notice), action: say(offer.action)) { [weak self] in
-            guard let self, let t = self.tenantSession, let job = try? await DepotFiles.shared.take(tenant: t, offer: offer) else { return }
-            self.enqueueDepot([job], label: job.name, key: job.file.nodeId)
-        }
-    }
-
-    /// Depot's "Upload folder…": the directory at `url` (the system's folder picker) listed here — only its files, hidden ones
-    /// included, as the web's directory input holds them —, its folders made under the level shown (`FolderUpload`) and its
-    /// files queued as one batch under its name; what could not be made is said, in the web's words.
+    /// Depot's "Upload folder…": the directory at `url` (the system's folder picker) walked here — every entry by its path
+    /// below it, hidden ones included, a link said as one and never followed — and handed to core's
+    /// `DepotUploads.uploadFolder`, which keeps, prepares, queues and says.
     func uploadFolder(_ url: URL) async {
-        guard let t = tenantSession, let scopeId = shell.space else { return }
+        guard let d = depot, let scopeId = shell.space else { return }
         let scoped = url.startAccessingSecurityScopedResource()
         let files = Self.folderFiles(url)
         if scoped { url.stopAccessingSecurityScopedResource() }
-        preparing = url.lastPathComponent
-        let report = try? await AppleDepot.shared.prepareFolder(
-            tenant: t, scopeId: scopeId, parentId: shell.folder?.nodeId, root: url, rootName: url.lastPathComponent, files: files
-        )
-        preparing = nil
-        await refreshLists(t)
-        guard let report else { notice = Notice(text: say(.shareFailed)); return }
-        let said = Notices.shared.folderUpload(r: report)
-        if !said.isEmpty { notice = Notice(text: said.map { say(notice: $0) }.joined(separator: "\n")) }
-        if report.outcome == .ready { enqueueDepot(report.jobs, label: report.name, key: report.rootId) }
+        let found = AppleDepot.shared.found(root: url, files: files)
+        try? await d.uploadFolder(scopeId: scopeId, parentId: shell.folder?.nodeId, shownName: nil, path: url.path, found: found)
     }
 
-    /// The files below the directory at `url` (hidden ones included, as the web's directory input holds them), each by its
-    /// path below it; a directory enumerator is not iterated in an async context, so this is its own synchronous walk.
+    /// The entries below the directory at `url`, each by its path below it and what it is (hidden ones included, as the
+    /// web's directory input holds them; a link reported, never followed; one the enumerator could not read reported); a
+    /// directory enumerator is not iterated in an async context, so this is its own synchronous walk.
     nonisolated private static func folderFiles(_ url: URL) -> [AppleDepot.FolderFile] {
-        let keys: [URLResourceKey] = [.isRegularFileKey, .fileSizeKey, .contentModificationDateKey, .contentTypeKey]
+        let keys: [URLResourceKey] = [.isRegularFileKey, .isDirectoryKey, .isSymbolicLinkKey, .isReadableKey, .fileSizeKey, .contentModificationDateKey, .contentTypeKey]
         var files: [AppleDepot.FolderFile] = []
         let base = url.standardizedFileURL.path
-        if let walk = FileManager.default.enumerator(at: url, includingPropertiesForKeys: keys) {
-            for case let file as URL in walk {
-                guard let v = try? file.resourceValues(forKeys: Set(keys)), v.isRegularFile == true else { continue }
-                let full = file.standardizedFileURL.path
-                let relative = full.hasPrefix(base + "/") ? String(full.dropFirst(base.count + 1)) : file.lastPathComponent
-                files.append(AppleDepot.FolderFile(
-                    relativePath: relative, path: full, size: Int64(v.fileSize ?? 0),
-                    type: v.contentType?.preferredMIMEType ?? "application/octet-stream",
-                    modifiedAt: v.contentModificationDate.map { KotlinLong(value: Int64($0.timeIntervalSince1970 * 1000)) }
-                ))
-            }
+        func relative(_ file: URL) -> String {
+            let full = file.standardizedFileURL.path
+            return full.hasPrefix(base + "/") ? String(full.dropFirst(base.count + 1)) : file.lastPathComponent
         }
-        return files
+        func entry(_ file: URL, _ kind: FolderUpload.Kind, _ v: URLResourceValues? = nil) -> AppleDepot.FolderFile {
+            AppleDepot.FolderFile(
+                relativePath: relative(file), path: file.standardizedFileURL.path, kind: kind, size: Int64(v?.fileSize ?? 0),
+                type: v?.contentType?.preferredMIMEType ?? "application/octet-stream",
+                modifiedAt: v?.contentModificationDate.map { KotlinLong(value: Int64($0.timeIntervalSince1970 * 1000)) }
+            )
+        }
+        var unreadable: [AppleDepot.FolderFile] = []
+        let walk = FileManager.default.enumerator(at: url, includingPropertiesForKeys: keys) { failed, _ in
+            unreadable.append(entry(failed, .unreadable))
+            return true
+        }
+        while let file = walk?.nextObject() as? URL {
+            guard let v = try? file.resourceValues(forKeys: Set(keys)) else { files.append(entry(file, .unreadable)); continue }
+            if v.isSymbolicLink == true { files.append(entry(file, .link)) }
+            else if v.isDirectory == true { files.append(entry(file, .directory)) }
+            else if v.isRegularFile == true { files.append(entry(file, v.isReadable == false ? .unreadable : .file, v)) }
+            else { files.append(entry(file, .other)) }
+        }
+        return files + unreadable
     }
 
-    /// The header's "Replace…": the content `file` shows replaced with the picked file at `url` (core's `FileModel.replace`), queued.
+    /// The header's "Replace…": the content `file` showed when Replace was chosen replaced with the picked file at `url`.
     func replaceFile(_ file: FileModel, url: URL) {
-        guard let p = Picked(url) else { return }
+        guard let d = depot, let p = Picked(url) else { return }
         let source = AppleDepot.shared.source(url: url, name: p.name, size: p.size, type: p.type, modifiedAt: p.modifiedAt.map { KotlinLong(value: $0) })
-        guard let job = file.replace(source: source) else { return }
-        enqueueDepot([job], label: p.name, key: file.node.nodeId)
+        d.replace(file: file, source: source)
     }
 
     /// Why `item` did not go up, in its application's words (the uploads list's line under it); nil while it may still.
