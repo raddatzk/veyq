@@ -174,6 +174,7 @@ private fun ReceiptViewer(view: PotView, model: AppModel, receiptId: String, onC
 @Composable
 private fun PdfPages(context: Context, bytes: ByteArray) {
     var pages by remember(bytes) { mutableStateOf<List<Bitmap>?>(null) }
+    var total by remember(bytes) { mutableStateOf(0) }
     LaunchedEffect(bytes) {
         pages = withContext(Dispatchers.IO) {
             val file = java.io.File.createTempFile("receipt", ".pdf", context.cacheDir)
@@ -181,7 +182,9 @@ private fun PdfPages(context: Context, bytes: ByteArray) {
                 file.writeBytes(bytes)
                 ParcelFileDescriptor.open(file, ParcelFileDescriptor.MODE_READ_ONLY).use { fd ->
                     PdfRenderer(fd).use { pdf ->
-                        (0 until minOf(pdf.pageCount, 20)).map { i ->
+                        total = pdf.pageCount
+                        // each page rendered up front, so at most the core's cap (`Receipts.PDF_PAGES_SHOWN`), said when there are more
+                        (0 until Receipts.pagesShown(pdf.pageCount)).map { i ->
                             pdf.openPage(i).use { page ->
                                 val scale = 1080f / page.width
                                 val bmp = Bitmap.createBitmap((page.width * scale).toInt(), (page.height * scale).toInt(), Bitmap.Config.ARGB_8888)
@@ -203,7 +206,10 @@ private fun PdfPages(context: Context, bytes: ByteArray) {
     when {
         p == null -> CircularProgressIndicator()
         p.isEmpty() -> Text(stringResource(R.string.receipts_download_only))
-        else -> p.forEach { Image(it.asImageBitmap(), null, Modifier.fillMaxWidth(), contentScale = ContentScale.FillWidth) }
+        else -> {
+            p.forEach { Image(it.asImageBitmap(), null, Modifier.fillMaxWidth(), contentScale = ContentScale.FillWidth) }
+            Receipts.pagesCut(total)?.let { Text(say(it), color = role(LocalPalette.current.muted)) }
+        }
     }
 }
 

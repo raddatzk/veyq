@@ -37,6 +37,7 @@ import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import me.raddatz.veyq.mobile.expenses.PotView
 import me.raddatz.veyq.mobile.expenses.RevisionFormat
 
@@ -50,31 +51,44 @@ internal fun potRefusal(outcome: String): String = say(me.raddatz.veyq.mobile.wo
  */
 @Composable
 internal fun PotSettings(view: PotView, state: me.raddatz.veyq.mobile.expenses.PotModel.State, model: AppModel) {
+    // core's `PotSettings` decides what may be changed and says a refusal; this draws it
+    val settings = androidx.compose.runtime.remember(state.ref) { model.potSettings() } ?: return
+    androidx.compose.runtime.DisposableEffect(settings) { onDispose { settings.clear() } }
+    val said by settings.state.collectAsStateWithLifecycle()
+    val ui = SettingsUi(settings, said, state.saving, model)
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
         LocalNodeHero.current(0.dp)
         if (!view.ready) {
             Text(stringResource(if (view.canChangeSettings) R.string.settings_missing else R.string.settings_missing_read_only))
         }
-        BaseCurrency(view, state, model)
+        BaseCurrency(view, ui)
         if (view.ready) {
-            People(view, state, model)
-            Categories(view, state, model)
+            People(view, ui)
+            Categories(view, ui)
         } else {
-            state.message?.let { Text(potRefusal(it), color = MaterialTheme.colorScheme.error) }
+            said.notice?.let { Text(say(it), color = MaterialTheme.colorScheme.error) }
         }
     }
+}
+
+/** What the settings' rows draw from: core's model, its state, and whether a write is saving. */
+private class SettingsUi(
+    val settings: me.raddatz.veyq.mobile.expenses.PotSettings,
+    val said: me.raddatz.veyq.mobile.expenses.PotSettings.State,
+    val saving: Boolean,
+    private val model: AppModel,
+) {
+    /** One of [settings]' actions, [done] once it was stored (a field emptied, a dialog closed). */
+    fun write(op: suspend me.raddatz.veyq.mobile.expenses.PotSettings.() -> Boolean, done: () -> Unit = {}) = model.settingsWrite({ settings.op() }, done)
 }
 
 /** The currencies offered, by code: core's one table (the web's `Intl`). */
 internal val currencies: List<String> get() = me.raddatz.veyq.mobile.expenses.Currencies.known
 
-/** The minor-unit digits of [code] (the euro 2, the yen 0, the dinar 3): core's one table. */
-internal fun minorUnitsOf(code: String): Int = me.raddatz.veyq.mobile.expenses.Currencies.minorUnits(code)
-
 /** The base currency: chosen while the Pot holds no money entry, fixed from its first one on. */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun BaseCurrency(view: PotView, state: me.raddatz.veyq.mobile.expenses.PotModel.State, model: AppModel) {
+private fun BaseCurrency(view: PotView, ui: SettingsUi) {
     val palette = LocalPalette.current
     Section(stringResource(R.string.pot_base_currency))
     if (!view.currencyEditable) {
@@ -83,7 +97,7 @@ private fun BaseCurrency(view: PotView, state: me.raddatz.veyq.mobile.expenses.P
         return
     }
     var open by remember { mutableStateOf(false) }
-    ExposedDropdownMenuBox(open, { if (!state.saving) open = it }) {
+    ExposedDropdownMenuBox(open, { if (!ui.saving) open = it }) {
         OutlinedTextField(
             view.currency ?: "", {}, readOnly = true, label = { Text(stringResource(R.string.pot_base_currency)) },
             trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(open) },
@@ -92,7 +106,7 @@ private fun BaseCurrency(view: PotView, state: me.raddatz.veyq.mobile.expenses.P
         ExposedDropdownMenu(open, { open = false }) {
             for (code in currencies) DropdownMenuItem(text = { Text(code) }, onClick = {
                 open = false
-                if (code != view.currency) model.potWrite({ it.setBaseCurrency(code, minorUnitsOf(code)) })
+                ui.write({ setBaseCurrency(code) })
             })
         }
     }
@@ -101,7 +115,7 @@ private fun BaseCurrency(view: PotView, state: me.raddatz.veyq.mobile.expenses.P
 
 /** The Pot's own categories beside the default set: added and renamed, never removed in the first cut. */
 @Composable
-private fun Categories(view: PotView, state: me.raddatz.veyq.mobile.expenses.PotModel.State, model: AppModel) {
+private fun Categories(view: PotView, ui: SettingsUi) {
     if (!view.categoriesShown) return
     val palette = LocalPalette.current
     var renaming by remember { mutableStateOf<Pair<String, String>?>(null) }
@@ -111,7 +125,7 @@ private fun Categories(view: PotView, state: me.raddatz.veyq.mobile.expenses.Pot
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
             Text(c.second, Modifier.weight(1f))
             if (view.canChangeSettings) {
-                IconButton(onClick = { renaming = c }, enabled = !state.saving) {
+                IconButton(onClick = { renaming = c }, enabled = !ui.saving) {
                     Icon(Icons.Outlined.Edit, contentDescription = stringResource(R.string.settings_rename_category, c.second))
                 }
             }
@@ -121,7 +135,7 @@ private fun Categories(view: PotView, state: me.raddatz.veyq.mobile.expenses.Pot
         var name by rememberSaveable { mutableStateOf("") }
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             OutlinedTextField(name, { name = it }, label = { Text(stringResource(R.string.settings_category_name)) }, singleLine = true, modifier = Modifier.weight(1f))
-            OutlinedButton(onClick = { model.potWrite({ it.addCategory(name) }) { name = "" } }, enabled = name.isNotBlank() && !state.saving) {
+            OutlinedButton(onClick = { ui.write({ addCategory(name) }) { name = "" } }, enabled = name.isNotBlank() && !ui.saving) {
                 Text(stringResource(R.string.settings_add_category))
             }
         }
@@ -133,7 +147,7 @@ private fun Categories(view: PotView, state: me.raddatz.veyq.mobile.expenses.Pot
             title = { Text(stringResource(R.string.settings_rename_category, c.second)) },
             text = { OutlinedTextField(name, { name = it }, label = { Text(stringResource(R.string.settings_category_name)) }, singleLine = true) },
             confirmButton = {
-                TextButton(onClick = { model.potWrite({ it.renameCategory(c.first, name) }) { renaming = null } }, enabled = name.isNotBlank() && !state.saving) {
+                TextButton(onClick = { ui.write({ renameCategory(c.first, name) }) { renaming = null } }, enabled = name.isNotBlank() && !ui.saving) {
                     Text(stringResource(R.string.entry_save))
                 }
             },
@@ -144,10 +158,9 @@ private fun Categories(view: PotView, state: me.raddatz.veyq.mobile.expenses.Pot
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun People(view: PotView, state: me.raddatz.veyq.mobile.expenses.PotModel.State, model: AppModel) {
+private fun People(view: PotView, ui: SettingsUi) {
     val palette = LocalPalette.current
     var renaming by remember { mutableStateOf<PotView.PersonEntry?>(null) }
-    var erasing by remember { mutableStateOf<PotView.PersonEntry?>(null) }
     Section(stringResource(R.string.pot_people))
     for (p in view.personEntries) {
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
@@ -159,17 +172,17 @@ private fun People(view: PotView, state: me.raddatz.veyq.mobile.expenses.PotMode
                 Text(facts.joinToString(" · "), style = MaterialTheme.typography.bodySmall, color = role(palette.muted))
             }
             if (p.renamable) {
-                IconButton(onClick = { renaming = p }, enabled = !state.saving) {
+                IconButton(onClick = { renaming = p }, enabled = !ui.saving) {
                     Icon(Icons.Outlined.Edit, contentDescription = stringResource(R.string.people_rename, p.name))
                 }
             }
             if (p.canToggle) {
-                TextButton(onClick = { model.potWrite({ it.setActive(p.id, !p.active) }) }, enabled = !state.saving) {
+                TextButton(onClick = { ui.write({ toggleActive(p.id) }) }, enabled = !ui.saving) {
                     Text(stringResource(if (p.active) R.string.people_deactivate else R.string.people_activate))
                 }
             }
             if (p.canErase) {
-                IconButton(onClick = { erasing = p }, enabled = !state.saving) {
+                IconButton(onClick = { ui.settings.askErase(p.id) }, enabled = !ui.saving) {
                     Icon(
                         Icons.Outlined.Delete,
                         contentDescription = stringResource(if (p.named) R.string.people_delete else R.string.people_remove, p.name),
@@ -189,7 +202,7 @@ private fun People(view: PotView, state: me.raddatz.veyq.mobile.expenses.PotMode
         var name by rememberSaveable { mutableStateOf("") }
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             OutlinedTextField(name, { name = it }, label = { Text(stringResource(R.string.people_name)) }, singleLine = true, modifier = Modifier.weight(1f))
-            OutlinedButton(onClick = { model.potWrite({ it.addPerson(name) }) { name = "" } }, enabled = name.isNotBlank() && !state.saving) {
+            OutlinedButton(onClick = { ui.write({ addPerson(name) }) { name = "" } }, enabled = name.isNotBlank() && !ui.saving) {
                 Text(stringResource(R.string.people_add))
             }
         }
@@ -208,12 +221,12 @@ private fun People(view: PotView, state: me.raddatz.veyq.mobile.expenses.PotMode
                     for (m in view.addableMembers) DropdownMenuItem(text = { Text(m.name) }, onClick = { chosen = m; open = false })
                 }
             }
-            OutlinedButton(onClick = { chosen?.let { m -> model.potWrite({ it.addMember(m.userId) }) { chosen = null } } }, enabled = chosen != null && !state.saving) {
+            OutlinedButton(onClick = { chosen?.let { m -> ui.write({ addMember(m.userId) }) { chosen = null } } }, enabled = chosen != null && !ui.saving) {
                 Text(stringResource(R.string.people_add_member))
             }
         }
     }
-    state.message?.let { Text(potRefusal(it), color = MaterialTheme.colorScheme.error) }
+    ui.said.notice?.let { Text(say(it), color = MaterialTheme.colorScheme.error) }
 
     renaming?.let { p ->
         var name by remember(p.id) { mutableStateOf(p.name) }
@@ -222,24 +235,25 @@ private fun People(view: PotView, state: me.raddatz.veyq.mobile.expenses.PotMode
             title = { Text(stringResource(R.string.people_rename, p.name)) },
             text = { OutlinedTextField(name, { name = it }, label = { Text(stringResource(R.string.people_name)) }, singleLine = true) },
             confirmButton = {
-                TextButton(onClick = { model.potWrite({ it.rename(p.id, name) }) { renaming = null } }, enabled = name.isNotBlank() && !state.saving) {
+                TextButton(onClick = { ui.write({ rename(p.id, name) }) { renaming = null } }, enabled = name.isNotBlank() && !ui.saving) {
                     Text(stringResource(R.string.entry_save))
                 }
             },
             dismissButton = { TextButton(onClick = { renaming = null }) { Text(stringResource(R.string.entry_cancel)) } },
         )
     }
-    erasing?.let { p ->
+    // the erase asked is core's state: done only on its confirm, cancelled by its Cancel
+    ui.said.asking?.let { p ->
         AlertDialog(
-            onDismissRequest = { erasing = null },
+            onDismissRequest = { ui.settings.cancelAsk() },
             title = { Text(stringResource(if (p.named) R.string.people_delete else R.string.people_remove, p.name)) },
             text = { Text(stringResource(if (p.named) R.string.people_delete_confirm else R.string.people_remove_confirm)) },
             confirmButton = {
-                TextButton(onClick = { model.potWrite({ it.erase(p.id) }); erasing = null }) {
+                TextButton(onClick = { ui.write({ erase() }) }) {
                     Text(stringResource(if (p.named) R.string.people_delete_accept else R.string.people_remove_accept), color = MaterialTheme.colorScheme.error)
                 }
             },
-            dismissButton = { TextButton(onClick = { erasing = null }) { Text(stringResource(R.string.entry_cancel)) } },
+            dismissButton = { TextButton(onClick = { ui.settings.cancelAsk() }) { Text(stringResource(R.string.entry_cancel)) } },
         )
     }
 }

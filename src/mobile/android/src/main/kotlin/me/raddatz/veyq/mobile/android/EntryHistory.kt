@@ -55,8 +55,8 @@ internal fun EntryHistory(view: PotView, entryId: String) {
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 internal fun DeletedEntrySheet(view: PotView, state: me.raddatz.veyq.mobile.expenses.PotModel.State, model: AppModel, row: PotView.EntryRow, onClose: () -> Unit) {
-    val now = System.currentTimeMillis()
-    val restorable = view.restorable(row.id, now)
+    // the window on the core's clock (`PotModel.restorable`), never the platform's
+    val restorable = model.restorable(row.id)
     val purge = view.purgeAfter(row.id)
     ModalBottomSheet(onDismissRequest = { model.clearPotMessage(); onClose() }, sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)) {
         Column(Modifier.fillMaxWidth().verticalScroll(rememberScrollState()).padding(horizontal = 16.dp).padding(bottom = 24.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -73,7 +73,7 @@ internal fun DeletedEntrySheet(view: PotView, state: me.raddatz.veyq.mobile.expe
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
                 TextButton(onClick = { model.clearPotMessage(); onClose() }) { Text(stringResource(R.string.entry_cancel)) }
                 if (restorable) {
-                    Button(onClick = { model.potWrite({ it.restoreEntry(row.id, view.latestRevision(row.id)) }) { onClose() } }, enabled = !state.saving) {
+                    Button(onClick = { model.restoreEntry(row.id) { onClose() } }, enabled = !state.saving) {
                         Text(stringResource(R.string.entry_restore))
                     }
                 }

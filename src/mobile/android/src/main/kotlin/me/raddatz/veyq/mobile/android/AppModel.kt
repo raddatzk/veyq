@@ -14,8 +14,6 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import me.raddatz.veyq.mobile.crypto.BouncyCastlePrimitives
 import me.raddatz.veyq.mobile.expenses.Amounts
-import me.raddatz.veyq.mobile.expenses.Ledger
-import me.raddatz.veyq.mobile.expenses.PotCreate
 import me.raddatz.veyq.mobile.expenses.PotSession
 import me.raddatz.veyq.mobile.expenses.PotView
 import me.raddatz.veyq.mobile.navigation.ApplicationId
@@ -343,8 +341,6 @@ class AppModel(app: Application) : AndroidViewModel(app) {
         potWatch?.cancel()
         potModel = pots
         potWatch = viewModelScope.launch { pots.state.collect { _pot.value = it } }
-        creatingWatch?.cancel()
-        creatingWatch = viewModelScope.launch { pots.creating.collect { _creating.value = it } }
         val model = me.raddatz.veyq.mobile.navigation.ShellModel(t, hidden, recent, System::currentTimeMillis)
         shellWatch?.cancel()
         shellModel = model
@@ -458,7 +454,6 @@ class AppModel(app: Application) : AndroidViewModel(app) {
     /** The Pot open in the app (core's `PotModel`): its views, its live poll, its writes. */
     private var potModel: me.raddatz.veyq.mobile.expenses.PotModel? = null
     private var potWatch: kotlinx.coroutines.Job? = null
-    private var creatingWatch: kotlinx.coroutines.Job? = null
     private val potSession: PotSession? get() = potModel?.session
 
     private val _pot = MutableStateFlow<me.raddatz.veyq.mobile.expenses.PotModel.State?>(null)
@@ -1025,50 +1020,49 @@ class AppModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
+    /** Records settle-up [rows] as paid, dated the core's today (core's `PotModel.record`); a refusal is the Pot's message. */
+    fun recordSettleUp(rows: List<me.raddatz.veyq.mobile.expenses.PotView.SettleRow>) {
+        val pots = potModel ?: return
+        viewModelScope.launch { pots.record(rows) }
+    }
+
+    /** Whether deleted entry [entryId] may be restored now, by the core's clock. */
+    fun restorable(entryId: String): Boolean = potModel?.restorable(entryId) == true
+
+    /** Restores deleted entry [entryId] (core's `PotModel.restore`, its window the core's); [done] once it was. */
+    fun restoreEntry(entryId: String, done: () -> Unit) {
+        val pots = potModel ?: return
+        viewModelScope.launch { if (pots.restore(entryId)) done() }
+    }
+
+    /** The open Pot's settings and people (core's `PotSettings`); null while none is read. */
+    fun potSettings(): me.raddatz.veyq.mobile.expenses.PotSettings? = potModel?.settings()
+
     /**
-     * One write to the open Pot ([op] on its session): saving, then the Pot as read after it and a refusal as its message;
-     * [done] runs once it was stored.
+     * One change of the open Pot's settings or people ([op], a `PotSettings` action); [done] once it was stored. A new base
+     * currency is said on the Pot's row at once.
      */
-    fun potWrite(op: suspend (PotSession) -> PotSession.WriteOutcome, done: () -> Unit = {}) {
+    fun settingsWrite(op: suspend () -> Boolean, done: () -> Unit = {}) {
         val pots = potModel ?: return
         val ref = _pot.value?.ref ?: return
         viewModelScope.launch {
-            val stored = pots.write(op)
-            // A settings write may have set the base currency: the Pot's row says it at once.
+            val stored = op()
             pots.rowDetails()?.let { facts -> _rowDetails.update { it + (ref.nodeId to facts) } }
             if (stored) done()
         }
     }
 
-    private val _creating = MutableStateFlow(me.raddatz.veyq.mobile.expenses.PotModel.Creating())
-    val creating: StateFlow<me.raddatz.veyq.mobile.expenses.PotModel.Creating> = _creating.asStateFlow()
+    /** "New pot" (core's `PotCreateSheet`) at the shell's place now, in the person's language's currency; null before the shell is read. */
+    fun potCreateSheet(): me.raddatz.veyq.mobile.expenses.PotCreateSheet? {
+        val shell = shellModel ?: return null
+        return potModel?.createSheet(shell, java.util.Locale.getDefault().language)
+    }
 
-    /** The current members of [scopeId], for the "New pot" sheet's people; null when they do not read. */
-    suspend fun membersOf(scopeId: String): List<me.raddatz.veyq.mobile.session.Person>? =
-        tenantSession?.let { runCatching { it.scopeMembers(scopeId) }.getOrNull() }
-
-    /**
-     * Creates a Pot named [name] at the root of [scopeId] with [currency] ([minorUnits] its digits) and [people], reads the
-     * tenant's lists again and opens it; [done] runs once it exists (its people may still have failed: then the Pot opens
-     * and says so on its Settings, where they can be added).
-     */
-    fun createPot(scopeId: String, name: String, currency: String, minorUnits: Int, people: List<PotCreate.NewPerson>, parentId: String? = null, done: () -> Unit) {
-        val pots = potModel ?: return
+    /** "New pot" made one: the new Pot's row says its facts. */
+    fun potCreated() {
         val shell = shellModel ?: return
-        viewModelScope.launch {
-            if (pots.create(shell, scopeId, parentId, name, Ledger.BaseCurrency(currency, minorUnits), people)) {
-                readRowDetails(shell.tenant)
-                done()
-            }
-        }
+        viewModelScope.launch { readRowDetails(shell.tenant) }
     }
-
-    fun clearCreating() {
-        potModel?.clearCreating()
-    }
-
-    /** Today by the core's clock (`yyyy-MM-dd`): what a payment recorded now is dated. */
-    fun today(): String = potModel?.today().orEmpty()
 
     /**
      * The entry editor of [entryId] in the open Pot (null: a new entry), core's [me.raddatz.veyq.mobile.expenses.EntryEditor]

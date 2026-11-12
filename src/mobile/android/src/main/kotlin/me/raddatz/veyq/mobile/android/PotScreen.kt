@@ -121,7 +121,8 @@ private fun Note(text: String) {
 
 /** Minor units of [currency] as the person's locale writes money. */
 fun money(minor: Long, currency: String?, minorUnits: Int): String {
-    val f = NumberFormat.getCurrencyInstance()
+    // D8: the core hands every amount with its currency; none is never the locale's, but a number alone (the desktops' rule)
+    val f = if (currency == null) NumberFormat.getNumberInstance() else NumberFormat.getCurrencyInstance()
     currency?.let { runCatching { f.currency = Currency.getInstance(it) } }
     f.minimumFractionDigits = minorUnits
     f.maximumFractionDigits = minorUnits
@@ -235,7 +236,7 @@ private fun Overview(view: PotView, state: me.raddatz.veyq.mobile.expenses.PotMo
                     Text(say(view.pays(t)), Modifier.weight(1f))
                     Text(money(t.amount, view.currency, view.minorUnits), fontWeight = FontWeight.SemiBold)
                     if (view.canWrite) {
-                        TextButton(onClick = { model.potWrite({ it.recordPayments(listOf(t), model.today()) }) }, enabled = !state.saving) {
+                        TextButton(onClick = { model.recordSettleUp(listOf(t)) }, enabled = !state.saving) {
                             Text(stringResource(R.string.balances_record))
                         }
                     }
@@ -243,7 +244,7 @@ private fun Overview(view: PotView, state: me.raddatz.veyq.mobile.expenses.PotMo
             }
             if (view.canRecordAll) {
                 item {
-                    TextButton(onClick = { model.potWrite({ it.recordPayments(view.settleUp, model.today()) }) }, enabled = !state.saving) {
+                    TextButton(onClick = { model.recordSettleUp(view.settleUp) }, enabled = !state.saving) {
                         Text(stringResource(R.string.balances_record_all))
                     }
                 }

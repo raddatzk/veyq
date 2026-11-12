@@ -24,13 +24,20 @@ object ShareIn {
             else -> return null
         }
         if (uris.isEmpty()) return null
-        val read = uris.map { read(context, it) }
-        val (fit, refused) = PotShare.split(read.filterNotNull(), { it.type }, { it.name }, { it.size })
-        return me.raddatz.veyq.mobile.expenses.ShareInbox.Incoming(fit, refused.size + read.count { it == null })
+        // one rule on every app (core's `PotShare.Intake`): each a receipt, at most its count, all within one budget
+        val intake = PotShare.Intake()
+        var refused = 0
+        val fit = uris.mapNotNull { uri ->
+            read(context, uri, intake.room)?.takeIf { intake.take(it.type, it.name, it.size) }.also { if (it == null) refused++ }
+        }
+        return me.raddatz.veyq.mobile.expenses.ShareInbox.Incoming(fit, refused)
     }
 
-    /** One shared stream read whole (one larger than a receipt may be is not read), or null when it does not open. */
-    private fun read(context: Context, uri: Uri): PotSession.PendingReceipt? = runCatching {
+    /**
+     * One shared stream read whole, or null when it does not open or is larger than [room] (what is left of the share's
+     * budget: a HEIC larger than its JPEG included, so nothing beyond it is read at all).
+     */
+    private fun read(context: Context, uri: Uri, room: Long): PotSession.PendingReceipt? = runCatching {
         val resolver = context.contentResolver
         var name: String? = null
         var size = -1L
@@ -41,8 +48,8 @@ object ShareIn {
             }
         }
         val type = resolver.getType(uri).orEmpty()
-        if (size > HEIC_READ_LIMIT) return@runCatching null
-        val bytes = resolver.openInputStream(uri)?.use { it.readBytes() } ?: return@runCatching null
+        if (size > room) return@runCatching null
+        val bytes = resolver.openInputStream(uri)?.use { bounded(it, room) } ?: return@runCatching null
         if (type == "image/heic" || type == "image/heif") {
             val jpeg = BitmapFactory.decodeByteArray(bytes, 0, bytes.size)?.let { bitmap ->
                 ByteArrayOutputStream().also { bitmap.compress(android.graphics.Bitmap.CompressFormat.JPEG, 90, it) }.toByteArray()
@@ -52,6 +59,17 @@ object ShareIn {
         PotSession.PendingReceipt(java.util.UUID.randomUUID().toString(), bytes, type, name, null)
     }.onFailure { android.util.Log.w("veyq-share", "a shared stream did not read: ${it.javaClass.simpleName}") }.getOrNull()
 
-    /** A HEIC may be larger than the JPEG it becomes; anything past this is not read at all. */
-    private const val HEIC_READ_LIMIT = 4 * 10_485_760L
+    /** At most [limit] bytes of [input]; null when it holds more (a size the provider did not say). */
+    private fun bounded(input: java.io.InputStream, limit: Long): ByteArray? {
+        val out = ByteArrayOutputStream()
+        val buf = ByteArray(1 shl 16)
+        var total = 0L
+        while (true) {
+            val n = input.read(buf)
+            if (n < 0) return out.toByteArray()
+            total += n
+            if (total > limit) return null
+            out.write(buf, 0, n)
+        }
+    }
 }
