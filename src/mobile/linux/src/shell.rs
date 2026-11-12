@@ -21,6 +21,7 @@ use crate::file_page::FilePage;
 use crate::header::{self, Header};
 use crate::home::{self, app_icon, app_name, kind_icon};
 use crate::pot::PotPage;
+use crate::uploads::{self, Uploads};
 use crate::{avatars, create_action, said, trash, words};
 
 /// What a sidebar item opens.
@@ -69,6 +70,8 @@ pub struct Shell {
     window: adw::ApplicationWindow,
     pot: RefCell<Option<PotPage>>,
     file: RefCell<Option<FilePage>>,
+    /// The upload queue's button in the content's header bar, shown while it lists anything.
+    _uploads: Rc<Uploads>,
     /// Where each list was scrolled to, by its place.
     scrolls: ListScrolls,
     now: RefCell<Option<(ShellModelState, ShellShown)>>,
@@ -135,6 +138,9 @@ impl Shell {
         let content_view = adw::ToolbarView::new();
         content_view.add_top_bar(&content_header);
         let toasts = adw::ToastOverlay::new();
+        // the upload queue, GNOME Files' way: a header bar button while anything is listed, its popover the list
+        let uploads = Uploads::new(&toasts);
+        content_header.pack_end(uploads.button());
         toasts.set_child(Some(&content_view));
         let content = adw::NavigationPage::new(&toasts, &words::app_name());
 
@@ -178,6 +184,7 @@ impl Shell {
             window: window.clone(),
             pot: RefCell::new(None),
             file: RefCell::new(None),
+            _uploads: uploads,
             scrolls: ListScrolls::default(),
             now: RefCell::new(None),
             started: Cell::new(false),
@@ -220,6 +227,31 @@ impl Shell {
             }
         });
         window.add_action(&save);
+        // a file's Replace, the header's own action on its page: chosen first, then its open dialog (`uploads`)
+        let replace = gio::SimpleAction::new("file-replace", None);
+        let weak = Rc::downgrade(self);
+        replace.connect_activate(move |_, _| {
+            let Some(s) = weak.upgrade() else { return };
+            if let Some(id) = s.file.borrow().as_ref().and_then(FilePage::id) {
+                uploads::replace(s.window.upcast_ref(), id, &s.toasts);
+            }
+        });
+        window.add_action(&replace);
+        // New's "Upload files" and "Upload folder…" into the level shown (`uploads`)
+        for (name, folder) in [("upload-files", false), ("upload-folder", true)] {
+            let action = gio::SimpleAction::new(name, None);
+            let weak = Rc::downgrade(self);
+            action.connect_activate(move |_, _| {
+                let Some(s) = weak.upgrade() else { return };
+                let Some(level) = s.level() else { return };
+                if folder {
+                    uploads::pick_folder(s.window.upcast_ref(), level, &s.toasts);
+                } else {
+                    uploads::pick_files(s.window.upcast_ref(), level, &s.toasts);
+                }
+            });
+            window.add_action(&action);
+        }
         let weak = Rc::downgrade(self);
         self.add_entry.connect_clicked(move |_| {
             let Some(s) = weak.upgrade() else { return };
@@ -371,6 +403,16 @@ impl Shell {
         });
     }
 
+    /// The level shown, where New's uploads go: its space, the folder there (none: its top), the name the queue labels it by.
+    fn level(&self) -> Option<uploads::Level> {
+        let now = self.now.borrow();
+        let (state, shown) = now.as_ref()?;
+        let scope_id = state.shell.space.clone()?;
+        let folder = state.shell.path.last();
+        let label = folder.map(|f| f.name.clone()).unwrap_or_else(|| said::piece(&shown.space_name));
+        Some(uploads::Level { scope_id, parent_id: folder.map(|f| f.node_id.clone()), label })
+    }
+
     /// Says [text] as a toast over the content.
     pub fn say(&self, text: &str) {
         self.toasts.add_toast(adw::Toast::new(text));
@@ -385,6 +427,7 @@ impl Shell {
     /// Draws the core's shell: [state] with what the core says it shows beside it.
     pub fn show(self: &Rc<Self>, state: ShellModelState, shown: ShellShown) {
         let first = !self.started.replace(true);
+        self._uploads.start();
         avatars::listed(&format!("{}\n{}", shown.connection, shown.tenant.tenant_id), &shown.pictures);
         *self.now.borrow_mut() = Some((state, shown));
         self.draw_switcher();
@@ -441,8 +484,8 @@ impl Shell {
         self.tenant_action.set_state(&format!("{}\n{}", shown.connection, shown.tenant.tenant_id).to_variant());
     }
 
-    /// New: what the sidebar's New offers (`AppKinds.drawerCreates`) where the shell may create (`canCreateHere`): a folder
-    /// and a Pot; another kind is a later CR's (its entry stays insensitive: `win.create` is no action).
+    /// New: what the core offers where the shell is (`AppKinds.createsWhere`: on Home a folder, a Pot, files and a folder
+    /// uploaded; elsewhere a folder and a Pot) where it may create (`canCreateHere`).
     fn draw_new(&self) {
         let now = self.now.borrow();
         let Some((_, shown)) = now.as_ref() else { return };
@@ -451,7 +494,8 @@ impl Shell {
             let action = match c.create {
                 Create::Folder => "win.create-folder",
                 Create::Pot => "win.create-pot",
-                _ => "win.create",
+                Create::UploadFiles => "win.upload-files",
+                Create::UploadFolder => "win.upload-folder",
             };
             menu.append(Some(&said::key(&c.word)), Some(action));
         }
@@ -575,7 +619,7 @@ impl Shell {
                         if let Some(held) = held.upgrade()
                             && let Some(h) = held.borrow().as_ref()
                         {
-                            h.facts(Some(Facts { can_write, has_content: true }));
+                            h.facts(Some(Facts { can_write, has_content: true }), None);
                         }
                     });
                     *pot = Some(page);
@@ -593,11 +637,11 @@ impl Shell {
                     let page = FilePage::open(&node);
                     // the file read: its header learns what it may do (`FileModel.Header.facts`)
                     let held = Rc::downgrade(&self.header);
-                    page.on_facts(move |facts| {
+                    page.on_facts(move |facts, id| {
                         if let Some(held) = held.upgrade()
                             && let Some(h) = held.borrow().as_ref()
                         {
-                            h.facts(Some(facts));
+                            h.facts(Some(facts), Some(id));
                         }
                     });
                     *file = Some(page);

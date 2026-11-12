@@ -29,8 +29,8 @@ const PDF_WIDTH: i32 = 720;
 /// The page's own spacing between two PDF pages, in logical pixels.
 const PDF_GAP: i32 = 12;
 
-/// What a file's page tells of each read: its header's facts.
-type OnFacts = Box<dyn Fn(Facts)>;
+/// What a file's page tells of each read: its header's facts and the page's id in the core.
+type OnFacts = Box<dyn Fn(Facts, i64)>;
 
 /// A file on screen: opened in the core when made, closed when dropped.
 pub struct FilePage {
@@ -104,14 +104,20 @@ impl FilePage {
         &self.inner.root
     }
 
-    /// Told the header's facts each time the file is read (`FileShown.headerFacts`).
-    pub fn on_facts(&self, f: impl Fn(Facts) + 'static) {
+    /// Told the header's facts each time the file is read (`FileShown.headerFacts`), with the page's id.
+    pub fn on_facts(&self, f: impl Fn(Facts, i64) + 'static) {
         *self.inner.on_facts.borrow_mut() = Some(Box::new(f));
         if let Some(facts) = self.inner.shown.borrow().as_ref().and_then(|s| s.header_facts.clone())
+            && let Some(id) = self.inner.id.get()
             && let Some(f) = self.inner.on_facts.borrow().as_ref()
         {
-            f(facts);
+            f(facts, id);
         }
+    }
+
+    /// The page's id in the core, once it opened (`File.Open`).
+    pub fn id(&self) -> Option<i64> {
+        self.inner.id.get()
     }
 
     /// "Save a copy": GTK's save dialog (the portal's where there is one) suggests the core's name, the core writes the
@@ -207,8 +213,8 @@ async fn follow(weak: Weak<Inner>, updates: async_channel::Receiver<Result<Updat
             Ok(Update::File { shown, .. }) => {
                 if let Some(s) = &shown {
                     eprintln!("veyq: file shown: {:?}, revision {}, {}", s.view, s.revision, s.media_type.as_deref().unwrap_or("-"));
-                    if let (Some(facts), Some(f)) = (s.header_facts.clone(), inner.on_facts.borrow().as_ref()) {
-                        f(facts);
+                    if let (Some(facts), Some(id), Some(f)) = (s.header_facts.clone(), inner.id.get(), inner.on_facts.borrow().as_ref()) {
+                        f(facts, id);
                     }
                 }
                 *inner.shown.borrow_mut() = shown;

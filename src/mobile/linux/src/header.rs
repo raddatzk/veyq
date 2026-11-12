@@ -28,7 +28,7 @@ use crate::{said, words};
 pub const MAX_BUTTONS: i32 = 2;
 
 /// The header's ids drawn so far; every other id of the plan is left out until its phase.
-pub const DRAWN: &[&str] = &["favorite", "share", "rename", "delete", "download", "move", "copy", "report", "cover"];
+pub const DRAWN: &[&str] = &["favorite", "share", "rename", "delete", "download", "move", "copy", "report", "cover", "replace"];
 
 /// Whether [id] is drawn for a node of [kind].
 pub fn drawn(id: &str, _kind: &str) -> bool {
@@ -36,11 +36,12 @@ pub fn drawn(id: &str, _kind: &str) -> bool {
 }
 
 /// The window's action an id fires (`win.header-<id>`; a Pot's download is the Pot page's `win.pot-download`, a file's its
-/// page's Save a copy, `win.file-save`).
+/// page's Save a copy, `win.file-save`, and a file's own Replace its page's `win.file-replace`).
 pub fn action_of(id: &str, kind: &str) -> String {
     match (id, kind) {
         ("download", "EXPENSES_POT") => "win.pot-download".into(),
         ("download", "FILE") => "win.file-save".into(),
+        ("replace", _) => "win.file-replace".into(),
         _ => format!("win.header-{id}"),
     }
 }
@@ -61,8 +62,8 @@ struct Inner {
     undo_toast: RefCell<Option<adw::Toast>>,
     /// Whether it still draws into the bar: a header kept for its Undo after its page left does not.
     on_bar: Cell<bool>,
-    /// Facts the page learnt before the core answered the open: sent once it did.
-    later: RefCell<Option<Option<Facts>>>,
+    /// Facts the page learnt before the core answered the open (and a file page's id): sent once it did.
+    later: RefCell<Option<(Option<Facts>, Option<i64>)>>,
     /// A state showed the trash's undo offered: its end is the next state without it.
     seen_undo: Cell<bool>,
     /// The node's head: its cover, cut as stored, drawn 16:9 across the width it is given; hidden while it has none.
@@ -142,8 +143,8 @@ impl Header {
                 return;
             };
             inner.id.set(Some(header));
-            if let Some(facts) = inner.later.borrow_mut().take() {
-                bridge::send(Call::HeaderFacts { header, facts });
+            if let Some((facts, file)) = inner.later.borrow_mut().take() {
+                bridge::send(Call::HeaderFacts { header, facts, file });
             }
             let Some((watch, updates)) = bridge::watch(&Watched::Header { header }) else { return };
             *inner.watch.borrow_mut() = Some(watch);
@@ -153,11 +154,12 @@ impl Header {
         Self { node: node.clone(), inner }
     }
 
-    /// What the kind's page knows now (a Pot read: whether it takes writes).
-    pub fn facts(&self, facts: Option<Facts>) {
+    /// What the kind's page knows now (a Pot read: whether it takes writes) and, for a file's page, its id: the page's own
+    /// actions (Replace) join the plan.
+    pub fn facts(&self, facts: Option<Facts>, file: Option<i64>) {
         match self.inner.id.get() {
-            Some(header) => bridge::send(Call::HeaderFacts { header, facts }),
-            None => *self.inner.later.borrow_mut() = Some(facts),
+            Some(header) => bridge::send(Call::HeaderFacts { header, facts, file }),
+            None => *self.inner.later.borrow_mut() = Some((facts, file)),
         }
     }
 
@@ -489,6 +491,7 @@ pub fn icon_of(id: &str) -> &'static str {
         "delete" => "user-trash-symbolic",
         "report" => "dialog-warning-symbolic",
         "cover" => "image-x-generic-symbolic",
+        "replace" => "document-revert-symbolic",
         _ => "view-more-symbolic",
     }
 }
@@ -560,6 +563,8 @@ mod tests {
             assert!(drawn(id, "FOLDER") && drawn(id, "EXPENSES_POT") && drawn(id, "FILE"), "{id}");
         }
         assert_eq!(action_of("download", "FILE"), "win.file-save", "a file's download is its page's Save a copy");
+        assert!(drawn("replace", "FILE"), "a file's own Replace is drawn");
+        assert_eq!(action_of("replace", "FILE"), "win.file-replace", "a file's Replace is its page's");
         assert!(!drawn("an-applications-own", "FOLDER"), "an application's own action is its page's");
         assert_eq!(action_of("report", "FOLDER"), "win.header-report");
         assert_eq!(action_of("cover", "EXPENSES_POT"), "win.header-cover");
