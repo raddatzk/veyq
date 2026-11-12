@@ -573,6 +573,77 @@ yet, native-apps § Open; `HeaderShown.cover`, `Header.CoverPicture` and `NodeCo
   more than 20 pages shows 20 and says so), saved through the save dialog and read back from the container / the VM;
   the 101st refused; the skipped notice under the held quota.
 
+**Status: done (2026-11-12).**
+
+**Spike first (D4):** `Windows.Data.Pdf` reaches an unpackaged WinUI 3 build. `PdfPages` (the app's renderer:
+`PdfDocument.LoadFromStreamAsync` over an `InMemoryRandomAccessStream`, a page to a PNG in memory) and `PdfPagesTest`, run
+by `windows/run.py build` in the unpackaged x64 `Veyq.Tests` process on the VM (ARM64, x64 emulation): a one-page PDF
+rendered at 400 × 200 with its left half black, 25 pages counted, bytes that are no PDF refused — committed first
+(`fc4665032`), before any other code of the phase. No NuGet package.
+
+**Built:**
+- core: `PotModel.Opened.openReceipt` (`SessionOpened` maps it onto `PotSession`, a played Pot plays it), so
+  `PotModel.openReceipt` reaches the open Pot's door; `Receipts.picked(path, bytes)`: a desktop's dialog names no type,
+  so a picked file is named by its path's last part (`/` or `\`) and typed by its bytes (`mediaTypeOf`), bytes that are no
+  image and no PDF refused whatever the name claims (`ReceiptsShownTest`).
+- bridge: `Editor.AddReceipts(editor, paths)` (each path read by the core, at most `Receipts.MAX_BYTES`;
+  `EntryEditor.addReceipts`), `Editor.DropReceipt` (applied in the order called, as an edit), `Receipt.Open(pot,
+  receipt)` → `Answer.Bytes(mediaType)` with the receipt beside the JSON, `Receipt.Pages(total)` → `ReceiptPages(shown,
+  cut)`, `Receipt.Save(pot, receipt, path)` (`NO_RECEIPT`, `NOT_WRITTEN`, nothing left at the path); `EditorShown.receipts`
+  (`EditorReceipt`: id, name, held, opens), `canAddReceipt`, `refusedPick`. The native `DeviceFiles.read` joins its parts
+  once (a 10 MiB receipt was appended 160 times over). `DispatchTest.aReceiptIsAddedByPathOpenedAndSavedThroughCalls`,
+  `WireTest` samples, `LiveBridgeTest.aReceiptIsAttachedShownAndSavedThroughCalls`.
+- Linux: the editor's Receipts group (Add receipt: GTK's open dialog for images and PDFs, several at once; a kept
+  receipt's row opens the viewer; each taken off by its button; the core's refusal under the group); `receipt_viewer.rs`
+  (an `AdwDialog`, Save a copy in its header bar; `gdk::Texture::from_bytes`; poppler-rs `Document::from_bytes`, each page
+  onto a cairo surface at the dialog's width in device pixels as a `gdk::MemoryTexture`, the page cap and its words; GTK's
+  save dialog → `Receipt.Save`; `cargo test` renders a PDF from memory). `Cargo.toml`: `poppler-rs` 0.26 (`v0_82`);
+  Containerfile: `poppler-glib-devel`; `Cargo.lock` by `run.py lock` (two crates added).
+- Windows: `EntryEditorPage`'s Receipts section (the open picker, several files; rows open `ReceiptViewerDialog`; Remove
+  buttons; the refusal); `ReceiptViewerDialog` (a `ContentDialog` 640 wide, Save a copy its primary button: `BitmapImage`,
+  `PdfPages` at the dialog's width × the rasterization scale, the cap's words, the save picker → `Receipt.Save`).
+- words: `receipts_held`, `receipts_saved`, `receipts_not_saved` (en, de).
+- The three fixes Phase 4 found, each its own commit: `EntryForm.of` writes a stored rate in the reader's separator
+  (every app; `EntryFormTest`, bitten); a Pot's Windows page offers Add entry alone (New is the level's); the Linux editor's
+  history page says History once (its header bar names it).
+
+**Met:**
+- The spike as above (`Veyq.Tests` 25 passed, `PdfPagesTest` 3 of them).
+- 11 mutations of `Bridge.kt`, each `DispatchTest.aReceipt*` red and restored by `scratchpad/e5/bite.py` (`/bin/cp -f`),
+  all bit: `AddReceipts` a no-op; a picked file read past the cap (the test's files record what the core asks to read);
+  `Receipt.Open`'s payload not the receipt; no media type; `Receipt.Save` opening the path before the receipt (a file
+  left); the picked ones not shown; a kept one not openable; `canAddReceipt` and `refusedPick` not the core's; the page cap
+  not the core's; `DropReceipt` a no-op. `EntryFormTest.aStoredRate*` bitten (the verbatim rate red).
+  `SecretFreeSchemaTest` unchanged and green.
+- `./gradlew :core:jvmTest :core:macosArm64Test :bridge:jvmTest` green; with `VEYQ_LIVE` and
+  `VEYQ_LIVE_RECEIPT_NO_ROOM=1`, `LiveBridgeTest.aReceiptIsAttachedShownAndSavedThroughCalls` green: Amsterdam copied as
+  `App pot 62240`, a JPEG and a two-page PDF attached by path and saved, read back from a fresh open, each opened
+  (`image/jpeg`, `application/pdf`) and saved to a path at its file's SHA-256, the PDF taken off and gone; under the
+  one-byte quota a save named `Live Quittung.jpg` left out; the quota put back (204, none before); the copy purged.
+- `linux/run.py build` (clippy `-D warnings`, `cargo test` 30 passed) and `windows/run.py build` (Veyq.Bridge.Tests 4,
+  Veyq.Tests 25 passed, the NuGet gate green, no package added); `:android:assembleDebug` and `xcodebuild -target Veyq
+  -sdk macosx CODE_SIGNING_ALLOWED=NO` green; `validate_mobile_words.py`, `validate_mobile_platform_guidelines.py`,
+  `validate_changes.py` green.
+- poppler-rs: 0.26.0 of 2026-02-21 on crates.io (MIT, the GNOME `World/Rust` group's, its repository active 2026-09),
+  binding the glib and cairo gtk4 0.11 uses; not deprecated or archived. Fedora 44 carries poppler-glib 26.01.
+- Linux (container, Broadway on 8097, headless Chrome), en/light then de/dark, on `Linux pot` (Amsterdam copied by the
+  header's Copy, renamed): a JPEG and the 25-page PDF picked together in GTK's open dialog (held, "Added when the entry is
+  saved"), saved; the PDF shown, 20 of 25 pages drawn and "The first 20 of 25 pages are shown…" / "Die ersten 20 von 25
+  Seiten…"; Save a copy into the read-only source folder said "The copy could not be saved." (`NOT_WRITTEN`), into `/tmp`
+  "Copy saved." / "Kopie gespeichert.", read back in the container at the file's SHA-256 (PDF and JPEG); the picture
+  shown (480×320); 101 files picked at once: 100 held, Add receipt gone, the refusal under the group (en, de); the PDF
+  taken off and saved, gone on reopening; the editor's history page with one History; under the held quota a save toasted
+  "Saved without receipt-1-page.pdf: the space's storage is full." / "Ohne receipt-1-page.pdf gespeichert: …". The copy
+  trashed and deleted forever. Shots: `scratchpad/e5/lx/`.
+- Windows (VM, `run.py run --devlogin`, then `--unlock`; `drive`), en-US/light then de-DE/dark, on `Windows pot` (the
+  same way): in a Pot the CommandBar holds Add entry and no New (`w01-pot-commands.png`); a JPEG and the PDF picked in the
+  open picker, held, saved; the PDF shown (20 `receipt-page` images of 640×906, the cap's words in en and de), Save a copy
+  through the save picker "Copy saved." / "Kopie gespeichert.", read back on the VM at the file's SHA-256 (`certutil`, PDF
+  and JPEG); the picture shown (480×320); 101 picked: 100 rows, Add receipt gone, the refusal (en, de); the PDF taken off
+  and gone; under the held quota "Saved without receipt-1-page.pdf…" / "Ohne r003.jpg gespeichert: …". The copy trashed and
+  deleted forever; the pass ended with "Diesem Gerät nicht mehr vertrauen" (`manage servers: None`). Shots:
+  `scratchpad/e5/win/`.
+
 ### Phase 6 — Bridge and desktops: settings and people, New pot, a fresh Pot copied
 
 **Done when:**
@@ -769,3 +840,50 @@ owner's veto. D4's renderers (poppler-glib on Linux, `Windows.Data.Pdf` on Windo
   `Linux pot` and `Windows pot` were trashed and deleted forever. `App pot e2` and `App folder e2` (Phase 2) stay in the
   space's trash; other sessions' `windows/run.py run` processes (PIDs 61912, 64097, 64732, 66678) and the Linux
   container on 8095 were left alone.
+
+### Phase 5 (2026-11-12)
+
+- **`Windows.Data.Pdf` works unpackaged** (the spike, recorded first): no MSIX identity is needed for it, and the renderer
+  stays in memory end to end (a stream in, a PNG stream out, `BitmapImage.SetSourceAsync`). Kept as `PdfPagesTest`, so
+  a later SDK or packaging change that loses it goes red. Decided here.
+- **A list of paths, not one:** `Editor.AddReceipts` takes every path one open dialog gave (both desktops' dialogs pick
+  several, as Android's `OpenMultipleDocuments`), so the 101st is refused within one pick by the core's count, not by a
+  host looping. `Editor.DropReceipt` rides the in-order path with `Editor.Change`: a drop followed at once by a save must
+  not land after it (the DispatchTest sends both unawaited). Decided here.
+- **The type is the bytes' on a desktop** (`Receipts.picked`): a path carries no media type, and guessing one from the
+  extension would let a renamed text file through as a receipt; Android's picker names a type, so its rule is unchanged.
+  `application/octet-stream` for bytes that are no image and no PDF makes `claims` refuse them. Decided here.
+- **The page cap is a call** (`Receipt.Pages(total)`): the host knows the page count only after its renderer opened the
+  document, and the cap and its words are the core's; a constant copied into Rust and C# would be a third and fourth copy.
+- **The read cap is held where it can bite**: the core's own refusal of a file over `MAX_BYTES` hid a bridge that read a
+  picked file whole (the first bite missed); the test's `DeviceFiles` now records the most the core asks to read.
+- **The native read was quadratic** (`Exports.kt` appended each 64 KiB part to the array read so far): harmless for a
+  cover, 160 copies for a 10 MiB receipt. It joins once now.
+- **The bridge's live test sets the quota itself**, reading the core's internal `VeyqAccount.http` by reflection (the
+  bridge's tests are no friends of `:core`); gated by `VEYQ_LIVE_RECEIPT_NO_ROOM=1`, since it touches the tenant's quota
+  for every other session meanwhile. The desktops' passes used `DepotLiveTest`'s hold instead. Deviation from "with
+  `VEYQ_LIVE_STORAGE_FIT`'s quota": the same one-byte rule (a quota of exactly one byte taken as a leftover), its own switch.
+- **The three Phase 4 fixes**: the rate's separator is the core's for every app (Android and Apple too, unchanged code);
+  Windows' Pot page drops New (Fluent's one creating action per page, as the phones); Linux's history group lost its title
+  on the editor's page only (the dialog keeps it, headed by the entry).
+- **Traps met** (to `src/mobile/CLAUDE.md` § Traps at once): a full storage must come after the pass's copy; GTK's
+  multi-file dialog hands back a folder typed and entered; a popover survives two Playwright connections but its button's
+  next click closes it; the Windows open picker takes typed names only after navigating its list, and `#1` is both a row
+  and Open; `ContentDialogMaxWidth`; poppler-rs' `v0_82` and cairo's byte order.
+- **Noticed, not changed:** the Linux picture viewer scales a picture narrower than the dialog up to its width
+  (`gtk::Picture` fills the box; Windows' `Image` keeps 480 px); a receipt's row in the entries list says nothing of its
+  receipts on either desktop (the phones do not either). The Windows open picker shows "Alle Dateien" over the filter
+  list it was given (the system's word).
+- **Deviations:** the de/dark Windows skip notice named `r003.jpg`, not
+  the one-page PDF (the picker reopened in the folder of the 101); Android and Apple were built, not run (nothing of
+  their screens changed but the rate's separator, which `EntryFormTest` holds); the Linux de pass ran in the window's
+  unmaximized size after a stray double-click.
+- **Phase 7 harvests:** ADR 0128's Consequences gain `Editor.AddReceipts` (the first open-picker consumer, a list of
+  paths), `Receipt.Open` as `Answer.Bytes`, `Receipt.Pages`; ADR 0123's the renderers (poppler-glib, `Windows.Data.Pdf`
+  unpackaged, measured) and native-apps § Open's Flatpak list gains poppler-glib; `src/mobile/CLAUDE.md` already names the
+  calls and the traps above.
+- **Left in the dev instance by my runs:** nothing of this phase — `App pot 62240` (LiveBridgeTest), `Linux pot` and
+  `Windows pot` were trashed and deleted forever, the tenant's quota put back after each hold (four holds, each ended
+  `BUILD SUCCESSFUL`). `App pot e2` and `App folder e2` (Phase 2) stay in the space's trash; `Amsterdam (2)`/`(3)` and the
+  `Ui pot`s are not mine. Other sessions' `windows/run.py run` processes (PIDs 24480, 61912, 64097, 64732, 66678) and the
+  Linux container on 8095 were left alone.

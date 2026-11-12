@@ -46,13 +46,16 @@ A Gradle build of its own, run through its own wrapper.
   Beside the JSON go three channels ([ADR 0128](../../docs/decisions/0128-the-bridge-carries-shown-bytes-beside-the-json-ranges-through-a-reader-and-files-by-path.md)): bytes a UI shows as `Answer.Bytes`' payload (`Avatar.Picture`; the
   state names the ids to ask for, an update never carries bytes), a blob's ranges through a reader held by id
   (`Answer.Reader`, `Reader.Read`, `Reader.Close`, closed with the tenant; `Bridge.openReader` the door), and files by
-  the path the host's dialog gave, which the core opens (`Pot.Download` through `DeviceFiles`, core's `FileSink`).
+  the path the host's dialog gave, which the core opens (`Pot.Download` and `Receipt.Save` through `DeviceFiles`, core's
+  `FileSink`; `Editor.AddReceipts` reads each picked path, never more than `Receipts.MAX_BYTES`, through `FileSource`).
+  A receipt shown is `Receipt.Open`'s payload, decoded in memory and never written to disk.
   The generated layer copies a payload once (Rust `Option<Vec<u8>>`, C# `byte[]?`); no screen touches a pointer.
 - `linux/` — the Linux app (ADR 0127 decision 4): a Cargo package in Rust (gtk4-rs, libadwaita-rs), with `Cargo.lock`
   committed and every cargo run `--locked`. `src/lib.rs` is the library: `bridge` (the safe wrapper over the six
   functions, the host function), `words`, `said` (money, days and sizes the desktop's way), `theme`, `create_action`
   and one module per screen (`sign_in` with the unlock, `shell` with Search, `home`, `pot` with its download,
-  `entry_editor` (an entry's editor; `typed`: when a text field is set from the state) and `entry_history`, `manage`
+  `entry_editor` (an entry's editor; `typed`: when a text field is set from the state), `receipt_viewer` (a receipt
+  shown from memory: a picture through GTK, a PDF through poppler-rs) and `entry_history`, `manage`
   for "Manage servers"; `header` with `trash`, `move_sheet`, `share_sheet`, `report` and `cover` for a node's header and
   its sheets; `dev_login` in a debug build only), and `avatars` (`Held`, no widget and tested: the open
   tenant's pictures, asked for again only when the shell's id set changes; drawn as `adw::Avatar`).
@@ -69,7 +72,8 @@ A Gradle build of its own, run through its own wrapper.
   `ShareDays`, `ReportDialog`, `CoverDialog`, every `ContentDialog` shown through `Dialogs.Show`),
   `AvatarsHeld` (`Held<T>`, no control, Linux's `avatars::Held` rule for rule; `AvatarsTest`) and `Avatars` (decodes
   each picture through `BitmapImage`, sets it on every `PersonPicture` of that id), `Act` (sends a
-  call, logs its answer), `EntryEditorPage` (an entry's editor, a page in place of the Pot's places) with `TypedText`
+  call, logs its answer), `EntryEditorPage` (an entry's editor, a page in place of the Pot's places) with
+  `ReceiptViewerDialog` and `PdfPages` (a receipt's PDF through `Windows.Data.Pdf`, from memory; `PdfPagesTest`), `TypedText`
   (when a text box is set from the state; `TypedTextTest`), `Words`/`MrtWords` and `SaidNotice` (the words), `Said` (money, days and sizes the system's
   way), `CreateAction`, `Log` (`%LOCALAPPDATA%\veyq\log.txt`), and in a debug build `DevLogin` and `DebugEnv`
   (`VEYQ_THEME`, `VEYQ_LANGUAGE`). `Veyq.Tests` holds the words and formats against the app's `.pri`. `Veyq.Drive` is the
@@ -122,7 +126,9 @@ A Gradle build of its own, run through its own wrapper.
     with the tenant, a picture's bytes and its refusal, and every call of a node's header and its sheets (`Header.*`,
     `Trash.*`, `Move.*`, `Share.*`, `Report.*`, `Cover.*`), and a Pot's (`Pot.*`, `Watched.PotLive`) and its entry editor's
     (`Editor.*`, `Watched.Editor`, over a played Pot: edits applied in the order sent, a save answered once its write
-    ended), each bitten by making it a no-op.
+    ended) with its receipts (`Editor.AddReceipts`/`DropReceipt`, `Receipt.Open`/`Pages`/`Save`: a path that does not
+    open, a file past the cap read no further, the 101st refused, nothing left at a path on a failure), each bitten by
+    making it a no-op.
   - `WireTest` writes and reads back a sample of every variant of every sealed type the wire reaches. The samples go
     to `build/generated/bridge/samples`, which the Rust test reads.
   - `SecretFreeSchemaTest` checks that nothing the core sends has a field named like a key, seal, token, secret or
@@ -138,7 +144,9 @@ A Gradle build of its own, run through its own wrapper.
   runs it live. Its header cases (`aFolderIs*`, `aPotIsCopied*`, `aLinkIs*`, `aCover*`) run with `VEYQ_LIVE` alone and
   clean up what they made (`aPotIsPolled*` too: an `App pot <n>` copy polled, settled and restored, then purged; `anEntryIsWritten*`: an `App pot
   <n>` copy written through the editor's calls — every kind, the split's modes, a rate filled, a refusal, a stale save, a
-  delete — each read back from a fresh open, then purged); `aReport*` needs `VEYQ_LIVE_REPORT_BRIDGE=1` (it leaves one report: run it once),
+  delete — each read back from a fresh open, then purged; `aReceiptIs*`: an `App pot <n>` copy with a JPEG and a PDF
+  attached by path, opened and saved to their SHA-256, one taken off, and with `VEYQ_LIVE_RECEIPT_NO_ROOM=1` the tenant's
+  quota set to one byte for a save that names its receipt left out, put back however the run ends); `aReport*` needs `VEYQ_LIVE_REPORT_BRIDGE=1` (it leaves one report: run it once),
   `aCopyWithoutRoom*` `VEYQ_LIVE_NO_ROOM=1` while `DepotLiveTest` holds the one-byte quota, and `theLinksOfAFolder*`
   writes a desktop pass's links out for the web's guest page — each case's doc says what it reads.
 - `python3 linux/run.py <verb>` — everything Linux. From the repository root the launcher runs the same verbs as
@@ -666,3 +674,21 @@ first in each of its scrolls — `LocalNodeHero.current(inset)` (Android) / `Nod
   `.` or `,` — a decimal goes in by `set`, a UIA `set` while a form rebuilds may land on the box it replaces (wait for the
   rebuild), a UIA `select` leaves a `ComboBox`'s drop-down open, and an `AutoSuggestBox`'s inner box is `#TextBox`
   (Search's too): reach it by `press ed-date tab tab`.
+- A desktop pass that needs a full storage (a receipt's skipped notice) copies its Pot first — a copy needs room — and
+  then holds the one-byte quota with `DepotLiveTest.aCopyOrAFolder*` (`VEYQ_LIVE_STORAGE_FIT="Reisen/AppUpUi"`,
+  `VEYQ_LIVE_STORAGE_FIT_HOLD_S`), started once the app's `run.py run` finished its own Gradle step: the quota is set about
+  a minute after the start and put back when the hold ends. The bridge's `LiveBridgeTest` sets it itself: the core's
+  bearer-carrying client is internal to `:core`, so the test reads `VeyqAccount.http` by reflection (a test's reach only).
+- GTK's open dialog (Broadway, the container): a folder's path typed and Enter pressed in a dialog that opens several
+  files hands the folder back as the one file picked (the core refuses it). Type its parent's path, then open the folder
+  by a double-click on its row; Ctrl+A in the list picks every file. A double-click a little off the dialog lands on the
+  window's title bar and unmaximizes it. A popover stays open across two Playwright connections, but a click on its
+  button in the second closes it: open a menu and pick from it in one run of steps.
+- Windows' open picker (`Veyq.Drive`): a name typed into `#1148` lands only once the dialog was navigated through its
+  list (`select <n>`, `press <n> enter` on a folder's row); several files go in as `"a.jpg" "b.pdf"`, or by `press 0
+  ctrl+a` in the list and `press 0 enter`. The id `1` is both the second row and Open: a `press 1` may take either.
+- A `ContentDialog` is at most `ContentDialogMaxWidth` wide (548 by default), whatever its content asks: a dialog that
+  shows a receipt sets that resource on itself (`ReceiptViewerDialog`).
+- poppler-rs opens a document over bytes in memory only with its `v0_82` feature (`Document::from_bytes`, a
+  `glib::Bytes` the document holds); `from_data` borrows a slice that must outlive the document. cairo's `ARgb32` is
+  B, G, R, A premultiplied in memory on the targets the app is built for (`gdk::MemoryFormat::B8g8r8a8Premultiplied`).
