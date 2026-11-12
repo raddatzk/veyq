@@ -1,7 +1,7 @@
 ---
 id: cr-expenses-whole-on-every-app
 title: Expenses whole on Linux and Windows — the Pot's screens moved into the core first, then bridged and drawn
-status: planned
+status: done
 satisfies: []
 adrs: ["0127", "0128", "0123", "0122"]
 invariants:
@@ -715,6 +715,43 @@ deleted from its Settings place (retrospective; Phase 7's first step).
 - The CR's harvest, then the CR is deleted.
 
 **Done when** the trust-chain guards are green.
+
+**Status: done (2026-11-12).**
+
+**The crash, fixed:** reproduced on the first try (New pot, its Settings, delete it, open the trash) and read from two
+WER dumps with x64 `dotnet-dump` and WinDbg's `amd64\cdb.exe`: once an AV in `WalkExternalTrackerObjects` during a GC
+started from `TrashDialog.Draw`, once in the finalizer releasing a `WinRT.ObjectReference`. In both, the freed tracker
+object was a `PersonPicture`'s, with two `ReferenceTrackerNativeObjectWrapper`s for one native object (the older
+disconnected) beside `WeakReference<PersonPicture>`s: `Avatars.Shown`'s weak references had resolved a collected
+wrapper's element anew through the native weak reference while New pot's closed dialog tore its people down. `Avatars`
+now holds a picture strongly while loaded and keys its id by the managed object (`35c717a1d`). The repro crashed 2 of
+4 cycles before and 0 of 6 after; `windows/run.py build` green (Veyq.Bridge.Tests 4, Veyq.Tests 25).
+
+**Harvest** (where each retrospective's lesson now binds; published pages: none — no `site/` page speaks for the native
+apps, R12):
+- ADR 0127: the Built line and a Consequences bullet on the Pot's screen models (`EntryEditor`, `PotModel`'s ops, record,
+  restore and `live()`, `PotSettings`, `PotCreateSheet`), today the core's, the stale save as the web's, the rate's
+  counter, the D8 unifications open to the owner's veto, and the bridge's answer-at-once shape (`EditorSaved`, `Said`,
+  `Answer.Stored`), the watch-as-poll and the history as a call.
+- ADR 0128: the Built line (decision 3's picked file read) and a Consequences bullet: `Editor.AddReceipts` (a list of
+  paths, the type the bytes'), `Receipt.Open` as `Answer.Bytes`, `Receipt.Pages`, `Receipt.Save`, the quadratic native
+  read, the bite that first missed.
+- ADR 0123: the bridge's Expenses calls with what `DispatchTest` and `LiveBridgeTest` measured; the Linux and the Windows
+  app's Expenses with the two PDF renderers as measured (poppler-glib through poppler-rs; `Windows.Data.Pdf` unpackaged,
+  `PdfPagesTest`), the rejected ones, and the crash.
+- `src/mobile/CLAUDE.md`: the Pot's `commonTest` models in Prove your work; traps — the iPhone's popover without Cancel,
+  a phone's field reading the model synchronously, the untestable call order (`PotCreate.Name`), a redraw keeping the
+  scroll, GTK's picture without height-for-width, the Linux `run`'s UTC, no `WeakReference` to a XAML element, reading a
+  Windows dump. The rest of the retrospectives' traps were moved there at their phases.
+- native-apps: the split's models and the drift answered, both desktops' rows and § Built (Expenses whole), § Open
+  (a Pot's writes gone, New's Pot entry enabled, poppler-glib on the Flatpak's list, the cover shown on a Pot's page,
+  receipts gone from the bridge's open list, Apple's Expenses screens never typed into).
+- `docs/apps/expenses.md`: unchanged — it states the web's rules, and D8 moved none of them: the stale save and the
+  receipt's type were already the web's, the rest are the apps' own (a currency-less amount's spelling, the share
+  intake, the delete's word, the PDF page cap).
+- `docs/inbox.md`: #838 (Linux's payer row); #438's next step. Dropped as the web's own rules (checked): duplicate
+  category and person names on an existing Pot (both allow them; both fold a typed duplicate at create), a Pot created
+  without people, the first person as a new entry's payer; an entry's row saying nothing of its receipts.
 
 ## Not in this CR
 

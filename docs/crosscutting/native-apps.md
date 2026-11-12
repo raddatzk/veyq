@@ -13,7 +13,8 @@ Everything that is not drawing a screen or talking to the device belongs in the 
 [ADR 0127](../decisions/0127-an-apps-logic-is-the-kotlin-cores-each-platform-draws-only-its-own-ui.md)), and it is there
 (2026-11-10): the suite, the API, every application's domain and its flows, the upload queue, and each screen's state and
 rules as a core model both apps draw — the way in (`session/SessionModel`), the shell and its lists (`navigation/ShellModel`,
-`RowDetails`), the trash sheet (`navigation/TrashSheet`), the open Pot (`expenses/PotModel`), shared files
+`RowDetails`), the trash sheet (`navigation/TrashSheet`), the open Pot (`expenses/PotModel`) with its entry editor, settings
+and New pot (`EntryEditor`, `PotSettings`, `PotCreateSheet`), shared files
 (`expenses/ShareInbox`), the link form and a link's row (`session/LinkForm`, `LinkRow`), a header's plan and words
 (`navigation/NodeHeader`), an open node's header with pin, trash, rename and cover (`navigation/NodeHeaderModel`) and the
 sheets behind it (`MoveSheet`, `ShareSheet`, `ReportSheet`; ADR 0127's Consequences); which words an outcome raises (`words/Notices`) and what a row or a page says, piece by piece
@@ -28,7 +29,10 @@ page is decided and read by the core, decoded and drawn by the platform; a Pot c
 shown; a currency's minor units are one table measured from the web's `Intl` (`expenses/Currencies`, not
 `java.util.Currency` or `NumberFormatter`); a drop onto an open Pot runs the core's state machine; receipts a save left out
 for want of room close the editor and the shell says which (the web's toast); a report's contact is counted as the web's
-`maxlength` counts it; the lists' covers are read again after every change on both.
+`maxlength` counts it; the lists' covers are read again after every change on both; an amount the core hands without a
+currency is a number alone (no locale's or `"EUR"` fallback); a stale save reads the other writer's version into the
+editor and saves on top, as the web; the editor's delete is asked and says `entry_delete`; a PDF receipt shows at most
+20 pages and says so; today and a restore's window are the core's clock.
 
 ## Platforms
 
@@ -39,8 +43,8 @@ for want of room close the editor and the shell says which (the web's toast); a 
 | iPhone | yes (iOS 26) | SwiftUI | — | yes, the Simulator, every slice |
 | iPad | yes (the iOS target, no device family set) | SwiftUI | `NavigationSplitView` with its sidebar open in a regular size class; the detail is one page whose bar's places are a segmented control in its toolbar, not a tab bar, Search always the toolbar's field at its trailing end; Settings pinned at the sidebar's foot; an object chosen in the sidebar has no back (ADR 0122 decision 7); sign-in and unlock read at a form's width | the Simulator, 2026-11-10 |
 | macOS | yes (macOS 26) | SwiftUI | always the split view, as the iPad's; the sidebar 240–360 pt wide | an ad-hoc signed build, 2026-11-10 (Home, a Pot's entries and overview); without a team's signing the device trust is never enrolled; no share extension there |
-| Windows | the core and the bridge for x64 (`veyq.dll`), cross-compiled on the developer's Mac; the app on a Windows host (`src/mobile/windows/run.py build`), unpackaged and self-contained | WinUI 3 in C#, Fluent, over the core as `veyq.dll` through the bridge | `NavigationView` with its own thresholds: Left from 1008 epx, LeftCompact (icons) from 641, LeftMinimal below; the switcher its pane header, Search its `AutoSuggestBox` (Ctrl+E, Ctrl+F), Settings at its foot, New the first command of the content's `CommandBar` | an ARM64 Windows 11 VM under x64 emulation, driven through UI Automation, 2026-11-11 (the first slice: sign-in, the shell, Home, a Pot read only, Search; maximized, 800 and 500 wide); the members' pictures and a Pot's download through the system's save picker, its ZIP imported by the web, 2026-11-11; the device trust, the owner answering Windows Hello, 2026-11-11; a node's header with every action on it, 2026-11-12; no x64 PC |
-| Linux | the core and the bridge for arm64 and x86-64, cross-compiled on the developer's Mac; the app for arm64, in a Fedora 44 container (`src/mobile/linux/run.py build`) | GTK 4 and libadwaita in Rust, over the core as `libveyq.so` through the bridge | `AdwNavigationSplitView` with libadwaita's `AdwSidebar` (240–360 sp), collapsing below 600 sp to a navigation stack, the sidebar in its page mode; the switcher the sidebar's title menu, Search a search bar under it (Ctrl+F), Settings at its foot | Broadway in Fedora 44 arm64, drawn into a browser, 2026-11-10 (the first slice: sign-in, the shell, Home, a Pot read only, Search; 1100 × 750 and 500 × 750); the members' pictures and a Pot's download through GTK's save dialog, its ZIP imported by the web, 2026-11-11; the device trust over gnome-keyring in the container, 2026-11-11; a node's header with every action on it, 2026-11-12; no desktop session yet |
+| Windows | the core and the bridge for x64 (`veyq.dll`), cross-compiled on the developer's Mac; the app on a Windows host (`src/mobile/windows/run.py build`), unpackaged and self-contained | WinUI 3 in C#, Fluent, over the core as `veyq.dll` through the bridge | `NavigationView` with its own thresholds: Left from 1008 epx, LeftCompact (icons) from 641, LeftMinimal below; the switcher its pane header, Search its `AutoSuggestBox` (Ctrl+E, Ctrl+F), Settings at its foot, New the first command of the content's `CommandBar` | an ARM64 Windows 11 VM under x64 emulation, driven through UI Automation, 2026-11-11 (the first slice: sign-in, the shell, Home, a Pot read only, Search; maximized, 800 and 500 wide); the members' pictures and a Pot's download through the system's save picker, its ZIP imported by the web, 2026-11-11; the device trust, the owner answering Windows Hello, 2026-11-11; a node's header with every action on it, 2026-11-12; Expenses whole (the entry editor, receipts with a PDF through `Windows.Data.Pdf`, settle-up, history and restore, settings and people, New pot, the live poll), 2026-11-12; no x64 PC |
+| Linux | the core and the bridge for arm64 and x86-64, cross-compiled on the developer's Mac; the app for arm64, in a Fedora 44 container (`src/mobile/linux/run.py build`) | GTK 4 and libadwaita in Rust, over the core as `libveyq.so` through the bridge | `AdwNavigationSplitView` with libadwaita's `AdwSidebar` (240–360 sp), collapsing below 600 sp to a navigation stack, the sidebar in its page mode; the switcher the sidebar's title menu, Search a search bar under it (Ctrl+F), Settings at its foot | Broadway in Fedora 44 arm64, drawn into a browser, 2026-11-10 (the first slice: sign-in, the shell, Home, a Pot read only, Search; 1100 × 750 and 500 × 750); the members' pictures and a Pot's download through GTK's save dialog, its ZIP imported by the web, 2026-11-11; the device trust over gnome-keyring in the container, 2026-11-11; a node's header with every action on it, 2026-11-12; Expenses whole (the entry editor, receipts with a PDF through poppler-glib, settle-up, history and restore, settings and people, New pot, the live poll), 2026-11-12; no desktop session yet |
 
 Windows and Linux are wanted (owner 2026-11-09), each with its own native UI over the same core
 ([ADR 0127](../decisions/0127-an-apps-logic-is-the-kotlin-cores-each-platform-draws-only-its-own-ui.md)): Linux GTK 4 and
@@ -54,10 +58,10 @@ proved by the members' pictures and a Pot's download on both. On Windows that co
 "Measured" means ADR 0123 records it run against a dev instance (and, where it says so, read back by the web); "built"
 means the code is there and compiles, nothing recorded beyond. Both apps hold everything listed unless a row says
 otherwise; the Linux and Windows apps hold only their first slice, the members' pictures, a Pot's download, the
-device trust with "Manage servers" (their rows above), and a folder's and a Pot's header with every action on it: pin,
+device trust with "Manage servers" (their rows above), a folder's and a Pot's header with every action on it: pin,
 trash with undo and the space's trash, rename, New folder, move and copy with the storage check, a folder's download,
-share links, a report and a cover with its crop (measured 2026-11-12, ADR 0123's Consequences, the Linux app and the
-Windows app).
+share links, a report and a cover with its crop, and Expenses whole as the next paragraph's but the share sheet's files
+(measured 2026-11-12, ADR 0123's Consequences, the Linux app and the Windows app).
 
 **Account and session.** Sign-in with password and Secret Key behind the `/api/setup` major gate, each grant judged as
 the web judges it (measured, `LiveSignInTest`, `GrantTrustTest`); several servers and tenants with their switcher,
@@ -90,7 +94,11 @@ is resumed — measured 2026-11-09. Taking shared images and PDFs into a Pot fro
 ADR 0129), measured 2026-11-08.
 
 **Expenses.** Every web use case: create a Pot, record entries, receipts, balances, an entry's history, exchange
-rates, participants, share, verify the ledger; the live poll; export and copy of a Pot — measured 2026-11-08/09.
+rates, participants, share, verify the ledger; the live poll; export and copy of a Pot — measured 2026-11-08/09. On
+Linux and Windows too (2026-11-12): the entry editor, receipts attached through the system's open dialog, shown from
+memory (a PDF through poppler-glib / `Windows.Data.Pdf`) and saved through its save dialog, settle-up, an entry's
+history and restore, settings and people, New pot, the live poll while the window is active and Refresh (F5); not the
+system's share-in (GNOME has no share target, Windows' needs a packaged app) nor drag and drop.
 
 **Depot.** Upload, replace, download a file; upload a folder; view a file (image, PDF, text, media) and send a copy;
 drop boxes (read, create, move a guest's folder out); uploader names of members — measured 2026-11-09.
@@ -114,8 +122,8 @@ Apple's toolbar button and list — measured 2026-11-09 (the list behind Apple's
     checked there (ADR 0128).
   - **Drag and drop.** The save picker (a download) and the open picker (a cover's picture, encoded by the app and read
     by the core by path, `Header.CoverSave`) are built; Depot's uploads bring drag and drop.
-  - **The other screens.** Every other application's screens, uploads and a Pot's writes are not built. New offers a
-    folder (its Pot entry disabled); Settings offers nothing yet.
+  - **The other screens.** Every other application's screens and uploads are not built. New offers a folder and a Pot;
+    Settings offers nothing yet.
   - **Windows' share sheet left a ghost** once: after it was used, screenshots taken while a later `ContentDialog`
     opened showed its window again (stale, the first link), while UI Automation drove the dialog beneath; gone after a
     restart. Whether a person sees it on a real display is checked in the next Windows pass.
@@ -142,8 +150,8 @@ Apple's toolbar button and list — measured 2026-11-09 (the list behind Apple's
     session is Wayland; Flathub offers `org.gnome.Platform`/`Sdk` 49, 50 and 51 for aarch64 (`flatpak remote-ls
     --runtime --arch=aarch64 flathub`); and Fedora 45 lacks `libcrypt.so.1` as Fedora 44 does (`ldd` of the app).
   - **The Flatpak** on the GNOME runtime. It installs the generated icon and desktop entry (`generate_theme.py --gtk`) to hicolor and `applications/`. It must carry GTK 4.22 and libadwaita 1.9, `libcrypt.so.1`, a CA bundle and
-    the zoneinfo, libsecret (for the device trust; the host's Secret Service or its portal answers over D-Bus), and
-    glycin's loaders, through which GTK 4.22 decodes WebP (without them every member's picture is
+    the zoneinfo, libsecret (for the device trust; the host's Secret Service or its portal answers over D-Bus),
+    poppler-glib (a receipt's PDF, `poppler-rs` over it), and glycin's loaders, through which GTK 4.22 decodes WebP (without them every member's picture is
     drawn as initials, measured 2026-11-11). Whether the document portal's path opens in the core is checked there
     (ADR 0128). The app's build and tests move into that runtime's SDK (`org.gnome.Sdk`), replacing the Fedora 44
     container as what the app is proved against (ADR 0127 decision 4); Fedora stays only as a test VM's system.
@@ -155,8 +163,8 @@ Apple's toolbar button and list — measured 2026-11-09 (the list behind Apple's
     (`run.py run --no-secret-service`, `run.py test`'s `no-bus` and `absent` probes).
   - **A fingerprint reader** (fprintd, polkit) has no standard way to a key, so the presence level is not planned on
     Linux.
-  - **The other screens.** Every other application's screens (Depot, Memories), uploads and a Pot's writes are not
-    built. New offers a folder (its Pot entry disabled); Settings offers nothing yet.
+  - **The other screens.** Every other application's screens (Depot, Memories) and uploads are not built. New offers a
+    folder and a Pot; Settings offers nothing yet.
   - **A foreign currency's spelling.** A currency other than the locale's own is written by its code (`EUR 1,234.56`
     under en_US) where Android and Apple write `€1,234.56`. glibc's locale data has only the locale's own symbol.
   - **x86-64.** The app has not been built and run on x86-64; only arm64 was.
@@ -165,13 +173,17 @@ Apple's toolbar button and list — measured 2026-11-09 (the list behind Apple's
   x86-64 Linux PC without AVX, and a Windows-on-ARM PC whose x64 emulation hides AVX (it shows it by default). A
   software AES-GCM, or a second source such as CNG, would be a second implementation of a primitive on one platform;
   it is revisited if someone asks.
-- **A cover on the desktops is shown only in its dialog**: no hero on a node's page and no thumbnail in a row, where
-  Android and Apple draw both. The core has what they need (`NodeCover.THUMBNAIL_EDGE`, `NodeCover.changes`, the
-  header's `HeaderShown.cover` and `Header.CoverPicture`); a Pot's page draws it with the core's head in the Expenses
-  slice, the other kinds in theirs.
+- **A cover on the desktops is shown on a Pot's page** (its head, cut by `Cover.Cut`) and in its dialog, but no folder's
+  page draws a hero and no row a thumbnail, where Android and Apple draw both. The core has what they need
+  (`NodeCover.THUMBNAIL_EDGE`, `NodeCover.changes`, `HeaderShown.cover`, `Header.CoverPicture`, `Cover.Cut`); the other
+  kinds bring it in their slices. A cover set from another device shows on the page's next open, as on every platform.
 - **Apple's Undo was never tapped on a device**: the simulator tool's screenshots lag 2–3 s behind a 6 s window, so
   the tap lands after the toast is gone. The trash's and the move's undo are held by the core's tests and measured on
   Android and both desktops.
+- **Apple's Expenses screens were never typed into** since their move into the core (2026-11-12): the simulator tool
+  types no text, so a new entry saved, an item split, a person or category added or renamed, New pot created and a
+  share from Photos were driven on Android and the desktops and held by `commonTest`, not on an iPhone; on Apple they
+  were seen opened, refused, recorded, restored and deleted only.
 - A CI job for the apps (Windows needs a Windows runner).
 
 **The bridge** ([ADR 0128](../decisions/0128-the-bridge-carries-shown-bytes-beside-the-json-ranges-through-a-reader-and-files-by-path.md))
@@ -181,7 +193,7 @@ Apple's toolbar button and list — measured 2026-11-09 (the list behind Apple's
 - **Cancelling a write.** A download runs to its end or fails, and the partial file is removed; cancelling comes with
   the first consumer that needs it (Depot's large files).
 - **The calls that open a reader** (a Depot file, a Memory's medium) and the video player, the upload queue in the
-  bridge, and tiles and receipts as UI (covers outside their dialog above) are their applications' slices: the channels are there (ADR 0128
+  bridge, and tiles as UI (covers outside a Pot's page above) are their applications' slices: the channels are there (ADR 0128
   decisions 1 and 2).
 
 **Account**

@@ -1,7 +1,8 @@
 # ADR 0128 — The bridge carries shown bytes beside the JSON, a blob's ranges through a reader, and files by path the core opens
 - Status: Accepted
-- Built: partly (not built: decision 2's opening calls, which are Depot's and Memories'; decision 3's reading of a
-  picked file, which has its core side, `FileSource`, and no call yet)
+- Built: partly (not built: decision 2's opening calls, which are Depot's and Memories'); decision 3's reading of a
+  picked file by a receipt's open dialog (`Editor.AddReceipts`, 2026-11-12) and a cover's encoded picture
+  (`Header.CoverSave`)
 - Date: 2026-11-11
 - Model: [native-apps](../crosscutting/native-apps.md)
 
@@ -105,6 +106,26 @@ handed over (`AppleDepot`, `fopen`). Some 60 calls are still to come, so the dis
   and Apple watch it instead of syncing themselves. **A picture replaced under the same user id sends no signal yet:**
   the id set is unchanged, so no update tells a host to ask again. Nothing reads the people anew today; the first
   caller of `AvatarsModel.peopleRead` owes the hosts that signal (a revision per id).
+- **A receipt goes in by path and out as shown bytes** (2026-11-12, Expenses on the desktops; ADR 0123's Consequences,
+  the Linux app and the Windows app):
+  - `Editor.AddReceipts(editor, paths)` takes every path one open dialog gave (both desktops' dialogs pick several, as
+    Android's `OpenMultipleDocuments`), so the 101st is refused by the core's count within one pick, never by a host
+    looping. The core reads each at most `Receipts.MAX_BYTES` through `FileSource`; nothing of its content crosses.
+    **A desktop's path names no type, so the type is the bytes'** (`Receipts.picked`): a name from the path's last part,
+    the type from `mediaTypeOf`, bytes that are no image and no PDF refused whatever the extension claims (a renamed
+    text file would pass by extension). `DispatchTest`'s files record the most the core asks to read: the core's own
+    refusal of a file over the cap hid a bridge that read the file whole, so the first bite missed.
+  - `Receipt.Open(pot, receipt)` answers `Answer.Bytes(mediaType)` with the receipt beside the JSON (decision 1): a
+    receipt is at most 10 MiB and decoded whole, so no reader; the reader stays for Depot's and Memories' large blobs.
+    `Receipt.Pages(total)` → `ReceiptPages(shown, cut)`: a host knows the page count only once its renderer opened the
+    document, and the cap and its words are the core's, never a constant copied into Rust and C#.
+  - `Receipt.Save(pot, receipt, path)` writes through `FileSink` (`NO_RECEIPT`, `NOT_WRITTEN`, nothing left at the path).
+  - The native read joined each 64 KiB part onto what was read so far (`Exports.kt`): harmless for a cover, 160 copies
+    for a 10 MiB receipt. It joins once.
+  - Measured: `DispatchTest.aReceiptIsAddedByPathOpenedAndSavedThroughCalls` (11 mutations of `Bridge.kt`, each red);
+    with `VEYQ_LIVE`, `LiveBridgeTest.aReceiptIsAttachedShownAndSavedThroughCalls` attached a JPEG and a two-page PDF by
+    path, opened each (`image/jpeg`, `application/pdf`) and saved it to a path at its file's SHA-256, and under a held
+    one-byte quota saved the entry with the receipt named skipped; `SecretFreeSchemaTest` unchanged.
 - Decoding a picture is the platform's (ADR 0127 decision 1), and WebP is not every platform's own: GTK 4.22 decodes it
   through glycin's loaders, Windows through the Store's Webp Image Extensions. Packaging must carry both (native-apps
   § Open).

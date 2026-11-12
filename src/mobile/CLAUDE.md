@@ -118,7 +118,7 @@ A Gradle build of its own, run through its own wrapper.
   by `ExpensesVectorsTest` (`contracts/expenses/v1-vectors.json`, the crypto vectors' `expense-entry`) and
   `LedgerRulesTest`; `BigTest` holds `expenses/Big.kt` to `java.math.BigInteger`. A rule of `expenses/Ledger.kt` or
   `Money.kt` changes only with the case that pins it; so does one of `expenses/PotWrites.kt` and `LedgerCheck.kt`
-  (`PotWritesTest`, over real seals), of `EntryForm.kt` (`EntryFormTest`, over the vectors), of `ExchangeRates.kt` (`ExchangeRatesTest`), of `Currencies.kt` (`CurrenciesTest`: the web's `Intl` codes and digits), of `Receipts.kt` and core's `blob/Sniff.kt` (`ReceiptsTest`), of `PotShare.kt` (`PotShareTest`), of core's `session/LivePoll.kt` (`LivePollTest`, on virtual time), of core's `session/MemberAvatars.kt` (`MemberAvatarsTest`) and `session/ShareNames.kt` (`ShareNamesTest`), of `PotView.kt`'s people, balances and entries, an entry row's line and badge among them (`PotViewPeopleTest`, `PotViewEntriesTest`), of core's `session/NodeEpochWrite.kt` and `session/NodeMetaWrite.kt` (`NodeEpochWriteTest`, `NodeMetaWriteTest`), of
+  (`PotWritesTest`, over real seals), of `EntryForm.kt` (`EntryFormTest`, over the vectors), of `ExchangeRates.kt` (`ExchangeRatesTest`), of `Currencies.kt` (`CurrenciesTest`: the web's `Intl` codes and digits), of `Receipts.kt` and core's `blob/Sniff.kt` (`ReceiptsTest`), of `PotShare.kt` (`PotShareTest`), of the Pot's screen models over a Pot the test plays (`PotFixture`, `commonTest`) — `expenses/EntryEditor.kt` (`EntryEditorTest`), `PotModel.kt` with its record, restore, live poll and `PotSettings` (`PotModelTest`), `PotCreateSheet.kt` (`PotCreateSheetTest`), what a receipt is shown as (`ReceiptsShownTest`) and every amount said with its currency (`PotViewMoneyTest`) —, of core's `session/LivePoll.kt` (`LivePollTest`, on virtual time), of core's `session/MemberAvatars.kt` (`MemberAvatarsTest`) and `session/ShareNames.kt` (`ShareNamesTest`), of `PotView.kt`'s people, balances and entries, an entry row's line and badge among them (`PotViewPeopleTest`, `PotViewEntriesTest`), of core's `session/NodeEpochWrite.kt` and `session/NodeMetaWrite.kt` (`NodeEpochWriteTest`, `NodeMetaWriteTest`), of
   core's `session/NodeMove.kt` browser rules, a guest's folder's included (`NodeMoveTest`), of `navigation/NodeHeader.kt`'s plan and
   its narrowing in a guest's folder (`NodeHeaderTest`), of core's `session/CoverFrame.kt` (`CoverFrameTest`), of core's `export/NodeExport.kt` archive (`FolderExportTest`, `ZipTest`) and its streamed `export/Sha256.kt` (`Sha256Test`), of Depot's `depot/FolderUpload.kt` plan (`FolderUploadTest`), of what Depot's rows and file page say (`DepotWordsTest`), of Memories' `memories/MemoryMedia.kt` listed tier and order (`MemoryMediaTest`) and `memories/MediaDetails.kt` (`MediaDetailsTest`, `MediaDetailsShownTest`), of core's `blob/RangeReader.kt` (`RangeReaderTest`), of core's `blob/FileSink.kt`, `FileSource.kt` and `Files.kt` (`FilesTest`, `nativeTest`: on macOS, Linux and Windows, through a non-ASCII name, the directory listed by the platform's own calls), of core's `session/AvatarsModel.kt` (`AvatarsModelTest`), of core's `blob/UploadQueue.kt` (`UploadQueueTest`, the web's `queue.test.ts` rules on virtual time), of core's `session/LinkForm.kt` (`LinkFormTest`: the new-link form's rules) and `session/LinkRow.kt` (`LinkRowTest`: a link's row and what a member may do with it), of Expenses' `expenses/ShareInbox.kt` (`ShareInboxTest`: shared files from arrival to their Pot), of core's `navigation/ShellModel.kt` (`ShellModelTest`: the shell after a read and after a folder on Home's path changed), `navigation/TrashSheet.kt` (`TrashSheetTest`: a space's trash sheet) and `navigation/ShellWords.kt` with `AppKinds`' words (`ShellWordsTest`), of core's `session/SessionModel.kt` (`SessionModelTest`: the start, sign-in, unlock, switcher and sign-out over a door the test plays), of core's `words/Notices.kt` (`NoticesTest`: every outcome's key with as many arguments as its words take), of core's `media/ExifReader.kt` and `media/VideoHeader.kt` and Memories' `memories/MediaMetadata.kt` (`MediaMetadataFixtureTest` over the web's own fixtures, held to what the web's `readExif.fixture.test.ts` and `videoHeader.test.ts` expect; `MediaMetadataNativeTest` on the Apple path; `XmpValueTest`: its XMP reads across line breaks), of `memories/MediaUpload.kt`'s type and core's `crypto/BlobMeta.kt` digest (`MediaUploadTest`), of Depot's `depot/FileView.kt` and core's
   `blob/Sniff.kt` and `blob/DownloadName.kt` (`FileViewTest`), and of core's `session/NodeRekey.kt` frontier and what it
@@ -435,6 +435,12 @@ first in each of its scrolls — `LocalNodeHero.current(inset)` (Android) / `Nod
   Apple's "Delete forever" in the space's trash sent nothing, its row already cleared (measured 2026-11-11). A question
   that is a core sheet's state is cancelled only by its Cancel button, and the action hands the row it confirmed
   (`TrashSheet.purge(row)`).
+- An iPhone shows a `confirmationDialog` as a popover with no Cancel button: a tap outside dismisses it, and a binding
+  that ignores its dismissal (the answer to the trap above) left the erase asked (measured 2026-11-12, a Pot's person).
+  The dismissal cancels one main-queue turn later unless the destructive action confirmed meanwhile.
+- A text field on the phones reads the model synchronously after its own edit: both hosts set their drawn state from
+  `editor.current` right after `change(…)` (Compose's `mutableStateOf`, Apple's `editorState`), and from the watch only
+  what the core changes itself (a rate filled). A field bound to a value that arrives a frame later loses keystrokes.
 - A SwiftUI view that observes a core model it does not own follows it through a watch its owner holds, never one
   tied to the view's lifecycle: a rename hands the view another header, and a box started on appear kept the old one
   (Report vanished from the menu). The header redraws on `AppModel.headerRevision`, which a watch on every handed-out
@@ -660,7 +666,9 @@ first in each of its scrolls — `LocalNodeHero.current(inset)` (Android) / `Nod
 - The bridge launches each call on `Dispatchers.Default`, so two calls sent one after the other may be dispatched the other
   way round. An edit stream is applied on the host's thread in the order called (`Bridge.call`, `Editor.Change`; bitten
   by 400 titles sent unawaited), and Linux's `bridge::call` hands the call to the core when it is called, not when its
-  answer is first awaited (C#'s `CallAsync` does the same). A new stream of edits goes the same way.
+  answer is first awaited (C#'s `CallAsync` does the same). A new stream of edits goes the same way (`Editor.DropReceipt`,
+  `PotCreate.Name`). No test sees the order of two trivial calls: `Dispatchers.Default` kept them in order in practice,
+  so a `PotCreate.Name` launched instead of applied stayed green (2026-11-12); the order rests on `Bridge.call`'s path.
 - A text field is set from the state by D5's rule (`linux/src/typed.rs`, `windows/Veyq/TypedText.cs`, the same cases):
   states lag the typing by a keystroke or two, so a focused field passes over a state that echoes a text it sent and
   takes any other (a stale save's version, a rate filled). "Differs from what it sent last" alone rewrote the field to an
@@ -715,3 +723,25 @@ first in each of its scrolls — `LocalNodeHero.current(inset)` (Android) / `Nod
 - `scripts/validate_mobile_platform_guidelines.py` refuses `list-add-symbolic` anywhere but the create action (a "+" on
   a settings row is a labelled button) and, on Windows, any button aligned at the bottom (`VerticalAlignment.Bottom`
   in an initializer or set on a variable): a dialog's or place's actions sit in the flow, not pinned.
+- A redraw on the desktops must not lose the scroll once updates arrive unasked (the live poll): a scroll rebuilt per
+  state jumped to the top on every tick (the Linux Pot page, 2026-11-12). Both Pot pages keep one scroll across redraws;
+  another place starts at its top.
+- GTK: a `gtk::Picture` in a `GtkAspectFrame` got no height for its width, and a height asked inside a widget's
+  `resize` was ignored until the next turn of the loop: the Pot's 16:9 head is a `DrawingArea` sized from its width
+  (`header.rs`, `Header::hero`).
+- `linux/run.py run` leaves the container's zone UTC (an instant there is said in UTC); `run.py test` links Berlin. A
+  pass reading times off the Linux app reads them as UTC.
+- Never hold a XAML element through a `WeakReference`: once its managed wrapper was collected, `TryGetTarget` resolves
+  the native object's own weak reference into a second wrapper, and on an element being torn down (a closed dialog's
+  `PersonPicture`s) the GC's reference tracking was left with a freed object. The app died with `0xc0000005` in
+  `coreclr.dll` — `WalkExternalTrackerObjects` during a GC, or the finalizer releasing that wrapper — at a later,
+  unrelated draw (measured 2026-11-12 from two dumps; 2 crashes in 4 tries before the fix, none in 6 after). A host keeps
+  an element strongly while it is loaded (`Avatars.cs`), keyed by the managed object (`ConditionalWeakTable`) where it
+  must be weak.
+- A native crash of the Windows app is read from a WER dump: the VM keeps full dumps of `Veyq.App.exe` in
+  `F:\veyq\dumps` (`HKLM\SOFTWARE\Microsoft\Windows\Windows Error Reporting\LocalDumps\Veyq.App.exe`, three kept).
+  The app is x64 under emulation, so its dump needs x64 tools: `dotnet tool install dotnet-dump --tool-path
+  F:\veyq\tools-x64 --arch x64`, run as `"C:\Program Files\dotnet\x64\dotnet.exe" <its dotnet-dump.dll> analyze`
+  (the arm64 one says "SOS does not support the current target architecture"; `clrstack`, `dso`, `lno`, `verifyheap`),
+  and the native stack from WinDbg's `amd64\cdb.exe` (`winget install Microsoft.WinDbg`; `-z <dump>`, `.ecxr; kn`,
+  `s -q` to find who holds a pointer).

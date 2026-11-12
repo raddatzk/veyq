@@ -635,6 +635,21 @@ implementation exists but what holds it to the first.
     `ShownLink.address` alone (`linkAddresses`), the privacy passage's in `ReportShown.privacyUrl` (`publicAddresses`),
     each by name and bitten; any other outward `url`/`address` is refused. A link's password and a report's typed
     reason and contact cross inward only.
+  - **Expenses whole** (2026-11-12, ADR 0127's Consequences for the models, ADR 0128's for the receipts): a Pot's
+    writes and screens, each model held by an id as Pots are — `Pot.Record`, `Pot.Restore` (answered `Said`),
+    `Pot.History` → `EntryHistory`; `Editor.Open/Change/Save/AskDelete/Delete/CancelAsk/Close` and `Watched.Editor`
+    (`EditorShown`, every field one core function's answer; `Editor.Save`/`Delete` → `EditorSaved` once the write
+    ended; a closed Pot closes its editors), `Editor.AddReceipts/DropReceipt`, `Receipt.Open/Pages/Save`;
+    `PotSettings.*` and `Watched.PotSettings`, `PotCreate.*` and `Watched.PotCreate` (each change → `Answer.Stored`);
+    `Watched.PotLive`, the live poll inside the watch's own job; `Cover.Cut` (`CoverFrame.pixels`, the Pot's head). The
+    editor's sealed edits travel as `Edit.<name>`, its kinds and modes as `EntryKind`, `SplitMode`, `RateState`,
+    `EditorRate`: no host type takes those names. Measured: `DispatchTest`'s Pot cases (`aPotIsPolled…`,
+    `anEntryIsWrittenEdited…`, `aReceiptIsAdded…`, `aPotsSettingsAndPeople…`, `aNewPotIsFilled…`), each call made a
+    no-op red (one of 24 settings and New pot mutations stayed green: `PotCreate.Name` launched instead of applied, an
+    order `Dispatchers.Default` keeps in practice); with `VEYQ_LIVE`, `LiveBridgeTest`'s `aPotIsPolledSettledAndRestored…`
+    (another device's entry seen through the poll after 20.3 s), `anEntryIsWrittenEditedAndDeleted…` (CHF's rate filled
+    from the tenant's service, a stale save, every kind), `aReceiptIsAttachedShownAndSaved…` and
+    `aPotIsCreatedSetUpAndCopied…`, each on an `App pot <n>` copy purged after.
 
   Measured 2026-11-10 (the channels 2026-11-11, ADR 0128's Consequences):
   - `./gradlew :bridge:jvmTest` runs four checks:
@@ -746,6 +761,31 @@ implementation exists but what holds it to the first.
     opening the minted one and after the renew only the new; a cover picked (4000×2250, encoded at 2048×1152, quality
     85), zoomed and dragged, read back by `CoverCropLiveTest` to the crop, framed anew (the same blob) and removed; a
     report sent once. The privacy row's `UriLauncher` answered "Operation not supported": the container has no browser.
+  - **Expenses whole** (built 2026-11-12; the models ADR 0127's Consequences). `pot.rs`: Add entry (the header bar's
+    `create_action`), Refresh (F5 / Ctrl+R), the live poll watched while the page is mapped and the window active,
+    settle-up's Record and Record all asked by an `AdwAlertDialog`, the deleted entries, the head (`Header::hero`: a 16:9
+    `DrawingArea` cut from `Cover.Cut` by cairo), one scroll kept across redraws. `entry_editor.rs`: an `AdwDialog`
+    around an `AdwNavigationView` (the form, a split's page, the history page), its Receipts group (GTK's open dialog,
+    several files), the refusal under its field, the rate's note as the currency row's subtitle; `typed.rs`: a focused
+    field passes over a state echoing a text it sent and takes any other. `receipt_viewer.rs`: a picture through
+    `gdk::Texture::from_bytes`, never larger than its own size; a PDF through **poppler-glib** (`poppler-rs` 0.26 with
+    `v0_82`, GNOME's own PDF stack, MIT, the GNOME `World/Rust` group's; poppler is GPL-2.0-or-later, which an
+    AGPL-3.0-only app may use), `Document::from_bytes` and each page onto a cairo surface at the dialog's width as a
+    `gdk::MemoryTexture` — nothing written to disk; Save a copy through GTK's save dialog. `entry_history.rs`,
+    `pot_settings.rs` (edited in place) and `pot_create.rs` (an `AdwDialog` from New). The Containerfile gained
+    `poppler-glib-devel` (Fedora 44 carries poppler-glib 26.01). Rejected for the PDF: PDFium (no GNOME packaging, a
+    prebuilt binary in practice), MuPDF (its Rust bindings a single vendor's), glycin (no PDF loader), the system's
+    viewer (the decrypted receipt written to a file another app reads).
+
+  Measured 2026-11-12 (`run.py build`: clippy `-D warnings`, `cargo test` 30 with `typed`'s cases bitten twice and a PDF
+  rendered from memory; a pass under Broadway driven from headless Chrome, English light and German dark, on `Linux pot`,
+  a copy of Amsterdam, purged after): an entry written elsewhere (`PotLiveTest`) did not show for 40 s while the save
+  dialog held the window inactive and showed at once after; Refresh by button, F5 and Ctrl+R; one settle-up row and
+  all; a deleted entry's history and restore; every kind, two payers, an item by percent, the rest by amounts and by
+  shares, CHF and GBP filled, a refusal under its field, a stale save, delete asked; a long title and an amount typed
+  with the cursor kept; a JPEG and a 25-page PDF picked together, the PDF's 20 pages and the cap's words, saved and read
+  back at the file's SHA-256 (a read-only folder: "The copy could not be saved."); 101 picked, 100 held; the skipped
+  notice under a held one-byte quota; New pot from a folder and from a space's root, its settings and people, the copy.
 - **The Windows app** (ADR 0127 decision 5; `src/mobile/windows/`). WinUI 3 in C# on .NET 10, `win-x64`, unpackaged
   and self-contained, the Windows App SDK included, so its build output runs where it is copied. Built 2026-11-10/11.
   - **Packages.** `Microsoft.WindowsAppSDK.WinUI` and `.Foundation` 2.6.5 and `Microsoft.Windows.SDK.BuildTools`, not the
@@ -829,6 +869,34 @@ implementation exists but what holds it to the first.
     and on and deleted, the web's guest page checked after each; a cover picked through the open picker, zoomed, read
     back by `CoverCropLiveTest`, framed anew and removed; a report sent once, its privacy link opened in Edge. Not
     driven: the cover's pan (`Veyq.Drive` has no drag; zoom framed it) and a move's Undo left to its window.
+  - **Expenses whole** (built 2026-11-12; Linux's set, the models ADR 0127's Consequences). `PotPage`: Add entry (the
+    content's `CreateAction.Button`, alone — New is the level's), Refresh (F5 / Ctrl+R), the live poll watched while
+    loaded and `Window.Activated` not `Deactivated`, settle-up asked by `Dialogs.Ask` (the action the default), the
+    deleted entries, `EntryHistoryDialog` (Restore its primary button), the head (`NodeHeader.Hero`, WIC's
+    `BitmapTransform.Bounds` of `Cover.Cut`), the scroll kept. `EntryEditorPage`: **a page in place of the Pot's places,
+    not a `ContentDialog`** (WinUI shows one at a time, and the editor opens the receipt viewer and the delete's confirm
+    over itself); Save, Delete and Cancel in its `CommandBar`, the refusal an `InfoBar` and the field's description, the
+    history an `Expander`; `TypedText` is `typed.rs`' rule. `ReceiptViewerDialog`: a picture through `BitmapImage` at
+    most its own width, a PDF through **`Windows.Data.Pdf`** (`PdfPages`: `PdfDocument.LoadFromStreamAsync` over an
+    `InMemoryRandomAccessStream`, a page to a PNG stream in memory — part of the Windows SDK, no NuGet package, and
+    reached by the unpackaged app: no MSIX identity needed, measured first and kept as `PdfPagesTest`, so an SDK or
+    packaging change that loses it goes red); WebView2's PDF viewer was not the fallback (it needs the bytes at a URL or
+    a file). `PotSettingsView` (in place; the base currency's `ComboBox` kept across updates, writing on commit) and
+    `PotCreateDialog`. Money in another currency than the region's is written by its code (`Said.Money`):
+    `CurrencyFormatter` wrote Canadian dollars "12,50 $" in de-DE, the US dollar's sign.
+
+  Measured 2026-11-12 (`run.py build`: `Veyq.Tests` 25 with `PdfPagesTest` — a one-page PDF at 400 × 200 with its left
+  half black, 25 pages counted, bytes that are no PDF refused —, `TypedTextTest` and `SaidTest`'s code mode bitten; a
+  pass by `run.py drive`, en-US light and de-DE dark, on `Windows pot`, a copy of Amsterdam, purged after, ended with
+  "Diesem Gerät nicht mehr vertrauen"): Linux's set — the poll held off while the save picker was open (an entry written
+  at 03:06:38 arrived when it was cancelled at 03:07:22), Refresh by command, Ctrl+R and F5, settle-up, history and
+  restore, every kind of entry, the refusals, the caret kept while typing, a stale save, delete; receipts picked in
+  the open picker, the PDF's 20 pages of 640 × 906 and the cap's words, saved and read back at the file's SHA-256
+  (`certutil`), 101 picked, the skipped notice; New pot, the settings and people, every refusal said, the copy. A crash
+  the passes met — `0xc0000005` in `coreclr.dll` after a Pot deleted from its Settings place, as the trash's rows
+  arrived — was read from WER dumps: a `PersonPicture` reached through a `WeakReference` after its managed wrapper was
+  collected (`src/mobile/CLAUDE.md` § Traps); held strongly while loaded, the repro crashed 2 of 4 times before and 0
+  of 6 after.
 - **The device trust on every app** (decision 8 as changed 2026-11-11; [ADR 0127](0127-an-apps-logic-is-the-kotlin-cores-each-platform-draws-only-its-own-ui.md)'s
   Consequences for the desktops' stores). The flows are the core's alone — `session/Account.kt` and `SessionModel.kt`
   enrol, offer, resume, unlock, change the level, sign out and stop trusting through the `DeviceKeys` interface

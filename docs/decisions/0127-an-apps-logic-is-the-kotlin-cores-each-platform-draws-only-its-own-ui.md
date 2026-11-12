@@ -5,8 +5,10 @@
   under GTK's Broadway backend, not yet in a desktop session or as a Flatpak; decision 5 for Windows' first slice, the
   same one: the core as a `mingwX64` DLL behind the same bridge, its C# types generated, a WinUI 3 app run unpackaged on
   an ARM64 Windows 11 VM under x64 emulation, not yet on an x64 PC or as an MSIX; on both, the device trust with the
-  core reaching the secure store itself (2026-11-11), and a node's header with every action on it, its sheets' models
-  moved into the core first (2026-11-12; the Consequences). Measured 2026-11-10 to 2026-11-12
+  core reaching the secure store itself (2026-11-11), a node's header with every action on it, its sheets' models
+  moved into the core first (2026-11-12), and Expenses whole — the entry editor, receipts, settle-up, an entry's
+  history and restore, a Pot's settings and people, New pot and the live poll —, the Pot's screen models moved into
+  the core first (2026-11-12; the Consequences). Measured 2026-11-10 to 2026-11-12
   (`src/mobile/linux/run.py` and `src/mobile/windows/run.py`, each `test`, `bridge` and `build`, `./gradlew
   :bridge:jvmTest`, a browser pass on Linux, a UI Automation pass on Windows): ADR 0123's Consequences, the core on
   Linux and on Windows, the bridge, the Linux app and the Windows app
@@ -167,6 +169,49 @@ four times.
   - Where the shell decided differently by accident, the core settled it on every app: an object opened at the top and
     trashed leaves for its application's list (`Shell.leave`, `ShellModel.afterTrash`; it stayed open on a closed model),
     and a renamed open object keeps its place and `top` (`ShellModel.afterRename`).
+- **The Pot's screens are core screen models** (2026-11-12, before Linux and Windows drew them; decision 2's shape, each
+  rule a `commonTest` case over a Pot the test plays, `PotFixture`, killed by a mutation; what the desktops built and
+  measured is ADR 0123's Consequences, the Linux app and the Windows app). Android and Apple held each of these in their
+  screens and app models and draw them from the core now:
+  - `expenses/EntryEditor` (opened by `PotModel.editor`): the form (core's `EntryForm`; Apple's hand-written
+    `FormState` copy gone), tried, the refusal shown only once tried, the preview, the rate's fill (started by a currency
+    the base is not; **an answer for a currency changed meanwhile is dropped by a counter, not by cancelling its
+    request**, since a cancelled request leaves "dropped" unbiteable and USD → GBP → USD would let the first answer
+    fill), the receipts held (`Receipts.READ_LIMIT` is what a device reads of a picked file at most; the count and size
+    caps and a refused pick the core's), save, the skipped receipts' notice, delete only once asked. **A stale save now
+    does what the web does**: the other writer's version is read into the form (`ED_STALE`), the receipts an earlier try
+    uploaded are carried, never uploaded twice, and the next save goes on top — both apps had kept the old revision, so
+    every next save was stale again (open to the owner's veto). The delete is asked, with a new word saying it can be
+    restored; the web asks nothing.
+  - `PotModel`: every write of the Pot's screens is one `PotModel.Op` on the open Pot (`Opened.write`), so a test plays
+    it without a session; `record(rows)` dated the core's today; `restore(entryId)` judged on the core's clock (outside
+    the window nothing is sent and the message says why); `live()` waits for a Pot still opening and ends when that Pot
+    closes or another opens, so a poll never reads a Pot no screen shows. The editor's and the settings' writes leave the
+    Pot's message alone (`said = false`): each says its own outcome.
+  - `expenses/PotSettings` (the base currency refused once money is in, own categories, a person or member added,
+    renamed, (de)activated, erased only once asked, of the settled only) and `expenses/PotCreateSheet` (the space and
+    currency of the shell's place and the platform's language, the members read again on a space change, a late answer
+    for a space left dropped, the people, `canCreate`, `parentIn` from the place it opened at — Apple's `"REFUSED"`
+    literal gone).
+  - **Today and the clock are the core's**: a new entry's date, a settle-up's, the rate's day and a restore's window
+    come from `PotModel.today()`/`now` (`session/LocalDays`); a platform hands only a day the person picked.
+  - Where the apps disagreed, one rule (technical, open to the owner's veto): an amount without a currency is a number
+    alone everywhere (Android's locale currency and Apple's `"EUR"` fallback gone; the core never hands one without —
+    `PotViewMoneyTest`); shared files fit a Pot by `PotShare.Intake` (each a receipt, at most 100, all within 64 MiB,
+    a device reading no more than `room`; Android's 40 MiB per-file cap gone); the editor's delete says `entry_delete`;
+    a PDF receipt shows at most `Receipts.PDF_PAGES_SHOWN` (20) pages and says so (`receipts_pages_cut`; Apple's PDFKit
+    view pages lazily and shows all, which the constant allows as "at least"); what a receipt is, is its bytes'
+    (`Receipts.kindOf`, `mediaTypeOf`; Apple's ImageIO sniff gone). Saving a receipt stays each platform's door.
+  - **The bridge answers each write with what a host acts on at once**, never left to a watched state that may arrive
+    after: the editor's save and delete `EditorSaved(done, notice)`, a settle-up or restore `Said`, every settings and
+    New pot change `Answer.Stored(stored, notice)` (the host empties its box on `stored`, says the notice otherwise).
+    The live poll is a watch whose job is the poll (`Watched.PotLive`, delivering nothing of its own): a host's dropped
+    watch stops it structurally, where a `Pot.Live`/`Pot.Unlive` pair would leave a page torn down without its stop call
+    polling (the bitten alternative, a poll launched beside the watch, kept polling). An entry's history is a call
+    (`Pot.History`), restorable judged when asked, not part of every poll's update. Each field of the shown editor is
+    one core function's answer (`EditorShown`: the payers' total, the rest, the split's hint and words), so no host
+    computes one. Edits (`Editor.Change`, `Editor.DropReceipt`, `PotCreate.Name`) are applied on the host's thread in
+    the order called.
 - The repository's Rust (`src/mobile/linux/`) is held to the no-deprecated rule by reading: cargo has no deprecation
   gate, as the JavaScript install has.
   The repository's C# (`src/mobile/windows/`) has one: `run.py build` is red on any NuGet package `dotnet package list`
