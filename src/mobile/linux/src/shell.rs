@@ -3,17 +3,21 @@
 //! space shown, its tenant and server; spaces and tenants in its menu), with New beside it and Search under it (Ctrl+F),
 //! and Settings pinned at its foot; the switcher shows the signed-in member's picture beside the tenant. The content
 //! side shows what the core's shell says is open: Home, an application's list, a Pot (its menu at the header's end:
-//! Download), or an object this app does not draw yet. Below 600sp the split view collapses to a navigation stack.
+//! Download), a file ([crate::file_page]), or an object this app does not draw yet. Below 600sp the split view collapses
+//! to a navigation stack. A list keeps where it was scrolled to when the shell draws it anew — after an object opened from
+//! it closed, after an update — by its place ([ListScrolls]).
 //!
 //! Every state is the core's (`ShellModel.State` and `ShellShown`); every action one call. What the sidebar selects,
 //! which back the header shows and what the title says follow the state, as Android's and Apple's shells draw it.
 use std::cell::{Cell, RefCell};
+use std::collections::HashMap;
 use std::rc::Rc;
 
 use adw::prelude::*;
 use gtk::{gio, glib};
 
-use crate::bridge::{self, wire::Answer, wire::ApplicationId, wire::Call, wire::Create, wire::Facts, wire::ObjectRef, wire::ShellModelState, wire::ShellShown};
+use crate::bridge::{self, wire::Answer, wire::ApplicationId, wire::Call, wire::Create, wire::Facts, wire::NodeAt, wire::ObjectRef, wire::ShellModelState, wire::ShellShown};
+use crate::file_page::FilePage;
 use crate::header::{self, Header};
 use crate::home::{self, app_icon, app_name, kind_icon};
 use crate::pot::PotPage;
@@ -64,6 +68,9 @@ pub struct Shell {
     toasts: adw::ToastOverlay,
     window: adw::ApplicationWindow,
     pot: RefCell<Option<PotPage>>,
+    file: RefCell<Option<FilePage>>,
+    /// Where each list was scrolled to, by its place.
+    scrolls: ListScrolls,
     now: RefCell<Option<(ShellModelState, ShellShown)>>,
     started: Cell<bool>,
 }
@@ -170,6 +177,8 @@ impl Shell {
             toasts,
             window: window.clone(),
             pot: RefCell::new(None),
+            file: RefCell::new(None),
+            scrolls: ListScrolls::default(),
             now: RefCell::new(None),
             started: Cell::new(false),
         });
@@ -201,6 +210,16 @@ impl Shell {
             }
         });
         window.add_action(&download);
+        // a file's Save a copy, the header's download on its page
+        let save = gio::SimpleAction::new("file-save", None);
+        let weak = Rc::downgrade(self);
+        save.connect_activate(move |_, _| {
+            let Some(s) = weak.upgrade() else { return };
+            if let Some(file) = s.file.borrow().as_ref() {
+                file.save(s.window.upcast_ref(), &s.toasts);
+            }
+        });
+        window.add_action(&save);
         let weak = Rc::downgrade(self);
         self.add_entry.connect_clicked(move |_| {
             let Some(s) = weak.upgrade() else { return };
@@ -513,8 +532,8 @@ impl Shell {
             self.header_bar.remove(&child);
         }
         if let Some(node) = &shown.headed {
-            // a folder's page knows all it needs; a Pot's tells once it is read
-            let facts = (node.kind != "EXPENSES_POT").then_some(Facts { can_write: true, has_content: true });
+            // a folder's page knows all it needs; a Pot's and a file's tell once they are read
+            let facts = (node.kind != "EXPENSES_POT" && node.kind != "FILE").then_some(Facts { can_write: true, has_content: true });
             *self.header.borrow_mut() = Some(Header::open(node, facts, &self.header_bar, &self.toasts));
         }
     }
@@ -542,6 +561,7 @@ impl Shell {
         self.draw_header(shown);
         let body: gtk::Widget = match &shell.open_object {
             Some(o) if o.kind == "EXPENSES_POT" => {
+                self.file.borrow_mut().take();
                 let mut pot = self.pot.borrow_mut();
                 if pot.as_ref().is_none_or(|p| p.r#ref != *o) {
                     let page = PotPage::open(o, self.window.upcast_ref(), &self.toasts);
@@ -565,13 +585,38 @@ impl Shell {
                 page.places(&shown.tabs, shown.selected_tab.as_ref());
                 page.widget().clone().upcast()
             }
+            Some(o) if o.kind == "FILE" => {
+                self.pot.borrow_mut().take();
+                let mut file = self.file.borrow_mut();
+                let node = NodeAt { scope_id: o.scope_id.clone(), node_id: o.node_id.clone(), kind: o.kind.clone(), name: o.name.clone() };
+                if file.as_ref().is_none_or(|f| f.node != node) {
+                    let page = FilePage::open(&node);
+                    // the file read: its header learns what it may do (`FileModel.Header.facts`)
+                    let held = Rc::downgrade(&self.header);
+                    page.on_facts(move |facts| {
+                        if let Some(held) = held.upgrade()
+                            && let Some(h) = held.borrow().as_ref()
+                        {
+                            h.facts(Some(facts));
+                        }
+                    });
+                    *file = Some(page);
+                }
+                file.as_ref().expect("set above").widget().clone().upcast()
+            }
             Some(o) => {
                 self.pot.borrow_mut().take();
+                self.file.borrow_mut().take();
                 adw::StatusPage::builder().icon_name(kind_icon(&o.kind)).title(o.name.as_str()).description(words::not_built()).build().upcast()
             }
             None => {
                 self.pot.borrow_mut().take();
-                if shell.application.is_some() { home::list(shown.list.as_ref()) } else { home::home(state, shown) }
+                self.file.borrow_mut().take();
+                let list = if shell.application.is_some() { home::list(shown.list.as_ref()) } else { home::home(state, shown) };
+                if let Some(scroll) = list.downcast_ref::<gtk::ScrolledWindow>() {
+                    self.scrolls.keep(scroll, ListScrolls::place(state));
+                }
+                list
             }
         };
         let pot_open = self.pot.borrow().is_some();
@@ -583,5 +628,107 @@ impl Shell {
         if self.content_view.content().as_ref() != Some(&body) {
             self.content_view.set_content(Some(&body));
         }
+    }
+}
+
+/// Where each list was scrolled to, by its place ([ListScrolls::place]): the shell draws a list anew on every state and
+/// whenever an object opened from it closes (the object takes its place, ADR 0122), and each new one is put back where its
+/// place's list stood (the owner's report, 2026-11-12: a long list jumped to its top).
+#[derive(Default, Clone)]
+pub struct ListScrolls(Rc<RefCell<HashMap<String, f64>>>);
+
+impl ListScrolls {
+    /// A list's place: an application's list in a space, or Home's level (its space, its folder and its filter).
+    pub fn place(state: &ShellModelState) -> String {
+        let shell = &state.shell;
+        place_of(shell.application, shell.space.as_deref(), shell.path.last().map(|f| f.node_id.as_str()), shell.filter)
+    }
+
+    /// [scroll], the list of [place], put back where that place's list was and followed from now on.
+    pub fn keep(&self, scroll: &gtk::ScrolledWindow, place: String) {
+        let adjustment = scroll.vadjustment();
+        let held = self.0.clone();
+        let (key, shown) = (place.clone(), scroll.clone());
+        adjustment.connect_value_changed(move |a| {
+            // a list leaving the window is clamped to its top as it goes: only a list on screen says where it stands
+            if shown.is_mapped() {
+                held.borrow_mut().insert(key.clone(), a.value());
+            }
+        });
+        let Some(target) = self.0.borrow().get(&place).copied().filter(|t| *t > 0.0) else { return };
+        // put back once the list is laid out tall enough to stand there (its height arrives with its first allocation) —
+        // on the next turn of the loop: a value set inside the allocation moved the scroll bar but not the list (measured
+        // 2026-11-12, the list drawn at its top under a thumb at its bottom)
+        let pending = Rc::new(Cell::new(true));
+        let waiting = pending.clone();
+        adjustment.connect_changed(move |a| {
+            if waiting.get()
+                && let Some(at) = put_back(target, a.upper(), a.page_size(), false)
+            {
+                waiting.set(false);
+                let (a, place) = (a.clone(), place.clone());
+                glib::idle_add_local_once(move || {
+                    a.set_value(at);
+                    eprintln!("veyq: list {place} put back at {at:.0}");
+                });
+            }
+        });
+        // a list grown shorter meanwhile stands at its end, once it is laid out
+        let a = adjustment.clone();
+        glib::timeout_add_local_once(std::time::Duration::from_millis(400), move || {
+            if pending.get() {
+                pending.set(false);
+                if let Some(at) = put_back(target, a.upper(), a.page_size(), true) {
+                    a.set_value(at);
+                }
+            }
+        });
+    }
+}
+
+/// The key of a list's place ([ListScrolls::place]).
+fn place_of(application: Option<ApplicationId>, space: Option<&str>, folder: Option<&str>, filter: Option<ApplicationId>) -> String {
+    let space = space.unwrap_or_default();
+    match application {
+        Some(app) => format!("app:{}:{space}", serde_json::to_string(&app).unwrap_or_default()),
+        None => format!("home:{space}:{}:{}", folder.unwrap_or_default(), serde_json::to_string(&filter).unwrap_or_default()),
+    }
+}
+
+/// Where a list [target] down is put back, its content [upper] tall in a view [page] tall: there once it reaches that far,
+/// else nothing yet — or, [settled] (laid out, grown shorter meanwhile), its end.
+fn put_back(target: f64, upper: f64, page: f64, settled: bool) -> Option<f64> {
+    let end = (upper - page).max(0.0);
+    if end >= target {
+        Some(target)
+    } else if settled && end > 0.0 {
+        Some(end)
+    } else {
+        None
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn a_lists_place_names_its_application_or_its_space_folder_and_filter() {
+        let expenses = place_of(Some(ApplicationId::Expenses), Some("s1"), None, None);
+        assert_eq!(expenses, place_of(Some(ApplicationId::Expenses), Some("s1"), Some("f"), None), "an application's list is one place in its space");
+        assert_ne!(expenses, place_of(Some(ApplicationId::Depot), Some("s1"), None, None));
+        assert_ne!(expenses, place_of(Some(ApplicationId::Expenses), Some("s2"), None, None));
+        let root = place_of(None, Some("s1"), None, None);
+        assert_ne!(root, place_of(None, Some("s1"), Some("f1"), None), "each folder is a place of its own");
+        assert_ne!(root, place_of(None, Some("s1"), None, Some(ApplicationId::Depot)), "each filter is a place of its own");
+        assert_eq!(place_of(None, Some("s1"), Some("f1"), None), place_of(None, Some("s1"), Some("f1"), None));
+    }
+
+    #[test]
+    fn a_list_is_put_back_once_it_is_tall_enough_else_at_its_end_once_laid_out() {
+        assert_eq!(put_back(1200.0, 800.0, 600.0, false), None, "not laid out tall enough yet");
+        assert_eq!(put_back(1200.0, 2000.0, 600.0, false), Some(1200.0));
+        assert_eq!(put_back(1200.0, 1000.0, 600.0, true), Some(400.0), "grown shorter: its end");
+        assert_eq!(put_back(1200.0, 500.0, 600.0, true), None, "no scroll at all: left at its top");
     }
 }

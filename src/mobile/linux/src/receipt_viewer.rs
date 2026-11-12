@@ -124,15 +124,15 @@ async fn show_pdf(body: &gtk::Box, bytes: Vec<u8>, scale: i32) {
 }
 
 /// A page rendered: its pixels as cairo's ARGB32 rows.
-struct Rendered {
-    width: i32,
-    height: i32,
-    stride: usize,
-    data: Vec<u8>,
+pub(crate) struct Rendered {
+    pub(crate) width: i32,
+    pub(crate) height: i32,
+    pub(crate) stride: usize,
+    pub(crate) data: Vec<u8>,
 }
 
-/// One page onto a white cairo surface [width] pixels wide.
-fn render(page: &poppler::Page, width: i32) -> Option<Rendered> {
+/// One page onto a white cairo surface [width] pixels wide (a file's PDF too, [crate::file_page]).
+pub(crate) fn render(page: &poppler::Page, width: i32) -> Option<Rendered> {
     let (w, h) = page.size();
     if w <= 0.0 || h <= 0.0 {
         return None;

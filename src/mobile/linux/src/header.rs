@@ -6,7 +6,8 @@
 //! words is the core's; this lays it out.
 //!
 //! The move and the copy open core's sheet ([crate::move_sheet]); a folder's download goes where GTK's save dialog says
-//! (`Header.Download`, under the core's archive name), a Pot's through its page (`Pot.Download`); the share opens core's
+//! (`Header.Download`, under the core's archive name), a Pot's through its page (`Pot.Download`), a file's — the file
+//! itself, with its progress and Cancel — through its page (`File.Save`, [crate::file_page]); the share opens core's
 //! share sheet ([crate::share_sheet]); the report opens core's report sheet ([crate::report]), the cover its dialog
 //! ([crate::cover]), whose words follow the core's state (Set cover, or Change cover where the node has one).
 //!
@@ -29,15 +30,19 @@ pub const MAX_BUTTONS: i32 = 2;
 /// The header's ids drawn so far; every other id of the plan is left out until its phase.
 pub const DRAWN: &[&str] = &["favorite", "share", "rename", "delete", "download", "move", "copy", "report", "cover"];
 
-/// Whether [id] is drawn for a node of [kind]: a download where it is the node's archive (a file's is its own bytes,
-/// Depot's page).
-pub fn drawn(id: &str, kind: &str) -> bool {
-    DRAWN.contains(&id) && (id != "download" || kind != "FILE")
+/// Whether [id] is drawn for a node of [kind].
+pub fn drawn(id: &str, _kind: &str) -> bool {
+    DRAWN.contains(&id)
 }
 
-/// The window's action an id fires (`win.header-<id>`; a Pot's download is the Pot page's `win.pot-download`).
+/// The window's action an id fires (`win.header-<id>`; a Pot's download is the Pot page's `win.pot-download`, a file's its
+/// page's Save a copy, `win.file-save`).
 pub fn action_of(id: &str, kind: &str) -> String {
-    if id == "download" && kind == "EXPENSES_POT" { "win.pot-download".into() } else { format!("win.header-{id}") }
+    match (id, kind) {
+        ("download", "EXPENSES_POT") => "win.pot-download".into(),
+        ("download", "FILE") => "win.file-save".into(),
+        _ => format!("win.header-{id}"),
+    }
 }
 
 /// The header of one node, opened in the core when made and closed when dropped.
@@ -552,9 +557,9 @@ mod tests {
     #[test]
     fn the_cores_actions_are_drawn_and_a_download_where_it_is_the_nodes_archive() {
         for id in ["favorite", "share", "rename", "delete", "move", "copy", "download", "report", "cover"] {
-            assert!(drawn(id, "FOLDER") && drawn(id, "EXPENSES_POT"), "{id}");
+            assert!(drawn(id, "FOLDER") && drawn(id, "EXPENSES_POT") && drawn(id, "FILE"), "{id}");
         }
-        assert!(!drawn("download", "FILE"), "a file's download is its own bytes");
+        assert_eq!(action_of("download", "FILE"), "win.file-save", "a file's download is its page's Save a copy");
         assert!(!drawn("an-applications-own", "FOLDER"), "an application's own action is its page's");
         assert_eq!(action_of("report", "FOLDER"), "win.header-report");
         assert_eq!(action_of("cover", "EXPENSES_POT"), "win.header-cover");
