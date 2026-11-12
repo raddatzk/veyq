@@ -144,7 +144,7 @@ data class EntryForm(
         fun of(content: MoneyContent, base: Ledger.BaseCurrency, people: List<String>, separator: Char = '.'): EntryForm {
             val mu = content.minorUnits
             val form = empty(base, people, content.date).copy(
-                currency = content.currency, minorUnits = mu, rate = content.rate,
+                currency = content.currency, minorUnits = mu, rate = content.rate.replace('.', separator),
                 amount = Amounts.text(content.amount, mu, separator), receipts = content.receipts,
             )
             return when (content) {

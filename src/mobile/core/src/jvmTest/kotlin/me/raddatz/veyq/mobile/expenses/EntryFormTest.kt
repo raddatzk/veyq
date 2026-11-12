@@ -191,6 +191,16 @@ class EntryFormTest {
     }
 
     @Test
+    fun aStoredRateOpensInTheReadersSeparatorAndSavesBackAsSealed() {
+        val sealed = Expense("Museum", "fun", "2026-11-11", "CHF", 2, "1.082954299329", 5000, emptyList(), listOf(Contribution(a, 5000)), Allocation(emptyList(), Split.Equal(listOf(a, b))))
+        val comma = EntryForm.of(sealed, eur, listOf(a, b), ',')
+        // as a filled rate reads (ExchangeRates.fill), never the sealed dot under a comma reader's cursor
+        assertEquals("1,082954299329", comma.rate)
+        assertEquals("1.082954299329", EntryForm.of(sealed, eur, listOf(a, b), '.').rate)
+        assertEquals(sealed, comma.contentOf { it in listOf(a, b) }.content)
+    }
+
+    @Test
     fun switchingTheKindCarriesTheAmount() {
         assertEquals("100,00", dinner().withKind(EntryForm.Kind.TRANSFER, ',').amount)
         val back = EntryForm.empty(eur, listOf(a, b), "2026-07-01").copy(kind = EntryForm.Kind.TRANSFER, amount = "12,50").withKind(EntryForm.Kind.EXPENSE)
