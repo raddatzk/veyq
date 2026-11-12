@@ -220,11 +220,8 @@ internal sealed class Uploads : IDisposable
         }
     }
 
-    /// <summary>Where New's uploads go: a space, the folder there (null: its top) and the batch's label.</summary>
-    public sealed record Level(string ScopeId, string? ParentId, string Label);
-
     /// <summary>New's "Upload files": the open picker picks several, their paths go to the core (Upload.Files).</summary>
-    public async void PickFiles(Level level, Action<bool, string> say)
+    public async void PickFiles(UploadLevel level, Action<bool, string> say)
     {
         try
         {
@@ -247,7 +244,7 @@ internal sealed class Uploads : IDisposable
 
     /// <summary>New's "Upload folder…": the folder picker picks one directory, which the core walks and uploads
     /// (Upload.Folder).</summary>
-    public async void PickFolder(Level level, Action<bool, string> say)
+    public async void PickFolder(UploadLevel level, Action<bool, string> say)
     {
         try
         {
@@ -293,7 +290,7 @@ internal sealed class Uploads : IDisposable
         }
     }
 
-    private static void Queued(Answer answer, string what, Action<bool, string> say)
+    internal static void Queued(Answer answer, string what, Action<bool, string> say)
     {
         switch (answer)
         {

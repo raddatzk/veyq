@@ -129,10 +129,15 @@ internal static class HomeView
     }
 
     /// <summary>Home: the filters (where the core offers more than "all"), then the level's groups (Home.groups): a
-    /// folder enters, an object opens in its application.</summary>
-    public static UIElement Home(ShellModelState state, ShellShown shown)
+    /// folder enters, an object opens in its application. With <paramref name="drops"/>, files and folders dropped onto the
+    /// level upload there, and onto a folder's row into that folder (the Depot CR's D8).</summary>
+    public static UIElement Home(ShellModelState state, ShellShown shown, Drops? drops = null)
     {
         var (scroll, content) = Column();
+        // the scroller holds only the column's height: the level takes a drop under its last row too
+        scroll.Background = new Microsoft.UI.Xaml.Media.SolidColorBrush(Microsoft.UI.Colors.Transparent);
+        AutomationProperties.SetAutomationId(scroll, "level");
+        drops?.OntoLevel(scroll);
         if (state.lists.filters.Count > 1) content.Children.Add(Filters(state, shown));
         if (shown.groups.Count == 0) content.Children.Add(Empty());
         foreach (var g in shown.groups)
@@ -140,7 +145,12 @@ internal static class HomeView
             var rows = new List<ListViewItem>();
             foreach (var n in g.nodes)
             {
-                if (g.folders) rows.Add(FolderRow(n));
+                if (g.folders)
+                {
+                    var row = FolderRow(n);
+                    if (n.kind == "FOLDER") drops?.OntoFolder(row, n.nodeId, n.name);
+                    rows.Add(row);
+                }
                 else if (state.lists.objects.FirstOrDefault(o => o.scopeId == n.scopeId && o.nodeId == n.nodeId) is { } o) rows.Add(ObjectRow(o));
             }
             Section(content, g.heading is { } h ? Said.Key(h) : null, rows);

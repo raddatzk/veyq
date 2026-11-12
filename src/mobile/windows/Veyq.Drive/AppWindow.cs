@@ -14,6 +14,9 @@ namespace Veyq.Drive;
 
 internal sealed partial class AppWindow(string process)
 {
+    /// <summary>Where the next drag's shot goes, taken while it is held over its target (`hovershot <file>`).</summary>
+    private string? _hoverShot;
+
     private AutomationElement Window()
     {
         var deadline = DateTime.UtcNow.AddSeconds(15);
@@ -146,6 +149,21 @@ internal sealed partial class AppWindow(string process)
             case "sleep":
                 Thread.Sleep(int.Parse(parts[1], CultureInfo.InvariantCulture));
                 return "";
+            case "explorer":
+                return Explorer(int.Parse(parts[1], CultureInfo.InvariantCulture), line);
+            case "drag":
+                return Drag(parts[1], parts.Length > 2 ? parts[2] : throw new ArgumentException("drag <id> <name>|<name>…"));
+            case "click":
+                Mouse.Click(int.Parse(parts[1], CultureInfo.InvariantCulture), int.Parse(parts[2], CultureInfo.InvariantCulture));
+                return "";
+            case "screen":
+                Capture(0, 0, GetSystemMetrics(0), GetSystemMetrics(1), string.Join(' ', parts.Skip(1)));
+                return "";
+            case "droptargets":
+                return DropTargets(Handle(Window()));
+            case "hovershot":
+                _hoverShot = string.Join(' ', parts.Skip(1));
+                return "";
             case "shot":
                 Shot(Window(), string.Join(' ', parts.Skip(1)));
                 return "";
@@ -153,6 +171,126 @@ internal sealed partial class AppWindow(string process)
                 throw new ArgumentException($"no step named {parts[0]}");
         }
     }
+
+    /// <summary>`explorer <x> <y> <w> <h> <path>`: an Explorer window opened at <path> in the logged-on session, placed at
+    /// x, y and sized w × h, so a drag has a source beside the app.</summary>
+    private static string Explorer(int x, string line)
+    {
+        var parts = line.Split(' ', 6, StringSplitOptions.RemoveEmptyEntries);
+        int y = int.Parse(parts[2], CultureInfo.InvariantCulture), w = int.Parse(parts[3], CultureInfo.InvariantCulture), h = int.Parse(parts[4], CultureInfo.InvariantCulture);
+        var path = parts[5];
+        Process.Start(new ProcessStartInfo("explorer.exe", $"\"{path}\"") { UseShellExecute = false })?.Dispose();
+        var window = ExplorerWindow(Path.GetFileName(path.TrimEnd('\\')), 15);
+        SetWindowPos(Handle(window), 0, x, y, w, h, SwpNoZOrder);
+        SetForegroundWindow(Handle(window));
+        Thread.Sleep(1000);
+        return $"explorer at {path}\n";
+    }
+
+    /// <summary>The Explorer window whose title is <paramref name="title"/>.</summary>
+    private static AutomationElement ExplorerWindow(string title, int seconds = 5)
+    {
+        var deadline = DateTime.UtcNow.AddSeconds(seconds);
+        var cabinet = new AndCondition(new PropertyCondition(AutomationElement.ClassNameProperty, "CabinetWClass"),
+            new PropertyCondition(AutomationElement.ControlTypeProperty, ControlType.Window));
+        while (true)
+        {
+            foreach (AutomationElement w in AutomationElement.RootElement.FindAll(TreeScope.Children, cabinet))
+            {
+                if (w.Current.Name.StartsWith(title, StringComparison.OrdinalIgnoreCase)) return w;
+            }
+            if (DateTime.UtcNow > deadline) throw new InvalidOperationException($"no Explorer window titled {title}");
+            Thread.Sleep(300);
+        }
+    }
+
+    /// <summary>`drag <id> <name>|<name>…`: the named items of the frontmost Explorer window selected and dragged with the
+    /// mouse onto the app's element <id> (a level, a folder's row), as a person drags them (SendInput: Explorer's OLE drag
+    /// on real input; UIA has no drag).</summary>
+    private string Drag(string id, string names)
+    {
+        var cabinet = new AndCondition(new PropertyCondition(AutomationElement.ClassNameProperty, "CabinetWClass"),
+            new PropertyCondition(AutomationElement.ControlTypeProperty, ControlType.Window));
+        var first = names.Split('|', StringSplitOptions.RemoveEmptyEntries)[0];
+        AutomationElement? explorer = null;
+        foreach (AutomationElement w in AutomationElement.RootElement.FindAll(TreeScope.Children, cabinet))
+        {
+            try
+            {
+                ExplorerItem(w, first);
+                explorer = w;
+                break;
+            }
+            catch (InvalidOperationException)
+            {
+                // another Explorer window: the drag's source is the one showing its first item
+            }
+        }
+        if (explorer is null) throw new InvalidOperationException($"no Explorer window shows {first}");
+        SetForegroundWindow(Handle(explorer));
+        Thread.Sleep(500);
+        var items = names.Split('|', StringSplitOptions.RemoveEmptyEntries).Select(n => ExplorerItem(explorer, n)).ToList();
+        for (var i = 0; i < items.Count; i++)
+        {
+            var select = (SelectionItemPattern)items[i].GetCurrentPattern(SelectionItemPattern.Pattern);
+            if (i == 0) select.Select();
+            else select.AddToSelection();
+        }
+        Thread.Sleep(300);
+        // pressed on the first item's name, where a press drags the selection (beside it a press starts a marquee)
+        var name = items[0].FindFirst(TreeScope.Descendants, new PropertyCondition(AutomationElement.AutomationIdProperty, "System.ItemNameDisplay"));
+        var from = (name ?? items[0]).Current.BoundingRectangle;
+        // `@x,y`: a point of the screen instead of an element (a probe of the drag itself)
+        var to = id.StartsWith('@')
+            ? new System.Windows.Rect(int.Parse(id[1..].Split(',')[0], CultureInfo.InvariantCulture), int.Parse(id[1..].Split(',')[1], CultureInfo.InvariantCulture), 1, 1)
+            : Find(id).Current.BoundingRectangle;
+        int fx = (int)(from.Left + Math.Min(from.Width / 2, 40)), fy = (int)(from.Top + from.Height / 2);
+        // a row: its middle; a level (taller than a few rows): near its bottom, below its rows, where no folder's row takes it
+        int tx = (int)(to.Left + to.Width / 2), ty = (int)(to.Height > 120 ? to.Bottom - 40 : to.Top + to.Height / 2);
+        var shot = _hoverShot;
+        _hoverShot = null;
+        var said = Mouse.Drag(fx, fy, tx, ty, shot is null ? null : () => Capture(0, 0, GetSystemMetrics(0), GetSystemMetrics(1), shot));
+        return $"dragged {items.Count} from ({fx},{fy}) to {id} ({tx},{ty}): {said}\n";
+    }
+
+    /// <summary>The item named <paramref name="name"/> in an Explorer window, its extension shown or hidden.</summary>
+    private static AutomationElement ExplorerItem(AutomationElement explorer, string name)
+    {
+        foreach (AutomationElement item in explorer.FindAll(TreeScope.Descendants, new PropertyCondition(AutomationElement.ControlTypeProperty, ControlType.ListItem)))
+        {
+            var shown = item.Current.Name;
+            if (shown == name || shown == Path.GetFileNameWithoutExtension(name)) return item;
+        }
+        throw new InvalidOperationException($"no item named {name} in Explorer");
+    }
+
+    /// <summary>The app's window and each of its child windows with its class and whether OLE holds a drop target for it
+    /// (RegisterDragDrop's window property): where a drop from Explorer can land at all.</summary>
+    private static string DropTargets(nint main)
+    {
+        var text = new StringBuilder();
+        void Say(nint hwnd, int depth)
+        {
+            var name = new char[256];
+            var length = GetClassNameW(hwnd, name, name.Length);
+            var target = GetPropW(hwnd, "OleDropTargetInterface") != 0;
+            text.Append(' ', depth * 2).Append(new string(name, 0, length)).Append(target ? " drop target" : "").AppendLine();
+        }
+        Say(main, 0);
+        EnumChildWindows(main, (child, _) => { Say(child, 1); return true; }, 0);
+        return text.ToString();
+    }
+
+    private delegate bool EnumProc(nint hwnd, nint data);
+
+    [DllImport("user32.dll")]
+    private static extern bool EnumChildWindows(nint parent, EnumProc proc, nint data);
+
+    [DllImport("user32.dll", CharSet = CharSet.Unicode)]
+    private static extern int GetClassNameW(nint hwnd, char[] name, int max);
+
+    [DllImport("user32.dll", CharSet = CharSet.Unicode)]
+    private static extern nint GetPropW(nint hwnd, string name);
 
     private static void Invoke(AutomationElement e)
     {
@@ -234,14 +372,19 @@ internal sealed partial class AppWindow(string process)
         {
             throw new InvalidOperationException("the window has no bounds");
         }
-        int w = r.Right - r.Left, h = r.Bottom - r.Top;
+        Capture(r.Left, r.Top, r.Right - r.Left, r.Bottom - r.Top, file);
+    }
+
+    /// <summary>A PNG of the screen's rectangle at x, y of w × h, as it shows.</summary>
+    private static void Capture(int x, int y, int w, int h, string file)
+    {
         var screen = GetDC(0);
         var memory = CreateCompatibleDC(screen);
         var bitmap = CreateCompatibleBitmap(screen, w, h);
         var old = SelectObject(memory, bitmap);
         try
         {
-            if (!BitBlt(memory, 0, 0, w, h, screen, r.Left, r.Top, SrcCopy | CaptureBlt)) throw new InvalidOperationException("BitBlt failed");
+            if (!BitBlt(memory, 0, 0, w, h, screen, x, y, SrcCopy | CaptureBlt)) throw new InvalidOperationException("BitBlt failed");
             var source = System.Windows.Interop.Imaging.CreateBitmapSourceFromHBitmap(bitmap, 0, System.Windows.Int32Rect.Empty,
                 BitmapSizeOptions.FromEmptyOptions());
             var png = new PngBitmapEncoder();
@@ -286,6 +429,9 @@ internal sealed partial class AppWindow(string process)
 
     [LibraryImport("user32.dll")]
     private static partial nint GetDC(nint hwnd);
+
+    [LibraryImport("user32.dll")]
+    private static partial int GetSystemMetrics(int index);
 
     [LibraryImport("user32.dll")]
     private static partial int ReleaseDC(nint hwnd, nint dc);

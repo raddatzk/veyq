@@ -487,7 +487,7 @@ internal sealed class ShellView
             if (shell.openObject is { } other) body = NotBuilt(other);
             else
             {
-                body = shell.application is not null ? HomeView.List(shown.list) : HomeView.Home(state, shown);
+                body = shell.application is not null ? HomeView.List(shown.list) : HomeView.Home(state, shown, LevelDrops());
                 if (body is ScrollViewer list) Keep(list, ListScrolls.Place(shell.application, shell.space, shell.path.Count > 0 ? shell.path[^1].nodeId : null, shell.filter));
             }
         }
@@ -567,11 +567,18 @@ internal sealed class ShellView
     }
 
     /// <summary>The level shown, where New's uploads go: its space, the folder there (null: its top), the batch's label.</summary>
-    private Uploads.Level? Level()
+    private UploadLevel? Level()
     {
         if (_state is not { } state || _shown is not { } shown || state.shell.space is not { } space) return null;
         var folder = state.shell.path.Count > 0 ? state.shell.path[^1] : null;
-        return new Uploads.Level(space, folder?.nodeId, folder?.name ?? Said.Piece(shown.spaceName));
+        return new UploadLevel(space, folder?.nodeId, folder?.name ?? Said.Piece(shown.spaceName));
+    }
+
+    /// <summary>Where a drop onto the level shown goes: only where its New offers Upload files (the core's creates).</summary>
+    private Drops? LevelDrops()
+    {
+        if (_shown is not { } shown || !shown.canCreateHere || !shown.creates.Any(c => c.create == Create.UploadFiles)) return null;
+        return Level() is { } level ? new Drops(level, Say) : null;
     }
 
     /// <summary>New's folder (Shell.CreateFolder), named in a dialog that asks again with the core's problem.</summary>
