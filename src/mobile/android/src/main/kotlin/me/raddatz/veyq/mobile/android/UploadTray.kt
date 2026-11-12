@@ -50,23 +50,18 @@ import me.raddatz.veyq.mobile.blob.UploadQueue
  */
 @Composable
 internal fun UploadTray(model: AppModel) {
-    val state by model.uploadState.collectAsStateWithLifecycle()
-    val preparing by model.preparing.collectAsStateWithLifecycle()
+    // the tray is core's `DepotUploads`: its queue, the folder being prepared, the acknowledge of a batch all in
+    val depot = model.depot.collectAsStateWithLifecycle().value ?: return
+    val shown by depot.state.collectAsStateWithLifecycle()
+    val state = shown.queue
+    val preparing = shown.preparing
     var open by remember { mutableStateOf(false) }
     val batches = state.batches
-    // a batch all in is acknowledged after a moment; one with a failure waits for its close
-    LaunchedEffect(batches.map { it.id to it.finished }) {
-        val clean = state.clean
-        if (clean.isNotEmpty()) {
-            kotlinx.coroutines.delay(UploadQueue.ACKNOWLEDGE_AFTER_MS)
-            clean.forEach { model.uploads.acknowledge(it.id) }
-        }
-    }
     if (preparing != null && batches.isEmpty()) {
         Column(Modifier.fillMaxWidth()) {
             LinearProgressIndicator(Modifier.fillMaxWidth())
             Text(
-                stringResource(R.string.upload_preparing_folder, preparing!!), style = MaterialTheme.typography.bodySmall,
+                stringResource(R.string.upload_preparing_folder, preparing), style = MaterialTheme.typography.bodySmall,
                 modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp),
             )
         }
@@ -94,12 +89,12 @@ internal fun UploadTray(model: AppModel) {
             Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, stringResource(R.string.upload_title))
         }
     }
-    if (open) UploadSheet(state, model) { open = false }
+    if (open) UploadSheet(state, depot) { open = false }
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun UploadSheet(state: UploadQueue.State, model: AppModel, onDismiss: () -> Unit) {
+private fun UploadSheet(state: UploadQueue.State, depot: me.raddatz.veyq.mobile.depot.DepotUploads, onDismiss: () -> Unit) {
     ModalBottomSheet(onDismissRequest = onDismiss) {
         Column(Modifier.navigationBarsPadding()) {
             Row(Modifier.fillMaxWidth().padding(horizontal = 24.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -107,17 +102,17 @@ private fun UploadSheet(state: UploadQueue.State, model: AppModel, onDismiss: ()
                     Text(stringResource(R.string.upload_title), style = MaterialTheme.typography.titleLarge)
                     if (state.active > 0) Text(stringResource(R.string.upload_active, state.active), style = MaterialTheme.typography.bodyMedium)
                 }
-                if (state.active > 0) TextButton(onClick = { model.uploads.cancelAll() }) { Text(stringResource(R.string.upload_cancel_all)) }
+                if (state.active > 0) TextButton(onClick = { depot.cancelAll() }) { Text(stringResource(R.string.upload_cancel_all)) }
             }
             LazyColumn(Modifier.fillMaxWidth()) {
                 for (batch in state.batches) {
                     item(key = "b:" + batch.id) {
                         Row(Modifier.fillMaxWidth().padding(start = 24.dp, end = 8.dp, top = 12.dp), verticalAlignment = Alignment.CenterVertically) {
                             Text(batch.label, style = MaterialTheme.typography.titleSmall, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
-                            if (batch.finished) TextButton(onClick = { model.uploads.acknowledge(batch.id) }) { Text(stringResource(R.string.upload_close)) }
+                            if (batch.finished) TextButton(onClick = { depot.acknowledge(batch.id) }) { Text(stringResource(R.string.upload_close)) }
                         }
                     }
-                    items(batch.items, key = { it.id }) { item -> UploadRow(item, model) }
+                    items(batch.items, key = { it.id }) { item -> UploadRow(item, depot) }
                 }
             }
         }
@@ -125,7 +120,7 @@ private fun UploadSheet(state: UploadQueue.State, model: AppModel, onDismiss: ()
 }
 
 @Composable
-private fun UploadRow(item: UploadQueue.Item, model: AppModel) {
+private fun UploadRow(item: UploadQueue.Item, depot: me.raddatz.veyq.mobile.depot.DepotUploads) {
     val status = androidx.compose.ui.platform.LocalContext.current.text(me.raddatz.veyq.mobile.words.Notices.uploadStatus(item))
     ListItem(
         headlineContent = { Text(item.name, maxLines = 1, overflow = TextOverflow.Ellipsis) },
@@ -144,8 +139,8 @@ private fun UploadRow(item: UploadQueue.Item, model: AppModel) {
         },
         trailingContent = {
             when {
-                item.active -> IconButton(onClick = { model.uploads.cancel(item.id) }) { Icon(Icons.Filled.Close, stringResource(R.string.upload_cancel)) }
-                item.retryable -> IconButton(onClick = { model.uploads.retry(item.id) }) { Icon(Icons.Filled.Refresh, stringResource(R.string.upload_retry)) }
+                item.active -> IconButton(onClick = { depot.cancel(item.id) }) { Icon(Icons.Filled.Close, stringResource(R.string.upload_cancel)) }
+                item.retryable -> IconButton(onClick = { depot.retry(item.id) }) { Icon(Icons.Filled.Refresh, stringResource(R.string.upload_retry)) }
             }
         },
         colors = ListItemDefaults.colors(containerColor = androidx.compose.ui.graphics.Color.Transparent),

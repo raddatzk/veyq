@@ -200,44 +200,29 @@ private fun LinkRow(
 }
 
 /**
- * The share of a space's top level (the web's `LevelView` `share(null, …)`): no link roots there, so it offers "Add files
- * only" alone — a drop box at the top, named as typed, with its first link (Depot's `folderUploadShare`), shown once.
+ * The share of a space's top level (the web's `LevelView` `share(null, …)`), drawn from core's `ShareSheet.topLevel`: no
+ * link roots there, so it offers "Add files only" alone — a drop box at the top, named as typed, with its first link,
+ * shown once. Its form, saving, refusal and day are the core's.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 internal fun TopLevelUploadSheet(scopeId: String, model: AppModel, onClose: () -> Unit) {
-    val context = LocalContext.current
+    val sheet = remember(scopeId) { model.topLevelShareSheet(scopeId) } ?: return
+    val state by sheet.state.collectAsStateWithLifecycle()
     val scope = rememberCoroutineScope()
-    var fresh by remember { mutableStateOf<String?>(null) }
-    var form by remember {
-        mutableStateOf(me.raddatz.veyq.mobile.session.LinkForm.start(
-            model.linkRules(), null, writeOnly = false, uploadOffered = false, uploadOnly = true,
-            today = me.raddatz.veyq.mobile.session.LocalDays.dayOf(System.currentTimeMillis()), editingEndDay = null,
-        ))
-    }
-    var saving by remember { mutableStateOf(false) }
-    var problem by remember { mutableStateOf<String?>(null) }
     ModalBottomSheet(onDismissRequest = onClose, sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)) {
         Column(Modifier.padding(horizontal = 20.dp).padding(bottom = 24.dp).verticalScroll(rememberScrollState())) {
-            Text(stringResource(R.string.share_role_uploader), style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+            Text(say(sheet.title), style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
             Spacer(Modifier.padding(8.dp))
-            val made = fresh
-            if (made != null) FreshLink(made, onClose)
-            else NewLinkForm(
-                form, shareWords("FOLDER"), saving, problem, me.raddatz.veyq.mobile.words.Msg.SHARE_CREATE,
-                onChange = { form = it(form) }, onCancel = onClose,
-                onSave = {
-                    saving = true
-                    problem = null
-                    val sent = form
-                    scope.launch {
-                        val r = model.createDropBox(scopeId, null, sent.label, sent.submittedPassword.orEmpty(), sent.submittedEndDay?.let(me.raddatz.veyq.mobile.session.LocalDays::endOf))
-                        if (r.outcome == me.raddatz.veyq.mobile.depot.DropBoxes.Outcome.CREATED) fresh = r.url
-                        else problem = context.text(me.raddatz.veyq.mobile.words.Notices.dropBoxRefused(r.outcome) ?: me.raddatz.veyq.mobile.words.Notice(me.raddatz.veyq.mobile.words.Msg.SHARE_FAILED))
-                        saving = false
-                    }
-                },
-            )
+            val made = state.fresh
+            val form = state.form
+            when {
+                made != null -> FreshLink(made, onClose)
+                form != null -> NewLinkForm(
+                    form, sheet.words, state.saving, state.problem?.let { say(it) }, sheet.submit(state),
+                    onChange = sheet::form, onCancel = onClose, onSave = { scope.launch { sheet.save() } },
+                )
+            }
         }
     }
 }

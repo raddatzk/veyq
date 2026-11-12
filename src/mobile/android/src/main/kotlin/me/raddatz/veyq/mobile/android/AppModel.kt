@@ -9,6 +9,9 @@ import androidx.lifecycle.viewModelScope
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.flatMapLatest
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
@@ -308,6 +311,8 @@ class AppModel(app: Application) : AndroidViewModel(app) {
                 out.wasCurrent -> {
                     shellWatch?.cancel()
                     shellModel = null
+                    _depot.value?.close()
+                    _depot.value = null
                 }
                 else -> refreshManaged()
             }
@@ -348,6 +353,8 @@ class AppModel(app: Application) : AndroidViewModel(app) {
         val model = me.raddatz.veyq.mobile.navigation.ShellModel(t, hidden, recent, System::currentTimeMillis)
         shellWatch?.cancel()
         shellModel = model
+        _depot.value?.close()
+        _depot.value = model.depotUploads(uploads) { viewModelScope.launch { refreshLists(t) } }
         startPending = true
         model.load(openLastUsed = shareInbox.waiting.value == null)
         shellWatch = viewModelScope.launch { model.state.collect { it?.let(::publish) } }
@@ -427,6 +434,12 @@ class AppModel(app: Application) : AndroidViewModel(app) {
         return m.shareSheet(node) { viewModelScope.launch { readRowDetails(m.tenant) } }
     }
 
+    /** The share of space [scopeId]'s top level (core's `ShareSheet.topLevel`: "Add files only" alone, a drop box at the top). */
+    fun topLevelShareSheet(scopeId: String): me.raddatz.veyq.mobile.navigation.ShareSheet? {
+        val m = shellModel ?: return null
+        return m.topLevelShareSheet(scopeId) { viewModelScope.launch { readRowDetails(m.tenant) } }
+    }
+
     // ---- the move and copy sheet (core's MoveSheet) ----
 
     /** Every node of [scopeId] this device opens (a Memory's chapters). */
@@ -495,8 +508,11 @@ class AppModel(app: Application) : AndroidViewModel(app) {
 
     // ---- what the shell says (a snackbar), and an upload under way ----
 
-    /** A notice the shell shows once: its text and, where offered, an action (Depot's "Replace anyway"). */
-    class Notice(val text: String, val action: String? = null, val run: (suspend () -> Unit)? = null)
+    /**
+     * A notice the shell shows once: its text and, where offered, an action (Depot's "Replace anyway"); [done] once it is
+     * gone, its action taken or not.
+     */
+    class Notice(val text: String, val action: String? = null, val run: (suspend () -> Unit)? = null, val done: (() -> Unit)? = null)
 
     private val _notices = kotlinx.coroutines.channels.Channel<Notice>(kotlinx.coroutines.channels.Channel.BUFFERED)
     val notices: kotlinx.coroutines.flow.Flow<Notice> = _notices.receiveAsFlow()
@@ -511,90 +527,74 @@ class AppModel(app: Application) : AndroidViewModel(app) {
      * sign-out or a switch of tenant empties it.
      */
     val uploads = me.raddatz.veyq.mobile.blob.UploadQueue()
-    val uploadState: StateFlow<me.raddatz.veyq.mobile.blob.UploadQueue.State> = uploads.state
-
-    /** The name of a picked directory whose folders are being made before its files queue up. */
-    private val _preparing = MutableStateFlow<String?>(null)
-    val preparing: StateFlow<String?> = _preparing.asStateFlow()
 
     /**
-     * Queues the picked [uris] as new files under the level shown ([label] its name; `DepotFiles.UploadJob`): a name a file
-     * already holds offers its replace (Depot's `replaceConfirm`).
+     * The uploads as the shell shows them (core's `DepotUploads` over [uploads], one per open tenant): the tray draws its
+     * state, Depot's uploads go through it, and what it says ([sayUploads]) is the shell's snackbar.
+     */
+    private val _depot = MutableStateFlow<me.raddatz.veyq.mobile.depot.DepotUploads?>(null)
+    val depot: StateFlow<me.raddatz.veyq.mobile.depot.DepotUploads?> = _depot.asStateFlow()
+
+    /** What the uploads say, each once, as the shell's snackbar: its action takes the offer, else it is seen. */
+    @OptIn(kotlinx.coroutines.ExperimentalCoroutinesApi::class)
+    private val sayUploads = viewModelScope.launch {
+        _depot.flatMapLatest { d -> d?.state?.map { d to it.said } ?: kotlinx.coroutines.flow.flowOf(null) }
+            .distinctUntilChanged { a, b -> a?.second?.id == b?.second?.id }
+            .collect { pair ->
+                val (d, said) = pair ?: return@collect
+                said ?: return@collect
+                val app = getApplication<Application>()
+                notify(Notice(said.notices.joinToString("\n") { app.text(it) }, said.action?.let { app.words(it) }, run = { d.take(said) }) { d.seen(said.id) })
+            }
+    }
+
+    /**
+     * Queues the picked [uris] as new files under the level shown ([label] its name; core's `DepotUploads.upload`): a name a
+     * file already holds offers its replace.
      */
     fun uploadPicked(scopeId: String, parentId: String?, label: String, uris: List<android.net.Uri>) {
-        val t = tenantSession ?: return
+        val d = _depot.value ?: return
         viewModelScope.launch {
-            val jobs = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
-                uris.mapNotNull { picked(it) }.map { me.raddatz.veyq.mobile.depot.DepotFiles.UploadJob(t, scopeId, parentId, source(it), me.raddatz.veyq.mobile.AppKinds::tokenInput) }
-            }
-            uploads.enqueue(jobs, label, parentId ?: scopeId, ::depotSettled, null)
+            val sources = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) { uris.mapNotNull { picked(it) }.map { source(it) } }
+            d.upload(scopeId, parentId, label, sources)
         }
     }
 
-    /**
-     * A Depot item settled: the lists read anew; a name a file holds offers that file's replace, content someone replaced
-     * meanwhile "Replace anyway" — each said once, the item taken out of the tray (its notice says it).
-     */
-    private fun depotSettled(item: me.raddatz.veyq.mobile.blob.UploadQueue.Item) {
-        viewModelScope.launch {
-            val app = getApplication<Application>()
-            val t = tenantSession ?: return@launch
-            refreshLists(t)
-            val offer = runCatching { me.raddatz.veyq.mobile.depot.DepotFiles.offerAfter(t, item) }.getOrNull() ?: return@launch
-            uploads.remove(item.id)
-            notify(Notice(app.text(offer.notice), app.words(offer.action)) {
-                runCatching { me.raddatz.veyq.mobile.depot.DepotFiles.take(t, offer) }.getOrNull()?.let { enqueueReplace(it) }
-            })
-        }
-    }
-
-    /** Queues a replace of a file's content; content changed meanwhile offers "Replace anyway". */
-    private fun enqueueReplace(job: me.raddatz.veyq.mobile.depot.DepotFiles.ReplaceJob) {
-        uploads.enqueue(listOf(job), job.name, job.file.nodeId, ::depotSettled, null)
-    }
-
-    /** The header's "Replace…": the picked document replaces the content [file] shows (core's `FileModel.replace`). */
+    /** The header's "Replace…": the picked document replaces the content [file] showed when Replace was chosen. */
     fun replaceFile(file: me.raddatz.veyq.mobile.depot.FileModel, uri: android.net.Uri) {
+        val d = _depot.value ?: return
         viewModelScope.launch {
             val p = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) { picked(uri) } ?: return@launch
-            file.replace(source(p))?.let { enqueueReplace(it) }
+            d.replace(file, source(p))
         }
     }
 
     /**
      * Depot's "Upload folder…": the directory the system's picker granted ([tree], `OpenDocumentTree`) walked through its
-     * documents provider — only its files, each read at any offset —, its folders made under [parentId] (`FolderUpload`)
-     * and its files queued as one batch under its name; what could not be made is said, in the web's words.
+     * documents provider, each entry handed to core's `DepotUploads.uploadFolder`, which keeps, prepares, queues and says.
      */
     fun uploadFolderPicked(scopeId: String, parentId: String?, tree: android.net.Uri) {
+        val d = _depot.value ?: return
         viewModelScope.launch {
-            val app = getApplication<Application>()
-            val t = tenantSession ?: return@launch
-            val report = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
-                runCatching {
-                    val (rootName, entries) = treeEntries(tree)
-                    _preparing.value = rootName
-                    me.raddatz.veyq.mobile.depot.FolderUpload.prepare(t, scopeId, parentId, rootName, entries, me.raddatz.veyq.mobile.AppKinds::tokenInput)
-                }.getOrNull()
-            }
-            _preparing.value = null
-            refreshLists(t)
-            val r = report ?: return@launch notify(Notice(app.getString(R.string.share_failed)))
-            val said = me.raddatz.veyq.mobile.words.Notices.folderUpload(r)
-            if (said.isNotEmpty()) notify(Notice(said.joinToString("\n") { app.text(it) }))
-            if (r.outcome == me.raddatz.veyq.mobile.depot.FolderUpload.Outcome.READY) uploads.enqueue(r.jobs, r.name, r.rootId, ::depotSettled, null)
+            val walk = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) { treeWalk(tree) }
+            d.uploadFolder(scopeId, parentId, walk.shown, walk.path, walk.found)
         }
     }
 
-    /** The directory [tree] names: its name and every file below it, by its path there (`/`-separated). */
-    private fun treeEntries(tree: android.net.Uri): Pair<String, List<me.raddatz.veyq.mobile.depot.FolderUpload.Entry>> {
+    /** What the documents provider lists of a picked directory: its shown name (if it gives one), its id, every entry below. */
+    private class TreeWalk(val shown: String?, val path: String, val found: List<me.raddatz.veyq.mobile.depot.FolderUpload.Found>)
+
+    /** The directory [tree] names walked: each entry by its path there (`/`-separated) and what the provider says it is. */
+    private fun treeWalk(tree: android.net.Uri): TreeWalk {
         val resolver = getApplication<Application>().contentResolver
         val rootId = android.provider.DocumentsContract.getTreeDocumentId(tree)
-        val rootName = resolver.query(
-            android.provider.DocumentsContract.buildDocumentUriUsingTree(tree, rootId),
-            arrayOf(android.provider.DocumentsContract.Document.COLUMN_DISPLAY_NAME), null, null, null,
-        )?.use { if (it.moveToFirst()) it.getString(0) else null } ?: "Folder"
-        val out = ArrayList<me.raddatz.veyq.mobile.depot.FolderUpload.Entry>()
+        val shown = runCatching {
+            resolver.query(
+                android.provider.DocumentsContract.buildDocumentUriUsingTree(tree, rootId),
+                arrayOf(android.provider.DocumentsContract.Document.COLUMN_DISPLAY_NAME), null, null, null,
+            )?.use { if (it.moveToFirst()) it.getString(0) else null }
+        }.getOrNull()
+        val out = ArrayList<me.raddatz.veyq.mobile.depot.FolderUpload.Found>()
         fun walk(docId: String, path: String) {
             val children = android.provider.DocumentsContract.buildChildDocumentsUriUsingTree(tree, docId)
             val cols = arrayOf(
@@ -603,17 +603,25 @@ class AppModel(app: Application) : AndroidViewModel(app) {
                 android.provider.DocumentsContract.Document.COLUMN_LAST_MODIFIED,
             )
             val rows = ArrayList<Array<Any?>>()
-            resolver.query(children, cols, null, null, null)?.use { q ->
-                while (q.moveToNext()) rows += arrayOf(q.getString(0), q.getString(1), q.getString(2), if (q.isNull(3)) 0L else q.getLong(3), if (q.isNull(4)) null else q.getLong(4))
-            }
+            val listed = runCatching {
+                resolver.query(children, cols, null, null, null)?.use { q ->
+                    while (q.moveToNext()) rows += arrayOf(q.getString(0), q.getString(1), q.getString(2), if (q.isNull(3)) 0L else q.getLong(3), if (q.isNull(4)) null else q.getLong(4))
+                }
+            }.getOrNull()
+            // a directory the provider does not list is said, never silently skipped
+            if (listed == null) { out += me.raddatz.veyq.mobile.depot.FolderUpload.Found(path.ifEmpty { shown ?: rootId }, me.raddatz.veyq.mobile.depot.FolderUpload.Kind.UNREADABLE); return }
             for (row in rows) {
                 val id = row[0] as String
                 val name = row[1] as String
                 val mime = row[2] as String?
                 val at = if (path.isEmpty()) name else "$path/$name"
-                if (mime == android.provider.DocumentsContract.Document.MIME_TYPE_DIR) { walk(id, at); continue }
+                if (mime == android.provider.DocumentsContract.Document.MIME_TYPE_DIR) {
+                    out += me.raddatz.veyq.mobile.depot.FolderUpload.Found(at, me.raddatz.veyq.mobile.depot.FolderUpload.Kind.DIRECTORY)
+                    walk(id, at)
+                    continue
+                }
                 val uri = android.provider.DocumentsContract.buildDocumentUriUsingTree(tree, id)
-                out += me.raddatz.veyq.mobile.depot.FolderUpload.Entry(at, me.raddatz.veyq.mobile.blob.UploadSource.of(name, row[3] as Long, mime ?: "application/octet-stream", row[4] as Long?) { from, length ->
+                out += me.raddatz.veyq.mobile.depot.FolderUpload.Found(at, me.raddatz.veyq.mobile.depot.FolderUpload.Kind.FILE, me.raddatz.veyq.mobile.blob.UploadSource.of(name, row[3] as Long, mime ?: "application/octet-stream", row[4] as Long?) { from, length ->
                     // opened per frame: the upload asks one frame after another and never holds the file
                     val pfd = resolver.openFileDescriptor(uri, "r") ?: throw java.io.IOException("unreadable")
                     pfd.use { d ->
@@ -627,7 +635,7 @@ class AppModel(app: Application) : AndroidViewModel(app) {
             }
         }
         walk(rootId, "")
-        return rootName to out
+        return TreeWalk(shown, rootId, out)
     }
 
     // ---- Depot's files (the application's `depot/`) ----
@@ -641,15 +649,6 @@ class AppModel(app: Application) : AndroidViewModel(app) {
         val m = shellModel ?: return null
         openFile?.close()
         return m.fileModel(node, shares = true).also { openFile = it }
-    }
-
-    /** "Add files only" at [parentId] of [scopeId] (null: the space's top level, the web's level share): a drop box there with its first link. */
-    suspend fun createDropBox(scopeId: String, parentId: String?, name: String, password: String, expiresAt: String?): me.raddatz.veyq.mobile.depot.DropBoxes.Created {
-        val t = tenantSession ?: return me.raddatz.veyq.mobile.depot.DropBoxes.Created(me.raddatz.veyq.mobile.depot.DropBoxes.Outcome.FAILED)
-        val r = runCatching { me.raddatz.veyq.mobile.depot.DropBoxes.create(t, scopeId, parentId, name, password, expiresAt) }
-            .getOrDefault(me.raddatz.veyq.mobile.depot.DropBoxes.Created(me.raddatz.veyq.mobile.depot.DropBoxes.Outcome.FAILED))
-        refreshLists(t)
-        return r
     }
 
     /** Memory or chapter [nodeId]'s gallery (`MemoryMedia.list`); null when it could not be read. */
@@ -768,11 +767,8 @@ class AppModel(app: Application) : AndroidViewModel(app) {
         return asked
     }
 
-    /** Drop box [nodeId]'s guests' folders with their files (`DropBoxes.folders`); null when they could not be read. */
-    suspend fun dropBoxFolders(scopeId: String, nodeId: String): List<me.raddatz.veyq.mobile.depot.DropBoxes.GuestFolder>? {
-        val t = tenantSession ?: return null
-        return runCatching { me.raddatz.veyq.mobile.depot.DropBoxes.folders(t, scopeId, nodeId) }.getOrNull()
-    }
+    /** Drop box [ref]'s page (core's `DropBoxPage`: its guests' folders read anew with the lists, a delete asked first). */
+    fun dropBoxPage(ref: me.raddatz.veyq.mobile.navigation.NodeAt): me.raddatz.veyq.mobile.depot.DropBoxPage? = shellModel?.dropBoxPage(ref)
 
     /**
      * The file a person is about to send a copy of to another app ("Send a copy…"), while the shell asks them first: the copy

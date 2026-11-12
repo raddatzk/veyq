@@ -128,6 +128,7 @@ fun ShellScreen(s: Screen.Signed, model: AppModel) {
         model.notices.collect { n ->
             val answer = snackbar.showSnackbar(n.text, actionLabel = n.action, withDismissAction = n.action != null, duration = androidx.compose.material3.SnackbarDuration.Long)
             if (answer == androidx.compose.material3.SnackbarResult.ActionPerformed) n.run?.let { scope.launch { it() } }
+            n.done?.invoke()
         }
     }
     // "Send a copy…": what happens is said first — the copy leaves veyq decrypted —, then the system's share sheet

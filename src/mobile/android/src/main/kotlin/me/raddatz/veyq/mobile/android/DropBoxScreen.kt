@@ -23,7 +23,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -53,14 +53,15 @@ internal fun DropBoxScreen(ref: ObjectRef, model: AppModel) {
     val notices = LocalShellNotices.current
     val context = androidx.compose.ui.platform.LocalContext.current
     val details by model.rowDetails.collectAsStateWithLifecycle()
-    // read again whenever the lists are (the row details move with every refresh)
-    var folders by remember { mutableStateOf<List<DropBoxes.GuestFolder>?>(null) }
-    LaunchedEffect(ref.nodeId, details) { folders = model.dropBoxFolders(ref.scopeId, ref.nodeId) }
-    var deleting by remember { mutableStateOf<DropBoxes.GuestFolder?>(null) }
+    // the page is core's `DropBoxPage`: its folders read anew with the shell's lists, a folder's delete asked first
+    val page = remember(ref.nodeId) { model.dropBoxPage(me.raddatz.veyq.mobile.navigation.NodeAt(ref.scopeId, ref.nodeId, ref.kind, ref.name)) } ?: return
+    DisposableEffect(page) { onDispose { page.close() } }
+    val shown by page.state.collectAsStateWithLifecycle()
+    val deleting = shown.deleting
     var movingOut by remember { mutableStateOf<DropBoxes.GuestFolder?>(null) }
     val screen by model.screen.collectAsStateWithLifecycle()
     val hero = LocalNodeHero.current
-    val list = folders
+    val list = shown.folders
     LazyColumn(Modifier.fillMaxSize()) {
         item(key = "hero") { hero(16.dp) }
         when {
@@ -85,7 +86,7 @@ internal fun DropBoxScreen(ref: ObjectRef, model: AppModel) {
                                     )
                                     DropdownMenuItem(
                                         text = { Text(stringResource(R.string.dropbox_delete_folder, f.label), color = MaterialTheme.colorScheme.error) },
-                                        onClick = { menu = false; deleting = f },
+                                        onClick = { menu = false; page.askDelete(f) },
                                     )
                                 }
                             }
@@ -106,24 +107,22 @@ internal fun DropBoxScreen(ref: ObjectRef, model: AppModel) {
         }
     }
     movingOut?.let { f ->
-        androidx.compose.runtime.remember(f) {
-            model.moveSheet(me.raddatz.veyq.mobile.navigation.NodeAt(f.node.scopeId, f.node.id, f.node.kind, f.label), copying = false)
-        }?.let { sheet -> NodeMoveSheet(sheet, onDone = { folders = null }, onClose = { movingOut = null }) }
+        androidx.compose.runtime.remember(f) { model.moveSheet(page.at(f), copying = false) }
+            ?.let { sheet -> NodeMoveSheet(sheet, onDone = {}, onClose = { movingOut = null }) }
     }
     deleting?.let { f ->
         AlertDialog(
-            onDismissRequest = { deleting = null },
+            onDismissRequest = page::cancelAsk,
             title = { Text(stringResource(R.string.dropbox_delete_folder, f.label)) },
             text = { Text(stringResource(R.string.dropbox_delete_folder_confirm, f.label)) },
             confirmButton = {
                 TextButton(onClick = {
-                    deleting = null
-                    // core's trash, its undo offered for core's window as the header's delete does (Apple's notice did already)
-                    val header = model.header(me.raddatz.veyq.mobile.navigation.NodeAt(f.node.scopeId, f.node.id, f.node.kind, f.label), me.raddatz.veyq.mobile.AppKinds.Facts())
+                    // the folder asked, handed back: core's trash through its header (core's facts), its undo as the header's delete
+                    val header = page.delete(f)?.let { model.header(it, page.folderFacts) }
                     if (header != null) notices?.let { trash(header, it.snackbar, it.scope, context) } ?: scope.launch { header.trash() }
-                }) { Text(stringResource(R.string.entry_delete), color = MaterialTheme.colorScheme.error) }
+                }) { Text(stringResource(R.string.dropbox_delete_folder_accept), color = MaterialTheme.colorScheme.error) }
             },
-            dismissButton = { TextButton(onClick = { deleting = null }) { Text(stringResource(R.string.entry_cancel)) } },
+            dismissButton = { TextButton(onClick = page::cancelAsk) { Text(stringResource(R.string.entry_cancel)) } },
         )
     }
 }
