@@ -177,3 +177,35 @@ mailed operation; this CR's lessons moved to where they bind and the file delete
   boot, six reds; in the second round one mutation (the register's unconditional confirm) was masked by another that
   failed the same test earlier and needed a run of its own. And the restore between rounds hung on this shell's
   interactive `cp` — `/bin/cp -f` and a `cmp` against the backup before the next round.
+
+### Phase 3
+
+- **Decided here, technical:** the link is written on `window.location.origin` (as a share link is), not on the tenant's
+  served domain, so a dev instance's port survives; a link invite is "a MEMBER preview without `ownerEmail`"; a code in
+  the fragment is tried for every member link (a mailed one carries none) and one that does not open falls back to the
+  code step with its message; the client's address check (`shared/mailbox.ts`) reads RFC 5321's common shapes as the
+  server's `Mailbox` does and leaves quoted local parts and address literals to the server; the banner re-reads the
+  address when the tab comes back into view, so a confirmation opened in another tab clears it. The dialog's result and
+  the panel's re-issue share one component, `InviteLinkResult.vue`.
+- **Decision 7 left out that the register issues no session**, and the confirmation request needs the account's own
+  (ADR 0074 decision 4). The join therefore signs the new account in with the password it already holds (one more
+  Argon2id, a few seconds behind "Accept & join") and then asks once; both steps are outside the join's error path. A
+  refinement line would have caught it: for every "the client then calls X", name the session X needs.
+- **The default way moved, and the CR's inventory did not see what that breaks.** Opening the dialog on the link took
+  five lane-L1 specs and two shot scripts off their path — each fills "Email address" right after "Invite member". The
+  inventory's test grep (`memberInvite`, `TenantJoinView`, …) matched none of them: an e2e spec reaches the dialog by its
+  visible English label. Candidate rule for changes/README: a UI phase that changes what a control shows first greps
+  `tests/e2e` and `tests/e2e/shots` for the visible labels of what moved.
+- **No criterion yet for the link way**, so the new spec carries `@uc.spaces.add-member:member-invite-and-onboard`
+  (`validate_stack_criterion_tags.py` refuses an unknown one). Phase 4 should add the link criteria to the coverage
+  files and re-tag `member-invite-link.spec.ts` with them.
+- **Product note for the owner, not blocking:** a member who joined through a link sees three notices stacked on their
+  first page — the unconfirmed address, the donation line and "finish your profile". Each is right on its own.
+- **Bites masked each other again** (phase 2's lesson): disabling the auto-open failed every join test first, so the
+  typed-address, confirmation and `invite_redeemed` mutations needed rounds of their own. A mutation that changes a
+  view's entry state belongs in a round alone.
+- **Gates as run:** `pnpm run check` in `src/web/` green (6788 tests); `tests/e2e` `pnpm run check` green; the new spec
+  green once on lane L1 (`scripts/run_stack_e2e.py --app veyq:cr-link --admin veyq-admin:cr-link -- member-invite-link
+  --project account`, images built from `8d79fde78`; the sweep green). The five specs moved to "Invite by email" were
+  linted and typechecked, not run. A selection written `-- --project account <file>` is red in one second: Playwright's
+  `--project` takes every word after it as a project name, so the file filter goes first.
