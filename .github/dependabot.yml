@@ -45,6 +45,10 @@ updates:
   # 03:17 UTC. Security updates follow Dependabot's alerts, not this schedule. The limit is 5 (the documented default,
   # spelled out): the minor/patch group is one PR, and each major beside it is one more — a limit of 1 would let a
   # single stuck major block the group.
+  # `@playwright/test` has a group of its own: its bump is red until lane L1's browser image follows by hand
+  # (scripts/validate_image_pins.py; the docker-compose entry below holds the image's version), and inside the
+  # minor/patch group it held every other bump back (PR #19, 2026-11-12). Listed first and excluded from the group below,
+  # so it lands in this one whichever rule Dependabot applies to a dependency two groups match.
   - package-ecosystem: "npm"
     directory: "/"
     schedule:
@@ -53,9 +57,14 @@ updates:
       time: "06:00"
       timezone: "Europe/Berlin"
     groups:
+      playwright:
+        patterns:
+          - "@playwright/test"
       npm-minor-patch:
         patterns:
           - "*"
+        exclude-patterns:
+          - "@playwright/test"
         update-types:
           - "minor"
           - "patch"
@@ -193,7 +202,14 @@ updates:
           - ">= 24.05"
 
   # `docker-compose` matches `(docker-)?compose(-\w+)?(.<suffix>)?.ya?ml`, so both infra/docker/docker-compose.yml
-  # and the release recipe infra/docker/docker-compose.prod.yml.
+  # and the release recipe infra/docker/docker-compose.prod.yml, and lane L1's overlay
+  # tests/e2e/stack/docker-compose.e2e.yml (read from dependabot-core main 2e9740c, 2026-11-12: the fetcher's
+  # `FILENAME_REGEX` takes `.e2e` as the suffix). The overlay is read since 2026-11-12, after PR #15 moved mailpit in the
+  # dev compose file and left the overlay's pin behind. Its images are pebble (its own), mailpit (the dev compose
+  # file's, so both directories' bumps should arrive together in this group's pull request — remembered from the docs'
+  # grouping across `directories`, unproven until a mailpit bump runs) and Playwright (held below). The overlay writes
+  # no image as a YAML anchor: the parser resolves one (`aliases: true`), the updater's `image:` pattern does not, and
+  # its "Expected content to change!" would fail the update.
   # MariaDB on its LTS line only (owner 2026-11-07: "only LTS makes sense"): 12.3 is the LTS, and the releases after
   # it are rolling ones (13.0's community support ends with 2026), so nothing from 12.4 on is proposed. 12.3's own
   # digest moves still arrive. The next LTS is moved to by hand, the bound below with it — a database major is a
@@ -201,7 +217,9 @@ updates:
   # `ignore` the docs leave unsaid (remembered from the options reference: `ignore` is a per-entry key); the first run
   # after this edit proves it was accepted.
   - package-ecosystem: "docker-compose"
-    directory: "/infra/docker"
+    directories:
+      - "/infra/docker"
+      - "/tests/e2e/stack"
     patterns:
       - "*"
     multi-ecosystem-group: "images"
@@ -216,6 +234,16 @@ updates:
       - dependency-name: "dxflrs/garage"
         versions:
           - ">= 2.1"
+      # The image carries the browser `@playwright/test` drives, so the two move as one version
+      # (scripts/validate_image_pins.py). The library proposes the move (the root npm entry's `playwright` group); the
+      # image's tag and index digest follow it by hand in that pull request. Proposed here as well, the move would
+      # arrive twice — once in each group, each red until the other lands — and hold this group's other images back.
+      # Whether a same-tag digest move still arrives under this rule is unproven (it is no version update).
+      - dependency-name: "mcr.microsoft.com/playwright"
+        update-types:
+          - "version-update:semver-major"
+          - "version-update:semver-minor"
+          - "version-update:semver-patch"
 
   # Reached by no ecosystem: the chart's mariadb and garage pins (infra/kubernetes/charts/veyq/values.yaml). There was
   # a `helm` entry, and it could never update them: Dependabot's helm updater skips every digest-pinned image on
@@ -229,9 +257,8 @@ updates:
   # its repository with a pin an ecosystem does reach — mariadb with the compose files, rclone with src/tools/Dockerfile's
   # `FROM rclone/rclone:…` — so a bump there turns validate_image_pins.py red (one repository, one tag; one `repo:tag`,
   # one digest) until the constant follows, by hand, in that same pull request (PR #11: rclone 1.75.0 → 1.75.2).
-  # The same holds for two more sites no ecosystem reads: tests/e2e/stack/docker-compose.e2e.yml (its directory is not
-  # this entry's), whose mailpit pin is the dev compose file's, and scripts/measure_volume.py's `PROBE_IMAGE`, the
-  # release recipe's busybox. PR #11 left both behind.
+  # The same holds for scripts/measure_volume.py's `PROBE_IMAGE`, the release recipe's busybox, which no ecosystem reads
+  # (PR #11 left it behind).
 
   # Every action is pinned `owner/repo@<commit sha> # v<major>.<minor>.<patch>` (scripts/validate_action_pins.py).
   # Re-read 2026-10-17 (dependabot-core main de71a59): a SHA pin is bumped to the commit of the newest version tag
