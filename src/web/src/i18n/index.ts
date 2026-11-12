@@ -594,6 +594,11 @@ const en = {
     // The entry sits on the sign-in card and is deliberately NOT gated on a camera: a camera-less laptop is
     // precisely this direction's case (ADR 0059 §1 — no direction is the camera one).
     signInEntry: 'Sign in with a QR code',
+    // The add-a-device direction's entry on the sign-in card: its own button and its own camera (owner 2026-11-12),
+    // offered only where a camera can exist. The scanner reads this code and nothing else.
+    joinEntry: 'Scan a code from another device',
+    joinScanHint: 'On a device you are signed in on, open “Add a device” and show a code. Point your camera at it.',
+    joinScanError: 'Camera unavailable — choose “Sign in with a QR code” instead and scan it with your other device.',
     signInTitle: 'Sign in with a QR code',
     signInOpening: 'Preparing a code…',
     signInIntro: 'Scan this with a device you are already signed in on.',
@@ -1366,6 +1371,8 @@ const en = {
     scan: 'Scan QR code',
     scanHint: 'Point your camera at the QR code in your Emergency Kit.',
     scanError: 'Camera unavailable — upload your kit or paste your Secret Key.',
+    // Said in the scanner while it keeps looking: a readable code that is not a kit (owner 2026-11-12).
+    notAKit: 'That is not an Emergency Kit.',
     secretKeyTypo: 'This Secret Key has a typo. Compare it with your Emergency Kit, group by group.',
     kitUnreadable: 'Couldn’t read that kit. Try another file or paste your Secret Key.',
     kitEmailMismatch:
@@ -2793,6 +2800,9 @@ const de: typeof en = {
     joinBack: 'Zurück zur Anmeldung',
     // --- Die andere Richtung: über QR-Code anmelden (uc.account.onboard-device § Main flow). ---
     signInEntry: 'Über QR-Code anmelden',
+    joinEntry: 'Code eines anderen Geräts scannen',
+    joinScanHint: 'Öffne auf einem Gerät, an dem du angemeldet bist, „Gerät hinzufügen“ und lass einen Code anzeigen. Richte deine Kamera darauf.',
+    joinScanError: 'Kamera nicht verfügbar — wähle stattdessen „Über QR-Code anmelden“ und scanne den Code mit deinem anderen Gerät.',
     signInTitle: 'Über QR-Code anmelden',
     signInOpening: 'Code wird vorbereitet…',
     signInIntro: 'Scanne das mit einem Gerät, an dem du schon angemeldet bist.',
@@ -3554,6 +3564,7 @@ const de: typeof en = {
     scan: 'QR-Code scannen',
     scanHint: 'Richte deine Kamera auf den QR-Code in deinem Notfall-Kit.',
     scanError: 'Kamera nicht verfügbar — lade dein Kit hoch oder füge deinen Secret Key ein.',
+    notAKit: 'Das ist kein Notfall-Kit.',
     secretKeyTypo: 'In diesem Secret Key steckt ein Tippfehler. Vergleiche ihn Gruppe für Gruppe mit deinem Notfall-Kit.',
     kitUnreadable: 'Konnte das Kit nicht lesen. Versuche eine andere Datei oder füge deinen Secret Key ein.',
     kitEmailMismatch:

@@ -166,14 +166,30 @@ async function enterLocked(w: VueWrapper) {
   await flushPromises()
 }
 
+/** The Secret-Key field's camera icon: it reads an Emergency Kit and nothing else (owner 2026-11-12). */
 const scanButton = (w: VueWrapper) =>
   w.findAll('button').find((b) => b.attributes('aria-label') === t('unlock.scan'))
+/** The add-a-device direction's own entry on this card. */
+const joinButton = (w: VueWrapper) => buttonLabelled(w, t('pairing.joinEntry'))
 
-/** Open the shared scan control and hand it a decoded string, the way the camera would. */
-async function scan(w: VueWrapper, text: string) {
+/** Two scanners can be mounted on this card, each with its own words: the kit one says `unlock.notAKit` over a
+ *  foreign code, the join one carries the pairing hint. Told apart by those, never by mount order. */
+const kitScanner = (w: VueWrapper) =>
+  w.findAllComponents({ name: 'KitScanner' }).find((c) => c.props('refusedText') === t('unlock.notAKit'))
+const joinScanner = (w: VueWrapper) =>
+  w.findAllComponents({ name: 'KitScanner' }).find((c) => c.props('hint') === t('pairing.joinScanHint'))
+
+/** Open the Secret-Key field's scanner and hand it a decoded string, the way the camera would. */
+async function scanKit(w: VueWrapper, text: string) {
   await scanButton(w)!.trigger('click')
-  const scanner = w.findComponent({ name: 'KitScanner' })
-  scanner.vm.$emit('found', text)
+  kitScanner(w)!.vm.$emit('found', text)
+  await flushPromises()
+}
+
+/** Open the join entry's scanner and hand it a decoded string, the way the camera would. */
+async function scanJoin(w: VueWrapper, text: string) {
+  await joinButton(w)!.trigger('click')
+  joinScanner(w)!.vm.$emit('found', text)
   await flushPromises()
 }
 
@@ -567,20 +583,19 @@ describe('LoginView (uc.account.sessions §E3, web)', () => {
     expect(w.text()).toContain(t('sessions.lockedTitle'))
   })
 
-  it('device-linking off: no "sign in with code" entry, and a scanned pairing code is not accepted (the kit still is)', async () => {
+  it('device-linking off: neither direction’s entry is offered (the kit scan still is)', async () => {
     switchedOff.add(CORE_DEVICE_LINKING)
     const w = mountView()
     await fillCredentials(w)
     expect(buttonLabelled(w, t('pairing.signInEntry'))).toBeUndefined()
-    await scanButton(w)!.trigger('click')
-    const accepts = w.findComponent({ name: 'KitScanner' }).props('accepts') as (t: string) => boolean
-    expect(accepts(`veyqpair:${PAIRING_SECRET}`)).toBe(false)
-    expect(accepts('veyqkit:whatever')).toBe(true) // control: the kit scan is unrelated to linking
+    expect(joinButton(w)).toBeUndefined()
+    expect(scanButton(w)).toBeDefined() // control: the kit scan is unrelated to linking
     // …and with the leaf on (the default), both are offered: the control of the three tests above
     switchedOff.clear()
     const on = mountView()
     await fillCredentials(on)
     expect(buttonLabelled(on, t('pairing.signInEntry'))).toBeDefined()
+    expect(joinButton(on)).toBeDefined()
   })
 
   it('signs this device out too, through the one sign-out', async () => {
@@ -607,32 +622,63 @@ describe('LoginView (uc.account.sessions §E3, web)', () => {
 
   // --- uc.account.onboard-device: the join entry, `the-locked-entry-adds-no-shell-route`'s behavioural half ---
 
-  it('offers the join through the SAME scan entry, which now accepts both of this app’s codes', async () => {
+  it('offers the join as its own button, whose scanner takes an add-a-device code and nothing else', async () => {
     const wrapper = mountView()
     await fillCredentials(wrapper)
 
-    // Offered exactly where the Emergency-Kit scan already was — one control, one camera lifecycle, one
-    // permission prompt, and no second button whose difference a user cannot see.
-    expect(scanButton(wrapper)).toBeDefined()
-    await scanButton(wrapper)!.trigger('click')
-    const accepts = wrapper.findComponent({ name: 'KitScanner' }).props('accepts') as (t: string) => boolean
+    // Owner 2026-11-12: its own labelled entry with its own camera, not an icon in the Secret-Key field.
+    await joinButton(wrapper)!.trigger('click')
+    const scanner = joinScanner(wrapper)!
+    expect(scanner.props('errorText')).toBe(t('pairing.joinScanError'))
+    const accepts = scanner.props('accepts') as (t: string) => boolean
     expect(accepts(`veyqpair:${PAIRING_SECRET}`)).toBe(true)
-    expect(accepts('veyqkit:whatever')).toBe(true)
-    // The negative, on the same predicate: a foreign QR is scanned PAST, not reported as a failure.
+    // The negatives, on the same predicate: a kit, the other direction's code (whose write-once slot a mis-read
+    // would burn) and a foreign QR are all scanned PAST.
+    expect(accepts('veyqkit:whatever')).toBe(false)
+    expect(accepts(`veyqsignin:${PAIRING_SECRET}`)).toBe(false)
     expect(accepts('https://example.com/')).toBe(false)
     expect(accepts('')).toBe(false)
+  })
+
+  it('the Secret-Key field’s camera no longer takes a pairing code — it says it is not an Emergency Kit', async () => {
+    const wrapper = mountView()
+    await fillCredentials(wrapper)
+
+    await scanButton(wrapper)!.trigger('click')
+    const accepts = kitScanner(wrapper)!.props('accepts') as (t: string) => boolean
+    expect(accepts(`veyqpair:${PAIRING_SECRET}`)).toBe(false)
+    expect(accepts('veyqkit:whatever')).toBe(true) // control: the kit is still taken
+  })
+
+  it('offers the join where the Secret-Key field is hidden too — it no longer hangs on that field', async () => {
+    vi.mocked(isTrusted).mockResolvedValue(true)
+    const wrapper = mountView()
+    await fillCredentials(wrapper)
+
+    expect(wrapper.find('input[name="secret-key"]').exists()).toBe(false) // control: the field is gone
+    expect(joinButton(wrapper)).toBeDefined()
+  })
+
+  it('offers no join beside a live session — the join card would only find this browser occupied', async () => {
+    session.accessToken = 'restored'
+    const wrapper = mountView()
+    await fillCredentials(wrapper)
+
+    expect(buttonLabelled(wrapper, t('login.signOut'))).toBeDefined() // control: the live-session card is up
+    expect(joinButton(wrapper)).toBeUndefined()
   })
 
   it('a scanned pairing code opens the join card with that secret — and attempts no unlock, and no login', async () => {
     const wrapper = mountView()
     await fillCredentials(wrapper)
 
-    await scan(wrapper, `veyqpair:${PAIRING_SECRET}`)
+    await scanJoin(wrapper, `veyqpair:${PAIRING_SECRET}`)
 
     const join = wrapper.findComponent({ name: 'JoinDeviceCard' })
     expect(join.exists()).toBe(true)
     expect(join.props('secret')).toBe(PAIRING_SECRET)
     expect(wrapper.text()).toContain(t('pairing.joinTitle'))
+    expect(joinScanner(wrapper)).toBeUndefined() // the camera is given up once the code is read
     // This device is about to be handed everything by another one. Nothing here may reach for a credential it
     // does not have — a "login failed" or "unlock failed" would be the screen contradicting the code it scanned.
     expect(login).not.toHaveBeenCalled()
@@ -643,13 +689,11 @@ describe('LoginView (uc.account.sessions §E3, web)', () => {
     expect(push).not.toHaveBeenCalled()
   })
 
-  it('the Emergency-Kit scan still applies the kit through the widened dispatch — the regression control', async () => {
-    // This is what a shared, dispatching scan control most plausibly breaks, and a bare "the join opened" would
-    // not notice it: the widening must leave the older path byte-identical in behaviour.
+  it('the Emergency-Kit scan still applies the kit — the regression control', async () => {
     const wrapper = mountView()
     await fillCredentials(wrapper)
 
-    await scan(wrapper, 'veyqkit:whatever')
+    await scanKit(wrapper, 'veyqkit:whatever')
 
     expect((wrapper.find('input[name="email"]').element as HTMLInputElement).value).toBe('scanned@example.com')
     expect((wrapper.find('input[name="secret-key"]').element as HTMLInputElement).value).toBe('scanned-secret-key')
@@ -660,14 +704,14 @@ describe('LoginView (uc.account.sessions §E3, web)', () => {
   it('leaving the join hands the sign-in form back, and finishing it routes into the shell', async () => {
     const wrapper = mountView()
     await fillCredentials(wrapper)
-    await scan(wrapper, `veyqpair:${PAIRING_SECRET}`)
+    await scanJoin(wrapper, `veyqpair:${PAIRING_SECRET}`)
 
     wrapper.findComponent({ name: 'JoinDeviceCard' }).vm.$emit('cancel')
     await flushPromises()
     expect(wrapper.find('form').exists()).toBe(true)
     expect(wrapper.findComponent({ name: 'JoinDeviceCard' }).exists()).toBe(false)
 
-    await scan(wrapper, `veyqpair:${PAIRING_SECRET}`)
+    await scanJoin(wrapper, `veyqpair:${PAIRING_SECRET}`)
     wrapper.findComponent({ name: 'JoinDeviceCard' }).vm.$emit('done')
     await flushPromises()
     expect(push).toHaveBeenCalledWith({ name: 'home' })
@@ -675,12 +719,12 @@ describe('LoginView (uc.account.sessions §E3, web)', () => {
 
   // --- uc.account.onboard-device: the OTHER direction's entry, and its behavioural half of the same criterion ---
 
-  it('offers the QR sign-in entry with and without a camera — where the scan control is camera-gated', async () => {
+  it('offers the QR sign-in entry with and without a camera — where the join entry is camera-gated', async () => {
     // Both halves are the assertion. Without the no-camera case the entry could be quietly gated and nobody
     // would notice; without the with-camera case "it is always absent" would pass the no-camera half.
     const withCamera = mountView()
     await fillCredentials(withCamera)
-    expect(scanButton(withCamera)).toBeDefined()
+    expect(joinButton(withCamera)).toBeDefined()
     expect(buttonLabelled(withCamera, t('pairing.signInEntry'))).toBeDefined()
 
     // A camera-less laptop is PRECISELY this direction's case: this device only displays a code, and the camera
@@ -689,7 +733,8 @@ describe('LoginView (uc.account.sessions §E3, web)', () => {
     const withoutCamera = mountView()
     await fillCredentials(withoutCamera)
 
-    expect(scanButton(withoutCamera)).toBeUndefined() // the control on the same predicate: that one IS gated
+    expect(joinButton(withoutCamera)).toBeUndefined() // the control on the same predicate: that one IS gated
+    expect(scanButton(withoutCamera)).toBeUndefined()
     expect(buttonLabelled(withoutCamera, t('pairing.signInEntry'))).toBeDefined()
   })
 
@@ -720,7 +765,7 @@ describe('LoginView (uc.account.sessions §E3, web)', () => {
 
     expect(buttonLabelled(wrapper, t('sessions.lockedEntry'))).toBeDefined()
     expect(buttonLabelled(wrapper, t('recovery.forgot'))).toBeDefined()
-    await scan(wrapper, 'veyqkit:whatever')
+    await scanKit(wrapper, 'veyqkit:whatever')
     expect((wrapper.find('input[name="email"]').element as HTMLInputElement).value).toBe('scanned@example.com')
     expect(wrapper.findComponent({ name: 'SignInWithCodeCard' }).exists()).toBe(false)
 

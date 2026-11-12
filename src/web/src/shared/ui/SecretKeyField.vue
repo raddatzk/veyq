@@ -10,10 +10,10 @@
 // the model is normalised on input rather than at submit: every host used to owe itself a `parseKit` at read
 // time and only one of them paid it.
 //
-// **Decoder-agnostic where it must be.** `accepts` stays a caller-supplied predicate and a decoded string this
-// component does not recognise is handed back via `scanned` — ADR 0059 §1: one scan entry serves both of this
-// app's QR payloads and recognising a payload is the caller's job. Without that pass-through the sign-in
-// screen's pairing dispatch would break.
+// **Its camera reads an Emergency Kit and nothing else** (owner 2026-11-12). Another readable code is scanned past
+// with "not an Emergency Kit" said in the overlay — never read and never handed to the host: a pairing code
+// once came through here too, and a field named "Secret Key" was the sign-in screen's hidden way to add a device.
+// That way in is now the sign-in card's own button (`LoginView`), shown whether or not this field is.
 //
 // `expectedEmail` is optional on purpose. Where the screen knows which account it is for, a kit carrying a
 // different address WARNS — it never blocks and never clears the key. The e-mail in a kit is metadata, an
@@ -51,8 +51,6 @@ const props = withDefaults(
     disabled?: boolean
     /** The account this screen is for, when it knows — enables the wrong-kit warning. */
     expectedEmail?: string
-    /** Which decoded strings the camera should stop on. Defaults to "an Emergency Kit". */
-    accepts?: (text: string) => boolean
   }>(),
   { name: 'secret-key' },
 )
@@ -61,8 +59,6 @@ const model = defineModel<string>({ required: true })
 const emit = defineEmits<{
   /** A kit was imported, scanned or pasted — the host may use its e-mail (the key is already in the model). */
   kit: [KitData]
-  /** A decoded string `accepts` allowed but that is not a kit — the host's own payload. */
-  scanned: [string]
 }>()
 
 const { t } = useI18n()
@@ -89,9 +85,7 @@ const typo = computed(() => {
 const scanSupported = typeof navigator !== 'undefined' && !!navigator.mediaDevices?.getUserMedia
 const iconCount = computed(() => (scanSupported ? 3 : 2))
 
-function acceptsScan(text: string): boolean {
-  return props.accepts ? props.accepts(text) : parseKit(text) !== null
-}
+const acceptsKit = (text: string): boolean => parseKit(text) !== null
 
 /** Take a kit: fill the key, hand the host the rest, and say so if it is for another account. */
 function applyKit(kit: KitData) {
@@ -121,11 +115,9 @@ async function onUpload(event: Event) {
 }
 
 function onScanned(text: string) {
+  // The scanner stops on a kit only (`acceptsKit`), so this always parses; the guard keeps a refusal silent.
   const kit = parseKit(text)
-  // Dispatch on the prefix, not on which of the two happens to parse: reading the kit first keeps this path
-  // byte-identical to what the sign-in screen did before the extraction.
   if (kit) applyKit(kit)
-  else emit('scanned', text)
   scanOpen.value = false
 }
 
@@ -195,6 +187,12 @@ watch(model, (value) => {
   <!-- Teleported: the overlay owns the whole screen, and every host renders this control inside a <label>,
        where a click anywhere in the overlay would also re-focus the input behind it. -->
   <Teleport to="body">
-    <KitScanner v-if="scanOpen" :accepts="acceptsScan" @found="onScanned" @close="scanOpen = false" />
+    <KitScanner
+      v-if="scanOpen"
+      :accepts="acceptsKit"
+      :refused-text="t('unlock.notAKit')"
+      @found="onScanned"
+      @close="scanOpen = false"
+    />
   </Teleport>
 </template>
