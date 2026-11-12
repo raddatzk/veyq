@@ -45,8 +45,8 @@ handed over (`AppleDepot`, `fopen`). Some 60 calls are still to come, so the dis
    `Answer.Reader(reader, size, mediaType)`; `Reader.Read(reader, position, length)` answers `Answer.Bytes` with that
    range — fewer bytes only at the end, an empty payload past it — through the core's `RangeReader`, whose frame cache
    stays the core's; `Reader.Close(reader)` frees it, and every reader of a tenant closes when the tenant does, as its
-   Pots do. The registry and the two generic calls are built; `Bridge.openReader` is the door the opening calls (a
-   Depot file, a Memory's medium) will use, and `DispatchTest` uses until then.
+   Pots do. `Bridge.openReader` is the door every opening call uses: Depot's `File.Reader` the first (a Memory's medium
+   next), and a reader a page opened closes with that page too.
 3. **A file on the device is a path the host names, and the core opens it.** The host's dialog gives a path — GTK's
    `FileDialog` (the xdg portal where one runs; under Flatpak the document portal's path), WinUI's `FileSavePicker` /
    `FileOpenPicker` — and the core opens it with the platform's own call. Nothing of a file's content crosses the
@@ -60,8 +60,10 @@ handed over (`AppleDepot`, `fopen`). Some 60 calls are still to come, so the dis
      `remove`, `fseeko` for Apple and Linux (`posixMain`), `_wfopen`, `_wremove`, `_fseeki64` for Windows (`mingwMain`).
      **A path is UTF-8 on the wire and UTF-16 to Windows:** mingw's `fopen` reads its argument in the ANSI code page,
      so a name outside it is written under mojibake (measured 2026-11-11, below).
-   - **No write is cancelled yet.** A download runs to its end or fails, and the partial file is removed. Cancelling
-     comes with the first consumer that needs it (Depot's large files).
+   - **A write that can be long is cancellable; the rest run to their end.** A file's Save a copy is
+     `File.Save(file, path)` → `Saving(save)`, followed by `Watched.Save` and stopped by `Save.Cancel`, which answers once
+     the partial file is gone; a node's ZIP, a receipt and a picture run to their end or fail, and the partial file is
+     removed either way.
 4. **The dispatch stays hand-written, one line per call; no generator.** `Bridge.dispatch` is a `when` over the sealed
    `Call`, each line onto a core model. Revisited if the dispatch grows beyond one line per call.
 
@@ -126,6 +128,39 @@ handed over (`AppleDepot`, `fopen`). Some 60 calls are still to come, so the dis
     with `VEYQ_LIVE`, `LiveBridgeTest.aReceiptIsAttachedShownAndSavedThroughCalls` attached a JPEG and a two-page PDF by
     path, opened each (`image/jpeg`, `application/pdf`) and saved it to a path at its file's SHA-256, and under a held
     one-byte quota saved the entry with the receipt named skipped; `SecretFreeSchemaTest` unchanged.
+- **A Depot file is shown as bytes, played through a reader, saved and uploaded by path** (2026-11-12, Depot on the
+  desktops; the models ADR 0129's Consequences, the screens ADR 0123's, the Linux app and the Windows app):
+  - **The first reader opened:** `File.Reader(file)` → `Answer.Reader(reader, size, mediaType)` over the page's own
+    `RangeReader` (one frame cache per page), refused `NO_MEDIUM` where the page shows none. A host holds one frame more as
+    its window, so a player's 4 KiB reads (GStreamer's block size) cost one call per 256 KiB; a read blocks only the
+    player's own thread, never the UI thread. **A page's readers close with the page in the bridge** (`File.Close`), not
+    only by the host: a rule the core can hold is the core's. An image's or a PDF's bytes are `File.Bytes` (decision 1).
+  - **The first cancelled write:** `File.Save` / `Watched.Save` / `Save.Cancel` (decision 3), the save a core model
+    (`FileSave`) in a scope of its own, so it outlives its page and stops with its tenant.
+  - **Uploads by path, at any offset:** `Upload.Files(scopeId, parentId, label, paths)`, `Upload.Folder(scopeId, parentId,
+    path)`, `Upload.Replace(file, path)` after `File.ChooseReplace(file)`, each answered `Queued(count)` once queued. The
+    core opens each path as a `FileSource` (core's `blob/PickedPaths`: its size and modified time the system's, its type
+    claimed by its name through `MediaTypes`, never by the bytes, since a claim is sealed as one) and reads it a frame at a
+    time, so a file of any size is never held whole. The level's label is the host's (the core has no localized space
+    word to give).
+  - **`listDirectory` and `pathFacts` join `blob/Files.kt`:** `opendir`/`readdir` and `lstat` (`posixMain`; Apple's
+    `st_mtimespec`, Linux's `st_mtim`), `FindFirstFileW`/`FindNextFileW` and `GetFileAttributesExW` (`mingwMain`, UTF-16
+    as `_wfopen`; a reparse point — a symbolic link, a junction — is a link). `PickedPaths.walk` is a desktop's folder
+    walk: every entry a `FolderUpload.Found`, a link reported and never followed, an unlistable directory said; the rule
+    what is kept is `FolderUpload.keeps`, the phones' too.
+  - **Found on the large file, in the core's HTTP:** the bearer client sets its own `HttpTimeout` (connect 30 s, 10 min
+    without a byte, no total) — a 2 GiB + 1 `completeFile` outlived OkHttp's default 10 s read timeout, since the server
+    checks every chunk first (inbox #845) — and `ApplicationBlobs.FrameSource` signs its presigned GETs again at each lapse
+    (400, 401, 403), where a read had signed at most twice and a save longer than the URLs' 600 s failed (Linux, 2.07 GB of
+    2.15).
+  - Measured: `DispatchTest`'s file, medium and upload cases (`aFileIsOpenedShownSaved…`, `aMediumIsReadThroughItsPagesReader…`,
+    `filesAFolderAndAReplaceAreUploadedByPath…`; 14, 4 and 8 mutations, each red); `FilesTest.aPickedDirectoryIsWalked…`
+    on macOS, Linux and Windows (`--tests '*FilesTest*'`); with `VEYQ_LIVE`, `LiveBridgeTest`'s `aFileIs…` (a 300 MiB
+    file saved at its SHA-256 in 16.6 s, a second save cancelled at 20 MiB with nothing at its path), `aMediumIs…`
+    (`VEYQ_LIVE_MEDIUM`: a 636 MB WebM uploaded by path, its ranges across a frame's edge and at the end at the file's
+    SHA-256, the reader refused after `File.Close`) and `filesAndAFolder…` (`VEYQ_LIVE_UPLOAD=1`: a folder with a hidden
+    file and a non-ASCII subfolder, its link said; a 400 MiB upload cancelled with nothing left; 2 GiB + 1 byte uploaded in
+    158 s and saved back in 132 s at its SHA-256); `SecretFreeSchemaTest` unchanged.
 - Decoding a picture is the platform's (ADR 0129 decision 1), and WebP is not every platform's own: GTK 4.22 decodes it
   through glycin's loaders, Windows through the Store's Webp Image Extensions. Packaging must carry both (native-apps
   § Open).

@@ -650,6 +650,29 @@ implementation exists but what holds it to the first.
     (another device's entry seen through the poll after 20.3 s), `anEntryIsWrittenEditedAndDeleted…` (CHF's rate filled
     from the tenant's service, a stale save, every kind), `aReceiptIsAttachedShownAndSaved…` and
     `aPotIsCreatedSetUpAndCopied…`, each on an `App pot <n>` copy purged after.
+  - **Depot whole** (2026-11-12, ADR 0129's Consequences for the models, ADR 0130's for the reader, the save and the
+    paths): a file's page `File.Open` → `FileOpened` and `Watched.File` (`FileShown`, every field the model's answer),
+    `File.Bytes`, `File.Pages` (answered as `ReceiptPages`), `File.Reader`, `File.Save`/`Watched.Save`/`Save.Cancel`,
+    `File.ChooseReplace`, `File.Close`; the uploads `Upload.*` and `Watched.Uploads` (`UploadsShown`); a drop box's page
+    `DropBox.Open` → `DropBoxOpened` and `Watched.DropBox` (`DropBoxShown`: each guest's folder by id with its label, count,
+    menu words and files), `DropBox.MoveOut` (answered with the move sheet it opened, `MoveOpened`), `DropBox.AskDelete/
+    CancelAsk`, `DropBox.Delete` (refused `NOT_ASKED` unless asked; trashed through a header the bridge makes with
+    `DropBoxPage.FOLDER_FACTS` and keeps for `DropBox.Undo`, answered `Trashed` at once — the host decides nothing),
+    `DropBox.Close`; `Share.OpenTopLevel(scopeId)` (`ShareShown.atTopLevel`), offered where `ShellShown.topLevelShare` says;
+    a file page's own actions (Replace) join its header through `Header.Facts`' `file`; `ShellShown.creates` names what a
+    level's New offers (Upload files and Upload folder among them). The uploads' writes read the shell's lists and every
+    open file page anew, so no host calls a reload; every page, save, reader and the queue close with their tenant.
+    `Share.Label` and `Share.Password` are applied on the host's thread in the order typed, as `Editor.Change`: launched
+    like any call, a Save right after the last key was once applied before it (`Linux lin` saved for `Linux link`).
+    Measured: `DispatchTest`'s file, medium, upload and drop box cases (`aDropBoxsPageIsReadAnewOnEachRevision…`; 6
+    mutations, each red, among them a refresh reading the cached tree, red only in the live case), `WireTest` with every
+    new shape, `SecretFreeSchemaTest` unchanged; with `VEYQ_LIVE`, `LiveBridgeTest`'s `aFileIs…`, `aMediumIs…`,
+    `filesAndAFolder…` (ADR 0130's Consequences) and `aDropBoxIsMadeFilledAndEmptied…` (`VEYQ_LIVE_DROPBOX_GUESTS=<file>`,
+    two guests dropping through the web's guest page by a script reading that file: the drop box made at a top level, both
+    guests' folders seen after `Shell.Refresh`, one moved out, the other's delete refused unasked and then trashed, a link
+    minted on a guest's file), each in an `App depot <n>` / `App drop <n>` purged after. `VEYQ_LIVE_DEPOT_PASS=<name>`
+    fills a desktop pass's folder (`VEYQ_LIVE_DEPOT_PASS_MEDIA` adds media), `VEYQ_LIVE_DEPOT_PASS_PURGE=1` purges it in any
+    space.
 
   Measured 2026-11-10 (the channels 2026-11-11, ADR 0130's Consequences):
   - `./gradlew :bridge:jvmTest` runs four checks:
@@ -786,6 +809,60 @@ implementation exists but what holds it to the first.
   with the cursor kept; a JPEG and a 25-page PDF picked together, the PDF's 20 pages and the cap's words, saved and read
   back at the file's SHA-256 (a read-only folder: "The copy could not be saved."); 101 picked, 100 held; the skipped
   notice under a held one-byte quota; New pot from a folder and from a space's root, its settings and people, the copy.
+  - **Depot whole** (built 2026-11-12; the models ADR 0129's Consequences, the calls the bridge's above).
+    - `file_page.rs`: a file's content in place — a `gtk::Picture` held at the core's edge (scaled down through cairo past
+      it), a monospace `gtk::TextView` under an `AdwBanner` saying the cut, a PDF's pages as frames rendered by
+      `receipt_viewer`'s poppler code when within a screen of the view and let go past three (a 1,000-page PDF holds a few
+      pages' pixels), a medium, or an `AdwStatusPage` with the core's words; its facts beneath. Save a copy is the header's
+      download of a FILE (`win.file-save`): GTK's save dialog, then an `AdwToast` with the progress and Cancel. Replace
+      (`win.file-replace`) is chosen before the dialog opens.
+    - **A medium plays through GTK's own player over the core's reader:** `reader_stream.rs` is a `gio::InputStream` +
+      `gio::Seekable` whose reads are `Reader.Read` ranges of at least one frame, answered on GStreamer's streaming thread
+      through `bridge::call_blocking`; `gtk::MediaFile::for_input_stream` drawn by `gtk::Video` with GTK's controls, no
+      autoplay; the stream's `error` said in the core's words (`file_unsupported`). **Measured first:** GTK 4.22.5's
+      GStreamer backend plays a seekable `GInputStream` (it wraps it in `giostreamsrc`; a 20 s WebM prepared, played and
+      seeked to 17 s in the container by a probe built against GTK alone), so GTK issue #4062 no longer holds and the planned
+      fallback (a `playbin3` over an `appsrc`, through `gstreamer-rs` and `gst-plugin-gtk4`) and its crates were never
+      added. **Codecs are the system's**: the Containerfile gains `gstreamer1-plugins-good`, `-bad-free` and
+      `gstreamer1-plugin-openh264`; the app ships none, and a stream nothing decodes (a ProRes `.mov`, an HEVC MP4: "No
+      suitable plugins found") says `file_unsupported` beside Save a copy.
+    - `uploads.rs`: New's Upload files / Upload folder… through GTK's `FileDialog` (`open_multiple`, `select_folder`); the
+      queue a header bar `gtk::MenuButton` with a popover (the line, Cancel all, each batch with Close once finished, each
+      item with its progress, Cancel or Retry), built once with its rows kept by id and updated in place (`changes`, tested
+      — drawn anew on every update, a Cancel clicked during a redraw was lost once); what the uploads say an `AdwToast`
+      with its action.
+    - `drop.rs`: a `gtk::DropTarget` for `gdk::FileList` (`ACTION_COPY`) on Home's level and on each FOLDER row (the
+      theme's `:drop(active)` outline), taken only where the level's New offers Upload files (`ShellShown.creates`, the
+      core's); a directory (a link to one followed) goes to `Upload.Folder`, any other local path into one `Upload.Files`
+      batch, an item without a local path is refused under its name (`depot_drop_not_local`). Which item is a folder stays
+      the host's: a core call deciding every dropped path (`pathFacts`) was weighed and left, the rule three lines each
+      side, both tested.
+    - `drop_box.rs`: the hint, an `AdwPreferencesGroup` per guest's folder with its menu (Move out…, Delete) and its files'
+      rows, the delete asked in an `AdwAlertDialog`, then a toast with Undo; the shell's Refresh shown on a drop box and F5 /
+      Ctrl+R reading the shell's lists where no Pot is open; the top level's share (`send-to-symbolic`, "Add files only")
+      where the core offers it. `shell::ListScrolls` puts each list back where its place's list stood after an object
+      opened from it closes (the owner's report: met at its top before the fix).
+    - A debug build reads its catalogs from `VEYQ_LOCALE_DIR` where set: the build's directory exists only in the
+      container, so on the Fedora VM every word was English under `LANGUAGE=de` (measured); a release build installs them
+      (native-apps § Open, the Flatpak).
+
+  Measured 2026-11-12 (`run.py build`: clippy `-D warnings`, `cargo test` 38 with `reader_stream`'s, `drop`'s and
+  `uploads::changes`' cases each bitten; passes in English light and German dark, in pass folders filled by
+  `VEYQ_LIVE_DEPOT_PASS` and purged after): **under Broadway** (the container, driven from headless Chrome) a 3000×2000
+  JPEG, a cut 1.25 MB text, a 30-page PDF scrolled to its end (pages 1–4 let go), a ZIP and an empty file said; Save a copy
+  of 300 MiB cancelled with nothing left and saved whole at its SHA-256; a 636 MB WebM and a 123 MB MP4 played and seeked
+  near the end, a ProRes file said; `VmHWM` at most 310 MiB through playback and at most 267 MiB through a 2 GiB + 1
+  upload, a replace of it and its save (whole, at its SHA-256), so no file is held whole; `find / -xdev -newer <marker>`
+  after the media: only GStreamer's registry and the device store; a folder with a hidden file, a non-ASCII subfolder and a
+  link (said), a same-named file offered and replaced, Replace from the header, cancel, retry, Cancel all; "Add files
+  only" made a drop box, two guests dropped through the web, seen by Refresh and F5, one moved out, the other deleted after
+  asking, with Undo; a link on a guest's file made, edited, switched off and deleted. **In a real GNOME session** (the
+  Fedora 45 VM, GTK 4.24.1, libadwaita 1.10.0, Wayland; the container's arm64 debug build, driven without a person or root
+  through Mutter's RemoteDesktop and ScreenCast D-Bus API): files and folders dragged from Files onto a FOLDER row and onto
+  the level, each uploaded under its name with what it held; GNOME's portal file chooser (`GDK_DEBUG=portals`) for Upload
+  files, Upload folder… and Save a copy (saved at the originals' SHA-256); **audio heard on the default sink's monitor**
+  (`parec`): a 440 Hz WebM (Opus) and a 550 Hz MP4 (AAC) at RMS −21.1 dBFS while playing, silence paused. Not produced: a
+  drop without a local path in the session (Files offers no copy out of its trash; `cargo test` holds the refusal).
 - **The Windows app** (ADR 0129 decision 5; `src/mobile/windows/`). WinUI 3 in C# on .NET 10, `win-x64`, unpackaged
   and self-contained, the Windows App SDK included, so its build output runs where it is copied. Built 2026-11-10/11.
   - **Packages.** `Microsoft.WindowsAppSDK.WinUI` and `.Foundation` 2.6.5 and `Microsoft.Windows.SDK.BuildTools`, not the
@@ -897,6 +974,51 @@ implementation exists but what holds it to the first.
   arrived — was read from WER dumps: a `PersonPicture` reached through a `WeakReference` after its managed wrapper was
   collected (`src/mobile/CLAUDE.md` § Traps); held strongly while loaded, the repro crashed 2 of 4 times before and 0
   of 6 after.
+  - **Depot whole** (built 2026-11-12; Linux's set, the models ADR 0129's Consequences).
+    - `FilePage.cs`: the content in the content frame — an `Image` decoded at the core's edge (`BitmapDecoder`'s size
+      first, `DecodePixelWidth`), a long text a virtualized `ListView` a line a row under an `InfoBar` (one `TextBox` of a
+      megabyte drew only its first line), the PDF's pages lazily through `PdfPages`, the core's words; Save a copy the
+      header's download of a file (`HeaderPlan.ByPage`) through the save picker, its progress an `InfoBar` with a
+      `ProgressBar` and Cancel (`ShellView.Saving`); `ListScrolls.cs` (the rule, tested) with `ShellView.Keep`.
+    - **A medium plays in a `MediaPlayerElement`** (transport controls, no autoplay) over
+      `MediaSource.CreateFromStream(stream.AsRandomAccessStream(), type)`: `ReaderStream.cs` is a plain seekable .NET
+      `Stream` doing `reader_stream.rs`' work (testable on any host through the same adapter, no hand-written WinRT
+      interface), awaited off the UI thread; a seek made while a read awaits the core keeps its position
+      (`CompareExchange`), since Media Foundation reads and seeks from threads of its own. **Measured first** that the
+      unpackaged, self-contained x64 build plays a WebM and an MP4 so on the VM; no NuGet package added. **The page owns
+      its `MediaPlayer`** (`SetMediaPlayer`, taken back first): disposing the one the element made crashed the app
+      (`0xc000027b`, `E_ABORT` stowed in a dispatcher callback, read from WER dumps with cdb) when the shell replaced the
+      page. `MediaFailed` is said in the core's words; codecs are Media Foundation's and the Store's extensions, the app
+      ships none.
+    - `Uploads.cs`: New's Upload files / Upload folder through `FileOpenPicker` (multiple) and `FolderPicker`, the queue an
+      `AppBarButton` with its `Flyout`, what is said an `InfoBar` with its action; a file's Replace in its header.
+      `DropSort.cs` (Linux's rule for rule, in Veyq.Tests) and `Drops.cs`: `AllowDrop` on the level's scroller (hit-testable
+      by a transparent background) and each FOLDER row, `DragOver` taking `StorageItems` as Copy, `Drop` reading
+      `GetStorageItemsAsync()`, a row's drop `Handled` so the level beneath does not take it again.
+    - `DropBoxPage.cs` (a `MenuFlyout` behind More per guest's folder, a `ListView` of its files, the delete asked in a
+      `ContentDialog`, Undo in the shell's `InfoBar`), a drop box's Refresh command and F5 / Ctrl+R everywhere, the top
+      level's "Add files only" command (`ShareDialog.OpenTopLevel`, `MoveDialog.OpenWith`).
+    - `Veyq.Drive` gains `scroll`, `range`, `explorer`, `drag` (items selected through UI Automation, then pressed and
+      dragged with SendInput's mouse onto an element or a point), `hovershot`, `click`, `screen` and `droptargets` (which of
+      the app's windows hold an OLE drop target).
+
+  Measured 2026-11-12 (`run.py build`: `Veyq.Tests` 33 with `ReaderStreamTest` 4, `DropSortTest` 2, `ListScrolls` and
+  `HeaderPlan.ByPage` bitten; passes by `run.py drive`, en-US light and de-DE dark, purged after): Linux's set of files,
+  words and saves (the 300 MiB save cancelled with nothing in Downloads, saved whole at its SHA-256, `Get-FileHash`); the
+  WebM and the MP4 played and seeked, the ProRes file said (`MediaFailed SourceNotSupported C00D5212`), `%TEMP%` holding
+  nothing new of them; two files picked at once, a folder with a junction (said), the offer, cancel, retry, Cancel all, a
+  replace whose page then played the new medium; 2 GiB + 1 uploaded in 7 min and saved in 5 min at its SHA-256; the drop
+  box's set as Linux's, the guests seen by Refresh and F5. **Memory:** the app idles at 359–459 MiB (WinUI, x64 under
+  Prism on the ARM VM), so the bound there is the peak's growth over that baseline, which must not scale with the file:
+  a medium played added 110–180 MiB whatever its size (607 MB and 118 MB; peak 532–536 MiB), a 2 GiB + 1 upload and its
+  save +86 MiB (en) and +243 MiB (de), an order below the file (two samples; a third would tell whether de's is the GC's
+  slack). Audio heard by the owner at the VM. **Not met: the visible drop.** `Veyq.Drive drag` presses and drags as a
+  person does (Explorer shows its drag image over its own window), but the app never sees the drag, and none of its
+  windows holds an OLE drop target (`droptargets`). The VM runs with UAC off (`EnableLUA 0`), so every process is at high
+  integrity (`0x3000`, read from each token); that the Windows App SDK takes no drop into an elevated app is remembered
+  from a forum thread, not settled. Two ways around a reboot were measured and dropped (`runas /trustlevel:0x20000` left
+  the app elevated; a restricted token started it at medium integrity but still elevated, and its sign-in did not reach
+  the server). `DropSortTest` holds the rule; the visible drop is open (native-apps § Open).
 - **The device trust on every app** (decision 8 as changed 2026-11-11; [ADR 0129](0129-an-apps-logic-is-the-kotlin-cores-each-platform-draws-only-its-own-ui.md)'s
   Consequences for the desktops' stores). The flows are the core's alone — `session/Account.kt` and `SessionModel.kt`
   enrol, offer, resume, unlock, change the level, sign out and stop trusting through the `DeviceKeys` interface

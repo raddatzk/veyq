@@ -212,6 +212,52 @@ four times.
     one core function's answer (`EditorShown`: the payers' total, the rest, the split's hint and words), so no host
     computes one. Edits (`Editor.Change`, `Editor.DropReceipt`, `PotCreate.Name`) are applied on the host's thread in
     the order called.
+- **Depot's screens are core screen models** (2026-11-12, before Linux and Windows drew them; decision 2's shape, each
+  rule a `commonTest` case over a file, a level or a tree the test plays, killed by a mutation — `FileModelTest`,
+  `DepotUploadsTest`, `DropBoxPageTest`, `FolderUploadTest`, `ShareSheetTest`; what the desktops built and measured is ADR
+  0123's Consequences, the bridge, the Linux app and the Windows app). Android and Apple held each of these in their
+  screens and draw them from the core now:
+  - `depot/FileModel` (`ShellModel.fileModel`): what a file's page shows, decided by its bytes (`FileView.decide`): an
+    image (decoded by the platform to at most `FileView.IMAGE_EDGE`, 4096), a text's first megabyte and whether it was
+    cut, a PDF (pages rendered as they come into view, at most `FileView.PDF_PAGES`, 1000, said past it), a medium as a
+    `RangeReader`, or what the page says instead (`FileModel.words`); the facts and the uploader; `reload` when the shell's
+    lists change; the opened file's rights `FileRights` (the rights matrix's opened-file rows, [depot](../apps/depot.md) §
+    Guests), from which the header's facts and the file's own actions come — Replace (worded Upload into an empty file),
+    Send a copy (where the platform shares and the page shows content). **A member replaces nothing in a guest's identity
+    folder**, where both apps offered Replace on every file (technical, open to the owner's veto). The app-held map of every
+    file went: the replace offer reads its file when made and when taken.
+  - **A FILE's download is the file itself** under its own name (`AppKinds.downloadsItself`/`ownDownload`,
+    `ShellModel.downloadAs`), any other node its ZIP, on every app — the desktops had written a file's ZIP. A phone's Send a
+    copy is that download into the shared directory, swept at the next start.
+  - `depot/FileSave`: "Save a copy" written a frame at a time where the person chose, its progress and its cancel (which
+    returns once the partial file is gone), in a scope of its own, so it outlives its page and stops with its tenant.
+  - `depot/DepotUploads` (`ShellModel.depotUploads`, one per open tenant, over the app's one `UploadQueue`): files and a
+    folder into a level, a replace **expected over the content shown when Replace was chosen** (`FileModel.chooseReplace`,
+    the web's "the blob the member saw"; a replace not chosen first is refused), each Depot item's settle (the lists read
+    anew, the replace offer, the item out of the tray), what the uploads say one at a time (`State.said`, `take`, `seen`),
+    and the tray's acknowledge on the model's clock for the whole queue, Memories' batches too — a model that knew only
+    Depot's jobs would have left that timer in the views. A cancelled upload gives up the file it made
+    (`UploadJob.abandon`, every give-up `NonCancellable`); one whose give-up cannot reach the server keeps the node, and
+    the next run fills it (the web's `fileUploadJob`).
+  - **The folder walk's rule is the core's, the walk the platform's:** a phone enumerates through its own door
+    (`DocumentsContract`, security-scoped URLs) and hands `FolderUpload.Found` entries; `FolderUpload.keeps` decides
+    (regular files, hidden ones kept, a link never followed, an unreadable entry said — both in words of their own, never
+    dropped silently); the root is the picked directory's own name (`rootName`), never a literal. On the desktops the core
+    walks the path itself (ADR 0130's Consequences).
+  - `depot/DropBoxPage` (`ShellModel.dropBoxPage`): the guests' folders, read anew on each revision of the shell's lists, a
+    folder moved out through `MoveSheet`, its delete asked (`dropbox_delete_folder`) and done through a header with the
+    core's guest-folder facts (`DropBoxPage.FOLDER_FACTS`). "Add files only" at a space's top level is `ShareSheet.topLevel`
+    (the share sheet in a mode, its form, saving, refusal and fresh address the sheet's own), not a sheet of each app's.
+    **Where the top level's share is offered is the core's for the desktops** (`ShellModel.offersTopLevelShare`); Android
+    and Apple still compute it in their shells (native-apps § Open).
+  - **`ShellModel.refresh()` reads the tree anew** (`TenantSession.forgetTree` first): the session caches its tree, and
+    every write of this device forgets it, but before this a refresh read the cache, so a desktop saw another device's
+    upload or a guest's new folder only after a new sign-in. One tree read per refresh; a separate reload beside `refresh`
+    was weighed and left, since `refresh` already promised what another device wrote. Bitten by the live case only
+    (`ShellModel` takes a concrete `TenantSession`, which no `commonTest` plays).
+  - Where the apps disagreed, one rule (technical, open to the owner's veto): the drop box folder's delete says
+    `dropbox_delete_folder`, the tray's close `upload_close`; a folder upload's failure says its own words, never
+    `share_failed`.
 - The repository's Rust (`src/mobile/linux/`) is held to the no-deprecated rule by reading: cargo has no deprecation
   gate, as the JavaScript install has.
   The repository's C# (`src/mobile/windows/`) has one: `run.py build` is red on any NuGet package `dotnet package list`

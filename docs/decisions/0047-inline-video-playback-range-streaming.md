@@ -220,6 +220,19 @@ Still open, settled with the worker queue: whether a small tier for every galler
 - **Native surfaces.** A Service Worker is a web-only mechanism; a future native client feeds its own player the
   same decrypted ranges through the platform equivalent. This ADR governs the **web** playback path (the current
   V1 priority); it does not bind native to a SW.
+- **The apps hold the same rule: no plaintext at rest but where the person saves it** (2026-11-12, Depot on every app;
+  [ADR 0129](0129-an-apps-logic-is-the-kotlin-cores-each-platform-draws-only-its-own-ui.md)'s Consequences for the core's
+  file page). An image, a text and a PDF are held in memory only, each capped; a medium is streamed through the core's
+  `RangeReader`, only the frames a range needs decrypted, in a bounded cache per page. Android plays through a
+  `MediaDataSource` over it and renders a PDF from a `memfd`; Apple plays through an `AVAssetResourceLoader` and opens a
+  PDF from `Data`; Linux plays a `gio::InputStream` and Windows a seekable stream over it ([ADR 0130](0130-the-bridge-carries-shown-bytes-beside-the-json-ranges-through-a-reader-and-files-by-path.md)
+  decision 2). A decrypted copy is written only where the person chose (a save dialog's path through the core's
+  `FileSink`; iOS's `fileMover` from a temporary directory swept at every start) or for a phone's Send a copy, which the
+  person asked for and which is swept at the next start. Earlier builds' `view-*` files are swept. Rejected: handing a
+  file to the system's viewer or player ("Open with"), which needs a decrypted file another app reads, and a temporary
+  file "deleted after", which a crash leaves. Measured: `run-as … ls cache` empty during and after every view and playback
+  on an Android emulator; `find / -xdev -newer <marker>` in the Linux container and `%TEMP%` on the Windows VM showed
+  nothing of a played medium (ADR 0123's Consequences).
 - **A download is whole-blob and sequential**, so it adds no access pattern beyond what a whole-blob read already
   shows. The page must stay open while it runs, since it holds the key.
 
