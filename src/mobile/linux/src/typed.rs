@@ -1,4 +1,4 @@
-//! A text field the person types into while the core's state for it arrives (D5 of the Expenses CR): the core keeps every
+//! A text field the person types into while the core's state for it arrives (ADR 0123's Consequences, Expenses whole): the core keeps every
 //! typed text as typed, and a state for a field arrives after each edit sent — possibly one or two keystrokes behind what
 //! the field shows. A field set from such a state would lose what was typed since and move the cursor. So a field is set
 //! from state only when it is not being typed into, or when the state's text is none it sent: another writer's version

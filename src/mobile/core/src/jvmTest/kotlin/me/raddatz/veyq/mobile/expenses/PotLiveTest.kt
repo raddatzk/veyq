@@ -104,7 +104,7 @@ class PotLiveTest {
         }
         System.getenv("VEYQ_LIVE_POT_EDIT")?.let { target ->
             // Another device edits an entry a desktop pass has open in its editor: "<pot name>|<entry title>" is retitled
-            // "<entry title> (elsewhere)" on its latest revision, so the pass's save is stale (D5 of the Expenses CR).
+            // "<entry title> (elsewhere)" on its latest revision, so the pass's save is stale (ADR 0127's Consequences: a stale save).
             val (potName, title) = target.split('|', limit = 2)
             val ref = pots.first { it.name == potName }
             val pot = PotSession.open(tenant, ref.scopeId, ref.nodeId)!!

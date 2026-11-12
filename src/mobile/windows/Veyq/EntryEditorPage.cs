@@ -1,4 +1,4 @@
-// The entry editor (the web's EntryEditor.vue and EntrySplit.vue; Linux's entry_editor.rs; D5 of the Expenses CR), Fluent's
+// The entry editor (the web's EntryEditor.vue and EntrySplit.vue; Linux's entry_editor.rs; ADR 0123's Consequences, Expenses whole), Fluent's
 // way: a page in the content frame, not a ContentDialog — WinUI shows one ContentDialog at a time, and the editor asks its
 // delete over itself. Every rule and the editor's state are the core's EntryEditor (Editor.Open, watched as
 // Watched.Editor): this draws EditorShown and sends each edit (Editor.Change), which the core applies in the order sent.

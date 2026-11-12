@@ -14,7 +14,7 @@ license = "AGPL-3.0-only"
 # AdwSidebar, the shell's sidebar.
 gtk = { package = "gtk4", version = "0.11", features = ["v4_20"] }
 adw = { package = "libadwaita", version = "0.9", features = ["v1_9"] }
-# A receipt's PDF (D4 of the Expenses CR): poppler-glib's bindings, kept in GNOME's World/Rust group beside gtk-rs
+# A receipt's PDF (ADR 0123's Consequences, Expenses whole): poppler-glib's bindings, kept in GNOME's World/Rust group beside gtk-rs
 # (0.26.0 of 2026-02-21 on crates.io, its repository active, measured 2026-11-12); it binds the glib and cairo gtk4 0.11 uses.
 # v0_82: `Document::from_bytes` (a document over the bytes in memory); Fedora 44 carries poppler-glib 26.01.
 poppler = { package = "poppler-rs", version = "0.26", features = ["v0_82"] }

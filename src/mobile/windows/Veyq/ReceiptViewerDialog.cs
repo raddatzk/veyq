@@ -1,4 +1,4 @@
-// A receipt opened (the web's ReceiptViewer; Linux's receipt_viewer.rs; D4 of the Expenses CR), Fluent's way: a
+// A receipt opened (the web's ReceiptViewer; Linux's receipt_viewer.rs; ADR 0123's Consequences, Expenses whole), Fluent's way: a
 // ContentDialog titled with the receipt's name — the editor is a page, so this is the one dialog open —, the receipt in
 // its ScrollViewer, "Save a copy" its primary button and Close its close button. The bytes come beside the answer
 // (Receipt.Open, ADR 0128) and are shown from memory, never written to disk: a picture decoded by WIC (BitmapImage), a

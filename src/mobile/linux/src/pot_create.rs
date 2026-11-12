@@ -1,4 +1,4 @@
-//! "New pot" from New (the web's `PotCreateDialog.vue`; D5 of the Expenses CR), GNOME's way: an `AdwDialog` with Cancel
+//! "New pot" from New (the web's `PotCreateDialog.vue`; ADR 0123's Consequences, Expenses whole), GNOME's way: an `AdwDialog` with Cancel
 //! and Create (the suggested action) in its header bar, the name an `AdwEntryRow`, the space and the base currency
 //! `AdwComboRow`s (the currency with search; the space only where there is more than one), the people a boxed list with
 //! a remove button each, a name typed added through an `AdwEntryRow` with apply, the space's members by their row's add

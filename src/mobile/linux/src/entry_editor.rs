@@ -1,4 +1,4 @@
-//! The entry editor (the web's `EntryEditor.vue` and `EntrySplit.vue`; D5 of the Expenses CR), GNOME's way: an `AdwDialog`
+//! The entry editor (the web's `EntryEditor.vue` and `EntrySplit.vue`; ADR 0123's Consequences, Expenses whole), GNOME's way: an `AdwDialog`
 //! holding an `AdwNavigationView` — the form, a split's page, the entry's history. Every rule and the editor's state are
 //! the core's `EntryEditor` (`Editor.Open`, watched as `Watched.Editor`): this draws `EditorShown` and sends each edit
 //! (`Editor.Change`), which the core applies in the order it was sent.

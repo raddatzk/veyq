@@ -49,7 +49,7 @@ pub fn open(parent: &impl IsA<gtk::Widget>, pot: i64, entry: &str, title: &str, 
     load(&inner, pot, entry, said);
 }
 
-/// Entry [entry]'s history in Pot [pot] as a page of the entry editor's navigation (D5 of the Expenses CR); [toasts] the
+/// Entry [entry]'s history in Pot [pot] as a page of the entry editor's navigation (ADR 0123's Consequences, Expenses whole); [toasts] the
 /// editor's.
 pub fn page(pot: i64, entry: &str, toasts: &adw::ToastOverlay) -> adw::NavigationPage {
     let content = gtk::Box::new(gtk::Orientation::Vertical, 18);

@@ -1,4 +1,4 @@
-// A Pot's Settings place (the web's SettingsPanel.vue and PeoplePanel.vue; D5 of the Expenses CR), Fluent's way and
+// A Pot's Settings place (the web's SettingsPanel.vue and PeoplePanel.vue; ADR 0123's Consequences, Expenses whole), Fluent's way and
 // editable in place, Linux's pot_settings.rs: every rule is the core's PotSettings (PotSettings.Open, watched as
 // Watched.PotSettings); what may be changed and done to whom arrives in PotSettingsShown, each change is a call answered
 // once its write ended (Answer.Stored: stored — the box is emptied —, or why not, said under the CommandBar).

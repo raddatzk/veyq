@@ -750,7 +750,7 @@ internal class CreatePerson(val name: String, val member: Boolean)
 /**
  * An entry editor as the host draws it (core's `EntryEditor.State` and its form, `EntryForm`), each field one core
  * function's answer; every typed text is the text typed (the core keeps strings), so a host sets a field from it only
- * when the field is not being typed into or the text is not one it sent (D5 of the Expenses CR).
+ * when the field is not being typed into or the text is not one it sent (ADR 0123's Consequences, Expenses whole).
  *
  * - [isNew] (no history, no delete), [editable] (false: a reader's, read only), [invalid] (the entry does not add up);
  * - the form: [kind], [title] (a transfer's note), [date] (`yyyy-MM-dd`), [category] among [categories] (each with its

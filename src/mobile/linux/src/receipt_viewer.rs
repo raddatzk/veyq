@@ -1,4 +1,4 @@
-//! A receipt opened (the web's `ReceiptViewer`; D4 of the Expenses CR), GNOME's way: an `AdwDialog` with the receipt's
+//! A receipt opened (the web's `ReceiptViewer`; ADR 0123's Consequences, Expenses whole), GNOME's way: an `AdwDialog` with the receipt's
 //! name, Save a copy in its header bar and the receipt below. Its bytes come beside the answer (`Receipt.Open`, ADR 0128)
 //! and are shown from memory, never written to disk: a picture decoded by GTK (`gdk::Texture::from_bytes`, glycin's
 //! loaders), a PDF by GNOME's own PDF stack (poppler-glib through poppler-rs, from the bytes; each page rendered onto a

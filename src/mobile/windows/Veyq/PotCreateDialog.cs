@@ -1,4 +1,4 @@
-// "New pot" from New (the web's PotCreateDialog.vue; D5 of the Expenses CR), Fluent's way and Linux's pot_create.rs: a
+// "New pot" from New (the web's PotCreateDialog.vue; ADR 0123's Consequences, Expenses whole), Fluent's way and Linux's pot_create.rs: a
 // ContentDialog — the name a TextBox, the space (only where there is more than one) and the base currency ComboBoxes, the
 // people a list with a Remove button each, a name typed added through a TextBox and its button, the space's members by
 // their row's button; Create its primary button, Cancel its close button. Every rule is the core's PotCreateSheet

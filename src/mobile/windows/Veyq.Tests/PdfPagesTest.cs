@@ -7,7 +7,7 @@ using Windows.Graphics.Imaging;
 
 namespace Veyq.Tests;
 
-/// <summary>A receipt's PDF through Windows.Data.Pdf in an unpackaged process (D4 of the Expenses CR, its Phase 5 spike):
+/// <summary>A receipt's PDF through Windows.Data.Pdf in an unpackaged process (ADR 0123's Consequences, Expenses whole: measured before any other code):
 /// opened from memory, a page rendered to a PNG at the width asked, its drawing where the PDF put it.</summary>
 [TestClass]
 public sealed class PdfPagesTest

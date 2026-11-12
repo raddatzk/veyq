@@ -1,4 +1,4 @@
-// A receipt's PDF drawn by Windows' own renderer (D4 of the Expenses CR): Windows.Data.Pdf, part of the Windows SDK the app
+// A receipt's PDF drawn by Windows' own renderer (ADR 0123's Consequences, Expenses whole): Windows.Data.Pdf, part of the Windows SDK the app
 // builds against, reached by an unpackaged app (PdfPagesTest, an unpackaged process, renders one). The document opens
 // from the decrypted bytes in memory, never from a file; each page renders to a PNG in memory, which the viewer decodes
 // as a BitmapImage. How many pages are rendered is the core's (Receipt.Pages: Receipts.pagesShown).
