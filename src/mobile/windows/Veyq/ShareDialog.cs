@@ -51,14 +51,19 @@ internal sealed class ShareDialog
     private ShareDialog(Window window) => _window = window;
 
     /// <summary>Opens the share sheet of <paramref name="node"/> over <paramref name="window"/>.</summary>
-    public static void Open(Window window, NodeAt node) => new ShareDialog(window).Show(node);
+    public static void Open(Window window, NodeAt node) => new ShareDialog(window).Show(node.name, new Call.ShareOpen { node = node });
 
-    private async void Show(NodeAt node)
+    /// <summary>Opens the share of space <paramref name="scopeId"/>'s top level over <paramref name="window"/>: "Add files
+    /// only" alone, its form at once; the dialog closes once its form does (ShareShown.atTopLevel).</summary>
+    public static void OpenTopLevel(Window window, string scopeId) =>
+        new ShareDialog(window).Show(Words.ShareRoleUploader(), new Call.ShareOpenTopLevel { scopeId = scopeId });
+
+    private async void Show(string title, Call open)
     {
         if (Dialogs.Open) return;
         var dialog = new ContentDialog
         {
-            Title = node.name,
+            Title = title,
             Content = new ScrollViewer { Content = _body, VerticalScrollBarVisibility = ScrollBarVisibility.Auto, Padding = new Thickness(0, 0, 16, 0) },
             CloseButtonText = Words.ShareDone(),
             DefaultButton = ContentDialogButton.Primary,
@@ -81,7 +86,7 @@ internal sealed class ShareDialog
         };
         _dialog = dialog;
         Draw();
-        Watch(node);
+        Watch(open);
         await Dialogs.Show(_window, dialog);
         _closed = true;
         _watch?.Dispose();
@@ -90,12 +95,12 @@ internal sealed class ShareDialog
         _id = null;
     }
 
-    private async void Watch(NodeAt node)
+    private async void Watch(Call open)
     {
         Answer answer;
         try
         {
-            (answer, _) = await Core.CallAsync(new Call.ShareOpen { node = node });
+            (answer, _) = await Core.CallAsync(open);
         }
         catch (Exception e)
         {
@@ -137,6 +142,12 @@ internal sealed class ShareDialog
             return;
         }
         dialog.Title = Said.Key(s.title);
+        // the top level's share is its form alone: once the form or the address shown closed, so does the sheet
+        if (s.atTopLevel && s.freshAddress is null && s.form is null)
+        {
+            dialog.Hide();
+            return;
+        }
         if (s.freshAddress is { } fresh)
         {
             _formOf = null;

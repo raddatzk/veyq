@@ -54,14 +54,19 @@ internal sealed class MoveDialog
 
     /// <summary>Opens the move (<paramref name="copy"/> false) or copy sheet of <paramref name="node"/> over
     /// <paramref name="window"/>, saying what it did in <paramref name="bar"/>.</summary>
-    public static void Open(Window window, NodeAt node, bool copy, InfoBar? bar) => new MoveDialog(window, bar).Show(node, copy);
+    public static void Open(Window window, NodeAt node, bool copy, InfoBar? bar) =>
+        new MoveDialog(window, bar).Show(node.name, copy, new Call.MoveOpen { node = node, copy = copy, deletedName = Words.PotDeletedPerson() });
 
-    private async void Show(NodeAt node, bool copy)
+    /// <summary>Opens the sheet <paramref name="open"/> opens in the core (answered MoveOpened: a drop box's
+    /// DropBox.MoveOut), a move, titled <paramref name="name"/> while it reads.</summary>
+    public static void OpenWith(Window window, string name, Call open, InfoBar? bar) => new MoveDialog(window, bar).Show(name, false, open);
+
+    private async void Show(string name, bool copy, Call open)
     {
         if (Dialogs.Open) return;
         var dialog = new ContentDialog
         {
-            Title = node.name,
+            Title = name,
             Content = new ScrollViewer { Content = _body, VerticalScrollBarVisibility = ScrollBarVisibility.Auto, Padding = new Thickness(0, 0, 16, 0) },
             PrimaryButtonText = copy ? Words.CopySubmit() : Words.MoveSubmit(),
             IsPrimaryButtonEnabled = false,
@@ -77,19 +82,19 @@ internal sealed class MoveDialog
         };
         _dialog = dialog;
         Draw();
-        Watch(node, copy);
+        Watch(open);
         await Dialogs.Show(_window, dialog);
         _closed = true;
         // a move's Undo standing keeps the sheet in the core until its offer ends
         if (!_undoing) End();
     }
 
-    private async void Watch(NodeAt node, bool copy)
+    private async void Watch(Call open)
     {
         Answer answer;
         try
         {
-            (answer, _) = await Core.CallAsync(new Call.MoveOpen { node = node, copy = copy, deletedName = Words.PotDeletedPerson() });
+            (answer, _) = await Core.CallAsync(open);
         }
         catch (Exception e)
         {

@@ -3,7 +3,7 @@
 // thresholds), holding the one switcher (spaces and tenants; the signed-in member's picture beside them) as its header,
 // Search as its AutoSuggestBox (Ctrl+E, Ctrl+F), Home, Favorites, Recent and the applications as its items, and Settings
 // at its foot. The content shows what the core's shell says is open — Home, an application's list, a Pot, a file
-// (FilePage), or an object this app does not draw yet — under its title and a CommandBar whose first command is New; an
+// (FilePage), a drop box (DropBoxPage), or an object this app does not draw yet — under its title and a CommandBar whose first command is New; an
 // open Pot's Download is among its secondary commands (the bar's own More), an InfoBar under the bar says how a download
 // went, and another follows a file's Save a copy with its progress and Cancel. A list keeps where it was scrolled to when
 // the shell draws it anew — after an object opened from it closed, after an update — by its place (ListScrolls).
@@ -44,6 +44,7 @@ internal sealed class ShellView
     private readonly Uploads _uploads;
     private readonly ListScrolls _scrolls = new();
     private FilePage? _file;
+    private DropBoxPage? _dropBox;
     private readonly Window _window;
     private readonly ContentControl _body;
     private readonly NavigationViewItem _settings;
@@ -176,15 +177,15 @@ internal sealed class ShellView
         };
         _nav.BackRequested += (_, _) => Act.Send(new Call.ShellBack());
 
-        // F5 and Ctrl+R refresh an open Pot (its CommandBar's Refresh), as Explorer and Edge refresh
+        // F5 and Ctrl+R refresh an open Pot (its CommandBar's Refresh), else the shell's lists, as Explorer and Edge refresh
         foreach (var (key, modifiers) in new[] { (VirtualKey.F5, VirtualKeyModifiers.None), (VirtualKey.R, VirtualKeyModifiers.Control) })
         {
             var accelerator = new KeyboardAccelerator { Key = key, Modifiers = modifiers };
             accelerator.Invoked += (_, e) =>
             {
-                if (_pot is not { } pot) return;
                 e.Handled = true;
-                pot.Refresh();
+                if (_pot is { } pot) pot.Refresh();
+                else RefreshLists();
             };
             _nav.KeyboardAccelerators.Add(accelerator);
         }
@@ -461,6 +462,8 @@ internal sealed class ShellView
             _pot.Places(shown.tabs, shown.selectedTab);
             _file?.Dispose();
             _file = null;
+            _dropBox?.Dispose();
+            _dropBox = null;
             body = _pot.Page;
         }
         else if (shell.openObject is { kind: "FILE" } file)
@@ -468,6 +471,8 @@ internal sealed class ShellView
             if (_pot is not null) _said.IsOpen = false;
             _pot?.Dispose();
             _pot = null;
+            _dropBox?.Dispose();
+            _dropBox = null;
             var node = new NodeAt { scopeId = file.scopeId, nodeId = file.nodeId, kind = file.kind, name = file.name };
             if (_file is null || _file.Node != node)
             {
@@ -477,6 +482,21 @@ internal sealed class ShellView
             }
             body = _file.Page;
         }
+        else if (shell.openObject is { kind: "DEPOT_DROPBOX" } box)
+        {
+            if (_pot is not null) _said.IsOpen = false;
+            _pot?.Dispose();
+            _pot = null;
+            _file?.Dispose();
+            _file = null;
+            var node = new NodeAt { scopeId = box.scopeId, nodeId = box.nodeId, kind = box.kind, name = box.name };
+            if (_dropBox is null || _dropBox.Node != node)
+            {
+                _dropBox?.Dispose();
+                _dropBox = new DropBoxPage(_window, node, _said);
+            }
+            body = _dropBox.Page;
+        }
         else
         {
             if (_pot is not null) _said.IsOpen = false;
@@ -484,6 +504,8 @@ internal sealed class ShellView
             _pot = null;
             _file?.Dispose();
             _file = null;
+            _dropBox?.Dispose();
+            _dropBox = null;
             if (shell.openObject is { } other) body = NotBuilt(other);
             else
             {
@@ -543,6 +565,14 @@ internal sealed class ShellView
         if (page is { CanAdd: true }) _commands.PrimaryCommands.Add(CreateAction.Button(Words.PotAdd(), "pot-add", page.AddEntry));
         // the upload queue while it lists anything
         if (_uploads.Button is { } uploads) _commands.PrimaryCommands.Add(uploads);
+        // a space's top level is no link's root: its share offers "Add files only" alone (the web's level share)
+        if (shown.topLevelShare && _state?.shell.space is { } space)
+        {
+            var share = new AppBarButton { Icon = new SymbolIcon(Symbol.Share), Label = Words.ShareRoleUploader() };
+            AutomationProperties.SetAutomationId(share, "top-share");
+            share.Click += (_, _) => ShareDialog.OpenTopLevel(_window, space);
+            _commands.PrimaryCommands.Add(share);
+        }
         if (_header is null) return;
         var file = _file;
         var (primary, secondary) = _header.Commands(() =>
@@ -563,7 +593,29 @@ internal sealed class ShellView
             refresh.Click += (_, _) => page.Refresh();
             _commands.PrimaryCommands.Add(refresh);
         }
+        else if (_dropBox is not null)
+        {
+            // a drop box's Refresh: the shell's lists read anew, so a guest's new folder shows (F5 and Ctrl+R too)
+            var refresh = new AppBarButton { Icon = new SymbolIcon(Symbol.Refresh), Label = Words.PotRefresh() };
+            AutomationProperties.SetAutomationId(refresh, "refresh");
+            refresh.Click += (_, _) => RefreshLists();
+            _commands.PrimaryCommands.Add(refresh);
+        }
         foreach (var c in secondary) _commands.SecondaryCommands.Add(c);
+    }
+
+    /// <summary>The shell's lists read anew from the server (Shell.Refresh): a drop box's page, Home's level and every list follow.</summary>
+    private static async void RefreshLists()
+    {
+        try
+        {
+            var (answer, _) = await Core.CallAsync(new Call.ShellRefresh());
+            Log.Write($"Shell.Refresh: {answer.GetType().Name}");
+        }
+        catch (Exception e)
+        {
+            Log.Write($"Shell.Refresh failed ({e.GetType().Name})");
+        }
     }
 
     /// <summary>The level shown, where New's uploads go: its space, the folder there (null: its top), the batch's label.</summary>
