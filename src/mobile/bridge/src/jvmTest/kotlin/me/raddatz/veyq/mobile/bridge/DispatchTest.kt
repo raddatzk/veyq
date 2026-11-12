@@ -1057,7 +1057,7 @@ class DispatchTest {
      * deleted whose receipts stay until [purgeAfter]; each poll, refresh and write recorded. A poll answers "moved" with a
      * lunch added, or — once [hold] is set — waits until it is cancelled, which [pollCancelled] records.
      */
-    private class PlayedPot(val purgeAfter: Long) : me.raddatz.veyq.mobile.expenses.PotModel.Opened {
+    private class PlayedPot(val purgeAfter: Long, val receipts: Map<String, ByteArray> = emptyMap()) : me.raddatz.veyq.mobile.expenses.PotModel.Opened {
         val polls = java.util.concurrent.atomic.AtomicInteger()
         val refreshes = java.util.concurrent.atomic.AtomicInteger()
         val ops = java.util.concurrent.CopyOnWriteArrayList<me.raddatz.veyq.mobile.expenses.PotModel.Op>()
@@ -1066,7 +1066,7 @@ class DispatchTest {
         val pollCancelled = kotlinx.coroutines.CompletableDeferred<Unit>()
         @Volatile var lunch = false
         override val session: me.raddatz.veyq.mobile.expenses.PotSession? = null
-        override fun view() = potView(purgeAfter, lunch)
+        override fun view() = potView(purgeAfter, lunch, receipts.keys)
         override suspend fun poll(): Boolean {
             polls.incrementAndGet()
             if (hold) {
@@ -1077,7 +1077,9 @@ class DispatchTest {
         }
         override suspend fun refresh() { refreshes.incrementAndGet() }
         override suspend fun rekeyed() {}
-        override fun newId() = "new"
+        private val minted = java.util.concurrent.atomic.AtomicInteger()
+        /** "new" first (a new entry's record), then "new-1", "new-2", … (each receipt picked). */
+        override fun newId() = minted.getAndIncrement().let { if (it == 0) "new" else "new-$it" }
         override suspend fun write(op: me.raddatz.veyq.mobile.expenses.PotModel.Op) = outcome.also { ops += op }
 
         /** The editor's saves (record, form, revision based on) and deletes, as they reached the Pot; a save waits for [saveGate]. */
@@ -1085,22 +1087,27 @@ class DispatchTest {
         val deletes = java.util.concurrent.CopyOnWriteArrayList<Pair<String, Long>>()
         val rates = java.util.concurrent.CopyOnWriteArrayList<Pair<String, String>>()
         @Volatile var saveGate: kotlinx.coroutines.CompletableDeferred<Unit>? = null
+        /** The receipts each save was handed to upload, and the names the next save says it left out for want of room. */
+        val uploads = java.util.concurrent.CopyOnWriteArrayList<List<me.raddatz.veyq.mobile.expenses.PotSession.PendingReceipt>>()
+        @Volatile var skipped: List<String> = emptyList()
+        override suspend fun openReceipt(receiptId: String): ByteArray? = receipts[receiptId]
         override suspend fun saveEntry(
             entryId: String, form: me.raddatz.veyq.mobile.expenses.EntryForm, basedOn: Long?,
             pending: List<me.raddatz.veyq.mobile.expenses.PotSession.PendingReceipt>, own: Set<String>,
         ): me.raddatz.veyq.mobile.expenses.EntryEditor.Written {
             saveGate?.await()
             saves += Triple(entryId, form, basedOn)
-            return me.raddatz.veyq.mobile.expenses.EntryEditor.Written(outcome)
+            uploads += pending
+            return me.raddatz.veyq.mobile.expenses.EntryEditor.Written(outcome, skipped, pending.map { it.id })
         }
         override suspend fun deleteEntry(entryId: String, basedOn: Long) = outcome.also { deletes += entryId to basedOn }
         override suspend fun rateFor(currency: String, day: String) =
             me.raddatz.veyq.mobile.expenses.ExchangeRates.Filled("1.082954", "2026-11-11").also { rates += currency to day }
     }
 
-    private fun bridgeWithPot(pot: PlayedPot, clock: java.util.concurrent.atomic.AtomicLong, opened: kotlinx.coroutines.CompletableDeferred<Unit>) = Bridge {
+    private fun bridgeWithPot(pot: PlayedPot, clock: java.util.concurrent.atomic.AtomicLong, opened: kotlinx.coroutines.CompletableDeferred<Unit>, files: DeviceFiles = JvmFiles) = Bridge {
         val hidden = Hidden({}, emptySet())
-        Composition(SessionModel(Door(), hidden, RecentUses({}, emptyList())), hidden) { _ ->
+        Composition(SessionModel(Door(), hidden, RecentUses({}, emptyList())), hidden, files) { _ ->
             Tenant(shell = null, pot = { me.raddatz.veyq.mobile.expenses.PotModel({ clock.get() }) { opened.await(); pot } }, me = "u1", pictures = pictures, loadPictures = {})
         }
     }
@@ -1289,6 +1296,90 @@ class DispatchTest {
         b.shutdown()
     }
 
+    /**
+     * An entry's receipts through calls (ADR 0128): files added by the paths an open dialog gave — one that does not open,
+     * one too large, one that is no receipt refused, the 101st refused —, one taken off, the save handed what was picked
+     * and saying what a full storage left out; a kept receipt opened as bytes beside the JSON with what they are, a PDF's
+     * page cap, and a receipt saved to a path (nothing left there when it does not open or the file does not write).
+     */
+    @Test
+    fun aReceiptIsAddedByPathOpenedAndSavedThroughCalls() = runBlocking {
+        val noon = 1_794_484_800_000L // 2026-11-12T12:00:00Z
+        val jpeg = byteArrayOf(0xFF.toByte(), 0xD8.toByte(), 0xFF.toByte(), 0xE0.toByte(), 0, 0x10, 'J'.code.toByte(), 'F'.code.toByte(), 'I'.code.toByte(), 'F'.code.toByte(), 0, 1)
+        val pot = PlayedPot(purgeAfter = noon + 86_400_000, receipts = mapOf("kept" to jpeg))
+        // what the core asks the device to read of a picked file at most
+        val asked = java.util.concurrent.CopyOnWriteArrayList<Int>()
+        val files = object : DeviceFiles by JvmFiles {
+            override suspend fun read(path: String, most: Int): ByteArray = JvmFiles.read(path, most.also { asked += it })
+        }
+        val b = bridgeWithPot(pot, java.util.concurrent.atomic.AtomicLong(noon), kotlinx.coroutines.CompletableDeferred(Unit), files)
+        b.signedIn()
+        val potId = (b.ask(Call.PotOpen(ObjectRef("s", "p", "EXPENSES_POT", ApplicationId.EXPENSES, "Trip"))) as Answer.PotOpened).pot
+        b.watching(Watched.Pot(potId)).untilJson { u -> (u["state"] as? kotlinx.serialization.json.JsonObject)?.get("view")?.takeIf { it is kotlinx.serialization.json.JsonObject } }
+        suspend fun shownNow(editor: Long): EditorShown = b.watching(Watched.Editor(editor)).let { w -> (w.next() as Update.Editor).shown!!.also { b.unwatch(w.id) } }
+        val dir = kotlin.io.path.createTempDirectory("veyq-receipts").toFile()
+        try {
+            fun file(name: String, bytes: ByteArray) = java.io.File(dir, name).also { it.writeBytes(bytes) }.path
+            val photo = file("Quittung März.jpg", jpeg)
+            val notes = file("notes.jpg", "Total 12.34".encodeToByteArray())
+            val large = java.io.File(dir, "large.pdf").also { f ->
+                java.io.RandomAccessFile(f, "rw").use { it.write("%PDF-1.7\n".encodeToByteArray()); it.setLength(me.raddatz.veyq.mobile.expenses.Receipts.MAX_BYTES + 1) }
+            }.path
+
+            // the entry's kept receipt: listed by its name, opened as its bytes with what they are, a PDF's page cap
+            val id = (b.ask(Call.EditorOpen(potId, DINNER, ",")) as Answer.EditorOpened).editor
+            val first = shownNow(id)
+            assertEquals(listOf(EditorReceipt("kept", "kept.jpg", held = false, opens = true)).map { listOf(it.id, it.name, it.held, it.opens) }, first.receipts.map { listOf(it.id, it.name, it.held, it.opens) })
+            assertTrue(first.canAddReceipt && !first.refusedPick)
+            val (opened, bytes) = b.askWithPayload(Call.ReceiptOpen(potId, "kept"))
+            assertEquals(Answer.Bytes("image/jpeg"), opened)
+            assertTrue(jpeg.contentEquals(bytes), "the payload is not the receipt's bytes")
+            assertEquals(Answer.Refused(Answer.Why.NO_RECEIPT), b.ask(Call.ReceiptOpen(potId, "nowhere")))
+            assertEquals(Answer.ReceiptPages(20, me.raddatz.veyq.mobile.words.Notice(Msg.RECEIPTS_PAGES_CUT, 20, 25)), b.ask(Call.ReceiptPages(25)))
+            assertEquals(Answer.ReceiptPages(3, null), b.ask(Call.ReceiptPages(3)))
+
+            // saved to the path a save dialog gave; nothing left at a path when the receipt does not open or the file not write
+            val saved = java.io.File(dir, "saved.jpg")
+            assertEquals(Answer.Done, b.ask(Call.ReceiptSave(potId, "kept", saved.path)))
+            assertTrue(jpeg.contentEquals(saved.readBytes()), "the saved file is not the receipt")
+            val none = java.io.File(dir, "none.jpg")
+            assertEquals(Answer.Refused(Answer.Why.NO_RECEIPT), b.ask(Call.ReceiptSave(potId, "nowhere", none.path)))
+            assertTrue(!none.exists(), "a receipt that did not open left a file")
+            assertEquals(Answer.Refused(Answer.Why.NOT_WRITTEN), b.ask(Call.ReceiptSave(potId, "kept", java.io.File(dir, "no/such/dir.jpg").path)))
+
+            // picked by path: the picture taken under its name, a path that does not open, bytes that are no receipt and a
+            // file past the cap refused (never read whole)
+            assertEquals(Answer.Done, b.ask(Call.EditorAddReceipts(id, listOf(photo, java.io.File(dir, "gone.jpg").path, notes, large))))
+            val picked = shownNow(id)
+            assertEquals(listOf("kept.jpg" to false, "Quittung März.jpg" to true), picked.receipts.map { it.name to it.held })
+            assertTrue(picked.refusedPick, "a refused file was not said")
+            assertEquals(setOf(me.raddatz.veyq.mobile.expenses.Receipts.MAX_BYTES.toInt()), asked.toSet(), "a picked file was read past a receipt's size")
+            // up to a hundred held; the 101st refused
+            assertEquals(Answer.Done, b.ask(Call.EditorAddReceipts(id, List(98) { photo })))
+            val full = shownNow(id)
+            assertEquals(100, full.receipts.size)
+            assertTrue(!full.refusedPick && !full.canAddReceipt)
+            assertEquals(Answer.Done, b.ask(Call.EditorAddReceipts(id, listOf(photo))))
+            val over = shownNow(id)
+            assertEquals(100 to true, over.receipts.size to over.refusedPick)
+
+            // taken off: a picked one forgotten, the kept one dropped by the save, applied before the save that follows
+            val held = over.receipts.filter { it.held }
+            b.call(wire.encodeToString(Call.serializer(), Call.EditorDropReceipt(id, held.first().id))) { _, _ -> }
+            b.call(wire.encodeToString(Call.serializer(), Call.EditorDropReceipt(id, "kept"))) { _, _ -> }
+            pot.skipped = listOf("Quittung März.jpg")
+            assertEquals(Answer.EditorSaved(true, me.raddatz.veyq.mobile.words.Notices.receiptsSkipped(listOf("Quittung März.jpg"))), b.ask(Call.EditorSave(id)))
+            assertEquals(emptyList(), pot.saves.single().second.receipts, "the kept receipt taken off is still kept")
+            val uploaded = pot.uploads.single()
+            assertEquals(held.drop(1).map { it.id }, uploaded.map { it.id })
+            assertEquals("Quittung März.jpg" to "image/jpeg", uploaded.first().name to uploaded.first().type)
+            assertEquals(Answer.Refused(Answer.Why.NO_SUCH_EDITOR), b.ask(Call.EditorAddReceipts(99, listOf(photo))))
+        } finally {
+            dir.deleteRecursively()
+        }
+        b.shutdown()
+    }
+
     @Test
     fun aCoversCutIsTheCoresPixels() = runBlocking {
         val b = bridge()
@@ -1383,10 +1474,11 @@ class DispatchTest {
         const val LUNCH = "0e000000-0000-4000-9000-000000000003"
 
         /** The played Pot's view, as `PotFixture` builds one in the core's tests: from revisions the test writes. */
-        fun potView(purgeAfter: Long, lunch: Boolean): me.raddatz.veyq.mobile.expenses.PotView {
+        fun potView(purgeAfter: Long, lunch: Boolean, receipts: Set<String> = emptySet()): me.raddatz.veyq.mobile.expenses.PotView {
             val base = me.raddatz.veyq.mobile.expenses.Ledger.BaseCurrency("EUR", 2)
+            // the dinner keeps every receipt the Pot holds
             fun expense(title: String, amount: Long) = me.raddatz.veyq.mobile.expenses.Expense(
-                title, "food", "2026-07-01", "EUR", 2, "1", amount, emptyList(),
+                title, "food", "2026-07-01", "EUR", 2, "1", amount, if (title == "Dinner") receipts.sorted() else emptyList(),
                 listOf(me.raddatz.veyq.mobile.expenses.Contribution(ANNA, amount)),
                 me.raddatz.veyq.mobile.expenses.Allocation(emptyList(), me.raddatz.veyq.mobile.expenses.Split.Equal(listOf(ANNA, BEN))),
             )
@@ -1409,6 +1501,10 @@ class DispatchTest {
                     "Trip", me.raddatz.veyq.mobile.expenses.PotMeta(base, emptyList()), me.raddatz.veyq.mobile.expenses.Ledger.build(held, base),
                     me.raddatz.veyq.mobile.expenses.LedgerCheck.of(held), null, emptySet(), canWrite = true, currencyFixed = true, held = held,
                     ratesOffered = true,
+                    receipts = receipts.sorted().map { id ->
+                        val listed = me.raddatz.veyq.mobile.blob.ApplicationBlobs.Listed(id, DINNER, me.raddatz.veyq.mobile.expenses.Receipts.ROLE, "b-$id", 1, 10, "", null, null, 1_000L, 1_000L, null, null, false)
+                        me.raddatz.veyq.mobile.expenses.Receipts.Receipt(id, DINNER, listed, "$id.jpg", "image/jpeg", 10, 1_000L, dropped = false, blocked = false)
+                    },
                 ),
             )
         }

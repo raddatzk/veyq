@@ -121,6 +121,8 @@ class WireTest {
             Call.ReportOpen(me.raddatz.veyq.mobile.navigation.NodeAt("scope-1", "folder-1", "FOLDER", "Holidays")), Call.ReportClose(11), Call.ReportWhole(11, false),
             Call.ReportCategory(11, "ILLEGAL_CONTENT"), Call.ReportReason(11, "why"), Call.ReportGoodFaith(11, true), Call.ReportContact(11, "me@example.org"), Call.ReportSend(11),
             Call.EditorOpen(3, null, ","), Call.EditorOpen(3, "e1", "."), Call.EditorSave(12), Call.EditorAskDelete(12), Call.EditorDelete(12), Call.EditorCancelAsk(12), Call.EditorClose(12),
+            Call.EditorAddReceipts(12, listOf("/home/p/Bilder/Quittung März.jpg", "C:\\Users\\p\\scan.pdf")), Call.EditorDropReceipt(12, "r1"),
+            Call.ReceiptOpen(3, "r1"), Call.ReceiptPages(25), Call.ReceiptSave(3, "r1", "/home/p/Downloads/r1.jpg"),
             // every edit the editor takes
             Call.EditorChange(12, me.raddatz.veyq.mobile.expenses.EditorChange.Kind(me.raddatz.veyq.mobile.expenses.EntryForm.Kind.REFUND)), Call.EditorChange(12, me.raddatz.veyq.mobile.expenses.EditorChange.Day("2026-11-12")),
             Call.EditorChange(12, me.raddatz.veyq.mobile.expenses.EditorChange.Title("Museum")), Call.EditorChange(12, me.raddatz.veyq.mobile.expenses.EditorChange.Category("food")), Call.EditorChange(12, me.raddatz.veyq.mobile.expenses.EditorChange.Currency("CHF")),
@@ -151,6 +153,8 @@ class WireTest {
             Answer.Downloaded(false, Notice(Msg.DOWNLOAD_FAILED, listOf("Holidays")), null),
             Answer.EditorOpened(12), Answer.EditorSaved(true, Notice(Msg.RECEIPTS_NO_ROOM, listOf(Joined(listOf("a.jpg"), ", ")))), Answer.EditorSaved(false, null),
             Answer.Refused(Answer.Why.NO_SUCH_EDITOR),
+            Answer.ReceiptPages(20, Notice(Msg.RECEIPTS_PAGES_CUT, listOf(20, 25))), Answer.ReceiptPages(3, null),
+            Answer.Refused(Answer.Why.NO_RECEIPT), Answer.Refused(Answer.Why.NOT_WRITTEN),
         ),
         Update.serializer() to listOf(
             Update.Session(Gate.Starting), Update.Session(Gate.NeedsApp), Update.Session(Gate.SignIn(error = Msg.SIGNIN_ERROR_CREDENTIALS, server = "veyq.localhost:8080")),
@@ -204,13 +208,15 @@ class WireTest {
                 rest = EditorSplit(me.raddatz.veyq.mobile.expenses.EntryForm.Mode.SHARES, false, Notice(Msg.ED_SPLIT_ONLY, listOf("Anna")), listOf(EditorSplitPerson("p1", "Anna", true, "1")), null),
                 restIsWhole = false, preview = listOf(EditorShare("Anna", Piece.Money(3303, "EUR", 2), Piece.Money(2500, "EUR", 2)), EditorShare("Ben", null, Piece.Money(803, "EUR", 2))),
                 refusal = EditorRefusal(Notice(Msg.PROBLEM_ITEMS), "item", 0), saving = true, notice = Notice(Msg.ED_STALE), asking = true, done = false,
+                receipts = listOf(EditorReceipt("r1", "receipt.pdf", held = false, opens = true), EditorReceipt("r2", "Quittung März.jpg", held = true, opens = false)),
+                canAddReceipt = true, refusedPick = true,
             )),
             Update.Editor(13, EditorShown(
                 isNew = true, editable = false, invalid = false, kind = me.raddatz.veyq.mobile.expenses.EntryForm.Kind.TRANSFER, title = "", date = "2026-11-12",
                 category = "other", categories = emptyList(), currency = "EUR", currencies = emptyList(), base = "EUR", rate = "1", rateFill = null,
                 amount = "9", from = "p1", to = "p2", people = emptyList(), payers = emptyList(), canRemovePayer = false, canAddPayer = true,
                 total = Piece.Money(0, "EUR", 2), items = emptyList(), rest = null, restIsWhole = true, preview = emptyList(), refusal = EditorRefusal(Notice(Msg.PROBLEM_TRANSFER), null, null),
-                saving = false, notice = null, asking = false, done = true,
+                saving = false, notice = null, asking = false, done = true, receipts = emptyList(), canAddReceipt = false, refusedPick = false,
             )),
             Update.Editor(14, null),
             Update.Share(10, ShareShown(

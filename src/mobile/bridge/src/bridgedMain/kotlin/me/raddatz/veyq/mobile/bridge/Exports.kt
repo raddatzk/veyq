@@ -59,13 +59,23 @@ private object Files : DeviceFiles {
     override suspend fun read(path: String, most: Int): ByteArray {
         val source = FileSource(path, "", 0, null, null)
         try {
-            var out = ByteArray(0)
+            // the parts joined once at the end: a receipt of 10 MiB read by appending would copy it 160 times over
+            val parts = ArrayList<ByteArray>()
+            var size = 0L
             while (true) {
-                val part = source.read(out.size.toLong(), READ_STEP)
-                out += part
-                if (out.size > most) throw IllegalStateException("too large")
-                if (part.size < READ_STEP) return out
+                val part = source.read(size, READ_STEP)
+                parts += part
+                size += part.size
+                if (size > most) throw IllegalStateException("too large")
+                if (part.size < READ_STEP) break
             }
+            val out = ByteArray(size.toInt())
+            var at = 0
+            for (p in parts) {
+                p.copyInto(out, at)
+                at += p.size
+            }
+            return out
         } finally {
             source.close()
         }

@@ -198,6 +198,35 @@ internal sealed class Call {
     @Serializable @SerialName("Editor.Close") data class EditorClose(val editor: Long) : Call()
 
     /**
+     * Files picked as editor [editor]'s receipts by their [paths], as the host's open dialog gave them (ADR 0128 decision 3):
+     * the core opens each and reads at most `Receipts.MAX_BYTES` of it (nothing of its content crosses), names it by its
+     * path and types it by its bytes (`Receipts.picked`), and the editor holds each it takes until the save
+     * (`EntryEditor.addReceipts`); one it refuses — no image or PDF, too large, the 101st, a path that does not open —
+     * shows as [EditorShown.refusedPick]. Answered once read.
+     */
+    @Serializable @SerialName("Editor.AddReceipts") data class EditorAddReceipts(val editor: Long, val paths: List<String>) : Call()
+
+    /** Receipt [receipt] taken off editor [editor]'s entry (`EntryEditor.dropReceipt`), applied in the order called. */
+    @Serializable @SerialName("Editor.DropReceipt") data class EditorDropReceipt(val editor: Long, val receipt: String) : Call()
+
+    /**
+     * Receipt [receipt] of Pot [pot] opened to its bytes (`PotModel.openReceipt`), answered as [Answer.Bytes] with what the
+     * bytes are (`Receipts.mediaTypeOf`: an image's type, `application/pdf`, or null — a file only saved); refused
+     * `NO_RECEIPT` where it does not open (blocked, not held, not read). The host decodes it in memory, never from a file.
+     */
+    @Serializable @SerialName("Receipt.Open") data class ReceiptOpen(val pot: Long, val receipt: String) : Call()
+
+    /** How many of a PDF of [total] pages a viewer renders up front, and what it says under them ([Answer.ReceiptPages]). */
+    @Serializable @SerialName("Receipt.Pages") data class ReceiptPages(val total: Int) : Call()
+
+    /**
+     * Receipt [receipt] of Pot [pot] saved into the file at [path], which the host's save dialog gave (ADR 0128 decision 3:
+     * the core opens and writes it; nothing is left there on a failure): done, or refused `NO_RECEIPT` (it does not open)
+     * or `NOT_WRITTEN` (the file was not written).
+     */
+    @Serializable @SerialName("Receipt.Save") data class ReceiptSave(val pot: Long, val receipt: String, val path: String) : Call()
+
+    /**
      * Downloads Pot [pot] as the web's ZIP into the file at [path], which the host's save dialog gave (ADR 0128
      * decision 3: the core opens it and writes it; nothing of the file crosses). [deletedName] is the host's word for
      * an erased person (`pot_deleted_person`), which the CSV carries. [Answer.Done], or [Answer.Failed] with nothing
@@ -476,9 +505,14 @@ internal sealed class Answer {
      */
     @Serializable @SerialName("EditorSaved") data class EditorSaved(val done: Boolean, val notice: Notice?) : Answer()
 
+    /** A PDF viewer's pages ([Call.ReceiptPages]): how many it renders ([shown], `Receipts.pagesShown`) and what it says
+     *  under them when that is not all ([cut], `Receipts.pagesCut`). */
+    @Serializable @SerialName("ReceiptPages") data class ReceiptPages(val shown: Int, val cut: Notice?) : Answer()
+
     enum class Why {
         NOT_A_CALL, NO_TENANT_OPEN, NO_SUCH_CONNECTION, NO_SUCH_TENANT, NO_SUCH_POT, NO_SUCH_READER, NO_PICTURE, NOTHING_TO_DOWNLOAD,
         NO_SUCH_HEADER, NO_SUCH_TRASH, NO_SUCH_ROW, NO_SUCH_MOVE, NO_SUCH_SHARE, NO_SUCH_REPORT, NO_COVER, NO_SUCH_ENTRY, NO_SUCH_EDITOR,
+        NO_RECEIPT, NOT_WRITTEN,
 
         /** A change of trust (`TrustChange`): no offer to answer; the person cancelled the prompt; not enrolled; the
          *  password was not the account's. */
@@ -579,6 +613,8 @@ internal sealed class Update {
  *   `showsRest`; [restIsWhole] while there are no items);
  * - [people] offered; [preview], the shares in the base currency (`EntryEditor.State.preview`);
  * - [refusal] once a save was tried, at its field; [saving], [notice] (the last write's), [asking] (the delete), [done].
+ * - its [receipts] (the kept ones, then those picked), whether another may be picked ([canAddReceipt],
+ *   `EntryEditor.State.canAddReceipt`) and whether the last pick refused a file ([refusedPick]).
  */
 @Serializable
 @SerialName("EditorShown")
@@ -613,7 +649,17 @@ internal class EditorShown(
     val notice: Notice?,
     val asking: Boolean,
     val done: Boolean,
+    val receipts: List<EditorReceipt>,
+    val canAddReceipt: Boolean,
+    val refusedPick: Boolean,
 )
+
+/**
+ * One receipt of the entry edited: [id], the [name] it is listed and saved under (`Receipts.downloadName`); [held] — picked
+ * and not uploaded yet (uploaded with the save) — or kept; [opens]: a kept one the Pot holds and may open ([Call.ReceiptOpen]).
+ */
+@Serializable @SerialName("EditorReceipt")
+internal class EditorReceipt(val id: String, val name: String, val held: Boolean, val opens: Boolean)
 
 /** A category the editor offers: its id and its words. */
 @Serializable @SerialName("EditorChoice")

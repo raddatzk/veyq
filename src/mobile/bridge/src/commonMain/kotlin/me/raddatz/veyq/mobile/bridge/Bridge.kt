@@ -194,7 +194,11 @@ internal class Bridge<A : Connection, T : Any>(compose: () -> Composition<A, T>)
         val call = runCatching { wire.decodeFromString(Call.serializer(), request) }.getOrNull()
         // An editor's edit is applied here, on the host's thread, in the order the host called: launched, the edits of two
         // keystrokes could land the wrong way round, and the field would end on the first.
-        val edited = (call as? Call.EditorChange)?.let { c -> edit(c) }
+        val edited = when (call) {
+            is Call.EditorChange -> edit(call)
+            is Call.EditorDropReceipt -> editors[call.editor]?.model?.dropReceipt(call.receipt).done(Answer.Why.NO_SUCH_EDITOR)
+            else -> null
+        }
         scope.launch {
             var payload: ByteArray? = null
             val a = try {
@@ -322,6 +326,26 @@ internal class Bridge<A : Connection, T : Any>(compose: () -> Composition<A, T>)
             is Call.EditorDelete -> editors[call.editor]?.model?.let { e -> e.delete().let { Answer.EditorSaved(it, if (it) null else e.current.notice) } } ?: noEditor
             is Call.EditorCancelAsk -> editors[call.editor]?.model?.cancelAsk().done(Answer.Why.NO_SUCH_EDITOR)
             is Call.EditorClose -> editors.remove(call.editor)?.model?.close().done(Answer.Why.NO_SUCH_EDITOR)
+            is Call.EditorAddReceipts -> editors[call.editor]?.model?.let { e ->
+                // each file read by the core at the path given, never more than a receipt may hold
+                val picked = call.paths.map { path ->
+                    me.raddatz.veyq.mobile.expenses.Receipts.picked(path, runCatching { parts.files.read(path, me.raddatz.veyq.mobile.expenses.Receipts.MAX_BYTES.toInt()) }.getOrNull())
+                }
+                e.addReceipts(picked)
+                Answer.Done
+            } ?: noEditor
+            is Call.EditorDropReceipt -> editors[call.editor]?.model?.dropReceipt(call.receipt).done(Answer.Why.NO_SUCH_EDITOR)
+            is Call.ReceiptOpen -> pots[call.pot]?.let { pot ->
+                val bytes = pot.openReceipt(call.receipt) ?: return Answer.Refused(Answer.Why.NO_RECEIPT)
+                payload(bytes)
+                Answer.Bytes(me.raddatz.veyq.mobile.expenses.Receipts.mediaTypeOf(bytes))
+            } ?: noPot
+            is Call.ReceiptPages -> Answer.ReceiptPages(me.raddatz.veyq.mobile.expenses.Receipts.pagesShown(call.total), me.raddatz.veyq.mobile.expenses.Receipts.pagesCut(call.total))
+            is Call.ReceiptSave -> pots[call.pot]?.let { pot ->
+                val bytes = pot.openReceipt(call.receipt) ?: return Answer.Refused(Answer.Why.NO_RECEIPT)
+                val written = runCatching { parts.files.write(call.path) { sink -> sink(bytes); true } }.getOrDefault(false)
+                if (written) Answer.Done else Answer.Refused(Answer.Why.NOT_WRITTEN)
+            } ?: noPot
             is Call.PotDownload -> pots[call.pot]?.let { pot ->
                 val written = parts.files.write(call.path) { sink -> pot.download(call.deletedName, sink) != null }
                 if (written) Answer.Done else Answer.Refused(Answer.Why.NOTHING_TO_DOWNLOAD)
@@ -642,6 +666,11 @@ internal class Bridge<A : Connection, T : Any>(compose: () -> Composition<A, T>)
             preview = s.preview.map { EditorShare(it.name, it.given.takeIf { g -> g != 0L }?.let(::money), money(it.share)) },
             refusal = s.refusal?.let { EditorRefusal(Notice(Notices.entryProblem(it.problem)), it.at, it.item) },
             saving = s.saving, notice = s.notice, asking = s.asking, done = s.done,
+            receipts = f.receipts.map { id ->
+                val r = view?.receipt(id)
+                EditorReceipt(id, me.raddatz.veyq.mobile.expenses.Receipts.downloadName(r?.name, r?.type), held = false, opens = r != null && !r.blocked)
+            } + s.pending.map { EditorReceipt(it.id, it.name, held = true, opens = false) },
+            canAddReceipt = s.canAddReceipt, refusedPick = s.refusedPick,
         )
     }
 

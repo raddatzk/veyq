@@ -1015,6 +1015,208 @@ class LiveBridgeTest {
         b.shutdown()
     }
 
+    /**
+     * An entry's receipts through calls (ADR 0128) on an `App pot <n>` copy of Amsterdam: a JPEG and a PDF attached by the
+     * paths an open dialog would give, saved with the entry, read back from a fresh open, each opened (its payload's SHA-256
+     * the file's) and saved to a path and read back; the PDF taken off by an edit and gone. With
+     * `VEYQ_LIVE_RECEIPT_NO_ROOM=1` the tenant's quota is set to one byte (the seeded principal is the Server Owner; the
+     * admin listener is `VEYQ_ADMIN_BASE`, default `http://127.0.0.1:8090`, as `DepotLiveTest.aCopyOrAFolder*`'s
+     * `VEYQ_LIVE_STORAGE_FIT`) and put back however the run ends: an entry saved with a picture names it left out. The
+     * copy purged.
+     */
+    @Test
+    fun aReceiptIsAttachedShownAndSavedThroughCalls() = runBlocking {
+        val origin = System.getenv("VEYQ_LIVE") ?: return@runBlocking
+        val (b, first) = signedInLive(origin, "bridge live receipt test")
+        val dir = kotlin.io.path.createTempDirectory("veyq-live-receipts").toFile()
+        fun sha(bytes: ByteArray) = java.security.MessageDigest.getInstance("SHA-256").digest(bytes).joinToString("") { "%02x".format(it) }
+        try {
+            // a drawn JPEG and a two-page PDF, as a person's files
+            val jpeg = java.io.ByteArrayOutputStream().also { out ->
+                val img = java.awt.image.BufferedImage(320, 200, java.awt.image.BufferedImage.TYPE_INT_RGB)
+                img.createGraphics().apply { color = java.awt.Color(30, 90, 200); fillRect(0, 0, 160, 200); dispose() }
+                javax.imageio.ImageIO.write(img, "jpg", out)
+            }.toByteArray()
+            val photo = File(dir, "Live Quittung.jpg").also { it.writeBytes(jpeg) }
+            val scan = File(dir, "Live scan.pdf").also { it.writeBytes(pdfOf(2)) }
+            withAmsterdamCopy(b, first) { ref, reopen ->
+                var pot = reopen(null)
+                suspend fun open(entry: String?): Pair<Long, Watching> {
+                    val e = (b.ask(Call.EditorOpen(pot, entry, ".")) as Answer.EditorOpened).editor
+                    return e to b.watching(Watched.Editor(e))
+                }
+                suspend fun shown(w: Watching, pick: (EditorShown) -> Boolean = { true }) = w.until(1.minutes) { u -> (u as Update.Editor).shown?.takeIf(pick) }
+                suspend fun saved(e: Long) = b.ask(Call.EditorSave(e), timeout = 2.minutes) as Answer.EditorSaved
+                fun idOf(view: JsonObject, title: String) = view.getValue("entries").jsonArray.map { it.jsonObject.getValue("row").jsonObject }
+                    .firstOrNull { it["title"]?.takeIf { t -> t !is JsonNull }?.jsonPrimitive?.content == title }?.getValue("id")?.jsonPrimitive?.content
+
+                // attached by path, saved with the entry
+                val (ed, ew) = open(null)
+                b.ask(Call.EditorChange(ed, E.Title("Live receipts")))
+                b.ask(Call.EditorChange(ed, E.Paid(0, "4")))
+                assertEquals(Answer.Done, b.ask(Call.EditorAddReceipts(ed, listOf(photo.path, scan.path)), timeout = 1.minutes))
+                val picked = shown(ew) { it.receipts.size == 2 }
+                assertEquals(listOf("Live Quittung.jpg" to true, "Live scan.pdf" to true), picked.receipts.map { it.name to it.held })
+                assertTrue(!picked.refusedPick)
+                assertEquals(Answer.EditorSaved(true, null), saved(ed))
+                println("a JPEG and a PDF attached by path and saved with the entry")
+
+                // read back from a fresh open: both kept, each opened to its file's bytes and saved to a path
+                pot = reopen(pot)
+                val entry = assertNotNull(idOf(b.watching(Watched.Pot(pot)).untilJson(1.minutes) { u -> (u["state"] as? JsonObject)?.get("view") as? JsonObject }, "Live receipts"))
+                val (kept, kw) = open(entry)
+                val back = shown(kw) { it.receipts.size == 2 }
+                assertTrue(back.receipts.all { !it.held && it.opens }, "${back.receipts.map { it.name }} are not kept")
+                for ((file, type) in listOf(photo to "image/jpeg", scan to "application/pdf")) {
+                    val r = back.receipts.single { it.name == file.name }
+                    val (answer, bytes) = b.askWithPayload(Call.ReceiptOpen(pot, r.id), timeout = 1.minutes)
+                    assertEquals(Answer.Bytes(type), answer)
+                    assertEquals(sha(file.readBytes()), sha(bytes!!), "${file.name} opened to other bytes")
+                    val copy = File(dir, "saved-${file.name}")
+                    assertEquals(Answer.Done, b.ask(Call.ReceiptSave(pot, r.id, copy.path), timeout = 1.minutes))
+                    assertEquals(sha(file.readBytes()), sha(copy.readBytes()), "${file.name} saved as other bytes")
+                    println("${file.name}: opened as $type and saved, SHA-256 ${sha(bytes).take(16)}… both")
+                }
+
+                // the PDF taken off by an edit: gone from a fresh open
+                assertEquals(Answer.Done, b.ask(Call.EditorDropReceipt(kept, back.receipts.single { it.name == scan.name }.id)))
+                assertEquals(Answer.EditorSaved(true, null), saved(kept))
+                pot = reopen(pot)
+                b.watching(Watched.Pot(pot)).untilJson(1.minutes) { u -> (u["state"] as? JsonObject)?.get("view") as? JsonObject }
+                val (again, aw) = open(entry)
+                assertEquals(listOf(photo.name), shown(aw).receipts.map { it.name })
+                b.ask(Call.EditorClose(again))
+                println("the PDF taken off by an edit is gone")
+
+                // the space's storage full: the entry saved, the receipt named left out
+                if (System.getenv("VEYQ_LIVE_RECEIPT_NO_ROOM") != null) withOneByteQuota(origin, first.shown!!.tenant.tenantId) {
+                    val (nr, nw) = open(null)
+                    b.ask(Call.EditorChange(nr, E.Title("Live no room")))
+                    b.ask(Call.EditorChange(nr, E.Paid(0, "2")))
+                    assertEquals(Answer.Done, b.ask(Call.EditorAddReceipts(nr, listOf(photo.path))))
+                    shown(nw) { it.receipts.size == 1 }
+                    val full = saved(nr)
+                    assertEquals(
+                        Answer.EditorSaved(true, me.raddatz.veyq.mobile.words.Notices.receiptsSkipped(listOf(photo.name))), full,
+                        "the save under a full storage did not name the receipt left out",
+                    )
+                    println("under a one-byte quota: saved, ${full.notice}")
+                }
+            }
+        } finally {
+            dir.deleteRecursively()
+            b.shutdown()
+        }
+    }
+
+    /**
+     * The tenant's quota set to one byte for [body] on the admin listener (`VEYQ_ADMIN_BASE`), as the Server Owner the
+     * seeded principal is, and put back however [body] ends; a quota of exactly one byte found is taken for a run's own
+     * leftover (`DepotLiveTest.aCopyOrAFolder*`'s rule). The admin API is reached by a second sign-in's client: its
+     * bearer-carrying client is the core's, internal to it, so read by reflection — a test's reach, never the bridge's.
+     */
+    private suspend fun withOneByteQuota(origin: String, tenantId: String, body: suspend () -> Unit) {
+        val envFile = System.getenv("VEYQ_ENV_FILE")?.let(::File) ?: File(System.getProperty("veyq.repoRoot"), ".run/.env")
+        val env = envFile.readLines()
+            .mapNotNull { l -> l.substringBefore('=', "").takeIf { it.isNotBlank() }?.let { it.trim() to l.substringAfter('=').trim().trim('"', '\'') } }
+            .toMap()
+        val store = object : DeviceStore {
+            val values = ConcurrentHashMap<String, String>()
+            override fun read(key: String) = values[key]
+            override fun write(key: String, value: String) { values[key] = value }
+            override fun remove(key: String) { values.remove(key) }
+        }
+        val account = VeyqAccount.signIn(
+            BouncyCastlePrimitives, origin, env.getValue("VEYQ_EMAIL"), env.getValue("VEYQ_PASSWORD"), env.getValue("VEYQ_SECRET_KEY"),
+            ThisDevice(store, NoDeviceKeys, "bridge live receipt test, the Server Owner", BouncyCastlePrimitives),
+        ) { block -> HttpClient(OkHttp, block) }
+        val http = VeyqAccount::class.java.methods.single { it.name.startsWith("getHttp$") }.invoke(account) as HttpClient
+        val api = me.raddatz.veyq.mobile.api.apis.TenantsApi(System.getenv("VEYQ_ADMIN_BASE") ?: "http://127.0.0.1:8090", http)
+        val prior = api.getTenantStorage(tenantId).also { assertTrue(it.success, "the quota did not read: ${it.status}") }.body().quotaBytes?.takeIf { it != 1L }
+        suspend fun restore() = kotlinx.coroutines.withContext(kotlinx.coroutines.NonCancellable) {
+            val r = if (prior == null) api.clearTenantStorageQuota(tenantId) else api.setTenantStorageQuota(tenantId, me.raddatz.veyq.mobile.api.models.TenantStorageQuotaUpdate(prior))
+            println("the tenant's quota put back (${prior ?: "none"}): ${r.status}")
+        }
+        try {
+            assertTrue(api.setTenantStorageQuota(tenantId, me.raddatz.veyq.mobile.api.models.TenantStorageQuotaUpdate(1L)).success, "the quota was not set")
+            body()
+        } finally {
+            restore()
+        }
+    }
+
+    /**
+     * Amsterdam copied through the move sheet beside itself and renamed `App pot <n>`; [body] gets its ref and a reopen
+     * (closes the Pot id given, opens the copy afresh and answers its id); the copy is trashed and purged however it ends.
+     */
+    private suspend fun withAmsterdamCopy(b: Bridge<*, *>, first: Update.Shell, body: suspend (me.raddatz.veyq.mobile.navigation.ObjectRef, suspend (Long?) -> Long) -> Unit) {
+        val amsterdam = first.state!!.lists.objects.first { it.name == "Amsterdam" }
+        val scope = amsterdam.scopeId
+        val home = first.state.lists.nodes.first { it.nodeId == amsterdam.nodeId }.parentId
+        suspend fun fresh(): Update.Shell {
+            assertEquals(Answer.Done, b.ask(Call.ShellRefresh, timeout = 1.minutes))
+            return b.watching(Watched.Shell).next() as Update.Shell
+        }
+        fun nodes(u: Update.Shell) = u.state!!.lists.nodes.filter { it.scopeId == scope }
+        fun at(n: me.raddatz.veyq.mobile.navigation.NodeRef) = me.raddatz.veyq.mobile.navigation.NodeAt(n.scopeId, n.nodeId, n.kind, n.name)
+        val source = (b.ask(Call.PotOpen(amsterdam)) as Answer.PotOpened).pot
+        b.watching(Watched.Pot(source)).untilJson(1.minutes) { (it["state"] as? JsonObject)?.get("view") as? JsonObject }
+        val sheet = (b.ask(Call.MoveOpen(at(nodes(first).first { it.nodeId == amsterdam.nodeId }), true, "deleted person")) as Answer.MoveOpened).move
+        b.watching(Watched.Move(sheet)).until(2.minutes) { u -> (u as Update.Move).shown?.takeIf { it.loaded && it.losses.size > 1 } }
+        val copied = b.ask(Call.MoveHere(sheet), timeout = 3.minutes) as Answer.MoveSent
+        assertEquals(me.raddatz.veyq.mobile.words.Msg.COPY_DONE, copied.done?.msg, "${copied.problem}")
+        b.ask(Call.MoveClose(sheet))
+        b.ask(Call.PotClose(source))
+        val before = first.state.lists.nodes.map { it.nodeId }.toSet()
+        val copy = assertNotNull(nodes(fresh()).firstOrNull { it.kind == amsterdam.kind && it.parentId == home && it.nodeId !in before }, "the Pot's copy is not listed")
+        val name = "App pot ${System.currentTimeMillis() % 100_000}"
+        try {
+            val header = (b.ask(Call.HeaderOpen(at(copy), me.raddatz.veyq.mobile.AppKinds.Facts(), 2)) as Answer.HeaderOpened).header
+            b.watching(Watched.Header(header)).until { u -> (u as Update.Header).shown?.takeIf { it.plan != null } }
+            assertEquals(null, (b.ask(Call.HeaderRename(header, name), timeout = 1.minutes) as Answer.Renamed).problem)
+            b.ask(Call.HeaderClose(header))
+            println("copied Amsterdam as $name")
+            val ref = me.raddatz.veyq.mobile.navigation.ObjectRef(copy.scopeId, copy.nodeId, copy.kind, amsterdam.application, name)
+            body(ref) { open ->
+                open?.let { b.ask(Call.PotClose(it)) }
+                val pot = (b.ask(Call.PotOpen(ref)) as Answer.PotOpened).pot
+                b.watching(Watched.Pot(pot)).untilJson(1.minutes) { (it["state"] as? JsonObject)?.get("view") as? JsonObject }
+                pot
+            }
+        } finally {
+            val h = (b.ask(Call.HeaderOpen(at(copy), me.raddatz.veyq.mobile.AppKinds.Facts(), 2)) as Answer.HeaderOpened).header
+            println("trash $name: ${(b.ask(Call.HeaderTrash(h), timeout = 1.minutes) as? Answer.Trashed)?.notice?.msg}")
+            b.ask(Call.HeaderClose(h))
+            val t = (b.ask(Call.TrashOpen(scope)) as Answer.TrashOpened).trash
+            val tw = b.watching(Watched.Trash(t))
+            val trashed = tw.until(1.minutes) { u -> (u as Update.Trash).shown?.rows }
+            trashed.firstOrNull { it.id == copy.nodeId }?.let { row ->
+                val purged = b.ask(Call.TrashPurge(t, row.id), timeout = 1.minutes)
+                println("purge ${row.name}: $purged")
+                if (purged == Answer.Done) tw.until(1.minutes) { u -> (u as Update.Trash).shown?.takeIf { s -> s.busy == null && s.rows?.none { it.id == row.id } == true } }
+            }
+            b.ask(Call.TrashClose(t))
+            assertTrue(nodes(fresh()).none { it.nodeId == copy.nodeId }, "the copy was left")
+        }
+    }
+
+    /** A PDF of [pages] pages, 200 × 100 pt each, the left half of each filled black (as the Windows app's `PdfPagesTest`). */
+    private fun pdfOf(pages: Int): ByteArray {
+        val objects = mutableListOf("<< /Type /Catalog /Pages 2 0 R >>", "<< /Type /Pages /Kids [${(0 until pages).joinToString(" ") { "${3 + 2 * it} 0 R" }}] /Count $pages >>")
+        val draw = "0 0 0 rg 0 0 100 100 re f"
+        repeat(pages) { i ->
+            objects += "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 200 100] /Contents ${4 + 2 * i} 0 R >>"
+            objects += "<< /Length ${draw.length} >>\nstream\n$draw\nendstream"
+        }
+        val pdf = StringBuilder("%PDF-1.4\n")
+        val offsets = objects.mapIndexed { i, o -> pdf.length.also { pdf.append("${i + 1} 0 obj\n$o\nendobj\n") } }
+        val xref = pdf.length
+        pdf.append("xref\n0 ${objects.size + 1}\n0000000000 65535 f \n")
+        offsets.forEach { pdf.append("%010d 00000 n \n".format(it)) }
+        pdf.append("trailer\n<< /Size ${objects.size + 1} /Root 1 0 R >>\nstartxref\n$xref\n%%EOF\n")
+        return pdf.toString().encodeToByteArray()
+    }
+
     /** Signs a live bridge in as the seeded principal and returns it with its first shell (Amsterdam listed). */
     private suspend fun signedInLive(origin: String, device: String): Pair<Bridge<*, *>, Update.Shell> {
         val envFile = System.getenv("VEYQ_ENV_FILE")?.let(::File) ?: File(System.getProperty("veyq.repoRoot"), ".run/.env")
