@@ -552,7 +552,7 @@ The residuals and why each stays are [security-model § What holds today](securi
 
 | Event | The Secret Key | The Emergency Kit |
 |---|---|---|
-| **Account birth** (joining a tenant in `web`; the Server Owner's setup in `admin-web`) | minted, 32 random bytes (`buildAccount`); its proof key registered; the `PASSWORD` wrap derived from it with the password, the `RECOVERY` wrap from it alone | written; the codec is `@veyq/crypto`'s, one format with two writers and one reader ([en.account.key-model § The Emergency Kit](../features/account/enablers/en.account.key-model.md#the-emergency-kit)) |
+| **Account birth** (joining a tenant in `web`; the Server Owner's setup in `admin-web`) | minted, 32 random bytes (`buildAccount`); its proof key registered; the `PASSWORD` wrap derived from it with the password, the `RECOVERY` wrap from it alone | written; the codec is `@veyq/crypto`'s, one format with two writers and two readers, `web` and the native apps' core ([en.account.key-model § The Emergency Kit](../features/account/enablers/en.account.key-model.md#the-emergency-kit)) |
 | **Unlock** on a new device | entered from the kit, with the password | read |
 | **Password change**, **sign-in address change** | kept; each request signed by the proof key | stays valid |
 | **Recovery** (forgotten password) | kept: the server releases the withheld `RECOVERY` wrap against a mailed token **and** a signature of the proof key; the client opens it with the Secret Key alone and writes a new `PASSWORD` wrap ([ADR 0054](../decisions/0054-password-recovery-two-factor-release.md), `recovery.ts`) | stays valid |

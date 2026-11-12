@@ -282,11 +282,12 @@ it rescuing data.
 
 ## The Emergency Kit
 
-The kit is the Secret Key made portable, and it is a **format with two writers and one reader**: `web` writes
+The kit is the Secret Key made portable, and it is a **format with two writers and two readers**: `web` writes
 it when an account is born by joining a tenant and when an account is secured (a new Secret Key), `admin-web` when the Server Owner's account is born at setup
-([ADR 0065](../../../decisions/0065-admin-ui-cli-separate-service.md)), and only `web` reads it, at unlock.
-Two round-trip tests in two packages cannot keep a writer and a reader in agreement, so the codec exists
-**once**, in `@veyq/crypto`, pinned by a fixed-literal vector.
+([ADR 0065](../../../decisions/0065-admin-ui-cli-separate-service.md)); `web` reads it at unlock, and the native apps
+read it at sign-in, their read in the core ([ADR 0129](../../../decisions/0129-an-apps-logic-is-the-kotlin-cores-each-platform-draws-only-its-own-ui.md) decision 1: one Kotlin implementation for every app).
+Two round-trip tests in two packages cannot keep a writer and a reader in agreement, so the web's codec exists
+**once**, in `@veyq/crypto`, and both readers are pinned by the same fixed-literal vector.
 
 - **The token** is `veyqkit:` followed by the unpadded base64url of the UTF-8 bytes of the compact JSON
   `{"v":3,"email":…,"sk":…,"srv":…}`, in that key order — `sk` being the Secret Key in its text form (below), `srv` the
@@ -315,6 +316,16 @@ Two round-trip tests in two packages cannot keep a writer and a reader in agreem
   2400 px on its longer side. What was measured (macOS PDFKit's save keeps the token raw, a Quartz redraw drops it,
   and how much distortion a photographed kit stands) is stated where the fixtures are,
   `src/web/src/features/account/emergencyKit/emergencyKit.import.test.ts`.
+- **The apps read a kit file in the same order, with one step more.** (a) the token in the file's bytes; (b) the
+  document information's `Keywords`, through the core's own small PDF reader (a tolerant scan of the file's objects,
+  object streams inflated, a later definition winning); (c) the QR on the first three pages, each drawn 2400 px wide by
+  the platform's own PDF renderer and decoded by the core — an image file straight to its QR, as on the web; and
+  (d) **only where the token found carries no `srv`**, the first address field of the PDF's form, read as a typed
+  server. Address fields 2 and 3 are never read (they are the person's notes; a kit is one instance's), and the printed
+  email and Secret Key are never read as text. Where the app has a camera, its QR is also **scanned**. The platform
+  only picks the file, draws a page or a picture and runs the camera; where to look, in which order and what counts is
+  the core's. The kit is read on the device and its key held by the sign-in, never shown again; the server it fills
+  stays editable.
 - **The printed text follows the writer's UI language; the token never does.** The sheet is one A4 page: the
   email and the Secret Key; where the person signs in — three form fields for addresses, fillable on screen or by
   hand, the first holding the kit's server as a person types it (its host), where the kit has one; the QR with three

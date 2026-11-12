@@ -268,13 +268,26 @@ From `src/mobile` unless named:
 
 ## Phases
 
-- [ ] **1 docs — the refined state first.** `en.account.key-model` § The Emergency Kit: the kit has two writers and
+- [x] **1 docs — the refined state first.** `en.account.key-model` § The Emergency Kit: the kit has two writers and
   **two readers** — the web and the apps, the apps' read in the core; the apps' order with step (d) (the first address
   field, only where the token has no `srv`; fields 2 and 3 never read; the printed text never read); the scan wherever an
   app has a camera. `uc.account.unlock`'s step 1 names the apps' sign-in beside the web's screens as a place the one control holds.
   No site page changes (R10: none speaks for the apps; owner question 3).
   · Done when: the two docs say it; `for f in scripts/validate_*.py; do /usr/bin/python3 "$f" || echo "RED $f"; done`
   (guard_gaps skipped) shows no new red against its run before the edit on a detached worktree of `HEAD`.
+
+  **Status: done (2026-11-13).**
+  **Built:** `en.account.key-model` § The Emergency Kit — two writers and **two readers** (the web; the apps, their read
+  in the core, ADR 0129 decision 1), and a bullet with the apps' order (a)–(d): step (d) only where the token has no
+  `srv`, fields 2 and 3 never read, the printed text never read, the scan wherever an app has a camera, the platform only
+  picks, draws and runs the camera. `uc.account.unlock` step 1 names the apps' sign-in as a place the one control holds
+  (file and scan, email and server filled, the key held) and *One Secret-Key control* lists it. Beside the two, from the
+  inventory's last locator: `docs/crosscutting/keys-grants-and-trust.md`'s birth row ("two writers and two readers") and
+  the header comment of `src/packages/crypto/src/emergencyKit.ts` ("the only reader" was no longer true). No site page.
+  **Met:** the guard loop (`for f in scripts/validate_*.py; do /usr/bin/python3 "$f" || echo "RED $f"; done`, guard_gaps
+  skipped) showed no RED before the edit (this worktree at `089980f3a`, clean) and none after;
+  `git grep -n -iE "one reader|only .web. reads|reads it, at unlock|is the only reader" -- docs site src/packages` → only
+  ADR 0131's unrelated "one reader" (a picture reader).
 
 - [ ] **2 core — the token codec.** D1: `EmergencyKit.read`, the origin check, `Conformance` reading
   `emergency_kit_token`'s cases and refused tokens on the JVM (BouncyCastle) and over libsodium.
