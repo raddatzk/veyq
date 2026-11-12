@@ -43,7 +43,7 @@ asks, on Docker Compose or Kubernetes.
 
 </div>
 
-> **v1.0 is out** — the first stable release. Install it on Docker Compose or Kubernetes; every later 1.x upgrades in place.
+> **v1 is out** — the first stable release. Install it on Docker Compose or Kubernetes; every later 1.x upgrades in place.
 
 ## Why veyq
 
