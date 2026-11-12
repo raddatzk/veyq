@@ -49,7 +49,7 @@ dependencies {
     api("io.quarkus:quarkus-jdbc-mariadb") // the store of every profile but `%test` (prod, dev, e2e)
     api("io.quarkus:quarkus-flyway")
     api("org.flywaydb:flyway-mysql") // Flyway 12 keeps MariaDB/MySQL support out of flyway-core
-    api("software.amazon.awssdk:s3:2.57.8") // S3 blob store: vendor-neutral S3 client + presigner (ADR 0013)
+    api("software.amazon.awssdk:s3:2.57.11") // S3 blob store: vendor-neutral S3 client + presigner (ADR 0013)
     api("io.quarkus:quarkus-mailer") // generic SMTP transport (transitive Vert.x MailClient), no vendor SDK (ADR 0048)
     // ADR 0064's Kubernetes (Gateway API) sink. Chosen over a bare fabric8 client for `@WithKubernetesTestServer`
     // (the root's tests) as much as for the client itself: this repository has no cluster and no CI that could get
