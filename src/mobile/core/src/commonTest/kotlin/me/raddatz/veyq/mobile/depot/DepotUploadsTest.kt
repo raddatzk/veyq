@@ -74,7 +74,7 @@ class DepotUploadsTest {
         var report: (String, List<FolderUpload.Entry>) -> FolderUpload.Report = { name, _ -> FolderUpload.Report(FolderUpload.Outcome.NOTHING, name) }
         var prepared: List<FolderUpload.Entry>? = null
         override fun uploadJob(scopeId: String, parentId: String?, source: UploadSource, name: String) =
-            DepotFiles.UploadJob(scopeId, parentId, source, name) { n, _, _ -> level.upload(n) }
+            DepotFiles.UploadJob(scopeId, parentId, source, name, { n, _, _, _ -> level.upload(n) })
         override suspend fun prepareFolder(scopeId: String, parentId: String?, rootName: String, entries: List<FolderUpload.Entry>): FolderUpload.Report {
             prepareGate?.await()
             prepared = entries
@@ -107,7 +107,7 @@ class DepotUploadsTest {
     fun offerForOffersAFilesReplaceOnItsNameAndReplaceAnywayOnAStaleOneNothingElse() = runTest {
         val level = Level()
         val taken = level.put("a.txt", "b1")
-        val up = DepotFiles.UploadJob("s", null, source("a.txt"), "a.txt") { n, _, _ -> level.upload(n) }
+        val up = DepotFiles.UploadJob("s", null, source("a.txt"), "a.txt", { n, _, _, _ -> level.upload(n) })
         kotlin.runCatching { up.run {} }
         val offer = assertNotNull(DepotFiles.offerFor(item(up, UploadQueue.Status.FAILED, DepotFiles.Codes.EXISTS)) { if (it == taken) "b1" else null })
         assertEquals(Notices.replaceOffered("a.txt"), offer.notice)
@@ -237,7 +237,7 @@ class DepotUploadsTest {
         m.door.prepareGate = CompletableDeferred()
         m.door.report = { name, entries ->
             FolderUpload.Report(FolderUpload.Outcome.READY, name, 8, "root", failedFolders = listOf("$name/sub"),
-                jobs = entries.map { e -> DepotFiles.UploadJob("s", "root", e.source, e.path) { n, _, _ -> m.door.level.upload(n) } })
+                jobs = entries.map { e -> DepotFiles.UploadJob("s", "root", e.source, e.path, { n, _, _, _ -> m.door.level.upload(n) }) })
         }
         val walk = listOf(found("a.txt"), found(".hidden"), found("sub", FolderUpload.Kind.DIRECTORY), found("ln", FolderUpload.Kind.LINK), found("locked", FolderUpload.Kind.UNREADABLE))
         launch { m.uploads.uploadFolder("s", null, null, "/Users/me/Trip", walk) }
@@ -302,7 +302,7 @@ class DepotUploadsTest {
         assertTrue(m.uploads.current.queue.batches.isEmpty(), "acknowledged by the model, no view")
 
         // one that failed (a sibling of another kind holds the name) stays until it is closed
-        val failing = DepotFiles.UploadJob("s", null, source("x"), "x") { _, _, _ -> DepotFiles.Uploaded(DepotFiles.Outcome.TAKEN_BY_OTHER) }
+        val failing = DepotFiles.UploadJob("s", null, source("x"), "x", { _, _, _, _ -> DepotFiles.Uploaded(DepotFiles.Outcome.TAKEN_BY_OTHER) })
         m.queue.enqueue(listOf(failing), "Home", "s", null, null)
         advanceUntilIdle()
         advanceTimeBy(UploadQueue.ACKNOWLEDGE_AFTER_MS * 3)
@@ -311,6 +311,30 @@ class DepotUploadsTest {
         m.uploads.acknowledge(batch.id)
         runCurrent()
         assertTrue(m.uploads.current.queue.batches.isEmpty())
+        m.uploads.close()
+    }
+
+    @Test
+    fun anUploadCancelledAfterItsNodeWasMadeLeavesNoEmptyFile() = runTest {
+        val m = model()
+        val given = mutableListOf<String>()
+        val gate = CompletableDeferred<Unit>()
+        val job = DepotFiles.UploadJob("s", null, source("big.bin"), "big.bin", { _, _, p, made ->
+            made("n-big")
+            p(0.1)
+            gate.await()
+            DepotFiles.Uploaded(DepotFiles.Outcome.DONE, "n-big")
+        }) { given += it }
+        m.queue.enqueue(listOf(job), "Home", "s", null, null)
+        runCurrent()
+        m.uploads.cancel(m.uploads.current.queue.batches.single().items.single().id)
+        runCurrent()
+        assertEquals(listOf("n-big"), given, "the node it made is given up")
+        // one that ended (done or refused) gives nothing up: the upload itself saw its outcome
+        val done = DepotFiles.UploadJob("s", null, source("ok.txt"), "ok.txt", { _, _, _, made -> made("n-ok"); DepotFiles.Uploaded(DepotFiles.Outcome.DONE, "n-ok") }) { given += it }
+        kotlin.runCatching { done.run {} }
+        done.abandon()
+        assertEquals(listOf("n-big"), given)
         m.uploads.close()
     }
 }

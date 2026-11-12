@@ -176,15 +176,20 @@ object DepotFiles {
      */
     class UploadJob internal constructor(
         val scopeId: String, val parentId: String?, private val source: UploadSource, override val name: String,
-        /** Sends [source] named [name] (the tenant's [upload], a test's played server). */
-        private val send: suspend (name: String, source: UploadSource, progress: (Double) -> Unit) -> Uploaded,
+        /** Sends [source] named [name] (the tenant's [upload], a test's played server), telling [created] the node it made. */
+        private val send: suspend (name: String, source: UploadSource, progress: (Double) -> Unit, created: (String) -> Unit) -> Uploaded,
+        /** Gives up the node a run made and left without content (moved to the trash unless its content is there after all). */
+        private val giveUp: suspend (nodeId: String) -> Unit = {},
     ) : UploadQueue.Job {
         constructor(
             tenant: TenantSession, scopeId: String, parentId: String?, source: UploadSource,
             tokenInput: (String, String) -> String?, name: String = source.name,
-        ) : this(scopeId, parentId, source, name, { n, s, p ->
-            upload(tenant, scopeId, parentId, n, s.size, s.type ?: OCTET, s.modifiedAt, tokenInput, s::read, p)
-        })
+        ) : this(scopeId, parentId, source, name, { n, s, p, made ->
+            upload(tenant, scopeId, parentId, n, s.size, s.type ?: OCTET, s.modifiedAt, tokenInput, s::read, p, made)
+        }, { abandon(tenant, scopeId, parentId, it) })
+
+        /** The node a run created whose outcome it did not see (a cancel mid-way): what [abandon] gives up. */
+        private var made: String? = null
 
         override val sizeBytes get() = source.size
 
@@ -201,16 +206,24 @@ object DepotFiles {
 
         override suspend fun run(progress: (Double) -> Unit) {
             val r = try {
-                send(name, source, progress)
+                send(name, source, progress) { made = it }
             } finally {
                 source.close()
             }
+            made = null // an outcome seen: the upload gave up what it made itself
             existing = r.existing
             nodeId = r.nodeId
             failure(r)?.let { throw UploadQueue.Failed(it) }
         }
 
         override fun isFinal(code: String) = code in Codes.FINAL
+
+        /** A run cancelled after its node was made leaves no empty file behind (the web's `fileUploadJob` abandon). */
+        override suspend fun abandon() {
+            val id = made ?: return
+            made = null
+            giveUp(id)
+        }
     }
 
     /**
@@ -298,7 +311,7 @@ object DepotFiles {
     suspend fun upload(
         tenant: TenantSession, scopeId: String, parentId: String?, name: String, size: Long, type: String, modifiedAt: Long?,
         tokenInput: (String, String) -> String?, read: suspend (from: Long, length: Int) -> ByteArray,
-        progress: (Double) -> Unit = {},
+        progress: (Double) -> Unit = {}, onCreated: (String) -> Unit = {},
     ): Uploaded {
         val n = name.trim()
         collision(tenant, scopeId, parentId, n, tokenInput)?.let { other ->
@@ -309,6 +322,7 @@ object DepotFiles {
             is NodeCreate.Result.Refused -> return Uploaded(if (r.reason == NodeCreate.Reason.NAME_TAKEN) Outcome.TAKEN_BY_OTHER else Outcome.FAILED)
         }
         tenant.forgetTree()
+        onCreated(created.nodeId)
         val done = attach(tenant, scopeId, created.nodeId, size, type, n, modifiedAt, null, read, progress)
         if (done.outcome != Outcome.DONE) abandon(tenant, scopeId, parentId, created.nodeId)
         return done
@@ -388,7 +402,7 @@ object DepotFiles {
     }
 
     /** A created file whose content did not attach goes to the trash — unless it is attached after all (`abandon`). */
-    private suspend fun abandon(tenant: TenantSession, scopeId: String, parentId: String?, nodeId: String) {
+    internal suspend fun abandon(tenant: TenantSession, scopeId: String, parentId: String?, nodeId: String) {
         val page = runCatching { tenant.account.call { FilesApi(tenant.base, tenant.account.http).listFiles(scopeId, parentId) } }.getOrNull()
         val item = page?.items?.firstOrNull { it.nodeId == nodeId }
         if (item != null && item.fileBlob != null) return
