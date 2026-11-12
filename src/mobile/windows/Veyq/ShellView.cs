@@ -431,6 +431,7 @@ internal sealed class ShellView
                 _pot = new PotPage(pot, _window, Say);
                 // the Pot read: the header learns whether it takes writes (AppKinds.Facts)
                 _pot.Read = canWrite => _header?.Facts(new Facts { canWrite = canWrite, hasContent = true });
+                _pot.Changed = DrawCommands;
                 _said.IsOpen = false;
             }
             _pot.Hero(_header?.Hero);
@@ -483,8 +484,10 @@ internal sealed class ShellView
             _commands.PrimaryCommands.Add(CreateAction.Menu(Words.DrawerNew(), "new",
                 shown.creates.Select(c => (Said.Key(c.word), $"new:{c.create}", c.create == Create.Folder ? (Action?)NewFolder : null))));
         }
-        if (_header is null) return;
         var page = _pot;
+        // an open Pot's "Add entry" is the content's creating action, first, where its places show and it takes writes
+        if (page is { CanAdd: true }) _commands.PrimaryCommands.Add(CreateAction.Button(Words.PotAdd(), "pot-add", page.AddEntry));
+        if (_header is null) return;
         var (primary, secondary) = _header.Commands(() => page?.Download(WinRT.Interop.WindowNative.GetWindowHandle(_window), Say));
         foreach (var c in primary) _commands.PrimaryCommands.Add(c);
         if (page is not null)

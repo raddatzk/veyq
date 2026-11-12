@@ -2,8 +2,8 @@
 // the entry's title and amount, listing every revision the Pot holds, newest first — what it said, who wrote it and when
 // (Pot.History, each line the core's historyLine). A deleted entry says so, until when it can be restored (its
 // receipts' erasure, read on the core's clock) and offers Restore as the dialog's primary button (Pot.Restore); the
-// dialog closes once the restore was stored, and a refusal stays in it as an InfoBar. The entry editor (Expenses' next
-// phase) takes this list as its history.
+// dialog closes once the restore was stored, and a refusal stays in it as an InfoBar. A deleted entry's row opens this
+// dialog; a live entry's opens the entry editor (EntryEditorPage), whose History expander lists the same.
 using System;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Automation;

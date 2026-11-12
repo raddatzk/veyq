@@ -7,7 +7,9 @@
 // Its live poll (Watched.PotLive) runs while the page is loaded and its window is active, as the phones poll while the
 // Pot is shown: the watch is disposed when either ends, which stops the poll. Refresh (Pot.Refresh) is the CommandBar's
 // (F5 / Ctrl+R, ShellView). A settle-up row is recorded (Pot.Record, dated the core's today) after a ContentDialog asked,
-// one row or all; an entry opens its history (EntryHistoryDialog), a deleted one its restore. Its download
+// one row or all; an entry opens the entry editor (EntryEditorPage, a page in place of the places, its history
+// inside), a deleted one its history and restore (EntryHistoryDialog); "Add entry" is the shell's CommandBar's New
+// (AddEntry). Its download
 // (Pot.Download) goes where the system's save picker says, under the name the core gives (Pot.ArchiveName); the core
 // writes the file (ADR 0128 decision 3).
 using System;
@@ -39,14 +41,41 @@ internal sealed class PotPage : IDisposable
     private bool _loaded;
     private bool _active = true;
     private UIElement? _hero;
+    /// <summary>The column the head was put in last.</summary>
+    private Panel? _heroHolder;
     /// <summary>The places' scroll, kept across redraws (an update of the live poll keeps where it stood).</summary>
     private readonly ScrollViewer _scroll = new() { HorizontalScrollMode = ScrollMode.Disabled, HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled };
     private string? _place;
+    private EntryEditorPage? _editor;
+    private bool _canWrite;
 
     public ObjectRef Ref { get; }
 
     /// <summary>Told whether the Pot takes writes, each time its view is read (its header's facts).</summary>
     public Action<bool>? Read { get; set; }
+
+    /// <summary>Told when what the shell's CommandBar offers for this Pot changed: it was read, an editor opened or closed.</summary>
+    public Action? Changed { get; set; }
+
+    /// <summary>Whether "Add entry" is offered: the Pot read, it takes writes, and no editor is open.</summary>
+    public bool CanAdd => _canWrite && _editor is null && _id is not null;
+
+    /// <summary>The entry editor of a new entry (the CommandBar's "Add entry").</summary>
+    public void AddEntry() => OpenEditor(null);
+
+    /// <summary>The entry editor of <paramref name="entry"/> (null: a new one), in place of the places until it closes.</summary>
+    private void OpenEditor(string? entry)
+    {
+        if (_id is not { } pot || _editor is not null) return;
+        _editor = new EntryEditorPage(_window, pot, entry, _say, () =>
+        {
+            _editor = null;
+            Draw();
+            Changed?.Invoke();
+        });
+        Draw();
+        Changed?.Invoke();
+    }
 
     public UIElement Page => _root;
 
@@ -103,6 +132,8 @@ internal sealed class PotPage : IDisposable
     public void Hero(UIElement? hero)
     {
         if (ReferenceEquals(hero, _hero)) return;
+        if (_hero is not null) _heroHolder?.Children.Remove(_hero);
+        _heroHolder = null;
         _hero = hero;
         Draw();
     }
@@ -139,6 +170,11 @@ internal sealed class PotPage : IDisposable
             {
                 Log.Write($"pot update: {view.entries.Count} entries, {view.deleted.Count} deleted, {view.settleUp.Count} to settle");
                 Read?.Invoke(view.canWrite);
+                if (view.canWrite != _canWrite)
+                {
+                    _canWrite = view.canWrite;
+                    Changed?.Invoke();
+                }
             }
             Draw();
         }, e => Log.Write($"a Pot update: {e.Message}"));
@@ -147,6 +183,8 @@ internal sealed class PotPage : IDisposable
     public void Dispose()
     {
         _closed = true;
+        _editor?.Dispose();
+        _editor = null;
         _window.Activated -= Activated;
         _live?.Dispose();
         _live = null;
@@ -222,11 +260,36 @@ internal sealed class PotPage : IDisposable
 
     private static Style TextStyle(string key) => (Style)Application.Current.Resources[key];
 
+    /// <summary>The page drawn anew; what it threw is said in the log (out of a watch's callback it would end the app in
+    /// combase, with nothing in the log).</summary>
     private void Draw()
     {
-        // the head moves to the new place's scroll
-        if (_hero is FrameworkElement { Parent: Panel holder } hero) holder.Children.Remove(hero);
-        _root.Children.Clear();
+        try
+        {
+            DrawNow();
+        }
+        catch (Exception e)
+        {
+            Log.Write($"the Pot did not draw: {e.GetType().Name} 0x{e.HResult:X8}: {e.Message} | {string.Join(" | ", (e.StackTrace ?? "").Split('\n').Select(l => l.Trim()).Take(6))}");
+        }
+    }
+
+    private void DrawNow()
+    {
+        // the head moves to the new place's scroll, taken from the column it was put in (its Parent read null while that
+        // column still loaded, two draws in a row after the editor closed, and the add threw 0x800F1000)
+        if (_hero is not null) _heroHolder?.Children.Remove(_hero);
+        _heroHolder = null;
+        // the scroll stays in the tree across redraws: taken out and put back while it still loads (an update right after
+        // the editor closed) WinUI threw "no installed components were detected" and the page stayed empty
+        foreach (var child in _root.Children.Where(c => !ReferenceEquals(c, _scroll)).ToList()) _root.Children.Remove(child);
+        _scroll.Visibility = Visibility.Collapsed;
+        if (_editor is { } editor)
+        {
+            Grid.SetRowSpan((FrameworkElement)editor.Page, 2);
+            _root.Children.Add(editor.Page);
+            return;
+        }
         var view = _state?.view;
         if (view is null)
         {
@@ -246,7 +309,11 @@ internal sealed class PotPage : IDisposable
         }
         if (_tabs.Count > 1) _root.Children.Add(PlacesBar());
         var content = new StackPanel { Spacing = 4, Padding = new Thickness(12, 8, 12, 24) };
-        if (_hero is not null) content.Children.Add(_hero);
+        if (_hero is not null)
+        {
+            content.Children.Add(_hero);
+            _heroHolder = content;
+        }
         if (view.missing.Count > 0) Missing(content, view);
         if (!view.ready)
         {
@@ -269,7 +336,8 @@ internal sealed class PotPage : IDisposable
         }
         _scroll.Content = content;
         Grid.SetRow(_scroll, 1);
-        _root.Children.Add(_scroll);
+        if (!_root.Children.Contains(_scroll)) _root.Children.Add(_scroll);
+        _scroll.Visibility = Visibility.Visible;
         // another place starts at its top; an update of the same one stays where it stood
         if (_selected?.key != _place)
         {
@@ -408,7 +476,7 @@ internal sealed class PotPage : IDisposable
         }
     }
 
-    /// <summary>Entries as a list whose rows open their history (a deleted one's with its restore).</summary>
+    /// <summary>Entries as a list whose rows open the editor (a deleted one's its history and restore).</summary>
     private ListView EntryList(PotView view, IEnumerable<ShownEntry> entries, long? pot, bool deleted)
     {
         var list = new ListView { SelectionMode = ListViewSelectionMode.None, IsItemClickEnabled = true };
@@ -424,7 +492,9 @@ internal sealed class PotPage : IDisposable
             line.Padding = new Thickness(0, 8, 0, 8);
             var id = e.row.id;
             var item = new ListViewItem { Content = line, MinHeight = 44, HorizontalContentAlignment = HorizontalAlignment.Stretch };
-            item.Tag = (Action)(() => { if (pot is { } p) EntryHistoryDialog.Open(_window, p, id, title, amount, _say); });
+            item.Tag = deleted
+                ? (Action)(() => { if (pot is { } p) EntryHistoryDialog.Open(_window, p, id, title, amount, _say); })
+                : () => OpenEditor(id);
             AutomationProperties.SetAutomationId(item, $"{(deleted ? "deleted" : "entry")}:{id}");
             AutomationProperties.SetName(item, AutomationProperties.GetName(line));
             list.Items.Add(item);
