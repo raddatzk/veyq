@@ -208,7 +208,8 @@ origin, next to the keys. Its threat note, and what keeps it inside the policy a
   logged or sent.
 - **Bounded:** 64 MiB per file, 1000 pages, 32 M pixels per decoded image, 16 M pixels per page canvas; destroyed (document
   and worker) on a new file, navigation and unmount.
-- **Maintenance (measured 2026-10-12):** 6.4.299, published 2026-10-03, monthly releases, not deprecated; the project rule
+- **Maintenance (measured 2026-11-12, `pnpm view pdfjs-dist time`):** 6.5.438, published 2026-11-01 and the latest, the one
+  before it 6.4.299 of 2026-10-03, monthly releases, not deprecated; the project rule
   on unmaintained dependencies applies — a deprecation or an abandonment makes replacing it in-scope.
 
 ## The other response headers
