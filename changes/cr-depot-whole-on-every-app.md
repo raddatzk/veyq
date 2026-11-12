@@ -704,6 +704,8 @@ pending).
 - **Windows:** `Veyq.Drive drag` drops two files and a folder from Explorer onto a level and onto a folder row, uploaded
   there, en/light and de/dark; or, where SendInput's drag does not reach the app, that recorded and the Veyq.Tests case
   standing for it.
+- Windows' audio: met — the owner heard a medium's sound on the Windows VM (2026-11-12, Phase 4's build); Linux's is
+  this phase's, measured on the VM's PipeWire sink monitor (non-silent while a medium plays) since nobody listens there.
 - Builds and guards as Phase 3.
 
 ### Phase 7 — Bridge and desktops: drop boxes and shares
