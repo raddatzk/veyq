@@ -94,7 +94,7 @@ const en = {
         link: 'expenses/',
         linkLabel: 'Expenses in the guide',
         shot: 'pot',
-        shotShows: 'A Pot on its Balances tab: who is owed, who owes, and the transfers that settle it',
+        shotShows: 'A Pot on its Overview tab: who is owed, who owes, and the transfers that settle it',
       },
     ],
     next: {
@@ -248,7 +248,7 @@ const de: Strings = {
         link: 'expenses/',
         linkLabel: 'Ausgaben in der Anleitung',
         shot: 'pot',
-        shotShows: 'Eine Kasse im Reiter Salden: wem etwas zusteht, wer etwas schuldet und die Überweisungen, die es ausgleichen',
+        shotShows: 'Eine Kasse im Reiter Übersicht: wem etwas zusteht, wer etwas schuldet und die Überweisungen, die es ausgleichen',
       },
     ],
     next: {
