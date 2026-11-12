@@ -309,8 +309,11 @@ internal sealed class Call {
      */
     @Serializable @SerialName("Header.Open") data class HeaderOpen(val node: NodeAt, val facts: AppKinds.Facts?, val maxButtons: Int) : Call()
 
-    /** What the kind's page knows now (`NodeHeaderModel.update`). */
-    @Serializable @SerialName("Header.Facts") data class HeaderFacts(val header: Long, val facts: AppKinds.Facts?) : Call()
+    /**
+     * What the kind's page knows now (`NodeHeaderModel.update`) and, for a file's page, its id ([file]): the page's own
+     * actions (`FileModel.Header.own`: Replace) join the plan, worded by the page.
+     */
+    @Serializable @SerialName("Header.Facts") data class HeaderFacts(val header: Long, val facts: AppKinds.Facts?, val file: Long? = null) : Call()
     @Serializable @SerialName("Header.Close") data class HeaderClose(val header: Long) : Call()
 
     /** Pins or unpins (`toggleFavorite`): [Answer.Said] with the failure's notice, or none. */
@@ -389,6 +392,56 @@ internal sealed class Call {
 
     /** Stops save [save] and answers once it stopped, nothing left at its path ([Answer.Done]; refused where it had ended). */
     @Serializable @SerialName("Save.Cancel") data class SaveCancel(val save: Long) : Call()
+
+    /**
+     * The header's Replace on file [file]'s page, chosen before the host's open dialog opens (`FileModel.chooseReplace`, the
+     * Depot CR's D9: the replace expects the content shown now, whatever a peer writes while the dialog is open). Refused
+     * where the page offers no replace.
+     */
+    @Serializable @SerialName("File.ChooseReplace") data class FileChooseReplace(val file: Long) : Call()
+
+    /**
+     * The files at [paths] (each as the host's open dialog or a drop gave it) uploaded as new files under [parentId] (null:
+     * the space's top) of [scopeId], one batch labelled [label] (the level's name as the host shows it) — `DepotUploads.upload`.
+     * The core opens each path itself and reads it at offsets a frame at a time (ADR 0130 decision 3): nothing of a file
+     * crosses, and a file of any size is never held whole. A path that is no file that reads is left out. Answered once
+     * queued ([Answer.Queued]: how many); a name a file already holds offers its replace through [UploadsShown.said].
+     */
+    @Serializable @SerialName("Upload.Files") data class UploadFiles(val scopeId: String, val parentId: String?, val label: String, val paths: List<String>) : Call()
+
+    /**
+     * The directory at [path] uploaded whole under [parentId] of [scopeId] (`DepotUploads.uploadFolder`): walked by the core
+     * (`PickedPaths.walk`: a link reported and never followed), its folders made while [UploadsShown.preparing] says so,
+     * then its files queued as one batch under its own name. Answered once that is done ([Answer.Queued]: how many files,
+     * 0 where none went); what it left out or why it went nowhere arrives as [UploadsShown.said]. Refused where [path] is
+     * no directory that lists.
+     */
+    @Serializable @SerialName("Upload.Folder") data class UploadFolder(val scopeId: String, val parentId: String?, val path: String) : Call()
+
+    /**
+     * File [file]'s content replaced with the file at [path] (`DepotUploads.replace`), expected over the content shown when
+     * Replace was chosen ([FileChooseReplace]): answered [Answer.Queued] once queued; refused where Replace was not chosen
+     * or [path] is no file that reads. Someone's replace meanwhile offers "Replace anyway" through [UploadsShown.said].
+     */
+    @Serializable @SerialName("Upload.Replace") data class UploadReplace(val file: Long, val path: String) : Call()
+
+    /** Cancels upload item [item] (a waiting one at once, a running one at its next frame); its empty file is given up. */
+    @Serializable @SerialName("Upload.Cancel") data class UploadCancel(val item: String) : Call()
+
+    /** Tries failed upload item [item] again ([UploadsShown.Item.canRetry]). */
+    @Serializable @SerialName("Upload.Retry") data class UploadRetry(val item: String) : Call()
+
+    /** Cancels every upload still waiting or running. */
+    @Serializable @SerialName("Upload.CancelAll") data object UploadCancelAll : Call()
+
+    /** The tray closed batch [batch] (one with a failure stays until this; one all in leaves by itself). */
+    @Serializable @SerialName("Upload.Acknowledge") data class UploadAcknowledge(val batch: String) : Call()
+
+    /** What the uploads said ([UploadsShown.said], by its id) taken by its action: the replace it offers is queued. */
+    @Serializable @SerialName("Upload.TakeOffer") data class UploadTakeOffer(val said: Long) : Call()
+
+    /** What the uploads said was shown and dismissed without its action: the next waits. */
+    @Serializable @SerialName("Upload.Seen") data class UploadSeen(val said: Long) : Call()
 
     /**
      * Where a picture of [imageWidth] × [imageHeight] sits in a cover's frame of [frameWidth] × [frameHeight] (core's
@@ -547,6 +600,9 @@ internal sealed class Answer {
 
     /** A copy being saved ([Call.FileSave]): its id, for [Watched.Save] and [Call.SaveCancel]. */
     @Serializable @SerialName("Saving") data class Saving(val save: Long) : Answer()
+
+    /** An upload call's files queued ([Call.UploadFiles], [Call.UploadFolder], [Call.UploadReplace]): how many. */
+    @Serializable @SerialName("Queued") data class Queued(val count: Int) : Answer()
     @Serializable @SerialName("TrashOpened") data class TrashOpened(val trash: Long) : Answer()
 
     /** What an action says: its notice, or null where it says nothing (it went through). */
@@ -624,6 +680,9 @@ internal sealed class Answer {
         NO_SUCH_HEADER, NO_SUCH_TRASH, NO_SUCH_ROW, NO_SUCH_MOVE, NO_SUCH_SHARE, NO_SUCH_REPORT, NO_COVER, NO_SUCH_ENTRY, NO_SUCH_EDITOR,
         NO_RECEIPT, NOT_WRITTEN, NO_SUCH_SETTINGS, NO_SUCH_CREATE, NO_SUCH_FILE, NO_BYTES, NO_SUCH_SAVE, SAVE_ENDED, NO_MEDIUM,
 
+        /** An upload: no replace offered or chosen on that page; a path that is no file (or directory) that reads; no such said. */
+        NO_REPLACE, NOT_CHOSEN, NO_SUCH_PATH, NO_SUCH_SAID,
+
         /** A change of trust (`TrustChange`): no offer to answer; the person cancelled the prompt; not enrolled; the
          *  password was not the account's. */
         NO_OFFER, TRUST_CANCELLED, TRUST_FAILED, WRONG_PASSWORD,
@@ -678,6 +737,9 @@ internal sealed class Watched {
 
     /** A copy being saved by [Call.FileSave]. */
     @Serializable @SerialName("Save") data class Save(val save: Long) : Watched()
+
+    /** The uploads of the tenant open now (`DepotUploads`), whichever that is: the tray, what it says once. */
+    @Serializable @SerialName("Uploads") data object Uploads : Watched()
 }
 
 /** One state a watch delivers: the first at once, then each change. */
@@ -731,6 +793,46 @@ internal sealed class Update {
 
     /** A copy being saved; null for an id the bridge does not hold (its tenant closed). */
     @Serializable @SerialName("Save") data class Save(val save: Long, val shown: SaveShown?) : Update()
+
+    /** The uploads; null while no tenant is open. */
+    @Serializable @SerialName("Uploads") data class Uploads(val shown: UploadsShown?) : Update()
+}
+
+/**
+ * The uploads as the host draws them (core's `DepotUploads` over the app's one upload queue, the web's `UploadStatusMenu`),
+ * each field one core function's answer: the tray's one line ([summary], `Notices.uploadSummary`; null while nothing is
+ * listed: no tray) with how many run ([active]) and how far all is ([progress], 0 to 1); a picked directory whose folders
+ * are being made ([preparing], `upload_preparing_folder`); each batch with its items; and what the uploads say once
+ * ([said]): a folder's outcome, or a replace offered with its action's words — answered by [Call.UploadTakeOffer] or
+ * [Call.UploadSeen], the next one waiting until then.
+ */
+@Serializable
+@SerialName("UploadsShown")
+internal class UploadsShown(
+    val summary: Notice?,
+    val active: Int,
+    val progress: Double,
+    val preparing: Notice?,
+    val batches: List<Batch>,
+    val said: Said?,
+) {
+    /** One batch: where it goes ([label]), whether all its items settled ([finished]: the tray may close it). */
+    @Serializable @SerialName("UploadBatch")
+    class Batch(val id: String, val label: String, val finished: Boolean, val items: List<Item>)
+
+    /**
+     * One file of a batch: its [status] and [progress] (0 to 1 while it is sent), its line ([line], `Notices.uploadStatus`:
+     * why where it failed), and whether it is cancelled ([canCancel]: while it may still go up) or tried again ([canRetry]).
+     */
+    @Serializable @SerialName("UploadItem")
+    class Item(
+        val id: String, val name: String, val sizeBytes: Long, val status: me.raddatz.veyq.mobile.blob.UploadQueue.Status,
+        val progress: Double, val line: Notice, val failed: Boolean, val canCancel: Boolean, val canRetry: Boolean,
+    )
+
+    /** What is said now: one line per [notices], and the offer's button ([action]; null where it offers nothing). */
+    @Serializable @SerialName("UploadSaid")
+    class Said(val id: Long, val notices: List<Notice>, @Serializable(with = MsgKey::class) val action: Msg?)
 }
 
 /**

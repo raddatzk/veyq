@@ -1414,6 +1414,255 @@ class LiveBridgeTest {
     }
 
     /**
+     * Uploads by path through calls, over the real core (the Depot CR's Phase 5; ADR 0130 decision 3), with
+     * `VEYQ_LIVE_UPLOAD=1` (it moves more than 2 GiB): a folder "App depot <n>" made at the personal space's top level
+     * (`Shell.CreateFolder`); three files by path (`Upload.Files`) and a nested folder with a hidden file and a non-ASCII name
+     * (`Upload.Folder`, walked by the core, a link said and never followed), each read back to its SHA-256 by the header's
+     * download (a file downloads as itself) and its sealed type claimed by its name; a same-named file offered and replaced
+     * (`Upload.TakeOffer`); a replace chosen on a file's page and raced by a second session's replace, answered stale
+     * ("Replace anyway" said, nothing overwritten); a large upload cancelled (nothing left) and a file that went missing
+     * after it was picked failed, then retried once it is back; a 2 GiB + 1 byte file drawn on disk uploaded by path and
+     * saved back (`File.Save`) at its SHA-256; with the tenant's quota held at one byte (put back however it ends) a folder
+     * upload said not to fit before anything is sent. The folder is trashed and purged however it ends.
+     */
+    @Test
+    fun filesAndAFolderAreUploadedByPathThroughCalls() = runBlocking {
+        val origin = System.getenv("VEYQ_LIVE") ?: return@runBlocking
+        if (System.getenv("VEYQ_LIVE_UPLOAD") == null) return@runBlocking
+        val (b, first) = signedInLive(origin, "bridge upload test")
+        val personal = first.state!!.lists.spaces.first { it.kind == "PERSONAL" }.scopeId
+        val name = "App depot ${System.currentTimeMillis() % 100_000}"
+        suspend fun fresh(): Update.Shell {
+            assertEquals(Answer.Done, b.ask(Call.ShellRefresh, timeout = 1.minutes))
+            return b.watching(Watched.Shell).next() as Update.Shell
+        }
+        assertEquals(Answer.Done, b.ask(Call.ShellChoose(null)))
+        assertEquals(Answer.Done, b.ask(Call.ShellSwitchSpace(personal)))
+        assertEquals(Answer.Said(null), b.ask(Call.ShellCreateFolder(name), timeout = 1.minutes))
+        val folder = assertNotNull(fresh().state!!.lists.nodes.firstOrNull { it.scopeId == personal && it.name == name && it.parentId == null })
+        val folderId = folder.nodeId
+        println("made $name")
+        val dir = java.nio.file.Files.createTempDirectory("veyq-upload").toFile()
+        val uploads = b.watching(Watched.Uploads)
+        fun UploadsShown.items() = batches.flatMap { it.items }
+        // what the uploads say next: one said after the last taken (an update still carrying an earlier one passes)
+        var lastSaid = 0L
+        suspend fun nextSaid(pick: (UploadsShown.Said) -> Boolean = { true }) = uploads.until(2.minutes) { u ->
+            (u as Update.Uploads).shown?.said?.takeIf { it.id > lastSaid && pick(it) }
+        }.also { lastSaid = it.id }
+        fun digest(f: File) = java.security.MessageDigest.getInstance("SHA-256").let { d ->
+            f.inputStream().use { input -> val buf = ByteArray(1 shl 20); while (true) { val n = input.read(buf); if (n < 0) break; d.update(buf, 0, n) } }
+            d.digest().joinToString("") { "%02x".format(it) }
+        }
+        suspend fun settled(names: Collection<String>, timeout: kotlin.time.Duration = 5.minutes) = uploads.until(timeout) { u ->
+            val s = (u as Update.Uploads).shown
+            // a file of these that failed ends the wait with its line, never a timeout
+            s?.items()?.firstOrNull { it.name in names && it.failed }?.let { error("${it.name} failed: ${it.line}") }
+            s?.items()?.filter { it.name in names && it.status == me.raddatz.veyq.mobile.blob.UploadQueue.Status.UPLOADING }?.forEach { i ->
+                if ((i.progress * 100).toInt() % 10 == 0) println("  ${i.name} at ${(i.progress * 100).toInt()} %")
+            }
+            s?.takeIf { names.all { n -> s.items().any { it.name == n && it.status == me.raddatz.veyq.mobile.blob.UploadQueue.Status.DONE } } }
+        }
+        suspend fun under(parent: String) = fresh().state!!.lists.nodes.filter { it.parentId == parent }
+        fun at(n: me.raddatz.veyq.mobile.navigation.NodeRef) = me.raddatz.veyq.mobile.navigation.NodeAt(n.scopeId, n.nodeId, n.kind, n.name)
+        /** A file read back whole through its header's download (a FILE downloads as itself), its SHA-256. */
+        suspend fun readBack(n: me.raddatz.veyq.mobile.navigation.NodeRef): String {
+            val h = (b.ask(Call.HeaderOpen(at(n), me.raddatz.veyq.mobile.AppKinds.Facts(canWrite = true, hasContent = true), 2)) as Answer.HeaderOpened).header
+            val out = File(dir, "back-${n.nodeId}")
+            assertTrue((b.ask(Call.HeaderDownload(h, out.path, "deleted"), timeout = 5.minutes) as Answer.Downloaded).written, n.name)
+            b.ask(Call.HeaderClose(h))
+            return digest(out).also { out.delete() }
+        }
+        suspend fun typeOf(n: me.raddatz.veyq.mobile.navigation.NodeRef): List<String> {
+            val id = (b.ask(Call.FileOpen(at(n))) as Answer.FileOpened).file
+            val shown = b.watching(Watched.File(id)).until(2.minutes) { u -> (u as Update.File).shown?.takeIf { it.view != FileShown.View.LOADING && it.headerFacts != null } }
+            b.ask(Call.FileClose(id))
+            return shown.facts.mapNotNull { (it as? me.raddatz.veyq.mobile.words.Piece.Plain)?.text }
+        }
+        try {
+            // three files by path
+            val text = File(dir, "a.txt").apply { writeBytes(ByteArray(3 * me.raddatz.veyq.mobile.crypto.V1.FRAME_PLAINTEXT + 17) { i -> ('a' + i % 26).code.toByte() }) }
+            val jpeg = File(dir, "b.jpg").apply {
+                outputStream().use { out ->
+                    val image = java.awt.image.BufferedImage(640, 480, java.awt.image.BufferedImage.TYPE_INT_RGB)
+                    val g = image.createGraphics()
+                    g.paint = java.awt.GradientPaint(0f, 0f, java.awt.Color(30, 90, 200), 640f, 480f, java.awt.Color(240, 200, 40))
+                    g.fillRect(0, 0, 640, 480)
+                    g.dispose()
+                    javax.imageio.ImageIO.write(image, "jpg", out)
+                }
+            }
+            val pdf = File(dir, "c.pdf").apply { writeBytes(pdfOf(3)) }
+            assertEquals(Answer.Queued(3), b.ask(Call.UploadFiles(personal, folderId, name, listOf(text.path, jpeg.path, pdf.path))))
+            settled(listOf("a.txt", "b.jpg", "c.pdf"))
+            val listed = under(folderId).associateBy { it.name }
+            for (f in listOf(text, jpeg, pdf)) assertEquals(digest(f), readBack(listed.getValue(f.name)), "${f.name} read back")
+            assertTrue("image/jpeg" in typeOf(listed.getValue("b.jpg")), "a picked JPEG is claimed as one")
+            assertTrue("application/pdf" in typeOf(listed.getValue("c.pdf")))
+            println("three files uploaded by path and read back at their SHA-256, typed by their names")
+
+            // a nested folder with a hidden file and a non-ASCII name; a link in it said, never followed
+            val trip = File(dir, "Trip ü").apply { mkdirs() }
+            File(trip, ".hidden").writeText("hidden")
+            File(trip, "Büro 中文").mkdirs()
+            val nested = File(trip, "Büro 中文/notes.txt").apply { writeText("nested ".repeat(1000)) }
+            val outside = File(dir, "outside").apply { mkdirs(); File(this, "secret.txt").writeText("never") }
+            java.nio.file.Files.createSymbolicLink(File(trip, "link").toPath(), outside.toPath())
+            assertEquals(Answer.Queued(2), b.ask(Call.UploadFolder(personal, folderId, trip.path), timeout = 2.minutes))
+            val leftOut = nextSaid()
+            assertEquals(listOf(me.raddatz.veyq.mobile.words.Notice(me.raddatz.veyq.mobile.words.Msg.DEPOT_FOLDER_LINK_SKIPPED, "link")), leftOut.notices)
+            assertEquals(Answer.Done, b.ask(Call.UploadSeen(leftOut.id)))
+            settled(listOf(".hidden", "notes.txt"))
+            val tripNode = assertNotNull(under(folderId).firstOrNull { it.name == "Trip ü" }, "the folder under its own name")
+            assertNotNull(under(tripNode.nodeId).firstOrNull { it.name == ".hidden" }, "the hidden file")
+            val buro = assertNotNull(under(tripNode.nodeId).firstOrNull { it.name == "Büro 中文" })
+            assertEquals(digest(nested), readBack(under(buro.nodeId).single { it.name == "notes.txt" }))
+            assertTrue(fresh().state!!.lists.nodes.none { it.name == "secret.txt" })
+            println("a nested folder uploaded under its name with its hidden file; the link said and left out")
+
+            // a same-named file offered and replaced
+            val other = File(dir, "again").apply { mkdirs() }
+            val replacing = File(other, "a.txt").apply { writeText("the replaced content") }
+            assertEquals(Answer.Queued(1), b.ask(Call.UploadFiles(personal, folderId, name, listOf(replacing.path))))
+            val offer = nextSaid()
+            assertEquals(listOf(me.raddatz.veyq.mobile.words.Notices.replaceOffered("a.txt")), offer.notices)
+            assertEquals(me.raddatz.veyq.mobile.words.Msg.DEPOT_REPLACE_TITLE, offer.action)
+            assertEquals(Answer.Done, b.ask(Call.UploadTakeOffer(offer.id)))
+            val aNode = under(folderId).single { it.name == "a.txt" }
+            val replacedSha = digest(replacing)
+            kotlinx.coroutines.withTimeout(2.minutes.inWholeMilliseconds) { while (runCatching { readBack(aNode) }.getOrNull() != replacedSha) kotlinx.coroutines.delay(1_000) }
+            println("a same-named a.txt offered and replaced")
+
+            // a replace chosen on b.jpg's page, then a second session replaces it first: answered stale, nothing overwritten
+            val bNode = under(folderId).single { it.name == "b.jpg" }
+            val page = (b.ask(Call.FileOpen(at(bNode))) as Answer.FileOpened).file
+            b.watching(Watched.File(page)).until(2.minutes) { u -> (u as Update.File).shown?.takeIf { it.headerFacts != null } }
+            assertEquals(Answer.Done, b.ask(Call.FileChooseReplace(page)))
+            val peer = secondSession(origin, "bridge upload test, the peer")
+            val peerFile = assertNotNull(me.raddatz.veyq.mobile.depot.DepotFiles.one(peer, personal, bNode.nodeId))
+            val peerBytes = "the peer's content".encodeToByteArray()
+            val raced = me.raddatz.veyq.mobile.depot.DepotFiles.replace(peer, peerFile, peerBytes.size.toLong(), "text/plain", "peer.txt", null, peerFile.blobId, { from, len -> peerBytes.copyOfRange(from.toInt(), minOf(peerBytes.size, from.toInt() + len)) })
+            assertEquals(me.raddatz.veyq.mobile.depot.DepotFiles.Outcome.DONE, raced.outcome)
+            assertEquals(Answer.Queued(1), b.ask(Call.UploadReplace(page, pdf.path)))
+            val stale = nextSaid()
+            assertEquals(me.raddatz.veyq.mobile.words.Msg.DEPOT_REPLACE_ANYWAY, stale.action, "${stale.notices}")
+            assertEquals(Answer.Done, b.ask(Call.UploadSeen(stale.id)))
+            assertEquals(sha256(peerBytes), readBack(bNode), "the peer's replace was overwritten")
+            b.ask(Call.FileClose(page))
+            println("a replace raced by a second session answered stale, the peer's content kept")
+
+            // a large upload cancelled (nothing left); a file gone after it was picked fails, and is retried once back
+            val slow = File(dir, "slow.bin")
+            java.io.RandomAccessFile(slow, "rw").use { it.setLength(400L shl 20) }
+            val late = File(dir, "late.txt").apply { writeText("late") }
+            assertEquals(Answer.Queued(1), b.ask(Call.UploadFiles(personal, folderId, name, listOf(slow.path))))
+            assertEquals(Answer.Queued(1), b.ask(Call.UploadFiles(personal, folderId, name, listOf(late.path))))
+            late.renameTo(File(dir, "late.away"))
+            val running = uploads.until(5.minutes) { u -> (u as Update.Uploads).shown?.items()?.firstOrNull { it.name == "slow.bin" && it.status == me.raddatz.veyq.mobile.blob.UploadQueue.Status.UPLOADING && it.progress > 0.05 } }
+            assertEquals(Answer.Done, b.ask(Call.UploadCancel(running.id)))
+            uploads.until(2.minutes) { u -> (u as Update.Uploads).shown?.items()?.firstOrNull { it.id == running.id && it.status == me.raddatz.veyq.mobile.blob.UploadQueue.Status.CANCELLED } }
+            val failed = uploads.until(3.minutes) { u -> (u as Update.Uploads).shown?.items()?.firstOrNull { it.name == "late.txt" && it.failed } }
+            assertTrue(failed.canRetry, "${failed.line}")
+            File(dir, "late.away").renameTo(late)
+            assertEquals(Answer.Done, b.ask(Call.UploadRetry(failed.id)))
+            uploads.until(2.minutes) { u -> (u as Update.Uploads).shown?.items()?.firstOrNull { it.id == failed.id && it.status == me.raddatz.veyq.mobile.blob.UploadQueue.Status.DONE } }
+            val names = under(folderId).map { it.name }
+            assertTrue("slow.bin" !in names, "a cancelled upload left its file: $names")
+            assertEquals(1, names.count { it == "late.txt" }, "a retry made a second file: $names")
+            slow.delete()
+            println("slow.bin cancelled at ${(running.progress * 100).toInt()} %, nothing left; late.txt failed while gone, retried")
+
+            // a read that fails once mid-upload: the queue's own retry fills the file the first run made (no second file)
+            val flaky = File(dir, "flaky.bin").apply { writeBytes(ByteArray(3 * me.raddatz.veyq.mobile.crypto.V1.FRAME_PLAINTEXT) { (it % 251).toByte() }) }
+            JvmFiles.failOnce += "flaky.bin"
+            assertEquals(Answer.Queued(1), b.ask(Call.UploadFiles(personal, folderId, name, listOf(flaky.path))))
+            settled(listOf("flaky.bin"))
+            assertTrue("flaky.bin" !in JvmFiles.failOnce, "the read did not fail")
+            val flakyNodes = under(folderId).filter { it.name.startsWith("flaky") }
+            assertEquals(listOf("flaky.bin"), flakyNodes.map { it.name }, "the retry made another file")
+            assertEquals(digest(flaky), readBack(flakyNodes.single()))
+            println("flaky.bin failed once mid-upload; the retry filled the file its first run made")
+
+            // 2 GiB + 1 byte, drawn on disk, uploaded by path and saved back at its SHA-256
+            val bigSize = (2L shl 30) + 1
+            fun big(i: Long): Byte = ((i * 2654435761L) ushr 13).toByte()
+            val bigFile = File(dir, "big.bin")
+            java.io.BufferedOutputStream(bigFile.outputStream(), 1 shl 20).use { out ->
+                val buf = ByteArray(1 shl 20)
+                var at = 0L
+                while (at < bigSize) {
+                    val n = minOf(buf.size.toLong(), bigSize - at).toInt()
+                    for (k in 0 until n) buf[k] = big(at + k)
+                    out.write(buf, 0, n)
+                    at += n
+                }
+            }
+            val bigSha = digest(bigFile)
+            val upStarted = System.currentTimeMillis()
+            assertEquals(Answer.Queued(1), b.ask(Call.UploadFiles(personal, folderId, name, listOf(bigFile.path))))
+            settled(listOf("big.bin"), 60.minutes)
+            println("big.bin (${bigFile.length()} B) uploaded by path in ${System.currentTimeMillis() - upStarted} ms")
+            bigFile.delete()
+            val bigNode = under(folderId).single { it.name == "big.bin" }
+            val bigPage = (b.ask(Call.FileOpen(at(bigNode))) as Answer.FileOpened).file
+            b.watching(Watched.File(bigPage)).until(2.minutes) { u -> (u as Update.File).shown?.takeIf { it.headerFacts != null } }
+            val back = File(dir, "big.back")
+            val saveStarted = System.currentTimeMillis()
+            val save = (b.ask(Call.FileSave(bigPage, back.path)) as Answer.Saving).save
+            val saved = b.watching(Watched.Save(save)).until(60.minutes) { u -> (u as Update.Save).shown?.takeIf { it.end != null } }
+            assertEquals(me.raddatz.veyq.mobile.depot.FileSave.End.SAVED, saved.end, "${saved.notice}")
+            assertEquals(bigSize, back.length())
+            assertEquals(bigSha, digest(back), "the 2 GiB + 1 copy is not the file")
+            println("big.bin saved back in ${System.currentTimeMillis() - saveStarted} ms at $bigSha")
+            back.delete()
+            b.ask(Call.FileClose(bigPage))
+
+            // the one-byte quota: a folder upload said not to fit, nothing sent
+            val before = under(folderId).size
+            withOneByteQuota(origin, first.shown!!.tenant.tenantId) {
+                assertEquals(Answer.Queued(0), b.ask(Call.UploadFolder(personal, folderId, trip.path), timeout = 2.minutes))
+                val noRoom = nextSaid { s -> s.notices.any { it.msg == me.raddatz.veyq.mobile.words.Msg.DEPOT_FOLDER_NO_ROOM } }
+                assertEquals(Answer.Done, b.ask(Call.UploadSeen(noRoom.id)))
+                println("with one byte of room: ${noRoom.notices.map { it.msg }}")
+            }
+            assertEquals(before, under(folderId).size, "a folder that does not fit made something")
+        } finally {
+            dir.deleteRecursively()
+            val h = (b.ask(Call.HeaderOpen(me.raddatz.veyq.mobile.navigation.NodeAt(folder.scopeId, folderId, folder.kind, folder.name), me.raddatz.veyq.mobile.AppKinds.Facts(), 2)) as Answer.HeaderOpened).header
+            println("trash $name: ${(b.ask(Call.HeaderTrash(h), timeout = 1.minutes) as? Answer.Trashed)?.notice?.msg}")
+            val t = (b.ask(Call.TrashOpen(personal)) as Answer.TrashOpened).trash
+            val tw = b.watching(Watched.Trash(t))
+            tw.until(1.minutes) { u -> (u as Update.Trash).shown?.rows }.firstOrNull { it.id == folderId }?.let { row ->
+                val purged = b.ask(Call.TrashPurge(t, row.id), timeout = 5.minutes)
+                println("purge ${row.name}: $purged")
+                if (purged == Answer.Done) tw.until(5.minutes) { u -> (u as Update.Trash).shown?.takeIf { s -> s.busy == null && s.rows?.none { it.id == row.id } == true } }
+            }
+            b.ask(Call.TrashClose(t))
+            assertTrue(fresh().state!!.lists.nodes.none { it.nodeId == folderId }, "the folder was left")
+            b.shutdown()
+        }
+    }
+
+    /** A second session of the seeded principal through the core alone (a peer device), its tenant opened. */
+    private suspend fun secondSession(origin: String, device: String): me.raddatz.veyq.mobile.session.TenantSession {
+        val envFile = System.getenv("VEYQ_ENV_FILE")?.let(::File) ?: File(System.getProperty("veyq.repoRoot"), ".run/.env")
+        val env = envFile.readLines()
+            .mapNotNull { l -> l.substringBefore('=', "").takeIf { it.isNotBlank() }?.let { it.trim() to l.substringAfter('=').trim().trim('"', '\'') } }
+            .toMap()
+        val store = object : DeviceStore {
+            val values = ConcurrentHashMap<String, String>()
+            override fun read(key: String) = values[key]
+            override fun write(key: String, value: String) { values[key] = value }
+            override fun remove(key: String) { values.remove(key) }
+        }
+        val account = VeyqAccount.signIn(
+            BouncyCastlePrimitives, origin, env.getValue("VEYQ_EMAIL"), env.getValue("VEYQ_PASSWORD"), env.getValue("VEYQ_SECRET_KEY"),
+            ThisDevice(store, NoDeviceKeys, device, BouncyCastlePrimitives),
+        ) { block -> HttpClient(OkHttp, block) }
+        return account.open(account.tenants.first { origin.contains(it.domain) })
+    }
+
+    /**
      * A medium read in ranges through calls, over the real core (the Depot CR's Phase 4; ADR 0130 decision 2): with
      * `VEYQ_LIVE_MEDIUM=<a video file>` (a 600 MiB WebM, made by `ffmpeg` on this machine) a folder "App depot <n>" is made at
      * the personal space's top level and the file uploaded there by the core's own upload in a second session, read from

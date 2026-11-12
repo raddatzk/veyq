@@ -126,10 +126,21 @@ internal class Tenant(
     },
     /** A file's page (`ShellModel.fileModel`; the desktops hand no copy to another app, so it offers no "Send a copy"). */
     val file: ((node: NodeAt) -> me.raddatz.veyq.mobile.depot.FileModel)? = shell?.let { s -> { node -> s.fileModel(node, shares = false) } },
+    /**
+     * The uploads over the app's one [queue] (`ShellModel.depotUploads`), [changed] after each write (the shell's lists and
+     * the open file pages read anew); a test's tenant plays one over a door of its own.
+     */
+    val uploads: ((queue: me.raddatz.veyq.mobile.blob.UploadQueue, changed: () -> Unit) -> me.raddatz.veyq.mobile.depot.DepotUploads)? =
+        shell?.let { s -> { queue, changed -> s.depotUploads(queue, changed) } },
 )
 
-/** A header the host opened, with the most buttons its bar holds. */
-internal class HeldHeader(val model: NodeHeaderModel, val maxButtons: Int)
+/**
+ * A header the host opened, with the most buttons its bar holds, and the file page whose own actions join its plan
+ * ([Call.HeaderFacts]' `file`: a FILE's Replace, worded by the page).
+ */
+internal class HeldHeader(val model: NodeHeaderModel, val maxButtons: Int) {
+    val file = MutableStateFlow<Long?>(null)
+}
 
 /** An entry editor the host opened on Pot [pot] ([Call.EditorOpen]), typed in with [separator]. */
 internal class HeldEditor(val pot: Long, val model: EntryEditor, val separator: Char)
@@ -156,11 +167,22 @@ internal interface DeviceFiles {
     /** The whole file at [path] (a cover the host encoded); throws when it does not open or holds more than [most] bytes. */
     suspend fun read(path: String, most: Int): ByteArray
 
+    /**
+     * The file at [path] as an upload's source (core's `PickedPaths.source`): read at offsets a frame at a time, never whole;
+     * null where it is no file that reads.
+     */
+    fun source(path: String): me.raddatz.veyq.mobile.blob.UploadSource?
+
+    /** What a walk of the directory at [path] meets (core's `PickedPaths.walk`); null where it is no directory that lists. */
+    fun walk(path: String): List<me.raddatz.veyq.mobile.depot.FolderUpload.Found>?
+
     /** No file is written: a test's composition that has none to offer. */
     object None : DeviceFiles {
         override suspend fun write(path: String, produce: suspend (sink: (ByteArray) -> Unit) -> Boolean) =
             throw UnsupportedOperationException("this composition writes no files")
         override suspend fun read(path: String, most: Int): ByteArray = throw UnsupportedOperationException("this composition reads no files")
+        override fun source(path: String): me.raddatz.veyq.mobile.blob.UploadSource? = null
+        override fun walk(path: String): List<me.raddatz.veyq.mobile.depot.FolderUpload.Found>? = null
     }
 
     companion object {
@@ -201,6 +223,12 @@ internal class Bridge<A : Connection, T : Any>(compose: () -> Composition<A, T>)
     /** Each reader a file's page opened ([Call.FileReader]), by the reader's id: the page's id, so it closes with it. */
     private val pageReaders = Registry<Long>()
     private val saves = Registry<me.raddatz.veyq.mobile.depot.FileSave>()
+
+    /** The app's one upload queue (the phones' `AppModel.uploads`): emptied when the tenant closes. */
+    private val queue = me.raddatz.veyq.mobile.blob.UploadQueue()
+
+    /** The open tenant's uploads over [queue] ([Watched.Uploads]); null while none is open. */
+    private val uploads = MutableStateFlow<me.raddatz.veyq.mobile.depot.DepotUploads?>(null)
 
     /** "Manage servers" while it is open, null while closed; its spaces read by [managing]'s job. */
     private val manage = MutableStateFlow<List<ManagedShown>?>(null)
@@ -452,12 +480,40 @@ internal class Bridge<A : Connection, T : Any>(compose: () -> Composition<A, T>)
             } ?: noFile
             is Call.SaveCancel -> saves[call.save]?.let { if (it.cancel()) Answer.Done else Answer.Refused(Answer.Why.SAVE_ENDED) }
                 ?: Answer.Refused(Answer.Why.NO_SUCH_SAVE)
+            is Call.FileChooseReplace -> filePages[call.file]?.let { if (it.chooseReplace()) Answer.Done else Answer.Refused(Answer.Why.NO_REPLACE) } ?: noFile
+            is Call.UploadFiles -> uploads.value?.let { u ->
+                // each path opened by the core and read at offsets: nothing of a file crosses, none is held whole
+                Answer.Queued(u.upload(call.scopeId, call.parentId, call.label, call.paths.mapNotNull { parts.files.source(it) }))
+            } ?: noTenant
+            is Call.UploadFolder -> uploads.value?.let { u ->
+                val found = parts.files.walk(call.path) ?: return Answer.Refused(Answer.Why.NO_SUCH_PATH)
+                Answer.Queued(u.uploadFolder(call.scopeId, call.parentId, null, call.path, found))
+            } ?: noTenant
+            is Call.UploadReplace -> uploads.value?.let { u ->
+                val page = filePages[call.file] ?: return noFile
+                val source = parts.files.source(call.path) ?: return Answer.Refused(Answer.Why.NO_SUCH_PATH)
+                if (u.replace(page, source)) Answer.Queued(1) else Answer.Refused(Answer.Why.NOT_CHOSEN)
+            } ?: noTenant
+            is Call.UploadCancel -> uploads.value?.cancel(call.item).done()
+            is Call.UploadRetry -> uploads.value?.retry(call.item).done()
+            Call.UploadCancelAll -> uploads.value?.cancelAll().done()
+            is Call.UploadAcknowledge -> uploads.value?.acknowledge(call.batch).done()
+            is Call.UploadTakeOffer -> uploads.value?.let { u ->
+                val said = u.current.saying.firstOrNull { it.id == call.said } ?: return Answer.Refused(Answer.Why.NO_SUCH_SAID)
+                u.take(said)
+                Answer.Done
+            } ?: noTenant
+            is Call.UploadSeen -> uploads.value?.seen(call.said).done()
             is Call.HeaderOpen -> tenant.value?.models?.header?.let { make ->
                 val id = ids.incrementAndFetch()
                 headers.put(id, HeldHeader(make(call.node, call.facts, ::closeOpen), call.maxButtons))
                 Answer.HeaderOpened(id)
             } ?: noTenant
-            is Call.HeaderFacts -> headers[call.header]?.model?.update(call.facts).done(Answer.Why.NO_SUCH_HEADER)
+            is Call.HeaderFacts -> headers[call.header]?.let { h ->
+                h.file.value = call.file
+                h.model.update(call.facts)
+                Answer.Done
+            } ?: noHeader
             is Call.HeaderClose -> headers.remove(call.header)?.let { Answer.Done } ?: Answer.Refused(Answer.Why.NO_SUCH_HEADER)
             is Call.HeaderPin -> headers[call.header]?.let { Answer.Said(it.model.toggleFavorite()) } ?: noHeader
             is Call.HeaderTrash -> headers[call.header]?.let { h -> h.model.trash().let { Answer.Trashed(it, h.model.current.undo != null) } } ?: noHeader
@@ -643,6 +699,13 @@ internal class Bridge<A : Connection, T : Any>(compose: () -> Composition<A, T>)
         val t = parts.await().tenant(o.session) ?: return Answer.Done
         closeTenant()
         tenant.value = Open(t, o.account, o.tenant)
+        // a write of the uploads reads the shell's lists anew and every file page open (a replaced file shows its new content)
+        uploads.value = t.uploads?.invoke(queue) {
+            scope.launch {
+                runCatching { t.shell?.refresh() }
+                filePages.values().forEach { it.reload() }
+            }
+        }
         scope.launch { runCatching { t.loadPictures() } }
         t.shell?.load(openLastUsed = true)
         return Answer.Done
@@ -650,6 +713,10 @@ internal class Bridge<A : Connection, T : Any>(compose: () -> Composition<A, T>)
 
     private fun closeTenant() {
         tenant.value = null
+        // the uploads are the tenant's: what still waits or runs is cancelled (the phones' `uploads.clear()` on a switch)
+        uploads.value?.close()
+        uploads.value = null
+        queue.clear()
         pots.removeAll().forEach { it.close() }
         editors.removeAll().forEach { it.model.close() }
         settings.removeAll()
@@ -692,8 +759,11 @@ internal class Bridge<A : Connection, T : Any>(compose: () -> Composition<A, T>)
                 } ?: flowOf(Update.Shell(null))
             }
         }
-        is Watched.Header -> headers[w.header]?.let { h -> h.model.state.map { Update.Header(w.header, shownHeader(h)) } }
-            ?: flowOf(Update.Header(w.header, null))
+        // a file page's own actions join its header's plan: read anew as the page's state changes
+        is Watched.Header -> headers[w.header]?.let { h ->
+            val page = h.file.flatMapLatest { f -> f?.let { filePages[it]?.state } ?: flowOf(null) }
+            combine(h.model.state, page) { _, _ -> Update.Header(w.header, shownHeader(h)) }
+        } ?: flowOf(Update.Header(w.header, null))
         is Watched.Trash -> trashes[w.trash]?.let { t -> t.state.map { Update.Trash(w.trash, shownTrash(t, it)) } }
             ?: flowOf(Update.Trash(w.trash, null))
         is Watched.Move -> moves[w.move]?.let { m -> m.state.map { Update.Move(w.move, shownMove(m, it)) } }
@@ -717,6 +787,7 @@ internal class Bridge<A : Connection, T : Any>(compose: () -> Composition<A, T>)
             ?: flowOf(Update.File(w.file, null))
         is Watched.Save -> saves[w.save]?.let { sv -> sv.state.map { Update.Save(w.save, SaveShown(sv.name, it.written, it.total, it.fraction, it.end, it.notice)) } }
             ?: flowOf(Update.Save(w.save, null))
+        Watched.Uploads -> uploads.flatMapLatest { u -> u?.state?.map { Update.Uploads(shownUploads(it)) } ?: flowOf(Update.Uploads(null)) }
         is Watched.Pot -> {
             val pictures = tenant.value?.models?.pictures ?: flowOf(emptyMap())
             (pots[w.pot]?.state ?: flowOf(null)).combine(pictures) { s, p -> Update.Pot(w.pot, s, if (s == null) emptyList() else p.keys.sorted()) }
@@ -750,7 +821,7 @@ internal class Bridge<A : Connection, T : Any>(compose: () -> Composition<A, T>)
             canGoBack = shell.canGoBack,
             isHome = shell.isHome,
             drawerOpensAtStart = shell.drawerOpensAtStart,
-            creates = AppKinds.drawerCreates.map { ShellShown.ShownCreate(it, it.word) },
+            creates = AppKinds.createsWhere(shell.isHome).map { ShellShown.ShownCreate(it, it.word) },
             canCreateHere = open.models.shell?.canCreateHere == true,
             headed = shell.openObject?.at ?: shell.space?.let(shell::folderAt),
             me = open.models.me,
@@ -816,20 +887,42 @@ internal class Bridge<A : Connection, T : Any>(compose: () -> Composition<A, T>)
         canCreate = sheet.canCreate(name), saving = s.saving, notice = s.notice, done = s.done,
     )
 
-    /** A header as the host draws it ([HeaderShown]), each field the model's own answer. */
+    /** A header as the host draws it ([HeaderShown]), each field the model's own answer — a file page's own actions its. */
     private fun shownHeader(h: HeldHeader): HeaderShown {
         val m = h.model
         val s = m.current
-        fun actions(ids: List<String>) = ids.map { HeaderShown.PlanAction(it, m.label(it, hasCover = s.cover != null)) }
+        val page = h.file.value?.let { filePages[it] }?.current?.header
+        fun word(id: String) = page?.label(id) ?: m.label(id, hasCover = s.cover != null)
+        fun actions(ids: List<String>) = ids.map { HeaderShown.PlanAction(it, word(it)) }
         return HeaderShown(
             node = m.node,
             pinned = s.pinned,
-            plan = m.plan(h.maxButtons)?.let { p -> HeaderShown.Plan(actions(p.buttons), actions(p.menu), actions(p.last)) },
+            plan = m.plan(h.maxButtons, page?.own.orEmpty())?.let { p -> HeaderShown.Plan(actions(p.buttons), actions(p.menu), actions(p.last)) },
             deleteQuestion = m.deleteQuestion(),
             undo = s.undo,
             gone = s.gone,
             archiveName = s.downloadName ?: NodeExport.fileName(m.node.name),
             cover = s.cover,
+        )
+    }
+
+    /** The uploads as the host draws them ([UploadsShown]), each field the model's or a core function's answer. */
+    private fun shownUploads(s: me.raddatz.veyq.mobile.depot.DepotUploads.State): UploadsShown {
+        val q = s.queue
+        return UploadsShown(
+            summary = Notices.uploadSummary(q),
+            active = q.active,
+            progress = q.progress,
+            preparing = s.preparing?.let { Notice(Msg.UPLOAD_PREPARING_FOLDER, it) },
+            batches = q.batches.map { b ->
+                UploadsShown.Batch(b.id, b.label, b.finished, b.items.map { i ->
+                    UploadsShown.Item(
+                        i.id, i.name, i.sizeBytes, i.status, i.progress, Notices.uploadStatus(i),
+                        failed = i.status == me.raddatz.veyq.mobile.blob.UploadQueue.Status.FAILED, canCancel = i.active, canRetry = i.retryable,
+                    )
+                })
+            },
+            said = s.said?.let { UploadsShown.Said(it.id, it.notices, it.action) },
         )
     }
 

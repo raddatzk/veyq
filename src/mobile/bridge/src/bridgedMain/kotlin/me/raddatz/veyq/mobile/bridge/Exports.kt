@@ -81,6 +81,10 @@ private object Files : DeviceFiles {
         }
     }
 
+    override fun source(path: String): me.raddatz.veyq.mobile.blob.UploadSource? = me.raddatz.veyq.mobile.blob.PickedPaths.source(path)
+
+    override fun walk(path: String): List<me.raddatz.veyq.mobile.depot.FolderUpload.Found>? = me.raddatz.veyq.mobile.blob.PickedPaths.walk(path)
+
     private const val READ_STEP = 1 shl 16
 }
 

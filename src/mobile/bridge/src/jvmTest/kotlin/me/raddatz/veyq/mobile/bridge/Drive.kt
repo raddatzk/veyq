@@ -60,10 +60,56 @@ internal fun Bridge<*, *>.watching(w: Watched): Watching {
 internal suspend fun Bridge<*, *>.gateNow(): me.raddatz.veyq.mobile.session.SessionModel.Gate =
     watching(Watched.Session).let { w -> (w.next() as Update.Session).gate.also { unwatch(w.id) } }
 
-/** core's `FileSink` as the JVM plays it: the file stays only when the producer answered true. */
+/**
+ * core's `FileSink`, `FileSource` and `PickedPaths` as the JVM plays them: a written file stays only when the producer
+ * answered true; a picked path is read at offsets ([reads] records each read, `<name>@<from>+<length>`, and each whole
+ * read, `<name>@whole`, so a test tells the two apart); a directory walked without following a link.
+ */
 internal object JvmFiles : DeviceFiles {
-    override suspend fun read(path: String, most: Int): ByteArray =
-        java.io.File(path).readBytes().also { if (it.size > most) throw IllegalStateException("too large") }
+    val reads: MutableList<String> = java.util.Collections.synchronizedList(ArrayList())
+
+    /** Names whose first read past the first frame fails once (a network or disk hiccup mid-upload), then reads. */
+    val failOnce: MutableSet<String> = java.util.concurrent.ConcurrentHashMap.newKeySet()
+
+    override suspend fun read(path: String, most: Int): ByteArray {
+        reads += "${java.io.File(path).name}@whole"
+        return java.io.File(path).readBytes().also { if (it.size > most) throw IllegalStateException("too large") }
+    }
+
+    override fun source(path: String): me.raddatz.veyq.mobile.blob.UploadSource? {
+        val f = java.io.File(path)
+        if (!f.isFile || !f.canRead()) return null
+        return me.raddatz.veyq.mobile.blob.UploadSource.of(f.name, f.length(), me.raddatz.veyq.mobile.blob.MediaTypes.byName(f.name), f.lastModified()) { from, length ->
+            reads += "${f.name}@$from+$length"
+            if (from > 0 && failOnce.remove(f.name)) throw java.io.IOException("${f.name} did not read this once")
+            java.io.RandomAccessFile(f, "r").use { raf ->
+                val buf = ByteArray(maxOf(0, minOf(length.toLong(), raf.length() - from).toInt()))
+                raf.seek(from)
+                raf.readFully(buf)
+                buf
+            }
+        }
+    }
+
+    override fun walk(path: String): List<me.raddatz.veyq.mobile.depot.FolderUpload.Found>? {
+        val root = java.nio.file.Paths.get(path)
+        if (!java.nio.file.Files.isDirectory(root, java.nio.file.LinkOption.NOFOLLOW_LINKS)) return null
+        val out = ArrayList<me.raddatz.veyq.mobile.depot.FolderUpload.Found>()
+        fun visit(dir: java.nio.file.Path) {
+            val names = java.nio.file.Files.list(dir).use { s -> s.map { it.fileName.toString() }.sorted().toList() }
+            for (n in names) {
+                val p = dir.resolve(n)
+                val at = root.relativize(p).toString().replace('\\', '/')
+                when {
+                    java.nio.file.Files.isSymbolicLink(p) -> out += me.raddatz.veyq.mobile.depot.FolderUpload.Found(at, me.raddatz.veyq.mobile.depot.FolderUpload.Kind.LINK)
+                    java.nio.file.Files.isDirectory(p) -> { out += me.raddatz.veyq.mobile.depot.FolderUpload.Found(at, me.raddatz.veyq.mobile.depot.FolderUpload.Kind.DIRECTORY); visit(p) }
+                    else -> out += me.raddatz.veyq.mobile.depot.FolderUpload.Found(at, me.raddatz.veyq.mobile.depot.FolderUpload.Kind.FILE, source(p.toString()))
+                }
+            }
+        }
+        visit(root)
+        return out
+    }
 
     override suspend fun write(path: String, produce: suspend (sink: (ByteArray) -> Unit) -> Boolean): Boolean {
         val file = java.io.File(path)

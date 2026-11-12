@@ -1253,6 +1253,194 @@ class DispatchTest {
     }
 
     /**
+     * A level of Depot files the test plays as the server, for both a file's page and the uploads: each file by name with its
+     * content's blob; an upload reads its source a frame at a time as the core's does (the reads a [JvmFiles] source records),
+     * a name a file holds answered EXISTS, a replace over another blob than the one there STALE. An upload of a name starting
+     * with "Held" waits until [let]; one starting with "Fail" fails while [failing].
+     */
+    private class PlayedLevel : me.raddatz.veyq.mobile.depot.DepotUploads.Door, me.raddatz.veyq.mobile.depot.FileModel.Door {
+        val names = java.util.concurrent.ConcurrentHashMap<String, String>() // name -> node id
+        val blobs = java.util.concurrent.ConcurrentHashMap<String, String>() // node id -> blob
+        val sent: MutableList<String> = java.util.Collections.synchronizedList(ArrayList())
+        val let = kotlinx.coroutines.CompletableDeferred<Unit>()
+        @Volatile var failing = true
+        @Volatile var changes = 0
+        private val next = java.util.concurrent.atomic.AtomicInteger()
+
+        fun put(name: String, blob: String): String = "n-$name".also { names[name] = it; blobs[it] = blob }
+
+        private suspend fun readAll(source: me.raddatz.veyq.mobile.blob.UploadSource, progress: (Double) -> Unit) {
+            var from = 0L
+            while (from < source.size) {
+                val n = minOf(V1.FRAME_PLAINTEXT.toLong(), source.size - from).toInt()
+                source.read(from, n)
+                from += n
+                progress(from.toDouble() / source.size)
+            }
+        }
+
+        override fun uploadJob(scopeId: String, parentId: String?, source: me.raddatz.veyq.mobile.blob.UploadSource, name: String) =
+            me.raddatz.veyq.mobile.depot.DepotFiles.UploadJob(scopeId, parentId, source, name, { n, src, p, _, _ ->
+                names[n]?.let { return@UploadJob me.raddatz.veyq.mobile.depot.DepotFiles.Uploaded(me.raddatz.veyq.mobile.depot.DepotFiles.Outcome.EXISTS, existing = it) }
+                if (n.startsWith("Held")) let.await()
+                if (n.startsWith("Fail") && failing) return@UploadJob me.raddatz.veyq.mobile.depot.DepotFiles.Uploaded(me.raddatz.veyq.mobile.depot.DepotFiles.Outcome.FAILED)
+                readAll(src, p)
+                sent += "upload:${parentId ?: "top"}/$n"
+                me.raddatz.veyq.mobile.depot.DepotFiles.Uploaded(me.raddatz.veyq.mobile.depot.DepotFiles.Outcome.DONE, put(n, "b-$n"))
+            })
+
+        override suspend fun prepareFolder(scopeId: String, parentId: String?, rootName: String, entries: List<me.raddatz.veyq.mobile.depot.FolderUpload.Entry>) =
+            me.raddatz.veyq.mobile.depot.FolderUpload.Report(
+                me.raddatz.veyq.mobile.depot.FolderUpload.Outcome.READY, rootName, entries.sumOf { it.size }, "n-$rootName",
+                jobs = entries.map { uploadJob(scopeId, "n-$rootName", it.source, it.path) },
+            )
+
+        fun listed(nodeId: String): me.raddatz.veyq.mobile.depot.DepotFiles.File? = blobs[nodeId]?.let { blob ->
+            me.raddatz.veyq.mobile.depot.DepotFiles.File("s", nodeId, blob, 1, 0, null, 7, "text/plain", nodeId.removePrefix("n-"), 1_700_000_000_000, null)
+        }
+
+        override fun replaceJob(file: me.raddatz.veyq.mobile.depot.DepotFiles.File, source: me.raddatz.veyq.mobile.blob.UploadSource, expectedBlobId: String?) =
+            me.raddatz.veyq.mobile.depot.DepotFiles.ReplaceJob(file, source, expectedBlobId, source.name) { src, e, p ->
+                val now = blobs[file.nodeId]
+                if (now != e) return@ReplaceJob me.raddatz.veyq.mobile.depot.DepotFiles.Uploaded(me.raddatz.veyq.mobile.depot.DepotFiles.Outcome.STALE, file.nodeId, currentBlobId = now)
+                readAll(src, p)
+                sent += "replace:${file.nodeId} over $e"
+                blobs[file.nodeId] = "r${next.incrementAndGet()}-${src.name}"
+                me.raddatz.veyq.mobile.depot.DepotFiles.Uploaded(me.raddatz.veyq.mobile.depot.DepotFiles.Outcome.DONE, file.nodeId)
+            }
+
+        override suspend fun file(scopeId: String, nodeId: String) = listed(nodeId)
+        override fun changed() {
+            changes++
+        }
+
+        // the file's page
+        override suspend fun file(node: NodeAt) = listed(node.nodeId)
+        override fun inIdentityFolder(node: NodeAt) = false
+        override suspend fun read(file: me.raddatz.veyq.mobile.depot.DepotFiles.File, first: Int, until: Int, sink: suspend (ByteArray) -> Unit) {
+            if (first == 0) sink("content".encodeToByteArray())
+        }
+        override fun reader(file: me.raddatz.veyq.mobile.depot.DepotFiles.File) = RangeReader(7, 1) { a, b, sink -> read(file, a, b, sink) }
+        override suspend fun uploader(file: me.raddatz.veyq.mobile.depot.DepotFiles.File): me.raddatz.veyq.mobile.depot.Uploaders.Uploader? = null
+    }
+
+    @Test
+    fun filesAFolderAndAReplaceAreUploadedByPathAndTheQueueIsDrivenThroughCalls() = runBlocking {
+        val dir = java.nio.file.Files.createTempDirectory("veyq-up").toFile()
+        val a = java.io.File(dir, "a.txt").apply { writeBytes(ByteArray(3 * V1.FRAME_PLAINTEXT + 5) { (it % 97).toByte() }) }
+        val bBin = java.io.File(dir, "b.bin").apply { writeBytes(ByteArray(10) { it.toByte() }) }
+        val trip = java.io.File(dir, "Trip").apply { mkdirs() }
+        java.io.File(trip, ".hidden").writeText("h")
+        java.io.File(trip, "x.txt").writeText("x")
+        java.io.File(trip, "sub").mkdirs()
+        java.io.File(trip, "sub/y.txt").writeText("y")
+        val elsewhere = java.io.File(dir, "elsewhere").apply { mkdirs(); java.io.File(this, "secret.txt").writeText("never") }
+        java.nio.file.Files.createSymbolicLink(java.io.File(trip, "link").toPath(), elsewhere.toPath())
+        java.io.File(dir, "Held.bin").writeText("held")
+        java.io.File(dir, "Held2.bin").writeText("held")
+        java.io.File(dir, "Fail.bin").writeText("fail")
+
+        val level = PlayedLevel()
+        val b = Bridge {
+            val hidden = Hidden({}, emptySet())
+            Composition(SessionModel(Door(), hidden, RecentUses({}, emptyList())), hidden, JvmFiles) { _ ->
+                Tenant(
+                    shell = null, pot = null, me = "u1", pictures = pictures, loadPictures = {},
+                    header = { node, facts, _ -> me.raddatz.veyq.mobile.navigation.NodeHeaderModel(node, facts, Played()) },
+                    file = { node -> me.raddatz.veyq.mobile.depot.FileModel(node, level, shares = false) },
+                    uploads = { queue, changed -> me.raddatz.veyq.mobile.depot.DepotUploads(queue, object : me.raddatz.veyq.mobile.depot.DepotUploads.Door by level {
+                        override fun changed() { level.changed(); changed() }
+                    }) },
+                )
+            }
+        }
+        assertEquals(Update.Uploads(null), b.watching(Watched.Uploads).next())
+        assertEquals(Answer.Refused(Answer.Why.NO_TENANT_OPEN), b.ask(Call.UploadFiles("s", null, "Home", listOf(a.path))))
+        b.signedIn()
+        val uploads = b.watching(Watched.Uploads)
+        fun UploadsShown.items() = batches.flatMap { it.items }
+
+        // two files by path (a third is no file): answered once queued, each read at offsets a frame at a time, never whole
+        JvmFiles.reads.clear()
+        assertEquals(Answer.Queued(2), b.ask(Call.UploadFiles("s", null, "Home", listOf(a.path, bBin.path, java.io.File(dir, "gone.txt").path))), "an upload answered before it was queued")
+        uploads.until { u -> (u as Update.Uploads).shown?.takeIf { s -> s.items().count { it.status == me.raddatz.veyq.mobile.blob.UploadQueue.Status.DONE } == 2 } }
+        assertEquals(setOf("upload:top/a.txt", "upload:top/b.bin"), level.sent.toSet())
+        val aReads = JvmFiles.reads.filter { it.startsWith("a.txt@") }
+        assertTrue(aReads.none { it.endsWith("@whole") }, "a path was read whole: $aReads")
+        assertEquals(listOf(0L, 1L, 2L, 3L).map { "a.txt@${it * V1.FRAME_PLAINTEXT}+${if (it < 3) V1.FRAME_PLAINTEXT else 5}" }, aReads, "read at offsets, a frame at a time")
+
+        // a same-named file: the core's offer said with its action, taken through the call: the replace goes up
+        assertEquals(Answer.Queued(1), b.ask(Call.UploadFiles("s", null, "Home", listOf(a.path))))
+        val offer = uploads.until { u -> (u as Update.Uploads).shown?.said }
+        assertEquals(listOf(me.raddatz.veyq.mobile.words.Notices.replaceOffered("a.txt")), offer.notices, "the offer is not the core's")
+        assertEquals(Msg.DEPOT_REPLACE_TITLE, offer.action)
+        assertEquals(Answer.Refused(Answer.Why.NO_SUCH_SAID), b.ask(Call.UploadTakeOffer(offer.id + 99)))
+        assertEquals(Answer.Done, b.ask(Call.UploadTakeOffer(offer.id)))
+        uploads.until { u -> (u as Update.Uploads).shown?.takeIf { it.said == null && level.sent.contains("replace:n-a.txt over b-a.txt") } }
+
+        // a folder by path: walked by the core (the hidden file kept, the link said and never followed), queued under its name
+        assertEquals(Answer.Refused(Answer.Why.NO_SUCH_PATH), b.ask(Call.UploadFolder("s", null, a.path)))
+        assertEquals(Answer.Queued(3), b.ask(Call.UploadFolder("s", null, trip.path)))
+        val leftOut = uploads.until { u -> (u as Update.Uploads).shown?.said }
+        assertEquals(listOf(me.raddatz.veyq.mobile.words.Notice(Msg.DEPOT_FOLDER_LINK_SKIPPED, "link")), leftOut.notices)
+        assertNull(leftOut.action)
+        assertEquals(Answer.Done, b.ask(Call.UploadSeen(leftOut.id)))
+        uploads.until { u -> (u as Update.Uploads).shown?.takeIf { it.said == null && level.sent.containsAll(listOf("upload:n-Trip/.hidden", "upload:n-Trip/x.txt", "upload:n-Trip/sub/y.txt")) } }
+        assertTrue(level.sent.none { it.contains("secret") })
+
+        // a replace from a file's page: chosen first, then a peer's replace meanwhile answered stale — "Replace anyway" taken
+        val page = (b.ask(Call.FileOpen(NodeAt("s", "n-b.bin", "FILE", "b.bin"))) as Answer.FileOpened).file
+        val shownPage = b.watching(Watched.File(page)).until { u -> (u as Update.File).shown?.takeIf { it.headerFacts != null } }
+        val header = (b.ask(Call.HeaderOpen(NodeAt("s", "n-b.bin", "FILE", "b.bin"), shownPage.headerFacts, 2)) as Answer.HeaderOpened).header
+        assertEquals(Answer.Done, b.ask(Call.HeaderFacts(header, shownPage.headerFacts, page)))
+        val plan = b.watching(Watched.Header(header)).until { u -> (u as Update.Header).shown?.plan?.takeIf { p -> (p.buttons + p.menu + p.last).any { it.id == "replace" } } }
+        assertEquals(Msg.DEPOT_REPLACE, (plan.buttons + plan.menu + plan.last).first { it.id == "replace" }.word, "the page's own Replace, worded by it")
+        assertEquals(Answer.Refused(Answer.Why.NOT_CHOSEN), b.ask(Call.UploadReplace(page, a.path)), "a replace not chosen first")
+        assertEquals(Answer.Done, b.ask(Call.FileChooseReplace(page)))
+        level.blobs["n-b.bin"] = "peer" // someone else replaced it while the dialog was open
+        assertEquals(Answer.Refused(Answer.Why.NO_SUCH_PATH), b.ask(Call.UploadReplace(page, java.io.File(dir, "gone.txt").path)))
+        assertEquals(Answer.Done, b.ask(Call.FileChooseReplace(page)))
+        level.blobs["n-b.bin"] = "peer2"
+        assertEquals(Answer.Queued(1), b.ask(Call.UploadReplace(page, a.path)))
+        val stale = uploads.until { u -> (u as Update.Uploads).shown?.said }
+        assertEquals(listOf(me.raddatz.veyq.mobile.words.Notices.replaceStale("a.txt")), stale.notices)
+        assertEquals(Msg.DEPOT_REPLACE_ANYWAY, stale.action)
+        assertTrue(level.sent.none { it.startsWith("replace:n-b.bin") }, "nothing overwritten before it was asked")
+        assertEquals(Answer.Done, b.ask(Call.UploadTakeOffer(stale.id)))
+        uploads.until { u -> (u as Update.Uploads).shown?.takeIf { level.sent.contains("replace:n-b.bin over peer2") } }
+        assertTrue(level.changes > 0)
+
+        // a cancel, a retry and Cancel all
+        assertEquals(Answer.Queued(1), b.ask(Call.UploadFiles("s", null, "Home", listOf(java.io.File(dir, "Held.bin").path))))
+        val held = uploads.until { u -> (u as Update.Uploads).shown?.items()?.firstOrNull { it.name == "Held.bin" && it.status == me.raddatz.veyq.mobile.blob.UploadQueue.Status.UPLOADING || it.name == "Held.bin" && it.status == me.raddatz.veyq.mobile.blob.UploadQueue.Status.PREPARING } }
+        assertTrue(held.canCancel)
+        assertEquals(Answer.Done, b.ask(Call.UploadCancel(held.id)))
+        uploads.until { u -> (u as Update.Uploads).shown?.items()?.firstOrNull { it.id == held.id && it.status == me.raddatz.veyq.mobile.blob.UploadQueue.Status.CANCELLED } }
+        assertEquals(Answer.Queued(1), b.ask(Call.UploadFiles("s", null, "Home", listOf(java.io.File(dir, "Fail.bin").path))))
+        val failed = uploads.until { u -> (u as Update.Uploads).shown?.items()?.firstOrNull { it.name == "Fail.bin" && it.failed } }
+        assertTrue(failed.canRetry && !failed.canCancel)
+        assertEquals(Msg.UPLOAD_FAILED_COUNT, uploads.until { u -> (u as Update.Uploads).shown?.summary?.takeIf { it.msg == Msg.UPLOAD_FAILED_COUNT } }.msg)
+        level.failing = false
+        assertEquals(Answer.Done, b.ask(Call.UploadRetry(failed.id)))
+        uploads.until { u -> (u as Update.Uploads).shown?.items()?.firstOrNull { it.id == failed.id && it.status == me.raddatz.veyq.mobile.blob.UploadQueue.Status.DONE } }
+        assertEquals(Answer.Queued(2), b.ask(Call.UploadFiles("s", null, "Home", listOf(java.io.File(dir, "Held.bin").path, java.io.File(dir, "Held2.bin").path))))
+        uploads.until { u -> (u as Update.Uploads).shown?.takeIf { it.active == 2 } }
+        assertEquals(Answer.Done, b.ask(Call.UploadCancelAll))
+        val cancelledAll = uploads.until { u -> (u as Update.Uploads).shown?.takeIf { s -> s.active == 0 && s.batches.lastOrNull()?.items?.let { i -> i.size == 2 && i.all { it.status == me.raddatz.veyq.mobile.blob.UploadQueue.Status.CANCELLED } } == true } }
+        // a batch closed by the tray
+        val batch = cancelledAll.batches.last()
+        assertEquals(Answer.Done, b.ask(Call.UploadAcknowledge(batch.id)))
+        uploads.until { u -> (u as Update.Uploads).shown?.takeIf { s -> s.batches.none { it.id == batch.id } } }
+
+        // the uploads are the tenant's
+        assertEquals(Answer.Done, b.ask(Call.SessionSignOut("a.example#u1")))
+        uploads.until { u -> (u as Update.Uploads).takeIf { it.shown == null } }
+        level.let.complete(Unit)
+        dir.deleteRecursively()
+        b.shutdown()
+    }
+
+    /**
      * A Pot the test plays (`PotModel.Opened`): Anna and Ben in euros, a dinner Anna paid (so Ben owes her) and a taxi
      * deleted whose receipts stay until [purgeAfter]; each poll, refresh and write recorded. A poll answers "moved" with a
      * lunch added, or — once [hold] is set — waits until it is cancelled, which [pollCancelled] records.
