@@ -26,6 +26,7 @@ vi.mock('../applications/registry', async (importOriginal) => {
 vi.mock('../../api/client', () => ({ sharesApi: vi.fn(), publicSharesApi: vi.fn(), tokenApi: vi.fn() }))
 
 import ShareTreePage from './ShareTreePage.vue'
+import LevelView from '../node/LevelView.vue'
 import { createRegistry } from '../applications/registry'
 import { FOLDER_KIND } from '../node/kind'
 import { sealName, wrapContentKey } from '../node/tree'
@@ -119,5 +120,20 @@ describe('ShareTreePage: a breadcrumb click keeps the share key', () => {
     await flushPromises()
     expect(click.defaultPrevented).toBe(false)
     expect(router.currentRoute.value.query.node).toBe(NESTED)
+  })
+})
+
+// Back to where the guest was (`../node/returnTo.ts`), as a member: a crumb up hands the level the child the guest came
+// through, whose row it brings back and marks.
+describe('ShareTreePage: a crumb up brings back the folder the guest came from', () => {
+  it('one level up: the folder left; to the root: the top folder it lay in', async () => {
+    const w = await mountAtNested()
+    await clickCrumb(w, 'Briefe')
+    expect(w.findComponent(LevelView).props('returnTo')).toBe(NESTED)
+    expect(w.find('li.is-returned').attributes('data-node-id')).toBe(NESTED)
+
+    await clickCrumb(w, 'Familie')
+    expect(w.findComponent(LevelView).props('returnTo')).toBe(LETTERS)
+    expect(w.find('li.is-returned').attributes('data-node-id')).toBe(LETTERS)
   })
 })
