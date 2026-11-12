@@ -9,13 +9,18 @@
 //! (`Header.Download`, under the core's archive name), a Pot's through its page (`Pot.Download`); the share opens core's
 //! share sheet ([crate::share_sheet]); the report opens core's report sheet ([crate::report]), the cover its dialog
 //! ([crate::cover]), whose words follow the core's state (Set cover, or Change cover where the node has one).
+//!
+//! The header also draws the node's head for its page ([Header::hero]): the cover across the page's width, 16:9, cut as
+//! stored (`Header.CoverPicture`, the part its crop shows by `Cover.Cut`: the core's math), as Android's and Apple's
+//! pages place it first in their scroll; a click opens the cover dialog where the plan offers it. A node without a cover
+//! shows none (its cover is set from the menu).
 use std::cell::{Cell, RefCell};
 use std::rc::{Rc, Weak};
 
 use adw::prelude::*;
-use gtk::{gio, glib};
+use gtk::{cairo, gdk, gio, glib};
 
-use crate::bridge::{self, Watch, wire::Answer, wire::Call, wire::Facts, wire::HeaderShown, wire::NodeAt, wire::Update, wire::Watched};
+use crate::bridge::{self, Watch, wire::Answer, wire::Call, wire::Crop, wire::Facts, wire::HeaderShown, wire::NodeAt, wire::Update, wire::Watched};
 use crate::{said, words};
 
 /// The most buttons the content's header bar holds beside its title (GNOME: a few, the rest in the menu).
@@ -55,6 +60,12 @@ struct Inner {
     later: RefCell<Option<Option<Facts>>>,
     /// A state showed the trash's undo offered: its end is the next state without it.
     seen_undo: Cell<bool>,
+    /// The node's head: its cover, cut as stored, drawn 16:9 across the width it is given; hidden while it has none.
+    hero: gtk::DrawingArea,
+    picture: Rc<RefCell<Option<cairo::ImageSurface>>>,
+    /// The crop the head shows (`HeaderShown.cover`), and the number of the latest read of its picture.
+    hero_crop: RefCell<Option<Crop>>,
+    hero_asked: Cell<u64>,
 }
 
 impl Header {
@@ -70,7 +81,49 @@ impl Header {
             on_bar: Cell::new(true),
             later: RefCell::new(None),
             seen_undo: Cell::new(false),
+            hero: gtk::DrawingArea::builder().hexpand(true).content_height(180).visible(false).build(),
+            picture: Rc::new(RefCell::new(None)),
+            hero_crop: RefCell::new(None),
+            hero_asked: Cell::new(0),
         });
+        inner.hero.set_overflow(gtk::Overflow::Hidden);
+        inner.hero.add_css_class("card");
+        inner.hero.set_margin_bottom(6);
+        // 16:9 at whatever width the page gives it (GTK has no height-for-width for a picture that may grow)
+        inner.hero.connect_resize(|area, width, _| {
+            let height = width * 9 / 16;
+            if area.content_height() != height {
+                // a size asked for during an allocation is not taken: the next turn of the loop asks for it
+                let area = area.clone();
+                glib::idle_add_local_once(move || area.set_content_height(height));
+            }
+        });
+        let held = inner.picture.clone();
+        inner.hero.set_draw_func(move |_, cr, width, height| {
+            let Some(surface) = held.borrow().clone() else { return };
+            // the cut fills the frame, as the web's cover box does (its aspect is the frame's)
+            let (sw, sh) = (f64::from(surface.width()), f64::from(surface.height()));
+            let scale = (f64::from(width) / sw).max(f64::from(height) / sh);
+            cr.translate((f64::from(width) - sw * scale) / 2.0, (f64::from(height) - sh * scale) / 2.0);
+            cr.scale(scale, scale);
+            if cr.set_source_surface(&surface, 0.0, 0.0).is_ok() {
+                let _ = cr.paint();
+            }
+        });
+        let w = Rc::downgrade(&inner);
+        let click = gtk::GestureClick::new();
+        click.connect_released(move |gesture, _, _, _| {
+            let Some(i) = w.upgrade() else { return };
+            let offered = i.shown.borrow().as_ref().and_then(|s| s.plan.as_ref()).is_some_and(|p| {
+                [&p.buttons, &p.menu, &p.last].iter().any(|g| g.iter().any(|a| a.id == "cover"))
+            });
+            if offered {
+                let _ = gesture.widget().and_then(|w| w.activate_action("win.header-cover", None).ok());
+            }
+        });
+        inner.hero.add_controller(click);
+        inner.hero.set_tooltip_text(Some(&words::cover_change()));
+        inner.hero.update_property(&[gtk::accessible::Property::Label(&words::cover_change())]);
         clear(bar);
         let weak = Rc::downgrade(&inner);
         let call = Call::HeaderOpen { node: node.clone(), facts, max_buttons: MAX_BUTTONS };
@@ -159,10 +212,17 @@ impl Header {
         crate::report::open(parent, &self.node);
     }
 
+    /// The node's head for its page: the cover, cut as stored; hidden while there is none.
+    pub fn hero(&self) -> gtk::Widget {
+        self.inner.hero.clone().upcast()
+    }
+
     /// The cover dialog over [parent] ([crate::cover]): the stored cover framed as the core holds it, or a picture to pick.
     pub fn cover(&self, parent: &impl IsA<gtk::Widget>) {
         let Some(header) = self.inner.id.get() else { return };
         let stored = self.inner.shown.borrow().as_ref().and_then(|s| s.cover.clone());
+        // a new picture may come under the crop it had: the head reads its picture again at the next state
+        *self.inner.hero_crop.borrow_mut() = Some(Crop { x: -1.0, y: -1.0, width: 0.0, height: 0.0 });
         crate::cover::open(parent, header, &self.node, stored, &self.inner.toasts);
     }
 
@@ -263,7 +323,53 @@ impl Inner {
         self.toasts.add_toast(toast);
     }
 
-    fn draw(&self) {
+    /// The head follows the state's cover: read again (its picture, then the part its crop shows) when the crop changed.
+    fn draw_hero(self: &Rc<Self>, cover: Option<Crop>) {
+        if *self.hero_crop.borrow() == cover {
+            return;
+        }
+        *self.hero_crop.borrow_mut() = cover.clone();
+        let n = self.hero_asked.get() + 1;
+        self.hero_asked.set(n);
+        let (Some(crop), Some(header)) = (cover, self.id.get()) else {
+            self.hero.set_visible(false);
+            self.picture.borrow_mut().take();
+            return;
+        };
+        let w = Rc::downgrade(self);
+        glib::spawn_future_local(async move {
+            let answered = bridge::call(&Call::HeaderCoverPicture { header }).await;
+            let texture = match answered {
+                Ok((Answer::Bytes { .. }, Some(bytes))) => match gdk::Texture::from_bytes(&glib::Bytes::from_owned(bytes)) {
+                    Ok(t) => t,
+                    Err(e) => return eprintln!("veyq: cover hero: the picture did not decode: {e}"),
+                },
+                other => return eprintln!("veyq: cover hero: Header.CoverPicture answered {:?}", other.map(|(a, _)| a)),
+            };
+            let (width, height) = (texture.width(), texture.height());
+            let cut = bridge::call(&Call::CoverCut { crop, width, height }).await.map(|(a, _)| a);
+            let Some(i) = w.upgrade() else { return };
+            if i.hero_asked.get() != n {
+                return;
+            }
+            let Ok(Answer::CoverCut { x, y, width: cw, height: ch }) = cut else {
+                return eprintln!("veyq: cover hero: Cover.Cut answered {cut:?}");
+            };
+            eprintln!("veyq: cover hero: {width}×{height}, the crop's {cw}×{ch} at {x},{y}");
+            let Some(surface) = cut_surface(&texture, x, y, cw, ch) else {
+                return eprintln!("veyq: cover hero: the cut was not drawn");
+            };
+            *i.picture.borrow_mut() = Some(surface);
+            i.hero.set_visible(true);
+            i.hero.queue_draw();
+        });
+    }
+
+    fn draw(self: &Rc<Self>) {
+        let cover = self.shown.borrow().as_ref().map(|s| s.cover.clone());
+        if let Some(cover) = cover {
+            self.draw_hero(cover);
+        }
         let shown = self.shown.borrow();
         // the offer ended (its window, or the undo): the toast goes with it — once a state showed the offer, so an
         // update from before the trash that arrives after its answer ends nothing
@@ -340,6 +446,25 @@ async fn follow(weak: Weak<Inner>, updates: async_channel::Receiver<Result<Updat
             Err(e) => eprintln!("veyq: a header update did not read: {:?}", e.0),
         }
     }
+}
+
+/// The part ([x], [y], [width] × [height] pixels) of [texture] a cover's crop shows, as cairo's surface to draw.
+fn cut_surface(texture: &gdk::Texture, x: i32, y: i32, width: i32, height: i32) -> Option<cairo::ImageSurface> {
+    let (tw, th) = (texture.width(), texture.height());
+    if width <= 0 || height <= 0 || x < 0 || y < 0 || x + width > tw || y + height > th {
+        return None;
+    }
+    // cairo's ARGB32 is B, G, R, A premultiplied on the little-endian machines the app runs on (as the cover dialog reads it)
+    let mut downloader = gdk::TextureDownloader::new(texture);
+    downloader.set_format(gdk::MemoryFormat::B8g8r8a8Premultiplied);
+    let (whole, stride) = downloader.download_bytes();
+    let row = width as usize * 4;
+    let mut part = Vec::with_capacity(row * height as usize);
+    for r in y..y + height {
+        let at = r as usize * stride + x as usize * 4;
+        part.extend_from_slice(&whole[at..at + row]);
+    }
+    cairo::ImageSurface::create_for_data(part, cairo::Format::ARgb32, width, height, row as i32).ok()
 }
 
 fn clear(bar: &gtk::Box) {

@@ -53,6 +53,9 @@ pub struct Shell {
     back: gtk::Button,
     /// The header bar's end, where the node on screen draws its actions (`header`).
     header_bar: gtk::Box,
+    /// An open Pot's Refresh (`win.pot-refresh`, F5 / Ctrl+R), beside its actions.
+    refresh: gtk::Button,
+    refresh_action: gio::SimpleAction,
     header: Rc<RefCell<Option<Header>>>,
     /// A header whose page left while its trash's Undo stands: kept until another takes its place.
     undoing: RefCell<Option<Header>>,
@@ -110,6 +113,13 @@ impl Shell {
         // the node on screen's actions, GNOME's way: buttons and a menu at the header bar's end (`header`)
         let header_bar = gtk::Box::new(gtk::Orientation::Horizontal, 6);
         content_header.pack_end(&header_bar);
+        // an open Pot's Refresh: desktops have no pull gesture (F5 and Ctrl+R, as GNOME's apps reload)
+        let refresh = gtk::Button::builder().icon_name("view-refresh-symbolic").tooltip_text(words::pot_refresh()).action_name("win.pot-refresh").visible(false).build();
+        refresh.update_property(&[gtk::accessible::Property::Label(&words::pot_refresh())]);
+        content_header.pack_end(&refresh);
+        let refresh_action = gio::SimpleAction::new("pot-refresh", None);
+        refresh_action.set_enabled(false);
+        window.add_action(&refresh_action);
         let content_view = adw::ToolbarView::new();
         content_view.add_top_bar(&content_header);
         let toasts = adw::ToastOverlay::new();
@@ -147,6 +157,8 @@ impl Shell {
             content_title,
             back,
             header_bar,
+            refresh,
+            refresh_action,
             header: Rc::new(RefCell::new(None)),
             undoing: RefCell::new(None),
             toasts,
@@ -183,6 +195,13 @@ impl Shell {
             }
         });
         window.add_action(&download);
+        let weak = Rc::downgrade(self);
+        self.refresh_action.connect_activate(move |_, _| {
+            let Some(s) = weak.upgrade() else { return };
+            if let Some(pot) = s.pot.borrow().as_ref() {
+                pot.refresh();
+            }
+        });
 
         // the header's actions, on the node on screen (`header`)
         for id in ["favorite", "share", "rename", "delete", "move", "copy", "download", "report", "cover"] {
@@ -282,6 +301,10 @@ impl Shell {
         let shortcuts = gtk::ShortcutController::new();
         shortcuts.set_scope(gtk::ShortcutScope::Global);
         shortcuts.add_shortcut(gtk::Shortcut::new(gtk::ShortcutTrigger::parse_string("<Control>f"), Some(toggle)));
+        // an open Pot's Refresh (the action is enabled only while one shows)
+        for trigger in ["F5", "<Control>r"] {
+            shortcuts.add_shortcut(gtk::Shortcut::new(gtk::ShortcutTrigger::parse_string(trigger), Some(gtk::NamedAction::new("win.pot-refresh"))));
+        }
         window.add_controller(shortcuts);
     }
 
@@ -494,7 +517,7 @@ impl Shell {
             Some(o) if o.kind == "EXPENSES_POT" => {
                 let mut pot = self.pot.borrow_mut();
                 if pot.as_ref().is_none_or(|p| p.r#ref != *o) {
-                    let page = PotPage::open(o);
+                    let page = PotPage::open(o, self.window.upcast_ref(), &self.toasts);
                     // the Pot read: the header learns whether it takes writes (`AppKinds.Facts`)
                     let held = Rc::downgrade(&self.header);
                     page.on_read(move |can_write| {
@@ -507,6 +530,7 @@ impl Shell {
                     *pot = Some(page);
                 }
                 let page = pot.as_ref().expect("set above");
+                page.hero(self.header.borrow().as_ref().map(Header::hero));
                 page.places(&shown.tabs, shown.selected_tab.as_ref());
                 page.widget().clone().upcast()
             }
@@ -519,6 +543,9 @@ impl Shell {
                 if shell.application.is_some() { home::list(shown.list.as_ref()) } else { home::home(state, shown) }
             }
         };
+        let pot_open = self.pot.borrow().is_some();
+        self.refresh.set_visible(pot_open);
+        self.refresh_action.set_enabled(pot_open);
         if self.content_view.content().as_ref() != Some(&body) {
             self.content_view.set_content(Some(&body));
         }

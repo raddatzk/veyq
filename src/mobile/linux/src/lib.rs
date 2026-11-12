@@ -8,6 +8,7 @@ pub mod cover;
 pub mod bridge;
 pub mod create_action;
 pub mod dev_login;
+pub mod entry_history;
 pub mod header;
 pub mod home;
 pub mod manage;
