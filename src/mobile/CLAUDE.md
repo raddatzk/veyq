@@ -13,7 +13,8 @@ A Gradle build of its own, run through its own wrapper.
   `peopleRead` gets a different set; every app watches it), and each
   application's own package (`expenses/`: the web's Expenses domain, a Pot's session and what its views show; `depot/`: Depot's files, each one
   core attachment, and a file's page as a screen model, `FileModel`: what it shows decided by the bytes, an image, a text
-  and a PDF held in memory, a medium read through a `RangeReader`, never a decrypted file written to show one; the header's
+  and a PDF held in memory, a medium read through a `RangeReader`, never a decrypted file written to show one; its "Save a
+  copy", `FileSave` (written a frame at a time where the person chose, its progress, cancelled with nothing left); the header's
   file actions and the opened file's rights, `FileRights`; the uploads as the shell shows them, `DepotUploads` (files and a
   folder into a level, a replace expected over the content shown when it was chosen, each item's settle and its replace
   offer said once, the tray's acknowledge on the model's clock), a walk's rule `FolderUpload.keeps`, a drop box's page
@@ -54,7 +55,10 @@ A Gradle build of its own, run through its own wrapper.
   (`Answer.Reader`, `Reader.Read`, `Reader.Close`, closed with the tenant; `Bridge.openReader` the door), and files by
   the path the host's dialog gave, which the core opens (`Pot.Download` and `Receipt.Save` through `DeviceFiles`, core's
   `FileSink`; `Editor.AddReceipts` reads each picked path, never more than `Receipts.MAX_BYTES`, through `FileSource`).
-  A receipt shown is `Receipt.Open`'s payload, decoded in memory and never written to disk.
+  A receipt shown is `Receipt.Open`'s payload, decoded in memory and never written to disk. A file's page is `File.Open`
+  (`Watched.File`: `FileShown`; an image's or a PDF's bytes `File.Bytes`, asked again when its `revision` turns), and its Save a
+  copy `File.Save(file, path)` → `Saving(save)`, followed by `Watched.Save` and stopped by `Save.Cancel`, which answers once
+  the partial file is gone; a save outlives its page and stops with its tenant.
   The generated layer copies a payload once (Rust `Option<Vec<u8>>`, C# `byte[]?`); no screen touches a pointer.
 - `linux/` — the Linux app (ADR 0127 decision 4): a Cargo package in Rust (gtk4-rs, libadwaita-rs), with `Cargo.lock`
   committed and every cargo run `--locked`. `src/lib.rs` is the library: `bridge` (the safe wrapper over the six
@@ -62,7 +66,8 @@ A Gradle build of its own, run through its own wrapper.
   and one module per screen (`sign_in` with the unlock, `shell` with Search, `home`, `pot` with its download,
   `pot_settings` (a Pot's Settings place, editable in place) and `pot_create` (New pot),
   `entry_editor` (an entry's editor; `typed`: when a text field is set from the state), `receipt_viewer` (a receipt
-  shown from memory: a picture through GTK, a PDF through poppler-rs) and `entry_history`, `manage`
+  shown from memory: a picture through GTK, a PDF through poppler-rs) and `entry_history`, `file_page` (a Depot file's page
+  and its Save a copy with its toast), `manage`
   for "Manage servers"; `header` with `trash`, `move_sheet`, `share_sheet`, `report` and `cover` for a node's header and
   its sheets; `dev_login` in a debug build only), and `avatars` (`Held`, no widget and tested: the open
   tenant's pictures, asked for again only when the shell's id set changes; drawn as `adw::Avatar`).
@@ -80,7 +85,8 @@ A Gradle build of its own, run through its own wrapper.
   `AvatarsHeld` (`Held<T>`, no control, Linux's `avatars::Held` rule for rule; `AvatarsTest`) and `Avatars` (decodes
   each picture through `BitmapImage`, sets it on every `PersonPicture` of that id), `Act` (sends a
   call, logs its answer), `PotSettingsView` (a Pot's Settings place, editable in place), `PotCreateDialog` (New pot),
-  `EntryEditorPage` (an entry's editor, a page in place of the Pot's places) with
+  `FilePage` (a Depot file's page; its Save a copy's `InfoBar` is `ShellView.Saving`), `ListScrolls` (where each list was
+  scrolled to; `ListScrollsTest`), `EntryEditorPage` (an entry's editor, a page in place of the Pot's places) with
   `ReceiptViewerDialog` and `PdfPages` (a receipt's PDF through `Windows.Data.Pdf`, from memory; `PdfPagesTest`), `TypedText`
   (when a text box is set from the state; `TypedTextTest`), `Words`/`MrtWords` and `SaidNotice` (the words), `Said` (money, days and sizes the system's
   way), `CreateAction`, `Log` (`%LOCALAPPDATA%\veyq\log.txt`), and in a debug build `DevLogin` and `DebugEnv`
@@ -134,7 +140,9 @@ A Gradle build of its own, run through its own wrapper.
   leaves to another device (`NodeRekeyRulesTest`).
 - `./gradlew :bridge:jvmTest` — the bridge (ADR 0123's Consequences, the bridge):
   - `DispatchTest` covers the way in, over a door the test plays: a reader read backwards in uneven ranges and closed
-    with the tenant, a picture's bytes and its refusal, and every call of a node's header and its sheets (`Header.*`,
+    with the tenant, a picture's bytes and its refusal, a file's page and its Save a copy (`File.*`, `Watched.File`/`Save`,
+    `Save.Cancel` over a played file: the bytes and type the core's, a save watched as soon as it is answered, a cancelled
+    one leaving nothing, a FILE's header download the file itself), and every call of a node's header and its sheets (`Header.*`,
     `Trash.*`, `Move.*`, `Share.*`, `Report.*`, `Cover.*`), and a Pot's (`Pot.*`, `Watched.PotLive`) and its entry editor's
     (`Editor.*`, `Watched.Editor`, over a played Pot: edits applied in the order sent, a save answered once its write
     ended) with its receipts (`Editor.AddReceipts`/`DropReceipt`, `Receipt.Open`/`Pages`/`Save`: a path that does not
@@ -163,7 +171,11 @@ A Gradle build of its own, run through its own wrapper.
   `App pot <n>` made by New pot in a folder of its own with a member and a typed person, set up through the settings'
   calls — currency, a category, a person to its erase, another member, the currency refused after an entry — and copied,
   the copy read back as the original, the folder with both purged); `aReport*` needs `VEYQ_LIVE_REPORT_BRIDGE=1` (it leaves one report: run it once),
-  `aCopyWithoutRoom*` `VEYQ_LIVE_NO_ROOM=1` while `DepotLiveTest` holds the one-byte quota, and `theLinksOfAFolder*`
+  `aCopyWithoutRoom*` `VEYQ_LIVE_NO_ROOM=1` while `DepotLiveTest` holds the one-byte quota, `aFileIsShownAndSaved*` (an `App
+  depot <n>` filled by the core's upload in a second session, its JPEG, text and PDF shown by call at their SHA-256, a 300 MiB
+  file saved and a second save cancelled, then purged), `aDesktopPassFolder*` with `VEYQ_LIVE_DEPOT_PASS=<name>` (not a
+  check: a desktop pass's Depot folder at the personal top level, filled; `VEYQ_LIVE_DEPOT_PASS_PURGE=1` purges it), and
+  `theLinksOfAFolder*`
   writes a desktop pass's links out for the web's guest page — each case's doc says what it reads.
 - `python3 linux/run.py <verb>` — everything Linux. From the repository root the launcher runs the same verbs as
   `./gradlew linux:coreTest`, `linux:bridge`, `linux:build` and `linux:run`. The Kotlin is cross-compiled here by this
@@ -217,7 +229,8 @@ A Gradle build of its own, run through its own wrapper.
     outcome last (`build/windows/hello-probe.txt`). `--check` stops before the first key: Hello's availability in that
     session, no prompt. Brief the person on every prompt the run may raise first, the uncertain ones marked.
   - `drive <step>...` prints the app's log, then runs `Veyq.Drive`'s steps (`tree`, `invoke <id>`, `select <id>`,
-    `set <id> <text>`, `key`, `type <id> <text>` and `press <id> [keys]` (a system dialog's entry and button), `size`,
+    `set <id> <text>`, `key`, `type <id> <text>` and `press <id> [keys]` (a system dialog's entry and button), `scroll <id>
+    [percent]` (a ScrollViewer through UIA's ScrollPattern), `size`,
     `maximize`, `wait`, `sleep`, `shot <name>.png`) and prints what each saw. Read the log and the tree first; a `shot`
     (to `build/windows/shots/`) is the proof, not the probe.
   - `register` registers the scheduled tasks `veyq-app` and `veyq-drive` once per Windows host. It is the host owner's
@@ -773,7 +786,22 @@ first in each of its scrolls — `LocalNodeHero.current(inset)` (Android) / `Nod
   another place starts at its top.
 - GTK: a `gtk::Picture` in a `GtkAspectFrame` got no height for its width, and a height asked inside a widget's
   `resize` was ignored until the next turn of the loop: the Pot's 16:9 head is a `DrawingArea` sized from its width
-  (`header.rs`, `Header::hero`).
+  (`header.rs`, `Header::hero`). The same for a scroll: a value set in the adjustment's `changed` during its allocation moved
+  the scroll bar's thumb but drew the list at its top (measured 2026-11-12); `shell::ListScrolls` sets it on idle.
+- The shell draws a list anew on every state and when an object opened from it closes (the object takes its place), so on
+  the desktops too a list came back at its top (the owner's report, met on Linux 2026-11-12): `ListScrolls` (Linux
+  `shell.rs`, Windows `ListScrolls.cs` with `ShellView.Keep`) keeps each list's offset by its place and puts a new list back
+  once it is laid out tall enough.
+- One WinUI `TextBox` holding a megabyte drew only its first line, even 15 s later (measured 2026-11-12, a file's cut text):
+  a long text is a virtualized `ListView` a line a row (`FilePage.Text`), as on iOS. The Linux container has no monospace
+  font, so a `TextView`'s `monospace` falls back to the proportional one there (a desktop has one).
+- A session's tree is cached and `Shell.Refresh` does not read it anew: a desktop sees another device's upload only after it
+  signs in again. A live case that writes through a second session writes before the bridge signs in
+  (`LiveBridgeTest.aFileIsShownAndSaved*`).
+- Driving a file's save on the desktops: GTK's save dialog takes a whole path in its name field (`key Control+a`, `type
+  /tmp/big.bin`, `key Enter`); a 300 MiB save in the container ends in about 3 s, so a Cancel is clicked in the same
+  Playwright run. On Windows the save picker's name is typed into `FileNameControlHost` and saved by `press
+  FileNameControlHost enter` (a `key enter` goes to the app's window, not the picker's).
 - `linux/run.py run` leaves the container's zone UTC (an instant there is said in UTC); `run.py test` links Berlin. A
   pass reading times off the Linux app reads them as UTC.
 - Never hold a XAML element through a `WeakReference`: once its managed wrapper was collected, `TryGetTarget` resolves

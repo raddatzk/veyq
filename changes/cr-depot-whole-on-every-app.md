@@ -463,6 +463,62 @@ Android and Apple thinned.
 - The owner's scroll report (Phase 1 fixed it on Android and Apple) met on both desktops: a long list scrolled to its
   bottom, an object near the bottom opened, back — the list still at the bottom; fixed in the phase where it is not.
 
+**Status: done (2026-11-12).**
+
+**Built:**
+- core `depot/FileSave.kt`: a copy saved where the person chose, its content a frame at a time into the host's sink, its
+  state (`written`/`total`/`fraction`, `end` SAVED, FAILED or CANCELLED, what it says: `download_saving` with both sizes,
+  then `download_done`/`download_failed`/`download_cancelled`), `cancel()` returning once the partial file is gone; it runs
+  in a scope of its own, so a save outlives its page. `FileModel.save(into)` (null where nothing is uploaded), `bytes`,
+  `mediaType`, `State.revision` (turned when other content shows), `FileModel.words`/`cut` (what the page says where it shows
+  no content — a medium included, for a platform that plays none — and above a cut text). Words `download_saving`,
+  `download_cancelled`, `download_cancel` (en + de). `ShellModel.downloadAs` public.
+- bridge: `File.Open` → `FileOpened`, `Watched.File` → `Update.File(FileShown)`, `File.Bytes` (an image's or a PDF's bytes
+  beside the answer), `File.Pages` (`FileView.pagesShown`/`pagesCut`, answered as `ReceiptPages`), `File.Close`,
+  `File.Save(file, path)` → `Saving(save)` once it runs, `Watched.Save` → `Update.Save(SaveShown)`, `Save.Cancel`; every page
+  and save closed with its tenant (a save cancelled, its partial file removed). `Tenant.file` (`shares = false`).
+- Linux `file_page.rs`: the page drawn from `FileShown` (a `gtk::Picture` held at the core's edge — scaled down through cairo
+  past it —, a monospace `gtk::TextView` under an `AdwBanner`, a PDF's pages as frames rendered by `receipt_viewer::render`
+  when within a screen of the view and let go past three, an `AdwStatusPage` with the core's words); its facts one row beneath.
+  The header's download of a FILE is drawn (`win.file-save`): GTK's save dialog, then an `AdwToast` with the progress and
+  Cancel, then how it ended. `shell::ListScrolls`: each list put back where its place's list stood.
+- Windows `FilePage.cs`: the same in Fluent (`Image` decoded at the edge through `BitmapDecoder`'s size first, a virtualized
+  `ListView` a line a row under an `InfoBar`, the PDF's pages lazily through `PdfPages`), the save's `InfoBar` with a
+  `ProgressBar` and Cancel (`ShellView.Saving`); `HeaderPlan.ByPage` (a Pot's and a file's download are their page's);
+  `ListScrolls.cs` (the rule, tested) with `ShellView.Keep`. `Veyq.Drive` gains `scroll <id> [percent]` (UIA's ScrollPattern).
+
+**Met:**
+- `DispatchTest.aFileIsOpenedShownSavedWithItsProgressAndCancelledThroughCalls`, `WireTest` (each new shape sampled),
+  `SecretFreeSchemaTest` unchanged and green; `FileModelTest` +4 (`aCopyIsSavedFrameByFrame…`, `aCancelledCopyLeavesNothing…`,
+  `theBytesAHostShows…`, `whatThePageSays…`). 14 mutations by `scratchpad/d3/bite.py` (`/bin/cp -f` restore), all 14 bit —
+  among them the Done-when's five: the bytes not the file's, no media type, a cancelled save leaving its file, a save answered
+  before it is held, a FILE's header download a ZIP again (`bite.log`); then core and bridge green again.
+- `VEYQ_LIVE=http://veyq.localhost:8080 ./gradlew :bridge:jvmTest --tests '*LiveBridgeTest.aFileIs*' --rerun`: in `App depot
+  21970` a JPEG (`84454c0a…`), a 1.25 MB text (its first 1 MiB at the original's prefix SHA-256, the cut said) and a 30-page
+  PDF (`07723747…`) shown; a 300 MiB file saved in 16.6 s at its SHA-256 (`e72b2954…`), a second save cancelled at 20 MiB with
+  nothing at its path; the folder purged.
+- `./gradlew :core:jvmTest :core:macosArm64Test :bridge:jvmTest :android:assembleDebug` green; `linux/run.py build` (clippy,
+  `cargo test` 32 passed) and `windows/run.py build` (Veyq.Bridge.Tests, Veyq.Tests passed) green; `validate_mobile_words`,
+  `validate_mobile_platform_guidelines`, `validate_changes` green. Linux bites (`put_back`, `place_of`, a FILE's download
+  action) and Windows bites (`ListScrolls.PutBack`, `Place`, `HeaderPlan.ByPage`), all at once in one build each: every one of
+  the six tests red, green after the restore (`lbite.log`, `wbite.log`).
+- Linux (container, Broadway on 8097), en/light and de/dark, in `Linux depot` (filled by `VEYQ_LIVE_DEPOT_PASS`, purged after
+  with `VEYQ_LIVE_DEPOT_PASS_PURGE=1`): the 3000×2000 JPEG, `long.txt` with "Showing only the first megabyte…" / "Angezeigt
+  wird nur das erste Megabyte…", the 30-page PDF (en: stderr pages 1–4 held at the top, 23–30 at the end, the first ones let
+  go; de: drawn, not scrolled), the ZIP ("This file cannot be shown here…"), the empty file ("This file is
+  empty."); Save a copy of the 300 MiB file to `/tmp`: cancelled at 17 MB (en) and 43 MB (de) with `/tmp` holding nothing
+  after, then saved whole at `e72b2954…` (`sha256sum` in the container); the header's download of `archive.zip` wrote the ZIP
+  itself (`unzip -l`: `inside.txt`), not veyq's archive.
+- Windows (the VM, x64 under Prism), en/light and de/dark, in `Windows depot`: the same files and words; the text a line a row
+  (13,108 lines, after the fix below, both themes); the PDF drawn in both, scrolled to its end in en/light (`scroll file-pdf
+  100`: pages 26–30 held, the first let go); Save a copy through the save picker into Downloads: cancelled at 26 MB / 35 MB with
+  nothing in Downloads after (`Get-ChildItem`), saved whole at `E72B2954…` (`Get-FileHash`) in both runs; `archive.zip`'s
+  download held `inside.txt`, 143 B.
+- The scroll: Linux, Home of Familie Raddatz scrolled to its bottom, "Ui pot (3)" opened, back — **met: the list stood at its
+  top** (`a05`, `a07`: the scroll bar's thumb at the bottom, the list drawn at its top, after a first fix); after the fix,
+  "Gescanntes Dokument.pdf" opened from the bottom and back — the bottom rows shown (`c03-back`, stderr `put back at 603`).
+  Windows, the same list at its bottom (`x03`), the PDF opened (`x04`), back — the bottom rows shown (`x05`, `put back at 469`).
+
 ### Phase 4 — Bridge and desktops: a medium played through a reader
 
 **Done when:**
@@ -650,4 +706,38 @@ owner's veto.
 - **Left in the dev instance by my runs:** nothing of this phase: `App depot 2` (with `AppPotD2`, the moved-out guest folders,
   `Trip2`, `Trip3`, the big files) and the drop box `App drop` were trashed and deleted forever on the web; their guests'
   folders went with them. The throwaway AVD is deleted; the simulator's `AppDepot3` test files removed.
+
+### Phase 3 (2026-11-12)
+
+- **"Save a copy" is the header's download of a file on the desktops** (`win.file-save`, `HeaderPlan.ByPage`), as a Pot's
+  download is its page's: one action, the file itself, with progress and Cancel. The one-shot `Header.Download` stays and
+  writes a FILE's own bytes too (`ShellModel.downloadAs`, now public, is what `DispatchTest` bites through). Decided here.
+- **A save is a core model of its own, `FileSave`, in a scope of its own**: it outlives its page (the toast or `InfoBar` stays
+  in the shell), stops with the tenant, and `cancel()` returns once the sink removed the partial file — so `Save.Cancel`'s
+  answer is the host's proof that nothing is left. Its words (`download_saving` with both sizes, `download_cancelled`,
+  `download_cancel`) are new keys, en + de.
+- **What the page says where it shows no content is the core's** (`FileModel.words`, `cut`), a medium included: until Phase 4
+  plays one, a desktop says `file_unsupported` beside Save a copy (D7's fallback words). `File.Pages` answers with the
+  receipt's `ReceiptPages` shape (shown, cut) rather than a twin.
+- **A PDF's pages are frames sized from the page, rendered when within a screen of the view and let go past three** (both
+  desktops), so a 1,000-page PDF holds a few pages' pixels; the bound itself is the core's.
+- **The owner's scroll report, met on Linux before the fix** (the list at its top after back), fixed on both desktops by
+  `ListScrolls` (by place: an application's list in a space, Home's level by space, folder and filter). Windows was not
+  measured before its fix: the same rebuild-per-draw structure, reasoned.
+- **Found and fixed on the way:** GTK took a scroll value set inside the adjustment's `changed` during an allocation into the
+  scroll bar but not the list (the list drawn at its top under a thumb at the bottom) — set on the next turn of the loop; one
+  WinUI `TextBox` holding a megabyte drew only its first line (measured after 15 s) — a virtualized `ListView` a line a row,
+  Apple's answer of Phase 1; GTK's `property` row style put the facts small and the uploader large — plain row.
+- **Found, left:** a session's tree is cached and `Shell.Refresh` does not read it anew, so a desktop does not see another
+  device's upload until it signs in again (`LiveBridgeTest` uploads before the bridge signs in for that reason) — Phase 5
+  (uploads seen by the queue's settle) and Phase 7 (a guest's drop) meet it; `FileModel.reload` is not called by the bridge
+  yet (no `File.Reload`), which a replace (Phase 5) needs. The Linux container has no monospace font: the text's
+  `monospace` falls back to the proportional one (container only). An image past `IMAGE_EDGE` was not on a device (the pass's
+  JPEG is 3000×2000): the scale-down (`file_page::within_edge`, Windows' `DecodePixelWidth`) is unexercised there. Windows'
+  file page shows the level's New (as every non-Pot page does).
+- **Deviations:** the Windows de/dark PDF was not scrolled (`Veyq.Drive` gained its `scroll` step after that run), nor the
+  Linux de/dark one; both scrolled in en/light. The Windows "Not now" pressed in the first run was cleared from the VM's
+  `device-store.json` after the pass (a backup beside it, `.bak-d3`), so the next offer shows.
+- **Left in the dev instance by my runs:** nothing: `App depot 96533` and `App depot 21970` (the live case's) and `Linux depot`,
+  `Windows depot` (the passes') trashed and purged; saved copies removed from the container's `/tmp` and the VM's Downloads.
 
