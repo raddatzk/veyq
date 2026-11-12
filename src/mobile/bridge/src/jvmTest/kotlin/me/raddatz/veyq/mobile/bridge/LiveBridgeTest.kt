@@ -1417,7 +1417,8 @@ class LiveBridgeTest {
      * A desktop pass's folder (the Depot CR's Phase 3), not a check: with `VEYQ_LIVE_DEPOT_PASS=<name>` it makes a folder of
      * that name at the personal space's top level and fills it through the core's own upload with what the pass opens —
      * a JPEG, a text past `TEXT_CAP`, a 30-page PDF, a ZIP, an empty file and a 300 MiB file of drawn bytes —, printing each
-     * one's SHA-256. It stays, for the pass; the pass trashes and purges it.
+     * one's SHA-256. It stays, for the pass; with `VEYQ_LIVE_DEPOT_PASS_PURGE=1` the folder of that name is trashed and purged
+     * instead, the pass's end.
      */
     @Test
     fun aDesktopPassFolderIsFilled() = runBlocking {
@@ -1439,6 +1440,12 @@ class LiveBridgeTest {
         ) { block -> HttpClient(OkHttp, block) }
         val tenant = account.open(account.tenants.first { origin.contains(it.domain) })
         val scope = tenant.spaces().first { it.kind == "PERSONAL" }.scopeId
+        if (System.getenv("VEYQ_LIVE_DEPOT_PASS_PURGE") == "1") {
+            val folder = assertNotNull(tenant.nodes().firstOrNull { it.scopeId == scope && it.parentId == null && it.name == folderName }, "no $folderName")
+            println("trash $folderName: ${me.raddatz.veyq.mobile.session.NodeTrash.delete(tenant, scope, folder.nodeId)}")
+            println("purge $folderName: ${me.raddatz.veyq.mobile.session.NodeTrash.purge(tenant, scope, folder.nodeId)}")
+            return@runBlocking
+        }
         val made = me.raddatz.veyq.mobile.session.FolderCreate.create(tenant, scope, null, folderName)
         val folderId = assertIs<me.raddatz.veyq.mobile.session.NodeCreate.Result.Done>(made, "$made").created.nodeId
         val jpeg = java.io.ByteArrayOutputStream().also { out ->
