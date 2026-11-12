@@ -118,7 +118,7 @@ listeners and by every route for its parent, so a host cannot have a route witho
 
 {{/*
 The annotation map the chart's Gateway and every tenant ListenerSet receive — the operator's
-`gateway.annotations`, plus, when the ACME opt-in is on, `cert-manager.io/issuer: veyq-acme` and
+`gateway.annotations`, plus, when the ACME opt-in is on, `cert-manager.io/issuer: <veyq.acmeIssuer>` and
 `acme.cert-manager.io/http01-parentreffallback: "true"` (the latter sends each ListenerSet's HTTP-01 challenge
 route to the Gateway's one port-80 listener; ADR 0064). It has TWO consumers and both must read it from here: the
 Gateway's metadata in gateway.yaml, and app-configmap.yaml, which hands the same map to the backend for every
@@ -128,10 +128,29 @@ HTTPRoute carries no certificate and gets none of it.
 Returned as YAML because `include` can only return a string; `{}` when empty, so a consumer's `with`/`range`
 over `fromYaml` sees an empty map. The merge copies — `set` on .Values itself would leak into every later read.
 */}}
+{{/*
+The ACME Issuer's name, one per directory: `veyq-acme-production` and `veyq-acme-staging` for Let's Encrypt's two,
+`veyq-acme-<8 hex of the URL's sha256>` for any other CA. A switch of gateway.tls.acme.server therefore renames the
+Issuer, which the Gateway's and every ListenerSet's `cert-manager.io/issuer` annotation follows — and cert-manager
+re-orders a Certificate whose issuer no longer matches the one its Secret was issued by, keeping the old certificate
+served until the new one is Ready. One Issuer whose server URL changed is no such trigger: its Certificates stay Ready
+on the old directory's certificates (raddatz.me, 2026-11-11).
+*/}}
+{{- define "veyq.acmeIssuer" -}}
+{{- $server := required "gateway.tls.acme.server is required" .Values.gateway.tls.acme.server -}}
+{{- if eq $server "https://acme-v02.api.letsencrypt.org/directory" -}}
+veyq-acme-production
+{{- else if eq $server "https://acme-staging-v02.api.letsencrypt.org/directory" -}}
+veyq-acme-staging
+{{- else -}}
+veyq-acme-{{ sha256sum $server | trunc 8 }}
+{{- end -}}
+{{- end }}
+
 {{- define "veyq.gatewayAnnotations" -}}
 {{- $annotations := deepCopy (.Values.gateway.annotations | default dict) -}}
 {{- if (.Values.gateway.tls.acme | default dict).enabled -}}
-{{- $_ := set $annotations "cert-manager.io/issuer" "veyq-acme" -}}
+{{- $_ := set $annotations "cert-manager.io/issuer" (include "veyq.acmeIssuer" .) -}}
 {{- $_ := set $annotations "acme.cert-manager.io/http01-parentreffallback" "true" -}}
 {{- end -}}
 {{- toYaml $annotations -}}

@@ -41,7 +41,6 @@ By hand, copy the template to `.env` and fill it in: every required variable has
 | `MARIADB_ROOT_PASSWORD` | Yes | — | MariaDB's root password; a backup capture uses it |
 | `GARAGE_RPC_SECRET` | Yes | — | The bundled Garage's node secret, exactly 64 hex characters |
 | `GARAGE_ADMIN_TOKEN` | Yes | — | The bundled Garage's admin token. The application reads it too: it sets the bundled store up with it and derives the store's access keys from it, so there is no store key to set |
-| `VEYQ_ACME_EMAIL` | Yes | — | The Let's Encrypt account email |
 | `ADMIN_DOMAIN` | No | unset | A hostname of the admin surface's own. Unset, the console is reachable from the host only ([First-run setup](/run/first-run/#reach-the-console)); set it only after the Server Owner exists |
 | `ADMIN_PORT` | No | `8081` | The host port the admin surface is published on, on `127.0.0.1` only |
 | `VEYQ_ACME_CASERVER` | No | Let's Encrypt production | The ACME directory; point it at the staging directory while testing |
@@ -66,7 +65,7 @@ refuses an install that leaves a required value unset, naming it. Required: `dom
 database keys under `secrets` (or `secrets.existingSecret`), `storeDomain` and the two Garage keys under `secrets`
 when `garage.enabled` is `true`, `networkPolicy.ingressFrom` while
 network policy is on, `externalDatabase.jdbcUrl` when `mariadb.enabled` is `false`, `gateway.tls.secretName` in
-`shared` mode, `gateway.tls.acme.email` when the ACME issuer is on, and a backup choice: `backup.existingClaim`, or
+`shared` mode, and a backup choice: `backup.existingClaim`, or
 `backup.enabled: false`.
 
 ### Domains, images, HSTS
@@ -125,7 +124,6 @@ network policy is on, `externalDatabase.jdbcUrl` when `mariadb.enabled` is `fals
 | `gateway.tls.mode` | `none` | `none` (plain HTTP only; TLS ends before the gateway), `per-domain` (an HTTPS listener and certificate per host, tenants' in `ListenerSet`s) or `shared` (one HTTPS listener with a wildcard certificate, no custom tenant domains) |
 | `gateway.tls.secretName` | — | The wildcard certificate's Secret in `shared` mode |
 | `gateway.tls.acme.enabled` | `false` | Let the chart create a cert-manager issuer (HTTP-01) and use it; needs `per-domain` and cert-manager 1.21 or later |
-| `gateway.tls.acme.email` | — | The ACME account email |
 | `gateway.tls.acme.server` | Let's Encrypt production | The ACME directory |
 
 ### Secrets

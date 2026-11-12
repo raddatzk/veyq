@@ -54,7 +54,8 @@ export type AddMediaSource = {
 export interface MediaDeriver {
   /**
    * Downscale an image Blob to `maxEdge` at `quality`. Encodes JPEG by default; pass `mimeType: 'image/webp'`
-   * for an alpha-preserving encode (a space icon, uc.spaces.set-space-icon). `background` fills the canvas before
+   * for an alpha-preserving encode (a space icon, uc.spaces.set-space-icon), which libwebp writes in every browser,
+   * never the canvas (ADR 0127), and which rejects when that encoder cannot load. `background` fills the canvas before
    * drawing (a hex/CSS colour) so a transparent source does not flatten onto the canvas default (transparent
    * black → black once JPEG-flattened); omit it to keep alpha (only meaningful with an alpha-capable `mimeType`).
    */
@@ -84,7 +85,7 @@ export interface MediaDeriver {
 export { scaleToMaxEdge } from './mediaPixels'
 
 /**
- * The page-thread canvas port: today's `HTMLCanvasElement` + `toBlob`. Chromium runs that encode in an idle
+ * The page-thread canvas port: today's `HTMLCanvasElement` + `toBlob` (every type but WebP, which libwebp encodes). Chromium runs that encode in an idle
  * period, so in a tab that is not being painted (backgrounded, minimized, occluded) a call can wait for one that
  * may not come until a fallback timeout fires — which is why this port is only the Worker's fallback.
  */

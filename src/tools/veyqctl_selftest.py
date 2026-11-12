@@ -61,10 +61,11 @@ what prove it. Everything here runs against a mirror directory this file writes 
      and `rollback` (`test_rollback`, O1 (a)): verify against the live store, stop, empty the database, the capture's
      release started once, stop, restore with the check only, key, start — and refused, nothing stopped, for a release
      gone from `releases/`, a capture that does not verify, and no terminal without `--yes`;
- 10. **`self-update`** — replaced by the installed release's `veyqctl` with its mode kept, nothing to do the second
-     time, refused (nothing replaced) when the installed copy no longer matches its manifest; for a signed release,
-     the manifest on disk verified against its bundle first — refused when it was edited to match a swapped
-     `veyqctl`, and when the bundle is gone.
+ 10. **`self-update`** (`test_self_update`, ADR 0096 decision 9) — with no instance, the newest release's `veyqctl`
+     (never a prerelease) replaces this one, its mode kept, after `cosign verify-blob` over exactly the bytes it
+     installs; nothing fetched when this one is as new or newer; refused, nothing replaced, for a copy that does not
+     verify against its `veyqctl.bundle`, a missing bundle, an older signed copy served under the newest tag (the
+     release it names), and a signed copy that names none.
 
  11. **the instance list and the GitOps target** (ADR 0126, cr-veyqctl-gitops-target) — `init --compose` installing
      as `install` and listing the home; `--home` over `--instance` over the current one; every Compose lifecycle verb
@@ -75,7 +76,27 @@ what prove it. Everything here runs against a mirror directory this file writes 
      stopping on a major's entry, rewriting the four pins and three tags, committing its three files alone, pushing
      only with `--push` — and refusing drift, uncommitted changes, an unverified or mis-versioned chart, a failed render
      and a downgrade with the repository untouched; a hand-written veyqctl.json confirmed by `check` when its pins
-     are its running release's as signed, and refused by `upgrade` when not.
+     are its running release's as signed, and refused by `upgrade` when not;
+ 12. **`init`'s order and memory** (cr-veyqctl-server-path phases 1, 2b) — every program a command starts checked at
+     once before its first question, the missing ones named and waited for (`test_programs_checked_first`); no
+     question after the first step; every answer kept in the repository's veyq-setup.json and the flags that shape
+     the files with it, so an interrupted run goes on asking nothing twice and a written checkout writes nothing again
+     (`test_init_resumes`, `test_init_resumes_from_flags`);
+ 13. **the server path** (`test_server_path`, stand-in `ServerHost`) — veyq-server's manifest and tree verified before
+     Copier runs, the server's secrets encrypted once, the host key pinned only when confirmed (and a rebuilt server's
+     new key asked again), the deploy key read-only through gh, DNS waited for, nothing pushed or bootstrapped without
+     a yes, the push check, no bootstrap where the admin logs in already, ~/.ssh/config and ~/.kube/config written,
+     the wait through a tunnel closed after — and nothing read from a cluster that is not there yet;
+ 14. **`tls production` and `connect`** (`test_tls_production`, `test_connect`) — the switch committed and pushed
+     only on a yes, no certificate deleted while the Issuer still names staging; the ssh block rewritten in place,
+     connect.py's taken over, an owner's own `Host` never shadowed;
+ 15. **which releases it speaks** (`test_own_release`, ADR 0096 decision 9) — `--version` from a checkout and from a
+     stamped copy; a manifest of a newer major refused and its own or an older one read; an instance (Compose or
+     GitOps) on a newer major refused before anything runs, and an upgrade into one refused at its manifest with
+     nothing stopped; a veyqctl older than its instance saying so, with `self-update` as the way (never when as new,
+     or from a checkout); `self-update` of an unreleased veyqctl refused, nothing fetched or replaced. Every other test
+     runs a veyqctl published as 3.0, since their releases reach major 3, and SELF points into the temp directory
+     throughout.
 What it cannot show: that Docker, cosign and the backup tool behave as the stand-in answers. That is the live runs' (the CR says
 which). Not a `validate_*.py`: it asserts nothing about the repository, only about the tool. Runnable locally:
 
@@ -89,6 +110,7 @@ import io
 import json
 import os
 import pathlib
+import re
 import shutil
 import stat
 import subprocess
@@ -161,7 +183,7 @@ MARIADB_PASSWORD=
 MARIADB_ROOT_PASSWORD=
 GARAGE_RPC_SECRET=
 GARAGE_ADMIN_TOKEN=
-VEYQ_ACME_EMAIL=
+OPERATOR_EMAIL=
 #   ADMIN_PORT=8081
 """
 COMPOSE = """# Every value is REQUIRED: `${VAR:?…}` fails the `up` (a comment, as the recipe's own header says it)
@@ -216,40 +238,63 @@ class FakeHost(vc.Host):
         self.envs.append(dict(env or {}))
         if stdin is not None:
             self.stdins.append(stdin)
-        rc, out = 0, ""
         if cmd[0] == sys.executable and cmd[1].endswith(vc.BACKUP_ASSET):
-            rc = 1 if cmd[2] == self.fail_tool else 0
-            if cmd[2] == "store-in-use":
-                rc, out = (1, "") if self.store_in_use is None else (rc, self.store_in_use + "\n")
-            if cmd[2] == "retention":
-                rc, out = (1, "") if self.fresh is None else (rc, json.dumps(
-                    {"days": 30, "source": "the default, none set", "youngest": "20261001T000000Z" if self.fresh else
-                     None, "youngestAt": None, "fresh": self.fresh}) + "\n")
-            if cmd[2] == "restore" and not rc:  # the tool places leg (c) where veyqctl told it to
-                key = cmd[cmd.index("--config-secret-file") + 1]
-                pathlib.Path(key).write_bytes(b"restored-key")
-        elif "read-file" in cmd:  # the erasure ledger read out of the app's volume by a one-off container
-            rc, out = (3, "") if self.ledger is None else (0, self.ledger)
-        elif cmd[:2] == ["docker", "cp"]:
-            pathlib.Path(cmd[3]).write_bytes(b"the-instance-key")
-        elif cmd[:3] == ["docker", "ps", "-aq"]:
-            out = "cid-app\n"
-        elif cmd[:3] == ["docker", "image", "inspect"]:
-            rc = 0 if cmd[-1] in self.local_images else 1
-        elif cmd[0].endswith("cosign") and cmd[1] == "verify":
-            rc = 0 if cmd[2] in self.signed else 1
-        elif cmd[0].endswith("cosign") and cmd[1] == "version":
-            out = f"GitVersion:    {self.cosign_version}\nGitCommit:     0\n" if self.cosign_version else "no version\n"
-        elif cmd[0].endswith("cosign") and cmd[1] == "verify-blob":
-            # rc 0 iff the bundle is the stand-in signature over exactly this blob AND veyq's identity was asked for
+            rc, out = self.answer_backup_tool(cmd)
+        elif cmd[0].endswith("cosign"):
+            rc, out = self.answer_cosign(cmd)
+        else:
+            rc, out = self.answer_docker(cmd)
+        result = subprocess.CompletedProcess(cmd, rc, out, "stand-in refusal" if rc else "")
+        if check and rc:
+            raise vc.Refused(f"`{' '.join(cmd[:4])} …` exited {rc}")
+        return result
+
+    def answer_backup_tool(self, cmd) -> tuple:
+        """The release's instance_backup.py: `fail_tool` fails, and the reads answer as the stand-in's state says."""
+        rc, out = (1 if cmd[2] == self.fail_tool else 0), ""
+        if cmd[2] == "store-in-use":
+            rc, out = (1, "") if self.store_in_use is None else (rc, self.store_in_use + "\n")
+        if cmd[2] == "retention":
+            rc, out = (1, "") if self.fresh is None else (rc, json.dumps(
+                {"days": 30, "source": "the default, none set", "youngest": "20261001T000000Z" if self.fresh else
+                 None, "youngestAt": None, "fresh": self.fresh}) + "\n")
+        if cmd[2] == "restore" and not rc:  # the tool places the key where veyqctl told it to
+            key = cmd[cmd.index("--config-secret-file") + 1]
+            pathlib.Path(key).write_bytes(b"restored-key")
+        return rc, out
+
+    def answer_cosign(self, cmd) -> tuple:
+        """cosign: `verify` of a signed image, `version`, and `verify-blob` — rc 0 iff the bundle is the stand-in
+        signature over exactly this blob AND veyq's identity was asked for."""
+        if cmd[1] == "verify":
+            return (0 if cmd[2] in self.signed else 1), ""
+        if cmd[1] == "version":
+            return 0, (f"GitVersion:    {self.cosign_version}\nGitCommit:     0\n" if self.cosign_version
+                       else "no version\n")
+        if cmd[1] == "verify-blob":
             blob = pathlib.Path(cmd[2]).read_bytes()
             self.blobs.append(blob)
             bundle = pathlib.Path(cmd[cmd.index("--bundle") + 1]) if "--bundle" in cmd else None
             identity = (cmd[cmd.index("--certificate-oidc-issuer") + 1] == vc.COSIGN_OIDC_ISSUER
                         and cmd[cmd.index("--certificate-identity-regexp") + 1] == vc.COSIGN_IDENTITY_REGEXP
                         ) if {"--certificate-oidc-issuer", "--certificate-identity-regexp"} <= set(cmd) else False
-            rc = 0 if bundle and bundle.is_file() and bundle.read_text() == bundle_token(blob) and identity else 1
-        elif "config" in cmd and "--format" in cmd:
+            return (0 if bundle and bundle.is_file() and bundle.read_text() == bundle_token(blob) and identity
+                    else 1), ""
+        return 0, ""
+
+    def answer_docker(self, cmd) -> tuple:
+        """docker and docker compose: the reads veyqctl makes (config, ps, inspect, port), the key copied out, a local
+        image present or not, the erasure ledger read by a one-off container."""
+        if "read-file" in cmd:
+            return (3, "") if self.ledger is None else (0, self.ledger)
+        if cmd[:2] == ["docker", "cp"]:
+            pathlib.Path(cmd[3]).write_bytes(b"the-instance-key")
+            return 0, ""
+        if cmd[:3] == ["docker", "ps", "-aq"]:
+            return 0, "cid-app\n"
+        if cmd[:3] == ["docker", "image", "inspect"]:
+            return (0 if cmd[-1] in self.local_images else 1), ""
+        if "config" in cmd and "--format" in cmd:
             services = {
                 "app": {"environment": {"VEYQ_SECURITY_CONFIG_SECRET_FILE": "/var/lib/veyq/config-secret.key",
                                         "VEYQ_BUNDLED_STORE_ENDPOINT": "http://garage:3900",
@@ -261,18 +306,15 @@ class FakeHost(vc.Host):
                 del services["garage"]
                 services["app"]["environment"].update({"VEYQ_BUNDLED_STORE_ENDPOINT": "",
                                                        "VEYQ_BUNDLED_STORE_ADMIN_TOKEN": ""})
-            out = json.dumps({"name": self.project, "services": services,
-                              "networks": {"edge": {"name": f"{self.project}_edge"}}})
-        elif "ps" in cmd and "--format" in cmd:
-            out = "\n".join(json.dumps({k: v for k, v in r.items() if not k.startswith("_")}) for r in self.ps)
-        elif cmd[:2] == ["docker", "inspect"]:
-            out = "\n".join(f"{r['ID']}full {r['_restart']}" for r in self.ps if r["ID"] in cmd)
-        elif "port" in cmd:
-            out = "127.0.0.1:8081\n"
-        result = subprocess.CompletedProcess(cmd, rc, out, "stand-in refusal" if rc else "")
-        if check and rc:
-            raise vc.Refused(f"`{' '.join(cmd[:4])} …` exited {rc}")
-        return result
+            return 0, json.dumps({"name": self.project, "services": services,
+                                  "networks": {"edge": {"name": f"{self.project}_edge"}}})
+        if "ps" in cmd and "--format" in cmd:
+            return 0, "\n".join(json.dumps({k: v for k, v in r.items() if not k.startswith("_")}) for r in self.ps)
+        if cmd[:2] == ["docker", "inspect"]:
+            return 0, "\n".join(f"{r['ID']}full {r['_restart']}" for r in self.ps if r["ID"] in cmd)
+        if "port" in cmd:
+            return 0, "127.0.0.1:8081\n"
+        return 0, ""
 
     def which(self, name):
         return f"/usr/bin/{name}" if (name != "cosign" or self.cosign) else None
@@ -283,9 +325,12 @@ class FakeHost(vc.Host):
     def wait(self, prompt):
         return False  # no terminal: a missing program is refused
 
-    def prompt(self, question, default="", hint=""):
-        """A terminal where each question gets its answer from `answers`, else Enter (the default, or nothing)."""
-        return self.answers.get(question) or default or None
+    def prompt(self, question, default="", hint="", yes_no=False, optional=False):
+        """A terminal where each question gets its answer from `answers` (an empty one: Enter, where the question
+        allows it), else Enter on the default — and no answer at all (None) where there is none."""
+        if question in self.answers and (self.answers[question] or optional):
+            return self.answers[question]
+        return default or None
 
     def ran(self, *words: str) -> list[int]:
         """The indexes of every recorded command containing all of `words`."""
@@ -363,7 +408,7 @@ def test_resolver(tmp: pathlib.Path) -> None:
           "selects no release" in refused(vc.select, listed, "2", "the mirror"))
     check("resolver: a pin that is not in the source is refused", "not in" in refused(vc.select, listed, "3.1", "x"))
     for bad in ("1.x", "v1.3", "", "1.2.3", "newest"):
-        check(f"resolver: selector {bad!r} is refused", "selects nothing" in refused(vc.check_selector, bad))
+        check(f"resolver: selector {bad!r} is refused", "is not valid" in refused(vc.check_selector, bad))
     check("check: the newer major beyond `0`", vc.newer_major(listed, vc.select(listed, "0", "x")).release == "1.12")
     check("check: no newer major beyond `1` (2.0 is a prerelease)",
           vc.newer_major(listed, vc.select(listed, "1", "x")) is None)
@@ -441,10 +486,10 @@ def test_major_entry() -> None:
 
     message = refused(lambda: goes(two, "1.9", "latest", {}))
     check("major entry: a next-major release whose manifest names no entry is refused, never crossed",
-          "names no release major 2 is entered from" in message, message)
+          "does not name the release major 2 is entered from" in message, message)
     message = refused(lambda: goes(listed("1.3", "2.5"), "1.3", "latest", at19))
     check("major entry: an entry the source does not list is refused, naming it",
-          "lists no release 1.9" in message, message)
+          "does not list 1.9" in message, message)
 
 
 def test_manifest() -> None:
@@ -514,7 +559,7 @@ def test_assets_on_disk(tmp: pathlib.Path) -> None:
 
 def test_template(tmp: pathlib.Path) -> None:
     m = vc.parse_manifest(manifest_bytes(), "v1.12")
-    given = {"VEYQ_DOMAIN": "veyq.test", "VEYQ_ACME_EMAIL": "ops@veyq.test", "ADMIN_PORT": "18081"}
+    given = {"VEYQ_DOMAIN": "veyq.test", "OPERATOR_EMAIL": "ops@veyq.test", "ADMIN_PORT": "18081"}
     values = vc.install_values(TEMPLATE, m, given, lambda k, e: None)
     check("template: the image lines come from the manifest",
           (values["VEYQ_IMAGE"], values["VEYQ_ADMIN_IMAGE"]) == (SIGNED_APP, SIGNED_ADMIN))
@@ -533,12 +578,12 @@ def test_template(tmp: pathlib.Path) -> None:
           lines.index(vc.KEPT_HEADER) < lines.index("ADMIN_PORT=18081") and "VEYQ_RELEASE=latest" in lines)
     check("template: render → read is the identity on the values", vc.env_values(rendered) == values)
 
-    asked = vc.install_values(TEMPLATE, m, {"VEYQ_ACME_EMAIL": "x@y"}, lambda k, e: f"asked-{k}-{e}")
+    asked = vc.install_values(TEMPLATE, m, {"OPERATOR_EMAIL": "x@y"}, lambda k, e: f"asked-{k}-{e}")
     check("template: a value not given is asked, with the template's as the example",
           asked["VEYQ_DOMAIN"] == "asked-VEYQ_DOMAIN-veyq.example.org")
     message = refused(vc.install_values, TEMPLATE, m, {"VEYQ_DOMAIN": "veyq.test"}, lambda k, e: None)
     check("template: an operator value neither given nor asked is refused, named",
-          "VEYQ_ACME_EMAIL" in message and "--set VEYQ_ACME_EMAIL" in message, message)
+          "OPERATOR_EMAIL" in message and "--set OPERATOR_EMAIL" in message, message)
     check("template: the image lines cannot be --set",
           "release's to write" in refused(vc.install_values, TEMPLATE, m, {**given, "VEYQ_IMAGE": "x"}, lambda k, e: None))
 
@@ -566,18 +611,18 @@ def test_signature_gate() -> None:
 
     host = FakeHost(local_images={"veyq:local", "veyq-admin:local"})
     message = refused(vc.verify_images, host, signed, True)
-    check("gate: --unsigned-local with registry references is refused", "no registry host and no digest" in message)
+    check("gate: --unsigned-local with registry references is refused", "without registry or digest" in message)
     check("gate: --unsigned-local with ONE registry reference is refused, naming it",
           "admin `ghcr.io" in refused(vc.verify_images, host, mixed, True))
     check("gate: --unsigned-local for an image not on the host is refused (never pulled from Docker Hub)",
-          "not on this host" in refused(vc.verify_images, FakeHost(local_images={"veyq:local"}), local, True))
+          "not on this computer" in refused(vc.verify_images, FakeHost(local_images={"veyq:local"}), local, True))
     check("gate: --unsigned-local with two local builds on the host passes", refused(vc.verify_images, host, local, True) == "")
     check("gate: a local build without --unsigned-local is refused",
           "--unsigned-local" in refused(vc.verify_images, FakeHost(), local, False))
     check("gate: a registry reference without a digest is refused",
           "pinned by digest" in refused(vc.verify_images, FakeHost(),
                                         signed._replace(app="ghcr.io/raddatzk/veyq:1.12"), False))
-    check("gate: no cosign on PATH is refused", "cosign is not on PATH" in refused(vc.verify_images, FakeHost(cosign=False),
+    check("gate: no cosign on PATH is refused", "cosign is not installed" in refused(vc.verify_images, FakeHost(cosign=False),
                                                                                   signed, False))
 
     app_target = f"ghcr.io/raddatzk/veyq@{DIGEST_A}"
@@ -606,7 +651,7 @@ def test_install(tmp: pathlib.Path) -> None:
     out = io.StringIO()
     with contextlib.redirect_stdout(out):
         rc = vc.main(["--home", str(home), "--source", str(mirror), "install", "--unsigned-local",
-                      "--set", "VEYQ_DOMAIN=veyq.test", "--set", "VEYQ_ACME_EMAIL=ops@veyq.test",
+                      "--set", "VEYQ_DOMAIN=veyq.test", "--set", "OPERATOR_EMAIL=ops@veyq.test",
                       "--set", "PLAIN_REQUIRED=1", "--set", "QUOTED=q", "--set", "VEYQ_RELEASE=1"], host)
     check("install: exits 0 on the stand-in host", rc == 0, out.getvalue()[-800:])
     lines = [l for l in out.getvalue().splitlines() if l]
@@ -661,7 +706,7 @@ def test_install(tmp: pathlib.Path) -> None:
     host = FakeHost(local_images={"veyq:local", "veyq-admin:local"})
     with contextlib.redirect_stdout(io.StringIO()):
         rc = vc.main(["--home", str(missing_home), "--source", str(mirror), "install", "--unsigned-local",
-                      "--set", "VEYQ_DOMAIN=veyq.test", "--set", "VEYQ_ACME_EMAIL=ops@veyq.test"], host)
+                      "--set", "VEYQ_DOMAIN=veyq.test", "--set", "OPERATOR_EMAIL=ops@veyq.test"], host)
     check("install: a variable the recipe requires and nothing gives is refused before `up`",
           rc == 1 and not host.ran("up") and not (missing_home / vc.ENV_FILE).exists())
 
@@ -681,9 +726,9 @@ def test_status() -> None:
     check("status: a project with no containers is not healthy", not healthy())
 
 
-# ---- phase 3: upgrade, backup, restore, self-update ---------------------------------------------------------------
+# ---- upgrade, backup, restore, self-update ----------------------------------------------------------------------
 
-INSTALL_SETS = ["--set", "VEYQ_DOMAIN=veyq.test", "--set", "VEYQ_ACME_EMAIL=ops@veyq.test", "--set", "PLAIN_REQUIRED=1",
+INSTALL_SETS = ["--set", "VEYQ_DOMAIN=veyq.test", "--set", "OPERATOR_EMAIL=ops@veyq.test", "--set", "PLAIN_REQUIRED=1",
                 "--set", "QUOTED=q", "--set", "ADMIN_PORT=18081"]
 
 
@@ -751,13 +796,19 @@ def test_upgrade_selector(tmp: pathlib.Path) -> None:
         rc = vc.main(["--home", str(home), "check", "--unsigned-local"],
                      FakeHost(local_images=all_images(), project="veyq-proof"))
     check("check: from 1.3 with `latest`, `upgrade` would take 1.12 and the one after it enters major 2",
-          rc == 0 and "would take release 1.12" in out.getvalue()
+          rc == 0 and "Take release 1.12" in out.getvalue()
           and "the `upgrade` after that one enters major 2" in out.getvalue(), out.getvalue()[-400:])
     home = installed(tmp, "home-up-down", mirror, "1.12", "1.3")
     host = FakeHost(local_images=all_images(), project="veyq-proof")
     rc, out = upgrade(home, host, "--unsigned-local", "--key-into", str(keys / "down.key"))
     check("upgrade: VEYQ_RELEASE pinned BELOW the running release is refused (no downgrade), nothing run",
           rc == 1 and "older than the running" in out and not host.commands, out[-300:])
+    out = io.StringIO()
+    with contextlib.redirect_stdout(out):
+        rc = vc.main(["--home", str(home), "check", "--unsigned-local"],
+                     FakeHost(local_images=all_images(), project="veyq-proof"))
+    check("check: VEYQ_RELEASE below the running release says `upgrade` would refuse, as `upgrade` does",
+          rc == 0 and "Refuse: " in out.getvalue() and "Take release" not in out.getvalue(), out.getvalue()[-300:])
 
 
 def test_upgrade_order(tmp: pathlib.Path) -> None:
@@ -824,7 +875,7 @@ def test_upgrade_refusals(tmp: pathlib.Path) -> None:
           and not host.commands)
     host = FakeHost(local_images=all_images())
     rc, out = upgrade(home, host, "--unsigned-local", "--key-into", str(home / vc.BACKUPS_DIR / "k.key"))
-    check("upgrade: --key-into inside backups/ (beside the dumps) is refused", rc == 1 and "beside the dumps" in out
+    check("upgrade: --key-into inside backups/ (beside the dumps) is refused", rc == 1 and "next to the backups" in out
           and not host.commands)
     if os.geteuid() != 0:  # root searches whatever the mode
         shut = tmp / "shut-keys"
@@ -938,17 +989,17 @@ def test_backup_without_garage(tmp: pathlib.Path) -> None:
             os.environ.pop(key, None)
         os.environ["VEYQ_BACKUP_STORE_ENDPOINT"] = "https://s3.example.org"  # one of three: the other two are named
         host = FakeHost(local_images=all_images(), project="veyq-ng", garage=False)
-        rc, out = run_quiet(["--home", str(home), "backup", "--key-into", str(tmp / "ng0.key")], host)
+        rc, out = run_main(["--home", str(home), "backup", "--key-into", str(tmp / "ng0.key")], host)
         check("no garage: `backup` without the own store's pair is refused before anything stops, naming what is missing",
               rc == 1 and not host.ran("stop") and not host.ran("capture") and "VEYQ_BACKUP_STORE_ACCESS_KEY" in out
               and "VEYQ_BACKUP_STORE_SECRET_KEY" in out and "VEYQ_BACKUP_STORE_ENDPOINT" not in out, out)
         host = FakeHost(local_images=all_images(), project="veyq-ng", garage=False)
-        rc, out = run_quiet(["--home", str(home), "backup", "prune"], host)
+        rc, out = run_main(["--home", str(home), "backup", "prune"], host)
         check("no garage: `backup prune` reads only the database and needs no store pair", rc == 0 and host.ran("prune"), out)
 
         os.environ.update(OWN_STORE)
         host = FakeHost(local_images=all_images(), project="veyq-ng", garage=False)
-        rc, out = run_quiet(["--home", str(home), "backup", "--key-into", str(tmp / "ng1.key")], host)
+        rc, out = run_main(["--home", str(home), "backup", "--key-into", str(tmp / "ng1.key")], host)
         first = first_of(host)
         ran = host.commands[first("capture")] if host.ran("capture") else []
         env = host.envs[first("capture")] if host.ran("capture") else {}
@@ -960,7 +1011,7 @@ def test_backup_without_garage(tmp: pathlib.Path) -> None:
         # The control on the same predicate: with a `garage` service, the same shell changes nothing — the store's
         # own network and the bundled pair, as before.
         host = FakeHost(local_images=all_images(), project="veyq-ng")
-        rc, out = run_quiet(["--home", str(home), "backup", "--key-into", str(tmp / "ng2.key")], host)
+        rc, out = run_main(["--home", str(home), "backup", "--key-into", str(tmp / "ng2.key")], host)
         first = first_of(host)
         ran = host.commands[first("capture")] if host.ran("capture") else []
         env = host.envs[first("capture")] if host.ran("capture") else {}
@@ -976,16 +1027,6 @@ def with_env(home: pathlib.Path, **values: str) -> None:
     """Lines an operator adds to `.env` (or uncomments from the template)."""
     with (home / vc.ENV_FILE).open("a") as f:
         f.writelines(f"{k}={v}\n" for k, v in values.items())
-
-
-def run_quiet(argv: list, host: FakeHost) -> tuple:
-    out = io.StringIO()
-    with contextlib.redirect_stdout(out), contextlib.redirect_stderr(out):
-        try:
-            rc = vc.main(argv, host)
-        except SystemExit as e:  # argparse: a flag this veyqctl does not know
-            rc = e.code or 2
-    return rc, out.getvalue()
 
 
 POOL_SECRET = "pool-secret-in-env-file"
@@ -1005,26 +1046,26 @@ def test_pool(tmp: pathlib.Path) -> None:
             ("a store of your own: no warning", {"store_in_use": "own"}, None, 0, False),
             ("unhealthy, bundled, no pool: exit 1 and the warning", {"ps": unhealthy}, None, 1, True),
     ):
-        rc, out = run_quiet(["--home", str(home), "status"], FakeHost(project="veyq-proof", **host_kw))
-        check(f"status: {label}", rc == rc_want and ("keeps no object versions" in out) == warns
+        rc, out = run_main(["--home", str(home), "status"], FakeHost(project="veyq-proof", **host_kw))
+        check(f"status: {label}", rc == rc_want and ("keeps no older versions" in out) == warns
               and (host_kw.get("store_in_use", "") is not None or "could not be read" in out), out[-400:])
     pooled = installed(tmp, "home-status-pool", mirror, "1.3", "1.3")
     with_env(pooled, VEYQ_BACKUP_OBJECTS_TO=str(tmp / "pool"))
     for label, ps, rc_want in (("healthy", FakeHost.HEALTHY, 0), ("unhealthy", unhealthy, 1)):
-        rc, out = run_quiet(["--home", str(pooled), "status"], FakeHost(project="veyq-proof", ps=ps))
+        rc, out = run_main(["--home", str(pooled), "status"], FakeHost(project="veyq-proof", ps=ps))
         check(f"status (control): a pool named in .env, {label} — no warning, exit {rc_want}",
-              rc == rc_want and "keeps no object versions" not in out, out[-300:])
+              rc == rc_want and "keeps no older versions" not in out, out[-300:])
     host = FakeHost(local_images=all_images(), project="veyq-proof")
-    rc, out = run_quiet(["--home", str(tmp / "home-install-warn"), "--source", str(mirror), "install",
+    rc, out = run_main(["--home", str(tmp / "home-install-warn"), "--source", str(mirror), "install",
                          "--unsigned-local", *INSTALL_SETS, "--set", "VEYQ_RELEASE=1.3"], host)
     check("install: ends with the same warning while no pool is named",
-          rc == 0 and "keeps no object versions" in out.splitlines()[-1], out[-300:])
+          rc == 0 and "keeps no older versions" in out.splitlines()[-1], out[-300:])
 
     # V2 — backup: the early copy before the stop, the capture after it into the same pool.
     home = installed(tmp, "home-pool-backup", mirror, "1.3", "1.3")
     with_env(home, VEYQ_BACKUP_OBJECTS_TO=str(tmp / "pool-a"))
     host = FakeHost(local_images=all_images(), project="veyq-proof")
-    rc, out = run_quiet(["--home", str(home), "backup", "--key-into", str(tmp / "pool-b1.key")], host)
+    rc, out = run_main(["--home", str(home), "backup", "--key-into", str(tmp / "pool-b1.key")], host)
     first = first_of(host)
     early, cap = host.ran("copy-objects"), host.ran("capture")
     capture = host.commands[cap[0]] if cap else []
@@ -1034,7 +1075,7 @@ def test_pool(tmp: pathlib.Path) -> None:
           and host.commands[early[0]][host.commands[early[0]].index("--objects-to") + 1] == str(tmp / "pool-a")
           and capture[capture.index("--objects-to") + 1] == str(tmp / "pool-a"), out[-400:])
     host = FakeHost(local_images=all_images(), project="veyq-proof")
-    rc, out = run_quiet(["--home", str(home), "backup", "--key-into", str(tmp / "pool-b2.key"), "--objects-to",
+    rc, out = run_main(["--home", str(home), "backup", "--key-into", str(tmp / "pool-b2.key"), "--objects-to",
                          str(tmp / "pool-cli")], host)
     capture = host.commands[host.ran("capture")[0]] if host.ran("capture") else []
     check("backup: --objects-to on the command line wins over .env",
@@ -1042,11 +1083,11 @@ def test_pool(tmp: pathlib.Path) -> None:
           and str(tmp / "pool-a") not in " ".join(" ".join(c) for c in host.commands), out[-300:])
     plain = installed(tmp, "home-no-pool", mirror, "1.3", "1.3")
     host = FakeHost(local_images=all_images(), project="veyq-proof")
-    rc, out = run_quiet(["--home", str(plain), "backup", "--key-into", str(tmp / "pool-b3.key")], host)
+    rc, out = run_main(["--home", str(plain), "backup", "--key-into", str(tmp / "pool-b3.key")], host)
     check("backup with no pool configured: no copy-objects, no --objects-to",
           rc == 0 and not host.ran("copy-objects") and not any("--objects-to" in c for c in host.commands), out[-300:])
     host = FakeHost(local_images=all_images(), project="veyq-proof")
-    rc, out = run_quiet(["--home", str(plain), "backup", "--key-into", str(tmp / "pool-b4.key"), "--objects-to",
+    rc, out = run_main(["--home", str(plain), "backup", "--key-into", str(tmp / "pool-b4.key"), "--objects-to",
                          str(plain / vc.RELEASES_DIR / "pool")], host)
     check("backup: a pool inside releases/ is refused before the app stops",
           rc == 1 and "releases" in out and not host.ran("stop"), out[-300:])
@@ -1054,7 +1095,7 @@ def test_pool(tmp: pathlib.Path) -> None:
     with_env(s3, VEYQ_BACKUP_OBJECTS_TO="s3:veyq-pool/inst", VEYQ_BACKUP_POOL_ENDPOINT="https://s3.example",
              VEYQ_BACKUP_POOL_ACCESS_KEY="AKpool", VEYQ_BACKUP_POOL_SECRET_KEY=POOL_SECRET)
     host = FakeHost(local_images=all_images(), project="veyq-proof")
-    rc, out = run_quiet(["--home", str(s3), "backup", "--key-into", str(tmp / "pool-b5.key")], host)
+    rc, out = run_main(["--home", str(s3), "backup", "--key-into", str(tmp / "pool-b5.key")], host)
     tool_calls = host.ran("copy-objects") + host.ran("capture")
     check("backup with an S3 pool: its credentials reach the tool through env, never argv",
           rc == 0 and len(tool_calls) == 2 and all(host.envs[i].get("VEYQ_BACKUP_POOL_SECRET_KEY") == POOL_SECRET
@@ -1088,7 +1129,7 @@ def test_pool(tmp: pathlib.Path) -> None:
     os.chdir(tmp)
     expected = str(pathlib.Path(os.getcwd()) / "relative-pool")  # the cwd as the process sees it (/private/var on macOS)
     try:
-        rc, out = run_quiet(["--home", str(s3), "restore", str(tmp / "a-capture"), "--domain", "family.veyq.test",
+        rc, out = run_main(["--home", str(s3), "restore", str(tmp / "a-capture"), "--domain", "family.veyq.test",
                              "--without-key", "--objects-from", "relative-pool"], host)
     finally:
         os.chdir(here)
@@ -1096,14 +1137,14 @@ def test_pool(tmp: pathlib.Path) -> None:
     check("restore --objects-from P: the tool is handed --objects-from with P absolute",
           rc == 0 and ran[ran.index("--objects-from") + 1] == expected, str(ran))
     host = FakeHost(local_images=all_images(), project="veyq-proof")
-    rc, out = run_quiet(["--home", str(s3), "restore", str(tmp / "a-capture"), "--domain", "family.veyq.test",
+    rc, out = run_main(["--home", str(s3), "restore", str(tmp / "a-capture"), "--domain", "family.veyq.test",
                          "--without-key", "--objects-from", "s3:veyq-pool/inst"], host)
     i = host.ran("restore")[0] if host.ran("restore") else 0
     check("restore from an S3 pool: its credentials reach the tool through env, never argv",
           rc == 0 and host.envs[i].get("VEYQ_BACKUP_POOL_SECRET_KEY") == POOL_SECRET
           and not any(POOL_SECRET in arg for c in host.commands for arg in c), out[-300:])
     host = FakeHost(local_images=all_images(), project="veyq-proof")
-    rc, out = run_quiet(["--home", str(s3), "restore", str(tmp / "a-capture"), "--domain", "family.veyq.test",
+    rc, out = run_main(["--home", str(s3), "restore", str(tmp / "a-capture"), "--domain", "family.veyq.test",
                          "--without-key"], host)
     ran = host.commands[host.ran("restore")[0]] if host.ran("restore") else []
     check("restore without --objects-from never implies .env's pool (objects go only into an empty store, by choice)",
@@ -1128,7 +1169,7 @@ def test_rollback(tmp: pathlib.Path) -> None:
 
     home, capture, key = upgraded("home-rb")
     host = FakeHost(local_images=all_images(), project="veyq-proof")
-    rc, out = run_quiet(["--home", str(home), "rollback", str(capture), "--key-from", str(key), "--yes"], host)
+    rc, out = run_main(["--home", str(home), "rollback", str(capture), "--key-from", str(key), "--yes"], host)
     first = first_of(host)
     old_tool = str(home / "releases/1.3" / vc.BACKUP_ASSET)
     order = [first("verify", "--against-store"), first("stop", "app"), first("empty-database", "--yes"),
@@ -1148,7 +1189,7 @@ def test_rollback(tmp: pathlib.Path) -> None:
           and (home / "releases/1.12").is_dir() and not (home / ".env.rollback").exists(), str(values))
 
     for label, argv_extra, host_kw, prep, said in (
-            ("the capture's release no longer in releases/", ["--yes"], {}, "drop-release", "no longer in the home"),
+            ("the capture's release no longer in releases/", ["--yes"], {}, "drop-release", "no longer on disk"),
             ("a capture that does not verify against the live store", ["--yes"], {"fail_tool": "verify"}, None,
              "verify"),
             ("no terminal to confirm and no --yes", [], {}, None, "pass --yes"),
@@ -1158,7 +1199,7 @@ def test_rollback(tmp: pathlib.Path) -> None:
             shutil.rmtree(home / "releases/1.3")
         before = ((home / vc.ENV_FILE).read_bytes(), (home / vc.STATE_FILE).read_bytes())
         host = FakeHost(local_images=all_images(), project="veyq-proof", **host_kw)
-        rc, out = run_quiet(["--home", str(home), "rollback", str(capture), "--key-from", str(key), *argv_extra], host)
+        rc, out = run_main(["--home", str(home), "rollback", str(capture), "--key-from", str(key), *argv_extra], host)
         check(f"rollback: refused for {label} — nothing stopped, nothing emptied, .env and state untouched",
               rc == 1 and said in out and not host.ran("stop") and not host.ran("empty-database")
               and ((home / vc.ENV_FILE).read_bytes(), (home / vc.STATE_FILE).read_bytes()) == before
@@ -1179,7 +1220,7 @@ def test_retention_and_ledger(tmp: pathlib.Path) -> None:
         return [c for c in host.commands if len(c) > 2 and c[1].endswith(vc.BACKUP_ASSET) and c[2] == "prune"]
 
     host = FakeHost(local_images=all_images(), project="veyq-proof")
-    rc, out = run_quiet(["--home", str(home), "backup", "--key-into", str(tmp / "b-ret.key")], host)
+    rc, out = run_main(["--home", str(home), "backup", "--key-into", str(tmp / "b-ret.key")], host)
     first = first_of(host)
     ran = prunes(host)
     check("backup: the captures past B are pruned after the capture and its check, before the stack is up again",
@@ -1190,20 +1231,20 @@ def test_retention_and_ledger(tmp: pathlib.Path) -> None:
           and not any(DB_ROOT in a for a in host.commands[first("prune")]))
 
     host = FakeHost(local_images=all_images(), project="veyq-proof")
-    rc, out = run_quiet(["--home", str(home), "backup", "prune"], host)
+    rc, out = run_main(["--home", str(home), "backup", "prune"], host)
     check("backup prune: only the prune — nothing stops, no key is asked for, no capture",
           rc == 0 and len(prunes(host)) == 1 and not host.ran("stop") and not host.ran("capture"), out[-300:])
     host = FakeHost(local_images=all_images(), project="veyq-proof", fail_tool="prune")
-    rc, out = run_quiet(["--home", str(home), "backup", "prune"], host)
+    rc, out = run_main(["--home", str(home), "backup", "prune"], host)
     check("backup prune: a prune that fails is the command's failure", rc == 1, out[-300:])
 
     host = FakeHost(local_images=all_images(), project="veyq-proof")
-    rc, out = run_quiet(["--home", str(home), "start"], host)
+    rc, out = run_main(["--home", str(home), "start"], host)
     first = first_of(host)
     check("start: the stack up, then the prune", rc == 0 and first("up") < first("prune") < 10 ** 6, out[-300:])
     host = FakeHost(local_images=all_images(), project="veyq-proof", fail_tool="prune")
-    rc, out = run_quiet(["--home", str(home), "start"], host)
-    check("start: a failed prune is said and the start stands", rc == 0 and "were not pruned" in out, out[-300:])
+    rc, out = run_main(["--home", str(home), "start"], host)
+    check("start: a failed prune is said and the start stands", rc == 0 and "were not deleted" in out, out[-300:])
 
     up_home = installed(tmp, "home-b-up", mirror, "1.3", "1.12")
     host = FakeHost(local_images=all_images(), project="veyq-proof")
@@ -1216,15 +1257,15 @@ def test_retention_and_ledger(tmp: pathlib.Path) -> None:
     for label, fresh, warns in (("no capture younger than B: the warning", False, True),
                                 ("a capture younger than B: no warning", True, False),
                                 ("B unreadable: says so, no warning", None, False)):
-        rc, out = run_quiet(["--home", str(home), "status"], FakeHost(project="veyq-proof", fresh=fresh))
+        rc, out = run_main(["--home", str(home), "status"], FakeHost(project="veyq-proof", fresh=fresh))
         check(f"status: {label}, exit code the health verdict",
-              rc == 0 and ("is younger than B" in out) == warns and (fresh is not None or "could not be read" in out),
+              rc == 0 and ("is younger than the retention period" in out) == warns and (fresh is not None or "could not be read" in out),
               out[-400:])
 
     capture_dir = tmp / "a-capture-b"
     for label, ledger in (("the ledger the app's volume holds", LEDGER), ("no ledger in the volume", None)):
         host = FakeHost(local_images=all_images(), project="veyq-proof", ledger=ledger)
-        rc, out = run_quiet(["--home", str(home), "restore", str(capture_dir), "--domain", "family.veyq.test",
+        rc, out = run_main(["--home", str(home), "restore", str(capture_dir), "--domain", "family.veyq.test",
                              "--key-from", str(tmp / "b-ret.key")], host)
         first = first_of(host)
         restore = host.commands[first("restore")] if host.ran("restore") else []
@@ -1251,7 +1292,7 @@ def test_retention_and_ledger(tmp: pathlib.Path) -> None:
         return rb, cap, tmp / f"{name}.key"
     rb, cap, key = upgraded("home-b-rb")
     host = FakeHost(local_images=all_images(), project="veyq-proof", ledger=LEDGER)
-    rc, out = run_quiet(["--home", str(rb), "rollback", str(cap), "--key-from", str(key), "--yes"], host)
+    rc, out = run_main(["--home", str(rb), "rollback", str(cap), "--key-from", str(key), "--yes"], host)
     first = first_of(host)
     verify = host.commands[first("verify", "--against-store")] if host.ran("verify", "--against-store") else []
     restore = host.commands[first("restore")] if host.ran("restore") else []
@@ -1261,35 +1302,65 @@ def test_retention_and_ledger(tmp: pathlib.Path) -> None:
           and not any(p.name.startswith(".ledger-") for p in rb.iterdir()), out[-400:])
 
 
+def self_update_mirror(root: pathlib.Path) -> pathlib.Path:
+    """Releases as the publish leaves them for `self-update`: each `veyqctl` stamped with its release and signed into
+    `veyqctl.bundle`; v1.8 a prerelease; `copy` overrides what a tag serves as its veyqctl (bundle made over it)."""
+    for tag, pre in (("v1.3", False), ("v1.7", False), ("v1.8", True)):
+        stamped = f'# veyqctl\nRELEASE: str | None = "{tag[1:]}"\n'
+        write_release(root, tag, prerelease=pre, files={vc.COMPOSE_ASSET: COMPOSE, vc.TEMPLATE_ASSET: TEMPLATE,
+                      vc.BACKUP_ASSET: "# backup tool\n", vc.SELF_ASSET: stamped, "garage.toml": "# garage\n"})
+        (root / tag / vc.SELF_BUNDLE_ASSET).write_text(bundle_token(stamped.encode()))
+    return root
+
+
+def serve_as_newest(mirror: pathlib.Path, text: str, *, sign: bool = True) -> None:
+    """v1.7's veyqctl replaced by `text`, its bundle made over it (a signed copy) or left as it was."""
+    (mirror / "v1.7" / vc.SELF_ASSET).write_text(text)
+    if sign:
+        (mirror / "v1.7" / vc.SELF_BUNDLE_ASSET).write_text(bundle_token(text.encode()))
+
+
 def test_self_update(tmp: pathlib.Path) -> None:
-    mirror = upgrade_mirror(tmp / "mirror-su")
-    home = installed(tmp, "home-su", mirror, "1.3", "1.3")
-    bin_dir = tmp / "bin"
-    bin_dir.mkdir()
-    target = bin_dir / "veyqctl"
-    target.write_text("# an older veyqctl\n")
-    target.chmod(0o750)
-    asset = home / "releases/1.3" / vc.SELF_ASSET
-    saved = vc.SELF
-    vc.SELF = target
-    try:
-        out = io.StringIO()
-        with contextlib.redirect_stdout(out):
-            rc = vc.main(["--home", str(home), "self-update"], FakeHost())
-        check("self-update: replaced by the installed release's veyqctl, its mode kept",
-              rc == 0 and target.read_bytes() == asset.read_bytes() and stat.S_IMODE(target.stat().st_mode) == 0o750,
-              out.getvalue()[-300:])
-        with contextlib.redirect_stdout(out):
-            rc = vc.main(["--home", str(home), "self-update"], FakeHost())
-        check("self-update: a second run finds nothing to replace", rc == 0 and "already" in out.getvalue())
-        asset.write_text("# tampered after it was fetched\n")
-        target.write_text("# an older veyqctl\n")
-        with contextlib.redirect_stdout(out):
-            rc = vc.main(["--home", str(home), "self-update"], FakeHost())
-        check("self-update: an installed veyqctl that no longer matches its manifest is refused, nothing replaced",
-              rc == 1 and target.read_text() == "# an older veyqctl\n")
-    finally:
-        vc.SELF = saved
+    """ADR 0096 decision 9: the newest release's veyqctl, for no instance, signed, naming its own release, never back."""
+    mirror = self_update_mirror(tmp / "mirror-su")
+    newest = (mirror / "v1.7" / vc.SELF_ASSET).read_text()
+    older = "# an older veyqctl\n"
+
+    def run(release: str | None, *extra) -> tuple:
+        vc.SELF.write_text(older)
+        vc.SELF.chmod(0o750)
+        host = FakeHost()
+        with veyqctl_of(1, release):
+            rc, out = run_main(["--source", mirror, "self-update", *extra], host)
+        return rc, out, host
+
+    rc, out, host = run("1.3")
+    check("self-update needs no instance: the newest release's veyqctl (never a prerelease), its signature checked, "
+          "its mode kept", rc == 0 and vc.SELF.read_text() == newest and stat.S_IMODE(vc.SELF.stat().st_mode) == 0o750
+          and host.ran("verify-blob") and "now release 1.7" in out, out[-400:])
+    check("self-update checks the very bytes it installs", host.blobs == [newest.encode()], str(host.blobs))
+    for label, release in (("as new as the newest: nothing to replace, nothing fetched", "1.7"),
+                           ("newer than the newest a source lists: never replaced by an older one", "1.9")):
+        rc, out, host = run(release)
+        check(f"self-update {label}", rc == 0 and vc.SELF.read_text() == older and "nothing to replace" in out
+              and not host.commands, out[-300:])
+    serve_as_newest(mirror, "# a swapped veyqctl\n" + newest, sign=False)
+    rc, out, host = run("1.3")
+    check("self-update: a veyqctl that does not verify against its veyqctl.bundle is refused, nothing replaced",
+          rc == 1 and vc.SELF.read_text() == older and "does not verify" in out, out[-300:])
+    serve_as_newest(mirror, (mirror / "v1.3" / vc.SELF_ASSET).read_text())
+    rc, out, host = run("1.3")
+    check("self-update: an older signed veyqctl served as the newest is refused by the release it names",
+          rc == 1 and vc.SELF.read_text() == older and "names release 1.3" in out, out[-300:])
+    serve_as_newest(mirror, "# a veyqctl from before the stamp\n")
+    rc, out, host = run("1.3")
+    check("self-update: a signed veyqctl that names no release is refused",
+          rc == 1 and vc.SELF.read_text() == older and "names no release" in out, out[-300:])
+    serve_as_newest(mirror, newest)
+    (mirror / "v1.7" / vc.SELF_BUNDLE_ASSET).unlink()
+    rc, out, host = run("1.3")
+    check("self-update: no veyqctl.bundle beside it is refused, nothing replaced",
+          rc == 1 and vc.SELF.read_text() == older and vc.SELF_BUNDLE_ASSET in out, out[-300:])
 
 
 # ---- the manifest's signature (cr-signed-release-manifest) ---------------------------------------------------------
@@ -1306,9 +1377,13 @@ def signed_mirror(root: pathlib.Path, *tags: str) -> pathlib.Path:
 
 
 def run_main(argv: list, host: FakeHost) -> tuple:
+    """veyqctl's exit code and everything it printed (stdout and stderr) for `argv` on the stand-in host."""
     out = io.StringIO()
-    with contextlib.redirect_stdout(out):
-        rc = vc.main([str(a) for a in argv], host)
+    with contextlib.redirect_stdout(out), contextlib.redirect_stderr(out):
+        try:
+            rc = vc.main([str(a) for a in argv], host)
+        except SystemExit as e:  # argparse: a flag this veyqctl does not know
+            rc = e.code or 2
     return rc, out.getvalue()
 
 
@@ -1434,15 +1509,34 @@ def test_manifest_signature(tmp: pathlib.Path) -> None:
     rc, out = run_main(["--home", tmp / "home-local-signed", "--source", mirror, "install", "--unsigned-local",
                         *INSTALL_SETS], host)
     check("control: --unsigned-local with registry references is refused as today",
-          rc == 1 and "no registry host and no digest" in out, out[-300:])
+          rc == 1 and "without registry or digest" in out, out[-300:])
 
     # `verify` names the manifest too
     host = FakeHost(signed=SIGNED_TARGETS)
     rc, out = run_main(["--home", tmp / "home-verify", "--source", mirror, "verify", "--release", "1.3"], host)
-    check("verify: the manifest's signature, then both images, and the closing line names the manifest",
+    check("verify: the manifest's signature, then both images, each checked off, and the closing line says so",
           rc == 0 and host.ran("verify-blob") and image_verifies(host)
-          and max(host.ran("verify-blob")) < min(image_verifies(host)) and "manifest" in out.splitlines()[-1],
+          and max(host.ran("verify-blob")) < min(image_verifies(host)) and "✓ manifest" in out
+          and "✓ app image" in out and "✓ admin image" in out and "as signed" in out.splitlines()[-1],
           out[-300:])
+    check("verify: no program is shown without --verbose, and digests are shortened on screen",
+          "+ " not in out and not re.search(r"sha256:[0-9a-f]{13}", out), out[-300:])
+    host = FakeHost(signed=SIGNED_TARGETS)
+    rc, out = run_main(["--home", tmp / "home-verify", "--source", mirror, "verify", "--release", "1.3", "-v"], host)
+    check("verify -v: cosign's version checked once for three signatures",
+          rc == 0 and sum(c[0].endswith("cosign") and c[1:2] == ["version"] for c in host.commands) == 1
+          and len(image_verifies(host)) == 2, out[-300:])
+    # The real Host shows a program only under --verbose (the stand-in records instead of running, so it is asked here).
+    shown = {}
+    for verbose in (False, True):
+        vc.set_verbose(verbose)
+        buffer = io.StringIO()
+        with contextlib.redirect_stdout(buffer):
+            vc.Host().run([sys.executable, "-c", "pass"])
+        vc.set_verbose(False)
+        shown[verbose] = buffer.getvalue()
+    check("Host.run: a program is shown with --verbose, with its arguments, and not without",
+          shown[False] == "" and shown[True].strip() == f"+ {sys.executable} -c pass", repr(shown))
 
     # bite (e): upgrade toward a release whose manifest was changed after it was signed
     up_mirror = signed_mirror(tmp / "mirror-up-signed", "v1.3", "v1.4")
@@ -1479,39 +1573,6 @@ def test_manifest_signature(tmp: pathlib.Path) -> None:
           "just verified" in message and (release / vc.MANIFEST_ASSET).read_bytes() != kept, message)
     (release / vc.MANIFEST_ASSET).write_bytes(kept)
 
-    # bite (d): self-update trusts the manifest on disk only once it verifies against the bundle beside it
-    bin_dir = tmp / "bin-signed"
-    bin_dir.mkdir()
-    target = bin_dir / "veyqctl"
-    saved = vc.SELF
-    vc.SELF = target
-    try:
-        release = home / "releases/1.3"
-        target.write_text("# an older veyqctl\n")
-        host = FakeHost()
-        rc, out = run_main(["--home", home, "self-update"], host)
-        check("self-update (control): a signed release's veyqctl replaces this one after the manifest verifies",
-              rc == 0 and target.read_bytes() == (release / vc.SELF_ASSET).read_bytes() and bool(host.ran("verify-blob")),
-              out[-300:])
-        target.write_text("# an older veyqctl\n")
-        manifest_path, self_path = release / vc.MANIFEST_ASSET, release / vc.SELF_ASSET
-        kept = (manifest_path.read_bytes(), self_path.read_bytes())
-        self_path.write_text("# a swapped veyqctl\n")
-        doc = json.loads(manifest_path.read_text())
-        doc["assets"][vc.SELF_ASSET] = sha(self_path.read_bytes())
-        manifest_path.write_text(json.dumps(doc))
-        rc, out = run_main(["--home", home, "self-update"], FakeHost())
-        check("bite (d): self-update with the manifest on disk edited to match a swapped veyqctl is refused, nothing "
-              "replaced", rc == 1 and target.read_text() == "# an older veyqctl\n" and "does not verify" in out,
-              out[-400:])
-        manifest_path.write_bytes(kept[0])
-        self_path.write_bytes(kept[1])
-        (release / BUNDLE).unlink(missing_ok=True)
-        rc, out = run_main(["--home", home, "self-update"], FakeHost())
-        check("bite (d): self-update with the bundle gone from disk is refused, nothing replaced",
-              rc == 1 and target.read_text() == "# an older veyqctl\n" and BUNDLE in out, out[-400:])
-    finally:
-        vc.SELF = saved
 
 
 def test_entry_signed(tmp: pathlib.Path) -> None:
@@ -1632,7 +1693,7 @@ class GitOpsHost(FakeHost):
         if cmd[0] == "kubectl":
             for key, answer in self.cluster.items():
                 if key in joined:
-                    return answer
+                    return answer(self) if callable(answer) else answer  # a callable: the cluster as it is now
             return 0, ""
         if cmd[0] == "helm" and cmd[1] == "show":
             digest = cmd[3].rsplit("@", 1)[1]
@@ -1663,7 +1724,7 @@ def gitops_signed(*releases: str, without: tuple = ()) -> set:
     return {f"{names[role]}@{pin_of(r, role)}" for r in releases for role in names if (r, role) not in without}
 
 
-INIT = ["--domain", "veyq.example.org", "--gateway-class", "traefik", "--acme-email", "ops@example.org",
+INIT = ["--domain", "veyq.example.org", "--gateway-class", "traefik", "--tls", "acme",
         "--gateway-namespace", "traefik", "--gateway-pod-label", "app.kubernetes.io/name=traefik"]
 
 
@@ -1690,18 +1751,28 @@ def test_instances(tmp: pathlib.Path) -> None:
     rc, out = run_main(["--home", tmp / "elsewhere", "--source", mirror, "init", "--compose", "--name", "test",
                         "--unsigned-local", *INSTALL_SETS], FakeHost(local_images=all_images()))
     check("init: a name listed for another path is refused before anything is installed",
-          rc == 1 and "listed already" in out and not (tmp / "elsewhere").exists(), out[-400:])
+          rc == 1 and "already an instance named" in out and not (tmp / "elsewhere").exists(), out[-400:])
+    gone = tmp / "moved-away"
+    registry = vc.read_registry()
+    registry["instances"]["gone-instance"] = str(gone)
+    vc.write_registry(registry)
+    rc, out = run_main(["--home", tmp / "takes-the-name", "--source", mirror, "init", "--compose", "--name",
+                        "gone-instance", "--unsigned-local", *INSTALL_SETS, "--set", "VEYQ_RELEASE=1.3"],
+                       FakeHost(local_images=all_images(), project="veyq-proof"))
+    check("init: a name listed for a directory that no longer exists (moved or deleted) is free again, and says so",
+          rc == 0 and "no longer exists" in out
+          and vc.read_registry()["instances"]["gone-instance"] == str(tmp / "takes-the-name"), out[-400:])
     gitops_home = tmp / "inst-gitops"
     gitops_home.mkdir()
     (gitops_home / vc.GITOPS_FILE).write_text("{}")
     registry["instances"]["cluster"] = str(gitops_home)
     vc.write_registry(registry)
-    for verb in ("start", "backup", "rollback", "self-update"):
+    for verb in ("start", "backup", "rollback"):
         argv = ["--instance", "cluster", verb] + (["/tmp/capture", "--key-from", "/tmp/k"] if verb == "rollback" else [])
         host = FakeHost()
         rc, out = run_main(argv, host)
         check(f"a GitOps instance refuses `{verb}`, names what does it there, and runs nothing",
-              rc == 1 and "is Compose's" in out and vc.COMPOSE_ONLY[verb][:20] in out and not host.commands, out)
+              rc == 1 and "is for Compose" in out and vc.COMPOSE_ONLY[verb][:20] in out and not host.commands, out)
     rc, out = run_main(["--instance", "nope", "status"], FakeHost())
     check("--instance of no listed name is refused, naming `veyqctl instances`", rc == 1 and "instances" in out, out)
     rc, out = run_main(["use", "nope"], FakeHost())
@@ -1716,7 +1787,7 @@ def test_instances(tmp: pathlib.Path) -> None:
     check("upgrade --push on a Compose home is refused before anything runs", rc == 1 and "GitOps" in out, out)
     rc, out = run_main(["instances"], FakeHost())
     check("instances: each listed with its target and path, the current one marked",
-          "* cluster  gitops" in out and "  test  compose" in out, out)
+          re.search(r"\* cluster +gitops ", out) is not None and re.search(r"  test +compose ", out) is not None, out)
     vc.write_registry({"current": None, "instances": {}})
 
 
@@ -1741,16 +1812,16 @@ def test_programs_checked_first(tmp: pathlib.Path) -> None:
                 self.missing = set()
             return self.installs
 
-        def prompt(self, question, default="", hint=""):
+        def prompt(self, question, default="", hint="", yes_no=False, optional=False):
             self.asked.append(question)
             self.asked_at.append(len(self.commands))  # how many commands had run when it was asked
-            return super().prompt(question, default, hint)
+            return super().prompt(question, default, hint, yes_no, optional)
 
     host = Missing({"kubectl", "helm"})
     rc, out = run_main(["init", "--gitops", top / "apps" / "veyq", *INIT, "--secrets", "none"], host)
     check("init --gitops without kubectl and helm: after the setup answers, both named with where to get them, "
           "waited for, refused without a terminal — no cluster question, no command but git's",
-          rc == 1 and "kubectl, helm, not on PATH" in out and vc.PROGRAMS["helm"] in out
+          rc == 1 and "kubectl, helm are not installed" in out and vc.PROGRAMS["helm"] in out
           and vc.PROGRAMS["kubectl"] in out and host.waited == [{"kubectl", "helm"}]
           and "kubeconfig context" not in host.asked and all(c[0] == "git" for c in host.commands)
           and "brew install kubernetes-cli helm" in out, out[-400:])
@@ -1758,7 +1829,7 @@ def test_programs_checked_first(tmp: pathlib.Path) -> None:
     (top / ".sops.yaml").write_text("creation_rules: []\n")
     rc, out = run_main(["init", "--gitops", top / "apps" / "veyq-sops", *INIT], host)
     check("the secrets answer decides the programs: sops chosen and missing is named in the one check",
-          rc == 1 and "needs sops, not on PATH" in out and "kubeconfig context" not in host.asked, out[-400:])
+          rc == 1 and "sops is not installed" in out and "kubeconfig context" not in host.asked, out[-400:])
     (top / ".sops.yaml").unlink()
     mirror = gitops_mirror(tmp / "programs-mirror", ("v1.0", None))
     host = Missing({"helm"}, installs=True, signed=gitops_signed("1.0"))
@@ -1774,7 +1845,7 @@ def test_programs_checked_first(tmp: pathlib.Path) -> None:
     host = Missing({"git"}, answers={"compose or gitops": "gitops"})
     rc, out = run_main(["init"], host)
     check("init with gitops chosen at its prompt and no git is refused before the next question",
-          rc == 1 and "needs git, not on PATH" in out and host.asked == ["compose or gitops"], out[-400:])
+          rc == 1 and "git is not installed" in out and host.asked == ["compose or gitops"], out[-400:])
     host = Missing(set(), cosign_version="v3.1.2")
     rc, out = run_main(["init", "--gitops", top / "apps" / "veyq", *INIT, "--secrets", "none"], host)
     check("init --gitops with a cosign below the floor is refused after the setup answers, before the cluster's",
@@ -1785,11 +1856,11 @@ def test_programs_checked_first(tmp: pathlib.Path) -> None:
     host = Missing({"helm"})
     rc, out = run_main(["--home", home, "upgrade"], host)
     check("a GitOps verb without helm is refused naming it, before reading the instance",
-          rc == 1 and "`upgrade` of a GitOps instance needs helm" in out and not host.commands, out[-400:])
+          rc == 1 and "`upgrade` of a GitOps instance: helm is not installed" in out and not host.commands, out[-400:])
     host = Missing({"docker", "cosign"})
     rc, out = run_main(["--home", tmp / "programs-compose", "install"], host)
     check("a Compose install without docker and cosign is refused naming both, before any command or file",
-          rc == 1 and "`install` needs docker, cosign, not on PATH" in out and not host.commands
+          rc == 1 and "`install`: docker, cosign are not installed" in out and not host.commands
           and not (tmp / "programs-compose").exists(), out[-400:])
     host = Missing({"cosign"})
     rc, out = run_main(["--home", tmp / "programs-compose", "status"], host)
@@ -1806,7 +1877,7 @@ def test_gitops_init(tmp: pathlib.Path) -> None:
     rc, out = run_main(["--source", mirror, "init", "--gitops", d, "--release", "1.0", *INIT, "--secrets",
                         "external-secrets", "--secret-store", "vault"], host)
     files = {p.relative_to(d).as_posix() for p in d.rglob("*") if p.is_file()}
-    check("init without the server shows no server outline", "With the server, after the questions" not in out
+    check("init without the server shows no server outline", "With a new server, veyqctl does this" not in out
           and "sets up a veyq instance" in out, out[:300])
     check("init --gitops: writes the Application, the values, resources/ with ExternalSecrets, and veyqctl.json",
           rc == 0 and files == {"application.yaml", "values.yaml", vc.GITOPS_FILE, "resources/kustomization.yaml",
@@ -1824,7 +1895,7 @@ def test_gitops_init(tmp: pathlib.Path) -> None:
           values + application)
     check("the values name the Secrets, the gateway, ACME and the data-plane peer the operator gave",
           "existingSecret: veyq-secrets" in values and "existingSecret: veyq-config-secret-key" in values
-          and "className: traefik" in values and "mode: per-domain" in values and "email: ops@example.org" in values
+          and "className: traefik" in values and "mode: per-domain" in values and "email:" not in values
           and "kubernetes.io/metadata.name: traefik" in values and "storeDomain: store.veyq.example.org" in values)
     external = (d / "resources" / "secrets.external.yaml").read_text()
     check("external-secrets: each key read from a remote key under the prefix, through the named store",
@@ -1862,6 +1933,9 @@ def test_gitops_init(tmp: pathlib.Path) -> None:
           setup["veyq"]["apps/veyq"].get("domain") == "veyq.example.org"
           and setup["veyq"]["apps/veyq"].get("secrets") == "external-secrets"
           and not any(k in json.dumps(setup) for k in ("mariadbPassword", "rpcSecret")), json.dumps(setup))
+    check("init --gitops with external-secrets keeps the store's kind and the key prefix, which only it uses",
+          setup["veyq"]["apps/veyq"].get("secret_store_kind") == "ClusterSecretStore"
+          and setup["veyq"]["apps/veyq"].get("remote_prefix") == "veyq-", json.dumps(setup["veyq"]))
     before = tree_text(top)
     rc, out = run_main(["--source", mirror, "init", "--gitops", d, *INIT, "--secrets", "none"], GitOpsHost(top=top, signed=signed))
     check("a second init into the written directory with an answer that differs is refused, naming it, and changes "
@@ -1885,10 +1959,10 @@ def test_gitops_init(tmp: pathlib.Path) -> None:
     stray.rmdir()
     rc, out = run_main(["--instance", "repo", "--source", mirror, "verify"], GitOpsHost(top=top, signed=signed))
     check("verify on a GitOps instance: manifest, three images and chart", rc == 0 and "chart" in out
-          and "nothing was written" in out, out[-400:])
+          and "Nothing was written" in out, out[-400:])
     rc, out = run_main(["--instance", "repo", "--source", mirror, "check"], GitOpsHost(top=top, signed=signed))
     check("check on a GitOps instance: the pinned release, and the Secrets with every key",
-          rc == 0 and "pinned already" in out and "exist with every key" in out, out[-500:])
+          rc == 0 and "installed already" in out and "exist with every key" in out, out[-500:])
     rc, out = run_main(["--instance", "repo", "--source", mirror, "check"], GitOpsHost(top=top, signed=signed, cluster={
         "get secret veyq-config-secret-key": (1, "")}))
     check("check: a Secret the provider did not create is named, exit 1", rc == 1 and "veyq-config-secret-key (missing)"
@@ -1976,7 +2050,7 @@ def test_gitops_init(tmp: pathlib.Path) -> None:
           rc == 0 and "className: traefik" in values and "kubernetes.io/metadata.name: traefik" in values
           and "app.kubernetes.io/name: traefik" in values and "mode: per-domain" in values
           and "storeDomain: store.veyq.example.org" in values
-          and "email: owner@example.org" in values
+          and "email:" not in values and "owner@example.org" not in values  # no ACME contact, not even git's
           and json.loads((d6 / vc.GITOPS_FILE).read_text())["secrets"] == "sops", out[-500:])
     d7 = top / "apps" / "veyq-admin-host"
     host = GitOpsHost(top=top, signed=signed, answers={"veyq's domain": "veyq.example.org"}, cluster={
@@ -2002,6 +2076,28 @@ def test_gitops_init(tmp: pathlib.Path) -> None:
     rc, out = run_main(["--source", mirror, "init", "--gitops", top / "apps" / "veyq-sealed", "--name", "sealed",
                         *INIT, "--secrets", "sealed-secrets"], GitOpsHost(top=top, signed=signed, kubeseal=False))
     check("init --secrets sealed-secrets without kubeseal is refused", rc == 1 and "kubeseal" in out, out[-300:])
+    d_yn = top / "apps" / "veyq-yn"
+    rc, out = run_main(["--source", mirror, "init", "--gitops", d_yn, "--name", "yes-no", *INIT, "--secrets", "none",
+                        "--admin-host-source", "10.42.0.1/32"],
+                       GitOpsHost(top=top, signed=signed, answers={"open veyq's admin page directly while connected to the server": "y"}))
+    check("a yes/no question answered `y` is taken as yes, and kept as `yes`",
+          rc == 0 and (d_yn / "resources/admin-host-access.yaml").is_file() and json.loads(
+              (top / vc.SETUP_FILE).read_text())["veyq"]["apps/veyq-yn"]["admin_host_access"] == "yes", out[-300:])
+    check("yes_or_no: y, Yes, N and no as yes or no, anything else untouched",
+          [vc.yes_or_no(a) for a in ("y", "Yes", "N", "no", "maybe")] == ["yes", "yes", "no", "no", "maybe"])
+    class Asked(GitOpsHost):
+        def prompt(self, question, default="", hint="", yes_no=False, optional=False):
+            self.asked = getattr(self, "asked", []) + [question]
+            return super().prompt(question, default, hint, yes_no, optional)
+    host = Asked(top=top, signed=signed, answers={"use the bundled store for photos and files": "n"})
+    rc, out = run_main(["--source", mirror, "init", "--gitops", top / "apps" / "veyq-own-store", "--name", "own-store",
+                        *INIT, "--secrets", "none"], host)
+    own = (top / "apps" / "veyq-own-store" / "values.yaml").read_text() if rc == 0 else ""
+    check("init asks whether to use the bundled store; no: Garage off, no storage domain asked or written, kept",
+          rc == 0 and "garage:\n  enabled: false" in own and "storeDomain" not in own
+          and "use the bundled store for photos and files" in host.asked and "storage domain" not in host.asked
+          and json.loads((top / vc.SETUP_FILE).read_text())["veyq"]["apps/veyq-own-store"]["bundled_store"] == "no",
+          out[-300:] + own[:300])
 
 
 def interrupted(argv: list, host: FakeHost) -> str:
@@ -2013,6 +2109,7 @@ def interrupted(argv: list, host: FakeHost) -> str:
     except KeyboardInterrupt:
         return out.getvalue()
     raise AssertionError("the run was not interrupted")
+
 
 
 def test_init_resumes(tmp: pathlib.Path) -> None:
@@ -2033,8 +2130,26 @@ def test_init_resumes(tmp: pathlib.Path) -> None:
     values = (d / "values.yaml").read_text() if (d / "values.yaml").exists() else ""
     check("the same command continues: nothing asked again, the answers taken (and shown), the instance written",
           rc == 0 and "domain: resume.example.org" in values and f"(from {vc.SETUP_FILE})" in out
-          and "a run here stopped" in out and vc.read_registry()["instances"].get("resumed") == str(d.resolve())
+          and "A previous run stopped here" in out and vc.read_registry()["instances"].get("resumed") == str(d.resolve())
           and not progress.path.exists(), out[-600:])
+    kept = json.loads((top / vc.SETUP_FILE).read_text())["veyq"]["apps/veyq"]
+    check("without external-secrets no store kind or key prefix is kept or shown, and a default kept is not "
+          "announced as taken from veyq-setup.json (raddatz.me, 2026-11-11)",
+          "secret_store_kind" not in kept and "remote_prefix" not in kept and "--secret-store-kind" not in out
+          and "--namespace: veyq " not in out and "--backup-size: " not in out, json.dumps(kept) + out[-300:])
+
+    # an earlier run's store flags in veyq-setup.json, on a run without external-secrets: dropped
+    top3 = tmp / "resume-stale"
+    top3.mkdir()
+    (top3 / vc.SETUP_FILE).write_text(json.dumps({"veyq": {"apps/veyq": {"secret_store_kind": "SecretStore",
+                                                                           "remote_prefix": "mine-"}}}))
+    rc, out = run_main(["--source", mirror, "init", "--gitops", top3 / "apps" / "veyq"],
+                       GitOpsHost(top=top3, signed=signed, answers=dict(answers, **{"instance name": "stale"})))
+    kept = json.loads((top3 / vc.SETUP_FILE).read_text())["veyq"]["apps/veyq"]
+    check("an earlier run's store kind and key prefix (not the defaults) are neither shown nor kept once the secrets "
+          "are not external-secrets", rc == 0 and "secret_store_kind" not in kept and "remote_prefix" not in kept
+          and kept.get("secrets") == "none" and "--secret-store-kind" not in out and "--remote-prefix" not in out,
+          json.dumps(kept) + out[-300:])
 
     # stopped after the values were handed over and the files written: the same values, the files not rewritten
     top2 = tmp / "resume2"
@@ -2069,9 +2184,9 @@ def test_init_resumes_from_flags(tmp: pathlib.Path) -> None:
     values = (d / "values.yaml").read_text() if (d / "values.yaml").exists() else ""
     claim = (d / "resources/backup-pvc.yaml").read_text() if (d / "resources/backup-pvc.yaml").exists() else ""
     application = (d / "application.yaml").read_text() if (d / "application.yaml").exists() else ""
-    check("continued with no flag: TLS derived from --acme-email, the store left out, the claim's size, the namespace "
+    check("continued with no flag: TLS acme kept, the store left out, the claim's size, the namespace "
           "and the branch are the first run's",
-          rc == 0 and "ops@example.org" in values and "store." not in values and "storage: 5Gi" in claim
+          rc == 0 and "enabled: true" in values and "store." not in values and "storage: 5Gi" in claim
           and "namespace: web" in claim and "targetRevision: live" in application, out[-500:] + values[:300])
     before = tree_text(top)
     host = GitOpsHost(top=top, signed=signed)
@@ -2084,6 +2199,13 @@ def test_init_resumes_from_flags(tmp: pathlib.Path) -> None:
 SERVER_IP = "203.0.113.10"
 HOST_KEY = "server.example.org ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIHostKeyOfTheFreshServer"
 AGE_PUBLIC = "age1" + "q" * 58
+DEBIAN_13 = 'PRETTY_NAME="Debian GNU/Linux 13 (trixie)"\nID=debian\nVERSION_ID="13"\nVERSION_CODENAME=trixie\n'
+UBUNTU_2604 = 'PRETTY_NAME="Ubuntu 26.04.1 LTS"\nID=ubuntu\nID_LIKE=debian\nVERSION_CODENAME=resolute\n'
+FEDORA_43 = 'NAME="Fedora Linux"\nID=fedora\nVERSION_ID=43\nPRETTY_NAME="Fedora Linux 43 (Server Edition)"\n'
+# What veyq-server 0.6's roles name in meta/main.yml (two of the seven are enough: veyqctl takes what every role names).
+ROLE_META = ("galaxy_info:\n  role_name: {role}\n  min_ansible_version: \"2.18\"\n  platforms:\n    - name: Debian\n"
+             "      versions:\n        - trixie\n    - name: Ubuntu\n      versions:\n        - noble\n        - resolute\n"
+             "dependencies: []\n")
 TEMPLATE_FILES = {  # a veyq-server release as the stand-in clone checks it out: what Copier renders from it
     "copier.yml": "_subdirectory: template\n",
     "template/.sops.yaml.jinja": "creation_rules: []\n",
@@ -2105,15 +2227,18 @@ class ServerHost(GitOpsHost):
     (a substring of the question → the answer; True when none matches)."""
 
     def __init__(self, *, confirms=None, waits=True, gh=True, tamper_manifest=False, tamper_tree=False,
-                 host_key=HOST_KEY, bootstrapped=False, dns=None, remote_differs=False, **kwargs) -> None:
+                 host_key=HOST_KEY, bootstrapped=False, dns=None, remote_differs=False, os_release=DEBIAN_13,
+                 root_login=True, **kwargs) -> None:
         super().__init__(empty_repo=True, **kwargs)
+        self.os_release, self.root_login = os_release, root_login  # the server's system; whether root takes your key
         self.confirms, self.waits, self.gh = dict(confirms or {}), waits, gh
         self.tamper_manifest, self.tamper_tree, self.host_key = tamper_manifest, tamper_tree, host_key
         self.bootstrapped = bootstrapped
         self.remote_differs = remote_differs  # origin's gitops/ is not this checkout's after the push
         self.dns = dns if dns is not None else {}
-        self.asked_confirm: list[str] = []
         self.waited: list[str] = []
+        self.prompted: list[str] = []
+        self.confirmed: list[str] = []  # every confirmation's question, in order
         self.tunnels: list = []
         # git's state outlives a run, as a repository's does: kept beside the checkout
         self.state = self.top.parent / f"{self.top.name}.git-state"
@@ -2135,14 +2260,19 @@ class ServerHost(GitOpsHost):
         return "v0.1", raw, bundle
 
     def confirm(self, prompt):
-        self.asked_confirm.append(prompt)
+        self.confirmed.append(prompt)
         return next((v for k, v in self.confirms.items() if k in prompt), True)
 
     def wait(self, prompt):
         self.waited.append(prompt)
         return self.waits
 
+    def prompt(self, question, default="", hint="", yes_no=False, optional=False):
+        self.prompted.append(question)
+        return super().prompt(question, default, hint, yes_no, optional)
+
     def secret(self, question):
+        self.prompted.append(f"(hidden) {question}")
         return ""  # Enter: generated
 
     def sleep(self, seconds):
@@ -2222,6 +2352,16 @@ class ServerHost(GitOpsHost):
                 return self.record(cmd, check, 0, f"userknownhostsfile {pathlib.Path.home()}/.ssh/known_hosts\n", env)
             if cmd[-1] == "true":
                 return self.record(cmd, check, 0 if self.bootstrapped else 255, "", env)
+            if cmd[-1] == "cat /etc/os-release":
+                # As ssh does: only a host key the named known_hosts holds (StrictHostKeyChecking=yes); root only before
+                # the bootstrap switches its login off, and only where the image lets root in; the admin user after.
+                user = cmd[-2].split("@")[0]
+                named = next((c.split("=", 1)[1] for c in cmd if c.startswith("UserKnownHostsFile=")), "")
+                known = pathlib.Path(named) if named else None
+                pinned = ("StrictHostKeyChecking=yes" in cmd and known is not None and known.is_file()
+                          and self.host_key in known.read_text())
+                logs_in = pinned and (self.bootstrapped if user != "root" else self.root_login and not self.bootstrapped)
+                return self.record(cmd, check, 0 if logs_in else 255, self.os_release if logs_in else "", env)
             if "cat ~/.kube/config" in cmd:
                 return self.record(cmd, check, 0, KUBECONFIG_K3S, env)
         if tool == "gh":
@@ -2264,6 +2404,8 @@ class ServerHost(GitOpsHost):
                                                     "__RANDOM_16__\nargocd_repo_ssh_private_key: __DEPLOY_KEY__\n",
             "ansible/known_hosts": "# The server's SSH host key, pinned.\n",
             "ansible/requirements.yml": "collections: []\n",
+            "ansible/roles/base/meta/main.yml": ROLE_META.format(role="base"),
+            "ansible/roles/k3s/meta/main.yml": ROLE_META.format(role="k3s"),
             "gitops/root.yaml": f"spec:\n  source:\n    targetRevision: {data['branch']}\n",
             "gitops/apps/kustomization.yaml": "resources:\n  - project.yaml\n  # veyq: `veyqctl init` writes "
                                               "gitops/apps/veyq/ and adds its Application here.\n",
@@ -2294,189 +2436,358 @@ users:
 """
 
 
-def test_server_path(tmp: pathlib.Path) -> None:
-    """`init` from an empty repository to a running instance, against stand-ins for every program it starts: each
-    confirmation's no stops before its step, each refusal changes nothing outside the repository."""
-    home_before = os.environ.get("HOME")
+@contextlib.contextmanager
+def operator_home(tmp: pathlib.Path):
+    """A home directory for the operator — ~/.ssh with one public key, later ~/.kube — set as HOME while the server
+    path's tests run, and HOME restored after."""
+    before = os.environ.get("HOME")
     home = tmp / "server-home"
     (home / ".ssh").mkdir(parents=True)
     (home / ".ssh" / "id_ed25519.pub").write_text("ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIOperatorsOwnKey me@laptop\n")
     os.environ["HOME"] = str(home)
     try:
-        mirror, signed = tmp / "g-mirror", gitops_signed("1.0", "1.1", "2.0")
-        age_key = tmp / "server-age.txt"
-        age_key.write_text("AGE-SECRET-KEY-1STANDIN\n")
-        answers = {"compose or gitops": "gitops", "server address (DNS name or IPv4)": "server.example.org",
-                   "veyq's domain": "raddatz.me",
-                   "admin user": "kevin", "admin SSH key: a number, or paste a public key": "1"}
+        yield home
+    finally:
+        if before is None:
+            os.environ.pop("HOME", None)
+        else:
+            os.environ["HOME"] = before
 
-        def fresh(name):
-            top = tmp / name
-            top.mkdir()
-            return top
 
-        def outside():  # what the run may change outside the repository: the user's SSH and kube files
-            return {p.relative_to(home).as_posix(): p.read_text() for p in home.rglob("*") if p.is_file()}
+def test_server_path(tmp: pathlib.Path, home: pathlib.Path) -> pathlib.Path:
+    """`init` from an empty repository to a running instance, against stand-ins for every program it starts: each
+    confirmation's no stops before its step, each refusal changes nothing outside the repository. Returns the
+    repository it set up, which the tls and connect tests go on with."""
+    mirror, signed = tmp / "g-mirror", gitops_signed("1.0", "1.1", "2.0")
+    age_key = tmp / "server-age.txt"
+    age_key.write_text("AGE-SECRET-KEY-1STANDIN\n")
+    answers = {"compose or gitops": "gitops", "server address": "server.example.org",
+               "veyq's domain": "raddatz.me",
+               "admin user": "kevin", "your SSH key: its number, or paste a public key": "1"}
 
-        def run(top, **kw):
-            host = ServerHost(top=top, signed=signed, answers=dict(answers), **kw)
-            cwd = os.getcwd()
-            os.chdir(top)
-            try:
-                rc, out = run_main(["--source", mirror, "init", "--age-key", age_key, "--release", "1.0"], host)
-            finally:
-                os.chdir(cwd)
-            return host, rc, out
+    def fresh(name):
+        top = tmp / name
+        top.mkdir()
+        return top
 
-        # refusals before anything is rendered: a manifest changed after signing, a tree that is not the signed one
-        before = outside()
-        for label, kw, said in (("a veyq-server manifest that does not verify", {"tamper_manifest": True},
-                                 "the identity that publishes veyq-server"),
-                                ("a checked-out tree whose sha256 is not the manifest's", {"tamper_tree": True},
-                                 "its signed manifest says")):
-            top = fresh(f"server-{len(label)}")
-            host, rc, out = run(top, **kw)
-            check(f"server path: {label} is refused before Copier runs, nothing outside the repository changed",
-                  rc == 1 and said in out and not host.ran("copier") and not (top / ".copier-answers.yml").exists()
-                  and outside() == before, out[-500:])
+    def outside():  # what the run may change outside the repository: the user's SSH and kube files
+        return {p.relative_to(home).as_posix(): p.read_text() for p in home.rglob("*") if p.is_file()}
 
-        # the host key not confirmed: nothing logs in, nothing pushed, ~/.ssh untouched; then the same command goes on
-        top = fresh("server-run")
-        host, rc, out = run(top, confirms={"provider's console": False})
-        check("server path: a host key not confirmed is refused — not pinned, nothing pushed, ~/.ssh and ~/.kube "
-              "untouched", rc == 1 and "not confirmed" in out and not vc.pinned_host_key(top) and not host.pushed
-              and outside() == before and not host.ran("ansible-playbook"), out[-500:])
-        check("init begins by saying what it does, and the server path adds its steps' outline",
-              out.index("sets up a veyq instance") < out.index("1. Setup") and "With the server, after the questions"
-              in out, out[:600])
-        rendered = (top / ".copier-answers.yml").read_text()
-        secrets_file = (top / vc.SERVER_SECRETS).read_text()
-        setup = json.loads((top / vc.SETUP_FILE).read_text())
-        check("server path: the answers are veyq-setup.json's server section (no secret, the age key's public half "
-              "only), the secrets file encrypted, .copier-answers.yml naming veyq-server's public repository",
-              setup["server"]["server_address"] == "server.example.org" and setup["server"]["age_recipient"] ==
-              AGE_PUBLIC and "AGE-SECRET" not in json.dumps(setup) and "ENC[" in secrets_file
-              and f"_src_path: {vc.SERVER_TEMPLATE_URL}" in rendered and host.rendered["repo_url"] ==
-              "git@github.com:owner/raddatz.me.git" and host.rendered["admin_ssh_public_key"].endswith("Key")
-              and host.rendered["age_recipient"] == AGE_PUBLIC, json.dumps(setup))
-
-        host, rc, out = run(top, confirms={"Commit them": False})
-        check("server path: resumed, nothing asked again, the host key pinned; commit declined: nothing pushed, no "
-              "bootstrap", rc == 1 and vc.pinned_host_key(top) == HOST_KEY and not host.ran("copier")
-              and not host.pushed and not host.ran("ansible-playbook") and (top / vc.SERVER_SECRETS).read_text()
-              == secrets_file and "admin user: kevin   (from veyq-setup.json)" in out, out[-500:])
-
-        host, rc, out = run(top, remote_differs=True)
-        check("server path: origin's gitops/ differing from the checkout after the push is refused before the "
-              "bootstrap (its first sync would take the remote's copy)", rc == 1 and "push first" in out
-              and not [c for c in host.commands if c[:2] == ["ansible-playbook", "playbooks/bootstrap.yml"]],
-              out[-400:])
-
-        host, rc, out = run(top, confirms={"Run the bootstrap": False})
-        check("server path: pushed, then the bootstrap declined: ansible-playbook never ran, ~/.ssh/config untouched",
-              rc == 1 and host.pushed and not [c for c in host.commands if c[0] == "ansible-playbook" and
-                                               "--version" not in c]
-              and not (home / ".ssh" / "config").exists(), out[-500:])
-
-        host, rc, out = run(top)
-        boot = [i for i, c in enumerate(host.commands) if c[:2] == ["ansible-playbook", "playbooks/bootstrap.yml"]]
-        add = host.ran("deploy-key", "add")
-        config = (home / ".ssh" / "config").read_text() if (home / ".ssh" / "config").exists() else ""
-        kube = (home / ".kube" / "config").read_text() if (home / ".kube" / "config").exists() else ""
-        check("server path: the whole run — the deploy key entered read-only with gh, veyq's Application listed for "
-              "the root, the bootstrap with the age key's file, the tunnel and context written, Argo CD waited for",
-              rc == 0 and boot and add and "--allow-write" not in host.commands[add[0]]
-              and host.env_at[boot[0]].get("SOPS_AGE_KEY_FILE") == str(age_key.resolve())
-              and "  - veyq/application.yaml" in (top / "gitops/apps/kustomization.yaml").read_text()
-              and "Host server-run" in config and "LocalForward 16443 127.0.0.1:6443" in config
-              and "LocalForward 18443 server.example.org:30443" in config and "name: server-run" in kube
-              and "https://127.0.0.1:16443" in kube and host.tunnels == ["closed"]
-              and HOST_KEY in (home / ".ssh" / "known_hosts").read_text() and "Synced and Healthy" in out, out[-900:])
-
-        host, rc, out = run(top)
-        check("server path: init again on a set-up server — nothing rendered, nothing committed, no bootstrap (the "
-              "admin logs in already)", rc == 0 and not host.ran("copier") and not host.ran("commit")
-              and not [c for c in host.commands if c[:2] == ["ansible-playbook", "playbooks/bootstrap.yml"]],
-              f"rc={rc} copier={host.ran('copier')} commit={host.ran('commit')} " + out[-300:])
-
-        host, rc, out = run(top, host_key=HOST_KEY.replace("Fresh", "Rebuilt"), confirms={"provider's console": False})
-        check("server path: a rebuilt server's new host key is shown beside the pinned one and, unconfirmed, refused",
-              rc == 1 and "a rebuilt server?" in out and vc.pinned_host_key(top) == HOST_KEY, out[-500:])
-
-        top2 = fresh("server-dns")
-        host, rc, out = run(top2, waits=False, gh=False, dns={"raddatz.me": set()})
-        check("server path: without gh the deploy key is shown with GitHub's page and waited for (no terminal: "
-              "refused, nothing pushed)", rc == 1 and "github.com/owner/raddatz.me/settings/keys/new" in out
-              and not host.pushed, out[-500:])
-
-        values = top / "gitops/apps/veyq/values.yaml"
-        check("server path: TLS starts on Let's Encrypt staging (asked, offered so), recorded in veyq-setup.json",
-              f"server: {vc.ACME_DIRECTORIES['staging']}" in values.read_text() and json.loads(
-                  (top / vc.SETUP_FILE).read_text())["veyq"]["gitops/apps/veyq"]["acme_directory"] == "staging")
-        certs = {"get issuer": (0, vc.ACME_DIRECTORIES["production"]), "secretName": (0, "veyq-app\nveyq-garage\n"),
-                 "Ready": (0, "veyq-app True\nveyq-garage True\n")}
-        staged_values = values.read_text()
-        host = ServerHost(top=top, cluster=certs, confirms={"Switch to Let's Encrypt production": False})
-        rc, out = run_main(["--instance", "server-run", "tls", "production"], host)
-        check("tls production declined: nothing changed, nothing committed or pushed",
-              rc == 1 and values.read_text() == staged_values and not host.ran("commit") and not host.ran("push"),
-              out[-300:])
-        host = ServerHost(top=top, cluster=certs, confirms={"Delete them": False})
-        rc, out = run_main(["--instance", "server-run", "tls", "production"], host)
-        check("tls production: rendered, committed with veyq-setup.json and pushed; the certificates' deletion declined "
-              "deletes nothing", rc == 1 and f"server: {vc.ACME_DIRECTORIES['production']}" in values.read_text()
-              and host.ran("helm", "template") and host.ran("push") and not host.ran("delete", "secret")
-              and json.loads((top / vc.SETUP_FILE).read_text())["veyq"]["gitops/apps/veyq"]["acme_directory"]
-              == "production", out[-300:])
-        (top / "gitops/apps/veyq/values.yaml").write_text(staged_values)  # as if the run before had stopped earlier
-        host = ServerHost(top=top, cluster=dict(certs, **{"get issuer": (0, vc.ACME_DIRECTORIES["staging"])}))
-        rc, out = run_main(["--instance", "server-run", "tls", "production", "--timeout", "0"], host)
-        check("tls production: while the Issuer still names staging (Argo CD not synced), no certificate is deleted",
-              rc == 1 and "does not name the production directory" in out and not host.ran("delete", "secret"),
-              out[-300:])
-        (top / "gitops/apps/veyq/values.yaml").write_text(staged_values)
-        host = ServerHost(top=top, cluster=certs)
-        rc, out = run_main(["--instance", "server-run", "tls", "production"], host)
-        deleted = host.ran("delete", "secret")
-        check("tls production: once the Issuer names production, the certificates staging issued deleted (asked), "
-              "waited for, through a tunnel it closes", rc == 0 and deleted and host.commands[deleted[0]][-2:] ==
-              ["veyq-app", "veyq-garage"] and host.ran("ssh", "-N", "server-run", "&") and host.tunnels == ["closed"]
-              and "issued by Let's Encrypt production" in out, out[-400:])
-        rc, out = run_main(["--instance", "server-run", "tls", "production"], ServerHost(top=top, cluster=certs))
-        check("tls production on production: nothing to do", rc == 0 and "nothing to do" in out, out[-200:])
-        compose_home = tmp / "server-compose-home"
-        compose_home.mkdir()
-        rc, out = run_main(["--home", compose_home, "tls", "production"], FakeHost())
-        check("tls on a Compose home is refused, naming where Compose takes its directory", rc == 1
-              and "GitOps instance's" in out, out[-200:])
-
-        (home / ".ssh" / "config").write_text((home / ".ssh" / "config").read_text() + "\nHost other\n  User x\n")
+    def run(top, **kw):
+        host = ServerHost(top=top, signed=signed, answers=dict(answers), **kw)
         cwd = os.getcwd()
         os.chdir(top)
         try:
-            rc, out = run_main(["connect"], ServerHost(top=top))
-            again = (home / ".ssh" / "config").read_text()
-            check("connect: the block rewritten in place, the owner's own Host kept",
-                  rc == 0 and again.count("# >>> server-run") == 1 and "Host other" in again, out[-300:])
-            (home / ".ssh" / "config").write_text("# >>> server-run (scripts/connect.py)\nHost server-run\n  HostName old\n"
-                                                  "  IdentityAgent ~/agent.sock\n# <<< server-run\n\nHost other\n")
-            rc, out = run_main(["connect"], ServerHost(top=top))
-            again = (home / ".ssh" / "config").read_text()
-            check("connect: the block the retired scripts/connect.py wrote is taken over — replaced, its own lines kept",
-                  rc == 0 and "scripts/connect.py" not in again and "# >>> server-run (veyqctl connect)" in again
-                  and "IdentityAgent ~/agent.sock" in again and "HostName old" not in again and "Host other" in again,
-                  again)
-            (home / ".ssh" / "config").write_text("Host server-run\n  User mine\n")
-            rc, out = run_main(["connect"], ServerHost(top=top))
-            check("connect: never shadows a `Host` of the owner's own", rc == 1 and "of its own" in out
-                  and (home / ".ssh" / "config").read_text() == "Host server-run\n  User mine\n", out[-300:])
+            rc, out = run_main(["--source", mirror, "init", "--age-key", age_key, "--release", "1.0"], host)
         finally:
             os.chdir(cwd)
+        return host, rc, out
+
+    # refusals before anything is rendered: a manifest changed after signing, a tree that is not the signed one
+    before = outside()
+    for label, kw, said in (("a veyq-server manifest that does not verify", {"tamper_manifest": True},
+                             "the identity that publishes veyq-server"),
+                            ("a checked-out tree whose sha256 is not the manifest's", {"tamper_tree": True},
+                             "its signed manifest says")):
+        top = fresh(f"server-{len(label)}")
+        host, rc, out = run(top, **kw)
+        check(f"server path: {label} is refused before Copier runs, nothing outside the repository changed",
+              rc == 1 and said in out and not host.ran("copier") and not (top / ".copier-answers.yml").exists()
+              and outside() == before, out[-500:])
+
+    # the server's system against what the roles set up — after the host key, before anything leaves this machine
+    for label, kw, said in (("a server whose system the roles do not set up (Fedora 43)", {"os_release": FEDORA_43},
+                             "runs Fedora Linux 43 (Server Edition), but veyq-server's roles set up Debian trixie, "
+                             "Ubuntu noble, Ubuntu resolute only"),
+                            ("a fresh server whose root does not take your key (a stock Ubuntu cloud image)",
+                             {"root_login": False}, "authorized_keys")):
+        top = fresh(f"server-os-{len(label)}")
+        host, rc, out = run(top, **kw)
+        check(f"server path: {label} is refused by name after the host key — nothing pushed, nothing run on the "
+              f"server, nothing outside the repository changed",
+              rc == 1 and said in out and vc.pinned_host_key(top) and not host.pushed and not host.ran("ansible-playbook")
+              and outside() == before, out[-500:])
+    top = fresh("server-os-ubuntu")
+    host, rc, out = run(top, os_release=UBUNTU_2604, confirms={"Commit them and push": False})
+    reads = [c for c in host.commands if c[-1:] == ["cat /etc/os-release"]]
+    check("server path: Ubuntu 26.04 is one the roles set up — checked off, read as root with the pinned key only",
+          "✓ system        Ubuntu 26.04.1 LTS" in out and len(reads) == 1 and reads[0][-2] == "root@server.example.org"
+          and "StrictHostKeyChecking=yes" in reads[0] and outside() == before, out[-600:])
+    for meta in (top / "ansible" / "roles").glob("*/meta/main.yml"):
+        meta.write_text(meta.read_text().replace("        - resolute\n", "", 1) if meta.parent.parent.name == "k3s"
+                        else meta.read_text())
+    check("server path: a system is one the roles set up only when EVERY role names it",
+          ("Ubuntu", "resolute") not in vc.role_systems(top) and ("Ubuntu", "noble") in vc.role_systems(top),
+          str(vc.role_systems(top)))
+
+    # the host key not confirmed: nothing logs in, nothing pushed, ~/.ssh untouched; then the same command goes on
+    top = fresh("server-run")
+    host, rc, out = run(top, confirms={"your provider shows": False})
+    check("server path: the cluster veyq-server sets up is not there yet — nothing is read from it before the "
+          "bootstrap, and init does not check it", not host.ran("gatewayclass") and not host.ran("appprojects")
+          and not host.ran("get", "crd"), str([c for c in host.commands if c[0] == "kubectl"][:3]))
+    check("server path: a host key not confirmed is refused — not pinned, nothing pushed, ~/.ssh and ~/.kube "
+          "untouched", rc == 1 and "not confirmed" in out and not vc.pinned_host_key(top) and not host.pushed
+          and outside() == before and not host.ran("ansible-playbook"), out[-500:])
+    check("init begins by saying what it does, and the server path adds its steps' outline",
+          out.index("sets up a veyq instance") < out.index("1. Setup") and "With a new server, veyqctl does this"
+          in out, out[:600])
+    rendered = (top / ".copier-answers.yml").read_text()
+    secrets_file = (top / vc.SERVER_SECRETS).read_text()
+    setup = json.loads((top / vc.SETUP_FILE).read_text())
+    check("server path: the answers are veyq-setup.json's server section (no secret, the age key's public half "
+          "only), the secrets file encrypted, .copier-answers.yml naming veyq-server's public repository",
+          setup["server"]["server_address"] == "server.example.org" and setup["server"]["age_recipient"] ==
+          AGE_PUBLIC and "AGE-SECRET" not in json.dumps(setup) and "ENC[" in secrets_file
+          and f"_src_path: {vc.SERVER_TEMPLATE_URL}" in rendered and host.rendered["repo_url"] ==
+          "git@github.com:owner/raddatz.me.git" and host.rendered["admin_ssh_public_key"].endswith("Key")
+          and host.rendered["age_recipient"] == AGE_PUBLIC, json.dumps(setup))
+    check("server path: the server's name on this computer is not asked — the instance's, kept for a rebuild",
+          not any("name for the server" in q for q in host.prompted)
+          and setup["server"]["connect_name"] == setup["veyq"]["gitops/apps/veyq"]["name"], json.dumps(setup))
+    order = [next((i for i, q in enumerate(host.prompted) if part in q), -1)
+             for part in ("admin user", "(hidden) your sudo password", "your SSH key")]
+    check("server path: the sudo password is asked right after the admin user, before the SSH key (owner 2026-11-11)",
+          -1 not in order and order == sorted(order), f"{order} {host.prompted}")
+    check("server path: the node name is not asked — derived from the address, kept for a rebuild",
+          not any("node name" in q for q in host.prompted) and setup["server"]["node_name"] == "server"
+          and host.rendered["node_name"] == "server", f"{host.prompted} {setup['server']}")
+
+    host, rc, out = run(top, confirms={"Commit them": False})
+    check("server path: resumed, nothing asked again, the host key pinned; commit declined: nothing pushed, no "
+          "bootstrap", rc == 1 and vc.pinned_host_key(top) == HOST_KEY and not host.ran("copier")
+          and not host.pushed and not host.ran("ansible-playbook") and (top / vc.SERVER_SECRETS).read_text()
+          == secrets_file and "admin user: kevin   (from veyq-setup.json)" in out, out[-500:])
+
+    host, rc, out = run(top, remote_differs=True)
+    check("server path: origin's gitops/ differing from the checkout after the push is refused before the "
+          "bootstrap (its first sync would take the remote's copy)", rc == 1 and "push first" in out
+          and not [c for c in host.commands if c[:2] == ["ansible-playbook", "playbooks/bootstrap.yml"]],
+          out[-400:])
+
+    host, rc, out = run(top, confirms={"Set up the server now": False})
+    check("server path: pushed, then the bootstrap declined: ansible-playbook never ran, ~/.ssh/config untouched",
+          rc == 1 and host.pushed and not [c for c in host.commands if c[0] == "ansible-playbook" and
+                                           "--version" not in c]
+          and not (home / ".ssh" / "config").exists(), out[-500:])
+
+    host, rc, out = run(top)
+    boot = [i for i, c in enumerate(host.commands) if c[:2] == ["ansible-playbook", "playbooks/bootstrap.yml"]]
+    add = host.ran("deploy-key", "add")
+    config = (home / ".ssh" / "config").read_text() if (home / ".ssh" / "config").exists() else ""
+    kube = (home / ".kube" / "config").read_text() if (home / ".kube" / "config").exists() else ""
+    check("server path: the whole run — the deploy key entered read-only with gh, veyq's Application listed for "
+          "the root, the bootstrap with the age key's file, the tunnel and context written, Argo CD waited for",
+          rc == 0 and boot and add and "--allow-write" not in host.commands[add[0]]
+          and host.env_at[boot[0]].get("SOPS_AGE_KEY_FILE") == str(age_key.resolve())
+          and "  - veyq/application.yaml" in (top / "gitops/apps/kustomization.yaml").read_text()
+          and "Host server-run" in config and "LocalForward 16443 127.0.0.1:6443" in config
+          and "LocalForward 18443 server.example.org:30443" in config and "name: server-run" in kube
+          and "https://127.0.0.1:16443" in kube and host.tunnels == ["closed"]
+          and HOST_KEY in (home / ".ssh" / "known_hosts").read_text() and "Synced and Healthy" in out, out[-900:])
+    check("server path: the closing line for the sudo password hands sops the age key's file, as veyqctl's own "
+          "decrypt does (raddatz.me, 2026-11-12)",
+          f"Your sudo password: SOPS_AGE_KEY_FILE={age_key.resolve()} sops decrypt --extract" in out, out[-700:])
+    check("server path: on staging the closing lines say the store check fails until `veyqctl tls production`",
+          "store check fails" in out and "veyqctl tls production" in out[out.index("Synced and Healthy"):], out[-700:])
+
+    host, rc, out = run(top)
+    check("server path: init again on a set-up server — nothing rendered, nothing committed, no bootstrap (the "
+          "admin logs in already)", rc == 0 and not host.ran("copier") and not host.ran("commit")
+          and not [c for c in host.commands if c[:2] == ["ansible-playbook", "playbooks/bootstrap.yml"]],
+          f"rc={rc} copier={host.ran('copier')} commit={host.ran('commit')} " + out[-300:])
+
+    host, rc, out = run(top, host_key=HOST_KEY.replace("Fresh", "Rebuilt"), confirms={"your provider shows": False})
+    check("server path: a rebuilt server's new host key is shown beside the pinned one and, unconfirmed, refused",
+          rc == 1 and "Was the server reinstalled?" in out and vc.pinned_host_key(top) == HOST_KEY, out[-500:])
+
+    top3 = fresh("server-new-age-key")
+    host = ServerHost(top=top3, signed=signed, waits=False,
+                      answers=dict(answers, **{"age key file (Enter: create a new one)": ""}))
+    cwd = os.getcwd()
+    os.chdir(top3)
+    try:
+        rc, out = run_main(["--source", mirror, "init", "--release", "1.0"], host)
     finally:
-        if home_before is None:
-            os.environ.pop("HOME", None)
-        else:
-            os.environ["HOME"] = home_before
+        os.chdir(cwd)
+    check("server path: Enter on the age key question creates a new key in .age/key.txt and waits for its copy in a "
+          "password manager (no terminal: refused before anything is rendered)",
+          host.ran("age-keygen", "-o") and (top3 / ".age" / "key.txt").is_file()
+          and any("password manager" in w for w in host.waited) and rc == 1 and not host.ran("copier"), out[-400:])
+
+    # A fresh start in the same checkout (raddatz.me, 2026-11-11): the key an earlier run kept on this machine is gone.
+    top4 = fresh("server-age-gone")
+    enter = dict(answers, **{"age key file (Enter: create a new one)": ""})
+
+    def init_in(top_dir, host):
+        cwd = os.getcwd()
+        os.chdir(top_dir)
+        try:
+            return run_main(["--source", mirror, "init", "--release", "1.0"], host)
+        finally:
+            os.chdir(cwd)
+    init_in(top4, ServerHost(top=top4, signed=signed, answers=dict(enter), confirms={"your provider shows": False}))
+    (top4 / ".age" / "key.txt").unlink()
+    host = ServerHost(top=top4, signed=signed, waits=False, answers=dict(enter))
+    rc, out = init_in(top4, host)
+    check("init again after the kept age key was deleted: says it is gone and asks again (Enter: a new one), never "
+          "refuses the gone file as one holding no key",
+          "is gone: name one, or create a new one" in out and "holds no age key" not in out
+          and any("age key file" in q for q in host.prompted) and host.ran("age-keygen", "-o"), out[-500:])
+
+    top2 = fresh("server-dns")
+    host, rc, out = run(top2, waits=False, gh=False, dns={"raddatz.me": set()})
+    check("server path: without gh the deploy key is shown with GitHub's page and waited for (no terminal: "
+          "refused, nothing pushed)", rc == 1 and "github.com/owner/raddatz.me/settings/keys/new" in out
+          and not host.pushed, out[-500:])
+    return top
+
+
+def tls_cluster(issuer: str, served: str, legacy: bool = True) -> dict:
+    """The cluster `tls` reads: one Issuer naming `issuer`'s directory — `veyq-acme` as every chart up to 1.66 named it
+    (`legacy`), else `veyq-acme-<directory>` — and two Certificates whose current revision was ordered from `served`'s.
+    Under the legacy name nothing re-orders them but a `delete secret`, and the first read after it still shows the old
+    ones (cert-manager has not reacted yet); under a per-directory name cert-manager re-orders by itself, the old ones
+    shown, Ready, for the first two reads. So a run that stops at the first Ready is caught either way."""
+    name = vc.LEGACY_ACME_ISSUER if legacy else f"veyq-acme-{issuer}"
+
+    def reissued(host):
+        if legacy:
+            return getattr(host, "reads_after_delete", 0) > 1
+        return getattr(host, "certificate_reads", 0) > 2
+
+    def certificates(host):
+        host.certificate_reads = getattr(host, "certificate_reads", 0) + 1
+        if host.ran("delete", "secret"):
+            host.reads_after_delete = getattr(host, "reads_after_delete", 0) + 1
+        revision = 2 if reissued(host) else 1
+        return 0, f"veyq-app veyq-app {revision} True\nveyq-garage veyq-garage {revision} True\n"
+
+    def orders(host):
+        replaced = reissued(host)
+        base = vc.ACME_DIRECTORIES[issuer if replaced else served].rsplit("/", 1)[0]
+        revision = 2 if replaced else 1
+        return 0, f"veyq-app-{revision} {base}/acme/order/1/1\nveyq-garage-{revision} {base}/acme/order/1/2\n"
+    return {"get issuer": (0, f"{name} {vc.ACME_DIRECTORIES[issuer]}\n"), "secretName": certificates,
+            "ownerReferences": orders}
+
+
+def test_tls_production(tmp: pathlib.Path, top: pathlib.Path) -> None:
+    """`tls production` and `tls staging` on the instance the server path set up on staging: each confirmation's no
+    changes nothing, no certificate is deleted while the Issuer still names the old directory, the certificates are
+    judged by the directory their ACME order came from, a run after values-only finishes the job, and a second run
+    has nothing to do."""
+    values = top / "gitops/apps/veyq/values.yaml"
+    check("server path: TLS starts on Let's Encrypt staging (asked, offered so), recorded in veyq-setup.json",
+          f"server: {vc.ACME_DIRECTORIES['staging']}" in values.read_text() and json.loads(
+              (top / vc.SETUP_FILE).read_text())["veyq"]["gitops/apps/veyq"]["acme_directory"] == "staging")
+    certs = tls_cluster("production", "staging")
+    staged_values = values.read_text()
+    host = ServerHost(top=top, cluster=certs, confirms={"Switch to Let's Encrypt production": False})
+    rc, out = run_main(["--instance", "server-run", "tls", "production", "--timeout", "3"], host)
+    check("tls production declined: nothing changed, nothing committed or pushed",
+          rc == 1 and values.read_text() == staged_values and not host.ran("commit") and not host.ran("push"),
+          out[-300:])
+    host = ServerHost(top=top, cluster=certs, confirms={"Delete them": False})
+    rc, out = run_main(["--instance", "server-run", "tls", "production", "--timeout", "3"], host)
+    check("tls production: rendered, committed with veyq-setup.json and pushed; the certificates' deletion declined "
+          "deletes nothing", rc == 1 and f"server: {vc.ACME_DIRECTORIES['production']}" in values.read_text()
+          and host.ran("helm", "template") and host.ran("push") and not host.ran("delete", "secret")
+          and json.loads((top / vc.SETUP_FILE).read_text())["veyq"]["gitops/apps/veyq"]["acme_directory"]
+          == "production", out[-300:])
+    # raddatz.me, 2026-11-11: the values were switched and pushed, the staging certificates stayed — Ready, so
+    # cert-manager never re-orders them. The same command again finds them by their orders and replaces them.
+    host = ServerHost(top=top, cluster=certs)
+    rc, out = run_main(["--instance", "server-run", "tls", "production", "--timeout", "3"], host)
+    deleted = host.ran("delete", "secret")
+    check("tls production again after a values-only run: no commit, the certificates still ordered from staging "
+          "found by their ACME orders, deleted (asked) and waited for, through a tunnel it closes",
+          rc == 0 and not host.ran("commit") and deleted and host.commands[deleted[0]][-2:] == ["veyq-app", "veyq-garage"]
+          and "Still from Let's Encrypt staging" in out and host.ran("ssh", "-N", "server-run", "&")
+          and getattr(host, "reads_after_delete", 0) >= 2
+          and host.tunnels == ["closed"] and "issued by Let's Encrypt production" in out, out[-400:])
+    (top / "gitops/apps/veyq/values.yaml").write_text(staged_values)  # as if the run before had stopped earlier
+    host = ServerHost(top=top, cluster=dict(certs, **{"get issuer": (0, f"veyq-acme {vc.ACME_DIRECTORIES['staging']}\n")}))
+    rc, out = run_main(["--instance", "server-run", "tls", "production", "--timeout", "0"], host)
+    check("tls production: while the Issuer still names staging (Argo CD not synced), no certificate is deleted",
+          rc == 1 and "no Issuer names the production directory" in out and not host.ran("delete", "secret"),
+          out[-300:])
+    (top / "gitops/apps/veyq/values.yaml").write_text(staged_values)
+    host = ServerHost(top=top, cluster=certs)
+    rc, out = run_main(["--instance", "server-run", "tls", "production", "--timeout", "3"], host)
+    check("tls production in one run: switched, pushed, the staging certificates replaced, production's waited for",
+          rc == 0 and host.ran("push") and host.ran("delete", "secret") and "issued by Let's Encrypt production" in out,
+          out[-400:])
+    rc, out = run_main(["--instance", "server-run", "tls", "production", "--timeout", "3"],
+                       ServerHost(top=top, cluster=tls_cluster("production", "production")))
+    check("tls production on production, every certificate from there: nothing to do", rc == 0 and "nothing to do" in out,
+          out[-200:])
+
+    # back to staging (owner 2026-11-11: for test rebuilds), the same mechanics the other way, then forth again
+    produced = values.read_text()
+    host = ServerHost(top=top, cluster=tls_cluster("staging", "production"), confirms={"Delete them": False})
+    rc, out = run_main(["--instance", "server-run", "tls", "staging", "--timeout", "3"], host)
+    check("tls staging: says browsers warn and the store check fails; rendered, committed with veyq-setup.json and "
+          "pushed; the real certificates' deletion declined deletes nothing",
+          rc == 1 and "every site warns in the browser" in out and "store check fails" in out
+          and f"server: {vc.ACME_DIRECTORIES['staging']}" in values.read_text() and host.ran("push")
+          and not host.ran("delete", "secret") and json.loads((top / vc.SETUP_FILE).read_text())["veyq"][
+              "gitops/apps/veyq"]["acme_directory"] == "staging", out[-400:])
+    values.write_text(produced)
+    host = ServerHost(top=top, cluster=tls_cluster("staging", "production"))
+    rc, out = run_main(["--instance", "server-run", "tls", "staging", "--timeout", "3"], host)
+    check("tls staging: once the Issuer names staging, the real certificates deleted (asked), staging's waited for",
+          rc == 0 and host.ran("delete", "secret") and "issued by Let's Encrypt staging" in out
+          and any("then browsers warn" in q for q in host.confirmed), out[-400:])
+    rc, out = run_main(["--instance", "server-run", "tls", "staging", "--timeout", "3"],
+                       ServerHost(top=top, cluster=tls_cluster("staging", "staging")))
+    check("tls staging on staging: nothing to do", rc == 0 and "nothing to do" in out, out[-200:])
+    rc, out = run_main(["--instance", "server-run", "tls", "production", "--timeout", "3"],
+                       ServerHost(top=top, cluster=tls_cluster("production", "staging")))
+    check("tls production after staging: back on production", rc == 0 and f"server: "
+          f"{vc.ACME_DIRECTORIES['production']}" in values.read_text(), out[-300:])
+    compose_home = tmp / "server-compose-home"
+    compose_home.mkdir()
+    # a chart that names its Issuer per directory (ADR 0064 as amended 2026-11-11): the switch renames it, cert-manager
+    # re-orders by itself, nothing is deleted, the old certificates served until the new are Ready
+    values.write_text(staged_values)
+    host = ServerHost(top=top, cluster=tls_cluster("production", "staging", legacy=False))
+    rc, out = run_main(["--instance", "server-run", "tls", "production", "--timeout", "3"], host)
+    check("tls production on a per-directory Issuer: switched and pushed, nothing deleted, cert-manager's re-orders "
+          "waited for until every certificate is from production",
+          rc == 0 and host.ran("push") and not host.ran("delete", "secret") and "veyq-acme-production names" in out
+          and "re-orders them from production" in out and getattr(host, "certificate_reads", 0) >= 3
+          and "issued by Let's Encrypt production" in out, out[-500:])
+    rc, out = run_main(["--home", compose_home, "tls", "production"], FakeHost())
+    check("tls on a Compose home is refused, naming where Compose takes its directory", rc == 1
+          and "GitOps instance only" in out, out[-200:])
+
+
+def test_connect(top: pathlib.Path, home: pathlib.Path) -> None:
+    """`connect` in that repository: its ~/.ssh/config block rewritten in place, connect.py's taken over, and an
+    owner's own `Host` of the same name never shadowed."""
+    (home / ".ssh" / "config").write_text((home / ".ssh" / "config").read_text() + "\nHost other\n  User x\n")
+    cwd = os.getcwd()
+    os.chdir(top)
+    try:
+        rc, out = run_main(["connect"], ServerHost(top=top))
+        again = (home / ".ssh" / "config").read_text()
+        check("connect: the block rewritten in place, the owner's own Host kept",
+              rc == 0 and again.count("# >>> server-run") == 1 and "Host other" in again, out[-300:])
+        (home / ".ssh" / "config").write_text("# >>> server-run (scripts/connect.py)\nHost server-run\n  HostName old\n"
+                                              "  IdentityAgent ~/agent.sock\n# <<< server-run\n\nHost other\n")
+        rc, out = run_main(["connect"], ServerHost(top=top))
+        again = (home / ".ssh" / "config").read_text()
+        check("connect: the block the retired scripts/connect.py wrote is taken over — replaced, its own lines kept",
+              rc == 0 and "scripts/connect.py" not in again and "# >>> server-run (veyqctl connect)" in again
+              and "IdentityAgent ~/agent.sock" in again and "HostName old" not in again and "Host other" in again,
+              again)
+        (home / ".ssh" / "config").write_text("Host server-run\n  User mine\n")
+        rc, out = run_main(["connect"], ServerHost(top=top))
+        check("connect: never shadows a `Host` of the owner's own", rc == 1 and "of its own" in out
+              and (home / ".ssh" / "config").read_text() == "Host server-run\n  User mine\n", out[-300:])
+    finally:
+        os.chdir(cwd)
 
 
 def test_gitops_upgrade(tmp: pathlib.Path) -> None:
@@ -2508,7 +2819,7 @@ def test_gitops_upgrade(tmp: pathlib.Path) -> None:
     check("upgrade --push from 1.1 enters major 2 (2.0) and pushes", rc == 0 and json.loads(
         (d / vc.GITOPS_FILE).read_text())["running"] == "2.0" and host.ran("git", "push"), out[-400:])
     rc, out = run_main(["--instance", "repo", "--source", mirror, "upgrade"], GitOpsHost(top=top, signed=signed))
-    check("upgrade on the newest: nothing to do", rc == 0 and "nothing to do" in out, out[-200:])
+    check("upgrade on the newest: nothing to do", rc == 0 and "nothing to do" in out.lower(), out[-200:])
 
     # every refusal leaves the repository untouched and commits nothing
     d4 = top / "apps" / "veyq-refusals"
@@ -2519,14 +2830,14 @@ def test_gitops_upgrade(tmp: pathlib.Path) -> None:
     (d4 / vc.GITOPS_FILE).write_text(json.dumps({**meta, "release": "1"}))
     before = snapshot(d4)
     cases = [
-        ("uncommitted changes", GitOpsHost(top=top, signed=signed, dirty=True), None, "not committed"),
+        ("uncommitted changes", GitOpsHost(top=top, signed=signed, dirty=True), None, "uncommitted changes"),
         ("a chart that does not verify", GitOpsHost(top=top, signed=gitops_signed(
             "1.0", "1.1", "2.0", without=(("1.1", "chart"),))), None, "does not verify"),
         ("a chart of another version", GitOpsHost(top=top, signed=signed, chart_version="1.0"), None, "not 1.1"),
         ("a render that fails", GitOpsHost(top=top, signed=signed, render_fails=True), None, "helm template"),
         ("a digest edited by hand (drift)", GitOpsHost(top=top, signed=signed),
          lambda: (d4 / "values.yaml").write_text((d4 / "values.yaml").read_text().replace(pin_of("1.0", "admin"),
-                                                                                          DIGEST_B)), "no longer pin"),
+                                                                                          DIGEST_B)), "no longer match"),
     ]
     for label, host, edit, words in cases:
         if edit:
@@ -2539,10 +2850,10 @@ def test_gitops_upgrade(tmp: pathlib.Path) -> None:
         (d4 / name).write_bytes(data)
     (d4 / vc.GITOPS_FILE).write_text(json.dumps({**meta, "release": "1.0", "running": "1.1"}))
     rc, out = run_main(["--instance", "refusals", "--source", mirror, "upgrade"], GitOpsHost(top=top, signed=signed))
-    check("upgrade below the pinned release is refused (no downgrade)", rc == 1 and "below the pinned" in out, out[-300:])
+    check("upgrade below the pinned release is refused (no downgrade)", rc == 1 and "older than the installed" in out, out[-300:])
 
 
-ADOPTED_VALUES = """# hand-written, as affenbande's
+ADOPTED_VALUES = """# hand-written, as an operator's own
 domain: cloud.example.org
 image:
   # renovate: datasource=docker depName=ghcr.io/raddatzk/veyq
@@ -2568,7 +2879,7 @@ ADOPTED_APPLICATION = """spec:
 
 
 def hand_written(d: pathlib.Path, pins: dict, files_admin: str, running: str = "1.0") -> None:
-    """A veyq half written by hand, as affenbande's, and the veyqctl.json its owner wrote beside it (the Run page's
+    """A veyq half written by hand, as an operator might, and the veyqctl.json its owner wrote beside it (the Run page's
     *A veyq half that exists already*): the files pin `pins` but for the admin image, which they pin `files_admin`."""
     d.mkdir(parents=True, exist_ok=True)
     (d / "application.yaml").write_text(ADOPTED_APPLICATION.format(**pins))
@@ -2598,12 +2909,12 @@ def test_gitops_hand_written(tmp: pathlib.Path) -> None:
     hand_written(d, pins, pins["admin"])
     rc, out = run_main(["--home", d, "--source", mirror, "check"], GitOpsHost(top=top, signed=signed))
     check("check: a hand-written veyqctl.json pinning its release's signed pins is confirmed",
-          rc == 0 and "release 1.0's, as it was signed" in out, out[-400:])
+          rc == 0 and "pins what 1.0 signed" in out, out[-400:])
     host = GitOpsHost(top=top, signed=signed)
     rc, out = run_main(["--home", d, "--source", mirror, "upgrade"], host)
     values, application = (d / "values.yaml").read_text(), (d / "application.yaml").read_text()
     check("a hand-written layout upgrades like a written one: its comments kept, the Renovate hint moved with it",
-          rc == 0 and "# hand-written, as affenbande's" in values and values.count('tag: "1.1"') == 3
+          rc == 0 and "# hand-written, as an operator's own" in values and values.count('tag: "1.1"') == 3
           and "version=1.1" in application and pin_of("1.1", "chart") in application and host.ran("git", "commit"),
           out[-400:] + values)
     rc, out = run_main(["--source", mirror, "init", "--gitops", d, "--secrets", "sops", *INIT],
@@ -2612,11 +2923,115 @@ def test_gitops_hand_written(tmp: pathlib.Path) -> None:
           rc == 1 and vc.GITOPS_FILE in out and vc.EXISTING_HALF_DOCS in out, out[-300:])
 
 
+# ---- which releases this veyqctl speaks (ADR 0096 decision 9) -------------------------------------------------------
+
+@contextlib.contextmanager
+def veyqctl_of(major: int, release: str | None):
+    """This veyqctl as one of `major`, published as `release` (None: a checkout's)."""
+    saved = vc.MAJOR, vc.RELEASE
+    vc.MAJOR, vc.RELEASE = major, release
+    try:
+        yield
+    finally:
+        vc.MAJOR, vc.RELEASE = saved
+
+
+def test_own_release(tmp: pathlib.Path) -> None:
+    def version() -> tuple:
+        out = io.StringIO()
+        with contextlib.redirect_stdout(out):
+            try:
+                vc.main(["--version"], FakeHost())
+            except SystemExit as e:  # argparse's own exit, 0 for --version
+                return e.code, out.getvalue().strip()
+        return None, out.getvalue().strip()
+    with veyqctl_of(1, None):
+        rc, out = version()
+    check("--version from a checkout: unreleased, and the major it knows",
+          rc == 0 and out == "veyqctl unreleased (a checkout), major 1", f"{rc} {out}")
+    with veyqctl_of(1, "1.12"):
+        rc, out = version()
+    check("--version of a released copy: the release it was published as", rc == 0 and out == "veyqctl 1.12",
+          f"{rc} {out}")
+
+    with veyqctl_of(1, "1.12"):
+        said = refused(vc.parse_manifest, manifest_bytes(release="2.0", majorEntry="1.12"), "v2.0")
+        check("a manifest of a newer major is refused by a veyqctl that knows major 1, naming where to get one",
+              "of major 2" in said and "major 1 at most" in said and vc.GET_VEYQCTL in said, said)
+        check("a manifest of its own major or the one before is read",
+              not refused(vc.parse_manifest, manifest_bytes(), "v1.12")
+              and not refused(vc.parse_manifest, manifest_bytes(release="0.9", majorEntry=NULL), "v0.9"))
+
+    mirror = upgrade_mirror(tmp / "mirror-own")
+    with veyqctl_of(2, None):
+        newer = installed(tmp, "home-own-2", mirror, "2.1", "2.1")
+    host = FakeHost()
+    with veyqctl_of(1, "1.12"):
+        rc, out = run_main(["--home", newer, "status"], host)
+    check("an instance on a newer major: every verb refused before it runs anything",
+          rc == 1 and f"the instance in {newer} is release 2.1, of major 2" in out and not host.commands, out[-400:])
+    with veyqctl_of(2, None):
+        crossing = installed(tmp, "home-own-cross", mirror, "1.12", "latest")
+    host = FakeHost(local_images=all_images())
+    with veyqctl_of(1, "1.12"):
+        rc, out = run_main(["--home", crossing, "upgrade", "--unsigned-local", "--key-into", tmp / "own-key"], host)
+    check("upgrade into a major this veyqctl does not know is refused at its manifest, nothing stopped",
+          rc == 1 and "the manifest of v2.1" in out and "major 1 at most" in out
+          and not host.ran("compose", "stop") and not host.ran("compose", "up"), out[-400:])
+
+    with veyqctl_of(1, None):
+        older = installed(tmp, "home-own-1", mirror, "1.7", "1.7")
+    for label, release, verb, noted in (
+            ("a veyqctl older than its instance says so, and how to get the instance's own", "1.3", "status", True),
+            ("a veyqctl as new as its instance says nothing", "1.7", "status", False),
+            ("a veyqctl from a checkout says nothing", None, "status", False)):
+        with veyqctl_of(1, release):
+            _, out = run_main(["--home", older, verb], FakeHost())
+        said = "This veyqctl is release" in out
+        check(label, said == noted and (not noted or ("This veyqctl is release 1.3, and the instance runs 1.7" in out
+                                                       and "veyqctl self-update" in out)), out[-400:])
+    vc.SELF.write_text("# a checkout's veyqctl\n")
+    host = FakeHost()
+    with veyqctl_of(1, None):
+        try:
+            rc, out = run_main(["--source", mirror, "self-update"], host)
+        except Exception as e:  # an unreleased veyqctl past the refusal has no release to compare: a crash, not a pass
+            rc, out = None, repr(e)
+    check("self-update of an unreleased veyqctl (a checkout's source) is refused, nothing fetched or replaced",
+          rc == 1 and "unreleased" in out and vc.SELF.read_text() == "# a checkout's veyqctl\n" and not host.commands,
+          out[-400:])
+
+    top = tmp / "own-gitops"
+    pins = {r: pin_of("1.0", r) for r in vc.PIN_ROLES}
+    on2, on1 = top / "gitops" / "apps" / "two", top / "gitops" / "apps" / "veyq"
+    hand_written(on2, pins, pins["admin"], running="2.0")
+    hand_written(on1, pins, pins["admin"], running="1.0")
+    signed = gitops_signed("1.0", "1.1")
+    with veyqctl_of(1, "1.0"):
+        host = GitOpsHost(top=top, signed=signed)
+        rc, out = run_main(["--home", on2, "--source", tmp / "g-mirror", "check"], host)
+        check("a GitOps instance on a newer major: refused before anything runs",
+              rc == 1 and "is release 2.0, of major 2" in out and not host.commands, out[-400:])
+    with veyqctl_of(1, "0.9"):
+        _, out = run_main(["--home", on1, "--source", tmp / "g-mirror", "check"], GitOpsHost(top=top, signed=signed))
+        check("a GitOps instance newer than its veyqctl: said, with self-update as the way, as on Compose",
+              "This veyqctl is release 0.9, and the instance runs 1.0" in out and "veyqctl self-update" in out,
+              out[-400:])
+
+
 def main() -> int:
     with tempfile.TemporaryDirectory(prefix="veyqctl-selftest-") as raw:
         tmp = pathlib.Path(raw)
         # The instance list lives in the user's config: never the real one (ADR 0126 decision 2).
         os.environ["XDG_CONFIG_HOME"] = str(tmp / "config")
+        # `self-update` replaces SELF: never this checkout's veyqctl.py, whatever a test forgets (one did, 2026-11-12).
+        vc.SELF = tmp / "self" / "veyqctl"
+        vc.SELF.parent.mkdir()
+        vc.SELF.write_text("# the veyqctl self-update replaces\n")
+        test_own_release(tmp)
+        # The scenarios below name releases up to major 3, so they run a veyqctl that knows them, as one published
+        # as 3.0 would; test_own_release holds the gate and the stamp themselves.
+        vc.MAJOR, vc.RELEASE = 3, "3.0"
         test_resolver(tmp)
         test_major_entry()
         test_manifest()
@@ -2642,7 +3057,10 @@ def main() -> int:
         test_init_resumes_from_flags(tmp)
         test_gitops_upgrade(tmp)
         test_gitops_hand_written(tmp)
-        test_server_path(tmp)
+        with operator_home(tmp) as home:
+            top = test_server_path(tmp, home)
+            test_tls_production(tmp, top)
+            test_connect(top, home)
         test_programs_checked_first(tmp)
     if failures:
         print(f"\nveyqctl self-test FAILED: {len(failures)} check(s)")

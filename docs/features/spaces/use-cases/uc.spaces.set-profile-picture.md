@@ -17,8 +17,10 @@
 1. The member opens the picture control in *Settings → Your profile* or on **their own** profile page (`#people/<myId>`);
    the same component serves both, and it is absent on anyone else's profile.
 2. They pick an image file and frame it 1:1 in the cropper.
-3. The client re-encodes it to a 256 px WebP, pads the bytes to the constant length and seals them under a field key derived from
-   `K_tenant` with the `member-avatar` purpose at (tenant scope, own user id).
+3. The client re-encodes it to a 256 px WebP (libwebp's own build, in every browser alike,
+   [ADR 0127](../../../decisions/0127-the-web-client-encodes-webp-with-its-own-build-of-libwebp.md)), pads the bytes to the
+   constant length and seals them under a field key derived from `K_tenant` with the `member-avatar` purpose at (tenant
+   scope, own user id).
 4. `PUT /api/account/profile/avatar { sealedAvatar }` — the server stores the blob verbatim, bumps `avatar_revision`
    and answers `204`. In *Your profile* the picture rides with the profile's Save (the profile first, then the picture); on
    the own profile page "Edit profile" opens the same fields with their own Save.

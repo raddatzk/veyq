@@ -9,6 +9,7 @@ import type { Plugin } from 'vite'
 import { defaultExclude, defineConfig } from 'vitest/config'
 import vue from '@vitejs/plugin-vue'
 import { buildCsp, CSP_POLICY_FILE } from './src/shared/security/csp.ts'
+import { PDF_DECODER_FILES, pdfDataBase } from './src/shared/pdf/pdfOptions.ts'
 import { DEV_BREACH_ORIGIN, DEV_GEOCODER_ORIGIN, DEV_RATES_ORIGIN, DEV_TILE_ORIGIN } from './src/shared/state/mapDefaults.ts'
 
 // Vite dev-server config. `pnpm run dev` works with the defaults below; the env vars only matter for special
@@ -120,6 +121,43 @@ function repositoryUrl(repository: unknown): string | undefined {
     .replace(/\.git$/, '')
   return /^https:\/\//.test(url) ? url : undefined
 }
+// The WebP encoder (ADR 0127) is libwebp built by us, not an npm package, so Vite's licence file does not list it. This
+// plugin adds it under the same heading shape, with libwebp's licence and patent grant as the build copied them from the
+// tag, and the tag's source on libwebp's repository as its `Source:` (`verify:license-sources` holds that form).
+const WEBP_ENCODER_DIR = fileURLToPath(new URL('./webp-encoder/', import.meta.url))
+function libwebpNotice(): string {
+  const pin = readFileSync(join(WEBP_ENCODER_DIR, 'libwebp.pin'), 'utf8')
+  const tag = /^tag (\S+)$/m.exec(pin)?.[1]
+  if (!tag) throw new Error('webp-encoder/libwebp.pin names no tag')
+  const read = (name: string) => readFileSync(join(WEBP_ENCODER_DIR, name), 'utf8').trim()
+  return [
+    `## libwebp - ${tag} (BSD-3-Clause)`,
+    `Source: https://github.com/webmproject/libwebp/tree/${tag}\nRepository: https://chromium.googlesource.com/webm/libwebp`,
+    read('COPYING'),
+    read('PATENTS'),
+  ].join('\n\n')
+}
+// pdf.js' image decoders (ADR 0128) are files the build COPIES from `pdfjs-dist/wasm/`, not modules it bundles, so their
+// notices are not in Vite's file either: the decoders are compiled from PDFium's JBIG2 decoder and OpenJPEG and wrapped by
+// Mozilla, and the package ships one notice per part beside them. Each goes in under a heading that names the package, its
+// version and the notice's file, with the package at that version as its `Source:` (`verify:license-sources` holds that
+// form, and requires all four whenever the decoders shipped).
+const PDFJS_DECODER_NOTICES = [
+  ['LICENSE_JBIG2', "PDFium's JBIG2 decoder, compiled into jbig2_nowasm_fallback.js (JBIG2 and CCITT images)"],
+  ['LICENSE_PDFJS_JBIG2', "pdf.js' build of that decoder into jbig2_nowasm_fallback.js"],
+  ['LICENSE_OPENJPEG', 'OpenJPEG, compiled into openjpeg_nowasm_fallback.js (JPEG 2000 images)'],
+  ['LICENSE_PDFJS_OPENJPEG', "pdf.js' build of OpenJPEG into openjpeg_nowasm_fallback.js"],
+] as const
+function pdfjsDecoderNotices(): string {
+  const { root, version } = pdfjsPackage()
+  return PDFJS_DECODER_NOTICES.map(([file, covers]) =>
+    [
+      `## pdfjs-dist - ${version} - wasm/${file}`,
+      `Source: https://www.npmjs.com/package/pdfjs-dist/v/${version}\nCovers: ${covers}, shipped in assets/pdfjs-${version}/decoders/`,
+      readFileSync(join(root, 'wasm', file), 'utf8').trim(),
+    ].join('\n\n'),
+  ).join('\n\n')
+}
 function licenseSourcesPlugin(): Plugin {
   return {
     name: 'veyq-license-sources',
@@ -132,9 +170,11 @@ function licenseSourcesPlugin(): Plugin {
         if (asset?.type !== 'asset' || typeof asset.source !== 'string') return this.error(`${LICENSE_FILE} was not emitted before this plugin ran`)
         const cache = new Map()
         const repositories = new Map<string, string | undefined>()
+        let encoderBundled = false
         for (const chunk of Object.values(bundle)) {
           if (chunk.type !== 'chunk') continue
           for (const id of chunk.moduleIds) {
+            if (id.startsWith(WEBP_ENCODER_DIR)) encoderBundled = true
             const pkg = packageOf(id, cache)
             if (pkg) repositories.set(`${pkg.name} - ${pkg.version}`, repositoryUrl(pkg.repository))
           }
@@ -144,6 +184,8 @@ function licenseSourcesPlugin(): Plugin {
           const lines = [`Source: https://www.npmjs.com/package/${name}/v/${version}`, ...(repository ? [`Repository: ${repository}`] : [])]
           return `${heading}\n\n${lines.join('\n')}`
         })
+        if (encoderBundled) asset.source = `${asset.source.trimEnd()}\n\n${libwebpNotice()}\n`
+        if (Object.keys(bundle).some((name) => name.startsWith(`${pdfjsDataDir()}decoders/`))) asset.source = `${asset.source.trimEnd()}\n\n${pdfjsDecoderNotices()}\n`
       },
     },
   }
@@ -154,15 +196,24 @@ function licenseSourcesPlugin(): Plugin {
 // be hashed single imports; this plugin copies the three directories verbatim to `assets/pdfjs-<version>/` (under
 // `/assets/`, so the backend serves them immutable - the version is in the path, a new release is a new path) and serves
 // the same path from node_modules in dev. They are same-origin, so `connect-src 'self'` carries the fetches and the policy
-// gains nothing. The WASM decoders (`wasm/`) are deliberately NOT copied: they need 'wasm-unsafe-eval' (csp.ts).
+// gains nothing. Beside them, `decoders/` gets exactly the two plain-JavaScript image decoders of `pdfjs-dist/wasm/`
+// (`PDF_DECODER_FILES`, ADR 0128), named, never a listing of that directory: it also holds pdf.js' WebAssembly, which does
+// not ship (`useWasm: false`, inbox #837), and `quickjs-eval.js`, an interpreter nothing here may load. pdf.js' worker
+// `import()`s a decoder, and a module import refuses a non-script type, so dev serves those two as `text/javascript`
+// (production's static handler types a `.js` by its name, as for the worker - `AppShellSliceTest` pins it). `verify:pdf-worker` holds the directory.
 const PDFJS_DATA_DIRS = ['cmaps', 'standard_fonts', 'iccs'] as const
 function pdfjsPackage(): { root: string; version: string } {
   const pkg = createRequire(import.meta.url).resolve('pdfjs-dist/package.json')
   return { root: dirname(pkg), version: JSON.parse(readFileSync(pkg, 'utf8')).version as string }
 }
+/** The data directory under dist, `assets/pdfjs-<version>/`: the path the runtime's `pdfDataBase` puts under the base URL. */
+function pdfjsDataDir(): string {
+  return pdfDataBase('', pdfjsPackage().version)
+}
 function pdfjsAssetsPlugin(): Plugin {
-  const { root, version } = pdfjsPackage()
-  const prefix = `/assets/pdfjs-${version}/`
+  const { root } = pdfjsPackage()
+  const dataDir = pdfjsDataDir()
+  const prefix = `/${dataDir}`
   return {
     name: 'veyq-pdfjs-assets',
     configureServer(server) {
@@ -170,10 +221,11 @@ function pdfjsAssetsPlugin(): Plugin {
         const url = (req.url ?? '').split('?')[0]
         const rel = url.startsWith(prefix) ? url.slice(prefix.length) : ''
         const [dir, name, ...rest] = rel.split('/')
-        if (!(PDFJS_DATA_DIRS as readonly string[]).includes(dir) || !name || rest.length || name.includes('..')) return next()
+        const decoder = dir === 'decoders' && (PDF_DECODER_FILES as readonly string[]).includes(name) && !rest.length
+        if (!decoder && (!(PDFJS_DATA_DIRS as readonly string[]).includes(dir) || !name || rest.length || name.includes('..'))) return next()
         try {
-          res.setHeader('Content-Type', 'application/octet-stream')
-          res.end(readFileSync(join(root, dir, name)))
+          res.setHeader('Content-Type', decoder ? 'text/javascript' : 'application/octet-stream')
+          res.end(readFileSync(decoder ? join(root, 'wasm', name) : join(root, dir, name)))
         } catch {
           res.statusCode = 404
           res.end()
@@ -183,8 +235,11 @@ function pdfjsAssetsPlugin(): Plugin {
     generateBundle() {
       for (const dir of PDFJS_DATA_DIRS) {
         for (const name of readdirSync(join(root, dir))) {
-          this.emitFile({ type: 'asset', fileName: `assets/pdfjs-${version}/${dir}/${name}`, source: readFileSync(join(root, dir, name)) })
+          this.emitFile({ type: 'asset', fileName: `${dataDir}${dir}/${name}`, source: readFileSync(join(root, dir, name)) })
         }
+      }
+      for (const name of PDF_DECODER_FILES) {
+        this.emitFile({ type: 'asset', fileName: `${dataDir}decoders/${name}`, source: readFileSync(join(root, 'wasm', name)) })
       }
     },
   }

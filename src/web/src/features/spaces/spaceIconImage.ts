@@ -1,6 +1,7 @@
 // Space-icon pixel stage (uc.spaces.set-space-icon step 3, web). Bakes the framed 1:1 crop of a source image into
 // a fixed square, then re-encodes it to a WebP that fits the constant pad budget — stepping quality down until it
-// does. Reuses the Memory cover's `deriveImage` seam (downscale + encode, taught `mimeType`/`background` in
+// does. The WebP is libwebp's in every browser (ADR 0127: Safari's canvas answers WebP with a PNG), so nothing here
+// ever returns another format. Reuses the Memory cover's `deriveImage` seam (downscale + encode, taught `mimeType`/`background` in
 // cr-space-icon); the crop bake is icon-specific (a Memory cover stores a reference + crop and never bakes pixels).
 import { type MediaDeriver } from '../../shared/image/mediaDeriver'
 import { type CropRect } from '../../shared/ui/ImageCropper.vue'

@@ -25,6 +25,9 @@
 3. The client generates, **cold** (no invite, no temp-wrap — this is the root of the owner's own key
    tree): the **identity keypair**, the **Master Key** with one wrap per chosen unlock method, and the
    **Emergency Kit** (email + Secret Key — its format is [en.account.key-model § The Emergency Kit](../../account/enablers/en.account.key-model.md#the-emergency-kit)), then forces the owner to confirm they saved the kit.
+   The kit step asks, optionally, for the address the owner will sign in at: the console is served on localhost and
+   cannot know it. A host is taken as its origin and goes into the kit as its server; anything that is no address veyq
+   is served at blocks the download, and an address changed after a download asks for a new one and a new confirm.
 4. Once the kit is confirmed, the console says, as information and not as a choice, what an operator may owe: the
    household exemption ends once a link is shared publicly, an operator who shares links publicly or runs veyq for a
    club or a company probably owes at least a name, a postal address and the controller's contact, it covers every

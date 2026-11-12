@@ -1121,6 +1121,8 @@
   display: grid;
   min-width: 0;
   color: var(--app-text);
+  /* Brought back into sight below the sticky top bar (`core/node/returnTo.ts`), never under it. */
+  scroll-margin-top: var(--app-sticky-top, 0px);
 }
 
 .veyq-level-item-main {

@@ -58,8 +58,13 @@ const props = withDefaults(
     dragging?: boolean
     /** A drag is over it that it takes (lit). */
     dropTarget?: boolean
+    /** The node's id (`data-node-id`): where the level finds the row it brings back into sight (`returnTo`). */
+    nodeId?: string
   }>(),
-  { kind: undefined, coreActions: () => [], folder: false, unsupported: false, selected: undefined, canDrag: false, dragging: false, dropTarget: false },
+  {
+    kind: undefined, coreActions: () => [], folder: false, unsupported: false, selected: undefined, canDrag: false, dragging: false, dropTarget: false,
+    nodeId: undefined,
+  },
 )
 const emit = defineEmits<{ toggleSelect: [] }>()
 const { t } = useI18n()
@@ -88,6 +93,7 @@ const variantOf = (a: LevelRowAction): 'primary' | 'secondary' | 'danger' => (a.
       },
     ]"
     :data-kind="kind"
+    :data-node-id="nodeId"
     :draggable="canDrag ? 'true' : undefined"
   >
     <label v-if="selected !== undefined" class="veyq-level-item-check" :class="{ 'is-on': selected }">

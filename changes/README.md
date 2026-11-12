@@ -1011,6 +1011,10 @@ on the assertion (§ *a live-defect red can land on the wrong STEP*, below). Mar
 phase, which is the second thing it buys: the live defects run first, against the least-changed tree there will
 ever be.
 
+And the lever exists in the API the same CR defines: cr-webp-encoder-from-libwebp bit its size test "at quality
+1.0 lossless" on an encoder whose API has no lossless mode, and asked for "the decoded size" in a directory with no
+decoder.
+
 ### Where the defect is still live, order it guard → red → fix → green
 
 **The unfixed defect is a stronger bite test than any injection, and it is free.** A forged one proves the guard fires on a shape *you*
@@ -1271,6 +1275,15 @@ queueing on; they ran in four, because each lever touched a different log (or a 
 names file, line and control per finding, so one red carries every verdict separately. Never two levers on one
 predicate (the second masks the first), and a lever that must stay green — a measurement of a gap — gets a run
 whose only other levers cannot turn it red.
+
+### A browser pass that loads a BUILT chunk reads that chunk's imports first
+
+cr-pdf-scan-decoders planned its pass from the spike, whose page imported `pdfjs-dist` directly, and so told the page
+to create the `default` Trusted Types policy the app would. The built `pdfjsRuntime-<hash>.js` is not standalone: it
+imports the main chunk, which boots the app and installs the app's own policies, so the page's policy collided with
+them and took Trusted HTML down. The pass that held created nothing and let the app's policies come with the chunk.
+**A harness that loads an emitted chunk lists what the chunk imports (`grep -o 'from"./[^"]*"'`) before it decides
+what the page itself must provide**; a spike's harness is a template for the question, not for the page.
 
 ### Each layer of a defence in depth is tested with the other layers held off
 
@@ -1669,7 +1682,9 @@ the sign-in screen was unreachable without a first-run setup the CR never mentio
 same proof was meant to exercise registers on neither screen. The finding held (the app booted under the policy
 with zero violations), but on a different screen than the one written down, and the worker went unverified. So a
 done-when that names what the browser should show also names what the instance must hold for it (a seeded
-account, a tenant on the browsed host), or it names the screen a bare instance actually reaches.
+account, a tenant on the browsed host), or it names the screen a bare instance actually reaches. A done-when that runs
+lane L1 names the host ports the lane binds (80, 443, the admin port 18081) and checks them with `lsof` at refine:
+cr-webp-encoder-from-libwebp's L1 never started, an ssh tunnel and a neighbour session's process held 18081.
 
 **And a lever that simulates a failure must spare what the proof itself needs.** `cr-one-sign-out-path` asked for
 its E4 check "with the network offline" — but the flow ends in a document load, which devtools' offline mode
@@ -2227,6 +2242,23 @@ against a backend built from `main` — the owner's dev loop and every session w
 backend → web is the order the *work* is done in, not the order it may *merge* in: a CR whose contract makes a field the
 client sends required merges its server and client phases in one merge, or keeps the field optional until the client
 phase merges.
+
+### A multi-job write flow names, per write, the state a failure right after it leaves — and who puts it back
+
+cr-release-promotes-a-tested-snapshot (2026-11-06) planned the promotion's writes in order — move `<major>` and
+`latest`, move the draft onto `v<version>`, push that tag — and never asked what the world looks like if the run dies
+between two of them: `latest` would have named an image whose release never published, and a run that had pushed the
+tag could not be retried, since its own checks refuse an existing tag. The build reordered the channels after the
+publication and added the `refused` job that rolls a half-done run back. So a refine of a workflow with more than one
+write lists, for each write, what a failure just after it leaves and which job or person restores it.
+
+### A done-when names the proof; a command is one way to get it
+
+The same CR's phase 1 named `run_pipeline.py --job version` as its bar, and the phase's brief forbade pipeline runs
+(the owner's rule of that phase) — a bar the implementation could not meet as written, though the guard's executed
+scenario proved the same thing. Name what must be shown; the command is an example of how. And before a CR decides to
+*record* a value somewhere, grep where it would come from: the same CR planned to record the major entry, which the
+tools image already carried (`/opt/veyq/release.json`).
 
 ### Every CR closes with a short, honest retrospective
 

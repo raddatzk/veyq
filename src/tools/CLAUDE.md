@@ -5,7 +5,9 @@ decision 8): `veyqctl.py` ([ADR 0096](../../docs/decisions/0096-veyqctl-manages-
 and `instance_backup.py` ([ADR 0056](../../docs/decisions/0056-instance-durable-state-and-cold-logical-backup.md)), which
 `veyqctl` runs from a release's directory and the `veyq-tools` image runs as its entrypoint
 ([ADR 0098](../../docs/decisions/0098-on-kubernetes-the-start-that-would-migrate-backs-up-first.md)). Each module's
-docstring owns what it does. Loaded in addition to the root `CLAUDE.md` when working here.
+docstring owns what it does — in `veyqctl.py` the docstring holds the commands, the constraints and a map of the
+file's sections, and each section says at its head what it does. Loaded in addition to the root `CLAUDE.md` when
+working here.
 
 ## What binds here
 - **Each file ships alone** — fetched with `curl` onto an operator's host, or copied flat into the image's `/opt/veyq/`.

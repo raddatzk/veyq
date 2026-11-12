@@ -288,11 +288,20 @@ it when an account is born by joining a tenant and when an account is secured (a
 Two round-trip tests in two packages cannot keep a writer and a reader in agreement, so the codec exists
 **once**, in `@veyq/crypto`, pinned by a fixed-literal vector.
 
-- **The token** is `veyqkit:` followed by the unpadded base64url of the UTF-8 bytes of
-  `{"v":2,"email":…,"sk":…}` — `sk` being the Secret Key in its text form (below). `v` is the version. A reader
-  rejects any other `v` (version 1 carried the key as base64 and was never in use), an `email` that is not a non-empty
-  string, and an `sk` that does not read as a Secret Key. The password is never in it, and neither is the address of
-  the server: a kit names the account, not where it lives.
+- **The token** is `veyqkit:` followed by the unpadded base64url of the UTF-8 bytes of the compact JSON
+  `{"v":3,"email":…,"sk":…,"srv":…}`, in that key order — `sk` being the Secret Key in its text form (below), `srv` the
+  origin of the server the kit was made on (`https://veyq.example.com`), left out where the writer knows none. `v` is
+  the version. A reader rejects any other `v` (version 1 carried the key as base64, version 2 had no `srv`; neither is in
+  use), an `email` that is not a non-empty string, an `sk` that does not read as a Secret Key, and an `srv` that is not
+  exactly an http or https origin as the URL standard serializes it (no path, no trailing slash, no default port, a
+  lower-case host). The password is never in it. `contracts/crypto/vectors/v1.json` § `emergency_kit_token` pins it, for
+  `@veyq/crypto` and the native apps alike.
+- **The server is a hint, never a check.** It is there so a reader can say where a kit was made, and a native app can
+  fill in the server it signs in to. An account may be reached under several addresses and a domain can change over
+  the years a kit lies in a drawer, so no reader refuses a kit for its server: `web` says, as information, where a kit
+  made at another address was made ([uc.account.unlock](../use-cases/uc.account.unlock.md)). `web`'s kit takes the
+  origin of the page it is made on; `admin-web`'s, served on localhost, takes the address the Server Owner types at setup,
+  if any ([uc.admin.setup-server](../../admin/use-cases/uc.admin.setup-server.md)).
 - **It travels three ways, and each is part of the format:** as the **QR code**; as **printed** email +
   Secret Key for typing; and as a literal string in the PDF's **document information** (`keywords`), because
   a file import finds the kit by scanning the file's bytes for `veyqkit:`. The document information is not a
@@ -307,11 +316,11 @@ Two round-trip tests in two packages cannot keep a writer and a reader in agreem
   and how much distortion a photographed kit stands) is stated where the fixtures are,
   `src/web/src/features/account/emergencyKit/emergencyKit.import.test.ts`.
 - **The printed text follows the writer's UI language; the token never does.** The sheet is one A4 page: the
-  email and the Secret Key; where the person signs in — `web`'s kit names the address it was made on (the page's
-  host), `admin-web`'s does not (it is served on localhost), and both offer three form fields for more addresses,
-  fillable on screen or by hand; the QR with three steps, the third saying that the password is deliberately not on
-  the sheet; how to keep it; and the docs site's forgot-password page in the writer's language. The layout code is
-  per package (no UI in `@veyq/crypto`), the two kept line for line alike but for the address row.
+  email and the Secret Key; where the person signs in — three form fields for addresses, fillable on screen or by
+  hand, the first holding the kit's server as a person types it (its host), where the kit has one; the QR with three
+  steps, the third saying that the password is deliberately not on the sheet; how to keep it; and the docs site's
+  forgot-password page in the writer's language. The layout code is per package (no UI in `@veyq/crypto`), the two kept
+  line for line alike.
 
 ### The Secret Key's text form
 

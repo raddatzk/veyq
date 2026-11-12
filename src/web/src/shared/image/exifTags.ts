@@ -4,8 +4,9 @@
 // epoch-ms, the GPS position signed decimal degrees), so what a caller maps from them is its own and a test can hand
 // it a record without knowing the library. Formats: whatever the library reads - JPEG, TIFF, PNG, WebP, HEIC, AVIF
 // among them, each pinned by `exifTags.test.ts` over a generated file (`scripts/make_exif_fixture.py`). Chosen over an
-// own IFD reader because it is maintained (release 4.52.0, 2026-10-23), pure JavaScript, and needs no network, `eval`
-// or WASM, which the CSP grants none of; owning the reader instead means owning a walker per container.
+// own IFD reader because it is maintained (release 4.52.0, 2026-10-23), pure JavaScript, and needs no network, no
+// `eval` and no WebAssembly (the CSP grants no `eval`, and WebAssembly only as a decision of its own per module, ADR
+// 0127); owning the reader instead means owning a walker per container.
 //
 // How the library is called binds four things, which is why no other module imports it:
 // 1. **Its ES module source, `exifreader/src/exif-reader.js`, never the package's main entry.** That entry is a webpack

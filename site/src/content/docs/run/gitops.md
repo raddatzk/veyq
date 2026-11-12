@@ -37,7 +37,7 @@ On the cluster — `init` checks this before it writes anything and names every 
 
 ## From an empty repository: the server too
 
-What you need for it: a fresh **Debian 13** server you reach as root over SSH with your key (8 GB of memory; 4 GB is
+What you need for it: a freshly installed server of a system [veyq-server's README](https://github.com/raddatzk/veyq-server#the-server-it-needs) names — Debian 13, Ubuntu 24.04 or 26.04 LTS, the platforms its roles are written for — reached as root over SSH with your key (a stock Ubuntu cloud image logs in as `ubuntu`: put your key into root's `authorized_keys` first; 8 GB of memory, 4 GB is
 tight), its provider's firewall open for TCP 22, 80 and 443 only, an **empty Git repository** and its clone on your
 machine, and your DNS. On your machine, besides the programs above: `ssh`, `age-keygen`, `sops`, `copier` and
 `ansible-core` 2.18 or later — `init` names whatever is missing, with Homebrew's command where `brew` is, and waits.
@@ -51,9 +51,10 @@ veyqctl init             # gitops · set up the server too? yes
 It asks everything first — the server's address, the admin user and the SSH key it logs in with (offered from
 `~/.ssh` and your agents, 1Password's included), the age key the repository's secrets are encrypted to (a file you
 have, or Enter for a new one in `.age/key.txt`, gitignored — `init` waits until you have put its copy into your password
-manager), Argo CD's and veyq's administration through the SSH tunnel (yes), this machine's name for the server, the
-admin user's sudo password (hidden; Enter generates one), and veyq's own questions, where TLS starts on **Let's Encrypt
-staging**. Then, each step said as it comes and every one that changes something outside the repository asked first:
+manager), Argo CD's and veyq's administration through the SSH tunnel (yes), the admin user's sudo password (hidden;
+Enter generates one), and veyq's own questions — its domain, whether to use the bundled store, and TLS, which starts on
+**Let's Encrypt staging**. The instance's name is also this machine's name for the server (`ssh -N <name>`, the kubectl
+context). Then, each step said as it comes and every one that changes something outside the repository asked first:
 
 1. **veyq-server's newest release, verified** before Copier reads it: its manifest's signature under veyq-server's
    release workflow, the commit it names checked out, and that tree's sha256 compared with the manifest's. Copier
@@ -61,7 +62,9 @@ staging**. Then, each step said as it comes and every one that changes something
 2. **The server's secrets**, once: the admin password, its salt and Argo CD's read-only deploy key, encrypted with
    `sops` to your age key. A file that exists is never made again.
 3. **The host key**: `init` shows the server's fingerprint — compare it with your provider's console — and pins it in
-   `ansible/known_hosts` on your yes. A rebuilt server presents a new key; `init` shows both and asks again.
+   `ansible/known_hosts` on your yes. A rebuilt server presents a new key; `init` shows both and asks again. Then,
+   with that key only, it reads the server's `/etc/os-release` (as root, or as the admin user on a server set up
+   already) and refuses a system the roles' `meta/main.yml` do not name — before anything is pushed or run there.
 4. **veyq's half** in `gitops/apps/veyq`, listed for the root Application.
 5. **The deploy key** at GitHub with `gh` on your yes, read-only; otherwise `init` shows it with the page it goes on and
    waits.
@@ -75,27 +78,35 @@ staging**. Then, each step said as it comes and every one that changes something
    opens the tunnel to the cluster's API, Argo CD (`https://localhost:18443`) and veyq's administration
    (`http://localhost:18081`) — and the kubeconfig context `<name>`, never shadowing a `Host` of your own.
 10. **The wait**, through a tunnel `init` opens and closes, until Argo CD reports every application Synced and Healthy.
-    Then it says how to read Argo CD's first password and where to create the Server Owner.
+    Then it says how to read Argo CD's first password, change it and delete the Secret that holds it, and where to
+    create the Server Owner.
 
 Every answer is in `veyq-setup.json`, committed with the rest; the age key is the one thing the repository does not
 hold. **Keep it in your password manager**: with it and the repository, `veyqctl init` sets a lost server up again — on
 a fresh one it pins the new host key on your yes, bootstraps and connects, asking nothing else.
 
-**Once everything runs on staging**, switch to production — its certificates are the browser-trusted ones:
+**Once everything runs on staging**, switch to production — its certificates are the browser-trusted ones. Until
+then the admin console's store check fails too (veyq's server trusts staging certificates no more than a browser does),
+so check the store after the switch:
 
 ```sh
 veyqctl tls production
 ```
 
 It commits the values' new directory (and `veyq-setup.json`'s answer) and pushes on your yes, waits until Argo CD has
-applied the Issuer, deletes the certificates staging issued on your yes — this cannot be undone, and until the new
-ones are issued those hosts serve none — and waits until every production certificate is Ready.
+applied the Issuer, and waits until every certificate was ordered from production (it reads each one's ACME order) and
+is Ready. The chart names its Issuer per directory, so the switch renames it and cert-manager re-orders every certificate
+by itself, serving the staging ones until then. A chart from release 1.66 or earlier names it `veyq-acme` for both, and
+nothing re-orders: there `tls` deletes the staging certificates on your yes — this cannot be undone, and until the new
+ones are issued those hosts serve none. Run again, it finishes what an earlier run left. `veyq-setup.json` records the
+switch, so a rebuild from it starts on production. `veyqctl tls staging` goes back the same way — for test rebuilds that would
+spend production's rate limits; it says first that browsers warn and the store check fails until you switch again.
 
 ## Write the instance: `init`
 
 ```sh
 veyqctl init --gitops <checkout>/apps/veyq \
-  --domain veyq.example.org --gateway-class traefik --acme-email ops@example.org \
+  --domain veyq.example.org --gateway-class traefik --tls acme \
   --gateway-namespace traefik --gateway-pod-label app.kubernetes.io/name=traefik \
   --secrets external-secrets --secret-store vault --context my-cluster
 ```
@@ -291,8 +302,9 @@ mover on the same lines is drift, which `upgrade` refuses. On GitHub, such a job
 setting that lets Actions create pull requests (Settings → Actions → General → Workflow permissions); the maintainer
 runs one weekly, beside Renovate.
 
-`start`, `stop`, `status`, `logs`, `backup`, `restore`, `rollback` and `self-update` are Compose's: on a GitOps instance
-each refuses and names what does that job there (Argo CD, `kubectl`, the backup gate, the restore Job).
+`start`, `stop`, `status`, `logs`, `backup`, `restore` and `rollback` are Compose's: on a GitOps instance
+each refuses and names what does that job there (Argo CD, `kubectl`, the backup gate, the restore Job). `self-update`
+belongs to no instance: it replaces `veyqctl` with the newest release's ([Verify a release](/run/verify-a-release/)).
 
 ## How far this is proven
 

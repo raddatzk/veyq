@@ -179,6 +179,29 @@ describe('SecretKeyField (uc.account.unlock § One Secret-Key control)', () => {
     expect(messages(unknown)).toHaveLength(0)
   })
 
+  it('says where a kit made at another address was made — and does not block, clear or refuse it', async () => {
+    const elsewhere = { ...KIT, server: 'https://familie.example.org:8443' }
+    const w = mountField()
+    vi.mocked(importKitFromFile).mockResolvedValue(elsewhere)
+    await pick(w, someFile())
+
+    const shown = messages(w)
+    expect(shown).toHaveLength(1)
+    expect(shown[0].attributes('data-tone')).toBe('info')
+    expect(shown[0].text()).toContain('familie.example.org:8443')
+    expect(shown[0].text()).toContain(location.host)
+    expect(w.emitted('update:modelValue')?.at(-1)).toEqual([KIT.secretKey])
+    expect(w.emitted('kit')).toEqual([[elsewhere]])
+
+    // Two controls: a kit made at this very page's origin, and a kit with no server, say nothing.
+    for (const kit of [{ ...KIT, server: location.origin }, KIT]) {
+      const quiet = mountField()
+      vi.mocked(importKitFromFile).mockResolvedValue(kit)
+      await pick(quiet, someFile())
+      expect(messages(quiet), JSON.stringify(kit)).toHaveLength(0)
+    }
+  })
+
   it('hands back a scanned payload it does not recognise, and keeps the caller’s predicate', async () => {
     const accepts = (text: string) => text.startsWith('veyqkit:') || text.startsWith('veyqpair:')
     const w = mountField({ accepts })

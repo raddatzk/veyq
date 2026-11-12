@@ -108,7 +108,8 @@ of 2026-11-07 are not promotable), a **release** by
 release](../../site/src/content/docs/run/verify-a-release.md), and `veyqctl` pin the release identity and reject the
 snapshot's, so a snapshot never verifies as a release; `validate_release_identity.py` holds both to that. The owner and
 repository in those strings come from the chart's `home:`; a move of the repository edits that line, and the guard
-names every line that must follow it.
+names every line that must follow it — except the maintainer's snapshot check in infra/README § Cutting a release,
+which no guard reads.
 
 ## Releasing: a snapshot promoted
 

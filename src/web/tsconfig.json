@@ -16,5 +16,5 @@
     "verbatimModuleSyntax": false,
     "types": ["node", "vitest/globals"]
   },
-  "include": ["src", "vite.config.ts"]
+  "include": ["src", "webp-encoder", "vite.config.ts"]
 }

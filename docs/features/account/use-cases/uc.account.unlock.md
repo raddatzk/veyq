@@ -124,6 +124,10 @@ stateDiagram-v2
   have changed address since, and only the wrap can decide whether a key is right. The alternative to warning
   is not a stricter check — it is the generic AEAD tag mismatch of E1, which tells the person their password
   might be wrong when in fact they picked up the wrong kit.
+- **A kit made at another address says where; it never blocks either.** A kit carries the origin of the server it
+  was made on, where its writer knew one ([en.account.key-model § The Emergency Kit](../enablers/en.account.key-model.md#the-emergency-kit)).
+  An imported kit whose server is not the page's own says, as information, where it was made and where the person is.
+  An account may be reached under several addresses, so the server is a hint, never a check.
 - **Unlocks the E2EE layer.** Once unlocked, the account key is available — this is what lets the client
   decrypt **E2EE session names** (planned — `uc.account.sessions` is reserved in ADR 0004, not yet written) and all content.
 

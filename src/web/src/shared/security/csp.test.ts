@@ -61,16 +61,18 @@ describe('buildCsp', () => {
   const csp = buildCsp(BUILT)
 
   it('locks scripts/objects/frames down — the key-exfil + XSS backstop', () => {
-    expect(csp).toContain("script-src 'self'")
+    // Exactly these two: our own module scripts, and compiling the WebP encoder's WebAssembly (ADR 0127).
+    expect(directive(csp, 'script-src')).toEqual(["'self'", "'wasm-unsafe-eval'"])
+    expect(directive(buildCsp(DEV), 'script-src')).toEqual(["'self'", "'wasm-unsafe-eval'"])
     expect(csp).toContain("default-src 'self'")
     expect(csp).toContain("object-src 'none'")
     expect(csp).toContain("frame-src 'none'")
     expect(csp).toContain("base-uri 'self'")
     expect(csp).toContain("form-action 'self'")
     expect(csp).toContain("worker-src 'self'")
-    // no unsafe script execution anywhere
-    expect(csp).not.toContain("script-src 'self' 'unsafe")
-    expect(csp).not.toMatch(/script-src[^;]*unsafe-eval/)
+    // no unsafe script execution anywhere: 'wasm-unsafe-eval' compiles WebAssembly, 'unsafe-eval' would evaluate strings
+    expect(csp).not.toMatch(/script-src[^;]*'unsafe-(eval|inline|hashes)'/)
+    expect(buildCsp(DEV)).not.toMatch(/script-src[^;]*'unsafe-(eval|inline|hashes)'/)
   })
 
   it('allows only what the app genuinely needs (data:/blob:)', () => {

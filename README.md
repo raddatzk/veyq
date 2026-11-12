@@ -14,6 +14,26 @@ End-to-end encrypted. Self-hostable. Free software.
 
 [**Website**](https://veyq.app) · [**Run your own**](https://veyq.app/run/) · [**Security model**](https://veyq.app/security/start-here/) · [**Releases**](https://github.com/raddatzk/veyq/releases) · [Deutsch](https://veyq.app/de/)
 
+</div>
+
+Run your own — fetch `veyqctl` into `~/.local/bin`, check its signature, and let it set up an instance (it needs
+`python3` and [`cosign`](https://docs.sigstore.dev/cosign/system_config/installation/) 3.1.3 or later). Run it where the
+instance belongs — for Argo CD, in your empty repository's clone:
+
+```sh
+bin=~/.local/bin base=https://github.com/raddatzk/veyq/releases/latest/download && mkdir -p "$bin"
+curl -fsSLo "$bin/veyqctl" "$base/veyqctl" && curl -fsSLo "$bin/veyqctl.bundle" "$base/veyqctl.bundle"
+cosign verify-blob --bundle "$bin/veyqctl.bundle" "$bin/veyqctl" \
+  --certificate-oidc-issuer https://token.actions.githubusercontent.com \
+  --certificate-identity-regexp '^https://github\.com/raddatzk/veyq/\.github/workflows/release\.yml@refs/heads/(main|release/[0-9]+\.x)$' \
+  && chmod +x "$bin/veyqctl" && "$bin/veyqctl" init
+```
+
+It runs only what verifies: if `cosign` refuses, nothing starts. [Run your own](https://veyq.app/run/) says what `init`
+asks, on Docker Compose or Kubernetes.
+
+<div align="center">
+
 [![Checks](https://github.com/raddatzk/veyq/actions/workflows/checks.yml/badge.svg)](https://github.com/raddatzk/veyq/actions/workflows/checks.yml)
 [![CodeQL](https://github.com/raddatzk/veyq/actions/workflows/codeql.yml/badge.svg)](https://github.com/raddatzk/veyq/actions/workflows/codeql.yml)
 
@@ -23,7 +43,7 @@ End-to-end encrypted. Self-hostable. Free software.
 
 </div>
 
-> **v1.0 is out** — the first stable release. Install it on Docker Compose or Kubernetes; every later 1.x upgrades in place.
+> **v1 is out** — the first stable release. Install it on Docker Compose or Kubernetes; every later 1.x upgrades in place.
 
 ## Why veyq
 

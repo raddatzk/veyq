@@ -120,6 +120,7 @@ export default defineConfigWithVueTs(
       'dist/**',
       'node_modules/**',
       'src/api/generated/**', // generated client — mirrors the contracts, never hand-edited
+      'webp-encoder/wasm/*.mjs', // Emscripten's glue, built from the pin by webp-encoder/build.py, never hand-edited
     ],
   },
   pluginVue.configs['flat/essential'],

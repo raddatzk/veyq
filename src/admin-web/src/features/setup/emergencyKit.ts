@@ -4,8 +4,10 @@
 // The Secret Key is sensitive — this is the user's recovery secret, so the kit must be stored safely.
 // jspdf + qrcode are heavy and only needed when actually writing a kit — they're imported lazily inside
 // renderKitPdf so the setup screen's first paint stays cheap. The layout is `src/web/`'s
-// `features/account/emergencyKit/emergencyKit.ts`, line for line but for one row: this kit names no address it was
-// made on (`KitContext`). A shared layout would be UI in `@veyq/crypto`, which holds nothing but crypto (ADR 0065).
+// `features/account/emergencyKit/emergencyKit.ts`, line for line. Only where the kit's server comes from differs: this
+// surface is served on localhost, which is not where the Server Owner signs in on another device, so the server is the
+// address they type at setup (`kitServerOf`), or none. A shared layout would be UI in `@veyq/crypto`, which holds
+// nothing but crypto (ADR 0065).
 // The `veyqkit:` codec is `@veyq/crypto/emergencyKit`, shared with `src/web/`, which is the only package that ever
 // reads a kit back.
 //
@@ -21,7 +23,7 @@
 // hoisted `src/web/`'s copy into the root `node_modules`. Only the container build — which never sees `src/web/` —
 // failed to resolve it. pnpm links only declared dependencies into a package's `node_modules`, so that hiding is gone.
 
-import { kitPayload, type KitData } from '@veyq/crypto/emergencyKit'
+import { isKitServer, kitPayload, type KitData } from '@veyq/crypto/emergencyKit'
 import { readSecretKey } from '@veyq/crypto/secretKey'
 
 /** Resolves a `kit.*` message key in the user's language, with named values — the caller's `t`. */
@@ -30,9 +32,26 @@ export type Translate = (key: string, named?: Record<string, unknown>) => string
 /** What the kit is written in: the caller's messages, and the language tag its date is formatted for. */
 export type KitLanguage = { t: Translate; locale: string }
 
-/** The facts of the kit beyond its data: when it is made. No address it is made on, unlike `src/web/`'s: this surface
- *  is served on localhost, which is not where the Server Owner signs in to the app on another device. */
+/** The facts of the kit beyond its data: when it is made. Where is the data's `server`. */
 export type KitContext = { now?: Date }
+
+/**
+ * The kit's server from what the Server Owner typed at setup: nothing typed is no server; a host, with or without
+ * `https://`, `http://` and a port, is its origin; anything else — a path, a query, credentials, another scheme — is
+ * `invalid`, as veyq is served at the root of its host. What comes back is what the token carries (`isKitServer`).
+ */
+export function kitServerOf(typed: string): { server?: string } | 'invalid' {
+  const text = typed.trim()
+  if (text === '') return {}
+  let url: URL
+  try {
+    url = new URL(/^[a-z][a-z0-9+.-]*:\/\//i.test(text) ? text : `https://${text}`)
+  } catch {
+    return 'invalid'
+  }
+  if (url.pathname !== '/' || url.search !== '' || url.hash !== '' || url.username !== '' || url.password !== '') return 'invalid'
+  return isKitServer(url.origin) ? { server: url.origin } : 'invalid'
+}
 
 // The kit's palette, from the brand mark: ink, a muted line, the brand violet and its deep shade, a tint, a rule, and
 // the callout's amber.
@@ -52,7 +71,8 @@ const WHITE: Rgb = [255, 255, 255]
 
 /**
  * Render the Emergency Kit PDF (A4): the human text in the caller's language, the Secret Key in its printed form, the QR,
- * three form fields for the addresses the person signs in at, and the token in the document information. Returns the
+ * three form fields for the addresses the person signs in at (the first holding the kit's server, where it has one), and
+ * the token in the document information. Returns the
  * file's bytes; `saveKitPdf` hands them to the user.
  */
 export async function renderKitPdf(data: KitData, { t, locale }: KitLanguage, { now = new Date() }: KitContext = {}): Promise<Uint8Array> {
@@ -139,13 +159,13 @@ export async function renderKitPdf(data: KitData, { t, locale }: KitLanguage, { 
   font('bold', 16, C.brandDeep, 'courier')
   for (let line = 0; line < 3; line++) doc.text(groups.slice(line * 3, line * 3 + 3).join('-'), M + 18, y + 90 + line * 20)
 
-  // 2 — where you sign in: three lines (form fields) for the addresses. The member's kit names the one it was made on
-  // first; this one cannot (KitContext), so its lines move up by that row.
+  // 2 — where you sign in: three lines (form fields) for the addresses, the first holding the kit's server as a person
+  // types it (its host), so it can be corrected like the others.
   y += 162
   section(2, t('kit.pdfWhere'), y)
   y += 20
   font('normal', 9, C.muted)
-  doc.text(t('kit.pdfMoreAddresses'), M, y + 4, { maxWidth: CW })
+  doc.text(t('kit.pdfAddresses'), M, y + 4, { maxWidth: CW })
   draw(C.line)
   doc.setLineWidth(0.8)
   for (let i = 0; i < 3; i++) {
@@ -158,7 +178,7 @@ export async function renderKitPdf(data: KitData, { t, locale }: KitLanguage, { 
     field.width = CW
     field.height = 18
     field.fontSize = 11
-    field.value = ''
+    field.value = i === 0 && data.server !== undefined ? new URL(data.server).host : ''
     doc.addField(field)
   }
 

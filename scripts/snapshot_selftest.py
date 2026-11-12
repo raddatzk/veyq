@@ -51,6 +51,12 @@ with tempfile.TemporaryDirectory(prefix="snapshot_selftest_") as tmp:
     two = release_assets.produce(base / "two", f"ghcr.io/o/veyq:0.3@{D1}", f"ghcr.io/o/veyq-admin:0.3@{D2}", True,
                                  f"ghcr.io/o/veyq-tools:0.3@{D3}", release="0.3")
     first = release_assets.asset_set_digest(one)
+    # `veyqctl` as a release carries it: the tree's source, its one RELEASE line naming the release (ADR 0096 decision 9).
+    tree_veyqctl = release_assets.TOOLS["veyqctl"].read_text()
+    carried = (one / "veyqctl").read_text()
+    check(carried == tree_veyqctl.replace('RELEASE: str | None = None', 'RELEASE: str | None = "0.3"', 1)
+          and carried != tree_veyqctl, "the release's veyqctl is not the tree's source stamped with its release")
+    check(refused(release_assets.stamp_veyqctl, carried, "0.4"), "a veyqctl stamped already is stamped again")
     check(first.startswith("sha256:") and len(first) == 71, f"the hash is not `sha256:<64 hex>`: {first}")
     check(release_assets.asset_set_digest(two) == first,
           "another production of the same tree (release image refs, a tools image, --unscheduled) hashes differently")

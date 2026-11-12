@@ -38,6 +38,8 @@ MOBILE_APPLE = MOBILE / "apple"
 MOBILE_LINUX = MOBILE / "linux"
 # The Windows app (ADR 0129 decision 5): driven on a Windows host from this one by its `run.py`.
 MOBILE_WINDOWS = MOBILE / "windows"
+# The web client's WebP encoder (ADR 0127): libwebp built by us, in a directory of its own inside the surface that ships it.
+WEBP_ENCODER = WEB / "webp-encoder"
 # Every surface, for the guards that iterate them.
 SURFACES = (BACKEND, WEB, ADMIN_WEB, CRYPTO)
 # Where a tree from before stage 2 carries each surface (repository-relative): the upgrade proof builds a predecessor

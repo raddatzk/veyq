@@ -142,6 +142,7 @@ import { CORE_PUBLIC_SHARES, CORE_PUBLIC_SHARES_CONTRIBUTE, CORE_PUBLIC_SHARES_D
 import { realI18n, t } from '../test/i18n'
 import { chooseNew, hasNewMenu, newMenuLabels } from '../test/newMenu'
 import { actionIdsOf, clickAction, rowOf, titlesOf } from '../test/levelRows'
+import LevelView from '../core/node/LevelView.vue'
 import { registry } from '../core/applications/registry'
 import { treeNode } from '../test/models'
 import { stubApi } from '../test/apiMock'
@@ -523,6 +524,51 @@ describe('SpaceView entering a scope', () => {
     } finally {
       entered.mockRestore()
     }
+  })
+})
+
+// Back to where the member was (`core/node/returnTo.ts`): going UP - a crumb, Back, a crumb further up - hands the level the
+// child the member came from, which it brings back into sight; going down, or into another scope, hands it nothing.
+describe('SpaceView coming back up the tree', () => {
+  it('hands the level the child it came up from, by crumb and by Back alike', async () => {
+    const w = await mountAt('#~me')
+    const router = (w.vm as unknown as { $router: import('vue-router').Router }).$router
+    const returnTo = () => w.findComponent(LevelView).props('returnTo')
+    expect(returnTo(), 'a first view came from nowhere').toBeNull()
+
+    await rowOf(w, 'Trips').find('button.veyq-level-item-main').trigger('click')
+    await flushPromises()
+    expect(router.currentRoute.value.hash).toBe('#~me/trips/')
+    expect(returnTo(), 'a step down').toBeNull()
+
+    await rowOf(w, 'Italy').find('button.veyq-level-item-main').trigger('click')
+    await flushPromises()
+    expect(w.findComponent(LevelView).exists(), 'the Memory is open').toBe(false)
+    router.back()
+    await flushPromises()
+    expect(router.currentRoute.value.hash).toBe('#~me/trips/')
+    expect(returnTo(), 'Back from the Memory').toBe('italy')
+
+    await router.push({ hash: '#~me' }) // what a crumb does (`AppTopbar`)
+    await flushPromises()
+    expect(returnTo(), 'the crumb of the scope root').toBe('trips')
+  })
+
+  it('a crumb further up names the child the member came through', async () => {
+    const w = await mountAt('#~me/trips/memories/italy')
+    expect(w.findComponent(LevelView).exists()).toBe(false)
+    const router = (w.vm as unknown as { $router: import('vue-router').Router }).$router
+    await router.push({ hash: '#~me' })
+    await flushPromises()
+    expect(w.findComponent(LevelView).props('returnTo')).toBe('trips')
+  })
+
+  it('a move into another scope is no way up', async () => {
+    const w = await mountAt('#~me/trips/')
+    const router = (w.vm as unknown as { $router: import('vue-router').Router }).$router
+    await router.push({ hash: '' }) // the tenant's top level: the personal tree's ids name nothing there
+    await flushPromises()
+    expect(w.findComponent(LevelView).props('returnTo')).toBeNull()
   })
 })
 

@@ -34,6 +34,13 @@ if (policy === null || policy.trim() === '') failures.push(`dist/${POLICY_FILE} 
 // Bite: drop 'self' from `worker-src` in src/shared/security/csp.ts, `pnpm run build`, and this goes RED.
 else if (!/(^|;)\s*worker-src 'self'\s*(;|$)/.test(policy)) failures.push(`dist/${POLICY_FILE} does not carry exactly "worker-src 'self'"`)
 
+// Scripts are our own files, and WebAssembly may be compiled - the WebP encoder (ADR 0127) - but no string is ever
+// evaluated: `script-src` is exactly `'self' 'wasm-unsafe-eval'`, never 'unsafe-eval' (nor any other source).
+// Bite: add 'unsafe-eval' to `script-src` in src/shared/security/csp.ts, `pnpm run build` - RED.
+if (policy !== null && !/(^|;)\s*script-src 'self' 'wasm-unsafe-eval'\s*(;|$)/.test(policy)) {
+  failures.push(`dist/${POLICY_FILE} does not carry exactly "script-src 'self' 'wasm-unsafe-eval'"`)
+}
+
 // Trusted Types, enforced (ADR 0117): the policy demands them and names exactly the two policies the client creates.
 // Bite: drop `require-trusted-types-for` from csp.ts, or add a name to `trusted-types`, `pnpm run build` - RED.
 if (policy !== null) {
@@ -65,7 +72,7 @@ if (failures.length) {
 }
 
 console.log(
-  `verify:csp: dist/${POLICY_FILE} present with worker-src 'self', Trusted Types enforced (veyq, default) and no scheme or ` +
+  `verify:csp: dist/${POLICY_FILE} present with script-src 'self' 'wasm-unsafe-eval', worker-src 'self', Trusted Types enforced (veyq, default) and no scheme or ` +
     `wildcard in connect-src, no Vue pass-through ` +
     'policy or static vnode in the bundle, dist/index.html carries no CSP <meta>.',
 )

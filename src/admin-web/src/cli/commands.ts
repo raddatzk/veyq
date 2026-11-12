@@ -139,7 +139,10 @@ export type Flag = {
 export type Command = {
   /** How the command is written on the command line, flags included — the one line `--help` prints. */
   usage: string
+  /** One line, at most {@link SUMMARY_MAX} characters — what a group's help lists beside the command. */
   summary: string
+  /** The whole story, printed by the command's own `--help` instead of the summary; absent when the summary is it. */
+  details?: string
   flags: Record<string, Flag>
   /** The one positional argument the command takes after its words (`capabilities off <id>`); it reaches `run`
    *  under its `name` beside the flags. Required when declared. */
@@ -348,6 +351,29 @@ function parseRecipients(typed: string): NonNullable<InstanceOperatorUpdate['rec
   })
 }
 
+/** The longest summary a group's help lists — a line, not a paragraph; the paragraph is `details`. */
+export const SUMMARY_MAX = 72
+
+/**
+ * The first word of every command, in the order `--help` lists them, each with its one line. A command's group is
+ * its first word; the tests hold that every group has a command and every command a group.
+ */
+export const GROUPS: Record<string, string> = {
+  tenant: 'Tenants: create, invite owners, suspend, delete, quotas',
+  account: 'Accounts: block sign-in, erase',
+  store: 'The object store the media are kept in',
+  capabilities: 'Switch what the server offers on or off',
+  services: 'Services members’ browsers call: map tiles, exchange rates',
+  release: 'The running release and the daily release check',
+  'config-secret': 'The config-secret key’s state',
+  operator: 'Who runs this server: contact, provider, privacy notice',
+  moderator: 'Appoint and remove moderators',
+  moderation: 'The moderation key and the moderators’ proposals',
+  order: 'Authorities’ orders: removal, preservation, information',
+  'guest-write-record': 'How long a guest’s write record is kept',
+  'backup-retention': 'How long backups are kept',
+}
+
 /**
  * Keyed by the command words as typed (`tenant create`, `release`) — a flat map rather than a nested tree,
  * because two words is the whole depth and a tree would be machinery for one level of nesting.
@@ -361,13 +387,15 @@ export const COMMANDS: Record<string, Command> = {
   },
   'tenant list': {
     usage: 'tenant list',
-    summary: 'List all tenants with their invite status, storage usage and quota (bytes; null = no quota).',
+    summary: 'List all tenants with invite status, storage usage and quota.',
+    details: 'List all tenants with their invite status, storage usage and quota (bytes; null = no quota).',
     flags: {},
     run: () => listTenants(),
   },
   'tenant resend': {
     usage: 'tenant resend --tenant-id <id>',
-    summary: "Re-mint a pending tenant's invite for the same owner email (no mail: hand over the copy-link).",
+    summary: "Re-mint a pending tenant's invite for the same owner email.",
+    details: "Re-mint a pending tenant's invite for the same owner email (no mail: hand over the copy-link).",
     flags: { 'tenant-id': tenantId },
     run: (f) => resendInvite(f['tenant-id']),
   },
@@ -391,7 +419,8 @@ export const COMMANDS: Record<string, Command> = {
   },
   'tenant suspend': {
     usage: 'tenant suspend --tenant-id <id> [--over-content --ground <ground> [--provision <text>] [--facts <text>]]',
-    summary: 'Take an ACTIVE tenant offline (reversible; touches no key, grant or content). Over content — a moderator proposed it, or it is over what the tenant hosts — it carries a statement of reasons, mailed with the facts to each owner of the tenant; the provision and the facts are required on a server run by a club, an organisation or a company. Prints whom the mail reached (statementDelivery) and warns on stderr when it did not reach everyone.',
+    summary: 'Take an ACTIVE tenant offline (reversible).',
+    details: 'Take an ACTIVE tenant offline (reversible; touches no key, grant or content). Over content — a moderator proposed it, or it is over what the tenant hosts — it carries a statement of reasons, mailed with the facts to each owner of the tenant; the provision and the facts are required on a server run by a club, an organisation or a company. Prints whom the mail reached (statementDelivery) and warns on stderr when it did not reach everyone.',
     flags: { 'tenant-id': tenantId, ...STATEMENT_FLAGS },
     run: async (f) => suspendTenant(f['tenant-id'], await statementOf(f)),
     // `ok` as before, and over content whom the statement's mail reached.
@@ -406,7 +435,8 @@ export const COMMANDS: Record<string, Command> = {
   },
   'tenant delete': {
     usage: 'tenant delete --tenant-id <id> --domain <domain> [--over-content --ground <ground> [--provision <text>] [--facts <text>]]',
-    summary:
+    summary: 'Delete a tenant: offline at once, erased after 30 days.',
+    details:
       'Delete an ACTIVE or SUSPENDED tenant: offline at once, everything in it erased after 30 days (printed as dueAt) unless `tenant stop-deletion`. Members keep their accounts and are mailed. --domain is the confirmation: the tenant’s own domain, checked by the server. Over content — a moderator proposed taking it offline, or it is over what the tenant hosts — it carries a statement of reasons, mailed with the facts to each owner, as `tenant suspend` does, and prints and warns of whom it reached as that does.',
     flags: { 'tenant-id': tenantId, domain: { describe: 'the tenant’s own domain, typed as the confirmation', required: true }, ...STATEMENT_FLAGS },
     run: async (f) => deleteTenant(f['tenant-id'], f.domain, await statementOf(f)),
@@ -414,20 +444,23 @@ export const COMMANDS: Record<string, Command> = {
   },
   'tenant stop-deletion': {
     usage: 'tenant stop-deletion --tenant-id <id>',
-    summary: 'Stop a tenant’s pending deletion before it is erased; it returns SUSPENDED (bring it back with `tenant reactivate`).',
+    summary: 'Stop a tenant’s pending deletion; it returns SUSPENDED.',
+    details: 'Stop a tenant’s pending deletion before it is erased; it returns SUSPENDED (bring it back with `tenant reactivate`).',
     flags: { 'tenant-id': tenantId },
     run: (f) => stopTenantDeletion(f['tenant-id']),
   },
   'tenant invite-owner': {
     usage: 'tenant invite-owner --tenant-id <id> --email <address>',
-    summary:
+    summary: 'Invite a member of an ACTIVE tenant to own it.',
+    details:
       'Invite one of an ACTIVE tenant’s members to own it — the way out of an ownerless tenant. Mailed where the server’s mail is set up (delivery SENT); otherwise hand over the copy-link from bootstrapSecret.',
     flags: { 'tenant-id': tenantId, email: { describe: 'the address of one of the tenant’s members', required: true } },
     run: (f) => inviteTenantOwner(f['tenant-id'], f.email),
   },
   'tenant quota': {
     usage: 'tenant quota --tenant-id <id> --gib <GiB|none>',
-    summary: "Set a tenant's storage quota in GiB, or clear it with none (deletes nothing).",
+    summary: "Set a tenant's storage quota in GiB, or clear it with none.",
+    details: "Set a tenant's storage quota in GiB, or clear it with none (deletes nothing).",
     flags: { 'tenant-id': tenantId, gib: { describe: 'the quota in GiB, or none', required: true } },
     run: (f) => {
       const bytes = parseQuotaGib(f.gib)
@@ -437,7 +470,8 @@ export const COMMANDS: Record<string, Command> = {
   },
   release: {
     usage: 'release',
-    summary:
+    summary: 'Print the running release and the newer ones the check found.',
+    details:
       'Print the release version the running server was published under, the daily release check (on or off, its source, its last success), every newer release it found — an UNSCHEDULED_MAJOR means upgrade now — and noticesMailedTo: the address a new find is also mailed to, or null while the server’s mail is not set up and confirmed (then finds are only shown).',
     flags: {},
     // `release` stays the document's first key, so a script that read it before still reads it.
@@ -449,7 +483,8 @@ export const COMMANDS: Record<string, Command> = {
   },
   'release check': {
     usage: 'release check <on|off>',
-    summary: 'Switch the daily release check on or off. Off, the server makes no request at all; the source is kept.',
+    summary: 'Switch the daily release check on or off.',
+    details: 'Switch the daily release check on or off. Off, the server makes no request at all; the source is kept.',
     flags: {},
     operand: { name: 'state', describe: 'on or off' },
     run: async (f) => {
@@ -460,13 +495,15 @@ export const COMMANDS: Record<string, Command> = {
   },
   'config-secret': {
     usage: 'config-secret',
-    summary: "Print the config-secret key's state (OK, ABSENT or MISMATCH) — a restore's verification read; it changes nothing.",
+    summary: "Print the config-secret key's state: OK, ABSENT or MISMATCH.",
+    details: "Print the config-secret key's state (OK, ABSENT or MISMATCH) — a restore's verification read; it changes nothing.",
     flags: {},
     run: () => getInstanceConfigSecret(),
   },
   'store show': {
     usage: 'store show',
-    summary:
+    summary: 'Print the object store in use, a pending change and its last check.',
+    details:
       'Print the object-store setting in use and its last check, a saved change still waiting for its check (pending), and whether a bundled store is offered. Secrets are never printed.',
     flags: {},
     run: () => getInstanceStore(),
@@ -474,7 +511,8 @@ export const COMMANDS: Record<string, Command> = {
   'store set': {
     usage:
       'store set --bundled | --endpoint <url> --bucket <bucket> --region <region> --access-key <id> [--type S3|GARAGE] [--public-endpoint <url>] [--garage-admin-endpoint <url>]',
-    summary:
+    summary: 'Save an object-store setting as pending, until `store check`.',
+    details:
       'Save an object-store setting as pending: the bundled one, or one of your own. Nothing changes for the media until `store check` passes, which puts it in use. Secrets come from VEYQ_STORE_SECRET_KEY and VEYQ_STORE_GARAGE_ADMIN_TOKEN (never flags); unset keeps the stored one.',
     flags: {
       bundled: { describe: 'use the store the deployment brings; no other flag may be given', required: false, switch: true },
@@ -516,7 +554,8 @@ export const COMMANDS: Record<string, Command> = {
   },
   'store check': {
     usage: 'store check',
-    summary:
+    summary: 'Check the pending (else the in-use) store; a pass puts it in use.',
+    details:
       'Check the pending object store (else the one in use) step by step; a pending one that passes is put in use. Prints every step and exits 1 when the check failed. Tenants can be created only after a passed check.',
     flags: {},
     run: () => checkInstanceStore(),
@@ -524,13 +563,15 @@ export const COMMANDS: Record<string, Command> = {
   },
   'store discard': {
     usage: 'store discard',
-    summary: 'Discard the pending object-store setting; the one in use stays. Changes nothing when none is pending.',
+    summary: 'Discard the pending object-store setting.',
+    details: 'Discard the pending object-store setting; the one in use stays. Changes nothing when none is pending.',
     flags: {},
     run: () => discardPendingInstanceStore(),
   },
   'store reconcile': {
     usage: 'store reconcile [--confirm-exclusive-bucket | --withdraw-exclusive-bucket | --pause | --resume]',
-    summary:
+    summary: 'Print what the bucket reconcile found, or change how it deletes.',
+    details:
       'Print what the bucket reconcile found: the last full listing, the objects no record claims, the candidates with the date the first is deleted, and the verdict (ARMED, NOT_CONFIRMED, PAUSED, NO_STORE). With one switch, change it first: confirm that this bucket holds this server\'s objects alone (arms deleting after the grace), withdraw that, pause or resume deleting.',
     flags: {
       'confirm-exclusive-bucket': {
@@ -556,14 +597,16 @@ export const COMMANDS: Record<string, Command> = {
   },
   'capabilities list': {
     usage: 'capabilities list [--lang en|de]',
-    summary: 'Print the capability register as a tree: each entry on, off, or off through its nearest switched-off ancestor, with its title and purpose.',
+    summary: 'Print the capability register as a tree, each entry on or off.',
+    details: 'Print the capability register as a tree: each entry on, off, or off through its nearest switched-off ancestor, with its title and purpose.',
     flags: { lang },
     run: () => listInstanceCapabilities(),
     render: (r, f, env) => renderCapabilities(r as InstanceCapability[], cliLocale(f, env)),
   },
   'capabilities off': {
     usage: 'capabilities off <id> [--lang en|de]',
-    summary: 'Switch an entry off at once and print what that does to new and to existing data. Deletes nothing.',
+    summary: 'Switch an entry off at once. Deletes nothing.',
+    details: 'Switch an entry off at once and print what that does to new and to existing data. Deletes nothing.',
     flags: { lang },
     operand: capabilityId,
     run: (f) => setInstanceCapability(f.id, true),
@@ -577,7 +620,8 @@ export const COMMANDS: Record<string, Command> = {
   },
   'capabilities require': {
     usage: 'capabilities require <id> --requirement <name> --value <n|off> [--lang en|de]',
-    summary: 'Set a requirement on an entry for the server (1 for a flag, else days 1-3650), or clear it with off, and print what it does to new and to existing data.',
+    summary: 'Set or clear a requirement on an entry for the server.',
+    details: 'Set a requirement on an entry for the server (1 for a flag, else days 1-3650), or clear it with off, and print what it does to new and to existing data.',
     flags: {
       requirement: { describe: 'the requirement name, as `capabilities list` prints it', required: true },
       value: { describe: '1 for a flag, a number of days (1-3650), or off to clear', required: true },
@@ -599,14 +643,16 @@ export const COMMANDS: Record<string, Command> = {
   },
   'services list': {
     usage: 'services list',
-    summary: 'Print the external services a member’s browser calls, each with its address or "not configured".',
+    summary: 'Print the external services a member’s browser calls.',
+    details: 'Print the external services a member’s browser calls, each with its address or "not configured".',
     flags: {},
     run: () => listExternalServices(),
     render: (r) => (r as InstanceExternalService[]).map(renderService).join('\n'),
   },
   'services set': {
     usage: 'services set <id> --url <url> [--attribution <text>]',
-    summary: 'Configure a service’s address (the map tiles: a {z}/{x}/{y} template and an attribution; the exchange rates: a template with {date}); acts at once.',
+    summary: 'Configure a service’s address; acts at once.',
+    details: 'Configure a service’s address (the map tiles: a {z}/{x}/{y} template and an attribution; the exchange rates: a template with {date}); acts at once.',
     flags: {
       url: { describe: 'an http(s) address; the map tiles take a template with {z}, {x} and {y}, the exchange rates one with {date}', required: true },
       attribution: { describe: 'the attribution shown on every map (map tiles only)', required: false },
@@ -617,7 +663,8 @@ export const COMMANDS: Record<string, Command> = {
   },
   'services unset': {
     usage: 'services unset <id>',
-    summary: 'Stop using a service: no browser calls it, and the served policy leaves its origin out. Deletes nothing.',
+    summary: 'Stop using a service. Deletes nothing.',
+    details: 'Stop using a service: no browser calls it, and the served policy leaves its origin out. Deletes nothing.',
     flags: {},
     operand: serviceId,
     run: (f) => clearExternalService(f.id),
@@ -625,7 +672,8 @@ export const COMMANDS: Record<string, Command> = {
   },
   'capabilities on': {
     usage: 'capabilities on <id> [--lang en|de]',
-    summary: 'Switch an entry back on at once. Under a parent that is still off, it stays off until that parent is on.',
+    summary: 'Switch an entry back on at once.',
+    details: 'Switch an entry back on at once. Under a parent that is still off, it stays off until that parent is on.',
     flags: { lang },
     operand: capabilityId,
     run: (f) => setInstanceCapability(f.id, false),
@@ -633,28 +681,32 @@ export const COMMANDS: Record<string, Command> = {
   },
   'moderator list': {
     usage: 'moderator list',
-    summary: 'Print the moderator roster: whether moderation is on, the key’s current epoch, a due rotation, and each moderator’s address, state and whether it holds the key.',
+    summary: 'Print the moderator roster and the moderation key’s state.',
+    details: 'Print the moderator roster: whether moderation is on, the key’s current epoch, a due rotation, and each moderator’s address, state and whether it holds the key.',
     flags: {},
     run: () => getModeration(),
     render: (r) => renderRoster(r as InstanceModeration),
   },
   'moderator appoint': {
     usage: 'moderator appoint --address <address>',
-    summary: 'Appoint an existing account as a moderator. It stays PENDING until they accept in the web client’s moderation page; a holder then delivers the key.',
+    summary: 'Appoint an existing account as a moderator.',
+    details: 'Appoint an existing account as a moderator. It stays PENDING until they accept in the web client’s moderation page; a holder then delivers the key.',
     flags: { address: { describe: 'the account’s address', required: true } },
     run: (f) => appointModerator(f.address),
     render: (r) => renderRoster(r as InstanceModeration),
   },
   'moderator remove': {
     usage: 'moderator remove --address <address>',
-    summary: 'Remove a moderator; if they held the key, rotate it for the remaining moderators (reason removal).',
+    summary: 'Remove a moderator; rotate the key if they held it.',
+    details: 'Remove a moderator; if they held the key, rotate it for the remaining moderators (reason removal).',
     flags: { address: { describe: 'the moderator’s address, as `moderator list` prints it', required: true } },
     run: async (f) => removeModerator(await moderatorByAddress(f.address)),
     render: (r) => renderRoster(r as InstanceModeration),
   },
   'guest-write-record show': {
     usage: 'guest-write-record show',
-    summary:
+    summary: 'Print how many days a guest’s write record is kept.',
+    details:
       'Print how many days a guest’s write keeps its IP address, source port, time and the Origin its request carried (default 7, whether you set it). The record has no switch: it is kept wherever a guest may write, which the capabilities core.public-shares.contribute and .drop-box decide.',
     flags: {},
     run: () => getGuestWriteRecord(),
@@ -662,7 +714,8 @@ export const COMMANDS: Record<string, Command> = {
   },
   'guest-write-record set': {
     usage: 'guest-write-record set <days>',
-    summary:
+    summary: 'Set how many days a guest’s write record is kept, 1 to 30.',
+    details:
       'Set how many days a guest’s write is kept, 1 to 30. A shorter time reaches what is kept at the next cleanup, a longer one only what is kept from now on. More than 7 needs a reason in your record of processing.',
     flags: {},
     operand: { name: 'days', describe: `whole days, ${MIN_DAYS} to ${MAX_DAYS}` },
@@ -675,7 +728,8 @@ export const COMMANDS: Record<string, Command> = {
   },
   'guest-write-record forget': {
     usage: 'guest-write-record forget <identity-id>',
-    summary:
+    summary: 'Delete one share identity’s kept writes (GDPR Art. 21).',
+    details:
       'A guest objects to the record (GDPR Art. 21): delete every kept write of one share identity — its IP address, source port, time and Origin. What a hold copied for a report or an authority’s order stays until the hold ends; the output says how much.',
     flags: {},
     operand: { name: 'identity-id', describe: 'the share identity’s id, as a moderation case names it' },
@@ -688,7 +742,8 @@ export const COMMANDS: Record<string, Command> = {
   },
   'backup-retention show': {
     usage: 'backup-retention show',
-    summary:
+    summary: 'Print how many days a backup is kept.',
+    details:
       'Print how many days every backup veyq’s tools take is kept, the newest too (default 30, whether you set it): veyqctl’s captures on the host, the cluster gate’s on its volume.',
     flags: {},
     run: () => backupRetention.getBackupRetention(),
@@ -696,7 +751,8 @@ export const COMMANDS: Record<string, Command> = {
   },
   'backup-retention set': {
     usage: 'backup-retention set <days>',
-    summary:
+    summary: 'Set how many days a backup is kept, 7 to 365.',
+    details:
       'Set how many days a backup is kept, 7 to 365. The next backup, start or daily prune deletes every backup older than that. More than 30 needs a reason in your record of processing.',
     flags: {},
     operand: { name: 'days', describe: `whole days, ${backupRetention.MIN_DAYS} to ${backupRetention.MAX_DAYS}` },
@@ -709,14 +765,16 @@ export const COMMANDS: Record<string, Command> = {
   },
   'operator show': {
     usage: 'operator show',
-    summary: 'Print the server contact, the provider identification, the supervisory authority, the privacy notice’s values and the notification address with its confirmation; a value not set is null, published as “not stated by this operator”.',
+    summary: 'Print the operator details; a value not set is null.',
+    details: 'Print the server contact, the provider identification, the supervisory authority, the privacy notice’s values and the notification address with its confirmation; a value not set is null, published as “not stated by this operator”.',
     flags: {},
     run: () => getOperator(),
     render: (r) => renderOperator(r as InstanceOperator),
   },
   'operator set': {
     usage: 'operator set [--contact-email <a>] [--contact-languages <de,en>] [--statement-email <a>] [--notification-email <a>] [--provider-name <n>] [--provider-address <a>] [--provider-email <a>] [--provider-representative <n>] [--supervisory-authority <n>] [--recipients \'<name>|<hosting|object-storage|mail-relay|backup|other:<what they do>>|<country code, e.g. DE>; …\'] [--data-protection-officer <n>]',
-    summary: 'Change the given values (none clears one) and keep the rest; --recipients replaces the privacy notice’s whole list. A new notification address gets a code by the server’s mail, typed into the console’s Server → Operator.',
+    summary: 'Change the given operator values and keep the rest.',
+    details: 'Change the given values (none clears one) and keep the rest; --recipients replaces the privacy notice’s whole list. A new notification address gets a code by the server’s mail, typed into the console’s Server → Operator.',
     flags: Object.fromEntries(
       Object.keys(OPERATOR_FLAGS).map((k) => [k, { describe: `${k.replace(/-/g, ' ')}, or none to clear it`, required: false }]),
     ),
@@ -735,34 +793,39 @@ export const COMMANDS: Record<string, Command> = {
   },
   'operator clear': {
     usage: 'operator clear',
-    summary: 'Clear every operator value, the notification address and its confirmation included.',
+    summary: 'Clear every operator value.',
+    details: 'Clear every operator value, the notification address and its confirmation included.',
     flags: {},
     run: () => clearOperator(),
   },
   'moderation rotate': {
     usage: 'moderation rotate --reason by-hand|compromise|identity-rotation|removal',
-    summary: 'Mint a new moderation key, sealed to every moderator who has accepted; reports from then on are sealed to it. The key is never printed or kept.',
+    summary: 'Mint a new moderation key for every accepted moderator.',
+    details: 'Mint a new moderation key, sealed to every moderator who has accepted; reports from then on are sealed to it. The key is never printed or kept.',
     flags: { reason: { describe: 'the reason category the moderation log records', required: true, oneOf: Object.keys(ROTATION_REASONS) } },
     run: (f) => rotateModerationKey(ROTATION_REASONS[f.reason]),
     render: (r) => renderRoster(r as InstanceModeration),
   },
   'moderation proposals': {
     usage: 'moderation proposals',
-    summary: 'Print the moderators’ open proposals — each with its case, category, step and target (a member’s address, or a tenant) — and every sign-in block in force. Take a sign-in proposal with `account block`, a tenant one with `tenant suspend`.',
+    summary: 'Print the moderators’ open proposals and the sign-in blocks.',
+    details: 'Print the moderators’ open proposals — each with its case, category, step and target (a member’s address, or a tenant) — and every sign-in block in force. Take a sign-in proposal with `account block`, a tenant one with `tenant suspend`.',
     flags: {},
     run: () => getModerationSteps(),
     render: (r) => renderSteps(r as ModerationSteps),
   },
   'moderation decline': {
     usage: 'moderation decline --proposal <id>',
-    summary: 'Decline an open proposal instead of taking it; the case shows it as declined and the moderation log records it.',
+    summary: 'Decline an open proposal instead of taking it.',
+    details: 'Decline an open proposal instead of taking it; the case shows it as declined and the moderation log records it.',
     flags: { proposal: { describe: 'the proposal id, as `moderation proposals` prints it', required: true } },
     run: (f) => declineProposal(f.proposal),
     render: (r) => renderSteps(r as ModerationSteps),
   },
   'account block': {
     usage: 'account block --address <address> [--case <caseId>] [--over-content] [--ground <ground> [--provision <text>] [--facts <text>]]',
-    summary: 'Block an account’s sign-in: every session of it ends at once and every sign-in is refused until `account unblock`. Settles its open sign-in proposals as taken. Deletes nothing. Over content — a case, an open proposal, or --over-content — it carries a statement of reasons, mailed with the facts to the account’s address; the provision and the facts are required on a server run by a club, an organisation or a company. Prints the steps and whom the mail reached (statementDelivery), and warns on stderr when it did not reach the member.',
+    summary: 'Block an account’s sign-in; its sessions end at once.',
+    details: 'Block an account’s sign-in: every session of it ends at once and every sign-in is refused until `account unblock`. Settles its open sign-in proposals as taken. Deletes nothing. Over content — a case, an open proposal, or --over-content — it carries a statement of reasons, mailed with the facts to the account’s address; the provision and the facts are required on a server run by a club, an organisation or a company. Prints the steps and whom the mail reached (statementDelivery), and warns on stderr when it did not reach the member.',
     flags: {
       address: { describe: 'the account’s address', required: true },
       case: { describe: 'the case the block answers, as `moderation proposals` prints it', required: false },
@@ -777,14 +840,16 @@ export const COMMANDS: Record<string, Command> = {
   },
   'account unblock': {
     usage: 'account unblock --address <address>',
-    summary: 'Lift the sign-in block of an account; it signs in again with its own keys.',
+    summary: 'Lift an account’s sign-in block.',
+    details: 'Lift the sign-in block of an account; it signs in again with its own keys.',
     flags: { address: { describe: 'the blocked account’s address, as `moderation proposals` prints it', required: true } },
     run: async (f) => liftSignInBlock(await signInBlockByAddress(f.address)),
     render: (r) => renderSteps(r as ModerationSteps),
   },
   'account erase': {
     usage: 'account erase --address <address> [--lose-moderation-key]',
-    summary:
+    summary: 'Erase an account: stopped at once, erased after 14 days.',
+    details:
       'Erase an account: it stops at once (sessions end, sign-in refused) and is erased after 14 days, or the window `veyq.account.erasure.window` sets (printed as dueAt), unless `account stop-erasure`. Not the Server Owner’s own account; a last owner’s tenant is left ownerless (`tenant list`); holds and moderation records stay. An account that alone holds the moderation key is refused with a warning unless --lose-moderation-key: erased here, the key goes with it, and every report and hold sealed only to it can no longer be read.',
     flags: {
       address: { describe: 'the account’s address', required: true },
@@ -808,19 +873,22 @@ export const COMMANDS: Record<string, Command> = {
   },
   'account stop-erasure': {
     usage: 'account stop-erasure --address <address>',
-    summary: 'Stop a pending account erasure before the purge; the account signs in again.',
+    summary: 'Stop a pending account erasure; the account signs in again.',
+    details: 'Stop a pending account erasure before the purge; the account signs in again.',
     flags: { address: { describe: 'the account’s address, as `account erasures` prints it', required: true } },
     run: (f) => stopAccountErasure(f.address),
   },
   'account erasures': {
     usage: 'account erasures',
-    summary: 'Print the pending account erasures, earliest due first: each address, when and by whom (SELF or SERVER_OWNER) it was requested, and when it is erased.',
+    summary: 'Print the pending account erasures, earliest due first.',
+    details: 'Print the pending account erasures, earliest due first: each address, when and by whom (SELF or SERVER_OWNER) it was requested, and when it is erased.',
     flags: {},
     run: () => listAccountErasures(),
   },
   'order remove': {
     usage: 'order remove --share <link|id> --reference <text> [--received-at <ISO time>] [--defer-until <ISO time>] [--lang en|de]',
-    summary: 'Enter a terrorist-content removal order: the link and everything it gives access to are blocked at once, by id, for everyone. Prints the block time and the text for the authority’s feedback form (TCO Annex II). Only the link’s id is sent — never the key after #.',
+    summary: 'Enter a terrorist-content removal order (TCO): block a link.',
+    details: 'Enter a terrorist-content removal order: the link and everything it gives access to are blocked at once, by id, for everyone. Prints the block time and the text for the authority’s feedback form (TCO Annex II). Only the link’s id is sent — never the key after #.',
     flags: {
       ...ORDER_FLAGS,
       'defer-until': { describe: 'the authority forbids telling the affected until then — at most six weeks ahead', required: false },
@@ -830,14 +898,16 @@ export const COMMANDS: Record<string, Command> = {
   },
   'order preserve': {
     usage: 'order preserve --share <link|id> --reference <text> [--received-at <ISO time>] [--lang en|de]',
-    summary: 'Enter a European Preservation Order: what the link gives access to is kept for 60 days from receipt, without a block.',
+    summary: 'Enter a European Preservation Order: keep a link’s content 60 days.',
+    details: 'Enter a European Preservation Order: what the link gives access to is kept for 60 days from receipt, without a block.',
     flags: ORDER_FLAGS,
     run: (f) => order('PRESERVATION', f),
     render: renderOrder,
   },
   'order inform': {
     usage: 'order inform --share <link|id> --reference <text> [--received-at <ISO time>] [--hold-days <days>] [--lang en|de]',
-    summary: 'Enter a request for information: what the link gives access to is kept for the days it names (six months when it names none), without a block. Record the handover in the moderation surface.',
+    summary: 'Enter a request for information: keep a link’s content, no block.',
+    details: 'Enter a request for information: what the link gives access to is kept for the days it names (six months when it names none), without a block. Record the handover in the moderation surface.',
     flags: { ...ORDER_FLAGS, 'hold-days': { describe: 'the days the request names', required: false } },
     run: (f) => order('INFORMATION', f),
     render: renderOrder,

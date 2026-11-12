@@ -133,9 +133,8 @@ The load model is a household. The volume pre-check's largest tree is 5,000 node
    - **(b) Full text over the journal.** This is designed inside the journal's refinement (inbox #18): whether a client
      reads one compacted snapshot per journal or replays updates decides its cost. It then plugs in as one more
      document kind.
-   - **(c) Semantic search.** Deferred. Embeddings in the browser need WebAssembly or WebGPU, the CSP grants no
-     `'wasm-unsafe-eval'` ([CSP](../crosscutting/cc.security.csp.md)), and a model is tens of MB. Its natural home is
-     the native apps.
+   - **(c) Semantic search.** Deferred. Embeddings in the browser need WebAssembly or WebGPU, and a model is tens of
+     MB. Its natural home is the native apps.
 9. **People and settings are results too: two kinds in the one list of decision 5, after content at an equal match.**
    (Owner, 2026-11-09.)
    - **People:**

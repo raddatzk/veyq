@@ -1,0 +1,18 @@
+# The WebP encoder in this directory, pinned (ADR 0127 decision 2). Written by `build.py --write`, never by hand.
+#
+# tag     the libwebp release tag it is built from (a stable vX.Y.Z; libwebp publishes tags, no GitHub releases)
+# commit  the commit that tag must be, read with `git ls-remote https://github.com/webmproject/libwebp refs/tags/<tag>^{}`
+#         when the tag was taken; the build refuses a tag that has moved since
+# image   the Emscripten image that compiles it — the Dockerfile's FROM, the same string
+# sha256  each output's SHA-256 and its path in this directory
+#
+# `build.py` rebuilds and compares with these lines and the committed files (CI's rebuild check), and
+# scripts/validate_build_input_pins.py holds them together offline: the outputs hash to these lines, and the image
+# is the Dockerfile's.
+tag v1.6.0
+commit 4fa21912338357f89e4fd51cf2368325b59e9bd9
+image emscripten/emsdk:7.0.0@sha256:6bd7aef93408b10bf7b36642cb7c91119b302f720b9ec2d20439f73cf07fe894
+sha256 e9ae9facf0ceca531dab77ecd241a649cda5b8a34c76cd63d5bdffb2fc81ef44 wasm/webp_encoder.wasm
+sha256 59848fb42a1d4649bc9300b29d5f46f47c0a5a016508ac1c3d5dc40bb0fe64b6 wasm/webp_encoder.mjs
+sha256 5aec868f669e384a22372a4e8a1a6cd7d44c64cd451f960ca69cc170d1e13acf COPYING
+sha256 cc3273e0694ea5896145e0677699b53471b03ea43021ddc50e7923fbb9f5023c PATENTS

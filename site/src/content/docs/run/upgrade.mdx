@@ -55,11 +55,12 @@ fields and claims are compared on rendered manifests by `scripts/chart_upgrade_c
 cd /opt/veyq
 ./veyqctl check                                              # which release upgrade would take, and what is newer
 ./veyqctl upgrade --key-into /media/usb-stick/veyq-<stamp>.key
-./veyqctl self-update                                        # then: veyqctl itself, as the new release ships it
+./veyqctl self-update                                        # then: veyqctl itself, the newest release's
 ```
 
-`upgrade` runs only when you run it, and in this order — **nothing is stopped before step 4**. Each step names what it
-runs, so you can do it by hand.
+`upgrade` runs only when you run it, and in this order — **nothing is stopped before step 4**. Each step is a heading
+of its own; with `-v` (`--verbose`, on every command) it also shows every program it runs, with its arguments, so you can
+do it by hand.
 
 1. **Resolve the release** `.env`'s `VEYQ_RELEASE` selects ([below](#which-release-upgrade-takes)). The running one:
    nothing to do. An older one: refused — there is no downgrade.
@@ -248,6 +249,9 @@ run and the version clients check share one major. Major 1 began with v1.0 (2026
   so after your major stops being current you have about two years to upgrade before an app asks you to. Apps that
   speak a new major ship before the server's major does. The web client and the admin console come from the server's
   own image and always match it.
+- **`veyqctl` is a client too.** `veyqctl --version` names its release. It refuses an instance or a release of a
+  newer major than its own and says where to get a newer `veyqctl`. Within a major an older `veyqctl` still works, and
+  says so when it is older than your instance: `veyqctl self-update` fetches the newest, for every instance you manage.
 - **The bundled database upgrades itself.** When a release moves the bundled MariaDB to a newer version, its first
   start backs up the database's system tables and upgrades them, on Compose and Kubernetes alike. An upgraded database
   does not go back to the older MariaDB: the backup taken before the upgrade is the way back. A database you run
