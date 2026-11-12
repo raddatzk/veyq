@@ -136,9 +136,9 @@ class DepotUploads(
      * A picked directory uploaded under [parentId] of [scopeId]: what its walk [found] kept ([FolderUpload.keeps]; each link
      * and unreadable entry said), its folders made — [State.preparing] naming it ([FolderUpload.rootName] of [shownName] and
      * [path]) — and its files queued as one batch under the folder's name; a refusal or a folder not made said in Depot's
-     * words. Runs off the caller's thread.
+     * words. Runs off the caller's thread; returns once its files are queued, with how many were (0 where none went).
      */
-    suspend fun uploadFolder(scopeId: String, parentId: String?, shownName: String?, path: String, found: List<FolderUpload.Found>) =
+    suspend fun uploadFolder(scopeId: String, parentId: String?, shownName: String?, path: String, found: List<FolderUpload.Found>): Int =
         withContext(work) {
             val rootName = FolderUpload.rootName(shownName, path)
             val walked = FolderUpload.walked(found)
@@ -151,7 +151,12 @@ class DepotUploads(
             door.changed()
             val outcome = if (report == null) listOf(Notice(Msg.DEPOT_FOLDER_FAILED, rootName)) else Notices.folderUpload(report)
             say(Notices.folderLeftOut(walked) + outcome)
-            if (report?.outcome == FolderUpload.Outcome.READY) enqueue(report.jobs, report.name, report.rootId)
+            if (report?.outcome == FolderUpload.Outcome.READY) {
+                enqueue(report.jobs, report.name, report.rootId)
+                report.jobs.size
+            } else {
+                0
+            }
         }
 
     /** The header's replace of [file]'s content with the picked [source] (chosen first, [FileModel.chooseReplace]), queued. */

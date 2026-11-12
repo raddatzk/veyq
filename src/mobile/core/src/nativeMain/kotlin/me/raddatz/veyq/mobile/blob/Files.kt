@@ -18,3 +18,22 @@ internal expect fun removeFile(path: String): Boolean
 
 /** Moves [file]'s position to [offset] from its start, past 2 GiB too; true when it moved. */
 internal expect fun seekFile(file: CPointer<FILE>, offset: Long): Boolean
+
+/** What a path is, as the system lists it without following a link ([pathFacts]). */
+internal enum class PathKind { FILE, DIRECTORY, LINK, OTHER }
+
+/** A path's kind, its size in bytes (a file's) and when it was last modified (epoch milliseconds, where the system says). */
+internal class PathFacts(val kind: PathKind, val size: Long, val modifiedAt: Long?)
+
+/**
+ * What [path] is (UTF-8), never following a link: a link — a symbolic link, a Windows reparse point (a junction too) — is
+ * reported as one ([PathKind.LINK]), so a walk over it reaches nothing outside the directory picked. Null where the system
+ * cannot tell (it does not exist, or may not be read).
+ */
+internal expect fun pathFacts(path: String): PathFacts?
+
+/** The names directory [path] holds (`.` and `..` left out), as the system lists them; null where it does not list. */
+internal expect fun listDirectory(path: String): List<String>?
+
+/** What joins a directory's path and a name in it: `/`, Windows' `\`. */
+internal expect val pathSeparator: Char

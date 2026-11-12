@@ -174,21 +174,32 @@ object DepotFiles {
      * upload queue (the web's `fileUploadJob`), named [name] (a folder upload's planned name; else the file's own). A name a
      * file of the level holds fails it final with [Codes.EXISTS] and that file in [existing], to offer its replace.
      */
-    class UploadJob internal constructor(
+    class UploadJob(
         val scopeId: String, val parentId: String?, private val source: UploadSource, override val name: String,
-        /** Sends [source] named [name] (the tenant's [upload], a test's played server), telling [created] the node it made. */
-        private val send: suspend (name: String, source: UploadSource, progress: (Double) -> Unit, created: (String) -> Unit) -> Uploaded,
-        /** Gives up the node a run made and left without content (moved to the trash unless its content is there after all). */
-        private val giveUp: suspend (nodeId: String) -> Unit = {},
+        /**
+         * Sends [source] named [name] (the tenant's [upload], a test's played server) — into the node an earlier run made
+         * and left empty ([into], filled rather than created anew: the web's `fileUploadJob` reuses it), telling [created]
+         * the node it made.
+         */
+        private val send: suspend (name: String, source: UploadSource, progress: (Double) -> Unit, into: String?, created: (String) -> Unit) -> Uploaded,
+        /**
+         * Gives up the node a run made and left without content (moved to the trash unless its content is there after all):
+         * true once it is gone or filled, false where that could not be told (offline) — the node is then kept for the retry.
+         */
+        private val giveUp: suspend (nodeId: String) -> Boolean = { true },
     ) : UploadQueue.Job {
         constructor(
             tenant: TenantSession, scopeId: String, parentId: String?, source: UploadSource,
             tokenInput: (String, String) -> String?, name: String = source.name,
-        ) : this(scopeId, parentId, source, name, { n, s, p, made ->
-            upload(tenant, scopeId, parentId, n, s.size, s.type ?: OCTET, s.modifiedAt, tokenInput, s::read, p, made)
+        ) : this(scopeId, parentId, source, name, { n, s, p, into, made ->
+            upload(tenant, scopeId, parentId, n, s.size, s.type ?: OCTET, s.modifiedAt, tokenInput, s::read, p, made, into, giveUpOwn = false)
         }, { abandon(tenant, scopeId, parentId, it) })
 
-        /** The node a run created whose outcome it did not see (a cancel mid-way): what [abandon] gives up. */
+        /**
+         * The node a run made that holds nothing of the file yet: filled by the next run (the queue's retry, the person's),
+         * given up by [abandon]. A give-up that could not reach the server keeps it, so a retry fills it rather than colliding
+         * with it (the Depot CR's Phase 2 leftover: offline, the retry met its own empty file and offered its replace).
+         */
         private var made: String? = null
 
         override val sizeBytes get() = source.size
@@ -206,11 +217,11 @@ object DepotFiles {
 
         override suspend fun run(progress: (Double) -> Unit) {
             val r = try {
-                send(name, source, progress) { made = it }
+                send(name, source, progress, made) { made = it }
             } finally {
                 source.close()
             }
-            made = null // an outcome seen: the upload gave up what it made itself
+            if (r.outcome == Outcome.DONE) made = null // filled: nothing to give up
             existing = r.existing
             nodeId = r.nodeId
             failure(r)?.let { throw UploadQueue.Failed(it) }
@@ -221,8 +232,7 @@ object DepotFiles {
         /** A run cancelled after its node was made leaves no empty file behind (the web's `fileUploadJob` abandon). */
         override suspend fun abandon() {
             val id = made ?: return
-            made = null
-            kotlinx.coroutines.withContext(kotlinx.coroutines.NonCancellable) { giveUp(id) }
+            if (kotlinx.coroutines.withContext(kotlinx.coroutines.NonCancellable) { giveUp(id) }) made = null
         }
     }
 
@@ -230,7 +240,7 @@ object DepotFiles {
      * [file]'s content replaced with [source] over [expectedBlobId] as a job of the upload queue; content someone replaced
      * meanwhile fails it final with [Codes.STALE] and theirs in [currentBlobId], to offer "Replace anyway".
      */
-    class ReplaceJob internal constructor(
+    class ReplaceJob(
         val file: File, private val source: UploadSource, val expectedBlobId: String?, override val name: String,
         /** Sends [source] over [expectedBlobId] (the tenant's [replace], a test's played server). */
         private val send: suspend (source: UploadSource, expectedBlobId: String?, progress: (Double) -> Unit) -> Uploaded,
@@ -312,8 +322,13 @@ object DepotFiles {
         tenant: TenantSession, scopeId: String, parentId: String?, name: String, size: Long, type: String, modifiedAt: Long?,
         tokenInput: (String, String) -> String?, read: suspend (from: Long, length: Int) -> ByteArray,
         progress: (Double) -> Unit = {}, onCreated: (String) -> Unit = {},
+        /** A node an earlier run of the same upload made and left empty: its content goes there, nothing is created. */
+        into: String? = null,
+        /** Whether a failure gives up the node it made itself; a queue job gives it up itself ([UploadJob.abandon]). */
+        giveUpOwn: Boolean = true,
     ): Uploaded {
         val n = name.trim()
+        if (into != null) return attach(tenant, scopeId, into, size, type, n, modifiedAt, null, read, progress)
         collision(tenant, scopeId, parentId, n, tokenInput)?.let { other ->
             return if (other.kind == FILE) Uploaded(Outcome.EXISTS, existing = other.id) else Uploaded(Outcome.TAKEN_BY_OTHER)
         }
@@ -326,7 +341,7 @@ object DepotFiles {
         val done = attach(tenant, scopeId, created.nodeId, size, type, n, modifiedAt, null, read, progress)
         // a cancel ends the upload as a failure: its node is given up all the same, past the cancel (the calls of a
         // cancelled coroutine fail at once, so the file stayed "not uploaded yet", measured on the emulator)
-        if (done.outcome != Outcome.DONE) kotlinx.coroutines.withContext(kotlinx.coroutines.NonCancellable) { abandon(tenant, scopeId, parentId, created.nodeId) }
+        if (done.outcome != Outcome.DONE && giveUpOwn) kotlinx.coroutines.withContext(kotlinx.coroutines.NonCancellable) { abandon(tenant, scopeId, parentId, created.nodeId) }
         return done
     }
 
@@ -404,12 +419,16 @@ object DepotFiles {
     }
 
     /** A created file whose content did not attach goes to the trash — unless it is attached after all (`abandon`). */
-    internal suspend fun abandon(tenant: TenantSession, scopeId: String, parentId: String?, nodeId: String) {
+    internal suspend fun abandon(tenant: TenantSession, scopeId: String, parentId: String?, nodeId: String): Boolean {
+        // a listing that does not answer (offline) tells nothing: the node is kept, for a retry to fill
         val page = runCatching { tenant.account.call { FilesApi(tenant.base, tenant.account.http).listFiles(scopeId, parentId) } }.getOrNull()
-        val item = page?.items?.firstOrNull { it.nodeId == nodeId }
-        if (item != null && item.fileBlob != null) return
-        runCatching { me.raddatz.veyq.mobile.session.NodeTrash.delete(tenant, scopeId, nodeId) }
+            ?: return false
+        val item = page.items.firstOrNull { it.nodeId == nodeId }
+        if (item == null || item.fileBlob != null) return true
+        val gone = runCatching { me.raddatz.veyq.mobile.session.NodeTrash.delete(tenant, scopeId, nodeId) }.getOrNull()
+            .let { it == me.raddatz.veyq.mobile.session.NodeTrash.Deleted.TRASHED || it == me.raddatz.veyq.mobile.session.NodeTrash.Deleted.GONE }
         tenant.forgetTree()
+        return gone
     }
 
     private fun file(tenant: TenantSession, node: OpenNode, item: me.raddatz.veyq.mobile.api.depot.models.FileListItem): File {

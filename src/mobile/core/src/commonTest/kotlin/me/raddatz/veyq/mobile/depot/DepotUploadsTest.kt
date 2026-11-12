@@ -74,7 +74,7 @@ class DepotUploadsTest {
         var report: (String, List<FolderUpload.Entry>) -> FolderUpload.Report = { name, _ -> FolderUpload.Report(FolderUpload.Outcome.NOTHING, name) }
         var prepared: List<FolderUpload.Entry>? = null
         override fun uploadJob(scopeId: String, parentId: String?, source: UploadSource, name: String) =
-            DepotFiles.UploadJob(scopeId, parentId, source, name, { n, _, _, _ -> level.upload(n) })
+            DepotFiles.UploadJob(scopeId, parentId, source, name, { n, _, _, _, _ -> level.upload(n) })
         override suspend fun prepareFolder(scopeId: String, parentId: String?, rootName: String, entries: List<FolderUpload.Entry>): FolderUpload.Report {
             prepareGate?.await()
             prepared = entries
@@ -107,7 +107,7 @@ class DepotUploadsTest {
     fun offerForOffersAFilesReplaceOnItsNameAndReplaceAnywayOnAStaleOneNothingElse() = runTest {
         val level = Level()
         val taken = level.put("a.txt", "b1")
-        val up = DepotFiles.UploadJob("s", null, source("a.txt"), "a.txt", { n, _, _, _ -> level.upload(n) })
+        val up = DepotFiles.UploadJob("s", null, source("a.txt"), "a.txt", { n, _, _, _, _ -> level.upload(n) })
         kotlin.runCatching { up.run {} }
         val offer = assertNotNull(DepotFiles.offerFor(item(up, UploadQueue.Status.FAILED, DepotFiles.Codes.EXISTS)) { if (it == taken) "b1" else null })
         assertEquals(Notices.replaceOffered("a.txt"), offer.notice)
@@ -237,7 +237,7 @@ class DepotUploadsTest {
         m.door.prepareGate = CompletableDeferred()
         m.door.report = { name, entries ->
             FolderUpload.Report(FolderUpload.Outcome.READY, name, 8, "root", failedFolders = listOf("$name/sub"),
-                jobs = entries.map { e -> DepotFiles.UploadJob("s", "root", e.source, e.path, { n, _, _, _ -> m.door.level.upload(n) }) })
+                jobs = entries.map { e -> DepotFiles.UploadJob("s", "root", e.source, e.path, { n, _, _, _, _ -> m.door.level.upload(n) }) })
         }
         val walk = listOf(found("a.txt"), found(".hidden"), found("sub", FolderUpload.Kind.DIRECTORY), found("ln", FolderUpload.Kind.LINK), found("locked", FolderUpload.Kind.UNREADABLE))
         launch { m.uploads.uploadFolder("s", null, null, "/Users/me/Trip", walk) }
@@ -302,7 +302,7 @@ class DepotUploadsTest {
         assertTrue(m.uploads.current.queue.batches.isEmpty(), "acknowledged by the model, no view")
 
         // one that failed (a sibling of another kind holds the name) stays until it is closed
-        val failing = DepotFiles.UploadJob("s", null, source("x"), "x", { _, _, _, _ -> DepotFiles.Uploaded(DepotFiles.Outcome.TAKEN_BY_OTHER) })
+        val failing = DepotFiles.UploadJob("s", null, source("x"), "x", { _, _, _, _, _ -> DepotFiles.Uploaded(DepotFiles.Outcome.TAKEN_BY_OTHER) })
         m.queue.enqueue(listOf(failing), "Home", "s", null, null)
         advanceUntilIdle()
         advanceTimeBy(UploadQueue.ACKNOWLEDGE_AFTER_MS * 3)
@@ -319,22 +319,57 @@ class DepotUploadsTest {
         val m = model()
         val given = mutableListOf<String>()
         val gate = CompletableDeferred<Unit>()
-        val job = DepotFiles.UploadJob("s", null, source("big.bin"), "big.bin", { _, _, p, made ->
+        val job = DepotFiles.UploadJob("s", null, source("big.bin"), "big.bin", { _, _, p, _, made ->
             made("n-big")
             p(0.1)
             gate.await()
             DepotFiles.Uploaded(DepotFiles.Outcome.DONE, "n-big")
-        }) { given += it }
+        }) { given += it; true }
         m.queue.enqueue(listOf(job), "Home", "s", null, null)
         runCurrent()
         m.uploads.cancel(m.uploads.current.queue.batches.single().items.single().id)
         runCurrent()
         assertEquals(listOf("n-big"), given, "the node it made is given up")
         // one that ended (done or refused) gives nothing up: the upload itself saw its outcome
-        val done = DepotFiles.UploadJob("s", null, source("ok.txt"), "ok.txt", { _, _, _, made -> made("n-ok"); DepotFiles.Uploaded(DepotFiles.Outcome.DONE, "n-ok") }) { given += it }
+        val done = DepotFiles.UploadJob("s", null, source("ok.txt"), "ok.txt", { _, _, _, _, made -> made("n-ok"); DepotFiles.Uploaded(DepotFiles.Outcome.DONE, "n-ok") }) { given += it; true }
         kotlin.runCatching { done.run {} }
         done.abandon()
         assertEquals(listOf("n-big"), given)
         m.uploads.close()
+    }
+
+    @Test
+    fun aRetryFillsTheNodeAFailedRunMadeWhereItsGiveUpCouldNotReachTheServer() = runTest {
+        // the web's `fileUploadJob`: offline, the attach fails and so does the give-up; the retry fills the node it made
+        // rather than creating another, which met its own empty file and offered its replace (the CR's Phase 2 leftover)
+        val m = model()
+        val runs = mutableListOf<String?>()
+        var online = false
+        val job = DepotFiles.UploadJob("s", null, source("off.txt"), "off.txt", { _, _, _, into, made ->
+            runs += into
+            if (into == null) made("n-off")
+            if (online) DepotFiles.Uploaded(DepotFiles.Outcome.DONE, into ?: "n-off") else DepotFiles.Uploaded(DepotFiles.Outcome.FAILED)
+        }) { online }
+        m.queue.enqueue(listOf(job), "Home", "s", null, null)
+        advanceUntilIdle()
+        val item = m.queue.state.value.batches.single().items.single()
+        assertEquals(UploadQueue.Status.FAILED, item.status)
+        assertEquals(listOf(null, "n-off"), runs, "the queue's own retry already filled the node the first run made")
+        online = true
+        m.queue.retry(item.id)
+        runCurrent() // not past the moment the tray acknowledges a batch all in
+        assertEquals(UploadQueue.Status.DONE, m.queue.state.value.batches.single().items.single().status)
+        assertEquals(listOf(null, "n-off", "n-off"), runs, "the person's retry fills it too: no second node, no collision")
+        m.uploads.close()
+    }
+
+    @Test
+    fun theTraysLineSaysWhatIsUnderWayElseWhatDidNotGoUpElseAllIn() {
+        val job = DepotFiles.UploadJob("s", null, source("a"), "a", { _, _, _, _, _ -> DepotFiles.Uploaded(DepotFiles.Outcome.DONE, "n") })
+        fun state(vararg s: UploadQueue.Status) = UploadQueue.State(listOf(UploadQueue.Batch("b", "Home", null, s.map { item(job, it, null) }, s.none { it == UploadQueue.Status.QUEUED })))
+        assertNull(Notices.uploadSummary(UploadQueue.State(emptyList())))
+        assertEquals(Notice(Msg.UPLOAD_ACTIVE, 2), Notices.uploadSummary(state(UploadQueue.Status.QUEUED, UploadQueue.Status.UPLOADING, UploadQueue.Status.FAILED)))
+        assertEquals(Notice(Msg.UPLOAD_FAILED_COUNT, 1), Notices.uploadSummary(state(UploadQueue.Status.DONE, UploadQueue.Status.FAILED)))
+        assertEquals(Notice(Msg.UPLOAD_STATUS_DONE), Notices.uploadSummary(state(UploadQueue.Status.DONE, UploadQueue.Status.CANCELLED)))
     }
 }

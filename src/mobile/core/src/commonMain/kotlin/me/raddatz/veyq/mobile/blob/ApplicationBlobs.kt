@@ -245,7 +245,7 @@ class ApplicationBlobs(private val tenant: TenantSession) {
             val chunk = read(from, length)
             if (chunk.size != length) throw UploadRefused("source_changed")
             var status = account.putToStore(signed.getValue(i), suite.sealFrame(key, i, count, chunk))
-            if (status == 403) {
+            if (status in LAPSED) {
                 // The window's signature expired: sign again from here, seal the frame again (a fresh nonce), once.
                 sign(i)
                 status = account.putToStore(signed.getValue(i), suite.sealFrame(key, i, count, chunk))
@@ -294,7 +294,8 @@ class ApplicationBlobs(private val tenant: TenantSession) {
     /**
      * A blob's frames read by index under [key], as often as asked (a player seeking through a video): its presigned GETs are
      * signed once and kept, and signed again when the store refuses one (they lapse). A network failure, a 5xx, 408 or 429
-     * is tried again (at most 4 times, backing off); a 403 signs again (twice per read at most).
+     * is tried again (at most 4 times, backing off); a URL refused as lapsed signs them again (twice in a row at most, so a
+     * read longer than their lifetime signs again at each lapse).
      */
     internal inner class FrameSource(private val scopeId: String, private val blobId: String, val chunkCount: Int, private val key: ByteArray) {
         private var urls: List<String>? = null
@@ -309,9 +310,10 @@ class ApplicationBlobs(private val tenant: TenantSession) {
                     val (status, frame) = account.getFromStore(signed[i])
                     if (frame != null) {
                         sink(suite.openFrame(key, i, chunkCount, frame))
+                        resigned = 0 // a read longer than the URLs' lifetime signs again at each lapse
                         break
                     }
-                    if (status == 403 && resigned < 2) {
+                    if (status in LAPSED && resigned < 2) {
                         resigned++
                         urls = null
                         continue
@@ -338,6 +340,9 @@ class ApplicationBlobs(private val tenant: TenantSession) {
 
     companion object {
         private const val PAGE = 1000
+
+        /** What a store answers a presigned URL past its lifetime with: S3's 403, others' 400 or 401. Signed anew. */
+        private val LAPSED = setOf(400, 401, 403)
 
         private fun codeOf(body: String): String? =
             runCatching { (Json.parseToJsonElement(body) as JsonObject)["code"]?.jsonPrimitive?.content }.getOrNull()

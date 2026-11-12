@@ -452,6 +452,12 @@ class VeyqAccount private constructor(
         /** The DEVICE factor's message (`deviceKey.ts`: HMAC-SHA256(device key, "veyq/v1/device-bind")). */
         private val DEVICE_BIND = utf8("veyq/v1/device-bind")
 
+        /** How long a connection to the server may take to open. */
+        const val CONNECT_MS = 30_000L
+
+        /** How long the server may work on a call without sending a byte (a large file's completion). */
+        const val SERVER_WORK_MS = 10L * 60 * 1000
+
         /** The DEVICE_KEY wrap's associated data, the web's (`deviceKeyWrap.ts`); only this device ever opens it. */
         private val DEVICE_KEY_AAD = utf8("veyq/v1/device-key-wrap")
 
@@ -472,6 +478,13 @@ class VeyqAccount private constructor(
                 expectSuccess = false
                 install(ContentNegotiation) { json(json) }
                 install(bearer)
+                // the server answers some calls only after work that grows with a blob: a file's `completeFile` stats every
+                // chunk it holds (8,193 for 2 GiB; measured 2026-11-12: past OkHttp's default 10 s read timeout, the upload
+                // failed). A browser waits; so does the app, up to SERVER_WORK_MS without a byte, never a total bound.
+                install(io.ktor.client.plugins.HttpTimeout) {
+                    connectTimeoutMillis = CONNECT_MS
+                    socketTimeoutMillis = SERVER_WORK_MS
+                }
             }
             val c = Connected(V1(primitives), server.trimEnd('/'), tokens, http, client { expectSuccess = false })
             try {

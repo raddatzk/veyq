@@ -402,6 +402,17 @@ object Notices {
         UploadQueue.Status.CANCELLED -> Notice(Msg.UPLOAD_STATUS_CANCELLED)
     }
 
+    /**
+     * The uploads' one line (the web's `UploadStatusMenu`, what both phones' trays say): how many are under way while any
+     * is, else how many did not go up, else that all is in; null while the queue lists nothing.
+     */
+    fun uploadSummary(q: UploadQueue.State): Notice? = when {
+        q.batches.isEmpty() -> null
+        q.active > 0 -> Notice(Msg.UPLOAD_ACTIVE, q.active)
+        q.failed > 0 -> Notice(Msg.UPLOAD_FAILED_COUNT, q.failed)
+        else -> Notice(Msg.UPLOAD_STATUS_DONE)
+    }
+
     /** Whether [item] is a medium (Memories) rather than a file (Depot): their refusals for room are worded apart. */
     fun isMedium(item: UploadQueue.Item): Boolean = item.job is MediaUpload.Job
 }

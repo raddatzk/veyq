@@ -175,6 +175,12 @@ object AppKinds {
     val drawerCreates: List<Create> = listOf(Create.FOLDER, Create.POT)
 
     /**
+     * What a desktop's one "New" offers where the shell is ([isHome]: a level of Home, a space's top or a folder): Home's
+     * — files and a folder uploaded there too, as on the phones —, else the drawer's.
+     */
+    fun createsWhere(isHome: Boolean): List<Create> = if (isHome) homeCreates else drawerCreates
+
+    /**
      * What core's header reads of a kind (the web's `KindRegistration`): whether it brings a share sheet, takes a cover and
      * is renamed, and its delete's words — its title, and its question with the node's name.
      */

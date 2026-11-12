@@ -35,6 +35,8 @@ class UploadQueue(dispatcher: CoroutineDispatcher) {
     /** The app's queue, on [Dispatchers.Default]. */
     constructor() : this(Dispatchers.Default)
 
+    /** An item's state (named `UploadStatus` on the bridge's wire). */
+    @kotlinx.serialization.Serializable @kotlinx.serialization.SerialName("UploadStatus")
     enum class Status { QUEUED, PREPARING, UPLOADING, DONE, FAILED, CANCELLED }
 
     /** A job's refusal, by its code (`quota_exceeded`, an application's own `exists`, …): what [Item.error] says. */
