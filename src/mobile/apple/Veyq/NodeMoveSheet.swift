@@ -107,8 +107,10 @@ struct NodeMoveSheet: View {
                     .disabled(!st.canChoose)
                 }
             }
-            // moving a guest's folder out ends it (the web's `endsIdentity`): core asks first, there is no way back
-            .alert(say(.moveIdentityTitle), isPresented: Binding(get: { st.confirming }, set: { if !$0 { sheet.cancelConfirm() } })) {
+            // moving a guest's folder out ends it (the web's `endsIdentity`): core asks first, there is no way back. Only
+            // Cancel cancels: a binding that cancelled on dismissal ran before the accept's action, whose confirm then found
+            // nothing asked and moved nothing (measured 2026-11-12, a drop box's folder moved out on iOS)
+            .alert(say(.moveIdentityTitle), isPresented: Binding(get: { st.confirming }, set: { _ in })) {
                 Button(say(.moveIdentityAccept)) { Task { _ = try? await sheet.confirm() } }
                 Button(say(.signinCancel), role: .cancel) { sheet.cancelConfirm() }
             } message: {
