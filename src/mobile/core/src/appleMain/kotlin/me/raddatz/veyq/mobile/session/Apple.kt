@@ -199,4 +199,7 @@ object AppleSessions {
 
     /** What the bytes of an opened receipt are (an image, a PDF, a download only). */
     fun receiptKind(data: NSData): me.raddatz.veyq.mobile.expenses.Receipts.Kind = me.raddatz.veyq.mobile.expenses.Receipts.kindOf(data.toByteArray())
+
+    /** What an opened receipt's bytes are as a media type (`Receipts.mediaTypeOf`), for the share sheet; nil for other bytes. */
+    fun receiptMediaType(data: NSData): String? = me.raddatz.veyq.mobile.expenses.Receipts.mediaTypeOf(data.toByteArray())
 }

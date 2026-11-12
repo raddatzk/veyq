@@ -40,6 +40,25 @@ class PotModel internal constructor(
         suspend fun rekeyed()
         /** A fresh record id ([PotSession.newId]). */
         fun newId(): String
+        /** One write of the Pot's screens ([Op]) on its session. */
+        suspend fun write(op: Op): PotSession.WriteOutcome
+    }
+
+    /**
+     * A write the Pot's screens make, besides the entry editor's: a settle-up recorded, a deleted entry restored, the
+     * settings and the people ([PotSettings]). One type, so a test plays every write the screens send.
+     */
+    sealed class Op {
+        data class Record(val rows: List<PotView.SettleRow>, val date: String) : Op()
+        data class Restore(val entryId: String, val basedOn: Long) : Op()
+        data class BaseCurrency(val code: String, val minorUnits: Int) : Op()
+        data class AddCategory(val name: String) : Op()
+        data class RenameCategory(val id: String, val name: String) : Op()
+        data class AddPerson(val name: String) : Op()
+        data class AddMember(val userId: String) : Op()
+        data class Rename(val personId: String, val name: String) : Op()
+        data class SetActive(val personId: String, val active: Boolean) : Op()
+        data class Erase(val personId: String) : Op()
     }
 
     internal class SessionOpened(override val session: PotSession) : Opened {
@@ -53,6 +72,18 @@ class PotModel internal constructor(
             session.rekeyed()
         }
         override fun newId() = session.newId()
+        override suspend fun write(op: Op): PotSession.WriteOutcome = when (op) {
+            is Op.Record -> session.recordPayments(op.rows, op.date)
+            is Op.Restore -> session.restoreEntry(op.entryId, op.basedOn)
+            is Op.BaseCurrency -> session.setBaseCurrency(op.code, op.minorUnits)
+            is Op.AddCategory -> session.addCategory(op.name)
+            is Op.RenameCategory -> session.renameCategory(op.id, op.name)
+            is Op.AddPerson -> session.addPerson(op.name)
+            is Op.AddMember -> session.addMember(op.userId)
+            is Op.Rename -> session.rename(op.personId, op.name)
+            is Op.SetActive -> session.setActive(op.personId, op.active)
+            is Op.Erase -> session.erase(op.personId)
+        }
     }
 
     /**
@@ -152,16 +183,6 @@ class PotModel internal constructor(
         if (opened === o) _state.update { it?.with(view = o.view()) }
     }
 
-    /** A write begins: the state shows it saving; its session, or null when no Pot is open. */
-    fun beginWrite(): PotSession? {
-        val s = session ?: return null
-        _state.update { it?.with(saving = true, message = null) }
-        return s
-    }
-
-    /** A write ended in [outcome]: the Pot as read after it, a refusal as the message (its name); whether it was stored. */
-    fun endWrite(outcome: PotSession.WriteOutcome): Boolean = ended(outcome, said = true)
-
     /** The write ended: the Pot as read after it, and — where [said] — a refusal as the message. */
     private fun ended(outcome: PotSession.WriteOutcome, said: Boolean): Boolean {
         val o = opened
@@ -171,11 +192,46 @@ class PotModel internal constructor(
         return outcome == PotSession.WriteOutcome.WRITTEN
     }
 
-    /** One write to the open Pot ([op] on its session), between [beginWrite] and [endWrite]; whether it was stored. */
-    suspend fun write(op: suspend (PotSession) -> PotSession.WriteOutcome): Boolean {
-        val s = session ?: return false
-        return writing(said = true) { op(s) }
+    /** One [Op] on the open Pot, its refusal the Pot's message where [said]; what it came to. */
+    internal suspend fun written(op: Op, said: Boolean): PotSession.WriteOutcome {
+        val o = opened ?: return PotSession.WriteOutcome.REFUSED
+        var outcome = PotSession.WriteOutcome.REFUSED
+        writing(said) { o.write(op).also { outcome = it } }
+        return outcome
     }
+
+    private suspend fun write(op: Op): Boolean = written(op, said = true) == PotSession.WriteOutcome.WRITTEN
+
+    /**
+     * Records settle-up [rows] as paid (one row, or all of [PotView.settleUp]), dated the core's today: one transfer each,
+     * in one batch; its refusal the Pot's message. Whether it was stored.
+     */
+    suspend fun record(rows: List<PotView.SettleRow>): Boolean {
+        if (rows.isEmpty() || _state.value?.view?.canWrite != true) return false
+        return write(Op.Record(rows, today()))
+    }
+
+    /** Whether deleted entry [entryId] is offered a restore now, by the core's clock ([PotView.restorable]). */
+    fun restorable(entryId: String): Boolean = _state.value?.view?.restorable(entryId, now()) == true
+
+    /**
+     * Restores deleted entry [entryId] on its latest revision while it is [restorable] by the core's clock; outside its
+     * window nothing is sent and the message says it can no longer be restored ([NOT_RESTORABLE]). Whether it was stored.
+     */
+    suspend fun restore(entryId: String): Boolean {
+        val view = _state.value?.view ?: return false
+        if (!view.restorable(entryId, now())) {
+            _state.update { it?.with(message = NOT_RESTORABLE) }
+            return false
+        }
+        return write(Op.Restore(entryId, view.latestRevision(entryId)))
+    }
+
+    /** The open Pot's settings and people ([PotSettings]); null while none is read. */
+    fun settings(): PotSettings? = _state.value?.view?.let { PotSettings(this, scope) }
+
+    /** The open Pot's view now, for its screen models. */
+    internal fun view(): PotView? = _state.value?.view
 
     /**
      * [op] as a write of the open Pot: saving while it runs (the live poll skips meanwhile), the Pot read after it; its
@@ -263,36 +319,31 @@ class PotModel internal constructor(
         return r
     }
 
-    /** The "New pot" sheet: saving while it creates, and its refusal ([PotCreate.Outcome] name). */
-    class Creating(val saving: Boolean = false, val message: String? = null)
-
-    private val _creating = MutableStateFlow(Creating())
-    val creating: StateFlow<Creating> = _creating.asStateFlow()
-
-    fun clearCreating() {
-        _creating.value = Creating()
+    /**
+     * The "New pot" sheet ([PotCreateSheet]) opened at the shell's place and over its spaces now, [language] the person's
+     * (the base currency it starts with); null before the shell is read. Its create reads the shell's lists again and
+     * opens the new Pot there.
+     */
+    fun createSheet(shell: ShellModel, language: String): PotCreateSheet? {
+        val t = tenant ?: return null
+        val now = shell.state.value ?: return null
+        return PotCreateSheet.open(CreateDoor(t, shell), now.shell, now.lists.spaces, language, scope, Dispatchers.Default)
     }
 
-    /**
-     * Creates a Pot [name] in [scopeId] under [parentId] (null: the space's root) with [base] and [people], reads the
-     * shell's lists again and opens it there; whether it exists (its people may still have failed: it says so on its
-     * Settings, where they can be added).
-     */
-    suspend fun create(
-        shell: ShellModel, scopeId: String, parentId: String?, name: String, base: Ledger.BaseCurrency, people: List<PotCreate.NewPerson>,
-    ): Boolean {
-        val t = tenant ?: return false
-        _creating.value = Creating(saving = true)
-        val r = runCatching { PotCreate.create(t, scopeId, parentId, name, base, people) }.getOrDefault(PotCreate.Result(PotCreate.Outcome.REFUSED))
-        val nodeId = r.nodeId
-        if (nodeId == null) {
-            _creating.value = Creating(message = r.outcome.name)
-            return false
+    private class CreateDoor(private val t: TenantSession, private val shell: ShellModel) : PotCreateSheet.Door {
+        override suspend fun members(scopeId: String) = t.scopeMembers(scopeId)
+        override suspend fun create(scopeId: String, parentId: String?, name: String, base: Ledger.BaseCurrency, people: List<PotCreate.NewPerson>): PotCreate.Result {
+            val r = runCatching { PotCreate.create(t, scopeId, parentId, name, base, people) }.getOrDefault(PotCreate.Result(PotCreate.Outcome.REFUSED))
+            val nodeId = r.nodeId ?: return r
+            t.forgetTree()
+            shell.refresh()
+            shell.state.value?.lists?.objects?.firstOrNull { it.nodeId == nodeId }?.let(shell::open)
+            return r
         }
-        t.forgetTree()
-        shell.refresh()
-        _creating.value = Creating(message = r.outcome.takeIf { it != PotCreate.Outcome.CREATED }?.name)
-        shell.state.value?.lists?.objects?.firstOrNull { it.nodeId == nodeId }?.let(shell::open)
-        return true
+    }
+
+    companion object {
+        /** The message of a restore asked once its window closed ([restore]): no write was sent. */
+        const val NOT_RESTORABLE = "NOT_RESTORABLE"
     }
 }

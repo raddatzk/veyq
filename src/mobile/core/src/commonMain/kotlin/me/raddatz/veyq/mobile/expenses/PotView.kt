@@ -426,7 +426,8 @@ class PotView internal constructor(session: Source) {
                 Kind.TRANSFER -> me.raddatz.veyq.mobile.words.Notice(me.raddatz.veyq.mobile.words.Msg.POT_TRANSFER_BETWEEN, who.getOrElse(0) { "" }, who.getOrElse(1) { "" })
                 null -> null
             }?.let { me.raddatz.veyq.mobile.words.Piece.Said(it) },
-            e.foreignAmount?.let { me.raddatz.veyq.mobile.words.Piece.Money(it, e.foreignCurrency, e.foreignMinorUnits) },
+            // an amount always with its currency (D8): a foreign amount without one is not said
+            e.foreignAmount?.let { a -> e.foreignCurrency?.let { me.raddatz.veyq.mobile.words.Piece.Money(a, it, e.foreignMinorUnits) } },
         )
     }
 

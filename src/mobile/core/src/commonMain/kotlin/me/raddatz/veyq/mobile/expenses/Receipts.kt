@@ -42,6 +42,28 @@ object Receipts {
     /** How a receipt is shown, by its decrypted bytes alone (`receiptView`): an image, a PDF, or a download only. */
     enum class Kind { IMAGE, PDF, OTHER }
 
+    /**
+     * How many of a PDF's pages a receipt's viewer shows at least (Android's cap made the core's, D8): a viewer that pages
+     * lazily (Apple's PDFKit) may show them all; one that renders each page up front stops here and says so ([pagesCut]).
+     */
+    const val PDF_PAGES_SHOWN = 20
+
+    /** The pages of a PDF of [total] a viewer renders up front: at most [PDF_PAGES_SHOWN]. */
+    fun pagesShown(total: Int): Int = total.coerceIn(0, PDF_PAGES_SHOWN)
+
+    /** What a viewer that stopped at [PDF_PAGES_SHOWN] says under a PDF of [total] pages; null when it showed them all. */
+    fun pagesCut(total: Int): me.raddatz.veyq.mobile.words.Notice? =
+        if (total > PDF_PAGES_SHOWN) me.raddatz.veyq.mobile.words.Notice(me.raddatz.veyq.mobile.words.Msg.RECEIPTS_PAGES_CUT, PDF_PAGES_SHOWN, total) else null
+
+    /**
+     * What a receipt's bytes are as a media type (`image/jpeg`, `application/pdf`), read from the bytes alone — never from
+     * its sealed type, a peer's statement — so a share sheet offers it as what it is; null for any other bytes.
+     */
+    fun mediaTypeOf(bytes: ByteArray): String? {
+        val head = if (bytes.size > 4096) bytes.copyOfRange(0, 4096) else bytes
+        return Sniff.image(head)?.mime ?: if (Sniff.pdf(head)) "application/pdf" else null
+    }
+
     fun kindOf(bytes: ByteArray): Kind {
         val head = if (bytes.size > 4096) bytes.copyOfRange(0, 4096) else bytes
         return when {

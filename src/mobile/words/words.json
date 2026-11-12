@@ -1100,6 +1100,11 @@
     "en": "This file cannot be shown here; save a copy to open it.",
     "de": "Diese Datei lässt sich hier nicht anzeigen; speichere eine Kopie, um sie zu öffnen."
   },
+  "receipts_pages_cut": {
+    "note": "under a PDF receipt whose pages a viewer stopped rendering; {1} the pages shown, {2} all of them",
+    "en": "The first {1} of {2} pages are shown. Save the receipt to see all of them.",
+    "de": "Die ersten {1} von {2} Seiten werden gezeigt. Speichere den Beleg, um alle zu sehen."
+  },
   "receipts_no_room": {
     "en": "Saved without {1}: the space’s storage is full.",
     "de": "Ohne {1} gespeichert: Der Speicher des Bereichs ist voll."

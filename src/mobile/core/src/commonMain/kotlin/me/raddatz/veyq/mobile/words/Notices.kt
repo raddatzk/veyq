@@ -304,6 +304,7 @@ object Notices {
         "BUSY" -> Msg.POT_BUSY
         "BLOCKED" -> Msg.POT_BLOCKED
         "INVALID" -> Msg.PEOPLE_INVALID
+        "NOT_RESTORABLE" -> Msg.ENTRY_NOT_RESTORABLE
         else -> Msg.PEOPLE_FAILED
     }
 
