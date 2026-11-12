@@ -29,6 +29,8 @@ BACKEND = SRC / "backend"
 WEB = SRC / "web"
 ADMIN_WEB = SRC / "admin-web"
 CRYPTO = SRC / "packages/crypto"
+# The web client's WebP encoder (ADR 0127): libwebp built by us, in a directory of its own inside the surface that ships it.
+WEBP_ENCODER = WEB / "webp-encoder"
 # Every surface, for the guards that iterate them.
 SURFACES = (BACKEND, WEB, ADMIN_WEB, CRYPTO)
 # Where a tree from before stage 2 carries each surface (repository-relative): the upgrade proof builds a predecessor
