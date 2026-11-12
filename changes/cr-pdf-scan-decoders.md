@@ -137,4 +137,38 @@ WebAssembly stays inbox #837.
 
 ## Retrospective
 
-<!-- Filled by the implementer. -->
+**What was built.** Phase 1 (`c6de50621`): `wasmUrl` → `decoders/` in `pdfOptions.ts` (with `PDF_DECODER_FILES`, which
+`vite.config.ts` and the test read; the guard keeps its own list on purpose), the named copy and the `text/javascript` dev
+route in `pdfjsAssetsPlugin`, the four notices in the licence file, both dist guards, three decode tests. Phase 2
+(`129d3b74a`): the docs, the site sentence in EN and DE, ADR 0128 built, inbox #836 deleted and #837 narrowed.
+Measured: `pnpm run check` (src/web) green on its second run — the first was red on one timeout only
+(`FileViewer.pdf.test.ts`, load 21); `pnpm run check` (site) green; the guard glob 70/70 green, as was the baseline taken
+on a detached worktree of `73e4c0b9b` before the first edit. Every bite the CR names was seen red and green again. The
+browser pass held: all three pages pixel for pixel, no violation, and blank with `decoders/` moved aside (the control).
+
+**Execution lessons.**
+- **The built `pdfjsRuntime` chunk is not standalone: it imports the main chunk, which boots the app.** The pass as planned
+  ("the page creates the `default` policy the app's would") collided with the app's own `installTrustedTypes`, which then
+  failed and took Trusted HTML with it. The fix was to create nothing and let the app's own policies come with the chunk
+  — a truer pass, at the price of the app's boot running beside it (one `GET /api/setup` 404). Root cause: the CR derived
+  the harness from the spike, which imported `pdfjs-dist` directly, not the built chunk. Next time: a pass that loads a
+  built chunk reads the chunk's own imports first (`grep -o 'from"./[^"]*"'`).
+- **"Each decoder fetched once" is per document, not per page load.** pdf.js starts a worker per document, and each worker
+  imports the decoder it needs; with the throwaway server's `no-store`, `jbig2_nowasm_fallback.js` was fetched twice (the
+  CCITT and the JBIG2 PDF). In production `/assets/` is `immutable`, so the repeat should be a cache hit — not measured.
+- **A plain YAML scalar in `docs/coverage/` must not hold `": "`.** A gap reason reading "the built header: pages drawn"
+  made `validate_coverage.py` and `validate_stack_criterion_tags.py` red (invalid YAML); the glob found it, and an editor
+  would not have. Next time: write coverage prose with a dash, or run `validate_coverage.py` right after the edit.
+- **Fixtures were checked against an independent decoder before the test trusted them.** Ghostscript drew all three to
+  exactly the predicted pixels, so a pdf.js-agrees-with-my-wrong-encoding pass was ruled out before the assertion was
+  written. One G4 strip, coded 1 = black, serves both CCITT (default `BlackIs1 false`) and JBIG2's MMR region, so the
+  spike's `/BlackIs1 true` and its inverted copy were not needed. A failed decoder load does not poison a later document
+  in node (probed: without `wasmUrl`, then with, the second decodes), so the tests do not depend on their order.
+
+**Planning lessons.**
+- The CR's statement "production types a static `.js` by its extension" is the one link no proof here touches: the pass's
+  server typed `.js` itself, and no backend test serves a file under `assets/pdfjs-<version>/decoders/`. The lane L1 run at
+  the end of V1 (or a fast-jar pass) is what shows it; the docs say so.
+- The CR's "Which statements change" matched the locator; the locator's other hits were all "scan" as QR or search, and
+  are spared by name in the phase 2 commit. Not on the locator and left alone: cc.security.csp's maintenance line still
+  names pdf.js 6.4.299 measured 2026-10-12 while 6.5.438 is installed — a stale fact outside this CR.
