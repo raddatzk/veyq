@@ -48,6 +48,15 @@ acceptanceCriteria:
         unit:
           - src/shared/ui/SecretKeyField.test.ts
           - src/views/TenantJoinView.kitImport.test.ts
+  - id: kit-from-another-server-says-where
+    text: >
+      An imported kit whose server is not the page's own origin says where it was made and where the person is, as
+      information, and does not block — the key is still applied; a kit made at this origin, or with no server, says
+      nothing.
+    coverage:
+      web:
+        unit:
+          - src/shared/ui/SecretKeyField.test.ts
   - id: wrong-credentials-generic-failure
     text: A wrong password or wrong Secret Key fails with a generic unlock failure (AEAD tag mismatch) and holds no key material; the server is uninvolved (E1).
     coverage:
