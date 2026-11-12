@@ -74,7 +74,7 @@ Why each non-obvious source is there:
   encodes a space icon and a member picture with its own build of libwebp (`src/web/webp-encoder/`, [ADR 0127](../decisions/0127-the-web-client-encodes-webp-with-its-own-build-of-libwebp.md)),
   because Safari's canvas answers WebP with a PNG. An attacker who could hand the page a module would first need to run
   script in it, which `'self'` and Trusted Types refuse; one who runs script already holds the unlocked keys. The source
-  is granted for the page, not for that module, so any further WebAssembly (pdf.js's decoders, inbox #837) is a decision
+  is granted for the page, not for that module, so any further WebAssembly (pdf.js's own, inbox #837) is a decision
   of its own — what it is, where it comes from, how it is pinned — never a consequence of this source. The encoder is
   fetched as bytes from the origin and instantiated from them (never streamed), so it needs no `connect-src` beyond
   `'self'`.
@@ -175,20 +175,30 @@ lane L1 (§ *Verification*).
 A PDF is a peer's document, and `pdfjs-dist` (Mozilla, Apache-2.0, the legacy build) parses and draws it in the page's
 origin, next to the keys. Its threat note, and what keeps it inside the policy above **without changing it**:
 
-- **It runs in a worker** (`worker-src 'self'`): the parser and the interpreter run off the page thread, in a same-origin
-  hashed module worker the build emits (`assets/pdf.worker.min-<hash>.js`, served with a script MIME type). The page thread
-  holds only the drawing onto a canvas. A worker has no DOM and no access to the page's memory, but it shares the origin,
-  so this is containment of a crash and of CPU, not a sandbox against a pdf.js defect.
-- **No code from strings:** the CSP has no `'unsafe-eval'`; the emitted pdf.js files contain no `new Function(`/`eval(`
-  (`pnpm run verify:pdf-worker` fails the build otherwise), and pdf.js 6 has no eval path to switch off.
-- **No WebAssembly of pdf.js:** `useWasm: false`, and its `.wasm` decoders are not shipped (`verify:pdf-worker` fails on a
-  `wasm/` directory or on any `.wasm` but the WebP encoder's). The policy would compile them since [ADR 0127](../decisions/0127-the-web-client-encodes-webp-with-its-own-build-of-libwebp.md)
-  granted `'wasm-unsafe-eval'`; they stay off because nobody has turned them on — where their `.wasm` comes from and how
-  it is pinned is open (inbox #837). Cost: JBIG2 and JPEG 2000 images (scans) and ICC transforms do not render; the page
-  shows gaps.
-- **No network but the origin:** the document is our decrypted buffer (`{data}`, never a URL); the CMaps, standard fonts
-  and ICC profile pdf.js reads on demand are same-origin copies under `assets/pdfjs-<version>/`, and `connect-src 'self'`
-  already covers them. No origin was added.
+- **It runs in a worker** (`worker-src 'self'`): the parser, the interpreter and the image decoders run off the page
+  thread, in a same-origin hashed module worker the build emits (`assets/pdf.worker.min-<hash>.js`, served with a script
+  MIME type). The page thread holds only the drawing onto a canvas. A worker has no DOM and no access to the page's memory,
+  but it shares the origin, so this is containment of a crash and of CPU, not a sandbox against a defect in pdf.js or in
+  a decoder.
+- **No code from strings:** the CSP has no `'unsafe-eval'`; the emitted pdf.js files and its two image decoders contain no
+  `new Function(`/`eval(` (`pnpm run verify:pdf-worker` fails the build otherwise), and pdf.js 6 has no eval path to
+  switch off.
+- **The image decoders are plain JavaScript, not WebAssembly** ([ADR 0128](../decisions/0128-pdf-js-decodes-scanned-images-with-its-plain-javascript-decoders.md)):
+  a scan's CCITT G4, JBIG2 and JPEG 2000 images are decoded by pdf.js's JavaScript builds of PDFium's JBIG2 decoder and of
+  OpenJPEG (`jbig2_nowasm_fallback.js`, `openjpeg_nowasm_fallback.js`). The build copies exactly these two files, unchanged,
+  from `pdfjs-dist`'s `wasm/` directory to `assets/pdfjs-<version>/decoders/`, so they are pinned with the rest of pdf.js
+  (one package, one lockfile integrity), and their four notices go into the built licence file. `wasmUrl` points there;
+  the worker imports a decoder the first time a document holds such an image — a same-origin module import that
+  `script-src 'self'` admits. They parse untrusted bytes and are compiled from C, so they sit under the worker's
+  containment and its limit like the rest of the parser, and the 32 M pixels per decoded image bound them too.
+  `useWasm` stays `false` and no `.wasm` of pdf.js ships: `verify:pdf-worker` fails on a `wasm/` directory, on any `.wasm`
+  but the WebP encoder's, and on a `decoders/` holding anything but those two files byte for byte the package's. The policy
+  would compile pdf.js's WebAssembly since [ADR 0127](../decisions/0127-the-web-client-encodes-webp-with-its-own-build-of-libwebp.md)
+  granted `'wasm-unsafe-eval'`; whether its speed on a large JPEG 2000 page and its ICC colour are worth a `.wasm` is
+  inbox #837. Cost meanwhile: ICC-profiled colour falls back to its alternate colour space.
+- **No network but the origin:** the document is our decrypted buffer (`{data}`, never a URL); the CMaps, standard fonts,
+  ICC profile and image decoders pdf.js reads on demand are same-origin copies under `assets/pdfjs-<version>/`, and
+  `connect-src 'self'` already covers the fetches, `script-src 'self'` the decoders' import. No origin was added.
 - **No script, no navigation:** a PDF's JavaScript is never run (no scripting manager, no sandbox file) and there is no
   annotation layer, so a link in a PDF is pixels, not an element; the text layer that makes the text selectable is `<span>`s
   only (no `<a>`, no handler), so a link's text can be copied and never followed; the page holds no frame, object, embed,
@@ -312,11 +322,20 @@ every header of the admin origin.
   does not compile (`@ts-expect-error`, held by `pnpm run typecheck`). Bitten 2026-11-05: a template that binds a
   string to `v-safe-html` fails `vue-tsc` (`Type 'string' is not assignable to type 'SafeHtml'`).
 - [`src/web/scripts/assert-pdf-worker-in-dist.mjs`](../../src/web/scripts/assert-pdf-worker-in-dist.mjs) (`pnpm run verify:pdf-worker`,
-  in `pnpm run check`) pins what lets pdf.js run under this policy: the same-origin worker, the lazy chunk, no eval, no
-  WASM of pdf.js — the one `.wasm` it allows is the WebP encoder's, once, byte for byte the committed file (§ *A dependency
-  that parses untrusted bytes*; bitten 2026-11-12: pdf.js's `openjpeg.wasm` copied into `dist/assets/` turns it red).
-  **Run in a real browser 2026-10-12** against a local server sending the built header: the worker started, pages drew,
-  a standard font loaded from the same origin, no violation fired.
+  in `pnpm run check`) pins what lets pdf.js run under this policy: the same-origin worker, the lazy chunk, no eval in
+  either nor in the image decoders, no WASM of pdf.js — the one `.wasm` it allows is the WebP encoder's, once, byte for
+  byte the committed file — and `decoders/` holding exactly the two plain-JavaScript decoders, byte for byte `pdfjs-dist`'s
+  (§ *A dependency that parses untrusted bytes*; bitten 2026-11-12: pdf.js's `openjpeg.wasm` copied into `dist/assets/`,
+  its `jbig2.wasm` or `quickjs-eval.js` copied into `decoders/`, one flipped byte of a decoder and an `eval(0)` appended to
+  one each turn it red). `pdfEngine.real.test.ts` decodes a CCITT G4, a JBIG2 and a JPEG 2000 image through our options to
+  their pixels; without `wasmUrl` all three are red. **Run in a real browser 2026-10-12** against a local server sending
+  the built header: the worker started, pages drew, a standard font loaded from the same origin, no violation fired.
+  **Scans, 2026-11-12** (cr-pdf-scan-decoders), headless Chrome against a local server sending the built header on every
+  response: the built `pdfjsRuntime` chunk, imported from `dist/` (its import of the main chunk installed the app's own
+  Trusted Types policies), opened a CCITT G4, a JBIG2 and a JPEG 2000 PDF and drew each pixel for pixel; each document's
+  worker imported its decoder from `assets/pdfjs-<version>/decoders/`, once; no `securitypolicyviolation`, no CSP or
+  Trusted Types message in the console; with `decoders/` removed all three drew blank. Not shown by it: the backend's
+  static handler typing the decoders (that server typed `.js` itself) and the Depot viewer around the renderer.
 - [`src/web/scripts/assert-csp-policy-in-dist.mjs`](../../src/web/scripts/assert-csp-policy-in-dist.mjs)
   (`pnpm run verify:csp`, run by `pnpm run check` and by the `Dockerfile`'s frontend stage) fails a `dist` that
   has no emitted policy or whose `index.html` carries a CSP `<meta>`, whose policy lacks the two Trusted Types

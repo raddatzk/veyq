@@ -622,12 +622,14 @@ here; the server is blind.
   **dynamic** `import('./pdfjsRuntime')` - the one file that imports it, never imported statically (a source test and
   `pnpm run verify:pdf-worker` pin it, with the worker a same-origin hashed asset for `worker-src 'self'`, no `eval`/`new
   Function` in the emitted files, no `.wasm` of pdf.js - the WebP encoder's is the one allowed); `pdfOptions.ts` is the
-  option set - the document is `{data}` (never a URL), `useWasm: false` (the policy would compile the WASM decoders since
-  ADR 0127 granted `'wasm-unsafe-eval'`, but where their `.wasm` comes from and how it is pinned is undecided, inbox #837:
-  JBIG2/JPEG 2000 scan images render blank - a documented gap), `enableXfa: false`, no scripting, no annotation
+  option set - the document is `{data}` (never a URL), `useWasm: false` (the policy would compile pdf.js's WebAssembly
+  since ADR 0127 granted `'wasm-unsafe-eval'`; whether it is worth shipping is inbox #837, so ICC colour falls back - a
+  documented gap), `wasmUrl` at the same-origin `decoders/` holding the plain-JavaScript image decoders, so a scan's CCITT,
+  JBIG2 and JPEG 2000 images draw (ADR 0128; `verify:pdf-worker` holds exactly those two files, byte for byte
+  `pdfjs-dist`'s), `enableXfa: false`, no scripting, no annotation
   layer (a text layer yes - spans only, selectable and copyable - and a password prompt that hands the password to pdf.js
-  only: never state, log, storage or network); CMaps, standard fonts and ICC profiles are same-origin copies under `assets/pdfjs-<version>/`
-  (`vite.config.ts`'s `pdfjsAssetsPlugin`), `connect-src 'self'` carries them. **Bumping `pdfjs-dist` re-runs the real-library
+  only: never state, log, storage or network); CMaps, standard fonts, ICC profiles and the decoders are same-origin copies under `assets/pdfjs-<version>/`
+  (`vite.config.ts`'s `pdfjsAssetsPlugin`), `connect-src 'self'` carries them (`script-src 'self'` the decoders' import). **Bumping `pdfjs-dist` re-runs the real-library
   test and `verify:pdf-worker`; check that its options still exist** (v6 dropped `isEvalSupported`). The member and the guest
   mount the same component.
 

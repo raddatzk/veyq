@@ -1,7 +1,7 @@
 # ADR 0128 — pdf.js decodes scanned images with its plain-JavaScript decoders
 
 - Status: Accepted
-- Built: no (cr-pdf-scan-decoders)
+- Built: yes
 - Date: 2026-11-12
 - Model: [cc.security.csp](../crosscutting/cc.security.csp.md)
 

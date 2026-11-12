@@ -8,7 +8,8 @@ title: View a file — open it and see it (image, text, PDF, video, audio), or g
 # are proven in unit and real-DOM tests; the page mounts for a member and, through core's page of a link, for a READ and
 # a READ_WRITE guest with guarded clients. No real browser has played a video or audio through the service worker for a
 # FILE, gone full screen or run it on a phone yet (gaps below). A PDF is drawn by pdf.js (lazy chunk, same-origin worker,
-# policy unchanged); the library itself runs in a node test, and the built chunk ran once in a real browser.
+# policy unchanged); the library itself runs in a node test (scanned images decoded included), and the built chunk ran in a
+# real browser by hand.
 acceptanceCriteria:
   - id: the-bytes-decide-what-a-file-is
     text: What the viewer shows is decided from the decrypted bytes (magic numbers), never by the claimed type alone - a PNG claimed as text/plain is an image typed image/png, a binary claimed as image/png or text/plain is not shown, a text needs valid UTF-8 (or a UTF-16 byte-order mark) with no control bytes AND a text-ish claim, and SVG is an image only when the markup and the claim agree.
@@ -63,12 +64,12 @@ acceptanceCriteria:
       - surface: web
         reason: The real library is exercised in node (an RC4 40-bit fixture with encrypted content streams - need, wrong, right, declined - and the text of an encrypted page) and once in a real browser by hand; AES-encrypted documents, the other security handlers and a phone are not exercised.
   - id: pdf-js-stays-inside-the-content-security-policy
-    text: pdf.js is a lazy chunk with a same-origin hashed worker and same-origin runtime data, opens the document from the decrypted buffer (never a URL), runs no PDF script and shows no annotation layer (its text layer is plain selectable spans), builds no code from strings and ships none of its WebAssembly, so it runs inside the page's policy as it is (object-src and frame-src none, worker-src self, no unsafe-eval); its WASM decoders are not turned on, so a PDF whose images need them shows those images blank.
+    text: pdf.js is a lazy chunk with a same-origin hashed worker and same-origin runtime data, opens the document from the decrypted buffer (never a URL), runs no PDF script and shows no annotation layer (its text layer is plain selectable spans), builds no code from strings and ships none of its WebAssembly, so it runs inside the page's policy as it is (object-src and frame-src none, worker-src self, no unsafe-eval); its image decoders are the plain-JavaScript builds pdfjs-dist ships, imported by its worker from the same origin, so a scanned page's CCITT G4, JBIG2 and JPEG 2000 images draw (the real-library test decodes one of each, through our options, to its pixels; without the decoders' URL all three fail).
     coverage:
       web: { unit: [src/shared/pdf/pdfEngine.real.test.ts, src/features/depot/components/FileViewer.pdf.test.ts, src/shared/security/csp.test.ts] }
     gaps:
       - surface: web
-        reason: The lazy chunk, the worker, the absence of eval and of pdf.js's WebAssembly and the runtime data are pinned by the build check `pnpm run verify:pdf-worker` (src/web/scripts/assert-pdf-worker-in-dist.mjs, in `pnpm run check`), which is not a test file and so no coverage ref; and no check proves that a browser starts the worker - that was observed once by hand (a local server sending the built header), not in CI.
+        reason: The lazy chunk, the worker, the absence of eval and of pdf.js's WebAssembly, the runtime data and the two image decoders (exactly them, byte for byte the package's) are pinned by the build check `pnpm run verify:pdf-worker` (src/web/scripts/assert-pdf-worker-in-dist.mjs, in `pnpm run check`), which is not a test file and so no coverage ref; and no check proves that a browser starts the worker or imports a decoder under the policy - that was observed by hand (a local server sending the built header - pages drawn 2026-10-12, a CCITT G4, a JBIG2 and a JPEG 2000 page drawn in headless Chrome 2026-11-12), not in CI.
   - id: reading-starts-with-the-page-and-stops-with-it
     text: The file is read when its page opens (not for a list row), with a busy state and a Stop; unmounting or moving to another file aborts the read in flight and drops a late result; a failed read is an error with Try again, never an unhandled rejection.
     coverage:

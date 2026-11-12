@@ -76,10 +76,10 @@ decision).
 - One encoder means one behaviour to test, and for the first time a test can run the real one: the module runs in
   Node, so a unit test encodes pixels and asserts the WebP and its size against the pad. The canvas encoder never ran
   in a test.
-- `'wasm-unsafe-eval'` is granted for the page, not for this module. Any later WebAssembly — pdf.js's JBIG2 and
-  JPEG 2000 decoders, whose absence leaves scanned pages blank ([cc.security.csp](../crosscutting/cc.security.csp.md)) —
-  is no longer blocked by the policy, but each is its own decision: what it is, where it comes from, how it is pinned.
-  This ADR turns none of them on.
+- `'wasm-unsafe-eval'` is granted for the page, not for this module. Any later WebAssembly — pdf.js's own, for its
+  image decoders and ICC colour (inbox #837; scanned pages draw without it, with the decoders' plain-JavaScript builds,
+  [ADR 0128](0128-pdf-js-decodes-scanned-images-with-its-plain-javascript-decoders.md)) — is no longer blocked by the
+  policy, but each is its own decision: what it is, where it comes from, how it is pinned. This ADR turns none of them on.
 - We maintain a native build: a toolchain image, a reproducibility check, and libwebp's release cadence, which the
   workflow of decision 4 turns into a pull request rather than a reminder. If the rebuild ever stops being
   byte-identical, the check is red until the cause is found; the fix is never to drop the check.

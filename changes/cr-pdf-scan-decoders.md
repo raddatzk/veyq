@@ -99,7 +99,7 @@ WebAssembly stays inbox #837.
   **Done when:** `pnpm run check` in `src/web/` is green, every bite above was seen RED and green again, and the browser
   pass holds.
 
-- [ ] **2 docs — every reader says scans draw.**
+- [x] **2 docs — every reader says scans draw.**
   - **Locator:**
     `git grep -n -i -E "jbig2|jpeg ?2000|jpx|ccitt|usewasm|wasmurl|nowasm|#837|scanned|scans\b" -- docs src/web site/src/content ':!docs/inbox.md' ':!docs/decisions/0128-*'`
     and `git grep -n -i -E "gaps|Lücken" -- site/src/content/docs/depot site/src/content/docs/de/depot`. Every hit is

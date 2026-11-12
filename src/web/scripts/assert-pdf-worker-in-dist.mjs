@@ -142,7 +142,7 @@ const encoderSha = sha256(ENCODER_SOURCE)
 const isEncoder = (p) => p.startsWith(ASSETS + '/') && ENCODER.test(p.slice(ASSETS.length + 1)) && sha256(p) === encoderSha
 const encoders = wasm.filter(isEncoder)
 const foreign = wasm.filter((p) => !isEncoder(p))
-if (foreign.length) failures.push(`(v) WebAssembly other than the WebP encoder shipped (${foreign.map((p) => p.slice(DIST.length + 1)).join(', ')}) - pdf.js' decoders stay off until they are decided`)
+if (foreign.length) failures.push(`(v) WebAssembly other than the WebP encoder shipped (${foreign.map((p) => p.slice(DIST.length + 1)).join(', ')}) - pdf.js' WebAssembly stays off (inbox #837)`)
 if (encoders.length !== 1) failures.push(`(v) expected the WebP encoder once as assets/webp_encoder-<hash>.wasm with the committed bytes, found ${encoders.length}`)
 
 if (failures.length) {
