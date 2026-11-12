@@ -1,6 +1,6 @@
 # Feature: Memory
 
-The product center: a **Memory** (photos, media, a journal, places & tracks — added in later slices),
+The product center: a **Memory** (photos, media, places and GPX tracks; a journal in a later slice),
 organized in an **encrypted tree** of **folders** (organization only) and **Memories** (nested into
 **Chapters**). Everything content lives inside a [scope](../spaces/_index.md) and is **end-to-end encrypted**
 — the server stores only ciphertext, opaque node ids/parents/kinds/ordering/timestamps, and blinded slug
@@ -124,7 +124,10 @@ The tree these build on — encrypted names, blinded slugs, a key on every node,
   gallery grid); **cr-0122** the sub-bucket management UI (create / rename / delete, and a Move / Delete selection
   bar); a camera filter is not built
 - Memory journal — planned: markdown sealed under `K_node`
-- Tracks (GPX) — planned: sealed under `K_node` (the sealed *location* is now [uc.memory.place](use-cases/uc.memory.place.md))
+- [uc.memory.tracks](use-cases/uc.memory.tracks.md) — **built (web)** ([ADR 0130](../../decisions/0130-a-gpx-track-is-a-medium-of-its-memory-drawn-on-its-map.md)):
+  GPX tracks on a Memory's Map tab beside its photos — each track a medium whose original is its GPX file (no contract,
+  table or role of its own; the server cannot tell it from a photo), read and drawn on the device only, several per Memory
+  and per chapter, kept out of every view of photos
 - Share a Memory — wrap its `K_node` to a per-share key (least-privilege, ADR 0012) → the
   [Sharing](../sharing/_index.md) feature ([uc.sharing.share-public-viewer](../sharing/use-cases/uc.sharing.share-public-viewer.md),
   **built**, [ADR 0029](../../decisions/0029-public-viewer-share.md))
