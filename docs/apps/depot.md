@@ -324,8 +324,9 @@ a guest's link presign) with the chunk provider the download uses (`fileChunkPro
     (2026-11-12, headless Chrome, the built pdf.js chunk loaded from `dist` under the built policy as the header,
     [cc.security.csp § Verification](../crosscutting/cc.security.csp.md#verification)): a CCITT G4, a JBIG2 and a JPEG 2000
     page drew pixel for pixel, each worker imported its decoder from `decoders/`, no violation; without `decoders/` all three
-    drew blank. **Not yet proven:** the Vue viewer on
-    a real file page behind the app (scroll in a long document, full screen, the observer's margin), a phone, the clipboard
+    drew blank. **And through the app** (the owner, 2026-11-12): the same three PDFs uploaded to a Depot and opened on their
+    file page each showed their image. **Not yet proven:** the Vue viewer on
+    a real file page behind the app beyond a one-page document (scroll in a long document, full screen, the observer's margin), a phone, the clipboard
     API's success path in a browser that allows it (unit-tested with a stub only), and the dev server's serving of the runtime data
     to pdf.js (probed with `curl` only, 2026-11-12: the two decoders answer `text/javascript`, byte for byte the package's, and
     nothing else of `wasm/` is served).
