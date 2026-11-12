@@ -4,6 +4,7 @@
 - Built: yes
 - Date: 2026-08-06
 - Model: [cc.mail](../crosscutting/cc.mail.md)
+- Replaced in part: § 2 (mail as the member invite's only channel, no link to copy) by ADR 0129 (not built)
 
 ## Context
 
