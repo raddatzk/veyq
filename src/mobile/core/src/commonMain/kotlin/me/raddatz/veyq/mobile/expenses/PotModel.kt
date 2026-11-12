@@ -50,6 +50,19 @@ class PotModel internal constructor(
         fun newId(): String
         /** One write of the Pot's screens ([Op]) on its session. */
         suspend fun write(op: Op): PotSession.WriteOutcome
+
+        /**
+         * The entry editor's save ([PotSession.saveEntry] of [form] as record [entryId] on [basedOn]): what it came to, the
+         * receipts it left out and those it uploaded. A played Pot that does not play the editor refuses.
+         */
+        suspend fun saveEntry(entryId: String, form: EntryForm, basedOn: Long?, pending: List<PotSession.PendingReceipt>, own: Set<String>): EntryEditor.Written =
+            EntryEditor.Written(PotSession.WriteOutcome.REFUSED)
+
+        /** The entry editor's delete ([PotSession.deleteEntry]); a played Pot that does not play it refuses. */
+        suspend fun deleteEntry(entryId: String, basedOn: Long): PotSession.WriteOutcome = PotSession.WriteOutcome.REFUSED
+
+        /** One unit of [currency] in the base from [day]'s table ([PotSession.rateFor]), or null: the rate is typed then. */
+        suspend fun rateFor(currency: String, day: String): ExchangeRates.Filled? = null
     }
 
     /**
@@ -92,6 +105,17 @@ class PotModel internal constructor(
             is Op.SetActive -> session.setActive(op.personId, op.active)
             is Op.Erase -> session.erase(op.personId)
         }
+        override suspend fun saveEntry(entryId: String, form: EntryForm, basedOn: Long?, pending: List<PotSession.PendingReceipt>, own: Set<String>): EntryEditor.Written {
+            val outcome = try {
+                session.saveEntry(entryId, form, basedOn, pending, own)
+            } catch (e: Exception) {
+                // a save that failed half-way: what it uploaded is still the editor's, so one tried again never uploads it twice
+                PotSession.WriteOutcome.REFUSED
+            }
+            return EntryEditor.Written(outcome, session.skippedReceipts, session.uploadedReceipts)
+        }
+        override suspend fun deleteEntry(entryId: String, basedOn: Long) = session.deleteEntry(entryId, basedOn)
+        override suspend fun rateFor(currency: String, day: String) = session.rateFor(currency, day)
     }
 
     /**
@@ -270,6 +294,7 @@ class PotModel internal constructor(
     fun editor(entryId: String?, separator: Char, pending: List<PotSession.PendingReceipt> = emptyList()): EntryEditor? =
         EntryEditor.open(EditorDoor(), entryId, separator, pending, scope, Dispatchers.Default)
 
+    /** The editor's door onto the open Pot: its saves and deletes are this model's writes, each on the Pot it opened on. */
     private inner class EditorDoor : EntryEditor.Door {
         override fun view(): PotView? = _state.value?.view
         override fun today(): String = this@PotModel.today()
@@ -278,20 +303,15 @@ class PotModel internal constructor(
         override suspend fun save(entryId: String, form: EntryForm, basedOn: Long?, pending: List<PotSession.PendingReceipt>, own: Set<String>): EntryEditor.Written {
             var written = EntryEditor.Written(PotSession.WriteOutcome.REFUSED)
             writing(said = false) {
-                val s = session ?: return@writing PotSession.WriteOutcome.REFUSED
-                val outcome = try {
-                    s.saveEntry(entryId, form, basedOn, pending, own)
-                } finally {
-                    written = EntryEditor.Written(PotSession.WriteOutcome.REFUSED, s.skippedReceipts, s.uploadedReceipts)
-                }
-                written = EntryEditor.Written(outcome, s.skippedReceipts, s.uploadedReceipts)
-                outcome
+                val o = opened ?: return@writing PotSession.WriteOutcome.REFUSED
+                written = o.saveEntry(entryId, form, basedOn, pending, own)
+                written.outcome
             }
             return written
         }
         override suspend fun delete(entryId: String, basedOn: Long): PotSession.WriteOutcome {
             var outcome = PotSession.WriteOutcome.REFUSED
-            writing(said = false) { (session?.deleteEntry(entryId, basedOn) ?: PotSession.WriteOutcome.REFUSED).also { outcome = it } }
+            writing(said = false) { (opened?.deleteEntry(entryId, basedOn) ?: PotSession.WriteOutcome.REFUSED).also { outcome = it } }
             return outcome
         }
     }
@@ -316,7 +336,7 @@ class PotModel internal constructor(
     fun rowDetails(): List<String>? = session?.let { PotRows.detailsOf(it.meta) }
 
     /** One unit of [currency] in the open Pot's base from [day]'s table (`yyyy-MM-dd`, the device's today), or null. */
-    suspend fun rateFor(currency: String, day: String): ExchangeRates.Filled? = session?.let { runCatching { it.rateFor(currency, day) }.getOrNull() }
+    suspend fun rateFor(currency: String, day: String): ExchangeRates.Filled? = opened?.let { runCatching { it.rateFor(currency, day) }.getOrNull() }
 
     /** A receipt of the open Pot opened to its bytes, or null (blocked, or it did not read). */
     suspend fun openReceipt(receiptId: String): ByteArray? = session?.let { runCatching { it.openReceipt(receiptId) }.getOrNull() }

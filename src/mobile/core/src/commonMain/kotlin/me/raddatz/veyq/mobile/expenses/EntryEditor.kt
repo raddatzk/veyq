@@ -70,8 +70,10 @@ class EntryEditor internal constructor(
     data class Held(val id: String, val name: String)
 
     /** Where the rate's fill is: asked of the day's table, filled from the rows of [Rate.day], or not in the table. */
+    @kotlinx.serialization.Serializable @kotlinx.serialization.SerialName("RateState")
     enum class RateState { FILLING, FILLED, MISSING }
 
+    @kotlinx.serialization.Serializable @kotlinx.serialization.SerialName("EditorRate")
     data class Rate(val state: RateState, val day: String? = null)
 
     data class State(
@@ -361,33 +363,36 @@ private fun EntryForm.withSplit(item: Int?, split: EntryForm.FormSplit): EntryFo
 
 /**
  * One edit of the entry editor's form ([EntryEditor.change]). A split's edit names its [item]'s index, or null for the
- * rest's split (the whole amount's while there are no items).
+ * rest's split (the whole amount's while there are no items). Serializable, since the native bridge carries it as it is
+ * (`Editor.Change`); each variant's serial name is `Edit.<name>`, so a host's generated type never takes a common name.
  */
+@kotlinx.serialization.Serializable
+@kotlinx.serialization.SerialName("EditorChange")
 sealed class EditorChange {
-    data class Kind(val kind: EntryForm.Kind) : EditorChange()
+    @kotlinx.serialization.Serializable @kotlinx.serialization.SerialName("Edit.Kind") data class Kind(val kind: EntryForm.Kind) : EditorChange()
     /** The date picked, `yyyy-MM-dd`. */
-    data class Day(val iso: String) : EditorChange()
-    data class Title(val text: String) : EditorChange()
-    data class Category(val id: String) : EditorChange()
-    data class Currency(val code: String) : EditorChange()
-    data class RateTyped(val text: String) : EditorChange()
+    @kotlinx.serialization.Serializable @kotlinx.serialization.SerialName("Edit.Day") data class Day(val iso: String) : EditorChange()
+    @kotlinx.serialization.Serializable @kotlinx.serialization.SerialName("Edit.Title") data class Title(val text: String) : EditorChange()
+    @kotlinx.serialization.Serializable @kotlinx.serialization.SerialName("Edit.Category") data class Category(val id: String) : EditorChange()
+    @kotlinx.serialization.Serializable @kotlinx.serialization.SerialName("Edit.Currency") data class Currency(val code: String) : EditorChange()
+    @kotlinx.serialization.Serializable @kotlinx.serialization.SerialName("Edit.RateTyped") data class RateTyped(val text: String) : EditorChange()
     /** A transfer's amount. */
-    data class Amount(val text: String) : EditorChange()
-    data class From(val person: String) : EditorChange()
-    data class To(val person: String) : EditorChange()
+    @kotlinx.serialization.Serializable @kotlinx.serialization.SerialName("Edit.Amount") data class Amount(val text: String) : EditorChange()
+    @kotlinx.serialization.Serializable @kotlinx.serialization.SerialName("Edit.From") data class From(val person: String) : EditorChange()
+    @kotlinx.serialization.Serializable @kotlinx.serialization.SerialName("Edit.To") data class To(val person: String) : EditorChange()
     /** The next person not paying yet. */
-    data object AddPayer : EditorChange()
-    data class RemovePayer(val index: Int) : EditorChange()
-    data class Payer(val index: Int, val person: String) : EditorChange()
-    data class Paid(val index: Int, val text: String) : EditorChange()
-    data object AddItem : EditorChange()
-    data class RemoveItem(val index: Int) : EditorChange()
-    data class ItemLabel(val index: Int, val text: String) : EditorChange()
-    data class ItemAmount(val index: Int, val text: String) : EditorChange()
-    data class SplitMode(val item: Int?, val mode: EntryForm.Mode) : EditorChange()
-    data class Toggle(val item: Int?, val person: String, val on: Boolean) : EditorChange()
+    @kotlinx.serialization.Serializable @kotlinx.serialization.SerialName("Edit.AddPayer") data object AddPayer : EditorChange()
+    @kotlinx.serialization.Serializable @kotlinx.serialization.SerialName("Edit.RemovePayer") data class RemovePayer(val index: Int) : EditorChange()
+    @kotlinx.serialization.Serializable @kotlinx.serialization.SerialName("Edit.Payer") data class Payer(val index: Int, val person: String) : EditorChange()
+    @kotlinx.serialization.Serializable @kotlinx.serialization.SerialName("Edit.Paid") data class Paid(val index: Int, val text: String) : EditorChange()
+    @kotlinx.serialization.Serializable @kotlinx.serialization.SerialName("Edit.AddItem") data object AddItem : EditorChange()
+    @kotlinx.serialization.Serializable @kotlinx.serialization.SerialName("Edit.RemoveItem") data class RemoveItem(val index: Int) : EditorChange()
+    @kotlinx.serialization.Serializable @kotlinx.serialization.SerialName("Edit.ItemLabel") data class ItemLabel(val index: Int, val text: String) : EditorChange()
+    @kotlinx.serialization.Serializable @kotlinx.serialization.SerialName("Edit.ItemAmount") data class ItemAmount(val index: Int, val text: String) : EditorChange()
+    @kotlinx.serialization.Serializable @kotlinx.serialization.SerialName("Edit.SplitMode") data class SplitMode(val item: Int?, val mode: EntryForm.Mode) : EditorChange()
+    @kotlinx.serialization.Serializable @kotlinx.serialization.SerialName("Edit.Toggle") data class Toggle(val item: Int?, val person: String, val on: Boolean) : EditorChange()
     /** A person's value typed in the split's mode. */
-    data class Share(val item: Int?, val person: String, val text: String) : EditorChange()
-    data class Equally(val item: Int?) : EditorChange()
-    data class Expand(val item: Int?) : EditorChange()
+    @kotlinx.serialization.Serializable @kotlinx.serialization.SerialName("Edit.Share") data class Share(val item: Int?, val person: String, val text: String) : EditorChange()
+    @kotlinx.serialization.Serializable @kotlinx.serialization.SerialName("Edit.Equally") data class Equally(val item: Int?) : EditorChange()
+    @kotlinx.serialization.Serializable @kotlinx.serialization.SerialName("Edit.Expand") data class Expand(val item: Int?) : EditorChange()
 }

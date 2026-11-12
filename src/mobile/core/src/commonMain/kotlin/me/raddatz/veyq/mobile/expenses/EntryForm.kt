@@ -37,9 +37,11 @@ data class EntryForm(
     val receipts: List<String> = emptyList(),
     val refunds: String? = null,
 ) {
+    @kotlinx.serialization.Serializable @kotlinx.serialization.SerialName("EntryKind")
     enum class Kind { EXPENSE, REFUND, TRANSFER }
 
     /** The editor's split modes; shares of 1 each are sealed as `equal`. */
+    @kotlinx.serialization.Serializable @kotlinx.serialization.SerialName("SplitMode")
     enum class Mode { SHARES, PERCENT, AMOUNTS }
 
     data class Payer(val participant: String, val amount: String)
@@ -84,6 +86,15 @@ data class EntryForm(
                 }
             },
         )
+
+        /** What was typed for [person] in [split]'s mode; null while they are not on it. */
+        fun typedIn(split: FormSplit, person: String): String? = split.rows.firstOrNull { it.participant == person }?.let { r ->
+            when (split.mode) {
+                Mode.SHARES -> r.shares
+                Mode.PERCENT -> r.percent
+                Mode.AMOUNTS -> r.amount
+            }
+        }
 
         /** A folded split in one line: "only X" for one person, else "everyone (n)". */
         fun collapsedWords(split: FormSplit, people: List<PotView.Person>): me.raddatz.veyq.mobile.words.Notice {
