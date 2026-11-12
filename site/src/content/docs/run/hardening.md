@@ -5,6 +5,7 @@ sources:
   - docs/decisions/0071-runtime-hardening-on-both-targets.md
   - docs/decisions/0118-the-app-image-is-distroless-and-carries-its-own-commands.md
   - docs/decisions/0117-the-web-client-enforces-trusted-types.md
+  - docs/decisions/0127-the-web-client-encodes-webp-with-its-own-build-of-libwebp.md
   - docs/decisions/0065-admin-ui-cli-separate-service.md
   - docs/decisions/0050-operator-config-secret-encryption.md
   - docs/crosscutting/cc.security.csp.md
@@ -94,7 +95,8 @@ It defends a leaked database backup, not a compromised host. So:
   surface alike. Turn it off (`VEYQ_HSTS_ENABLED=false` / `hsts.enabled: false`) only if a hostname of the instance
   is also served over plain HTTP, or your own proxy sets the header already. A browser that saw it keeps it for 180
   days.
-- **The Content Security Policy is built in**: scripts only from the instance itself, no framing, and network
+- **The Content Security Policy is built in**: scripts only from the instance itself, never code evaluated from a
+  string (`eval`), no framing, and network
   connections only to the instance, its store and the outside services you configured (the breached-password check,
   the map tiles, the place-name lookup and the exchange rates, [External services](/run/capabilities/#external-services)); a service
   without an address, or switched off, is not allowed at all
@@ -108,6 +110,10 @@ It defends a leaked database backup, not a compromised host. So:
   enforces Trusted Types: a browser that supports them refuses any markup or script address the web client did not
   make through its own sanitizer or its short list of library literals
   ([ADR 0117](https://github.com/raddatzk/veyq/blob/main/docs/decisions/0117-the-web-client-enforces-trusted-types.md)).
+  It lets the client compile its own WebAssembly (`'wasm-unsafe-eval'`): the picture encoder, libwebp built by the
+  project from a pinned release, which makes a space icon or a profile picture the same small WebP in every browser
+  ([ADR 0127](https://github.com/raddatzk/veyq/blob/main/docs/decisions/0127-the-web-client-encodes-webp-with-its-own-build-of-libwebp.md));
+  that grants compiling WebAssembly, not running JavaScript from a string, which the policy still refuses.
   The admin console sends its own, stricter policy, also as a header.
 - **The other security headers are built in too**, on the application and the admin console alike: no
   content-type sniffing, a page keeps no handle on the page that opened it nor that page on it

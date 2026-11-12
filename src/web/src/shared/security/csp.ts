@@ -6,8 +6,11 @@
 // a policy string (which would silently drift from the origins it is meant to allow).
 //
 // Notes on the chosen directives:
-// - script-src 'self': the entry is a hashed same-origin module; the app has NO inline script, NO eval/Function,
-//   and NO WebAssembly (Argon2id is pure-JS @noble), so a strict script-src holds with no unsafe- escapes.
+// - script-src 'self' 'wasm-unsafe-eval': the entry is a hashed same-origin module; the app has NO inline script and NO
+//   eval/Function (Argon2id is pure-JS @noble), so no 'unsafe-eval' and no 'unsafe-inline'. 'wasm-unsafe-eval' lets the
+//   page compile WebAssembly, not evaluate JavaScript: the client's own build of libwebp encodes a space icon and a
+//   member picture (ADR 0127, webp-encoder/). It is granted for the page, not for that module, so any further
+//   WebAssembly is a decision of its own, never a consequence of this source.
 // - style-src 'self' with no 'unsafe-inline' (inbox #523): the built CSS is same-origin files, and Vue applies :style
 //   bindings through the CSSOM, which style-src does not govern. The one <style> element a component we use renders
 //   is allowed by its hash (REKA_STYLE_HASHES). The dev server adds a nonce, because Vite injects every
@@ -89,7 +92,7 @@ export function buildCsp({ tileOrigin, geocoderOrigin, breachOrigin, ratesOrigin
     'object-src': ["'none'"],
     'frame-src': ["'none'"],
     'frame-ancestors': ["'none'"],
-    'script-src': ["'self'"],
+    'script-src': ["'self'", "'wasm-unsafe-eval'"], // the WebP encoder (ADR 0127); never 'unsafe-eval'
     'worker-src': ["'self'"],
     'style-src': styleSrc,
     'img-src': imgSrc,

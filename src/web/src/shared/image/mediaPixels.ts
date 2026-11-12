@@ -6,14 +6,22 @@
 // The Worker imports this module, so nothing here may touch the DOM at module top level, and nothing here may
 // import `mediaDeriver.ts` (which constructs the Worker — the Worker importing it would bundle a Worker into
 // itself). The page port's `document.createElement` lives in `mediaDeriver.ts`, at use.
+//
+// A WebP is never encoded by the canvas (ADR 0127): Safari's answers `'image/webp'` with a PNG, which never fits a space
+// icon's or a member picture's pad. `drawEncoded` hands the final canvas's pixels to libwebp (`webp-encoder/`) instead,
+// on both threads alike; the canvas still crops and downscales, and still encodes every JPEG.
+import { encodeWebp } from '../../../webp-encoder/encodeWebp'
 
 /** Either canvas kind a port hands out; both are drawable sources for the next halving step. */
 export type PixelCanvas = HTMLCanvasElement | OffscreenCanvas
 type Context2D = CanvasRenderingContext2D | OffscreenCanvasRenderingContext2D
 
+/** The one image type the canvas never encodes: libwebp does (ADR 0127). */
+export const WEBP = 'image/webp'
+
 /**
  * Where the pixel stage draws and encodes: `create` hands out a blank canvas of the given size, `encode` turns
- * the final one into image bytes. The page port is `HTMLCanvasElement` + `toBlob` (a paint-gated encode in a
+ * the final one into image bytes — every type but {@link WEBP}. The page port is `HTMLCanvasElement` + `toBlob` (a paint-gated encode in a
  * hidden tab — the reason the Worker exists); the Worker port is `OffscreenCanvas` + `convertToBlob`.
  */
 export interface CanvasPort<C extends PixelCanvas = PixelCanvas> {
@@ -62,7 +70,8 @@ export function halvingPlan(
 
 /**
  * Downscale `src` (intrinsically `w`×`h`) to `maxEdge` along [halvingPlan] on `port`'s canvases, then encode the
- * final canvas. The intermediate steps keep alpha (no fill); `background` is applied only on the FINAL canvas.
+ * final canvas: a WebP by libwebp from its pixels, anything else by `port.encode`. The intermediate steps keep alpha (no
+ * fill); `background` is applied only on the FINAL canvas. An encoder that cannot load, or that refuses, rejects.
  */
 export async function drawEncoded<C extends PixelCanvas>(
   port: CanvasPort<C>,
@@ -78,6 +87,10 @@ export async function drawEncoded<C extends PixelCanvas>(
   let curSrc: CanvasImageSource = src
   for (const step of plan.steps) curSrc = drawStep(port, curSrc, step.w, step.h)
   const canvas = drawStep(port, curSrc, plan.final.w, plan.final.h, background)
+  if (mimeType === WEBP) {
+    const { w: width, h: height } = plan.final
+    return encodeWebp(context(canvas).getImageData(0, 0, width, height).data, width, height, quality)
+  }
   const blob = await port.encode(canvas, mimeType, quality)
   if (!blob) throw new Error('encode_failed')
   return new Uint8Array(await blob.arrayBuffer())
@@ -94,8 +107,7 @@ function drawStep<C extends PixelCanvas>(
   background?: string,
 ): C {
   const canvas = port.create(width, height)
-  const ctx = (canvas as { getContext(id: '2d'): Context2D | null }).getContext('2d')
-  if (!ctx) throw new Error('canvas_unavailable')
+  const ctx = context(canvas)
   if (background) {
     ctx.fillStyle = background
     ctx.fillRect(0, 0, width, height)
@@ -104,4 +116,11 @@ function drawStep<C extends PixelCanvas>(
   ctx.imageSmoothingQuality = 'high'
   ctx.drawImage(src, 0, 0, width, height)
   return canvas
+}
+
+/** The canvas's 2D context; a canvas hands out the same one on every call. */
+function context(canvas: PixelCanvas): Context2D {
+  const ctx = (canvas as { getContext(id: '2d'): Context2D | null }).getContext('2d')
+  if (!ctx) throw new Error('canvas_unavailable')
+  return ctx
 }

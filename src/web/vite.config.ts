@@ -120,6 +120,22 @@ function repositoryUrl(repository: unknown): string | undefined {
     .replace(/\.git$/, '')
   return /^https:\/\//.test(url) ? url : undefined
 }
+// The WebP encoder (ADR 0127) is libwebp built by us, not an npm package, so Vite's licence file does not list it. This
+// plugin adds it under the same heading shape, with libwebp's licence and patent grant as the build copied them from the
+// tag, and the tag's source on libwebp's repository as its `Source:` (`verify:license-sources` holds that form).
+const WEBP_ENCODER_DIR = fileURLToPath(new URL('./webp-encoder/', import.meta.url))
+function libwebpNotice(): string {
+  const pin = readFileSync(join(WEBP_ENCODER_DIR, 'libwebp.pin'), 'utf8')
+  const tag = /^tag (\S+)$/m.exec(pin)?.[1]
+  if (!tag) throw new Error('webp-encoder/libwebp.pin names no tag')
+  const read = (name: string) => readFileSync(join(WEBP_ENCODER_DIR, name), 'utf8').trim()
+  return [
+    `## libwebp - ${tag} (BSD-3-Clause)`,
+    `Source: https://github.com/webmproject/libwebp/tree/${tag}\nRepository: https://chromium.googlesource.com/webm/libwebp`,
+    read('COPYING'),
+    read('PATENTS'),
+  ].join('\n\n')
+}
 function licenseSourcesPlugin(): Plugin {
   return {
     name: 'veyq-license-sources',
@@ -132,9 +148,11 @@ function licenseSourcesPlugin(): Plugin {
         if (asset?.type !== 'asset' || typeof asset.source !== 'string') return this.error(`${LICENSE_FILE} was not emitted before this plugin ran`)
         const cache = new Map()
         const repositories = new Map<string, string | undefined>()
+        let encoderBundled = false
         for (const chunk of Object.values(bundle)) {
           if (chunk.type !== 'chunk') continue
           for (const id of chunk.moduleIds) {
+            if (id.startsWith(WEBP_ENCODER_DIR)) encoderBundled = true
             const pkg = packageOf(id, cache)
             if (pkg) repositories.set(`${pkg.name} - ${pkg.version}`, repositoryUrl(pkg.repository))
           }
@@ -144,6 +162,7 @@ function licenseSourcesPlugin(): Plugin {
           const lines = [`Source: https://www.npmjs.com/package/${name}/v/${version}`, ...(repository ? [`Repository: ${repository}`] : [])]
           return `${heading}\n\n${lines.join('\n')}`
         })
+        if (encoderBundled) asset.source = `${asset.source.trimEnd()}\n\n${libwebpNotice()}\n`
       },
     },
   }
@@ -154,7 +173,8 @@ function licenseSourcesPlugin(): Plugin {
 // be hashed single imports; this plugin copies the three directories verbatim to `assets/pdfjs-<version>/` (under
 // `/assets/`, so the backend serves them immutable - the version is in the path, a new release is a new path) and serves
 // the same path from node_modules in dev. They are same-origin, so `connect-src 'self'` carries the fetches and the policy
-// gains nothing. The WASM decoders (`wasm/`) are deliberately NOT copied: they need 'wasm-unsafe-eval' (csp.ts).
+// gains nothing. The WASM decoders (`wasm/`) are deliberately NOT copied: the policy would compile them since ADR 0127,
+// but they are not turned on (inbox #837), and `verify:pdf-worker` refuses any `.wasm` but the WebP encoder's.
 const PDFJS_DATA_DIRS = ['cmaps', 'standard_fonts', 'iccs'] as const
 function pdfjsPackage(): { root: string; version: string } {
   const pkg = createRequire(import.meta.url).resolve('pdfjs-dist/package.json')

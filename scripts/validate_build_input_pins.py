@@ -26,6 +26,10 @@ the code*, changes/README.md):
      it. (It was `setup-gradle`'s `validate-wrappers` input until cr-workflow-actions-pinned-by-commit dropped
      that action for `setup-java`'s `cache: gradle`: its live major caches through a proprietary component by
      default.)
+  6. **The WebP encoder is the pinned build** (ADR 0127). `src/web/webp-encoder/libwebp.pin` names a stable
+     `vX.Y.Z` libwebp tag, its 40-hex commit, and an `image` that is exactly the `FROM` of the `Dockerfile` beside it;
+     each of its `sha256` lines hashes the committed file it names; and every tracked file under its `wasm/` but the
+     hand-written `.d.mts` has a line — an output nothing pins is an output nothing rebuilt.
 
 **The defect that bought it.** Live when this guard was written (2026-09-27, cr-build-inputs-pinned): the npm
 wrapper downloaded the generator JAR with no checksum and ran any file already in its storage dir, the wrapper
@@ -33,7 +37,8 @@ properties carried no distribution checksum, the backend had no verification met
 generated with openapi-generator 7.21.0 while both clients used 7.23.0. Nothing noticed any of it, because a
 build that fetches an unchecked input is exactly as green as one that fetches a checked one. Check 5 was added
 2026-09-28 (inbox #189) with no incident behind it: the JAR that does the verifying was a tracked binary no review
-could read, and a swapped one passed every check above.
+could read, and a swapped one passed every check above. Check 6 came with cr-webp-encoder-from-libwebp, no incident
+either: the client began to ship a WebAssembly binary we build, and a swapped `.wasm` is as unreadable as that JAR.
 
 **Its limits — what a green run does NOT prove.** It reads files and contacts no repository, so it cannot tell a
 right checksum from a wrong one: that the pin, the wrapper sum and every metadata entry are the published bytes
@@ -51,7 +56,10 @@ checksums. Check 5 proves the JAR is the pinned bytes, not that the pin is Gradl
 new pin line is green here, and only that one readable pin line in the diff (and CI's wrapper validation against
 Gradle's published list) shows it. The workflow half sees `gradlew` only in a step's `run:`: a Dockerfile that runs
 it (the release image build) is covered because that job `needs:` one that validates, which this guard does not
-check, and a script that calls `gradlew` indirectly is invisible. The Dockerfile `FROM` lines are `validate_image_pins.py`'s, npm packages are the lockfile's, and the pnpm version is `validate_pnpm_installs_gated.py`'s.
+check, and a script that calls `gradlew` indirectly is invisible. Check 6 proves
+the committed encoder is the bytes the pin names, not that the pin is what libwebp's tag builds to: only a rebuild
+proves that (`src/web/webp-encoder/build.py`, CI's `webp-encoder` job), and a swapped `.wasm` with a matching new pin
+line is green here, as with check 5. The Dockerfile `FROM` lines are `validate_image_pins.py`'s, npm packages are the lockfile's, and the pnpm version is `validate_pnpm_installs_gated.py`'s.
 """
 from __future__ import annotations  # `str | None` below — the repo's guards run on Python 3.9
 
@@ -62,6 +70,8 @@ import re
 import subprocess
 import sys
 import xml.etree.ElementTree as ET
+
+import repo_layout  # where the code surfaces live (ADR 0106)
 
 try:
     import yaml
@@ -76,6 +86,10 @@ WORKFLOW_DIR = ".github/workflows/"
 WRAPPER_VALIDATION = "gradle/actions/wrapper-validation"
 GRADLEW = re.compile(r"(^|[\s/])gradlew(\s|$)", re.MULTILINE)
 VERIFIER = "scripts/verify_openapi_generator_jar.mjs"
+WEBP_ENCODER = repo_layout.rel(repo_layout.WEBP_ENCODER)  # repository-relative, as `git ls-files` prints it
+WEBP_PIN = f"{WEBP_ENCODER}/libwebp.pin"
+STABLE_TAG = re.compile(r"^v[0-9]+\.[0-9]+\.[0-9]+$")
+COMMIT = re.compile(r"^[0-9a-f]{40}$")
 
 SKIP_PREFIXES = ("changes/", "docs/", "site/src/content/")
 HEX64 = re.compile(r"^[0-9a-f]{64}$")
@@ -261,6 +275,45 @@ def check_verification(files: list[str]) -> None:
                 fail(f"{rel}: `{line.strip()}` overrides dependency verification for every build that reads it")
 
 
+def check_webp_encoder(files: list[str]) -> None:
+    if WEBP_PIN not in files:
+        fail(f"{WEBP_PIN} is not tracked — nothing pins the client's WebP encoder (ADR 0127); re-anchor this guard")
+        return
+    pin: dict[str, str] = {}
+    hashed: dict[str, str] = {}
+    for raw in (ROOT / WEBP_PIN).read_text().splitlines():
+        parts = raw.split()
+        if not parts or parts[0].startswith("#"):
+            continue
+        if parts[0] == "sha256" and len(parts) == 3:
+            hashed[parts[2]] = parts[1]
+        elif parts[0] in ("tag", "commit", "image") and len(parts) == 2 and parts[0] not in pin:
+            pin[parts[0]] = parts[1]
+        else:
+            fail(f"{WEBP_PIN}: unreadable or repeated line {raw!r}")
+    if not STABLE_TAG.match(pin.get("tag", "")):
+        fail(f"{WEBP_PIN}: `tag` is not a stable libwebp release tag vX.Y.Z: {pin.get('tag')!r}")
+    if not COMMIT.match(pin.get("commit", "")):
+        fail(f"{WEBP_PIN}: `commit` is not a full 40-hex commit: {pin.get('commit')!r}")
+    dockerfile = f"{WEBP_ENCODER}/Dockerfile"
+    froms = re.findall(r"^\s*FROM\s+(\S+)", (ROOT / dockerfile).read_text(), re.MULTILINE | re.IGNORECASE) \
+        if dockerfile in files else []
+    if froms != [pin.get("image")]:
+        fail(f"{WEBP_PIN}: `image` {pin.get('image')!r} is not the one FROM of {dockerfile} ({froms!r}) — a new "
+             f"toolchain writes new bytes: run build.py --write and commit both")
+    if not hashed:
+        fail(f"{WEBP_PIN} pins no output")
+    for name, sha in sorted(hashed.items()):
+        rel = f"{WEBP_ENCODER}/{name}"
+        if rel not in files:
+            fail(f"{WEBP_PIN} pins {name}, which is not tracked")
+        elif hashlib.sha256((ROOT / rel).read_bytes()).hexdigest() != sha:
+            fail(f"{rel} does not hash to its line in {WEBP_PIN} — the committed encoder is not the pinned build")
+    for rel in files:
+        if rel.startswith(f"{WEBP_ENCODER}/wasm/") and not rel.endswith(".d.mts") and rel[len(WEBP_ENCODER) + 1:] not in hashed:
+            fail(f"{rel} is part of the encoder's output and no `sha256` line of {WEBP_PIN} pins it")
+
+
 def main() -> int:
     files = tracked()
     if files:
@@ -268,12 +321,14 @@ def main() -> int:
         check_wrapper(files)
         check_wrapper_jar(files)
         check_verification(files)
+        check_webp_encoder(files)
     if errors:
         for e in errors:
             print(f"::error::build-input pins: {e}")
         return 1
     print("build-input pins: one generator version, pinned and verified on every generate:api; "
-          "wrapper distribution checksummed, wrapper JAR pinned; Gradle dependency verification on")
+          "wrapper distribution checksummed, wrapper JAR pinned; Gradle dependency verification on; "
+          "the WebP encoder is its pinned build")
     return 0
 
 

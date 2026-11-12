@@ -1,7 +1,7 @@
 # ADR 0127 — The web client encodes WebP with its own build of libwebp
 
 - Status: Accepted
-- Built: no
+- Built: partly (not built: decision 4's update workflow, which waits for the owner's go on its write permissions)
 - Date: 2026-11-12
 - Model: [cc.security.csp](../crosscutting/cc.security.csp.md)
 
@@ -83,6 +83,13 @@ decision).
 - We maintain a native build: a toolchain image, a reproducibility check, and libwebp's release cadence, which the
   workflow of decision 4 turns into a pull request rather than a reminder. If the rebuild ever stops being
   byte-identical, the check is red until the cause is found; the fix is never to drop the check.
-- The client grows by the encoder (an estimated few hundred KiB, loaded only when a picture is set) and its licence
+- The client grows by the encoder (the `.wasm` is 270 kB, 114 kB gzipped, and its glue 2 kB, measured in the first
+  build of libwebp 1.6.0; loaded only when a picture is encoded) and its licence
   notice: libwebp is BSD-3-Clause with Google's patent grant, carried beside the npm packages' notices in the built
   client.
+
+## Related
+
+- The encoder: [`src/web/webp-encoder/`](../../src/web/webp-encoder/README.md).
+- Run area of the docs site: [Hardening](../../site/src/content/docs/run/hardening.md)
+- Security area of the docs site: [How veyq is tested](../../site/src/content/docs/security/how-veyq-is-tested.md)

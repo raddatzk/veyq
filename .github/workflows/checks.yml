@@ -212,6 +212,40 @@ jobs:
         working-directory: tests/e2e
         run: pnpm run check
 
+  webp-encoder:
+    name: WebP encoder rebuilds byte for byte
+    # The client's WebP encoder is libwebp built by us and committed (ADR 0127 decision 2); this rebuild is what ties the
+    # committed `.wasm` to libwebp's source. It rebuilds from src/web/webp-encoder/libwebp.pin in the pinned Emscripten
+    # image and is red on any byte that differs from the pin or the committed files — never waved through: a rebuild
+    # that stops being byte-identical stays red until the cause is found. It rebuilds when anything under
+    # src/web/webp-encoder/ changed since the run's base (a pull request's base, a push's previous tip); when that base
+    # cannot be read (a new branch, a local run of scripts/run_pipeline.py) it rebuilds anyway. Dependabot's bump of the
+    # Emscripten digest lands in that directory, so its pull request rebuilds — and is red until `build.py --write` is
+    # run on it, because a new toolchain writes new bytes.
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+
+      - name: Did the encoder change?
+        id: changed
+        env:
+          BASE: ${{ github.event_name == 'pull_request' && github.event.pull_request.base.sha || github.event.before }}
+        run: |
+          if [ -n "$BASE" ] && git cat-file -e "$BASE^{commit}" 2>/dev/null && git diff --quiet "$BASE" HEAD -- src/web/webp-encoder; then
+            echo "rebuild=false" >> "$GITHUB_OUTPUT"
+            echo "src/web/webp-encoder/ is unchanged since $BASE: nothing to rebuild"
+          else
+            echo "rebuild=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Rebuild from the pin and compare
+        if: steps.changed.outputs.rebuild == 'true'
+        run: python3 src/web/webp-encoder/build.py
+
   chart:
     name: Chart checks
     runs-on: ubuntu-latest
@@ -1090,6 +1124,7 @@ jobs:
       - backend
       - backend-races
       - frontend
+      - webp-encoder
       - chart
       - web-e2e
       - api-fuzz
@@ -1104,6 +1139,7 @@ jobs:
       && needs.backend.result == 'success'
       && needs.backend-races.result == 'success'
       && needs.frontend.result == 'success'
+      && needs.webp-encoder.result == 'success'
       && needs.chart.result == 'success'
       && needs.web-e2e.result == 'success'
       && needs.api-fuzz.result == 'success'

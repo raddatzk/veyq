@@ -188,7 +188,8 @@ sequenceDiagram
   real work, not a prop flip. The pixel stage is not ready either: `deriveImage` is **JPEG-only and fills no
   background**, so a transparent logo flattens onto an uninitialised (black) canvas — invisible for photos, its
   only use today; wrong for an icon. The icon encodes **WebP with alpha**, which needs a `mimeType` threaded
-  through.
+  through — and libwebp's own build to write it, in every browser alike, because Safari's canvas answers WebP with a
+  PNG that never fits the pad ([ADR 0127](../../../decisions/0127-the-web-client-encodes-webp-with-its-own-build-of-libwebp.md)).
 - **Trust tier — unchanged for the seal, widened for the read.** The seal's strength tracks
   [ADR 0026](../../../decisions/0026-client-trust-tiers.md) like all veyq E2EE; there is no icon-specific
   weakness. The **read** is what moves: rendering other tenants' icons means the switcher's origin receives

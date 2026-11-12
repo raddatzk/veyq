@@ -46,6 +46,11 @@ acceptanceCriteria:
       web:
         unit:
           - src/features/spaces/spaceIcon.test.ts
+          # The padding holds only if the encode fits the pad in every browser: libwebp's own build writes the WebP
+          # (ADR 0127), run for real here — a 256 px photo fits at quality 0.9, a transparent logo keeps its alpha.
+          - webp-encoder/encodeWebp.test.ts
+          - src/shared/image/mediaPixels.test.ts
+          - src/shared/image/mediaDeriveWorker.test.ts
   - id: icon-size-cap-fits-mariadb
     text: The contract's @Size for sealedIcon is the exact computed base64 length of the sealed constant and is provably below MariaDB's 65535-byte TEXT limit — not inherited from identity_pins.sealed_blob (which declares 1048576 over a TEXT column) nor from veyq_scope_favorites.ciphertext (65536 against 65535). H2 is effectively unbounded, so this cannot be proven by the hermetic suite alone and needs a real-MariaDB write at the cap.
     coverage:
