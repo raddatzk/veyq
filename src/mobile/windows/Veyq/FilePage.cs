@@ -55,8 +55,11 @@ internal sealed class FilePage : IDisposable
 
     public UIElement Page => _root;
 
-    /// <summary>Told the header's facts each time the file is read (FileShown.headerFacts).</summary>
-    public Action<Facts>? Read { get; set; }
+    /// <summary>Told the header's facts each time the file is read (FileShown.headerFacts), with the page's id.</summary>
+    public Action<Facts, long>? Read { get; set; }
+
+    /// <summary>The page's id in the core, once it opened (File.Open).</summary>
+    public long? Id => _id;
 
     public FilePage(NodeAt node)
     {
@@ -104,7 +107,7 @@ internal sealed class FilePage : IDisposable
             if (_closed || update is not Update.File { shown: { } s }) return;
             Log.Write($"file shown: {s.view}, revision {s.revision}, {s.mediaType ?? "-"}");
             _shown = s;
-            if (s.headerFacts is { } facts) Read?.Invoke(facts);
+            if (s.headerFacts is { } facts && _id is { } id) Read?.Invoke(facts, id);
             Draw();
         }, e => Log.Write($"a file update: {e.Message}"));
     }

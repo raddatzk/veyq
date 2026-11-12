@@ -38,6 +38,10 @@ internal sealed class ShellView
     private readonly InfoBar _said;
     /// <summary>A file's Save a copy under way: its progress and Cancel (Watched.Save, Save.Cancel), then how it ended.</summary>
     private readonly InfoBar _saving;
+    /// <summary>What the uploads say once (a folder's outcome, a replace offered with its action).</summary>
+    private readonly InfoBar _offer;
+    /// <summary>The upload queue: its command in the bar while it lists anything, the pickers that fill it.</summary>
+    private readonly Uploads _uploads;
     private readonly ListScrolls _scrolls = new();
     private FilePage? _file;
     private readonly Window _window;
@@ -49,6 +53,7 @@ internal sealed class ShellView
     private NodeHeader? _header;
     private NodeHeader? _undoing;
     private ShellShown? _shown;
+    private ShellModelState? _state;
     private IReadOnlyList<ObjectRef>? _hits;
     private bool _started;
     private bool _drawing;
@@ -122,8 +127,12 @@ internal sealed class ShellView
         AutomationProperties.SetAutomationId(_said, "said");
         _saving = new InfoBar { IsOpen = false, IsClosable = true, Margin = new Thickness(12, 0, 12, 4) };
         AutomationProperties.SetAutomationId(_saving, "saving");
+        _offer = new InfoBar { IsOpen = false, IsClosable = true, Margin = new Thickness(12, 0, 12, 4) };
+        AutomationProperties.SetAutomationId(_offer, "uploads-said");
+        _uploads = new Uploads(window, _offer) { Changed = DrawCommands };
         _body = new ContentControl { HorizontalContentAlignment = HorizontalAlignment.Stretch, VerticalContentAlignment = VerticalAlignment.Stretch };
         var content = new Grid();
+        content.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
         content.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
         content.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
         content.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
@@ -133,7 +142,9 @@ internal sealed class ShellView
         content.Children.Add(_said);
         Grid.SetRow(_saving, 2);
         content.Children.Add(_saving);
-        Grid.SetRow(_body, 3);
+        Grid.SetRow(_offer, 3);
+        content.Children.Add(_offer);
+        Grid.SetRow(_body, 4);
         content.Children.Add(_body);
 
         _nav = new NavigationView
@@ -306,6 +317,7 @@ internal sealed class ShellView
     {
         var first = !_started;
         _started = true;
+        _state = state;
         Avatars.Listed($"{shown.connection}\n{shown.tenant.tenantId}", shown.pictures);
         DrawSwitcher(state, shown);
         DrawPane(state, shown);
@@ -461,7 +473,7 @@ internal sealed class ShellView
             {
                 _file?.Dispose();
                 // the file read: its header learns what it may do (FileModel.Header.facts)
-                _file = new FilePage(node) { Read = facts => _header?.Facts(facts) };
+                _file = new FilePage(node) { Read = (facts, id) => _header?.Facts(facts, id) };
             }
             body = _file.Page;
         }
@@ -516,17 +528,21 @@ internal sealed class ShellView
         // beside it — two Add commands side by side would ask which one adds what
         if (page is null && shown.canCreateHere && shown.creates.Count > 0)
         {
-            // a folder and a Pot are made here; another kind is a later CR's (its entry stays disabled)
+            // what the core offers here (AppKinds.createsWhere): a folder and a Pot, on Home files and a folder uploaded too
             _commands.PrimaryCommands.Add(CreateAction.Menu(Words.DrawerNew(), "new",
                 shown.creates.Select(c => (Said.Key(c.word), $"new:{c.create}", c.create switch
                 {
                     Create.Folder => (Action?)NewFolder,
                     Create.Pot => () => PotCreateDialog.Open(_window, Say),
+                    Create.UploadFiles => () => { if (Level() is { } l) _uploads.PickFiles(l, Say); },
+                    Create.UploadFolder => () => { if (Level() is { } l) _uploads.PickFolder(l, Say); },
                     _ => null,
                 }))));
         }
         // an open Pot's "Add entry" is the content's creating action, first, where its places show and it takes writes
         if (page is { CanAdd: true }) _commands.PrimaryCommands.Add(CreateAction.Button(Words.PotAdd(), "pot-add", page.AddEntry));
+        // the upload queue while it lists anything
+        if (_uploads.Button is { } uploads) _commands.PrimaryCommands.Add(uploads);
         if (_header is null) return;
         var file = _file;
         var (primary, secondary) = _header.Commands(() =>
@@ -534,6 +550,9 @@ internal sealed class ShellView
             var window = WinRT.Interop.WindowNative.GetWindowHandle(_window);
             if (page is not null) page.Download(window, Say);
             else file?.Save(window, Say, Saving);
+        }, () =>
+        {
+            if (file?.Id is { } id) _uploads.Replace(id, Say);
         });
         foreach (var c in primary) _commands.PrimaryCommands.Add(c);
         if (page is not null)
@@ -545,6 +564,14 @@ internal sealed class ShellView
             _commands.PrimaryCommands.Add(refresh);
         }
         foreach (var c in secondary) _commands.SecondaryCommands.Add(c);
+    }
+
+    /// <summary>The level shown, where New's uploads go: its space, the folder there (null: its top), the batch's label.</summary>
+    private Uploads.Level? Level()
+    {
+        if (_state is not { } state || _shown is not { } shown || state.shell.space is not { } space) return null;
+        var folder = state.shell.path.Count > 0 ? state.shell.path[^1] : null;
+        return new Uploads.Level(space, folder?.nodeId, folder?.name ?? Said.Piece(shown.spaceName));
     }
 
     /// <summary>New's folder (Shell.CreateFolder), named in a dialog that asks again with the core's problem.</summary>

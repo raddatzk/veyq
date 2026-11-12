@@ -35,6 +35,7 @@ internal sealed class NodeHeader : IDisposable
     private long? _id;
     private Watch? _watch;
     private Facts? _later;
+    private long? _laterFile;
     private bool _laterSet;
     private bool _closed;
     private bool _seenUndo;
@@ -117,7 +118,7 @@ internal sealed class NodeHeader : IDisposable
             return;
         }
         _id = header;
-        if (_laterSet) Act.Send(new Call.HeaderFacts { header = header, facts = _later });
+        if (_laterSet) Act.Send(new Call.HeaderFacts { header = header, facts = _later, file = _laterFile });
         _watch = Core.Watch(new Watched.Header { header = header }, update =>
         {
             if (_closed || update is not Update.Header h) return;
@@ -201,28 +202,30 @@ internal sealed class NodeHeader : IDisposable
 
     private static string Ids(Plan? p) => p is null ? "" : string.Join(" | ", new[] { p.buttons, p.menu, p.last }.Select(g => string.Join(",", g.Select(a => a.id))));
 
-    /// <summary>What the kind's page knows now (a Pot read: whether it takes writes).</summary>
-    public void Facts(Facts? facts)
+    /// <summary>What the kind's page knows now (a Pot read: whether it takes writes) and, for a file's page, its id
+    /// <paramref name="file"/>: the page's own actions (Replace) join the plan.</summary>
+    public void Facts(Facts? facts, long? file = null)
     {
-        if (_id is { } header) Act.Send(new Call.HeaderFacts { header = header, facts = facts });
-        else (_later, _laterSet) = (facts, true);
+        if (_id is { } header) Act.Send(new Call.HeaderFacts { header = header, facts = facts, file = file });
+        else (_later, _laterFile, _laterSet) = (facts, file, true);
     }
 
     /// <summary>The header's commands for the bar: its primary ones (the plan's buttons) and its secondary ones (the
     /// menu, a separator, the last group), from the plan's groups (HeaderPlan). <paramref name="pageDownload"/> is the
-    /// page's own download where it has one (HeaderPlan.ByPage: a Pot's, a file's Save a copy).</summary>
-    public (List<ICommandBarElement> Primary, List<ICommandBarElement> Secondary) Commands(Action pageDownload)
+    /// page's own download where it has one (HeaderPlan.ByPage: a Pot's, a file's Save a copy), <paramref name="pageReplace"/>
+    /// a file page's own Replace.</summary>
+    public (List<ICommandBarElement> Primary, List<ICommandBarElement> Secondary) Commands(Action pageDownload, Action? pageReplace = null)
     {
         var primary = new List<ICommandBarElement>();
         var secondary = new List<ICommandBarElement>();
         if (Shown is not { gone: false, plan: { } plan } s) return (primary, secondary);
         var kind = s.node.kind;
-        foreach (var a in HeaderPlan.Primary(plan, kind)) primary.Add(Command(a, s, pageDownload));
-        foreach (var a in HeaderPlan.Secondary(plan, kind)) secondary.Add(a is null ? new AppBarSeparator() : Command(a, s, pageDownload));
+        foreach (var a in HeaderPlan.Primary(plan, kind)) primary.Add(Command(a, s, pageDownload, pageReplace));
+        foreach (var a in HeaderPlan.Secondary(plan, kind)) secondary.Add(a is null ? new AppBarSeparator() : Command(a, s, pageDownload, pageReplace));
         return (primary, secondary);
     }
 
-    private AppBarButton Command(PlanAction a, HeaderShown s, Action pageDownload)
+    private AppBarButton Command(PlanAction a, HeaderShown s, Action pageDownload, Action? pageReplace)
     {
         var label = a.word is { } w ? Veyq.Said.Key(w) : a.id;
         var icon = a.id switch
@@ -236,6 +239,7 @@ internal sealed class NodeHeader : IDisposable
             "share" => new SymbolIcon(Symbol.Share),
             "report" => new SymbolIcon(Symbol.Flag),
             "cover" => new SymbolIcon(Symbol.Pictures),
+            "replace" => new SymbolIcon(Symbol.Upload),
             _ => new SymbolIcon(Symbol.More),
         };
         var button = new AppBarButton { Icon = icon, Label = label };
@@ -249,6 +253,7 @@ internal sealed class NodeHeader : IDisposable
                 case "rename": Rename(s.node.name, null); break;
                 case "delete": Delete(); break;
                 case "download" when HeaderPlan.ByPage(a.id, s.node.kind): pageDownload(); break;
+                case "replace": pageReplace?.Invoke(); break;
                 case "download": Download(); break;
                 case "move": MoveDialog.Open(_window, s.node, copy: false, UndoBar); break;
                 case "copy": MoveDialog.Open(_window, s.node, copy: true, UndoBar); break;
