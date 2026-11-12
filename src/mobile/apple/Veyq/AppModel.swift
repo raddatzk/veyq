@@ -131,6 +131,8 @@ final class AppModel {
             initial: Set(Shared.defaults.stringArray(forKey: "veyq.hidden") ?? [])
         )
         session = AppleSessions.shared.sessionModel(device: device, hidden: hidden, recent: recent, signInElsewhere: inExtension)
+        // a copy sent or a download handed to the save sheet in an earlier run has been read by now (or never will be)
+        if !inExtension { Self.sweepTemporary() }
         gateWatch = session.watch { @Sendable _ in
             Task { @MainActor [weak self] in self?.gateChanged() }
         }
@@ -325,6 +327,7 @@ final class AppModel {
                 shellWatch?.stop()
                 shellModel = nil
                 dropHeaders()
+                closeFile()
             } else if managing != nil {
                 managing = managed()
             }
@@ -375,6 +378,7 @@ final class AppModel {
         shellWatch?.stop()
         shellModel = model
         dropHeaders()
+        closeFile()
         try await model.load(openLastUsed: incoming == nil)
         shellWatch = model.watch { @Sendable _ in
             Task { @MainActor [weak self] in self?.applyShell(start: false) }
@@ -652,9 +656,7 @@ final class AppModel {
 
     /// `item`'s original written to a temporary file under `name`, for the system's save sheet; nil where it did not read.
     func downloadMedium(_ item: MemoryMedia.Item, name: String) async -> URL? {
-        guard let t = tenantSession else { return nil }
-        let dir = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
-        guard (try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)) != nil else { return nil }
+        guard let t = tenantSession, let dir = Self.downloadDir() else { return nil }
         let url = dir.appendingPathComponent(name)
         guard (try? await AppleMemories.shared.download(tenant: t, item: item, path: url.path))?.boolValue == true else {
             try? FileManager.default.removeItem(at: dir)
@@ -781,9 +783,6 @@ final class AppModel {
         return try? await DropBoxes.shared.folders(tenant: t, scopeId: scopeId, dropBoxId: nodeId)
     }
 
-    /// Every file of the tenant with its content's reference and opened meta, by node id (Depot's `DepotFiles.list`).
-    private(set) var files: [String: DepotFiles.File] = [:]
-
     /// What the rows read last (core's `RowDetails`): a part that does not read next time keeps these.
     @ObservationIgnored private var rows = RowDetails.ReadCompanion.shared.EMPTY
 
@@ -792,51 +791,54 @@ final class AppModel {
         if reset { rows = RowDetails.ReadCompanion.shared.EMPTY }
         guard let read = try? await RowDetails.shared.read(tenant: t, previous: rows), tenantSession === t else { return }
         rows = read
-        files = read.files
+        // the file on screen reads itself anew: a replaced blob is shown
+        openFile?.model.reload()
         rowDetails = read.details.mapValues { $0.map { say(piece: $0) } }
         listsRevision += 1
         await readCovers(t, named: read.covers)
     }
 
-    /// A file page's facts: size, the sealed type (a claim, shown as such), modified (core's `DepotFiles.facts`).
-    func fileFacts(_ f: DepotFiles.File) -> String {
-        DepotFiles.shared.facts(f: f).map { say(piece: $0) }.joined(separator: " · ")
+    /// The file page on screen (core's `FileModel`, one at a time) and its watch; read anew whenever the lists are.
+    @ObservationIgnored private var openFile: (model: FileModel, watch: FileModel.Watch)?
+
+    /// What the file page on screen shows (`FileModel.State`) and of which node, on the main actor.
+    private var fileShown: (node: NodeAt, state: FileModel.State)?
+
+    /// What file `node`'s page shows, once its model delivered it; nil before, and for any other node.
+    func fileState(_ node: NodeAt) -> FileModel.State? {
+        guard let shown = fileShown, shown.node == node else { return nil }
+        return shown.state
     }
 
-    /// What a file's page shows (core's `FileView`): its first frame read and decided by its bytes, then what that needs.
-    /// Who uploaded `f`'s content (Depot's `uploaderOf`), as its page names it; nil where nobody is to be named.
-    func uploaderText(_ f: DepotFiles.File) async -> String? {
-        guard let t = tenantSession, let u = try? await Uploaders.shared.of(tenant: t, file: f) else { return nil }
-        return say(notice: Uploaders.shared.words(u: u))
-    }
-
-    func fileView(_ f: DepotFiles.File, nodeName: String) async -> FileShown {
-        guard let t = tenantSession, let v = try? await AppleDepot.shared.view(tenant: t, file: f, nodeName: nodeName) else { return .failed }
-        let d = v.decision
-        switch d.kind {
-        case .image:
-            guard let data = v.data, let image = CoverImages.image(data as Data, maxPixels: 4096) else {
-                return .message(say(FileView.shared.message(kind: .unsupported)))
+    /// The page of file `node` (core's `FileModel` over the shell): iOS hands a copy on through its share sheet, a Mac does
+    /// not. Called while a view is drawn, so it changes nothing observed: the state arrives through the watch.
+    func fileModel(_ node: NodeAt) -> FileModel? {
+        if let held = openFile, held.model.node == node { return held.model }
+        guard let m = shellModel else { return nil }
+        closeFile()
+        #if os(iOS)
+        let shares = true
+        #else
+        let shares = false
+        #endif
+        let made = m.fileModel(ref: node, shares: shares)
+        let id = ObjectIdentifier(made)
+        let watch = made.watch { @Sendable state in
+            nonisolated(unsafe) let state = state
+            Task { @MainActor [weak self] in
+                // a state of a page closed meanwhile is dropped
+                guard let self, let open = self.openFile?.model, ObjectIdentifier(open) == id else { return }
+                self.fileShown = (open.node, state)
             }
-            return .picture(image)
-        case .text:
-            return .text(v.text ?? "", truncated: d.truncated)
-        case .pdf, .media:
-            let url = FileManager.default.temporaryDirectory.appendingPathComponent("view-\(UUID().uuidString).\(d.fileExtension ?? "bin")")
-            guard (try? await AppleDepot.shared.download(tenant: t, file: f, path: url.path))?.boolValue == true else { return .failed }
-            return d.kind == .pdf ? .pdf(url) : .media(url)
-        default: return .message(say(FileView.shared.message(kind: d.kind)))
         }
+        openFile = (made, watch)
+        return made
     }
 
-    /// File `ref`'s content written to a temporary file under its download name, for the system's save sheet.
-    func downloadFile(_ ref: NodeAt) async -> Downloaded? {
-        guard let t = tenantSession, let f = files[ref.nodeId], f.hasContent else { return nil }
-        let dir = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
-        guard (try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)) != nil else { return nil }
-        let url = dir.appendingPathComponent(DepotFiles.shared.downloadName(file: f, nodeName: ref.name))
-        guard (try? await AppleDepot.shared.download(tenant: t, file: f, path: url.path))?.boolValue == true else { return nil }
-        return Downloaded(url: url)
+    private func closeFile() {
+        openFile?.watch.stop()
+        openFile?.model.close()
+        openFile = nil
     }
 
     /// Something the shell asks or says once (an upload's refusal, its "Replace anyway"), with its action where it offers one.
@@ -849,8 +851,8 @@ final class AppModel {
 
     var notice: Notice?
 
-    /// The file whose content the person is picking a replacement for (the header's "Replace…"), while they pick.
-    var replacing: String?
+    /// The file page whose content the person is picking a replacement for (the header's "Replace…"), while they pick.
+    var replacing: FileModel?
 
     /// The file a person is about to send a copy of to another app ("Send a Copy…"), while the shell says first that the
     /// copy leaves veyq decrypted. The data are theirs; the app says what happens and never forbids it.
@@ -864,8 +866,30 @@ final class AppModel {
 
     var sentCopy: SentCopy?
 
-    /// Where copies sent to another app wait to be read: cleared before the next one and when the sheet is done.
+    /// Where copies sent to another app wait to be read: cleared before the next one, when the sheet is done and at start.
     private static var sharedDir: URL { FileManager.default.temporaryDirectory.appendingPathComponent("shared", isDirectory: true) }
+
+    /// Where a download waits for the system's save sheet (iOS's `fileMover`): removed once the sheet is done and at start.
+    static var downloadsDir: URL { FileManager.default.temporaryDirectory.appendingPathComponent("downloads", isDirectory: true) }
+
+    /// A new directory of its own under `downloadsDir` for one download; nil where it could not be made.
+    static func downloadDir() -> URL? {
+        let dir = downloadsDir.appendingPathComponent(UUID().uuidString, isDirectory: true)
+        return (try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)) != nil ? dir : nil
+    }
+
+    /// Every decrypted copy the app wrote for the person — a copy sent, a download for the save sheet — swept at start: what
+    /// a crash or a sheet left behind is not kept (ADR 0047: no plaintext at rest but where the person saves it).
+    private static func sweepTemporary() {
+        try? FileManager.default.removeItem(at: sharedDir)
+        try? FileManager.default.removeItem(at: downloadsDir)
+        // what builds before this rule left there: a viewed file's decrypted copy (`view-…`), a download's own directory
+        let tmp = FileManager.default.temporaryDirectory
+        for name in (try? FileManager.default.contentsOfDirectory(atPath: tmp.path)) ?? []
+        where name.hasPrefix("view-") || UUID(uuidString: name) != nil {
+            try? FileManager.default.removeItem(at: tmp.appendingPathComponent(name))
+        }
+    }
 
     func clearSentCopies() {
         try? FileManager.default.removeItem(at: Self.sharedDir)
@@ -873,12 +897,13 @@ final class AppModel {
 
     /// A decrypted copy of file `ref` under its own name (core's `downloadName`), for the system's share sheet.
     func copyForSending(_ ref: NodeAt) async -> SentCopy? {
-        guard let t = tenantSession, let f = files[ref.nodeId], f.hasContent else { return nil }
+        guard let header = fileModel(ref)?.current.header, header.facts.hasContent else { return nil }
         clearSentCopies()
         let dir = Self.sharedDir.appendingPathComponent(UUID().uuidString, isDirectory: true)
         guard (try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)) != nil else { return nil }
-        let url = dir.appendingPathComponent(DepotFiles.shared.downloadName(file: f, nodeName: ref.name))
-        guard (try? await AppleDepot.shared.download(tenant: t, file: f, path: url.path))?.boolValue == true else { return nil }
+        let url = dir.appendingPathComponent(header.downloadName)
+        // the file itself (core's download of a file): the one decrypted copy the person asked for, swept at the next start
+        guard await downloadNode(ref, to: url.path) != nil else { return nil }
         return SentCopy(url: url)
     }
 
@@ -952,20 +977,12 @@ final class AppModel {
     private func depotSettled(_ item: UploadQueue.Item) async {
         guard let t = tenantSession else { return }
         await refreshLists(t)
-        guard let offer = DepotFiles.shared.offerFor(item: item, blobIdOf: { [files] id in files[id]?.blobId }) else { return }
+        guard let offer = try? await DepotFiles.shared.offerAfter(tenant: t, item: item) else { return }
         uploads.remove(id: item.id)
-        let nodeId = offer.nodeId
-        let source = offer.source
-        let expected = offer.expectedBlobId
         notice = Notice(text: say(notice: offer.notice), action: say(offer.action)) { [weak self] in
-            self?.replace(nodeId, source: source, expected: expected)
+            guard let self, let t = self.tenantSession, let job = try? await DepotFiles.shared.take(tenant: t, offer: offer) else { return }
+            self.enqueueDepot([job], label: job.name, key: job.file.nodeId)
         }
-    }
-
-    /// Queues file `nodeId`'s content replaced with `source` over `expected`.
-    private func replace(_ nodeId: String, source: UploadSource, expected: String?) {
-        guard let t = tenantSession, let f = files[nodeId] else { return }
-        enqueueDepot([DepotFiles.ReplaceJob(tenant: t, file: f, source: source, expectedBlobId: expected, name: source.name)], label: source.name, key: nodeId)
     }
 
     /// Depot's "Upload folder…": the directory at `url` (the system's folder picker) listed here — only its files, hidden ones
@@ -1009,14 +1026,12 @@ final class AppModel {
         return files
     }
 
-    /// The header's "Replace…": file `nodeId`'s content replaced with the picked file at `url` over `expected`, queued.
-    func replaceFile(_ nodeId: String, url: URL, expected: String?) {
-        guard let t = tenantSession, let f = files[nodeId], let p = Picked(url) else { return }
-        let job = AppleDepot.shared.replaceJob(
-            tenant: t, file: f, url: url, name: p.name, size: p.size, type: p.type,
-            modifiedAt: p.modifiedAt.map { KotlinLong(value: $0) }, expectedBlobId: expected
-        )
-        enqueueDepot([job], label: p.name, key: nodeId)
+    /// The header's "Replace…": the content `file` shows replaced with the picked file at `url` (core's `FileModel.replace`), queued.
+    func replaceFile(_ file: FileModel, url: URL) {
+        guard let p = Picked(url) else { return }
+        let source = AppleDepot.shared.source(url: url, name: p.name, size: p.size, type: p.type, modifiedAt: p.modifiedAt.map { KotlinLong(value: $0) })
+        guard let job = file.replace(source: source) else { return }
+        enqueueDepot([job], label: p.name, key: file.node.nodeId)
     }
 
     /// Why `item` did not go up, in its application's words (the uploads list's line under it); nil while it may still.
@@ -1309,31 +1324,23 @@ final class AppModel {
 
 
     /// A receipt of the open Pot opened to its bytes, or nil (blocked, or it did not read).
-    /// Downloads the open Pot `ref` as the web's ZIP (uc.platform.export-import, ADR 0082) into a file of its own in the
-    /// temporary directory, named as the web names it, for the system's save sheet; nil when it did not complete.
-    func downloadPot(_ ref: ObjectRef) async -> URL? {
+    /// Writes the open Pot `ref` as the web's ZIP (uc.platform.export-import, ADR 0082) to `path` (core's `FileSink`, which
+    /// removes a download that did not finish); nil when it did not complete.
+    func downloadPot(_ ref: ObjectRef, to path: String) async -> [NodeExport.Skipped]? {
         guard let session = potSession, pot?.ref == ref else { return nil }
-        let dir = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
-        guard (try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)) != nil else { return nil }
-        let url = dir.appendingPathComponent(NodeExport.shared.fileName(name: ref.name))
         let written = try? await FileDownloads.shared.pot(
-            session: session, deletedName: say(.potDeletedPerson), nowMs: Int64(Date().timeIntervalSince1970 * 1000), path: url.path
+            session: session, deletedName: say(.potDeletedPerson), nowMs: Int64(Date().timeIntervalSince1970 * 1000), path: path
         )
-        return written == nil ? nil : url
+        return written == nil ? nil : []
     }
 
-    /// Folder `ref` with everything under it as the web's ZIP in a temporary file (core's `ShellModel.download` into its
-    /// `FileSink`, which removes a download that did not finish), and what it left out; nil when it did not finish.
-    func downloadFolder(_ ref: NodeAt) async -> Downloaded? {
+    /// Writes node `ref`'s download to `path` (core's `ShellModel.download` into its `FileSink`: a file the file itself, any
+    /// other node with everything under it as the web's ZIP); what it left out, nil when it did not finish (nothing left).
+    func downloadNode(_ ref: NodeAt, to path: String) async -> [NodeExport.Skipped]? {
         guard let m = shellModel else { return nil }
-        let dir = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
-        guard (try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)) != nil else { return nil }
-        let url = dir.appendingPathComponent(NodeExport.shared.fileName(name: ref.name))
-        let skipped = try? await FileDownloads.shared.subtree(
-            shell: m, ref: ref, deletedName: say(.potDeletedPerson), nowMs: Int64(Date().timeIntervalSince1970 * 1000), path: url.path
+        return try? await FileDownloads.shared.subtree(
+            shell: m, ref: ref, deletedName: say(.potDeletedPerson), nowMs: Int64(Date().timeIntervalSince1970 * 1000), path: path
         )
-        guard let skipped else { return nil }
-        return Downloaded(url: url, leftOut: skipped)
     }
 
     func openReceipt(_ receiptId: String) async -> Data? {

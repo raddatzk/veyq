@@ -11,16 +11,11 @@ struct HeaderContribution {
     var subtitle: String?
     /// What the page knows of its object (a Pot's write right, a file's content): the kind's doors follow it in core.
     var facts = AppKinds.Facts(canWrite: true, hasContent: true)
-    /// The download door: writes the node's ZIP to a temporary file; it and what it left out, or nil when not whole.
-    var download: (() async -> Downloaded?)?
+    /// The download door: writes the node's download (a file the file itself, else its ZIP) to the path given; what it left
+    /// out, or nil when not whole (nothing is left at the path then).
+    var download: ((String) async -> [NodeExport.Skipped]?)?
     /// The application's own actions, merged into core's plan where the kind's order puts them.
     var actions: [OwnAction] = []
-}
-
-/// A download written: the file, and what it left out.
-struct Downloaded {
-    let url: URL
-    var leftOut: [NodeExport.Skipped] = []
 }
 
 /// An action of the application's own on its node's header.
@@ -59,26 +54,31 @@ struct KindPage {
 
     private static let dropBox = KindPage(header: { node, model in
         HeaderContribution(
-            download: { await model.downloadFolder(node) }
+            download: { await model.downloadNode(node, to: $0) }
         )
     }, body: { ref, _, model in AnyView(DropBoxScreen(model: model, ref: ref)) })
 
-    /// Depot's file: its download under its own name, its replace (or first upload), its page (`FileScreen`).
+    /// Depot's file: what its header offers is core's (`FileModel`'s header: its facts, Replace, Send a Copy where the
+    /// platform shares, its download — the file itself under its own name); its page (`FileScreen`).
     private static let file = KindPage(header: { node, model in
-        let has = model.files[node.nodeId]?.hasContent == true
+        guard let file = model.fileModel(node), let h = model.fileState(node)?.header else { return nil }
         return HeaderContribution(
-            facts: AppKinds.Facts(canWrite: true, hasContent: has),
-            download: { await model.downloadFile(node) },
-            actions: [OwnAction(id: "replace", label: say(DepotFiles.shared.replaceWord(f: model.files[node.nodeId])), systemImage: "square.and.arrow.down.on.square") {
-                model.replacing = node.nodeId
-            }] + sendAction(node, model, has)
+            facts: h.facts,
+            download: { await model.downloadNode(node, to: $0) },
+            actions: h.own.map { a in
+                let label = h.label(id: a.id).map { say($0) } ?? a.id
+                if a.id == FileModel.companion.SEND {
+                    return OwnAction(id: a.id, label: label, systemImage: "paperplane", slot: a.slot) { model.sendingCopy = node }
+                }
+                return OwnAction(id: a.id, label: label, systemImage: "square.and.arrow.down.on.square", slot: a.slot) { model.replacing = file }
+            }
         )
     }, body: { ref, _, model in AnyView(FileScreen(model: model, ref: ref)) })
 
     /// Core's folder: its ZIP and its copy with everything under it the build exports and copies (`NodeExport`, `SubtreeCopy`).
     private static let folder = KindPage(header: { node, model in
         HeaderContribution(
-            download: { await model.downloadFolder(node) }
+            download: { await model.downloadNode(node, to: $0) }
         )
     })
 
@@ -90,19 +90,9 @@ struct KindPage {
             subtitle: view.subtitle.map { say(notice: $0) },
             // a cover and a copy write: core offers them where Expenses is on (the web's `canCopy`, `expensesRights`)
             facts: AppKinds.Facts(canWrite: view.canWrite, hasContent: true),
-            download: { await model.downloadPot(ref).map { Downloaded(url: $0) } }
+            download: { await model.downloadPot(ref, to: $0) }
         )
     }, body: { ref, key, model in AnyView(PotScreen(model: model, ref: ref, tab: key)) })
-}
-
-/// A file's "Send a Copy…" (iOS: the system's share sheet; a Mac downloads instead), after the shell's notice.
-@MainActor private func sendAction(_ node: NodeAt, _ model: AppModel, _ has: Bool) -> [OwnAction] {
-    #if os(iOS)
-    guard has else { return [] }
-    return [OwnAction(id: "send", label: say(.fileSend), systemImage: "paperplane", slot: .menu) { model.sendingCopy = node }]
-    #else
-    return []
-    #endif
 }
 
 /// Core's header actions on a node of any kind (the web's `NodeHeader` with `coreNodeActions.ts` and `standardNodeActions`,
@@ -257,18 +247,39 @@ struct NodeHeaderActions: View {
         }
     }
 
-    /// The node's ZIP, written to a temporary file, then offered to the system's save sheet.
+    /// The node's download (a file the file itself, else its ZIP) under core's name for it. A Mac asks where in its save panel
+    /// and core writes there (`FileSink`); iOS has no other way to a place the person picks than the save sheet
+    /// (`fileMover`), so it writes into the app's downloads directory first, removed once the sheet is done and at start.
     private func download() async {
         guard let door = contribution.download else { return }
+        _ = model.headerRevision
+        let name = header?.current.downloadName ?? NodeExport.shared.fileName(name: node.name)
+        #if os(macOS)
+        let panel = NSSavePanel()
+        panel.nameFieldStringValue = name
+        guard panel.runModal() == .OK, let url = panel.url else { return }
         downloading = true
-        let written = await door()
+        let written = await door(url.path)
         downloading = false
         if let written {
-            leftOut = written.leftOut
-            downloaded = written.url
+            if let said = Notices.shared.downloadLeftOut(leftOut: written) { failed = say(notice: said) }
         } else {
             failed = say(notice: Notices.shared.downloaded(name: node.name, leftOut: nil))
         }
+        #else
+        guard let dir = AppModel.downloadDir() else { return }
+        let url = dir.appendingPathComponent(name)
+        downloading = true
+        let written = await door(url.path)
+        downloading = false
+        if let written {
+            leftOut = written
+            downloaded = url
+        } else {
+            try? FileManager.default.removeItem(at: dir)
+            failed = say(notice: Notices.shared.downloaded(name: node.name, leftOut: nil))
+        }
+        #endif
     }
 
     private func cleanUpDownload() {

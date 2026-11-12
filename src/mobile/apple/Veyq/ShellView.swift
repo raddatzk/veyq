@@ -389,9 +389,9 @@ struct Bar: View {
         #endif
         // a file's "Replace…": the system's picker hands over one file
         .fileImporter(isPresented: Binding(get: { model.replacing != nil }, set: { if !$0 { model.replacing = nil } }), allowedContentTypes: [.item]) { result in
-            guard let nodeId = model.replacing, case .success(let url) = result else { return }
+            guard let file = model.replacing, case .success(let url) = result else { return }
             model.replacing = nil
-            model.replaceFile(nodeId, url: url, expected: model.files[nodeId]?.blobId)
+            model.replaceFile(file, url: url)
         }
         .overlay(alignment: .top) {
             if let name = model.preparing {
