@@ -336,6 +336,77 @@ Android and Apple thinned.
   added, renamed, deactivated and erased, a member added, New pot from a level with two people, a PDF receipt opened
   (Android's page cap shown on a PDF of more than 20 pages), a picture shared into a Pot from the system's share sheet.
 
+**Status: done (2026-11-12).**
+
+**Built:**
+- core `PotModel`: every write of the Pot's screens is one `PotModel.Op` on the open Pot (`Opened.write`, which
+  `SessionOpened` maps onto `PotSession`; a test plays them); `record(rows)` dated `today()`, refused to a reader or with
+  no rows; `restorable(entryId)` and `restore(entryId)` on the core's clock — outside the window nothing is sent and the
+  message is `NOT_RESTORABLE` (`Notices.potRefused` → `ENTRY_NOT_RESTORABLE`), inside it `restoreEntry` on
+  `latestRevision`; `settings()`; `createSheet(shell, language)`. Gone: `beginWrite`/`endWrite`, `write(op on a
+  session)`, `Creating`/`creating`/`clearCreating`/`create`.
+- core `PotSettings` (screen model): `setBaseCurrency(code)` (nothing when it is the Pot's, refused and said once money is
+  in, the digits the core's table), `addCategory`, `renameCategory`, `addPerson`, `addMember`, `rename`, `toggleActive`,
+  `askErase`/`erase`/`cancelAsk` (only a settled person is asked about, the erase only once asked), each answering
+  whether it was stored; its refusal is its own `notice` (the write's `said = false`).
+- core `PotCreateSheet` (screen model): space (`defaultSpace` of the shell's place) and currency (`defaultCurrency` of
+  the platform's language), the members read again on a space change (a late answer for a space left dropped by a
+  counter), the people kept and typed (`PotCreate.People`), `canCreate(name)`, `create(name, typed)` with `parentIn`
+  from the place it opened at, its refusal a notice, `done`.
+- core `Receipts.PDF_PAGES_SHOWN` (20), `pagesShown`, `pagesCut` (word `receipts_pages_cut`, en + de) and
+  `mediaTypeOf`; `PotShare.BUDGET` (64 MiB) and `PotShare.Intake` (each a receipt, at most `MAX_FILES`, all within the
+  budget, `room` what a device still reads), `split` over it; `PotView.line` never says a foreign amount without its
+  currency. `AppleSessions.receiptMediaType`.
+- `commonTest`: `PotModelTest` (+7), `PotCreateSheetTest` (7), `ReceiptsShownTest` (4), `PotViewMoneyTest` (2);
+  `PotFixture` gains members, own categories, a tombstone's `purgeAfter` and `currencyFixed`.
+- Android: `recordSettleUp`, `restorable`/`restoreEntry`, `potSettings`/`settingsWrite`, `potCreateSheet`/`potCreated` on
+  the app model; `PotSettings` draws core's `PotSettings` (the erase dialog is its `asking`), `PotCreateSheet` draws core's;
+  the PDF viewer renders `Receipts.pagesShown` and says `pagesCut`; `ShareIn` judges by `PotShare.Intake` and reads a
+  stream only up to `room` (the 40 MiB `HEIC_READ_LIMIT` gone); `money()` without a currency writes a number alone.
+  Gone: `potWrite`, `createPot`, `membersOf`, `creating`, `today()`, `minorUnitsOf`.
+- Apple: `recordSettleUp`, `restorable`/`restoreEntry`, `openSettings`/`settingsWrite`/`askErase`/`cancelErase`
+  (`settingsState`), `openCreateSheet` and its actions watched (`createState`); views `PotSettingsTab` and `NewPotSheet`
+  (no view shadows the core's classes); the receipt's share type from `Receipts.mediaTypeOf` (ImageIO's sniff and import
+  gone from `EntryReceipts`), `IncomingFiles` over `PotShare.Intake` (its own `budget` gone), `money()` without the
+  `"EUR"` fallback. Gone: `potWrite`, `CreatingPot`, `createPot(scopeId:…)`, `membersOf`, the `"REFUSED"` literal.
+
+**Met:**
+- 34 mutations, each its case red and restored by `scratchpad/e2/bite.py` (`/bin/cp -f`), all bit: a settle-up on the
+  core's today, refused to a reader, its refusal the message; a restore refused outside its window, on the core's clock,
+  said as not restorable, written on the latest revision; the base currency refused once money is in, its own currency
+  nothing to do, its digits the core's; an erase only once asked, asked only of the settled; the settings' refusal its
+  notice and not the Pot's, a blank person never sent; New pot needs a name and a space, re-reads members on a space
+  change, drops another space's member, drops a late answer, lands in the folder shown only in the space shown, starts
+  on the shown space in the language's currency, takes a typed name, the currency's digits, says its refusal;
+  `kindOf` a PDF, the media type from the bytes, the page cap and its notice, the share's budget and count; an amount's
+  currency always there, a foreign one its own.
+- `./gradlew :core:jvmTest :core:macosArm64Test :bridge:jvmTest :android:assembleDebug` green;
+  `xcodebuild -target Veyq -sdk macosx CODE_SIGNING_ALLOWED=NO` and `xcodebuild -scheme Veyq` signed for the iPhone 18 Pro
+  simulator green (the iOS one again after the erase popover's fix).
+- The inventory's first locator finds in the apps neither `potWrite`, `parentIn`, `defaultSpace`, `restorable(`'s
+  platform clock nor `"REFUSED"`; `grep -n 'ImageIO\|CGImage' apple/Veyq/EntryReceipts.swift` finds nothing;
+  `HEIC_READ_LIMIT` is gone.
+- `validate_mobile_words.py`, `validate_mobile_platform_guidelines.py`, `validate_changes.py` green.
+- `linux/run.py build` (clippy, `cargo test` 23 passed) and `windows/run.py build` (the VM: Veyq.Bridge.Tests 4 and
+  Veyq.Tests 17 passed) green, nothing of theirs changed; the macOS build again green after the last Swift change.
+- Android (throwaway AVD `veyq_e2_throwaway`, created and deleted), read through `uiautomator dump`: Amsterdam copied
+  through the move sheet and renamed `App pot e2`; settle-up one row ("Ben pays Anna" €67.34, a transfer dated Nov 12,
+  2026, both settled); the base currency "Fixed: the pot holds entries."; a person added ("Cleo e2", "Dan e2"), renamed
+  ("Dana e2"), deactivated, its remove asked, cancelled (kept), asked and done; member "other" added; a category added
+  and renamed ("Snacks e2 renamed"); an expense split among four with the 25-page PDF picked, so three settle-up rows,
+  recorded all at once (three transfers of Nov 12); the PDF opened: "The first 20 of 25 pages are shown. Save the
+  receipt to see all of them."; "Taxi" deleted (asked), its sheet "It can be restored until Dec 12, 2026", its history
+  (Deleted / Taxi · €9.99 with writer and time), restored ("edited"); New pot from a folder of my own (`App folder e2`)
+  with a member and a typed person ("App pot e2 new", USD as the English default), its base currency changed to AUD
+  while empty ("In AUD"); `e2-share.jpg` shared from the Files app (long-press, Share, veyq), the pick mode, `App pot
+  e2`, the editor with the receipt, saved ("Shared e2" €5.00) and the picture opened.
+- Apple (the booted iPhone 18 Pro, German): `App pot e2` restored from the space's trash; New pot ("Neue Kasse") on the
+  shown space in EUR, its members offered, a member added, "Erstellen" disabled without a name, cancelled; the settings
+  ("Steht fest: Die Kasse hat Einträge."); settle-up one row and then "Alle eintragen" (everyone "ausgeglichen"); Cleo
+  deactivated; "other" erased through the asked popover; Cleo's erase asked and dismissed by a tap outside (kept) and
+  asked again; the shared receipt opened as a picture; "Shared e2" deleted through its ask and restored ("Er kann bis 12.
+  Dez. 2026, 1:43 wiederhergestellt werden").
+
 ### Phase 3 — Bridge and desktops: the live poll, refresh, settle-up, an entry's history and restore
 
 Also: the Pot page draws the core's head with its cover on both desktops (no desktop shows a cover outside its dialog
@@ -459,3 +530,42 @@ owner's veto. D4's renderers (poppler-glib on Linux, `Windows.Data.Pdf` on Windo
   hold them. A shared file into a Pot (ADR 0129) now opens the editor through `openEditor(nil, pending:)` on Apple and
   `entryEditor(…, pending)` on Android — not passed by hand in this phase (Phase 2 passes a share).
 - **Left in the dev instance by my runs:** nothing; `App pot e1` was deleted forever from the trash.
+
+### Phase 2 (2026-11-12)
+
+- **One write type for the Pot's screens (`PotModel.Op`)**: the record, the restore and every settings and people write
+  go through `Opened.write(op)`, so `commonTest` plays each one without a session. The apps' `potWrite`, which handed a
+  lambda over the session, and Apple's `beginWrite`/`endWrite` copy are gone. Decided here.
+- **A restore outside its window says why** (`NOT_RESTORABLE` → `entry_not_restorable`, an existing word) instead of
+  a generic refusal; nothing is sent. The window is `PotModel.now`, the clock the app hands the core once — the same
+  device clock as before, but read in one place.
+- **The settings say their own refusal** (`PotSettings.State.notice`, the write `said = false`), as the editor does:
+  the Pot's message is left to the settle-up and the restore. The not-ready Pot's currency field shows the settings'
+  notice now.
+- **A share is judged in order by one intake** (`PotShare.Intake`): each a receipt, at most 100, all within 64 MiB —
+  Apple's budget made every app's. Android's 40 MiB per-file read cap became "read no more than what is left of the
+  budget" (`room`), a bounded read, so a provider that hides a stream's size is cut off too. A refused file no longer
+  reorders the rest (`split` kept the order of the refused ones; now both lists keep the share's order).
+- **An amount without a currency is a number alone on every platform** (D8): the desktops' rule, made Android's
+  (was the locale's currency) and Apple's (was `"EUR"`). The wire keeps the currency nullable (`Piece.Money`,
+  `NoticeArg.amount`) rather than changing the desktops' generated types in a phase that does not touch them; the core
+  never hands one without — `PotViewMoneyTest` walks every amount a view says, and `PotView.line` drops a foreign
+  amount whose currency is missing. Open to the owner's veto with the other D8 unifications.
+- **The PDF's page cap is said** (`receipts_pages_cut`, a new word, en + de): Android rendered 20 pages silently before.
+  Apple's PDFKit view pages lazily and shows all, which `PDF_PAGES_SHOWN` allows as "at least".
+- **A trap met on Apple**: an iPhone shows a `confirmationDialog` as a popover with no Cancel button; a tap outside
+  dismisses it, and a binding that ignores the dismissal (the cancel-before-action trap's answer) left the erase asked.
+  The dismissal now cancels one main-queue turn later unless the destructive action confirmed meanwhile. Moved to
+  `src/mobile/CLAUDE.md` § Traps at the docs phase.
+- **New pot takes the shell's spaces** (`ShellModel.State.lists.spaces`), not the platform's copy; the name field is
+  Apple's `peopleName` label as before (not changed here).
+- **Deviations:** the Apple pass ran on the booted iPhone 18 Pro (signed in, as the brief said), not a throwaway one; it
+  restored `App pot e2` from the trash rather than copying Amsterdam again. The Windows and Linux builds were the only
+  desktop checks (Phase 2 changes nothing of theirs).
+- **Not verified on Apple** (the Simulator tool types no text): a person or category added or renamed, New pot created,
+  the base currency changed on an empty Pot, a share from Photos (no `--remember` trust for the extension was set up);
+  Android's pass and `commonTest` hold them. No PDF of more than 20 pages on Apple (PDFKit shows all; nothing to cap).
+- **Left in the dev instance by my runs:** `App pot e2` and `App folder e2` (holding `App pot e2 new`) are in the space's
+  trash, removed for good on Dec 12, 2026. Deleting them forever was refused by this session's permission classifier
+  (irreversible deletion); the owner purges them from the trash, or the server does on that day.
+
