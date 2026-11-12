@@ -13,15 +13,19 @@
 //  (iii) the runtime is reached by a dynamic `import(...)` and by no static import, and the entry chunks (everything
 //        index.html loads) hold none of pdf.js - neither its library nor its worker;
 //  (iv)  neither emitted file builds code from strings: no `new Function(` and no `eval(` (the page has no 'unsafe-eval');
-//  (v)   the same-origin runtime data exists (`assets/pdfjs-<version>/{cmaps,standard_fonts,iccs}/`), and NO `.wasm` file
-//        and no `wasm` directory shipped: the WASM decoders need 'wasm-unsafe-eval', which the policy does not grant, and
-//        `useWasm: false` (pdfOptions.ts) is what keeps pdf.js from asking.
+//  (v)   the same-origin runtime data exists (`assets/pdfjs-<version>/{cmaps,standard_fonts,iccs}/`), and none of pdf.js'
+//        WebAssembly shipped: no `wasm` directory, and the one `.wasm` in dist is the WebP encoder's
+//        (`assets/webp_encoder-<hash>.wasm`, byte for byte `webp-encoder/wasm/webp_encoder.wasm`, ADR 0127). The policy
+//        would compile pdf.js' decoders now ('wasm-unsafe-eval'); they stay off because nobody turned them on - each is
+//        a decision of its own (inbox #836) - and `useWasm: false` (pdfOptions.ts) is what keeps pdf.js from asking.
+//        Bite: copy a `.wasm` of pdfjs-dist's `wasm/` into dist/assets/ and run this - RED.
 //
 // What it does NOT prove: that a browser starts the worker or that the deployed policy admits it at run time - only a real
 // page with the real header shows that (docs/apps/depot.md names the proof).
 //
 // Bite (snapshot-and-restore, never `git checkout`): in `src/shared/pdf/pdfEngine.ts` replace the dynamic import with a static
 // `import { getDocument } from './pdfjsRuntime'`, build, and (iii) goes RED; restore and it is green.
+import { createHash } from 'node:crypto'
 import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -29,6 +33,10 @@ import { fileURLToPath } from 'node:url'
 const DIST = fileURLToPath(new URL('../dist', import.meta.url))
 const ASSETS = join(DIST, 'assets')
 const WORKER = /^pdf\.worker\.min-[^/]+\.js$/
+// The WebP encoder (ADR 0127): the one WebAssembly the client ships, emitted by Vite under its own name and a hash.
+const ENCODER = /^webp_encoder-[\w-]+\.wasm$/
+const ENCODER_SOURCE = fileURLToPath(new URL('../webp-encoder/wasm/webp_encoder.wasm', import.meta.url))
+const sha256 = (path) => createHash('sha256').update(readFileSync(path)).digest('hex')
 const RUNTIME = /^pdfjsRuntime-[^/]+\.js$/
 const DATA_DIRS = ['cmaps', 'standard_fonts', 'iccs']
 // A file name as a literal inside a RegExp: every metacharacter escaped, the backslash first among them.
@@ -108,11 +116,16 @@ const walk = (dir) => {
   }
 }
 walk(DIST)
-if (wasm.length) failures.push(`(v) WebAssembly shipped (${wasm.map((p) => p.slice(DIST.length + 1)).join(', ')}) - the policy has no 'wasm-unsafe-eval'`)
+const encoderSha = sha256(ENCODER_SOURCE)
+const isEncoder = (p) => p.startsWith(ASSETS + '/') && ENCODER.test(p.slice(ASSETS.length + 1)) && sha256(p) === encoderSha
+const encoders = wasm.filter(isEncoder)
+const foreign = wasm.filter((p) => !isEncoder(p))
+if (foreign.length) failures.push(`(v) WebAssembly other than the WebP encoder shipped (${foreign.map((p) => p.slice(DIST.length + 1)).join(', ')}) - pdf.js' decoders stay off until they are decided`)
+if (encoders.length !== 1) failures.push(`(v) expected the WebP encoder once as assets/webp_encoder-<hash>.wasm with the committed bytes, found ${encoders.length}`)
 
 if (failures.length) {
   console.error('PDF.JS IS NOT BUILT AS INTENDED - PDFs would not open, or pdf.js would weigh on every page:')
   for (const f of failures) console.error('  - ' + f)
   process.exit(1)
 }
-console.log(`verify:pdf-worker: ${runtimes[0]} is lazy (dynamic import only), ${workers[0]} is its same-origin worker, no eval/new Function, no WASM, runtime data in ${dataRoots[0]}/.`)
+console.log(`verify:pdf-worker: ${runtimes[0]} is lazy (dynamic import only), ${workers[0]} is its same-origin worker, no eval/new Function, no WASM but the WebP encoder's, runtime data in ${dataRoots[0]}/.`)

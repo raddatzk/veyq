@@ -1,6 +1,8 @@
 // Web Worker that runs the image pixel stage (decode → progressive-halving downscale → encode) off the page
 // thread. It runs the SAME `mediaPixels` code the page deriver runs — only the canvas port differs
-// (`OffscreenCanvas` + `convertToBlob`) — so the tiers it produces are the page thread's tiers.
+// (`OffscreenCanvas` + `convertToBlob`) — so the tiers it produces are the page thread's tiers. A WebP is encoded by
+// libwebp here as there (ADR 0127); an encoder that cannot load is answered as a `source` failure below, because the
+// page would fetch the same module and fail the same way.
 //
 // Why a Worker at all: Chromium encodes a page-thread canvas (`toBlob`, and `convertToBlob` alike) in an idle
 // period, and a tab that is not being painted (backgrounded, minimized, occluded) can wait for one — ≈1 s per
