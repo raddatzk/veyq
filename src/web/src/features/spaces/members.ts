@@ -1,12 +1,12 @@
-// uc.spaces.add-member (web, cr-0077) — the member-management data layer for a tenant OWNER. Inviting by email is
-// tenant-owner-gated; the member directory (pubkeys) is any key-holder's. Operator-blind: the server holds invite
+// uc.spaces.add-member (web, cr-0077) — the member-management data layer for a tenant OWNER. Inviting — by email, or as a
+// link the owner hands over (ADR 0129) — is tenant-owner-gated; the member directory (pubkeys) is any key-holder's. Operator-blind: the server holds invite
 // metadata, the invite's public key and opaque grants, and already-stored operational metadata (pubkeys/roles) —
 // never a scope key. Every grant here names the key it is wrapped to and is signed by its granter (ADR 0111).
 import { tenantsApi, scopesApi } from '../../api/client'
 import { withRefresh } from '../../app/sessionRefresh'
 import { decodeHttpError } from '../../shared/httpError'
 import { commitRotation, openScopeById, rekeyClosedScopes } from './scopes'
-import { buildMemberInvite, type InviteSecret } from './memberInvite'
+import { buildMemberInvite, buildMemberInviteLink, inviteLinkOf, type InviteSecret } from './memberInvite'
 import { recipientIdentityDigest, sealGrant } from './grant'
 import { zeroScopeKey } from './epochs'
 import { anchorIdentity, IdentityUnanchoredError, type ServedIdentity } from '../account/identityPins'
@@ -46,6 +46,45 @@ export async function inviteMember(
     const memberInviteRequest = await buildMemberInvite(tenantId, email, secret)
     onPhase?.('sending')
     return withRefresh(() => tenantsApi().inviteTenantMember({ tenantId, memberInviteRequest }))
+  })
+}
+
+/** A generated code — the one secret a link invite takes (ADR 0129 decision 1: a password would ride the same link). */
+export type InviteCode = Extract<InviteSecret, { mode: 'code' }>
+
+/** A link invite as its owner hands it over (ADR 0129 decision 1): the whole link — the code in it — and when it ends. Shown
+ *  once and held nowhere: the server has the token alone. */
+export type MemberInviteLinkResult = { inviteId: string; link: string; expiresAt: Date }
+
+/**
+ * Mint a member invite bound to nobody, whose link the owner hands over (ADR 0129 decision 1) — owner-gated, and refused
+ * like the mailed one where the tenant cannot send (`503 mail_unavailable`). The invite is the mailed way's placeholder
+ * member ({@link buildMemberInviteLink}); the server sends nothing and answers the token, which this client writes into
+ * the link with the sealed part and [secret]'s code. A `409 stale_epoch` is rebuilt once, as an invite's.
+ */
+export async function createMemberInviteLink(
+  tenantId: string, secret: InviteCode, onPhase?: (phase: InvitePhase) => void,
+): Promise<MemberInviteLinkResult> {
+  return onceMoreIfStale(async () => {
+    onPhase?.('securing')
+    const { request: memberInviteLinkRequest, sealed } = await buildMemberInviteLink(tenantId, secret)
+    onPhase?.('sending')
+    const minted = await withRefresh(() => tenantsApi().createMemberInviteLink({ tenantId, memberInviteLinkRequest }))
+    return { inviteId: minted.inviteId, link: inviteLinkOf(minted.bootstrapSecret, sealed, secret.code), expiresAt: minted.inviteExpiresAt }
+  })
+}
+
+/** Re-issue a pending LINK invite: end it and mint a new one in its place — a new token, invite key, grant, link and code
+ *  (ADR 0129 decision 2) — owner-gated. The old link opens nothing once this answers. */
+export async function reissueMemberInviteLink(
+  tenantId: string, inviteId: string, secret: InviteCode, onPhase?: (phase: InvitePhase) => void,
+): Promise<MemberInviteLinkResult> {
+  return onceMoreIfStale(async () => {
+    onPhase?.('securing')
+    const { request: memberInviteLinkRequest, sealed } = await buildMemberInviteLink(tenantId, secret)
+    onPhase?.('sending')
+    const minted = await withRefresh(() => tenantsApi().reissueMemberInviteLink({ tenantId, inviteId, memberInviteLinkRequest }))
+    return { inviteId: minted.inviteId, link: inviteLinkOf(minted.bootstrapSecret, sealed, secret.code), expiresAt: minted.inviteExpiresAt }
   })
 }
 

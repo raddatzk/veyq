@@ -3,9 +3,11 @@
 // tenant scope's current epoch key to it, and seals the seed — with the head of the owner's key chain and the owner's
 // account — into the link's secret part under a generated code (or a password the owner chose). The grant it wraps is
 // the invite's anchor (ADR 0111 decision 19): whatever a later rotation re-wraps, the invitee
-// checks it against this one. The server receives the public key, the
-// signature, the grant and the sealed part, mails the link and forgets the sealed part; the seed and the code never
-// reach it. The owner passes the code on outside veyq: the operator mails the link, so a link alone must not open.
+// checks it against this one. Two ways (ADR 0129 decision 1): a MAILED invite sends the server the public key, the
+// signature, the grant and the sealed part, the server mails the link and forgets the sealed part, and the owner passes
+// the code on outside veyq — the operator mails the link, so a link alone must not open. A LINK invite sends neither
+// address nor sealed part: the server answers the token, and this client writes `token.sealed.code` into a link the
+// owner hands over — the seed, the sealed part and the code never reach the server.
 import * as v1 from '@veyq/crypto/v1'
 import * as invite from '@veyq/crypto/invite'
 import { inviteLinkKekAsync } from '@veyq/crypto/argonWorker'
@@ -16,7 +18,7 @@ import { listMyTenants, openScopeById } from './scopes'
 import { zeroScopeKey } from './epochs'
 import { recipientIdentityDigest, sealGrant } from './grant'
 import { myChainHead } from '../account/tenantTrust'
-import type { MemberInviteRequest } from '../../api/generated/tenants'
+import type { MemberInviteLinkRequest, MemberInviteRequest } from '../../api/generated/tenants'
 
 /** What opens the link: a code minted here (shown once, passed on by the owner), or a password the owner chose. A code may
  *  carry its link key's derivation already under way ({@link prepareInviteCode}). */
@@ -75,6 +77,32 @@ async function inviteTtlSeconds(tenantId: string): Promise<number> {
  * transient key are wiped before it returns.
  */
 export async function buildMemberInvite(tenantId: string, email: string, secret: InviteSecret): Promise<MemberInviteRequest> {
+  return withOwner(tenantId, secret, (signer, tenant, ttl) => sealMemberInvite(tenantId, email, secret, signer, tenant, ttl))
+}
+
+/**
+ * Build a **link** invite into the tenant [tenantId] (ADR 0129 decision 1): the same invite key, signature and grant as
+ * {@link buildMemberInvite}, bound to nobody, its link sealed under the generated [secret]'s code. The request carries no
+ * address and no sealed part — `sealed` (base64url, the link's middle segment) stays on this device, and the owner's
+ * client writes it into the link with the token the server answers and the code ({@link inviteLinkOf}).
+ */
+export async function buildMemberInviteLink(
+  tenantId: string, secret: Extract<InviteSecret, { mode: 'code' }>,
+): Promise<{ request: MemberInviteLinkRequest; sealed: string }> {
+  return withOwner(tenantId, secret, (signer, tenant, ttl) => sealInvite(tenantId, secret, signer, tenant, ttl))
+}
+
+/** The link a link invite is handed over as: this origin's accept page, its fragment `token.sealed.code`
+ *  (`buildInviteFragment`, which refuses a part the parser would split wrong). */
+export function inviteLinkOf(token: string, sealed: string, code: string, origin = window.location.origin): string {
+  return `${origin}/tenant/accept#${invite.buildInviteFragment(token, sealed, code)}`
+}
+
+/** Run [seal] as the signed-in owner of [tenantId]: the head of their key chain, their identity and the tenant's current
+ *  key, every one wiped after it. */
+async function withOwner<T>(
+  tenantId: string, secret: InviteSecret, seal: (signer: InviteSigner, tenant: InviteEpoch, ttl: number) => Promise<T>,
+): Promise<T> {
   if (!invite.inviteLinkSecret(secret.mode, secret.mode === 'code' ? secret.code : secret.password)) {
     throw new Error('invite secret is not a code or a password')
   }
@@ -88,8 +116,8 @@ export async function buildMemberInvite(tenantId: string, email: string, secret:
   try {
     if (!priv) throw new Error('vault is locked — cannot invite')
     const self = await me(priv)
-    return await sealMemberInvite(
-      tenantId, email, secret, { userId: self.userId, pub: self.pub, head: fromB64std(head), signPrivateKey: priv.sign },
+    return await seal(
+      { userId: self.userId, pub: self.pub, head: fromB64std(head), signPrivateKey: priv.sign },
       { epoch: opened.epochs.epoch, key: opened.epochs.key }, ttl,
     )
   } finally {
@@ -115,6 +143,16 @@ export type InviteEpoch = { epoch: number; key: Uint8Array }
 export async function sealMemberInvite(
   tenantId: string, email: string, secret: InviteSecret, signer: InviteSigner, tenant: InviteEpoch, ttlSeconds: number,
 ): Promise<MemberInviteRequest> {
+  const { request, sealed } = await sealInvite(tenantId, secret, signer, tenant, ttlSeconds)
+  // The wire carries opaque bytes as standard base64; the server re-encodes them for the link's fragment.
+  return { email, ...request, sealedLink: b64std(fromB64url(sealed)) }
+}
+
+/** What both ways of inviting share (ADR 0129 decision 1): the invite key, the owner's signature, the grant — the request
+ *  bound to nobody — and the link's sealed part (base64url), which only the mailed way sends. */
+async function sealInvite(
+  tenantId: string, secret: InviteSecret, signer: InviteSigner, tenant: InviteEpoch, ttlSeconds: number,
+): Promise<{ request: MemberInviteLinkRequest; sealed: string }> {
   const secretBytes = invite.inviteLinkSecret(secret.mode, secret.mode === 'code' ? secret.code : secret.password)
   if (!secretBytes) throw new Error('invite secret is not a code or a password')
   const ahead = secret.mode === 'code' ? (secret.ahead?.take() ?? null) : null
@@ -138,17 +176,17 @@ export async function sealMemberInvite(
       seed, signerHead: signer.head, signerUserId: signer.userId,
     })
     return {
-      email,
-      inviteId,
-      invitePublicKey: invitePublicKeyB64,
-      inviteKeySignature: b64std(inviteKeySignature),
-      expiresAt: new Date(expiresAt * 1000),
-      // The wire carries opaque bytes as standard base64; the server re-encodes them for the link's fragment.
-      sealedLink: b64std(fromB64url(sealed)),
-      epoch,
-      wrappedGrant: grant.wrappedGrant,
-      grantSignature: grant.grantSignature,
-      recipientIdentityDigest: recipientIdentityDigest(invitePublicKeyB64),
+      request: {
+        inviteId,
+        invitePublicKey: invitePublicKeyB64,
+        inviteKeySignature: b64std(inviteKeySignature),
+        expiresAt: new Date(expiresAt * 1000),
+        epoch,
+        wrappedGrant: grant.wrappedGrant,
+        grantSignature: grant.grantSignature,
+        recipientIdentityDigest: recipientIdentityDigest(invitePublicKeyB64),
+      },
+      sealed,
     }
   } finally {
     seed.fill(0)

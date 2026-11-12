@@ -1,7 +1,7 @@
 // uc.spaces.add-member, the owner's side of a member invite (ADR 0111 decisions 1-2): what `inviteMember` / `reissueMemberInvite` POST, opened the way only the invitee can open it — the link's
 // sealed part with the code, the seed inside it to the invite key, that key to the grant. Every claim about the posted
 // bytes is checked with the real crypto; each negative has a control that passes on the same bytes.
-import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 
 vi.mock('../../api/client', () => ({ tenantsApi: vi.fn(), scopesApi: vi.fn() }))
 vi.mock('./scopes', () => ({ openScopeById: vi.fn(), listMyTenants: vi.fn() }))
@@ -25,7 +25,7 @@ vi.mock('@veyq/crypto/argonWorker', async () => {
   }
 })
 
-import { inviteMember, prepareInviteCode, reissueMemberInvite } from './members'
+import { createMemberInviteLink, inviteMember, prepareInviteCode, reissueMemberInvite, reissueMemberInviteLink } from './members'
 import { tenantsApi } from '../../api/client'
 import { listMyTenants, openScopeById } from './scopes'
 import { identityPrivate } from '../../app/vault'
@@ -37,7 +37,7 @@ import { fakeApi } from '../../test/apiMock'
 import { httpError } from '../../test/httpError'
 import { myTenant, openedScope } from '../../test/models'
 import { ScopeKind } from '../../api/generated/scopes'
-import type { MemberInviteRequest, TenantsApi } from '../../api/generated/tenants'
+import type { MemberInviteLinkRequest, MemberInviteRequest, TenantsApi } from '../../api/generated/tenants'
 import * as v1 from '@veyq/crypto/v1'
 import * as invite from '@veyq/crypto/invite'
 import { b64std, b64url, fromB64std } from '@veyq/crypto/base64'
@@ -304,5 +304,72 @@ describe('a code prepared ahead (inbox #566): its link key derived while the own
     fakeApi(tenantsApi, { inviteTenantMember: vi.fn<TenantsApi['inviteTenantMember']>() })
     await expect(inviteMember(T, 'b@x.z', p)).rejects.toThrow()
     expect(p.ahead.take()).not.toBeNull()
+  })
+})
+
+describe('a link invite (ADR 0129 decision 1): the server answers the token, this client writes the link with the code', () => {
+  const MINTED = { inviteId: 'echo', bootstrapSecret: 'tok-EN_1', inviteExpiresAt: new Date('2026-11-19T10:00:00Z') }
+  // The page the owner's client runs on: the link names its origin (a node suite has no window of its own).
+  beforeEach(() => vi.stubGlobal('window', { location: { origin: 'https://acme.example' } }))
+  afterEach(() => vi.unstubAllGlobals())
+
+  /** Mint a link invite under [CODE] and return what the server received and what the owner is handed. */
+  async function minted() {
+    const create = vi.fn<TenantsApi['createMemberInviteLink']>().mockResolvedValue(MINTED)
+    const mailed = vi.fn<TenantsApi['inviteTenantMember']>()
+    fakeApi(tenantsApi, { createMemberInviteLink: create, inviteTenantMember: mailed })
+    const result = await createMemberInviteLink(T, { mode: 'code', code: CODE })
+    expect(create).toHaveBeenCalledTimes(1)
+    expect(mailed).not.toHaveBeenCalled() // the mailed operation would mail, and answers no token
+    expect(create.mock.calls[0][0].tenantId).toBe(T)
+    return { req: create.mock.calls[0][0].memberInviteLinkRequest, result }
+  }
+
+  /** Open a handed-over link as the invitee's page does: its fragment's sealed part with the code the fragment carries. */
+  function openHanded(link: string, req: MemberInviteLinkRequest) {
+    const fragment = invite.parseInviteFragment(new URL(link).hash)
+    const sealed = invite.parseSealedInviteLink(fragment.sealed!)
+    const secret = invite.inviteLinkSecret(sealed.mode, fragment.code!)!
+    return { fragment, payload: invite.openInviteLink({ tenantId: T, inviteId: req.inviteId }, v1.kekInviteLink(secret, sealed.salt, LIGHT), sealed) }
+  }
+
+  it('sends no address and no sealed part — only the invite key, its signature and the grant', async () => {
+    const { req } = await minted()
+    expect(Object.keys(req).sort()).toEqual(
+      ['epoch', 'expiresAt', 'grantSignature', 'inviteId', 'inviteKeySignature', 'invitePublicKey', 'recipientIdentityDigest', 'wrappedGrant'],
+    )
+    expect(req.epoch).toBe(EPOCH)
+  })
+
+  it('hands over this origin\'s accept page with token, sealed part and the code — which opens to the posted invite key', async () => {
+    const { req, result } = await minted()
+    expect(result.link.startsWith('https://acme.example/tenant/accept#tok-EN_1.')).toBe(true)
+    expect(result.expiresAt).toEqual(MINTED.inviteExpiresAt)
+    const { fragment, payload } = openHanded(result.link, req)
+    expect(fragment).toMatchObject({ token: 'tok-EN_1', code: CODE })
+    expect(b64std(v1.serializeIdentityPublic(invite.inviteKeyFromSeed(payload.seed).pub))).toBe(req.invitePublicKey)
+    expect(payload.signerUserId).toBe(OWNER_ID)
+  })
+
+  it('a re-issue mints a whole new invite in place of the old one, with a new link', async () => {
+    const send = vi.fn<TenantsApi['reissueMemberInviteLink']>().mockResolvedValue({ ...MINTED, bootstrapSecret: 'tok-2' })
+    fakeApi(tenantsApi, { reissueMemberInviteLink: send })
+    const old = crypto.randomUUID()
+    const result = await reissueMemberInviteLink(T, old, { mode: 'code', code: CODE })
+    const { tenantId, inviteId, memberInviteLinkRequest: req } = send.mock.calls[0][0]
+    expect({ tenantId, inviteId }).toEqual({ tenantId: T, inviteId: old })
+    expect(req.inviteId).not.toBe(old)
+    expect(openHanded(result.link, req).fragment.token).toBe('tok-2')
+  })
+
+  it('a 409 stale_epoch is rebuilt once — and the link carries the sealed part of the invite that was minted', async () => {
+    const create = vi.fn<TenantsApi['createMemberInviteLink']>()
+      .mockRejectedValueOnce(httpError(409, 'stale_epoch')).mockResolvedValueOnce(MINTED)
+    fakeApi(tenantsApi, { createMemberInviteLink: create })
+    const result = await createMemberInviteLink(T, { mode: 'code', code: CODE })
+    expect(create).toHaveBeenCalledTimes(2)
+    const [first, second] = create.mock.calls.map((c) => c[0].memberInviteLinkRequest)
+    expect(() => openHanded(result.link, second)).not.toThrow()
+    expect(() => openHanded(result.link, first)).toThrow() // control: the first build's invite is another one
   })
 })

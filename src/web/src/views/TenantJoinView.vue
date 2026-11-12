@@ -8,6 +8,10 @@
 // is sent, grants itself the tenant key the invite holds and writes its join record — it is in the space at once. When the
 // owner secured their account between the check and the accept (`409 invite_changed`), the invite is checked again and
 // accepted once more without asking for the code (ADR 0111 decision 20). No key leaves the device.
+// A LINK invite (ADR 0129) carries the code too (`#<token>.<sealed>.<code>`), so the code step is skipped, and it is bound
+// to nobody: the preview names no address, the invitee registers with one they type or signs in with any account, and a
+// new account asks for its confirmation mail right after it joined — a redemption proves no address (decision 4). A
+// consumed invite answers `410 invite_redeemed`: someone opened the link first, which the page says (decision 6).
 import { computed, onMounted, ref, shallowRef } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
@@ -48,12 +52,14 @@ import { fromB64std } from '@veyq/crypto/base64'
 import { secretKeyBytes } from '@veyq/crypto/secretKey'
 import { identityPublicFromPrivate } from '@veyq/crypto/v1'
 import { HttpStatus, isUnauthorized } from '../shared/httpError'
+import { isMailbox } from '../shared/mailbox'
+import { requestEmailConfirmation } from '../features/account/email/emailConfirmation'
 
 const { t } = useI18n()
 const route = useRoute()
 const router = useRouter()
 
-type Phase = 'loading' | 'missing' | 'invalid' | 'expired' | 'code' | 'register' | 'kit' | 'signin' | 'done'
+type Phase = 'loading' | 'missing' | 'invalid' | 'expired' | 'redeemed' | 'code' | 'register' | 'kit' | 'signin' | 'done'
 const phase = ref<Phase>('loading')
 const error = ref('')
 const busy = ref(false)
@@ -64,6 +70,14 @@ const tenantName = ref('')
 const tenantId = ref('')
 const domain = ref('')
 const ownerEmail = ref('')
+// A link invite (ADR 0129 decision 2): a MEMBER invite whose preview names no address. Its invitee types one.
+const linkInvite = ref(false)
+const typedEmail = ref('')
+/** The address this invitee registers or signs in with: the invite's, or the one typed for a link invite. */
+const inviteeEmail = computed(() => (linkInvite.value ? typedEmail.value.trim() : ownerEmail.value))
+const emailReady = computed(() => !linkInvite.value || isMailbox(inviteeEmail.value))
+// The address a link registration's confirmation mail went to, once it went (ADR 0129 decision 4) — '' when none did.
+const confirmationSentTo = ref('')
 // The invite's role (cr-0077): an OWNER cold-births the TENANT scope + seals the first grant; a MEMBER opens its
 // invite's grant with the code and grants itself the tenant key (ADR 0111 decision 3).
 const role = ref<InviteRole>(InviteRole.Owner)
@@ -78,6 +92,10 @@ const handover = ref(false)
 function jcopy(base: string, params?: Record<string, unknown>): string {
   const variant = handover.value ? 'Handover' : isMember.value ? 'Member' : ''
   return t(`tenant.join.${base}${variant}`, params ?? {})
+}
+/** The register and sign-in subline: a link invite names no address, so it has its own. */
+function subline(base: 'registerSub' | 'signinSub'): string {
+  return linkInvite.value ? t(`tenant.join.${base}Link`) : jcopy(base, { email: ownerEmail.value })
 }
 
 // register + signin form: the per-tenant handle chosen on join (ADR 0023), plus an OPTIONAL real name and picture,
@@ -108,7 +126,8 @@ const alreadyUnlocked = computed(
   () => !isMember.value && vaultState.unlocked && account.email.trim().toLowerCase() === ownerEmail.value.trim().toLowerCase(),
 )
 
-// The fragment: the token, and — for a MEMBER invite — the sealed part the code opens (ADR 0111 decision 1).
+// The fragment: the token, and — for a MEMBER invite — the sealed part the code opens (ADR 0111 decision 1), and — for a
+// link invite — the code itself (ADR 0129 decision 1).
 const fragment = parseInviteFragment(String(route.hash || ''))
 const secret = fragment.token
 // Non-reactive: keep the freshly born identity's Uint8Arrays out of Vue's deep proxy.
@@ -136,7 +155,8 @@ onMounted(async () => {
     tenantName.value = p.tenantName
     tenantId.value = p.tenantId
     domain.value = p.domain
-    ownerEmail.value = p.ownerEmail
+    ownerEmail.value = p.ownerEmail ?? ''
+    linkInvite.value = p.role === InviteRole.Member && p.ownerEmail === undefined
     role.value = p.role
     handover.value = p.handover
     if (p.role === InviteRole.Member) {
@@ -149,14 +169,20 @@ onMounted(async () => {
       }
       served = p.invite
       codeMode.value = mode
-      hasAccount = p.hasAccount
+      hasAccount = p.hasAccount ?? false
+      // A link that carries its code opens without asking for it (ADR 0129 decision 1); one whose code does not open
+      // the invite falls back to the code step, which says so.
+      if (fragment.code && mode === 'code') {
+        await openInvite(fragment.code)
+        if (openedInvite) return
+      }
       phase.value = 'code'
       return
     }
     phase.value = p.hasAccount || p.handover ? 'signin' : 'register'
   } catch (e) {
-    const { status } = await tenantError(e)
-    phase.value = status === HttpStatus.gone ? 'expired' : 'invalid'
+    const { status, code } = await tenantError(e)
+    phase.value = code === 'invite_redeemed' ? 'redeemed' : status === HttpStatus.gone ? 'expired' : 'invalid'
   }
 })
 
@@ -167,12 +193,20 @@ let hasAccount = false
  * sent (ADR 0111 decision 1) — a wrong code is the invitee's to retype; a check that fails is "ask for a new one".
  */
 async function openWithCode() {
-  if (!served || !fragment.sealed || code.value.trim().length === 0) return
+  if (code.value.trim().length === 0) return
+  await openInvite(code.value)
+  if (openedInvite) code.value = ''
+}
+
+/** Open the link's sealed part with [typed] — the code typed, or the one the link carries — and check the invite; then
+ *  the account step: sign-in for an invitee the preview knows to have an account, else register (a link invite, bound to
+ *  nobody, starts at register and offers the sign-in beside it). */
+async function openInvite(typed: string) {
+  if (!served || !fragment.sealed) return
   error.value = ''
   busy.value = true
   try {
-    openedInvite = await openMemberInvite(tenantId.value, served, fragment.sealed, code.value)
-    code.value = ''
+    openedInvite = await openMemberInvite(tenantId.value, served, fragment.sealed, typed)
     phase.value = hasAccount ? 'signin' : 'register'
   } catch (e) {
     if (e instanceof InviteCodeWrong) error.value = t(codeMode.value === 'code' ? 'tenant.join.codeWrong' : 'tenant.join.passwordWrong')
@@ -181,6 +215,13 @@ async function openWithCode() {
   } finally {
     busy.value = false
   }
+}
+
+/** A link invite's invitee switches between a new account and one they have (ADR 0129 decision 2). */
+function chooseAccount(next: 'register' | 'signin') {
+  error.value = ''
+  password.value = ''
+  phase.value = next
 }
 
 /** The MEMBER join for [userId] under [identity] through [opened] (ADR 0111 decision 3), with the Secret-Key proof key
@@ -204,12 +245,16 @@ async function prepareRegistration() {
   // predates the policy, on a screen whose whole job is letting them in. Client-side by construction, too:
   // under Model B (ADR 0003) the password never leaves the device, so there is no server rule to mirror.
   if (!username.value.trim() || password.value.length < MIN_PASSWORD_LENGTH) return
+  if (!emailReady.value) {
+    error.value = t('tenant.join.emailInvalid')
+    return
+  }
   error.value = ''
   busy.value = true
   try {
     if (!(await breachCheckPasses())) return
     const instanceSalt = fromB64std((await setupApi().getSetupStatus()).instanceSalt)
-    built = await buildAccount(ownerEmail.value, password.value, instanceSalt)
+    built = await buildAccount(inviteeEmail.value, password.value, instanceSalt)
     secretKeyDisplay.value = built.emergencyKit.secretKey
     phase.value = 'kit'
   } catch {
@@ -271,7 +316,10 @@ async function finishRegistration() {
       await acceptCheckedInvite(openedInvite!, (opened) => {
         const join = memberJoinFor(opened, userId, acct.identity, fromB64std(acct.material.secretKeyProofPublicKey))
         const key = { epoch: opened.grantedEpoch, key: opened.epochKey }
-        return registerAndAccept(secret, userId, handle, acct.material, undefined, sealedNameFor(key, userId), sealedAvatarFor(key, userId), join)
+        return registerAndAccept(
+          secret, userId, handle, acct.material, undefined, sealedNameFor(key, userId), sealedAvatarFor(key, userId), join,
+          linkInvite.value ? inviteeEmail.value : undefined,
+        )
       }, rereadInvite, undefined, acct.masterKey)
     } else {
       const born = bornTenantScope({ userId, identity: acct.identity }, tenantId.value)
@@ -280,6 +328,7 @@ async function finishRegistration() {
       await holdBorn(born.scopeRootKey, acct.masterKey)
     }
     acct.masterKey.fill(0)
+    if (linkInvite.value) await askForConfirmation()
     finish()
   } catch (e) {
     error.value = await mapError(e)
@@ -288,13 +337,32 @@ async function finishRegistration() {
   }
 }
 
+/**
+ * A link registration proves no address (ADR 0129 decision 4), so the new account asks for its confirmation mail once,
+ * at once — in its own session (ADR 0074 decision 4), which the register does not issue: it signs in first. Neither step
+ * is the join's: a failure leaves the join done, and the banner of the signed-in app offers the mail again (decision 5).
+ */
+async function askForConfirmation() {
+  try {
+    await login(inviteeEmail.value, password.value)
+    await requestEmailConfirmation()
+    confirmationSentTo.value = inviteeEmail.value
+  } catch {
+    // not an error of the join
+  }
+}
+
 /** Existing owner: sign in, unlock (identity key), then seal the grant to it and accept. */
 async function signInAndAccept() {
   if (password.value.length === 0 || secretKey.value.trim().length === 0) return
+  if (!emailReady.value) {
+    error.value = t('tenant.join.emailInvalid')
+    return
+  }
   error.value = ''
   busy.value = true
   try {
-    await login(ownerEmail.value, password.value)
+    await login(inviteeEmail.value, password.value)
     await unlockMasterKey(password.value, secretKey.value.trim())
     if (handover.value) {
       await acceptOwnership(secret)
@@ -413,7 +481,9 @@ async function mapError(e: unknown): Promise<string> {
   // A re-check after `409 invite_changed` that refused the invite: "ask for a new one", as at the code step.
   if (e instanceof InviteCheckFailed) return t('tenant.join.inviteUncheckable')
   const { status, code } = await tenantError(e)
+  if (code === 'invite_redeemed') return t('tenant.join.redeemed')
   if (status === HttpStatus.gone) return t('tenant.join.expired')
+  if (code === 'already_member') return t('tenant.join.alreadyMember')
   if (status === HttpStatus.notFound) return t('tenant.join.invalid')
   if (code === 'email_taken') return t('tenant.join.emailTaken')
   if (code === 'username_taken') return t('tenant.join.usernameTaken')
@@ -433,6 +503,7 @@ async function mapError(e: unknown): Promise<string> {
       <VeyqMessage v-else-if="phase === 'missing'" tone="warn">{{ t('tenant.join.missing') }}</VeyqMessage>
       <VeyqMessage v-else-if="phase === 'invalid'" tone="error">{{ t('tenant.join.invalid') }}</VeyqMessage>
       <VeyqMessage v-else-if="phase === 'expired'" tone="warn">{{ t('tenant.join.expired') }}</VeyqMessage>
+      <VeyqMessage v-else-if="phase === 'redeemed'" tone="warn">{{ t('tenant.join.redeemed') }}</VeyqMessage>
 
       <template v-else-if="phase === 'code'">
         <p class="veyq-form-copy">{{ jcopy('invitedTo', { tenant: tenantName, domain }) }}</p>
@@ -449,7 +520,7 @@ async function mapError(e: unknown): Promise<string> {
 
       <template v-else-if="phase === 'register'">
         <p class="veyq-form-copy">{{ jcopy('invitedTo', { tenant: tenantName, domain }) }}</p>
-        <p class="veyq-form-copy">{{ jcopy('registerSub', { email: ownerEmail }) }}</p>
+        <p class="veyq-form-copy">{{ subline('registerSub') }}</p>
         <p class="join-privacy"><a :href="privacyLink(PRIVACY_ANCHOR.account)" target="_blank" rel="noopener">{{ t('privacyNotice.atInvite') }}</a></p>
         <form class="veyq-form" @submit.prevent="prepareRegistration">
           <label>{{ t('tenant.join.username') }}
@@ -468,18 +539,24 @@ async function mapError(e: unknown): Promise<string> {
             <small class="field-hint">{{ t('tenant.join.nameHint') }}</small>
             <JoinPicturePicker v-model="avatarBytes" :name="`${firstName} ${lastName}`.trim() || username" />
           </template>
+          <!-- A link invite names no address: the new account's is typed here, before the password (ADR 0129 decision 2). -->
+          <label v-if="linkInvite">{{ t('common.email') }}
+            <VeyqInput v-model="typedEmail" name="email" type="email" autocomplete="email" maxlength="254" required />
+          </label>
           <label>{{ t('common.password') }}<VeyqPassword v-model="password" input-id="join-password" autocomplete="new-password" @blur="checkBreaches" /></label>
           <small v-if="passwordHintKey(password)" class="field-hint">{{ t(passwordHintKey(password)!) }}</small>
           <PasswordBreachNotice v-model:use-anyway="useAnyway" :state="breachState" id-prefix="join" :disabled="busy" />
           <VeyqMessage v-if="error" tone="error">{{ error }}</VeyqMessage>
           <VeyqButton type="submit" :label="t('tenant.join.continue')" icon="arrow-right" :loading="busy"
-                  :disabled="!username.trim() || password.length < MIN_PASSWORD_LENGTH" />
+                  :disabled="!username.trim() || password.length < MIN_PASSWORD_LENGTH || !inviteeEmail" />
         </form>
+        <VeyqButton v-if="linkInvite" :label="t('tenant.join.haveAccount')" variant="secondary" appearance="text" size="small"
+                    data-testid="join-have-account" :disabled="busy" @click="chooseAccount('signin')" />
       </template>
 
       <template v-else-if="phase === 'kit'">
         <VeyqMessage tone="info">{{ t('tenant.join.saveKitTitle') }}</VeyqMessage>
-        <EmergencyKitSave :email="ownerEmail" :secret-key="secretKeyDisplay" v-model="kitReady">
+        <EmergencyKitSave :email="inviteeEmail" :secret-key="secretKeyDisplay" v-model="kitReady">
           <p class="veyq-form-copy">{{ t('tenant.join.saveKitSub') }}</p>
         </EmergencyKitSave>
         <VeyqMessage v-if="error" tone="error">{{ error }}</VeyqMessage>
@@ -530,22 +607,29 @@ async function mapError(e: unknown): Promise<string> {
 
         <!-- Cold path: locked vault or a different account signed in → full sign-in + unlock. -->
         <template v-else>
-          <p class="veyq-form-copy">{{ jcopy('signinSub', { email: ownerEmail }) }}</p>
+          <p class="veyq-form-copy">{{ subline('signinSub') }}</p>
           <form class="veyq-form" @submit.prevent="signInAndAccept">
+            <!-- A link invite admits any account of this instance: its address is typed (ADR 0129 decision 2). -->
+            <label v-if="linkInvite">{{ t('common.email') }}
+              <VeyqInput v-model="typedEmail" name="email" type="email" autocomplete="username" maxlength="254" required />
+            </label>
             <label>{{ t('common.password') }}<VeyqPassword v-model="password" input-id="signin-password" autocomplete="current-password" /></label>
             <label>{{ t('unlock.secretKey') }}
-              <SecretKeyField v-model="secretKey" input-id="signin-secret-key" :expected-email="ownerEmail" required />
+              <SecretKeyField v-model="secretKey" input-id="signin-secret-key" :expected-email="inviteeEmail" required />
               <small class="field-hint">{{ t('unlock.secretKeyHint') }}</small>
             </label>
             <VeyqMessage v-if="error" tone="error">{{ error }}</VeyqMessage>
             <VeyqButton type="submit" :label="jcopy('join')" icon="check" :loading="busy"
-                    :disabled="!usernameReady || password.length === 0 || secretKey.trim().length === 0" />
+                    :disabled="!usernameReady || password.length === 0 || secretKey.trim().length === 0 || !inviteeEmail" />
           </form>
+          <VeyqButton v-if="linkInvite" :label="t('tenant.join.newAccount')" variant="secondary" appearance="text" size="small"
+                      data-testid="join-new-account" :disabled="busy" @click="chooseAccount('register')" />
         </template>
       </template>
 
       <div v-else-if="phase === 'done'" class="veyq-stack">
         <VeyqMessage tone="success">{{ jcopy('done', { tenant: tenantName }) }}</VeyqMessage>
+        <VeyqMessage v-if="confirmationSentTo" tone="info">{{ t('tenant.join.confirmationSent', { email: confirmationSentTo }) }}</VeyqMessage>
         <p class="veyq-form-copy">{{ jcopy('doneNote') }}</p>
         <!-- A handover leaves this browser signed in and unlocked on the space it now owns: open it. -->
         <VeyqButton v-if="handover" :label="t('tenant.join.openSpace')" icon="arrow-right" @click="router.push('/')" />

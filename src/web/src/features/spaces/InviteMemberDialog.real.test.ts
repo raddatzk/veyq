@@ -6,10 +6,10 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { mount, flushPromises, type VueWrapper } from '@vue/test-utils'
 import { defineComponent, h, ref } from 'vue'
 
-vi.mock('./members', () => ({ inviteMember: vi.fn(), memberError: vi.fn(), prepareInviteCode: vi.fn() }))
+vi.mock('./members', () => ({ createMemberInviteLink: vi.fn(), inviteMember: vi.fn(), memberError: vi.fn(), prepareInviteCode: vi.fn() }))
 
 import InviteMemberDialog from './InviteMemberDialog.vue'
-import { inviteMember, prepareInviteCode } from './members'
+import { createMemberInviteLink, inviteMember, prepareInviteCode } from './members'
 import { realI18n, t } from '../../test/i18n'
 
 let wrapper: VueWrapper | undefined
@@ -34,6 +34,7 @@ describe('InviteMemberDialog over the real Dialog', () => {
           h('div', [
             h(InviteMemberDialog, {
               tenantId: 't-1',
+              tenantName: 'Acme',
               visible: open.value,
               'onUpdate:visible': (v: boolean) => (open.value = v),
               onInvited: () => { refreshing.value = true },
@@ -42,6 +43,10 @@ describe('InviteMemberDialog over the real Dialog', () => {
       },
     })
     wrapper = mount(Host, { attachTo: document.body, global: { plugins: [realI18n()] } })
+    await flushPromises()
+    // The dialog opens on the link way (ADR 0129 decision 1): switch to the mail way through the real toggle.
+    const mailWay = [...document.body.querySelectorAll('.veyq-toggle-group__item')].find((b) => b.textContent?.includes(t('members.wayMail'))) as HTMLElement
+    mailWay.click()
     await flushPromises()
 
     const input = document.body.querySelector('input[type="email"]') as HTMLInputElement
@@ -55,5 +60,29 @@ describe('InviteMemberDialog over the real Dialog', () => {
     expect(refreshing.value).toBe(true)
     expect(document.body.textContent).toContain(t('members.inviteSentTo', { email: 'partner@example.com' }))
     expect(document.body.querySelector('form')).toBeNull()
+  })
+
+  it('the link way draws its result in the real dialog: the message holding the link, and keeps it while the host refreshes', async () => {
+    const LINK = 'https://acme.example/tenant/accept#tok.SEALED.ABCDE12345'
+    vi.mocked(createMemberInviteLink).mockResolvedValue({ inviteId: 'i-1', link: LINK, expiresAt: new Date('2026-11-19T10:00:00Z') })
+    const refreshing = ref(false)
+    const Host = defineComponent({
+      setup() {
+        const open = ref(true)
+        return () => h('div', [h(InviteMemberDialog, {
+          tenantId: 't-1', tenantName: 'Acme', visible: open.value,
+          'onUpdate:visible': (v: boolean) => (open.value = v), onInvited: () => { refreshing.value = true },
+        })])
+      },
+    })
+    wrapper = mount(Host, { attachTo: document.body, global: { plugins: [realI18n()] } })
+    await flushPromises()
+    ;(document.body.querySelector('[data-testid="invite-link-create"]') as HTMLElement).click()
+    await flushPromises()
+
+    expect(createMemberInviteLink).toHaveBeenCalledOnce()
+    expect(inviteMember).not.toHaveBeenCalled()
+    expect(refreshing.value).toBe(true)
+    expect((document.body.querySelector('[data-testid="invite-link-message"]') as HTMLTextAreaElement).value).toContain(LINK)
   })
 })

@@ -8,7 +8,8 @@
 // operator footer (uc.admin.operator-details): who runs the instance and its terms, reachable from every page of the
 // signed-in app as § 5 DDG asks of a provider identification and DSA Art. 14(1) of the terms. Above the route sits the
 // donation banner as a member's (uc.platform.support-the-project, ADR 0124) — on the signed-in app only, never on the
-// public or plain layouts' login, invite, join and recovery pages.
+// public or plain layouts' login, invite, join and recovery pages — and above it, while the account's address is
+// unconfirmed, the banner that says so and cannot be dismissed (ADR 0129 decision 5), on the same pages only.
 import { computed, watch } from 'vue'
 import { RouterView, useRoute } from 'vue-router'
 import { useI18n } from 'vue-i18n'
@@ -24,6 +25,7 @@ import IncompatibleScreen from './IncompatibleScreen.vue'
 import FinishProfilePrompt from '../../features/account/profile/FinishProfilePrompt.vue'
 import OperatorIdentification from '../../core/operator/OperatorIdentification.vue'
 import DonationBanner from '../../core/project/DonationBanner.vue'
+import UnconfirmedEmailBanner from '../../features/account/email/UnconfirmedEmailBanner.vue'
 import ShortcutsDialog from '../../core/shortcuts/ShortcutsDialog.vue'
 
 const route = useRoute()
@@ -70,6 +72,7 @@ watch(needsScope, (needs) => { if (needs) void enterScope(TENANT_SCOPE) }, { imm
     </div>
     <div class="app-workspace">
       <main class="content">
+        <UnconfirmedEmailBanner />
         <DonationBanner member />
         <FinishProfilePrompt />
         <RouterView />
