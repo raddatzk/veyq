@@ -1,6 +1,6 @@
 {
   "registry": "platform-capabilities",
-  "note": "Catalog of the client-facing capability ids (ADR 0032, ADR 0088). The ids form a tree: each is a dotted path under a root (`core`, or an application's own name, `memories`; ADR 0088 decision 1), and an id of three or more segments has its parent as an entry. An application's own name is an entry too, the one id of one segment: its switch, which makes the application read-only while it is off (ADR 0079 decision 8, uc.platform.switch-application-off), and an ancestor of every id under it. An entry is active only if it and every ancestor entry are active: the AND along the path, which the server computes. A client reads the leaf ids it has UI for and never ANDs them itself (ADR 0088 decisions 2 and 3). From V1 on the catalog is strictly append-only: an id, once added, is never removed, renamed or repurposed. Before V1 it was cut once, from four flat ids into this tree, because no client had been released (ADR 0088 decision 10). `serves` names the use-case(s) an entry gates, a coarser many-to-many projection, and is catalog-only metadata, never put on the wire (the manifest is [{ id }] only). `source` records how the active bit is computed: operator-policy (the Server Owner switches it off through the Admin API, PUT /api/instance/capabilities/{capabilityId}, stored in the database and applied without a restart, and the endpoint refuses with 422 capability_disabled) vs infra-preflight (a runtime probe with no off-switch; no current entry is one, en.platform.capability-register § The catalog) vs external-service (an outside service the browser calls: active only while the Server Owner configured its address, PUT /api/instance/external-services/{capabilityId}, and its switches are on; both deliveries carry the address as `serviceUrl`, and the served CSP names its origin only then, ADR 0088 decision 7). `levels` names who may switch an entry off: `instance` (the Server Owner, `*` in ADR 0088's register) always, and `tenant` (a tenant owner, for their tenant, through PUT /api/tenants/{tenantId}/capability-switches/{capabilityId}, `+`) where listed. The effective state is the AND along the path at both levels, so a tenant only narrows. An entry a client offers before sign-in is instance-only, because the client cannot know a tenant's choice there (ADR 0088 decision 12). `requirements` are the entry's values that tighten it instead of switching it off (ADR 0088 decision 8): each a `flag` or a number of `days`, settable at the entry's levels, the strictest of both in effect (a flag set at either level, the smaller number of days). Each name is unique in the catalog, because it is a property of the wire's `Capability` (contracts/api/_common.openapi.yaml), and each carries its `title` and `whenSet`, what it refuses and what it does to what exists. `title`, `purpose` and `whenOff` are the entry's words for whoever switches it, each in English and German: what it is, what it is for, and what switching it off does to what is new and to what exists, as built (ADR 0088 decision 13). The catalog is the one place they are written; the backend generates its ids and these texts from it (buildSrc's GenerateCapabilityRegister), the API serves them and every client renders them from there. `description` is the dev-facing note and is not served. scripts/validate_capabilities.py checks the tree, that every `serves` resolves to a built use-case, and that every entry carries its three texts in both languages.",
+  "note": "Catalog of the client-facing capability ids (ADR 0032, ADR 0088). The ids form a tree: each is a dotted path under a root (`core`, or an application's own name, `memories`; ADR 0088 decision 1), and an id of three or more segments has its parent as an entry. An application's own name is an entry too, the one id of one segment: its switch, which makes the application read-only while it is off (ADR 0079 decision 8, uc.platform.switch-application-off), and an ancestor of every id under it. An entry is active only if it and every ancestor entry are active: the AND along the path, which the server computes. A client reads the leaf ids it has UI for and never ANDs them itself (ADR 0088 decisions 2 and 3). From V1 on the catalog is strictly append-only: an id, once added, is never removed, renamed or repurposed. Before V1 it was cut once, from four flat ids into this tree, because no client had been released (ADR 0088 decision 10). `serves` names the use-case(s) an entry gates, a coarser many-to-many projection, and is catalog-only metadata, never put on the wire (the manifest is [{ id }] only). `source` records how the active bit is computed: operator-policy (the Server Owner switches it off through the Admin API, PUT /api/instance/capabilities/{capabilityId}, stored in the database and applied without a restart, and the endpoint refuses with 422 capability_disabled) vs infra-preflight (a runtime probe with no off-switch; no current entry is one, en.platform.capability-register § The catalog) vs external-service (an outside service the browser calls: active only while the Server Owner configured its address, PUT /api/instance/external-services/{capabilityId}, and its switches are on; both deliveries carry the address as `serviceUrl`, and the served CSP names its origin only then, ADR 0088 decision 7) vs deployment (active only while the deployment's environment configures it, and its switches are on: the music frame and its services, ADR 0131 decision 4). `levels` names who may switch an entry off: `instance` (the Server Owner, `*` in ADR 0088's register) always, and `tenant` (a tenant owner, for their tenant, through PUT /api/tenants/{tenantId}/capability-switches/{capabilityId}, `+`) where listed. The effective state is the AND along the path at both levels, so a tenant only narrows. An entry a client offers before sign-in is instance-only, because the client cannot know a tenant's choice there (ADR 0088 decision 12). `requirements` are the entry's values that tighten it instead of switching it off (ADR 0088 decision 8): each a `flag` or a number of `days`, settable at the entry's levels, the strictest of both in effect (a flag set at either level, the smaller number of days). Each name is unique in the catalog, because it is a property of the wire's `Capability` (contracts/api/_common.openapi.yaml), and each carries its `title` and `whenSet`, what it refuses and what it does to what exists. `title`, `purpose` and `whenOff` are the entry's words for whoever switches it, each in English and German: what it is, what it is for, and what switching it off does to what is new and to what exists, as built (ADR 0088 decision 13). The catalog is the one place they are written; the backend generates its ids and these texts from it (buildSrc's GenerateCapabilityRegister), the API serves them and every client renders them from there. `description` is the dev-facing note and is not served. scripts/validate_capabilities.py checks the tree, that every `serves` resolves to a built use-case, and that every entry carries its three texts in both languages.",
   "capabilities": {
     "core.public-shares": {
       "title": {
@@ -285,6 +285,60 @@
       "source": "external-service",
       "levels": ["instance", "tenant"],
       "description": "The map tiles (ADR 0018): a {z}/{x}/{y} URL template loaded as images. Active only while a URL is configured and the entry is on at both levels; the served CSP names its origin in img-src while it is on at the instance level. Independent of memories.places."
+    },
+    "memories.music": {
+      "title": {
+        "en": "Background music",
+        "de": "Hintergrundmusik"
+      },
+      "purpose": {
+        "en": "A Memory’s Spotify or Apple Music playlist plays while someone views it, from their own account, after they agree to load the service’s player. The player runs on this instance’s music host, apart from veyq itself.",
+        "de": "Die Spotify- oder Apple-Music-Playlist einer Erinnerung spielt, während jemand sie ansieht, über das eigene Konto, nachdem er dem Laden des Players des Dienstes zugestimmt hat. Der Player läuft auf dem Musik-Host dieser Instanz, getrennt von veyq selbst."
+      },
+      "whenOff": {
+        "en": "No playlist plays in veyq any more and the browser is no longer allowed to load the music host; playlists already set stay and open in the service’s own app. The same holds while the deployment sets no music host.",
+        "de": "Keine Playlist spielt mehr in veyq, und der Browser darf den Musik-Host nicht mehr laden; bereits gesetzte Playlists bleiben und öffnen sich in der App des Dienstes. Dasselbe gilt, solange die Installation keinen Musik-Host setzt."
+      },
+      "serves": ["uc.memory.music"],
+      "source": "deployment",
+      "levels": ["instance", "tenant"],
+      "description": "The music frame (ADR 0131): active only while the deployment sets the music host (VEYQ_MUSIC_DOMAIN) and at least one child is configured, and the entry is on at both levels. Carries the frame's address as serviceUrl; the served CSP names the music host in frame-src, the Permissions-Policy allows it encrypted-media and autoplay, and the COOP is same-origin-allow-popups while it is on at the instance level."
+    },
+    "memories.music.spotify": {
+      "title": {
+        "en": "Spotify",
+        "de": "Spotify"
+      },
+      "purpose": {
+        "en": "Spotify playlists play through Spotify’s player for listeners with Spotify Premium. Needs this instance’s Spotify app.",
+        "de": "Spotify-Playlists spielen über den Player von Spotify für Hörer mit Spotify Premium. Braucht die Spotify-App dieser Instanz."
+      },
+      "whenOff": {
+        "en": "Spotify playlists no longer play in veyq; they stay and open in Spotify. The same holds while the deployment sets no Spotify client ID.",
+        "de": "Spotify-Playlists spielen nicht mehr in veyq; sie bleiben und öffnen sich in Spotify. Dasselbe gilt, solange die Installation keine Spotify-Client-ID setzt."
+      },
+      "serves": ["uc.memory.music"],
+      "source": "deployment",
+      "levels": ["instance", "tenant"],
+      "description": "The Spotify Web Playback SDK in the music frame (ADR 0131): active only while the deployment sets VEYQ_MUSIC_SPOTIFY_CLIENT_ID beside the music host. Carries the client ID as spotifyClientId."
+    },
+    "memories.music.apple-music": {
+      "title": {
+        "en": "Apple Music",
+        "de": "Apple Music"
+      },
+      "purpose": {
+        "en": "Apple Music playlists play through Apple’s MusicKit for listeners with an Apple Music subscription. Needs this instance’s MusicKit developer token.",
+        "de": "Apple-Music-Playlists spielen über MusicKit von Apple für Hörer mit einem Apple-Music-Abo. Braucht das MusicKit-Entwickler-Token dieser Instanz."
+      },
+      "whenOff": {
+        "en": "Apple Music playlists no longer play in veyq; they stay and open in Apple Music. The same holds while the deployment sets no developer token, or one that has expired.",
+        "de": "Apple-Music-Playlists spielen nicht mehr in veyq; sie bleiben und öffnen sich in Apple Music. Dasselbe gilt, solange die Installation kein Entwickler-Token setzt oder eines, das abgelaufen ist."
+      },
+      "serves": ["uc.memory.music"],
+      "source": "deployment",
+      "levels": ["instance", "tenant"],
+      "description": "MusicKit JS in the music frame (ADR 0131): active only while the deployment sets VEYQ_MUSIC_APPLE_DEVELOPER_TOKEN beside the music host and the token's exp has not passed. Carries the token as appleDeveloperToken."
     },
     "depot": {
       "title": {
