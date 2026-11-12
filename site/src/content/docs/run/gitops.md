@@ -301,8 +301,9 @@ mover on the same lines is drift, which `upgrade` refuses. On GitHub, such a job
 setting that lets Actions create pull requests (Settings → Actions → General → Workflow permissions); the maintainer
 runs one weekly, beside Renovate.
 
-`start`, `stop`, `status`, `logs`, `backup`, `restore`, `rollback` and `self-update` are Compose's: on a GitOps instance
-each refuses and names what does that job there (Argo CD, `kubectl`, the backup gate, the restore Job).
+`start`, `stop`, `status`, `logs`, `backup`, `restore` and `rollback` are Compose's: on a GitOps instance
+each refuses and names what does that job there (Argo CD, `kubectl`, the backup gate, the restore Job). `self-update`
+belongs to no instance: it replaces `veyqctl` with the newest release's ([Verify a release](/run/verify-a-release/)).
 
 ## How far this is proven
 

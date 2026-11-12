@@ -55,7 +55,7 @@ fields and claims are compared on rendered manifests by `scripts/chart_upgrade_c
 cd /opt/veyq
 ./veyqctl check                                              # which release upgrade would take, and what is newer
 ./veyqctl upgrade --key-into /media/usb-stick/veyq-<stamp>.key
-./veyqctl self-update                                        # then: veyqctl itself, as the new release ships it
+./veyqctl self-update                                        # then: veyqctl itself, the newest release's
 ```
 
 `upgrade` runs only when you run it, and in this order — **nothing is stopped before step 4**. Each step is a heading
@@ -251,8 +251,7 @@ run and the version clients check share one major. Major 1 began with v1.0 (2026
   own image and always match it.
 - **`veyqctl` is a client too.** `veyqctl --version` names its release. It refuses an instance or a release of a
   newer major than its own and says where to get a newer `veyqctl`. Within a major an older `veyqctl` still works, and
-  says so when it is older than your instance: on Compose `veyqctl self-update` takes your instance's own, on
-  Kubernetes [fetch it again](/run/verify-a-release/).
+  says so when it is older than your instance: `veyqctl self-update` fetches the newest, for every instance you manage.
 - **The bundled database upgrades itself.** When a release moves the bundled MariaDB to a newer version, its first
   start backs up the database's system tables and upgrades them, on Compose and Kubernetes alike. An upgraded database
   does not go back to the older MariaDB: the backup taken before the upgrade is the way back. A database you run

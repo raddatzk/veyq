@@ -46,9 +46,10 @@ install -m 0755 veyqctl /opt/veyq/veyqctl
 
 **If `cosign verify-blob` fails, stop**, and do not run the file. `veyqctl` needs `python3` 3.9 or later, Docker with
 Compose v2, and `cosign` on the host, and runs as a user who may use Docker. From then on `veyqctl self-update`
-replaces it with the copy of the release you run: it verifies that release's manifest on disk against the
-`manifest.json.bundle` kept beside it, then checks the copy against the manifest's sha256 — the signed manifest binds
-`veyqctl` as it binds every other file of the release (below), so `self-update` needs no `veyqctl.bundle`.
+replaces it with the newest release's `veyqctl`, checked as above against its `veyqctl.bundle`, and then held to the
+release it was offered as: a released `veyqctl` names its own release (`veyqctl --version`), so a source cannot pass off
+an older signed copy as the newest. It needs no instance, since one `veyqctl` serves every instance on the computer,
+and it never replaces a `veyqctl` with an older one.
 
 ## The images: `veyqctl verify`
 

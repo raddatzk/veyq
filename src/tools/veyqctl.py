@@ -14,7 +14,7 @@ or through Argo CD on Kubernetes (ADR 0126), optionally with a new server beneat
     upgrade [--key-into FILE] [--push]               Compose: back up, then switch; GitOps: a commit
     backup [prune] --key-into FILE                   Compose: the database, the store's index and the key
     restore DIR --domain D --key-from F | rollback DIR --key-from F   Compose: from a backup
-    self-update                                      Compose: this file, replaced by the installed release's
+    self-update                                      this file, replaced by the newest release's veyqctl
 
 `veyqctl <command> --help` has every flag; `-v` / `--verbose` shows every program it starts, with its arguments;
 `veyqctl --version` names the release it was published as, and only that release's major or an older one is managed.
@@ -105,11 +105,16 @@ COSIGN_VERSION = re.compile(r"GitVersion:\s*v?([0-9]+)\.([0-9]+)\.([0-9]+)")
 # `veyqctl.bundle` are of that copy. Only the major gates ([speaks]); the minor only informs ([note_newer_instance]).
 MAJOR = 1
 RELEASE: str | None = None
+# The RELEASE line of a released copy, as `scripts/release_assets.py` stamps it: how `self-update` reads which release a
+# fetched veyqctl is.
+SELF_STAMP = re.compile(r'(?m)^RELEASE: str \| None = "([0-9]+\.[0-9]+)"$')
 
 COMPOSE_ASSET = "docker-compose.prod.yml"
 TEMPLATE_ASSET = "env.example"  # validate_release_identity.py holds each `*_ASSET` to a name the producer writes
 BACKUP_ASSET = "instance_backup.py"
 SELF_ASSET = "veyqctl"
+# `veyqctl`'s own signature, beside it in every release (`cosign sign-blob` by the publish): what `self-update` checks.
+SELF_BUNDLE_ASSET = "veyqctl.bundle"
 MANIFEST_ASSET = "manifest.json"
 # The manifest's signature, an asset beside it: `cosign sign-blob` by the publish, under the images' identity.
 MANIFEST_BUNDLE_ASSET = "manifest.json.bundle"
@@ -696,15 +701,14 @@ def speaks(release: str, what: str) -> None:
                       f"major {MAJOR} at most. Fetch the newest veyqctl ({GET_VEYQCTL}) and run it again.")
 
 
-def note_newer_instance(running: str, compose: bool) -> None:
+def note_newer_instance(running: str) -> None:
     """The minor never gates: within a major a release's files change only so that what an older veyqctl does still
     holds (ADR 0085 decision 2). But a veyqctl older than its instance lacks what came to veyqctl since — said before
     the command runs, so an old copy on the PATH is noticed."""
     if RELEASE is None or release_key(running) <= release_key(RELEASE):
         return
-    how = "`veyqctl self-update` puts the instance's own in its place" if compose else f"fetch it: {GET_VEYQCTL}"
     say(f"This veyqctl is release {RELEASE}, and the instance runs {running}: what veyqctl gained since is missing "
-        f"here — {how}.")
+        f"here — `veyqctl self-update` fetches the newest.")
 
 
 # ---- the manifest ----------------------------------------------------------------------------------------------
@@ -982,7 +986,7 @@ def check_cosign_version(host: Host, cosign: str) -> None:
 
 def verify_manifest(host: Host, cosign: str, raw: bytes, bundle: bytes, what: str,
                     identity: str = COSIGN_IDENTITY_REGEXP, publisher: str = "veyq",
-                    bundle_name: str = MANIFEST_BUNDLE_ASSET, shown: str = "") -> None:
+                    bundle_name: str = MANIFEST_BUNDLE_ASSET, shown: str = "", label: str = "manifest") -> None:
     """`cosign verify-blob` of the manifest's exact bytes against its bundle and the one identity that publishes it:
     veyq's release workflow, or (the server path) veyq-server's. `shown` is the checklist's detail (default `what`)."""
     check_cosign_version(host, cosign)
@@ -998,7 +1002,7 @@ def verify_manifest(host: Host, cosign: str, raw: bytes, bundle: bytes, what: st
             f"({identity}): {(result.stderr or '').strip()[-800:]}\n"
             f"Nothing was pulled, written or started."
         )
-    checked("manifest", shown or what)
+    checked(label, shown or what)
 
 
 def cosign_target(role: str, ref: str) -> str:
@@ -2175,35 +2179,41 @@ SELF = Path(__file__)
 
 
 def cmd_self_update(args: argparse.Namespace, host: Host) -> int:
-    """This file, replaced by the installed release's `veyqctl` — the one its manifest names, checked by sha256."""
+    """This file, replaced by the newest release's `veyqctl` (ADR 0096 decision 9). It needs no instance: a veyqctl
+    belongs to the computer it runs on, which may manage instances on several releases and targets at once, and every
+    instance of an older release or major is one the newest veyqctl speaks. Never older than itself; checked as the
+    README's block checks it (`cosign verify-blob` against `veyqctl.bundle` and the identity that releases veyq), and
+    then held to the release it is offered as: the bundle binds the bytes to the release workflow, not to a release, so
+    only the copy's own `RELEASE` line tells a source's newest from an older signed copy served under its tag."""
+    target = SELF.resolve()
     if RELEASE is None:
         # An unreleased veyqctl is a checkout's source, or a link to it: replaced, the checkout would hold the
         # release's copy instead of its own code (it happened, to a self-test, 2026-11-12).
-        raise Refused(f"this veyqctl is unreleased ({SELF.resolve()}): it is the source, not a copy to update. Run "
-                      f"the release's own from releases/<release>/{SELF_ASSET}, or fetch one: {GET_VEYQCTL}. "
-                      f"Nothing was replaced.")
-    home = Path(args.home)
-    state = read_state(home)
-    if not state.unsigned_local:
-        # `self-update` replaces the verifier itself, so the manifest on disk is verified again before its sha256 of
-        # `veyqctl` is believed: a manifest edited in the home to match a swapped `veyqctl` must not install it.
-        directory = release_dir(home, state.release)
-        try:
-            raw, bundle = (directory / MANIFEST_ASSET).read_bytes(), (directory / MANIFEST_BUNDLE_ASSET).read_bytes()
-        except OSError as e:
-            raise Refused(f"release {state.release} on disk has no manifest that verifies ({e}), so its `veyqctl` cannot "
-                          f"be trusted. Nothing was replaced.") from None
-        heading(f"Verifying release {state.release} on disk")
-        verify_manifest(host, require_cosign(host), raw, bundle, f"the manifest of release {state.release} in {directory}",
-                        shown=f"release {state.release}, in {directory}")
-    asset = verified_asset(home, state.release, SELF_ASSET)
-    target = SELF.resolve()
-    if target == asset.resolve():
-        say(f"{target} is release {state.release}'s own copy: nothing to replace.")
+        raise Refused(f"this veyqctl is unreleased ({target}): it is the source, not a copy to update. Fetch a "
+                      f"released one: {GET_VEYQCTL}. Nothing was replaced.")
+    source = open_source(args.source)
+    newest = select(source.releases(), "latest", source.describe())
+    if release_key(newest.release) <= release_key(RELEASE):
+        say(f"This veyqctl is release {RELEASE}, and the newest in {source.describe()} is {newest.release}: nothing "
+            f"to replace.")
         return 0
-    data = asset.read_bytes()
+    heading(f"Fetching veyqctl {newest.release}")
+    data = source.fetch(newest.tag, SELF_ASSET)
+    try:
+        bundle = source.fetch(newest.tag, SELF_BUNDLE_ASSET)
+    except Refused as e:
+        raise Refused(f"{source.describe()} has no {SELF_BUNDLE_ASSET} for {newest.tag} ({e}): without it the veyqctl "
+                      f"there is not trusted. Nothing was replaced.") from None
+    verify_manifest(host, require_cosign(host), data, bundle, f"the veyqctl of {newest.tag} from {source.describe()}",
+                    bundle_name=SELF_BUNDLE_ASSET, shown=f"{newest.tag}, signed by veyq's release workflow",
+                    label="veyqctl")
+    named = SELF_STAMP.findall(data.decode("utf-8", "replace"))
+    if named != [newest.release]:
+        raise Refused(f"the veyqctl {source.describe()} serves as {newest.tag} names "
+                      f"{'release ' + named[0] if len(named) == 1 else 'no release'}: a release's veyqctl names its own, "
+                      f"so this is another one under that tag. Nothing was replaced.")
     if target.is_file() and target.read_bytes() == data:
-        say(f"{target} is release {state.release}'s veyqctl already: nothing to replace.")
+        say(f"{target} is release {newest.release}'s veyqctl already: nothing to replace.")
         return 0
     staged = target.with_name(f".{target.name}.new")
     mode = stat.S_IMODE(target.stat().st_mode) if target.exists() else 0o755
@@ -2214,9 +2224,8 @@ def cmd_self_update(args: argparse.Namespace, host: Host) -> int:
     except OSError as e:
         staged.unlink(missing_ok=True)
         raise Refused(f"{target} cannot be replaced: {e}") from None
-    heading(f"veyqctl is now release {state.release}'s")
-    say(f"{target}, sha256 {sha256(data)[:16]}…, as its manifest names."
-        + (" That release was installed --unsigned-local: NOT VERIFIED." if state.unsigned_local else ""))
+    heading(f"veyqctl is now release {newest.release}")
+    say(f"{target}, sha256 {sha256(data)[:16]}…, was release {RELEASE}.")
     return 0
 
 
@@ -4646,7 +4655,6 @@ COMPOSE_ONLY = {
     "backup": "veyq backs itself up before every release change, and the chart's `backup.request` asks for one",
     "restore": "the chart's restore Job (the docs: Backup and restore, under Helm)",
     "rollback": "the chart's restore Job, onto the previous release pinned back",
-    "self-update": "fetch the release's veyqctl as Verify a release says; a GitOps instance holds no release's files",
 }
 
 
@@ -4670,8 +4678,7 @@ class Target:
         running = self.running()
         if running is not None:
             speaks(running, f"the instance in {self.home}")
-            if verb != "self-update":
-                note_newer_instance(running, self.name == "compose")
+            note_newer_instance(running)
         programs = self.programs(verb)
         if programs:
             require_programs(self.host, programs, self.what(verb))
@@ -4708,7 +4715,7 @@ class ComposeTarget(Target):
         return release if TAG.match(f"v{release}") else None
 
     def programs(self, verb: str) -> list[str]:
-        return [] if verb == "self-update" else compose_programs(verb, bool(getattr(self.args, "unsigned_local", False)))
+        return compose_programs(verb, bool(getattr(self.args, "unsigned_local", False)))
 
     def verb(self, verb: str) -> int:
         return self.args.func(self.args, self.host)
@@ -4908,7 +4915,8 @@ def parser() -> argparse.ArgumentParser:
     rollback.add_argument("--yes", action="store_true", help="don't ask before emptying the database")
     rollback.set_defaults(func=cmd_rollback)
 
-    update = sub.add_parser("self-update", help="replace this veyqctl with the one of the installed release")
+    update = sub.add_parser("self-update", help="replace this veyqctl with the newest release's, signature checked; "
+                                                "needs no instance")
     update.set_defaults(func=cmd_self_update)
     # Before the command or after it: `veyqctl -v upgrade` and `veyqctl upgrade -v` both. SUPPRESS on the command's
     # own, or its default would overwrite the one given before it.
@@ -4925,7 +4933,7 @@ def main(argv: list[str] | None = None, host: Host | None = None) -> int:
     set_verbose(bool(getattr(args, "verbose", False)))
     host = host or Host()
     try:
-        if args.command in ("instances", "use", "init", "connect"):
+        if args.command in ("instances", "use", "init", "connect", "self-update"):
             return args.func(args, host)
         home = resolve_home(args)
         args.home = str(home)

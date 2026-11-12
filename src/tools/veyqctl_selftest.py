@@ -61,10 +61,11 @@ what prove it. Everything here runs against a mirror directory this file writes 
      and `rollback` (`test_rollback`, O1 (a)): verify against the live store, stop, empty the database, the capture's
      release started once, stop, restore with the check only, key, start — and refused, nothing stopped, for a release
      gone from `releases/`, a capture that does not verify, and no terminal without `--yes`;
- 10. **`self-update`** — replaced by the installed release's `veyqctl` with its mode kept, nothing to do the second
-     time, refused (nothing replaced) when the installed copy no longer matches its manifest; for a signed release,
-     the manifest on disk verified against its bundle first — refused when it was edited to match a swapped
-     `veyqctl`, and when the bundle is gone.
+ 10. **`self-update`** (`test_self_update`, ADR 0096 decision 9) — with no instance, the newest release's `veyqctl`
+     (never a prerelease) replaces this one, its mode kept, after `cosign verify-blob` over exactly the bytes it
+     installs; nothing fetched when this one is as new or newer; refused, nothing replaced, for a copy that does not
+     verify against its `veyqctl.bundle`, a missing bundle, an older signed copy served under the newest tag (the
+     release it names), and a signed copy that names none.
 
  11. **the instance list and the GitOps target** (ADR 0126, cr-veyqctl-gitops-target) — `init --compose` installing
      as `install` and listing the home; `--home` over `--instance` over the current one; every Compose lifecycle verb
@@ -92,9 +93,10 @@ what prove it. Everything here runs against a mirror directory this file writes 
  15. **which releases it speaks** (`test_own_release`, ADR 0096 decision 9) — `--version` from a checkout and from a
      stamped copy; a manifest of a newer major refused and its own or an older one read; an instance (Compose or
      GitOps) on a newer major refused before anything runs, and an upgrade into one refused at its manifest with
-     nothing stopped; a veyqctl older than its instance saying so (never when as new, from a checkout, or on
-     `self-update`); `self-update` of an unreleased veyqctl refused, nothing replaced. Every other test runs a
-     veyqctl published as 3.0, since their releases reach major 3, and SELF points into the temp directory throughout.
+     nothing stopped; a veyqctl older than its instance saying so, with `self-update` as the way (never when as new,
+     or from a checkout); `self-update` of an unreleased veyqctl refused, nothing fetched or replaced. Every other test
+     runs a veyqctl published as 3.0, since their releases reach major 3, and SELF points into the temp directory
+     throughout.
 What it cannot show: that Docker, cosign and the backup tool behave as the stand-in answers. That is the live runs' (the CR says
 which). Not a `validate_*.py`: it asserts nothing about the repository, only about the tool. Runnable locally:
 
@@ -1300,35 +1302,65 @@ def test_retention_and_ledger(tmp: pathlib.Path) -> None:
           and not any(p.name.startswith(".ledger-") for p in rb.iterdir()), out[-400:])
 
 
+def self_update_mirror(root: pathlib.Path) -> pathlib.Path:
+    """Releases as the publish leaves them for `self-update`: each `veyqctl` stamped with its release and signed into
+    `veyqctl.bundle`; v1.8 a prerelease; `copy` overrides what a tag serves as its veyqctl (bundle made over it)."""
+    for tag, pre in (("v1.3", False), ("v1.7", False), ("v1.8", True)):
+        stamped = f'# veyqctl\nRELEASE: str | None = "{tag[1:]}"\n'
+        write_release(root, tag, prerelease=pre, files={vc.COMPOSE_ASSET: COMPOSE, vc.TEMPLATE_ASSET: TEMPLATE,
+                      vc.BACKUP_ASSET: "# backup tool\n", vc.SELF_ASSET: stamped, "garage.toml": "# garage\n"})
+        (root / tag / vc.SELF_BUNDLE_ASSET).write_text(bundle_token(stamped.encode()))
+    return root
+
+
+def serve_as_newest(mirror: pathlib.Path, text: str, *, sign: bool = True) -> None:
+    """v1.7's veyqctl replaced by `text`, its bundle made over it (a signed copy) or left as it was."""
+    (mirror / "v1.7" / vc.SELF_ASSET).write_text(text)
+    if sign:
+        (mirror / "v1.7" / vc.SELF_BUNDLE_ASSET).write_text(bundle_token(text.encode()))
+
+
 def test_self_update(tmp: pathlib.Path) -> None:
-    mirror = upgrade_mirror(tmp / "mirror-su")
-    home = installed(tmp, "home-su", mirror, "1.3", "1.3")
-    bin_dir = tmp / "bin"
-    bin_dir.mkdir()
-    target = bin_dir / "veyqctl"
-    target.write_text("# an older veyqctl\n")
-    target.chmod(0o750)
-    asset = home / "releases/1.3" / vc.SELF_ASSET
-    saved = vc.SELF
-    vc.SELF = target
-    try:
-        out = io.StringIO()
-        with contextlib.redirect_stdout(out):
-            rc = vc.main(["--home", str(home), "self-update"], FakeHost())
-        check("self-update: replaced by the installed release's veyqctl, its mode kept",
-              rc == 0 and target.read_bytes() == asset.read_bytes() and stat.S_IMODE(target.stat().st_mode) == 0o750,
-              out.getvalue()[-300:])
-        with contextlib.redirect_stdout(out):
-            rc = vc.main(["--home", str(home), "self-update"], FakeHost())
-        check("self-update: a second run finds nothing to replace", rc == 0 and "already" in out.getvalue())
-        asset.write_text("# tampered after it was fetched\n")
-        target.write_text("# an older veyqctl\n")
-        with contextlib.redirect_stdout(out):
-            rc = vc.main(["--home", str(home), "self-update"], FakeHost())
-        check("self-update: an installed veyqctl that no longer matches its manifest is refused, nothing replaced",
-              rc == 1 and target.read_text() == "# an older veyqctl\n")
-    finally:
-        vc.SELF = saved
+    """ADR 0096 decision 9: the newest release's veyqctl, for no instance, signed, naming its own release, never back."""
+    mirror = self_update_mirror(tmp / "mirror-su")
+    newest = (mirror / "v1.7" / vc.SELF_ASSET).read_text()
+    older = "# an older veyqctl\n"
+
+    def run(release: str | None, *extra) -> tuple:
+        vc.SELF.write_text(older)
+        vc.SELF.chmod(0o750)
+        host = FakeHost()
+        with veyqctl_of(1, release):
+            rc, out = run_main(["--source", mirror, "self-update", *extra], host)
+        return rc, out, host
+
+    rc, out, host = run("1.3")
+    check("self-update needs no instance: the newest release's veyqctl (never a prerelease), its signature checked, "
+          "its mode kept", rc == 0 and vc.SELF.read_text() == newest and stat.S_IMODE(vc.SELF.stat().st_mode) == 0o750
+          and host.ran("verify-blob") and "now release 1.7" in out, out[-400:])
+    check("self-update checks the very bytes it installs", host.blobs == [newest.encode()], str(host.blobs))
+    for label, release in (("as new as the newest: nothing to replace, nothing fetched", "1.7"),
+                           ("newer than the newest a source lists: never replaced by an older one", "1.9")):
+        rc, out, host = run(release)
+        check(f"self-update {label}", rc == 0 and vc.SELF.read_text() == older and "nothing to replace" in out
+              and not host.commands, out[-300:])
+    serve_as_newest(mirror, "# a swapped veyqctl\n" + newest, sign=False)
+    rc, out, host = run("1.3")
+    check("self-update: a veyqctl that does not verify against its veyqctl.bundle is refused, nothing replaced",
+          rc == 1 and vc.SELF.read_text() == older and "does not verify" in out, out[-300:])
+    serve_as_newest(mirror, (mirror / "v1.3" / vc.SELF_ASSET).read_text())
+    rc, out, host = run("1.3")
+    check("self-update: an older signed veyqctl served as the newest is refused by the release it names",
+          rc == 1 and vc.SELF.read_text() == older and "names release 1.3" in out, out[-300:])
+    serve_as_newest(mirror, "# a veyqctl from before the stamp\n")
+    rc, out, host = run("1.3")
+    check("self-update: a signed veyqctl that names no release is refused",
+          rc == 1 and vc.SELF.read_text() == older and "names no release" in out, out[-300:])
+    serve_as_newest(mirror, newest)
+    (mirror / "v1.7" / vc.SELF_BUNDLE_ASSET).unlink()
+    rc, out, host = run("1.3")
+    check("self-update: no veyqctl.bundle beside it is refused, nothing replaced",
+          rc == 1 and vc.SELF.read_text() == older and vc.SELF_BUNDLE_ASSET in out, out[-300:])
 
 
 # ---- the manifest's signature (cr-signed-release-manifest) ---------------------------------------------------------
@@ -1541,39 +1573,6 @@ def test_manifest_signature(tmp: pathlib.Path) -> None:
           "just verified" in message and (release / vc.MANIFEST_ASSET).read_bytes() != kept, message)
     (release / vc.MANIFEST_ASSET).write_bytes(kept)
 
-    # bite (d): self-update trusts the manifest on disk only once it verifies against the bundle beside it
-    bin_dir = tmp / "bin-signed"
-    bin_dir.mkdir()
-    target = bin_dir / "veyqctl"
-    saved = vc.SELF
-    vc.SELF = target
-    try:
-        release = home / "releases/1.3"
-        target.write_text("# an older veyqctl\n")
-        host = FakeHost()
-        rc, out = run_main(["--home", home, "self-update"], host)
-        check("self-update (control): a signed release's veyqctl replaces this one after the manifest verifies",
-              rc == 0 and target.read_bytes() == (release / vc.SELF_ASSET).read_bytes() and bool(host.ran("verify-blob")),
-              out[-300:])
-        target.write_text("# an older veyqctl\n")
-        manifest_path, self_path = release / vc.MANIFEST_ASSET, release / vc.SELF_ASSET
-        kept = (manifest_path.read_bytes(), self_path.read_bytes())
-        self_path.write_text("# a swapped veyqctl\n")
-        doc = json.loads(manifest_path.read_text())
-        doc["assets"][vc.SELF_ASSET] = sha(self_path.read_bytes())
-        manifest_path.write_text(json.dumps(doc))
-        rc, out = run_main(["--home", home, "self-update"], FakeHost())
-        check("bite (d): self-update with the manifest on disk edited to match a swapped veyqctl is refused, nothing "
-              "replaced", rc == 1 and target.read_text() == "# an older veyqctl\n" and "does not verify" in out,
-              out[-400:])
-        manifest_path.write_bytes(kept[0])
-        self_path.write_bytes(kept[1])
-        (release / BUNDLE).unlink(missing_ok=True)
-        rc, out = run_main(["--home", home, "self-update"], FakeHost())
-        check("bite (d): self-update with the bundle gone from disk is refused, nothing replaced",
-              rc == 1 and target.read_text() == "# an older veyqctl\n" and BUNDLE in out, out[-400:])
-    finally:
-        vc.SELF = saved
 
 
 def test_entry_signed(tmp: pathlib.Path) -> None:
@@ -1768,7 +1767,7 @@ def test_instances(tmp: pathlib.Path) -> None:
     (gitops_home / vc.GITOPS_FILE).write_text("{}")
     registry["instances"]["cluster"] = str(gitops_home)
     vc.write_registry(registry)
-    for verb in ("start", "backup", "rollback", "self-update"):
+    for verb in ("start", "backup", "rollback"):
         argv = ["--instance", "cluster", verb] + (["/tmp/capture", "--key-from", "/tmp/k"] if verb == "rollback" else [])
         host = FakeHost()
         rc, out = run_main(argv, host)
@@ -2982,18 +2981,22 @@ def test_own_release(tmp: pathlib.Path) -> None:
     for label, release, verb, noted in (
             ("a veyqctl older than its instance says so, and how to get the instance's own", "1.3", "status", True),
             ("a veyqctl as new as its instance says nothing", "1.7", "status", False),
-            ("a veyqctl from a checkout says nothing", None, "status", False),
-            ("self-update, the way out, says nothing", "1.3", "self-update", False)):
+            ("a veyqctl from a checkout says nothing", None, "status", False)):
         with veyqctl_of(1, release):
             _, out = run_main(["--home", older, verb], FakeHost())
         said = "This veyqctl is release" in out
         check(label, said == noted and (not noted or ("This veyqctl is release 1.3, and the instance runs 1.7" in out
                                                        and "veyqctl self-update" in out)), out[-400:])
     vc.SELF.write_text("# a checkout's veyqctl\n")
+    host = FakeHost()
     with veyqctl_of(1, None):
-        rc, out = run_main(["--home", older, "self-update"], FakeHost())
-    check("self-update of an unreleased veyqctl (a checkout's source) is refused, nothing replaced",
-          rc == 1 and "unreleased" in out and vc.SELF.read_text() == "# a checkout's veyqctl\n", out[-400:])
+        try:
+            rc, out = run_main(["--source", mirror, "self-update"], host)
+        except Exception as e:  # an unreleased veyqctl past the refusal has no release to compare: a crash, not a pass
+            rc, out = None, repr(e)
+    check("self-update of an unreleased veyqctl (a checkout's source) is refused, nothing fetched or replaced",
+          rc == 1 and "unreleased" in out and vc.SELF.read_text() == "# a checkout's veyqctl\n" and not host.commands,
+          out[-400:])
 
     top = tmp / "own-gitops"
     pins = {r: pin_of("1.0", r) for r in vc.PIN_ROLES}
@@ -3008,8 +3011,9 @@ def test_own_release(tmp: pathlib.Path) -> None:
               rc == 1 and "is release 2.0, of major 2" in out and not host.commands, out[-400:])
     with veyqctl_of(1, "0.9"):
         _, out = run_main(["--home", on1, "--source", tmp / "g-mirror", "check"], GitOpsHost(top=top, signed=signed))
-        check("a GitOps instance newer than its veyqctl: said, with where to fetch it",
-              "This veyqctl is release 0.9, and the instance runs 1.0" in out and vc.GET_VEYQCTL in out, out[-400:])
+        check("a GitOps instance newer than its veyqctl: said, with self-update as the way, as on Compose",
+              "This veyqctl is release 0.9, and the instance runs 1.0" in out and "veyqctl self-update" in out,
+              out[-400:])
 
 
 def main() -> int:

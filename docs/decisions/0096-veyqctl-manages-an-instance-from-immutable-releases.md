@@ -101,9 +101,16 @@ decision 2), so it holds the rule an app holds:
 - **The minor never gates, and that binds the release's side.** Within a major, what a release carries for `veyqctl`
   (the compose file, the `.env` template, the chart's values, the manifest) changes only so that an older `veyqctl` of
   that major still does right; a removal is a major (ADR 0085 decision 2). A `veyqctl` older than its instance says
-  so before the command runs, with the way to a newer one (`self-update` on Compose).
-- **`self-update` refuses an unreleased `veyqctl`:** that copy is the source, and replacing it would overwrite a
-  checkout. It happened, to the self-test, the day this was built.
+  so before the command runs, with the way to a newer one: `self-update`.
+- **`self-update` takes the newest release's `veyqctl`, for no instance in particular.** A `veyqctl` belongs to the
+  computer it runs on, which may run one instance on Compose and steer another through Argo CD; the newest speaks
+  every release of every instance it may meet. It checks the copy as the README's block does (`cosign verify-blob`
+  against `veyqctl.bundle` and the identity that releases veyq), and then that the copy's own `RELEASE` names the
+  release it was offered as: the bundle binds bytes to the release workflow, not to a release, so without that a source
+  could serve an older signed copy as the newest. It never replaces a `veyqctl` with an older one, and refuses an
+  unreleased one: that copy is the source, and replacing it would overwrite a checkout (it happened, to the self-test,
+  the day this was built). Until 2026-11-12 it took the copy of the release a Compose instance ran, which a computer
+  managing several instances cannot choose between.
 
 ## Consequences
 
