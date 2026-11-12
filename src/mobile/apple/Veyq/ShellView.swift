@@ -362,13 +362,32 @@ struct Bar: View {
         .sheet(item: $uploadShareOf) { TopLevelUploadSheet(model: model, scopeId: $0.scopeId) }
         // what the model says once (an upload's refusal, its "Replace anyway")
         // its dismissal may run before its button's action (ADR 0127's trap): the action is the presented notice's own
-        .alert(model.notice?.text ?? "", isPresented: Binding(get: { model.notice != nil }, set: { if !$0 { model.notice?.done?(); model.notice = nil } }), presenting: model.notice) { n in
+        .alert(model.notice?.text ?? "", isPresented: Binding(get: { model.notice != nil }, set: { if !$0 { model.notice = nil } }), presenting: model.notice) { n in
             if let action = n.action, let run = n.run {
                 Button(action, role: .destructive) { Task { await run() } }
                 Button(say(.signinCancel), role: .cancel) {}
             } else {
                 Button(say(.ok), role: .cancel) {}
             }
+        }
+        // what the uploads say (core's `DepotUploads.said`: a folder's outcome, a replace offered), one at a time; the alert
+        // sits on a view of its own per said, since SwiftUI did not present a second alert of the same modifier after the
+        // first was answered (measured 2026-11-12, the second replace offer of a batch). Its dismissal sees it, its action
+        // takes the offer it shows — the said is handed in, not read back (the dismissal may run first).
+        .background {
+            let said = model.depotState?.said
+            Color.clear
+                .alert(said.map { $0.notices.map { say(notice: $0) }.joined(separator: "\n") } ?? "",
+                       isPresented: Binding(get: { said != nil }, set: { if !$0, let said { model.depot?.seen(id: said.id) } }),
+                       presenting: said) { s in
+                    if let action = s.action {
+                        Button(say(action), role: .destructive) { model.depot?.take(said: s) }
+                        Button(say(.signinCancel), role: .cancel) {}
+                    } else {
+                        Button(say(.ok), role: .cancel) {}
+                    }
+                }
+                .id(said?.id ?? -1)
         }
         // "Send a Copy…": what happens is said first — the copy leaves veyq decrypted —, then the system's share sheet
         .alert(say(.fileSendTitle), isPresented: Binding(get: { model.sendingCopy != nil }, set: { if !$0 { model.sendingCopy = nil } }), presenting: model.sendingCopy) { node in
@@ -390,8 +409,11 @@ struct Bar: View {
         #endif
         // a file's "Replace…": the system's picker hands over one file
         .fileImporter(isPresented: Binding(get: { model.replacing != nil }, set: { if !$0 { model.replacing = nil } }), allowedContentTypes: [.item]) { result in
-            guard let file = model.replacing, case .success(let url) = result else { return }
+            // the dismissal may clear `replacing` before this runs: the file Replace was chosen on is kept apart
+            let file = model.replacing ?? model.replaceChosen
             model.replacing = nil
+            model.replaceChosen = nil
+            guard let file, case .success(let url) = result else { return }
             model.replaceFile(file, url: url)
         }
         .overlay(alignment: .top) {

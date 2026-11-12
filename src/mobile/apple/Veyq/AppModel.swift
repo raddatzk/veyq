@@ -848,14 +848,17 @@ final class AppModel {
         let text: String
         var action: String?
         var run: (() async -> Void)?
-        /// Once it is gone, its action taken or not (the uploads' offer seen).
-        var done: (() -> Void)?
     }
 
     var notice: Notice?
 
     /// The file page whose content the person is picking a replacement for (the header's "Replace…"), while they pick.
-    var replacing: FileModel?
+    var replacing: FileModel? {
+        didSet { if let replacing { replaceChosen = replacing } }
+    }
+    /// The file page Replace was chosen on, kept past the importer's dismissal: its binding clears `replacing` before the
+    /// completion runs, which then found nothing to replace (the picked file was dropped, measured 2026-11-12).
+    @ObservationIgnored var replaceChosen: FileModel?
 
     /// The file a person is about to send a copy of to another app ("Send a Copy…"), while the shell says first that the
     /// copy leaves veyq decrypted. The data are theirs; the app says what happens and never forbids it.
@@ -916,11 +919,10 @@ final class AppModel {
     let uploads = UploadQueue()
 
     /// The uploads as the shell shows them (core's `DepotUploads` over `uploads`, one per open tenant): the uploads button
-    /// draws `depotState`, Depot's uploads go through it, and what it says becomes `notice`.
+    /// draws `depotState`, Depot's uploads go through it, and the shell shows what it says (`said`).
     private(set) var depot: DepotUploads?
     private(set) var depotState: DepotUploads.State?
     @ObservationIgnored private var depotWatch: DepotUploads.Watch?
-    @ObservationIgnored private var depotSaid: Int64?
 
     private func openDepot(_ m: ShellModel, _ t: TenantSession) {
         closeDepot()
@@ -943,20 +945,12 @@ final class AppModel {
         depot?.close()
         depot = nil
         depotState = nil
-        depotSaid = nil
     }
 
-    /// The uploads' state on the main actor; what they say, each once, as the shell's notice (its action takes the offer).
+    /// The uploads' state on the main actor; what they say (`said`) the shell shows as an alert of its own, one at a time.
     private func syncDepot() {
         guard let d = depot else { return }
-        let st = d.current
-        depotState = st
-        guard let said = st.said, said.id != depotSaid else { return }
-        depotSaid = said.id
-        notice = Notice(
-            text: said.notices.map { say(notice: $0) }.joined(separator: "\n"), action: said.action.map { say($0) },
-            run: said.offer == nil ? nil : { d.take(said: said) }, done: { d.seen(id: said.id) }
-        )
+        depotState = d.current
     }
 
     /// A picked file as an upload lists it: its name, size, type, modified time (read inside its security scope).
@@ -990,7 +984,7 @@ final class AppModel {
             guard let p = Picked(url) else { return nil }
             return AppleDepot.shared.source(url: url, name: p.name, size: p.size, type: p.type, modifiedAt: p.modifiedAt.map { KotlinLong(value: $0) })
         }
-        d.upload(scopeId: scopeId, parentId: shell.folder?.nodeId, label: levelLabel, sources: sources)
+        _ = d.upload(scopeId: scopeId, parentId: shell.folder?.nodeId, label: levelLabel, sources: sources)
     }
 
     /// Depot's "Upload folder…": the directory at `url` (the system's folder picker) walked here — every entry by its path
@@ -1042,7 +1036,7 @@ final class AppModel {
     func replaceFile(_ file: FileModel, url: URL) {
         guard let d = depot, let p = Picked(url) else { return }
         let source = AppleDepot.shared.source(url: url, name: p.name, size: p.size, type: p.type, modifiedAt: p.modifiedAt.map { KotlinLong(value: $0) })
-        d.replace(file: file, source: source)
+        _ = d.replace(file: file, source: source)
     }
 
     /// Why `item` did not go up, in its application's words (the uploads list's line under it); nil while it may still.
