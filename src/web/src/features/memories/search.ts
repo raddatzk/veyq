@@ -28,6 +28,7 @@ import { normalizeParticipants } from './memoryParticipants'
 import { effectiveCapturedAt, isVideoMediaType, mediaTypeOf, type MediaItem } from './media'
 import { uploaderOriginOf } from './mediaKey'
 import { closeListing, openedBlobMeta, openedMeta, openListing } from './openedListing'
+import { isTrackMeta } from './track/gpx'
 
 /** The kind token of a photo's and a video's document. */
 export const PHOTO_DOCUMENT = 'memories.photo'
@@ -112,10 +113,13 @@ export interface MediaDocumentsInput {
   open: (mediaId: string) => void
 }
 
-/** One document per medium of the open Memory but a blocked one (see the header). */
+/** Whether a medium is a GPX track (ADR 0130 decision 7): no photo, so no photo document - it is on its Memory's Map tab. */
+const isTrack = (scopeId: string, key: Uint8Array, item: MediaItem) => isTrackMeta(openedBlobMeta(scopeId, key, item))
+
+/** One document per medium of the open Memory but a blocked one or a track (see the header). */
 export function mediaDocuments(input: MediaDocumentsInput): ContributedDocument[] {
   return input.items
-    .filter((item) => !item.blocked)
+    .filter((item) => !item.blocked && !isTrack(input.scopeId, input.key, item))
     .map((item) => {
       const { nodeId: _node, ...doc } = mediumDocument(input.scopeId, input.key, item, '', input.unnamed)
       return { ...doc, open: () => input.open(item.mediaId) }
@@ -206,7 +210,7 @@ function* pageDocuments(
     const before = ctx.previous.get(item.mediaId)
     const key = keys.get(row.nodeId)
     if (before && before.revision === revisionOf(item) && before.nodeId === row.nodeId) out.push(before)
-    else if (key) out.push(mediumDocument(ctx.scopeId, key, item, row.nodeId, unnamedWord))
+    else if (key && !isTrack(ctx.scopeId, key, item)) out.push(mediumDocument(ctx.scopeId, key, item, row.nodeId, unnamedWord))
     yield
   }
   return out

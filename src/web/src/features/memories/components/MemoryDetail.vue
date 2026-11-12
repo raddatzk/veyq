@@ -6,8 +6,9 @@
 // rename/delete/share/create dialogs and the navigation (every link through the tree's `linkTo`).
 // Ported presentation from the design source (legacy/frontend-noe2ee); only the data layer is ours. Decrypted
 // thumbnails become object URLs that are **revoked** on reload / unmount (no lingering plaintext blob URLs).
-// Tabs: the Gallery, the Chapters (each opens to the same detail under its own `K_node`), the Contributions organizer
-// (buckets) and the media Trash — the last two a member's only. Journal, tracks and playlists are not built.
+// Tabs: the Gallery, the Chapters (each opens to the same detail under its own `K_node`), the Map (the photos' GPS and the
+// node's GPX tracks, uc.memory.tracks, ADR 0130), the Contributions organizer (buckets) and the media Trash — the last two a
+// member's only. Journal and playlists are not built.
 //
 // **The header is core's** (owner 2026-11-03, ADR 0110 decision 10): core's page draws it above this body, the cover
 // included, and this view contributes data to it (`contributeNodeHeader`): the item count as the subtitle, its actions
@@ -48,6 +49,8 @@ import { useMediaTrash } from '../useMediaTrash'
 import MediaGrid from './MediaGrid.vue'
 import MediaTile from './MediaTile.vue'
 import MemoryBuckets from './MemoryBuckets.vue'
+import MemoryTracks from './MemoryTracks.vue'
+import { GPX_MEDIA_TYPE } from '../track/gpx'
 import OptimisticTile from './OptimisticTile.vue'
 import { enqueueUploads, collectPickedFiles, inferMediaType, retryFile } from '../uploadQueue'
 import { useMediaGalleryLive } from '../useMediaGalleryLive'
@@ -256,6 +259,7 @@ watch(
 // `useMediaGalleryLive` (cr-0151). `onSettle` runs the auto-date then auto-location reconcile after a list refresh.
 const {
   items,
+  tracks,
   thumbs,
   thumbFailed,
   layoutItems,
@@ -376,7 +380,7 @@ function videoIdSet(list: readonly MediaItem[]): Set<string> {
 const galleryVideoIds = computed(() => videoIdSet(items.value))
 const trashVideoIds = computed(() => videoIdSet(trashedItems.value))
 
-const activeTab = ref<'gallery' | 'chapters' | 'beitraege' | 'trash'>('gallery') // local (the #fragment carries the tree path, cr-0031)
+const activeTab = ref<'gallery' | 'chapters' | 'map' | 'beitraege' | 'trash'>('gallery') // local (the #fragment carries the tree path, cr-0031)
 const fileInput = ref<HTMLInputElement | null>(null)
 
 // --- Memory date (cr-0067, uc.memory.date) → extracted into `useMemoryDate` (cr-0145). The effective range
@@ -605,6 +609,50 @@ function enqueueBatch(picked: File[]) {
   )
 }
 
+// --- GPX tracks (uc.memory.tracks, ADR 0130): a track is a medium whose original is its file, so it rides the one upload
+// queue as every medium does - into the node on screen, under its key, through the session's upload door. Its batch is
+// grouped apart from the gallery's (`#tracks`), so no photo tile stands in for it while it is on the wire; once it is
+// listed the gallery's listing hands it to the Map tab (`tracks`). The tab checked each file on the device first.
+const TRACK_BATCH = '#tracks'
+/** The picker may open now: a guest that has not named itself is asked first, and picks on its next click. */
+function trackPickReady(): boolean {
+  const upload = props.source.upload
+  if (upload && !upload.ready()) {
+    void upload.prepare()
+    return false
+  }
+  return true
+}
+function enqueueTracks(files: File[]) {
+  const key = props.memoryKey
+  const upload = props.source.upload
+  if (!key || !can.value.upload || !upload) return
+  const targetNodeId = props.node.id
+  const target = upload.target(targetNodeId, key, props.node.epoch)
+  if (!target) return
+  enqueueUploads(
+    { ...target, key: `${props.source.batchKey(targetNodeId)}${TRACK_BATCH}` },
+    files.map((file) => ({ file, mediaType: GPX_MEDIA_TYPE })),
+    {
+      label: props.node.name,
+      onFileDone: () => { if (props.node.id === targetNodeId) void pollMedia() },
+      onComplete: () => { if (props.node.id === targetNodeId) void load() },
+    },
+  )
+}
+/** A track's removal: what deletes a photo deletes it - a member's trash with Undo, a guest's purge of its own, asked first. */
+function canRemoveTrack(mediaId: string): boolean {
+  return can.value.deleteMedia === 'any' || isOwnMedia(mediaId)
+}
+function onRemoveTrack(item: MediaItem) {
+  if (can.value.deleteMedia === 'own') {
+    void onDeleteOwn(item.mediaId, {
+      header: t('memory.tracks.removeOwnTitle'), message: t('memory.tracks.removeOwnMessage'),
+      accept: t('memory.tracks.remove'), failed: t('memory.tracks.removeFailed'),
+    })
+  } else if (can.value.deleteMedia === 'any') void onDeleteFromLightbox({ mediaId: item.mediaId })
+}
+
 // --- a guest's delete of its own media (inbox #361): irreversible — the server purges it and keeps no copy — so asked
 // first, then gone from the grid at once. A member's delete is the lightbox's trash with undo (`useMediaGalleryLive`).
 const deletingOwn = ref<Set<string>>(new Set())
@@ -613,13 +661,15 @@ function isOwnMedia(mediaId: string): boolean {
   const del = props.source.deleteMedia
   return can.value.deleteMedia === 'own' && del?.reach === 'own' && del.isOwn(mediaId)
 }
-async function onDeleteOwn(mediaId: string) {
+/** The question and the failure's words: a photo's by default, a track's from the Map tab. */
+type OwnDeleteCopy = { header: string; message: string; accept: string; failed: string }
+async function onDeleteOwn(mediaId: string, copy?: OwnDeleteCopy) {
   const del = props.source.deleteMedia
   if (can.value.deleteMedia !== 'own' || del?.reach !== 'own' || deletingOwn.value.has(mediaId)) return
   const confirmed = await ask({
-    header: t('share.deletePhoto'),
-    message: t('share.deleteOwnConfirm'),
-    acceptLabel: t('share.deleteOwnAccept'),
+    header: copy?.header ?? t('share.deletePhoto'),
+    message: copy?.message ?? t('share.deleteOwnConfirm'),
+    acceptLabel: copy?.accept ?? t('share.deleteOwnAccept'),
     acceptIcon: 'trash',
   })
   if (!confirmed) return
@@ -628,7 +678,7 @@ async function onDeleteOwn(mediaId: string) {
     await del.purge(mediaId)
     removeMedia(mediaId)
   } catch {
-    toast.error(t('share.deleteFailed')) // the tile stays, so the guest can try again
+    toast.error(copy?.failed ?? t('share.deleteFailed')) // the tile stays, so the guest can try again
   } finally {
     const next = new Set(deletingOwn.value)
     next.delete(mediaId)
@@ -737,12 +787,16 @@ watch(
     />
 
     <!-- Tabbed detail (cr-0061, ported from the design source): Gallery (the media grid) + Chapters (the
-         nested Memories). Other design tabs — journal / map / playlists — arrive with their features. -->
+         nested Memories) + Map (the photos and the GPX tracks, uc.memory.tracks). Journal and playlists arrive with their
+         features. -->
     <VeyqTabs v-model:value="activeTab" class="memory-tabs">
       <VeyqTabList>
         <VeyqTab value="gallery">{{ t('memory.gallery') }}</VeyqTab>
         <VeyqTab v-if="can.navigate" value="chapters">
           {{ t('memory.chapters') }}<span v-if="chapters && chapters.length" class="tab-count">{{ chapters.length }}</span>
+        </VeyqTab>
+        <VeyqTab value="map" data-testid="memory-tab-map">
+          {{ t('memory.tracks.tab') }}<span v-if="tracks.length" class="tab-count">{{ tracks.length }}</span>
         </VeyqTab>
         <VeyqTab v-if="showBeitraege" value="beitraege">{{ t('memory.buckets.title') }}</VeyqTab>
         <VeyqTab v-if="can.mediaTrash" value="trash">{{ t('memory.trash.title') }}</VeyqTab>
@@ -900,6 +954,29 @@ watch(
               <strong>{{ t('memory.addChapter') }}</strong>
             </button>
           </div>
+        </VeyqTabPanel>
+
+        <!-- Map tab (uc.memory.tracks, ADR 0130): the photos' GPS and the node's tracks on one map, the tracks listed under it.
+             Its tracks are read only while it is on screen. -->
+        <VeyqTabPanel value="map">
+          <MemoryTracks
+            :scope-id="scopeId"
+            :node-id="node.id"
+            :memory-name="node.name"
+            :memory-key="memoryKey"
+            :tracks="tracks"
+            :photo-points="gpsPoints"
+            :active="activeTab === 'map'"
+            :loaders="source.loaders"
+            :can-add="can.upload"
+            :can-remove="canRemoveTrack"
+            :can-download="can.download"
+            :can-report="!!canReport"
+            :pick-ready="trackPickReady"
+            @add="enqueueTracks"
+            @remove="onRemoveTrack"
+            @report="emit('reportMedium', $event)"
+          />
         </VeyqTabPanel>
 
         <!-- Beiträge tab (uc.memory.buckets, cr-0113): the media ORGANIZER — a hierarchy picker (your primary +

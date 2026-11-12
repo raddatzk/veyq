@@ -281,4 +281,22 @@ describe('useMediaGalleryLive — a lightbox Undo whose restore is refused (inbo
     await deleteInLightboxAndUndo('b')
     expect(toastError.mock.calls.map(([line]) => line)).toEqual(['Not restored: Item 2. Please try again.'])
   })
+
+  // uc.memory.tracks (ADR 0130 decisions 1 and 7): a GPX track is a medium the gallery lists like any, known by its opened
+  // blob meta, and no photo - it is in `tracks`, never in `items` (the grid, the lightbox, the count, the organizer).
+  it('hands a GPX track to the Map tab and keeps it out of every view of photos', async () => {
+    vi.mocked(originalBlobMeta).mockImplementation((_s, _k, m) =>
+      m.mediaId === 'trk' ? { v: 1, type: 'application/gpx+xml', name: 'ride.gpx' } : m.mediaId === 'pic' ? { v: 1, type: 'image/jpeg', name: 'IMG.jpg' } : null)
+    vi.mocked(listMediaPages).mockResolvedValue(page([item('pic'), item('trk'), item('bare')]))
+    const { vm } = setup()
+    await flushPromises()
+    expect(vm.tracks.map((i) => i.mediaId)).toEqual(['trk'])
+    expect(vm.items.map((i) => i.mediaId)).toEqual(['pic', 'bare'])
+    expect(vm.layoutItems.map((t) => t.id).sort()).toEqual(['bare', 'pic'])
+    expect(vm.openLightboxOn('trk')).toBe(false)
+    // a removal reaches a track as it reaches a photo
+    vm.removeMedia('trk')
+    expect(vm.tracks).toEqual([])
+    expect(vm.items.map((i) => i.mediaId)).toEqual(['pic', 'bare'])
+  })
 })
