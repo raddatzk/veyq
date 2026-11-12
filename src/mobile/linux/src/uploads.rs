@@ -7,21 +7,31 @@
 //! outcome, a replace offered — is an `AdwToast`, its button the offer's action (`Upload.TakeOffer`), dismissed
 //! otherwise (`Upload.Seen`).
 //!
-//! Every state is the core's `DepotUploads` (`Watched.Uploads`); every action one call.
+//! Every state is the core's `DepotUploads` (`Watched.Uploads`); every action one call. The popover's rows are kept by the
+//! batch's and the item's id and updated in place, so a click is never taken by a row that an update replaced.
 use std::cell::{Cell, RefCell};
 use std::rc::Rc;
 
 use adw::prelude::*;
 use gtk::{gio, glib};
 
-use crate::bridge::{self, wire::Answer, wire::Call, wire::Update, wire::UploadStatus, wire::UploadsShown, wire::Watched};
+use crate::bridge::{self, wire::Answer, wire::Call, wire::Update, wire::UploadBatch, wire::UploadItem, wire::UploadStatus, wire::UploadsShown, wire::Watched};
 use crate::home::glib_escape;
 use crate::{header, said, words};
 
 /// The queue's button and what it last drew.
 pub struct Uploads {
     button: gtk::MenuButton,
-    list: gtk::Box,
+    /// The popover's head: the queue's one line and Cancel all.
+    line: gtk::Label,
+    cancel_all: gtk::Button,
+    /// The folder being prepared, while one is.
+    preparing: gtk::Box,
+    preparing_line: gtk::Label,
+    /// The batches' rows, each kept by its id and updated in place: a row drawn anew on every update took a Cancel
+    /// clicked while it was replaced into nothing (the Depot CR's Phase 5, once in de/dark).
+    batches_box: gtk::Box,
+    batches: RefCell<Vec<(String, BatchRows)>>,
     toasts: adw::ToastOverlay,
     /// The said shown last (its id), so an update that still carries it shows no second toast.
     said: Cell<Option<i64>>,
@@ -30,11 +40,157 @@ pub struct Uploads {
     _watch: RefCell<Option<bridge::Watch>>,
 }
 
+/// A batch drawn: its label and Close over its items' list.
+struct BatchRows {
+    top: gtk::Box,
+    label: gtk::Label,
+    close: gtk::Button,
+    rows: gtk::ListBox,
+    items: Vec<(String, ItemRow)>,
+}
+
+/// An item drawn: its row, its progress, its Cancel and Retry — each shown as the state says.
+struct ItemRow {
+    row: adw::ActionRow,
+    bar: gtk::ProgressBar,
+    cancel: gtk::Button,
+    retry: gtk::Button,
+}
+
+/// What an update does to the rows drawn for the ids [drawn] to show [wanted]: the ids whose rows go, and those whose
+/// rows are made. Every other row is kept and updated in place.
+pub fn changes(drawn: &[String], wanted: &[String]) -> (Vec<String>, Vec<String>) {
+    let gone = drawn.iter().filter(|id| !wanted.contains(id)).cloned().collect();
+    let made = wanted.iter().filter(|id| !drawn.contains(id)).cloned().collect();
+    (gone, made)
+}
+
+impl BatchRows {
+    fn new(id: &str) -> Self {
+        let top = gtk::Box::new(gtk::Orientation::Horizontal, 6);
+        let label = gtk::Label::builder().xalign(0.0).hexpand(true).ellipsize(gtk::pango::EllipsizeMode::End).build();
+        label.add_css_class("caption-heading");
+        top.append(&label);
+        let close = gtk::Button::builder().label(words::upload_close()).visible(false).build();
+        close.add_css_class("flat");
+        let batch = id.to_owned();
+        close.connect_clicked(move |_| bridge::send(Call::UploadAcknowledge { batch: batch.clone() }));
+        top.append(&close);
+        let rows = gtk::ListBox::builder().selection_mode(gtk::SelectionMode::None).build();
+        rows.add_css_class("boxed-list");
+        Self { top, label, close, rows, items: Vec::new() }
+    }
+
+    fn update(&mut self, batch: &UploadBatch) {
+        self.label.set_label(&batch.label);
+        self.close.set_visible(batch.finished);
+        let drawn: Vec<String> = self.items.iter().map(|(id, _)| id.clone()).collect();
+        let wanted: Vec<String> = batch.items.iter().map(|i| i.id.clone()).collect();
+        let (gone, _) = changes(&drawn, &wanted);
+        self.items.retain(|(id, item)| {
+            let keep = !gone.contains(id);
+            if !keep {
+                self.rows.remove(&item.row);
+            }
+            keep
+        });
+        for (at, item) in batch.items.iter().enumerate() {
+            let index = match self.items.iter().position(|(id, _)| *id == item.id) {
+                Some(i) => i,
+                None => {
+                    self.items.push((item.id.clone(), ItemRow::new(item)));
+                    self.items.len() - 1
+                }
+            };
+            let row = &self.items[index].1;
+            row.update(item);
+            // in the queue's order; a row already in its place is left where it is
+            if self.rows.row_at_index(at as i32).as_ref() != Some(row.row.upcast_ref::<gtk::ListBoxRow>()) {
+                if row.row.parent().is_some() {
+                    self.rows.remove(&row.row);
+                }
+                self.rows.insert(&row.row, at as i32);
+            }
+        }
+    }
+}
+
+impl ItemRow {
+    fn new(item: &UploadItem) -> Self {
+        // one line each, the name cut at its end: a long name never squeezes the row's controls
+        let row = adw::ActionRow::builder().title(glib_escape(&item.name)).title_lines(1).subtitle_lines(2).build();
+        let bar = gtk::ProgressBar::builder().valign(gtk::Align::Center).hexpand(false).width_request(72).visible(false).build();
+        row.add_suffix(&bar);
+        let cancel = gtk::Button::builder().icon_name("process-stop-symbolic").tooltip_text(words::upload_cancel()).valign(gtk::Align::Center).visible(false).build();
+        cancel.add_css_class("flat");
+        cancel.update_property(&[gtk::accessible::Property::Label(&words::upload_cancel())]);
+        let (id, name) = (item.id.clone(), item.name.clone());
+        cancel.connect_clicked(move |_| {
+            eprintln!("veyq: upload {name}: cancel pressed");
+            bridge::send(Call::UploadCancel { item: id.clone() });
+        });
+        row.add_suffix(&cancel);
+        let retry = gtk::Button::builder().icon_name("view-refresh-symbolic").tooltip_text(words::upload_retry()).valign(gtk::Align::Center).visible(false).build();
+        retry.add_css_class("flat");
+        retry.update_property(&[gtk::accessible::Property::Label(&words::upload_retry())]);
+        let (id, name) = (item.id.clone(), item.name.clone());
+        retry.connect_clicked(move |_| {
+            eprintln!("veyq: upload {name}: retry pressed");
+            bridge::send(Call::UploadRetry { item: id.clone() });
+        });
+        row.add_suffix(&retry);
+        Self { row, bar, cancel, retry }
+    }
+
+    fn update(&self, item: &UploadItem) {
+        self.row.set_title(&glib_escape(&item.name));
+        self.row.set_subtitle(&glib_escape(&said::notice(&item.line)));
+        if item.failed {
+            self.row.add_css_class("error");
+        } else {
+            self.row.remove_css_class("error");
+        }
+        let going = item.status == UploadStatus::Uploading || item.status == UploadStatus::Preparing;
+        self.bar.set_visible(going);
+        if item.status == UploadStatus::Preparing {
+            self.bar.pulse();
+        } else {
+            self.bar.set_fraction(item.progress);
+        }
+        self.cancel.set_visible(item.can_cancel);
+        self.retry.set_visible(item.can_retry);
+    }
+}
+
 impl Uploads {
     /// The queue's button (pack it into a header bar), saying in [toasts]; it follows the open tenant's uploads once
     /// [Uploads::start]ed.
     pub fn new(toasts: &adw::ToastOverlay) -> Rc<Self> {
         let list = gtk::Box::builder().orientation(gtk::Orientation::Vertical).spacing(12).width_request(360).margin_top(12).margin_bottom(12).margin_start(12).margin_end(12).build();
+        // the head: the title, the one line, Cancel all while anything may still go up
+        let head = gtk::Box::new(gtk::Orientation::Horizontal, 12);
+        let titles = gtk::Box::builder().orientation(gtk::Orientation::Vertical).hexpand(true).build();
+        let title = gtk::Label::builder().label(words::upload_title()).xalign(0.0).build();
+        title.add_css_class("heading");
+        titles.append(&title);
+        let line = gtk::Label::builder().xalign(0.0).visible(false).build();
+        line.add_css_class("dim-label");
+        titles.append(&line);
+        head.append(&titles);
+        let cancel_all = gtk::Button::builder().label(words::upload_cancel_all()).valign(gtk::Align::Center).visible(false).build();
+        cancel_all.connect_clicked(|_| {
+            eprintln!("veyq: uploads: cancel all pressed");
+            bridge::send(Call::UploadCancelAll);
+        });
+        head.append(&cancel_all);
+        list.append(&head);
+        let preparing = gtk::Box::builder().orientation(gtk::Orientation::Horizontal).spacing(8).visible(false).build();
+        preparing.append(&adw::Spinner::new());
+        let preparing_line = gtk::Label::builder().xalign(0.0).wrap(true).build();
+        preparing.append(&preparing_line);
+        list.append(&preparing);
+        let batches_box = gtk::Box::builder().orientation(gtk::Orientation::Vertical).spacing(12).build();
+        list.append(&batches_box);
         let scroll = gtk::ScrolledWindow::builder()
             .hscrollbar_policy(gtk::PolicyType::Never)
             .propagate_natural_height(true)
@@ -48,7 +204,12 @@ impl Uploads {
         button.update_property(&[gtk::accessible::Property::Label(&words::upload_title())]);
         Rc::new(Self {
             button,
-            list,
+            line,
+            cancel_all,
+            preparing,
+            preparing_line,
+            batches_box,
+            batches: RefCell::new(Vec::new()),
             toasts: toasts.clone(),
             said: Cell::new(None),
             logged: RefCell::new(std::collections::HashMap::new()),
@@ -84,9 +245,9 @@ impl Uploads {
     }
 
     fn draw(self: &Rc<Self>, shown: Option<&UploadsShown>) {
-        while let Some(child) = self.list.first_child() {
-            self.list.remove(&child);
-        }
+        let empty = Vec::new();
+        let batches = shown.map(|s| &s.batches).unwrap_or(&empty);
+        self.draw_batches(batches);
         let Some(s) = shown else {
             self.button.set_visible(false);
             return;
@@ -96,89 +257,49 @@ impl Uploads {
         self.button.set_visible(summary.is_some() || s.preparing.is_some());
         let tip = summary.clone().or_else(|| s.preparing.as_ref().map(said::notice)).unwrap_or_else(words::upload_title);
         self.button.set_tooltip_text(Some(&tip));
-
-        // the head: the title, the one line, Cancel all while anything may still go up
-        let head = gtk::Box::new(gtk::Orientation::Horizontal, 12);
-        let titles = gtk::Box::builder().orientation(gtk::Orientation::Vertical).hexpand(true).build();
-        let title = gtk::Label::builder().label(words::upload_title()).xalign(0.0).build();
-        title.add_css_class("heading");
-        titles.append(&title);
-        if let Some(line) = &summary {
-            let line = gtk::Label::builder().label(line.as_str()).xalign(0.0).build();
-            line.add_css_class("dim-label");
-            titles.append(&line);
-        }
-        head.append(&titles);
-        if s.active > 0 {
-            let all = gtk::Button::builder().label(words::upload_cancel_all()).valign(gtk::Align::Center).build();
-            all.connect_clicked(|_| {
-                eprintln!("veyq: uploads: cancel all pressed");
-                bridge::send(Call::UploadCancelAll);
-            });
-            head.append(&all);
-        }
-        self.list.append(&head);
+        self.line.set_visible(summary.is_some());
+        self.line.set_label(summary.as_deref().unwrap_or_default());
+        self.cancel_all.set_visible(s.active > 0);
+        self.preparing.set_visible(s.preparing.is_some());
         if let Some(p) = &s.preparing {
-            let row = gtk::Box::new(gtk::Orientation::Horizontal, 8);
-            row.append(&adw::Spinner::new());
-            row.append(&gtk::Label::builder().label(said::notice(p)).xalign(0.0).wrap(true).build());
-            self.list.append(&row);
-        }
-        for batch in &s.batches {
-            let top = gtk::Box::new(gtk::Orientation::Horizontal, 6);
-            let label = gtk::Label::builder().label(batch.label.as_str()).xalign(0.0).hexpand(true).ellipsize(gtk::pango::EllipsizeMode::End).build();
-            label.add_css_class("caption-heading");
-            top.append(&label);
-            if batch.finished {
-                let close = gtk::Button::builder().label(words::upload_close()).build();
-                close.add_css_class("flat");
-                let id = batch.id.clone();
-                close.connect_clicked(move |_| bridge::send(Call::UploadAcknowledge { batch: id.clone() }));
-                top.append(&close);
-            }
-            self.list.append(&top);
-            let rows = gtk::ListBox::builder().selection_mode(gtk::SelectionMode::None).build();
-            rows.add_css_class("boxed-list");
-            for item in &batch.items {
-                // one line each, the name cut at its end: a long name never squeezes the row's controls
-                let row = adw::ActionRow::builder().title(glib_escape(&item.name)).title_lines(1).subtitle(glib_escape(&said::notice(&item.line))).subtitle_lines(2).build();
-                if item.failed {
-                    row.add_css_class("error");
-                }
-                if item.status == UploadStatus::Uploading || item.status == UploadStatus::Preparing {
-                    let bar = gtk::ProgressBar::builder().fraction(item.progress).valign(gtk::Align::Center).hexpand(false).width_request(72).build();
-                    if item.status == UploadStatus::Preparing {
-                        bar.pulse();
-                    }
-                    row.add_suffix(&bar);
-                }
-                if item.can_cancel {
-                    let cancel = gtk::Button::builder().icon_name("process-stop-symbolic").tooltip_text(words::upload_cancel()).valign(gtk::Align::Center).build();
-                    cancel.add_css_class("flat");
-                    cancel.update_property(&[gtk::accessible::Property::Label(&words::upload_cancel())]);
-                    let (id, name) = (item.id.clone(), item.name.clone());
-                    cancel.connect_clicked(move |_| {
-                        eprintln!("veyq: upload {name}: cancel pressed");
-                        bridge::send(Call::UploadCancel { item: id.clone() });
-                    });
-                    row.add_suffix(&cancel);
-                }
-                if item.can_retry {
-                    let retry = gtk::Button::builder().icon_name("view-refresh-symbolic").tooltip_text(words::upload_retry()).valign(gtk::Align::Center).build();
-                    retry.add_css_class("flat");
-                    retry.update_property(&[gtk::accessible::Property::Label(&words::upload_retry())]);
-                    let (id, name) = (item.id.clone(), item.name.clone());
-                    retry.connect_clicked(move |_| {
-                        eprintln!("veyq: upload {name}: retry pressed");
-                        bridge::send(Call::UploadRetry { item: id.clone() });
-                    });
-                    row.add_suffix(&retry);
-                }
-                rows.append(&row);
-            }
-            self.list.append(&rows);
+            self.preparing_line.set_label(&said::notice(p));
         }
         self.say(s);
+    }
+
+    /// The batches as the queue lists them, each batch's and item's rows kept by id ([changes]).
+    fn draw_batches(&self, batches: &[UploadBatch]) {
+        let mut drawn = self.batches.borrow_mut();
+        let ids: Vec<String> = drawn.iter().map(|(id, _)| id.clone()).collect();
+        let wanted: Vec<String> = batches.iter().map(|b| b.id.clone()).collect();
+        let (gone, _) = changes(&ids, &wanted);
+        drawn.retain(|(id, b)| {
+            let keep = !gone.contains(id);
+            if !keep {
+                self.batches_box.remove(&b.top);
+                self.batches_box.remove(&b.rows);
+            }
+            keep
+        });
+        let mut after: Option<gtk::Widget> = None;
+        for batch in batches {
+            let index = match drawn.iter().position(|(id, _)| *id == batch.id) {
+                Some(i) => i,
+                None => {
+                    let made = BatchRows::new(&batch.id);
+                    self.batches_box.append(&made.top);
+                    self.batches_box.append(&made.rows);
+                    drawn.push((batch.id.clone(), made));
+                    drawn.len() - 1
+                }
+            };
+            let rows = &mut drawn[index].1;
+            rows.update(batch);
+            // in the queue's order (GTK leaves a child already after its sibling where it is)
+            self.batches_box.reorder_child_after(&rows.top, after.as_ref());
+            self.batches_box.reorder_child_after(&rows.rows, Some(&rows.top));
+            after = Some(rows.rows.clone().upcast());
+        }
     }
 
     /// What the uploads say now, as a toast once: its button the offer's action, dismissed otherwise.
@@ -225,6 +346,7 @@ impl Uploads {
 }
 
 /// Where New's uploads go: a space, the folder there (None: its top) and the name the queue labels the batch with.
+#[derive(Clone)]
 pub struct Level {
     pub scope_id: String,
     pub parent_id: Option<String>,
@@ -306,9 +428,30 @@ fn paths_of(picked: &gio::ListModel) -> Vec<String> {
 }
 
 /// An upload call's answer: how many were queued on stderr, anything else said as the header says it.
-fn queued(toasts: &adw::ToastOverlay, answer: Result<Answer, bridge::Unreadable>, what: &str) {
+pub fn queued(toasts: &adw::ToastOverlay, answer: Result<Answer, bridge::Unreadable>, what: &str) {
     match answer {
         Ok(Answer::Queued { count }) => eprintln!("veyq: {what}: {count} queued"),
         other => header::say(toasts, other, what),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::changes;
+
+    fn ids(names: &[&str]) -> Vec<String> {
+        names.iter().map(|n| n.to_string()).collect()
+    }
+
+    #[test]
+    fn an_update_keeps_every_row_still_listed_and_makes_only_the_new_ones() {
+        let (gone, made) = changes(&ids(&["a", "b", "c"]), &ids(&["a", "b", "c"]));
+        assert!(gone.is_empty() && made.is_empty(), "a progress update keeps every row: a Cancel clicked meanwhile lands");
+        let (gone, made) = changes(&ids(&["a", "b", "c"]), &ids(&["b", "c", "d"]));
+        assert_eq!(gone, ids(&["a"]));
+        assert_eq!(made, ids(&["d"]));
+        let (gone, made) = changes(&[], &ids(&["a"]));
+        assert!(gone.is_empty());
+        assert_eq!(made, ids(&["a"]));
     }
 }

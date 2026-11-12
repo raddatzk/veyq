@@ -5,6 +5,7 @@ use adw::prelude::*;
 
 use crate::bridge::{self, wire::ApplicationId, wire::ArrangedList, wire::Call, wire::NodeRef, wire::ObjectRef,
     wire::ShellModelState, wire::ShellShown, wire::FolderRef};
+use crate::drop::Drops;
 use crate::{said, words};
 
 /// The icon of a node's kind — Android's `kindIcon`, Apple's `Names.kindSymbol`, in GNOME's icon set.
@@ -71,9 +72,13 @@ fn filter_name(f: Option<ApplicationId>) -> String {
 }
 
 /// Home: the filters (where the core offers more than "all"), then the level's groups (`Home.groups`): a folder
-/// enters, an object opens in its application.
-pub fn home(state: &ShellModelState, shown: &ShellShown) -> gtk::Widget {
+/// enters, an object opens in its application. With [drops], files and folders dropped onto the level upload there, and
+/// onto a folder's row into that folder (the Depot CR's D8).
+pub fn home(state: &ShellModelState, shown: &ShellShown, drops: Option<&Drops>) -> gtk::Widget {
     let (scroll, content) = column();
+    if let Some(d) = drops {
+        scroll.add_controller(d.onto_level());
+    }
     if state.lists.filters.len() > 1 {
         content.append(&filter_group(state, shown));
     }
@@ -87,7 +92,11 @@ pub fn home(state: &ShellModelState, shown: &ShellShown) -> gtk::Widget {
         }
         for n in &g.nodes {
             if g.folders {
-                list.add(&folder_row(n));
+                let row = folder_row(n);
+                if let Some(d) = drops.filter(|_| n.kind == "FOLDER") {
+                    row.add_controller(d.onto_folder(&n.node_id, &n.name));
+                }
+                list.add(&row);
             } else if let Some(o) = state.lists.objects.iter().find(|o| o.scope_id == n.scope_id && o.node_id == n.node_id) {
                 list.add(&object_row(o));
             }

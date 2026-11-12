@@ -21,6 +21,7 @@ use crate::file_page::FilePage;
 use crate::header::{self, Header};
 use crate::home::{self, app_icon, app_name, kind_icon};
 use crate::pot::PotPage;
+use crate::drop::Drops;
 use crate::uploads::{self, Uploads};
 use crate::{avatars, create_action, said, trash, words};
 
@@ -413,6 +414,15 @@ impl Shell {
         Some(uploads::Level { scope_id, parent_id: folder.map(|f| f.node_id.clone()), label })
     }
 
+    /// Where a drop onto the level shown goes: only where its New offers Upload files (the core's `creates`).
+    fn drops(&self) -> Option<Drops> {
+        let takes = self.now.borrow().as_ref().is_some_and(|(_, shown)| shown.can_create_here && shown.creates.iter().any(|c| c.create == Create::UploadFiles));
+        if !takes {
+            return None;
+        }
+        Some(Drops { level: self.level()?, toasts: self.toasts.clone() })
+    }
+
     /// Says [text] as a toast over the content.
     pub fn say(&self, text: &str) {
         self.toasts.add_toast(adw::Toast::new(text));
@@ -656,7 +666,7 @@ impl Shell {
             None => {
                 self.pot.borrow_mut().take();
                 self.file.borrow_mut().take();
-                let list = if shell.application.is_some() { home::list(shown.list.as_ref()) } else { home::home(state, shown) };
+                let list = if shell.application.is_some() { home::list(shown.list.as_ref()) } else { home::home(state, shown, self.drops().as_ref()) };
                 if let Some(scroll) = list.downcast_ref::<gtk::ScrolledWindow>() {
                     self.scrolls.keep(scroll, ListScrolls::place(state));
                 }

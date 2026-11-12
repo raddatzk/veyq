@@ -2,12 +2,13 @@
 //! through libveyq.so ([bridge]); this crate draws and holds the device — the words ([words], [said]), the theme
 //! ([theme]), the creating action ([create_action]), the members' pictures ([avatars]) and one module per screen:
 //! [sign_in] with the unlock, [shell] with [home], [pot] with its [pot_settings], a file's page ([file_page], a medium played from [reader_stream]), [entry_editor] (a text field's rule, [typed]), a node's [header] with its [move_sheet], [share_sheet], [report] and [cover] and a space's [trash], New pot ([pot_create]) (Search is the shell's sidebar's), [manage] ("Manage
-//! servers", from the switcher), the uploads ([uploads]), and, in a debug build, [dev_login].
+//! servers", from the switcher), the uploads ([uploads]) with drag and drop ([drop]), and, in a debug build, [dev_login].
 pub mod avatars;
 pub mod cover;
 pub mod bridge;
 pub mod create_action;
 pub mod dev_login;
+pub mod drop;
 pub mod entry_editor;
 pub mod entry_history;
 pub mod file_page;
