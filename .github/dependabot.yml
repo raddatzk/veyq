@@ -206,8 +206,8 @@ updates:
   # tests/e2e/stack/docker-compose.e2e.yml (read from dependabot-core main 2e9740c, 2026-11-12: the fetcher's
   # `FILENAME_REGEX` takes `.e2e` as the suffix). The overlay is read since 2026-11-12, after PR #15 moved mailpit in the
   # dev compose file and left the overlay's pin behind. Its images are pebble (its own), mailpit (the dev compose
-  # file's, so both directories' bumps should arrive together in this group's pull request — remembered from the docs'
-  # grouping across `directories`, unproven until a mailpit bump runs) and Playwright (held below). The overlay writes
+  # file's; both directories' bumps arrive together in this group's pull request — seen in PR #20, 2026-11-12, which
+  # moved mailpit v1.33.0 → v1.33.1 in infra/docker/ and tests/e2e/stack/ at once) and Playwright (held below). The overlay writes
   # no image as a YAML anchor: the parser resolves one (`aliases: true`), the updater's `image:` pattern does not, and
   # its "Expected content to change!" would fail the update.
   # MariaDB on its LTS line only (owner 2026-11-07: "only LTS makes sense"): 12.3 is the LTS, and the releases after
@@ -239,7 +239,10 @@ updates:
       # image's tag and index digest follow it by hand in that pull request. Proposed here as well, the move would
       # arrive twice — once in each group, each red until the other lands — and hold this group's other images back.
       # Whether a same-tag digest move still arrives under this rule is unproven (it is no version update).
-      - dependency-name: "mcr.microsoft.com/playwright"
+      # The name is the image's WITHOUT its registry: this rule first said `mcr.microsoft.com/playwright`, matched
+      # nothing, and PR #20 (2026-11-12) proposed "Updates `playwright` from v1.64.1-noble to v1.65.0-noble" — the
+      # parser's `image` capture, the registry being its own group (docker_compose/file_parser.rb, IMAGE_REGEX).
+      - dependency-name: "playwright"
         update-types:
           - "version-update:semver-major"
           - "version-update:semver-minor"
