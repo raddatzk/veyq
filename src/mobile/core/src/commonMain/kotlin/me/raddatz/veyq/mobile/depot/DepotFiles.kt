@@ -222,7 +222,7 @@ object DepotFiles {
         override suspend fun abandon() {
             val id = made ?: return
             made = null
-            giveUp(id)
+            kotlinx.coroutines.withContext(kotlinx.coroutines.NonCancellable) { giveUp(id) }
         }
     }
 
@@ -324,7 +324,9 @@ object DepotFiles {
         tenant.forgetTree()
         onCreated(created.nodeId)
         val done = attach(tenant, scopeId, created.nodeId, size, type, n, modifiedAt, null, read, progress)
-        if (done.outcome != Outcome.DONE) abandon(tenant, scopeId, parentId, created.nodeId)
+        // a cancel ends the upload as a failure: its node is given up all the same, past the cancel (the calls of a
+        // cancelled coroutine fail at once, so the file stayed "not uploaded yet", measured on the emulator)
+        if (done.outcome != Outcome.DONE) kotlinx.coroutines.withContext(kotlinx.coroutines.NonCancellable) { abandon(tenant, scopeId, parentId, created.nodeId) }
         return done
     }
 
