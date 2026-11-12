@@ -13,10 +13,13 @@ internal static class HeaderPlan
     /// <summary>The ids drawn so far.</summary>
     public static readonly string[] Drawn = ["favorite", "share", "rename", "delete", "download", "move", "copy", "report", "cover"];
 
-    /// <summary>Whether <paramref name="id"/> is drawn for a node of <paramref name="kind"/>: a download where it is the
-    /// node's archive (a file's is its own bytes, Depot's page).</summary>
-    public static bool IsDrawn(string id, string kind) =>
-        Drawn.Contains(id) && (id != "download" || kind != "FILE");
+    /// <summary>Whether <paramref name="id"/> is drawn for a node of <paramref name="kind"/> (a file's download is its
+    /// page's Save a copy, a Pot's its page's download: <see cref="ByPage"/>).</summary>
+    public static bool IsDrawn(string id, string kind) => Drawn.Contains(id);
+
+    /// <summary>Whether <paramref name="id"/> of a node of <paramref name="kind"/> is its page's to do: a Pot's download
+    /// (Pot.Download) and a file's (Save a copy, File.Save, with its progress and Cancel).</summary>
+    public static bool ByPage(string id, string kind) => id == "download" && kind is "EXPENSES_POT" or "FILE";
 
     /// <summary>The plan's buttons this app draws: the bar's primary commands.</summary>
     public static List<PlanAction> Primary(Plan plan, string kind) => plan.buttons.Where(a => IsDrawn(a.id, kind)).ToList();

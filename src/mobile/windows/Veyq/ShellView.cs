@@ -2,9 +2,11 @@
 // draw theirs: a NavigationView whose pane is Left, LeftCompact or LeftMinimal by the window's width (its own
 // thresholds), holding the one switcher (spaces and tenants; the signed-in member's picture beside them) as its header,
 // Search as its AutoSuggestBox (Ctrl+E, Ctrl+F), Home, Favorites, Recent and the applications as its items, and Settings
-// at its foot. The content shows what the core's shell says is open — Home, an application's list, a Pot, or an object
-// this app does not draw yet — under its title and a CommandBar whose first command is New; an open Pot's Download is
-// among its secondary commands (the bar's own More), and an InfoBar under the bar says how a download went.
+// at its foot. The content shows what the core's shell says is open — Home, an application's list, a Pot, a file
+// (FilePage), or an object this app does not draw yet — under its title and a CommandBar whose first command is New; an
+// open Pot's Download is among its secondary commands (the bar's own More), an InfoBar under the bar says how a download
+// went, and another follows a file's Save a copy with its progress and Cancel. A list keeps where it was scrolled to when
+// the shell draws it anew — after an object opened from it closed, after an update — by its place (ListScrolls).
 //
 // Every state is the core's (ShellModel.State and ShellShown); every action one call. Which item is selected, whether
 // back is enabled and what the title says follow the state, as Linux's shell.rs draws it.
@@ -34,6 +36,10 @@ internal sealed class ShellView
     private readonly CommandBar _commands;
     private readonly PersonPicture _me;
     private readonly InfoBar _said;
+    /// <summary>A file's Save a copy under way: its progress and Cancel (Watched.Save, Save.Cancel), then how it ended.</summary>
+    private readonly InfoBar _saving;
+    private readonly ListScrolls _scrolls = new();
+    private FilePage? _file;
     private readonly Window _window;
     private readonly ContentControl _body;
     private readonly NavigationViewItem _settings;
@@ -114,15 +120,20 @@ internal sealed class ShellView
         head.Children.Add(_commands);
         _said = new InfoBar { IsOpen = false, IsClosable = true, Margin = new Thickness(12, 0, 12, 4) };
         AutomationProperties.SetAutomationId(_said, "said");
+        _saving = new InfoBar { IsOpen = false, IsClosable = true, Margin = new Thickness(12, 0, 12, 4) };
+        AutomationProperties.SetAutomationId(_saving, "saving");
         _body = new ContentControl { HorizontalContentAlignment = HorizontalAlignment.Stretch, VerticalContentAlignment = VerticalAlignment.Stretch };
         var content = new Grid();
+        content.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
         content.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
         content.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
         content.RowDefinitions.Add(new RowDefinition { Height = new GridLength(1, GridUnitType.Star) });
         content.Children.Add(head);
         Grid.SetRow(_said, 1);
         content.Children.Add(_said);
-        Grid.SetRow(_body, 2);
+        Grid.SetRow(_saving, 2);
+        content.Children.Add(_saving);
+        Grid.SetRow(_body, 3);
         content.Children.Add(_body);
 
         _nav = new NavigationView
@@ -436,16 +447,37 @@ internal sealed class ShellView
             }
             _pot.Hero(_header?.Hero);
             _pot.Places(shown.tabs, shown.selectedTab);
+            _file?.Dispose();
+            _file = null;
             body = _pot.Page;
+        }
+        else if (shell.openObject is { kind: "FILE" } file)
+        {
+            if (_pot is not null) _said.IsOpen = false;
+            _pot?.Dispose();
+            _pot = null;
+            var node = new NodeAt { scopeId = file.scopeId, nodeId = file.nodeId, kind = file.kind, name = file.name };
+            if (_file is null || _file.Node != node)
+            {
+                _file?.Dispose();
+                // the file read: its header learns what it may do (FileModel.Header.facts)
+                _file = new FilePage(node) { Read = facts => _header?.Facts(facts) };
+            }
+            body = _file.Page;
         }
         else
         {
             if (_pot is not null) _said.IsOpen = false;
             _pot?.Dispose();
             _pot = null;
-            body = shell.openObject is { } other ? NotBuilt(other)
-                : shell.application is not null ? HomeView.List(shown.list)
-                : HomeView.Home(state, shown);
+            _file?.Dispose();
+            _file = null;
+            if (shell.openObject is { } other) body = NotBuilt(other);
+            else
+            {
+                body = shell.application is not null ? HomeView.List(shown.list) : HomeView.Home(state, shown);
+                if (body is ScrollViewer list) Keep(list, ListScrolls.Place(shell.application, shell.space, shell.path.Count > 0 ? shell.path[^1].nodeId : null, shell.filter));
+            }
         }
         if (!ReferenceEquals(_body.Content, body)) _body.Content = body;
         DrawCommands();
@@ -465,8 +497,8 @@ internal sealed class ShellView
         _header = null;
         if (shown.headed is { } node)
         {
-            // a folder's page knows all it needs; a Pot's tells once it is read
-            var facts = node.kind == "EXPENSES_POT" ? null : new Facts { canWrite = true, hasContent = true };
+            // a folder's page knows all it needs; a Pot's and a file's tell once they are read
+            var facts = node.kind is "EXPENSES_POT" or "FILE" ? null : new Facts { canWrite = true, hasContent = true };
             _header = new NodeHeader(_window, node, facts, DrawCommands, Say) { UndoBar = _said };
         }
     }
@@ -496,7 +528,13 @@ internal sealed class ShellView
         // an open Pot's "Add entry" is the content's creating action, first, where its places show and it takes writes
         if (page is { CanAdd: true }) _commands.PrimaryCommands.Add(CreateAction.Button(Words.PotAdd(), "pot-add", page.AddEntry));
         if (_header is null) return;
-        var (primary, secondary) = _header.Commands(() => page?.Download(WinRT.Interop.WindowNative.GetWindowHandle(_window), Say));
+        var file = _file;
+        var (primary, secondary) = _header.Commands(() =>
+        {
+            var window = WinRT.Interop.WindowNative.GetWindowHandle(_window);
+            if (page is not null) page.Download(window, Say);
+            else file?.Save(window, Say, Saving);
+        });
         foreach (var c in primary) _commands.PrimaryCommands.Add(c);
         if (page is not null)
         {
@@ -537,10 +575,89 @@ internal sealed class ShellView
     /// <summary>How an action went, under the bar until it is closed or the object leaves.</summary>
     public void Say(bool done, string message)
     {
+        _said.Content = null;
         _said.ActionButton = null;
         _said.Severity = done ? InfoBarSeverity.Success : InfoBarSeverity.Error;
         _said.Message = message;
         _said.IsOpen = true;
+    }
+
+    /// <summary>A file's Save a copy under way: the InfoBar says how far it is with a ProgressBar and Cancel
+    /// (Save.Cancel), then how it ended; it stays when the page leaves.</summary>
+    private void Saving(long save)
+    {
+        var bar = new ProgressBar { Minimum = 0, Maximum = 1, Margin = new Thickness(0, 0, 0, 8) };
+        AutomationProperties.SetAutomationId(bar, "saving-progress");
+        var cancel = new Button { Content = Words.DownloadCancel() };
+        AutomationProperties.SetAutomationId(cancel, "saving-cancel");
+        cancel.Click += (_, _) =>
+        {
+            Log.Write($"save {save}: cancel pressed");
+            Act.Send(new Call.SaveCancel { save = save });
+        };
+        _saving.Severity = InfoBarSeverity.Informational;
+        _saving.Message = "";
+        _saving.Content = bar;
+        _saving.ActionButton = cancel;
+        _saving.IsClosable = false;
+        _saving.IsOpen = true;
+        Watch? watch = null;
+        var logged = -1;
+        watch = Core.Watch(new Watched.Save { save = save }, update =>
+        {
+            if (update is not Update.Save { shown: { } s }) return;
+            if (s.end is null)
+            {
+                _saving.Message = Said.Notice(s.notice);
+                bar.Value = s.fraction;
+                // a line in the log each tenth, for a pass to read the progress from
+                var tenth = (int)Math.Floor(s.fraction * 10);
+                if (tenth != logged)
+                {
+                    logged = tenth;
+                    Log.Write($"save {save}: {s.written} of {s.total} B");
+                }
+                return;
+            }
+            Log.Write($"save {save} ended {s.end}: {s.written} of {s.total} B");
+            _saving.Content = null;
+            _saving.ActionButton = null;
+            _saving.IsClosable = true;
+            _saving.Severity = s.end == SaveEnd.Saved ? InfoBarSeverity.Success : s.end == SaveEnd.Cancelled ? InfoBarSeverity.Informational : InfoBarSeverity.Error;
+            _saving.Message = Said.Notice(s.notice);
+            watch?.Dispose();
+        }, e => Log.Write($"a save's update: {e.Message}"));
+    }
+
+    /// <summary>The list of <paramref name="place"/> put back where that place's list stood, and followed from now on.</summary>
+    private void Keep(ScrollViewer list, string place)
+    {
+        list.ViewChanged += (_, _) =>
+        {
+            // a list leaving the window says nothing of where it stood
+            if (list.IsLoaded) _scrolls.Moved(place, list.VerticalOffset);
+        };
+        if (_scrolls.At(place) is not { } target) return;
+        var pending = true;
+        void Restore(bool settled)
+        {
+            if (!pending) return;
+            if (ListScrolls.PutBack(target, list.ExtentHeight, list.ViewportHeight, settled) is not { } at) return;
+            pending = false;
+            list.ChangeView(null, at, null, disableAnimation: true);
+            Log.Write($"list {place} put back at {at:0}");
+        }
+        // put back once it is laid out tall enough to stand there; a list grown shorter meanwhile stands at its end
+        list.SizeChanged += (_, _) => Restore(false);
+        list.LayoutUpdated += (_, _) => Restore(false);
+        list.Loaded += (_, _) =>
+        {
+            var timer = _window.DispatcherQueue.CreateTimer();
+            timer.Interval = TimeSpan.FromMilliseconds(400);
+            timer.IsRepeating = false;
+            timer.Tick += (_, _) => Restore(true);
+            timer.Start();
+        };
     }
 
     private static UIElement NotBuilt(ObjectRef o)

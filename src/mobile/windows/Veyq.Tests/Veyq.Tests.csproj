@@ -32,6 +32,7 @@
     <Compile Include="../Veyq/ShareDays.cs" Link="App/ShareDays.cs" />
     <Compile Include="../Veyq/TypedText.cs" Link="App/TypedText.cs" />
     <Compile Include="../Veyq/PdfPages.cs" Link="App/PdfPages.cs" />
+    <Compile Include="../Veyq/ListScrolls.cs" Link="App/ListScrolls.cs" />
     <Compile Include="$(VeyqGenerated)bridge/Bridge.g.cs" Link="App/Bridge.g.cs" />
     <Compile Include="$(VeyqGenerated)words/windows/Words.g.cs" Link="App/Words.g.cs" />
   </ItemGroup>

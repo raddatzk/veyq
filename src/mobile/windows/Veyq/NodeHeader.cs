@@ -5,7 +5,8 @@
 // Undo an InfoBar's action held for exactly as long as the core offers it (it closes when the state's undo does: no
 // timer here). The move and the copy open core's sheet (MoveDialog), the share core's share sheet (ShareDialog), the report
 // core's report sheet (ReportDialog), the cover its dialog (CoverDialog); a folder's download goes where the save picker says
-// (Header.Download, under the core's archive name), a Pot's through its page (Pot.Download). What is offered, in which
+// (Header.Download, under the core's archive name), a Pot's through its page (Pot.Download), a file's — the file itself,
+// with its progress and Cancel — through its page (File.Save, FilePage). What is offered, in which
 // order and with which words is the core's (HeaderPlan: what is drawn so far, and the bar's groups).
 //
 // The header also draws the node's head for its page (Hero): the cover across the page's width, 16:9, cut as stored
@@ -208,20 +209,20 @@ internal sealed class NodeHeader : IDisposable
     }
 
     /// <summary>The header's commands for the bar: its primary ones (the plan's buttons) and its secondary ones (the
-    /// menu, a separator, the last group), from the plan's groups (HeaderPlan). <paramref name="potDownload"/> is a Pot
-    /// page's download.</summary>
-    public (List<ICommandBarElement> Primary, List<ICommandBarElement> Secondary) Commands(Action potDownload)
+    /// menu, a separator, the last group), from the plan's groups (HeaderPlan). <paramref name="pageDownload"/> is the
+    /// page's own download where it has one (HeaderPlan.ByPage: a Pot's, a file's Save a copy).</summary>
+    public (List<ICommandBarElement> Primary, List<ICommandBarElement> Secondary) Commands(Action pageDownload)
     {
         var primary = new List<ICommandBarElement>();
         var secondary = new List<ICommandBarElement>();
         if (Shown is not { gone: false, plan: { } plan } s) return (primary, secondary);
         var kind = s.node.kind;
-        foreach (var a in HeaderPlan.Primary(plan, kind)) primary.Add(Command(a, s, potDownload));
-        foreach (var a in HeaderPlan.Secondary(plan, kind)) secondary.Add(a is null ? new AppBarSeparator() : Command(a, s, potDownload));
+        foreach (var a in HeaderPlan.Primary(plan, kind)) primary.Add(Command(a, s, pageDownload));
+        foreach (var a in HeaderPlan.Secondary(plan, kind)) secondary.Add(a is null ? new AppBarSeparator() : Command(a, s, pageDownload));
         return (primary, secondary);
     }
 
-    private AppBarButton Command(PlanAction a, HeaderShown s, Action potDownload)
+    private AppBarButton Command(PlanAction a, HeaderShown s, Action pageDownload)
     {
         var label = a.word is { } w ? Veyq.Said.Key(w) : a.id;
         var icon = a.id switch
@@ -247,7 +248,7 @@ internal sealed class NodeHeader : IDisposable
                 case "share": ShareDialog.Open(_window, s.node); break;
                 case "rename": Rename(s.node.name, null); break;
                 case "delete": Delete(); break;
-                case "download" when s.node.kind == "EXPENSES_POT": potDownload(); break;
+                case "download" when HeaderPlan.ByPage(a.id, s.node.kind): pageDownload(); break;
                 case "download": Download(); break;
                 case "move": MoveDialog.Open(_window, s.node, copy: false, UndoBar); break;
                 case "copy": MoveDialog.Open(_window, s.node, copy: true, UndoBar); break;

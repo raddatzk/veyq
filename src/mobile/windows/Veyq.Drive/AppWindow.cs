@@ -114,6 +114,15 @@ internal sealed partial class AppWindow(string process)
                 Thread.Sleep(300);
                 return "";
             }
+            case "scroll":
+            {
+                // a scrolled view (a ScrollViewer: a list, a file's PDF) moved to <percent> of its height, as a wheel would
+                var e = Find(parts[1]);
+                var to = double.Parse(parts.Length > 2 ? parts[2] : "100", CultureInfo.InvariantCulture);
+                ((ScrollPattern)e.GetCurrentPattern(ScrollPattern.Pattern)).SetScrollPercent(ScrollPattern.NoScroll, to);
+                Thread.Sleep(300);
+                return "";
+            }
             case "size":
                 Size(Window(), int.Parse(parts[1], CultureInfo.InvariantCulture), int.Parse(parts[2], CultureInfo.InvariantCulture));
                 return "";

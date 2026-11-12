@@ -17,6 +17,8 @@
 //                             dialog's entry, the save picker's file name, which a Value set is not read from)
 //   press <id> [keys]         the element focused and keys typed into the window it lies in (`enter` by default):
 //                             a system dialog's button (the save picker's Save), which UIA's Invoke cannot press
+//   scroll <id> [percent]     a scrolled view (its ScrollPattern: a ScrollViewer, a list) moved to percent of its height
+//                             (100 by default)
 //   size <w> <h>              the window restored and resized to w × h (in its own pixels)
 //   maximize                  the window maximized
 //   wait <id> [seconds]       until an element with that AutomationId is there (10 s by default)

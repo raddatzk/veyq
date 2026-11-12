@@ -12,9 +12,11 @@ public sealed class HeaderPlanTest
     {
         foreach (var id in new[] { "favorite", "share", "rename", "delete", "move", "copy", "download", "report", "cover" })
         {
-            Assert.IsTrue(HeaderPlan.IsDrawn(id, "FOLDER") && HeaderPlan.IsDrawn(id, "EXPENSES_POT"), id);
+            Assert.IsTrue(HeaderPlan.IsDrawn(id, "FOLDER") && HeaderPlan.IsDrawn(id, "EXPENSES_POT") && HeaderPlan.IsDrawn(id, "FILE"), id);
         }
-        Assert.IsFalse(HeaderPlan.IsDrawn("download", "FILE"), "a file's download is its own bytes");
+        Assert.IsTrue(HeaderPlan.ByPage("download", "FILE"), "a file's download is its page's Save a copy");
+        Assert.IsTrue(HeaderPlan.ByPage("download", "EXPENSES_POT"));
+        Assert.IsFalse(HeaderPlan.ByPage("download", "FOLDER"), "a folder's download is the header's ZIP");
         Assert.IsFalse(HeaderPlan.IsDrawn("an-applications-own", "FOLDER"), "an application's own action is its page's");
     }
 
