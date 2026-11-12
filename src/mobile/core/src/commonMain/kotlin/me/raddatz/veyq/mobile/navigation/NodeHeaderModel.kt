@@ -61,6 +61,8 @@ class NodeHeaderModel(
         fun closeOpen(ref: NodeAt)
         /** After each write that went through, for what the app keeps around the lists (its rows' details). */
         fun changed()
+        /** What [ref]'s download is saved as (a file its own name, else its ZIP's, `AppKinds.downloadName`). */
+        suspend fun downloadName(ref: NodeAt): String = me.raddatz.veyq.mobile.export.NodeExport.fileName(ref.name)
         /** Where the frame of [ref]'s cover sits, or null where its meta names none. */
         suspend fun cover(ref: NodeAt): NodeCover.Crop? = null
         /** [ref]'s cover picture (the JPEG its uploader made), or null. */
@@ -81,6 +83,11 @@ class NodeHeaderModel(
         val gone: Boolean = false,
         /** Where the frame of the node's cover sits; null while it has none (or its kind takes none). */
         val cover: NodeCover.Crop? = null,
+        /**
+         * What its download is saved as: a file under its own name (its download is the file itself), any other node its
+         * ZIP's; null until read.
+         */
+        val downloadName: String? = null,
     )
 
     private var facts: AppKinds.Facts? = facts
@@ -106,12 +113,21 @@ class NodeHeaderModel(
             recompose()
         }
         if (AppKinds.header(node.kind)?.takesCover == true) scope.launch { readCover() }
+        scope.launch { readDownloadName() }
+    }
+
+    private suspend fun readDownloadName() {
+        val name = runCatching { door.downloadName(node) }.getOrNull() ?: me.raddatz.veyq.mobile.export.NodeExport.fileName(node.name)
+        _state.update { it.copy(downloadName = name) }
     }
 
     /** What the kind's page knows now (null: it cannot tell yet): the rights follow. */
     fun update(facts: AppKinds.Facts?) {
+        val was = this.facts
         this.facts = facts
         recompose()
+        // a file's content arrived or went: its name may come from its uploaded one now
+        if (was != null && facts != null && was != facts && AppKinds.downloadsItself(node.kind)) scope.launch { readDownloadName() }
     }
 
     private fun recompose() = _state.update { it.copy(rights = rights(it.pinned)) }

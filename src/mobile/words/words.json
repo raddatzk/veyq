@@ -1633,6 +1633,11 @@
     "en": "Showing only the first megabyte. Download the file to read all of it.",
     "de": "Angezeigt wird nur das erste Megabyte. Lade die Datei herunter, um alles zu lesen."
   },
+  "file_pages_cut": {
+    "note": "under a PDF file whose pages a viewer stopped drawing; {1} the pages shown, {2} all of them",
+    "en": "The first {1} of {2} pages are shown. Download the file to see all of them.",
+    "de": "Die ersten {1} von {2} Seiten werden gezeigt. Lade die Datei herunter, um alle zu sehen."
+  },
   "share_file_title": {
     "en": "Share this file",
     "de": "Diese Datei teilen"

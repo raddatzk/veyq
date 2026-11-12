@@ -275,6 +275,7 @@ class ShellModel(
             override suspend fun rename(ref: NodeAt, name: String) = this@ShellModel.rename(ref, name)
             override fun closeOpen(ref: NodeAt) = closeOpen(ref)
             override fun changed() = changed()
+            override suspend fun downloadName(ref: NodeAt) = AppKinds.downloadName(tenant, ref)
             override suspend fun cover(ref: NodeAt): NodeCover.Crop? {
                 val n = tenant.node(ref.scopeId, ref.nodeId) ?: return null
                 return NodeCover.read(NodeMetaWrite.openForWrite(tenant.account.suite, n.scopeId, n.id, n.key, n.wrappedMeta))?.crop
@@ -431,17 +432,46 @@ class ShellModel(
     })
 
     /**
-     * Node [ref] with everything under it as the web's ZIP into [sink] (`NodeExport.walk`, `write`; the kinds the build
-     * exports, a copied Pot's erased people named [deletedName]): what it left out, or null when there is nothing to export.
+     * Node [ref]'s download into [sink]: a file the file itself ([AppKinds.ownDownload]), any other node with everything
+     * under it as the web's ZIP (`NodeExport.walk`, `write`; the kinds the build exports, a copied Pot's erased people named
+     * [deletedName]): what it left out, or null when there is nothing to download or it did not finish.
      * Natively the sink is a file by its path (`FileSink`, which removes a download that did not finish).
      */
-    suspend fun download(ref: NodeAt, deletedName: String, nowMs: Long, sink: (ByteArray) -> Unit): List<NodeExport.Skipped>? {
-        val walked = NodeExport.walk(tenant, ref.scopeId, ref.nodeId, AppKinds.exports(deletedName)) ?: return null
-        NodeExport.write(walked.root, VeyqAccount.MAJOR.toString(), nowMs, sink)
-        return walked.skipped
-    }
+    suspend fun download(ref: NodeAt, deletedName: String, nowMs: Long, sink: (ByteArray) -> Unit): List<NodeExport.Skipped>? =
+        downloadAs(ref.kind, own = { AppKinds.ownDownload(tenant, ref, it) == true }, zip = zip@{ out ->
+            val walked = NodeExport.walk(tenant, ref.scopeId, ref.nodeId, AppKinds.exports(deletedName)) ?: return@zip null
+            NodeExport.write(walked.root, VeyqAccount.MAJOR.toString(), nowMs, out)
+            walked.skipped
+        }, sink = sink)
+
+    /**
+     * The file [ref]'s page shows over this tenant ([FileModel]): the file read anew on each [FileModel.reload], its content
+     * in frames and ranges, its uploader, its replace as a job of the upload queue; [shares] where the platform has a
+     * share sheet ("Send a copy").
+     */
+    fun fileModel(ref: NodeAt, shares: Boolean): me.raddatz.veyq.mobile.depot.FileModel =
+        me.raddatz.veyq.mobile.depot.FileModel(ref, object : me.raddatz.veyq.mobile.depot.FileModel.Door {
+            override suspend fun file(node: NodeAt) = me.raddatz.veyq.mobile.depot.DepotFiles.one(tenant, node.scopeId, node.nodeId)
+            override fun inIdentityFolder(node: NodeAt) = this@ShellModel.inIdentityFolder(node)
+            override suspend fun read(file: me.raddatz.veyq.mobile.depot.DepotFiles.File, first: Int, until: Int, sink: suspend (ByteArray) -> Unit) =
+                me.raddatz.veyq.mobile.depot.DepotFiles.read(tenant, file, first, until, sink)
+            override fun reader(file: me.raddatz.veyq.mobile.depot.DepotFiles.File) = me.raddatz.veyq.mobile.depot.DepotFiles.reader(tenant, file)
+            override suspend fun uploader(file: me.raddatz.veyq.mobile.depot.DepotFiles.File) = me.raddatz.veyq.mobile.depot.Uploaders.of(tenant, file)
+            override fun replaceJob(file: me.raddatz.veyq.mobile.depot.DepotFiles.File, source: me.raddatz.veyq.mobile.blob.UploadSource, expectedBlobId: String?) =
+                me.raddatz.veyq.mobile.depot.DepotFiles.ReplaceJob(tenant, file, source, expectedBlobId, source.name)
+        }, shares)
 
     companion object {
+        /**
+         * A node of [kind]'s download into [sink]: its [own] content where the kind downloads itself
+         * ([AppKinds.downloadsItself]: a file, nothing left out) — null where it did not finish —, else the [zip] of it.
+         */
+        internal suspend fun downloadAs(
+            kind: String, own: suspend ((ByteArray) -> Unit) -> Boolean, zip: suspend ((ByteArray) -> Unit) -> List<NodeExport.Skipped>?,
+            sink: (ByteArray) -> Unit,
+        ): List<NodeExport.Skipped>? =
+            if (AppKinds.downloadsItself(kind)) (if (own(sink)) emptyList() else null) else zip(sink)
+
         /**
          * The shell after the lists were read: [prior] kept (null: the app starts — on [lastUsed], else Home's default
          * space), but a space no longer listed gives way to the default one.

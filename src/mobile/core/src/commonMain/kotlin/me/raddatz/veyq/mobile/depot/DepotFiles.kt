@@ -86,6 +86,30 @@ object DepotFiles {
         return out
     }
 
+    /** File [nodeId] of [scopeId] as it is listed now (its content read anew, a replaced blob included); null where it is not. */
+    @Throws(Exception::class)
+    suspend fun one(tenant: TenantSession, scopeId: String, nodeId: String): File? {
+        val node = tenant.node(scopeId, nodeId)?.takeIf { it.kind == FILE } ?: return null
+        val page = tenant.account.call { FilesApi(tenant.base, tenant.account.http).listFiles(scopeId, node.parentId) }
+        val item = page.items.firstOrNull { it.nodeId == nodeId } ?: return null
+        return file(tenant, node, item)
+    }
+
+    /**
+     * [file]'s content read at any offset ([me.raddatz.veyq.mobile.blob.RangeReader], ADR 0047): what a player asks for is
+     * served from the frames that hold it, never the whole plaintext held or written.
+     */
+    fun reader(tenant: TenantSession, file: File): me.raddatz.veyq.mobile.blob.RangeReader =
+        me.raddatz.veyq.mobile.blob.RangeReader(file.size ?: 0, file.chunkCount) { first, until, sink -> read(tenant, file, first, until, sink) }
+
+    /** File [ref]'s content into [sink] as it is read (its own download, not a ZIP); false where it has none or did not finish. */
+    @Throws(Exception::class)
+    suspend fun download(tenant: TenantSession, scopeId: String, nodeId: String, sink: (ByteArray) -> Unit): Boolean {
+        val file = one(tenant, scopeId, nodeId)?.takeIf { it.hasContent } ?: return false
+        read(tenant, file) { sink(it) }
+        return true
+    }
+
     /**
      * [file]'s content handed to [sink] a frame at a time, in order (frames [first] to [until], exclusive): a file of any size
      * is read without holding it whole, a page that decides by the bytes reads the first frame alone. Its key must open
@@ -217,7 +241,7 @@ object DepotFiles {
      */
     class Offer(
         val notice: me.raddatz.veyq.mobile.words.Notice, val action: me.raddatz.veyq.mobile.words.Msg,
-        val nodeId: String, val source: UploadSource, val expectedBlobId: String?,
+        val scopeId: String, val nodeId: String, val source: UploadSource, val expectedBlobId: String?,
     )
 
     /** [item]'s offer, or null where it offers nothing; [blobIdOf] is a listed file's content now. */
@@ -226,12 +250,29 @@ object DepotFiles {
         val job = item.job
         return when {
             job is UploadJob && item.error == Codes.EXISTS -> job.existing?.let { existing ->
-                Offer(me.raddatz.veyq.mobile.words.Notices.replaceOffered(item.name), me.raddatz.veyq.mobile.words.Msg.DEPOT_REPLACE_TITLE, existing, job.picked, blobIdOf(existing))
+                Offer(me.raddatz.veyq.mobile.words.Notices.replaceOffered(item.name), me.raddatz.veyq.mobile.words.Msg.DEPOT_REPLACE_TITLE, job.scopeId, existing, job.picked, blobIdOf(existing))
             }
             job is ReplaceJob && item.error == Codes.STALE ->
-                Offer(me.raddatz.veyq.mobile.words.Notices.replaceStale(item.name), me.raddatz.veyq.mobile.words.Msg.DEPOT_REPLACE_ANYWAY, job.file.nodeId, job.picked, job.currentBlobId)
+                Offer(me.raddatz.veyq.mobile.words.Notices.replaceStale(item.name), me.raddatz.veyq.mobile.words.Msg.DEPOT_REPLACE_ANYWAY, job.file.scopeId, job.file.nodeId, job.picked, job.currentBlobId)
             else -> null
         }
+    }
+
+    /**
+     * [item]'s offer as the tenant lists it now: the colliding file's content read anew for its expected blob (the app holds
+     * no list of files); null where it offers nothing.
+     */
+    @Throws(Exception::class)
+    suspend fun offerAfter(tenant: TenantSession, item: UploadQueue.Item): Offer? {
+        val existing = (item.job as? UploadJob)?.let { j -> j.existing?.let { one(tenant, j.scopeId, it) } }
+        return offerFor(item) { id -> existing?.takeIf { it.nodeId == id }?.blobId }
+    }
+
+    /** The replace an [offer] makes when taken: a job over the file as it is listed now, or null where it is gone. */
+    @Throws(Exception::class)
+    suspend fun take(tenant: TenantSession, offer: Offer): ReplaceJob? {
+        val file = one(tenant, offer.scopeId, offer.nodeId) ?: return null
+        return ReplaceJob(tenant, file, offer.source, offer.expectedBlobId, offer.source.name)
     }
 
     private const val OCTET = "application/octet-stream"

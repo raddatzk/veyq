@@ -8,7 +8,8 @@ import me.raddatz.veyq.mobile.crypto.V1
  * frame's decrypted BYTES (`Sniff`); the sealed type and the name are claims that only narrow (text must be claimed). A
  * raster image, a PDF and a text are shown in the app, an audio or video container played there, and everything else is
  * only downloaded — a peer's bytes are never handed to another app or rendered as markup: an SVG is shown as its text.
- * The platform names any file it hands its own viewer by [Decision.extension], the SNIFFED type's, never the peer's name.
+ * Nothing decrypted is written to show it (ADR 0047): an image, a text and a PDF are held in memory (each capped), a medium
+ * is read in ranges through core's `RangeReader` ([FileModel]).
  */
 object FileView {
     /** Largest image decrypted into memory (the web's `IMAGE_CAP`); over it, the download is offered instead. */
@@ -17,6 +18,17 @@ object FileView {
     const val TEXT_CAP = 1024 * 1024
     /** Largest PDF decrypted (`PDF_CAP`). */
     const val PDF_CAP = 64L * 1024 * 1024
+    /** The longest side, in pixels, a platform decodes a shown image to (both phones' 4096 before it was the core's). */
+    const val IMAGE_EDGE = 4096
+    /** Most pages of a PDF a viewer draws (the web's pdf.js cap, `docs/apps/depot.md` § The viewer); past it, it says so. */
+    const val PDF_PAGES = 1000
+
+    /** The pages of a PDF of [total] a viewer draws: at most [PDF_PAGES]. */
+    fun pagesShown(total: Int): Int = total.coerceIn(0, PDF_PAGES)
+
+    /** What a viewer says under a PDF of [total] pages it did not draw whole; null where it draws them all. */
+    fun pagesCut(total: Int): me.raddatz.veyq.mobile.words.Notice? =
+        if (total > PDF_PAGES) me.raddatz.veyq.mobile.words.Notice(me.raddatz.veyq.mobile.words.Msg.FILE_PAGES_CUT, PDF_PAGES, total) else null
 
     enum class Kind { IMAGE, MEDIA, PDF, TEXT, TOO_LARGE, EMPTY, UNSUPPORTED }
 
@@ -28,8 +40,7 @@ object FileView {
     }
 
     /**
-     * What to show: its [kind], the sniffed [mime] and its [fileExtension] (what a file handed to the platform's viewer is named
-     * by), how many [frames] to read for it (all, or a text's first [TEXT_CAP] bytes), and whether a text is [truncated].
+     * What to show: its [kind], the sniffed [mime] and its [fileExtension] (the sniffed type's, never the peer's name), how many [frames] to read for it (all, or a text's first [TEXT_CAP] bytes), and whether a text is [truncated].
      */
     data class Decision(val kind: Kind, val mime: String? = null, val fileExtension: String? = null, val frames: Int = 0, val truncated: Boolean = false)
 
@@ -54,23 +65,27 @@ object FileView {
         return Decision(Kind.UNSUPPORTED)
     }
 
-    /** What a file's page shows, read as far as it needs: the [decision], an image's [bytes], a text's [text]. */
+    /** What a file's page shows, read as far as it needs: the [decision], an image's or a PDF's [bytes], a text's [text]. */
     class Opened(val decision: Decision, val bytes: ByteArray?, val text: String?)
 
     /**
      * [file]'s view (node [nodeName]): its first frame decided by its bytes — the node's name a claim only where it has an
-     * extension, else the uploaded name —, then an image read whole, a text's first [TEXT_CAP] bytes decoded. A PDF or
-     * media file is the platform's to stream ([DepotFiles.read]) into what renders it.
+     * extension, else the uploaded name —, then an image and a PDF read whole (both capped), a text's first [TEXT_CAP] bytes
+     * decoded. A medium is read in ranges ([DepotFiles.reader]), never here.
      */
     @Throws(Exception::class)
-    suspend fun open(tenant: me.raddatz.veyq.mobile.session.TenantSession, file: DepotFiles.File, nodeName: String): Opened {
+    suspend fun open(tenant: me.raddatz.veyq.mobile.session.TenantSession, file: DepotFiles.File, nodeName: String): Opened =
+        open(file, nodeName) { first, until, sink -> DepotFiles.read(tenant, file, first, until, sink) }
+
+    /** [file]'s view over [read], which hands its frames `first until until` in order (a test plays it). */
+    suspend fun open(file: DepotFiles.File, nodeName: String, read: suspend (first: Int, until: Int, sink: suspend (ByteArray) -> Unit) -> Unit): Opened {
         var head = ByteArray(0)
-        DepotFiles.read(tenant, file, 0, 1) { head = it }
+        read(0, 1) { head = it }
         val named = if (Sniff.extensionOf(nodeName).isNotEmpty()) nodeName else file.uploadedName
         val d = decide(head, file.chunkCount, file.size ?: 0, file.type, named)
         suspend fun frames(until: Int): ByteArray {
             val parts = ArrayList<ByteArray>()
-            DepotFiles.read(tenant, file, 0, until) { parts += it }
+            read(0, until) { parts += it }
             val all = ByteArray(parts.sumOf { it.size })
             var o = 0
             for (p in parts) {
@@ -80,7 +95,7 @@ object FileView {
             return all
         }
         return when (d.kind) {
-            Kind.IMAGE -> Opened(d, frames(file.chunkCount), null)
+            Kind.IMAGE, Kind.PDF -> Opened(d, frames(file.chunkCount), null)
             Kind.TEXT -> frames(d.frames).let { Opened(d, null, Sniff.decodeText(it.copyOf(minOf(it.size, TEXT_CAP)))) }
             else -> Opened(d, null, null)
         }

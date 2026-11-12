@@ -6,7 +6,6 @@ import kotlinx.cinterop.usePinned
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import me.raddatz.veyq.mobile.AppKinds
-import me.raddatz.veyq.mobile.blob.FileSink
 import me.raddatz.veyq.mobile.blob.FileUploadSource
 import me.raddatz.veyq.mobile.session.TenantSession
 import platform.Foundation.NSData
@@ -14,9 +13,9 @@ import platform.Foundation.NSURL
 import platform.Foundation.create
 
 /**
- * Depot's files for the Apple app: what Swift cannot hand core itself (a suspending reader), done here over a file — an
- * upload job reads the picked file at any offset a frame at a time ([FileUploadSource]), a download writes the plaintext
- * to a file as it is read, a view reads the frames it needs. Nothing is held whole but what a view shows.
+ * Depot's files for the Apple app: what Swift cannot hand core itself — an upload reads the picked file at any offset a
+ * frame at a time ([FileUploadSource]), a file page's shown bytes cross as `NSData`. Nothing is held whole but what a view
+ * shows, and nothing decrypted is written to show it.
  */
 @OptIn(ExperimentalForeignApi::class)
 object AppleDepot {
@@ -46,42 +45,17 @@ object AppleDepot {
         FolderUpload.prepare(tenant, scopeId, parentId, rootName, entries, AppKinds::tokenInput)
     }
 
-    /** [file]'s content replaced with the picked file at [url] over [expectedBlobId]: a job for the upload queue. */
-    fun replaceJob(
-        tenant: TenantSession, file: DepotFiles.File, url: NSURL, name: String, size: Long, type: String, modifiedAt: Long?, expectedBlobId: String?,
-    ): DepotFiles.ReplaceJob = DepotFiles.ReplaceJob(tenant, file, FileUploadSource(url, null, name, size, type, modifiedAt), expectedBlobId, name)
+    /** The picked file at [url] as an upload reads it, a frame at a time at any offset (a file page's replace, `FileModel.replace`). */
+    fun source(url: NSURL, name: String, size: Long, type: String, modifiedAt: Long?): me.raddatz.veyq.mobile.blob.UploadSource =
+        FileUploadSource(url, null, name, size, type, modifiedAt)
 
-    /** Writes [file]'s content to [path] as it is read (core's [FileSink]); false (and nothing left at [path]) when it did not finish. */
-    @Throws(Exception::class)
-    suspend fun download(tenant: TenantSession, file: DepotFiles.File, path: String): Boolean = withContext(Dispatchers.Default) {
-        val out = FileSink.open(path) ?: return@withContext false
-        out.fill { sink ->
-            DepotFiles.read(tenant, file) { sink(it) }
-            true
-        }
-    }
-
-    /** What a file's page shows: the decision (`FileView`) and what it needs read — an image's bytes, a text's characters. */
-    class Viewed(val decision: FileView.Decision, val data: NSData?, val text: String?)
-
-    /** [file]'s view: its first frame decided by its bytes (the node's name a claim only when it has an extension). */
-    @Throws(Exception::class)
-    suspend fun view(tenant: TenantSession, file: DepotFiles.File, nodeName: String): Viewed = withContext(Dispatchers.Default) {
-        val o = FileView.open(tenant, file, nodeName)
-        Viewed(o.decision, o.bytes?.toNSData(), o.text)
-    }
-
-    /** [file]'s first [frames] frames' plaintext, joined (a view's head, an image, a text's first MiB). */
-    @Throws(Exception::class)
-    suspend fun read(tenant: TenantSession, file: DepotFiles.File, frames: Int): NSData = withContext(Dispatchers.Default) {
-        val parts = ArrayList<ByteArray>()
-        DepotFiles.read(tenant, file, 0, frames) { parts += it }
-        val all = ByteArray(parts.sumOf { it.size })
-        var o = 0
-        for (p in parts) {
-            p.copyInto(all, o)
-            o += p.size
-        }
-        all.toNSData()
+    /**
+     * The bytes a file's page shows from memory — an image's, a PDF's (`FileModel.Shown`) — handed to Swift as they are;
+     * nothing is written to show them (ADR 0047). Null for any other view.
+     */
+    fun bytes(shown: FileModel.Shown): NSData? = when (shown) {
+        is FileModel.Shown.Image -> shown.bytes.toNSData()
+        is FileModel.Shown.Pdf -> shown.bytes.toNSData()
+        else -> null
     }
 }

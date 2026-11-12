@@ -64,6 +64,33 @@ object AppKinds {
     }
 
     /**
+     * Whether a node of [kind] downloads as its own content rather than the web's ZIP (a Depot file: the file itself, under
+     * its own name, D3 of the Depot CR); every other kind downloads the ZIP of it with everything under it.
+     */
+    fun downloadsItself(kind: String): Boolean = kind == FILE
+
+    /**
+     * Node [ref]'s own download into [sink] where its kind has one ([downloadsItself]): true once whole, false where it has
+     * nothing to download or did not finish; null for a kind that downloads as the ZIP.
+     */
+    @Throws(Exception::class)
+    suspend fun ownDownload(tenant: me.raddatz.veyq.mobile.session.TenantSession, ref: me.raddatz.veyq.mobile.navigation.NodeAt, sink: (ByteArray) -> Unit): Boolean? =
+        when (ref.kind) {
+            FILE -> me.raddatz.veyq.mobile.depot.DepotFiles.download(tenant, ref.scopeId, ref.nodeId, sink)
+            else -> null
+        }
+
+    /** The name node [ref]'s download is saved as: a file's own (`DepotFiles.downloadName`), else the ZIP's. */
+    @Throws(Exception::class)
+    suspend fun downloadName(tenant: me.raddatz.veyq.mobile.session.TenantSession, ref: me.raddatz.veyq.mobile.navigation.NodeAt): String =
+        when (ref.kind) {
+            FILE -> me.raddatz.veyq.mobile.depot.DepotFiles.downloadName(
+                runCatching { me.raddatz.veyq.mobile.depot.DepotFiles.one(tenant, ref.scopeId, ref.nodeId) }.getOrNull(), ref.name,
+            )
+            else -> me.raddatz.veyq.mobile.export.NodeExport.fileName(ref.name)
+        }
+
+    /**
      * How the build's kinds copy (the web's `importContent` for a copy, `SubtreeCopy`): a Pot by Expenses' copy (`PotCopy`,
      * its erased people named [deletedName]; it names itself), a Depot file read here and uploaded again under a fresh key
      * (`DepotExport.duplicate`), a drop box as a plain folder (the web's `importsAsFolder`); every other kind but a folder is
