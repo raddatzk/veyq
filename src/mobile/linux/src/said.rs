@@ -196,6 +196,15 @@ fn monetary() -> Monetary {
     }
 }
 
+/// The person's decimal separator, as they type an amount (the locale's numeric data; the core reads both `.` and `,`):
+/// what the entry editor hands the core at its open, so the amounts and the rate it fills read the person's way.
+pub fn decimal_separator() -> String {
+    // SAFETY: called on GTK's main thread only, which is the only one that changes the locale (at GTK's start).
+    let l = unsafe { &*localeconv() };
+    let d = text(l.decimal_point);
+    if d.chars().count() == 1 { d } else { ".".into() }
+}
+
 /// [minor] units of [currency] (with [minor_units] digits after the point) as the locale writes money: its separators
 /// and grouping, its own currency by its symbol where it is the locale's, any other by its code. No currency: the
 /// number alone.

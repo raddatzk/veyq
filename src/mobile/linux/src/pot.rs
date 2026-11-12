@@ -7,8 +7,9 @@
 //! Its live poll (`Watched.PotLive`) runs while the page is mapped and its window is active, as the phones poll while
 //! the Pot is shown (`STARTED`, `scenePhase`): the watch is dropped when either ends, which stops the poll. Refresh
 //! (`Pot.Refresh`) is the header bar's button and F5 / Ctrl+R (`win.pot-refresh`, the shell's). A settle-up row is
-//! recorded (`Pot.Record`, dated the core's today) after an `AdwAlertDialog` asked, one row or all; an entry opens its
-//! history ([crate::entry_history]), a deleted one its restore. Its download (`Pot.Download`) goes where GTK's save
+//! recorded (`Pot.Record`, dated the core's today) after an `AdwAlertDialog` asked, one row or all; an entry opens the
+//! entry editor ([crate::entry_editor], which holds its history), a deleted one its history and restore
+//! ([crate::entry_history]); "Add entry" is the shell's header bar's creating action ([PotPage::add_entry]). Its download (`Pot.Download`) goes where GTK's save
 //! dialog says, under the name the core gives (`Pot.ArchiveName`); the core writes the file (ADR 0128 decision 3).
 use std::cell::{Cell, RefCell};
 use std::rc::{Rc, Weak};
@@ -158,6 +159,12 @@ impl PotPage {
                 }
             }
         });
+    }
+
+    /// The entry editor of a new entry (the header bar's "Add entry").
+    pub fn add_entry(&self) {
+        let Some(pot) = self.inner.id.get() else { return };
+        crate::entry_editor::open(&self.inner.window, pot, None, &self.inner.toasts);
     }
 
     /// Reads the Pot again now (Refresh, F5 / Ctrl+R); what changed arrives on its watch.
@@ -319,7 +326,7 @@ impl Inner {
         }
     }
 
-    /// An entry's row, opened to its history (a deleted one's with its restore).
+    /// An entry's row, opened to the editor (a deleted one's to its history and restore).
     fn entry_row(self: &Rc<Self>, view: &PotView, e: &ShownEntry, deleted: bool) -> adw::ActionRow {
         let title = e.row.title.clone().unwrap_or_else(words::pot_transfer);
         let row = adw::ActionRow::builder().title(glib_escape(&title)).subtitle(glib_escape(&said::line(&e.line))).activatable(true).build();
@@ -336,7 +343,11 @@ impl Inner {
         row.connect_activated(move |_| {
             let Some(i) = w.upgrade() else { return };
             let Some(pot) = i.id.get() else { return };
-            crate::entry_history::open(&i.window, pot, &id, &title, amount.as_deref(), &i.toasts);
+            if deleted {
+                crate::entry_history::open(&i.window, pot, &id, &title, amount.as_deref(), &i.toasts);
+            } else {
+                crate::entry_editor::open(&i.window, pot, Some(&id), &i.toasts);
+            }
         });
         row
     }

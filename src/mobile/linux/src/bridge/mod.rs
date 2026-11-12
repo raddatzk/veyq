@@ -67,14 +67,16 @@ pub struct Unreadable(pub serde_json::Error);
 /// copied out of the callback; None for every other answer.
 pub type Answered = (Answer, Option<Vec<u8>>);
 
-/// One action of the core, answered once. Before the core started it is never answered.
-pub async fn call(call: &Call) -> Result<Answered, Unreadable> {
+/// One action of the core, answered once. Before the core started it is never answered. The call reaches the core when
+/// this is called, not when its answer is first awaited, so calls arrive in the order they were made (an entry editor's
+/// edits are applied in that order, `Editor.Change`).
+pub fn call(call: &Call) -> impl std::future::Future<Output = Result<Answered, Unreadable>> + use<> {
     let json = CString::new(serde_json::to_string(call).expect("a Call writes")).expect("JSON holds no NUL");
     let (tx, rx) = async_channel::bounded::<Result<Answered, Unreadable>>(1);
     let ctx = Box::into_raw(Box::new(tx)).cast::<c_void>();
     // SAFETY: the request is read before the call returns; ctx is taken back exactly once, by [answered].
     unsafe { wire::veyq_call(json.as_ptr(), ptr::null(), 0, ctx, answered) };
-    rx.recv().await.unwrap_or_else(|_| unreachable!("the answer's sender is dropped only after it sent"))
+    async move { rx.recv().await.unwrap_or_else(|_| unreachable!("the answer's sender is dropped only after it sent")) }
 }
 
 unsafe extern "C" fn answered(ctx: *mut c_void, json: *const c_char, bytes: *const u8, len: usize) {
@@ -90,8 +92,9 @@ unsafe extern "C" fn answered(ctx: *mut c_void, json: *const c_char, bytes: *con
 /// [call] sent from GTK's main loop, its answer awaited there; an answer other than done is said on stderr by the call's
 /// kind alone (never its fields: a sign-in's carry what the person typed).
 pub fn send(call: Call) {
+    let answer = self::call(&call);
     gtk::glib::spawn_future_local(async move {
-        match self::call(&call).await.map(|(answer, _)| answer) {
+        match answer.await.map(|(answer, _)| answer) {
             Ok(Answer::Done | Answer::PotOpened { .. } | Answer::Groups { .. } | Answer::Hits { .. }) => {}
             other => {
                 let kind = serde_json::to_value(&call).ok().and_then(|v| v["type"].as_str().map(str::to_owned)).unwrap_or_default();

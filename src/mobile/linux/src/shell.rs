@@ -55,6 +55,8 @@ pub struct Shell {
     header_bar: gtk::Box,
     /// An open Pot's Refresh (`win.pot-refresh`, F5 / Ctrl+R), beside its actions.
     refresh: gtk::Button,
+    /// An open Pot's "Add entry", the content's creating action, shown once the Pot is read and takes writes.
+    add_entry: gtk::Button,
     refresh_action: gio::SimpleAction,
     header: Rc<RefCell<Option<Header>>>,
     /// A header whose page left while its trash's Undo stands: kept until another takes its place.
@@ -110,6 +112,9 @@ impl Shell {
         let content_header = adw::HeaderBar::new();
         content_header.set_title_widget(Some(&content_title));
         content_header.pack_start(&back);
+        let add_entry = create_action::create_action(&words::pot_add(), || {});
+        add_entry.set_visible(false);
+        content_header.pack_start(&add_entry);
         // the node on screen's actions, GNOME's way: buttons and a menu at the header bar's end (`header`)
         let header_bar = gtk::Box::new(gtk::Orientation::Horizontal, 6);
         content_header.pack_end(&header_bar);
@@ -158,6 +163,7 @@ impl Shell {
             back,
             header_bar,
             refresh,
+            add_entry: add_entry.clone(),
             refresh_action,
             header: Rc::new(RefCell::new(None)),
             undoing: RefCell::new(None),
@@ -195,6 +201,13 @@ impl Shell {
             }
         });
         window.add_action(&download);
+        let weak = Rc::downgrade(self);
+        self.add_entry.connect_clicked(move |_| {
+            let Some(s) = weak.upgrade() else { return };
+            if let Some(pot) = s.pot.borrow().as_ref() {
+                pot.add_entry();
+            }
+        });
         let weak = Rc::downgrade(self);
         self.refresh_action.connect_activate(move |_, _| {
             let Some(s) = weak.upgrade() else { return };
@@ -520,7 +533,11 @@ impl Shell {
                     let page = PotPage::open(o, self.window.upcast_ref(), &self.toasts);
                     // the Pot read: the header learns whether it takes writes (`AppKinds.Facts`)
                     let held = Rc::downgrade(&self.header);
+                    let add = self.add_entry.downgrade();
                     page.on_read(move |can_write| {
+                        if let Some(add) = add.upgrade() {
+                            add.set_visible(can_write);
+                        }
                         if let Some(held) = held.upgrade()
                             && let Some(h) = held.borrow().as_ref()
                         {
@@ -544,6 +561,9 @@ impl Shell {
             }
         };
         let pot_open = self.pot.borrow().is_some();
+        if !pot_open {
+            self.add_entry.set_visible(false);
+        }
         self.refresh.set_visible(pot_open);
         self.refresh_action.set_enabled(pot_open);
         if self.content_view.content().as_ref() != Some(&body) {

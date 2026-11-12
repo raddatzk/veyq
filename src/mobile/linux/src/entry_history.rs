@@ -2,7 +2,8 @@
 //! amount, listing every revision the Pot holds, newest first — what it said, who wrote it and when (`Pot.History`, each
 //! line the core's `historyLine`). A deleted entry says so, until when it can be restored (its receipts' erasure, read
 //! on the core's clock) and offers Restore (`Pot.Restore`); the dialog closes once the restore was stored, and a
-//! refusal is a toast in it. The entry editor (Expenses' next phase) takes this list as its history page.
+//! refusal is a toast in it. A deleted entry's row opens this dialog; a live entry's opens the entry editor
+//! ([crate::entry_editor]), which takes the same list as its history page ([page]).
 use std::rc::Rc;
 
 use adw::prelude::*;
@@ -13,7 +14,8 @@ use crate::home::glib_escape;
 use crate::{said, words};
 
 struct Inner {
-    dialog: adw::Dialog,
+    /// The dialog it is shown in; None for the editor's page.
+    dialog: Option<adw::Dialog>,
     content: gtk::Box,
     toasts: adw::ToastOverlay,
 }
@@ -37,15 +39,43 @@ pub fn open(parent: &impl IsA<gtk::Widget>, pot: i64, entry: &str, title: &str, 
     let toasts = adw::ToastOverlay::new();
     toasts.set_child(Some(&view));
     let dialog = adw::Dialog::builder().child(&toasts).content_width(480).content_height(520).title(title).build();
-    let inner = Rc::new(Inner { dialog: dialog.clone(), content, toasts });
+    let inner = Rc::new(Inner { dialog: Some(dialog.clone()), content, toasts });
     // the dialog holds its state while it is open; the answers reach it weakly
     let held = std::cell::RefCell::new(Some(inner.clone()));
     dialog.connect_closed(move |_| {
         held.borrow_mut().take();
     });
     dialog.present(Some(parent));
+    load(&inner, pot, entry, said);
+}
 
-    let (w, entry, said) = (Rc::downgrade(&inner), entry.to_owned(), said.clone());
+/// Entry [entry]'s history in Pot [pot] as a page of the entry editor's navigation (D5 of the Expenses CR); [toasts] the
+/// editor's.
+pub fn page(pot: i64, entry: &str, toasts: &adw::ToastOverlay) -> adw::NavigationPage {
+    let content = gtk::Box::new(gtk::Orientation::Vertical, 18);
+    content.set_margin_top(12);
+    content.set_margin_bottom(24);
+    content.set_margin_start(12);
+    content.set_margin_end(12);
+    content.append(&adw::Spinner::builder().width_request(32).height_request(32).halign(gtk::Align::Center).build());
+    let clamp = adw::Clamp::builder().maximum_size(560).child(&content).build();
+    let scroll = gtk::ScrolledWindow::builder().hscrollbar_policy(gtk::PolicyType::Never).vexpand(true).child(&clamp).build();
+    let view = adw::ToolbarView::new();
+    view.add_top_bar(&adw::HeaderBar::new());
+    view.set_content(Some(&scroll));
+    let page = adw::NavigationPage::new(&view, &words::history_show());
+    let inner = Rc::new(Inner { dialog: None, content, toasts: toasts.clone() });
+    // the page holds its state while it is shown; the answer reaches it weakly
+    let held = std::cell::RefCell::new(Some(inner.clone()));
+    page.connect_hidden(move |_| {
+        held.borrow_mut().take();
+    });
+    load(&inner, pot, entry, toasts);
+    page
+}
+
+fn load(inner: &Rc<Inner>, pot: i64, entry: &str, said: &adw::ToastOverlay) {
+    let (w, entry, said) = (Rc::downgrade(inner), entry.to_owned(), said.clone());
     glib::spawn_future_local(async move {
         let answered = bridge::call(&Call::PotHistory { pot, entry: entry.clone() }).await.map(|(a, _)| a);
         let Some(i) = w.upgrade() else { return };
@@ -56,7 +86,9 @@ pub fn open(parent: &impl IsA<gtk::Widget>, pot: i64, entry: &str, title: &str, 
             }
             other => {
                 eprintln!("veyq: Pot.History answered {other:?}");
-                i.dialog.close();
+                if let Some(d) = &i.dialog {
+                    d.close();
+                }
             }
         }
     });
@@ -106,7 +138,9 @@ impl Inner {
                     };
                     match answered {
                         Ok(Answer::Said { notice: None }) => {
-                            i.dialog.close();
+                            if let Some(d) = &i.dialog {
+                                d.close();
+                            }
                         }
                         other => {
                             button.set_sensitive(true);
