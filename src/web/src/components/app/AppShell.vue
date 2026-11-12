@@ -37,6 +37,9 @@ const appLayout = computed(() => route.meta.layout === 'app')
 // The anonymous public share viewer (cr-0100) wants the full viewport width for its gallery, not the narrow
 // centered card the login/setup public shell uses.
 const plainLayout = computed(() => route.meta.layout === 'plain')
+// A page of running text in the public shell — the terms and the privacy notice (`meta.reading`) — reads at a text
+// measure, not in the sign-in card's 460 px column, which wrapped it every six words.
+const readingLayout = computed(() => route.meta.reading === true)
 
 // Only the home enters a scope (from its #fragment), so an app page loaded straight — a reload on /settings — would run
 // with none: no tenant sections, no terms gate, no tenant capabilities. Such a page gets the token-less tenant home,
@@ -83,7 +86,7 @@ watch(needsScope, (needs) => { if (needs) void enterScope(TENANT_SCOPE) }, { imm
     <RouterView />
   </main>
   <main v-else class="public-shell">
-    <div class="veyq-shell-inner">
+    <div class="veyq-shell-inner" :class="{ 'veyq-shell-inner--reading': readingLayout }">
       <p v-if="serverState.unreachable" class="veyq-banner" role="alert">{{ t('common.unreachable') }}</p>
       <RouterView />
     </div>
@@ -99,5 +102,8 @@ watch(needsScope, (needs) => { if (needs) void enterScope(TENANT_SCOPE) }, { imm
 }
 .veyq-shell-inner {
   width: min(460px, 100%);
+}
+.veyq-shell-inner--reading {
+  width: min(46rem, 100%);
 }
 </style>
