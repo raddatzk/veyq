@@ -47,6 +47,10 @@ internal sealed class PotPage : IDisposable
     private readonly ScrollViewer _scroll = new() { HorizontalScrollMode = ScrollMode.Disabled, HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled };
     private string? _place;
     private EntryEditorPage? _editor;
+    /// <summary>The Settings place, opened in the core when it is first shown and kept while the page is, and the column
+    /// it was put in last (taken out of it before the next draw, as the head).</summary>
+    private PotSettingsView? _settings;
+    private Panel? _settingsHolder;
     private bool _canWrite;
 
     public ObjectRef Ref { get; }
@@ -185,6 +189,8 @@ internal sealed class PotPage : IDisposable
         _closed = true;
         _editor?.Dispose();
         _editor = null;
+        _settings?.Dispose();
+        _settings = null;
         _window.Activated -= Activated;
         _live?.Dispose();
         _live = null;
@@ -280,6 +286,8 @@ internal sealed class PotPage : IDisposable
         // column still loaded, two draws in a row after the editor closed, and the add threw 0x800F1000)
         if (_hero is not null) _heroHolder?.Children.Remove(_hero);
         _heroHolder = null;
+        if (_settings is not null) _settingsHolder?.Children.Remove(_settings.Panel);
+        _settingsHolder = null;
         // the scroll stays in the tree across redraws: taken out and put back while it still loads (an update right after
         // the editor closed) WinUI threw "no installed components were detected" and the page stayed empty
         foreach (var child in _root.Children.Where(c => !ReferenceEquals(c, _scroll)).ToList()) _root.Children.Remove(child);
@@ -315,24 +323,22 @@ internal sealed class PotPage : IDisposable
             _heroHolder = content;
         }
         if (view.missing.Count > 0) Missing(content, view);
-        if (!view.ready)
+        if (_selected?.key == "expenses.settings")
+        {
+            // the settings choose a base currency the Pot does not have yet
+            Settings(content);
+        }
+        else if (!view.ready)
         {
             content.Children.Add(Note(Words.SettingsMissingReadOnly(), "pot-not-ready"));
         }
+        else if (_selected?.key == "expenses.overview")
+        {
+            Overview(content, view, _id);
+        }
         else
         {
-            switch (_selected?.key)
-            {
-                case "expenses.overview":
-                    Overview(content, view, _id);
-                    break;
-                case "expenses.settings":
-                    Settings(content, view);
-                    break;
-                default:
-                    Entries(content, view, _id);
-                    break;
-            }
+            Entries(content, view, _id);
         }
         _scroll.Content = content;
         Grid.SetRow(_scroll, 1);
@@ -375,7 +381,7 @@ internal sealed class PotPage : IDisposable
         return block;
     }
 
-    private static TextBlock Note(string text, string id)
+    internal static TextBlock Note(string text, string id)
     {
         var note = Text(text, id, "BodyTextBlockStyle");
         note.Foreground = Brush("TextFillColorSecondaryBrush");
@@ -383,7 +389,7 @@ internal sealed class PotPage : IDisposable
         return note;
     }
 
-    private static void Heading(StackPanel content, string text)
+    internal static void Heading(StackPanel content, string text)
     {
         var title = Text(text, null, "BodyStrongTextBlockStyle");
         title.Margin = new Thickness(12, 16, 0, 4);
@@ -392,11 +398,11 @@ internal sealed class PotPage : IDisposable
     }
 
     /// <summary>A row of a place: a title, a line under it, and what stands at its end (a badge, an amount).</summary>
-    private static Grid Row(string title, string? line, string automationId, params UIElement[] trailing) =>
+    internal static Grid Row(string title, string? line, string automationId, params UIElement[] trailing) =>
         LedRow(null, title, line, automationId, trailing);
 
     /// <summary>A row led by <paramref name="leading"/> (a person's picture) where there is one.</summary>
-    private static Grid LedRow(UIElement? leading, string title, string? line, string automationId, UIElement[] trailing)
+    internal static Grid LedRow(UIElement? leading, string title, string? line, string automationId, UIElement[] trailing)
     {
         var row = new Grid { ColumnSpacing = 12, Padding = new Thickness(12, 8, 12, 8), MinHeight = 44 };
         var column = 0;
@@ -584,15 +590,16 @@ internal sealed class PotPage : IDisposable
         }
     }
 
-    private static void Settings(StackPanel content, PotView view)
+    /// <summary>The Settings place (PotSettingsView): opened in the core the first time it shows, kept across redraws.</summary>
+    private void Settings(StackPanel content)
     {
-        Heading(content, Words.PotBaseCurrency());
-        content.Children.Add(Row(view.currency ?? "—", null, "currency"));
-        Heading(content, Words.PotPeople());
-        foreach (var p in view.people)
+        if (_id is not { } pot) return;
+        if (_settings is null || _settings.Pot != pot)
         {
-            content.Children.Add(LedRow(Avatars.Person(p.entry.name, p.entry.userId, PersonSize), p.entry.name, Said.Line(p.facts), $"person:{p.entry.id}", []));
+            _settings?.Dispose();
+            _settings = new PotSettingsView(pot, _window, _say);
         }
-        if (view.deletedPeople > 0) content.Children.Add(Note(Words.PeopleDeletedSummary(view.deletedPeople), "people-deleted"));
+        content.Children.Add(_settings.Panel);
+        _settingsHolder = content;
     }
 }

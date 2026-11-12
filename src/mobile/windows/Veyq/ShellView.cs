@@ -484,9 +484,14 @@ internal sealed class ShellView
         // beside it — two Add commands side by side would ask which one adds what
         if (page is null && shown.canCreateHere && shown.creates.Count > 0)
         {
-            // a folder is made here; the others are later CRs' (their entry stays disabled)
+            // a folder and a Pot are made here; another kind is a later CR's (its entry stays disabled)
             _commands.PrimaryCommands.Add(CreateAction.Menu(Words.DrawerNew(), "new",
-                shown.creates.Select(c => (Said.Key(c.word), $"new:{c.create}", c.create == Create.Folder ? (Action?)NewFolder : null))));
+                shown.creates.Select(c => (Said.Key(c.word), $"new:{c.create}", c.create switch
+                {
+                    Create.Folder => (Action?)NewFolder,
+                    Create.Pot => () => PotCreateDialog.Open(_window, Say),
+                    _ => null,
+                }))));
         }
         // an open Pot's "Add entry" is the content's creating action, first, where its places show and it takes writes
         if (page is { CanAdd: true }) _commands.PrimaryCommands.Add(CreateAction.Button(Words.PotAdd(), "pot-add", page.AddEntry));
