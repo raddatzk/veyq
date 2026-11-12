@@ -65,6 +65,10 @@ class PotCreateSheetTest {
         assertEquals("club", s.current.scopeId)
         assertEquals("EUR", s.current.currency)
         assertEquals("USD", sheet(Door(), atHomeRoot, language = "en").current.currency)
+        // a desktop hands its locale's tag: the language is its first part
+        assertEquals("EUR", sheet(Door(), atHomeRoot, language = "de-DE").current.currency)
+        assertEquals("EUR", sheet(Door(), atHomeRoot, language = "de_DE.UTF-8").current.currency)
+        assertEquals("USD", sheet(Door(), atHomeRoot, language = "en-US").current.currency)
         // no space shown: the first
         assertEquals("home", sheet(Door(), Shell(application = null)).current.scopeId)
     }

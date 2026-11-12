@@ -62,8 +62,12 @@ object PotCreate {
     fun parentIn(shell: me.raddatz.veyq.mobile.navigation.Shell, scopeId: String): String? =
         if (scopeId == shell.space) shell.folder?.nodeId else null
 
-    /** The base currency a new Pot starts with: the euro for a German-speaking person, else the dollar (the web's). */
-    fun defaultCurrency(language: String): String = if (language == "de") "EUR" else "USD"
+    /**
+     * The base currency a new Pot starts with: the euro for a German-speaking person, else the dollar (the web's).
+     * [language] is a language ("de") or a locale's tag whose first part is one ("de-DE", a desktop's "de_DE.UTF-8").
+     */
+    fun defaultCurrency(language: String): String =
+        if (language.substringBefore('-').substringBefore('_').lowercase() == "de") "EUR" else "USD"
 
     enum class Outcome { CREATED, PEOPLE_NOT_ADDED, INVALID, NAME_TAKEN, BUSY, BLOCKED, REFUSED }
 

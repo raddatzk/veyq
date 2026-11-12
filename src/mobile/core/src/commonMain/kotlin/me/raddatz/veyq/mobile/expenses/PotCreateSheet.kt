@@ -24,7 +24,7 @@ import me.raddatz.veyq.mobile.words.Notices
  * the sheet creates in the space shown ([PotCreate.parentIn]), else at the space's root. The name arrives with [create]
  * and [canCreate], so no draft of it lives here. Every app draws [state] and decides nothing.
  *
- * Opened by [PotModel.createSheet]; a test opens it over a [Door] it plays.
+ * Opened by [PotModel.createSheet]; a test opens it over a [Door] it plays ([open]).
  */
 class PotCreateSheet internal constructor(
     private val door: Door,
@@ -157,7 +157,8 @@ class PotCreateSheet internal constructor(
         scope.cancel()
     }
 
-    internal companion object {
+    companion object {
+        /** The sheet over [door] (a model's, or a test's outside the core: the bridge's dispatch plays one). */
         fun open(door: Door, place: Shell, spaces: List<SpaceRef>, language: String, parent: CoroutineScope, work: CoroutineDispatcher): PotCreateSheet =
             PotCreateSheet(door, place, State(spaces, PotCreate.defaultSpace(place, spaces), PotCreate.defaultCurrency(language)), parent, work)
     }
