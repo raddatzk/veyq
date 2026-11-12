@@ -538,6 +538,64 @@ Android and Apple thinned.
   a codec the system lacks says `file_unsupported` with Save a copy. Linux: frames drawn and the position advancing
   under Broadway; audio heard in Phase 6's VM session.
 
+**Status: done (2026-11-12)** — but the Windows peak-memory bound (below, Deviations) and audio heard (Phase 6's session; Windows
+pending).
+
+**Built:**
+- bridge: `File.Reader(file)` → `Answer.Reader(reader, size, mediaType)`, the first caller of `Bridge.openReader`, over the page's
+  own `RangeReader` (`FileModel.Shown.Media.reader`: one frame cache per page); refused `NO_MEDIUM` where the page shows none;
+  every reader a page opened closes with `File.Close` (the bridge's rule, not a host's) as well as with `Reader.Close` and the
+  tenant. `LiveBridgeTest.aMediumIsReadInRangesThroughCalls` (`VEYQ_LIVE_MEDIUM`), and the pass folder takes media by path
+  (`VEYQ_LIVE_DEPOT_PASS_MEDIA`).
+- Linux `reader_stream.rs`: a `gio::InputStream` + `gio::Seekable` subclass whose reads are `Reader.Read` ranges of at least one
+  frame (256 KiB, the window it holds), answered on GStreamer's streaming thread through `bridge::call_blocking`;
+  `file_page.rs` draws a medium as `gtk::Video` over `gtk::MediaFile::for_input_stream` (GTK's own controls, no autoplay), its
+  `error` turned into the core's words (`FileShown.words`, `file_unsupported`), the player let go and the stream closed when
+  the page leaves or shows other content. The Containerfile gains `gstreamer1-plugins-good`, `-bad-free` and
+  `gstreamer1-plugin-openh264` (the system's codecs; the app ships none).
+- Windows `ReaderStream.cs`: a seekable .NET `Stream` doing the same, awaited off the UI thread, a read's end never moving a
+  seek made meanwhile; `FilePage.cs` plays a medium in a `MediaPlayerElement` (transport controls, no autoplay) over
+  `MediaSource.CreateFromStream(stream.AsRandomAccessStream(), type)` with a `MediaPlayer` the page owns, `MediaFailed` turned
+  into the core's words. `Veyq.Drive` gains `range <id> <percent>`.
+
+**Met:**
+- **D7's measurements first, both first choices held:** in the container (`scratchpad/d4/probe/probe.c`, built against GTK
+  4.22.5 with the image plus GStreamer's good and bad-free plugins, under broadwayd): `gtk_media_file_new_for_input_stream` over
+  a seekable `GMemoryInputStream` of a 20 s WebM (VP9/Opus) prepared (`seekable=1 video=1 audio=1`), played and seeked to 17 s
+  (`ts` 17.9 → 19.9 s), GStreamer's factory log naming `giostreamsrc` → `matroskademux` → `vp9dec`/`opusdec`, nothing written but
+  its registry (`find / -newer`); an MP4 the same; an HEVC MP4 said `No suitable plugins found` as the stream's error. GNOME/gtk
+  #4062 no longer holds for 4.22, so no fallback and no crate. On the VM (x64 under Prism, unpackaged, self-contained) the
+  app's `MediaSource.CreateFromStream` over `AsRandomAccessStream` opened the 607 MB WebM (`medium opened: 250 s, 1280×720,
+  seekable True`) and the MP4 (`120 s`) and played both.
+- `DispatchTest.aMediumIsReadThroughItsPagesReaderInRangesAndClosesWithItsPageAndItsTenant`, `WireTest` (`File.Reader`
+  sampled), `SecretFreeSchemaTest` unchanged and green; `scratchpad/d4/bite.py` (`/bin/cp -f` restore): a range off by one
+  frame, a reader not closed with its tenant, one not closed with its page, a reader opened where no medium shows — all four
+  bit, green after (`bite.log`).
+- `VEYQ_LIVE=http://veyq.localhost:8080 VEYQ_LIVE_MEDIUM=<scratchpad>/d4/media/big.webm ./gradlew :bridge:jvmTest --tests
+  '*LiveBridgeTest.aMediumIs*' --rerun`: a 636,452,149 B WebM (VP9/Opus, 250 s, `ffmpeg` here) uploaded by path in 35.8 s into
+  `App depot 65286`, opened as a medium of its size and `video/webm`, its ranges at 0 (64 KiB), across the first frame's edge,
+  two frames in the middle and the last 1,000 B each at the file's SHA-256, none past the end, the reader refused after
+  `File.Close`; the folder trashed and purged.
+- `linux/run.py build` (clippy `-D warnings`, `cargo test` 35 passed: `reader_stream` small reads served from one window, a
+  seek from the start, here and the end, a range across a frame's edge, the short read at the end, the whole medium read in
+  uneven pieces, the reader let go on close); `scratchpad/d4/lbite.py`: three mutations at once, all three tests red, green
+  after (`lbite.log`). `windows/run.py build` (Veyq.Bridge.Tests, Veyq.Tests 31 passed, `ReaderStreamTest` 4 through
+  `AsRandomAccessStream`, a seek while a read awaits included); `scratchpad/d4/wbite.py`: four mutations at once, three of the
+  four tests red (the end-relative seek's case lives in the first, which was red), green after (`wbite.log`).
+  `./gradlew :core:jvmTest :core:macosArm64Test :bridge:jvmTest` green; `validate_mobile_words`,
+  `validate_mobile_platform_guidelines`, `validate_changes` green.
+- Linux (container, Broadway on 8097), in `Linux depot` (filled with `VEYQ_LIVE_DEPOT_PASS_MEDIA`, purged after), en/light and
+  de/dark: `big.webm` played (`medium at 0 s`, `5 s`), seeked near the end by the controls' scale (`235 s`/`238 s` → `240 s`,
+  the frame at 00:04:02 drawn); `clip.mp4` (H.264/AAC, 123 MB) played to its end and seeked (frames at 1:45 and 1:57 drawn);
+  `prores.mov` "This file cannot be shown here. You can download it." / "Diese Datei kann hier nicht angezeigt werden…" (the
+  stream's `missing a plug-in`); `VmHWM` 293,808 kB (en) and 309,648 kB (de); `find / -xdev -newer <marker>` and the mounted
+  volumes after both media: only GStreamer's registry and the device store.
+- Windows (the VM), en/light and de/dark, in `Windows depot` (purged after): `big.webm` opened and played, seeked to 94 % (`235 s`,
+  then `240 s` in de/dark, the frame at the seek's keyframe drawn), `clip.mp4` played and seeked (`108 s` → `110 s`, the frame
+  at 1:54 drawn in de/dark), `prores.mov` said in the core's words in both (`MediaFailed SourceNotSupported C00D5212`); `%TEMP%`
+  listed before and after each run: new files only the `dotnet` build's workload logs; `PeakWorkingSet64` 532 MiB (en; 424 at
+  the start, the page reopened) and 536 MiB (de; 359 at the start).
+
 ### Phase 5 — Bridge and desktops: uploads (files, a folder, replace, large files) and the queue
 
 **Done when:**
@@ -740,4 +798,35 @@ owner's veto.
   `device-store.json` after the pass (a backup beside it, `.bak-d3`), so the next offer shows.
 - **Left in the dev instance by my runs:** nothing: `App depot 96533` and `App depot 21970` (the live case's) and `Linux depot`,
   `Windows depot` (the passes') trashed and purged; saved copies removed from the container's `/tmp` and the VM's Downloads.
+
+### Phase 4 (2026-11-12)
+
+- **Both D7 first choices held, measured before building:** GTK 4.22 plays a `GInputStream` (its GStreamer backend is in
+  libgtk and wraps the stream in `giostreamsrc`), so the `appsrc` fallback and its crates were never needed; Windows plays from
+  `MediaSource.CreateFromStream` over the .NET adapter (`AsRandomAccessStream`) without an `IRandomAccessStream` of our own.
+  Decided here: the stream is a plain .NET `Stream` (testable on any host through the same adapter), not a hand-written WinRT
+  interface.
+- **A page's readers close with the page in the bridge** (`File.Close` closes what `File.Reader` opened), not only by the host:
+  D5 said a host closes them; a rule the core can hold is the core's.
+- **The reader read by a medium is the page's own `RangeReader`** (one cache of 16 frames per page); a host holds one frame
+  more as its window, so a player's 4 KiB reads (GStreamer's block size) cost one call per 256 KiB.
+- **No autoplay** on either desktop: the person presses play (GNOME's and Fluent's controls).
+- **A seek made while a read awaits the core keeps its position** (C#'s `CompareExchange`; Rust holds one lock across a read):
+  found while chasing a stall that was the driver's (below), kept and tested since Media Foundation reads and seeks from
+  threads of its own.
+- **Found and fixed on the way:** the Windows app crashed (`0xc000027b`, `E_ABORT` stowed in a dispatcher callback) when the
+  shell replaced a medium's page: the page had disposed the `MediaPlayer` the element made itself. The page owns its player now
+  (`SetMediaPlayer`, taken back first). Found from the WER dumps with cdb (the stowed exception's stack) and a temporary
+  first-chance hook naming `ContentControl.set_Content`.
+- **Found, not a defect:** a seek through UIA's `RangeValue` left the transport controls scrubbing (rate 0) until a key reached
+  the slider — the first "stall after a seek"; a person's drag ends it. The pass presses a key after `range`.
+- **Deviations:** the Windows peak working set is 532–536 MiB, over D4's 400 MiB: the app stood at 359–424 MiB before any
+  medium played (WinUI, x64 under Prism), and both media added a similar 110–180 MiB whatever their size (607 MB and 118 MB),
+  so the file is not held whole; Linux met it (≤ 310 MiB). Audio was heard on neither: Broadway has no sound (Phase 6's session
+  hears Linux's), and no one listened at the VM (pending, for Phase 6's Windows pass). The VM's software VP9 decode under
+  emulation draws behind the position after a seek (the keyframe's frame first). The pass folders claimed every medium as
+  `application/octet-stream` on upload, so the facts line says that type; the core sniffs the content (`video/webm`).
+- **Left in the dev instance and on the hosts by my runs:** nothing in the dev instance (`App depot 65286`, `Linux depot`,
+  `Windows depot` trashed and purged). On the VM: the "Not now" pressed was cleared from `device-store.json` (backup
+  `.bak-d4` beside it); three WER dumps of the E_ABORT crash in `F:\veyq\dumps` (it keeps three).
 

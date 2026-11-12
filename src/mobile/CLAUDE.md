@@ -58,7 +58,9 @@ A Gradle build of its own, run through its own wrapper.
   A receipt shown is `Receipt.Open`'s payload, decoded in memory and never written to disk. A file's page is `File.Open`
   (`Watched.File`: `FileShown`; an image's or a PDF's bytes `File.Bytes`, asked again when its `revision` turns), and its Save a
   copy `File.Save(file, path)` → `Saving(save)`, followed by `Watched.Save` and stopped by `Save.Cancel`, which answers once
-  the partial file is gone; a save outlives its page and stops with its tenant.
+  the partial file is gone; a save outlives its page and stops with its tenant. A medium the page shows is opened with
+  `File.Reader` (`Answer.Reader`: its size and sniffed type; refused `NO_MEDIUM` elsewhere) and read through `Reader.Read`
+  from the player's own thread; the reader closes with `Reader.Close`, with its page (`File.Close`) and with its tenant.
   The generated layer copies a payload once (Rust `Option<Vec<u8>>`, C# `byte[]?`); no screen touches a pointer.
 - `linux/` — the Linux app (ADR 0129 decision 4): a Cargo package in Rust (gtk4-rs, libadwaita-rs), with `Cargo.lock`
   committed and every cargo run `--locked`. `src/lib.rs` is the library: `bridge` (the safe wrapper over the six
@@ -67,7 +69,8 @@ A Gradle build of its own, run through its own wrapper.
   `pot_settings` (a Pot's Settings place, editable in place) and `pot_create` (New pot),
   `entry_editor` (an entry's editor; `typed`: when a text field is set from the state), `receipt_viewer` (a receipt
   shown from memory: a picture through GTK, a PDF through poppler-rs) and `entry_history`, `file_page` (a Depot file's page
-  and its Save a copy with its toast), `manage`
+  and its Save a copy with its toast; a medium played by `gtk::Video` over a `gtk::MediaFile` reading `reader_stream`, a
+  seekable `gio::InputStream` whose reads are `Reader.Read` ranges, `bridge::call_blocking` on GStreamer's thread), `manage`
   for "Manage servers"; `header` with `trash`, `move_sheet`, `share_sheet`, `report` and `cover` for a node's header and
   its sheets; `dev_login` in a debug build only), and `avatars` (`Held`, no widget and tested: the open
   tenant's pictures, asked for again only when the shell's id set changes; drawn as `adw::Avatar`).
@@ -85,7 +88,9 @@ A Gradle build of its own, run through its own wrapper.
   `AvatarsHeld` (`Held<T>`, no control, Linux's `avatars::Held` rule for rule; `AvatarsTest`) and `Avatars` (decodes
   each picture through `BitmapImage`, sets it on every `PersonPicture` of that id), `Act` (sends a
   call, logs its answer), `PotSettingsView` (a Pot's Settings place, editable in place), `PotCreateDialog` (New pot),
-  `FilePage` (a Depot file's page; its Save a copy's `InfoBar` is `ShellView.Saving`), `ListScrolls` (where each list was
+  `FilePage` (a Depot file's page; its Save a copy's `InfoBar` is `ShellView.Saving`; a medium in a `MediaPlayerElement` over
+  `MediaSource.CreateFromStream` of `ReaderStream`, a seekable .NET `Stream` whose reads are `Reader.Read` ranges, through
+  `AsRandomAccessStream`; `ReaderStreamTest`), `ListScrolls` (where each list was
   scrolled to; `ListScrollsTest`), `EntryEditorPage` (an entry's editor, a page in place of the Pot's places) with
   `ReceiptViewerDialog` and `PdfPages` (a receipt's PDF through `Windows.Data.Pdf`, from memory; `PdfPagesTest`), `TypedText`
   (when a text box is set from the state; `TypedTextTest`), `Words`/`MrtWords` and `SaidNotice` (the words), `Said` (money, days and sizes the system's
@@ -142,7 +147,8 @@ A Gradle build of its own, run through its own wrapper.
   - `DispatchTest` covers the way in, over a door the test plays: a reader read backwards in uneven ranges and closed
     with the tenant, a picture's bytes and its refusal, a file's page and its Save a copy (`File.*`, `Watched.File`/`Save`,
     `Save.Cancel` over a played file: the bytes and type the core's, a save watched as soon as it is answered, a cancelled
-    one leaving nothing, a FILE's header download the file itself), and every call of a node's header and its sheets (`Header.*`,
+    one leaving nothing, a FILE's header download the file itself; `File.Reader` over a played medium: its ranges the
+    file's across a frame's edge and at the end, refused where no medium shows, closed with its page and its tenant), and every call of a node's header and its sheets (`Header.*`,
     `Trash.*`, `Move.*`, `Share.*`, `Report.*`, `Cover.*`), and a Pot's (`Pot.*`, `Watched.PotLive`) and its entry editor's
     (`Editor.*`, `Watched.Editor`, over a played Pot: edits applied in the order sent, a save answered once its write
     ended) with its receipts (`Editor.AddReceipts`/`DropReceipt`, `Receipt.Open`/`Pages`/`Save`: a path that does not
@@ -173,8 +179,11 @@ A Gradle build of its own, run through its own wrapper.
   the copy read back as the original, the folder with both purged); `aReport*` needs `VEYQ_LIVE_REPORT_BRIDGE=1` (it leaves one report: run it once),
   `aCopyWithoutRoom*` `VEYQ_LIVE_NO_ROOM=1` while `DepotLiveTest` holds the one-byte quota, `aFileIsShownAndSaved*` (an `App
   depot <n>` filled by the core's upload in a second session, its JPEG, text and PDF shown by call at their SHA-256, a 300 MiB
-  file saved and a second save cancelled, then purged), `aDesktopPassFolder*` with `VEYQ_LIVE_DEPOT_PASS=<name>` (not a
-  check: a desktop pass's Depot folder at the personal top level, filled; `VEYQ_LIVE_DEPOT_PASS_PURGE=1` purges it), and
+  file saved and a second save cancelled, then purged), `aMediumIsRead*` with `VEYQ_LIVE_MEDIUM=<a video file>` (made by
+  `ffmpeg` here; uploaded by path into an `App depot <n>`, its reader's ranges by call at the start, across a frame's edge,
+  in the middle and at the end held to the file's, then purged), `aDesktopPassFolder*` with `VEYQ_LIVE_DEPOT_PASS=<name>`
+  (not a check: a desktop pass's Depot folder at the personal top level, filled, with `VEYQ_LIVE_DEPOT_PASS_MEDIA=<file>,…`
+  media by path beside; `VEYQ_LIVE_DEPOT_PASS_PURGE=1` purges it), and
   `theLinksOfAFolder*`
   writes a desktop pass's links out for the web's guest page — each case's doc says what it reads.
 - `python3 linux/run.py <verb>` — everything Linux. From the repository root the launcher runs the same verbs as
@@ -802,6 +811,25 @@ first in each of its scrolls — `LocalNodeHero.current(inset)` (Android) / `Nod
   /tmp/big.bin`, `key Enter`); a 300 MiB save in the container ends in about 3 s, so a Cancel is clicked in the same
   Playwright run. On Windows the save picker's name is typed into `FileNameControlHost` and saved by `press
   FileNameControlHost enter` (a `key enter` goes to the app's window, not the picker's).
+- GTK 4.22's media backend is GStreamer, built into libgtk (no `media/` module), and plays a `GInputStream` through
+  `giostreamsrc`, seeks included (measured 2026-11-12 in the container: a WebM and an MP4 from a memory stream; GNOME/gtk
+  #4062's assert is gone). Its reads arrive on GStreamer's streaming thread, where `reader_stream` waits on the core through
+  `bridge::call_blocking`: never call that from the main loop. What no plugin decodes raises the stream's `error` ("missing a
+  plug-in"), but an MP4 whose video only is undecodable plays its sound with no frame and no error (H.264 without
+  openh264, measured): the image carries openh264 as a desktop does.
+- Driving a medium on Linux (Broadway): GTK's controls show at the video's bottom; play and seek by clicking them (the
+  scale's x is the position) and read `medium at <s> s of <s> s` on stderr, each fifth second — the frames drawn lag.
+- WinUI's `MediaPlayerElement`: the page makes its own `MediaPlayer`, hands it over with `SetMediaPlayer` and takes it back
+  (`SetMediaPlayer(null)`) before disposing it. A player the element made itself and that the page disposed threw `E_ABORT`
+  out of the shell's next `Content` set, a dispatcher callback, and ended the app in combase (`0xc000027b`, measured
+  2026-11-12 from three dumps: the stowed exception's stack named `DispatcherQueue::DeferInvokeCallback`, and a
+  first-chance hook `ContentControl.set_Content`). `MediaSource.CreateFromStream` asks the stream for `CloneStream` first;
+  the adapter's `NotSupportedException` there is expected (Media Foundation goes on with the one stream). A format Media
+  Foundation cannot decode (ProRes) fails with `MF_E_TOPO_CODEC_NOT_FOUND` (`C00D5212`).
+- Driving a medium on Windows (`Veyq.Drive`): `invoke PlayPauseButton`; a seek is `range ProgressSlider <percent>`, which
+  leaves the transport controls scrubbing (the playback rate 0, the position held) until a key reaches the slider: follow it
+  with `press ProgressSlider left`. A seek lands on a keyframe, and the VM's software decode under emulation draws behind
+  the position; the log's `medium at <s> s` and `MediaOpened` are read first.
 - `linux/run.py run` leaves the container's zone UTC (an instant there is said in UTC); `run.py test` links Berlin. A
   pass reading times off the Linux app reads them as UTC.
 - Never hold a XAML element through a `WeakReference`: once its managed wrapper was collected, `TryGetTarget` resolves
