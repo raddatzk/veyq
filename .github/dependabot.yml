@@ -238,7 +238,8 @@ updates:
       # (scripts/validate_image_pins.py). The library proposes the move (the root npm entry's `playwright` group); the
       # image's tag and index digest follow it by hand in that pull request. Proposed here as well, the move would
       # arrive twice — once in each group, each red until the other lands — and hold this group's other images back.
-      # Whether a same-tag digest move still arrives under this rule is unproven (it is no version update).
+      # A same-tag digest move still arrives under this rule (it is no version update): PR #23, 2026-11-12, proposed
+      # "Updates `playwright` from v1.64.1-noble to v1.64.1-noble", MCR's re-pushed index, at both of the overlay's sites.
       # The name is the image's WITHOUT its registry: this rule first said `mcr.microsoft.com/playwright`, matched
       # nothing, and PR #20 (2026-11-12) proposed "Updates `playwright` from v1.64.1-noble to v1.65.0-noble" — the
       # parser's `image` capture, the registry being its own group (docker_compose/file_parser.rb, IMAGE_REGEX).
