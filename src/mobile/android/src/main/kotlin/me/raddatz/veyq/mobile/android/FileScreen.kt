@@ -115,8 +115,11 @@ private fun ShownImage(s: FileModel.Shown.Image, name: String) {
         ?: CircularProgressIndicator()
 }
 
-/** A PDF opened over an anonymous in-memory file and the renderer over it; both closed with the page. */
-private class OpenPdf(val fd: android.os.ParcelFileDescriptor, val renderer: android.graphics.pdf.PdfRenderer) {
+/**
+ * A PDF opened over an anonymous in-memory file and the renderer over it; both closed with the page. Every PDF the app
+ * shows goes this way (a file's page, a receipt), never through a file on disk.
+ */
+internal class OpenPdf(val fd: android.os.ParcelFileDescriptor, val renderer: android.graphics.pdf.PdfRenderer) {
     val lock = Mutex()
 
     fun close() {

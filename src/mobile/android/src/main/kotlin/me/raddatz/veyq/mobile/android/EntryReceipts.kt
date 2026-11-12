@@ -5,7 +5,6 @@ import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.graphics.pdf.PdfRenderer
 import android.net.Uri
-import android.os.ParcelFileDescriptor
 import android.provider.OpenableColumns
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -143,7 +142,7 @@ private fun ReceiptViewer(view: PotView, model: AppModel, receiptId: String, onC
                         Receipts.Kind.IMAGE -> BitmapFactory.decodeByteArray(b, 0, b.size)?.let {
                             Image(it.asImageBitmap(), name, Modifier.fillMaxWidth(), contentScale = ContentScale.FillWidth)
                         } ?: Text(stringResource(R.string.receipts_download_only))
-                        Receipts.Kind.PDF -> PdfPages(context, b)
+                        Receipts.Kind.PDF -> PdfPages(b)
                         Receipts.Kind.OTHER -> Text(stringResource(R.string.receipts_download_only))
                     }
                 }
@@ -168,37 +167,34 @@ private fun ReceiptViewer(view: PotView, model: AppModel, receiptId: String, onC
 }
 
 /**
- * A PDF's pages, drawn by the platform's renderer. It reads a seekable file only, so the decrypted bytes go to a file in
- * the app's own cache for the time of the rendering and are deleted right after; nothing else of the PDF runs.
+ * A PDF's pages, drawn by the platform's renderer. It reads a seekable descriptor only, so the decrypted bytes go to an
+ * anonymous in-memory file (`OpenPdf`, a `memfd`: no path, nothing at rest, ADR 0047), closed once the pages are drawn;
+ * nothing else of the PDF runs.
  */
 @Composable
-private fun PdfPages(context: Context, bytes: ByteArray) {
+private fun PdfPages(bytes: ByteArray) {
     var pages by remember(bytes) { mutableStateOf<List<Bitmap>?>(null) }
     var total by remember(bytes) { mutableStateOf(0) }
     LaunchedEffect(bytes) {
         pages = withContext(Dispatchers.IO) {
-            val file = java.io.File.createTempFile("receipt", ".pdf", context.cacheDir)
+            val open = OpenPdf.of(bytes) ?: return@withContext emptyList()
             try {
-                file.writeBytes(bytes)
-                ParcelFileDescriptor.open(file, ParcelFileDescriptor.MODE_READ_ONLY).use { fd ->
-                    PdfRenderer(fd).use { pdf ->
-                        total = pdf.pageCount
-                        // each page rendered up front, so at most the core's cap (`Receipts.PDF_PAGES_SHOWN`), said when there are more
-                        (0 until Receipts.pagesShown(pdf.pageCount)).map { i ->
-                            pdf.openPage(i).use { page ->
-                                val scale = 1080f / page.width
-                                val bmp = Bitmap.createBitmap((page.width * scale).toInt(), (page.height * scale).toInt(), Bitmap.Config.ARGB_8888)
-                                bmp.eraseColor(android.graphics.Color.WHITE)
-                                page.render(bmp, null, null, PdfRenderer.Page.RENDER_MODE_FOR_DISPLAY)
-                                bmp
-                            }
-                        }
+                val pdf = open.renderer
+                total = pdf.pageCount
+                // each page rendered up front, so at most the core's cap (`Receipts.PDF_PAGES_SHOWN`), said when there are more
+                (0 until Receipts.pagesShown(pdf.pageCount)).map { i ->
+                    pdf.openPage(i).use { page ->
+                        val scale = 1080f / page.width
+                        val bmp = Bitmap.createBitmap((page.width * scale).toInt(), (page.height * scale).toInt(), Bitmap.Config.ARGB_8888)
+                        bmp.eraseColor(android.graphics.Color.WHITE)
+                        page.render(bmp, null, null, PdfRenderer.Page.RENDER_MODE_FOR_DISPLAY)
+                        bmp
                     }
                 }
             } catch (e: Exception) {
                 emptyList()
             } finally {
-                file.delete()
+                open.close()
             }
         }
     }
