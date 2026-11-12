@@ -3,7 +3,9 @@
 //! space shown, its tenant and server; spaces and tenants in its menu), with New beside it and Search under it (Ctrl+F),
 //! and Settings pinned at its foot; the switcher shows the signed-in member's picture beside the tenant. The content
 //! side shows what the core's shell says is open: Home, an application's list, a Pot (its menu at the header's end:
-//! Download), a file ([crate::file_page]), or an object this app does not draw yet. Below 600sp the split view collapses
+//! Download), a file ([crate::file_page]), a drop box ([crate::drop_box]), or an object this app does not draw yet. Refresh
+//! (F5, Ctrl+R) reads an open Pot anew, else the shell's lists (a guest's new folder, another device's upload); a space's top
+//! level offers its share, "Add files only" ([crate::share_sheet::open_top_level]), beside it. Below 600sp the split view collapses
 //! to a navigation stack. A list keeps where it was scrolled to when the shell draws it anew — after an object opened from
 //! it closed, after an update — by its place ([ListScrolls]).
 //!
@@ -17,6 +19,7 @@ use adw::prelude::*;
 use gtk::{gio, glib};
 
 use crate::bridge::{self, wire::Answer, wire::ApplicationId, wire::Call, wire::Create, wire::Facts, wire::NodeAt, wire::ObjectRef, wire::ShellModelState, wire::ShellShown};
+use crate::drop_box::DropBoxPage;
 use crate::file_page::FilePage;
 use crate::header::{self, Header};
 use crate::home::{self, app_icon, app_name, kind_icon};
@@ -59,8 +62,10 @@ pub struct Shell {
     back: gtk::Button,
     /// The header bar's end, where the node on screen draws its actions (`header`).
     header_bar: gtk::Box,
-    /// An open Pot's Refresh (`win.pot-refresh`, F5 / Ctrl+R), beside its actions.
+    /// Refresh (`win.pot-refresh`, F5 / Ctrl+R): an open Pot's, else the shell's lists; shown on a Pot and a drop box.
     refresh: gtk::Button,
+    /// The space's top level's share, "Add files only", shown where the core offers it (`ShellShown.topLevelShare`).
+    top_share: gtk::Button,
     /// An open Pot's "Add entry", the content's creating action, shown once the Pot is read and takes writes.
     add_entry: gtk::Button,
     refresh_action: gio::SimpleAction,
@@ -71,6 +76,7 @@ pub struct Shell {
     window: adw::ApplicationWindow,
     pot: RefCell<Option<PotPage>>,
     file: RefCell<Option<FilePage>>,
+    drop_box: RefCell<Option<DropBoxPage>>,
     /// The upload queue's button in the content's header bar, shown while it lists anything.
     _uploads: Rc<Uploads>,
     /// Where each list was scrolled to, by its place.
@@ -133,8 +139,11 @@ impl Shell {
         let refresh = gtk::Button::builder().icon_name("view-refresh-symbolic").tooltip_text(words::pot_refresh()).action_name("win.pot-refresh").visible(false).build();
         refresh.update_property(&[gtk::accessible::Property::Label(&words::pot_refresh())]);
         content_header.pack_end(&refresh);
+        // a space's top level is no link's root: its share offers "Add files only" alone (the web's level share)
+        let top_share = gtk::Button::builder().icon_name("send-to-symbolic").tooltip_text(words::share_role_uploader()).visible(false).build();
+        top_share.update_property(&[gtk::accessible::Property::Label(&words::share_role_uploader())]);
+        content_header.pack_end(&top_share);
         let refresh_action = gio::SimpleAction::new("pot-refresh", None);
-        refresh_action.set_enabled(false);
         window.add_action(&refresh_action);
         let content_view = adw::ToolbarView::new();
         content_view.add_top_bar(&content_header);
@@ -177,6 +186,7 @@ impl Shell {
             back,
             header_bar,
             refresh,
+            top_share,
             add_entry: add_entry.clone(),
             refresh_action,
             header: Rc::new(RefCell::new(None)),
@@ -185,6 +195,7 @@ impl Shell {
             window: window.clone(),
             pot: RefCell::new(None),
             file: RefCell::new(None),
+            drop_box: RefCell::new(None),
             _uploads: uploads,
             scrolls: ListScrolls::default(),
             now: RefCell::new(None),
@@ -265,6 +276,20 @@ impl Shell {
             let Some(s) = weak.upgrade() else { return };
             if let Some(pot) = s.pot.borrow().as_ref() {
                 pot.refresh();
+            } else {
+                // the shell's lists read anew from the server: a drop box's page, Home's level and every list follow
+                let toasts = s.toasts.clone();
+                glib::spawn_future_local(async move {
+                    header::say(&toasts, bridge::call(&Call::ShellRefresh).await.map(|(a, _)| a), "Shell.Refresh");
+                });
+            }
+        });
+        let weak = Rc::downgrade(self);
+        self.top_share.connect_clicked(move |_| {
+            let Some(s) = weak.upgrade() else { return };
+            let space = s.now.borrow().as_ref().and_then(|(state, _)| state.shell.space.clone());
+            if let Some(space) = space {
+                crate::share_sheet::open_top_level(&s.window, space);
             }
         });
 
@@ -375,7 +400,7 @@ impl Shell {
         let shortcuts = gtk::ShortcutController::new();
         shortcuts.set_scope(gtk::ShortcutScope::Global);
         shortcuts.add_shortcut(gtk::Shortcut::new(gtk::ShortcutTrigger::parse_string("<Control>f"), Some(toggle)));
-        // an open Pot's Refresh (the action is enabled only while one shows)
+        // Refresh: an open Pot's, else the shell's lists
         for trigger in ["F5", "<Control>r"] {
             shortcuts.add_shortcut(gtk::Shortcut::new(gtk::ShortcutTrigger::parse_string(trigger), Some(gtk::NamedAction::new("win.pot-refresh"))));
         }
@@ -616,6 +641,7 @@ impl Shell {
         let body: gtk::Widget = match &shell.open_object {
             Some(o) if o.kind == "EXPENSES_POT" => {
                 self.file.borrow_mut().take();
+                self.drop_box.borrow_mut().take();
                 let mut pot = self.pot.borrow_mut();
                 if pot.as_ref().is_none_or(|p| p.r#ref != *o) {
                     let page = PotPage::open(o, self.window.upcast_ref(), &self.toasts);
@@ -641,6 +667,7 @@ impl Shell {
             }
             Some(o) if o.kind == "FILE" => {
                 self.pot.borrow_mut().take();
+                self.drop_box.borrow_mut().take();
                 let mut file = self.file.borrow_mut();
                 let node = NodeAt { scope_id: o.scope_id.clone(), node_id: o.node_id.clone(), kind: o.kind.clone(), name: o.name.clone() };
                 if file.as_ref().is_none_or(|f| f.node != node) {
@@ -658,14 +685,26 @@ impl Shell {
                 }
                 file.as_ref().expect("set above").widget().clone().upcast()
             }
+            Some(o) if o.kind == "DEPOT_DROPBOX" => {
+                self.pot.borrow_mut().take();
+                self.file.borrow_mut().take();
+                let mut page = self.drop_box.borrow_mut();
+                let node = NodeAt { scope_id: o.scope_id.clone(), node_id: o.node_id.clone(), kind: o.kind.clone(), name: o.name.clone() };
+                if page.as_ref().is_none_or(|p| p.node != node) {
+                    *page = Some(DropBoxPage::open(&node, &self.toasts));
+                }
+                page.as_ref().expect("set above").widget().clone().upcast()
+            }
             Some(o) => {
                 self.pot.borrow_mut().take();
                 self.file.borrow_mut().take();
+                self.drop_box.borrow_mut().take();
                 adw::StatusPage::builder().icon_name(kind_icon(&o.kind)).title(o.name.as_str()).description(words::not_built()).build().upcast()
             }
             None => {
                 self.pot.borrow_mut().take();
                 self.file.borrow_mut().take();
+                self.drop_box.borrow_mut().take();
                 let list = if shell.application.is_some() { home::list(shown.list.as_ref()) } else { home::home(state, shown, self.drops().as_ref()) };
                 if let Some(scroll) = list.downcast_ref::<gtk::ScrolledWindow>() {
                     self.scrolls.keep(scroll, ListScrolls::place(state));
@@ -677,8 +716,8 @@ impl Shell {
         if !pot_open {
             self.add_entry.set_visible(false);
         }
-        self.refresh.set_visible(pot_open);
-        self.refresh_action.set_enabled(pot_open);
+        self.refresh.set_visible(pot_open || self.drop_box.borrow().is_some());
+        self.top_share.set_visible(shown.top_level_share);
         if self.content_view.content().as_ref() != Some(&body) {
             self.content_view.set_content(Some(&body));
         }

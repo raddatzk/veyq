@@ -90,6 +90,17 @@ struct Inner {
 
 /// Opens the share sheet of [node] over [parent].
 pub fn open(parent: &impl IsA<gtk::Widget>, node: &NodeAt) {
+    open_call(parent, Call::ShareOpen { node: node.clone() });
+}
+
+/// Opens the share of space [scope_id]'s top level over [parent]: "Add files only" alone, its form at once; the sheet
+/// closes once its form does (`ShareShown.atTopLevel`).
+pub fn open_top_level(parent: &impl IsA<gtk::Widget>, scope_id: String) {
+    open_call(parent, Call::ShareOpenTopLevel { scope_id });
+}
+
+/// Opens the sheet [call] opens in the core (answered `ShareOpened`) over [parent].
+fn open_call(parent: &impl IsA<gtk::Widget>, call: Call) {
     let toasts = adw::ToastOverlay::new();
     let title = adw::WindowTitle::new("", "");
     let header = adw::HeaderBar::builder().title_widget(&title).build();
@@ -217,7 +228,6 @@ pub fn open(parent: &impl IsA<gtk::Widget>, node: &NodeAt) {
     });
     dialog.present(Some(parent));
     let weak = Rc::downgrade(&inner);
-    let call = Call::ShareOpen { node: node.clone() };
     glib::spawn_future_local(async move {
         let Ok((Answer::ShareOpened { share }, _)) = bridge::call(&call).await else {
             eprintln!("veyq: the share sheet did not open in the core");
@@ -368,6 +378,11 @@ impl Inner {
         let Some(s) = shown else { return };
         self.title.set_title(&said::key(&s.title));
         let page = if s.fresh_address.is_some() { "fresh" } else if s.form.is_some() { "form" } else { "list" };
+        // the top level's share is its form alone: once the form or the address shown closed, so does the sheet
+        if s.at_top_level && page == "list" {
+            self.dialog.close();
+            return;
+        }
         self.stack.set_visible_child_name(page);
         self.cancel.set_visible(page == "form");
         self.save.set_visible(page == "form");

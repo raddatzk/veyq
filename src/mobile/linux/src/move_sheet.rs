@@ -68,6 +68,12 @@ struct Inner {
 
 /// Opens the move ([copy] false) or copy sheet of [node] over [parent], saying what it did in [toasts].
 pub fn open(parent: &impl IsA<gtk::Widget>, node: &NodeAt, copy: bool, toasts: &adw::ToastOverlay) {
+    open_call(parent, &node.name, Call::MoveOpen { node: node.clone(), copy, deleted_name: words::pot_deleted_person() }, toasts);
+}
+
+/// Opens the sheet [call] opens in the core (answered `MoveOpened`: `Move.Open`, or a drop box's `DropBox.MoveOut`) over
+/// [parent], titled [name] while it reads.
+pub fn open_call(parent: &impl IsA<gtk::Widget>, name: &str, call: Call, toasts: &adw::ToastOverlay) {
     let nav = adw::NavigationView::new();
     let dialog = adw::Dialog::builder().content_width(520).content_height(600).child(&nav).build();
     let inner = Rc::new(Inner {
@@ -88,7 +94,7 @@ pub fn open(parent: &impl IsA<gtk::Widget>, node: &NodeAt, copy: bool, toasts: &
     let loading = adw::ToolbarView::new();
     loading.add_top_bar(&adw::HeaderBar::new());
     loading.set_content(Some(&adw::StatusPage::builder().child(&spinner).vexpand(true).build()));
-    nav.add(&adw::NavigationPage::with_tag(&loading, &node.name, "loading"));
+    nav.add(&adw::NavigationPage::with_tag(&loading, name, "loading"));
     // back in the navigation view is the person's: the core goes to the page now shown
     let weak = Rc::downgrade(&inner);
     nav.connect_popped(move |nav, _| {
@@ -110,7 +116,6 @@ pub fn open(parent: &impl IsA<gtk::Widget>, node: &NodeAt, copy: bool, toasts: &
     });
     dialog.present(Some(parent));
     let weak = Rc::downgrade(&inner);
-    let call = Call::MoveOpen { node: node.clone(), copy, deleted_name: words::pot_deleted_person() };
     glib::spawn_future_local(async move {
         let Ok((Answer::MoveOpened { r#move: m }, _)) = bridge::call(&call).await else {
             eprintln!("veyq: the move sheet did not open in the core");
