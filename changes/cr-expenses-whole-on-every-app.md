@@ -655,8 +655,54 @@ rendered at 400 × 200 with its left half black, 25 pages counted, bytes that ar
 - Linux and Windows, en/light and de/dark: New pot from a folder and from a space's root, its settings and people as
   above, the copy, every refusal said; the Pots purged at the end. Windows ends with Stop trusting.
 
+**Status: done (2026-11-12)**, with one defect open: the Windows app crashed three times in `coreclr.dll` after a Pot was
+deleted from its Settings place (retrospective; Phase 7's first step).
+
+**Built:**
+- core: `PotCreate.defaultCurrency` reads a desktop's locale tag (`de-DE`, `de_DE.UTF-8`); `PotCreateSheet.open` is
+  public, so the bridge's test plays a sheet outside the core (`PotCreateSheetTest`).
+- bridge: `PotSettings.Open`/`Close`, `Currency`, `AddCategory`, `RenameCategory`, `AddPerson`, `AddMember`, `Rename`,
+  `Toggle`, `AskErase`, `Erase`, `CancelAsk`, each change answered `Answer.Stored(stored, notice)` once its write ended;
+  `Watched.PotSettings` (`PotSettingsShown` over the open Pot's view; a closed Pot closes its settings). `PotCreate.Open`
+  (the host's language), `Close`, `Name` (applied in the order called, held in the bridge, never echoed), `Space`,
+  `Currency`, `AddTyped`, `AddMember`, `Remove`, `Create`; `Watched.PotCreate` (`canCreate` the core's, of the name sent
+  last). `DispatchTest.aPotsSettingsAndPeopleAreChangedThroughCalls`, `aNewPotIsFilledAndCreatedThroughCalls`, `WireTest`
+  samples, `LiveBridgeTest.aPotIsCreatedSetUpAndCopiedThroughCalls`.
+- Linux: `pot_settings` (the Settings place, edited in place: the base currency while no entry fixes it, own categories
+  added and renamed, people renamed, (de)activated and erased once asked, a person or a member added) and `pot_create`
+  (an `AdwDialog`: name, space, currency, people); New's Pot entry enabled (`win.create-pot`). A receipt's picture is
+  never shown larger than its own size (`ContentFit::ScaleDown`).
+- Windows: `PotSettingsView` (the same, in place; a rename through the name dialog) and `PotCreateDialog` (a
+  `ContentDialog`); New's Pot entry enabled. The base currency's `ComboBox` is kept across updates and writes on commit
+  (the CAD bug, retrospective). Money in another currency than the region's is written by its code (`Said.Money`,
+  `SaidTest`).
+
+**Met:**
+- `DispatchTest`'s two cases green; 23 of 24 mutations of `Bridge.kt` red (the uncaught one in the retrospective).
+  `./gradlew :core:jvmTest :core:macosArm64Test :bridge:jvmTest` green; with `VEYQ_LIVE`,
+  `LiveBridgeTest.aPotIsCreatedSetUpAndCopiedThroughCalls` green. `linux/run.py build` green; words and platform guards
+  green (remembered: the previous session's measurements).
+- `windows/run.py build` after each Windows commit: Veyq.Bridge.Tests 4, Veyq.Tests 25 passed. `SaidTest` bitten: with
+  the code mode off, de-DE wrote Canadian dollars "12,50 $" and en-US euros "€1,234.56" (red), restored green.
+- Linux (container, Broadway), en/light and de/dark: complete, the Pots purged (remembered: the previous session's pass;
+  shots `scratchpad/e6/lx/`).
+- Windows (VM, `run.py run --devlogin`, then `--unlock`; `drive`), en-US/light: complete but for the currency (the
+  previous session; `x02`–`x09`); after the fix, CHF chosen by keys in the open list (Enter, `c`, Enter) lands
+  (`p6-en-04-chf.png`). de-DE/dark, after the fix: New pot in the space's root (Create disabled while the name is empty;
+  "Hier gibt es schon eine Kasse mit diesem Namen." for `Amsterdam`) and in a folder of its own; the base currency changed
+  seven times while empty, ending on CHF (by keys in the open list and by the item), each choice one write (the log's
+  `PotSettingsCurrency: stored True` once per choice); after an entry "Steht fest: Die Kasse hat Einträge."; a
+  category added and renamed (Save disabled while the name is empty); a person added, renamed, deactivated and erased
+  once asked; a member added and removed again once asked; "Eine Person lässt sich deaktivieren oder löschen, sobald ihr
+  Saldo ausgeglichen ist." once a person owes; the Pot copied into the folder and the copy read back as the original
+  (entry, CHF fixed, both categories, both people with their balances). Every Pot and folder of the pass trashed and
+  deleted forever; the pass ended with "Diesem Gerät nicht mehr vertrauen" (`manage servers: None`). Shots:
+  `scratchpad/e6/win/p6-*`.
+
 ### Phase 7 — The docs
 
+- First, the crash Phase 6 left open (its retrospective): diagnosed from a dump (the VM now writes full dumps of
+  `Veyq.App.exe` to `F:\veyq\dumps`, WER LocalDumps) and fixed, or recorded in native-apps § Open with its steps.
 - ADR 0127's Consequences: the Pot's screen models moved (`EntryEditor`, `PotSettings`, `PotCreateSheet`, today the
   core's); its Built line.
 - ADR 0128's Consequences: the first open-picker consumer (`Editor.AddReceipt`), a receipt shown as `Answer.Bytes`.
@@ -887,3 +933,61 @@ owner's veto. D4's renderers (poppler-glib on Linux, `Windows.Data.Pdf` on Windo
   `BUILD SUCCESSFUL`). `App pot e2` and `App folder e2` (Phase 2) stay in the space's trash; `Amsterdam (2)`/`(3)` and the
   `Ui pot`s are not mine. Other sessions' `windows/run.py run` processes (PIDs 24480, 61912, 64097, 64732, 66678) and the
   Linux container on 8095 were left alone.
+
+### Phase 6 (2026-11-12)
+
+- **`PotSettingsShown` is a watch of its own** (`Watched.PotSettings`), not a part of `Update.Pot`: the settings carry a
+  model of their own (`PotSettings`: an erase asked, a notice) over the open Pot's view, and a host that never opens the
+  Settings place pays nothing for them. A closed Pot closes its settings (`PotClose`), so a host need not order the two.
+  Decided here.
+- **One answer for every settings change, `Answer.Stored(stored, notice)`**, sent once the write ended: a host empties
+  its box on `stored` and says the notice otherwise, never reading the state for the outcome of its own write (an update
+  can lag the answer, the trash's lesson). New pot's `Create` answers the same way. Decided here.
+- **New pot's typed name is held in the bridge** (`HeldCreate.name`, applied in the order called like an editor's edit)
+  and never echoed into the field; `canCreate` is the core's (`PotCreateSheet.canCreate` of the name sent last), so no
+  host decides when Create is enabled. Decided here.
+- **The settings are edited in place**, as the phones' Settings place, each row's change a call; a rename goes through
+  the name dialog (`Dialogs.AskName`, Linux's `header::ask_name`), which shows the core's refusal under the
+  field until the name is stored or the dialog is cancelled. Decided here.
+- **The image rule**: one pixel of a picture is shown at most one logical pixel on both desktops (Linux
+  `ContentFit::ScaleDown`, Windows `Image` with its own width as `MaxWidth`); GTK's `Contain` scaled a narrow receipt
+  up to the dialog's width (Phase 5's noticed item, fixed in its own commit).
+- **The uncaught bite**: "a name not applied in call order" (`PotCreateName` launched instead of applied on the host's
+  thread) stayed green — `Dispatchers.Default` keeps two trivial writes in order in practice, as Phase 4 found for
+  `Editor.Change`. The order rests on the code's path (`Bridge.call`'s `edited`), not on a test that can see it.
+- **The CAD bug** (Windows): the settings' currency `ComboBox` was rebuilt on every update, so each key of a type-ahead
+  went to a new box and wrote its own choice — "c h f" landed on CAD — and its header showed twice. The box is kept while
+  the currency may be chosen, only its selection set from the state, writes on `SelectionChangedTrigger.Committed`, and
+  carries no header (its heading names it). Measured after the fix: one write per choice. What remains is WinUI's: a
+  closed box's first key commits, and the Pot page's redraw after that write takes the focus (its places' panel is moved
+  into each redraw); in the open list a letter moves to the next item starting with it, further letters move nothing.
+- **Money in another currency** (the side finding): Windows wrote Canadian dollars "12,50 $" in de-DE —
+  `CurrencyFormatter`'s symbol, the US dollar's sign. The region's own currency keeps its symbol, any other is written by
+  its code, Linux's rule (`Said.Money`; Android and Apple write "CA$", as unambiguous). The format stays the host's (the
+  core hands amount, code and minor units; D8's "every amount with its currency" is unchanged). Decided here.
+- **Open — a crash** (Windows): `Veyq.App.exe` ended with `0xc0000005` in `coreclr.dll` (offsets `0x35916f`,
+  `0x25a98e`, the third not read) three times, each the first time in that app session that a Pot was deleted from its Settings
+  place while the base currency was still choosable, then the trash opened: the crash came as the trash's rows arrived.
+  Not with the Settings place left first (Home, or Entries), not with the currency fixed by an entry, and not on four
+  later tries in one session — so timing, likely the GC, plays a part. No stack: WER kept no dump. The VM now writes full
+  dumps (`HKLM\…\Windows Error Reporting\LocalDumps\Veyq.App.exe`, `F:\veyq\dumps`, three kept); Phase 7 starts
+  there.
+- **Traps met** (to `src/mobile/CLAUDE.md` § Traps at once): the closed `ComboBox`'s type-ahead and the focus a redraw
+  takes; `Veyq.Drive` — a virtualized item chosen by keys or by `select` while the list is open, Home's rows opened by
+  `invoke`, `wait` an id, `sleep` milliseconds; Broadway's `AdwComboRow` search (Enter selects nothing, click in the same
+  run); the platform guard's `list-add-symbolic` outside the create action and bottom-aligned buttons.
+- **Noticed, not changed:** two own categories, or two people, may carry the same name (the core's rule on every app);
+  New pot creates a Pot with no people (the phones the same); after an entry the payer defaults to the first person, not
+  the one creating it.
+- **Deviations:** the Linux and the Windows en passes are the previous session's (it stopped before the Windows de/dark
+  pass and its fix); the Windows de pass restarted the app three times (twice after the crash), each `run.py run` of
+  mine stopped by its PID, the previous session's (PID 43777) first; `--unlock` was used, since the first start found the
+  device trusted by password from that session.
+- **Phase 7 harvests:** ADR 0127's Consequences gain `PotSettings`/`PotCreateSheet` reached through the bridge and the
+  one-answer rule (`Answer.Stored`); native-apps § Open gains the crash if Phase 7 does not fix it; `src/mobile/CLAUDE.md`
+  already names the modules, the calls and the traps.
+- **Left in the dev instance by my runs:** nothing of this phase — `Windows pot`, `Windows folder` (with `Windows pot` and
+  `Windows pot im Ordner`), `Windows pot en`, `Windows pot de` and the probes `Windows crash a`–`g` were trashed and
+  deleted forever. `App pot e2` and `App folder e2` (Phase 2) and `Windows cover` stay in the space's trash, not mine.
+  Other sessions' `windows/run.py run` processes (PIDs 61912, 64097, 64732, 66678) and the Linux container on 8095 were
+  left alone; the orphaned `ssh -R` tunnels without a parent were not mine to judge and were left too.
