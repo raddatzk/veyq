@@ -329,8 +329,8 @@ internal sealed class Call {
     @Serializable @SerialName("Header.Rename") data class HeaderRename(val header: Long, val name: String) : Call()
 
     /**
-     * Downloads the header's node with everything under it as the web's ZIP into the file at [path], which the host's
-     * save dialog gave (`ShellModel.download`; ADR 0128 decision 3: the core opens it, writes it and removes a download
+     * Downloads the header's node into the file at [path], which the host's save dialog gave — a file the file itself, any
+     * other node with everything under it as the web's ZIP (`ShellModel.download`; ADR 0128 decision 3: the core opens it, writes it and removes a download
      * that did not finish). [deletedName] is the host's word for an erased person, which a Pot's CSV carries.
      * [Answer.Downloaded]. The name the dialog suggests is [HeaderShown.archiveName].
      */
@@ -898,7 +898,10 @@ internal class HeaderShown(
     val deleteQuestion: Notice,
     val undo: Notice?,
     val gone: Boolean,
-    /** The file name a download's save dialog suggests (`NodeExport.fileName`: the web's archive name). */
+    /**
+     * The file name a download's save dialog suggests (`NodeHeaderModel.State.downloadName`): a file's own name, any other
+     * node's archive (`NodeExport.fileName`) — the web's names.
+     */
     val archiveName: String,
     /** Where the frame of the node's cover sits (`State.cover`); null while it has none. Its picture: [Call.HeaderCoverPicture]. */
     val cover: NodeCover.Crop?,

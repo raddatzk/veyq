@@ -782,7 +782,7 @@ internal class Bridge<A : Connection, T : Any>(compose: () -> Composition<A, T>)
             deleteQuestion = m.deleteQuestion(),
             undo = s.undo,
             gone = s.gone,
-            archiveName = NodeExport.fileName(m.node.name),
+            archiveName = s.downloadName ?: NodeExport.fileName(m.node.name),
             cover = s.cover,
         )
     }
