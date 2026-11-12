@@ -153,11 +153,15 @@ fn render(page: &poppler::Page, width: i32) -> Option<Rendered> {
     Some(Rendered { width, height, stride, data })
 }
 
-/// [texture] at most [WIDTH] logical pixels wide, its height kept in proportion (a picture asks no height for its width).
+/// [texture] at most [WIDTH] logical pixels wide, its height kept in proportion (a picture asks no height for its width),
+/// and never larger than its own size: one pixel of it at most one logical pixel, as Windows' `Image` shows it
+/// (`ContentFit::ScaleDown`; GTK's default, `Contain`, scaled a narrow picture up to the dialog's width).
 fn fitted(texture: &impl IsA<gdk::Paintable>) -> gtk::Picture {
     let (tw, th) = (texture.intrinsic_width().max(1), texture.intrinsic_height().max(1));
     let picture = gtk::Picture::for_paintable(texture);
     picture.set_can_shrink(true);
+    picture.set_content_fit(gtk::ContentFit::ScaleDown);
+    picture.set_hexpand(false);
     let width = tw.min(WIDTH);
     picture.set_size_request(width, (f64::from(th) * f64::from(width) / f64::from(tw)).round() as i32);
     picture.set_halign(gtk::Align::Center);
