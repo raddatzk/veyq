@@ -26,6 +26,12 @@ otherwise leave those on the old version unremarked. The digest is the **multi-a
 would pin one architecture, and the publish builds amd64 and arm64. That is not checkable offline and is not
 checked here (limit below).
 
+One pair of pins more: **the Playwright image runs the library's version.** Every pinned `mcr.microsoft.com/playwright`
+reference's tag (`vX.Y.Z[-<suffix>]`) and every tracked `package.json`'s `@playwright/test` (an exact `X.Y.Z`) are one
+version — lane L1's browser is the image's, driven by the library (ADR 0090 decision 3), and Dependabot proposes the two
+in different pull requests, so it holds the image's version and the library's bump is red here until the image follows
+(2026-11-12). Each side without the other is red too: a check that finds one half checked nothing.
+
 **The defect that bought it.** Live when this guard was written (2026-09-25, cr-image-provenance-verifiable):
 the signed release recipe ran `mariadb`, `garage` and `traefik` by tag, the chart did the same, the backup tool
 started `rclone` and `mariadb` by tag, and both Dockerfiles built from tags — so a signature over the recipe
@@ -47,6 +53,7 @@ digest still agree (the tag may have moved since) is exactly what a pin gives up
 """
 from __future__ import annotations  # `str | None` below — the repo's guards run on Python 3.9
 
+import json
 import pathlib
 import re
 import subprocess
@@ -68,6 +75,11 @@ FROM = re.compile(r"^\s*FROM\s+(?:--\S+\s+)*(\S+)(?:\s+AS\s+(\S+))?\s*$", re.IGN
 COPY_FROM = re.compile(r"^\s*COPY\s+.*--from=(\S+)", re.IGNORECASE)
 PY_CONST = re.compile(r"""^([A-Z][A-Z0-9_]*IMAGE)\s*=\s*["']([^"']+)["']""", re.MULTILINE)
 YAML_LINE = re.compile(r"""^\s*(?:-\s+)?image:\s*["']?([^\s"'#]+)""")
+# Playwright's official image and the library whose browser it carries (the last check below).
+PLAYWRIGHT_REPO = "mcr.microsoft.com/playwright"
+PLAYWRIGHT_PACKAGE = "@playwright/test"
+PLAYWRIGHT_TAG = re.compile(r"^v(?P<version>[0-9]+\.[0-9]+\.[0-9]+)(?:-[A-Za-z0-9._-]+)?$")
+EXACT_VERSION = re.compile(r"^[0-9]+\.[0-9]+\.[0-9]+$")
 
 errors: list[str] = []
 sites: list[tuple[str, str, str]] = []  # (where, kind, reference)
@@ -158,6 +170,7 @@ for rel in files:
 
 ours = own_images()
 digest_of: dict[str, dict[str, list[str]]] = {}
+playwright_images: list[tuple[str, str]] = []  # (where, tag)
 external = 0
 for where, kind, ref in sites:
     if ref.startswith("$") or ref == "scratch":
@@ -176,6 +189,8 @@ for where, kind, ref in sites:
         continue
     key = f"{match.group('repo')}:{match.group('tag')}"
     digest_of.setdefault(key, {}).setdefault(ref.split("@", 1)[1], []).append(where)
+    if match.group("repo") == PLAYWRIGHT_REPO:
+        playwright_images.append((where, match.group("tag")))
 
 # One repository, one tag. Since 2026-11-07 Dependabot reaches the compose files and the Dockerfiles but not the chart
 # (its helm updater skips digest pins) nor the backup tool's constants, so a bump it proposes moves only some of a
@@ -204,6 +219,52 @@ for key, digests in sorted(digest_of.items()):
             f"under the same tag, and a restore rehearsed on one proves nothing about the other."
         )
 
+# The Playwright image runs the library's browser (ADR 0090 decision 3): a library of another version looks for a
+# browser build the image does not carry. scripts/run_stack_e2e.py refuses that at preflight, minutes into lane L1;
+# this says so within seconds, on the pull request that moved one side (2026-11-12: Dependabot's npm group moved
+# `@playwright/test` to 1.65.0 beside an image on v1.64.1, and every L1 leg went red). Both sides are found, not listed:
+# every tracked package.json that depends on the library, every pinned reference to the image.
+playwright_packages: list[tuple[str, str]] = []  # (where, version spec)
+for rel in files:
+    if rel.rsplit("/", 1)[-1] != "package.json":
+        continue
+    try:
+        manifest = json.loads((ROOT / rel).read_text())
+    except (OSError, ValueError) as exc:
+        fail(f"{rel} does not parse as JSON ({exc}), so whether it depends on {PLAYWRIGHT_PACKAGE} cannot be checked")
+        continue
+    for section in ("dependencies", "devDependencies", "optionalDependencies"):
+        spec = (manifest.get(section) or {}).get(PLAYWRIGHT_PACKAGE)
+        if spec is not None:
+            playwright_packages.append((f"{rel} ({section})", str(spec)))
+playwright_versions: dict[str, list[str]] = {}
+for where, spec in playwright_packages:
+    if not EXACT_VERSION.match(spec):
+        fail(f"{where}: {PLAYWRIGHT_PACKAGE} is `{spec}`, not an exact version — the library must be exactly the "
+             f"Playwright image's version, and a range lets the lockfile move it alone. Pin it as `X.Y.Z`.")
+        continue
+    playwright_versions.setdefault(spec, []).append(where)
+for where, tag in playwright_images:
+    match = PLAYWRIGHT_TAG.match(tag)
+    if not match:
+        fail(f"{where}: the Playwright image's tag `{tag}` does not read as `vX.Y.Z[-<suffix>]`, so its version cannot "
+             f"be held to {PLAYWRIGHT_PACKAGE}'s")
+        continue
+    playwright_versions.setdefault(match.group("version"), []).append(where)
+if playwright_packages and not playwright_images:
+    fail(f"{', '.join(w for w, _ in playwright_packages)} depend(s) on {PLAYWRIGHT_PACKAGE}, but no tracked file pins "
+         f"`{PLAYWRIGHT_REPO}` — the library would drive a browser nothing pins (ADR 0090 decision 3)")
+if playwright_images and not playwright_packages:
+    fail(f"{', '.join(w for w, _ in playwright_images)} pin(s) `{PLAYWRIGHT_REPO}`, but no tracked package.json "
+         f"depends on {PLAYWRIGHT_PACKAGE} — the image's version is held to nothing")
+if len(playwright_versions) > 1:
+    listing = "; ".join(f"`{v}` at {', '.join(w)}" for v, w in sorted(playwright_versions.items()))
+    fail(
+        f"Playwright is pinned at {len(playwright_versions)} versions ({listing}). The library must be exactly the "
+        f"image's browser's: move the image to `{PLAYWRIGHT_REPO}:v<version>-<suffix>@sha256:<its multi-arch index "
+        f"digest>` in the same change as the library (Dependabot proposes only the library, .github/dependabot.yml)."
+    )
+
 kinds = {kind for _, kind, _ in sites}
 for kind in ("yaml", "dockerfile", "python"):
     if kind not in kinds:
@@ -219,5 +280,7 @@ if errors:
 print(
     f"image pins OK: {external} third-party image reference(s) across {len({w.split(':')[0].split(' ')[0] for w, _, _ in sites})} "
     f"file(s) are each `repo:tag@sha256:…`, {len(tags_of)} repositories are each pinned under one tag, and "
-    f"{len(digest_of)} distinct `repo:tag` carry one digest each"
+    f"{len(digest_of)} distinct `repo:tag` carry one digest each; Playwright is one version "
+    f"({', '.join(playwright_versions)}) across {len(playwright_packages)} package.json pin(s) and "
+    f"{len(playwright_images)} image reference(s)"
 )
