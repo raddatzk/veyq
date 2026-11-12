@@ -1,10 +1,11 @@
 // Every screenshot a Use page places (`<Screenshot id=… shows=…>`, site/src/components/Screenshot.astro), taken of the
 // web client: one scenario per id, reaching the state the page's `shows` text describes, in English and in German.
-// scripts/site_capture.py starts this and copies what it wrote into site/src/assets/screenshots/.
+// scripts/site_capture.py starts this and copies what it wrote into site/src/assets/screenshots/ — and the project
+// website's shots (`website/<id>`, the section "the website" below) into site/src/assets/website/.
 //
-// The catalogue test runs first and needs no stack: every placed id must be a scenario here or a reasoned entry of
-// left-out.json, and nothing here may be a shot no page places — so a new `<Screenshot>` cannot silently stay a
-// placeholder. Then one test per language walks the steps in order: a `seed` makes data later shots read and stops the
+// The catalogue test runs first and needs no stack: every placed id (a Use page's or the website's) must be a scenario
+// here or a reasoned entry of left-out.json, and nothing here may be a shot no page places — so a new `<Screenshot>`
+// cannot silently stay a placeholder. Then one test per language walks the steps in order: a `seed` makes data later shots read and stops the
 // language when it fails; a `shot` takes one or more pictures and, when it fails, is reported while the next one runs.
 // VEYQ_SHOTS_ONLY (comma-separated ids) takes only those shots; every seed still runs.
 import { test, expect, type Locator, type Page, type Route } from '@playwright/test'
@@ -1204,6 +1205,93 @@ shot('expenses-share-dialog', async (w) => {
   await closeDialogs(page)
 })
 
+// ------------------------------------------------------------------------------------------------------------ the website
+
+// The project website's shots — the hero's `shotId` and each application's `shot` in
+// site/src/components/website/strings.ts, which README.md shows as well. Each is the whole window of the web client at a
+// laptop's size, as the website's browser frame (site/src/components/website/Shot.astro) expects. Their ids carry the
+// `website/` prefix: the capture copies them into site/src/assets/website/, not beside the Use pages' shots. They come
+// last, so every seed above has filled the space by then.
+
+const WEBSITE_VIEWPORT = { width: 1440, height: 900 }
+
+function websiteShot(id: string, reach: (w: World, page: Page) => Promise<void>): void {
+  shot(`website/${id}`, async (w) => {
+    const { page } = w.owner
+    await page.setViewportSize(WEBSITE_VIEWPORT)
+    try {
+      await reach(w, page)
+      await capture(w, `website/${id}`, { page })
+    } finally {
+      await page.setViewportSize(VIEWPORT)
+    }
+  })
+}
+
+// A little more in the two folders the website shows than the Use pages need: the party's Memory gets photos and a
+// cover, so its tile wears a picture rather than a placeholder, the party a seating plan, and the documents a few more
+// letters, so the Depot shot reads as somebody's papers. Nothing above reads these.
+seed('website', async (w) => {
+  const { page } = w.owner
+  const n = names(w)
+  await home(w, page)
+  await open(w, page, n.party)
+  await upload(w, page, [file(w, w.t('Seating plan.pdf', 'Sitzplan.pdf'), letterPdf([w.t('Seating plan', 'Sitzplan')]))])
+  await open(w, page, n.partyPhotos)
+  await uploadPhotos(w, page, 3, 4, '2026-07-18')
+  await thumbnailsDecoded(page, 4)
+  await headerAction(w, page, w.t('Set cover', 'Cover festlegen'))
+  const d = dialog(page, 'Cover')
+  const chooser = page.waitForEvent('filechooser')
+  await d.getByRole('button', { name: w.t('Choose an image', 'Bild auswählen') }).click()
+  await (await chooser).setFiles({ name: 'party.jpg', mimeType: 'image/jpeg', buffer: await drawJpeg(page, SCENES[3]!) })
+  await expect(d.locator('.veyq-cropper img')).toBeVisible({ timeout: 60_000 })
+  await d.getByRole('button', { name: w.t('Save cover', 'Cover speichern') }).click()
+  await expect(d).toBeHidden({ timeout: 60_000 })
+  await expect(page.locator('header.veyq-node-header').getByRole('button', { name: w.t('Change cover', 'Cover ändern'), exact: true }))
+    .toBeVisible({ timeout: 60_000 })
+  await home(w, page)
+  await open(w, page, n.documents)
+  const letters: [string, string[]][] = w.t(
+    [['Car insurance 2026.pdf', ['Car insurance 2026']], ['Tax return 2025.pdf', ['Tax return 2025']], ['Warranty – washing machine.pdf', ['Warranty']]],
+    [['Kfz-Versicherung 2026.pdf', ['Kfz-Versicherung 2026']], ['Steuererklärung 2025.pdf', ['Steuererklärung 2025']], ['Garantie – Waschmaschine.pdf', ['Garantie']]])
+  await upload(w, page, letters.map(([name, lines]) => file(w, name, letterPdf(lines))))
+  // The project's donation banner is the signed-in app's, but not what the website's pictures are about.
+  const dismiss = page.getByTestId('donation-banner-dismiss')
+  if (await dismiss.count()) await dismiss.click()
+  await expect(page.getByTestId('donation-banner')).toHaveCount(0)
+})
+
+websiteShot('folder', async (w, page) => {
+  await home(w, page)
+  await open(w, page, names(w).party)
+  const grid = page.getByRole('button', { name: w.t('Grid view', 'Rasteransicht'), exact: true })
+  if (await grid.count()) await grid.click()
+  await expect(page.locator('.veyq-level-list:not(.is-list)').first()).toBeVisible()
+  await expect.poll(() => page.locator('.veyq-level-view img').evaluateAll((imgs) =>
+    imgs.filter((i) => (i as HTMLImageElement).naturalWidth > 0).length), { timeout: 60_000 }).toBeGreaterThanOrEqual(1)
+})
+
+websiteShot('gallery', async (w, page) => {
+  await home(w, page)
+  await open(w, page, names(w).rome)
+  await page.getByRole('tab', { name: w.t(/^(Photos|Gallery|All)/, /^(Fotos|Galerie|Alle)/) }).first().click().catch(() => undefined)
+  // The seed's six; a whole run has the two a member added too (memories-contributions-tab, a shot `--only` skips).
+  await thumbnailsDecoded(page, 6)
+})
+
+websiteShot('depot', async (w, page) => {
+  await home(w, page)
+  await open(w, page, names(w).documents)
+  await listView(w, page)
+})
+
+websiteShot('pot', async (w, page) => {
+  await openPot(w, page)
+  await page.getByRole('tab', { name: w.t('Overview', 'Übersicht'), exact: true }).click()
+  await expect(page.locator('ul.expenses-settle-up')).toBeVisible({ timeout: 30_000 })
+})
+
 // -------------------------------------------------------------------------------------------------------------- run
 
 /** Every id a Use page places, read the way the to-do report reads them (scripts/site_shots.py). */
@@ -1211,10 +1299,21 @@ function placedIds(): string[] {
   return execFileSync('python3', [`${REPO}scripts/site_shots.py`, '--ids'], { encoding: 'utf8' }).split('\n').filter(Boolean)
 }
 
+/**
+ * Every id the project website places, as `website/<id>`: the hero's `shotId: '…'`, and an application's `shot: '…'` —
+ * the one followed by its `shotShows` (the hero's own `shot` is the text of its picture, not an id).
+ */
+function websiteIds(): string[] {
+  const strings = readFileSync(`${REPO}site/src/components/website/strings.ts`, 'utf8')
+  const ids = [...strings.matchAll(/\bshotId: '([^']+)'|\bshot: '([^']+)',\s*shotShows:/g)].map((m) => m[1] ?? m[2])
+  return [...new Set(ids.map((id) => `website/${id}`))]
+}
+
 export const SCENARIO_IDS = steps.filter((s) => s.kind === 'shot').flatMap((s) => s.ids)
 
 test('every placed screenshot has a scenario or a reason it is left out', () => {
-  const placed = new Set(placedIds())
+  expect(websiteIds(), 'the website places no shot: its strings changed shape').not.toEqual([])
+  const placed = new Set([...placedIds(), ...websiteIds()])
   const left = Object.keys(LEFT_OUT).filter((k) => !k.startsWith('//'))
   const scenarios = new Set(SCENARIO_IDS)
   expect(SCENARIO_IDS.length, 'an id has two scenarios').toBe(scenarios.size)
@@ -1245,7 +1344,7 @@ if (process.env.VEYQ_STACK_FILE) {
             const reason = String(error instanceof Error ? error.message : error).split('\n').filter(Boolean).slice(0, 4).join(' | ')
             console.log(`[${lang}] FAIL  ${label}: ${reason}`)
             for (const [who, d] of [['owner', w.owner], ['member', w.member]] as const) {
-              await d?.page.screenshot({ path: `${shotsDir()}/failed-${step.ids[0]}.${lang}.${who}.png` }).catch(() => undefined)
+              await d?.page.screenshot({ path: `${shotsDir()}/failed-${step.ids[0].replace('/', '-')}.${lang}.${who}.png` }).catch(() => undefined)
             }
             if (step.kind === 'seed') throw error
             for (const id of step.ids) results[id] = reason

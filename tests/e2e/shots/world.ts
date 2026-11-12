@@ -10,6 +10,7 @@
 import { chromium, expect, type Browser, type BrowserContext, type Locator, type Page } from '@playwright/test'
 import { X509Certificate, createHash, randomBytes } from 'node:crypto'
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs'
+import { dirname } from 'node:path'
 import tls from 'node:tls'
 import { readKit } from '../src/accounts'
 import { confineToInstance, type Confinement } from '../src/egress'
@@ -170,6 +171,12 @@ async function settle(page: Page): Promise<void> {
   await page.evaluate(() => new Promise<void>((r) => requestAnimationFrame(() => requestAnimationFrame(() => r()))))
 }
 
+/** The pointer into the window's bottom-right corner, whatever size the window has now. */
+async function parkPointer(page: Page): Promise<void> {
+  const size = page.viewportSize() ?? VIEWPORT
+  await page.mouse.move(size.width - 2, size.height - 2)
+}
+
 /**
  * The shot `<id>.<lang>.png`: [target] is an element (with [pad] pixels of its surroundings), or a page with a region
  * of it. An element taller than the window is taken in a window grown to hold it — scrolled into view instead, it would
@@ -182,10 +189,11 @@ export async function capture(
   target: Locator | { page: Page; clip?: { x: number; y: number; width: number; height: number } },
   options: { pad?: number; keepPointer?: boolean; keepFocus?: boolean } = {},
 ): Promise<void> {
-  mkdirSync(shotsDir(), { recursive: true })
+  // An id may name a sub-folder (`website/folder`): the capture copies those images elsewhere.
   const path = `${shotsDir()}/${id}.${w.lang}.png`
+  mkdirSync(dirname(path), { recursive: true })
   if ('page' in target && !('locator' in target)) {
-    if (!options.keepPointer) await target.page.mouse.move(VIEWPORT.width - 2, VIEWPORT.height - 2)
+    if (!options.keepPointer) await parkPointer(target.page)
     if (!options.keepFocus) await target.page.evaluate(() => (document.activeElement as HTMLElement | null)?.blur?.())
     await settle(target.page)
     await target.page.screenshot({ path, clip: target.clip, animations: 'disabled', caret: 'hide' })
@@ -194,7 +202,7 @@ export async function capture(
   const element = target as Locator
   const page = element.page()
   await expect(element).toBeVisible()
-  if (!options.keepPointer) await page.mouse.move(VIEWPORT.width - 2, VIEWPORT.height - 2)
+  if (!options.keepPointer) await parkPointer(page)
   // A dialog focuses its first control (often its close button), whose ring would be in the picture.
   if (!options.keepFocus) await page.evaluate(() => (document.activeElement as HTMLElement | null)?.blur?.())
   // A dialog is taken as it is, scrolled to its top (a filled form leaves it scrolled to the last field); anything else
