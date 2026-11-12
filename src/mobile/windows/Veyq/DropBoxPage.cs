@@ -1,4 +1,4 @@
-// A drop box's page for a member (Depot's DropBoxDetail.vue; the Depot CR's D2 and D10; Linux's drop_box.rs), Fluent's
+// A drop box's page for a member (Depot's DropBoxDetail.vue; ADR 0123's Consequences, the Windows app's Depot whole; Linux's drop_box.rs), Fluent's
 // way: the hint, then each guest's folder — its name as a heading, how many files it holds, a More button whose MenuFlyout
 // holds Move out… and Delete — over a ListView of its files, each opening the file's page; nobody's yet, the core's words.
 // A folder's delete is asked in a ContentDialog (one at a time, Dialogs.Show), then trashed with Undo in the shell's

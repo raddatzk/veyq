@@ -1,4 +1,4 @@
-//! A drop box's page for a member (Depot's `DropBoxDetail.vue`; the Depot CR's D2 and D10), GNOME's way: the hint, then
+//! A drop box's page for a member (Depot's `DropBoxDetail.vue`; ADR 0123's Consequences, the Linux app's Depot whole), GNOME's way: the hint, then
 //! each guest's folder as an `AdwPreferencesGroup` — titled by the guest's name, how many files it holds beneath, a menu at
 //! its header (Move out…, Delete) — whose rows are its files, each opening the file's page; nobody's yet, an
 //! `AdwStatusPage` with the core's words. A folder's delete is asked in an `AdwAlertDialog`, then trashed with Undo in a

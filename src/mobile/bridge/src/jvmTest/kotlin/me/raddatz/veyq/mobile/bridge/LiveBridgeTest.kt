@@ -1414,7 +1414,7 @@ class LiveBridgeTest {
     }
 
     /**
-     * Uploads by path through calls, over the real core (the Depot CR's Phase 5; ADR 0130 decision 3), with
+     * Uploads by path through calls, over the real core (ADR 0130 decision 3 and its Consequences), with
      * `VEYQ_LIVE_UPLOAD=1` (it moves more than 2 GiB): a folder "App depot <n>" made at the personal space's top level
      * (`Shell.CreateFolder`); three files by path (`Upload.Files`) and a nested folder with a hidden file and a non-ASCII name
      * (`Upload.Folder`, walked by the core, a link said and never followed), each read back to its SHA-256 by the header's
@@ -1663,7 +1663,7 @@ class LiveBridgeTest {
     }
 
     /**
-     * A medium read in ranges through calls, over the real core (the Depot CR's Phase 4; ADR 0130 decision 2): with
+     * A medium read in ranges through calls, over the real core (ADR 0130 decision 2 and its Consequences): with
      * `VEYQ_LIVE_MEDIUM=<a video file>` (a 600 MiB WebM, made by `ffmpeg` on this machine) a folder "App depot <n>" is made at
      * the personal space's top level and the file uploaded there by the core's own upload in a second session, read from
      * its path at offsets (never held whole); the bridge opens it (`File.Open`: a medium), opens its reader (`File.Reader`:
@@ -1750,7 +1750,7 @@ class LiveBridgeTest {
     }
 
     /**
-     * A desktop pass's folder (the Depot CR's Phase 3), not a check: with `VEYQ_LIVE_DEPOT_PASS=<name>` it makes a folder of
+     * A desktop pass's folder (ADR 0123's Consequences, the bridge's Depot whole), not a check: with `VEYQ_LIVE_DEPOT_PASS=<name>` it makes a folder of
      * that name at the personal space's top level and fills it through the core's own upload with what the pass opens —
      * a JPEG, a text past `TEXT_CAP`, a 30-page PDF, a ZIP, an empty file and a 300 MiB file of drawn bytes —, printing each
      * one's SHA-256. It stays, for the pass; with `VEYQ_LIVE_DEPOT_PASS_PURGE=1` the folder of that name is trashed and purged
@@ -1821,7 +1821,7 @@ class LiveBridgeTest {
             println("uploaded $name ($size B): ${up.outcome}")
         }
         // with VEYQ_LIVE_DEPOT_PASS_MEDIA=<file>,<file>…: media made on this machine (ffmpeg), each read from its path at
-        // offsets, never held whole (the Depot CR's Phase 4)
+        // offsets, never held whole (ADR 0130's Consequences)
         for (path in System.getenv("VEYQ_LIVE_DEPOT_PASS_MEDIA").orEmpty().split(',').filter { it.isNotBlank() }) {
             val medium = File(path)
             java.io.RandomAccessFile(medium, "r").use { raf ->
@@ -2044,7 +2044,7 @@ class LiveBridgeTest {
     }
 
     /**
-     * A drop box made, filled by guests and emptied through calls (the Depot CR's Phase 7): with `VEYQ_LIVE_DROPBOX_GUESTS=<file>`
+     * A drop box made, filled by guests and emptied through calls (ADR 0123's Consequences, the bridge's Depot whole): with `VEYQ_LIVE_DROPBOX_GUESTS=<file>`
      * a folder "App depot <n>" is made beside Amsterdam, the space's top level is said to offer its share
      * (`ShellShown.topLevelShare`) and "Add files only" there (`Share.OpenTopLevel`) makes "App drop <n>" with its first link,
      * whose address is written to that file. Two guests then drop through the web's guest page (a script reading the file

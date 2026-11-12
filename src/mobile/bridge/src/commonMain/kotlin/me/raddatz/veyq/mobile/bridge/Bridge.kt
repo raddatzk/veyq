@@ -676,7 +676,7 @@ internal class Bridge<A : Connection, T : Any>(compose: () -> Composition<A, T>)
         return Answer.Reader(id, reader.size, mediaType)
     }
 
-    /** Closes every reader page [file] opened: a reader's lifetime is its page's (the Depot CR's D5). */
+    /** Closes every reader page [file] opened: a reader's lifetime is its page's (ADR 0130's Consequences). */
     private fun closeReadersOf(file: Long) {
         pageReaders.keys().forEach { reader -> if (pageReaders[reader] == file) { pageReaders.remove(reader); readers.remove(reader) } }
     }

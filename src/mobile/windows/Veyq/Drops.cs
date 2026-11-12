@@ -1,8 +1,8 @@
-// Drag and drop onto a level and onto a folder's row (the Depot CR's D8), Fluent's way: the level's scroller and each
+// Drag and drop onto a level and onto a folder's row (ADR 0123's Consequences, the Windows app's Depot whole), Fluent's way: the level's scroller and each
 // folder's row take dropped storage items (Explorer's files and folders) as a copy, the row under the pointer highlighted
 // as a list's hovered row is; what was dropped is sorted by DropSort and handed to the core by path (ADR 0130 decision 3:
 // the core opens and reads each at offsets, nothing of a file crosses). A dropped veyq download is uploaded as the file
-// it is (the CR's Owner question 3).
+// it is (until import is built, native-apps § Open).
 using System;
 using System.Linq;
 using Microsoft.UI.Xaml;

@@ -198,7 +198,7 @@ object DepotFiles {
         /**
          * The node a run made that holds nothing of the file yet: filled by the next run (the queue's retry, the person's),
          * given up by [abandon]. A give-up that could not reach the server keeps it, so a retry fills it rather than colliding
-         * with it (the Depot CR's Phase 2 leftover: offline, the retry met its own empty file and offered its replace).
+         * with it (found 2026-11-12: offline, the retry met its own empty file and offered its replace).
          */
         private var made: String? = null
 

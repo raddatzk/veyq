@@ -395,7 +395,7 @@ internal sealed class Call {
 
     /**
      * The header's Replace on file [file]'s page, chosen before the host's open dialog opens (`FileModel.chooseReplace`, the
-     * Depot CR's D9: the replace expects the content shown now, whatever a peer writes while the dialog is open). Refused
+     * web's rule, ADR 0129's Consequences: the replace expects the content shown now, whatever a peer writes while the dialog is open). Refused
      * where the page offers no replace.
      */
     @Serializable @SerialName("File.ChooseReplace") data class FileChooseReplace(val file: Long) : Call()
@@ -1085,7 +1085,7 @@ internal class ReportShown(
 internal class HistoryShown(val line: List<Piece>, val writer: String?, val at: Long)
 
 /**
- * A file's page as the host draws it (core's `FileModel`, the Depot CR's D1), each field the model's own answer:
+ * A file's page as the host draws it (core's `FileModel`, ADR 0129's Consequences), each field the model's own answer:
  * - [view], what shows in the content's place, and [words], what the page says there where it shows no content (opening,
  *   failed, not uploaded yet, too large, empty, not shown here — and a medium, for a host that does not play one);
  * - an image ([mediaType], decoded to [edge] pixels on its longest side at most) and a PDF, their bytes through

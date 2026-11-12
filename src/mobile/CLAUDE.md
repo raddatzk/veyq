@@ -552,7 +552,7 @@ first in each of its scrolls — `LocalNodeHero.current(inset)` (Android) / `Nod
   node it made, and the next run fills it (`into`, the web's `fileUploadJob`); before, the retry collided with its own empty
   file and offered its replace (measured on the emulator in airplane mode).
 - A guest's new folder in a drop box shows only once the tenant's tree is read anew: the session caches it, and nothing polls.
-  `ShellModel.refresh()` forgets it first (the desktops' F5 / Refresh, Depot CR Phase 7); a phone pass force-stops and relaunches
+  `ShellModel.refresh()` forgets it first (the desktops' F5 / Refresh; ADR 0129's Consequences); a phone pass force-stops and relaunches
   the app (`devlogin.py`) after a guest dropped through the web.
 - Driving the web from a mobile pass (headless system Chrome, `?devlogin`): a level row's `locator.click()` waits forever
   for a stable element; click the row's bounding box with `page.mouse`, or open by hash (`#app-depot-2/alpha-txt`). A file
@@ -561,7 +561,7 @@ first in each of its scrolls — `LocalNodeHero.current(inset)` (Android) / `Nod
   idle (`kill -3` after `adb root`, `/data/anr/trace_*`), so tap Wait, never Close; a pass reads its state after it.
 - On iOS one SwiftUI `Text` of a megabyte drew nothing (measured 2026-11-12, a file's cut text): a long text is a line a
   row in a `LazyVStack` (`FileText`). AVFoundation plays no WebM: a file page reads the asset's `isPlayable` through the
-  resource loader and says `file_unsupported` (D7 of the Depot CR); Android plays it.
+  resource loader and says `file_unsupported`, as a format nothing decodes; Android plays it.
 - The shell shows an open object in its list's place and the bar is the object's (ADR 0122), so a list leaves the view
   tree and is composed anew on the way back, at its top (the owner's report, 2026-11-12). Android keeps each list's
   `LazyListState` in the shell (`ListStates`, by list key). On iOS neither `ScrollViewReader.scrollTo` nor
@@ -839,7 +839,7 @@ first in each of its scrolls — `LocalNodeHero.current(inset)` (Android) / `Nod
 - One WinUI `TextBox` holding a megabyte drew only its first line, even 15 s later (measured 2026-11-12, a file's cut text):
   a long text is a virtualized `ListView` a line a row (`FilePage.Text`), as on iOS. The Linux container has no monospace
   font, so a `TextView`'s `monospace` falls back to the proportional one there (a desktop has one).
-- A session's tree is cached (`TenantSession.trees`); only a refresh forgets it (`ShellModel.refresh`, since the Depot CR's Phase 7:
+- A session's tree is cached (`TenantSession.trees`); only a refresh forgets it (`ShellModel.refresh`, since 2026-11-12:
   before it a desktop saw another device's upload or a guest's folder only after a new sign-in). A refresh is the one way a write
   of someone else shows: a live case that writes through a second session calls `Shell.Refresh` before it looks.
 - Driving a file's save on the desktops: GTK's save dialog takes a whole path in its name field (`key Control+a`, `type

@@ -53,7 +53,7 @@ object FileRights {
  * A file's page (Depot's `FileDetail` and `FileViewer`, ADR 0129 decision 2; `docs/apps/depot.md` § The viewer): what it
  * shows — decided by its first frame's bytes ([FileView]) — and its facts, its uploader, and what its header offers.
  *
- * Nothing decrypted is written to show it (ADR 0047, the CR's D4): an image, a text and a PDF are held in memory, each
+ * Nothing decrypted is written to show it (ADR 0047 and its Consequences): an image, a text and a PDF are held in memory, each
  * capped ([FileView.IMAGE_CAP], [FileView.TEXT_CAP], [FileView.PDF_CAP]); a medium is a [RangeReader] the platform's player
  * reads in ranges. A platform decodes an image to [Shown.Image.edge] at most and draws at most [Shown.Pdf.pages] pages.
  *
@@ -280,7 +280,7 @@ class FileModel(
     companion object {
         /**
          * What the page says in the content's place where [shown] shows no content: opening, failed, not uploaded yet, a
-         * message's words — and a medium's for a platform that plays none (the CR's D7: Save a copy offered beside it). Null
+         * message's words — and a medium's for a platform that plays none (Save a copy offered beside it). Null
          * where content shows.
          */
         fun words(shown: Shown): Msg? = when (shown) {

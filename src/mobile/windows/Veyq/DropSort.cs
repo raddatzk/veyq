@@ -1,4 +1,4 @@
-// What a drop onto a level or a folder's row is sorted into (the Depot CR's D8), the one rule the Windows side holds about a
+// What a drop onto a level or a folder's row is sorted into (ADR 0123's Consequences, the Windows app's Depot whole), the one rule the Windows side holds about a
 // drop (Linux's drop.rs, rule for rule): each dropped storage item with a local path goes to the core as a picked one does —
 // the files as one batch (Upload.Files), each folder walked by the core (Upload.Folder) —, and an item with no path (a
 // phone's or a cloud's virtual item) is refused under its name. Where a drop is taken at all is the core's: a level takes

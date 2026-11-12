@@ -130,7 +130,7 @@ internal static class HomeView
 
     /// <summary>Home: the filters (where the core offers more than "all"), then the level's groups (Home.groups): a
     /// folder enters, an object opens in its application. With <paramref name="drops"/>, files and folders dropped onto the
-    /// level upload there, and onto a folder's row into that folder (the Depot CR's D8).</summary>
+    /// level upload there, and onto a folder's row into that folder (ADR 0123's Consequences, the Windows app's Depot whole).</summary>
     public static UIElement Home(ShellModelState state, ShellShown shown, Drops? drops = null)
     {
         var (scroll, content) = Column();

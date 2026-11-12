@@ -1,4 +1,4 @@
-// The uploads (the Depot CR's D2, D5 and D10), Fluent's way: files and a folder picked through Windows' own pickers
+// The uploads (ADR 0123's Consequences, the Windows app's Depot whole), Fluent's way: files and a folder picked through Windows' own pickers
 // (FileOpenPicker, FolderPicker, owned by the window as the save picker is) and handed to the core by their paths — the
 // core opens and reads each at offsets a frame at a time (Upload.Files, Upload.Folder; ADR 0130 decision 3), so nothing of
 // a file crosses and none is held whole —, a file's Replace chosen before its picker opens (File.ChooseReplace,

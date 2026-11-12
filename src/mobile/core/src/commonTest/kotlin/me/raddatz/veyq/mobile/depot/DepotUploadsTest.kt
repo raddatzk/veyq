@@ -28,7 +28,7 @@ import kotlin.test.assertSame
 import kotlin.test.assertTrue
 
 /**
- * Depot's uploads both phones drew (ADR 0129 decision 2, the Depot CR's D2 and D9) — over a level of files the test plays:
+ * Depot's uploads both phones drew (ADR 0129 decision 2 and its Consequences, Depot's screens) — over a level of files the test plays:
  * the settle's replace offer and its action, a replace expected over the content shown when it was chosen, a folder's
  * preparing and outcome in Depot's words, and the tray's acknowledge on virtual time. Also `DepotFiles.offerFor` and
  * `collision` (R2).
@@ -188,7 +188,7 @@ class DepotUploadsTest {
         assertTrue(level.sent.isEmpty(), "nothing replaced without its action")
     }
 
-    // ---- a replace, expected over the content shown when it was chosen (D9) ----
+    // ---- a replace, expected over the content shown when it was chosen (the web's rule) ----
 
     private class FileDoor(val level: Level, val nodeId: String) : FileModel.Door {
         override suspend fun file(node: NodeAt) = level.listed(nodeId)
@@ -341,7 +341,7 @@ class DepotUploadsTest {
     @Test
     fun aRetryFillsTheNodeAFailedRunMadeWhereItsGiveUpCouldNotReachTheServer() = runTest {
         // the web's `fileUploadJob`: offline, the attach fails and so does the give-up; the retry fills the node it made
-        // rather than creating another, which met its own empty file and offered its replace (the CR's Phase 2 leftover)
+        // rather than creating another, which met its own empty file and offered its replace (found 2026-11-12 offline on the emulator)
         val m = model()
         val runs = mutableListOf<String?>()
         var online = false

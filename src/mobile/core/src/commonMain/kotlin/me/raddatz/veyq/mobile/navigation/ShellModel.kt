@@ -123,7 +123,7 @@ class ShellModel(
     /**
      * Reads the lists anew from the server (after a write, or what another device or a guest wrote); a read that fails
      * keeps what was listed. The session's tree is forgotten first: a session caches it ([TenantSession.trees]), and a
-     * refresh that read the cache showed a guest's new folder only after a sign-in (the Depot CR, Phases 3–7).
+     * refresh that read the cache showed a guest's new folder only after a sign-in (found 2026-11-12; ADR 0129's Consequences).
      */
     suspend fun refresh() {
         reading.withLock {

@@ -1,4 +1,4 @@
-// A file's page (Depot's file viewer; the Depot CR's D1, D4 and D10; Linux's file_page.rs), Fluent's way: the file's
+// A file's page (Depot's file viewer; ADR 0123's Consequences, the Windows app's Depot whole; Linux's file_page.rs), Fluent's way: the file's
 // content in place — a picture (Image, decoded by WIC at the core's edge at most), a text (a read-only monospace TextBox,
 // the cut said in an InfoBar above it), a PDF (Windows.Data.Pdf, PdfPages.cs: its pages rendered as they come into view
 // and let go when far from it), an audio or video played by the system's own player (MediaPlayerElement with its

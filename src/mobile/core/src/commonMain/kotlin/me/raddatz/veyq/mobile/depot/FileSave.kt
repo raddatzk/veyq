@@ -14,7 +14,7 @@ import me.raddatz.veyq.mobile.words.Msg
 import me.raddatz.veyq.mobile.words.Notice
 
 /**
- * A copy of a file saved where the person chose ("Save a copy", the file page's download; the Depot CR's D4): the one place
+ * A copy of a file saved where the person chose ("Save a copy", the file page's download; ADR 0047's Consequences): the one place
  * a decrypted copy is written (ADR 0047). Its content goes into [write]'s sink a frame at a time, never held whole, and
  * [state] says how far it is and how it ended — saved, failed, or [cancel]led with nothing left at its path (the sink, core's
  * `FileSink` natively, removes what a write that did not finish left).

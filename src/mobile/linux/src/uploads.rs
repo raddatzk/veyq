@@ -1,4 +1,4 @@
-//! The uploads (the Depot CR's D2, D5 and D10), GNOME's way: files and a folder picked through GTK's own dialog (the portal's
+//! The uploads (ADR 0123's Consequences, the Linux app's Depot whole), GNOME's way: files and a folder picked through GTK's own dialog (the portal's
 //! on a desktop) and handed to the core by their paths — the core opens and reads each at offsets a frame at a time
 //! (`Upload.Files`, `Upload.Folder`, ADR 0130 decision 3), so nothing of a file crosses and none is held whole —, a file's
 //! Replace chosen before its dialog opens (`File.ChooseReplace`, `Upload.Replace`), and the queue as a header bar
@@ -29,7 +29,7 @@ pub struct Uploads {
     preparing: gtk::Box,
     preparing_line: gtk::Label,
     /// The batches' rows, each kept by its id and updated in place: a row drawn anew on every update took a Cancel
-    /// clicked while it was replaced into nothing (the Depot CR's Phase 5, once in de/dark).
+    /// clicked while it was replaced into nothing (measured 2026-11-12, once in de/dark).
     batches_box: gtk::Box,
     batches: RefCell<Vec<(String, BatchRows)>>,
     toasts: adw::ToastOverlay,

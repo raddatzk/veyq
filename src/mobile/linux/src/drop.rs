@@ -1,10 +1,10 @@
-//! Drag and drop onto a level and onto a folder's row (the Depot CR's D8), GNOME's way: a `gtk::DropTarget` for a
+//! Drag and drop onto a level and onto a folder's row (ADR 0123's Consequences, the Linux app's Depot whole), GNOME's way: a `gtk::DropTarget` for a
 //! `gdk::FileList` (what Files hands over, through the portal on a sandboxed desktop) taking a copy; the row or the level
 //! under the pointer is highlighted by the theme's own `:drop(active)` style. Each dropped file's local path goes to the
 //! core as a picked one does (`Upload.Files`, all files of one drop in one batch), each dropped directory's to
 //! `Upload.Folder`, which the core walks (ADR 0130 decision 3: the core opens and reads each at offsets, nothing of a file
 //! crosses). A dropped item with no local path (a remote location without a mount) is refused and said
-//! (`depot_drop_not_local`). A dropped veyq download is uploaded as the file it is (the CR's Owner question 3).
+//! (`depot_drop_not_local`). A dropped veyq download is uploaded as the file it is (until import is built, native-apps § Open).
 //!
 //! What a drop is sorted into is this side's only rule ([sort], [calls]); where a drop is taken at all is the core's: the
 //! level takes one where its New offers Upload files (`ShellShown.creates`).

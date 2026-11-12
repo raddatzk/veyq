@@ -65,7 +65,7 @@ object AppKinds {
 
     /**
      * Whether a node of [kind] downloads as its own content rather than the web's ZIP (a Depot file: the file itself, under
-     * its own name, D3 of the Depot CR); every other kind downloads the ZIP of it with everything under it.
+     * its own name, ADR 0129's Consequences); every other kind downloads the ZIP of it with everything under it.
      */
     fun downloadsItself(kind: String): Boolean = kind == FILE
 

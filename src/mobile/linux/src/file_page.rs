@@ -1,4 +1,4 @@
-//! A file's page (Depot's file viewer; the Depot CR's D1, D4 and D10), GNOME's way: the file's content in place — a picture
+//! A file's page (Depot's file viewer; ADR 0123's Consequences, the Linux app's Depot whole), GNOME's way: the file's content in place — a picture
 //! (`gtk::Picture`, decoded by GTK and held at the core's edge at most), a text (a read-only monospace `gtk::TextView`, the
 //! cut said in an `AdwBanner`), a PDF (its pages rendered by poppler as they come into view, [crate::receipt_viewer]'s
 //! renderer), an audio or video played by GTK's own player (`gtk::Video` over a `gtk::MediaFile` reading the core's reader

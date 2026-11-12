@@ -9,7 +9,7 @@ using Windows.Storage.Streams;
 
 namespace Veyq.Tests;
 
-/// <summary>A medium's stream over a played reader (the Depot CR's Phase 4; Linux's reader_stream tests, case for case), as
+/// <summary>A medium's stream over a played reader (ADR 0123's Consequences, the Windows app's Depot whole; Linux's reader_stream tests, case for case), as
 /// the app hands it to Media Foundation: through AsRandomAccessStream, the WinRT stream MediaSource.CreateFromStream reads —
 /// small reads served from one window, a seek from the start, from here and from the end, a range across a frame's edge, a
 /// short read at the end, the reader let go when the stream is.</summary>

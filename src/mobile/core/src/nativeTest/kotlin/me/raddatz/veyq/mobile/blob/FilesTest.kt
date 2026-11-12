@@ -18,7 +18,7 @@ import kotlin.test.assertTrue
  * directory as the system lists it ([listDir], the platform's own listing, never the calls under test) holds that name
  * exactly. A sink that fails mid-way leaves nothing behind.
  *
- * A picked directory is walked by the platform's own listing ([PickedPaths.walk], the Depot CR's D6): a nested directory
+ * A picked directory is walked by the platform's own listing ([PickedPaths.walk], ADR 0130's Consequences): a nested directory
  * under a non-ASCII name, a hidden file kept, a link reported and never followed, an entry that does not list said.
  *
  * The bites, each measured red: Windows' `openFile` over plain `fopen` (the name listed is another); [FileSink.fill]
