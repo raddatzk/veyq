@@ -39,6 +39,8 @@ internal sealed class PotSettingsView : IDisposable
     private readonly TextBox _personName = new() { MinWidth = 240 };
     private readonly StackPanel _members = new() { Spacing = 4 };
     private ComboBox? _currencyBox;
+    /// <summary>The base currency the state said last: a selection of it is no choice.</summary>
+    private string? _currencyShown;
 
     /// <summary>The place, moved into each redraw of the Pot page.</summary>
     public StackPanel Panel { get; } = new() { Spacing = 4 };
@@ -155,34 +157,50 @@ internal sealed class PotSettingsView : IDisposable
             _note.Children.Clear();
             if (!s.ready) _note.Children.Add(PotPage.Note(s.canChangeSettings ? Words.SettingsMissing() : Words.SettingsMissingReadOnly(), "settings-missing"));
 
-            // the base currency: chosen while no money fixes it
-            if (_currencyBox is not null) _currencyBox.IsDropDownOpen = false;
-            _currency.Children.Clear();
-            _currencyBox = null;
-            PotPage.Heading(_currency, Words.PotBaseCurrency());
-            if (s.currencyEditable)
+            // the base currency: chosen while no money fixes it. The box is kept while it may be chosen (only its selection
+            // set from the state): built anew per update, a type-ahead's next key went to a box that replaced it (CAD, not CHF)
+            if (s.currencyEditable && _currencyBox is not null)
             {
-                var box = new ComboBox { Header = Words.PotBaseCurrency(), MinWidth = 200, Margin = new Thickness(12, 0, 12, 0), Description = Words.SettingsCurrencyHint() };
-                AutomationProperties.SetAutomationId(box, "settings-currency");
-                foreach (var code in s.currencies)
-                {
-                    var item = new ComboBoxItem { Content = code, Tag = code };
-                    AutomationProperties.SetAutomationId(item, $"settings-currency:{code}");
-                    box.Items.Add(item);
-                }
-                box.SelectedIndex = s.currency is null ? -1 : s.currencies.ToList().IndexOf(s.currency);
-                box.SelectionChanged += (_, _) =>
-                {
-                    if (_drawing || box.SelectedItem is not ComboBoxItem { Tag: string code } || code == s.currency) return;
-                    Change(null, id => new Call.PotSettingsCurrency { settings = id, code = code });
-                };
-                _currencyBox = box;
-                _currency.Children.Add(box);
+                var at = s.currency is null ? -1 : s.currencies.ToList().IndexOf(s.currency);
+                if (_currencyBox.SelectedIndex != at) _currencyBox.SelectedIndex = at;
             }
             else
             {
-                _currency.Children.Add(PotPage.Row(s.currency ?? "—", s.currencyFixed ? Words.SettingsCurrencyFixed() : null, "currency"));
+                if (_currencyBox is not null) _currencyBox.IsDropDownOpen = false;
+                _currency.Children.Clear();
+                _currencyBox = null;
+                PotPage.Heading(_currency, Words.PotBaseCurrency());
+                if (s.currencyEditable)
+                {
+                    // a choice is written once committed (the drop-down closed on it, or Enter), never per key of a type-ahead
+                    var box = new ComboBox
+                    {
+                        MinWidth = 200, Margin = new Thickness(12, 0, 12, 0), Description = Words.SettingsCurrencyHint(),
+                        SelectionChangedTrigger = ComboBoxSelectionChangedTrigger.Committed,
+                    };
+                    AutomationProperties.SetName(box, Words.PotBaseCurrency());
+                    AutomationProperties.SetAutomationId(box, "settings-currency");
+                    foreach (var code in s.currencies)
+                    {
+                        var item = new ComboBoxItem { Content = code, Tag = code };
+                        AutomationProperties.SetAutomationId(item, $"settings-currency:{code}");
+                        box.Items.Add(item);
+                    }
+                    box.SelectedIndex = s.currency is null ? -1 : s.currencies.ToList().IndexOf(s.currency);
+                    box.SelectionChanged += (_, _) =>
+                    {
+                        if (_drawing || box.SelectedItem is not ComboBoxItem { Tag: string code } || code == _currencyShown) return;
+                        Change(null, id => new Call.PotSettingsCurrency { settings = id, code = code });
+                    };
+                    _currencyBox = box;
+                    _currency.Children.Add(box);
+                }
+                else
+                {
+                    _currency.Children.Add(PotPage.Row(s.currency ?? "—", s.currencyFixed ? Words.SettingsCurrencyFixed() : null, "currency"));
+                }
             }
+            _currencyShown = s.currency;
             _currency.Visibility = Visibility.Visible;
 
             // the own categories
