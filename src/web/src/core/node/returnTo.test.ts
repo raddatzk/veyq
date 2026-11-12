@@ -100,7 +100,7 @@ describe('bringIntoView', () => {
   it('a row out of sight is centred, and its button takes the focus without a scroll of its own', () => {
     const li = row(window.innerHeight + 400)
     const focus = vi.spyOn(li.querySelector('button')!, 'focus')
-    expect(bringIntoView(li)).toBe(true)
+    bringIntoView(li)
     expect(li.scrollIntoView).toHaveBeenCalledWith({ block: 'center' })
     expect(focus).toHaveBeenCalledWith({ preventScroll: true })
     expect(document.activeElement).toBe(li.querySelector('button'))
@@ -108,8 +108,9 @@ describe('bringIntoView', () => {
 
   it('a row already in sight stays where it is (the browser restored it, or it never left)', () => {
     const li = row(100)
-    expect(bringIntoView(li)).toBe(true)
+    bringIntoView(li)
     expect(li.scrollIntoView).not.toHaveBeenCalled()
+    expect(document.activeElement, 'the focus moves all the same').toBe(li.querySelector('button'))
   })
 
   it('a row under the sticky top bar counts as out of sight', () => {
@@ -121,7 +122,8 @@ describe('bringIntoView', () => {
 
   it('a row with no button (one this client cannot show) is brought into sight, and the focus stays', () => {
     const li = row(-500, false)
-    expect(bringIntoView(li)).toBe(false)
+    bringIntoView(li)
     expect(li.scrollIntoView).toHaveBeenCalled()
+    expect(document.activeElement).toBe(document.body)
   })
 })

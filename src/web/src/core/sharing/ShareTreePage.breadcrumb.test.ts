@@ -124,16 +124,16 @@ describe('ShareTreePage: a breadcrumb click keeps the share key', () => {
 })
 
 // Back to where the guest was (`../node/returnTo.ts`), as a member: a crumb up hands the level the child the guest came
-// through, whose row it brings back and marks.
+// through, whose row it brings back (`data-node-id`, where the level finds it).
 describe('ShareTreePage: a crumb up brings back the folder the guest came from', () => {
   it('one level up: the folder left; to the root: the top folder it lay in', async () => {
     const w = await mountAtNested()
     await clickCrumb(w, 'Briefe')
     expect(w.findComponent(LevelView).props('returnTo')).toBe(NESTED)
-    expect(w.find('li.is-returned').attributes('data-node-id')).toBe(NESTED)
+    expect(w.find(`li[data-node-id="${NESTED}"]`).exists()).toBe(true)
 
     await clickCrumb(w, 'Familie')
     expect(w.findComponent(LevelView).props('returnTo')).toBe(LETTERS)
-    expect(w.find('li.is-returned').attributes('data-node-id')).toBe(LETTERS)
+    expect(w.find(`li[data-node-id="${LETTERS}"]`).exists()).toBe(true)
   })
 })

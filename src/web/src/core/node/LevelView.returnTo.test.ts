@@ -1,7 +1,8 @@
 // @vitest-environment happy-dom
 // The level's half of "back to where I was" (`returnTo.ts`): the host names the child the view came up from, and the
-// level brings that row back into sight, gives it the focus and shows its ring until the focus leaves it - once per
-// arrival, never again on a re-render under the same place (a live poll).
+// level brings that row back into sight and gives it the focus, unmarked (owner 2026-11-12: the row looks as it always
+// does; only a keyboard's `:focus-visible` rings it) - once per arrival, never again on a re-render under the same place
+// (a live poll).
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { mount, flushPromises, type VueWrapper } from '@vue/test-utils'
 
@@ -62,11 +63,13 @@ async function mountWith(returnTo: string | null) {
 const mainOf = (title: string) => rowOf(w!, title).find('button.veyq-level-item-main').element as HTMLElement
 
 describe('the level brings the row it was left through back', () => {
-  it('on arrival: that row holds the focus and shows its ring; nothing else does', async () => {
+  it('on arrival: that row holds the focus, and looks as it does on any other arrival', async () => {
+    await mountWith(null)
+    const plain = rowOf(w!, 'last').classes()
+    w!.unmount()
     await mountWith('last')
     expect(document.activeElement).toBe(mainOf('last'))
-    expect(rowOf(w!, 'last').classes()).toContain('is-returned')
-    expect(rowOf(w!, 'first').classes()).not.toContain('is-returned')
+    expect(rowOf(w!, 'last').classes(), 'no mark of its own').toEqual(plain)
     expect(rowOf(w!, 'last').attributes('data-node-id')).toBe('last')
   })
 
@@ -75,17 +78,9 @@ describe('the level brings the row it was left through back', () => {
     expect(document.activeElement).toBe(mainOf('Alps'))
   })
 
-  it('without a returnTo the level opens as ever: no focus taken, no ring', async () => {
+  it('without a returnTo the level opens as ever: no focus taken', async () => {
     await mountWith(null)
     expect(document.activeElement).toBe(document.body)
-    expect(w!.findAll('.is-returned')).toHaveLength(0)
-  })
-
-  it('the ring goes with the focus', async () => {
-    await mountWith('last')
-    mainOf('first').focus()
-    await flushPromises()
-    expect(rowOf(w!, 'last').classes()).not.toContain('is-returned')
   })
 
   it('once per arrival: a re-render under the same place (a live poll) does not take the focus back', async () => {
@@ -106,6 +101,5 @@ describe('the level brings the row it was left through back', () => {
   it('a child the level does not show (deleted, filtered) is not looked for', async () => {
     await mountWith('gone')
     expect(document.activeElement).toBe(document.body)
-    expect(w!.findAll('.is-returned')).toHaveLength(0)
   })
 })

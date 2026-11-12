@@ -509,22 +509,16 @@ watch(canSelect, (can) => {
 watch(levelItems, (now) => selection.retain(now.keys()))
 
 // --- back to where the view came from (a breadcrumb or Back) ------------------------------------------------------------
-// The host names the child it came up from; its row comes back into sight and takes the focus, its ring shown (`is-returned`)
-// until the focus leaves it - a mouse click on a crumb gives no `:focus-visible`. Once per arrival: a re-render under the same
-// place (a live poll) moves nothing. A row the shown tab or a presentation hides is not looked for.
+// The host names the child it came up from; its row comes back into sight and takes the focus - unmarked (owner 2026-11-12):
+// only a keyboard's `:focus-visible` shows a ring, as anywhere. Once per arrival: a re-render under the same place (a live
+// poll) moves nothing. A row the shown tab or a presentation hides is not looked for.
 const root = ref<HTMLElement | null>(null)
-const returned = ref<string | null>(null)
 async function revealReturn() {
-  returned.value = null
   const id = props.returnTo
   if (!id) return
   await nextTick()
   const row = [...(root.value?.querySelectorAll<HTMLElement>('[data-node-id]') ?? [])].find((el) => el.dataset.nodeId === id)
-  if (!row || !bringIntoView(row)) return
-  returned.value = id
-  row.addEventListener('focusout', () => {
-    if (returned.value === id) returned.value = null
-  }, { once: true })
+  if (row) bringIntoView(row)
 }
 onMounted(() => void revealReturn())
 watch([() => props.returnTo, () => props.folder?.id ?? null], () => void revealReturn())
@@ -872,7 +866,6 @@ async function onDrop(e: DragEvent): Promise<void> {
             :dragging="!!dragged?.has(item.key)"
             :drop-target="dropOver === item.key"
             :node-id="item.key"
-            :returned="returned === item.key"
             @toggle-select="selection.toggle(item.key)"
             @dragstart="onDragStart($event, item)"
             @dragend="onDragEnd"
