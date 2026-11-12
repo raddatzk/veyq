@@ -9,6 +9,11 @@
 // (Ctrl+S, Escape). A refusal is the page's InfoBar and its field's description; the rate's note is the rate box's
 // description. The form is built anew only when its shape changes (a payer, an item, the kind…), never while typing; a
 // box is set from the state only by TypedText's rule, so what is typed and the caret stay.
+//
+// An entry's receipts are a section of their own: "Add receipt" opens the open picker for images and PDFs (several at
+// once), whose paths go to the core (Editor.AddReceipts: it reads each, at most a receipt's size, and holds what it takes
+// until the save); a kept receipt opens its viewer (ReceiptViewerDialog), each one is taken off by its button
+// (Editor.DropReceipt); what the core refused is said under the section. Nothing of a receipt is read here.
 using System;
 using System.Collections.Generic;
 using System.Globalization;
@@ -290,6 +295,11 @@ internal sealed class EntryEditorPage : IDisposable
         public TextBlock? ItemsRefusal;
         public TextBlock? TransferRefusal;
         public required StackPanel Preview;
+        public required StackPanel Receipts;
+        public required HyperlinkButton AddReceipt;
+        public required TextBlock RefusedPick;
+        /// <summary>What the receipts' rows were drawn from: they are built anew only when it changes.</summary>
+        public string ReceiptsDrawn = "";
         public required TextBlock Invalid;
         public List<string> People = [];
         /// <summary>Every ComboBox of the form: its drop-down closed before the form is replaced or the page goes (UI
@@ -373,6 +383,7 @@ internal sealed class EntryEditorPage : IDisposable
                 _form = Build(s);
             }
             Update(_form, s);
+            DrawReceipts(_form, s);
         }
         finally
         {
@@ -418,6 +429,9 @@ internal sealed class EntryEditorPage : IDisposable
             Date = date,
             Currency = new AutoSuggestBox(),
             Preview = new StackPanel { Spacing = 4 },
+            Receipts = new StackPanel { Spacing = 4 },
+            AddReceipt = new HyperlinkButton { Content = Words.ReceiptsAdd() },
+            RefusedPick = Problem("ed-receipts-refused"),
             Invalid = invalid,
             People = s.people.Select(p => p.id).ToList(),
         };
@@ -548,6 +562,15 @@ internal sealed class EntryEditorPage : IDisposable
             }
             column.Children.Add(form.Preview);
         }
+        // the receipts: added through the open picker, each opened or taken off
+        column.Children.Add(Heading(Words.ReceiptsTitle()));
+        AutomationProperties.SetAutomationId(form.Receipts, "ed-receipts");
+        column.Children.Add(form.Receipts);
+        AutomationProperties.SetAutomationId(form.AddReceipt, "ed-add-receipt");
+        form.AddReceipt.Click += (_, _) => PickReceipts();
+        column.Children.Add(form.AddReceipt);
+        form.RefusedPick.Text = Words.ReceiptsRefused();
+        column.Children.Add(form.RefusedPick);
         if (!s.isNew && _entry is { } entry) column.Children.Add(History(entry));
         form.Combos.AddRange(new[] { form.Kind, form.Category, form.From, form.To }.OfType<ComboBox>().Concat(form.Payers.Select(p => p.Person)));
         foreach (var c in column.Children.OfType<Control>()) c.IsEnabled = s.editable || c is Expander;
@@ -679,6 +702,91 @@ internal sealed class EntryEditorPage : IDisposable
             }
         };
         return expander;
+    }
+
+    /// <summary>The receipts' rows, built anew only when what they show changed (never on a keystroke).</summary>
+    private void DrawReceipts(Form f, EditorShown s)
+    {
+        f.AddReceipt.Visibility = s.editable && s.canAddReceipt ? Visibility.Visible : Visibility.Collapsed;
+        f.RefusedPick.Visibility = s.refusedPick ? Visibility.Visible : Visibility.Collapsed;
+        var drawn = $"{s.editable}|" + string.Join(",", s.receipts.Select(r => $"{r.id}={r.name}:{r.held}:{r.opens}"));
+        if (f.ReceiptsDrawn == drawn) return;
+        f.ReceiptsDrawn = drawn;
+        f.Receipts.Children.Clear();
+        if (s.receipts.Count == 0)
+        {
+            f.Receipts.Children.Add(new TextBlock { Text = Words.ReceiptsNone(), Foreground = Brush("TextFillColorSecondaryBrush") });
+            return;
+        }
+        var i = 0;
+        foreach (var r in s.receipts)
+        {
+            var row = new Grid { ColumnSpacing = 8 };
+            row.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+            row.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+            UIElement label;
+            if (r.opens)
+            {
+                var open = new HyperlinkButton { Content = r.name };
+                AutomationProperties.SetAutomationId(open, $"ed-receipt:{i}");
+                var (id, name) = (r.id, r.name);
+                open.Click += (_, _) =>
+                {
+                    Log.Write("receipt viewer open");
+                    ReceiptViewerDialog.Open(_window, _pot, id, name, _say);
+                };
+                label = open;
+            }
+            else
+            {
+                var text = new StackPanel { VerticalAlignment = VerticalAlignment.Center, Padding = new Thickness(12, 4, 0, 4) };
+                text.Children.Add(new TextBlock { Text = r.name, TextWrapping = TextWrapping.Wrap });
+                if (r.held) text.Children.Add(new TextBlock { Text = Words.ReceiptsHeld(), Style = (Style)Application.Current.Resources["CaptionTextBlockStyle"], Foreground = Brush("TextFillColorSecondaryBrush") });
+                AutomationProperties.SetAutomationId(text, $"ed-receipt:{i}");
+                AutomationProperties.SetName(text, r.held ? $"{r.name}, {Words.ReceiptsHeld()}" : r.name);
+                label = text;
+            }
+            row.Children.Add(label);
+            if (s.editable)
+            {
+                var remove = new Button { Content = new SymbolIcon(Symbol.Remove), VerticalAlignment = VerticalAlignment.Center };
+                AutomationProperties.SetName(remove, Words.ReceiptsRemove());
+                ToolTipService.SetToolTip(remove, Words.ReceiptsRemove());
+                AutomationProperties.SetAutomationId(remove, $"ed-remove-receipt:{i}");
+                var id = r.id;
+                remove.Click += (_, _) =>
+                {
+                    if (_editor is { } e) Act.Send(new Call.EditorDropReceipt { editor = e, receipt = id });
+                };
+                Grid.SetColumn(remove, 1);
+                row.Children.Add(remove);
+            }
+            f.Receipts.Children.Add(row);
+            i++;
+        }
+    }
+
+    /// <summary>"Add receipt": the open picker for images and PDFs, several at once; the core reads what was picked.</summary>
+    private async void PickReceipts()
+    {
+        if (_editor is not { } e) return;
+        try
+        {
+            var picker = new Windows.Storage.Pickers.FileOpenPicker { SuggestedStartLocation = Windows.Storage.Pickers.PickerLocationId.DocumentsLibrary };
+            foreach (var ext in new[] { ".pdf", ".jpg", ".jpeg", ".png", ".gif", ".webp", ".heic", ".heif", ".avif", ".bmp" }) picker.FileTypeFilter.Add(ext);
+            WinRT.Interop.InitializeWithWindow.Initialize(picker, WinRT.Interop.WindowNative.GetWindowHandle(_window));
+            var files = await picker.PickMultipleFilesAsync();
+            if (files is null || files.Count == 0) return;
+            // the core opens each path itself
+            var paths = files.Select(f => f.Path).Where(p => !string.IsNullOrEmpty(p)).ToList();
+            var (answer, _) = await Core.CallAsync(new Call.EditorAddReceipts { editor = e, paths = paths });
+            Log.Write($"{paths.Count} receipts picked: {answer.GetType().Name}");
+        }
+        catch (Exception ex)
+        {
+            // an exception out of an async void would end the app in combase, with nothing in the log
+            Log.Write($"the receipts' pick failed: {ex.GetType().Name}: {ex.Message}");
+        }
     }
 
     /// <summary>Everything <paramref name="s"/> says, set on the form's controls (the drawing flag held).</summary>
