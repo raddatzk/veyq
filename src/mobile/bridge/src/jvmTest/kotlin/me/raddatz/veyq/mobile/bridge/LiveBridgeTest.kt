@@ -1777,9 +1777,10 @@ class LiveBridgeTest {
         val tenant = account.open(account.tenants.first { origin.contains(it.domain) })
         val scope = tenant.spaces().first { it.kind == "PERSONAL" }.scopeId
         if (System.getenv("VEYQ_LIVE_DEPOT_PASS_PURGE") == "1") {
-            val folder = assertNotNull(tenant.nodes().firstOrNull { it.scopeId == scope && it.parentId == null && it.name == folderName }, "no $folderName")
-            println("trash $folderName: ${me.raddatz.veyq.mobile.session.NodeTrash.delete(tenant, scope, folder.nodeId)}")
-            println("purge $folderName: ${me.raddatz.veyq.mobile.session.NodeTrash.purge(tenant, scope, folder.nodeId)}")
+            // a pass's node at any space's top level (a folder, a drop box a pass made there), its whole subtree
+            val folder = assertNotNull(tenant.nodes().firstOrNull { it.parentId == null && it.name == folderName }, "no $folderName")
+            println("trash $folderName: ${me.raddatz.veyq.mobile.session.NodeTrash.delete(tenant, folder.scopeId, folder.nodeId)}")
+            println("purge $folderName: ${me.raddatz.veyq.mobile.session.NodeTrash.purge(tenant, folder.scopeId, folder.nodeId)}")
             return@runBlocking
         }
         val made = me.raddatz.veyq.mobile.session.FolderCreate.create(tenant, scope, null, folderName)

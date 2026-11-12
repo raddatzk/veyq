@@ -259,6 +259,9 @@ internal class Bridge<A : Connection, T : Any>(compose: () -> Composition<A, T>)
             is Call.EditorChange -> edit(call)
             is Call.EditorDropReceipt -> editors[call.editor]?.model?.dropReceipt(call.receipt).done(Answer.Why.NO_SUCH_EDITOR)
             is Call.PotCreateName -> named(call)
+            // a link's label and password are typed too: a Save sent after the last keystroke finds it applied
+            is Call.ShareLabel -> shares[call.share]?.label(call.label).done(Answer.Why.NO_SUCH_SHARE)
+            is Call.SharePassword -> shares[call.share]?.password(call.password).done(Answer.Why.NO_SUCH_SHARE)
             else -> null
         }
         scope.launch {
@@ -644,8 +647,8 @@ internal class Bridge<A : Connection, T : Any>(compose: () -> Composition<A, T>)
             is Call.ShareEdit -> shares[call.share]?.edit(call.link).done(Answer.Why.NO_SUCH_SHARE)
             is Call.ShareRole -> shares[call.share]?.role(call.role).done(Answer.Why.NO_SUCH_SHARE)
             is Call.ShareLabel -> shares[call.share]?.label(call.label).done(Answer.Why.NO_SUCH_SHARE)
-            is Call.ShareLockOn -> shares[call.share]?.passwordOn(call.on).done(Answer.Why.NO_SUCH_SHARE)
             is Call.SharePassword -> shares[call.share]?.password(call.password).done(Answer.Why.NO_SUCH_SHARE)
+            is Call.ShareLockOn -> shares[call.share]?.passwordOn(call.on).done(Answer.Why.NO_SUCH_SHARE)
             is Call.ShareEndOn -> shares[call.share]?.endOn(call.on).done(Answer.Why.NO_SUCH_SHARE)
             is Call.ShareEndDay -> shares[call.share]?.endDay(call.day).done(Answer.Why.NO_SUCH_SHARE)
             is Call.ShareCancelForm -> shares[call.share]?.cancelForm().done(Answer.Why.NO_SUCH_SHARE)
