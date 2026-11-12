@@ -99,6 +99,8 @@ class AppModel(app: Application) : AndroidViewModel(app) {
     init {
         // a copy sent to another app in an earlier run has been read by now (or never will be)
         clearSentCopies()
+        // a viewed file's decrypted copy that builds before core's file page left in the cache (`view-…`)
+        app.cacheDir.listFiles { f -> f.name.startsWith("view-") }?.forEach { runCatching { it.delete() } }
     }
 
     private val prefs = app.getSharedPreferences("veyq-recent", Context.MODE_PRIVATE)
@@ -337,6 +339,8 @@ class AppModel(app: Application) : AndroidViewModel(app) {
         tenantSession?.let { was -> if (was.account !== account || was.tenant.tenantId != tenant.tenantId) uploads.clear() }
         tenantSession = t
         rows = me.raddatz.veyq.mobile.RowDetails.Read.EMPTY
+        openFile?.close()
+        openFile = null
         val pots = me.raddatz.veyq.mobile.expenses.PotModel(t, System::currentTimeMillis)
         potWatch?.cancel()
         potModel = pots
@@ -482,7 +486,8 @@ class AppModel(app: Application) : AndroidViewModel(app) {
         val read = me.raddatz.veyq.mobile.RowDetails.read(t, rows)
         if (tenantSession !== t) return
         rows = read
-        _files.value = read.files
+        // the file on screen reads itself anew: a replaced blob is shown
+        openFile?.reload()
         val app = getApplication<Application>()
         _rowDetails.value = read.details.mapValues { (_, facts) -> facts.map { app.piece(it) } }
         readCovers(t, read.covers)
@@ -533,19 +538,27 @@ class AppModel(app: Application) : AndroidViewModel(app) {
     private fun depotSettled(item: me.raddatz.veyq.mobile.blob.UploadQueue.Item) {
         viewModelScope.launch {
             val app = getApplication<Application>()
-            tenantSession?.let { refreshLists(it) }
-            val offer = me.raddatz.veyq.mobile.depot.DepotFiles.offerFor(item) { _files.value[it]?.blobId } ?: return@launch
+            val t = tenantSession ?: return@launch
+            refreshLists(t)
+            val offer = runCatching { me.raddatz.veyq.mobile.depot.DepotFiles.offerAfter(t, item) }.getOrNull() ?: return@launch
             uploads.remove(item.id)
-            notify(Notice(app.text(offer.notice), app.words(offer.action)) { replace(offer.nodeId, offer.source, offer.expectedBlobId) })
+            notify(Notice(app.text(offer.notice), app.words(offer.action)) {
+                runCatching { me.raddatz.veyq.mobile.depot.DepotFiles.take(t, offer) }.getOrNull()?.let { enqueueReplace(it) }
+            })
         }
     }
 
-    /** Queues file [nodeId]'s content replaced with [source] over [expected]; content changed meanwhile offers "Replace anyway". */
-    fun replace(nodeId: String, source: me.raddatz.veyq.mobile.blob.UploadSource, expected: String?) {
-        val t = tenantSession ?: return
-        val file = _files.value[nodeId] ?: return
-        val name = source.name
-        uploads.enqueue(listOf(me.raddatz.veyq.mobile.depot.DepotFiles.ReplaceJob(t, file, source, expected, name)), name, nodeId, ::depotSettled, null)
+    /** Queues a replace of a file's content; content changed meanwhile offers "Replace anyway". */
+    private fun enqueueReplace(job: me.raddatz.veyq.mobile.depot.DepotFiles.ReplaceJob) {
+        uploads.enqueue(listOf(job), job.name, job.file.nodeId, ::depotSettled, null)
+    }
+
+    /** The header's "Replace…": the picked document replaces the content [file] shows (core's `FileModel.replace`). */
+    fun replaceFile(file: me.raddatz.veyq.mobile.depot.FileModel, uri: android.net.Uri) {
+        viewModelScope.launch {
+            val p = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) { picked(uri) } ?: return@launch
+            file.replace(source(p))?.let { enqueueReplace(it) }
+        }
     }
 
     /**
@@ -619,10 +632,15 @@ class AppModel(app: Application) : AndroidViewModel(app) {
 
     // ---- Depot's files (the application's `depot/`) ----
 
-    /** Who uploaded [file]'s content (Depot's `uploaderOf`); null where nobody is to be named. */
-    suspend fun uploader(file: me.raddatz.veyq.mobile.depot.DepotFiles.File): me.raddatz.veyq.mobile.depot.Uploaders.Uploader? {
-        val t = tenantSession ?: return null
-        return runCatching { me.raddatz.veyq.mobile.depot.Uploaders.of(t, file) }.getOrNull()
+    /** The file page on screen (core's `FileModel`): one at a time, read anew whenever the lists are. */
+    private var openFile: me.raddatz.veyq.mobile.depot.FileModel? = null
+
+    /** The page of file [node] (core's `FileModel` over the shell; Android has a share sheet, so it sends a copy). */
+    fun fileModel(node: me.raddatz.veyq.mobile.navigation.NodeAt): me.raddatz.veyq.mobile.depot.FileModel? {
+        openFile?.takeIf { it.node == node }?.let { return it }
+        val m = shellModel ?: return null
+        openFile?.close()
+        return m.fileModel(node, shares = true).also { openFile = it }
     }
 
     /** "Add files only" at [parentId] of [scopeId] (null: the space's top level, the web's level share): a drop box there with its first link. */
@@ -756,37 +774,6 @@ class AppModel(app: Application) : AndroidViewModel(app) {
         return runCatching { me.raddatz.veyq.mobile.depot.DropBoxes.folders(t, scopeId, nodeId) }.getOrNull()
     }
 
-    /** Every file of the tenant with its content's reference and opened meta, by node id (`DepotFiles.list`). */
-    private val _files = MutableStateFlow<Map<String, me.raddatz.veyq.mobile.depot.DepotFiles.File>>(emptyMap())
-    val files: StateFlow<Map<String, me.raddatz.veyq.mobile.depot.DepotFiles.File>> = _files.asStateFlow()
-
-    /** What [file]'s page shows (node [nodeName]), read as far as it needs (core's `FileView.open`); null when it did not read. */
-    suspend fun openFileView(file: me.raddatz.veyq.mobile.depot.DepotFiles.File, nodeName: String): me.raddatz.veyq.mobile.depot.FileView.Opened? {
-        val t = tenantSession ?: return null
-        return kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
-            runCatching { me.raddatz.veyq.mobile.depot.FileView.open(t, file, nodeName) }.getOrNull()
-        }
-    }
-
-    /** [file]'s content a frame at a time ([DepotFiles.read]). */
-    suspend fun readFile(file: me.raddatz.veyq.mobile.depot.DepotFiles.File, first: Int = 0, until: Int = Int.MAX_VALUE, sink: suspend (ByteArray) -> Unit) {
-        val t = tenantSession ?: throw IllegalStateException("signed out")
-        kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) { me.raddatz.veyq.mobile.depot.DepotFiles.read(t, file, first, until, sink) }
-    }
-
-    /** Writes file [ref]'s content to [out] as it is read; nothing left out, or null when it did not finish. */
-    suspend fun downloadFile(ref: me.raddatz.veyq.mobile.navigation.NodeAt, out: java.io.OutputStream): List<me.raddatz.veyq.mobile.export.NodeExport.Skipped>? {
-        val file = _files.value[ref.nodeId]?.takeIf { it.hasContent } ?: return null
-        val ok = runCatching {
-            out.buffered(1 shl 16).let { b ->
-                readFile(file) { b.write(it) }
-                b.flush()
-            }
-        }.isSuccess
-        runCatching { out.close() }
-        return if (ok) emptyList() else null
-    }
-
     /**
      * The file a person is about to send a copy of to another app ("Send a copy…"), while the shell asks them first: the copy
      * leaves veyq decrypted. The data are theirs; the app says what happens and never forbids it.
@@ -811,18 +798,19 @@ class AppModel(app: Application) : AndroidViewModel(app) {
      * could not be written.
      */
     suspend fun copyForSending(ref: me.raddatz.veyq.mobile.navigation.NodeAt): Pair<android.net.Uri, String>? {
-        val file = _files.value[ref.nodeId]?.takeIf { it.hasContent } ?: return null
+        val header = fileModel(ref)?.current?.header?.takeIf { it.facts.hasContent } ?: return null
         val app = getApplication<Application>()
         return kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
             clearSentCopies()
             val dir = java.io.File(sharedDir, java.util.UUID.randomUUID().toString()).apply { mkdirs() }
-            val out = java.io.File(dir, me.raddatz.veyq.mobile.depot.DepotFiles.downloadName(file, ref.name))
-            val ok = runCatching { out.outputStream().buffered().use { o -> readFile(file) { o.write(it) } } }.isSuccess
+            val out = java.io.File(dir, header.downloadName)
+            // the file itself (core's download of a file), the one decrypted copy the person asked for; swept at the next start
+            val ok = out.outputStream().let { downloadNode(ref, it) } != null
             if (!ok) {
                 dir.deleteRecursively()
                 return@withContext null
             }
-            androidx.core.content.FileProvider.getUriForFile(app, "${app.packageName}.files", out) to (file.type ?: "application/octet-stream")
+            androidx.core.content.FileProvider.getUriForFile(app, "${app.packageName}.files", out) to header.mediaType
         }
     }
 
@@ -1089,10 +1077,10 @@ class AppModel(app: Application) : AndroidViewModel(app) {
     }
 
     /**
-     * Writes folder [ref] and everything under it as the web's ZIP into [out] (core's `ShellModel.download`); what it left
-     * out, or null when it did not finish. [out] is closed either way.
+     * Writes node [ref]'s download into [out] (core's `ShellModel.download`: a file the file itself, any other node with
+     * everything under it as the web's ZIP); what it left out, or null when it did not finish. [out] is closed either way.
      */
-    suspend fun downloadFolder(ref: me.raddatz.veyq.mobile.navigation.NodeAt, out: java.io.OutputStream): List<me.raddatz.veyq.mobile.export.NodeExport.Skipped>? = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+    suspend fun downloadNode(ref: me.raddatz.veyq.mobile.navigation.NodeAt, out: java.io.OutputStream): List<me.raddatz.veyq.mobile.export.NodeExport.Skipped>? = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
         val m = shellModel ?: return@withContext null
         val deleted = getApplication<Application>().getString(R.string.pot_deleted_person)
         val skipped = runCatching {

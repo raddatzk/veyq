@@ -18,11 +18,9 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.ImageBitmap
@@ -32,121 +30,62 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.viewinterop.AndroidView
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.withContext
+import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
-import me.raddatz.veyq.mobile.blob.Sniff
-import me.raddatz.veyq.mobile.depot.DepotFiles
+import kotlinx.coroutines.withContext
+import me.raddatz.veyq.mobile.depot.FileModel
 import me.raddatz.veyq.mobile.depot.FileView
 import me.raddatz.veyq.mobile.navigation.ObjectRef
 
-/** What a file's page shows, once read: the decision and what it needs (the web's `FileView`). */
-private sealed interface Shown {
-    data object Loading : Shown
-    data object Failed : Shown
-    data class Message(val kind: FileView.Kind) : Shown
-    data class Picture(val image: ImageBitmap) : Shown
-    data class Text(val text: String, val truncated: Boolean) : Shown
-    /** A PDF: its decrypted copy and the renderer over it, which draws a page when it scrolls into view. */
-    class Pdf(val file: java.io.File, val pfd: android.os.ParcelFileDescriptor, val renderer: android.graphics.pdf.PdfRenderer) : Shown {
-        val lock = kotlinx.coroutines.sync.Mutex()
-    }
-    data class Media(val file: java.io.File) : Shown
-}
-
 /**
- * A file's page (Depot's `FileDetail` and `FileViewer`, `docs/apps/depot.md` § The viewer): its facts — size, type,
- * modified — and the file shown IN THE APP by what its first frame's bytes are (core's `FileView`): an image, a PDF drawn
- * page by page as pictures (no links, no forms), a text as plain text (the first MiB), an audio or video played here; a
- * file the bytes do not name, or one too large, is offered as a download. Nothing is handed to another app: a decrypted
- * PDF or media file lives in the app's cache, named by its SNIFFED type, only while the page is open.
+ * A file's page (Depot's `FileDetail` and `FileViewer`, `docs/apps/depot.md` § The viewer), drawn from core's `FileModel`:
+ * its facts and uploader, and the file shown IN THE APP as core decided by its bytes — an image (decoded to core's edge), a
+ * PDF drawn page by page as pictures (no links, no forms), a text as plain text, an audio or video played here through
+ * core's range reader; a file the bytes do not name, or one too large, is offered as a download. Nothing decrypted is
+ * written to show it (ADR 0047): the PDF is handed to the renderer through an anonymous in-memory file (`memfd`), the
+ * medium is read in ranges.
  */
 @Composable
 internal fun FileScreen(ref: ObjectRef, model: AppModel) {
     val palette = LocalPalette.current
-    val context = LocalContext.current
-    val files by model.files.collectAsStateWithLifecycle()
-    val file = files[ref.nodeId]
-    var shown by remember(file?.blobId) { mutableStateOf<Shown>(Shown.Loading) }
-    LaunchedEffect(file?.blobId) {
-        val f = file ?: return@LaunchedEffect
-        if (!f.hasContent) return@LaunchedEffect
-        shown = runCatching { show(context, model, f, ref.name) }.getOrDefault(Shown.Failed)
+    val node = ref.at
+    val file = remember(node) { model.fileModel(node) }
+    if (file == null) {
+        CircularProgressIndicator(Modifier.padding(16.dp))
+        return
     }
-    // the decrypted copy lives only while the page is open
-    DisposableEffect(shown) {
-        val s = shown
-        onDispose {
-            when (s) {
-                is Shown.Pdf -> {
-                    runCatching { s.renderer.close() }
-                    runCatching { s.pfd.close() }
-                    s.file.delete()
-                }
-                is Shown.Media -> s.file.delete()
-                else -> Unit
-            }
-        }
-    }
+    val state by file.state.collectAsStateWithLifecycle()
     Column(Modifier.fillMaxSize().padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-        // the facts (Depot's `detail`): size, the sealed type (a claim, shown as such), modified
-        if (file != null && file.hasContent) {
-            val facts = me.raddatz.veyq.mobile.depot.DepotFiles.facts(file).map { piece(it) }
-            Text(facts.joinToString(" · "), style = MaterialTheme.typography.bodySmall, color = role(palette.muted))
-            // who uploaded it (Depot's header fact): a member by name, one who left, a guest by the name it gave itself
-            var uploader by remember(file.blobId, file.uploaderKey) { mutableStateOf<me.raddatz.veyq.mobile.depot.Uploaders.Uploader?>(null) }
-            LaunchedEffect(file.blobId, file.uploaderKey) { uploader = model.uploader(file) }
-            uploader?.let { u ->
-                Text(say(me.raddatz.veyq.mobile.depot.Uploaders.words(u)), style = MaterialTheme.typography.bodySmall, color = role(palette.muted))
-            }
+        // the facts (Depot's `detail`): size, the sealed type (a claim, shown as such), modified; who uploaded it
+        if (state.facts.isNotEmpty()) {
+            Text(state.facts.map { piece(it) }.joinToString(" · "), style = MaterialTheme.typography.bodySmall, color = role(palette.muted))
         }
+        state.uploader?.let { Text(say(it), style = MaterialTheme.typography.bodySmall, color = role(palette.muted)) }
         Box(Modifier.fillMaxWidth().weight(1f), contentAlignment = Alignment.TopCenter) {
-            when {
-                file == null -> CircularProgressIndicator()
-                !file.hasContent -> Note(stringResource(R.string.depot_not_uploaded))
-                else -> when (val s = shown) {
-                    Shown.Loading -> Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                        CircularProgressIndicator()
-                        Text(stringResource(R.string.file_opening), color = role(palette.muted), modifier = Modifier.padding(top = 8.dp))
-                    }
-                    Shown.Failed -> Note(stringResource(R.string.file_open_failed))
-                    is Shown.Message -> Note(say(FileView.message(s.kind)))
-                    is Shown.Picture -> Image(s.image, ref.name, Modifier.fillMaxWidth(), contentScale = ContentScale.Fit)
-                    is Shown.Text -> Column(Modifier.fillMaxSize()) {
-                        if (s.truncated) Text(stringResource(R.string.file_text_truncated), style = MaterialTheme.typography.bodySmall, color = role(palette.muted))
-                        LazyColumn(Modifier.fillMaxSize().horizontalScroll(rememberScrollState())) {
-                            item {
-                                SelectionContainer {
-                                    Text(s.text, fontFamily = FontFamily.Monospace, style = MaterialTheme.typography.bodySmall)
-                                }
+            when (val s = state.shown) {
+                FileModel.Shown.Loading -> Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    CircularProgressIndicator()
+                    Text(stringResource(R.string.file_opening), color = role(palette.muted), modifier = Modifier.padding(top = 8.dp))
+                }
+                FileModel.Shown.Failed -> Note(stringResource(R.string.file_open_failed))
+                FileModel.Shown.NotUploaded -> Note(stringResource(R.string.depot_not_uploaded))
+                is FileModel.Shown.Message -> Note(say(s.words))
+                is FileModel.Shown.Image -> ShownImage(s, ref.name)
+                is FileModel.Shown.Text -> Column(Modifier.fillMaxSize()) {
+                    if (s.truncated) Text(stringResource(R.string.file_text_truncated), style = MaterialTheme.typography.bodySmall, color = role(palette.muted))
+                    LazyColumn(Modifier.fillMaxSize().horizontalScroll(rememberScrollState())) {
+                        item {
+                            SelectionContainer {
+                                Text(s.text, fontFamily = FontFamily.Monospace, style = MaterialTheme.typography.bodySmall)
                             }
                         }
                     }
-                    is Shown.Pdf -> {
-                        val width = context.resources.displayMetrics.widthPixels
-                        LazyColumn(Modifier.fillMaxSize(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                            items(s.renderer.pageCount) { i ->
-                                // a page drawn when it scrolls into view, one at a time (the renderer draws one page at once)
-                                val page by androidx.compose.runtime.produceState<ImageBitmap?>(null, s, i) {
-                                    value = withContext(Dispatchers.IO) { s.lock.withLockPage { renderPage(s.renderer, i, width) } }
-                                }
-                                page?.let { Image(it, null, Modifier.fillMaxWidth(), contentScale = ContentScale.FillWidth) }
-                                    ?: Box(Modifier.fillMaxWidth().heightIn(min = 400.dp))
-                            }
-                        }
-                    }
-                    is Shown.Media -> AndroidView(
-                        factory = { c ->
-                            android.widget.VideoView(c).apply {
-                                setVideoPath(s.file.path)
-                                setMediaController(android.widget.MediaController(c).also { it.setAnchorView(this) })
-                                setOnPreparedListener { start() }
-                            }
-                        },
-                        modifier = Modifier.fillMaxWidth().heightIn(min = 240.dp),
-                    )
+                }
+                is FileModel.Shown.Pdf -> ShownPdf(s)
+                is FileModel.Shown.Media -> ReaderPlayer(s.reader, s, 16f / 9f, Modifier.fillMaxWidth().heightIn(min = 240.dp)) {
+                    Note(say(FileView.message(FileView.Kind.UNSUPPORTED)))
                 }
             }
         }
@@ -158,43 +97,86 @@ private fun Note(text: String) {
     Text(text, color = role(LocalPalette.current.muted), modifier = Modifier.padding(top = 24.dp))
 }
 
-/** Reads [f] as far as its view needs and makes it showable (off the main thread). */
-private suspend fun show(context: android.content.Context, model: AppModel, f: DepotFiles.File, nodeName: String): Shown {
-    // core decides and reads what the view needs (`FileView.open`); a PDF or a medium is streamed into a file here
-    val opened = model.openFileView(f, nodeName) ?: return Shown.Failed
-    val d = opened.decision
-    suspend fun toCache(): java.io.File {
-        val file = java.io.File(context.cacheDir, "view-${java.util.UUID.randomUUID()}.${d.fileExtension}")
-        file.outputStream().buffered().use { out -> model.readFile(f) { out.write(it) } }
-        return file
-    }
-    return when (d.kind) {
-        FileView.Kind.IMAGE -> withContext(Dispatchers.Default) {
-            val bytes = opened.bytes ?: return@withContext Shown.Message(FileView.Kind.UNSUPPORTED)
+/** An image decoded off the main thread to core's edge at most (`FileView.IMAGE_EDGE`), from the bytes in memory. */
+@Composable
+private fun ShownImage(s: FileModel.Shown.Image, name: String) {
+    val image by produceState<ImageBitmap?>(null, s) {
+        value = withContext(Dispatchers.Default) {
+            val bytes = s.bytes
             val bounds = android.graphics.BitmapFactory.Options().apply { inJustDecodeBounds = true }
             android.graphics.BitmapFactory.decodeByteArray(bytes, 0, bytes.size, bounds)
             var sample = 1
-            while (maxOf(bounds.outWidth, bounds.outHeight) / sample > 4096) sample *= 2
+            while (maxOf(bounds.outWidth, bounds.outHeight) / sample > s.edge) sample *= 2
             android.graphics.BitmapFactory.decodeByteArray(bytes, 0, bytes.size, android.graphics.BitmapFactory.Options().apply { inSampleSize = sample })
-                ?.let { Shown.Picture(it.asImageBitmap()) } ?: Shown.Message(FileView.Kind.UNSUPPORTED)
+                ?.asImageBitmap()
         }
-        FileView.Kind.TEXT -> Shown.Text(opened.text.orEmpty(), d.truncated)
-        FileView.Kind.PDF -> withContext(Dispatchers.IO) {
-            val file = toCache()
-            runCatching {
-                val pfd = android.os.ParcelFileDescriptor.open(file, android.os.ParcelFileDescriptor.MODE_READ_ONLY)
-                Shown.Pdf(file, pfd, android.graphics.pdf.PdfRenderer(pfd))
+    }
+    image?.let { Image(it, name, Modifier.fillMaxWidth(), contentScale = ContentScale.Fit) }
+        ?: CircularProgressIndicator()
+}
+
+/** A PDF opened over an anonymous in-memory file and the renderer over it; both closed with the page. */
+private class OpenPdf(val fd: android.os.ParcelFileDescriptor, val renderer: android.graphics.pdf.PdfRenderer) {
+    val lock = Mutex()
+
+    fun close() {
+        runCatching { renderer.close() }
+        runCatching { fd.close() }
+    }
+
+    companion object {
+        /**
+         * [bytes] written into a `memfd` (anonymous memory, no path, gone with its last descriptor: no plaintext at rest,
+         * ADR 0047) and handed to `PdfRenderer`; null where the renderer refuses it.
+         */
+        fun of(bytes: ByteArray): OpenPdf? {
+            val fd = runCatching { android.system.Os.memfd_create("veyq-pdf", 0) }.getOrNull() ?: return null
+            return runCatching {
+                java.io.FileOutputStream(fd).let { out ->
+                    out.write(bytes)
+                    out.flush()
+                }
+                android.system.Os.lseek(fd, 0, android.system.OsConstants.SEEK_SET)
+                val pfd = android.os.ParcelFileDescriptor.dup(fd)
+                runCatching { android.system.Os.close(fd) }
+                runCatching { OpenPdf(pfd, android.graphics.pdf.PdfRenderer(pfd)) }.getOrElse {
+                    runCatching { pfd.close() }
+                    null
+                }
             }.getOrElse {
-                file.delete()
-                Shown.Message(FileView.Kind.UNSUPPORTED)
+                runCatching { android.system.Os.close(fd) }
+                null
             }
         }
-        FileView.Kind.MEDIA -> withContext(Dispatchers.IO) { Shown.Media(toCache()) }
-        else -> Shown.Message(d.kind)
     }
 }
 
-private suspend fun <T> kotlinx.coroutines.sync.Mutex.withLockPage(f: () -> T): T = withLock { f() }
+/** A PDF's pages, each drawn when it scrolls into view, at most core's bound (`FileView.PDF_PAGES`), the rest said. */
+@Composable
+private fun ShownPdf(s: FileModel.Shown.Pdf) {
+    val context = LocalContext.current
+    val pdf by produceState<OpenPdf?>(null, s) { value = withContext(Dispatchers.IO) { OpenPdf.of(s.bytes) } }
+    DisposableEffect(pdf) {
+        val held = pdf
+        onDispose { held?.close() }
+    }
+    val open = pdf ?: return CircularProgressIndicator()
+    val total = open.renderer.pageCount
+    val width = context.resources.displayMetrics.widthPixels
+    LazyColumn(Modifier.fillMaxSize(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        items(FileView.pagesShown(total).coerceAtMost(s.pages)) { i ->
+            // a page drawn when it scrolls into view, one at a time (the renderer draws one page at once)
+            val page by produceState<ImageBitmap?>(null, open, i) {
+                value = withContext(Dispatchers.IO) { open.lock.withLock { renderPage(open.renderer, i, width) } }
+            }
+            page?.let { Image(it, null, Modifier.fillMaxWidth(), contentScale = ContentScale.FillWidth) }
+                ?: Box(Modifier.fillMaxWidth().heightIn(min = 400.dp))
+        }
+        FileView.pagesCut(total)?.let { cut ->
+            item { Text(say(cut), style = MaterialTheme.typography.bodySmall, color = role(LocalPalette.current.muted)) }
+        }
+    }
+}
 
 /** Page [i] drawn [width] pixels wide on white: a picture only (no links, no forms, no script). */
 private fun renderPage(r: android.graphics.pdf.PdfRenderer, i: Int, width: Int): ImageBitmap? = runCatching {

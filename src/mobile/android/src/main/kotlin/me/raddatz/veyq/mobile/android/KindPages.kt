@@ -2,7 +2,7 @@ package me.raddatz.veyq.mobile.android
 
 import androidx.compose.runtime.Composable
 import androidx.compose.material.icons.outlined.Upload
-import androidx.compose.material.icons.outlined.Send
+import androidx.compose.material.icons.automirrored.outlined.Send
 import androidx.compose.runtime.getValue
 import kotlinx.coroutines.launch
 import androidx.compose.ui.platform.LocalContext
@@ -29,7 +29,7 @@ internal object KindPages {
     /** Core's folder: its ZIP and its copy with everything under it the build exports and copies (`NodeExport`, `SubtreeCopy`). */
     private val folder = KindPage(header = { node, model ->
         HeaderContribution(
-            download = { out -> model.downloadFolder(node, out) },
+            download = { out -> model.downloadNode(node, out) },
         )
     })
 
@@ -46,7 +46,7 @@ internal object KindPages {
     /** Depot's drop box: its guests' folders (`DropBoxScreen`); never renamed; its cover; its ZIP and its copy (a plain folder). */
     private val dropBox = KindPage(header = { node, model ->
         HeaderContribution(
-            download = { out -> model.downloadFolder(node, out) },
+            download = { out -> model.downloadNode(node, out) },
         )
     }, body = { ref, _, model -> DropBoxScreen(ref, model) })
 
@@ -64,32 +64,28 @@ internal object KindPages {
 }
 
 @Composable
-private fun fileHeader(node: NodeAt, model: AppModel): HeaderContribution {
-    val files by model.files.collectAsStateWithLifecycle()
-    val f = files[node.nodeId]
-    val scope = androidx.compose.runtime.rememberCoroutineScope()
-    // the replace: the system's picker hands over one document, which replaces the content over the one listed
+private fun fileHeader(node: NodeAt, model: AppModel): HeaderContribution? {
+    // what the header offers on a file is core's (`FileModel`'s header: its facts, Replace, Send a copy, its download name)
+    val file = androidx.compose.runtime.remember(node) { model.fileModel(node) } ?: return null
+    val state by file.state.collectAsStateWithLifecycle()
+    val h = state.header ?: return null
+    // the replace: the system's picker hands over one document, which replaces the content shown
     val pick = androidx.activity.compose.rememberLauncherForActivityResult(androidx.activity.result.contract.ActivityResultContracts.OpenDocument()) { uri ->
-        val p = uri?.let { model.picked(it) } ?: return@rememberLauncherForActivityResult
-        model.replace(node.nodeId, model.source(p), f?.blobId)
+        uri?.let { model.replaceFile(file, it) }
     }
-    val has = f?.hasContent == true
     return HeaderContribution(
-        facts = me.raddatz.veyq.mobile.AppKinds.Facts(hasContent = has),
-        download = { out -> model.downloadFile(node, out) },
-        downloadName = me.raddatz.veyq.mobile.depot.DepotFiles.downloadName(f, node.name),
+        facts = h.facts,
+        download = { out -> model.downloadNode(node, out) },
+        downloadName = h.downloadName,
         downloadMime = "application/octet-stream",
-        actions = listOf(
-            OwnAction(
-                "replace", say(me.raddatz.veyq.mobile.depot.DepotFiles.replaceWord(f)),
-                androidx.compose.material.icons.Icons.Outlined.Upload,
-            ) { pick.launch(arrayOf("*/*")) },
-            // a decrypted copy to another app the person picks (the system's share sheet), after the shell's notice
-            OwnAction(
-                "send", stringResource(R.string.file_send), androidx.compose.material.icons.Icons.Outlined.Send,
-                me.raddatz.veyq.mobile.navigation.NodeHeader.Slot.MENU,
-            ) { model.askToSend(node) },
-        ).filter { it.id != "send" || has },
+        actions = h.own.map { a ->
+            when (a.id) {
+                me.raddatz.veyq.mobile.depot.FileModel.REPLACE ->
+                    OwnAction(a.id, say(h.label(a.id)!!), androidx.compose.material.icons.Icons.Outlined.Upload, a.slot) { pick.launch(arrayOf("*/*")) }
+                // a decrypted copy to another app the person picks (the system's share sheet), after the shell's notice
+                else -> OwnAction(a.id, say(h.label(a.id)!!), androidx.compose.material.icons.Icons.AutoMirrored.Outlined.Send, a.slot) { model.askToSend(node) }
+            }
+        },
     )
 }
 

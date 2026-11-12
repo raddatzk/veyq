@@ -47,7 +47,6 @@ import androidx.compose.material3.ListItemDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -69,8 +68,6 @@ import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.runBlocking
-import me.raddatz.veyq.mobile.blob.RangeReader
 import me.raddatz.veyq.mobile.memories.MediaDetails
 import me.raddatz.veyq.mobile.memories.MemoryMedia
 import me.raddatz.veyq.mobile.navigation.NodeRef
@@ -297,109 +294,15 @@ private fun LightboxPage(item: MemoryMedia.Item, model: AppModel, current: Boole
     }
 }
 
-/**
- * A video played as it is read (the web's range playback, ADR 0047): the platform's player reads the original through a
- * [MediaDataSource] over core's [RangeReader] — each range from the frames that hold it, opened on the device —, so the
- * plaintext is never held whole nor written anywhere. The platform's media controls; a tap shows or hides them.
- */
+/** A video played as it is read (the web's range playback, ADR 0047): core's range reader under the shared player. */
 @Composable
 private fun MediaVideo(item: MemoryMedia.Item, model: AppModel) {
-    val context = LocalContext.current
     val reader = remember(item.mediaId) { model.mediaReader(item) }
-    var failed by remember(item.mediaId) { mutableStateOf(reader == null) }
-    var aspect by remember(item.mediaId) {
-        val m = item.meta
-        mutableStateOf(if (m?.width != null && m.height != null) m.width!!.toFloat() / m.height!! else 16f / 9f)
-    }
-    if (failed || reader == null) {
+    val m = item.meta
+    val aspect = if (m?.width != null && m.height != null) m.width!!.toFloat() / m.height!! else 16f / 9f
+    ReaderPlayer(reader, item.mediaId, aspect) {
         Text(stringResource(R.string.memory_video_failed), color = Color.White, modifier = Modifier.padding(24.dp))
-        return
     }
-    val player = remember(item.mediaId) { android.media.MediaPlayer() }
-    val controller = remember(item.mediaId) { android.widget.MediaController(context) }
-    val prepared = remember(item.mediaId) { booleanArrayOf(false) }
-    DisposableEffect(player) {
-        onDispose {
-            controller.hide()
-            player.release()
-        }
-    }
-    Box(
-        Modifier.aspectRatio(aspect).clickable(interactionSource = null, indication = null) {
-            if (controller.isShowing) controller.hide() else controller.show()
-        },
-    ) {
-        AndroidView(
-            factory = { c ->
-                // a texture, not a surface view: it is drawn in the dialog's window, so it pages and fades with it
-                android.view.TextureView(c).also { view ->
-                    player.setDataSource(ReaderSource(reader))
-                    player.setOnVideoSizeChangedListener { _, w, h -> if (w > 0 && h > 0) aspect = w.toFloat() / h }
-                    player.setOnErrorListener { _, _, _ ->
-                        failed = true
-                        true
-                    }
-                    player.setOnPreparedListener {
-                        it.start()
-                        controller.show()
-                    }
-                    view.surfaceTextureListener = object : android.view.TextureView.SurfaceTextureListener {
-                        override fun onSurfaceTextureAvailable(texture: android.graphics.SurfaceTexture, width: Int, height: Int) {
-                            runCatching { player.setSurface(android.view.Surface(texture)) }
-                            if (!prepared[0]) {
-                                prepared[0] = true
-                                player.prepareAsync()
-                            }
-                        }
-
-                        override fun onSurfaceTextureSizeChanged(texture: android.graphics.SurfaceTexture, width: Int, height: Int) = Unit
-                        override fun onSurfaceTextureDestroyed(texture: android.graphics.SurfaceTexture): Boolean {
-                            runCatching { player.setSurface(null) }
-                            return true
-                        }
-
-                        override fun onSurfaceTextureUpdated(texture: android.graphics.SurfaceTexture) = Unit
-                    }
-                    controller.setMediaPlayer(PlayerControl(player))
-                    controller.setAnchorView(view)
-                }
-            },
-            modifier = Modifier.fillMaxSize(),
-        )
-    }
-}
-
-/** The player reads its ranges from [reader] (on its own thread, which waits for the frames). */
-private class ReaderSource(private val reader: RangeReader) : android.media.MediaDataSource() {
-    override fun readAt(position: Long, buffer: ByteArray, offset: Int, size: Int): Int {
-        if (position >= reader.size) return -1
-        val bytes = try {
-            runBlocking { reader.read(position, size) }
-        } catch (e: Exception) {
-            throw java.io.IOException(e)
-        }
-        if (bytes.isEmpty()) return -1
-        bytes.copyInto(buffer, offset)
-        return bytes.size
-    }
-
-    override fun getSize(): Long = reader.size
-    override fun close() = Unit
-}
-
-/** The platform's media controls over [player]; a call after it was released does nothing. */
-private class PlayerControl(private val player: android.media.MediaPlayer) : android.widget.MediaController.MediaPlayerControl {
-    override fun start() { runCatching { player.start() } }
-    override fun pause() { runCatching { player.pause() } }
-    override fun getDuration(): Int = runCatching { player.duration }.getOrDefault(0)
-    override fun getCurrentPosition(): Int = runCatching { player.currentPosition }.getOrDefault(0)
-    override fun seekTo(pos: Int) { runCatching { player.seekTo(pos) } }
-    override fun isPlaying(): Boolean = runCatching { player.isPlaying }.getOrDefault(false)
-    override fun getBufferPercentage(): Int = 0
-    override fun canPause(): Boolean = true
-    override fun canSeekBackward(): Boolean = true
-    override fun canSeekForward(): Boolean = true
-    override fun getAudioSessionId(): Int = runCatching { player.audioSessionId }.getOrDefault(0)
 }
 
 /**
