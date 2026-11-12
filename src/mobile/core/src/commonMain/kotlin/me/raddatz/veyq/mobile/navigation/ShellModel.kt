@@ -120,9 +120,16 @@ class ShellModel(
 
     private var rekeys: kotlinx.coroutines.Job? = null
 
-    /** Reads the lists anew (after a write, or what another device wrote); a read that fails keeps what was listed. */
+    /**
+     * Reads the lists anew from the server (after a write, or what another device or a guest wrote); a read that fails
+     * keeps what was listed. The session's tree is forgotten first: a session caches it ([TenantSession.trees]), and a
+     * refresh that read the cache showed a guest's new folder only after a sign-in (the Depot CR, Phases 3–7).
+     */
     suspend fun refresh() {
-        reading.withLock { runCatching { read() }.getOrNull()?.let { raw = it } }
+        reading.withLock {
+            tenant.forgetTree()
+            runCatching { read() }.getOrNull()?.let { raw = it }
+        }
         rebuild(start = false, openLastUsed = false)
     }
 
@@ -199,6 +206,16 @@ class ShellModel(
 
     /** Whether [ref] is a guest's identity folder or lies in one. */
     fun inIdentityFolder(ref: NodeAt): Boolean = tenant.inIdentityFolder(ref.scopeId, ref.nodeId)
+
+    /**
+     * Whether [shell] shows a space's top level on Home, where its share offers "Add files only" ([topLevelShareSheet], the
+     * web's level share): no folder, object, application or Search open, and the tenant's links and drop boxes on.
+     */
+    fun offersTopLevelShare(shell: Shell): Boolean {
+        val space = shell.space ?: return false
+        val rules = tenant.linkRules
+        return topLevelShared(shell, space) && rules.on && rules.dropBox
+    }
 
     /** Whether "New" is offered where the shell is: in a space, never in a guest's folder (the web's `folderRights`). */
     val canCreateHere: Boolean
@@ -525,6 +542,10 @@ class ShellModel(
                 else -> prior
             }
         }
+
+        /** Whether [shell] stands on [space]'s top level on Home: no folder, object, application or Search open. */
+        fun topLevelShared(shell: Shell, space: String): Boolean =
+            shell.openObject == null && shell.application == null && !shell.searching && shell.folderAt(space) == null
 
         /**
          * The shell where folder [nodeId] on Home's path changed: still in [tree] (its space's nodes), the path read anew to

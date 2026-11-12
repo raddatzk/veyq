@@ -47,6 +47,16 @@ class ShellModelTest {
     }
 
     @Test
+    fun a_spaces_top_level_on_home_is_where_its_share_offers_add_files_only() {
+        val top = Shell.start(null, "t")
+        assertEquals(true, ShellModel.topLevelShared(top, "t"))
+        assertEquals(false, ShellModel.topLevelShared(top.enter(FolderRef("a", "A")), "t"), "a folder's level has the folder's own share")
+        assertEquals(false, ShellModel.topLevelShared(top.open(pot), "t"), "an object open")
+        assertEquals(false, ShellModel.topLevelShared(top.choose(ApplicationId.EXPENSES), "t"), "an application's list")
+        assertEquals(false, ShellModel.topLevelShared(top.search(true), "t"), "Search")
+    }
+
+    @Test
     fun a_read_keeps_the_shell_but_a_space_no_longer_listed_gives_way() {
         val prior = Shell.start(null, "p").enter(FolderRef("a", "A"))
         assertSame(prior, ShellModel.next(prior, listOf(personal, tenantSpace), pot))
