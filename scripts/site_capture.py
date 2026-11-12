@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
 """Take the docs site's screenshots: boot a throwaway instance, fill it with made-up content, and photograph the web client.
 
-**What it does.** Every `<Screenshot id=…>` a Use page places (`scripts/site_shots.py` lists them) is one scenario in
+**What it does.** Every `<Screenshot id=…>` a Use page places (`scripts/site_shots.py` lists them), and every shot the
+project website places (`site/src/components/website/strings.ts`, shown by `README.md` too), is one scenario in
 `tests/e2e/shots/site.shots.ts`, or a reasoned entry of `tests/e2e/shots/left-out.json`. This:
 
   1. **catalogue** — runs the shots suite's catalogue test, which needs no stack: a placed id with no scenario and no
@@ -9,15 +10,17 @@
   2. **stack** — boots lane L1's isolated instance through `scripts/run_stack_e2e.py --keep -- --project setup`: the two
      images given, its own compose project `veyq-e2e-<stamp>` with Pebble's certificates, and L1's own first-run setup
      (the Server Owner, the bundled store, the first tenant). Nothing of a developer's dev stack is touched — that
-     script's own `host` stage proves it, and so does this one's at the end. It needs host ports 80, 443 and 18081.
+     script's own `host` stage proves it, and so does this one's at the end. It needs host ports 80, 443 and 18081
+     (`VEYQ_STACK_ADMIN_PORT` moves the last).
   3. **mail relay** — the run's Mailpit sits on the run's `admin` network only; a container of the overlay's Playwright
      image (already on the host for L1) forwards a loopback port to it, so the shots can read the invitations the
      instance mails.
   4. **shots** — the suite on the HOST, in the installed Google Chrome (`channel: 'chrome'`, headless — nothing is
      downloaded), English then German, each language a space of its own with made-up people and drawn pictures
      (`tests/e2e/shots/world.ts`).
-  5. **images** — copies `<id>.<en|de>.png` into `site/src/assets/screenshots/`, and reports per language what was
-     written, what failed and the bytes.
+  5. **images** — copies `<id>.<en|de>.png` into `site/src/assets/screenshots/` (the project website's, whose ids are
+     `website/<id>`, into `site/src/assets/website/`), and reports per language what was written, what failed and the
+     bytes.
   6. **teardown** — stops the relay, `docker compose down -v` the run's project (unless `--keep`), and checks that every
      container and volume that existed before the run is as it was.
 
@@ -31,6 +34,7 @@ Usage (from the repo root):
     ./gradlew backend:image admin:image                     # the images of this tree: veyq:local, veyq-admin:local
     python3 scripts/site_capture.py                         # every shot, both languages
     python3 scripts/site_capture.py --only depot-rename-dialog,owners-email --lang de
+    python3 scripts/site_capture.py --only website/depot,website/pot   # the website's shots carry `website/`
     python3 scripts/site_capture.py --keep                  # leave the instance up; --attach <run dir> reuses it
 
 Options: --app / --admin (default `veyq:local` / `veyq-admin:local`), --only <ids>, --lang en|de, --keep,
@@ -55,6 +59,7 @@ ROOT = repo_layout.ROOT
 E2E = repo_layout.E2E_DIR
 SHOTS_CONFIG = "shots/playwright.config.ts"
 IMAGES = ROOT / "site" / "src" / "assets" / "screenshots"
+WEBSITE_IMAGES = ROOT / "site" / "src" / "assets" / "website"  # the shots whose id is `website/<id>`
 RUN_ROOT = ROOT / ".e2e-stack-out"
 RELAY_PORT_IN = 8025
 
@@ -142,7 +147,9 @@ def copy_images(workdir: Path, langs: list[str]) -> tuple[dict[str, int], int, l
                 failed.append(f"{shot_id}.{lang}: {verdict}")
                 continue
             src = shots / f"{shot_id}.{lang}.png"
-            shutil.copyfile(src, IMAGES / src.name)
+            target = WEBSITE_IMAGES if shot_id.startswith("website/") else IMAGES
+            target.mkdir(parents=True, exist_ok=True)
+            shutil.copyfile(src, target / src.name)
             written[lang] += 1
             size += src.stat().st_size
         for finding in results.get("foreign", []):

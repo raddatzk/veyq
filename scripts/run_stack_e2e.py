@@ -144,6 +144,7 @@ Usage:
 Environment (all optional):
     VEYQ_STACK_WAIT_SECS   How long `veyqctl install` waits for a healthy stack (its VEYQ_WAIT_SECS). Default: 300
     VEYQ_STACK_CERT_SECS   How long the certificate stage polls for Pebble's certificate. Default: 120
+    VEYQ_STACK_ADMIN_PORT  The host port the run's admin UI answers on, when 18081 is taken. Default: 18081
 """
 from __future__ import annotations
 
@@ -200,7 +201,7 @@ PEBBLE_MANAGEMENT_PORT = 15000
 DOMAIN = "veyq.test"
 # Not the recipe's default 8081: on a developer's machine that port is the dev backend's, and a run must never answer
 # on a port the developer's own instance uses.
-ADMIN_PORT = 18081
+ADMIN_PORT = int(os.environ.get("VEYQ_STACK_ADMIN_PORT", "18081"))
 # The recipe publishes Traefik on these, so they belong to the run (ADR 0090 § Consequences).
 HOST_PORTS = (80, 443, ADMIN_PORT)
 WAIT_SECS = int(os.environ.get("VEYQ_STACK_WAIT_SECS", "300"))
