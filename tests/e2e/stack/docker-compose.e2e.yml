@@ -142,7 +142,11 @@ services:
   # networks, so a laptop runs exactly what CI runs — the browser never runs on the host (macOS has no certutil, and its
   # Chromium reads no NSS db). The orchestrator starts it with `compose run --rm browser` after `up`; the profile keeps
   # `up` from starting it. The image's Playwright version is tests/e2e/package.json's exact pin (the orchestrator refuses a
-  # mismatch); bump both together.
+  # mismatch at preflight, scripts/validate_image_pins.py in the trust chain); bump both together. Dependabot proposes
+  # the library (its own npm group) and holds the image's version (.github/dependabot.yml), so the bump is one pull
+  # request that is red until this tag and its index digest follow. The pin is written out at each service, never as a
+  # YAML anchor: Dependabot's compose updater matches `image:` followed by the reference, and a `&name` between the two
+  # makes its update fail ("Expected content to change!", dependabot-core docker_compose/file_updater.rb, 2026-11-12).
   #
   # How it reaches the instance, decided in phase 2 — the way an operator does, without publishing anything:
   #   - the domain through Traefik: on `edge`, Chromium resolves `veyq.test` and every `*.veyq.test` to the `traefik`
@@ -154,7 +158,7 @@ services:
   #     published loopback port — a container reaches the host's 127.0.0.1 on Docker Desktop and not on a Linux
   #     runner, so the run would differ between a laptop and CI.
   browser:
-    image: &playwright mcr.microsoft.com/playwright:v1.65.0-noble@sha256:9beb546099e11f52d62e505537914870e01a67e0e6b00ae41da4775324e73dbe
+    image: mcr.microsoft.com/playwright:v1.65.0-noble@sha256:9beb546099e11f52d62e505537914870e01a67e0e6b00ae41da4775324e73dbe
     profiles: [browser]
     cap_drop: [ALL]
     security_opt: [no-new-privileges:true]
@@ -199,7 +203,7 @@ services:
   # static file server from the Playwright image this file already pins (`python3 -m http.server`), with the recipe's
   # x-hardened triple and a non-root uid; it writes nothing.
   release-mirror:
-    image: *playwright
+    image: mcr.microsoft.com/playwright:v1.65.0-noble@sha256:9beb546099e11f52d62e505537914870e01a67e0e6b00ae41da4775324e73dbe
     cap_drop: [ALL]
     security_opt: [no-new-privileges:true]
     read_only: true
