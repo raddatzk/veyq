@@ -11,6 +11,11 @@
 //! an item, the kind…), never while typing; a text field is set from the state only by [Typed]'s rule, so what is typed
 //! and the cursor stay. A save answers what to do at once (`Editor.Save`: done closes the dialog, a stale save says so
 //! and shows the other version); notices are toasts.
+//!
+//! An entry's receipts are a group of their own: "Add receipt" opens GTK's open dialog for images and PDFs (several at
+//! once), whose paths go to the core (`Editor.AddReceipts`: it reads each, at most a receipt's size, and holds what it
+//! takes until the save); a kept receipt opens its viewer ([crate::receipt_viewer]), each one is taken off by its button
+//! (`Editor.DropReceipt`); what the core refused is said under the group. Nothing of a receipt is read here.
 use std::cell::{Cell, RefCell};
 use std::rc::{Rc, Weak};
 
@@ -140,6 +145,12 @@ struct Form {
     invalid: gtk::Label,
     /// The refusal's label at each place it is said: `main`, `transfer`, `payers`, `item<i>`, `items`, `rest`, `foot`.
     refusals: Vec<(String, gtk::Label)>,
+    receipts: adw::PreferencesGroup,
+    receipt_rows: RefCell<Vec<gtk::Widget>>,
+    /// What the receipts' rows were drawn from: they are built anew only when it changes.
+    receipts_drawn: RefCell<String>,
+    add_receipt: gtk::Button,
+    refused_pick: gtk::Label,
 }
 
 /// A split's page while it is shown: [item] (None: the rest's), built anew when its shape changes.
@@ -337,6 +348,7 @@ impl Inner {
         }
         if let Some(f) = self.form.borrow().as_ref() {
             update(f, s);
+            self.draw_receipts(f, s);
         }
         self.draw_split(s);
         self.drawing.set(false);
@@ -524,6 +536,20 @@ impl Inner {
         }
         let preview = adw::PreferencesGroup::builder().title(words::ed_shares_in(&s.base)).visible(false).build();
         body.append(&preview);
+
+        // the receipts: added through the open dialog, each opened or taken off
+        let receipts = adw::PreferencesGroup::builder().title(words::receipts_title()).build();
+        let add_receipt = gtk::Button::builder().label(words::receipts_add()).build();
+        add_receipt.add_css_class("flat");
+        let w = Rc::downgrade(self);
+        add_receipt.connect_clicked(move |_| if let Some(i) = w.upgrade() {
+            i.pick_receipts();
+        });
+        receipts.set_header_suffix(Some(&add_receipt));
+        body.append(&receipts);
+        let refused_pick = gtk::Label::builder().label(words::receipts_refused()).wrap(true).xalign(0.0).visible(false).build();
+        refused_pick.add_css_class("error");
+        body.append(&refused_pick);
         refusal("foot", &body, &mut refusals);
 
         // the foot: the history, the delete
@@ -573,7 +599,89 @@ impl Inner {
             preview_rows: RefCell::new(Vec::new()),
             invalid,
             refusals,
+            receipts,
+            receipt_rows: RefCell::new(Vec::new()),
+            receipts_drawn: RefCell::new(String::new()),
+            add_receipt,
+            refused_pick,
         }
+    }
+
+    /// The receipts' rows, built anew only when what they show changed (never on a keystroke).
+    fn draw_receipts(self: &Rc<Self>, f: &Form, s: &EditorShown) {
+        f.add_receipt.set_visible(s.editable && s.can_add_receipt);
+        f.refused_pick.set_visible(s.refused_pick);
+        let drawn = format!("{}|{:?}", s.editable, s.receipts.iter().map(|r| (&r.id, &r.name, r.held, r.opens)).collect::<Vec<_>>());
+        if *f.receipts_drawn.borrow() == drawn {
+            return;
+        }
+        *f.receipts_drawn.borrow_mut() = drawn;
+        for r in f.receipt_rows.borrow_mut().drain(..) {
+            f.receipts.remove(&r);
+        }
+        if s.receipts.is_empty() {
+            let none = adw::ActionRow::builder().title(words::receipts_none()).build();
+            none.add_css_class("dim-label");
+            f.receipts.add(&none);
+            f.receipt_rows.borrow_mut().push(none.upcast());
+        }
+        for r in &s.receipts {
+            let row = adw::ActionRow::builder().title(glib_escape(&r.name)).build();
+            if r.held {
+                row.set_subtitle(&words::receipts_held());
+            }
+            if r.opens {
+                row.set_activatable(true);
+                row.add_suffix(&gtk::Image::from_icon_name("go-next-symbolic"));
+                let (w, id, name) = (Rc::downgrade(self), r.id.clone(), r.name.clone());
+                row.connect_activated(move |_| if let Some(i) = w.upgrade() {
+                    eprintln!("veyq: receipt viewer open");
+                    crate::receipt_viewer::open(&i.dialog, i.pot, &id, &name);
+                });
+            }
+            if s.editable {
+                let remove = gtk::Button::builder().icon_name("list-remove-symbolic").tooltip_text(words::receipts_remove()).valign(gtk::Align::Center).build();
+                remove.add_css_class("flat");
+                let (w, id) = (Rc::downgrade(self), r.id.clone());
+                remove.connect_clicked(move |_| if let Some(i) = w.upgrade() {
+                    bridge::send(Call::EditorDropReceipt { editor: i.editor, receipt: id.clone() });
+                });
+                row.add_prefix(&remove);
+            }
+            f.receipts.add(&row);
+            f.receipt_rows.borrow_mut().push(row.upcast());
+        }
+    }
+
+    /// "Add receipt": GTK's open dialog for images and PDFs, several at once; the core reads what was picked.
+    fn pick_receipts(self: &Rc<Self>) {
+        let parent = self.dialog.root().and_downcast::<gtk::Window>();
+        let w = Rc::downgrade(self);
+        glib::spawn_future_local(async move {
+            let receipts = gtk::FileFilter::new();
+            receipts.add_mime_type("image/*");
+            receipts.add_mime_type("application/pdf");
+            receipts.set_name(Some(&words::receipts_title()));
+            let filters = gtk::gio::ListStore::new::<gtk::FileFilter>();
+            filters.append(&receipts);
+            let dialog = gtk::FileDialog::builder().title(words::receipts_add()).filters(&filters).default_filter(&receipts).modal(true).build();
+            let files = match dialog.open_multiple_future(parent.as_ref()).await {
+                Ok(files) => files,
+                Err(e) => {
+                    eprintln!("veyq: no receipt picked ({e})");
+                    return;
+                }
+            };
+            // the core opens each path itself; one that is no UTF-8 does not cross the wire
+            let paths: Vec<String> = (0..files.n_items())
+                .filter_map(|n| files.item(n).and_downcast::<gtk::gio::File>())
+                .filter_map(|f| f.path().and_then(|p| p.to_str().map(str::to_owned)))
+                .collect();
+            let Some(i) = w.upgrade() else { return };
+            let count = paths.len();
+            let answered = bridge::call(&Call::EditorAddReceipts { editor: i.editor, paths }).await.map(|(a, _)| a);
+            eprintln!("veyq: {count} receipts picked: {answered:?}");
+        });
     }
 
     /// A split's row in the form: what it is now as its subtitle; it opens the split's page.

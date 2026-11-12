@@ -15,6 +15,7 @@ pub mod home;
 pub mod manage;
 pub mod move_sheet;
 pub mod pot;
+pub mod receipt_viewer;
 pub mod report;
 pub mod said;
 pub mod share_sheet;

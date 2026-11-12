@@ -18,8 +18,10 @@ FROM fedora:44@sha256:15da97ed9aa94dd3d92c3925eb89520f6c80e07ea7ee24cba848d1f8b6
 #   thing of these the app itself needs. gnome-keyring, dbus-daemon: the Secret Service `run.py test` holds the core's
 #   DeviceKeys contract against — gnome-keyring-daemon under `dbus-run-session`, its login collection unlocked by a
 #   password drawn in the container per run (ADR 0127's Consequences); test-only.
+# poppler-glib-devel: a receipt's PDF drawn by GNOME's own PDF stack (poppler-glib through poppler-rs, D4 of the Expenses
+#   CR), from the bytes in memory; a Flatpak's runtime must carry poppler-glib.
 RUN dnf install -y --setopt=install_weak_deps=False \
-        gtk4-devel libadwaita-devel rust cargo clippy gcc gettext \
+        gtk4-devel libadwaita-devel poppler-glib-devel rust cargo clippy gcc gettext \
         libxcrypt-compat ca-certificates tzdata glibc-langpack-en glibc-langpack-de socat \
         libsecret gnome-keyring dbus-daemon \
     && dnf clean all
