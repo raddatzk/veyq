@@ -792,8 +792,11 @@ class DispatchTest {
             links += link(id, true, "2026-12-0$next")
             return me.raddatz.veyq.mobile.session.ShareLinks.Minted(me.raddatz.veyq.mobile.session.ShareLinks.Outcome.CREATED, "http://t/s/$id#k=key-$id")
         }
+        /** Whether "Add files only" makes its drop box (the top level's share) or the server refuses it. */
+        @Volatile var dropBoxMade = false
         override suspend fun createDropBox(name: String, password: String, expiresAt: String?) =
-            me.raddatz.veyq.mobile.depot.DropBoxes.Created(me.raddatz.veyq.mobile.depot.DropBoxes.Outcome.FAILED).also { sent += "dropbox:$name" }
+            (if (dropBoxMade) me.raddatz.veyq.mobile.depot.DropBoxes.Created(me.raddatz.veyq.mobile.depot.DropBoxes.Outcome.CREATED, "box-2", "http://t/s/d1#k=key-d1")
+            else me.raddatz.veyq.mobile.depot.DropBoxes.Created(me.raddatz.veyq.mobile.depot.DropBoxes.Outcome.FAILED)).also { sent += "dropbox:$name" }
         override suspend fun edit(shareId: String, edit: me.raddatz.veyq.mobile.session.ShareLinkChanges.Edit): me.raddatz.veyq.mobile.session.ShareLinkChanges.Changed {
             sent += "edit:$shareId:${edit.label}"
             return me.raddatz.veyq.mobile.session.ShareLinkChanges.Changed(me.raddatz.veyq.mobile.session.ShareLinkChanges.Outcome.DONE)
@@ -826,6 +829,110 @@ class DispatchTest {
             val i = links.indexOfFirst { it.shareId == id }
             links[i] = link(id, on, links[i].createdAt)
         }
+    }
+
+    /** A drop box's page door the test plays: its guests' folders as the server lists them, and the shell's revisions. */
+    private class PlayedDropBox : me.raddatz.veyq.mobile.depot.DropBoxPage.Door {
+        val listed = java.util.concurrent.CopyOnWriteArrayList<me.raddatz.veyq.mobile.depot.DropBoxes.GuestFolder>()
+        val turned = kotlinx.coroutines.flow.MutableStateFlow(0)
+        override suspend fun folders() = listed.toList()
+        override val revisions: kotlinx.coroutines.flow.Flow<Any?> = turned
+        fun guest(id: String, label: String, files: Int) = me.raddatz.veyq.mobile.depot.DropBoxes.GuestFolder(
+            me.raddatz.veyq.mobile.session.OpenNode("s", id, "box", "FOLDER", label, ByteArray(32)), label,
+            (1..files).map { me.raddatz.veyq.mobile.session.OpenNode("s", "$id-f$it", id, "FILE", "f$it.txt", ByteArray(32)) },
+        )
+    }
+
+    @Test
+    fun aDropBoxsPageIsReadAnewOnEachRevisionItsFoldersMovedOutAndDeletedOnlyAfterAskingAndTheTopLevelSharedThroughCalls() = runBlocking {
+        val box = PlayedDropBox()
+        box.listed += box.guest("anna", "Anna", 2)
+        val played = Played()
+        val move = PlayedMove()
+        val share = PlayedShare().apply { dropBoxMade = true }
+        val headerFacts = java.util.concurrent.CopyOnWriteArrayList<AppKinds.Facts?>()
+        val b = Bridge {
+            val hidden = Hidden({}, emptySet())
+            Composition(SessionModel(Door(), hidden, RecentUses({}, emptyList())), hidden) { _ ->
+                Tenant(
+                    shell = null, pot = null, me = "u1", pictures = pictures, loadPictures = {},
+                    header = { node, facts, _ -> headerFacts += facts; me.raddatz.veyq.mobile.navigation.NodeHeaderModel(node, facts, played) },
+                    move = { node, copying, _, _ -> me.raddatz.veyq.mobile.navigation.MoveSheet(node, copying, move) },
+                    dropBox = { node -> me.raddatz.veyq.mobile.depot.DropBoxPage(node, box) },
+                    topLevelShare = { scopeId -> me.raddatz.veyq.mobile.navigation.ShareSheet.topLevel(scopeId, share) { 1_700_000_000_000L } },
+                )
+            }
+        }
+        val at = NodeAt("s", "box", "DEPOT_DROPBOX", "Abgaben")
+        assertEquals(Answer.Refused(Answer.Why.NO_TENANT_OPEN), b.ask(Call.DropBoxOpen(at)))
+        assertEquals(Answer.Refused(Answer.Why.NO_TENANT_OPEN), b.ask(Call.ShareOpenTopLevel("s")))
+        b.signedIn()
+        val id = (b.ask(Call.DropBoxOpen(at)) as Answer.DropBoxOpened).box
+        val w = b.watching(Watched.DropBox(id))
+        val first = w.until { u -> (u as Update.DropBox).shown?.folders }
+        val anna = first.single()
+        assertEquals("anna" to "Anna", anna.id to anna.label)
+        assertEquals(me.raddatz.veyq.mobile.words.Notice(Msg.DROPBOX_GUEST_FILES, 2), anna.count)
+        assertEquals(me.raddatz.veyq.mobile.words.Notice(Msg.DROPBOX_MOVE_FOLDER, "Anna") to me.raddatz.veyq.mobile.words.Notice(Msg.DROPBOX_DELETE_FOLDER, "Anna"), anna.moveOut to anna.delete)
+        assertEquals(listOf("anna-f1", "anna-f2"), anna.files.map { it.nodeId })
+
+        // a guest dropped: shown once the shell's lists turn (a refresh read them), not before
+        box.listed += box.guest("ben", "Ben", 1)
+        box.turned.value++
+        val two = w.until { u -> (u as Update.DropBox).shown?.folders?.takeIf { it.size == 2 } }
+        assertEquals(listOf("Anna", "Ben"), two.map { it.label })
+
+        // a delete not asked trashes nothing; asked, declined, asked again, then trashed through a header with a guest folder's facts
+        assertEquals(Answer.Refused(Answer.Why.NOT_ASKED), b.ask(Call.DropBoxDelete(id, "ben")))
+        assertTrue(played.closed.isEmpty() && headerFacts.isEmpty(), "a delete without asking reached the trash")
+        assertEquals(Answer.Refused(Answer.Why.NO_SUCH_FOLDER), b.ask(Call.DropBoxAskDelete(id, "nobody")))
+        assertEquals(Answer.Done, b.ask(Call.DropBoxAskDelete(id, "ben")))
+        val asked = w.until { u -> (u as Update.DropBox).shown?.takeIf { it.deleting == "ben" } }
+        assertEquals(me.raddatz.veyq.mobile.words.Notice(Msg.DROPBOX_DELETE_FOLDER, "Ben"), asked.deleteTitle)
+        assertEquals(me.raddatz.veyq.mobile.words.Notice(Msg.DROPBOX_DELETE_FOLDER_CONFIRM, "Ben"), asked.deleteQuestion)
+        assertEquals(Answer.Done, b.ask(Call.DropBoxCancelAsk(id)))
+        w.until { u -> (u as Update.DropBox).shown?.takeIf { it.deleting == null } }
+        assertEquals(Answer.Refused(Answer.Why.NOT_ASKED), b.ask(Call.DropBoxDelete(id, "ben")), "a declined question still deleted")
+        assertEquals(Answer.Done, b.ask(Call.DropBoxAskDelete(id, "ben")))
+        w.until { u -> (u as Update.DropBox).shown?.takeIf { it.deleting == "ben" } }
+        val trashed = b.ask(Call.DropBoxDelete(id, "ben")) as Answer.Trashed
+        assertEquals(Msg.TRASH_MOVED, trashed.notice.msg)
+        assertTrue(trashed.undoable)
+        assertEquals(listOf<AppKinds.Facts?>(me.raddatz.veyq.mobile.depot.DropBoxPage.FOLDER_FACTS), headerFacts)
+        assertEquals(listOf(NodeAt("s", "ben", "FOLDER", "Ben")), played.closed)
+        assertEquals(Answer.Said(null), b.ask(Call.DropBoxUndo(id)))
+        assertEquals(listOf("ben"), played.restored)
+
+        // a folder moved out: the move sheet on it
+        assertEquals(Answer.Refused(Answer.Why.NO_SUCH_FOLDER), b.ask(Call.DropBoxMoveOut(id, "nobody")))
+        val m = (b.ask(Call.DropBoxMoveOut(id, "anna")) as Answer.MoveOpened).move
+        // (the played tree does not hold the guest's folder, so the sheet is not asked to load: only what it is on)
+        val sheet = b.watching(Watched.Move(m)).until { u -> (u as Update.Move).shown }
+        assertEquals(NodeAt("s", "anna", "FOLDER", "Anna"), sheet.node)
+        assertTrue(!sheet.copying)
+
+        // the top level's share: "Add files only" alone, its form open, the drop box made with its first link
+        val top = (b.ask(Call.ShareOpenTopLevel("s")) as Answer.ShareOpened).share
+        val sw = b.watching(Watched.Share(top))
+        val form = sw.until { u -> (u as Update.Share).shown?.takeIf { it.form != null } }
+        assertTrue(form.atTopLevel)
+        assertEquals(Msg.SHARE_ROLE_UPLOADER, form.title)
+        assertEquals(emptyList(), form.links)
+        assertEquals(Answer.Done, b.ask(Call.ShareLabel(top, "Abgaben 2")))
+        sw.until { u -> (u as Update.Share).shown?.form?.takeIf { it.label == "Abgaben 2" && it.canSave } }
+        assertEquals(Answer.Said(null), b.ask(Call.ShareSave(top)))
+        assertEquals("http://t/s/d1#k=key-d1", sw.until { u -> (u as Update.Share).shown?.freshAddress })
+        assertEquals(listOf("dropbox:Abgaben 2"), share.sent)
+
+        // closed: refused, watched as none; every page closes with its tenant
+        assertEquals(Answer.Done, b.ask(Call.DropBoxClose(id)))
+        assertEquals(Update.DropBox(id, null), b.watching(Watched.DropBox(id)).next())
+        listOf(Call.DropBoxAskDelete(id, "anna"), Call.DropBoxCancelAsk(id), Call.DropBoxDelete(id, "anna"), Call.DropBoxMoveOut(id, "anna"), Call.DropBoxUndo(id), Call.DropBoxClose(id))
+            .forEach { assertEquals(Answer.Refused(Answer.Why.NO_SUCH_DROPBOX), b.ask(it), "$it") }
+        val again = (b.ask(Call.DropBoxOpen(at)) as Answer.DropBoxOpened).box
+        assertEquals(Answer.Done, b.ask(Call.SessionSignOut("a.example#u1")))
+        assertEquals(Answer.Refused(Answer.Why.NO_SUCH_DROPBOX), b.ask(Call.DropBoxCancelAsk(again)), "a page outlived its tenant")
+        b.shutdown()
     }
 
     @Test

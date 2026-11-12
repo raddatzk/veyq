@@ -113,6 +113,10 @@ internal class Tenant(
     },
     /** A node's share sheet (`ShellModel.shareSheet`). */
     val share: ((node: NodeAt) -> ShareSheet)? = shell?.let { s -> { node -> s.shareSheet(node) {} } },
+    /** The share of a space's top level, "Add files only" (`ShellModel.topLevelShareSheet`). */
+    val topLevelShare: ((scopeId: String) -> ShareSheet)? = shell?.let { s -> { scopeId -> s.topLevelShareSheet(scopeId) {} } },
+    /** A drop box's page (`ShellModel.dropBoxPage`): its guests' folders read anew on each revision of the shell's lists. */
+    val dropBox: ((node: NodeAt) -> me.raddatz.veyq.mobile.depot.DropBoxPage)? = shell?.let { s -> { node -> s.dropBoxPage(node) } },
     /** A node's report sheet (`ShellModel.reportSheet`). */
     val report: ((node: NodeAt) -> ReportSheet)? = shell?.let { s -> { node -> s.reportSheet(node) } },
     /**
@@ -140,6 +144,11 @@ internal class Tenant(
  */
 internal class HeldHeader(val model: NodeHeaderModel, val maxButtons: Int) {
     val file = MutableStateFlow<Long?>(null)
+}
+
+/** A drop box's page the host opened, and the header its last delete trashed through (its undo, [Call.DropBoxUndo]). */
+internal class HeldDropBox(val page: me.raddatz.veyq.mobile.depot.DropBoxPage) {
+    @kotlin.concurrent.Volatile var trashed: NodeHeaderModel? = null
 }
 
 /** An entry editor the host opened on Pot [pot] ([Call.EditorOpen]), typed in with [separator]. */
@@ -215,6 +224,7 @@ internal class Bridge<A : Connection, T : Any>(compose: () -> Composition<A, T>)
     private val trashes = Registry<TrashSheet>()
     private val moves = Registry<MoveSheet>()
     private val shares = Registry<ShareSheet>()
+    private val dropBoxes = Registry<HeldDropBox>()
     private val reports = Registry<ReportSheet>()
     private val editors = Registry<HeldEditor>()
     private val settings = Registry<HeldSettings>()
@@ -594,6 +604,42 @@ internal class Bridge<A : Connection, T : Any>(compose: () -> Composition<A, T>)
                 Answer.ShareOpened(id)
             } ?: noTenant
             is Call.ShareClose -> shares.remove(call.share)?.let { Answer.Done } ?: noShare
+            is Call.ShareOpenTopLevel -> tenant.value?.models?.topLevelShare?.let { make ->
+                val id = ids.incrementAndFetch()
+                shares.put(id, make(call.scopeId))
+                Answer.ShareOpened(id)
+            } ?: noTenant
+            is Call.DropBoxOpen -> tenant.value?.models?.dropBox?.let { make ->
+                val id = ids.incrementAndFetch()
+                dropBoxes.put(id, HeldDropBox(make(call.node)))
+                Answer.DropBoxOpened(id)
+            } ?: noTenant
+            is Call.DropBoxClose -> dropBoxes.remove(call.box)?.page?.close().done(Answer.Why.NO_SUCH_DROPBOX)
+            is Call.DropBoxMoveOut -> dropBoxes[call.box]?.let { held ->
+                val folder = held.page.current.folders?.firstOrNull { it.node.id == call.folder } ?: return noFolder
+                val make = tenant.value?.models?.move ?: return noTenant
+                val id = ids.incrementAndFetch()
+                val sheet = make(held.page.at(folder), false, null, "")
+                moves.put(id, sheet)
+                scope.launch { sheet.load() }
+                Answer.MoveOpened(id)
+            } ?: noDropBox
+            is Call.DropBoxAskDelete -> dropBoxes[call.box]?.let { held ->
+                val folder = held.page.current.folders?.firstOrNull { it.node.id == call.folder } ?: return noFolder
+                held.page.askDelete(folder)
+                Answer.Done
+            } ?: noDropBox
+            is Call.DropBoxCancelAsk -> dropBoxes[call.box]?.page?.cancelAsk().done(Answer.Why.NO_SUCH_DROPBOX)
+            is Call.DropBoxDelete -> dropBoxes[call.box]?.let { held ->
+                val folder = held.page.current.folders?.firstOrNull { it.node.id == call.folder } ?: return noFolder
+                // the core hands the node only where its delete was asked; the header trashes it with a guest folder's facts
+                val node = held.page.delete(folder) ?: return Answer.Refused(Answer.Why.NOT_ASKED)
+                val make = tenant.value?.models?.header ?: return noTenant
+                val header = make(node, held.page.folderFacts, ::closeOpen)
+                held.trashed = header
+                header.trash().let { Answer.Trashed(it, header.current.undo != null) }
+            } ?: noDropBox
+            is Call.DropBoxUndo -> dropBoxes[call.box]?.let { Answer.Said(it.trashed?.undoTrash()) } ?: noDropBox
             is Call.ShareAdd -> shares[call.share]?.addLink().done(Answer.Why.NO_SUCH_SHARE)
             is Call.ShareEdit -> shares[call.share]?.edit(call.link).done(Answer.Why.NO_SUCH_SHARE)
             is Call.ShareRole -> shares[call.share]?.role(call.role).done(Answer.Why.NO_SUCH_SHARE)
@@ -642,6 +688,8 @@ internal class Bridge<A : Connection, T : Any>(compose: () -> Composition<A, T>)
     private val noEditor = Answer.Refused(Answer.Why.NO_SUCH_EDITOR)
     private val noCreate = Answer.Refused(Answer.Why.NO_SUCH_CREATE)
     private val noFile = Answer.Refused(Answer.Why.NO_SUCH_FILE)
+    private val noDropBox = Answer.Refused(Answer.Why.NO_SUCH_DROPBOX)
+    private val noFolder = Answer.Refused(Answer.Why.NO_SUCH_FOLDER)
 
     /** A settings change on [id]'s model, answered once its write ended with whether it was stored and why not. */
     private suspend fun stored(id: Long, change: suspend (PotSettings) -> Boolean): Answer {
@@ -730,6 +778,7 @@ internal class Bridge<A : Connection, T : Any>(compose: () -> Composition<A, T>)
         trashes.removeAll()
         moves.removeAll()
         shares.removeAll()
+        dropBoxes.removeAll().forEach { it.page.close() }
         reports.removeAll()
     }
 
@@ -787,6 +836,8 @@ internal class Bridge<A : Connection, T : Any>(compose: () -> Composition<A, T>)
             ?: flowOf(Update.File(w.file, null))
         is Watched.Save -> saves[w.save]?.let { sv -> sv.state.map { Update.Save(w.save, SaveShown(sv.name, it.written, it.total, it.fraction, it.end, it.notice)) } }
             ?: flowOf(Update.Save(w.save, null))
+        is Watched.DropBox -> dropBoxes[w.box]?.let { h -> h.page.state.map { Update.DropBox(w.box, shownDropBox(h.page, it)) } }
+            ?: flowOf(Update.DropBox(w.box, null))
         Watched.Uploads -> uploads.flatMapLatest { u -> u?.state?.map { Update.Uploads(shownUploads(it)) } ?: flowOf(Update.Uploads(null)) }
         is Watched.Pot -> {
             val pictures = tenant.value?.models?.pictures ?: flowOf(emptyMap())
@@ -823,6 +874,7 @@ internal class Bridge<A : Connection, T : Any>(compose: () -> Composition<A, T>)
             drawerOpensAtStart = shell.drawerOpensAtStart,
             creates = AppKinds.createsWhere(shell.isHome).map { ShellShown.ShownCreate(it, it.word) },
             canCreateHere = open.models.shell?.canCreateHere == true,
+            topLevelShare = open.models.shell?.offersTopLevelShare(shell) == true,
             headed = shell.openObject?.at ?: shell.space?.let(shell::folderAt),
             me = open.models.me,
             pictures = pictures.sorted(),
@@ -968,8 +1020,26 @@ internal class Bridge<A : Connection, T : Any>(compose: () -> Composition<A, T>)
     )
 
     /** A share sheet as the host draws it ([ShareShown]), each field the sheet's own answer. */
+    /** A drop box's page as the host draws it ([DropBoxShown]), each field the page's or the words' own answer. */
+    private fun shownDropBox(page: me.raddatz.veyq.mobile.depot.DropBoxPage, s: me.raddatz.veyq.mobile.depot.DropBoxPage.State): DropBoxShown {
+        val asked = s.deleting
+        return DropBoxShown(
+            node = page.node,
+            folders = s.folders?.map { f ->
+                DropBoxShown.ShownGuestFolder(
+                    f.node.id, f.label, Notice(Msg.DROPBOX_GUEST_FILES, f.files.size), Notice(Msg.DROPBOX_MOVE_FOLDER, f.label),
+                    Notice(Msg.DROPBOX_DELETE_FOLDER, f.label), f.files.mapNotNull { it.asObject() },
+                )
+            },
+            failed = s.failed, empty = Msg.DROPBOX_EMPTY, hint = Msg.DROPBOX_HINT, deleting = asked?.node?.id,
+            deleteTitle = asked?.let { Notice(Msg.DROPBOX_DELETE_FOLDER, it.label) },
+            deleteQuestion = asked?.let { Notice(Msg.DROPBOX_DELETE_FOLDER_CONFIRM, it.label) },
+            deleteAccept = Msg.DROPBOX_DELETE_FOLDER_ACCEPT,
+        )
+    }
+
     private fun shownShare(sh: ShareSheet, s: ShareSheet.State): ShareShown = ShareShown(
-        node = sh.node, title = sh.words.title, intro = sh.words.intro, canMint = sh.canMint,
+        node = sh.node, atTopLevel = sh.atTopLevel, title = sh.title, intro = sh.words.intro, canMint = sh.canMint,
         links = s.links?.let {
             sh.rows(s).map { r ->
                 val l = r.link

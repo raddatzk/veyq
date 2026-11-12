@@ -2043,6 +2043,136 @@ class LiveBridgeTest {
     }
 
     /**
+     * A drop box made, filled by guests and emptied through calls (the Depot CR's Phase 7): with `VEYQ_LIVE_DROPBOX_GUESTS=<file>`
+     * a folder "App depot <n>" is made beside Amsterdam, the space's top level is said to offer its share
+     * (`ShellShown.topLevelShare`) and "Add files only" there (`Share.OpenTopLevel`) makes "App drop <n>" with its first link,
+     * whose address is written to that file. Two guests then drop through the web's guest page (a script reading the file
+     * drives it: "App guest A" and "App guest B", one file each) — after this bridge signed in, so they show only because
+     * `Shell.Refresh` reads the tree anew (a session caches it): the drop box's page (`DropBox.Open`) lists both under their
+     * names with their files, read anew each time the lists are (a refresh every 5 s, `VEYQ_LIVE_DROPBOX_WAIT_S`, default
+     * 300 s). A's folder is moved out into "App depot <n>" (`DropBox.MoveOut`, the move out asked first), B's deleted only
+     * after asking (`DropBox.Delete` refused, then asked); a READ link minted on A's file and read back listed. The drop box,
+     * B's folder and "App depot <n>" are trashed and purged however it ends.
+     */
+    @Test
+    fun aDropBoxIsMadeFilledAndEmptiedThroughCalls() = runBlocking {
+        val origin = System.getenv("VEYQ_LIVE") ?: return@runBlocking
+        val out = File(System.getenv("VEYQ_LIVE_DROPBOX_GUESTS") ?: return@runBlocking)
+        val wait = (System.getenv("VEYQ_LIVE_DROPBOX_WAIT_S")?.toLong() ?: 300L).seconds
+        out.delete()
+        val (b, first) = signedInLive(origin, "bridge drop box test")
+        suspend fun fresh(): Update.Shell {
+            assertEquals(Answer.Done, b.ask(Call.ShellRefresh, timeout = 1.minutes))
+            return b.watching(Watched.Shell).next() as Update.Shell
+        }
+        val n = System.currentTimeMillis() % 100_000
+        val dropName = "App drop $n"
+        val purge = java.util.concurrent.CopyOnWriteArrayList<String>()
+        withFolder(b, first, "App depot $n", purge = true) { depot ->
+            val scope = depot.scopeId
+            try {
+                assertEquals(Answer.Done, b.ask(Call.ShellSwitchSpace(scope)))
+                val top = b.watching(Watched.Shell).until { u -> (u as Update.Shell).shown?.takeIf { it.headed == null } }
+                assertTrue(top.topLevelShare, "the space's top level offers no share")
+                val sheet = (b.ask(Call.ShareOpenTopLevel(scope)) as Answer.ShareOpened).share
+                val sw = b.watching(Watched.Share(sheet))
+                assertTrue(sw.until { u -> (u as Update.Share).shown?.takeIf { it.form != null } }.atTopLevel)
+                assertEquals(Answer.Done, b.ask(Call.ShareLabel(sheet, dropName)))
+                sw.until { u -> (u as Update.Share).shown?.form?.takeIf { it.label == dropName && it.canSave } }
+                assertEquals(Answer.Said(null), b.ask(Call.ShareSave(sheet), timeout = 1.minutes))
+                val address = sw.until { u -> (u as Update.Share).shown?.freshAddress }
+                b.ask(Call.ShareFreshSeen(sheet))
+                b.ask(Call.ShareClose(sheet))
+                val box = assertNotNull(fresh().state!!.lists.nodes.firstOrNull { it.name == dropName && it.parentId == null && it.kind == "DEPOT_DROPBOX" }, "the drop box is not listed")
+                purge += box.nodeId
+                out.writeText(address)
+                println("made $dropName, its link written to $out; waiting for two guests")
+
+                val page = (b.ask(Call.DropBoxOpen(me.raddatz.veyq.mobile.navigation.NodeAt(box.scopeId, box.nodeId, box.kind, box.name))) as Answer.DropBoxOpened).box
+                val pw = b.watching(Watched.DropBox(page))
+                assertEquals(emptyList(), pw.until { u -> (u as Update.DropBox).shown?.folders })
+                val guests = listOf("App guest A", "App guest B")
+                val deadline = System.currentTimeMillis() + wait.inWholeMilliseconds
+                var listed: List<DropBoxShown.ShownGuestFolder> = emptyList()
+                while (listed.map { it.label }.toSet() != guests.toSet() || listed.any { it.files.isEmpty() }) {
+                    assertTrue(System.currentTimeMillis() < deadline, "the guests' folders never showed: ${listed.map { it.label }} (a refresh that reads the cached tree shows none)")
+                    kotlinx.coroutines.delay(5_000)
+                    fresh()
+                    listed = b.watching(Watched.DropBox(page)).next().let { (it as Update.DropBox).shown?.folders.orEmpty() }
+                }
+                println("listed: ${listed.joinToString { "${it.label} (${it.files.size} files)" }}")
+                val a = listed.first { it.label == guests[0] }
+                val bFolder = listed.first { it.label == guests[1] }
+
+                // A moved out into the folder: the move out of the drop box asked first
+                val m = (b.ask(Call.DropBoxMoveOut(page, a.id)) as Answer.MoveOpened).move
+                b.watching(Watched.Move(m)).until(1.minutes) { u -> (u as Update.Move).shown?.takeIf { it.loaded } }
+                // the browser goes a crumb or a listed place at a time: the root, then down to the folder
+                val nodes = fresh().state!!.lists.nodes
+                val way = generateSequence(nodes.first { it.nodeId == depot.nodeId }) { n -> n.parentId?.let { p -> nodes.first { it.nodeId == p } } }.toList().reversed()
+                for (at in listOf(null) + way.map { it.nodeId }) {
+                    assertEquals(Answer.Done, b.ask(Call.MoveGo(m, at)))
+                    b.watching(Watched.Move(m)).until(1.minutes) { u -> (u as Update.Move).shown?.takeIf { s -> s.trail.last().nodeId == at } }
+                }
+                b.watching(Watched.Move(m)).until(1.minutes) { u -> (u as Update.Move).shown?.takeIf { it.loaded && it.canChoose } }
+                val asked = b.ask(Call.MoveHere(m), timeout = 1.minutes) as Answer.MoveSent
+                val moved = if (asked.confirming) b.ask(Call.MoveConfirm(m), timeout = 2.minutes) as Answer.MoveSent else asked
+                assertNotNull(moved.done, "the move out did not go through: ${moved.problem}")
+                b.ask(Call.MoveClose(m))
+                assertEquals(depot.nodeId, fresh().state!!.lists.nodes.first { it.nodeId == a.id }.parentId, "A's folder is not in the folder")
+
+                // B deleted only after asking
+                assertEquals(Answer.Refused(Answer.Why.NOT_ASKED), b.ask(Call.DropBoxDelete(page, bFolder.id)))
+                assertTrue(fresh().state!!.lists.nodes.any { it.nodeId == bFolder.id }, "a delete not asked trashed B's folder")
+                assertEquals(Answer.Done, b.ask(Call.DropBoxAskDelete(page, bFolder.id)))
+                b.watching(Watched.DropBox(page)).until { u -> (u as Update.DropBox).shown?.takeIf { it.deleting == bFolder.id } }
+                val trashed = b.ask(Call.DropBoxDelete(page, bFolder.id), timeout = 1.minutes) as Answer.Trashed
+                println("B: ${trashed.notice.msg}")
+                purge += bFolder.id
+                val after = b.watching(Watched.DropBox(page)).until(1.minutes) { u -> (u as Update.DropBox).shown?.folders?.takeIf { f -> f.none { it.id == bFolder.id } } }
+                assertTrue(after.none { it.id == a.id }, "A's folder still listed after its move out")
+                b.ask(Call.DropBoxClose(page))
+
+                // a READ link on A's file, minted and read back listed
+                val file = a.files.first()
+                val share = (b.ask(Call.ShareOpen(me.raddatz.veyq.mobile.navigation.NodeAt(file.scopeId, file.nodeId, file.kind, file.name))) as Answer.ShareOpened).share
+                val fw = b.watching(Watched.Share(share))
+                fw.until(1.minutes) { u -> (u as Update.Share).shown?.links }
+                assertEquals(Answer.Done, b.ask(Call.ShareAdd(share)))
+                fw.until { u -> (u as Update.Share).shown?.form }
+                assertEquals(Answer.Done, b.ask(Call.ShareRole(share, "READ")))
+                fw.until { u -> (u as Update.Share).shown?.form?.takeIf { it.role == "READ" && it.canSave } }
+                assertEquals(Answer.Said(null), b.ask(Call.ShareSave(share), timeout = 1.minutes))
+                val minted = fw.until(1.minutes) { u -> (u as Update.Share).shown?.takeIf { it.freshAddress != null && it.links?.isNotEmpty() == true } }
+                assertEquals(minted.freshAddress, minted.links!!.single().address)
+                println("${file.name}: a READ link minted and listed")
+                b.ask(Call.ShareClose(share))
+            } finally {
+                out.delete()
+                // the drop box trashed; it and B's folder purged (the folder made is withFolder's)
+                fresh().state!!.lists.nodes.firstOrNull { it.name == dropName && it.parentId == null }?.let { box ->
+                    if (box.nodeId !in purge) purge += box.nodeId
+                    val h = (b.ask(Call.HeaderOpen(me.raddatz.veyq.mobile.navigation.NodeAt(box.scopeId, box.nodeId, box.kind, box.name), me.raddatz.veyq.mobile.AppKinds.Facts(), 2)) as Answer.HeaderOpened).header
+                    println("trash $dropName: ${(b.ask(Call.HeaderTrash(h), timeout = 1.minutes) as? Answer.Trashed)?.notice?.msg}")
+                    b.ask(Call.HeaderClose(h))
+                }
+                val t = (b.ask(Call.TrashOpen(scope)) as Answer.TrashOpened).trash
+                val tw = b.watching(Watched.Trash(t))
+                val rows = tw.until(1.minutes) { u -> (u as Update.Trash).shown?.rows }
+                println("in the trash of ours: ${rows.filter { it.id in purge }.map { it.name }}")
+                for (row in rows.filter { it.id in purge }) {
+                    val purged = b.ask(Call.TrashPurge(t, row.id), timeout = 1.minutes)
+                    println("purge ${row.name}: $purged")
+                    if (purged == Answer.Done) tw.until(1.minutes) { u -> (u as Update.Trash).shown?.takeIf { s -> s.busy == null && s.rows?.none { it.id == row.id } == true } }
+                }
+                b.ask(Call.TrashClose(t))
+            }
+        }
+        assertTrue(fresh().state!!.lists.nodes.none { it.name == dropName }, "the drop box was left")
+        b.shutdown()
+    }
+
+    /**
      * A desktop pass's read-back for the web's guest page: with `VEYQ_LIVE_SHARE_LIST=<folder name>` (a folder at a space's
      * top) and `VEYQ_LIVE_LINKS_OUT=<file>`, that folder's share sheet is opened through calls and each link's id and
      * address — where it may be copied — written to the file, one line each (a dev link names the backend's port, 8080:

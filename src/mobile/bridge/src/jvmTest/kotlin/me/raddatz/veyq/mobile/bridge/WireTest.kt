@@ -79,7 +79,7 @@ class WireTest {
         groups = listOf(Home.Group(true, lists.nodes.take(1), null)), list = lists.drawer,
         tabs = listOf(ShellShown.ShownTab(BarTab("expenses.entries"), Msg.TAB_EXPENSES_ENTRIES)), selectedTab = BarTab("expenses.entries"),
         canGoBack = true, isHome = false, drawerOpensAtStart = false, creates = listOf(ShellShown.ShownCreate(me.raddatz.veyq.mobile.AppKinds.Create.FOLDER, Msg.FOLDER_NEW)),
-        canCreateHere = true, headed = me.raddatz.veyq.mobile.navigation.NodeAt("scope-1", "folder-1", "FOLDER", "Holidays"),
+        canCreateHere = true, topLevelShare = false, headed = me.raddatz.veyq.mobile.navigation.NodeAt("scope-1", "folder-1", "FOLDER", "Holidays"),
         me = "user-1", pictures = listOf("user-1", "user-2"),
     )
     private val record = TrustedDevice("http://veyq.localhost:8080", "p@example.org", "user-1", TrustedDevice.Method.DEVICE, "wrap-1", "veyq.device.ab")
@@ -113,6 +113,9 @@ class WireTest {
             Call.SharePassword(10, "typed by the person"), Call.ShareEndOn(10, false), Call.ShareEndDay(10, 20_800), Call.ShareCancelForm(10),
             Call.ShareSave(10), Call.ShareFreshSeen(10), Call.ShareAskRenew(10, "share-1"), Call.ShareAskDelete(10, "share-1"), Call.ShareCancelAsk(10),
             Call.ShareRenew(10), Call.ShareDelete(10), Call.ShareSwitchOff(10, "share-1"), Call.ShareReactivate(10, "share-1"),
+            Call.ShareOpenTopLevel("scope-1"), Call.DropBoxOpen(me.raddatz.veyq.mobile.navigation.NodeAt("scope-1", "box-1", "DEPOT_DROPBOX", "Abgaben")),
+            Call.DropBoxClose(30), Call.DropBoxMoveOut(30, "g1"), Call.DropBoxAskDelete(30, "g1"), Call.DropBoxCancelAsk(30), Call.DropBoxDelete(30, "g1"),
+            Call.DropBoxUndo(30),
             Call.HeaderCoverPicture(7), Call.HeaderCoverSave(7, "/tmp/cover.jpg", me.raddatz.veyq.mobile.session.NodeCover.Crop(0.0, 0.0, 0.5, 1.0)),
             Call.HeaderCoverSave(7, null, me.raddatz.veyq.mobile.session.NodeCover.Crop.FULL), Call.HeaderCoverRemove(7),
             Call.CoverPose(4000.0, 3000.0, 640.0, 360.0, me.raddatz.veyq.mobile.session.CoverFrame.Pose(1.5, -10.0, -20.5), null, 3.0, -2.0, 1.1),
@@ -147,7 +150,7 @@ class WireTest {
             Call.PotCreateSpace(16, "scope-2"), Call.PotCreateCurrency(16, "EUR"), Call.PotCreateAddTyped(16, "Ben"), Call.PotCreateAddMember(16, "u-dana"),
             Call.PotCreateRemove(16, 0), Call.PotCreateCreate(16, ""), Call.PotCreateCreate(16, "Cleo"),
         ),
-        Watched.serializer() to listOf(Watched.Session, Watched.Shell, Watched.Pot(3), Watched.PotLive(3), Watched.Manage, Watched.Header(7), Watched.Trash(8), Watched.Move(9), Watched.Share(10), Watched.Report(11), Watched.Editor(12), Watched.PotSettings(15), Watched.PotCreate(16), Watched.File(20), Watched.Save(21), Watched.Uploads),
+        Watched.serializer() to listOf(Watched.Session, Watched.Shell, Watched.Pot(3), Watched.PotLive(3), Watched.Manage, Watched.Header(7), Watched.Trash(8), Watched.Move(9), Watched.Share(10), Watched.Report(11), Watched.Editor(12), Watched.PotSettings(15), Watched.PotCreate(16), Watched.File(20), Watched.Save(21), Watched.Uploads, Watched.DropBox(30)),
         HostReply.serializer() to listOf(HostReply.Value("s\tn\t1"), HostReply.Value(null), HostReply.Done, HostReply.Failed("disk full")),
         Answer.serializer() to listOf(
             Answer.Done, Answer.Refused(Answer.Why.NO_TENANT_OPEN), Answer.Refused(Answer.Why.TRUST_CANCELLED), Answer.Failed("IllegalStateException"),
@@ -156,7 +159,7 @@ class WireTest {
             Answer.Reader(5, 9_000_000_000, "video/mp4"), Answer.Reader(6, 0, null),
             Answer.HeaderOpened(7), Answer.FileOpened(20), Answer.Saving(21), Answer.Queued(3), Answer.TrashOpened(8), Answer.Said(Notice(Msg.TRASH_MOVED, listOf("Trip"))), Answer.Said(null), Answer.Trashed(Notice(Msg.TRASH_MOVED, listOf("Trip")), undoable = true),
             Answer.Renamed(Notice(Msg.NODE_SLUG_TAKEN), null), Answer.Renamed(null, Notice(Msg.SHARE_NAME_RESEAL_FAILED)), Answer.Refused(Answer.Why.NO_SUCH_ROW),
-            Answer.MoveOpened(9), Answer.ShareOpened(10), Answer.ReportOpened(11), Answer.Refused(Answer.Why.NO_COVER),
+            Answer.MoveOpened(9), Answer.ShareOpened(10), Answer.DropBoxOpened(30), Answer.Refused(Answer.Why.NOT_ASKED), Answer.ReportOpened(11), Answer.Refused(Answer.Why.NO_COVER),
             Answer.CoverPosed(me.raddatz.veyq.mobile.session.CoverFrame.Pose(1.0, 0.0, -12.5), 640.0, 385.0, me.raddatz.veyq.mobile.session.NodeCover.Crop(0.0, 0.1, 1.0, 0.75)),
             Answer.CoverFit(2048, 1536, 0.85, 85), Answer.CoverCut(1000, 0, 2000, 3000),
             Answer.EntryHistory(listOf(HistoryShown(listOf(Piece.Said(Notice(Msg.HISTORY_DELETED))), "Anna", 1_700_000_000_000), HistoryShown(listOf(Piece.Plain("Taxi"), Piece.Money(999, "EUR", 2)), null, 1_699_000_000_000)),
@@ -285,7 +288,7 @@ class WireTest {
             )),
             Update.Uploads(UploadsShown(null, 0, 1.0, null, emptyList(), UploadsShown.Said(4, listOf(Notice(Msg.DEPOT_FOLDER_LINK_SKIPPED, listOf("link"))), null))),
             Update.Share(10, ShareShown(
-                node = me.raddatz.veyq.mobile.navigation.NodeAt("scope-1", "folder-1", "FOLDER", "Holidays"),
+                node = me.raddatz.veyq.mobile.navigation.NodeAt("scope-1", "folder-1", "FOLDER", "Holidays"), atTopLevel = false,
                 title = Msg.SHARE_FOLDER_TITLE, intro = Msg.SHARE_FOLDER_INTRO, canMint = true,
                 links = listOf(
                     ShareShown.ShownLink("share-1", Piece.Plain("Family"), listOf(Notice(Msg.SHARE_ROLE_VIEWER), Notice(Msg.SHARE_PASSWORD_BADGE)),
@@ -307,11 +310,26 @@ class WireTest {
                 renewQuestion = Msg.SHARE_RENEW_CONFIRM, deleteQuestion = Msg.SHARE_FOLDER_DELETE_CONFIRM,
             )),
             Update.Share(10, ShareShown(
-                node = me.raddatz.veyq.mobile.navigation.NodeAt("scope-1", "pot-1", "EXPENSES_POT", "Trip"), title = Msg.SHARE_TITLE, intro = Msg.SHARE_INTRO,
+                node = me.raddatz.veyq.mobile.navigation.NodeAt("scope-1", "pot-1", "EXPENSES_POT", "Trip"), atTopLevel = true, title = Msg.SHARE_TITLE, intro = Msg.SHARE_INTRO,
                 canMint = false, links = null, failed = true, busy = null, notice = null, form = null, editing = null, submit = Msg.SHARE_CREATE, saving = false,
                 problem = null, freshAddress = null, renewing = null, deleting = "share-2", renewQuestion = Msg.SHARE_RENEW_CONFIRM, deleteQuestion = Msg.SHARE_DELETE_CONFIRM,
             )),
             Update.Share(10, null),
+            Update.DropBox(30, DropBoxShown(
+                node = me.raddatz.veyq.mobile.navigation.NodeAt("scope-1", "box-1", "DEPOT_DROPBOX", "Abgaben"),
+                folders = listOf(DropBoxShown.ShownGuestFolder(
+                    "g1", "Anna (2)", Notice(Msg.DROPBOX_GUEST_FILES, listOf(2)), Notice(Msg.DROPBOX_MOVE_FOLDER, listOf("Anna (2)")),
+                    Notice(Msg.DROPBOX_DELETE_FOLDER, listOf("Anna (2)")), listOf(ObjectRef("scope-1", "file-9", "FILE", ApplicationId.DEPOT, "Übung 1.pdf")),
+                )),
+                failed = false, empty = Msg.DROPBOX_EMPTY, hint = Msg.DROPBOX_HINT, deleting = "g1",
+                deleteTitle = Notice(Msg.DROPBOX_DELETE_FOLDER, listOf("Anna (2)")), deleteQuestion = Notice(Msg.DROPBOX_DELETE_FOLDER_CONFIRM, listOf("Anna (2)")),
+                deleteAccept = Msg.DROPBOX_DELETE_FOLDER_ACCEPT,
+            )),
+            Update.DropBox(30, DropBoxShown(
+                me.raddatz.veyq.mobile.navigation.NodeAt("scope-1", "box-1", "DEPOT_DROPBOX", "Abgaben"), null, true, Msg.DROPBOX_EMPTY, Msg.DROPBOX_HINT,
+                null, null, null, Msg.DROPBOX_DELETE_FOLDER_ACCEPT,
+            )),
+            Update.DropBox(30, null),
             Update.Manage(null), Update.Manage(listOf(
                 ManagedShown("veyq.localhost#user-1", "veyq.localhost:8080", TrustedDevice.Method.DEVICE_KEY, StaySignedIn.LOGIN, listOf(StaySignedIn.PRESENCE, StaySignedIn.LOGIN), listOf(
                     ManagedShown.Tenant(tenant, hidden = false, current = true, shown = true, switchable = false, subtitle = Piece.Said(Notice(Msg.MANAGE_CURRENT)),

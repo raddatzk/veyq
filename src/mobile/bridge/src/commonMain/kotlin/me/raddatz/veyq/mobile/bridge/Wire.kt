@@ -513,6 +513,42 @@ internal sealed class Call {
     @Serializable @SerialName("Share.Open") data class ShareOpen(val node: NodeAt) : Call()
     @Serializable @SerialName("Share.Close") data class ShareClose(val share: Long) : Call()
 
+    /**
+     * The share of space [scopeId]'s top level (`ShellModel.topLevelShareSheet`, core's `ShareSheet.topLevel`): "Add files
+     * only" alone, its form open from the start, the drop box made at the space's top with its first link; answered with its
+     * id ([Answer.ShareOpened]) for [Watched.Share] and the `Share.*` calls ([ShareShown.atTopLevel]). Offered where
+     * [ShellShown.topLevelShare] says so.
+     */
+    @Serializable @SerialName("Share.OpenTopLevel") data class ShareOpenTopLevel(val scopeId: String) : Call()
+
+    /**
+     * Drop box [node]'s page (`ShellModel.dropBoxPage`, core's `DropBoxPage`: its guests' folders, read anew on each
+     * revision of the shell's lists — a [ShellRefresh] reads a guest's new folder), answered with its id
+     * ([Answer.DropBoxOpened]) for [Watched.DropBox]. It stays until [DropBoxClose] or the tenant closes.
+     */
+    @Serializable @SerialName("DropBox.Open") data class DropBoxOpen(val node: NodeAt) : Call()
+    @Serializable @SerialName("DropBox.Close") data class DropBoxClose(val box: Long) : Call()
+
+    /**
+     * "Move {name} out…" on the guest's folder listed as [folder] (its node id): the move sheet on it (`DropBoxPage.at`),
+     * answered [Answer.MoveOpened] for [Watched.Move] and the `Move.*` calls (its move out of the drop box asked first).
+     */
+    @Serializable @SerialName("DropBox.MoveOut") data class DropBoxMoveOut(val box: Long, val folder: String) : Call()
+
+    /** "Delete {name}" on the guest's folder listed as [folder]: asked first (`askDelete`); [DropBoxCancelAsk] declines it. */
+    @Serializable @SerialName("DropBox.AskDelete") data class DropBoxAskDelete(val box: Long, val folder: String) : Call()
+    @Serializable @SerialName("DropBox.CancelAsk") data class DropBoxCancelAsk(val box: Long) : Call()
+
+    /**
+     * The delete asked, answered for [folder] (`DropBoxPage.delete`): the folder trashed through its header with the core's
+     * facts of a guest's folder ([Answer.Trashed]: what it says, whether its undo is offered); refused `NOT_ASKED` where
+     * this folder's delete was not asked — nothing trashed.
+     */
+    @Serializable @SerialName("DropBox.Delete") data class DropBoxDelete(val box: Long, val folder: String) : Call()
+
+    /** The last delete's undo while offered: [Answer.Said] with why it failed, or none. */
+    @Serializable @SerialName("DropBox.Undo") data class DropBoxUndo(val box: Long) : Call()
+
     /** "New link": the form opens (`addLink`). */
     @Serializable @SerialName("Share.Add") data class ShareAdd(val share: Long) : Call()
 
@@ -619,6 +655,7 @@ internal sealed class Answer {
     @Serializable @SerialName("MoveSent") data class MoveSent(val done: Notice?, val undoable: Boolean, val confirming: Boolean, val problem: Notice?) : Answer()
     @Serializable @SerialName("MoveOpened") data class MoveOpened(val move: Long) : Answer()
     @Serializable @SerialName("ShareOpened") data class ShareOpened(val share: Long) : Answer()
+    @Serializable @SerialName("DropBoxOpened") data class DropBoxOpened(val box: Long) : Answer()
     @Serializable @SerialName("ReportOpened") data class ReportOpened(val report: Long) : Answer()
 
     /**
@@ -683,6 +720,9 @@ internal sealed class Answer {
         /** An upload: no replace offered or chosen on that page; a path that is no file (or directory) that reads; no such said. */
         NO_REPLACE, NOT_CHOSEN, NO_SUCH_PATH, NO_SUCH_SAID,
 
+        /** A drop box's page: none by that id; no guest's folder listed by that id; a delete that was not asked. */
+        NO_SUCH_DROPBOX, NO_SUCH_FOLDER, NOT_ASKED,
+
         /** A change of trust (`TrustChange`): no offer to answer; the person cancelled the prompt; not enrolled; the
          *  password was not the account's. */
         NO_OFFER, TRUST_CANCELLED, TRUST_FAILED, WRONG_PASSWORD,
@@ -740,6 +780,9 @@ internal sealed class Watched {
 
     /** The uploads of the tenant open now (`DepotUploads`), whichever that is: the tray, what it says once. */
     @Serializable @SerialName("Uploads") data object Uploads : Watched()
+
+    /** A drop box's page opened by [Call.DropBoxOpen]. */
+    @Serializable @SerialName("DropBox") data class DropBox(val box: Long) : Watched()
 }
 
 /** One state a watch delivers: the first at once, then each change. */
@@ -796,6 +839,9 @@ internal sealed class Update {
 
     /** The uploads; null while no tenant is open. */
     @Serializable @SerialName("Uploads") data class Uploads(val shown: UploadsShown?) : Update()
+
+    /** A drop box's page; null once it was closed (or an id the bridge does not hold). */
+    @Serializable @SerialName("DropBox") data class DropBox(val box: Long, val shown: DropBoxShown?) : Update()
 }
 
 /**
@@ -1159,6 +1205,35 @@ internal class MoveShown(
 }
 
 /**
+ * A drop box's page as the host draws it (`DropBoxPage`), each field one core function's answer: the drop box, its guests'
+ * folders in the order they came (null while the first read runs) — each by its node id with its label (`DropBoxes.labels`:
+ * a name more than one guest gave numbered), how many files it holds, its menu's words and its files (opened as any object,
+ * [Call.ShellOpen]) —, whether the last read failed, the words when nobody dropped anything yet ([empty]) and above the
+ * folders ([hint]), and the folder whose delete is asked ([deleting]) with its question.
+ */
+@Serializable
+internal class DropBoxShown(
+    val node: NodeAt,
+    val folders: List<ShownGuestFolder>?,
+    val failed: Boolean,
+    @Serializable(with = MsgKey::class) val empty: Msg,
+    @Serializable(with = MsgKey::class) val hint: Msg,
+    val deleting: String?,
+    val deleteTitle: Notice?,
+    val deleteQuestion: Notice?,
+    @Serializable(with = MsgKey::class) val deleteAccept: Msg,
+) {
+    @Serializable class ShownGuestFolder(
+        val id: String,
+        val label: String,
+        val count: Notice,
+        val moveOut: Notice,
+        val delete: Notice,
+        val files: List<ObjectRef>,
+    )
+}
+
+/**
  * A share sheet as the host draws it (`ShareSheet`), each field one core function's answer: the node, the sheet's title
  * and intro in its kind's words, whether "New link" is offered; the links (null while the first read runs) each with its
  * row's words and what may be done with it ([ShownLink], `LinkRow`); the row a write runs on, what the last one said
@@ -1172,6 +1247,8 @@ internal class MoveShown(
 @Serializable
 internal class ShareShown(
     val node: NodeAt,
+    /** The share of a space's top level ([Call.ShareOpenTopLevel]): its form alone, nothing listed — once the form closes, the sheet is done. */
+    val atTopLevel: Boolean,
     @Serializable(with = MsgKey::class) val title: Msg,
     @Serializable(with = MsgKey::class) val intro: Msg,
     val canMint: Boolean,
@@ -1297,6 +1374,8 @@ internal class ShellShown(
     val creates: List<ShownCreate>,
     /** Whether New is offered where the shell is (`ShellModel.canCreateHere`: never in a guest's folder). */
     val canCreateHere: Boolean,
+    /** Whether the level offers its top level's share, "Add files only" ([Call.ShareOpenTopLevel]; `ShellModel.offersTopLevelShare`). */
+    val topLevelShare: Boolean,
     /** The node the content heads (`Shell.openObject`, else the folder Home shows: `Shell.folderAt`); null on a space's root. */
     val headed: NodeAt?,
     /** The signed-in member's user id, whose picture the switcher shows when [pictures] holds it. */
