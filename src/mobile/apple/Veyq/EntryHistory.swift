@@ -37,8 +37,8 @@ struct DeletedEntrySheet: View {
     @Environment(\.dismiss) private var dismiss
 
     var body: some View {
-        let now = Int64(Date().timeIntervalSince1970 * 1000)
-        let restorable = view.restorable(entryId: row.id, nowMs: now)
+        // the window on the core's clock (`PotModel.restorable`), never the platform's
+        let restorable = model.restorable(row.id)
         let purge = view.purgeAfter(entryId: row.id)?.int64Value
         NavigationStack {
             Form {
@@ -64,8 +64,7 @@ struct DeletedEntrySheet: View {
                     ToolbarItem(placement: .confirmationAction) {
                         Button(say(.entryRestore)) {
                             let id = row.id
-                            let based = view.latestRevision(entryId: id)
-                            Task { if await model.potWrite({ try await $0.restoreEntry(entryId: id, basedOn: based) }) { dismiss() } }
+                            Task { if await model.restoreEntry(id) { dismiss() } }
                         }
                         .disabled(model.pot?.saving == true)
                     }

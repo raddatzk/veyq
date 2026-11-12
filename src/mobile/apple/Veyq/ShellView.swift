@@ -577,7 +577,7 @@ struct HomeView: View {
         } message: {
             if let nameProblem { Text(nameProblem) }
         }
-        .sheet(isPresented: $creatingPot) { PotCreateSheet(model: model) }
+        .sheet(isPresented: $creatingPot) { NewPotSheet(model: model) }
         // what the drawer's "New" asked for
         .onChange(of: model.newRequest, initial: true) { _, asked in
             switch asked {
@@ -763,7 +763,7 @@ struct ExpensesList: View {
         ArrangedListView(list: model.applicationList(.expenses), onOpen: model.open)
             .navigationTitle(Names.application(.expenses))
             .createAction(say(.createPot), shown: !model.spaces.isEmpty) { creating = true }
-            .sheet(isPresented: $creating) { PotCreateSheet(model: model) }
+            .sheet(isPresented: $creating) { NewPotSheet(model: model) }
     }
 }
 

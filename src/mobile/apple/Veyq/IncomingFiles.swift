@@ -5,12 +5,11 @@ import VeyqCore
 
 /// What another app hands veyq — through the share sheet (the extension) or dropped onto the app (ADR 0129) — read once, in
 /// order, into what a Pot's new expense takes as its receipts: an image as JPEG where the sender offers one, a HEIC
-/// re-encoded (decision 7), any other image and a PDF as they are; at most a Pot's receipts' count, each within its size,
-/// and at most [budget] held at once (decision 6). What does not fit is counted as left out.
+/// re-encoded (decision 7), any other image and a PDF as they are; judged in order by core's `PotShare.Intake` — each a
+/// receipt, at most a Pot's receipts' count, all within one budget (decision 6), one rule on every app. What does not fit
+/// is counted as left out.
 @MainActor
 enum IncomingFiles {
-    /// What is held whole at once: a share extension's memory is bounded; the files beyond it are left out as too large ones are.
-    static let budget = 64 * 1024 * 1024
 
     /// The type identifiers a drop or a share is offered for.
     static let accepted: [UTType] = [.image, .pdf]
@@ -18,14 +17,11 @@ enum IncomingFiles {
     static func read(_ providers: [NSItemProvider]) async -> AppModel.Incoming {
         var files: [PotSession.PendingReceipt] = []
         var refused = 0
-        var held = 0
+        let intake = PotShare.Intake()
         for provider in providers {
             guard let (data, type) = await load(provider) else { refused += 1; continue }
             let name = provider.suggestedName.map { named($0, type: type) }
-            let fits = PotShare.shared.takes(type: type, name: name, size: Int64(data.count))
-                && files.count < Int(PotShare.shared.MAX_FILES) && held + data.count <= budget
-            guard fits else { refused += 1; continue }
-            held += data.count
+            guard intake.take(type: type, name: name, size: Int64(data.count)) else { refused += 1; continue }
             files.append(AppleSessions.shared.pendingReceipt(id: UUID().uuidString.lowercased(), data: data, type: type, name: name, modifiedAt: nil))
         }
         return AppModel.Incoming(files: files, refused: Int32(refused))

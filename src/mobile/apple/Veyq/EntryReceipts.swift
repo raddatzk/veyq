@@ -1,4 +1,3 @@
-import ImageIO
 import PDFKit
 import PhotosUI
 import SwiftUI
@@ -152,13 +151,10 @@ struct ReceiptViewer: View {
         }
     }
 
-    /// What a receipt's bytes are, read from the bytes alone (ImageIO), never from its sealed type: a peer's statement.
+    /// What a receipt's bytes are, read from the bytes alone by the core (`Receipts.mediaTypeOf`, core's `Sniff`), never
+    /// from its sealed type: a peer's statement.
     private static func contentType(_ data: Data) -> UTType {
-        if let source = CGImageSourceCreateWithData(data as CFData, nil), let id = CGImageSourceGetType(source) as String?,
-           let type = UTType(id), type.conforms(to: .image) {
-            return type
-        }
-        return AppleSessions.shared.receiptKind(data: data) == .pdf ? .pdf : .data
+        AppleSessions.shared.receiptMediaType(data: data).flatMap { UTType(mimeType: $0) } ?? .data
     }
 
     private var downloadOnly: some View {

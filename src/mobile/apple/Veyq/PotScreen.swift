@@ -25,13 +25,13 @@ struct PotScreen: View {
         Group {
             if let state = model.pot, state.ref == ref, let view = state.view {
                 if !view.ready {
-                    PotSettings(model: model, view: view)
+                    PotSettingsTab(model: model, view: view)
                 } else {
                     VStack(spacing: 0) {
                         if !view.missing.isEmpty { LedgerNotice(view: view) }
                         switch tab {
                         case "expenses.overview": OverviewList(model: model, view: view)
-                        case "expenses.settings": PotSettings(model: model, view: view)
+                        case "expenses.settings": PotSettingsTab(model: model, view: view)
                         default: EntriesList(view: view, onAdd: {
                             if model.openEditor(nil) { editing = Editing(entryId: nil) }
                         }, onOpen: { id in
@@ -95,7 +95,9 @@ private struct LiveKey: Equatable {
 /// Minor units of `currency` as the person's locale writes money.
 func money(_ minor: Int64, _ currency: String?, _ minorUnits: Int32) -> String {
     let value = Decimal(minor) / pow(Decimal(10), Int(minorUnits))
-    return value.formatted(.currency(code: currency ?? "EUR").precision(.fractionLength(Int(minorUnits))))
+    // D8: the core hands every amount with its currency; none is never a guessed one, but a number alone (the desktops' rule)
+    guard let currency else { return value.formatted(.number.precision(.fractionLength(Int(minorUnits)))) }
+    return value.formatted(.currency(code: currency).precision(.fractionLength(Int(minorUnits))))
 }
 
 /// An entry's `YYYY-MM-DD` as the person's locale writes a day.
@@ -208,8 +210,8 @@ private struct OverviewList: View {
     let view: PotView
 
     private func record(_ payments: [PotView.SettleRow]) {
-        let day = model.today
-        Task { await model.potWrite { try await $0.recordPayments(payments: payments, date: day) } }
+        // dated the core's today (`PotModel.record`)
+        Task { await model.recordSettleUp(payments) }
     }
 
 

@@ -1140,52 +1140,110 @@ final class AppModel {
         syncPot()
     }
 
-    /// One write to the open Pot (`op` on its session): saving, then the Pot as read after it and a refusal as its message;
-    /// true once it was stored.
-    func potWrite(_ op: @escaping @MainActor (PotSession) async throws -> PotSession.WriteOutcome) async -> Bool {
-        guard let pots = potModel, let ref = pot?.ref, let session = pots.beginWrite() else { return false }
+    /// Records settle-up `rows` as paid, dated the core's today (core's `PotModel.record`); a refusal is the Pot's message.
+    func recordSettleUp(_ rows: [PotView.SettleRow]) async {
+        guard let pots = potModel else { return }
+        _ = try? await pots.record(rows: rows)
         syncPot()
-        let outcome = (try? await op(session)) ?? .refused
-        let stored = pots.endWrite(outcome: outcome)
+    }
+
+    /// Whether deleted entry `entryId` may be restored now, by the core's clock.
+    func restorable(_ entryId: String) -> Bool { potModel?.restorable(entryId: entryId) ?? false }
+
+    /// Restores deleted entry `entryId` (core's `PotModel.restore`, its window the core's); true once it was.
+    func restoreEntry(_ entryId: String) async -> Bool {
+        guard let pots = potModel else { return false }
+        let done = (try? await pots.restore(entryId: entryId))?.boolValue ?? false
         syncPot()
-        // A settings write may have set the base currency: the Pot's row says it at once.
+        return done
+    }
+
+    /// The open Pot's settings and people (core's `PotSettings`), one per open Pot, held here; its tab draws `settingsState`,
+    /// set after each of its actions (only they change it).
+    @ObservationIgnored private var potSettings: PotSettings?
+    @ObservationIgnored private var potSettingsOf: String?
+    private(set) var settingsState: PotSettings.State?
+
+    /// The open Pot's settings model, made anew when another Pot is open.
+    @discardableResult func openSettings() -> PotSettings? {
+        guard let ref = pot?.ref, pot?.view != nil else { return nil }
+        if potSettingsOf != ref.nodeId {
+            potSettings = potModel?.settings()
+            potSettingsOf = ref.nodeId
+            settingsState = potSettings?.current
+        }
+        return potSettings
+    }
+
+    /// One change of the open Pot's settings or people (`op`, a `PotSettings` action); true once it was stored. A new
+    /// base currency is said on the Pot's row at once.
+    func settingsWrite(_ op: @escaping @MainActor (PotSettings) async throws -> KotlinBoolean) async -> Bool {
+        guard let s = openSettings(), let pots = potModel, let ref = pot?.ref else { return false }
+        let stored = (try? await op(s))?.boolValue ?? false
+        settingsState = s.current
+        syncPot()
         if let facts = pots.rowDetails() { rowDetails[ref.nodeId] = facts }
         return stored
     }
 
-    /// The "New pot" sheet: saving while it creates, and its refusal (a `PotCreate.Outcome` name).
-    struct CreatingPot {
-        var saving = false
-        var message: String?
+    /// A person's erase asked (core's state: done only by `settingsWrite { try await $0.erase() }`).
+    func askErase(_ personId: String) { openSettings()?.askErase(personId: personId); settingsState = potSettings?.current }
+
+    func cancelErase() { potSettings?.cancelAsk(); settingsState = potSettings?.current }
+
+    /// "New pot" (core's `PotCreateSheet`) open in the app, watched here (its members arrive on their own); its sheet draws
+    /// `createState`.
+    @ObservationIgnored private var createSheet: PotCreateSheet?
+    @ObservationIgnored private var createWatch: PotCreateSheet.Watch?
+    private(set) var createState: PotCreateSheet.State?
+
+    /// Opens "New pot" at the shell's place now, in the person's language's currency.
+    func openCreateSheet() {
+        closeCreateSheet()
+        guard let shellModel, let s = potModel?.createSheet(shell: shellModel, language: Locale.current.language.languageCode?.identifier ?? "") else { return }
+        createSheet = s
+        createState = s.current
+        createWatch = s.watch { @Sendable _ in
+            Task { @MainActor [weak self] in self?.createState = self?.createSheet?.current }
+        }
     }
 
-    private(set) var creatingPot = CreatingPot()
+    func createSpace(_ scopeId: String) { createSheet?.space(scopeId: scopeId); createState = createSheet?.current }
+    func createCurrency(_ code: String) { createSheet?.currency(code: code); createState = createSheet?.current }
+    func createAddMember(_ userId: String) { createSheet?.addMember(userId: userId); createState = createSheet?.current }
+    func createRemove(_ index: Int) { createSheet?.remove(index: Int32(index)); createState = createSheet?.current }
 
-    /// The current members of `scopeId`, for the "New pot" sheet's people; empty when they do not read.
-    func membersOf(_ scopeId: String) async -> [Person] {
-        guard let t = tenantSession else { return [] }
-        return ((try? await t.scopeMembers(scopeId: scopeId)) ?? nil) ?? []
+    /// A name typed added; true when there was one (the field is emptied).
+    func createAddTyped(_ text: String) -> Bool {
+        let added = createSheet?.addTyped(text: text) ?? false
+        createState = createSheet?.current
+        return added
     }
 
-    /// Creates a Pot named `name` at the root of `scopeId` with `currency` and `people`, reads the tenant's lists again and
-    /// opens it; true once it exists (its people may still have failed: then it opens and says so on Settings).
-    func createPot(scopeId: String, name: String, currency: String, minorUnits: Int32, people: [PotCreate.NewPerson]) async -> Bool {
-        guard let pots = potModel, let shellModel else { return false }
-        creatingPot = CreatingPot(saving: true)
-        // in the folder on screen, where the sheet creates in the space shown (the web's "New" at a level)
-        let parent = PotCreate.shared.parentIn(shell: shell, scopeId: scopeId)
-        let created = (try? await pots.create(
-            shell: shellModel, scopeId: scopeId, parentId: parent, name: name,
-            base: Ledger.BaseCurrency(currency: currency, minorUnits: minorUnits), people: people
-        ))?.boolValue ?? false
-        let c = pots.creating.value as? PotModel.Creating
-        creatingPot = CreatingPot(saving: false, message: c?.message ?? (created ? nil : "REFUSED"))
-        applyShell(start: false)
-        await readDetails(shellModel.tenant)
+    func canCreatePot(_ name: String) -> Bool { createSheet?.canCreate(name: name) ?? false }
+
+    /// Creates the Pot named `name` (a person still `typed` joins first) and opens it; true once it exists.
+    func createPot(name: String, typed: String) async -> Bool {
+        guard let s = createSheet, let shellModel else { return false }
+        let created = (try? await s.create(name: name, typed: typed))?.boolValue ?? false
+        createState = s.current
+        if created {
+            applyShell(start: false)
+            await readDetails(shellModel.tenant)
+        }
         return created
     }
 
-    func clearCreatingPot() { potModel?.clearCreating(); creatingPot = CreatingPot() }
+    /// Today by the core's clock (`yyyy-MM-dd`): the editor's date picker falls back to it.
+    var today: String { potModel?.today() ?? "" }
+
+    func closeCreateSheet() {
+        createWatch?.stop()
+        createWatch = nil
+        createSheet?.close()
+        createSheet = nil
+        createState = nil
+    }
 
     /// The entry editor open in the app (core's `EntryEditor` over the Pot's model), watched by this model, not by its
     /// sheet: what the sheet draws is `editorState`, set at once after each edit (a field never lags what was typed) and
@@ -1249,8 +1307,6 @@ final class AppModel {
         editorState = nil
     }
 
-    /// Today by the core's clock (`yyyy-MM-dd`): what a payment recorded now is dated.
-    var today: String { potModel?.today() ?? "" }
 
     /// A receipt of the open Pot opened to its bytes, or nil (blocked, or it did not read).
     /// Downloads the open Pot `ref` as the web's ZIP (uc.platform.export-import, ADR 0082) into a file of its own in the

@@ -7,15 +7,17 @@ func potRefusal(_ outcome: String) -> String { say(Notices.shared.potRefused(out
 /// An open Pot's Settings tab (the web's `SettingsPanel.vue` and `PeoplePanel.vue`): its base currency, chosen while it
 /// holds no money entry; its people, each with their balance in short and what may be done to them
 /// (`PotView.PersonEntry`); and its own categories, added and renamed. A Pot without settings shows the currency alone.
-struct PotSettings: View {
+/// Drawn over core's `PotSettings` (held by the app model): what may be changed, the erase asked and a refusal are its.
+/// Named apart from that class (a SwiftUI view must not shadow a core class).
+struct PotSettingsTab: View {
     @Bindable var model: AppModel
     let view: PotView
     @State private var newName = ""
     @State private var newMember = ""
     @State private var renaming: PotView.PersonEntry?
     @State private var renameTo = ""
-    @State private var erasing: PotView.PersonEntry?
     @State private var newCategory = ""
+    @State private var confirming = false
     @State private var renamingCategory: String?
     @State private var categoryName = ""
 
@@ -23,9 +25,6 @@ struct PotSettings: View {
 
     /// The currencies offered, by code: core's one table (the web's `Intl`).
     private static var currencies: [String] { Currencies.shared.known }
-
-    /// The minor-unit digits of `code` (the euro 2, the yen 0, the dinar 3): core's one table.
-    private static func minorUnits(_ code: String) -> Int32 { Currencies.shared.minorUnits(code: code) }
 
     var body: some View {
         List {
@@ -45,10 +44,11 @@ struct PotSettings: View {
             }
         }
         .scrollContentBackground(.hidden)
+        .task(id: model.pot?.ref.nodeId) { model.openSettings() }
         .alert(say(.peopleRename, renaming?.name ?? ""), isPresented: Binding(get: { renaming != nil }, set: { if !$0 { renaming = nil } })) {
             TextField(say(.peopleName), text: $renameTo)
             Button(say(.entrySave)) {
-                if let p = renaming { write { try await $0.rename(participantId: p.id, name: renameTo) } then: {} }
+                if let p = renaming { let name = renameTo; write { try await $0.rename(personId: p.id, name: name) } then: {} }
                 renaming = nil
             }
             Button(say(.signinCancel), role: .cancel) { renaming = nil }
@@ -56,21 +56,28 @@ struct PotSettings: View {
         .alert(say(.peopleRename, renamingName), isPresented: Binding(get: { renamingCategory != nil }, set: { if !$0 { renamingCategory = nil } })) {
             TextField(say(.settingsCategoryName), text: $categoryName)
             Button(say(.entrySave)) {
-                if let id = renamingCategory { write { try await $0.renameCategory(id: id, name: categoryName) } then: {} }
+                if let id = renamingCategory { let name = categoryName; write { try await $0.renameCategory(id: id, name: name) } then: {} }
                 renamingCategory = nil
             }
             Button(say(.signinCancel), role: .cancel) { renamingCategory = nil }
         }
+        // the erase asked is core's state. A dismissal's cancel runs BEFORE the button's action (src/mobile/CLAUDE.md
+        // § Traps), and an iPhone's popover has no Cancel button but a tap outside: the dismissal cancels one turn
+        // later, unless the destructive action confirmed meanwhile.
         .confirmationDialog(
             erasing.map { $0.named ? say(.peopleDelete, $0.name) : say(.peopleRemove, $0.name) } ?? "",
-            isPresented: Binding(get: { erasing != nil }, set: { if !$0 { erasing = nil } }),
+            isPresented: Binding(get: { erasing != nil && !confirming }, set: { shown in
+                if !shown { DispatchQueue.main.async { if !confirming { model.cancelErase() } } }
+            }),
             titleVisibility: .visible
         ) {
             if let p = erasing {
                 Button(p.named ? say(.peopleDeleteAccept) : say(.peopleRemoveAccept), role: .destructive) {
-                    write { try await $0.erase(participantId: p.id) } then: {}
-                    erasing = nil
+                    // shown closed at once; core's question ends when the erase was sent
+                    confirming = true
+                    Task { _ = await model.settingsWrite { try await $0.erase() }; confirming = false }
                 }
+                Button(say(.signinCancel), role: .cancel) { model.cancelErase() }
             }
         } message: {
             if let p = erasing {
@@ -89,8 +96,8 @@ struct PotSettings: View {
                 Picker(say(.potBaseCurrency), selection: Binding(
                     get: { view.currency ?? "" },
                     set: { code in
-                        guard !code.isEmpty, code != view.currency else { return }
-                        write { try await $0.setBaseCurrency(currency: code, minorUnits: Self.minorUnits(code)) } then: {}
+                        guard !code.isEmpty else { return }
+                        write { try await $0.setBaseCurrency(code: code) } then: {}
                     }
                 )) {
                     if view.currency == nil { Text("—").tag("") }
@@ -110,7 +117,7 @@ struct PotSettings: View {
                 } else if view.canChangeSettings {
                     Text(say(.settingsCurrencyHint))
                 }
-                if !view.ready, let message = model.pot?.message { Text(potRefusal(message)).foregroundStyle(Role.danger) }
+                if !view.ready, let notice = model.settingsState?.notice { Text(say(notice: notice)).foregroundStyle(Role.danger) }
             }
         }
     }
@@ -123,7 +130,7 @@ struct PotSettings: View {
             if view.canWrite {
                 HStack {
                     TextField(say(.peopleName), text: $newName)
-                    Button(say(.peopleAdd)) { write { try await $0.addPerson(name: newName) } then: { newName = "" } }
+                    Button(say(.peopleAdd)) { let name = newName; write { try await $0.addPerson(name: name) } then: { newName = "" } }
                         .disabled(newName.trimmingCharacters(in: .whitespaces).isEmpty || saving)
                 }
                 .listRowBackground(Role.surface)
@@ -134,7 +141,7 @@ struct PotSettings: View {
                         Text(say(.peopleChooseMember)).tag("")
                         ForEach(view.addableMembers, id: \.userId) { Text($0.name).tag($0.userId) }
                     }
-                    Button(say(.peopleAddMember)) { write { try await $0.addMember(userId: newMember) } then: { newMember = "" } }
+                    Button(say(.peopleAddMember)) { let id = newMember; write { try await $0.addMember(userId: id) } then: { newMember = "" } }
                         .disabled(newMember.isEmpty || saving)
                 }
                 .listRowBackground(Role.surface)
@@ -145,7 +152,7 @@ struct PotSettings: View {
             VStack(alignment: .leading, spacing: 4) {
                 if view.deletedPeople > 0 { Text(say(.peopleDeletedSummary, view.deletedPeople)) }
                 if view.canWrite && view.anyUnsettled { Text(say(.peopleSettleFirst)) }
-                if let message = model.pot?.message { Text(potRefusal(message)).foregroundStyle(Role.danger) }
+                if let notice = model.settingsState?.notice { Text(say(notice: notice)).foregroundStyle(Role.danger) }
             }
         }
     }
@@ -165,12 +172,12 @@ struct PotSettings: View {
                     .disabled(saving)
             }
             if p.canToggle {
-                Button(p.active ? say(.peopleDeactivate) : say(.peopleActivate)) { write { try await $0.setActive(participantId: p.id, active: !p.active) } then: {} }
+                Button(p.active ? say(.peopleDeactivate) : say(.peopleActivate)) { let id = p.id; write { try await $0.toggleActive(personId: id) } then: {} }
                     .buttonStyle(.borderless)
                     .disabled(saving)
             }
             if p.canErase {
-                Button { erasing = p } label: { Image(systemName: "trash") }
+                Button { model.askErase(p.id) } label: { Image(systemName: "trash") }
                     .buttonStyle(.borderless)
                     .foregroundStyle(Role.danger)
                     .accessibilityLabel(p.named ? say(.peopleDelete, p.name) : say(.peopleRemove, p.name))
@@ -206,7 +213,7 @@ struct PotSettings: View {
                 if view.canAddCategory {
                     HStack {
                         TextField(say(.settingsCategoryName), text: $newCategory)
-                        Button(say(.settingsAddCategory)) { write { try await $0.addCategory(name: newCategory) } then: { newCategory = "" } }
+                        Button(say(.settingsAddCategory)) { let name = newCategory; write { try await $0.addCategory(name: name) } then: { newCategory = "" } }
                             .disabled(newCategory.trimmingCharacters(in: .whitespaces).isEmpty || saving)
                     }
                     .listRowBackground(Role.surface)
@@ -219,7 +226,9 @@ struct PotSettings: View {
         }
     }
 
-    private func write(_ op: @escaping @MainActor (PotSession) async throws -> PotSession.WriteOutcome, then done: @escaping () -> Void) {
-        Task { if await model.potWrite(op) { done() } }
+    private var erasing: PotSettings.Asked? { model.settingsState?.asking }
+
+    private func write(_ op: @escaping @MainActor (PotSettings) async throws -> KotlinBoolean, then done: @escaping () -> Void) {
+        Task { if await model.settingsWrite(op) { done() } }
     }
 }
