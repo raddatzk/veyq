@@ -251,7 +251,11 @@ or a one-off `1rem` label sitting in them.
 - **A centred dialog is at most a reading column wide, 36rem** (owner 2026-11-07; `.veyq-dialog--center` in each
   surface's `shared/ui/layer.css`): unsized, a dialog takes its text's natural width, and one long sentence stretched it
   across the screen. A dialog that needs more sets `--veyq-dialog-max-width: none` beside its own width (the expenses
-  entry, the space's trash, the localized markdown editor) — never a rule that out-ranks the default.
+  entry, the space's trash, the localized markdown editor, the Memory's banner) — never a rule that out-ranks the default.
+  **A dialog's width sits on the box** (`:style` or a class on `VeyqDialog`, as `min(<n>rem, calc(100vw - 2rem))`),
+  never on the element inside it: the box keeps its padding inside the cap, so a width on the content overflows it and
+  the end of the text and the action row are cut off — the banner's 640px past the 36rem cap, and every `92vw` content
+  width on a phone (2026-11-12).
 - **A tap beside a dialog closes it only while it holds no field** (owner 2026-11-08; `VeyqDialog` in both surfaces): a
   menu, a confirmation or a notice — the mobile navigation sheet among them — closes as Cancel would; a dialog with a
   field to type into, pick, tick or toggle (native, or a layer component by its role or `aria-pressed`) stays open,

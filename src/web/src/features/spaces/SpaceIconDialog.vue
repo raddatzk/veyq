@@ -63,7 +63,7 @@ async function save() {
 </script>
 
 <template>
-  <VeyqDialog :visible="true" :header="t('spaceIcon.dialogTitle')" @update:visible="emit('close')">
+  <VeyqDialog :visible="true" :style="{ width: 'min(29rem, calc(100vw - 2rem))' }" :header="t('spaceIcon.dialogTitle')" @update:visible="emit('close')">
     <div class="veyq-form space-icon-dialog">
       <p class="space-icon-copy">{{ t('spaceIcon.dialogIntro') }}</p>
 
@@ -85,9 +85,9 @@ async function save() {
 </template>
 
 <style scoped>
+/* The box carries a fixed, comfortable width (`:style` on the VeyqDialog), so the copy wraps and the cropper stays a
+   sensible size; set here on the content, a vw width overflowed the box on a phone, whose padding sits inside it. */
 .space-icon-dialog {
-  /* A fixed, comfortable width so the copy wraps + the square cropper stays a sensible size. */
-  width: min(420px, 92vw);
   gap: 0.85rem;
 }
 .space-icon-copy {

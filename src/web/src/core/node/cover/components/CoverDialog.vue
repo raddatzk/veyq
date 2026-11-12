@@ -80,7 +80,7 @@ function remove() {
 </script>
 
 <template>
-  <VeyqDialog :visible="true" :header="t('node.cover.dialogTitle')" @update:visible="emit('close')">
+  <VeyqDialog :visible="true" :style="{ width: 'min(34rem, calc(100vw - 2rem))' }" :header="t('node.cover.dialogTitle')" @update:visible="emit('close')">
     <div class="veyq-form veyq-cover-dialog">
       <p class="veyq-cover-copy">{{ t('node.cover.copy') }}</p>
 
@@ -118,9 +118,9 @@ function remove() {
 </template>
 
 <style scoped>
+/* The box carries a fixed, comfortable width (`:style` on the VeyqDialog), so the copy wraps and the cropper stays a
+   sensible size; set here on the content, a vw width overflowed the box on a phone, whose padding sits inside it. */
 .veyq-cover-dialog {
-  /* A fixed, comfortable width so the copy wraps and the full-width cropper stays a sensible size in every state. */
-  width: min(500px, 92vw);
   gap: 0.85rem;
 }
 .veyq-cover-copy {
