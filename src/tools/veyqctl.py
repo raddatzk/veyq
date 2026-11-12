@@ -3368,8 +3368,9 @@ def server_finish(run: InitRun, g: GitOps, repo_url: str) -> None:
              "Argo CD: " + (f"https://localhost:{CONNECT_PORTS['argocd']}" if answers["host_access"] == "yes"
                             else f"kubectl --context {name} -n argocd port-forward svc/argocd-server 8080:443")
              + ", user admin. Its first password: kubectl --context " + name + " -n argocd get secret "
-             "argocd-initial-admin-secret -o jsonpath='{.data.password}' | base64 -d — change it, then delete that "
-             "Secret."]
+             "argocd-initial-admin-secret -o jsonpath='{.data.password}' | base64 -d — change it in Argo CD (User "
+             "Info → Update Password), then delete that Secret, which Argo CD no longer reads: kubectl --context "
+             + name + " -n argocd delete secret argocd-initial-admin-secret"]
     if admin:
         lines.append(f"veyq's admin page: http://localhost:{CONNECT_PORTS['admin']} — create the Server Owner there.")
     if staging:  # raddatz.me, 2026-11-11: the store check failed on the test certificates, which nothing said

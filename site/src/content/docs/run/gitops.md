@@ -78,7 +78,8 @@ context). Then, each step said as it comes and every one that changes something 
    opens the tunnel to the cluster's API, Argo CD (`https://localhost:18443`) and veyq's administration
    (`http://localhost:18081`) — and the kubeconfig context `<name>`, never shadowing a `Host` of your own.
 10. **The wait**, through a tunnel `init` opens and closes, until Argo CD reports every application Synced and Healthy.
-    Then it says how to read Argo CD's first password and where to create the Server Owner.
+    Then it says how to read Argo CD's first password, change it and delete the Secret that holds it, and where to
+    create the Server Owner.
 
 Every answer is in `veyq-setup.json`, committed with the rest; the age key is the one thing the repository does not
 hold. **Keep it in your password manager**: with it and the repository, `veyqctl init` sets a lost server up again — on
