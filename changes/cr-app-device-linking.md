@@ -192,3 +192,8 @@ the bridge.
    (they do for the slide), and confirm the new hint's tone.
 3. **Linux without the Secret Service** (D4): a linked device there keeps the Master Key only for the run. Acceptable,
    or should the Linux app refuse to be linked in that state?
+
+**Decided** (the coordinator, 2026-11-12, under the owner's standing mandate to decide and report; the owner may overturn any):
+- 1: no typed fallback; two cameraless desktops use the password and Secret Key or the Emergency Kit.
+- 2: the web's words where they exist; the new hint as written.
+- 3: acceptable — a linked Linux device without the Secret Service holds the Master Key for the run only, as a signed-in one does.

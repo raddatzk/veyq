@@ -142,3 +142,9 @@ sessions and a sign-out, each action measured live once per app, and the "Add a 
    Windows and GNOME have no per-app language setting of their own.
 3. **Copy:** the page's section titles follow the web's English and German ("Devices and sessions", "Geräte und
    Sitzungen"); confirm or name the apps' own.
+
+**Decided** (the coordinator, 2026-11-12, under the owner's standing mandate to decide and report; the owner may overturn any):
+- 1: this CR holds only what surrounds signing in; change password, change email, replace the keys, erase the account and
+  the profile follow after Memories as their own CR (inbox #863).
+- 2: the desktops follow the system only.
+- 3: the web's titles, English and German.

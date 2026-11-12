@@ -169,3 +169,7 @@ every `:core:jvmTest`.
 2. **Real-camera passes** on a Linux laptop, a Windows laptop and an iPhone are the owner's steps (none of the test
    machines has a camera but this Mac); without them those three camera paths stay measured only through the test
    camera.
+
+**Decided** (the coordinator, 2026-11-12, under the owner's standing mandate to decide and report; the owner may overturn any):
+- 1: yes, the desktops get a camera (phase 5 as written).
+- 2: the three real-camera passes stay the owner's steps; until then those paths are measured through the test camera only.

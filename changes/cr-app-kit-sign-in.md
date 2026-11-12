@@ -413,6 +413,11 @@ proof is the tests and passes `src/mobile/CLAUDE.md` § Prove your work names �
    *Recommendation:* not now — the files picker takes a picture file, and the camera reads the paper; a third entry on a
    sign-in screen is one more thing to explain.
 
+
+**Decided** (the coordinator, 2026-11-12, under the owner's standing mandate to decide and report; the owner may overturn any):
+- 1–4: as recommended — the file first on the desktops, the scan first on a phone or tablet; the words as written; no site
+  page until the apps' packaging; no photo library now.
+
 ## Retrospective
 
 (filled at the end)
