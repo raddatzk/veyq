@@ -292,8 +292,8 @@ internal sealed class EntryEditorPage : IDisposable
         public required StackPanel Preview;
         public required TextBlock Invalid;
         public List<string> People = [];
-        /// <summary>Every ComboBox of the form: closed before the form is replaced (a drop-down left open over a
-        /// control taken out of the tree ended the app in combase).</summary>
+        /// <summary>Every ComboBox of the form: its drop-down closed before the form is replaced or the page goes (UI
+        /// Automation's select leaves it open, and its control would leave the tree under it).</summary>
         public readonly List<ComboBox> Combos = [];
     }
 
