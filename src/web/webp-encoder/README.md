@@ -36,15 +36,17 @@ python3 src/web/webp-encoder/build.py            # rebuild, compare with libwebp
 python3 src/web/webp-encoder/build.py --write    # rebuild and write the files and their hashes
 ```
 
-A rebuild of the pinned tag must be byte-identical: CI's `webp-encoder` job runs the first line on every change to
-this directory, and is red on any difference. If it ever differs, the check stays red until the cause is found — it is
+A rebuild of the pinned tag must be byte-identical: Checks' `webp-encoder` job runs the first line whenever this
+directory changed, and is red on any difference. Measured when it landed: two rebuilds from a clean checkout, and one
+under amd64 emulation on an arm64 Mac, wrote the pinned bytes. If it ever differs, the check stays red until the cause is found — it is
 never dropped (ADR 0127 Consequences).
 
 ## A newer libwebp, a newer Emscripten
 
-- **libwebp:** `.github/workflows/webp-encoder-update.yml` reads libwebp's stable `vX.Y.Z` tags weekly; on a newer
-  one it runs `build.py --tag <tag> --commit <sha> --write`, the tests, and opens a pull request. By hand, the same:
-  `git ls-remote https://github.com/webmproject/libwebp 'refs/tags/<tag>^{}'` names the commit.
+- **libwebp:** `python3 build.py --newest` names libwebp's newest stable `vX.Y.Z` tag, its commit, and whether it is
+  newer than the pin; `build.py --tag <tag> --commit <sha> --write` then rebuilds from it, and the tests run against
+  the new module. A scheduled workflow does exactly this weekly and opens a pull request (ADR 0127 decision 4); it
+  never merges.
 - **Emscripten:** Dependabot bumps the `Dockerfile`'s digest. A new toolchain writes new bytes, so that pull request is
   red (the pin's `image` no longer matches the `Dockerfile`, and the rebuild differs) until `build.py --write` is run
   on its branch and the result committed.

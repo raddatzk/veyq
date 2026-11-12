@@ -9,7 +9,9 @@ Two roles in one file, so the host and the container cannot disagree about a pat
                               listing it (the CI rebuild check, and the reproducibility proof);
       `build.py --write`      write the build into this directory and its hashes into `libwebp.pin`;
       `build.py --tag vX.Y.Z --commit <sha> --write`
-                              the same for another tag (the update workflow; the commit is what `git ls-remote` named).
+                              the same for another tag (the update workflow; the commit is what `git ls-remote` named);
+      `build.py --newest`     print libwebp's newest stable tag, its commit, and whether it is newer than the pin, as
+                              `key=value` lines (the update workflow appends them to `$GITHUB_OUTPUT`). Needs git only.
   - **In the container** (`--inside`): fetch the tag into a fixed path, refuse it unless it is the pinned commit, and
     compile the encoder alone into `/out`.
 
@@ -107,6 +109,28 @@ def run(cmd: list, shown: list | None = None, **kwargs) -> None:
     subprocess.run(cmd, check=True, **kwargs)
 
 
+def version(tag: str) -> tuple:
+    return tuple(int(part) for part in tag[1:].split("."))
+
+
+def newest() -> None:
+    """Print the newest stable `vX.Y.Z` tag upstream (never an `-rc`), the commit it names, and whether it is newer."""
+    listing = subprocess.run(["git", "ls-remote", "--tags", UPSTREAM], check=True, capture_output=True, text=True).stdout
+    commits: dict = {}
+    for line in listing.splitlines():
+        sha, ref = line.split("\t")
+        name = ref[len("refs/tags/"):]
+        peeled = name.endswith("^{}")
+        name = name[: -len("^{}")] if peeled else name
+        if STABLE_TAG.match(name) and (peeled or name not in commits):
+            commits[name] = sha  # an annotated tag's peeled line names the commit; a lightweight tag's own line does
+    if not commits:
+        sys.exit(f"no stable vX.Y.Z tag at {UPSTREAM} — has libwebp changed how it tags releases?")
+    tag = max(commits, key=version)
+    pinned = read_pin()["tag"]
+    print(f"tag={tag}\ncommit={commits[tag]}\npinned={pinned}\nnewer={'true' if version(tag) > version(pinned) else 'false'}")
+
+
 def inside(tag: str, commit: str) -> None:
     """In the container: fetch, check, compile into /out."""
     src = pathlib.Path("/work/libwebp")
@@ -146,7 +170,12 @@ def main() -> int:
     parser.add_argument("--tag", help="a libwebp release tag other than the pinned one (needs --commit)")
     parser.add_argument("--commit", help="the commit that tag must be")
     parser.add_argument("--write", action="store_true", help="write the build and its hashes instead of comparing")
+    parser.add_argument("--newest", action="store_true", help="print libwebp's newest stable tag and whether it is newer")
     args = parser.parse_args()
+
+    if args.newest:
+        newest()
+        return 0
 
     if args.inside:
         inside(args.tag, args.commit)

@@ -138,12 +138,15 @@ updates:
 
   # `docker` reads the files named Dockerfile/Containerfile in each directory (not recursively): each image's beside
   # the code it ships — the app image's in src/backend/, the admin image's in src/admin-web/, the tools image's in
-  # src/tools/.
+  # src/tools/ — and the WebP encoder's toolchain in src/web/webp-encoder/ (ADR 0127), never published: its Emscripten
+  # digest is kept current here like every pin, and a bump writes new encoder bytes, so that pull request is red at
+  # Checks' `webp-encoder` job until `build.py --write` is run on its branch (src/web/webp-encoder/README.md).
   - package-ecosystem: "docker"
     directories:
       - "/src/backend"
       - "/src/admin-web"
       - "/src/tools"
+      - "/src/web/webp-encoder"
     patterns:
       - "*"
     multi-ecosystem-group: "images"
