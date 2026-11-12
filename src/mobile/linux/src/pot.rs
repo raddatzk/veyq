@@ -52,6 +52,8 @@ struct Inner {
     place: RefCell<Option<String>>,
     /// Told whether the Pot takes writes, each time it is read (its header's facts).
     read: RefCell<Option<OnRead>>,
+    /// The Settings place, opened in the core when it is first shown and kept while the page is.
+    settings: RefCell<Option<crate::pot_settings::SettingsPlace>>,
 }
 
 impl PotPage {
@@ -72,6 +74,7 @@ impl PotPage {
             clamp: adw::Clamp::builder().maximum_size(720).build(),
             place: RefCell::new(None),
             read: RefCell::new(None),
+            settings: RefCell::new(None),
         });
         inner.scroll.set_child(Some(&inner.clamp));
         inner.root.append(&inner.scroll);
@@ -209,6 +212,7 @@ impl Drop for PotPage {
             self.inner.window.disconnect(h);
         }
         self.inner.watch.borrow_mut().take();
+        self.inner.settings.borrow_mut().take();
         if let Some(pot) = self.inner.id.get() {
             bridge::send(Call::PotClose { pot });
         }
@@ -259,6 +263,11 @@ impl Inner {
                 self.root.remove(&c);
             }
         }
+        if let Some(place) = self.settings.borrow().as_ref()
+            && let Some(parent) = place.widget().parent().and_downcast::<gtk::Box>()
+        {
+            parent.remove(place.widget());
+        }
         let state = self.state.borrow();
         let (tabs, selected) = &*self.tabs.borrow();
         let view = state.as_ref().and_then(|s| s.view.as_ref());
@@ -294,14 +303,12 @@ impl Inner {
         if !view.missing.is_empty() {
             content.append(&missing(view));
         }
-        if !view.ready {
-            content.append(&note(&words::settings_missing_read_only()));
-        } else {
-            match selected.as_ref().map(|t| t.key.as_str()) {
-                Some("expenses.overview") => self.overview(&content, view),
-                Some("expenses.settings") => settings(&content, view),
-                _ => self.entries(&content, view),
-            }
+        match selected.as_ref().map(|t| t.key.as_str()) {
+            // the settings choose a base currency the Pot does not have yet
+            Some("expenses.settings") => self.settings(&content),
+            _ if !view.ready => content.append(&note(&words::settings_missing_read_only())),
+            Some("expenses.overview") => self.overview(&content, view),
+            _ => self.entries(&content, view),
         }
         self.clamp.set_child(Some(&content));
         self.scroll.set_visible(true);
@@ -411,6 +418,18 @@ impl Inner {
         }
     }
 
+    /// The Settings place ([crate::pot_settings]): opened in the core the first time it shows, kept across redraws.
+    fn settings(self: &Rc<Self>, content: &gtk::Box) {
+        let Some(pot) = self.id.get() else { return };
+        let mut held = self.settings.borrow_mut();
+        if !held.as_ref().is_some_and(|p| p.of(pot)) {
+            *held = Some(crate::pot_settings::SettingsPlace::open(pot, &self.window, &self.toasts));
+        }
+        if let Some(place) = held.as_ref() {
+            content.append(place.widget());
+        }
+    }
+
     /// Asks before settle-up [rows] are recorded (one, or all): [heading] and [body] in an `AdwAlertDialog`, then
     /// `Pot.Record`; a refusal is said at once from the answer, the settled rows arrive on the Pot's watch.
     fn ask_record(self: &Rc<Self>, rows: Vec<SettleRow>, heading: &str, body: &str) {
@@ -491,18 +510,3 @@ fn missing(view: &PotView) -> adw::PreferencesGroup {
     group
 }
 
-fn settings(content: &gtk::Box, view: &PotView) {
-    let currency = adw::PreferencesGroup::builder().title(words::pot_base_currency()).build();
-    currency.add(&adw::ActionRow::builder().title(glib_escape(view.currency.as_deref().unwrap_or("—"))).build());
-    content.append(&currency);
-    let people = adw::PreferencesGroup::builder().title(words::pot_people()).build();
-    for p in &view.people {
-        let row = adw::ActionRow::builder().title(glib_escape(&p.entry.name)).subtitle(glib_escape(&said::line(&p.facts))).build();
-        row.add_prefix(&avatars::avatar(&p.entry.name, p.entry.user_id.as_deref(), 32));
-        people.add(&row);
-    }
-    if view.deleted_people > 0 {
-        people.set_description(Some(&words::people_deleted_summary(i64::from(view.deleted_people))));
-    }
-    content.append(&people);
-}

@@ -258,6 +258,15 @@ impl Shell {
             });
         });
         window.add_action(&create_folder);
+        // New's Pot (`PotCreate.Open`): its dialog, over the window; the shell opens the Pot it made
+        let create_pot = gio::SimpleAction::new("create-pot", None);
+        let weak = Rc::downgrade(self);
+        create_pot.connect_activate(move |_, _| {
+            if let Some(s) = weak.upgrade() {
+                crate::pot_create::open(s.window.upcast_ref(), &s.toasts);
+            }
+        });
+        window.add_action(&create_pot);
         // the space's trash, from the switcher's menu (`trash`)
         let open_trash = gio::SimpleAction::new("trash", None);
         let weak = Rc::downgrade(self);
@@ -413,14 +422,19 @@ impl Shell {
         self.tenant_action.set_state(&format!("{}\n{}", shown.connection, shown.tenant.tenant_id).to_variant());
     }
 
-    /// New: what the sidebar's New offers (`AppKinds.drawerCreates`) where the shell may create (`canCreateHere`). A
-    /// folder is made here; the others are later CRs' (their entry stays insensitive: `win.create` is no action).
+    /// New: what the sidebar's New offers (`AppKinds.drawerCreates`) where the shell may create (`canCreateHere`): a folder
+    /// and a Pot; another kind is a later CR's (its entry stays insensitive: `win.create` is no action).
     fn draw_new(&self) {
         let now = self.now.borrow();
         let Some((_, shown)) = now.as_ref() else { return };
         let menu = gio::Menu::new();
         for c in &shown.creates {
-            menu.append(Some(&said::key(&c.word)), Some(if c.create == Create::Folder { "win.create-folder" } else { "win.create" }));
+            let action = match c.create {
+                Create::Folder => "win.create-folder",
+                Create::Pot => "win.create-pot",
+                _ => "win.create",
+            };
+            menu.append(Some(&said::key(&c.word)), Some(action));
         }
         self.new.set_menu_model(Some(&menu));
         self.new.set_visible(shown.can_create_here);
