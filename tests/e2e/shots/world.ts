@@ -392,6 +392,8 @@ export async function inviteMember(w: World, page: Page, who: Person): Promise<{
   await openSettings(w, page, w.t('Members', 'Mitglieder'))
   await page.getByRole('button', { name: w.t('Invite member', 'Mitglied einladen') }).click()
   const dialog = page.getByRole('dialog', { name: w.t('Invite member', 'Mitglied einladen') })
+  // The dialog opens on sharing a link (ADR 0129 decision 1); the world invites by mail.
+  await dialog.getByRole('button', { name: w.t('Invite by email', 'Per E-Mail einladen') }).click()
   await dialog.getByLabel(w.t('Email address', 'E-Mail-Adresse')).fill(who.email)
   await dialog.getByRole('button', { name: w.t('Send invite', 'Einladung senden') }).click()
   const codeField = dialog.getByTestId('invite-code')

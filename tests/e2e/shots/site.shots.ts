@@ -346,6 +346,7 @@ shot('owners-invite', async (w) => {
   await openSettings(w, page, w.t('Members', 'Mitglieder'))
   await page.getByRole('button', { name: w.t('Invite member', 'Mitglied einladen') }).click()
   const d = dialog(page, w.t('Invite member', 'Mitglied einladen'))
+  await d.getByRole('button', { name: w.t('Invite by email', 'Per E-Mail einladen') }).click()
   await d.getByLabel(w.t('Email address', 'E-Mail-Adresse')).fill(w.t('jordan@family.example', 'jonas@familie.example'))
   await capture(w, 'owners-invite', d)
   await closeDialogs(page)
