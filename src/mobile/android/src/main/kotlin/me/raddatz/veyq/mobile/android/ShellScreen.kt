@@ -116,6 +116,8 @@ fun ShellScreen(s: Screen.Signed, model: AppModel) {
     val avatars by model.avatars.collectAsStateWithLifecycle()
     val incoming by model.incoming.collectAsStateWithLifecycle()
     val palette = LocalPalette.current
+    // each list's scroll, kept while an object opened from it is on screen (`ListStates`)
+    val listStates = remember { ListStates() }
     /** The space whose trash is open. */
     var trashOf by remember { mutableStateOf<String?>(null) }
     var uploadShareAt by remember { mutableStateOf<String?>(null) }
@@ -275,7 +277,7 @@ fun ShellScreen(s: Screen.Signed, model: AppModel) {
                 }
             }
             Box(Modifier.weight(1f).fillMaxSize()) {
-              androidx.compose.runtime.CompositionLocalProvider(LocalNodeHero provides hero) {
+              androidx.compose.runtime.CompositionLocalProvider(LocalNodeHero provides hero, LocalListStates provides listStates) {
                 when {
                     // a wide window: the application's list and its open object side by side (Material 3's list-detail)
                     wide && shell.showsListBeside -> ListBeside(s, model)
@@ -284,7 +286,7 @@ fun ShellScreen(s: Screen.Signed, model: AppModel) {
                         ?: ObjectScreen(shell.openObject!!, shell.selectedTab)
                     shell.application == null -> HomeScreen(s, model, onEnter = model::enter, onOpen = model::open, onFilter = model::filter)
                     shell.application == ApplicationId.EXPENSES -> ExpensesList(s, model)
-                    else -> ArrangedListScreen(s.applicationList(shell.application!!), onOpen = model::open)
+                    else -> ArrangedListScreen(s.applicationList(shell.application!!), onOpen = model::open, state = listStates.of("app:${shell.application}"))
                 }
               }
                 if (s.switching) androidx.compose.material3.LinearProgressIndicator(Modifier.fillMaxWidth())
@@ -347,7 +349,7 @@ private fun HomeScreen(s: Screen.Signed, model: AppModel, onEnter: (me.raddatz.v
     }
     // The level's "New" (the web's menu): a folder here, a Pot here, or files uploaded here.
     // nothing is created in a guest's folder (the web's `folderRights`: no "New" there)
-    CreateAction(stringResource(R.string.create_new), shown = model.canCreateHere, onClick = {}, menu = { close ->
+    CreateAction(stringResource(R.string.create_new), shown = model.canCreateHere, onClick = {}, state = LocalListStates.current.of("home:${s.shell.space}/${s.shell.folder?.nodeId}"), menu = { close ->
         me.raddatz.veyq.mobile.AppKinds.homeCreates.forEach { c ->
             androidx.compose.material3.DropdownMenuItem(text = { Text(say(c.word)) }, onClick = {
                 close()
@@ -659,7 +661,7 @@ private fun ObjectItems(refs: List<ObjectRef>, open: ObjectRef?, onOpen: (Object
 @Composable
 private fun ExpensesList(s: Screen.Signed, model: AppModel, onOpen: (ObjectRef) -> Unit = model::open) {
     var creating by remember { mutableStateOf(false) }
-    CreateAction(stringResource(R.string.create_pot), shown = s.spaces.isNotEmpty(), onClick = { creating = true }) { list, bottom ->
+    CreateAction(stringResource(R.string.create_pot), shown = s.spaces.isNotEmpty(), onClick = { creating = true }, state = LocalListStates.current.of("app:EXPENSES")) { list, bottom ->
         ArrangedListScreen(s.applicationList(ApplicationId.EXPENSES), onOpen = onOpen, state = list, bottom = bottom)
     }
     if (creating) PotCreateSheet(s, model) { creating = false }
@@ -687,6 +689,18 @@ private fun ArrangedListScreen(
         group(null, list.all, onOpen)
     }
 }
+
+/**
+ * The lists' scroll states by list (Home's level by space and folder, an application's list), kept by the shell while an
+ * object opened from them is on screen: a list composed anew on the way back starts where it was, not at its top (the
+ * owner's report, 2026-11-12: a Pot opened near the bottom came back to a list at the top).
+ */
+internal class ListStates {
+    private val states = HashMap<String, androidx.compose.foundation.lazy.LazyListState>()
+    fun of(key: String): androidx.compose.foundation.lazy.LazyListState = states.getOrPut(key) { androidx.compose.foundation.lazy.LazyListState() }
+}
+
+internal val LocalListStates = androidx.compose.runtime.staticCompositionLocalOf { ListStates() }
 
 /** Each listed node's cover, by node id (the model's), as the rows draw them. */
 private val LocalCovers = androidx.compose.runtime.staticCompositionLocalOf<Map<String, Pair<String, androidx.compose.ui.graphics.ImageBitmap>>> { emptyMap() }

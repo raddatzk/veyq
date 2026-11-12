@@ -41,9 +41,12 @@ fun CreateAction(
     /** Where a level creates more than one kind (the web's "New" menu): the button opens this menu, its entries each
      *  closing it with the first argument. Null: the button is the one action. */
     menu: (@Composable (close: () -> Unit) -> Unit)? = null,
+    /** The list's state where its owner keeps it across the list leaving the screen (`LocalListStates`). */
+    state: LazyListState? = null,
     content: @Composable (list: LazyListState, bottom: Dp) -> Unit,
 ) {
-    val list = rememberLazyListState()
+    val own = rememberLazyListState()
+    val list = state ?: own
     val expanded by remember { derivedStateOf { !list.canScrollBackward } }
     val palette = LocalPalette.current
     var open by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf(false) }
