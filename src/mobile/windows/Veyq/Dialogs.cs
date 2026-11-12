@@ -84,6 +84,23 @@ internal static class Dialogs
         return await Show(window, dialog) == ContentDialogResult.Primary ? box.Text : null;
     }
 
+    /// <summary>A question whose answer is the action asked for (a settle-up recorded): <paramref name="title"/>,
+    /// <paramref name="question"/>, and <paramref name="confirm"/> the default, as Fluent's dialogs put the expected
+    /// answer first; whether it was confirmed.</summary>
+    public static async Task<bool> Ask(Window window, string automationId, string title, string question, string confirm)
+    {
+        var dialog = new ContentDialog
+        {
+            Title = title,
+            Content = new TextBlock { Text = question, TextWrapping = TextWrapping.Wrap },
+            PrimaryButtonText = confirm,
+            CloseButtonText = Words.EntryCancel(),
+            DefaultButton = ContentDialogButton.Primary,
+        };
+        AutomationProperties.SetAutomationId(dialog, automationId);
+        return await Show(window, dialog) == ContentDialogResult.Primary;
+    }
+
     /// <summary>A question with a destructive answer: <paramref name="title"/>, <paramref name="question"/>, and
     /// <paramref name="confirm"/> (Cancel the default); whether it was confirmed.</summary>
     public static async Task<bool> Confirm(Window window, string automationId, string title, string question, string confirm)

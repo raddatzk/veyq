@@ -7,6 +7,11 @@
 // core's report sheet (ReportDialog), the cover its dialog (CoverDialog); a folder's download goes where the save picker says
 // (Header.Download, under the core's archive name), a Pot's through its page (Pot.Download). What is offered, in which
 // order and with which words is the core's (HeaderPlan: what is drawn so far, and the bar's groups).
+//
+// The header also draws the node's head for its page (Hero): the cover across the page's width, 16:9, cut as stored
+// (Header.CoverPicture, decoded by WIC, the part its crop shows by Cover.Cut: the core's math), as Android's and Apple's
+// pages place it first in their scroll; invoked, it opens the cover dialog where the plan offers it. A node without a
+// cover shows none (its cover is set from the bar).
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -35,6 +40,15 @@ internal sealed class NodeHeader : IDisposable
 
     public NodeAt Node { get; }
 
+    private readonly Button _hero;
+    private readonly Image _heroImage = new() { Stretch = Microsoft.UI.Xaml.Media.Stretch.UniformToFill };
+    private Crop? _heroCrop;
+    private bool _heroRead;
+    private int _heroAsked;
+
+    /// <summary>The node's head for its page: the cover, cut as stored; collapsed while there is none.</summary>
+    public UIElement Hero => _hero;
+
     /// <summary>The header's state now; null until the core delivered it.</summary>
     public HeaderShown? Shown { get; private set; }
 
@@ -52,6 +66,30 @@ internal sealed class NodeHeader : IDisposable
         Node = node;
         _changed = changed;
         _say = say;
+        _hero = new Button
+        {
+            Content = _heroImage,
+            Padding = new Thickness(0),
+            HorizontalAlignment = HorizontalAlignment.Stretch,
+            HorizontalContentAlignment = HorizontalAlignment.Stretch,
+            VerticalContentAlignment = VerticalAlignment.Stretch,
+            CornerRadius = new CornerRadius(8),
+            Margin = new Thickness(12, 4, 12, 8),
+            Visibility = Visibility.Collapsed,
+        };
+        AutomationProperties.SetAutomationId(_hero, "hero");
+        AutomationProperties.SetName(_hero, Words.CoverChange());
+        ToolTipService.SetToolTip(_hero, Words.CoverChange());
+        // 16:9 at whatever width the page gives it
+        _hero.SizeChanged += (_, e) => { if (e.NewSize.Width > 0) _hero.Height = e.NewSize.Width * 9 / 16; };
+        _hero.Click += (_, _) =>
+        {
+            if (Shown is { plan: { } plan } s && _id is { } header && new[] { plan.buttons, plan.menu, plan.last }.Any(g => g.Any(a => a.id == "cover")))
+            {
+                _heroRead = false; // a new picture may come under the crop it had
+                CoverDialog.Open(_window, header, s.node, s.cover);
+            }
+        };
         Open(facts);
     }
 
@@ -86,6 +124,7 @@ internal sealed class NodeHeader : IDisposable
             if (h.shown is { } s) Log.Write($"header {s.node.kind}: pinned {s.pinned}, undo {s.undo is not null}, gone {s.gone}, plan {Ids(s.plan)}");
             // the offer ended (its window, or the undo): the Undo goes with it — once a state showed the offer, so an
             // update from before the trash that arrives after its answer ends nothing
+            DrawHero(h.shown?.cover);
             if (h.shown?.undo is not null) _seenUndo = true;
             else if (_seenUndo)
             {
@@ -103,6 +142,60 @@ internal sealed class NodeHeader : IDisposable
             }
             _changed();
         }, e => Log.Write($"a header update: {e.Message}"));
+    }
+
+    /// <summary>The head follows the state's cover: read again (its picture, then the part its crop shows) when the crop
+    /// changed or the cover dialog was opened; the latest read's answer is drawn.</summary>
+    private async void DrawHero(Crop? cover)
+    {
+        if (_heroRead && Equals(cover, _heroCrop)) return;
+        _heroRead = true;
+        _heroCrop = cover;
+        var n = ++_heroAsked;
+        if (cover is null || _id is not { } header)
+        {
+            _hero.Visibility = Visibility.Collapsed;
+            _heroImage.Source = null;
+            return;
+        }
+        try
+        {
+            var (answer, bytes) = await Core.CallAsync(new Call.HeaderCoverPicture { header = header });
+            if (answer is not Answer.Bytes || bytes is null)
+            {
+                Log.Write($"cover hero: Header.CoverPicture answered {answer.GetType().Name}");
+                return;
+            }
+            using var stream = new Windows.Storage.Streams.InMemoryRandomAccessStream();
+            await stream.WriteAsync(System.Runtime.InteropServices.WindowsRuntime.WindowsRuntimeBufferExtensions.AsBuffer(bytes));
+            stream.Seek(0);
+            var decoder = await Windows.Graphics.Imaging.BitmapDecoder.CreateAsync(stream);
+            var (width, height) = ((int)decoder.OrientedPixelWidth, (int)decoder.OrientedPixelHeight);
+            var (cut, _) = await Core.CallAsync(new Call.CoverCut { crop = cover, width = width, height = height });
+            if (cut is not Answer.CoverCut c)
+            {
+                Log.Write($"cover hero: Cover.Cut answered {cut.GetType().Name}");
+                return;
+            }
+            var transform = new Windows.Graphics.Imaging.BitmapTransform
+            {
+                Bounds = new Windows.Graphics.Imaging.BitmapBounds { X = (uint)c.x, Y = (uint)c.y, Width = (uint)c.width, Height = (uint)c.height },
+            };
+            var bitmap = await decoder.GetSoftwareBitmapAsync(Windows.Graphics.Imaging.BitmapPixelFormat.Bgra8, Windows.Graphics.Imaging.BitmapAlphaMode.Premultiplied, transform,
+                Windows.Graphics.Imaging.ExifOrientationMode.RespectExifOrientation, Windows.Graphics.Imaging.ColorManagementMode.ColorManageToSRgb);
+            if (n != _heroAsked || _closed) return;
+            var source = new Microsoft.UI.Xaml.Media.Imaging.SoftwareBitmapSource();
+            await source.SetBitmapAsync(bitmap);
+            if (n != _heroAsked || _closed) return;
+            _heroImage.Source = source;
+            _hero.Visibility = Visibility.Visible;
+            Log.Write($"cover hero: {width}×{height}, the crop's {c.width}×{c.height} at {c.x},{c.y}");
+        }
+        catch (Exception e)
+        {
+            // an exception out of an async void would end the app in combase, with nothing in the log
+            Log.Write($"cover hero: not drawn ({e.GetType().Name}: {e.Message})");
+        }
     }
 
     private static string Ids(Plan? p) => p is null ? "" : string.Join(" | ", new[] { p.buttons, p.menu, p.last }.Select(g => string.Join(",", g.Select(a => a.id))));
@@ -159,7 +252,10 @@ internal sealed class NodeHeader : IDisposable
                 case "move": MoveDialog.Open(_window, s.node, copy: false, UndoBar); break;
                 case "copy": MoveDialog.Open(_window, s.node, copy: true, UndoBar); break;
                 case "report": ReportDialog.Open(_window, s.node); break;
-                case "cover" when _id is { } header: CoverDialog.Open(_window, header, s.node, s.cover); break;
+                case "cover" when _id is { } header:
+                    _heroRead = false; // a new picture may come under the crop it had
+                    CoverDialog.Open(_window, header, s.node, s.cover);
+                    break;
             }
         };
         return button;

@@ -1,12 +1,19 @@
-// An open Pot, read only (ADR 0122 decision 4: Expenses' places are the open Pot's Entries, Overview and Settings, as
-// the web's Pot has them). The Pot is a model of its own in the core (Pot.Open), watched while it is on screen and
-// closed when it leaves; what each row says — its line, its badge, a balance's words and tone, who pays whom — is the
-// core's (PotView.Shown). This lays it out and writes money. Linux's pot.rs, in Fluent: a SelectorBar over the places'
-// lists, each person with their picture (Avatars). Its download (Pot.Download) goes where the system's save picker
-// says, under the name the core gives (Pot.ArchiveName); the core writes the file (ADR 0128 decision 3).
+// An open Pot (ADR 0122 decision 4: Expenses' places are the open Pot's Entries, Overview and Settings, as the web's Pot
+// has them). The Pot is a model of its own in the core (Pot.Open), watched while it is on screen and closed when it
+// leaves; what each row says — its line, its badge, a balance's words and tone, who pays whom — is the core's
+// (PotView.Shown). This lays it out and writes money. Linux's pot.rs, in Fluent: a SelectorBar over the places' lists,
+// each person with their picture (Avatars), each place's scroll starting with the node's head (NodeHeader.Hero).
+//
+// Its live poll (Watched.PotLive) runs while the page is loaded and its window is active, as the phones poll while the
+// Pot is shown: the watch is disposed when either ends, which stops the poll. Refresh (Pot.Refresh) is the CommandBar's
+// (F5 / Ctrl+R, ShellView). A settle-up row is recorded (Pot.Record, dated the core's today) after a ContentDialog asked,
+// one row or all; an entry opens its history (EntryHistoryDialog), a deleted one its restore. Its download
+// (Pot.Download) goes where the system's save picker says, under the name the core gives (Pot.ArchiveName); the core
+// writes the file (ADR 0128 decision 3).
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Linq;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Automation;
 using Microsoft.UI.Xaml.Controls;
@@ -26,6 +33,15 @@ internal sealed class PotPage : IDisposable
     private IReadOnlyList<ShownTab> _tabs = [];
     private BarTab? _selected;
     private bool _closed;
+    private readonly Window _window;
+    private readonly Action<bool, string> _say;
+    private Watch? _live;
+    private bool _loaded;
+    private bool _active = true;
+    private UIElement? _hero;
+    /// <summary>The places' scroll, kept across redraws (an update of the live poll keeps where it stood).</summary>
+    private readonly ScrollViewer _scroll = new() { HorizontalScrollMode = ScrollMode.Disabled, HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled };
+    private string? _place;
 
     public ObjectRef Ref { get; }
 
@@ -34,13 +50,61 @@ internal sealed class PotPage : IDisposable
 
     public UIElement Page => _root;
 
-    public PotPage(ObjectRef r)
+    /// <summary>Opens Pot <paramref name="r"/> on a page of <paramref name="window"/>; <paramref name="say"/> says what
+    /// its actions did.</summary>
+    public PotPage(ObjectRef r, Window window, Action<bool, string> say)
     {
         Ref = r;
+        _window = window;
+        _say = say;
         _root.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
         _root.RowDefinitions.Add(new RowDefinition { Height = new GridLength(1, GridUnitType.Star) });
+        // the live poll's lifetime: the page loaded and its window active
+        _root.Loaded += (_, _) => { _loaded = true; Live(); };
+        _root.Unloaded += (_, _) => { _loaded = false; Live(); };
+        _window.Activated += Activated;
         Draw();
         Open();
+    }
+
+    private void Activated(object sender, WindowActivatedEventArgs e)
+    {
+        _active = e.WindowActivationState != WindowActivationState.Deactivated;
+        Live();
+    }
+
+    /// <summary>The live poll watched while the page is loaded and its window active, disposed (so stopped) when either
+    /// ends.</summary>
+    private void Live()
+    {
+        var wanted = _loaded && _active && !_closed && _id is not null;
+        if (wanted == (_live is not null)) return;
+        Log.Write($"pot live poll {(wanted ? "on" : "off")}");
+        if (wanted)
+        {
+            _live = Core.Watch(new Watched.PotLive { pot = _id!.Value }, _ => { }, e => Log.Write($"the Pot's poll: {e.Message}"));
+        }
+        else
+        {
+            _live?.Dispose();
+            _live = null;
+        }
+    }
+
+    /// <summary>Reads the Pot again now (Refresh, F5 / Ctrl+R); what changed arrives on its watch.</summary>
+    public void Refresh()
+    {
+        if (_id is not { } pot) return;
+        Log.Write("pot refresh");
+        Act.Send(new Call.PotRefresh { pot = pot });
+    }
+
+    /// <summary>The node's head (NodeHeader.Hero), placed first in each place's scroll; another header's replaces it.</summary>
+    public void Hero(UIElement? hero)
+    {
+        if (ReferenceEquals(hero, _hero)) return;
+        _hero = hero;
+        Draw();
     }
 
     private async void Open()
@@ -66,11 +130,16 @@ internal sealed class PotPage : IDisposable
             return;
         }
         _id = pot;
+        Live();
         _watch = Core.Watch(new Watched.Pot { pot = pot }, update =>
         {
             if (_closed || update is not Update.Pot p) return;
             _state = p.state;
-            if (p.state?.view is { } view) Read?.Invoke(view.canWrite);
+            if (p.state?.view is { } view)
+            {
+                Log.Write($"pot update: {view.entries.Count} entries, {view.deleted.Count} deleted, {view.settleUp.Count} to settle");
+                Read?.Invoke(view.canWrite);
+            }
             Draw();
         }, e => Log.Write($"a Pot update: {e.Message}"));
     }
@@ -78,6 +147,9 @@ internal sealed class PotPage : IDisposable
     public void Dispose()
     {
         _closed = true;
+        _window.Activated -= Activated;
+        _live?.Dispose();
+        _live = null;
         _watch?.Dispose();
         _watch = null;
         if (_id is { } pot) Act.Send(new Call.PotClose { pot = pot });
@@ -152,6 +224,8 @@ internal sealed class PotPage : IDisposable
 
     private void Draw()
     {
+        // the head moves to the new place's scroll
+        if (_hero is FrameworkElement { Parent: Panel holder } hero) holder.Children.Remove(hero);
         _root.Children.Clear();
         var view = _state?.view;
         if (view is null)
@@ -172,6 +246,7 @@ internal sealed class PotPage : IDisposable
         }
         if (_tabs.Count > 1) _root.Children.Add(PlacesBar());
         var content = new StackPanel { Spacing = 4, Padding = new Thickness(12, 8, 12, 24) };
+        if (_hero is not null) content.Children.Add(_hero);
         if (view.missing.Count > 0) Missing(content, view);
         if (!view.ready)
         {
@@ -182,19 +257,25 @@ internal sealed class PotPage : IDisposable
             switch (_selected?.key)
             {
                 case "expenses.overview":
-                    Overview(content, view);
+                    Overview(content, view, _id);
                     break;
                 case "expenses.settings":
                     Settings(content, view);
                     break;
                 default:
-                    Entries(content, view);
+                    Entries(content, view, _id);
                     break;
             }
         }
-        var scroll = new ScrollViewer { Content = content, HorizontalScrollMode = ScrollMode.Disabled, HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled };
-        Grid.SetRow(scroll, 1);
-        _root.Children.Add(scroll);
+        _scroll.Content = content;
+        Grid.SetRow(_scroll, 1);
+        _root.Children.Add(_scroll);
+        // another place starts at its top; an update of the same one stays where it stood
+        if (_selected?.key != _place)
+        {
+            _place = _selected?.key;
+            _scroll.ChangeView(null, 0, null, disableAnimation: true);
+        }
     }
 
     /// <summary>The Pot's places as a SelectorBar above its body; a choice is the shell's.</summary>
@@ -316,23 +397,48 @@ internal sealed class PotPage : IDisposable
         foreach (var m in view.missing) content.Children.Add(Row(Said.Piece(m), null, $"missing:{i++}"));
     }
 
-    private static void Entries(StackPanel content, PotView view)
+    private void Entries(StackPanel content, PotView view, long? pot)
     {
-        if (view.entries.Count == 0)
+        if (view.entries.Count == 0) content.Children.Add(Note(Words.PotNoEntriesReadonly(), "pot-no-entries"));
+        else content.Children.Add(EntryList(view, view.entries, pot, deleted: false));
+        if (view.deleted.Count > 0)
         {
-            content.Children.Add(Note(Words.PotNoEntriesReadonly(), "pot-no-entries"));
-            return;
-        }
-        foreach (var e in view.entries)
-        {
-            var trailing = new List<UIElement>();
-            if (e.badge is { } b) trailing.Add(Trailing(Said.Notice(b.notice), b.danger ? "SystemFillColorCriticalBrush" : "TextFillColorSecondaryBrush"));
-            if (e.row.amount is { } amount) trailing.Add(Trailing(Money(view, amount)));
-            content.Children.Add(Row(e.row.title ?? Words.PotTransfer(), Said.Line(e.line), $"entry:{e.row.id}", [.. trailing]));
+            Heading(content, Words.EntriesDeletedTitle());
+            content.Children.Add(EntryList(view, view.deleted, pot, deleted: true));
         }
     }
 
-    private static void Overview(StackPanel content, PotView view)
+    /// <summary>Entries as a list whose rows open their history (a deleted one's with its restore).</summary>
+    private ListView EntryList(PotView view, IEnumerable<ShownEntry> entries, long? pot, bool deleted)
+    {
+        var list = new ListView { SelectionMode = ListViewSelectionMode.None, IsItemClickEnabled = true };
+        foreach (var e in entries)
+        {
+            var trailing = new List<UIElement>();
+            if (deleted) trailing.Add(Trailing(Words.EntriesDeletedBadge(), "TextFillColorSecondaryBrush"));
+            else if (e.badge is { } b) trailing.Add(Trailing(Said.Notice(b.notice), b.danger ? "SystemFillColorCriticalBrush" : "TextFillColorSecondaryBrush"));
+            string? amount = e.row.amount is { } a ? Money(view, a) : null;
+            if (amount is not null) trailing.Add(Trailing(amount));
+            var title = e.row.title ?? Words.PotTransfer();
+            var line = Row(title, Said.Line(e.line), $"{(deleted ? "deleted" : "entry")}-line:{e.row.id}", [.. trailing]);
+            line.Padding = new Thickness(0, 8, 0, 8);
+            var id = e.row.id;
+            var item = new ListViewItem { Content = line, MinHeight = 44, HorizontalContentAlignment = HorizontalAlignment.Stretch };
+            item.Tag = (Action)(() => { if (pot is { } p) EntryHistoryDialog.Open(_window, p, id, title, amount, _say); });
+            AutomationProperties.SetAutomationId(item, $"{(deleted ? "deleted" : "entry")}:{id}");
+            AutomationProperties.SetName(item, AutomationProperties.GetName(line));
+            list.Items.Add(item);
+        }
+        list.ItemClick += (_, e) =>
+        {
+            var row = e.ClickedItem as ListViewItem ?? (e.ClickedItem as FrameworkElement)?.Parent as ListViewItem;
+            if (row?.Tag is Action open) open();
+            else Log.Write($"an entry's click reached no row ({e.ClickedItem?.GetType().Name})");
+        };
+        return list;
+    }
+
+    private void Overview(StackPanel content, PotView view, long? pot)
     {
         Heading(content, Words.PotBalances());
         foreach (var b in view.balances)
@@ -349,10 +455,36 @@ internal sealed class PotPage : IDisposable
         }
         if (view.settleUp.Count > 0)
         {
-            Heading(content, Words.PotSettleUp());
+            var head = new Grid { Margin = new Thickness(0, 0, 12, 0) };
+            head.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+            head.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+            var heading = new StackPanel();
+            Heading(heading, Words.PotSettleUp());
+            head.Children.Add(heading);
+            if (view.canRecordAll && pot is { } all)
+            {
+                var rows = view.settleUp.Select(t => t.row).ToList();
+                var recordAll = new HyperlinkButton { Content = Words.BalancesRecordAll(), VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(0, 12, 0, 0) };
+                AutomationProperties.SetAutomationId(recordAll, "settle-all");
+                recordAll.Click += (_, _) => Record(all, rows, Words.BalancesRecordAllQuestion(), Words.BalancesRecordAllHint(rows.Count));
+                Grid.SetColumn(recordAll, 1);
+                head.Children.Add(recordAll);
+            }
+            content.Children.Add(head);
             foreach (var t in view.settleUp)
             {
-                content.Children.Add(Row(Said.Notice(t.pays), null, $"settle:{t.row.fromId}:{t.row.toId}", Trailing(Money(view, t.row.amount))));
+                var pays = Said.Notice(t.pays);
+                var amount = Money(view, t.row.amount);
+                var trailing = new List<UIElement> { Trailing(amount) };
+                if (view.canWrite && pot is { } one)
+                {
+                    var record = new Button { Content = Words.BalancesRecord(), VerticalAlignment = VerticalAlignment.Center };
+                    AutomationProperties.SetAutomationId(record, $"record:{t.row.fromId}:{t.row.toId}");
+                    var row = t.row;
+                    record.Click += (_, _) => Record(one, [row], Words.BalancesRecordQuestion(), $"{pays} · {amount}\n\n{Words.BalancesRecordHint()}");
+                    trailing.Add(record);
+                }
+                content.Children.Add(Row(pays, null, $"settle:{t.row.fromId}:{t.row.toId}", [.. trailing]));
             }
         }
         if (view.byCategory.Count > 0)
@@ -360,6 +492,25 @@ internal sealed class PotPage : IDisposable
             Heading(content, Words.PotByCategory());
             foreach (var c in view.byCategory) content.Children.Add(Row(Said.Piece(c.label), null, $"category:{c.row.id}", Trailing(Money(view, c.row.amount))));
             content.Children.Add(Row(Words.PotTotal(), null, "total", Trailing(Money(view, view.total), strong: true)));
+        }
+    }
+
+    /// <summary>Asks before settle-up <paramref name="rows"/> are recorded (one, or all), then Pot.Record; a refusal is
+    /// said at once from the answer, the settled rows arrive on the Pot's watch.</summary>
+    private async void Record(long pot, List<SettleRow> rows, string title, string question)
+    {
+        try
+        {
+            if (!await Dialogs.Ask(_window, "record-ask", title, question, Words.BalancesRecord())) return;
+            var (answer, _) = await Core.CallAsync(new Call.PotRecord { pot = pot, rows = rows });
+            Log.Write($"pot record {rows.Count} row(s): {(answer is Answer.Said { notice: { } n } ? n.msg : answer.GetType().Name)}");
+            if (answer is Answer.Said { notice: { } said }) _say(false, Said.Notice(said));
+            else if (answer is not Answer.Said) _say(false, Words.PeopleFailed());
+        }
+        catch (Exception e)
+        {
+            // an exception out of an async void would end the app in combase, with nothing in the log
+            Log.Write($"Pot.Record failed: {e.GetType().Name}");
         }
     }
 

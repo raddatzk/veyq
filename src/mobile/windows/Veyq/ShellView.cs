@@ -154,6 +154,19 @@ internal sealed class ShellView
         };
         _nav.BackRequested += (_, _) => Act.Send(new Call.ShellBack());
 
+        // F5 and Ctrl+R refresh an open Pot (its CommandBar's Refresh), as Explorer and Edge refresh
+        foreach (var (key, modifiers) in new[] { (VirtualKey.F5, VirtualKeyModifiers.None), (VirtualKey.R, VirtualKeyModifiers.Control) })
+        {
+            var accelerator = new KeyboardAccelerator { Key = key, Modifiers = modifiers };
+            accelerator.Invoked += (_, e) =>
+            {
+                if (_pot is not { } pot) return;
+                e.Handled = true;
+                pot.Refresh();
+            };
+            _nav.KeyboardAccelerators.Add(accelerator);
+        }
+
         // Ctrl+E and Ctrl+F focus Search, as in Explorer; a closed pane opens for it
         foreach (var key in new[] { VirtualKey.E, VirtualKey.F })
         {
@@ -415,11 +428,12 @@ internal sealed class ShellView
             if (_pot is null || _pot.Ref != pot)
             {
                 _pot?.Dispose();
-                _pot = new PotPage(pot);
+                _pot = new PotPage(pot, _window, Say);
                 // the Pot read: the header learns whether it takes writes (AppKinds.Facts)
                 _pot.Read = canWrite => _header?.Facts(new Facts { canWrite = canWrite, hasContent = true });
                 _said.IsOpen = false;
             }
+            _pot.Hero(_header?.Hero);
             _pot.Places(shown.tabs, shown.selectedTab);
             body = _pot.Page;
         }
@@ -473,6 +487,14 @@ internal sealed class ShellView
         var page = _pot;
         var (primary, secondary) = _header.Commands(() => page?.Download(WinRT.Interop.WindowNative.GetWindowHandle(_window), Say));
         foreach (var c in primary) _commands.PrimaryCommands.Add(c);
+        if (page is not null)
+        {
+            // an open Pot's Refresh: desktops have no pull gesture (F5 and Ctrl+R, as Explorer and Edge refresh)
+            var refresh = new AppBarButton { Icon = new SymbolIcon(Symbol.Refresh), Label = Words.PotRefresh() };
+            AutomationProperties.SetAutomationId(refresh, "pot-refresh");
+            refresh.Click += (_, _) => page.Refresh();
+            _commands.PrimaryCommands.Add(refresh);
+        }
         foreach (var c in secondary) _commands.SecondaryCommands.Add(c);
     }
 
