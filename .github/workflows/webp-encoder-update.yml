@@ -1,0 +1,116 @@
+name: WebP encoder update
+
+# A newer libwebp, found and built without waiting for anyone (ADR 0127 decision 4). Weekly, in Dependabot's slot, it
+# reads libwebp's stable `vX.Y.Z` release tags (never an `-rc`; libwebp publishes tags, no GitHub releases). On a tag
+# newer than src/web/webp-encoder/libwebp.pin it rebuilds the encoder from that tag in the pinned Emscripten image
+# (`build.py --tag … --commit … --write`), runs the encoder's tests against the new module, and opens a pull request
+# with the new pin and the rebuilt files. It never merges; a person does, after the checks.
+#
+# The commit a new tag names is read once, here, with `git ls-remote`, and written into the pin: from then on the build
+# refuses that tag if it ever names another commit (trust on first use, the same trust the pin files of ADR 0057 §6 have).
+#
+# How the pull request's checks run. A pull request opened with GITHUB_TOKEN starts no other workflow (GitHub's rule
+# against workflow recursion), so `Checks` does not run on it by itself. Two things stand in, in this order:
+#   1. this job runs the two checks that are about the new bytes before it opens anything — the rebuild (the `--write`
+#      run) and the encoder's own tests on the new module — and opens no pull request when either is red;
+#   2. the pull request's body asks the person who reviews it to close and reopen it: a reopen by a person is a
+#      `pull_request` event of that person, so `Checks` runs in full (the `webp-encoder` job rebuilds once more and
+#      compares, `frontend` runs the web client's check, lane L1 the built policy in a browser), and `green` gates the
+#      merge as on any pull request.
+# No token with more reach than GITHUB_TOKEN is used, so no secret has to exist for this workflow to work.
+#
+# Its write permissions (contents: write, to push the branch; pull-requests: write, to open the pull request) are this
+# job's only and are granted nowhere else. It pushes one branch per tag, `webp-encoder/libwebp-<tag>`, and does nothing
+# when that branch already exists — a person is already looking at that tag.
+on:
+  schedule:
+    # Saturday 05:00 UTC: Dependabot's 06:00 Europe/Berlin in winter, one hour before it in summer (cron reads UTC).
+    - cron: "0 5 * * 6"
+  workflow_dispatch:
+
+concurrency:
+  group: webp-encoder-update
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  update:
+    name: Build a newer libwebp and open a pull request
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: write # push the update branch
+      pull-requests: write # open its pull request
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Find libwebp's newest stable tag
+        id: newest
+        run: python3 src/web/webp-encoder/build.py --newest | tee -a "$GITHUB_OUTPUT"
+
+      - name: Skip a tag a branch already carries
+        id: branch
+        if: steps.newest.outputs.newer == 'true'
+        env:
+          BRANCH: webp-encoder/libwebp-${{ steps.newest.outputs.tag }}
+        run: |
+          echo "name=$BRANCH" >> "$GITHUB_OUTPUT"
+          if git ls-remote --exit-code --heads origin "$BRANCH" > /dev/null; then
+            echo "open=false" >> "$GITHUB_OUTPUT"
+            echo "$BRANCH exists: a pull request for this tag is already open or was declined" >&2
+          else
+            echo "open=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Rebuild from the new tag
+        if: steps.branch.outputs.open == 'true'
+        env:
+          TAG: ${{ steps.newest.outputs.tag }}
+          COMMIT: ${{ steps.newest.outputs.commit }}
+        run: python3 src/web/webp-encoder/build.py --tag "$TAG" --commit "$COMMIT" --write
+
+      - name: Set up Node
+        if: steps.branch.outputs.open == 'true'
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: "22"
+
+      # pnpm at exactly the version package.json pins (validate_pnpm_installs_gated.py), and the gated install every
+      # other job of this lockfile runs, without the registry check `frontend` alone makes.
+      - name: Install dependencies
+        if: steps.branch.outputs.open == 'true'
+        run: |
+          npm install -g pnpm@12.16.1
+          python3 scripts/pnpm_install_no_deprecated.py --skip-registry-check
+
+      - name: Run the encoder's tests on the new module
+        if: steps.branch.outputs.open == 'true'
+        working-directory: src/web
+        run: pnpm exec vitest run webp-encoder
+
+      - name: Open the pull request
+        if: steps.branch.outputs.open == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          BRANCH: ${{ steps.branch.outputs.name }}
+          TAG: ${{ steps.newest.outputs.tag }}
+          PINNED: ${{ steps.newest.outputs.pinned }}
+          COMMIT: ${{ steps.newest.outputs.commit }}
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git switch --create "$BRANCH"
+          git add -- src/web/webp-encoder
+          git commit --message "chore(web): libwebp $TAG for the WebP encoder" \
+            --message "Rebuilt from $TAG ($COMMIT) by .github/workflows/webp-encoder-update.yml (ADR 0127 decision 4)."
+          git push origin "$BRANCH"
+          gh pr create --base "${{ github.event.repository.default_branch }}" --head "$BRANCH" \
+            --title "chore(web): libwebp $TAG for the WebP encoder" \
+            --body "libwebp $PINNED → $TAG ($COMMIT), rebuilt in the pinned Emscripten image; the encoder's tests passed on the new module in the run that opened this.
+
+          **Close and reopen this pull request before reviewing it:** it was opened with GITHUB_TOKEN, which starts no other workflow, so \`Checks\` has not run yet. A reopen by a person runs it in full (the rebuild compare, the web client's check, lane L1).
+
+          Read libwebp's NEWS for $TAG before merging: https://chromium.googlesource.com/webm/libwebp/+/refs/tags/$TAG/NEWS"

@@ -1,7 +1,7 @@
 # ADR 0127 — The web client encodes WebP with its own build of libwebp
 
 - Status: Accepted
-- Built: partly (not built: decision 4's update workflow, which waits for the owner's go on its write permissions)
+- Built: yes
 - Date: 2026-11-12
 - Model: [cc.security.csp](../crosscutting/cc.security.csp.md)
 
