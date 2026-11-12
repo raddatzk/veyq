@@ -17,6 +17,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.flatMapLatest
+import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
@@ -279,6 +280,16 @@ internal class Bridge<A : Connection, T : Any>(compose: () -> Composition<A, T>)
                 Answer.PotOpened(id)
             } ?: noTenant
             is Call.PotRefresh -> pots[call.pot]?.refresh().done(Answer.Why.NO_SUCH_POT)
+            is Call.PotRecord -> pots[call.pot]?.let { pot -> Answer.Said(if (pot.record(call.rows)) null else pot.refusal()) } ?: noPot
+            is Call.PotRestore -> pots[call.pot]?.let { pot -> Answer.Said(if (pot.restore(call.entry)) null else pot.refusal()) } ?: noPot
+            is Call.PotHistory -> pots[call.pot]?.let { pot ->
+                val view = pot.current?.view ?: return noPot
+                val rows = view.history(call.entry).takeIf { it.isNotEmpty() } ?: return Answer.Refused(Answer.Why.NO_SUCH_ENTRY)
+                Answer.EntryHistory(
+                    rows.map { HistoryShown(view.historyLine(it), it.writer, it.at) },
+                    view.deletedEntries.any { it.id == call.entry }, pot.restorable(call.entry), view.purgeAfter(call.entry),
+                )
+            } ?: noPot
             is Call.PotClose -> pots.remove(call.pot)?.close().done(Answer.Why.NO_SUCH_POT)
             is Call.PotDownload -> pots[call.pot]?.let { pot ->
                 val written = parts.files.write(call.path) { sink -> pot.download(call.deletedName, sink) != null }
@@ -327,6 +338,7 @@ internal class Bridge<A : Connection, T : Any>(compose: () -> Composition<A, T>)
                 val scale = frame.baseScale * pose.zoom
                 Answer.CoverPosed(pose, call.imageWidth * scale, call.imageHeight * scale, frame.crop(pose))
             }
+            is Call.CoverCut -> CoverFrame.pixels(call.crop, call.width, call.height).let { Answer.CoverCut(it[0], it[1], it[2], it[3]) }
             is Call.CoverFit -> NodeCover.encodedSize(call.width, call.height).let { Answer.CoverFit(it[0], it[1], NodeCover.QUALITY, NodeCover.QUALITY_PERCENT) }
             is Call.ReportOpen -> tenant.value?.models?.report?.let { make ->
                 val id = ids.incrementAndFetch()
@@ -417,6 +429,7 @@ internal class Bridge<A : Connection, T : Any>(compose: () -> Composition<A, T>)
 
     private val noTenant = Answer.Refused(Answer.Why.NO_TENANT_OPEN)
     private val noHeader = Answer.Refused(Answer.Why.NO_SUCH_HEADER)
+    private val noPot = Answer.Refused(Answer.Why.NO_SUCH_POT)
     private val noTrash = Answer.Refused(Answer.Why.NO_SUCH_TRASH)
     private val noMove = Answer.Refused(Answer.Why.NO_SUCH_MOVE)
     private val noShare = Answer.Refused(Answer.Why.NO_SUCH_SHARE)
@@ -523,6 +536,8 @@ internal class Bridge<A : Connection, T : Any>(compose: () -> Composition<A, T>)
             ?: flowOf(Update.Share(w.share, null))
         is Watched.Report -> reports[w.report]?.let { r -> r.state.map { Update.Report(w.report, shownReport(r, it)) } }
             ?: flowOf(Update.Report(w.report, null))
+        // the poll runs inside this watch's own job: a host's dropped watch cancels it, and it ends with its Pot
+        is Watched.PotLive -> flow { pots[w.pot]?.live() }
         is Watched.Pot -> {
             val pictures = tenant.value?.models?.pictures ?: flowOf(emptyMap())
             (pots[w.pot]?.state ?: flowOf(null)).combine(pictures) { s, p -> Update.Pot(w.pot, s, if (s == null) emptyList() else p.keys.sorted()) }

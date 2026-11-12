@@ -5,6 +5,7 @@ import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
 import me.raddatz.veyq.mobile.expenses.PotModel
+import me.raddatz.veyq.mobile.expenses.PotView
 import me.raddatz.veyq.mobile.navigation.ApplicationId
 import me.raddatz.veyq.mobile.navigation.ArrangedList
 import me.raddatz.veyq.mobile.navigation.BarTab
@@ -141,8 +142,24 @@ internal sealed class Call {
 
     /** Opens Pot [ref] as a model of its own, answered with its id ([Answer.PotOpened]) for [Watched.Pot]. */
     @Serializable @SerialName("Pot.Open") data class PotOpen(val ref: ObjectRef) : Call()
+    /** Reads Pot [pot] again now, its receipts too (`PotModel.refresh`: a desktop's Refresh, F5 / Ctrl+R). */
     @Serializable @SerialName("Pot.Refresh") data class PotRefresh(val pot: Long) : Call()
     @Serializable @SerialName("Pot.Close") data class PotClose(val pot: Long) : Call()
+
+    /**
+     * Records settle-up [rows] of Pot [pot] as paid (`PotModel.record`: one row of the view's `settleUp`, or all of
+     * them), dated the core's today: [Answer.Said] with the refusal, or none (stored).
+     */
+    @Serializable @SerialName("Pot.Record") data class PotRecord(val pot: Long, val rows: List<PotView.SettleRow>) : Call()
+
+    /**
+     * Restores deleted entry [entry] of Pot [pot] (`PotModel.restore`, its window on the core's clock): [Answer.Said]
+     * with why not (outside its window nothing is sent), or none (stored).
+     */
+    @Serializable @SerialName("Pot.Restore") data class PotRestore(val pot: Long, val entry: String) : Call()
+
+    /** Entry [entry]'s history in Pot [pot] and whether it is restored now ([Answer.EntryHistory]). */
+    @Serializable @SerialName("Pot.History") data class PotHistory(val pot: Long, val entry: String) : Call()
 
     /**
      * Downloads Pot [pot] as the web's ZIP into the file at [path], which the host's save dialog gave (ADR 0128
@@ -227,6 +244,12 @@ internal sealed class Call {
 
     /** The size and quality a picked picture of [width] × [height] is encoded at as a cover (`NodeCover.encodedSize`). */
     @Serializable @SerialName("Cover.Fit") data class CoverFit(val width: Int, val height: Int) : Call()
+
+    /**
+     * The part of a cover picture of [width] × [height] pixels that [crop] shows (`CoverFrame.pixels`, the web's
+     * `coverImageStyle`): what a page's head cuts out before it draws the cover ([Answer.CoverCut]).
+     */
+    @Serializable @SerialName("Cover.Cut") data class CoverCut(val crop: NodeCover.Crop, val width: Int, val height: Int) : Call()
 
     /**
      * The move ([copy] false) or copy sheet of [node] (`ShellModel.moveSheet`, core's `MoveSheet`, read at once), answered
@@ -395,9 +418,21 @@ internal sealed class Answer {
     /** A rename: why it did not land ([problem]: the dialog asks again), or what to say once it did ([notice]). */
     @Serializable @SerialName("Renamed") data class Renamed(val problem: Notice?, val notice: Notice?) : Answer()
 
+    /** The pixels a cover's crop shows ([Call.CoverCut]): from ([x], [y]), [width] × [height]. */
+    @Serializable @SerialName("CoverCut") data class CoverCut(val x: Int, val y: Int, val width: Int, val height: Int) : Answer()
+
+    /**
+     * An entry's history ([Call.PotHistory]), newest first (`PotView.history`, each line `historyLine`); whether the entry
+     * is deleted, whether it is offered a restore now (`PotModel.restorable`, the core's clock) and until when its
+     * receipts stay (`PotView.purgeAfter`, epoch ms; null: a live entry, or no time served).
+     */
+    @Serializable @SerialName("EntryHistory") data class EntryHistory(
+        val rows: List<HistoryShown>, val deleted: Boolean, val restorable: Boolean, val until: Long?,
+    ) : Answer()
+
     enum class Why {
         NOT_A_CALL, NO_TENANT_OPEN, NO_SUCH_CONNECTION, NO_SUCH_TENANT, NO_SUCH_POT, NO_SUCH_READER, NO_PICTURE, NOTHING_TO_DOWNLOAD,
-        NO_SUCH_HEADER, NO_SUCH_TRASH, NO_SUCH_ROW, NO_SUCH_MOVE, NO_SUCH_SHARE, NO_SUCH_REPORT, NO_COVER,
+        NO_SUCH_HEADER, NO_SUCH_TRASH, NO_SUCH_ROW, NO_SUCH_MOVE, NO_SUCH_SHARE, NO_SUCH_REPORT, NO_COVER, NO_SUCH_ENTRY,
 
         /** A change of trust (`TrustChange`): no offer to answer; the person cancelled the prompt; not enrolled; the
          *  password was not the account's. */
@@ -413,6 +448,13 @@ internal sealed class Watched {
     /** The shell over the tenant open now, whichever that is: a switch moves the watch to the new tenant's shell. */
     @Serializable @SerialName("Shell") data object Shell : Watched()
     @Serializable @SerialName("Pot") data class Pot(val pot: Long) : Watched()
+
+    /**
+     * Pot [pot]'s live poll (`PotModel.live`, ADR 0127 decision 2), for as long as this watch stands: a host watches it
+     * while the Pot's page shows and its window is active, and drops the watch when either ends. It delivers no update of
+     * its own — what a tick changed arrives on [Pot]'s. Its lifetime is the poll's, so a page torn down stops it.
+     */
+    @Serializable @SerialName("PotLive") data class PotLive(val pot: Long) : Watched()
 
     /** "Manage servers" while it is open ([Call.ManageOpen]). */
     @Serializable @SerialName("Manage") data object Manage : Watched()
@@ -502,6 +544,13 @@ internal class ReportShown(
     /** A category: the contract's name of it (its `category` on [Call.ReportCategory]) and its words. */
     @Serializable class ShownCategory(val id: String, @Serializable(with = MsgKey::class) val word: Msg)
 }
+
+/**
+ * One revision of an entry's history as the host draws it: its line (`PotView.historyLine`), who wrote it (null: no one
+ * known — the host's "Someone") and when the server stored it (epoch ms).
+ */
+@Serializable
+internal class HistoryShown(val line: List<Piece>, val writer: String?, val at: Long)
 
 /**
  * A node's header as the host draws it (`NodeHeaderModel`), each field one core function's answer: the node, whether it

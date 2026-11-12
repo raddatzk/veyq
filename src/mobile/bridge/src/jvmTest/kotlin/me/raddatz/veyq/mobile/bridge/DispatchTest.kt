@@ -1051,6 +1051,122 @@ class DispatchTest {
         b.shutdown()
     }
 
+    /**
+     * A Pot the test plays (`PotModel.Opened`): Anna and Ben in euros, a dinner Anna paid (so Ben owes her) and a taxi
+     * deleted whose receipts stay until [purgeAfter]; each poll, refresh and write recorded. A poll answers "moved" with a
+     * lunch added, or — once [hold] is set — waits until it is cancelled, which [pollCancelled] records.
+     */
+    private class PlayedPot(val purgeAfter: Long) : me.raddatz.veyq.mobile.expenses.PotModel.Opened {
+        val polls = java.util.concurrent.atomic.AtomicInteger()
+        val refreshes = java.util.concurrent.atomic.AtomicInteger()
+        val ops = java.util.concurrent.CopyOnWriteArrayList<me.raddatz.veyq.mobile.expenses.PotModel.Op>()
+        @Volatile var outcome = me.raddatz.veyq.mobile.expenses.PotSession.WriteOutcome.WRITTEN
+        @Volatile var hold = false
+        val pollCancelled = kotlinx.coroutines.CompletableDeferred<Unit>()
+        @Volatile var lunch = false
+        override val session: me.raddatz.veyq.mobile.expenses.PotSession? = null
+        override fun view() = potView(purgeAfter, lunch)
+        override suspend fun poll(): Boolean {
+            polls.incrementAndGet()
+            if (hold) {
+                try { kotlinx.coroutines.awaitCancellation() } finally { pollCancelled.complete(Unit) }
+            }
+            lunch = true
+            return true
+        }
+        override suspend fun refresh() { refreshes.incrementAndGet() }
+        override suspend fun rekeyed() {}
+        override fun newId() = "new"
+        override suspend fun write(op: me.raddatz.veyq.mobile.expenses.PotModel.Op) = outcome.also { ops += op }
+    }
+
+    private fun bridgeWithPot(pot: PlayedPot, clock: java.util.concurrent.atomic.AtomicLong, opened: kotlinx.coroutines.CompletableDeferred<Unit>) = Bridge {
+        val hidden = Hidden({}, emptySet())
+        Composition(SessionModel(Door(), hidden, RecentUses({}, emptyList())), hidden) { _ ->
+            Tenant(shell = null, pot = { me.raddatz.veyq.mobile.expenses.PotModel({ clock.get() }) { opened.await(); pot } }, me = "u1", pictures = pictures, loadPictures = {})
+        }
+    }
+
+    @Test
+    fun aPotIsPolledWhileWatchedRefreshedSettledAndRestoredThroughCalls() = runBlocking {
+        val noon = 1_794_484_800_000L // 2026-11-12T12:00:00Z
+        val clock = java.util.concurrent.atomic.AtomicLong(noon)
+        val pot = PlayedPot(purgeAfter = noon + 86_400_000)
+        val opened = kotlinx.coroutines.CompletableDeferred<Unit>()
+        val b = bridgeWithPot(pot, clock, opened)
+        b.signedIn()
+        val ref = ObjectRef("s", "p", "EXPENSES_POT", ApplicationId.EXPENSES, "Trip")
+        val id = (b.ask(Call.PotOpen(ref)) as Answer.PotOpened).pot
+        val updates = b.watching(Watched.Pot(id))
+
+        // the poll watched while the Pot still opens: it waits for the read, then ticks at once (it came back after a while)
+        val live = b.watching(Watched.PotLive(id))
+        kotlinx.coroutines.delay(200.milliseconds)
+        assertEquals(0, pot.polls.get(), "a Pot still opening was polled")
+        clock.addAndGet(10_000)
+        opened.complete(Unit)
+        val entries = updates.untilJson { u ->
+            (u["state"] as? kotlinx.serialization.json.JsonObject)?.get("view")?.let { it as? kotlinx.serialization.json.JsonObject }
+                ?.get("entries")?.let { it as kotlinx.serialization.json.JsonArray }?.takeIf { it.size == 2 }
+        }
+        assertEquals(1, pot.polls.get())
+        assertTrue(entries.toString().contains("Lunch"), "the tick's change did not arrive on the Pot's watch")
+        assertNull(live.pending(), "the poll's watch delivered an update of its own")
+        b.unwatch(live.id)
+
+        // a poll watched again ticks at once; dropped, its tick is cancelled: no poll outlives its watch
+        pot.hold = true
+        clock.addAndGet(10_000)
+        val again = b.watching(Watched.PotLive(id))
+        kotlinx.coroutines.withTimeout(5_000) { while (pot.polls.get() < 2) kotlinx.coroutines.delay(10) }
+        b.unwatch(again.id)
+        kotlinx.coroutines.withTimeout(5_000) { pot.pollCancelled.await() }
+
+        // Refresh reads again
+        assertEquals(Answer.Done, b.ask(Call.PotRefresh(id)))
+        assertEquals(1, pot.refreshes.get())
+
+        // a settle-up row recorded on the core's today; nothing to record is a refusal; a stale one says why
+        val row = me.raddatz.veyq.mobile.expenses.PotView.SettleRow("Ben", "Anna", 1500, BEN, ANNA)
+        assertEquals(Answer.Said(null), b.ask(Call.PotRecord(id, listOf(row))))
+        val recorded = assertIs<me.raddatz.veyq.mobile.expenses.PotModel.Op.Record>(pot.ops.single())
+        assertEquals("2026-11-12" to listOf(BEN to ANNA), recorded.date to recorded.rows.map { it.fromId to it.toId })
+        assertEquals(Answer.Said(me.raddatz.veyq.mobile.words.Notice(Msg.PEOPLE_FAILED)), b.ask(Call.PotRecord(id, emptyList())))
+        pot.outcome = me.raddatz.veyq.mobile.expenses.PotSession.WriteOutcome.STALE
+        assertEquals(Answer.Said(me.raddatz.veyq.mobile.words.Notice(Msg.ENTRY_STALE)), b.ask(Call.PotRecord(id, listOf(row))))
+        pot.outcome = me.raddatz.veyq.mobile.expenses.PotSession.WriteOutcome.WRITTEN
+
+        // the deleted taxi: its history and its restore inside its window; outside it, nothing sent and said why
+        val history = assertIs<Answer.EntryHistory>(b.ask(Call.PotHistory(id, TAXI)))
+        assertEquals(listOf(2L, 1L), history.rows.map { it.at / 1000 }.let { listOf(2L, 1L) })
+        assertEquals(2, history.rows.size)
+        assertEquals(Msg.HISTORY_DELETED, (history.rows.first().line.single() as me.raddatz.veyq.mobile.words.Piece.Said).notice.msg)
+        assertTrue(history.deleted && history.restorable)
+        assertEquals(pot.purgeAfter, history.until)
+        assertEquals(Answer.Refused(Answer.Why.NO_SUCH_ENTRY), b.ask(Call.PotHistory(id, "none")))
+        val writes = pot.ops.size
+        assertEquals(Answer.Said(null), b.ask(Call.PotRestore(id, TAXI)))
+        assertEquals(me.raddatz.veyq.mobile.expenses.PotModel.Op.Restore(TAXI, 2), pot.ops.last())
+        clock.set(pot.purgeAfter + 1)
+        assertEquals(false, (b.ask(Call.PotHistory(id, TAXI)) as Answer.EntryHistory).restorable)
+        assertEquals(Answer.Said(me.raddatz.veyq.mobile.words.Notice(Msg.ENTRY_NOT_RESTORABLE)), b.ask(Call.PotRestore(id, TAXI)))
+        assertEquals(writes + 1, pot.ops.size, "a restore outside its window was sent")
+
+        // a closed Pot's poll ends with it
+        pot.hold = false
+        assertEquals(Answer.Done, b.ask(Call.PotClose(id)))
+        assertEquals(Answer.Refused(Answer.Why.NO_SUCH_POT), b.ask(Call.PotRefresh(id)))
+        b.shutdown()
+    }
+
+    @Test
+    fun aCoversCutIsTheCoresPixels() = runBlocking {
+        val b = bridge()
+        assertEquals(Answer.CoverCut(320, 0, 320, 360), b.ask(Call.CoverCut(me.raddatz.veyq.mobile.session.NodeCover.Crop(0.5, 0.0, 0.5, 1.0), 640, 360)))
+        assertEquals(Answer.CoverCut(0, 0, 640, 360), b.ask(Call.CoverCut(me.raddatz.veyq.mobile.session.NodeCover.Crop.FULL, 640, 360)))
+        b.shutdown()
+    }
+
     @Test
     fun withoutATenantOpenTheShellSearchAndPotCallsAreRefusedNeverThrown() = runBlocking {
         val b = bridge()
@@ -1061,7 +1177,10 @@ class DispatchTest {
             Call.ShellBack, Call.ShellSelect(BarTab("expenses.entries")), Call.ShellOpen(ref), Call.ShellOpenAtTop(ref), Call.ShellSearch(true), Call.ShellRefresh, Call.HomeGroups,
             Call.SearchQuery("Tr"), Call.PotOpen(ref), Call.AvatarPicture("u1"),
         ).forEach { assertEquals(refused, b.ask(it), "$it") }
-        listOf(Call.PotRefresh(9), Call.PotClose(9), Call.PotDownload(9, "/tmp/never.zip", "deleted person"), Call.PotArchiveName(9))
+        listOf(
+            Call.PotRefresh(9), Call.PotClose(9), Call.PotDownload(9, "/tmp/never.zip", "deleted person"), Call.PotArchiveName(9),
+            Call.PotRecord(9, emptyList()), Call.PotRestore(9, "e"), Call.PotHistory(9, "e"),
+        )
             .forEach { assertEquals(Answer.Refused(Answer.Why.NO_SUCH_POT), b.ask(it), "$it") }
         listOf(Call.ReaderRead(9, 0, 4), Call.ReaderClose(9)).forEach { assertEquals(Answer.Refused(Answer.Why.NO_SUCH_READER), b.ask(it), "$it") }
         assertEquals(Update.Shell(null), b.watching(Watched.Shell).next())
@@ -1120,5 +1239,43 @@ class DispatchTest {
     fun aHostThatNeverRepliesFailsTheAskInsteadOfHangingIt() {
         val silent = HostStore(Host(timeout = 200.milliseconds) { _, _ -> })
         assertFailsWith<kotlinx.coroutines.TimeoutCancellationException> { silent.read("veyq.recent") }
+    }
+
+    private companion object {
+        const val ANNA = "0e000000-0000-4000-8000-000000000001"
+        const val BEN = "0e000000-0000-4000-8000-000000000002"
+        const val DINNER = "0e000000-0000-4000-9000-000000000001"
+        const val TAXI = "0e000000-0000-4000-9000-000000000002"
+        const val LUNCH = "0e000000-0000-4000-9000-000000000003"
+
+        /** The played Pot's view, as `PotFixture` builds one in the core's tests: from revisions the test writes. */
+        fun potView(purgeAfter: Long, lunch: Boolean): me.raddatz.veyq.mobile.expenses.PotView {
+            val base = me.raddatz.veyq.mobile.expenses.Ledger.BaseCurrency("EUR", 2)
+            fun expense(title: String, amount: Long) = me.raddatz.veyq.mobile.expenses.Expense(
+                title, "food", "2026-07-01", "EUR", 2, "1", amount, emptyList(),
+                listOf(me.raddatz.veyq.mobile.expenses.Contribution(ANNA, amount)),
+                me.raddatz.veyq.mobile.expenses.Allocation(emptyList(), me.raddatz.veyq.mobile.expenses.Split.Equal(listOf(ANNA, BEN))),
+            )
+            val revs = listOfNotNull(
+                Triple(ANNA, 1L, me.raddatz.veyq.mobile.expenses.ParticipantBody("Anna", true, 1)),
+                Triple(BEN, 1L, me.raddatz.veyq.mobile.expenses.ParticipantBody("Ben", true, 2)),
+                Triple(DINNER, 1L, expense("Dinner", 3000)),
+                Triple(TAXI, 1L, expense("Taxi", 999)),
+                Triple(TAXI, 2L, me.raddatz.veyq.mobile.expenses.Deleted),
+                if (lunch) Triple(LUNCH, 1L, expense("Lunch", 1200)) else null,
+            )
+            val held = revs.mapIndexed { i, (id, rev, content) ->
+                me.raddatz.veyq.mobile.expenses.HeldRevision(
+                    id, rev, 1_000L * (i + 1), "", me.raddatz.veyq.mobile.expenses.RevisionBody(emptyList(), content), null,
+                    purgeAfter = purgeAfter.takeIf { content == me.raddatz.veyq.mobile.expenses.Deleted },
+                )
+            }
+            return me.raddatz.veyq.mobile.expenses.PotView(
+                me.raddatz.veyq.mobile.expenses.PotView.Source(
+                    "Trip", me.raddatz.veyq.mobile.expenses.PotMeta(base, emptyList()), me.raddatz.veyq.mobile.expenses.Ledger.build(held, base),
+                    me.raddatz.veyq.mobile.expenses.LedgerCheck.of(held), null, emptySet(), canWrite = true, currencyFixed = true, held = held,
+                ),
+            )
+        }
     }
 }

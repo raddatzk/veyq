@@ -684,6 +684,147 @@ class LiveBridgeTest {
         b.shutdown()
     }
 
+    /**
+     * A Pot's live poll, settle-up and restore through calls, over the real core: Amsterdam copied beside itself and
+     * renamed "App pot <n>"; the copy opened and its poll watched (`Watched.PotLive`); an entry written by a second session
+     * of its own (another device) seen through the poll within its cadence; one settle-up row recorded, then all, each
+     * read back from the Pot's watch (every balance settled); the entry deleted by the second session, its history read
+     * (`Pot.History`: deleted, restorable) and restored (`Pot.Restore`), read back live. The copy is trashed and purged.
+     */
+    @Test
+    fun aPotIsPolledSettledAndRestoredThroughCalls() = runBlocking {
+        val origin = System.getenv("VEYQ_LIVE") ?: return@runBlocking
+        val envFile = System.getenv("VEYQ_ENV_FILE")?.let(::File) ?: File(System.getProperty("veyq.repoRoot"), ".run/.env")
+        val env = envFile.readLines()
+            .mapNotNull { l -> l.substringBefore('=', "").takeIf { it.isNotBlank() }?.let { it.trim() to l.substringAfter('=').trim().trim('"', '\'') } }
+            .toMap()
+        val (b, first) = signedInLive(origin, "bridge live poll test")
+        val amsterdam = first.state!!.lists.objects.first { it.name == "Amsterdam" }
+        val scope = amsterdam.scopeId
+        val home = first.state.lists.nodes.first { it.nodeId == amsterdam.nodeId }.parentId
+        suspend fun fresh(): Update.Shell {
+            assertEquals(Answer.Done, b.ask(Call.ShellRefresh, timeout = 1.minutes))
+            return b.watching(Watched.Shell).next() as Update.Shell
+        }
+        fun nodes(u: Update.Shell) = u.state!!.lists.nodes.filter { it.scopeId == scope }
+        fun at(n: me.raddatz.veyq.mobile.navigation.NodeRef) = me.raddatz.veyq.mobile.navigation.NodeAt(n.scopeId, n.nodeId, n.kind, n.name)
+        fun JsonObject.view() = (this["state"] as? JsonObject)?.get("view") as? JsonObject
+        fun ids(view: JsonObject, list: String) = view.getValue(list).jsonArray.map { it.jsonObject.getValue("row").jsonObject.getValue("id").jsonPrimitive.content }
+        fun settle(view: JsonObject) = view.getValue("settleUp").jsonArray.map { it.jsonObject.getValue("row").jsonObject }.map { r ->
+            me.raddatz.veyq.mobile.expenses.PotView.SettleRow(
+                r["from"]?.takeIf { it !is JsonNull }?.jsonPrimitive?.content, r["to"]?.takeIf { it !is JsonNull }?.jsonPrimitive?.content,
+                r.getValue("amount").jsonPrimitive.long, r.getValue("fromId").jsonPrimitive.content, r.getValue("toId").jsonPrimitive.content,
+            )
+        }
+
+        // Amsterdam copied beside itself through its open Pot model, the copy renamed "App pot <n>"
+        val source = (b.ask(Call.PotOpen(amsterdam)) as Answer.PotOpened).pot
+        b.watching(Watched.Pot(source)).untilJson(1.minutes) { it.view() }
+        val sheet = (b.ask(Call.MoveOpen(at(nodes(first).first { it.nodeId == amsterdam.nodeId }), true, "deleted person")) as Answer.MoveOpened).move
+        b.watching(Watched.Move(sheet)).until(2.minutes) { u -> (u as Update.Move).shown?.takeIf { it.loaded && it.losses.size > 1 } }
+        val copied = b.ask(Call.MoveHere(sheet), timeout = 3.minutes) as Answer.MoveSent
+        assertEquals(me.raddatz.veyq.mobile.words.Msg.COPY_DONE, copied.done?.msg, "${copied.problem}")
+        b.ask(Call.MoveClose(sheet))
+        b.ask(Call.PotClose(source))
+        val before = first.state.lists.nodes.map { it.nodeId }.toSet()
+        val copy = assertNotNull(nodes(fresh()).firstOrNull { it.kind == amsterdam.kind && it.parentId == home && it.nodeId !in before }, "the Pot's copy is not listed")
+        val name = "App pot ${System.currentTimeMillis() % 100_000}"
+        try {
+            val header = (b.ask(Call.HeaderOpen(at(copy), me.raddatz.veyq.mobile.AppKinds.Facts(), 2)) as Answer.HeaderOpened).header
+            b.watching(Watched.Header(header)).until { u -> (u as Update.Header).shown?.takeIf { it.plan != null } }
+            assertEquals(null, (b.ask(Call.HeaderRename(header, name), timeout = 1.minutes) as Answer.Renamed).problem)
+            b.ask(Call.HeaderClose(header))
+            println("copied Amsterdam as $name")
+            val ref = me.raddatz.veyq.mobile.navigation.ObjectRef(copy.scopeId, copy.nodeId, copy.kind, amsterdam.application, name)
+
+            // the copy opened, its poll watched as a desktop's page does while it shows
+            val id = (b.ask(Call.PotOpen(ref)) as Answer.PotOpened).pot
+            val pot = b.watching(Watched.Pot(id))
+            pot.untilJson(1.minutes) { it.view() }
+            val live = b.watching(Watched.PotLive(id))
+
+            // another device writes an entry: the poll brings it, within its cadence (20 s ± 20 %)
+            val store = object : DeviceStore {
+                val values = ConcurrentHashMap<String, String>()
+                override fun read(key: String) = values[key]
+                override fun write(key: String, value: String) { values[key] = value }
+                override fun remove(key: String) { values.remove(key) }
+            }
+            val account = VeyqAccount.signIn(
+                BouncyCastlePrimitives, origin, env.getValue("VEYQ_EMAIL"), env.getValue("VEYQ_PASSWORD"), env.getValue("VEYQ_SECRET_KEY"),
+                ThisDevice(store, NoDeviceKeys, "bridge live poll test, the other device", BouncyCastlePrimitives),
+            ) { block -> HttpClient(OkHttp, block) }
+            val tenant = account.open(account.tenants.first { it.tenantId == first.shown!!.tenant.tenantId })
+            val other = assertNotNull(me.raddatz.veyq.mobile.expenses.PotSession.open(tenant, ref.scopeId, ref.nodeId), "the other device did not open $name")
+            val payer = other.ledger!!.participants.first { it.active && !it.erased }
+            val form = me.raddatz.veyq.mobile.expenses.PotView(other).blankForm(java.time.LocalDate.now().toString())!!
+                .copy(title = "Live check", payers = listOf(me.raddatz.veyq.mobile.expenses.EntryForm.Payer(payer.id, "7")))
+            val entry = other.newId()
+            assertEquals(me.raddatz.veyq.mobile.expenses.PotSession.WriteOutcome.WRITTEN, other.saveEntry(entry, form, null))
+            val written = System.currentTimeMillis()
+            pot.untilJson(90.seconds) { u -> u.view()?.takeIf { entry in ids(it, "entries") } }
+            val seenAfter = System.currentTimeMillis() - written
+            println("the other device's entry seen through the poll after $seenAfter ms")
+            assertTrue(seenAfter < 30_000, "the poll took longer than its cadence")
+            assertNull(live.pending(), "the poll's watch delivered an update of its own")
+
+            // settle-up: one row, then all; each read back from the Pot's watch (where one row was all there was, the other
+            // device unsettles the Pot again with an entry another person paid)
+            val now = assertNotNull(b.watching(Watched.Pot(id)).untilJson { it.view() })
+            val rows = settle(now)
+            assertTrue(rows.isNotEmpty(), "the copy has nothing to settle")
+            assertEquals(Answer.Said(null), b.ask(Call.PotRecord(id, rows.take(1)), timeout = 1.minutes))
+            var afterOne = b.watching(Watched.Pot(id)).untilJson(1.minutes) { u -> u.view()?.takeIf { v -> settle(v).none { it.fromId == rows[0].fromId && it.toId == rows[0].toId && it.amount == rows[0].amount } } }
+            println("recorded one row of ${rows.size}; ${settle(afterOne).size} left")
+            if (settle(afterOne).isEmpty()) {
+                other.refresh()
+                val second = other.ledger!!.participants.filter { it.active && !it.erased }.first { it.id != payer.id }
+                val unsettle = me.raddatz.veyq.mobile.expenses.PotView(other).blankForm(java.time.LocalDate.now().toString())!!
+                    .copy(title = "Live check 2", payers = listOf(me.raddatz.veyq.mobile.expenses.EntryForm.Payer(second.id, "5")))
+                val second2 = other.newId()
+                assertEquals(me.raddatz.veyq.mobile.expenses.PotSession.WriteOutcome.WRITTEN, other.saveEntry(second2, unsettle, null))
+                // a fresh watch: the state as it is now, then each change — never an update queued from before the record
+                afterOne = b.watching(Watched.Pot(id)).untilJson(90.seconds) { u -> u.view()?.takeIf { second2 in ids(it, "entries") } }
+            }
+            assertEquals(Answer.Said(null), b.ask(Call.PotRecord(id, settle(afterOne)), timeout = 1.minutes))
+            val settled = b.watching(Watched.Pot(id)).untilJson(1.minutes) { u -> u.view()?.takeIf { settle(it).isEmpty() } }
+            val balances = settled.getValue("balances").jsonArray.map { it.jsonObject.getValue("row").jsonObject.getValue("balance").jsonPrimitive.long }
+            assertTrue(balances.all { it == 0L }, "not every balance settled: $balances")
+            println("recorded all: every balance settled")
+
+            // the other device deletes the entry; its history and its restore through calls
+            other.refresh()
+            val basedOn = me.raddatz.veyq.mobile.expenses.PotView(other).editing(entry)!!.basedOn
+            assertEquals(me.raddatz.veyq.mobile.expenses.PotSession.WriteOutcome.WRITTEN, other.deleteEntry(entry, basedOn))
+            pot.untilJson(90.seconds) { u -> u.view()?.takeIf { entry in ids(it, "deleted") } }
+            val history = assertIs<Answer.EntryHistory>(b.ask(Call.PotHistory(id, entry)))
+            assertTrue(history.deleted && history.restorable, "the deleted entry is not offered a restore")
+            assertEquals(2, history.rows.size)
+            println("the deleted entry's history: " + history.rows.joinToString { "${it.line} by ${it.writer}" } + "; restorable until ${history.until}")
+            assertEquals(Answer.Said(null), b.ask(Call.PotRestore(id, entry), timeout = 1.minutes))
+            b.watching(Watched.Pot(id)).untilJson(1.minutes) { u -> u.view()?.takeIf { entry in ids(it, "entries") && entry !in ids(it, "deleted") } }
+            assertEquals(3, (b.ask(Call.PotHistory(id, entry)) as Answer.EntryHistory).rows.size)
+            println("restored: live again")
+            b.unwatch(live.id)
+            assertEquals(Answer.Done, b.ask(Call.PotClose(id)))
+        } finally {
+            val h = (b.ask(Call.HeaderOpen(at(copy), me.raddatz.veyq.mobile.AppKinds.Facts(), 2)) as Answer.HeaderOpened).header
+            println("trash $name: ${(b.ask(Call.HeaderTrash(h), timeout = 1.minutes) as? Answer.Trashed)?.notice?.msg}")
+            b.ask(Call.HeaderClose(h))
+            val t = (b.ask(Call.TrashOpen(scope)) as Answer.TrashOpened).trash
+            val tw = b.watching(Watched.Trash(t))
+            val rows = tw.until(1.minutes) { u -> (u as Update.Trash).shown?.rows }
+            rows.firstOrNull { it.id == copy.nodeId }?.let { row ->
+                val purged = b.ask(Call.TrashPurge(t, row.id), timeout = 1.minutes)
+                println("purge ${row.name}: $purged")
+                if (purged == Answer.Done) tw.until(1.minutes) { u -> (u as Update.Trash).shown?.takeIf { s -> s.busy == null && s.rows?.none { it.id == row.id } == true } }
+            }
+            b.ask(Call.TrashClose(t))
+            assertTrue(nodes(fresh()).none { it.nodeId == copy.nodeId }, "the copy was left")
+        }
+        b.shutdown()
+    }
+
     /** Signs a live bridge in as the seeded principal and returns it with its first shell (Amsterdam listed). */
     private suspend fun signedInLive(origin: String, device: String): Pair<Bridge<*, *>, Update.Shell> {
         val envFile = System.getenv("VEYQ_ENV_FILE")?.let(::File) ?: File(System.getProperty("veyq.repoRoot"), ".run/.env")
