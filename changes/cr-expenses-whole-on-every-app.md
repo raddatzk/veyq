@@ -496,6 +496,65 @@ yet, native-apps § Open; `HeaderShown.cover`, `Header.CoverPicture` and `NodeCo
   with its rate's note, a refusal under its field, the preview, an edit, a stale save provoked from the web, delete
   asked; typing a long description and an amount keeps the cursor (D5).
 
+**Status: done (2026-11-12).**
+
+**Built:**
+- core: `PotModel.Opened` gains the editor's doors (`saveEntry`, `deleteEntry`, `rateFor`; `SessionOpened` maps them onto
+  `PotSession`, a played Pot plays them), so the editor's writes go through the Pot the model opened; `EditorChange`,
+  `EntryForm.Kind`/`Mode` and `EntryEditor.Rate` are `@Serializable` under names no host type takes (`Edit.<name>`,
+  `EntryKind`, `SplitMode`, `RateState`, `EditorRate`); `EntryForm.typedIn` (what was typed for a person in a split's mode).
+- bridge: `Editor.Open(pot, entry?, separator)` → `EditorOpened` (refused `NO_SUCH_ENTRY`), `Editor.Change` applied on
+  the host's thread in the order called, `Editor.Save` / `Editor.Delete` → `EditorSaved(done, notice)` once the write
+  ended, `Editor.AskDelete/CancelAsk/Close`, `Watched.Editor` → `Update.Editor(EditorShown)` (each field one core
+  function's answer: the form, people, payers with `canRemovePayer`/`nextPayer`, `payersTotal`, items, the rest
+  (`showsRest`), each split with `collapsedWords`, `typedIn` and `splitHint`, the categories' words, `Currencies.known`,
+  the rate's fill, the preview, the refusal's words at its field); a closed Pot closes its editors (`Registry.removeIf`).
+  `DispatchTest.anEntryIsWrittenEditedAndDeletedThroughTheEditorsCalls`, `WireTest` samples of every `EditorChange`,
+  `LiveBridgeTest.anEntryIsWrittenEditedAndDeletedThroughCalls`.
+- Linux: `entry_editor.rs` (an `AdwDialog` with an `AdwNavigationView`: the form, a split's page, the history page from
+  `entry_history::page`), `typed.rs` (D5's rule, `cargo test`), "Add entry" the header bar's `create_action`, a live
+  row opening the editor and a deleted one its history; `bridge::call` reaches the core when called;
+  `said::decimal_separator`.
+- Windows: `EntryEditorPage` (a page in place of the Pot's places; Save, Delete, Cancel in its `CommandBar`), `TypedText`
+  (`TypedTextTest`), "Add entry" the content's `CreateAction.Button` while the places show; `PotPage` keeps the head's
+  column itself and logs a draw that throws.
+- words: `generate_words.py` writes one `%` into the desktops' catalogs (words.json's `%%` is Android's and Apple's
+  format-string escape). `PotLiveTest`: `VEYQ_LIVE_POT_EDIT="<pot>|<title>"` retitles an entry from another device.
+
+**Met:**
+- 11 mutations, each its case red and restored by `scratchpad/e4/bite.py` (`/bin/cp -f`), all bit: `Editor.Change` a
+  no-op; edits launched instead of applied in order (400 titles sent unawaited, the last not the one shown); `Editor.Save`
+  answering before the write; `Editor.Delete`, `AskDelete`, `CancelAsk`, `Close` each a no-op; a closed Pot keeping its
+  editors; `Watched.Editor` not the model's state; the editor's save and rate not the Pot's door.
+  `scratchpad/e4/bite_typed.py`: D5's rule bitten twice in `cargo test` (a focused field set from its own echo; from
+  every state).
+- `./gradlew :core:jvmTest :core:macosArm64Test :bridge:jvmTest` green; with `VEYQ_LIVE`,
+  `LiveBridgeTest.anEntryIsWrittenEditedAndDeletedThroughCalls` green: Amsterdam copied as `App pot 18030`, a save refused
+  at `payers`, an expense with two payers and items by shares, percent and amounts read back from a fresh open, a refund
+  and a transfer, CHF's rate filled from the tenant's service (1.082954299329 of 2026-11-11), a stale save (another
+  device's title shown, the next save on top), the transfer deleted (among the deleted), the copy purged.
+- `linux/run.py build` (clippy `-D warnings`, `cargo test` 28 passed) and `windows/run.py build` (Veyq.Bridge.Tests,
+  Veyq.Tests 22 passed) green; `:android:assembleDebug`, `xcodebuild -target Veyq -sdk macosx CODE_SIGNING_ALLOWED=NO`
+  and `xcodebuild -scheme Veyq` for the iPhone 18 Pro simulator green; `validate_mobile_words.py`,
+  `validate_mobile_platform_guidelines.py` green.
+- Linux (container, Broadway on 8097, headless Chrome), en/light then de/dark, on `Linux pot` (Amsterdam copied by the
+  header's Copy, renamed): Save on the empty form said the payers' refusal under them, none before; a long title typed,
+  four keys left, `X` landed there (the cursor kept); an amount typed `4050`, two left, the separator: `40.50` / `40,50`;
+  two payers, an item split by percent (the hint "70.00 %, not 100 %" — `%%` before the words fix), the rest by amounts
+  (en) and by shares (de), the preview (Anna 44.50, Ben 16.00); CHF / GBP with the rate's note as the currency row's
+  subtitle (de `1,195914755196`); saved; the editor reopened, `PotLiveTest` (`VEYQ_LIVE_POT_EDIT`) retitled the entry
+  elsewhere, Save said "Someone else changed this entry…" with their title in the focused field, saved on top; a refund;
+  a transfer's Save refused at its amount (the row's error style); its history page; its delete asked and done. The copy
+  trashed and deleted forever. Shots: `scratchpad/e4/lx/`.
+- Windows (VM, `run.py run --devlogin`, then `--unlock`; `drive`), en-US/light then de-DE/dark, on `Windows pot` (the
+  same way): the refusal in the InfoBar and under the payers; the title typed with the caret kept (`thex day`,
+  `Txages`) and an amount typed into its middle (`410450` from `4050`); two payers, an item by percent (the hint
+  "70,00 %, not 100 %"), the rest by amounts / shares, the preview; CHF / GBP filled (the note the rate box's
+  description); saved; a stale save through `VEYQ_LIVE_POT_EDIT` (the InfoBar, their title); a refund; a transfer
+  refused at its amount; the history expander; the delete asked by its `ContentDialog` and done. The copy trashed and
+  deleted forever; the pass ended with "Diesem Gerät nicht mehr vertrauen" (`manage servers: None`). Shots:
+  `scratchpad/e4/win/`.
+
 ### Phase 5 — Bridge and desktops: receipts (attach by path, show an image and a PDF, save one, the skipped notice)
 
 **Done when:**
@@ -665,3 +724,48 @@ owner's veto. D4's renderers (poppler-glib on Linux, `Windows.Data.Pdf` on Windo
   `Linux pot` and `Windows pot` were each trashed and deleted forever. Other sessions' `windows/run.py run` processes
   (PIDs 61912, 64097, 64732, 66678, started 2026-11-11 23:57–00:10) and a Linux container on 8095 were running and left
   alone.
+
+### Phase 4 (2026-11-12)
+
+- **An edit is applied on the host's thread, in the order sent** (`Bridge.call` applies `Editor.Change` before it
+  launches the answer): each call was launched on `Dispatchers.Default`, so two keystrokes' edits could land the wrong way
+  round and a field end on the earlier text (bitten: 400 titles sent unawaited). Linux's `bridge::call` reaches the core
+  when called, not when its answer is first awaited; C#'s `CallAsync` already did. Decided here.
+- **D5's rule, refined:** "the state's text differs from what it sent last" would rewrite a focused field to a text one
+  keystroke behind (states lag the typing). A field remembers every text it sent: a focused field passes over a state
+  that echoes one of them (and forgets the older ones, since states arrive in the order applied); any other text — a
+  stale save's other version, a rate filled — is set, focused or not (`typed.rs`, `TypedText.cs`, the same five cases).
+- **The editor's writes go through the Pot's door** (`PotModel.Opened.saveEntry/deleteEntry/rateFor`), so the bridge's
+  `DispatchTest` plays a save and can bite "answered before the write"; `EditorDoor` no longer reaches the session.
+- **The shown editor carries every rule's answer** (`EditorShown`): what the phones compute inline from the form
+  (`payersTotal`, `showsRest`, `nextPayer`, `canRemovePayer`, `collapsedWords`, `splitHint`, the value in a split's mode)
+  is the core's on the wire; `EntryForm.typedIn` is the one function added for it. The delete answers as a save does
+  (`EditorSaved`), so a host closes on the answer. Decided here.
+- **The history is the editor's page** on Linux (`entry_history::page`) and an `Expander` on Windows (the editor is a page
+  there, D5); a deleted entry's row still opens the history dialog with its restore (the editor opens live entries only).
+- **Traps met** (to `src/mobile/CLAUDE.md` § Traps at once):
+  - `AdwComboRow`: a search or an expression set after its model replaces the selection, which notifies — the form sent
+    "AED" as the currency at its build. Built in one builder; the drawing flag is held while a form is built too.
+  - WinUI's `TextBox.TextChanged` is raised after the draw, so a drawing flag does not cover the state's own set: a
+    lagging state set a payer's box to "" and that came back as an edit. A box remembers the text the state set.
+  - WinUI: a head moved between two columns drawn in a row (the editor closed, then an update) read `Parent` null while
+    its column still loaded; the add threw `0x800F1000` ("no installed components were detected") out of a watch's
+    callback, which ended the app in combase with nothing in the log. `PotPage` keeps the column itself and logs a draw
+    that throws.
+  - words.json writes a percent sign `%%` (Android's and Apple's format strings); the desktops said "70.00 %%" until
+    `generate_words.py` wrote one `%` into their catalogs.
+  - Driving: Playwright names `Backspace` (not `BackSpace`) and presses no `Ü`; `Veyq.Drive`'s `key` has no `.` or `,`
+    (a decimal goes in by `set`), a UIA `set` while a form rebuilds may land on the old box, and an `AutoSuggestBox`'s
+    inner box is `#TextBox` (reached by Tab from the date).
+- **Noticed, not changed:** an edited entry's rate shows as sealed (`1.082954299329`, a dot) where a filled one is in the
+  reader's separator — `EntryForm.of` keeps `content.rate`; every app does the same (Phase 7 or a later CR). AdwComboRow
+  rows of a payer show the person at the row's end beside the amount; GNOME's guideline holds, a wider dialog would read
+  better. Windows' CommandBar shows "New" (the level's) beside "Add entry" in a Pot.
+- **Deviations:** the stale save was provoked from a second core session (`PotLiveTest`, `VEYQ_LIVE_POT_EDIT`), not the
+  web; the Windows dates and money read the VM's German culture under en-US words (Phase 3 the same); the Windows pass
+  restarted the app five times while the draw crash was found (each `run.py run` of mine stopped by its PID); the first
+  Windows start answered the offer with "Not now", the pass ended with Stop trusting.
+- **Left in the dev instance by my runs:** nothing of this phase — `App pot 652` and `App pot 18030` (LiveBridgeTest),
+  `Linux pot` and `Windows pot` were trashed and deleted forever. `App pot e2` and `App folder e2` (Phase 2) stay in the
+  space's trash; other sessions' `windows/run.py run` processes (PIDs 61912, 64097, 64732, 66678) and the Linux
+  container on 8095 were left alone.

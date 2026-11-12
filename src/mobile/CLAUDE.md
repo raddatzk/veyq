@@ -51,7 +51,8 @@ A Gradle build of its own, run through its own wrapper.
 - `linux/` — the Linux app (ADR 0127 decision 4): a Cargo package in Rust (gtk4-rs, libadwaita-rs), with `Cargo.lock`
   committed and every cargo run `--locked`. `src/lib.rs` is the library: `bridge` (the safe wrapper over the six
   functions, the host function), `words`, `said` (money, days and sizes the desktop's way), `theme`, `create_action`
-  and one module per screen (`sign_in` with the unlock, `shell` with Search, `home`, `pot` with its download, `manage`
+  and one module per screen (`sign_in` with the unlock, `shell` with Search, `home`, `pot` with its download,
+  `entry_editor` (an entry's editor; `typed`: when a text field is set from the state) and `entry_history`, `manage`
   for "Manage servers"; `header` with `trash`, `move_sheet`, `share_sheet`, `report` and `cover` for a node's header and
   its sheets; `dev_login` in a debug build only), and `avatars` (`Held`, no widget and tested: the open
   tenant's pictures, asked for again only when the shell's id set changes; drawn as `adw::Avatar`).
@@ -68,7 +69,8 @@ A Gradle build of its own, run through its own wrapper.
   `ShareDays`, `ReportDialog`, `CoverDialog`, every `ContentDialog` shown through `Dialogs.Show`),
   `AvatarsHeld` (`Held<T>`, no control, Linux's `avatars::Held` rule for rule; `AvatarsTest`) and `Avatars` (decodes
   each picture through `BitmapImage`, sets it on every `PersonPicture` of that id), `Act` (sends a
-  call, logs its answer), `Words`/`MrtWords` and `SaidNotice` (the words), `Said` (money, days and sizes the system's
+  call, logs its answer), `EntryEditorPage` (an entry's editor, a page in place of the Pot's places) with `TypedText`
+  (when a text box is set from the state; `TypedTextTest`), `Words`/`MrtWords` and `SaidNotice` (the words), `Said` (money, days and sizes the system's
   way), `CreateAction`, `Log` (`%LOCALAPPDATA%\veyq\log.txt`), and in a debug build `DevLogin` and `DebugEnv`
   (`VEYQ_THEME`, `VEYQ_LANGUAGE`). `Veyq.Tests` holds the words and formats against the app's `.pri`. `Veyq.Drive` is the
   pass's driver on the Windows host (UI Automation; its steps in `Program.cs`). Packages are central and exact
@@ -118,7 +120,9 @@ A Gradle build of its own, run through its own wrapper.
 - `./gradlew :bridge:jvmTest` — the bridge (ADR 0123's Consequences, the bridge):
   - `DispatchTest` covers the way in, over a door the test plays: a reader read backwards in uneven ranges and closed
     with the tenant, a picture's bytes and its refusal, and every call of a node's header and its sheets (`Header.*`,
-    `Trash.*`, `Move.*`, `Share.*`, `Report.*`, `Cover.*`), each bitten by making it a no-op.
+    `Trash.*`, `Move.*`, `Share.*`, `Report.*`, `Cover.*`), and a Pot's (`Pot.*`, `Watched.PotLive`) and its entry editor's
+    (`Editor.*`, `Watched.Editor`, over a played Pot: edits applied in the order sent, a save answered once its write
+    ended), each bitten by making it a no-op.
   - `WireTest` writes and reads back a sample of every variant of every sealed type the wire reaches. The samples go
     to `build/generated/bridge/samples`, which the Rust test reads.
   - `SecretFreeSchemaTest` checks that nothing the core sends has a field named like a key, seal, token, secret or
@@ -132,7 +136,9 @@ A Gradle build of its own, run through its own wrapper.
   Pot over the real core, the principal's picture through `Avatar.Picture` (its SHA-256 the core's own read's), and
   downloads Amsterdam through `Pot.Download`, every payload to the manifest. It is the only proof of the shell's, Search's and the Pot's dispatch, so a change there
   runs it live. Its header cases (`aFolderIs*`, `aPotIsCopied*`, `aLinkIs*`, `aCover*`) run with `VEYQ_LIVE` alone and
-  clean up what they made (`aPotIsPolled*` too: an `App pot <n>` copy polled, settled and restored, then purged); `aReport*` needs `VEYQ_LIVE_REPORT_BRIDGE=1` (it leaves one report: run it once),
+  clean up what they made (`aPotIsPolled*` too: an `App pot <n>` copy polled, settled and restored, then purged; `anEntryIsWritten*`: an `App pot
+  <n>` copy written through the editor's calls — every kind, the split's modes, a rate filled, a refusal, a stale save, a
+  delete — each read back from a fresh open, then purged); `aReport*` needs `VEYQ_LIVE_REPORT_BRIDGE=1` (it leaves one report: run it once),
   `aCopyWithoutRoom*` `VEYQ_LIVE_NO_ROOM=1` while `DepotLiveTest` holds the one-byte quota, and `theLinksOfAFolder*`
   writes a desktop pass's links out for the web's guest page — each case's doc says what it reads.
 - `python3 linux/run.py <verb>` — everything Linux. From the repository root the launcher runs the same verbs as
@@ -215,7 +221,8 @@ A Gradle build of its own, run through its own wrapper.
   removes them (only the erasure record stays); `VEYQ_LIVE_POT_SETTINGS=<pot name>` (a Pot without money entries) switches its
   currency and back and adds an own category ("App category renamed", which stays: categories are never removed).
   `VEYQ_LIVE_POT_THIRD=<pot name>` adds a person "Cleo" who pays 30.00 for everyone, so that Pot settles in more than
-  one payment (a desktop pass's Record all); both stay.
+  one payment (a desktop pass's Record all); both stay. `VEYQ_LIVE_POT_EDIT="<pot name>|<entry title>"` retitles that entry
+  "<entry title> (elsewhere)" from this second session, so a desktop pass's open editor saves stale.
   `VEYQ_LIVE_POT_CREATE=1` creates a Pot ("App pot <time>") with a name and a member, checks its name is taken then, and
   that a Pot the web created collides with the app's of its name (the slug token is the web's), and moves it to the trash.
   `VEYQ_LIVE_RATES=1` asks the tenant's exchange-rate service (a third party: Frankfurter on a dev instance) for today's table once.
@@ -635,3 +642,27 @@ first in each of its scrolls — `LocalNodeHero.current(inset)` (Android) / `Nod
 - A download's failure on Windows is shown with a nearly full volume (a small FAT VHD filled to one free cluster): the
   common file dialog itself refuses a folder the user cannot write to before the core is called (remembered, not
   measured), so Linux's read-only folder has no counterpart there.
+- The bridge launches each call on `Dispatchers.Default`, so two calls sent one after the other may be dispatched the other
+  way round. An edit stream is applied on the host's thread in the order called (`Bridge.call`, `Editor.Change`; bitten
+  by 400 titles sent unawaited), and Linux's `bridge::call` hands the call to the core when it is called, not when its
+  answer is first awaited (C#'s `CallAsync` does the same). A new stream of edits goes the same way.
+- A text field is set from the state by D5's rule (`linux/src/typed.rs`, `windows/Veyq/TypedText.cs`, the same cases):
+  states lag the typing by a keystroke or two, so a focused field passes over a state that echoes a text it sent and
+  takes any other (a stale save's version, a rate filled). "Differs from what it sent last" alone rewrote the field to an
+  older text.
+- An `AdwComboRow` whose search or expression is set after its model replaces its selection and notifies `selected`:
+  the editor sent "AED" as the currency at its build (measured 2026-11-12). Build a combo row in one builder, and hold the
+  drawing flag while a form is built, not only while it is updated.
+- WinUI's `TextBox.TextChanged` is raised after the code that set `Text` returned, so a drawing flag does not cover the
+  state's own set: a payer's box set to an older state's "" came back as an edit and the save was refused (measured
+  2026-11-12). A box remembers the text the state set and passes that change over (`EntryEditorPage.Box`).
+- WinUI: an element moved between two panels drawn in a row read `Parent` null while the first still loaded, and its
+  add to the second threw `0x800F1000` ("no installed components were detected"); thrown out of a watch's callback it
+  ended the app in combase with nothing in the log (the Pot's head after the editor closed, measured 2026-11-12). A page
+  keeps the panel it put an element in itself (`PotPage._heroHolder`), and a page's draw logs what it throws.
+- words.json writes a percent sign `%%`, as Android's and Apple's format strings read it; `generate_words.py` writes one
+  `%` into the desktops' catalogs (`desktop_text`), and both desktops' words tests expect that.
+- Driving the desktops' editors: Playwright names `Backspace` and presses no `Ü` (Broadway); `Veyq.Drive`'s `key` has no
+  `.` or `,` — a decimal goes in by `set`, a UIA `set` while a form rebuilds may land on the box it replaces (wait for the
+  rebuild), a UIA `select` leaves a `ComboBox`'s drop-down open, and an `AutoSuggestBox`'s inner box is `#TextBox`
+  (Search's too): reach it by `press ed-date tab tab`.
