@@ -118,7 +118,7 @@ and not a fallback, a larger pad or an npm package: [ADR 0127](../docs/decisions
     - `site/…/hardening.md`'s Coraza line;
     - the inbox and coverage rows that only match on a test name.
   - **Which statements change:**
-    - pdf.js's decoders stay off because they are not turned on (inbox #836), no longer because the policy refuses them
+    - pdf.js's decoders stay off because they are not turned on (inbox #837), no longer because the policy refuses them
       (`cc.security.csp.md` § pdf.js, `docs/apps/depot.md`, `uc.depot.view-file` and its coverage, `pdfOptions.ts`,
       `vite.config.ts`, `src/web/CLAUDE.md`);
     - semantic search's deferral rests on the model's size alone (ADR 0125 l.136–137);

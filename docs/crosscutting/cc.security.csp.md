@@ -74,7 +74,7 @@ Why each non-obvious source is there:
   encodes a space icon and a member picture with its own build of libwebp (`src/web/webp-encoder/`, [ADR 0127](../decisions/0127-the-web-client-encodes-webp-with-its-own-build-of-libwebp.md)),
   because Safari's canvas answers WebP with a PNG. An attacker who could hand the page a module would first need to run
   script in it, which `'self'` and Trusted Types refuse; one who runs script already holds the unlocked keys. The source
-  is granted for the page, not for that module, so any further WebAssembly (pdf.js's decoders, inbox #836) is a decision
+  is granted for the page, not for that module, so any further WebAssembly (pdf.js's decoders, inbox #837) is a decision
   of its own — what it is, where it comes from, how it is pinned — never a consequence of this source. The encoder is
   fetched as bytes from the origin and instantiated from them (never streamed), so it needs no `connect-src` beyond
   `'self'`.
@@ -184,7 +184,7 @@ origin, next to the keys. Its threat note, and what keeps it inside the policy a
 - **No WebAssembly of pdf.js:** `useWasm: false`, and its `.wasm` decoders are not shipped (`verify:pdf-worker` fails on a
   `wasm/` directory or on any `.wasm` but the WebP encoder's). The policy would compile them since [ADR 0127](../decisions/0127-the-web-client-encodes-webp-with-its-own-build-of-libwebp.md)
   granted `'wasm-unsafe-eval'`; they stay off because nobody has turned them on — where their `.wasm` comes from and how
-  it is pinned is open (inbox #836). Cost: JBIG2 and JPEG 2000 images (scans) and ICC transforms do not render; the page
+  it is pinned is open (inbox #837). Cost: JBIG2 and JPEG 2000 images (scans) and ICC transforms do not render; the page
   shows gaps.
 - **No network but the origin:** the document is our decrypted buffer (`{data}`, never a URL); the CMaps, standard fonts
   and ICC profile pdf.js reads on demand are same-origin copies under `assets/pdfjs-<version>/`, and `connect-src 'self'`

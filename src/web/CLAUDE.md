@@ -623,7 +623,7 @@ here; the server is blind.
   `pnpm run verify:pdf-worker` pin it, with the worker a same-origin hashed asset for `worker-src 'self'`, no `eval`/`new
   Function` in the emitted files, no `.wasm` of pdf.js - the WebP encoder's is the one allowed); `pdfOptions.ts` is the
   option set - the document is `{data}` (never a URL), `useWasm: false` (the policy would compile the WASM decoders since
-  ADR 0127 granted `'wasm-unsafe-eval'`, but where their `.wasm` comes from and how it is pinned is undecided, inbox #836:
+  ADR 0127 granted `'wasm-unsafe-eval'`, but where their `.wasm` comes from and how it is pinned is undecided, inbox #837:
   JBIG2/JPEG 2000 scan images render blank - a documented gap), `enableXfa: false`, no scripting, no annotation
   layer (a text layer yes - spans only, selectable and copyable - and a password prompt that hands the password to pdf.js
   only: never state, log, storage or network); CMaps, standard fonts and ICC profiles are same-origin copies under `assets/pdfjs-<version>/`

@@ -237,7 +237,7 @@ a guest's link presign) with the chunk provider the download uses (`fileChunkPro
   - **What is switched off, and why** (`pdf/pdfOptions.ts`, one pure module read by the runtime and the tests):
     `useWasm: false` — pdf.js would use WebAssembly for the JBIG2 and JPEG 2000 image decoders, ICC colour transforms and
     PostScript functions. The policy would compile them now (`'wasm-unsafe-eval'` is granted for the WebP encoder, ADR 0127),
-    but nobody has decided where their `.wasm` files come from and how they are pinned, so they stay off (inbox #836): the
+    but nobody has decided where their `.wasm` files come from and how they are pinned, so they stay off (inbox #837): the
     `.wasm` files are not shipped and no `wasmUrl` is set. **Consequence, stated:** a scanned page whose image is JBIG2 or JPEG 2000
     (common in scanner output) shows that image blank or with gaps, and ICC-profiled colours fall back to their alternate
     colour space. `enableXfa: false` (XFA forms are XML + script). **No scripting:** pdf.js 6 runs a PDF's JavaScript only
@@ -291,7 +291,7 @@ a guest's link presign) with the chunk provider the download uses (`fileChunkPro
     (DE + EN).
   - **Limits and follow-ups** (inbox #412): there is no search across pages that are not drawn (browser find sees the
     drawn ones); no annotation layer (live links, form filling - both need an owner decision: a link is a navigation and
-    phishing vector, a PDF must not navigate the app); the WASM decoders stay off until they are decided (inbox #836: the policy no longer blocks them) (the asm.js fallbacks pdf.js ships next to
+    phishing vector, a PDF must not navigate the app); the WASM decoders stay off until they are decided (inbox #837: the policy no longer blocks them) (the asm.js fallbacks pdf.js ships next to
     them could be served same-origin instead — not done). More than **1000 pages** is not shown (a message and the
     download): the page tree is a parse cost and a placeholder per page a DOM cost. A page that fails to draw says so
     in its place and leaves the others. Everything pdf.js holds (the document, its pages, its worker) is destroyed on a new
@@ -575,7 +575,7 @@ folder and its files, and when.
   for a file is inbox #411.
 - A PDF's live links and form fields (an annotation layer: a link is a navigation and phishing vector, so it needs the
   owner's decision on a policy for where a click may go) and the WASM image decoders (where their `.wasm` comes from and
-  how it is pinned, inbox #836 — the policy grants `'wasm-unsafe-eval'` since ADR 0127): § The viewer, inbox #412. (Text selection/copy, the password prompt and a plain text's Copy and
+  how it is pinned, inbox #837 — the policy grants `'wasm-unsafe-eval'` since ADR 0127): § The viewer, inbox #412. (Text selection/copy, the password prompt and a plain text's Copy and
   wrap toggle are built.)
 - An operator-configurable per-file size cap (the quota only, at first).
 - The other reversible choices made while building Depot wait for the owner's review: inbox #378. (Where the drop box

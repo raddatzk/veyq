@@ -10,7 +10,7 @@
 // - `useWasm: false` - pdf.js 6 has no eval path at all (the `isEvalSupported` option of older releases is gone), but it
 //   would use WebAssembly for the JBIG2 / JPEG 2000 decoders, ICC colour transforms and PostScript functions. The policy
 //   would compile them since ADR 0127 granted `'wasm-unsafe-eval'` for the WebP encoder, but where their `.wasm` comes
-//   from and how it is pinned is undecided (inbox #836), so they stay off. Off, the PostScript functions run as plain JS
+//   from and how it is pinned is undecided (inbox #837), so they stay off. Off, the PostScript functions run as plain JS
 //   and ICC profiles fall back to their alternate colour space; a scanned page whose image is JBIG2 or JPEG 2000 has no
 //   decoder (the `wasmUrl` it would import its asm.js fallback from is deliberately unset) and shows that image blank.
 // - `enableXfa: false` - XFA forms are an XML + script format; not drawn.

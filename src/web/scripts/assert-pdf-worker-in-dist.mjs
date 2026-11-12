@@ -17,7 +17,7 @@
 //        WebAssembly shipped: no `wasm` directory, and the one `.wasm` in dist is the WebP encoder's
 //        (`assets/webp_encoder-<hash>.wasm`, byte for byte `webp-encoder/wasm/webp_encoder.wasm`, ADR 0127). The policy
 //        would compile pdf.js' decoders now ('wasm-unsafe-eval'); they stay off because nobody turned them on - each is
-//        a decision of its own (inbox #836) - and `useWasm: false` (pdfOptions.ts) is what keeps pdf.js from asking.
+//        a decision of its own (inbox #837) - and `useWasm: false` (pdfOptions.ts) is what keeps pdf.js from asking.
 //        Bite: copy a `.wasm` of pdfjs-dist's `wasm/` into dist/assets/ and run this - RED.
 //
 // What it does NOT prove: that a browser starts the worker or that the deployed policy admits it at run time - only a real
