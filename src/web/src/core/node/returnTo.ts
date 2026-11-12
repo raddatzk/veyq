@@ -46,14 +46,12 @@ export function useReturnTo(
  * Bring `row` (a level's `<li>`) back into sight and give its main button the focus. A row already wholly in sight stays
  * where it is - the browser's own restore on Back put it there, or it never left - and one that is not is centred, so
  * its neighbours show too. Below the sticky top bar counts as out of sight (`scroll-margin-top`, the bar's height). A row
- * with no button (one this client cannot show) is only brought into sight. Answers whether the focus moved.
+ * with no button (one this client cannot show) is only brought into sight. The focus is not marked: a ring shows only
+ * where the browser's `:focus-visible` puts one (a keyboard).
  */
-export function bringIntoView(row: HTMLElement): boolean {
+export function bringIntoView(row: HTMLElement): void {
   const box = row.getBoundingClientRect()
   const top = parseFloat(getComputedStyle(row).scrollMarginTop) || 0
   if (box.top < top || box.bottom > window.innerHeight) row.scrollIntoView({ block: 'center' })
-  const main = row.querySelector<HTMLElement>('button.veyq-level-item-main')
-  if (!main) return false
-  main.focus({ preventScroll: true })
-  return true
+  row.querySelector<HTMLElement>('button.veyq-level-item-main')?.focus({ preventScroll: true })
 }

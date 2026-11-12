@@ -38,8 +38,8 @@
    detail view, [uc.memory.gallery](uc.memory.gallery.md)). The breadcrumb walks back up the local tree. Coming back
    UP - a crumb, a crumb further up, or the browser's Back - lands where the member left: the row they came through (the
    node itself, or the child of the level it lies in) is brought back into sight - left where it is when already in
-   sight, centred when not - and holds the focus with its ring until the focus leaves it; a step down or into another
-   space opens the level as ever. The same for a share guest (`core/node/returnTo.ts`).
+   sight, centred when not - and holds the focus, unmarked (only a keyboard's focus ring shows, as anywhere); a step
+   down or into another space opens the level as ever. The same for a share guest (`core/node/returnTo.ts`).
 5. **Organize:** *create folder* / *create Memory* seal the name (under a field key derived from the parent's key) + blinded slug (under the parent's key) (`K_SC` at
    the scope root, the folder's key inside one) and POST only ciphertext (every node, a folder too, births its random
    key wrapped under the same parent key — ADR 0080); *rename* re-seals the name + recomputes the slug under it; *delete* takes the node and its whole subtree into the space's recoverable trash

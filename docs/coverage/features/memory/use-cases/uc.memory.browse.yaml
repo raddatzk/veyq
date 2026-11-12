@@ -17,7 +17,7 @@ acceptanceCriteria:
     coverage:
       web: { unit: [src/core/node/browse.test.ts, src/core/node/location.test.ts] }
   - id: return-to-place
-    text: Coming back up the tree (a crumb, a crumb further up, the browser's Back) brings the row the member came through back into sight - unmoved when already in sight, centred when not - and gives it the focus and its ring until the focus leaves it, once per arrival; a step down or into another space hands the level nothing. A share guest's crumbs do the same.
+    text: Coming back up the tree (a crumb, a crumb further up, the browser's Back) brings the row the member came through back into sight - unmoved when already in sight, centred when not - and gives it the focus, unmarked (no ring of its own; only a keyboard's focus-visible shows one), once per arrival; a step down or into another space hands the level nothing. A share guest's crumbs do the same.
     coverage:
       web:
         unit:
