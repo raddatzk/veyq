@@ -771,6 +771,15 @@ Veyq.Tests case stands for it, as this Done-when allows) and a non-local drop in
   `InputSiteWindowClass`, none). The VM runs with UAC off (`EnableLUA 0`), so every process — Explorer and the app — is at high
   integrity (`0x3000`, read from each token); Windows App SDK is reported not to take a drop into an elevated app (remembered from
   a forum thread, not settled). The Veyq.Tests case stands for the visible drop, which stays open for a machine with UAC on.
+- **The rerun on UAC on (Phase 7's side task), not done — recorded why:** turning UAC on needs a reboot, and the VM has no
+  automatic logon (`Winlogon\AutoAdminLogon 0`, no stored password, read 2026-11-12): after it the console waits for the person's
+  password or PIN, which an agent never types, and every recipe (`run.py run`/`drive`, `Veyq.Drive`, the scheduled tasks) needs
+  that logged-on session. So `EnableLUA` stays 0 and nothing was rebooted. Two ways around it without a reboot were measured and
+  dropped: `runas /trustlevel:0x20000` left the app at `0x3000`, elevated; a restricted copy of the drive's own token (the
+  administrators' group deny-only, labelled medium, `CreateProcessAsUser`) started the app at `0x2000` but still reported
+  elevated (`TokenElevation` 1), and its sign-in said "The server could not be reached" through the same tunnel — so no drag was
+  tried, and the experiment was taken out again (kept in the scratch, `d7/medium/`). The visible drop stays open: an owner step
+  (UAC on, reboot, log on at the console once), then `drag` as Phase 6 drove it.
 - `./gradlew :core:jvmTest :core:macosArm64Test :bridge:jvmTest` green (no Kotlin changed; `words.json` gained `depot_drop_not_local`); `validate_mobile_words`,
   `validate_mobile_platform_guidelines`, `validate_changes` green.
 
@@ -786,6 +795,74 @@ Veyq.Tests case stands for it, as this Done-when allows) and a non-local drop in
 - Linux and Windows, en/light and de/dark: the drop box made from the top level's share (its address shown once), a
   guest's upload through the web's guest page, the page listing it with the guest's name, a folder moved out and another
   deleted asked; a file's link made, edited and deleted through the share sheet. Windows ends with Stop trusting.
+
+**Status: done (2026-11-12)** — but "Windows ends with Stop trusting" (nothing was trusted to stop, below) and the Windows drop
+rerun (Phase 6's Met: not possible without the owner at the VM's console).
+
+**Built:**
+- core `ShellModel.refresh()` forgets the session's tree before it reads (`TenantSession.forgetTree`): a refresh — the desktops'
+  F5 / Refresh, the uploads' settle, a made drop box — reads what another device or a guest wrote (the Phases 3–6 leftover).
+  `ShellModel.offersTopLevelShare(shell)` / `topLevelShared` (Home at a space's top level, links and drop boxes on: the phones'
+  own condition, now the core's for the desktops).
+- bridge: `DropBox.Open(node)` → `DropBoxOpened(box)`, `Watched.DropBox` → `Update.DropBox(DropBoxShown)` (each guest's folder by id
+  with its label, file count, menu words and files as objects; the hint, the empty words, the asked delete's question),
+  `DropBox.MoveOut` (answered `MoveOpened`: the move sheet on `DropBoxPage.at`), `DropBox.AskDelete/CancelAsk`, `DropBox.Delete`
+  (refused `NOT_ASKED` unless asked; trashed through a header made with `DropBoxPage.FOLDER_FACTS`, answered `Trashed`),
+  `DropBox.Undo`, `DropBox.Close`; every page closes with its tenant. `Share.OpenTopLevel(scopeId)` (`ShareSheet.topLevel`; `ShareShown`
+  gains `atTopLevel`, its title the sheet's own), `ShellShown.topLevelShare`. `Share.Label` and `Share.Password` are applied on the
+  host's thread in the order typed (as `Editor.Change`), so a Save right after the last keystroke finds it.
+- Linux `drop_box.rs` (the hint, an `AdwPreferencesGroup` per guest's folder with its menu — Move out…, Delete — and its files'
+  rows; the delete asked in an `AdwAlertDialog`, then a toast with Undo), the shell's Refresh shown on a drop box and F5 / Ctrl+R
+  reading the shell's lists where no Pot is open, the top level's share button (`send-to-symbolic`, "Add files only") where the core
+  offers it; `share_sheet::open_top_level` (the sheet closes once its form or the address does), `move_sheet::open_call`.
+- Windows `DropBoxPage.cs` (the same in Fluent: a heading, a `MenuFlyout` behind More, a `ListView` of files, the delete asked in a
+  `ContentDialog`, Undo in the shell's `InfoBar`), a drop box's Refresh command and F5 / Ctrl+R everywhere, the top level's "Add
+  files only" command; `ShareDialog.OpenTopLevel`, `MoveDialog.OpenWith`.
+- `LiveBridgeTest.aDropBoxIsMadeFilledAndEmptiedThroughCalls` (`VEYQ_LIVE_DROPBOX_GUESTS=<file>`; the guests are the web's guest
+  page, driven by a script reading that file), and the pass purge (`VEYQ_LIVE_DEPOT_PASS_PURGE`) finds its node in any space.
+
+**Met:**
+- `DispatchTest.aDropBoxsPageIsReadAnewOnEachRevision…AndTheTopLevelSharedThroughCalls`, `WireTest` (every new shape sampled),
+  `SecretFreeSchemaTest` unchanged and green; `ShellModelTest.a_spaces_top_level_on_home_is_where_its_share_offers_add_files_only`.
+- `scratchpad/d7/bite.py` (one mutation at a time, `/bin/cp -f` restore), all 6 bit: a delete without asking, a folder list not
+  read anew on the revision (the Done-when's two), a guest's folder trashed with a member folder's facts, the top level's share
+  not said to be one, the top level offered inside a folder, **a refresh reading the cached tree** (the live case red: "the
+  guests' folders never showed: []") — `bite.log`; green again after.
+- `VEYQ_LIVE=http://veyq.localhost:8080 VEYQ_LIVE_DROPBOX_GUESTS=<file> ./gradlew :bridge:jvmTest --tests
+  '*LiveBridgeTest.aDropBoxIs*' --rerun`, with `scratchpad/d7/guests.mjs` dropping two guests through the web's guest page
+  (headless Chrome, Vite's origin) once the link is written: `App drop 52592` made by `Share.OpenTopLevel` (the top level said to
+  offer it), both guests listed under their names with a file each after `Shell.Refresh` — the bridge had signed in before they
+  dropped —, "App guest A" moved out into `App depot 52592` (the move out asked, then confirmed), "App guest B"'s delete refused
+  unasked and then trashed, a READ link minted on A's file and listed with its address; the drop box (its trashed guest folder
+  with it: a purge erases the subtree, trashed descendants included) and the folder purged.
+- `./gradlew :core:jvmTest :core:macosArm64Test :bridge:jvmTest` green; `linux/run.py build` (clippy `-D warnings`, `cargo test`
+  38 passed) and `windows/run.py build` (Veyq.Bridge.Tests, Veyq.Tests passed) green; `validate_mobile_words`,
+  `validate_mobile_platform_guidelines`, `validate_changes` green. A FILE and a DEPOT_DROPBOX open their pages on both desktops.
+- Linux (container, Broadway on 8097), at Familie Raddatz's top level:
+  - en/light: "Add files only" (the header bar's share) made `Linux drop` and showed its address once (`e05`); the page "Nobody has
+    dropped anything yet…" (`e10`); two guests dropped through the web; Refresh — `drop box: 2 folders [Linux guest A (1), Linux
+    guest B (1)]` (`e11`); A's menu, Move out… (`e12`), the move sheet to `Linux depot`, "Move a guest's folder out of the drop
+    box?" (`e15`), moved; B's Delete asked (`e18`), deleted, the toast with Undo (`e19`); `notes A.txt`'s Share this file → New link
+    → Create link → the address once → the row "View only" (`e25`), Edit (its label `Linux link`, `e29`), Revoke, Delete link asked
+    (`e31`) and deleted (`0 links`).
+  - de/dark: the same with `Linux drop de` ("Nur Dateien hinzufügen", `d01`), the guests shown by **F5** (`d04`), the move out
+    ("Ordner aus dem Briefkasten verschieben?", `d06`), B's delete declined once ("Abbrechen") then done, the file's link made,
+    renamed `Linux Link de`, switched off ("Abgeschaltet · Gäste können ihn nicht öffnen", `d16`) and deleted.
+- Windows (the VM, x64 under Prism), at Familie Raddatz's top level:
+  - en/light: the "Add files only" command made `Windows drop` (`w02`: the address once); the page empty, two guests, Refresh →
+    `drop box: 2 folders [Windows guest A (1), Windows guest B (1)]` (`w04`); A moved out into `Windows depot` (the move out asked
+    in place, `w05`; "“Windows guest A” moved to “Windows depot”" in the `InfoBar`, `w06`); B's delete asked (`w06`), done, Undo
+    offered (`w07`); `notes A.txt`'s Share → New link → Create link → Done, Edit → label `Windows link` (typed and saved at once,
+    kept whole), Revoke, Delete link asked in place and deleted.
+  - de/dark: `Windows drop de` ("Nur Dateien hinzufügen", `wd01`); the guests shown by **F5**; A moved out, B's delete cancelled
+    once then done; the file's link made, renamed `Windows Link de` (`wd07`), switched off and deleted.
+  - **Stop trusting: nothing to stop.** Manage servers listed no trust for `veyq.localhost` (no "Stop trusting" button: the store's
+    `veyq.trusted-devices` was `[]`), because a "Not now" from an earlier phase was still in the device store (no offer after the
+    sign-in). The pass therefore ended with that "Not now" cleared from `device-store.json` (backup `.bak-d7`, written without a BOM),
+    so the next sign-in offers again — the state Stop trusting leaves.
+- Cleaned up: the Linux pass's drop boxes (their guests' folders with them) and `Linux depot` purged with
+  `VEYQ_LIVE_DEPOT_PASS_PURGE=1`; the Windows pass's `Windows depot`, `Windows drop`, `Windows drop de` are left in Familie Raddatz
+  (below, Left in the dev instance).
 
 ### Phase 8 — The docs
 
@@ -1045,3 +1122,38 @@ owner's veto.
   at 0 % again, the colour scheme back to default; this branch's debug build stays running there, signed in (password trust), with
   `rd.py`, `audio.py`, `restart.sh` and the catalogs beside it in `~/veyq-spike`. On the Windows VM the drop sources and shots
   removed; the run's tunnel stopped, and two orphaned tunnels of earlier phases' runs (from 19:20 and 20:03) ended by PID.
+
+### Phase 7 (2026-11-12)
+
+- **The refresh fix is the core's, in `ShellModel.refresh()`:** it forgets the session's tree before it reads, so every caller —
+  a desktop's F5, the uploads' settle, a drop box made — reads what others wrote. A separate "reload" beside `refresh` was weighed and
+  left: `refresh`'s own doc already promised "what another device wrote", and every write of this device forgets the tree anyway,
+  so the cost is one tree read per refresh. It is bitten by the live case only: `ShellModel` takes a concrete `TenantSession`, which
+  no `commonTest` plays. Decided here.
+- **No guest path in the core:** the Done-when's "a guest's upload through the core's guest path" has no core to drive — a guest
+  drops only through the web's guest page. The live case writes the link out and waits for guests a script drives on the web
+  (`VEYQ_LIVE_DROPBOX_GUESTS`); it needs that script beside it, so it runs only with that variable set. Deviation.
+- **`DropBox.Delete` trashes through a header the bridge makes** with `DropBoxPage.FOLDER_FACTS` and keeps for `DropBox.Undo`, rather
+  than answering the node for the host to open a header: the host decides nothing (ADR 0129), and the answer is `Trashed` at once
+  (CR 3a's trap). `DropBox.MoveOut` answers the move sheet it opened.
+- **Where the top level's share shows is the core's** (`offersTopLevelShare`) for the desktops; Android and Apple still compute it in
+  their shells (`folder == null && rules.on && rules.dropBox`) — left for the phones' next slice.
+- **Refresh on the desktops:** F5 / Ctrl+R refresh an open Pot as before and the shell's lists everywhere else; the button shows on a
+  Pot and on a drop box only (GNOME Files and Explorer show none on a plain level).
+- **Found and fixed on the way:** a link's label lost its last character once on Linux (`Linux lin`, Save clicked 0.8 s after the
+  last key): `Share.Label` and `Share.Password` were launched like any call, so a Save could be applied before the last edit (CR 3b's
+  trap); they are applied in order now (Windows then kept `Windows link` typed and saved at once). Not bitten: no test sees the order
+  of two trivial calls (the trap says so).
+- **Found, left:** a guest's folder deleted says it can be restored "from the trash", but a member's trash lists no guest-sealed
+  entry (`NodeTrash.list`, as the web's `listTrash`), so only Undo brings it back — the words are the phones' and the web's too;
+  inbox #846. One Windows switch-off took 30 s (de/dark; 4 s in en/light), not seen again. Windows offers the level's New on a drop
+  box's page (as on a file's, Phase 3's note). An "App top drop" at Familie Raddatz's top level predates this phase and was left.
+- **Deviations:** the Windows drop rerun on UAC on was not done (Phase 6's Met says why: no automatic logon, a reboot would need the
+  person at the console); "Stop trusting" had nothing to stop (above). The Fedora VM was not used: the container covers this phase.
+- **Left in the dev instance and on the hosts by my runs:** the live cases' `App drop <n>` / `App depot <n>` purged by the test, the
+  Linux pass's `Linux depot`, `Linux drop`, `Linux drop de` purged (`VEYQ_LIVE_DEPOT_PASS_PURGE=1`); **`Windows depot`, `Windows
+  drop` and `Windows drop de` (Familie Raddatz's top level) are left**: the dev backend answered every call 500 ("Error restarting
+  Quarkus … Compilation Failed", a hot reload of the main checkout, not this branch's) when they were to be purged — purge each with
+  `VEYQ_LIVE_DEPOT_PASS="<name>" VEYQ_LIVE_DEPOT_PASS_PURGE=1 ./gradlew :bridge:jvmTest --tests '*aDesktopPassFolder*' --rerun`. On the VM the drop-test files removed, the "Not now" cleared (`.bak-d7`), no tunnel left;
+  the container ran with `--rm`.
+

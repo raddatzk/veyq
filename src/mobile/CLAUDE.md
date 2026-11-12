@@ -67,7 +67,12 @@ A Gradle build of its own, run through its own wrapper.
   reported and never followed), answered `Queued(count)` once queued; a file's Replace is `File.ChooseReplace` before the
   dialog, then `Upload.Replace(file, path)`; the queue is `Watched.Uploads` (`UploadsShown`: the tray's line, each batch and
   item with its line, Cancel and Retry, what is said once with its action) and `Upload.Cancel/Retry/CancelAll/Acknowledge/
-  TakeOffer/Seen`. A file page's own header actions join its header through `Header.Facts`' `file`.
+  TakeOffer/Seen`. A file page's own header actions join its header through `Header.Facts`' `file`. A drop box's page is
+  `DropBox.Open` (`Watched.DropBox`: `DropBoxShown`, its guests' folders read anew on each revision of the shell's lists — a
+  `Shell.Refresh` reads a guest's new folder), a folder moved out by `DropBox.MoveOut` (answered with the move sheet it opened) and
+  deleted only after `DropBox.AskDelete` (`DropBox.Delete`: trashed through a header with a guest folder's facts, `DropBox.Undo`);
+  a space's top level's "Add files only" is `Share.OpenTopLevel(scopeId)` onto the `Share.*` calls, offered where
+  `ShellShown.topLevelShare` says.
   The generated layer copies a payload once (Rust `Option<Vec<u8>>`, C# `byte[]?`); no screen touches a pointer.
 - `linux/` — the Linux app (ADR 0129 decision 4): a Cargo package in Rust (gtk4-rs, libadwaita-rs), with `Cargo.lock`
   committed and every cargo run `--locked`. `src/lib.rs` is the library: `bridge` (the safe wrapper over the six
@@ -79,7 +84,8 @@ A Gradle build of its own, run through its own wrapper.
   and its Save a copy with its toast; a medium played by `gtk::Video` over a `gtk::MediaFile` reading `reader_stream`, a
   seekable `gio::InputStream` whose reads are `Reader.Read` ranges, `bridge::call_blocking` on GStreamer's thread), `uploads`
   (New's Upload files and Upload folder through GTK's `FileDialog`, a file's Replace, the queue's header bar button and
-  popover, what it says as a toast), `manage`
+  popover, what it says as a toast), `drop_box` (a drop box's page: each guest's folder with its menu and files, the delete
+  asked), `manage`
   for "Manage servers"; `header` with `trash`, `move_sheet`, `share_sheet`, `report` and `cover` for a node's header and
   its sheets; `dev_login` in a debug build only), and `avatars` (`Held`, no widget and tested: the open
   tenant's pictures, asked for again only when the shell's id set changes; drawn as `adw::Avatar`).
@@ -101,7 +107,7 @@ A Gradle build of its own, run through its own wrapper.
   `MediaSource.CreateFromStream` of `ReaderStream`, a seekable .NET `Stream` whose reads are `Reader.Read` ranges, through
   `AsRandomAccessStream`; `ReaderStreamTest`), `Uploads` (New's Upload files and Upload folder through `FileOpenPicker`
   and `FolderPicker`, a file's Replace, the queue's `AppBarButton` with its `Flyout`, what it says in an `InfoBar`),
-  `ListScrolls` (where each list was
+  `DropBoxPage` (a drop box's page), `ListScrolls` (where each list was
   scrolled to; `ListScrollsTest`), `EntryEditorPage` (an entry's editor, a page in place of the Pot's places) with
   `ReceiptViewerDialog` and `PdfPages` (a receipt's PDF through `Windows.Data.Pdf`, from memory; `PdfPagesTest`), `TypedText`
   (when a text box is set from the state; `TypedTextTest`), `Words`/`MrtWords` and `SaidNotice` (the words), `Said` (money, days and sizes the system's
@@ -163,7 +169,9 @@ A Gradle build of its own, run through its own wrapper.
     uploads by path (`Upload.*`, `File.ChooseReplace`, `Watched.Uploads` over a played level: each path read at offsets a
     frame at a time, never whole, answered once queued, the core's offer said and taken, a folder walked with its link said,
     a replace chosen first and answered stale, a cancel, a retry, Cancel all, a batch closed; a file page's Replace in its
-    header's plan), and every call of a node's header and its sheets (`Header.*`,
+    header's plan), a drop box's page (`DropBox.*`, `Watched.DropBox` over a played page: read anew on each revision, a delete
+    refused until asked and trashed with a guest folder's facts, a move out's sheet) and the top level's share
+    (`Share.OpenTopLevel`), and every call of a node's header and its sheets (`Header.*`,
     `Trash.*`, `Move.*`, `Share.*`, `Report.*`, `Cover.*`), and a Pot's (`Pot.*`, `Watched.PotLive`) and its entry editor's
     (`Editor.*`, `Watched.Editor`, over a played Pot: edits applied in the order sent, a save answered once its write
     ended) with its receipts (`Editor.AddReceipts`/`DropReceipt`, `Receipt.Open`/`Pages`/`Save`: a path that does not
@@ -202,7 +210,10 @@ A Gradle build of its own, run through its own wrapper.
   `filesAndAFolderAreUploadedByPath*` with `VEYQ_LIVE_UPLOAD=1` (it moves more than 2 GiB: files and a nested folder by path
   read back at their SHA-256, a replace offered and taken, one raced by a second session answered stale, a cancel and a retry,
   a 2 GiB + 1 byte file uploaded and saved back, a folder upload said not to fit under the one-byte quota, put back however it
-  ends; the folder purged), and
+  ends; the folder purged), `aDropBoxIs*` with `VEYQ_LIVE_DROPBOX_GUESTS=<file>` (a drop box made by `Share.OpenTopLevel`, its link
+  written to that file for guests a script drops through the web's guest page meanwhile — two, "App guest A" and "App guest B",
+  `VEYQ_LIVE_DROPBOX_WAIT_S`, default 300 —, shown only through `Shell.Refresh`, one moved out, one deleted after asking, a READ
+  link on a file; everything purged), and
   `theLinksOfAFolder*`
   writes a desktop pass's links out for the web's guest page — each case's doc says what it reads.
 - `python3 linux/run.py <verb>` — everything Linux. From the repository root the launcher runs the same verbs as
@@ -540,8 +551,9 @@ first in each of its scrolls — `LocalNodeHero.current(inset)` (Android) / `Nod
   (`DepotFiles.upload`, `UploadJob.abandon`). A failed upload whose give-up could not reach the server (offline) keeps the
   node it made, and the next run fills it (`into`, the web's `fileUploadJob`); before, the retry collided with its own empty
   file and offered its replace (measured on the emulator in airplane mode).
-- A guest's new folder in a drop box shows on the phones only once the tenant's tree is read anew: the tree is cached, and
-  nothing polls it; a pass force-stops and relaunches the app (`devlogin.py`) after a guest dropped through the web.
+- A guest's new folder in a drop box shows only once the tenant's tree is read anew: the session caches it, and nothing polls.
+  `ShellModel.refresh()` forgets it first (the desktops' F5 / Refresh, Depot CR Phase 7); a phone pass force-stops and relaunches
+  the app (`devlogin.py`) after a guest dropped through the web.
 - Driving the web from a mobile pass (headless system Chrome, `?devlogin`): a level row's `locator.click()` waits forever
   for a stable element; click the row's bounding box with `page.mouse`, or open by hash (`#app-depot-2/alpha-txt`). A file
   page's Replace is its hidden `input.files-picker` (`setInputFiles`), then "Ersetzen".
@@ -756,7 +768,8 @@ first in each of its scrolls — `LocalNodeHero.current(inset)` (Android) / `Nod
   way round. An edit stream is applied on the host's thread in the order called (`Bridge.call`, `Editor.Change`; bitten
   by 400 titles sent unawaited), and Linux's `bridge::call` hands the call to the core when it is called, not when its
   answer is first awaited (C#'s `CallAsync` does the same). A new stream of edits goes the same way (`Editor.DropReceipt`,
-  `PotCreate.Name`). No test sees the order of two trivial calls: `Dispatchers.Default` kept them in order in practice,
+  `PotCreate.Name`, `Share.Label`, `Share.Password` — a link's label once lost its last character to a Save sent 0.8 s after it,
+  Linux 2026-11-12). No test sees the order of two trivial calls: `Dispatchers.Default` kept them in order in practice,
   so a `PotCreate.Name` launched instead of applied stayed green (2026-11-12); the order rests on `Bridge.call`'s path.
 - A text field is set from the state by D5's rule (`linux/src/typed.rs`, `windows/Veyq/TypedText.cs`, the same cases):
   states lag the typing by a keystroke or two, so a focused field passes over a state that echoes a text it sent and
@@ -826,9 +839,9 @@ first in each of its scrolls — `LocalNodeHero.current(inset)` (Android) / `Nod
 - One WinUI `TextBox` holding a megabyte drew only its first line, even 15 s later (measured 2026-11-12, a file's cut text):
   a long text is a virtualized `ListView` a line a row (`FilePage.Text`), as on iOS. The Linux container has no monospace
   font, so a `TextView`'s `monospace` falls back to the proportional one there (a desktop has one).
-- A session's tree is cached and `Shell.Refresh` does not read it anew: a desktop sees another device's upload only after it
-  signs in again. A live case that writes through a second session writes before the bridge signs in
-  (`LiveBridgeTest.aFileIsShownAndSaved*`).
+- A session's tree is cached (`TenantSession.trees`); only a refresh forgets it (`ShellModel.refresh`, since the Depot CR's Phase 7:
+  before it a desktop saw another device's upload or a guest's folder only after a new sign-in). A refresh is the one way a write
+  of someone else shows: a live case that writes through a second session calls `Shell.Refresh` before it looks.
 - Driving a file's save on the desktops: GTK's save dialog takes a whole path in its name field (`key Control+a`, `type
   /tmp/big.bin`, `key Enter`); a 300 MiB save in the container ends in about 3 s, so a Cancel is clicked in the same
   Playwright run. On Windows the save picker's name is typed into `FileNameControlHost` and saved by `press
@@ -862,6 +875,9 @@ first in each of its scrolls — `LocalNodeHero.current(inset)` (Android) / `Nod
   openh264, measured): the image carries openh264 as a desktop does.
 - Driving a medium on Linux (Broadway): GTK's controls show at the video's bottom; play and seek by clicking them (the
   scale's x is the position) and read `medium at <s> s of <s> s` on stderr, each fifth second — the frames drawn lag.
+- A guest's folder a member trashed is in no member's trash list (`NodeTrash.list` leaves guest-sealed entries out, as the web's
+  `listTrash`), so a live case cannot purge it from there: purging its drop box erases it with the subtree (`NodeSubtreePurge`
+  takes trashed descendants too). The delete's words still say it can be restored from the trash (inbox #846).
 - WinUI's `MediaPlayerElement`: the page makes its own `MediaPlayer`, hands it over with `SetMediaPlayer` and takes it back
   (`SetMediaPlayer(null)`) before disposing it. A player the element made itself and that the page disposed threw `E_ABORT`
   out of the shell's next `Content` set, a dispatcher callback, and ended the app in combase (`0xc000027b`, measured
@@ -900,4 +916,8 @@ first in each of its scrolls — `LocalNodeHero.current(inset)` (Android) / `Nod
 - WinUI got no drop from Explorer on the Windows VM (2026-11-12): Explorer's drag started (its drag image shown over Explorer), the
   app logged no `DragEnter` and none of its windows held an OLE drop target. The VM runs with UAC off, so the app is elevated
   (`0x3000`) like everything else; Windows App SDK is reported to take no drop into an elevated app (remembered). The drop's rule is
-  held by `DropSortTest`; a visible drop needs a machine with UAC on.
+  held by `DropSortTest`; a visible drop needs a machine with UAC on. Turning UAC on there is the owner's step: it needs a
+  reboot, and the VM has no automatic logon (`AutoAdminLogon 0`), so the console then waits for the person's password or PIN —
+  which an agent never types — and every recipe needs that logged-on session. Without a reboot, `runas /trustlevel:0x20000` left
+  the app at `0x3000`, and a restricted, medium-labelled copy of the drive's token still read elevated (`TokenElevation` 1) and its
+  sign-in could not reach the server (measured 2026-11-12).
