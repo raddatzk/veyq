@@ -88,7 +88,13 @@ what prove it. Everything here runs against a mirror directory this file writes 
      the wait through a tunnel closed after — and nothing read from a cluster that is not there yet;
  14. **`tls production` and `connect`** (`test_tls_production`, `test_connect`) — the switch committed and pushed
      only on a yes, no certificate deleted while the Issuer still names staging; the ssh block rewritten in place,
-     connect.py's taken over, an owner's own `Host` never shadowed.
+     connect.py's taken over, an owner's own `Host` never shadowed;
+ 15. **which releases it speaks** (`test_own_release`, ADR 0096 decision 9) — `--version` from a checkout and from a
+     stamped copy; a manifest of a newer major refused and its own or an older one read; an instance (Compose or
+     GitOps) on a newer major refused before anything runs, and an upgrade into one refused at its manifest with
+     nothing stopped; a veyqctl older than its instance saying so (never when as new, from a checkout, or on
+     `self-update`); `self-update` of an unreleased veyqctl refused, nothing replaced. Every other test runs a
+     veyqctl published as 3.0, since their releases reach major 3, and SELF points into the temp directory throughout.
 What it cannot show: that Docker, cosign and the backup tool behave as the stand-in answers. That is the live runs' (the CR says
 which). Not a `validate_*.py`: it asserts nothing about the repository, only about the tool. Runnable locally:
 
@@ -2915,11 +2921,110 @@ def test_gitops_hand_written(tmp: pathlib.Path) -> None:
           rc == 1 and vc.GITOPS_FILE in out and vc.EXISTING_HALF_DOCS in out, out[-300:])
 
 
+# ---- which releases this veyqctl speaks (ADR 0096 decision 9) -------------------------------------------------------
+
+@contextlib.contextmanager
+def veyqctl_of(major: int, release: str | None):
+    """This veyqctl as one of `major`, published as `release` (None: a checkout's)."""
+    saved = vc.MAJOR, vc.RELEASE
+    vc.MAJOR, vc.RELEASE = major, release
+    try:
+        yield
+    finally:
+        vc.MAJOR, vc.RELEASE = saved
+
+
+def test_own_release(tmp: pathlib.Path) -> None:
+    def version() -> tuple:
+        out = io.StringIO()
+        with contextlib.redirect_stdout(out):
+            try:
+                vc.main(["--version"], FakeHost())
+            except SystemExit as e:  # argparse's own exit, 0 for --version
+                return e.code, out.getvalue().strip()
+        return None, out.getvalue().strip()
+    with veyqctl_of(1, None):
+        rc, out = version()
+    check("--version from a checkout: unreleased, and the major it knows",
+          rc == 0 and out == "veyqctl unreleased (a checkout), major 1", f"{rc} {out}")
+    with veyqctl_of(1, "1.12"):
+        rc, out = version()
+    check("--version of a released copy: the release it was published as", rc == 0 and out == "veyqctl 1.12",
+          f"{rc} {out}")
+
+    with veyqctl_of(1, "1.12"):
+        said = refused(vc.parse_manifest, manifest_bytes(release="2.0", majorEntry="1.12"), "v2.0")
+        check("a manifest of a newer major is refused by a veyqctl that knows major 1, naming where to get one",
+              "of major 2" in said and "major 1 at most" in said and vc.GET_VEYQCTL in said, said)
+        check("a manifest of its own major or the one before is read",
+              not refused(vc.parse_manifest, manifest_bytes(), "v1.12")
+              and not refused(vc.parse_manifest, manifest_bytes(release="0.9", majorEntry=NULL), "v0.9"))
+
+    mirror = upgrade_mirror(tmp / "mirror-own")
+    with veyqctl_of(2, None):
+        newer = installed(tmp, "home-own-2", mirror, "2.1", "2.1")
+    host = FakeHost()
+    with veyqctl_of(1, "1.12"):
+        rc, out = run_main(["--home", newer, "status"], host)
+    check("an instance on a newer major: every verb refused before it runs anything",
+          rc == 1 and f"the instance in {newer} is release 2.1, of major 2" in out and not host.commands, out[-400:])
+    with veyqctl_of(2, None):
+        crossing = installed(tmp, "home-own-cross", mirror, "1.12", "latest")
+    host = FakeHost(local_images=all_images())
+    with veyqctl_of(1, "1.12"):
+        rc, out = run_main(["--home", crossing, "upgrade", "--unsigned-local", "--key-into", tmp / "own-key"], host)
+    check("upgrade into a major this veyqctl does not know is refused at its manifest, nothing stopped",
+          rc == 1 and "the manifest of v2.1" in out and "major 1 at most" in out
+          and not host.ran("compose", "stop") and not host.ran("compose", "up"), out[-400:])
+
+    with veyqctl_of(1, None):
+        older = installed(tmp, "home-own-1", mirror, "1.7", "1.7")
+    for label, release, verb, noted in (
+            ("a veyqctl older than its instance says so, and how to get the instance's own", "1.3", "status", True),
+            ("a veyqctl as new as its instance says nothing", "1.7", "status", False),
+            ("a veyqctl from a checkout says nothing", None, "status", False),
+            ("self-update, the way out, says nothing", "1.3", "self-update", False)):
+        with veyqctl_of(1, release):
+            _, out = run_main(["--home", older, verb], FakeHost())
+        said = "This veyqctl is release" in out
+        check(label, said == noted and (not noted or ("This veyqctl is release 1.3, and the instance runs 1.7" in out
+                                                       and "veyqctl self-update" in out)), out[-400:])
+    vc.SELF.write_text("# a checkout's veyqctl\n")
+    with veyqctl_of(1, None):
+        rc, out = run_main(["--home", older, "self-update"], FakeHost())
+    check("self-update of an unreleased veyqctl (a checkout's source) is refused, nothing replaced",
+          rc == 1 and "unreleased" in out and vc.SELF.read_text() == "# a checkout's veyqctl\n", out[-400:])
+
+    top = tmp / "own-gitops"
+    pins = {r: pin_of("1.0", r) for r in vc.PIN_ROLES}
+    on2, on1 = top / "gitops" / "apps" / "two", top / "gitops" / "apps" / "veyq"
+    hand_written(on2, pins, pins["admin"], running="2.0")
+    hand_written(on1, pins, pins["admin"], running="1.0")
+    signed = gitops_signed("1.0", "1.1")
+    with veyqctl_of(1, "1.0"):
+        host = GitOpsHost(top=top, signed=signed)
+        rc, out = run_main(["--home", on2, "--source", tmp / "g-mirror", "check"], host)
+        check("a GitOps instance on a newer major: refused before anything runs",
+              rc == 1 and "is release 2.0, of major 2" in out and not host.commands, out[-400:])
+    with veyqctl_of(1, "0.9"):
+        _, out = run_main(["--home", on1, "--source", tmp / "g-mirror", "check"], GitOpsHost(top=top, signed=signed))
+        check("a GitOps instance newer than its veyqctl: said, with where to fetch it",
+              "This veyqctl is release 0.9, and the instance runs 1.0" in out and vc.GET_VEYQCTL in out, out[-400:])
+
+
 def main() -> int:
     with tempfile.TemporaryDirectory(prefix="veyqctl-selftest-") as raw:
         tmp = pathlib.Path(raw)
         # The instance list lives in the user's config: never the real one (ADR 0126 decision 2).
         os.environ["XDG_CONFIG_HOME"] = str(tmp / "config")
+        # `self-update` replaces SELF: never this checkout's veyqctl.py, whatever a test forgets (one did, 2026-11-12).
+        vc.SELF = tmp / "self" / "veyqctl"
+        vc.SELF.parent.mkdir()
+        vc.SELF.write_text("# the veyqctl self-update replaces\n")
+        test_own_release(tmp)
+        # The scenarios below name releases up to major 3, so they run a veyqctl that knows them, as one published
+        # as 3.0 would; test_own_release holds the gate and the stamp themselves.
+        vc.MAJOR, vc.RELEASE = 3, "3.0"
         test_resolver(tmp)
         test_major_entry()
         test_manifest()

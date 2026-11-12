@@ -76,6 +76,10 @@ TEMPLATE_ASSET = "env.example"
 # The tools that operate a release, by asset name: `veyqctl` itself, and the backup tool its `backup`, `restore` and
 # `upgrade` import from the running release's directory (shipped beside it rather than folded in: cr-veyqctl).
 TOOLS = {"veyqctl": repo_layout.VEYQCTL, "instance_backup.py": repo_layout.INSTANCE_BACKUP}
+# `veyqctl` knows the release it was published as (ADR 0096 decision 9): its one `RELEASE` line, None in the tree, names
+# the release in the copy a release carries ([stamp_veyqctl]). The manifest's sha256 and `veyqctl.bundle` are of that
+# copy, and a promotion that produces the set again from the same commit stamps the same bytes (ADR 0091 decision 5).
+VEYQCTL_UNSTAMPED = re.compile(r"(?m)^RELEASE: str \| None = None$")
 MANIFEST = "manifest.json"
 RELEASES = "releases.json"
 # `veyqctl`'s keyless signature, written by the publish (`cosign sign-blob --bundle`) beside the assets this file
@@ -230,8 +234,20 @@ def recipe_set() -> dict[str, pathlib.Path]:
     return files
 
 
-def write_assets(dest: pathlib.Path) -> list[str]:
-    """Copy the recipe set and the tools into `dest` (which must exist), and return the asset names written."""
+def stamp_veyqctl(text: str, release: str) -> str:
+    """`veyqctl`'s source with its `RELEASE` line naming `release`: the copy a release carries."""
+    found = len(VEYQCTL_UNSTAMPED.findall(text))
+    if found != 1:
+        raise ReleaseError(
+            f"`veyqctl` has {found} lines `RELEASE: str | None = None`, not one — the tree's copy names no release, and "
+            f"that one line is where a release writes its own"
+        )
+    return VEYQCTL_UNSTAMPED.sub(f'RELEASE: str | None = "{release}"', text)
+
+
+def write_assets(dest: pathlib.Path, release: str) -> list[str]:
+    """Copy the recipe set and the tools into `dest` (which must exist), `veyqctl` stamped with `release`, and return
+    the asset names written."""
     files = dict(recipe_set())
     for asset, source in TOOLS.items():
         if not source.is_file():
@@ -241,7 +257,10 @@ def write_assets(dest: pathlib.Path) -> list[str]:
         if not ASSET_NAME.match(asset):
             raise ReleaseError(f"`{asset}` is not a name a GitHub Release publishes as given, so no release can carry it")
     for asset, source in files.items():
-        shutil.copyfile(source, dest / asset)
+        if asset == "veyqctl":
+            (dest / asset).write_text(stamp_veyqctl(source.read_text(), release))
+        else:
+            shutil.copyfile(source, dest / asset)
     return sorted(files)
 
 
@@ -348,7 +367,7 @@ def produce(out: pathlib.Path, app: str, admin: str, unscheduled: bool, tools: s
     date = datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%d")
     dest.mkdir()
     try:
-        written = write_assets(dest)
+        written = write_assets(dest, release)
         # The asset list is what `veyqctl` downloads — from any source alike, and an HTTP mirror cannot be listed —
         # and each sha256 is what it checks a downloaded file against before it lands in `releases/<release>/`.
         assets = {name: hashlib.sha256((dest / name).read_bytes()).hexdigest() for name in written}

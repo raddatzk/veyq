@@ -16,7 +16,8 @@ or through Argo CD on Kubernetes (ADR 0126), optionally with a new server beneat
     restore DIR --domain D --key-from F | rollback DIR --key-from F   Compose: from a backup
     self-update                                      Compose: this file, replaced by the installed release's
 
-`veyqctl <command> --help` has every flag; `-v` / `--verbose` shows every program it starts, with its arguments.
+`veyqctl <command> --help` has every flag; `-v` / `--verbose` shows every program it starts, with its arguments;
+`veyqctl --version` names the release it was published as, and only that release's major or an older one is managed.
 
 One file, Python 3.9 and the standard library only, because an operator fetches it with `curl` onto a host that
 already needs `python3` for backups: no `pip`, no virtualenv (ADR 0096 decision 2). It manages the instance's
@@ -96,6 +97,14 @@ COSIGN_IDENTITY_REGEXP = r"^https://github\.com/raddatzk/veyq/\.github/workflows
 # manifest controls the bundle beside it, so it could hand exactly that one.
 COSIGN_MIN_VERSION = "3.1.3"
 COSIGN_VERSION = re.compile(r"GitVersion:\s*v?([0-9]+)\.([0-9]+)\.([0-9]+)")
+
+# Which veyqctl this is (ADR 0096 decision 9): a client of the releases it manages, gated as every client is (ADR 0032
+# § 1, ADR 0085). MAJOR is `VERSION`'s, written here as the server and the web client compile it in
+# (`scripts/validate_release_identity.py` assertion 1 holds it). RELEASE stays None in the tree:
+# `scripts/release_assets.py` stamps the release into the copy a release carries, so its manifest's sha256 and
+# `veyqctl.bundle` are of that copy. Only the major gates ([speaks]); the minor only informs ([note_newer_instance]).
+MAJOR = 1
+RELEASE: str | None = None
 
 COMPOSE_ASSET = "docker-compose.prod.yml"
 TEMPLATE_ASSET = "env.example"  # validate_release_identity.py holds each `*_ASSET` to a name the producer writes
@@ -661,6 +670,43 @@ def newer_major(listed: list[Listed], chosen: Listed) -> Listed | None:
     return max(beyond, key=lambda r: (r.major, r.minor)) if beyond else None
 
 
+# ---- which releases this veyqctl speaks (ADR 0096 decision 9) ---------------------------------------------------
+
+# Where an operator gets another veyqctl: the page that fetches it and checks its signature.
+GET_VEYQCTL = "https://veyq.app/run/verify-a-release/"
+
+
+def describe_self() -> str:
+    return f"release {RELEASE}" if RELEASE is not None else f"unreleased, major {MAJOR}"
+
+
+def release_key(release: str) -> tuple[int, int]:
+    major, minor = release.split(".")
+    return int(major), int(minor)
+
+
+def speaks(release: str, what: str) -> None:
+    """ADR 0085 decision 6, for veyqctl: a release of a major newer than MAJOR is one this veyqctl was not built knowing
+    (its files, its way in), so it is refused before it is acted on, as an app refuses a newer server's major. Every
+    older major is spoken: an upgrade enters MAJOR from the one before it (ADR 0096 decision 5), and dropping the oldest
+    is ADR 0085 decision 5's window, deferred for every client until a major 2 is released."""
+    major = release_key(release)[0]
+    if major > MAJOR:
+        raise Refused(f"{what} is release {release}, of major {major}, and this veyqctl ({describe_self()}) knows "
+                      f"major {MAJOR} at most. Fetch the newest veyqctl ({GET_VEYQCTL}) and run it again.")
+
+
+def note_newer_instance(running: str, compose: bool) -> None:
+    """The minor never gates: within a major a release's files change only so that what an older veyqctl does still
+    holds (ADR 0085 decision 2). But a veyqctl older than its instance lacks what came to veyqctl since — said before
+    the command runs, so an old copy on the PATH is noticed."""
+    if RELEASE is None or release_key(running) <= release_key(RELEASE):
+        return
+    how = "`veyqctl self-update` puts the instance's own in its place" if compose else f"fetch it: {GET_VEYQCTL}"
+    say(f"This veyqctl is release {RELEASE}, and the instance runs {running}: what veyqctl gained since is missing "
+        f"here — {how}.")
+
+
 # ---- the manifest ----------------------------------------------------------------------------------------------
 
 class Manifest(NamedTuple):
@@ -686,6 +732,7 @@ def parse_manifest(raw: bytes, tag: str) -> Manifest:
     release = doc.get("release")
     if release != tag[1:]:
         raise Refused(f"the manifest of {tag} names release {release!r} — a manifest names its own release")
+    speaks(release, f"the manifest of {tag}")
     images = doc.get("images")
     if not isinstance(images, dict) or not all(isinstance(images.get(k), str) and images.get(k) for k in ("app", "admin")):
         raise Refused(f"the manifest of {tag} does not name both images (`images.app`, `images.admin`)")
@@ -2129,6 +2176,12 @@ SELF = Path(__file__)
 
 def cmd_self_update(args: argparse.Namespace, host: Host) -> int:
     """This file, replaced by the installed release's `veyqctl` — the one its manifest names, checked by sha256."""
+    if RELEASE is None:
+        # An unreleased veyqctl is a checkout's source, or a link to it: replaced, the checkout would hold the
+        # release's copy instead of its own code (it happened, to a self-test, 2026-11-12).
+        raise Refused(f"this veyqctl is unreleased ({SELF.resolve()}): it is the source, not a copy to update. Run "
+                      f"the release's own from releases/<release>/{SELF_ASSET}, or fetch one: {GET_VEYQCTL}. "
+                      f"Nothing was replaced.")
     home = Path(args.home)
     state = read_state(home)
     if not state.unsigned_local:
@@ -4614,10 +4667,19 @@ class Target:
         for dest, why in self.FOREIGN_FLAGS.items():
             if getattr(self.args, dest, False):
                 raise Refused(why)
+        running = self.running()
+        if running is not None:
+            speaks(running, f"the instance in {self.home}")
+            if verb != "self-update":
+                note_newer_instance(running, self.name == "compose")
         programs = self.programs(verb)
         if programs:
             require_programs(self.host, programs, self.what(verb))
         return self.verb(verb)
+
+    def running(self) -> str | None:
+        """The release the instance runs, or None where it records none yet (the verb itself says what is missing)."""
+        raise NotImplementedError
 
     def programs(self, verb: str) -> list[str]:
         raise NotImplementedError
@@ -4638,6 +4700,13 @@ class ComposeTarget(Target):
         super().__init__(args, host, home)
         self.FOREIGN_FLAGS = {"push": f"--push is for a GitOps instance, and {home} runs on Compose"}
 
+    def running(self) -> str | None:
+        try:
+            release = read_state(self.home).release
+        except Refused:
+            return None
+        return release if TAG.match(f"v{release}") else None
+
     def programs(self, verb: str) -> list[str]:
         return [] if verb == "self-update" else compose_programs(verb, bool(getattr(self.args, "unsigned_local", False)))
 
@@ -4655,6 +4724,12 @@ class GitOpsTarget(Target):
         super().__init__(args, host, home)
         self.REFUSES = {verb: f"`{verb}` is for Compose, and {home} is a GitOps instance: {instead}"
                         for verb, instead in COMPOSE_ONLY.items()}
+
+    def running(self) -> str | None:
+        try:
+            return str(read_gitops(self.home.resolve()).doc["running"])
+        except Refused:
+            return None
 
     def programs(self, verb: str) -> list[str]:
         return list(GITOPS_PROGRAMS[verb])
@@ -4682,6 +4757,9 @@ def parser() -> argparse.ArgumentParser:
     p.add_argument("--source", default=None,
                    help=f"where releases come from: a mirror directory or http(s) URL (default: the GitHub "
                         f"releases of {UPSTREAM}, or where the instance was installed from)")
+    p.add_argument("--version", action="version",
+                   version=f"veyqctl {RELEASE}" if RELEASE else f"veyqctl unreleased (a checkout), major {MAJOR}",
+                   help="the release this veyqctl was published as")
     sub = p.add_subparsers(dest="command", required=True)
 
     sub.add_parser("instances", help="list your instances; * marks the current one"

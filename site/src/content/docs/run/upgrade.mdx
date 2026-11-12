@@ -249,6 +249,10 @@ run and the version clients check share one major. Major 1 began with v1.0 (2026
   so after your major stops being current you have about two years to upgrade before an app asks you to. Apps that
   speak a new major ship before the server's major does. The web client and the admin console come from the server's
   own image and always match it.
+- **`veyqctl` is a client too.** `veyqctl --version` names its release. It refuses an instance or a release of a
+  newer major than its own and says where to get a newer `veyqctl`. Within a major an older `veyqctl` still works, and
+  says so when it is older than your instance: on Compose `veyqctl self-update` takes your instance's own, on
+  Kubernetes [fetch it again](/run/verify-a-release/).
 - **The bundled database upgrades itself.** When a release moves the bundled MariaDB to a newer version, its first
   start backs up the database's system tables and upgrades them, on Compose and Kubernetes alike. An upgraded database
   does not go back to the older MariaDB: the backup taken before the upgrade is the way back. A database you run

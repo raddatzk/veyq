@@ -24,7 +24,8 @@ manifests, the image signatures, the predicates and the tag each name it.
 
   1. **`VERSION` exists at the repository root and holds the major alone.** With the history it *is* the release
      identity (ADR 0057 §1): the minor is the number of commits since `VERSION` last changed, so a checkout
-     answers what it is, with no network call and no registry — and no tree can hold the minor.
+     answers what it is, with no network call and no registry — and no tree can hold the minor. `veyqctl`'s `MAJOR` is
+     that major (ADR 0096 decision 9), and its `RELEASE` line is there once and unstamped, for the producer to stamp.
   2. **The publish workflow derives the version from the tree, offline.** The `version` job's compute step is
      *executed* here, inside a throwaway git repository this guard builds — `VERSION` changed twice, then a
      known number of commits, an older commit carrying an older `snapshot-` tag, plus a shallow clone of it and a
@@ -557,6 +558,27 @@ elif version_text != f"{version_value}\n":
         f"VERSION must be exactly `{version_value}` and one trailing newline — it is read by shell, by this "
         f"guard and by a human, and whitespace that only one of them tolerates is a difference of opinion."
     )
+
+# `veyqctl` is a client of the releases it manages and knows its own (ADR 0096 decision 9): it speaks `VERSION`'s major,
+# written into it as the server and the web client compile it in, and its RELEASE line stays unstamped in the tree,
+# where the producer stamps it ([release_assets.stamp_veyqctl], the one derivation, so the guard cannot disagree with it).
+if version_match and repo_layout.VEYQCTL.is_file():
+    veyqctl_text = repo_layout.VEYQCTL.read_text()
+    veyqctl_majors = [
+        node.value.value for node in ast.parse(veyqctl_text).body
+        if isinstance(node, ast.Assign) and len(node.targets) == 1 and isinstance(node.targets[0], ast.Name)
+        and node.targets[0].id == "MAJOR" and isinstance(node.value, ast.Constant)
+    ]
+    if veyqctl_majors != [int(version_value)]:
+        fail(
+            f"src/tools/veyqctl.py assigns `MAJOR` {veyqctl_majors or 'nowhere'}, and VERSION holds {version_value}: "
+            f"veyqctl refuses every release of a major above its own, so a release whose veyqctl knows another major "
+            f"than VERSION's refuses itself, or speaks a major it was not built for"
+        )
+    try:
+        release_assets.stamp_veyqctl(veyqctl_text, f"{version_value}.0")
+    except release_assets.ReleaseError as e:
+        fail(f"src/tools/veyqctl.py cannot be stamped as a release would: {e}")
 
 
 # ---- 2. the workflow derives that value, offline -------------------------------------------------------------
@@ -1593,7 +1615,7 @@ if not refusals:
     with tempfile.TemporaryDirectory(prefix="release_assets_") as tmp:
         carried = pathlib.Path(tmp)
         try:
-            release_assets.write_assets(carried)
+            release_assets.write_assets(carried, f"{version_value if version_match else 0}.0")
         except (release_assets.ReleaseError, OSError) as e:
             fail(f"the producer's carry step failed, so no release can be produced: {e}")
         else:

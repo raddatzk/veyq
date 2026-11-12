@@ -128,6 +128,9 @@ keeps inside a major reaches the operators who have not left the previous major 
   2, in every native app and in the web client's guest embed, together with a CI job against a major-1 server image;
   the train's step 1 ([`infra/README.md`](../../infra/README.md) § Cutting a release) holds it, so it is met before
   `VERSION` moves to 2, not found after.
+- **`veyqctl` is a client too** ([ADR 0096](0096-veyqctl-manages-an-instance-from-immutable-releases.md) decision 9,
+  owner 2026-11-12): it gates on the major as decision 6 says, refusing an instance or a release of a major above its
+  own. Unlike an app it speaks every major below its own, since it is what moves an instance into its major.
 - **The train is a procedure (decisions 2, 3 and 10)**, written in [`infra/README.md`](../../infra/README.md) § Cutting
   a release. The manifest's deprecation lifecycle stays deferred (ADR 0032 § Consequences) and is not needed for
   this.

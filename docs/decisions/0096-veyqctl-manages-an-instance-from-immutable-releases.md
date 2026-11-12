@@ -1,7 +1,7 @@
 # ADR 0096 — `veyqctl` manages an instance from immutable releases
 
 - Status: Accepted
-- Built: yes
+- Built: yes (not built: decision 9's lane proof that an older `veyqctl` of a major upgrades to its newest release)
 - Date: 2026-10-16
 - Model: [release-and-deployment](../crosscutting/release-and-deployment.md)
 - Replaced in part: decision 8 by ADR 0126 (not built)
@@ -86,6 +86,25 @@ one — never of integrity.
 **8. Kubernetes is out of scope.** `veyqctl` drives Compose only. A cluster upgrades with `helm upgrade` by digest
 and keeps current with its own GitOps tooling; veyq ships no in-cluster operator.
 
+**9. `veyqctl` is a client of the releases it manages, gated as every client is** ([ADR 0032](0032-capability-discovery-version-gating.md)
+§ 1, [ADR 0085](0085-one-major-moved-on-a-yearly-train.md); owner 2026-11-12). One copy on an operator's computer
+manages instances on different releases ([ADR 0126](0126-veyqctl-writes-a-gitops-repository-and-veyq-server-sets-up-its-cluster.md)
+decision 2), so it holds the rule an app holds:
+- **It knows its release.** `MAJOR` is `VERSION`'s, written into it as the server and the web client compile it in
+  (`scripts/validate_release_identity.py` assertion 1). The release stamps `RELEASE` into the copy it carries
+  (`scripts/release_assets.py`), so the manifest's sha256 and `veyqctl.bundle` are of the stamped copy; a checkout's
+  copy is unreleased. `veyqctl --version` says which.
+- **Only the major gates.** An instance or a manifest of a major above `MAJOR` is refused before anything is run or
+  written, naming where to get a newer `veyqctl`. Every older major is spoken: `veyqctl` is what moves an instance
+  into its major from the one before (decision 5), which no app does. Dropping the oldest is ADR 0085 decision 5's
+  window, deferred like every client's until a major 2 is released.
+- **The minor never gates, and that binds the release's side.** Within a major, what a release carries for `veyqctl`
+  (the compose file, the `.env` template, the chart's values, the manifest) changes only so that an older `veyqctl` of
+  that major still does right; a removal is a major (ADR 0085 decision 2). A `veyqctl` older than its instance says
+  so before the command runs, with the way to a newer one (`self-update` on Compose).
+- **`self-update` refuses an unreleased `veyqctl`:** that copy is the source, and replacing it would overwrite a
+  checkout. It happened, to the self-test, the day this was built.
+
 ## Consequences
 
 - **The operator's path is the tested path.** The stack lanes drive `veyqctl` against the candidate's own release
@@ -93,6 +112,10 @@ and keeps current with its own GitOps tooling; veyq ships no in-cluster operator
   decision 3). A local, unsigned candidate passes the signature check only by an explicit flag, refused unless both
   images are local references, so the way past the signatures cannot be pointed at a registry.
 - **Each Run page keeps what the tool runs**, so an operator can do any step by hand.
+- **Decision 9's minor promise has no lane yet.** The self-test holds the gate, the guard holds `MAJOR` to
+  `VERSION` and the stamp to its one line, but that an older `veyqctl` of a major still upgrades to the major's newest
+  release is proved only by an upgrade lane run by the previous release's `veyqctl`. It belongs with the heavy lanes at
+  the end of V1.
 - **The backup archive must hold the major entry**, since decision 5 enters a new major from it alone; which backups
   lane L3 restores is ADR 0091 decision 6's.
 - **Rejected — keep the recipe in the image and add `garage.toml`.** Closes the gap, keeps an unusual shape, and still
