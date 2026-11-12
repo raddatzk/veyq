@@ -27,13 +27,7 @@ struct FileScreen: View {
             Group {
                 switch state?.shown {
                 case let s as FileModel.ShownImage: FileImage(shown: s)
-                case let s as FileModel.ShownText:
-                    VStack(alignment: .leading) {
-                        if s.truncated { Text(say(.fileTextTruncated)).font(.footnote).foregroundStyle(Role.muted) }
-                        ScrollView([.vertical, .horizontal]) {
-                            Text(s.text).font(.system(.footnote, design: .monospaced)).textSelection(.enabled).frame(maxWidth: .infinity, alignment: .leading)
-                        }
-                    }
+                case let s as FileModel.ShownText: FileText(shown: s)
                 case let s as FileModel.ShownPdf: FilePdf(shown: s)
                 case let s as FileModel.ShownMedia: FileMedia(shown: s)
                 case let s as FileModel.ShownMessage: Text(say(s.words)).foregroundStyle(Role.muted)
@@ -48,6 +42,28 @@ struct FileScreen: View {
         .navigationTitle(ref.name)
         // the model is the shell's while the page is shown; asking for it here opens it
         .task(id: ref) { _ = model.fileModel(node) }
+    }
+}
+
+/// A text as plain text, a line a row: one `Text` of a megabyte drew nothing at all (iOS 27, measured 2026-11-12), so the
+/// lines are laid out lazily as they scroll into view.
+private struct FileText: View {
+    let shown: FileModel.ShownText
+    @State private var lines: [String] = []
+
+    var body: some View {
+        VStack(alignment: .leading) {
+            if shown.truncated { Text(say(.fileTextTruncated)).font(.footnote).foregroundStyle(Role.muted) }
+            ScrollView([.vertical, .horizontal]) {
+                LazyVStack(alignment: .leading, spacing: 0) {
+                    ForEach(lines.indices, id: \.self) { i in
+                        Text(verbatim: lines[i].isEmpty ? " " : lines[i])
+                            .font(.system(.footnote, design: .monospaced)).textSelection(.enabled).fixedSize()
+                    }
+                }
+            }
+        }
+        .task(id: ObjectIdentifier(shown)) { lines = shown.text.components(separatedBy: "\n") }
     }
 }
 
@@ -87,18 +103,31 @@ private struct FilePdf: View {
     }
 }
 
-/// An audio or video file played through core's range reader (`ReaderLoader`), with the system's controls.
+/// An audio or video file played through core's range reader (`ReaderLoader`), with the system's controls; a format the
+/// system does not play (a WebM on iOS) says so and offers the download, as a file nothing shows (the CR's D7).
 private struct FileMedia: View {
     let shown: FileModel.ShownMedia
     @State private var playback: Playback?
+    @State private var unplayable = false
 
     var body: some View {
         Group {
-            if let playback { VideoPlayer(player: playback.player).frame(minHeight: 240) } else { ProgressView() }
+            if unplayable {
+                Text(say(FileView.shared.message(kind: .unsupported))).foregroundStyle(Role.muted)
+            } else if let playback {
+                VideoPlayer(player: playback.player).frame(minHeight: 240)
+            } else {
+                ProgressView()
+            }
         }
         .task(id: ObjectIdentifier(shown)) {
             let p = Playback(reader: shown.reader, mime: shown.mediaType)
             playback = p
+            // the asset asks the reader for its head to tell; nothing is read whole
+            if let asset = p.player.currentItem?.asset, (try? await asset.load(.isPlayable)) != true {
+                NSLog("veyq-file: \(shown.mediaType) is not playable here")
+                unplayable = true
+            }
         }
         .onDisappear {
             playback?.player.pause()
