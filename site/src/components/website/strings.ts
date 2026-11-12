@@ -1,7 +1,7 @@
 // The words of the project website (site/src/pages/index.astro and de/index.astro), one object per language. The
 // website is the front door; every claim here is one the docs already make, and each section links the page that
 // makes it in full. Wording follows the Use area: "Memory", "Space", "application" — in German "Erinnerung",
-// "Bereich", "Anwendung", addressed with "du".
+// "Bereich", "Anwendung", addressed with "du". The appearance labels are the web client's own (shell.theme*).
 
 // Every language the website speaks, the default first. Adding one is adding its strings object below and a line
 // here: its page (site/src/pages/[lang]/index.astro) and its entry in the language switch follow. The website links
@@ -23,7 +23,7 @@ const en = {
   htmlTitle: 'veyq — share what matters, only with the people it belongs to',
   description:
     'veyq is a self-hostable, end-to-end encrypted platform for what you share with your family, your friends or your club: photos and videos, documents and files, shared costs, and more to come.',
-  nav: { apps: 'Applications', how: 'How it works', run: 'Run it yourself', docs: 'Documentation', main: 'Main', language: 'Language', skip: 'Skip to content' },
+  nav: { apps: 'Applications', how: 'How it works', run: 'Run it yourself', docs: 'Documentation', main: 'Main', language: 'Language', skip: 'Skip to content', theme: 'Appearance', themeSystem: 'System', themeLight: 'Light', themeDark: 'Dark' },
   hero: {
     eyebrow: ['End-to-end encrypted', 'Self-hostable', 'Free software'],
     title: 'Share what matters — only with the people it belongs to.',
@@ -177,7 +177,7 @@ const de: Strings = {
   htmlTitle: 'veyq — teile, was zählt, nur mit den Menschen, zu denen es gehört',
   description:
     'veyq ist eine selbst betreibbare, Ende-zu-Ende-verschlüsselte Plattform für das, was du mit deiner Familie, deinen Freundinnen und Freunden oder deinem Verein teilst: Fotos und Videos, Dokumente und Dateien, gemeinsame Kosten, und mehr kommt dazu.',
-  nav: { apps: 'Anwendungen', how: 'So funktioniert’s', run: 'Selbst betreiben', docs: 'Dokumentation', main: 'Hauptnavigation', language: 'Sprache', skip: 'Zum Inhalt' },
+  nav: { apps: 'Anwendungen', how: 'So funktioniert’s', run: 'Selbst betreiben', docs: 'Dokumentation', main: 'Hauptnavigation', language: 'Sprache', skip: 'Zum Inhalt', theme: 'Darstellung', themeSystem: 'System', themeLight: 'Hell', themeDark: 'Dunkel' },
   hero: {
     eyebrow: ['Ende-zu-Ende-verschlüsselt', 'Selbst betreibbar', 'Freie Software'],
     title: 'Teile, was zählt — nur mit den Menschen, zu denen es gehört.',
