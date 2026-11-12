@@ -232,7 +232,7 @@ DEFAULT_COMPOSE = REPO / "infra/docker/docker-compose.yml"
 DEFAULT_BACKUP_ROOT = REPO / "infra/backups"
 
 # Pinned by tag AND multi-arch index digest, like every other moving part of the bundled stack (mariadb:12.3,
-# dxflrs/garage:v2.0.0, traefik:v3.6, axllent/mailpit:v1.33.0) — and DB_IMAGE to the very digest the compose files
+# dxflrs/garage:v2.0.0, traefik:v3.6, axllent/mailpit:v1.33.1) — and DB_IMAGE to the very digest the compose files
 # run, which scripts/validate_image_pins.py holds (one `repo:tag`, one digest). Pinning is what makes an OLD backup's restorability independent of whatever the
 # host happens to carry years later — and neither tool is installed on a typical dev host anyway, so a host
 # install would be a new prerequisite for the runbook and for CI.
