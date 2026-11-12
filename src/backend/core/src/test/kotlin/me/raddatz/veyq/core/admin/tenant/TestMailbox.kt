@@ -98,6 +98,9 @@ class TestMailbox(private val port: Int) : AutoCloseable {
     fun countTo(recipient: String): Int =
         greenMail.receivedMessages.count { m -> m.allRecipients.any { it.toString().equals(recipient, ignoreCase = true) } }
 
+    /** How many messages reached this mailbox at all — for a path that must send nothing to anyone. */
+    fun total(): Int = greenMail.receivedMessages.size
+
     private fun messageTo(recipient: String): String? =
         greenMail.receivedMessages
             .firstOrNull { m -> m.allRecipients.any { it.toString().equals(recipient, ignoreCase = true) } }

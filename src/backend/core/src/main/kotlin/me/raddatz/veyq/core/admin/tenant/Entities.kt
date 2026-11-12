@@ -141,8 +141,11 @@ class TenantInviteEntity : PanacheEntityBase {
     @Column(name = "tenant_id", nullable = false, columnDefinition = "uuid")
     lateinit var tenantId: String
 
-    @Column(name = "owner_email", nullable = false, length = 254)
-    lateinit var ownerEmail: String
+    /** The address the invite is bound to — an owner invite's and a mailed member invite's — or null for a **link**
+     *  member invite, which is bound to nobody (ADR 0129 decision 2): no supersede-on-mint, no recipient rate bucket, no
+     *  address match at accept, and its redemption confirms no address (decision 4). */
+    @Column(name = "owner_email", length = 254)
+    var ownerEmail: String? = null
 
     @Column(name = "token_hash", nullable = false, length = 64)
     lateinit var tokenHash: String

@@ -20,6 +20,8 @@ import me.raddatz.veyq.core.generated.model.MemberAvatar
 import me.raddatz.veyq.core.generated.model.MemberVerification
 import me.raddatz.veyq.core.generated.model.PutVerificationRequest
 import me.raddatz.veyq.core.generated.model.VerificationPage
+import me.raddatz.veyq.core.generated.model.MemberInviteLink
+import me.raddatz.veyq.core.generated.model.MemberInviteLinkRequest
 import me.raddatz.veyq.core.generated.model.MemberInviteRequest
 import me.raddatz.veyq.core.generated.model.MemberInviteState
 import me.raddatz.veyq.core.generated.model.PendingMemberInvite
@@ -216,7 +218,10 @@ class TenantsResource(
         when (val outcome = handler.listMemberInvites(identity.principal.name, tenantId.toString())) {
             is MemberInvitesOutcome.Listed -> Response.ok(
                 outcome.invites.map {
-                    PendingMemberInvite(UUID.fromString(it.inviteId), it.email, InviteStatus.decode(it.status), it.expiresAt.utc())
+                    PendingMemberInvite(
+                        inviteId = UUID.fromString(it.inviteId), inviteStatus = InviteStatus.decode(it.status),
+                        inviteExpiresAt = it.expiresAt.utc(), email = it.email,
+                    )
                 },
             ).build()
             is HttpFailure -> httpError(outcome)
@@ -232,6 +237,29 @@ class TenantsResource(
             is ReissueOutcome.RateLimited -> rateLimited(outcome.retryAfterSeconds)
             is HttpFailure -> httpError(outcome)
         }
+
+    // A member invite as a link (ADR 0129 decisions 1-3): bound to nobody, sent nowhere, its token answered to the owner
+    // who minted it. Owner-gated in the handler like the mailed mint. No recipient, so the handler's limiter spends the
+    // tenant's budget only — TENANT is a handler-enforced marker (ADR 0051), as RECIPIENT is above.
+    @Authenticated
+    @RateLimit(key = RateLimitKey.TENANT)
+    override fun createMemberInviteLink(tenantId: UUID, memberInviteLinkRequest: MemberInviteLinkRequest): Response =
+        when (val o = handler.inviteMemberByLink(identity.principal.name, tenantId.toString(), memberInviteLinkRequest.toInput())) {
+            is LinkInviteOutcome.Done -> Response.status(Response.Status.CREATED).entity(o.toWire()).build()
+            is LinkInviteOutcome.RateLimited -> rateLimited(o.retryAfterSeconds)
+            is HttpFailure -> httpError(o)
+        }
+
+    @Authenticated
+    @RateLimit(key = RateLimitKey.TENANT) // the same tenant budget as the first link mint
+    override fun reissueMemberInviteLink(tenantId: UUID, inviteId: UUID, memberInviteLinkRequest: MemberInviteLinkRequest): Response =
+        when (val o = handler.reissueLinkInvite(identity.principal.name, tenantId.toString(), inviteId.toString(), memberInviteLinkRequest.toInput())) {
+            is LinkInviteOutcome.Done -> Response.ok(o.toWire()).build()
+            is LinkInviteOutcome.RateLimited -> rateLimited(o.retryAfterSeconds)
+            is HttpFailure -> httpError(o)
+        }
+
+    private fun LinkInviteOutcome.Done.toWire() = MemberInviteLink(UUID.fromString(inviteId), token, expiresAt.utc())
 
     @Authenticated
     override fun revokeMemberInvite(tenantId: UUID, inviteId: UUID): Response =
@@ -386,7 +414,7 @@ class TenantsResource(
             with(r) { OwnerBirth.of(grant, grantSignature, recipientIdentityDigest) },
             with(r) { selfGrant.join(inviteProof, SealedValue.of(sealedJoinRecord, wrappedJoinRecordValueKey), signerIdentityDigest) },
             r.username, SealedValue.of(r.sealedName, r.wrappedNameValueKey), SealedValue.of(r.sealedAvatar, r.wrappedAvatarValueKey),
-            r.epoch,
+            r.epoch, r.email,
         )) {
             is RegisterAcceptOutcome.Activated -> Response.status(Response.Status.CREATED)
                 .entity(TenantActivatedWithUser(UUID.fromString(outcome.tenantId), TenantStatus.ACTIVE, UUID.fromString(outcome.userId)))
@@ -611,14 +639,28 @@ class TenantsResource(
     private fun Instant.utc() = atOffset(ZoneOffset.UTC)
 }
 
-/** A member invite request as the handler takes it (ADR 0111 decisions 1-2). */
+/** A mailed member invite request as the handler takes it (ADR 0111 decisions 1-2). */
 private fun MemberInviteRequest.toInput() = MemberInviteInput(
     email = email,
+    sealedLink = sealedLink,
+    key = InviteKeyInput(
+        inviteId = inviteId.toString(),
+        invitePublicKey = invitePublicKey,
+        inviteKeySignature = inviteKeySignature,
+        expiresAt = expiresAt.toInstant(),
+        epoch = epoch.validated(),
+        grant = SignedGrant(wrappedGrant, grantSignature),
+        recipientIdentityDigest = recipientIdentityDigest,
+    ),
+)
+
+/** A link invite request as the handler takes it (ADR 0129 decision 1): the invite's key alone — no address, no sealed
+ *  part. */
+private fun MemberInviteLinkRequest.toInput() = InviteKeyInput(
     inviteId = inviteId.toString(),
     invitePublicKey = invitePublicKey,
     inviteKeySignature = inviteKeySignature,
     expiresAt = expiresAt.toInstant(),
-    sealedLink = sealedLink,
     epoch = epoch.validated(),
     grant = SignedGrant(wrappedGrant, grantSignature),
     recipientIdentityDigest = recipientIdentityDigest,

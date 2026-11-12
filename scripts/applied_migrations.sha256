@@ -17,3 +17,4 @@ release: 202611070833
 36ebe2b5246ea2c5e2a3003f3d04db9a6e943b81c9ec3ea51524b17f7b34b1e6  src/backend/core/src/main/resources/db/migration/V202611070831__core_baseline.sql
 1be55aad05de57fb25e1efacec74a2efd67513d63f8203a13e8b3254d0d71ab5  src/backend/apps/memories/src/main/resources/db/migration/V202611070832__memories_baseline.sql
 4a6bdd0ec40c293fbcfd2ab614ed8ca41d13fda3f2550e174721ea6727a2d24d  src/backend/apps/expenses/src/main/resources/db/migration/V202611070833__expenses_baseline.sql
+10f2bfd1a61fce101bef147c531bc8cf2937126c65f69008b9009ad9bcdbe2c0  src/backend/core/src/main/resources/db/migration/V202611122155__core_tenant_invite_link.sql

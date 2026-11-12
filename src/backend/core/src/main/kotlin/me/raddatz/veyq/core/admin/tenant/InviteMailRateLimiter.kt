@@ -14,7 +14,9 @@ import jakarta.inject.Inject
  * victim address**. So this is a dedicated, handler-level limiter — a sibling of `ShareRateLimiter` — consumed in
  * [TenantHandler] on the two tenant-owner member paths that drive SMTP mail (`inviteMember`, `reissueMemberInvite`),
  * **after** the authorization guards pass and **before** the mint, so a limited request creates no orphan invite
- * and only authorized owners consume a slot.
+ * and only authorized owners consume a slot. A **link** invite's mint and re-issue (ADR 0129 decision 2) send nothing
+ * and have no recipient, so they spend the per-tenant budget only ([checkTenant]): open invites stay bounded by the
+ * tenant's mint budget, and a link mint never spends an address's.
  *
  * Two buckets on the shared [TokenBucketCounter] (ADR 0052, over the mutation-verified core of ADR 0045 §2) —
  * two axes, one core, no arithmetic of its own:
@@ -61,4 +63,9 @@ class InviteMailRateLimiter(
             ?.let { return it }
         return tenantBuckets.consume(tenantId, nowNanos, perTenantMax.toLong(), windowSeconds)
     }
+
+    /** Spend one token of [tenantId]'s budget only — a link invite's mint or re-issue, bound to no recipient (ADR 0129
+     *  decision 2). Returns `null` when allowed, or the `Retry-After` seconds when the tenant's budget is exhausted. */
+    fun checkTenant(tenantId: String): Long? =
+        tenantBuckets.consume(tenantId, System.nanoTime(), perTenantMax.toLong(), windowSeconds)
 }

@@ -157,3 +157,23 @@ mailed operation; this CR's lessons moved to where they bind and the file delete
   `invite_kind_email_mismatch`; the link format got a conformance vector (`invite_link.link_fragment`). A refinement
   checklist line would catch the first kind: for every new operation over a sum type (mailed | link), say what it
   answers for the other variant.
+
+### Phase 2
+
+- **Decided here, technical:** a link re-issue ends the old invite (compare-and-set) and mints the new one in one
+  transaction, the mint's own refusals first, so a refused re-issue leaves the old link standing and an old invite a
+  revoke took meanwhile answers `404 invite_not_found` (`TenantStore.reissueLinkInvite`); `already_member` is decided
+  under the tenant lock and before the spend, so the link stays good for its real invitee; `invite_kind_email_mismatch`
+  comes after the token's liveness; the preview asks the tenant's suspension first, then `CONSUMED` → `invite_redeemed`.
+  The signer's erasure needed no code: its `signerUserId` clause already ends a link invite — only a test was owed.
+- **The contract has no `429` on the two link operations** — nor on the mailed ones (precedent: only `storage-fit`
+  declares it), though decision 3 bounds them by the tenant bucket. Phase 4 should either declare it on all four or
+  name the precedent, and add the link-budget test to `cc.security.rate-limit.md`'s runtime list.
+- **A guard named the CR missed:** moving the invite row's write into a shared `persistMemberInvite` renamed the grant
+  writer, and `validate_grant_writer_arity.py` went red until its `EXPECTED_WRITERS` and a `GrantWriterSnapshotSliceTest`
+  leg (link mint and re-issue) followed. A store refactor under a CR should grep `scripts/` for the store's method
+  names at refine, as it does `site/` for removals.
+- **Bite tests batch well when each mutation hits a different test's first failing assertion:** six mutations in one
+  boot, six reds; in the second round one mutation (the register's unconditional confirm) was masked by another that
+  failed the same test earlier and needed a run of its own. And the restore between rounds hung on this shell's
+  interactive `cp` — `/bin/cp -f` and a `cmp` against the backup before the next round.
