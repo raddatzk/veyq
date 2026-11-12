@@ -236,7 +236,7 @@ DEFAULT_BACKUP_ROOT = REPO / "infra/backups"
 # run, which scripts/validate_image_pins.py holds (one `repo:tag`, one digest). Pinning is what makes an OLD backup's restorability independent of whatever the
 # host happens to carry years later — and neither tool is installed on a typical dev host anyway, so a host
 # install would be a new prerequisite for the runbook and for CI.
-RCLONE_IMAGE = "rclone/rclone:1.75.2@sha256:2687085f718d3c628f7fdfb77c52a1d344332aed543110bb88088f2c70d43eb5"
+RCLONE_IMAGE = "rclone/rclone:1.76.0@sha256:7cbeec24a44f206067597c0368be4de90ae19a64d5113c7d1938bd737a81e466"
 DB_IMAGE = "mariadb:12.3@sha256:d46e102fa8b9b72bfcdeb56f9dd538742092119dc8b11f31fe662605cd234cd9"
 
 # The rclone remote's name. Only ever appears in `RCLONE_CONFIG_<NAME>_*` and in `<name>:<bucket>` — never in a
