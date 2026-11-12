@@ -95,7 +95,7 @@ services:
   # (MIT, actively maintained) — NOT the archived MailHog (root CLAUDE.md: no EOL deps). Nothing is stored across
   # restarts (in-memory), which is exactly what a throwaway test mailbox wants.
   mailpit:
-    image: axllent/mailpit:v1.33.0@sha256:9b3a463be15354c0f0eba91697d80e3e0d8a5623ef0e627cacc836bc17fd5231
+    image: axllent/mailpit:v1.33.1@sha256:aef2aacc11f075ec0fb6874275ee4a421e688e11a96ebb296134d1735c7761ce
     container_name: veyq-mailpit
     profiles: ["mail"]
     restart: unless-stopped

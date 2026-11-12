@@ -39,7 +39,7 @@
 # the browser get the recipe's x-hardened triple and a non-root uid, measured to run that way.
 services:
   pebble:
-    image: ghcr.io/letsencrypt/pebble:2.10.1@sha256:ddf230642b1a584f519f32e347de1b05a6e4c1f6c35c1863b33effeab5f78199
+    image: ghcr.io/letsencrypt/pebble:2.10.3@sha256:0c81f05db371f436c97fb894bd6d2ab8fc9c8e2ce40f8bef8a8e15941bcd75ef
     cap_drop: [ALL]
     security_opt: [no-new-privileges:true]
     read_only: true
@@ -66,7 +66,7 @@ services:
   # the settings take only one (`instance.openapi.yaml`'s host pattern refuses a bare `mailpit`). The image has no
   # USER and would run as root; measured to run with the triple, a non-root uid and only /tmp writable.
   mailpit:
-    image: axllent/mailpit:v1.33.0@sha256:9b3a463be15354c0f0eba91697d80e3e0d8a5623ef0e627cacc836bc17fd5231
+    image: axllent/mailpit:v1.33.1@sha256:aef2aacc11f075ec0fb6874275ee4a421e688e11a96ebb296134d1735c7761ce
     cap_drop: [ALL]
     security_opt: [no-new-privileges:true]
     read_only: true
@@ -158,7 +158,7 @@ services:
   #     published loopback port — a container reaches the host's 127.0.0.1 on Docker Desktop and not on a Linux
   #     runner, so the run would differ between a laptop and CI.
   browser:
-    image: mcr.microsoft.com/playwright:v1.64.1-noble@sha256:7852dc5a7d72f5fe458a597d690f6c42fbc8e9e26ddfa95f8e6ef552558d9bbf
+    image: mcr.microsoft.com/playwright:v1.65.0-noble@sha256:9beb546099e11f52d62e505537914870e01a67e0e6b00ae41da4775324e73dbe
     profiles: [browser]
     cap_drop: [ALL]
     security_opt: [no-new-privileges:true]
@@ -203,7 +203,7 @@ services:
   # static file server from the Playwright image this file already pins (`python3 -m http.server`), with the recipe's
   # x-hardened triple and a non-root uid; it writes nothing.
   release-mirror:
-    image: mcr.microsoft.com/playwright:v1.64.1-noble@sha256:7852dc5a7d72f5fe458a597d690f6c42fbc8e9e26ddfa95f8e6ef552558d9bbf
+    image: mcr.microsoft.com/playwright:v1.65.0-noble@sha256:9beb546099e11f52d62e505537914870e01a67e0e6b00ae41da4775324e73dbe
     cap_drop: [ALL]
     security_opt: [no-new-privileges:true]
     read_only: true
