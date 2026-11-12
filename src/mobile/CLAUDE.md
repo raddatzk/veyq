@@ -14,7 +14,11 @@ A Gradle build of its own, run through its own wrapper.
   application's own package (`expenses/`: the web's Expenses domain, a Pot's session and what its views show; `depot/`: Depot's files, each one
   core attachment, and a file's page as a screen model, `FileModel`: what it shows decided by the bytes, an image, a text
   and a PDF held in memory, a medium read through a `RangeReader`, never a decrypted file written to show one; the header's
-  file actions and the opened file's rights, `FileRights`; `memories/`: a Memory's gallery, each medium under the key its origin
+  file actions and the opened file's rights, `FileRights`; the uploads as the shell shows them, `DepotUploads` (files and a
+  folder into a level, a replace expected over the content shown when it was chosen, each item's settle and its replace
+  offer said once, the tray's acknowledge on the model's clock), a walk's rule `FolderUpload.keeps`, a drop box's page
+  `DropBoxPage` (read anew on each revision of the shell's lists, a folder's delete only after asking) and the top level's
+  "Add files only" `ShareSheet.topLevel`; `memories/`: a Memory's gallery, each medium under the key its origin
   fixes), which
   uses core's session and is never used by it; an application's spec is generated into `api.<application>`.
 - **The device trust** ([ADR 0123](../../docs/decisions/0123-the-apps-share-a-kotlin-multiplatform-core-under-native-ui.md)
@@ -125,7 +129,8 @@ A Gradle build of its own, run through its own wrapper.
   its narrowing in a guest's folder (`NodeHeaderTest`), of core's `session/CoverFrame.kt` (`CoverFrameTest`), of core's `export/NodeExport.kt` archive (`FolderExportTest`, `ZipTest`) and its streamed `export/Sha256.kt` (`Sha256Test`), of Depot's `depot/FolderUpload.kt` plan (`FolderUploadTest`), of what Depot's rows and file page say (`DepotWordsTest`), of Memories' `memories/MemoryMedia.kt` listed tier and order (`MemoryMediaTest`) and `memories/MediaDetails.kt` (`MediaDetailsTest`, `MediaDetailsShownTest`), of core's `blob/RangeReader.kt` (`RangeReaderTest`), of core's `blob/FileSink.kt`, `FileSource.kt` and `Files.kt` (`FilesTest`, `nativeTest`: on macOS, Linux and Windows, through a non-ASCII name, the directory listed by the platform's own calls), of core's `session/AvatarsModel.kt` (`AvatarsModelTest`), of core's `blob/UploadQueue.kt` (`UploadQueueTest`, the web's `queue.test.ts` rules on virtual time), of core's `session/LinkForm.kt` (`LinkFormTest`: the new-link form's rules) and `session/LinkRow.kt` (`LinkRowTest`: a link's row and what a member may do with it), of Expenses' `expenses/ShareInbox.kt` (`ShareInboxTest`: shared files from arrival to their Pot), of core's `navigation/ShellModel.kt` (`ShellModelTest`: the shell after a read and after a folder on Home's path changed), `navigation/TrashSheet.kt` (`TrashSheetTest`: a space's trash sheet) and `navigation/ShellWords.kt` with `AppKinds`' words (`ShellWordsTest`), of core's `session/SessionModel.kt` (`SessionModelTest`: the start, sign-in, unlock, switcher and sign-out over a door the test plays), of core's `words/Notices.kt` (`NoticesTest`: every outcome's key with as many arguments as its words take), of core's `media/ExifReader.kt` and `media/VideoHeader.kt` and Memories' `memories/MediaMetadata.kt` (`MediaMetadataFixtureTest` over the web's own fixtures, held to what the web's `readExif.fixture.test.ts` and `videoHeader.test.ts` expect; `MediaMetadataNativeTest` on the Apple path; `XmpValueTest`: its XMP reads across line breaks), of `memories/MediaUpload.kt`'s type and core's `crypto/BlobMeta.kt` digest (`MediaUploadTest`), of Depot's `depot/FileView.kt` and core's
   `blob/Sniff.kt` and `blob/DownloadName.kt` (`FileViewTest`), of Depot's `depot/FileModel.kt` with its `FileRights` and
   `ShellModel.downloadAs` (a file downloads as itself, any other node as its ZIP) (`FileModelTest`, over a file the test
-  plays), and of core's `session/NodeRekey.kt` frontier and what it
+  plays), of Depot's `depot/DepotUploads.kt` with `DepotFiles.offerFor` and `collision` (`DepotUploadsTest`, over a level the
+  test plays, on virtual time) and `depot/DropBoxPage.kt` (`DropBoxPageTest`), and of core's `session/NodeRekey.kt` frontier and what it
   leaves to another device (`NodeRekeyRulesTest`).
 - `./gradlew :bridge:jvmTest` — the bridge (ADR 0123's Consequences, the bridge):
   - `DispatchTest` covers the way in, over a door the test plays: a reader read backwards in uneven ranges and closed
@@ -481,6 +486,23 @@ first in each of its scrolls — `LocalNodeHero.current(inset)` (Android) / `Nod
   through `ReaderPlayback.swift`'s `AVAssetResourceLoader`. The only decrypted copies are the ones the person asked for —
   "Send a copy" (`cacheDir/shared`, `tmp/shared`) and iOS's download for `fileMover` (`tmp/downloads`) —, both swept at
   every start; a Mac's download goes to the save panel's path through core's `FileSink`.
+- SwiftUI did not present an alert again once it was answered and its binding turned true anew (measured 2026-11-12: the
+  second replace offer of a batch never showed, its state set, even 1.5 s later): what `DepotUploads` says has an alert on a
+  view of its own per said (`.id(said.id)`, `ShellView`). And a `.fileImporter`'s binding is cleared on dismissal BEFORE its
+  completion runs: a completion that reads the state the binding clears finds nothing (the picked file for Replace was
+  dropped) — keep what it needs apart (`AppModel.replaceChosen`). The move sheet's "move out of the drop box?" fell into
+  the cancel-before-action trap above (nothing moved); it now cancels only on Cancel.
+- A coroutine that was cancelled fails every suspending call at once, its own clean-up's too: a cancelled Depot upload
+  left a "not uploaded yet" file because its abandon's listing and trash ran cancelled. A give-up runs `NonCancellable`
+  (`DepotFiles.upload`, `UploadJob.abandon`). A failed upload whose give-up could not reach the server (offline) leaves its
+  empty file, and the retry then collides with it and offers its replace (measured on the emulator in airplane mode).
+- A guest's new folder in a drop box shows on the phones only once the tenant's tree is read anew: the tree is cached, and
+  nothing polls it; a pass force-stops and relaunches the app (`devlogin.py`) after a guest dropped through the web.
+- Driving the web from a mobile pass (headless system Chrome, `?devlogin`): a level row's `locator.click()` waits forever
+  for a stable element; click the row's bounding box with `page.mouse`, or open by hash (`#app-depot-2/alpha-txt`). A file
+  page's Replace is its hidden `input.files-picker` (`setInputFiles`), then "Ersetzen".
+- Under a host load around 20 the swiftshader emulator raises "isn't responding" on a long editor sheet: the main thread is
+  idle (`kill -3` after `adb root`, `/data/anr/trace_*`), so tap Wait, never Close; a pass reads its state after it.
 - On iOS one SwiftUI `Text` of a megabyte drew nothing (measured 2026-11-12, a file's cut text): a long text is a line a
   row in a `LazyVStack` (`FileText`). AVFoundation plays no WebM: a file page reads the asset's `isPlayable` through the
   resource loader and says `file_unsupported` (D7 of the Depot CR); Android plays it.

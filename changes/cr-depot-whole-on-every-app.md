@@ -393,6 +393,56 @@ Android and Apple thinned.
   and a retry, the tray acknowledged; a drop box made at the top level, a guest's upload through the web's guest page,
   its folder moved out and another deleted asked; read back on the web.
 
+**Status: done (2026-11-12).**
+
+**Built:**
+- core `depot/DepotUploads.kt` (ADR 0127 decision 2, over the app's `UploadQueue`): `upload(scope, parent, label, sources)`,
+  `uploadFolder(scope, parent, shownName, path, found)` (`preparing` while the folders are made, the walk's left-out entries
+  and the outcome said in Depot's words), `replace(fileModel, source)`, each Depot item's settle (`Door.changed`, the offer
+  read anew — `offerAfter`/`take` moved here from `DepotFiles` —, the item out of the tray), what it says one at a time
+  (`State.said`; `take(said)`, `seen(id)`), the tray's acknowledge on the model's clock, and the queue's
+  cancel/retry/cancelAll/acknowledge. `ShellModel.depotUploads(queue, changed)`.
+- `FolderUpload.Found`/`Kind`, `keeps`, `walked`, `rootName`; `Notices.folderLeftOut`; words `depot_folder_link_skipped`,
+  `depot_folder_unreadable`, `dropbox_delete_folder_accept` (en + de).
+- `FileModel.chooseReplace()`: the content shown when Replace is chosen is what `replace(source)` expects (D9, the web's).
+- `depot/DropBoxPage.kt`: the guests' folders read anew on each revision of the shell's lists (`ShellModel.dropBoxPage`,
+  the lists' identity), `askDelete`/`cancelAsk`/`delete(folder)` (the node to trash, only when asked), `at(folder)` for the
+  move sheet, `folderFacts` (the core's `Facts` of a guest's folder).
+- `ShareSheet.topLevel(scopeId)` (`atTopLevel`: its form open from the start, uploadOnly, today the core's clock's, nothing
+  listed, the drop box made at the space's top); `ShellModel.topLevelShareSheet`.
+- `DepotFiles.UploadJob`/`ReplaceJob` take their sender (a test plays the server); `collision` over a node list; an
+  `UploadJob` gives up the file it made when cancelled (`abandon`), and every give-up runs `NonCancellable`.
+- Android: `UploadTray` and the snackbar draw `DepotUploads`; the folder walk hands `Found` entries (no `"Folder"`); the drop
+  box page and the top-level sheet are the core's; Replace chosen before the picker; a receipt's PDF through `OpenPdf`'s
+  `memfd` (the brief's own fix).
+- Apple: the uploads button draws `DepotUploads`; what it says is an alert of its own per said; the walk reports links and
+  unreadable entries; the drop box page (`DropBoxBox`) and the top-level sheet are the core's; Replace chosen before the
+  importer, the chosen file kept past the importer's dismissal; the move sheet's move-out question cancels only on Cancel.
+
+**Met:**
+- `DepotUploadsTest` 9, `DropBoxPageTest` 2, `FolderUploadTest` +2, `ShareSheetTest` +1, `NoticesTest` green; 27 mutations by
+  `scratchpad/d2/bite.py` (`/bin/cp -f` restore), all 27 bit (`bite.log`, `bite-abandon.log`).
+- `./gradlew :core:jvmTest :core:macosArm64Test :bridge:jvmTest :android:assembleDebug` green; `xcodebuild -target Veyq -sdk
+  macosx CODE_SIGNING_ALLOWED=NO` and the signed iOS simulator build (`-scheme Veyq`, iPhone 18 Pro) green; `linux/run.py
+  build` (clippy, `cargo test` 30 passed) and `windows/run.py build` (Veyq.Bridge.Tests, Veyq.Tests passed) green;
+  `validate_mobile_words`, `validate_mobile_platform_guidelines`, `validate_changes` green.
+- Gone from the apps (inventory's first locator): `depotSettled`, `_preparing`/`preparing`, `"Folder"`, `share_failed` on a
+  folder, both views' acknowledge timers, `dropBoxFolders` and its triggers, both top-level sheets' own state,
+  `peopleDelete` and `receiptsClose` in Depot; the remaining hits are other areas' (a Pot's `Facts`, Expenses' people).
+- Android (throwaway AVD `veyq_d2_throwaway`, Android 36, deleted after), in `App depot 2`, read through `uiautomator dump`:
+  two files uploaded and the tray gone by itself; a same-named `alpha.txt` offered ("Replace file") and replaced (34 B);
+  `Trip2` uploaded under its own name with `.hidden` and `sub/c.txt`; a 24 MiB upload cancelled (after the fix: no file
+  left), another failed in airplane mode and retried (25.2 MB on the web); Replace chosen, the web replaced the file meanwhile,
+  the pick answered "someone else replaced this file" and "Replace anyway" wrote over theirs; a drop box made at the top level
+  with its link, two guests dropped through the web's guest page, one folder moved out into `App depot 2`, the other deleted
+  after asking (its undo offered); read back on the web. A receipt PDF (two pages) drawn with `run-as … ls cache` empty while
+  shown and after.
+- Apple (the booted iPhone 18 Pro, iOS 27, German): `Trip3` uploaded under its own name with `.hidden` and `sub/c.txt`, its
+  symlink said ("„link-to-hosts“ ist eine Verknüpfung und wurde ausgelassen"); two same-named files offered one after the
+  other, one seen, one taken; Replace chosen, the web replaced meanwhile, "Trotzdem ersetzen" offered and taken (11 B on the
+  web); two guests' folders listed, one deleted after "Dirk App löschen", one moved out into `App depot 2`; read back on the
+  web. Apple's receipt view shows a PDF from `Data` already (`PDFPages(data:)`), so it writes none.
+
 ### Phase 3 — Bridge and desktops: a file's page (image, text, PDF, the rest), Save a copy with progress and cancel
 
 **Done when:**
@@ -410,6 +460,8 @@ Android and Apple thinned.
   the JPEG, the cut text (its banner), a 30-page PDF (pages drawn as scrolled), a ZIP (unsupported, Save a copy), an
   empty file; Save a copy of a 300 MiB file with its progress and Cancel (nothing left, measured in the container / on the
   VM), then saved whole at its SHA-256; the header's Download of the file writes the file, not a ZIP.
+- The owner's scroll report (Phase 1 fixed it on Android and Apple) met on both desktops: a long list scrolled to its
+  bottom, an object near the bottom opened, back — the list still at the bottom; fixed in the phase where it is not.
 
 ### Phase 4 — Bridge and desktops: a medium played through a reader
 
@@ -561,4 +613,41 @@ owner's veto.
   its answer. The Apple app's URL cache (`Library/Caches/<bundle>/fsCachedData`) holds responses, ciphertext only.
 - **Left in the dev instance by my runs:** nothing; `App depot 1` with its six files was trashed and deleted forever. The
   throwaway AVD is deleted.
+
+### Phase 2 (2026-11-12)
+
+- **The tray is one model, `DepotUploads`, over the app-wide queue, one per open tenant** (`ShellModel.depotUploads`): it
+  mirrors the whole queue (Memories' batches too) and runs the acknowledge for all of it; only Depot's items get its settle.
+  Decided here: a model that knew only Depot's jobs would have left the tray's timer in the views for Memories.
+- **What the uploads say is a queue of `Said`, one shown at a time**, answered by `take(said)` (the said handed in, never read
+  back — a dismissal may run first) or `seen(id)`; the folder's outcome and the replace offer are both one. The apps had a
+  snackbar channel (Android) and the shell's notice (Apple); Apple's needed an alert of its own (below).
+- **The walk's rule is the core's, the walk the platform's** (D2): a phone hands `Found` entries — file, directory, link,
+  unreadable — and `FolderUpload.keeps` decides; a link and an unreadable entry are said in two new words, never silently
+  dropped. Android's provider lists hidden files (measured: `.hidden` uploaded from `Trip2`); it reports no links.
+- **`rootName` is the picker's shown name, else the path's last part** (`/`, a backslash, `:` part it), so a document id
+  like `primary:Download/Trip` names `Trip` and no literal remains.
+- **A replace's expectation is fixed by `FileModel.chooseReplace()`**, which the header's action calls before the picker
+  opens; a `replace` without a choice is refused (null), so a desktop's `Upload.Replace` (Phase 5) has to choose first. D9.
+- **A drop box page reads anew on the shell's lists' revision** (the `Lists` object's identity: a navigation keeps it, a read
+  makes a new one), and a guest folder's header uses the core's `DropBoxPage.FOLDER_FACTS` (no write, its download).
+- **`ShareSheet.topLevel` is the share sheet in a mode** (`atTopLevel`), not a sheet of its own: its form, save, refusal and
+  fresh address are the sheet's; the door makes the drop box under no parent.
+- **Found and fixed on the way:** an upload cancelled mid-way left an empty "not uploaded yet" file (the queue's `abandon`
+  was never implemented for Depot, and the upload's own give-up ran in the cancelled coroutine) — `UploadJob.abandon` and
+  `NonCancellable` give-ups, bitten; on Apple the second offer of a batch never showed, a file picked for Replace was dropped
+  (the importer's binding cleared `replacing` before its completion), and a guest's folder was never moved out (the move
+  sheet's question cancelled before its accept) — each fixed and passed on the simulator. All predate this phase except the
+  second offer, which the old notice path had as well.
+- **Left as found:** a failed upload whose give-up cannot reach the server (offline) leaves its empty file, and its retry
+  collides with it and offers the replace (measured in airplane mode); whether the web does the same is unchecked — a later
+  phase's or an inbox item. A guest's new folder shows on a phone only after its tree is read anew (nothing polls). A drop box made from
+  the top level on iOS was not driven (the simulator tool cannot type its name); Android and `ShareSheetTest` hold it.
+  Android's typed name lost its last character once (`App drop 2` became `App drop`), an `adb input` artefact.
+- **Deviations:** the Apple pass ran on the booted iPhone 18 Pro the brief named (it stays installed and signed in) and no
+  cancel/retry was driven there (the simulator tool cannot take the network away); the macOS build was compiled, not run.
+  Both passes worked in one folder, `App depot 2`, Apple's beside Android's.
+- **Left in the dev instance by my runs:** nothing of this phase: `App depot 2` (with `AppPotD2`, the moved-out guest folders,
+  `Trip2`, `Trip3`, the big files) and the drop box `App drop` were trashed and deleted forever on the web; their guests'
+  folders went with them. The throwaway AVD is deleted; the simulator's `AppDepot3` test files removed.
 
