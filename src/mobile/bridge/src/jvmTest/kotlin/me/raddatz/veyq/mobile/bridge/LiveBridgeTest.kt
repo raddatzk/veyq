@@ -3,6 +3,7 @@ package me.raddatz.veyq.mobile.bridge
 import io.ktor.client.HttpClient
 import io.ktor.client.engine.okhttp.OkHttp
 import kotlinx.coroutines.runBlocking
+import me.raddatz.veyq.mobile.expenses.EditorChange as E
 import me.raddatz.veyq.mobile.crypto.BouncyCastlePrimitives
 import me.raddatz.veyq.mobile.navigation.ApplicationId
 import me.raddatz.veyq.mobile.session.SessionModel.Gate
@@ -815,6 +816,195 @@ class LiveBridgeTest {
             val tw = b.watching(Watched.Trash(t))
             val rows = tw.until(1.minutes) { u -> (u as Update.Trash).shown?.rows }
             rows.firstOrNull { it.id == copy.nodeId }?.let { row ->
+                val purged = b.ask(Call.TrashPurge(t, row.id), timeout = 1.minutes)
+                println("purge ${row.name}: $purged")
+                if (purged == Answer.Done) tw.until(1.minutes) { u -> (u as Update.Trash).shown?.takeIf { s -> s.busy == null && s.rows?.none { it.id == row.id } == true } }
+            }
+            b.ask(Call.TrashClose(t))
+            assertTrue(nodes(fresh()).none { it.nodeId == copy.nodeId }, "the copy was left")
+        }
+        b.shutdown()
+    }
+
+    /**
+     * The entry editor through calls on an `App pot <n>` copy of Amsterdam: an expense with two payers and items split by
+     * shares, percent and amounts; a refund; a transfer; another currency with its rate filled from the tenant's service
+     * (typed where it names none); a save refused; a stale save (another device edited meanwhile); a delete — each read
+     * back from a fresh Pot open, the copy purged at the end.
+     */
+    @Test
+    fun anEntryIsWrittenEditedAndDeletedThroughCalls() = runBlocking {
+        val origin = System.getenv("VEYQ_LIVE") ?: return@runBlocking
+        val envFile = System.getenv("VEYQ_ENV_FILE")?.let(::File) ?: File(System.getProperty("veyq.repoRoot"), ".run/.env")
+        val env = envFile.readLines()
+            .mapNotNull { l -> l.substringBefore('=', "").takeIf { it.isNotBlank() }?.let { it.trim() to l.substringAfter('=').trim().trim('"', '\'') } }
+            .toMap()
+        val (b, first) = signedInLive(origin, "bridge live editor test")
+        val amsterdam = first.state!!.lists.objects.first { it.name == "Amsterdam" }
+        val scope = amsterdam.scopeId
+        val home = first.state.lists.nodes.first { it.nodeId == amsterdam.nodeId }.parentId
+        suspend fun fresh(): Update.Shell {
+            assertEquals(Answer.Done, b.ask(Call.ShellRefresh, timeout = 1.minutes))
+            return b.watching(Watched.Shell).next() as Update.Shell
+        }
+        fun nodes(u: Update.Shell) = u.state!!.lists.nodes.filter { it.scopeId == scope }
+        fun at(n: me.raddatz.veyq.mobile.navigation.NodeRef) = me.raddatz.veyq.mobile.navigation.NodeAt(n.scopeId, n.nodeId, n.kind, n.name)
+        fun JsonObject.view() = (this["state"] as? JsonObject)?.get("view") as? JsonObject
+        fun rows(view: JsonObject, list: String) = view.getValue(list).jsonArray.map { it.jsonObject.getValue("row").jsonObject }
+        fun idOf(view: JsonObject, title: String) = rows(view, "entries").firstOrNull { it["title"]?.takeIf { t -> t !is JsonNull }?.jsonPrimitive?.content == title }
+            ?.getValue("id")?.jsonPrimitive?.content
+
+        val source = (b.ask(Call.PotOpen(amsterdam)) as Answer.PotOpened).pot
+        b.watching(Watched.Pot(source)).untilJson(1.minutes) { it.view() }
+        val sheet = (b.ask(Call.MoveOpen(at(nodes(first).first { it.nodeId == amsterdam.nodeId }), true, "deleted person")) as Answer.MoveOpened).move
+        b.watching(Watched.Move(sheet)).until(2.minutes) { u -> (u as Update.Move).shown?.takeIf { it.loaded && it.losses.size > 1 } }
+        val copied = b.ask(Call.MoveHere(sheet), timeout = 3.minutes) as Answer.MoveSent
+        assertEquals(me.raddatz.veyq.mobile.words.Msg.COPY_DONE, copied.done?.msg, "${copied.problem}")
+        b.ask(Call.MoveClose(sheet))
+        b.ask(Call.PotClose(source))
+        val before = first.state.lists.nodes.map { it.nodeId }.toSet()
+        val copy = assertNotNull(nodes(fresh()).firstOrNull { it.kind == amsterdam.kind && it.parentId == home && it.nodeId !in before }, "the Pot's copy is not listed")
+        val name = "App pot ${System.currentTimeMillis() % 100_000}"
+        try {
+            val header = (b.ask(Call.HeaderOpen(at(copy), me.raddatz.veyq.mobile.AppKinds.Facts(), 2)) as Answer.HeaderOpened).header
+            b.watching(Watched.Header(header)).until { u -> (u as Update.Header).shown?.takeIf { it.plan != null } }
+            assertEquals(null, (b.ask(Call.HeaderRename(header, name), timeout = 1.minutes) as Answer.Renamed).problem)
+            b.ask(Call.HeaderClose(header))
+            println("copied Amsterdam as $name")
+            val ref = me.raddatz.veyq.mobile.navigation.ObjectRef(copy.scopeId, copy.nodeId, copy.kind, amsterdam.application, name)
+            var pot = (b.ask(Call.PotOpen(ref)) as Answer.PotOpened).pot
+            b.watching(Watched.Pot(pot)).untilJson(1.minutes) { it.view() }
+
+            /** A fresh open of the copy: its view as read now. */
+            suspend fun reopened(): JsonObject {
+                b.ask(Call.PotClose(pot))
+                pot = (b.ask(Call.PotOpen(ref)) as Answer.PotOpened).pot
+                return b.watching(Watched.Pot(pot)).untilJson(1.minutes) { it.view() }
+            }
+            suspend fun open(entry: String?): Pair<Long, Watching> {
+                val e = (b.ask(Call.EditorOpen(pot, entry, ".")) as Answer.EditorOpened).editor
+                return e to b.watching(Watched.Editor(e))
+            }
+            suspend fun shown(w: Watching, pick: (EditorShown) -> Boolean = { true }) = w.until(1.minutes) { u -> (u as Update.Editor).shown?.takeIf(pick) }
+            suspend fun edit(e: Long, vararg cs: me.raddatz.veyq.mobile.expenses.EditorChange) = cs.forEach { assertEquals(Answer.Done, b.ask(Call.EditorChange(e, it))) }
+            suspend fun saved(e: Long) = b.ask(Call.EditorSave(e), timeout = 2.minutes) as Answer.EditorSaved
+            suspend fun reread(title: String): EditorShown {
+                val view = reopened()
+                val id = assertNotNull(idOf(view, title), "$title is not read back")
+                val (e, w) = open(id)
+                return shown(w).also { b.ask(Call.EditorClose(e)) }
+            }
+
+            // a save refused: nothing written, the refusal at its field
+            val (refused, rw) = open(null)
+            val people = shown(rw).people
+            assertTrue(people.size >= 2, "the copy has fewer than two people")
+            val (p1, p2) = people[0].id to people[1].id
+            val others = people.drop(2).map { it.id }
+            assertEquals(Answer.EditorSaved(false, null), saved(refused))
+            assertEquals("payers", shown(rw) { it.refusal != null }.refusal?.at)
+            b.ask(Call.EditorClose(refused))
+            println("a save refused: at payers")
+
+            // an expense: two payers, items by shares, percent and amounts, the rest equally
+            val (ex, xw) = open(null)
+            edit(ex, E.Title("Live expense"), E.Paid(0, "40"), E.AddPayer, E.Payer(1, p2), E.Paid(1, "20"))
+            edit(ex, E.AddItem, E.ItemLabel(0, "By shares"), E.ItemAmount(0, "12"), E.Expand(0), E.Share(0, p1, "2"))
+            edit(ex, E.AddItem, E.ItemLabel(1, "By percent"), E.ItemAmount(1, "18"), E.Expand(1), E.SplitMode(1, me.raddatz.veyq.mobile.expenses.EntryForm.Mode.PERCENT))
+            others.forEach { edit(ex, E.Toggle(1, it, false)) }
+            edit(ex, E.Share(1, p1, "60"), E.Share(1, p2, "40"))
+            edit(ex, E.AddItem, E.ItemLabel(2, "By amounts"), E.ItemAmount(2, "10"), E.Expand(2), E.SplitMode(2, me.raddatz.veyq.mobile.expenses.EntryForm.Mode.AMOUNTS))
+            others.forEach { edit(ex, E.Toggle(2, it, false)) }
+            edit(ex, E.Share(2, p1, "7"), E.Share(2, p2, "3"))
+            assertTrue(shown(xw) { it.preview.isNotEmpty() }.refusal == null)
+            assertEquals(Answer.EditorSaved(true, null), saved(ex))
+            val expense = reread("Live expense")
+            assertEquals(listOf(p1 to "40.00", p2 to "20.00"), expense.payers.map { it.person to it.amount })
+            assertEquals(
+                listOf(me.raddatz.veyq.mobile.expenses.EntryForm.Mode.SHARES, me.raddatz.veyq.mobile.expenses.EntryForm.Mode.PERCENT, me.raddatz.veyq.mobile.expenses.EntryForm.Mode.AMOUNTS),
+                expense.items.map { it.split.mode },
+            )
+            assertEquals(listOf("2", "60.00", "7.00"), expense.items.map { it.split.people.first { p -> p.person == p1 }.value })
+            println("an expense with two payers and three items read back: ${expense.items.map { "${it.label} ${it.split.mode}" }}")
+
+            // a refund and a transfer
+            val (rf, _) = open(null)
+            edit(rf, E.Kind(me.raddatz.veyq.mobile.expenses.EntryForm.Kind.REFUND), E.Title("Live refund"), E.Paid(0, "5"))
+            assertEquals(Answer.EditorSaved(true, null), saved(rf))
+            assertEquals(me.raddatz.veyq.mobile.expenses.EntryForm.Kind.REFUND, reread("Live refund").kind)
+            val (tr, _) = open(null)
+            edit(tr, E.Kind(me.raddatz.veyq.mobile.expenses.EntryForm.Kind.TRANSFER), E.Title("Live transfer"), E.Amount("3"), E.From(p1), E.To(p2))
+            assertEquals(Answer.EditorSaved(true, null), saved(tr))
+            val transfer = reread("Live transfer")
+            assertEquals(Triple(me.raddatz.veyq.mobile.expenses.EntryForm.Kind.TRANSFER, p1, p2), Triple(transfer.kind, transfer.from, transfer.to))
+            println("a refund and a transfer read back")
+
+            // another currency: its rate filled from the tenant's service, or typed where it names none
+            val (fx, fw) = open(null)
+            edit(fx, E.Title("Live CHF"), E.Paid(0, "9"), E.Currency("CHF"))
+            // the fill starts with the currency's change (FILLING) where the tenant names a service; none: nothing comes
+            val answered = kotlinx.coroutines.withTimeoutOrNull(20.seconds) {
+                shown(fw) { it.currency == "CHF" && it.rateFill != null && it.rateFill?.state != me.raddatz.veyq.mobile.expenses.EntryEditor.RateState.FILLING }
+            }
+            val rate = if (answered?.rateFill?.state == me.raddatz.veyq.mobile.expenses.EntryEditor.RateState.FILLED) {
+                println("the rate filled: ${answered.rate} from ${answered.rateFill?.day}")
+                answered.rate
+            } else {
+                edit(fx, E.RateTyped("1.05"))
+                println("no rate from the tenant's service (${answered?.rateFill?.state ?: "none named"}): the rate typed")
+                "1.05"
+            }
+            assertEquals(Answer.EditorSaved(true, null), saved(fx))
+            val chf = reread("Live CHF")
+            assertEquals("CHF" to rate, chf.currency to chf.rate)
+
+            // a stale save: another device edits the expense meanwhile; the save says so and shows theirs, the next goes on top
+            val store = object : DeviceStore {
+                val values = ConcurrentHashMap<String, String>()
+                override fun read(key: String) = values[key]
+                override fun write(key: String, value: String) { values[key] = value }
+                override fun remove(key: String) { values.remove(key) }
+            }
+            val account = VeyqAccount.signIn(
+                BouncyCastlePrimitives, origin, env.getValue("VEYQ_EMAIL"), env.getValue("VEYQ_PASSWORD"), env.getValue("VEYQ_SECRET_KEY"),
+                ThisDevice(store, NoDeviceKeys, "bridge live editor test, the other device", BouncyCastlePrimitives),
+            ) { block -> HttpClient(OkHttp, block) }
+            val tenant = account.open(account.tenants.first { it.tenantId == first.shown!!.tenant.tenantId })
+            val other = assertNotNull(me.raddatz.veyq.mobile.expenses.PotSession.open(tenant, ref.scopeId, ref.nodeId), "the other device did not open $name")
+            val expenseId = assertNotNull(idOf(reopened(), "Live expense"))
+            val (st, sw) = open(expenseId)
+            shown(sw)
+            val theirs = me.raddatz.veyq.mobile.expenses.PotView(other).editing(expenseId)!!
+            assertEquals(
+                me.raddatz.veyq.mobile.expenses.PotSession.WriteOutcome.WRITTEN,
+                other.saveEntry(expenseId, theirs.form.copy(title = "Live expense (theirs)"), theirs.basedOn),
+            )
+            edit(st, E.Title("Live expense (mine)"))
+            assertEquals(Answer.EditorSaved(false, me.raddatz.veyq.mobile.words.Notice(me.raddatz.veyq.mobile.words.Msg.ED_STALE)), saved(st))
+            assertEquals("Live expense (theirs)", shown(sw) { it.title == "Live expense (theirs)" }.title)
+            edit(st, E.Title("Live expense (mine)"))
+            assertEquals(Answer.EditorSaved(true, null), saved(st))
+            assertEquals("Live expense (mine)", reread("Live expense (mine)").title)
+            println("a stale save said, theirs shown, mine on top")
+
+            // the transfer deleted, asked first
+            val transferId = assertNotNull(idOf(reopened(), "Live transfer"))
+            val (dl, _) = open(transferId)
+            assertEquals(Answer.Done, b.ask(Call.EditorAskDelete(dl)))
+            assertEquals(Answer.EditorSaved(true, null), b.ask(Call.EditorDelete(dl), timeout = 1.minutes))
+            val after = reopened()
+            assertTrue(rows(after, "deleted").any { it.getValue("id").jsonPrimitive.content == transferId }, "the transfer is not among the deleted")
+            assertNull(idOf(after, "Live transfer"))
+            println("the transfer deleted")
+            b.ask(Call.PotClose(pot))
+        } finally {
+            val h = (b.ask(Call.HeaderOpen(at(copy), me.raddatz.veyq.mobile.AppKinds.Facts(), 2)) as Answer.HeaderOpened).header
+            println("trash $name: ${(b.ask(Call.HeaderTrash(h), timeout = 1.minutes) as? Answer.Trashed)?.notice?.msg}")
+            b.ask(Call.HeaderClose(h))
+            val t = (b.ask(Call.TrashOpen(scope)) as Answer.TrashOpened).trash
+            val tw = b.watching(Watched.Trash(t))
+            val trashed = tw.until(1.minutes) { u -> (u as Update.Trash).shown?.rows }
+            trashed.firstOrNull { it.id == copy.nodeId }?.let { row ->
                 val purged = b.ask(Call.TrashPurge(t, row.id), timeout = 1.minutes)
                 println("purge ${row.name}: $purged")
                 if (purged == Answer.Done) tw.until(1.minutes) { u -> (u as Update.Trash).shown?.takeIf { s -> s.busy == null && s.rows?.none { it.id == row.id } == true } }

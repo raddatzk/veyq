@@ -1,6 +1,7 @@
 package me.raddatz.veyq.mobile.bridge
 
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.async
 import kotlinx.coroutines.runBlocking
 import me.raddatz.veyq.mobile.blob.RangeReader
 import me.raddatz.veyq.mobile.crypto.BouncyCastlePrimitives
@@ -1078,6 +1079,23 @@ class DispatchTest {
         override suspend fun rekeyed() {}
         override fun newId() = "new"
         override suspend fun write(op: me.raddatz.veyq.mobile.expenses.PotModel.Op) = outcome.also { ops += op }
+
+        /** The editor's saves (record, form, revision based on) and deletes, as they reached the Pot; a save waits for [saveGate]. */
+        val saves = java.util.concurrent.CopyOnWriteArrayList<Triple<String, me.raddatz.veyq.mobile.expenses.EntryForm, Long?>>()
+        val deletes = java.util.concurrent.CopyOnWriteArrayList<Pair<String, Long>>()
+        val rates = java.util.concurrent.CopyOnWriteArrayList<Pair<String, String>>()
+        @Volatile var saveGate: kotlinx.coroutines.CompletableDeferred<Unit>? = null
+        override suspend fun saveEntry(
+            entryId: String, form: me.raddatz.veyq.mobile.expenses.EntryForm, basedOn: Long?,
+            pending: List<me.raddatz.veyq.mobile.expenses.PotSession.PendingReceipt>, own: Set<String>,
+        ): me.raddatz.veyq.mobile.expenses.EntryEditor.Written {
+            saveGate?.await()
+            saves += Triple(entryId, form, basedOn)
+            return me.raddatz.veyq.mobile.expenses.EntryEditor.Written(outcome)
+        }
+        override suspend fun deleteEntry(entryId: String, basedOn: Long) = outcome.also { deletes += entryId to basedOn }
+        override suspend fun rateFor(currency: String, day: String) =
+            me.raddatz.veyq.mobile.expenses.ExchangeRates.Filled("1.082954", "2026-11-11").also { rates += currency to day }
     }
 
     private fun bridgeWithPot(pot: PlayedPot, clock: java.util.concurrent.atomic.AtomicLong, opened: kotlinx.coroutines.CompletableDeferred<Unit>) = Bridge {
@@ -1160,6 +1178,118 @@ class DispatchTest {
     }
 
     @Test
+    fun anEntryIsWrittenEditedAndDeletedThroughTheEditorsCalls() = runBlocking {
+        val noon = 1_794_484_800_000L // 2026-11-12T12:00:00Z
+        val pot = PlayedPot(purgeAfter = noon + 86_400_000)
+        val opened = kotlinx.coroutines.CompletableDeferred(Unit)
+        val b = bridgeWithPot(pot, java.util.concurrent.atomic.AtomicLong(noon), opened)
+        b.signedIn()
+        val ref = ObjectRef("s", "p", "EXPENSES_POT", ApplicationId.EXPENSES, "Trip")
+        val potId = (b.ask(Call.PotOpen(ref)) as Answer.PotOpened).pot
+        b.watching(Watched.Pot(potId)).untilJson { u -> (u["state"] as? kotlinx.serialization.json.JsonObject)?.get("view")?.takeIf { it is kotlinx.serialization.json.JsonObject } }
+        fun change(editor: Long, c: me.raddatz.veyq.mobile.expenses.EditorChange) = Call.EditorChange(editor, c)
+        suspend fun shownNow(editor: Long): EditorShown = b.watching(Watched.Editor(editor)).let { w -> (w.next() as Update.Editor).shown!!.also { b.unwatch(w.id) } }
+
+        // a new entry: dated the core's today, paid by the first person, split equally; no refusal before a save is tried
+        val id = (b.ask(Call.EditorOpen(potId, null, ",")) as Answer.EditorOpened).editor
+        val w = b.watching(Watched.Editor(id))
+        val first = (w.next() as Update.Editor).shown!!
+        assertTrue(first.isNew && first.editable)
+        assertEquals("2026-11-12" to "EUR", first.date to first.base)
+        assertEquals(listOf(ANNA), first.payers.map { it.person })
+        assertEquals(listOf("Anna", "Ben"), first.people.map { it.name })
+        assertEquals(false, first.rest?.expanded)
+        assertNull(first.refusal)
+
+        // edits land in the order the host sent them, each at once: a field typed fast ends on its last text
+        val typed = (1..400).map { "Museum".repeat(1 + it / 100).take(1 + it % 60) + it }
+        for (t in typed) b.call(wire.encodeToString(Call.serializer(), change(id, me.raddatz.veyq.mobile.expenses.EditorChange.Title(t)))) { _, _ -> }
+        assertEquals(typed.last(), shownNow(id).title, "an edit landed out of the order it was sent")
+
+        // a save of a form that cannot be saved: not done, nothing written, the refusal at its field from then on
+        assertEquals(Answer.EditorSaved(false, null), b.ask(Call.EditorSave(id)))
+        assertTrue(pot.saves.isEmpty())
+        val refused = shownNow(id).refusal!!
+        assertEquals(Triple(Msg.PROBLEM_PAYERS, "payers", null), Triple(refused.words.msg, refused.at, refused.item))
+
+        // two payers, an item split by percent, the rest by shares, another currency with its rate filled
+        listOf(
+            me.raddatz.veyq.mobile.expenses.EditorChange.Paid(0, "30,50"), me.raddatz.veyq.mobile.expenses.EditorChange.AddPayer,
+            me.raddatz.veyq.mobile.expenses.EditorChange.Paid(1, "20"), me.raddatz.veyq.mobile.expenses.EditorChange.AddItem,
+            me.raddatz.veyq.mobile.expenses.EditorChange.ItemLabel(0, "Tickets"), me.raddatz.veyq.mobile.expenses.EditorChange.ItemAmount(0, "20"),
+            me.raddatz.veyq.mobile.expenses.EditorChange.Expand(0), me.raddatz.veyq.mobile.expenses.EditorChange.SplitMode(0, me.raddatz.veyq.mobile.expenses.EntryForm.Mode.PERCENT),
+            me.raddatz.veyq.mobile.expenses.EditorChange.Share(0, ANNA, "70"),
+            me.raddatz.veyq.mobile.expenses.EditorChange.Expand(null), me.raddatz.veyq.mobile.expenses.EditorChange.Share(null, ANNA, "2"),
+            me.raddatz.veyq.mobile.expenses.EditorChange.Currency("CHF"),
+        ).forEach { assertEquals(Answer.Done, b.ask(change(id, it))) }
+        val filled = w.until { u -> (u as Update.Editor).shown?.takeIf { it.rateFill?.state == me.raddatz.veyq.mobile.expenses.EntryEditor.RateState.FILLED } }
+        assertEquals("1,082954" to "2026-11-11", filled.rate to filled.rateFill?.day)
+        assertEquals(listOf("CHF" to "2026-11-12"), pot.rates.toList())
+        assertEquals(2, filled.payers.size)
+        assertEquals(false to true, filled.canAddPayer to filled.canRemovePayer)
+        val item = filled.items.single()
+        assertEquals(me.raddatz.veyq.mobile.expenses.EntryForm.Mode.PERCENT, item.split.mode)
+        assertEquals(listOf("70", ""), item.split.people.map { it.value })
+        assertEquals(Msg.ED_PERCENT_TOTAL, item.split.hint?.msg)
+        assertEquals(listOf("2", "1"), filled.rest!!.people.map { it.value })
+        assertEquals(5050L to "CHF", (filled.total as me.raddatz.veyq.mobile.words.Piece.Money).let { it.amount to it.currency })
+        // the percent typed for Ben: the form saves, its preview in the base currency
+        assertEquals(Answer.Done, b.ask(change(id, me.raddatz.veyq.mobile.expenses.EditorChange.Share(0, BEN, "30"))))
+        assertEquals(2, shownNow(id).preview.size)
+
+        // the save answers once the write ended, done: never before
+        val gate = kotlinx.coroutines.CompletableDeferred<Unit>()
+        pot.saveGate = gate
+        val saving = async { b.ask(Call.EditorSave(id)) }
+        kotlinx.coroutines.delay(300.milliseconds)
+        assertTrue(!saving.isCompleted, "the save answered before its write ended")
+        gate.complete(Unit)
+        assertEquals(Answer.EditorSaved(true, null), saving.await())
+        val (record, form, basedOn) = pot.saves.single()
+        assertEquals(Triple("new", typed.last(), null as Long?), Triple(record, form.title, basedOn))
+        assertEquals(listOf(ANNA to "30,50", BEN to "20"), form.payers.map { it.participant to it.amount })
+        assertEquals("CHF" to "1,082954", form.currency to form.rate)
+        pot.saveGate = null
+        assertEquals(Answer.Done, b.ask(Call.EditorClose(id)))
+        assertEquals(Answer.Refused(Answer.Why.NO_SUCH_EDITOR), b.ask(change(id, me.raddatz.veyq.mobile.expenses.EditorChange.Title("x"))))
+
+        // an entry edited: its kind changed to a transfer
+        val dinner = (b.ask(Call.EditorOpen(potId, DINNER, ".")) as Answer.EditorOpened).editor
+        val d = shownNow(dinner)
+        assertTrue(!d.isNew)
+        assertEquals("Dinner" to "30.00", d.title to d.payers.single().amount)
+        assertEquals(Answer.Done, b.ask(change(dinner, me.raddatz.veyq.mobile.expenses.EditorChange.Kind(me.raddatz.veyq.mobile.expenses.EntryForm.Kind.TRANSFER))))
+        val transfer = shownNow(dinner)
+        assertEquals(me.raddatz.veyq.mobile.expenses.EntryForm.Kind.TRANSFER to "30.00", transfer.kind to transfer.amount)
+        assertNull(transfer.rest)
+        // the delete: asked, cancelled (nothing written), asked and done on the revision the editor is based on
+        assertEquals(Answer.EditorSaved(false, null), b.ask(Call.EditorDelete(dinner)))
+        assertEquals(Answer.Done, b.ask(Call.EditorAskDelete(dinner)))
+        assertTrue(shownNow(dinner).asking)
+        assertEquals(Answer.Done, b.ask(Call.EditorCancelAsk(dinner)))
+        assertEquals(false, shownNow(dinner).asking)
+        assertEquals(Answer.EditorSaved(false, null), b.ask(Call.EditorDelete(dinner)))
+        assertTrue(pot.deletes.isEmpty(), "a delete not asked was written")
+        assertEquals(Answer.Done, b.ask(Call.EditorAskDelete(dinner)))
+        assertEquals(Answer.EditorSaved(true, null), b.ask(Call.EditorDelete(dinner)))
+        assertEquals(listOf(DINNER to 1L), pot.deletes.toList())
+
+        // a stale save: not done, said so
+        val again = (b.ask(Call.EditorOpen(potId, DINNER, ".")) as Answer.EditorOpened).editor
+        pot.outcome = me.raddatz.veyq.mobile.expenses.PotSession.WriteOutcome.STALE
+        assertEquals(Answer.EditorSaved(false, me.raddatz.veyq.mobile.words.Notice(Msg.ED_STALE)), b.ask(Call.EditorSave(again)))
+        pot.outcome = me.raddatz.veyq.mobile.expenses.PotSession.WriteOutcome.WRITTEN
+
+        // no such entry, no such editor; a closed Pot's editors close with it
+        assertEquals(Answer.Refused(Answer.Why.NO_SUCH_ENTRY), b.ask(Call.EditorOpen(potId, TAXI, ".")))
+        assertEquals(Update.Editor(99, null), b.watching(Watched.Editor(99)).next())
+        val other = (b.ask(Call.EditorOpen(potId, null, ".")) as Answer.EditorOpened).editor
+        assertEquals(Answer.Done, b.ask(Call.PotClose(potId)))
+        assertEquals(Answer.Refused(Answer.Why.NO_SUCH_EDITOR), b.ask(Call.EditorSave(other)))
+        b.shutdown()
+    }
+
+    @Test
     fun aCoversCutIsTheCoresPixels() = runBlocking {
         val b = bridge()
         assertEquals(Answer.CoverCut(320, 0, 320, 360), b.ask(Call.CoverCut(me.raddatz.veyq.mobile.session.NodeCover.Crop(0.5, 0.0, 0.5, 1.0), 640, 360)))
@@ -1179,10 +1309,14 @@ class DispatchTest {
         ).forEach { assertEquals(refused, b.ask(it), "$it") }
         listOf(
             Call.PotRefresh(9), Call.PotClose(9), Call.PotDownload(9, "/tmp/never.zip", "deleted person"), Call.PotArchiveName(9),
-            Call.PotRecord(9, emptyList()), Call.PotRestore(9, "e"), Call.PotHistory(9, "e"),
+            Call.PotRecord(9, emptyList()), Call.PotRestore(9, "e"), Call.PotHistory(9, "e"), Call.EditorOpen(9, null, "."),
         )
             .forEach { assertEquals(Answer.Refused(Answer.Why.NO_SUCH_POT), b.ask(it), "$it") }
         listOf(Call.ReaderRead(9, 0, 4), Call.ReaderClose(9)).forEach { assertEquals(Answer.Refused(Answer.Why.NO_SUCH_READER), b.ask(it), "$it") }
+        listOf(
+            Call.EditorChange(9, me.raddatz.veyq.mobile.expenses.EditorChange.AddItem), Call.EditorSave(9), Call.EditorAskDelete(9),
+            Call.EditorDelete(9), Call.EditorCancelAsk(9), Call.EditorClose(9),
+        ).forEach { assertEquals(Answer.Refused(Answer.Why.NO_SUCH_EDITOR), b.ask(it), "$it") }
         assertEquals(Update.Shell(null), b.watching(Watched.Shell).next())
         assertEquals(Update.Pot(9, null), b.watching(Watched.Pot(9)).next())
         b.shutdown()
@@ -1274,6 +1408,7 @@ class DispatchTest {
                 me.raddatz.veyq.mobile.expenses.PotView.Source(
                     "Trip", me.raddatz.veyq.mobile.expenses.PotMeta(base, emptyList()), me.raddatz.veyq.mobile.expenses.Ledger.build(held, base),
                     me.raddatz.veyq.mobile.expenses.LedgerCheck.of(held), null, emptySet(), canWrite = true, currencyFixed = true, held = held,
+                    ratesOffered = true,
                 ),
             )
         }

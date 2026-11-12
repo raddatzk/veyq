@@ -44,6 +44,15 @@ internal class Registry<V> {
             if (map.compareAndSet(m, emptyMap())) return m.values
         }
     }
+
+    /** Removes every value [which] picks and returns them. */
+    fun removeIf(which: (V) -> Boolean): Collection<V> {
+        while (true) {
+            val m = map.load()
+            val gone = m.filterValues(which)
+            if (gone.isEmpty() || map.compareAndSet(m, m - gone.keys)) return gone.values
+        }
+    }
 }
 
 /**

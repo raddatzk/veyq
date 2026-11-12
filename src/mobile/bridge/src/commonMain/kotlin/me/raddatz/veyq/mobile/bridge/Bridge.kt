@@ -24,7 +24,11 @@ import kotlinx.coroutines.launch
 import me.raddatz.veyq.mobile.blob.RangeReader
 import me.raddatz.veyq.mobile.blob.Sniff
 import me.raddatz.veyq.mobile.crypto.Primitives
+import me.raddatz.veyq.mobile.expenses.Currencies
+import me.raddatz.veyq.mobile.expenses.EntryEditor
+import me.raddatz.veyq.mobile.expenses.EntryForm
 import me.raddatz.veyq.mobile.expenses.PotModel
+import me.raddatz.veyq.mobile.expenses.RevisionFormat
 import me.raddatz.veyq.mobile.AppKinds
 import me.raddatz.veyq.mobile.navigation.ApplicationId
 import me.raddatz.veyq.mobile.navigation.Connection
@@ -118,6 +122,9 @@ internal class Tenant(
 /** A header the host opened, with the most buttons its bar holds. */
 internal class HeldHeader(val model: NodeHeaderModel, val maxButtons: Int)
 
+/** An entry editor the host opened on Pot [pot] ([Call.EditorOpen]), typed in with [separator]. */
+internal class HeldEditor(val pot: Long, val model: EntryEditor, val separator: Char)
+
 /**
  * A file on the device the host named by its path, as its save dialog gave it (ADR 0128 decision 3): the core opens and
  * writes it, and nothing of its content crosses the bridge. Natively core's `FileSink`; a JVM test plays one.
@@ -170,6 +177,7 @@ internal class Bridge<A : Connection, T : Any>(compose: () -> Composition<A, T>)
     private val moves = Registry<MoveSheet>()
     private val shares = Registry<ShareSheet>()
     private val reports = Registry<ReportSheet>()
+    private val editors = Registry<HeldEditor>()
 
     /** "Manage servers" while it is open, null while closed; its spaces read by [managing]'s job. */
     private val manage = MutableStateFlow<List<ManagedShown>?>(null)
@@ -183,11 +191,18 @@ internal class Bridge<A : Connection, T : Any>(compose: () -> Composition<A, T>)
      * the JSON is the bytes of an [Answer.Bytes] (never null for one, empty included) and null for every other answer.
      */
     fun call(request: String, answer: (json: String, payload: ByteArray?) -> Unit) {
+        val call = runCatching { wire.decodeFromString(Call.serializer(), request) }.getOrNull()
+        // An editor's edit is applied here, on the host's thread, in the order the host called: launched, the edits of two
+        // keystrokes could land the wrong way round, and the field would end on the first.
+        val edited = (call as? Call.EditorChange)?.let { c -> edit(c) }
         scope.launch {
             var payload: ByteArray? = null
             val a = try {
-                val call = runCatching { wire.decodeFromString(Call.serializer(), request) }.getOrNull()
-                if (call == null) Answer.Refused(Answer.Why.NOT_A_CALL) else dispatch(call) { payload = it }
+                when {
+                    call == null -> Answer.Refused(Answer.Why.NOT_A_CALL)
+                    edited != null -> edited
+                    else -> dispatch(call) { payload = it }
+                }
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
@@ -196,6 +211,9 @@ internal class Bridge<A : Connection, T : Any>(compose: () -> Composition<A, T>)
             answer(wire.encodeToString(Answer.serializer(), a), if (a is Answer.Bytes) payload ?: ByteArray(0) else null)
         }
     }
+
+    /** [Call.EditorChange] on its editor: done, or no such editor. */
+    private fun edit(c: Call.EditorChange): Answer = editors[c.editor]?.model?.change(c.change).done(Answer.Why.NO_SUCH_EDITOR)
 
     /** One line per call; a call whose answer is [Answer.Bytes] hands its bytes to [payload] first. */
     private suspend fun dispatch(call: Call, payload: (ByteArray) -> Unit): Answer {
@@ -290,7 +308,20 @@ internal class Bridge<A : Connection, T : Any>(compose: () -> Composition<A, T>)
                     view.deletedEntries.any { it.id == call.entry }, pot.restorable(call.entry), view.purgeAfter(call.entry),
                 )
             } ?: noPot
-            is Call.PotClose -> pots.remove(call.pot)?.close().done(Answer.Why.NO_SUCH_POT)
+            is Call.PotClose -> pots.remove(call.pot)?.close().also { editors.removeIf { it.pot == call.pot }.forEach { it.model.close() } }.done(Answer.Why.NO_SUCH_POT)
+            is Call.EditorOpen -> pots[call.pot]?.let { pot ->
+                val separator = call.separator.firstOrNull() ?: '.'
+                val model = pot.editor(call.entry, separator) ?: return Answer.Refused(Answer.Why.NO_SUCH_ENTRY)
+                val id = ids.incrementAndFetch()
+                editors.put(id, HeldEditor(call.pot, model, separator))
+                Answer.EditorOpened(id)
+            } ?: noPot
+            is Call.EditorChange -> edit(call)
+            is Call.EditorSave -> editors[call.editor]?.model?.save()?.let { Answer.EditorSaved(it.done, it.notice) } ?: noEditor
+            is Call.EditorAskDelete -> editors[call.editor]?.model?.askDelete().done(Answer.Why.NO_SUCH_EDITOR)
+            is Call.EditorDelete -> editors[call.editor]?.model?.let { e -> e.delete().let { Answer.EditorSaved(it, if (it) null else e.current.notice) } } ?: noEditor
+            is Call.EditorCancelAsk -> editors[call.editor]?.model?.cancelAsk().done(Answer.Why.NO_SUCH_EDITOR)
+            is Call.EditorClose -> editors.remove(call.editor)?.model?.close().done(Answer.Why.NO_SUCH_EDITOR)
             is Call.PotDownload -> pots[call.pot]?.let { pot ->
                 val written = parts.files.write(call.path) { sink -> pot.download(call.deletedName, sink) != null }
                 if (written) Answer.Done else Answer.Refused(Answer.Why.NOTHING_TO_DOWNLOAD)
@@ -434,6 +465,7 @@ internal class Bridge<A : Connection, T : Any>(compose: () -> Composition<A, T>)
     private val noMove = Answer.Refused(Answer.Why.NO_SUCH_MOVE)
     private val noShare = Answer.Refused(Answer.Why.NO_SUCH_SHARE)
     private val noReport = Answer.Refused(Answer.Why.NO_SUCH_REPORT)
+    private val noEditor = Answer.Refused(Answer.Why.NO_SUCH_EDITOR)
 
     /** A move sheet's state as a write's answer ([Answer.MoveSent]). */
     private fun sent(s: MoveSheet.State) = Answer.MoveSent(s.done, s.undo != null, s.confirming, s.problem)
@@ -492,6 +524,7 @@ internal class Bridge<A : Connection, T : Any>(compose: () -> Composition<A, T>)
     private fun closeTenant() {
         tenant.value = null
         pots.removeAll().forEach { it.close() }
+        editors.removeAll().forEach { it.model.close() }
         readers.removeAll()
         headers.removeAll()
         trashes.removeAll()
@@ -538,6 +571,8 @@ internal class Bridge<A : Connection, T : Any>(compose: () -> Composition<A, T>)
             ?: flowOf(Update.Report(w.report, null))
         // the poll runs inside this watch's own job: a host's dropped watch cancels it, and it ends with its Pot
         is Watched.PotLive -> flow { pots[w.pot]?.live() }
+        is Watched.Editor -> editors[w.editor]?.let { e -> e.model.state.map { Update.Editor(w.editor, shownEditor(e, it)) } }
+            ?: flowOf(Update.Editor(w.editor, null))
         is Watched.Pot -> {
             val pictures = tenant.value?.models?.pictures ?: flowOf(emptyMap())
             (pots[w.pot]?.state ?: flowOf(null)).combine(pictures) { s, p -> Update.Pot(w.pot, s, if (s == null) emptyList() else p.keys.sorted()) }
@@ -576,6 +611,37 @@ internal class Bridge<A : Connection, T : Any>(compose: () -> Composition<A, T>)
             headed = shell.openObject?.at ?: shell.space?.let(shell::folderAt),
             me = open.models.me,
             pictures = pictures.sorted(),
+        )
+    }
+
+    /** An entry editor as the host draws it ([EditorShown]), each field one core function's answer. */
+    private fun shownEditor(e: HeldEditor, s: EntryEditor.State): EditorShown {
+        val f = s.form
+        val view = pots[e.pot]?.current?.view
+        val ids = s.people.map { it.id }
+        fun split(split: EntryForm.FormSplit, part: Long) = EditorSplit(
+            split.mode, split.expanded, EntryForm.collapsedWords(split, s.people),
+            s.people.map { p -> EntryForm.typedIn(split, p.id).let { EditorSplitPerson(p.id, p.name, it != null, it.orEmpty()) } },
+            EntryForm.splitHint(split, part, f.currency, f.minorUnits, e.separator),
+        )
+        fun money(amount: Long) = me.raddatz.veyq.mobile.words.Piece.Money(amount, view?.currency, view?.minorUnits ?: 2)
+        val categories = RevisionFormat.DEFAULT_CATEGORIES + view?.ownCategories.orEmpty().map { it.first }
+        return EditorShown(
+            isNew = s.isNew, editable = s.editable, invalid = s.invalid,
+            kind = f.kind, title = f.title, date = f.date, category = f.category,
+            categories = view?.let { v -> categories.map { EditorChoice(it, v.categoryLabel(it)) } }.orEmpty(),
+            currency = f.currency, currencies = Currencies.known, base = view?.currency.orEmpty(), rate = f.rate, rateFill = s.rate,
+            amount = f.amount, from = f.from, to = f.to,
+            people = s.people.map { EditorPerson(it.id, it.name) },
+            payers = f.payers.map { EditorPayer(it.participant, it.amount) },
+            canRemovePayer = f.canRemovePayer, canAddPayer = f.nextPayer(ids) != null,
+            total = me.raddatz.veyq.mobile.words.Piece.Money(f.payersTotal, f.currency, f.minorUnits),
+            items = f.items.map { EditorItem(it.label, it.amount, split(it.split, f.itemAmount(it))) },
+            rest = if (f.kind != EntryForm.Kind.TRANSFER && f.showsRest) split(f.rest, f.restLeft) else null,
+            restIsWhole = f.items.isEmpty(),
+            preview = s.preview.map { EditorShare(it.name, it.given.takeIf { g -> g != 0L }?.let(::money), money(it.share)) },
+            refusal = s.refusal?.let { EditorRefusal(Notice(Notices.entryProblem(it.problem)), it.at, it.item) },
+            saving = s.saving, notice = s.notice, asking = s.asking, done = s.done,
         )
     }
 

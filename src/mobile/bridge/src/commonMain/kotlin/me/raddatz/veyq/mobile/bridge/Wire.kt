@@ -4,6 +4,9 @@ import kotlinx.serialization.KSerializer
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
+import me.raddatz.veyq.mobile.expenses.EditorChange
+import me.raddatz.veyq.mobile.expenses.EntryEditor
+import me.raddatz.veyq.mobile.expenses.EntryForm
 import me.raddatz.veyq.mobile.expenses.PotModel
 import me.raddatz.veyq.mobile.expenses.PotView
 import me.raddatz.veyq.mobile.navigation.ApplicationId
@@ -160,6 +163,39 @@ internal sealed class Call {
 
     /** Entry [entry]'s history in Pot [pot] and whether it is restored now ([Answer.EntryHistory]). */
     @Serializable @SerialName("Pot.History") data class PotHistory(val pot: Long, val entry: String) : Call()
+
+    /**
+     * The entry editor (core's `EntryEditor`, `PotModel.editor`) of live entry [entry] of Pot [pot], or of a new entry
+     * (null: dated the core's today); [separator] is the reader's decimal separator (the platform's locale data, one
+     * character), as amounts are typed. Answered with its id ([Answer.EditorOpened]) for [Watched.Editor]; refused with
+     * `NO_SUCH_ENTRY` where the core opens none (no such live entry, a Pot not read or without a base currency).
+     */
+    @Serializable @SerialName("Editor.Open") data class EditorOpen(val pot: Long, val entry: String?, val separator: String) : Call()
+
+    /**
+     * One edit of editor [editor]'s form (`EntryEditor.change`). Applied the moment the host calls, in the order it called
+     * (two keystrokes' edits never land the wrong way round); what follows arrives on [Watched.Editor].
+     */
+    @Serializable @SerialName("Editor.Change") data class EditorChange(val editor: Long, val change: me.raddatz.veyq.mobile.expenses.EditorChange) : Call()
+
+    /**
+     * Saves editor [editor]'s form (`EntryEditor.save`), answered once the write ended ([Answer.EditorSaved]): done — the
+     * host closes the editor at once, saying the notice where there is one (receipts left out) — or not, with why (a
+     * stale save shows the other writer's version now; a form that cannot be saved shows its refusal at its field).
+     */
+    @Serializable @SerialName("Editor.Save") data class EditorSave(val editor: Long) : Call()
+
+    /** Asks for editor [editor]'s entry's delete (`EntryEditor.askDelete`): nothing is written yet. */
+    @Serializable @SerialName("Editor.AskDelete") data class EditorAskDelete(val editor: Long) : Call()
+
+    /** Deletes editor [editor]'s entry once asked (`EntryEditor.delete`), answered as a save is ([Answer.EditorSaved]). */
+    @Serializable @SerialName("Editor.Delete") data class EditorDelete(val editor: Long) : Call()
+
+    /** The delete asked is not wanted (`EntryEditor.cancelAsk`). */
+    @Serializable @SerialName("Editor.CancelAsk") data class EditorCancelAsk(val editor: Long) : Call()
+
+    /** Editor [editor] is gone (`EntryEditor.close`); a rate still being asked is forgotten. */
+    @Serializable @SerialName("Editor.Close") data class EditorClose(val editor: Long) : Call()
 
     /**
      * Downloads Pot [pot] as the web's ZIP into the file at [path], which the host's save dialog gave (ADR 0128
@@ -430,9 +466,19 @@ internal sealed class Answer {
         val rows: List<HistoryShown>, val deleted: Boolean, val restorable: Boolean, val until: Long?,
     ) : Answer()
 
+    /** An entry editor opened ([Call.EditorOpen]): its id, for [Watched.Editor] and the editor's calls. */
+    @Serializable @SerialName("EditorOpened") data class EditorOpened(val editor: Long) : Answer()
+
+    /**
+     * What an editor's save or delete came to (`EntryEditor.Saved`): [done] — the host closes the editor at once — and
+     * what to say ([notice]: the receipts left out of a done save; why one that is not done did not land; none for a form
+     * whose refusal shows at its field).
+     */
+    @Serializable @SerialName("EditorSaved") data class EditorSaved(val done: Boolean, val notice: Notice?) : Answer()
+
     enum class Why {
         NOT_A_CALL, NO_TENANT_OPEN, NO_SUCH_CONNECTION, NO_SUCH_TENANT, NO_SUCH_POT, NO_SUCH_READER, NO_PICTURE, NOTHING_TO_DOWNLOAD,
-        NO_SUCH_HEADER, NO_SUCH_TRASH, NO_SUCH_ROW, NO_SUCH_MOVE, NO_SUCH_SHARE, NO_SUCH_REPORT, NO_COVER, NO_SUCH_ENTRY,
+        NO_SUCH_HEADER, NO_SUCH_TRASH, NO_SUCH_ROW, NO_SUCH_MOVE, NO_SUCH_SHARE, NO_SUCH_REPORT, NO_COVER, NO_SUCH_ENTRY, NO_SUCH_EDITOR,
 
         /** A change of trust (`TrustChange`): no offer to answer; the person cancelled the prompt; not enrolled; the
          *  password was not the account's. */
@@ -455,6 +501,9 @@ internal sealed class Watched {
      * its own — what a tick changed arrives on [Pot]'s. Its lifetime is the poll's, so a page torn down stops it.
      */
     @Serializable @SerialName("PotLive") data class PotLive(val pot: Long) : Watched()
+
+    /** An entry editor opened by [Call.EditorOpen]. */
+    @Serializable @SerialName("Editor") data class Editor(val editor: Long) : Watched()
 
     /** "Manage servers" while it is open ([Call.ManageOpen]). */
     @Serializable @SerialName("Manage") data object Manage : Watched()
@@ -511,7 +560,95 @@ internal sealed class Update {
 
     /** A report sheet; null once it was closed. */
     @Serializable @SerialName("Report") data class Report(val report: Long, val shown: ReportShown?) : Update()
+
+    /** An entry editor; null once it was closed (or an id the bridge does not hold). */
+    @Serializable @SerialName("Editor") data class Editor(val editor: Long, val shown: EditorShown?) : Update()
 }
+
+/**
+ * An entry editor as the host draws it (core's `EntryEditor.State` and its form, `EntryForm`), each field one core
+ * function's answer; every typed text is the text typed (the core keeps strings), so a host sets a field from it only
+ * when the field is not being typed into or the text is not one it sent (D5 of the Expenses CR).
+ *
+ * - [isNew] (no history, no delete), [editable] (false: a reader's, read only), [invalid] (the entry does not add up);
+ * - the form: [kind], [title] (a transfer's note), [date] (`yyyy-MM-dd`), [category] among [categories] (each with its
+ *   words, `PotView.categoryLabel`), [currency] among [currencies] (`Currencies.known`) and the Pot's [base], [rate] (shown
+ *   while the currency is not the base) with its fill ([rateFill], `EntryEditor.Rate`; null: the hint);
+ * - a transfer's [amount], [from] and [to]; an expense's or a refund's [payers] (whether one may be removed or added,
+ *   `canRemovePayer`, `nextPayer`), their [total] (`payersTotal`), the [items] and the [rest] (null while it does not show,
+ *   `showsRest`; [restIsWhole] while there are no items);
+ * - [people] offered; [preview], the shares in the base currency (`EntryEditor.State.preview`);
+ * - [refusal] once a save was tried, at its field; [saving], [notice] (the last write's), [asking] (the delete), [done].
+ */
+@Serializable
+@SerialName("EditorShown")
+internal class EditorShown(
+    val isNew: Boolean,
+    val editable: Boolean,
+    val invalid: Boolean,
+    val kind: EntryForm.Kind,
+    val title: String,
+    val date: String,
+    val category: String,
+    val categories: List<EditorChoice>,
+    val currency: String,
+    val currencies: List<String>,
+    val base: String,
+    val rate: String,
+    val rateFill: EntryEditor.Rate?,
+    val amount: String,
+    val from: String,
+    val to: String,
+    val people: List<EditorPerson>,
+    val payers: List<EditorPayer>,
+    val canRemovePayer: Boolean,
+    val canAddPayer: Boolean,
+    val total: Piece,
+    val items: List<EditorItem>,
+    val rest: EditorSplit?,
+    val restIsWhole: Boolean,
+    val preview: List<EditorShare>,
+    val refusal: EditorRefusal?,
+    val saving: Boolean,
+    val notice: Notice?,
+    val asking: Boolean,
+    val done: Boolean,
+)
+
+/** A category the editor offers: its id and its words. */
+@Serializable @SerialName("EditorChoice")
+internal class EditorChoice(val id: String, val label: Piece)
+
+/** A person the editor offers (`PotView.offered`), in join order. */
+@Serializable @SerialName("EditorPerson")
+internal class EditorPerson(val id: String, val name: String)
+
+/** One payer (a refund's receiver): who, and the amount typed. */
+@Serializable @SerialName("EditorPayer")
+internal class EditorPayer(val person: String, val amount: String)
+
+/** One item: its label and amount as typed, and its own split. */
+@Serializable @SerialName("EditorItem")
+internal class EditorItem(val label: String, val amount: String, val split: EditorSplit)
+
+/**
+ * A split (an item's, or the rest's): its [mode]; folded ([expanded] false) it is one line, [folded]
+ * (`EntryForm.collapsedWords`); each person offered with whether they are on it and the value typed for them in the mode
+ * (`EntryForm.typedIn`); what it says under its rows ([hint], `EntryForm.splitHint`).
+ */
+@Serializable @SerialName("EditorSplit")
+internal class EditorSplit(val mode: EntryForm.Mode, val expanded: Boolean, val folded: Notice, val people: List<EditorSplitPerson>, val hint: Notice?)
+
+@Serializable @SerialName("EditorSplitPerson")
+internal class EditorSplitPerson(val person: String, val name: String, val on: Boolean, val value: String)
+
+/** One person of the preview: their name, what they gave (null: nothing) and their share, in the base currency. */
+@Serializable @SerialName("EditorShare")
+internal class EditorShare(val name: String, val given: Piece?, val share: Piece)
+
+/** Why the form cannot be saved ([words]), at which field ([at]: `EntryForm.Refusal.at`; [item] an item's index). */
+@Serializable @SerialName("EditorRefusal")
+internal class EditorRefusal(val words: Notice, val at: String?, val item: Int?)
 
 /**
  * A report sheet as the host draws it (`ReportSheet`), each field one core function's answer: the node; the categories in
