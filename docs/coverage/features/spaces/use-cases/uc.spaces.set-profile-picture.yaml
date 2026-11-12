@@ -3,7 +3,8 @@ feature: spaces
 title: Set your profile picture in a space
 # Built 2026-10-13 (ADR 0084): contract, crypto, backend and web. The web suites seal and open for real (the blob a PUT carries is
 # opened under the test key at the member's address) and mock only the generated client and the pixel stage; the contract's
-# `maxLength` is read from the YAML by memberAvatar.test.ts. NOT verified in a real browser: the crop, the WebP encode and how the
+# `maxLength` is read from the YAML by memberAvatar.test.ts. The WebP encode is libwebp's own build since ADR 0127, run for real
+# in Node (webp-encoder/encodeWebp.test.ts). NOT verified in a real browser by a test: the crop and the canvas bake, and how the
 # picture draws in the header, the popover, the profile page, the members list and the user menu were never seen by eye.
 acceptanceCriteria:
   - id: picture-sealed-on-device-constant-length
@@ -18,9 +19,12 @@ acceptanceCriteria:
           - src/features/account/profile/memberAvatar.test.ts
           - src/features/account/profile/ProfilePictureDialog.test.ts
           - src/features/account/profile/useNameAndPicture.test.ts
+          - webp-encoder/encodeWebp.test.ts
+          - src/shared/image/mediaPixels.test.ts
+          - src/shared/image/mediaDeriveWorker.test.ts
     gaps:
       - surface: web
-        reason: The crop, the canvas bake and the WebP encode are the pixel stage, which the dialog test mocks; no test runs them in a real browser, so that a 256 px crop really fits the 16 KiB budget on real photos is unverified.
+        reason: The WebP is encoded by the real libwebp module in webp-encoder/encodeWebp.test.ts (a generated 256 px photo fits the budget at quality 0.9, alpha is kept, the decoded size is the input's), and the pixel-stage tests prove a WebP request reaches that encoder and never the canvas, in the Worker and on the page. What stays unrun is the crop and the canvas bake before it — the dialog test mocks them and Node has no canvas — so their pixels are seen only in a browser (lane L1's field-seal spec).
   - id: set-clear-and-revision
     text: "`PUT` overwrites and bumps `avatar_revision`, `DELETE` clears and bumps and is idempotent; the directory and profile carry only the integer `avatarRevision`, never the bytes."
     coverage:

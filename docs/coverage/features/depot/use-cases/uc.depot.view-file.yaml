@@ -63,12 +63,12 @@ acceptanceCriteria:
       - surface: web
         reason: The real library is exercised in node (an RC4 40-bit fixture with encrypted content streams - need, wrong, right, declined - and the text of an encrypted page) and once in a real browser by hand; AES-encrypted documents, the other security handlers and a phone are not exercised.
   - id: pdf-js-stays-inside-the-content-security-policy
-    text: pdf.js is a lazy chunk with a same-origin hashed worker and same-origin runtime data, opens the document from the decrypted buffer (never a URL), runs no PDF script and shows no annotation layer (its text layer is plain selectable spans), builds no code from strings and ships no WebAssembly, so the page's policy (object-src and frame-src none, worker-src self, no unsafe-eval, no wasm-unsafe-eval) is unchanged; a PDF whose images need the WASM decoders shows those images blank.
+    text: pdf.js is a lazy chunk with a same-origin hashed worker and same-origin runtime data, opens the document from the decrypted buffer (never a URL), runs no PDF script and shows no annotation layer (its text layer is plain selectable spans), builds no code from strings and ships none of its WebAssembly, so it runs inside the page's policy as it is (object-src and frame-src none, worker-src self, no unsafe-eval); its WASM decoders are not turned on, so a PDF whose images need them shows those images blank.
     coverage:
       web: { unit: [src/shared/pdf/pdfEngine.real.test.ts, src/features/depot/components/FileViewer.pdf.test.ts, src/shared/security/csp.test.ts] }
     gaps:
       - surface: web
-        reason: The lazy chunk, the worker, the absence of eval and WebAssembly and the runtime data are pinned by the build check `pnpm run verify:pdf-worker` (src/web/scripts/assert-pdf-worker-in-dist.mjs, in `pnpm run check`), which is not a test file and so no coverage ref; and no check proves that a browser starts the worker - that was observed once by hand (a local server sending the built header), not in CI.
+        reason: The lazy chunk, the worker, the absence of eval and of pdf.js's WebAssembly and the runtime data are pinned by the build check `pnpm run verify:pdf-worker` (src/web/scripts/assert-pdf-worker-in-dist.mjs, in `pnpm run check`), which is not a test file and so no coverage ref; and no check proves that a browser starts the worker - that was observed once by hand (a local server sending the built header), not in CI.
   - id: reading-starts-with-the-page-and-stops-with-it
     text: The file is read when its page opens (not for a list row), with a busy state and a Stop; unmounting or moving to another file aborts the read in flight and drops a late result; a failed read is an error with Try again, never an unhandled rejection.
     coverage:

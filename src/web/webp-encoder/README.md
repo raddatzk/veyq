@@ -45,8 +45,8 @@ never dropped (ADR 0127 Consequences).
 
 - **libwebp:** `python3 build.py --newest` names libwebp's newest stable `vX.Y.Z` tag, its commit, and whether it is
   newer than the pin; `build.py --tag <tag> --commit <sha> --write` then rebuilds from it, and the tests run against
-  the new module. A scheduled workflow does exactly this weekly and opens a pull request (ADR 0127 decision 4); it
-  never merges.
+  the new module. ADR 0127 decision 4 has a scheduled workflow do exactly this weekly and open a pull request that a
+  person merges; until that workflow lands (its write permissions wait for the owner), it is done by hand.
 - **Emscripten:** Dependabot bumps the `Dockerfile`'s digest. A new toolchain writes new bytes, so that pull request is
   red (the pin's `image` no longer matches the `Dockerfile`, and the rebuild differs) until `build.py --write` is run
   on its branch and the result committed.

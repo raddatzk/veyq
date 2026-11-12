@@ -55,7 +55,7 @@ The policy:
 
 ```
 default-src 'self'; base-uri 'self'; object-src 'none'; frame-src 'none'; frame-ancestors 'none';
-script-src 'self'; worker-src 'self'; style-src 'self' <reka-style-hashes>;
+script-src 'self' 'wasm-unsafe-eval'; worker-src 'self'; style-src 'self' <reka-style-hashes>;
 img-src 'self' data: blob: [<tile-origin>]; media-src 'self' blob:; font-src 'self';
 connect-src 'self' [<store-origin>] [<geocoder-origin>] [<breach-check-origin>] [<rates-origin>] [https:]; form-action 'self';
 require-trusted-types-for 'script'; trusted-types veyq default
@@ -68,9 +68,16 @@ The bracketed sources are appended by the backend on every response; the built p
 
 Why each non-obvious source is there:
 
-- **`script-src 'self'`, with no `unsafe-*`.** The entry is a hashed same-origin module. The app has no inline
-  script, no `eval`/`Function` and no WebAssembly (Argon2id is pure-JS `@noble`), so scripts stay strictly
-  same-origin.
+- **`script-src 'self' 'wasm-unsafe-eval'`, with no `'unsafe-eval'` and no `'unsafe-inline'`.** The entry is a hashed
+  same-origin module. The app has no inline script and no `eval`/`Function` (Argon2id is pure-JS `@noble`), so scripts
+  stay strictly same-origin. `'wasm-unsafe-eval'` lets the page compile WebAssembly, not evaluate JavaScript: the client
+  encodes a space icon and a member picture with its own build of libwebp (`src/web/webp-encoder/`, [ADR 0127](../decisions/0127-the-web-client-encodes-webp-with-its-own-build-of-libwebp.md)),
+  because Safari's canvas answers WebP with a PNG. An attacker who could hand the page a module would first need to run
+  script in it, which `'self'` and Trusted Types refuse; one who runs script already holds the unlocked keys. The source
+  is granted for the page, not for that module, so any further WebAssembly (pdf.js's decoders, inbox #836) is a decision
+  of its own — what it is, where it comes from, how it is pinned — never a consequence of this source. The encoder is
+  fetched as bytes from the origin and instantiated from them (never streamed), so it needs no `connect-src` beyond
+  `'self'`.
 - **`style-src 'self'` and hashes, no `'unsafe-inline'`** (inbox #523). The built CSS is same-origin files. Vue applies
   `:style` bindings, `v-show` and Leaflet's and pdf.js's positioning through the CSSOM (`el.style.x = …`), which
   `style-src` does not govern; what it governs is a `<style>` element and a `style="…"` attribute parsed from markup,
@@ -174,9 +181,11 @@ origin, next to the keys. Its threat note, and what keeps it inside the policy a
   so this is containment of a crash and of CPU, not a sandbox against a pdf.js defect.
 - **No code from strings:** the CSP has no `'unsafe-eval'`; the emitted pdf.js files contain no `new Function(`/`eval(`
   (`pnpm run verify:pdf-worker` fails the build otherwise), and pdf.js 6 has no eval path to switch off.
-- **No WebAssembly:** `useWasm: false`, the `.wasm` decoders are not shipped (`verify:pdf-worker` fails on a `.wasm` or a
-  `wasm/` directory), because compiling them needs `'wasm-unsafe-eval'`. Cost: JBIG2 and JPEG 2000 images (scans) and ICC
-  transforms do not render; the page shows gaps. Granting `'wasm-unsafe-eval'` is the owner's decision.
+- **No WebAssembly of pdf.js:** `useWasm: false`, and its `.wasm` decoders are not shipped (`verify:pdf-worker` fails on a
+  `wasm/` directory or on any `.wasm` but the WebP encoder's). The policy would compile them since [ADR 0127](../decisions/0127-the-web-client-encodes-webp-with-its-own-build-of-libwebp.md)
+  granted `'wasm-unsafe-eval'`; they stay off because nobody has turned them on — where their `.wasm` comes from and how
+  it is pinned is open (inbox #836). Cost: JBIG2 and JPEG 2000 images (scans) and ICC transforms do not render; the page
+  shows gaps.
 - **No network but the origin:** the document is our decrypted buffer (`{data}`, never a URL); the CMaps, standard fonts
   and ICC profile pdf.js reads on demand are same-origin copies under `assets/pdfjs-<version>/`, and `connect-src 'self'`
   already covers them. No origin was added.
@@ -280,7 +289,9 @@ every header of the admin origin.
 ## Verification
 
 - [`src/web/src/shared/security/csp.test.ts`](../../src/web/src/shared/security/csp.test.ts) pins the directives:
-  - no `unsafe` on script;
+  - `script-src` exactly `'self' 'wasm-unsafe-eval'`, in dev and production, and no `'unsafe-eval'`,
+    `'unsafe-inline'` or `'unsafe-hashes'` on it (bitten 2026-11-12: `'unsafe-eval'` added to `buildCsp()` turns it red;
+    the refusal before ADR 0127, `/script-src[^;]*unsafe-eval/`, matched `'wasm-unsafe-eval'` itself);
   - `object-src 'none'`;
   - no third-party origin baked in when providers are unset;
   - `ws:` and the style nonce in dev only;
@@ -301,13 +312,16 @@ every header of the admin origin.
   does not compile (`@ts-expect-error`, held by `pnpm run typecheck`). Bitten 2026-11-05: a template that binds a
   string to `v-safe-html` fails `vue-tsc` (`Type 'string' is not assignable to type 'SafeHtml'`).
 - [`src/web/scripts/assert-pdf-worker-in-dist.mjs`](../../src/web/scripts/assert-pdf-worker-in-dist.mjs) (`pnpm run verify:pdf-worker`,
-  in `pnpm run check`) pins what lets pdf.js run under this policy: the same-origin worker, the lazy chunk, no eval, no WASM
-  (§ *A dependency that parses untrusted bytes*). **Run in a real browser 2026-10-12** against a local server sending the
-  built header: the worker started, pages drew, a standard font loaded from the same origin, no violation fired.
+  in `pnpm run check`) pins what lets pdf.js run under this policy: the same-origin worker, the lazy chunk, no eval, no
+  WASM of pdf.js — the one `.wasm` it allows is the WebP encoder's, once, byte for byte the committed file (§ *A dependency
+  that parses untrusted bytes*; bitten 2026-11-12: pdf.js's `openjpeg.wasm` copied into `dist/assets/` turns it red).
+  **Run in a real browser 2026-10-12** against a local server sending the built header: the worker started, pages drew,
+  a standard font loaded from the same origin, no violation fired.
 - [`src/web/scripts/assert-csp-policy-in-dist.mjs`](../../src/web/scripts/assert-csp-policy-in-dist.mjs)
   (`pnpm run verify:csp`, run by `pnpm run check` and by the `Dockerfile`'s frontend stage) fails a `dist` that
   has no emitted policy or whose `index.html` carries a CSP `<meta>`, whose policy lacks the two Trusted Types
-  directives or carries a scheme or wildcard in `connect-src` (the backend's `https:` is per tenant; bitten 2026-11-06:
+  directives, whose `script-src` is not exactly `'self' 'wasm-unsafe-eval'` (bitten 2026-11-12 with `'unsafe-eval'`
+  added), or carries a scheme or wildcard in `connect-src` (the backend's `https:` is per tenant; bitten 2026-11-06:
   with the dev-only `https:` made unconditional it is red, naming `connect-src carries https:`), or whose scripts still create Vue's `vue` policy or a static vnode. Bitten 2026-11-05: without the build
   plugin that removes Vue's policy it is red (`a bundled script still creates Vue's \`vue\` policy`).
 - The backend's app shell (`src/backend/core/src/main/kotlin/me/raddatz/veyq/core/appshell/`):

@@ -621,9 +621,10 @@ here; the server is blind.
   (core's `shared/pdf/`, so any application draws a PDF through it - Depot's viewer is the first; `docs/apps/depot.md` § The viewer): `pdfEngine.ts` is the only seam and reaches pdf.js through a
   **dynamic** `import('./pdfjsRuntime')` - the one file that imports it, never imported statically (a source test and
   `pnpm run verify:pdf-worker` pin it, with the worker a same-origin hashed asset for `worker-src 'self'`, no `eval`/`new
-  Function` in the emitted files, no `.wasm`); `pdfOptions.ts` is the option set - the document is `{data}` (never a URL),
-  `useWasm: false` (the WASM decoders need `'wasm-unsafe-eval'`, which the policy does not grant: JBIG2/JPEG 2000 scan
-  images render blank - a documented gap, a policy decision to change), `enableXfa: false`, no scripting, no annotation
+  Function` in the emitted files, no `.wasm` of pdf.js - the WebP encoder's is the one allowed); `pdfOptions.ts` is the
+  option set - the document is `{data}` (never a URL), `useWasm: false` (the policy would compile the WASM decoders since
+  ADR 0127 granted `'wasm-unsafe-eval'`, but where their `.wasm` comes from and how it is pinned is undecided, inbox #836:
+  JBIG2/JPEG 2000 scan images render blank - a documented gap), `enableXfa: false`, no scripting, no annotation
   layer (a text layer yes - spans only, selectable and copyable - and a password prompt that hands the password to pdf.js
   only: never state, log, storage or network); CMaps, standard fonts and ICC profiles are same-origin copies under `assets/pdfjs-<version>/`
   (`vite.config.ts`'s `pdfjsAssetsPlugin`), `connect-src 'self'` carries them. **Bumping `pdfjs-dist` re-runs the real-library

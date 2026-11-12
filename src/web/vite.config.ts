@@ -173,7 +173,8 @@ function licenseSourcesPlugin(): Plugin {
 // be hashed single imports; this plugin copies the three directories verbatim to `assets/pdfjs-<version>/` (under
 // `/assets/`, so the backend serves them immutable - the version is in the path, a new release is a new path) and serves
 // the same path from node_modules in dev. They are same-origin, so `connect-src 'self'` carries the fetches and the policy
-// gains nothing. The WASM decoders (`wasm/`) are deliberately NOT copied: they need 'wasm-unsafe-eval' (csp.ts).
+// gains nothing. The WASM decoders (`wasm/`) are deliberately NOT copied: the policy would compile them since ADR 0127,
+// but they are not turned on (inbox #836), and `verify:pdf-worker` refuses any `.wasm` but the WebP encoder's.
 const PDFJS_DATA_DIRS = ['cmaps', 'standard_fonts', 'iccs'] as const
 function pdfjsPackage(): { root: string; version: string } {
   const pkg = createRequire(import.meta.url).resolve('pdfjs-dist/package.json')

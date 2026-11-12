@@ -1,7 +1,7 @@
 ---
 id: cr-webp-encoder-from-libwebp
 title: Encode space icons and member pictures with our own WebAssembly build of libwebp
-status: planned
+status: in-progress
 satisfies: [uc.spaces.set-profile-picture, uc.spaces.set-space-icon]
 adrs: ["0127", "0084", "0117", "0065"]
 invariants:
@@ -45,7 +45,7 @@ and not a fallback, a larger pad or an npm package: [ADR 0127](../docs/decisions
 
 ## Phases
 
-- [ ] **1 encoder — the self-contained directory.** One directory, `src/web/webp-encoder/` (not a workspace member, ADR
+- [x] **1 encoder — the self-contained directory.** One directory, `src/web/webp-encoder/` (not a workspace member, ADR
   0127 decision 5), holding:
   - the build: a Dockerfile `FROM` a digest-pinned Emscripten image, and a Python build script that fetches the pinned
     libwebp tag, checks its commit, and compiles the **encoder only** with `-sDYNAMIC_EXECUTION=0`, `-sFILESYSTEM=0`, no
@@ -110,7 +110,7 @@ and not a fallback, a larger pad or an npm package: [ADR 0127](../docs/decisions
   - The rebuild job is green on the branch, and red when one byte of the committed `.wasm` is flipped (bite).
   - The update workflow, run once by `workflow_dispatch` with the pin set back to `v1.5.0`, opens the pull request to
     `v1.6.0` — the dispatch needs the owner's go.
-- [ ] **4 docs — the policy and its readers say what is true.**
+- [x] **4 docs — the policy and its readers say what is true.**
   - **Edit in place** every claim that the client ships no WebAssembly or that the policy refuses it:
     `git grep -n -i -E "wasm|webassembly" -- docs src/web/src src/web/scripts src/web/vite.config.ts src/web/CLAUDE.md site/src/content ':!docs/decisions/0127-*'`.
     The hits that stay true are spared by name:
@@ -150,3 +150,24 @@ and not a fallback, a larger pad or an npm package: [ADR 0127](../docs/decisions
   - the Playwright WebKit download, if Safari is not passed by hand.
 
 ## Retrospective
+
+Implement session, 2026-11-12. Phases 1 and 4 done; 2 and 3 done except what waits for the owner (§ hand-back in the
+report: the update workflow's landing and dispatch, the Safari pass, lane L1).
+
+- **Execution: lane L1 was planned as runnable here and is not.** `run_stack_e2e.py` hard-codes its admin port 18081,
+  and on this Mac an ssh tunnel and a Python process of the owner's hold it, so preflight is red before anything starts
+  (measured: `lsof -nP -iTCP:18081 -sTCP:LISTEN`). The images were built for it (`veyq:candidate-webp`,
+  `veyq-admin:candidate-webp`, from `b5eb2aef2`). Root cause: the CR's done-when names L1 without naming the host state
+  it needs (§ *a live proof that names a screen names the instance state that screen needs*, one level down: the ports).
+  Next time: a CR whose done-when runs L1 says at refine whether 80/443/18081 are free on the machine that will run it.
+- **Planning: the Chromium browser pass needs a signed-in session, and the CR did not say how an agent gets one.** The
+  `?devlogin` path needs `.run/.env` in the worktree; copying it was refused by the session's classifier as credential
+  materialization, rightly without the owner's say. So the pass ran in Chromium (the pane, Chrome 152) against this
+  tree's dev server, on the real modules — `renderSpaceIcon` through the real media Worker, libwebp, the dev CSP — but
+  not through the dialogs of a signed-in account; the stored picture's display was not seen. Next time: a browser pass in
+  a worktree names its login route at refine (an owner-run `?devlogin`, or a seeded throwaway account).
+- **Planning: three places in the CR leaned on what was not yet true or not quite meant.** "Bite the size test by
+  encoding at quality 1.0 lossless" — the API the CR specifies has no lossless mode, so the bite encodes at quality 1.0
+  lossy (29,680 bytes, red); "ADR 0127 → Built: yes" while decision 4's workflow waits for the owner's go (it is written
+  `partly`); and "the decoded size" in a directory that holds no decoder is read from the bitstream's VP8/VP8X headers.
+  Next time: a done-when that names a lever checks the lever exists in the API the same CR defines.

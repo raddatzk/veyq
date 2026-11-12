@@ -2,14 +2,15 @@
 // and drawn by pdf.js in a worker, so every option here is a security choice, and the set lives in one pure module
 // (no pdf.js import) that the build-checked runtime, the unit tests and the real-library test all read.
 //
-// The page's policy (`shared/security/csp.ts`) is `script-src 'self'` (no 'unsafe-eval', no 'wasm-unsafe-eval'),
+// The page's policy (`shared/security/csp.ts`) is `script-src 'self' 'wasm-unsafe-eval'` (no 'unsafe-eval'),
 // `worker-src 'self'`, `connect-src 'self' …`, `object-src/frame-src 'none'`. Each option below keeps pdf.js inside it:
 //
 // - The bytes are `data: Uint8Array`, our decrypted buffer - never a `url`, so pdf.js opens no connection to get the
 //   document, and `disableRange/Stream/AutoFetch` stay on (they only matter for a URL, and say so).
 // - `useWasm: false` - pdf.js 6 has no eval path at all (the `isEvalSupported` option of older releases is gone), but it
-//   would use WebAssembly for the JBIG2 / JPEG 2000 decoders, ICC colour transforms and PostScript functions, and
-//   compiling WebAssembly needs `'wasm-unsafe-eval'`. We do not grant that. Off, the PostScript functions run as plain JS
+//   would use WebAssembly for the JBIG2 / JPEG 2000 decoders, ICC colour transforms and PostScript functions. The policy
+//   would compile them since ADR 0127 granted `'wasm-unsafe-eval'` for the WebP encoder, but where their `.wasm` comes
+//   from and how it is pinned is undecided (inbox #836), so they stay off. Off, the PostScript functions run as plain JS
 //   and ICC profiles fall back to their alternate colour space; a scanned page whose image is JBIG2 or JPEG 2000 has no
 //   decoder (the `wasmUrl` it would import its asm.js fallback from is deliberately unset) and shows that image blank.
 // - `enableXfa: false` - XFA forms are an XML + script format; not drawn.
