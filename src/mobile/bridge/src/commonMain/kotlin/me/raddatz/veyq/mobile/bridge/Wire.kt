@@ -372,6 +372,14 @@ internal sealed class Call {
     @Serializable @SerialName("File.Close") data class FileClose(val file: Long) : Call()
 
     /**
+     * The medium file [file] plays, opened for reading in ranges ([Answer.Reader]: its id, its size, its sniffed type; ADR 0130
+     * decision 2): a player reads it through [ReaderRead] from a thread of its own, never decrypted whole or to disk (ADR
+     * 0047). Refused where the page shows no medium. The reader closes with [ReaderClose], with its page ([FileClose]) and
+     * with its tenant.
+     */
+    @Serializable @SerialName("File.Reader") data class FileReader(val file: Long) : Call()
+
+    /**
      * Saves a copy of file [file] ("Save a copy", the file's download: the file itself) into the file at [path], which the
      * host's save dialog gave (ADR 0130 decision 3: the core opens and writes it, nothing of it crosses): answered at once
      * with the save's id ([Answer.Saving]) once it runs, for [Watched.Save] and [SaveCancel]. Refused where the file has
@@ -614,7 +622,7 @@ internal sealed class Answer {
     enum class Why {
         NOT_A_CALL, NO_TENANT_OPEN, NO_SUCH_CONNECTION, NO_SUCH_TENANT, NO_SUCH_POT, NO_SUCH_READER, NO_PICTURE, NOTHING_TO_DOWNLOAD,
         NO_SUCH_HEADER, NO_SUCH_TRASH, NO_SUCH_ROW, NO_SUCH_MOVE, NO_SUCH_SHARE, NO_SUCH_REPORT, NO_COVER, NO_SUCH_ENTRY, NO_SUCH_EDITOR,
-        NO_RECEIPT, NOT_WRITTEN, NO_SUCH_SETTINGS, NO_SUCH_CREATE, NO_SUCH_FILE, NO_BYTES, NO_SUCH_SAVE, SAVE_ENDED,
+        NO_RECEIPT, NOT_WRITTEN, NO_SUCH_SETTINGS, NO_SUCH_CREATE, NO_SUCH_FILE, NO_BYTES, NO_SUCH_SAVE, SAVE_ENDED, NO_MEDIUM,
 
         /** A change of trust (`TrustChange`): no offer to answer; the person cancelled the prompt; not enrolled; the
          *  password was not the account's. */

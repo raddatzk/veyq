@@ -123,7 +123,7 @@ class WireTest {
             Call.EditorOpen(3, null, ","), Call.EditorOpen(3, "e1", "."), Call.EditorSave(12), Call.EditorAskDelete(12), Call.EditorDelete(12), Call.EditorCancelAsk(12), Call.EditorClose(12),
             Call.EditorAddReceipts(12, listOf("/home/p/Bilder/Quittung März.jpg", "C:\\Users\\p\\scan.pdf")), Call.EditorDropReceipt(12, "r1"),
             Call.ReceiptOpen(3, "r1"), Call.ReceiptPages(25), Call.ReceiptSave(3, "r1", "/home/p/Downloads/r1.jpg"),
-            Call.FileOpen(me.raddatz.veyq.mobile.navigation.NodeAt("scope-1", "file-1", "FILE", "Plan März.pdf")), Call.FileBytes(20), Call.FilePages(1200), Call.FileClose(20),
+            Call.FileOpen(me.raddatz.veyq.mobile.navigation.NodeAt("scope-1", "file-1", "FILE", "Plan März.pdf")), Call.FileBytes(20), Call.FilePages(1200), Call.FileClose(20), Call.FileReader(20),
             Call.FileSave(20, "C:\\Users\\p\\Downloads\\Plan März.pdf"), Call.SaveCancel(21),
             // every edit the editor takes
             Call.EditorChange(12, me.raddatz.veyq.mobile.expenses.EditorChange.Kind(me.raddatz.veyq.mobile.expenses.EntryForm.Kind.REFUND)), Call.EditorChange(12, me.raddatz.veyq.mobile.expenses.EditorChange.Day("2026-11-12")),

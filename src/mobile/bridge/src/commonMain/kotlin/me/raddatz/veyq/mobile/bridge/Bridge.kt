@@ -198,6 +198,8 @@ internal class Bridge<A : Connection, T : Any>(compose: () -> Composition<A, T>)
     private val settings = Registry<HeldSettings>()
     private val creates = Registry<HeldCreate>()
     private val filePages = Registry<me.raddatz.veyq.mobile.depot.FileModel>()
+    /** Each reader a file's page opened ([Call.FileReader]), by the reader's id: the page's id, so it closes with it. */
+    private val pageReaders = Registry<Long>()
     private val saves = Registry<me.raddatz.veyq.mobile.depot.FileSave>()
 
     /** "Manage servers" while it is open, null while closed; its spaces read by [managing]'s job. */
@@ -423,7 +425,7 @@ internal class Bridge<A : Connection, T : Any>(compose: () -> Composition<A, T>)
                 payload(r.read(call.position, call.length))
                 Answer.Bytes(null)
             } ?: Answer.Refused(Answer.Why.NO_SUCH_READER)
-            is Call.ReaderClose -> readers.remove(call.reader)?.let { Answer.Done } ?: Answer.Refused(Answer.Why.NO_SUCH_READER)
+            is Call.ReaderClose -> readers.remove(call.reader)?.let { pageReaders.remove(call.reader); Answer.Done } ?: Answer.Refused(Answer.Why.NO_SUCH_READER)
             is Call.FileOpen -> tenant.value?.models?.file?.let { make ->
                 val id = ids.incrementAndFetch()
                 filePages.put(id, make(call.node))
@@ -436,7 +438,12 @@ internal class Bridge<A : Connection, T : Any>(compose: () -> Composition<A, T>)
                 Answer.Bytes(f.mediaType(shown))
             } ?: noFile
             is Call.FilePages -> Answer.ReceiptPages(me.raddatz.veyq.mobile.depot.FileView.pagesShown(call.total), me.raddatz.veyq.mobile.depot.FileView.pagesCut(call.total))
-            is Call.FileClose -> filePages.remove(call.file)?.close().done(Answer.Why.NO_SUCH_FILE)
+            is Call.FileClose -> filePages.remove(call.file)?.also { closeReadersOf(call.file) }?.close().done(Answer.Why.NO_SUCH_FILE)
+            is Call.FileReader -> filePages[call.file]?.let { f ->
+                val medium = f.current.shown as? me.raddatz.veyq.mobile.depot.FileModel.Shown.Media
+                    ?: return Answer.Refused(Answer.Why.NO_MEDIUM)
+                openReader(medium.reader, medium.mediaType).also { if (it is Answer.Reader) pageReaders.put(it.reader, call.file) }
+            } ?: noFile
             is Call.FileSave -> filePages[call.file]?.let { f ->
                 val save = f.save { produce -> parts.files.write(call.path, produce) } ?: return Answer.Refused(Answer.Why.NOTHING_TO_DOWNLOAD)
                 val id = ids.incrementAndFetch()
@@ -554,14 +561,19 @@ internal class Bridge<A : Connection, T : Any>(compose: () -> Composition<A, T>)
 
     /**
      * Holds [reader] for the host until [Call.ReaderClose] or the tenant closes, answered as [Answer.Reader] (ADR 0130
-     * decision 2): the door of every call that opens a blob for reading in ranges (Depot's file, Memories' medium;
-     * their CRs), and of the test's reader until then. Refused while no tenant is open.
+     * decision 2): the door of every call that opens a blob for reading in ranges — a Depot file's medium
+     * ([Call.FileReader]), Memories' medium (its CR) — and of the test's reader. Refused while no tenant is open.
      */
     internal fun openReader(reader: RangeReader, mediaType: String?): Answer {
         if (tenant.value == null) return noTenant
         val id = ids.incrementAndFetch()
         readers.put(id, reader)
         return Answer.Reader(id, reader.size, mediaType)
+    }
+
+    /** Closes every reader page [file] opened: a reader's lifetime is its page's (the Depot CR's D5). */
+    private fun closeReadersOf(file: Long) {
+        pageReaders.keys().forEach { reader -> if (pageReaders[reader] == file) { pageReaders.remove(reader); readers.remove(reader) } }
     }
 
     private val noTenant = Answer.Refused(Answer.Why.NO_TENANT_OPEN)
@@ -646,6 +658,7 @@ internal class Bridge<A : Connection, T : Any>(compose: () -> Composition<A, T>)
         // a save stops with its tenant: its partial file removed by the sink as its job is cancelled
         saves.removeAll().forEach { save -> scope.launch { save.cancel() } }
         readers.removeAll()
+        pageReaders.removeAll()
         headers.removeAll()
         trashes.removeAll()
         moves.removeAll()

@@ -1414,6 +1414,93 @@ class LiveBridgeTest {
     }
 
     /**
+     * A medium read in ranges through calls, over the real core (the Depot CR's Phase 4; ADR 0130 decision 2): with
+     * `VEYQ_LIVE_MEDIUM=<a video file>` (a 600 MiB WebM, made by `ffmpeg` on this machine) a folder "App depot <n>" is made at
+     * the personal space's top level and the file uploaded there by the core's own upload in a second session, read from
+     * its path at offsets (never held whole); the bridge opens it (`File.Open`: a medium), opens its reader (`File.Reader`:
+     * its size and sniffed type) and reads ranges at the start, across a frame's edge, two frames at once in the middle and
+     * at the end — each the file's own bytes at that offset —, then closes the page, its reader with it. The folder is
+     * trashed and purged however it ends.
+     */
+    @Test
+    fun aMediumIsReadInRangesThroughCalls() = runBlocking {
+        val origin = System.getenv("VEYQ_LIVE") ?: return@runBlocking
+        val medium = System.getenv("VEYQ_LIVE_MEDIUM")?.let(::File) ?: return@runBlocking
+        assertTrue(medium.isFile, "no $medium")
+        val envFile = System.getenv("VEYQ_ENV_FILE")?.let(::File) ?: File(System.getProperty("veyq.repoRoot"), ".run/.env")
+        val env = envFile.readLines()
+            .mapNotNull { l -> l.substringBefore('=', "").takeIf { it.isNotBlank() }?.let { it.trim() to l.substringAfter('=').trim().trim('"', '\'') } }
+            .toMap()
+        val store = object : DeviceStore {
+            val values = ConcurrentHashMap<String, String>()
+            override fun read(key: String) = values[key]
+            override fun write(key: String, value: String) { values[key] = value }
+            override fun remove(key: String) { values.remove(key) }
+        }
+        val account = VeyqAccount.signIn(
+            BouncyCastlePrimitives, origin, env.getValue("VEYQ_EMAIL"), env.getValue("VEYQ_PASSWORD"), env.getValue("VEYQ_SECRET_KEY"),
+            ThisDevice(store, NoDeviceKeys, "bridge live medium test, the uploader", BouncyCastlePrimitives),
+        ) { block -> HttpClient(OkHttp, block) }
+        val tenant = account.open(account.tenants.first { origin.contains(it.domain) })
+        val personalScope = tenant.spaces().first { it.kind == "PERSONAL" }.scopeId
+        val folderName = "App depot ${System.currentTimeMillis() % 100_000}"
+        val made = me.raddatz.veyq.mobile.session.FolderCreate.create(tenant, personalScope, null, folderName)
+        val folderId = assertIs<me.raddatz.veyq.mobile.session.NodeCreate.Result.Done>(made, "$made").created.nodeId
+        println("made $folderName")
+        val b = Bridge.live(BouncyCastlePrimitives, { block -> HttpClient(OkHttp, block) }, Config("bridge medium test"), hostStore(ConcurrentHashMap()), { NoDeviceKeys }, JvmFiles)
+        suspend fun fresh(): Update.Shell {
+            assertEquals(Answer.Done, b.ask(Call.ShellRefresh, timeout = 1.minutes))
+            return b.watching(Watched.Shell).next() as Update.Shell
+        }
+        val file = java.io.RandomAccessFile(medium, "r")
+        fun at(from: Long, length: Int): ByteArray {
+            val out = ByteArray(minOf(length.toLong(), file.length() - from).coerceAtLeast(0).toInt())
+            synchronized(file) { file.seek(from); file.readFully(out) }
+            return out
+        }
+        try {
+            val name = medium.name
+            val started = System.currentTimeMillis()
+            val up = me.raddatz.veyq.mobile.depot.DepotFiles.upload(
+                tenant, personalScope, folderId, name, file.length(), "video/webm", null, me.raddatz.veyq.mobile.AppKinds::tokenInput, { from, len -> at(from, len) },
+            )
+            assertEquals(me.raddatz.veyq.mobile.depot.DepotFiles.Outcome.DONE, up.outcome, name)
+            println("uploaded $name (${file.length()} B) in ${System.currentTimeMillis() - started} ms")
+
+            val gate = b.watching(Watched.Session)
+            assertEquals(Answer.Done, b.ask(Call.SessionStart))
+            gate.until { (it as Update.Session).gate as? Gate.SignIn }
+            assertEquals(Answer.Done, b.ask(Call.SessionSignIn(origin, env.getValue("VEYQ_EMAIL"), env.getValue("VEYQ_PASSWORD"), env.getValue("VEYQ_SECRET_KEY")), timeout = 2.minutes))
+            gate.until(2.minutes) { (it as Update.Session).gate as? Gate.Signed }
+            b.watching(Watched.Shell).until(1.minutes) { (it as Update.Shell).takeIf { u -> u.state?.lists?.spaces?.isNotEmpty() == true } }
+            val node = fresh().state!!.lists.nodes.first { it.parentId == folderId && it.name == name }
+            val page = (b.ask(Call.FileOpen(me.raddatz.veyq.mobile.navigation.NodeAt(node.scopeId, node.nodeId, node.kind, node.name))) as Answer.FileOpened).file
+            val shown = b.watching(Watched.File(page)).until(2.minutes) { u -> (u as Update.File).shown?.takeIf { it.view != FileShown.View.LOADING } }
+            assertEquals(FileShown.View.MEDIA to file.length(), shown.view to shown.size)
+            val reader = b.ask(Call.FileReader(page), timeout = 1.minutes) as Answer.Reader
+            assertEquals(file.length() to "video/webm", reader.size to reader.mediaType)
+            val frame = me.raddatz.veyq.mobile.crypto.V1.FRAME_PLAINTEXT.toLong()
+            val middle = (file.length() / 2 / frame) * frame + 12_345
+            for ((from, length) in listOf(0L to 65_536, frame - 100 to 200, middle to 2 * me.raddatz.veyq.mobile.crypto.V1.FRAME_PLAINTEXT, file.length() - 1000 to 65_536)) {
+                val t = System.currentTimeMillis()
+                val (answer, bytes) = b.askWithPayload(Call.ReaderRead(reader.reader, from, length), 1.minutes)
+                assertEquals(Answer.Bytes(null), answer)
+                assertEquals(sha256(at(from, length)), sha256(bytes!!), "the range at $from is not the file's")
+                println("range $from+$length: ${bytes.size} B at ${sha256(bytes)} in ${System.currentTimeMillis() - t} ms")
+            }
+            assertEquals(0, b.askWithPayload(Call.ReaderRead(reader.reader, file.length(), 4096)).second!!.size, "past the end")
+            assertEquals(Answer.Done, b.ask(Call.FileClose(page)))
+            assertEquals(Answer.Refused(Answer.Why.NO_SUCH_READER), b.ask(Call.ReaderRead(reader.reader, 0, 4)), "the reader outlived its page")
+        } finally {
+            file.close()
+            // trashed and purged through the uploader's session (the bridge's tree would not see it gone: cached)
+            println("trash $folderName (core): ${me.raddatz.veyq.mobile.session.NodeTrash.delete(tenant, personalScope, folderId)}")
+            println("purge $folderName (core): ${me.raddatz.veyq.mobile.session.NodeTrash.purge(tenant, personalScope, folderId)}")
+            b.shutdown()
+        }
+    }
+
+    /**
      * A desktop pass's folder (the Depot CR's Phase 3), not a check: with `VEYQ_LIVE_DEPOT_PASS=<name>` it makes a folder of
      * that name at the personal space's top level and fills it through the core's own upload with what the pass opens —
      * a JPEG, a text past `TEXT_CAP`, a 30-page PDF, a ZIP, an empty file and a 300 MiB file of drawn bytes —, printing each
@@ -1482,6 +1569,18 @@ class LiveBridgeTest {
             val (size, type, read) = sized
             val up = me.raddatz.veyq.mobile.depot.DepotFiles.upload(tenant, scope, folderId, name, size, type, null, me.raddatz.veyq.mobile.AppKinds::tokenInput, { from, len -> read(from, len) })
             println("uploaded $name ($size B): ${up.outcome}")
+        }
+        // with VEYQ_LIVE_DEPOT_PASS_MEDIA=<file>,<file>…: media made on this machine (ffmpeg), each read from its path at
+        // offsets, never held whole (the Depot CR's Phase 4)
+        for (path in System.getenv("VEYQ_LIVE_DEPOT_PASS_MEDIA").orEmpty().split(',').filter { it.isNotBlank() }) {
+            val medium = File(path)
+            java.io.RandomAccessFile(medium, "r").use { raf ->
+                val read = { from: Long, len: Int ->
+                    ByteArray(minOf(len.toLong(), raf.length() - from).toInt()).also { out -> synchronized(raf) { raf.seek(from); raf.readFully(out) } }
+                }
+                val up = me.raddatz.veyq.mobile.depot.DepotFiles.upload(tenant, scope, folderId, medium.name, raf.length(), "application/octet-stream", null, me.raddatz.veyq.mobile.AppKinds::tokenInput, read)
+                println("uploaded ${medium.name} (${raf.length()} B): ${up.outcome}")
+            }
         }
         println("$folderName filled; big.bin's SHA-256 $bigSha, photo.jpg's ${sha256(jpeg)}")
     }

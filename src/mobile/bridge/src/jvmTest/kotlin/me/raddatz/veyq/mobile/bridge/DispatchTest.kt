@@ -1083,6 +1083,61 @@ class DispatchTest {
     }
 
     @Test
+    fun aMediumIsReadThroughItsPagesReaderInRangesAndClosesWithItsPageAndItsTenant() = runBlocking {
+        // a WebM's EBML head, then frames of a pattern no two frames share at one offset
+        val webm = byteArrayOf(0x1a, 0x45, 0xdf.toByte(), 0xa3.toByte()) + "webm".encodeToByteArray() +
+            ByteArray(3 * V1.FRAME_PLAINTEXT + 777) { ((it * 7 + it / V1.FRAME_PLAINTEXT) % 251).toByte() }
+        val played = PlayedFiles(mapOf("a.webm" to (webm to "video/webm"), "a.png" to (png to "image/png")))
+        val b = Bridge {
+            val hidden = Hidden({}, emptySet())
+            Composition(SessionModel(Door(), hidden, RecentUses({}, emptyList())), hidden, JvmFiles) { _ ->
+                Tenant(
+                    shell = null, pot = null, me = "u1", pictures = pictures, loadPictures = {},
+                    header = { node, facts, _ -> me.raddatz.veyq.mobile.navigation.NodeHeaderModel(node, facts, Played()) },
+                    download = { _, _, _ -> emptyList() },
+                    file = { node -> me.raddatz.veyq.mobile.depot.FileModel(node, played, shares = false) },
+                )
+            }
+        }
+        b.signedIn()
+        suspend fun open(name: String): Pair<Long, FileShown> {
+            val id = (b.ask(Call.FileOpen(NodeAt("s", "n-$name", "FILE", name))) as Answer.FileOpened).file
+            val shown = b.watching(Watched.File(id)).until { u -> (u as Update.File).shown?.takeIf { it.view != FileShown.View.LOADING } }
+            return id to shown
+        }
+        val (page, shown) = open("a.webm")
+        assertEquals(FileShown.View.MEDIA to webm.size.toLong(), shown.view to shown.size)
+        val opened = b.ask(Call.FileReader(page)) as Answer.Reader
+        assertEquals(Answer.Reader(opened.reader, webm.size.toLong(), "video/webm"), opened)
+        suspend fun range(position: Long, length: Int): List<Byte> {
+            val (answer, bytes) = b.askWithPayload(Call.ReaderRead(opened.reader, position, length))
+            assertEquals(Answer.Bytes(null), answer)
+            return bytes!!.toList()
+        }
+        // the start, a range across a frame's edge, two frames at once, a short read at the end, none past it
+        assertEquals(webm.copyOfRange(0, 4096).toList(), range(0, 4096))
+        val edge = V1.FRAME_PLAINTEXT.toLong()
+        assertEquals(webm.copyOfRange((edge - 100).toInt(), (edge + 100).toInt()).toList(), range(edge - 100, 200), "a range across a frame's edge")
+        assertEquals(webm.copyOfRange(10, 10 + 2 * V1.FRAME_PLAINTEXT).toList(), range(10, 2 * V1.FRAME_PLAINTEXT))
+        assertEquals(webm.copyOfRange(webm.size - 50, webm.size).toList(), range(webm.size - 50L, 4096), "the end")
+        assertEquals(emptyList(), range(webm.size.toLong(), 4096))
+        // a page that shows no medium opens no reader
+        val (image, _) = open("a.png")
+        assertEquals(Answer.Refused(Answer.Why.NO_MEDIUM), b.ask(Call.FileReader(image)))
+        assertEquals(Answer.Refused(Answer.Why.NO_SUCH_FILE), b.ask(Call.FileReader(-5)))
+        // closed by the host, then with its page, then with its tenant
+        val second = (b.ask(Call.FileReader(page)) as Answer.Reader).reader
+        assertEquals(Answer.Done, b.ask(Call.ReaderClose(second)))
+        assertEquals(Answer.Refused(Answer.Why.NO_SUCH_READER), b.ask(Call.ReaderRead(second, 0, 4)))
+        assertEquals(Answer.Done, b.ask(Call.FileClose(page)))
+        assertEquals(Answer.Refused(Answer.Why.NO_SUCH_READER), b.ask(Call.ReaderRead(opened.reader, 0, 4)), "a reader outlived its page")
+        val (again, _) = open("a.webm")
+        val held = (b.ask(Call.FileReader(again)) as Answer.Reader).reader
+        assertEquals(Answer.Done, b.ask(Call.SessionSignOut("a.example#u1")))
+        assertEquals(Answer.Refused(Answer.Why.NO_SUCH_READER), b.ask(Call.ReaderRead(held, 0, 4)), "a reader outlived its tenant")
+    }
+
+    @Test
     fun aFileIsOpenedShownSavedWithItsProgressAndCancelledThroughCalls() = runBlocking {
         val pdf = "%PDF-1.7\n%âãÏÓ\n1 0 obj<<>>endobj\n%%EOF\n".encodeToByteArray()
         val text = ByteArray(me.raddatz.veyq.mobile.depot.FileView.TEXT_CAP + V1.FRAME_PLAINTEXT) { ('a' + it % 26).code.toByte() }

@@ -38,6 +38,8 @@ internal class Registry<V> {
 
     fun values(): Collection<V> = map.load().values
 
+    fun keys(): Set<Long> = map.load().keys
+
     fun removeAll(): Collection<V> {
         while (true) {
             val m = map.load()
