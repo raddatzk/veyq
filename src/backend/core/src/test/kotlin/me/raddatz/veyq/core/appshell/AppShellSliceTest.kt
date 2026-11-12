@@ -63,6 +63,22 @@ class AppShellSliceTest {
     }
 
     @Test
+    fun pdfJsImageDecodersAreServedAsJavaScript() {
+        // pdf.js' worker `import()`s its plain-JavaScript image decoders from `assets/pdfjs-<version>/decoders/` (ADR 0128),
+        // and a module import refuses any type that is not JavaScript, `nosniff` included - so a decoder typed as anything
+        // else leaves every scanned PDF image blank while the web build's guards stay green. A module script asks with
+        // `Accept: */*`, as here.
+        val decoder = given().header("Accept", "*/*").`when`().get("/assets/pdfjs-0.0.0-fixture/decoders/jbig2_nowasm_fallback.js")
+        decoder.then().statusCode(200).body(containsString("decoderFixture")).body(not(containsString(FIXTURE_MARKER)))
+        val type = decoder.header("Content-Type").orEmpty()
+        assertTrue(JAVASCRIPT.matches(type), "a decoder must be served as JavaScript, was '$type'")
+        assertEquals("nosniff", decoder.header("X-Content-Type-Options"))
+        // Control: the predicate tells types apart - the licence file beside the shell is text, not JavaScript.
+        val text = html("/third-party-licenses.txt").header("Content-Type").orEmpty()
+        assertTrue(!JAVASCRIPT.matches(text), "control: '$text' must not count as JavaScript")
+    }
+
+    @Test
     fun theWebBundlesLicenceNoticesAreServedAsAFileNotTheShell() {
         // The web build's `third-party-licenses.txt` (with each package's source, MPL-2.0 §3.2) reaches a recipient here,
         // at the root the image puts `src/web/dist` in. A browser opening it asks for HTML, which is what the fallback
@@ -172,6 +188,9 @@ class AppShellSliceTest {
         const val HTML = "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8"
         const val CSP = "Content-Security-Policy"
         const val FIXTURE_MARKER = "app-shell-fixture"
+
+        /** A type a browser runs as a module script: `text/javascript` (the standard's) or an older JavaScript name. */
+        val JAVASCRIPT = Regex("^(text|application)/(x-)?javascript(;.*)?$", RegexOption.IGNORE_CASE)
 
         /** The Permissions-Policy the shell and the API send, written out here rather than read from the code. */
         const val PERMISSIONS_POLICY =

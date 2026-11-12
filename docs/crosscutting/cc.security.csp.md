@@ -335,8 +335,10 @@ every header of the admin origin.
   response: the built `pdfjsRuntime` chunk, imported from `dist/` (its import of the main chunk installed the app's own
   Trusted Types policies), opened a CCITT G4, a JBIG2 and a JPEG 2000 PDF and drew each pixel for pixel; each document's
   worker imported its decoder from `assets/pdfjs-<version>/decoders/`, once; no `securitypolicyviolation`, no CSP or
-  Trusted Types message in the console; with `decoders/` removed all three drew blank. Not shown by it: the backend's
-  static handler typing the decoders (that server typed `.js` itself) and the Depot viewer around the renderer.
+  Trusted Types message in the console; with `decoders/` removed all three drew blank. That server typed `.js` itself;
+  the backend's own typing is `AppShellSliceTest.pdfJsImageDecodersAreServedAsJavaScript` (a decoder under
+  `assets/pdfjs-<version>/decoders/` is answered as `text/javascript;charset=UTF-8` with `nosniff`, measured 2026-11-12;
+  bitten by an unsatisfiable type predicate). Not shown by either: the Depot viewer around the renderer.
 - [`src/web/scripts/assert-csp-policy-in-dist.mjs`](../../src/web/scripts/assert-csp-policy-in-dist.mjs)
   (`pnpm run verify:csp`, run by `pnpm run check` and by the `Dockerfile`'s frontend stage) fails a `dist` that
   has no emitted policy or whose `index.html` carries a CSP `<meta>`, whose policy lacks the two Trusted Types
