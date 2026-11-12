@@ -1,3 +1,5 @@
+import java.net.URI
+import java.security.MessageDigest
 import org.jetbrains.kotlin.gradle.ExperimentalKotlinGradlePluginApi
 import org.jetbrains.kotlin.gradle.plugin.KotlinHierarchyTemplate
 import org.jetbrains.kotlin.gradle.plugin.mpp.apple.XCFramework
@@ -277,6 +279,39 @@ kotlin {
             implementation(libs.ktor.client.winhttp)
         }
     }
+}
+
+// ZXing's QR black-box corpus (qr/zxing-corpus.sha256: the upstream commit and each file's SHA-256), fetched into build/
+// and never committed; `QrCorpusTest` holds the core's decoder to upstream's thresholds over it (ADR 0129 decision 1).
+// A file already there at its hash is not fetched again; one whose bytes differ fails the build.
+val qrCorpusManifest = file("qr/zxing-corpus.sha256")
+val qrCorpus = layout.buildDirectory.dir("qr-corpus")
+val fetchQrCorpus = tasks.register("fetchQrCorpus") {
+    group = "veyq"
+    description = "Fetches ZXing's QR black-box images into build/qr-corpus, each held to its pinned SHA-256."
+    inputs.file(qrCorpusManifest).withPropertyName("manifest")
+    outputs.dir(qrCorpus)
+    doLast {
+        val lines = qrCorpusManifest.readLines().filter { it.isNotBlank() && !it.startsWith("#") }
+        val commit = lines.first().removePrefix("commit ").trim()
+        val out = qrCorpus.get().asFile
+        fun sha256(bytes: ByteArray) = MessageDigest.getInstance("SHA-256").digest(bytes).joinToString("") { "%02x".format(it) }
+        lines.drop(1).forEach { line ->
+            val (hash, path) = line.split(Regex("\\s+"), limit = 2)
+            val target = out.resolve(path)
+            if (target.isFile && sha256(target.readBytes()) == hash) return@forEach
+            val url = URI("https://raw.githubusercontent.com/zxing/zxing/$commit/core/src/test/resources/blackbox/$path").toURL()
+            val bytes = url.openStream().use { it.readBytes() }
+            if (sha256(bytes) != hash) throw GradleException("$path: SHA-256 ${sha256(bytes)}, pinned $hash")
+            target.parentFile.mkdirs()
+            target.writeBytes(bytes)
+        }
+    }
+}
+tasks.named<Test>("jvmTest") {
+    dependsOn(fetchQrCorpus)
+    systemProperty("veyq.qrCorpus", qrCorpus.get().asFile.absolutePath)
+    inputs.dir(qrCorpus).withPropertyName("qrCorpus")
 }
 
 // The conformance suite reads the vectors from where every client reads them: contracts/crypto/vectors/v1.json.
