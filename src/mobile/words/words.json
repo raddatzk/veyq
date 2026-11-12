@@ -1052,6 +1052,36 @@
     "en": "Record all",
     "de": "Alle eintragen"
   },
+  "balances_record_question": {
+    "en": "Record this payment?",
+    "de": "Diese Zahlung eintragen?"
+  },
+  "balances_record_hint": {
+    "en": "It is recorded as a transfer dated today.",
+    "de": "Sie wird als Überweisung mit dem heutigen Datum eingetragen."
+  },
+  "balances_record_all_question": {
+    "en": "Record all payments?",
+    "de": "Alle Zahlungen eintragen?"
+  },
+  "balances_record_all_hint": {
+    "en": {
+      "one": "One transfer is recorded, dated today.",
+      "other": "{1:int} transfers are recorded, dated today."
+    },
+    "de": {
+      "one": "Eine Überweisung wird mit dem heutigen Datum eingetragen.",
+      "other": "{1:int} Überweisungen werden mit dem heutigen Datum eingetragen."
+    }
+  },
+  "pot_refresh": {
+    "en": "Refresh",
+    "de": "Aktualisieren"
+  },
+  "history_by": {
+    "en": "{1}, {2}",
+    "de": "{1}, {2}"
+  },
   "ed_rate_loading": {
     "en": "Fetching the day’s rate…",
     "de": "Der Kurs des Tages wird geladen …"

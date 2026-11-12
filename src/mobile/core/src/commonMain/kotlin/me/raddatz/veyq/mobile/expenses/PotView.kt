@@ -20,9 +20,9 @@ import me.raddatz.veyq.mobile.words.Piece
  * the words the core says for them. It is sent, never received — it is computed from a session, which stays here.
  */
 @Serializable(with = PotView.AsShown::class)
-class PotView internal constructor(session: Source) {
-    /** What a view is computed from: a session's state, or a test's. */
-    internal class Source(
+class PotView(session: Source) {
+    /** What a view is computed from: a session's state, or a test's (the bridge's dispatch plays one). */
+    class Source(
         val name: String, val meta: PotMeta?, val ledger: Ledger.Pot?, val check: LedgerCheck,
         val members: List<me.raddatz.veyq.mobile.session.Person>?, val named: Set<String>, val canWrite: Boolean,
         val canChangeSettings: Boolean = canWrite, val currencyFixed: Boolean = false,
@@ -472,8 +472,12 @@ class PotView internal constructor(session: Source) {
         val ready: Boolean,
         val canWrite: Boolean,
         val entries: List<ShownEntry>,
+        /** The deleted entries ([deletedEntries]), each opened to its history and, while [restorable], a restore. */
+        val deleted: List<ShownEntry>,
         val balances: List<ShownBalance>,
         val settleUp: List<ShownSettle>,
+        /** Whether "Record all" is offered ([canRecordAll]). */
+        val canRecordAll: Boolean,
         val total: Long,
         val byCategory: List<ShownCategory>,
         val people: List<ShownPerson>,
@@ -485,8 +489,10 @@ class PotView internal constructor(session: Source) {
     fun shown(): Shown = Shown(
         name, subtitle, currency, minorUnits, ready, canWrite,
         entries.map { ShownEntry(it, line(it), badge(it)) },
+        deletedEntries.map { ShownEntry(it, line(it), null) },
         balances.map { ShownBalance(it, person(it.name), balance(it), balanceFacts(it)) },
         settleUp.map { ShownSettle(it, pays(it)) },
+        canRecordAll,
         total,
         byCategory.map { ShownCategory(it, categoryLabel(it.id)) },
         personEntries.map { ShownPerson(it, personFacts(it)) },

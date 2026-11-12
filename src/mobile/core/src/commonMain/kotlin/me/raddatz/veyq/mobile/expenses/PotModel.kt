@@ -6,7 +6,9 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.flow.drop
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import me.raddatz.veyq.mobile.navigation.ObjectRef
@@ -28,8 +30,14 @@ class PotModel internal constructor(
 ) {
     constructor(tenant: TenantSession, now: () -> Long) : this(tenant, now, { ref -> PotSession.open(tenant, ref.scopeId, ref.nodeId)?.let(::SessionOpened) })
 
+    /**
+     * A Pot the caller plays ([Opened]), for a test outside the core (the bridge's dispatch): no tenant, so no re-key,
+     * copy or create; [now] is its clock.
+     */
+    constructor(now: () -> Long, opener: suspend (ObjectRef) -> Opened?) : this(null, now, opener)
+
     /** What the model asks of an open Pot: its session's ([SessionOpened]), or a test's. */
-    internal interface Opened {
+    interface Opened {
         /** The session, where a real Pot is open. */
         val session: PotSession?
         fun view(): PotView
@@ -150,16 +158,26 @@ class PotModel internal constructor(
     /**
      * The open Pot's live poll (core's `LivePoll`) for as long as the caller runs it — a Pot screen while it is shown, so
      * nothing is asked in the background; skipped while a write shows saving; the view read anew when a tick moved it.
+     * Started while the Pot is still opening, it waits for the read (a desktop watches the poll as its page appears, before
+     * the open's answer); it ends when that Pot closes or another opens in this model, so a poll never reads a Pot no
+     * screen shows.
      */
     suspend fun live() {
+        val read = _state.first { it != null && (it.view != null || it.failed) } ?: return
         val o = opened ?: return
         val cadence = poll ?: return
-        cadence.run {
-            when (if (_state.value?.saving != false) null else o.poll()) {
-                null -> LivePoll.Tick.SKIP
-                true -> LivePoll.Tick.DONE.also { if (opened === o) _state.update { it?.with(view = o.view()) } }
-                false -> LivePoll.Tick.DONE
+        coroutineScope {
+            val ticking = launch {
+                cadence.run {
+                    when (if (_state.value?.saving != false) null else o.poll()) {
+                        null -> LivePoll.Tick.SKIP
+                        true -> LivePoll.Tick.DONE.also { if (opened === o) _state.update { it?.with(view = o.view()) } }
+                        false -> LivePoll.Tick.DONE
+                    }
+                }
             }
+            _state.first { it?.ref != read.ref || opened !== o }
+            ticking.cancel()
         }
     }
 
@@ -277,6 +295,14 @@ class PotModel internal constructor(
             return outcome
         }
     }
+
+    /**
+     * What the last write of the Pot's screens that did not land says ([State.message] as `Notices.potRefused`; a write
+     * refused before it was sent — nothing to record, a reader — as a plain refusal): for a platform that says it at once,
+     * from the write's answer rather than a state that may arrive after.
+     */
+    fun refusal(): me.raddatz.veyq.mobile.words.Notice =
+        me.raddatz.veyq.mobile.words.Notice(me.raddatz.veyq.mobile.words.Notices.potRefused(_state.value?.message ?: PotSession.WriteOutcome.REFUSED.name))
 
     /** Forgets the last write's refusal (a sheet closed). */
     fun clearMessage() {

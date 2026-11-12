@@ -218,4 +218,53 @@ class PotModelTest {
         assertEquals(PotModel.Op.SetActive(PotFixture.ANNA, false), pot.ops.last())
         assertNull(s.current.notice)
     }
+
+    @Test
+    fun aLivePollStartedWhileThePotOpensWaitsForItsReadThenPolls() = runTest {
+        val pot = Played()
+        val gate = CompletableDeferred<Unit>()
+        val m = PotModel(null, { currentTime }, { gate.await(); pot }, backgroundScope)
+        val opening = launch { m.open(rome) }
+        runCurrent()
+        val live = backgroundScope.launch { m.live() }
+        advanceTimeBy(5_000)
+        runCurrent()
+        assertTrue(live.isActive, "the live poll gave up on a Pot still opening")
+        assertEquals(0, pot.polls)
+        gate.complete(Unit)
+        opening.join()
+        advanceTimeBy(30_000)
+        runCurrent()
+        assertTrue(pot.polls >= 1, "the live poll did not start once the Pot was read")
+        live.cancel()
+    }
+
+    @Test
+    fun aLivePollEndsWhenItsPotCloses() = runTest {
+        val pot = Played()
+        val m = model(pot)
+        m.open(rome)
+        advanceTimeBy(10_000)
+        val live = backgroundScope.launch { m.live() }
+        runCurrent()
+        assertEquals(1, pot.polls, "a poll that comes back after a while catches up at once")
+        m.close(rome)
+        runCurrent()
+        assertTrue(live.isCompleted, "the live poll outlived its Pot")
+        advanceTimeBy(120_000)
+        runCurrent()
+        assertEquals(1, pot.polls, "a closed Pot was polled")
+    }
+
+    @Test
+    fun aWritesRefusalIsSaidAtOnceAndOneRefusedBeforeItWasSentIsARefusal() = runTest {
+        val pot = Played(PotFixture.view(owing)).apply { outcome = PotSession.WriteOutcome.STALE }
+        val m = model(pot)
+        m.open(rome)
+        assertEquals(false, m.record(m.current!!.view!!.settleUp))
+        assertEquals(me.raddatz.veyq.mobile.words.Msg.ENTRY_STALE, m.refusal().msg)
+        m.clearMessage()
+        assertEquals(false, m.record(emptyList()))
+        assertEquals(me.raddatz.veyq.mobile.words.Msg.PEOPLE_FAILED, m.refusal().msg)
+    }
 }
