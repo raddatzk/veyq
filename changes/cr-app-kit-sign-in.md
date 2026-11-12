@@ -289,12 +289,33 @@ From `src/mobile` unless named:
   `git grep -n -iE "one reader|only .web. reads|reads it, at unlock|is the only reader" -- docs site src/packages` → only
   ADR 0131's unrelated "one reader" (a picture reader).
 
-- [ ] **2 core — the token codec.** D1: `EmergencyKit.read`, the origin check, `Conformance` reading
+- [x] **2 core — the token codec.** D1: `EmergencyKit.read`, the origin check, `Conformance` reading
   `emergency_kit_token`'s cases and refused tokens on the JVM (BouncyCastle) and over libsodium.
   · Done when: `./gradlew :core:jvmTest :core:macosArm64Test` green, `python3 linux/run.py test --tests '*Conformance*'`
   green. **Bites:** (B1) the origin check made to accept anything → the refused `srv` vectors red; (B2) `v == 3`
   dropped → "version 2" red; (B3) a valid token whose `sk` has a wrong check symbol, a case of its own, red when
   `SecretKeyText.read` is bypassed. Each bite by a one-line edit in a detached worktree, reverted by snapshot.
+
+  **Status: done (2026-11-13).**
+  **Built:** core `crypto/EmergencyKit.kt`: `Kit(email, secretKey, server)` (the key's bytes, `wipe()`, a `toString`
+  without them) and `EmergencyKit.read(p, text)` — the first `veyqkit:` token, base64url read as `atob` reads it, UTF-8
+  read strictly, then `parseKit`'s checks in order (`v` 3, a non-empty string `email`, `srv` an origin where present —
+  JSON `null` refused —, `sk` through `SecretKeyText.read`); the decoded buffer zeroed. `EmergencyKit.isServer`: the
+  origin check by hand (scheme, host, port re-checked against their serialization: lower-case ASCII, no path/slash/
+  userinfo/query, no default port or leading zero, IPv4 dotted-decimal, IPv6 compressed as the standard writes it).
+  **Deviation:** a domain label is held to `a-z 0-9 - _` (the URL standard lets a few more symbols through that no
+  server name carries) and an `xn--` label is not punycode-validated — both stricter or equal on every real origin; said
+  in the function's comment. `Conformance.emergencyKitToken()`: the reader half (each case read back to its three
+  values, each refused token refused) plus one case of its own, B3's — the third case rebuilt with its key's last check
+  symbol changed (and, as its control, rebuilt unchanged and read). `commonTest` `EmergencyKitTest`: the first token in
+  any text and only the first, the JSON's shapes, 9 origins taken and 23 refused.
+  **Met:** `./gradlew :core:jvmTest :core:macosArm64Test` green (`ConformanceTest` 3/3, `EmergencyKitTest` 4/4 on both;
+  `LibsodiumConformanceTest` 2/2); `python3 linux/run.py test --tests '*Conformance*:*EmergencyKit*'` 6/6 passed.
+  **Bites** (scratchpad `bite.py`, one edit at a time, `/bin/cp -f` restore, `:core:jvmTest --tests
+  '*ConformanceTest.bouncyCastle*'`): B1 `isServer` answering true for any non-empty text → red, "refuses a server with a
+  path / trailing slash / default port / upper case / without a scheme / of another scheme" (the empty one still refused
+  by the mutant itself); B2 the `v` check removed → red, "refuses version 2"; B3 `SecretKeyText.read(p, sk) ?: ByteArray(32)`
+  → red, "refuses a Secret Key with a wrong check symbol". The file compared equal to its copy after the run.
 
 - [ ] **3 core — the PDF reader and the order (steps 1, 2, 4).** D2 with a `KitPictures` and a decoder function both
   played in the test; D3's `KitPdf` and `inflate` (`expect`/`actual`). **First measurement:** `inflate` over a known

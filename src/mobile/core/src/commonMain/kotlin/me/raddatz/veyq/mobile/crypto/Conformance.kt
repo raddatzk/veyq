@@ -39,6 +39,7 @@ class Conformance(private val p: Primitives, vectorsJson: String) {
         fieldSeal()
         grantSignature()
         secretKeyText()
+        emergencyKitToken()
         keyChain()
         identityPin()
         scopeSuccession()
@@ -505,6 +506,40 @@ class Conformance(private val p: Primitives, vectorsJson: String) {
             val text = v.obj("secret_key_text")["cases"]!!.jsonArray[0].jsonObject.str("text")
             val typo = (if (text[0] == '0') "1" else "0") + text.drop(1)
             if (SecretKeyText.read(p, typo) != null) fail("a typo read as a key")
+        }
+    }
+
+    /**
+     * `#emergency_kit_token`, its **reader half** only: each case's token read back to its email, Secret Key and server
+     * (none where the case has none), and each refused token refused. The apps write no kit; a writer added to the core
+     * adds the other half here (each case's token written from its three values).
+     */
+    private fun emergencyKitToken() {
+        val section = v.obj("emergency_kit_token")
+        for ((i, e) in section["cases"]!!.jsonArray.withIndex()) {
+            val c = e.jsonObject
+            check("emergency_kit_token[$i]") {
+                val kit = EmergencyKit.read(p, c.str("token")) ?: fail("refused")
+                eq(kit.email, c.str("email"))
+                eq(SecretKeyText.format(p, kit.secretKey), c.str("secret_key"))
+                eq(kit.server, (c["server"] as? JsonPrimitive)?.content)
+            }
+        }
+        for (e in section["refused"]!!.jsonArray) {
+            val c = e.jsonObject
+            check("emergency_kit_token refuses ${c.str("why")}") {
+                if (EmergencyKit.read(p, c.str("token")) != null) fail("read as a kit")
+            }
+        }
+        // Not a vector: the first case's token with its Secret Key's last check symbol changed — the key must be read
+        // by `SecretKeyText.read`, whose check refuses it, not merely decoded.
+        check("emergency_kit_token refuses a Secret Key with a wrong check symbol") {
+            val c = section["cases"]!!.jsonArray[2].jsonObject
+            val sk = c.str("secret_key")
+            fun token(key: String) = "veyqkit:" + kotlin.io.encoding.Base64.UrlSafe.withPadding(kotlin.io.encoding.Base64.PaddingOption.ABSENT)
+                .encode("""{"v":3,"email":"${c.str("email")}","sk":"$key"}""".encodeToByteArray())
+            if (EmergencyKit.read(p, token(sk)) == null) fail("the case rebuilt with its own key did not read")
+            if (EmergencyKit.read(p, token(sk.dropLast(1) + (if (sk.last() == 'D') 'E' else 'D'))) != null) fail("a mistyped Secret Key read as a kit")
         }
     }
 
