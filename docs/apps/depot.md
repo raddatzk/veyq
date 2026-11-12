@@ -231,16 +231,18 @@ a guest's link presign) with the chunk provider the download uses (`fileChunkPro
     a `.js` name so the backend's static handler serves a script MIME type to a module worker under `nosniff`), which is
     what `worker-src 'self'` admits. `pnpm run verify:pdf-worker` (in `pnpm run check`) fails the build unless the worker and
     the runtime chunk exist, the runtime names the worker, the runtime is reached by a dynamic `import()` and by no static
-    one, the entry chunks hold none of pdf.js, neither file contains `new Function(`/`eval(`, no `.wasm` of pdf.js shipped
-    (the one `.wasm` in the build is the WebP encoder's, [ADR 0127](../decisions/0127-the-web-client-encodes-webp-with-its-own-build-of-libwebp.md)),
-    and the runtime data below is emitted.
+    one, the entry chunks hold none of pdf.js, neither file nor either image decoder contains `new Function(`/`eval(`, no
+    `.wasm` of pdf.js shipped (the one `.wasm` in the build is the WebP encoder's, [ADR 0127](../decisions/0127-the-web-client-encodes-webp-with-its-own-build-of-libwebp.md)),
+    the runtime data below is emitted, and its `decoders/` holds exactly the two image decoders, byte for byte `pdfjs-dist`'s.
   - **What is switched off, and why** (`pdf/pdfOptions.ts`, one pure module read by the runtime and the tests):
-    `useWasm: false` — pdf.js would use WebAssembly for the JBIG2 and JPEG 2000 image decoders, ICC colour transforms and
-    PostScript functions. The policy would compile them now (`'wasm-unsafe-eval'` is granted for the WebP encoder, ADR 0127),
-    but nobody has decided where their `.wasm` files come from and how they are pinned, so they stay off (inbox #837): the
-    `.wasm` files are not shipped and no `wasmUrl` is set. **Consequence, stated:** a scanned page whose image is JBIG2 or JPEG 2000
-    (common in scanner output) shows that image blank or with gaps, and ICC-profiled colours fall back to their alternate
-    colour space. `enableXfa: false` (XFA forms are XML + script). **No scripting:** pdf.js 6 runs a PDF's JavaScript only
+    `useWasm: false` — pdf.js would use WebAssembly for its image decoders, ICC colour transforms and PostScript functions.
+    The policy would compile it now (`'wasm-unsafe-eval'` is granted for the WebP encoder, ADR 0127), but no `.wasm` of
+    pdf.js ships: whether its speed and its ICC colour are worth one is inbox #837. **Consequence, stated:** ICC-profiled
+    colours fall back to their alternate colour space. A scanned page draws all the same: `wasmUrl` points at the
+    same-origin `decoders/` below, where pdf.js finds the **plain-JavaScript builds** of its image decoders
+    ([ADR 0128](../decisions/0128-pdf-js-decodes-scanned-images-with-its-plain-javascript-decoders.md)) — CCITT G4 and
+    JBIG2 (`jbig2_nowasm_fallback.js`, PDFium's decoder) and JPEG 2000 (`openjpeg_nowasm_fallback.js`, OpenJPEG), the usual
+    formats of a scanner — and its worker imports the one a page needs, once per document. `enableXfa: false` (XFA forms are XML + script). **No scripting:** pdf.js 6 runs a PDF's JavaScript only
     for a viewer that mounts its scripting manager and loads `pdf.sandbox.mjs`; this one does neither. There is no
     `isEvalSupported` option any more in pdf.js 6 and no `new Function`/`eval` in the emitted files (checked by
     `verify:pdf-worker`). `disableRange/Stream/AutoFetch` (they concern a URL; stated), `verbosity: 0` (no document
@@ -249,7 +251,10 @@ a guest's link presign) with the chunk provider the download uses (`fileChunkPro
   - **No network but our own origin.** pdf.js fetches predefined CMaps (CJK and other non-embedded encodings), the
     standard fonts' substitutes and the CMYK ICC profile by URL from a directory; `vite.config.ts`'s `pdfjsAssetsPlugin`
     copies `cmaps/`, `standard_fonts/` and `iccs/` to `assets/pdfjs-<version>/` (versioned path, so the backend's
-    `/assets/` immutable caching is safe) and `connect-src 'self'` carries the requests. No origin is added.
+    `/assets/` immutable caching is safe) and `connect-src 'self'` carries the requests. Beside them it copies, by name,
+    the two image decoders from `pdfjs-dist`'s `wasm/` directory to `decoders/` (never the directory: it also holds the
+    `.wasm` builds and a JavaScript interpreter), whose module import `script-src 'self'` admits; their four notices are in
+    the built `third-party-licenses.txt` (`verify:license-sources`). No origin is added.
   - **The page.** `FileViewer` mounts `PdfPages`: a vertical scroll of every page as a placeholder, drawn only while near
     the viewport (an `IntersectionObserver` with a one-viewport margin; each page is drawn at the container's width times
     `devicePixelRatio`, at most 3), and its canvas is given back (resized to 0 x 0) when far away, so a long PDF holds a
@@ -291,15 +296,17 @@ a guest's link presign) with the chunk provider the download uses (`fileChunkPro
     (DE + EN).
   - **Limits and follow-ups** (inbox #412): there is no search across pages that are not drawn (browser find sees the
     drawn ones); no annotation layer (live links, form filling - both need an owner decision: a link is a navigation and
-    phishing vector, a PDF must not navigate the app); the WASM decoders stay off until they are decided (inbox #837: the policy no longer blocks them) (the asm.js fallbacks pdf.js ships next to
-    them could be served same-origin instead — not done). More than **1000 pages** is not shown (a message and the
+    phishing vector, a PDF must not navigate the app); the image decoders are the plain-JavaScript builds, so a large
+    JPEG 2000 page decodes slower than it could, and ICC colour is not drawn — the WebAssembly builds would do both (inbox
+    #837). More than **1000 pages** is not shown (a message and the
     download): the page tree is a parse cost and a placeholder per page a DOM cost. A page that fails to draw says so
     in its place and leaves the others. Everything pdf.js holds (the document, its pages, its worker) is destroyed on a new
     file, on navigation and on unmount, and a document that finishes opening after the page moved on is destroyed at once.
   - **Tested:** the viewer's wiring with the engine mocked (`FileViewer.pdf.test.ts`: states, lazy drawing with an
     `IntersectionObserver` stub, zoom, destroy on unmount/replace, guest parity); the real library through our engine in node
     (`pdfEngine.real.test.ts`: page count, page size, a broken and an over-long PDF, the password flow - need / wrong / right /
-    declined - on an RC4-encrypted fixture, and `getTextContent()` of a plain and of an ENCRYPTED page; `pdfEngine.text.test.ts`
+    declined - on an RC4-encrypted fixture, `getTextContent()` of a plain and of an ENCRYPTED page, and a CCITT G4, a JBIG2
+    and a JPEG 2000 image decoded through our options to the pixels they hold (ADR 0128); `pdfEngine.text.test.ts`
     and `pdfEngine.password.test.ts` pin our side of the text layer and the prompt against a fake pdf.js; `FileViewer.pdf.test.ts`
     also: one text layer per drawn page, torn down with it, rebuilt on zoom, spans only, the password never in the DOM, the
     state, storage, the console or the network; `FileViewer.text.test.ts`: Copy, truncated copy, no-clipboard fallback, wrap
@@ -313,9 +320,15 @@ a guest's link presign) with the chunk provider the download uses (`fileChunkPro
     200 % and on a `/Rotate 90` page, a click on a link annotation's text navigated nowhere (the hit element was a `<span>`),
     an RC4-encrypted PDF asked for its password, refused a wrong one inline, opened with the right one and its text layer read
     the encrypted page, Escape offered the download, the password was in no DOM node afterwards, no `securitypolicyviolation`;
-    the plain text's Copy fell back correctly where the pane refuses the clipboard API. **Not yet proven:** the Vue viewer on
+    the plain text's Copy fell back correctly where the pane refuses the clipboard API. **Scans proven in a real browser**
+    (2026-11-12, headless Chrome, the built pdf.js chunk loaded from `dist` under the built policy as the header,
+    [cc.security.csp § Verification](../crosscutting/cc.security.csp.md#verification)): a CCITT G4, a JBIG2 and a JPEG 2000
+    page drew pixel for pixel, each worker imported its decoder from `decoders/`, no violation; without `decoders/` all three
+    drew blank. **Not yet proven:** the Vue viewer on
     a real file page behind the app (scroll in a long document, full screen, the observer's margin), a phone, the clipboard
-    API's success path in a browser that allows it (unit-tested with a stub only), and the dev server's serving of the runtime data.
+    API's success path in a browser that allows it (unit-tested with a stub only), and the dev server's serving of the runtime data
+    to pdf.js (probed with `curl` only, 2026-11-12: the two decoders answer `text/javascript`, byte for byte the package's, and
+    nothing else of `wasm/` is served).
 - **Full screen.** A button toggles the Fullscreen API on the viewer's container (Escape leaves, which the browser
   handles); where the API is missing or refused (an iPhone's Safari has no element fullscreen) a fixed-position overlay
   stands in, left by the button or Escape.
@@ -574,8 +587,9 @@ folder and its files, and when.
 - A thumbnail or cover for a file: out of scope for the viewer (inbox #412 decided Depot makes no preview blobs); a cover
   for a file is inbox #411.
 - A PDF's live links and form fields (an annotation layer: a link is a navigation and phishing vector, so it needs the
-  owner's decision on a policy for where a click may go) and the WASM image decoders (where their `.wasm` comes from and
-  how it is pinned, inbox #837 — the policy grants `'wasm-unsafe-eval'` since ADR 0127): § The viewer, inbox #412. (Text selection/copy, the password prompt and a plain text's Copy and
+  owner's decision on a policy for where a click may go) and pdf.js' WebAssembly (whether the speed of its image decoders
+  and its ICC colour are worth a `.wasm` in the client, inbox #837 — the policy grants `'wasm-unsafe-eval'` since ADR 0127;
+  where it would come from is answered by ADR 0128): § The viewer, inbox #412. (Text selection/copy, the password prompt and a plain text's Copy and
   wrap toggle are built.)
 - An operator-configurable per-file size cap (the quota only, at first).
 - The other reversible choices made while building Depot wait for the owner's review: inbox #378. (Where the drop box

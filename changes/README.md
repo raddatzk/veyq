@@ -1274,6 +1274,15 @@ names file, line and control per finding, so one red carries every verdict separ
 predicate (the second masks the first), and a lever that must stay green — a measurement of a gap — gets a run
 whose only other levers cannot turn it red.
 
+### A browser pass that loads a BUILT chunk reads that chunk's imports first
+
+cr-pdf-scan-decoders planned its pass from the spike, whose page imported `pdfjs-dist` directly, and so told the page
+to create the `default` Trusted Types policy the app would. The built `pdfjsRuntime-<hash>.js` is not standalone: it
+imports the main chunk, which boots the app and installs the app's own policies, so the page's policy collided with
+them and took Trusted HTML down. The pass that held created nothing and let the app's policies come with the chunk.
+**A harness that loads an emitted chunk lists what the chunk imports (`grep -o 'from"./[^"]*"'`) before it decides
+what the page itself must provide**; a spike's harness is a template for the question, not for the page.
+
 ### Each layer of a defence in depth is tested with the other layers held off
 
 **Layers that overlap mask each other's tests, and the mask is the fix working.** `cr-inert-store-responses`

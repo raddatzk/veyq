@@ -53,10 +53,10 @@
 
 - **A1 — a PDF the page cannot draw:** one that cannot be read, one over 1000 pages or 64 MiB: a clear message and the
   download. A page that
-  fails to draw says so in its place and leaves the others. A scanned page whose image uses the JBIG2 or JPEG 2000
-  codec shows that image blank, because pdf.js's WebAssembly decoders for them are not turned on (the policy would
-  allow them since [ADR 0127](../../../decisions/0127-the-web-client-encodes-webp-with-its-own-build-of-libwebp.md);
-  where they come from and how they are pinned is undecided, [CSP](../../../crosscutting/cc.security.csp.md)).
+  fails to draw says so in its place and leaves the others. A scanned page draws: its CCITT G4, JBIG2 or JPEG 2000
+  image is decoded by pdf.js's plain-JavaScript decoders ([ADR 0128](../../../decisions/0128-pdf-js-decodes-scanned-images-with-its-plain-javascript-decoders.md)).
+  What stays is colour: an ICC-profiled colour falls back to its alternate colour space, because pdf.js's WebAssembly is
+  not turned on (inbox #837, [CSP](../../../crosscutting/cc.security.csp.md)).
 - **A1b — a password-protected PDF:** the page asks for the password in a labelled field (focused, Enter submits, Escape
   cancels). A wrong one says "Wrong password, try again" in place and asks again; the right one shows the pages; Cancel
   keeps the PDF closed with the download offered. The password goes to pdf.js only: it is not stored, logged, kept in the

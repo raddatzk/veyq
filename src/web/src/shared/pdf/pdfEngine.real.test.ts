@@ -3,12 +3,18 @@
 // viewer's wiring and nothing about the library. This one opens a tiny hand-built PDF with the real `pdfjs-dist` legacy build
 // and OUR options (`pdfOptions.ts`) and asserts the page count, a page's size, and the failure classes - proving the library
 // and the option set work together. node has no canvas, so nothing is drawn here; drawing is a browser's (docs/apps/depot.md).
+// What a page WOULD draw is reachable, though: a scanned image's decoded pixels, which pdf.js' worker hands on to be painted.
 import { createHash } from 'node:crypto'
-import { describe, it, expect } from 'vitest'
+import { copyFileSync, mkdirSync, mkdtempSync, rmSync } from 'node:fs'
+import { createRequire } from 'node:module'
+import { tmpdir } from 'node:os'
+import { dirname, join } from 'node:path'
+import { pathToFileURL } from 'node:url'
+import { afterAll, beforeAll, describe, it, expect } from 'vitest'
 import * as pdfjs from 'pdfjs-dist/legacy/build/pdf.mjs'
 import { openPdf, PdfOpenError } from './pdfEngine'
 import { getDocument } from './pdfjsRuntime'
-import { PDF_MAX_PAGES, pdfOpenParameters } from './pdfOptions'
+import { PDF_DECODER_FILES, PDF_MAX_PAGES, pdfOpenParameters } from './pdfOptions'
 
 const PAD = Uint8Array.from([
   0x28, 0xbf, 0x4e, 0x5e, 0x4e, 0x75, 0x8a, 0x41, 0x64, 0x00, 0x4e, 0x56, 0xff, 0xfa, 0x01, 0x08,
@@ -135,7 +141,116 @@ describe('the real pdf.js, our options', () => {
     expect('url' in o).toBe(false) // the document is our decrypted buffer, never a URL pdf.js would fetch
     expect(o.cMapUrl).toBe('/assets/pdfjs-x/cmaps/')
     expect(o.standardFontDataUrl).toBe('/assets/pdfjs-x/standard_fonts/')
-    expect('wasmUrl' in o).toBe(false)
+    expect(o.wasmUrl).toBe('/assets/pdfjs-x/decoders/') // the plain-JavaScript image decoders (ADR 0128) - no WebAssembly
+    const outside = pdfOpenParameters(new Uint8Array(1), null)
+    expect(outside.useWasm).toBe(false)
+    expect('wasmUrl' in outside).toBe(false) // no data directory, no decoders
+  })
+})
+
+/** A one-page PDF of `width` x `height` points showing one image XObject of as many pixels, whose dictionary entries
+ *  (colour space, filter, ...) are `entries` and whose encoded stream is `stream`. */
+function imagePdf(width: number, height: number, entries: string, stream: Uint8Array): Uint8Array {
+  const ascii = (text: string) => Uint8Array.from(text, (c) => c.charCodeAt(0))
+  const content = `q ${width} 0 0 ${height} 0 0 cm /Im0 Do Q`
+  const objects = [
+    ascii('<< /Type /Catalog /Pages 2 0 R >>'),
+    ascii('<< /Type /Pages /Kids [3 0 R] /Count 1 >>'),
+    ascii(`<< /Type /Page /Parent 2 0 R /MediaBox [0 0 ${width} ${height}] /Resources << /XObject << /Im0 5 0 R >> >> /Contents 4 0 R >>`),
+    ascii(`<< /Length ${content.length} >>\nstream\n${content}\nendstream`),
+    Uint8Array.from([...ascii(`<< /Type /XObject /Subtype /Image /Width ${width} /Height ${height} ${entries} /Length ${stream.length} >>\nstream\n`), ...stream, ...ascii('\nendstream')]),
+  ]
+  const parts = [ascii('%PDF-1.7\n')]
+  const offsets: number[] = []
+  let length = parts[0].length
+  objects.forEach((body, i) => {
+    offsets.push(length)
+    for (const part of [ascii(`${i + 1} 0 obj\n`), body, ascii('\nendobj\n')]) {
+      parts.push(part)
+      length += part.length
+    }
+  })
+  const xref = `xref\n0 ${objects.length + 1}\n0000000000 65535 f \n${offsets.map((o) => `${String(o).padStart(10, '0')} 00000 n \n`).join('')}`
+  parts.push(ascii(`${xref}trailer\n<< /Size ${objects.length + 1} /Root 1 0 R >>\nstartxref\n${length}\n%%EOF\n`))
+  return new Uint8Array(Buffer.concat(parts))
+}
+
+// The encoded images of a scan (ADR 0128). The bilevel bitmap is 64 x 32 pixels, black where `scanBlack` says; the colour
+// one 16 x 8, pixel (x, y) = `jpxPixel`. Made with Pillow and OpenJPEG 2.5.3 (Python, outside the repo): the bitmap saved
+// as a Group 4 TIFF and its one strip cut out (T.6 coding, 1 = black: the CCITT stream, and the MMR data of the JBIG2
+// one); the JBIG2 stream is that data as one immediate lossless generic region with MMR coding, between a page-information
+// and an end-of-page segment; the JPEG 2000 one is `opj_compress -n 2` of the colour image (lossless, a JP2 file).
+// Ghostscript draws each to exactly these pixels. What proves them here is the pixel assertion below, not this note.
+const scanBlack = (x: number, y: number) => (x + 2 * y) % 9 < 3 || (x >= 40 && y < 12)
+const jpxPixel = (x: number, y: number) => [16 * x, 32 * y, 255 - 8 * (x + y)]
+const G4 = Buffer.from(
+  'JrHo9Ho9EcC8IIIIIIIILEIIIIIIILCCCCCCCCUIIIIIIIIKggggggggjPEIIIIIIILCCCCCCCCwggggggggoQQQQQQQQRh8IIIIIIIILEIIIIIIILCCCCCCCCRuNxrCCCCCCCCCCCCCCoIIIIIIIIIIIIIKIQQQQQQQQQQQQShBBBBBBBBBBBBBQgggggggggggggoQQQQQQQQQQQQQSwgggggggggggggohBBBBBBBBBBBBBQgggggggggggggoQQQQQQQQQQQQQVBBBBBBBBBBBBBBRCCCCCCCCCCCCCUIIIIIIIIIIIIIKEEEEEEEEEEEEEFCCCCCCCCCCCCCCWEEEEEEEEEEEEEFEIIIIIIIIIIIIIKEEEEEEEEEEEEEFCCCCCCCCCCCCCCgAgAgA==',
+  'base64',
+)
+const be32 = (...values: number[]) => Buffer.from(values.flatMap((v) => [v >>> 24, (v >>> 16) & 255, (v >>> 8) & 255, v & 255]))
+/** A JBIG2 segment: its number, type, no referred-to segments, page 1, the data's length, the data. */
+const segment = (number: number, type: number, data: Uint8Array) => Buffer.concat([be32(number), Buffer.from([type, 0, 1]), be32(data.length), data])
+const JBIG2 = Buffer.concat([
+  segment(0, 48, Buffer.concat([be32(64, 32, 0, 0), Buffer.from([0, 0, 0])])), // page information: 64 x 32, no resolution, flags 0, no striping
+  segment(1, 39, Buffer.concat([be32(64, 32, 0, 0), Buffer.from([0, 1]), G4])), // immediate lossless generic region at 0,0, OR, MMR
+  segment(2, 49, new Uint8Array(0)), // end of page
+])
+const JPX = Buffer.from(
+  'AAAADGpQICANCocKAAAAFGZ0eXBqcDIgAAAAAGpwMiAAAAAtanAyaAAAABZpaGRyAAAACAAAABAAAwcHAAAAAAAPY29scgEAAAAAABAAAAEPanAyY/9P/1EALwAAAAAAEAAAAAgAAAAAAAAAAAAAABAAAAAIAAAAAAAAAAAAAwcBAQcBAQcBAf9SAAwAAAABAQEEBAAB/1wAB0BASEhQ/2QAJQABQ3JlYXRlZCBieSBPcGVuSlBFRyB2ZXJzaW9uIDIuNS4z/5AACgAAAAAAlAAB/5PPtGwSH4eeGRx52IUKpZu7j9GW3Tyx22QduFQMiAffgOATjCnsPbevNb5KfLPhMTA5neqqzABM8gAdo/9/34DIBkTX0oAnahrH/1ZSbp6dn9IxRx5ob090a8A6FA+QMDadA4SSFHLfwPkBw+oHADXx+wDUn4Au3aHB84SH1Ag2nf9/ANShD//Z',
+  'base64',
+)
+
+describe('a scanned page: pdf.js\' plain-JavaScript image decoders, found through our options (ADR 0128)', () => {
+  // The data directory the build emits, as a `file:` URL: its `decoders/` holds the two files `pdfjsAssetsPlugin` copies,
+  // from the same package. Nothing else is in it, so a decode below can only have come from them.
+  let dataDir = ''
+  beforeAll(() => {
+    dataDir = mkdtempSync(join(tmpdir(), 'veyq-pdfjs-'))
+    const wasmDir = join(dirname(createRequire(import.meta.url).resolve('pdfjs-dist/package.json')), 'wasm')
+    mkdirSync(join(dataDir, 'decoders'))
+    for (const name of PDF_DECODER_FILES) copyFileSync(join(wasmDir, name), join(dataDir, 'decoders', name))
+  })
+  afterAll(() => rmSync(dataDir, { recursive: true, force: true }))
+
+  /** The one image page 1 paints, as pdf.js' worker decoded it: `{ width, height, kind, data }`, or null when it left it out. */
+  async function decodedImage(bytes: Uint8Array) {
+    const task = pdfjs.getDocument(pdfOpenParameters(bytes, pathToFileURL(dataDir).href + '/'))
+    try {
+      const page = await (await task.promise).getPage(1)
+      const ops = await page.getOperatorList()
+      const paint = ops.fnArray.indexOf(pdfjs.OPS.paintImageXObject)
+      if (paint < 0) return null // the image was left out: no decoder
+      const id = ops.argsArray[paint][0] as string
+      return await new Promise<{ width: number; height: number; kind: number; data: Uint8Array } | null>((resolve) => page.objs.get(id, resolve))
+    } finally {
+      await task.destroy()
+    }
+  }
+  /** One bit per pixel, rows padded to whole bytes, 1 = white (DeviceGray): the bitmap as pdf.js hands a 1-bit image on. */
+  const scanBits = () =>
+    Uint8Array.from({ length: 32 * 8 }, (_, i) => {
+      const [y, byte] = [Math.floor(i / 8), i % 8]
+      let bits = 0
+      for (let b = 0; b < 8; b++) bits = (bits << 1) | (scanBlack(byte * 8 + b, y) ? 0 : 1)
+      return bits
+    })
+
+  it('draws a CCITT Group 4 image (a fax or office scanner\'s usual format)', async () => {
+    const image = await decodedImage(imagePdf(64, 32, '/ColorSpace /DeviceGray /BitsPerComponent 1 /Filter /CCITTFaxDecode /DecodeParms << /K -1 /Columns 64 /Rows 32 >>', G4))
+    expect(image).toMatchObject({ width: 64, height: 32, kind: pdfjs.ImageKind.GRAYSCALE_1BPP })
+    expect(Array.from(image!.data)).toEqual(Array.from(scanBits()))
+  })
+
+  it('draws a JBIG2 image', async () => {
+    const image = await decodedImage(imagePdf(64, 32, '/ColorSpace /DeviceGray /BitsPerComponent 1 /Filter /JBIG2Decode', JBIG2))
+    expect(image).toMatchObject({ width: 64, height: 32, kind: pdfjs.ImageKind.GRAYSCALE_1BPP })
+    expect(Array.from(image!.data)).toEqual(Array.from(scanBits()))
+  })
+
+  it('draws a JPEG 2000 image', async () => {
+    const image = await decodedImage(imagePdf(16, 8, '/ColorSpace /DeviceRGB /BitsPerComponent 8 /Filter /JPXDecode', JPX))
+    expect(image).toMatchObject({ width: 16, height: 8, kind: pdfjs.ImageKind.RGB_24BPP })
+    expect(Array.from(image!.data)).toEqual(Array.from({ length: 16 * 8 }, (_, i) => jpxPixel(i % 16, Math.floor(i / 16))).flat())
   })
 })
 

@@ -14,7 +14,7 @@ import { pdfDataBase, pdfOpenParameters } from './pdfOptions'
 // In a browser the worker is that asset; in node (the real-library test) pdf.js runs its "fake worker" from its own file.
 if (typeof Worker !== 'undefined') pdfjs.GlobalWorkerOptions.workerSrc = workerUrl
 
-/** The directory of the same-origin CMaps, standard fonts and ICC profiles the build emitted; none outside a browser page. */
+/** The directory of the same-origin CMaps, standard fonts, ICC profiles and image decoders the build emitted; none outside a browser page. */
 const dataBase = typeof document === 'undefined' ? null : pdfDataBase(import.meta.env.BASE_URL, __PDFJS_VERSION__)
 
 export const getDocument = (data: Uint8Array) => pdfjs.getDocument(pdfOpenParameters(data, dataBase))

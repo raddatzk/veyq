@@ -10,7 +10,15 @@
 // One heading is not an npm package: libwebp, which the client's WebP encoder is built from (ADR 0127). Its Source is the
 // pinned tag on libwebp's repository (`webp-encoder/libwebp.pin`), and its text carries the build's COPYING and PATENTS;
 // exactly that form is accepted for it, and it must be there. Bite: drop the `libwebpNotice()` line from the plugin - RED.
-import { readFileSync } from 'node:fs'
+//
+// Four headings are files of an npm package rather than the package: the notices of pdf.js' image decoders, which the build
+// copies from `pdfjs-dist/wasm/` into `assets/pdfjs-<version>/decoders/` (ADR 0128). Whenever that directory shipped, each
+// of `wasm/LICENSE_JBIG2`, `LICENSE_PDFJS_JBIG2`, `LICENSE_OPENJPEG` and `LICENSE_PDFJS_OPENJPEG` must be there once, as
+// `## pdfjs-dist - <the installed version> - wasm/<file>` with the package at that version as its Source and the file's
+// text verbatim. Bite: drop one of the four from the built licence file - RED.
+import { existsSync, readFileSync } from 'node:fs'
+import { createRequire } from 'node:module'
+import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 const DIST = fileURLToPath(new URL('../dist/', import.meta.url))
@@ -48,6 +56,20 @@ else {
   const entry = text.slice(libwebp[0].index, all.find((m) => m.index > libwebp[0].index)?.index ?? text.length)
   for (const name of ['COPYING', 'PATENTS']) {
     if (!entry.includes(readFileSync(ENCODER + name, 'utf8').trim())) failures.push(`libwebp's entry does not carry its ${name}`)
+  }
+}
+const PDFJS = dirname(createRequire(import.meta.url).resolve('pdfjs-dist/package.json'))
+const PDFJS_VERSION = JSON.parse(readFileSync(join(PDFJS, 'package.json'), 'utf8')).version
+if (existsSync(join(DIST, 'assets', `pdfjs-${PDFJS_VERSION}`, 'decoders'))) {
+  for (const file of ['LICENSE_JBIG2', 'LICENSE_PDFJS_JBIG2', 'LICENSE_OPENJPEG', 'LICENSE_PDFJS_OPENJPEG']) {
+    const heading = `## pdfjs-dist - ${PDFJS_VERSION} - wasm/${file}`
+    const found = all.filter((m) => m[0] === heading)
+    if (found.length !== 1) {
+      failures.push(`pdf.js' image decoders shipped, and "${heading}" is listed ${found.length} times, not once`)
+      continue
+    }
+    const entry = text.slice(found[0].index, all.find((m) => m.index > found[0].index)?.index ?? text.length)
+    if (!entry.includes(readFileSync(join(PDFJS, 'wasm', file), 'utf8').trim())) failures.push(`"${heading}" does not carry the notice's text`)
   }
 }
 if (!/^## exifreader - \S+ \(MPL-2\.0\)\n\nSource: \S+\nRepository: https:\/\/github\.com\/mattiasw\/ExifReader$/m.test(text)) {
