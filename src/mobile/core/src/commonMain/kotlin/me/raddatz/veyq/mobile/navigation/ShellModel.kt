@@ -507,7 +507,7 @@ class ShellModel(
          * A node of [kind]'s download into [sink]: its [own] content where the kind downloads itself
          * ([AppKinds.downloadsItself]: a file, nothing left out) — null where it did not finish —, else the [zip] of it.
          */
-        internal suspend fun downloadAs(
+        suspend fun downloadAs(
             kind: String, own: suspend ((ByteArray) -> Unit) -> Boolean, zip: suspend ((ByteArray) -> Unit) -> List<NodeExport.Skipped>?,
             sink: (ByteArray) -> Unit,
         ): List<NodeExport.Skipped>? =

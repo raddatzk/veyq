@@ -1,5 +1,6 @@
 package me.raddatz.veyq.mobile.depot
 
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
@@ -53,7 +54,10 @@ class FileModelTest {
         override fun inIdentityFolder(node: NodeAt) = identity
         override suspend fun read(file: DepotFiles.File, first: Int, until: Int, sink: suspend (ByteArray) -> Unit) {
             reads += first to until
-            for (i in first until minOf(until, played.frames.size)) sink(played.frames[i])
+            for (i in first until minOf(until, played.frames.size)) {
+                sink(played.frames[i])
+                kotlinx.coroutines.yield() // a frame fetched: a watcher sees each step
+            }
         }
         override fun reader(file: DepotFiles.File) = RangeReader(file.size ?: 0, file.chunkCount) { first, until, sink -> read(file, first, until, sink) }
         override suspend fun uploader(file: DepotFiles.File): Uploaders.Uploader {
@@ -64,7 +68,7 @@ class FileModelTest {
     }
 
     private fun TestScope.open(door: Door, at: NodeAt = node, shares: Boolean = true): FileModel {
-        val m = FileModel(at, door, shares, scope = backgroundScope)
+        val m = FileModel(at, door, shares, scope = backgroundScope, saves = backgroundScope)
         runCurrent()
         return m
     }
@@ -210,5 +214,115 @@ class FileModelTest {
         assertContentEquals(content, file)
         assertContentEquals(zipBytes, download("FOLDER").second)
         assertNull(ShellModel.downloadAs("FILE", own = { false }, zip = { emptyList() }) {}, "a file that did not finish is no download")
+    }
+
+    /** A place a copy is written, as core's `FileSink` keeps it: whole only when its producer answered true, else gone. */
+    private class Kept {
+        var bytes: ByteArray? = null
+        var opened = 0
+        val into: suspend (suspend (sink: (ByteArray) -> Unit) -> Boolean) -> Boolean = { produce ->
+            opened++
+            val out = mutableListOf<Byte>()
+            var keep = false
+            try {
+                keep = produce { out += it.toList() }
+                keep
+            } finally {
+                bytes = if (keep) out.toByteArray() else null
+            }
+        }
+    }
+
+    @Test
+    fun aCopyIsSavedFrameByFrameWithItsProgressAndSaysSo() = runTest {
+        val content = ByteArray(3 * V1.FRAME_PLAINTEXT + 17) { (it % 253).toByte() }
+        val door = Door(Played(content, "b1", type = "application/zip", uploaded = "a.zip"))
+        val m = open(door, NodeAt("s", "f", "FILE", "a.zip"))
+        val kept = Kept()
+        val seen = mutableListOf<FileSave.State>()
+        val save = m.save(kept.into)!!
+        val watch = backgroundScope.launch { save.state.collect { seen += it } }
+        runCurrent()
+        assertEquals(FileSave.End.SAVED, save.current.end)
+        assertContentEquals(content, kept.bytes, "the copy is not the file's content")
+        assertEquals(Notice(Msg.DOWNLOAD_DONE, "a.zip"), save.current.notice)
+        assertEquals(1.0, save.current.fraction)
+        // the file's frames read in one pass (never whole in memory), each step said as it went
+        assertEquals(0 to Int.MAX_VALUE, door.reads.last())
+        assertEquals(content.size.toLong(), save.total)
+        assertTrue(seen.any { it.end == null && it.written == V1.FRAME_PLAINTEXT.toLong() }, "${seen.map { it.written }}")
+        assertEquals(
+            Notice(Msg.DOWNLOAD_SAVING, "a.zip", me.raddatz.veyq.mobile.words.Bytes(V1.FRAME_PLAINTEXT.toLong()), me.raddatz.veyq.mobile.words.Bytes(content.size.toLong())),
+            seen.first { it.written == V1.FRAME_PLAINTEXT.toLong() }.notice,
+        )
+        watch.cancel()
+        // nothing to save where the file has no content
+        assertNull(open(Door(Played(ByteArray(0), null))).save(kept.into))
+    }
+
+    @Test
+    fun aCancelledCopyLeavesNothingAndAFailedOneSaysSo() = runTest {
+        val content = ByteArray(4 * V1.FRAME_PLAINTEXT) { 7 }
+        val gate = kotlinx.coroutines.CompletableDeferred<Unit>()
+        val door = object : FileModel.Door by Door(Played(content, "b1", type = "application/zip")) {
+            override suspend fun read(file: DepotFiles.File, first: Int, until: Int, sink: suspend (ByteArray) -> Unit) {
+                val frames = content.toList().chunked(V1.FRAME_PLAINTEXT).map { it.toByteArray() }
+                for (i in first until minOf(until, frames.size)) {
+                    sink(frames[i])
+                    if (i == 1) gate.await() // the save stands midway until the test lets it go on
+                }
+            }
+        }
+        val m = FileModel(NodeAt("s", "f", "FILE", "a.zip"), door, shares = false, scope = backgroundScope, saves = backgroundScope)
+        runCurrent()
+        val kept = Kept()
+        val save = m.save(kept.into)!!
+        runCurrent()
+        assertNull(save.current.end, "it ended before it was let go on")
+        assertEquals(2L * V1.FRAME_PLAINTEXT, save.current.written)
+        assertTrue(save.cancel())
+        assertEquals(FileSave.End.CANCELLED, save.current.end)
+        assertEquals(Notice(Msg.DOWNLOAD_CANCELLED, "a.zip"), save.current.notice)
+        assertNull(kept.bytes, "a cancelled copy left something at its path")
+        assertEquals(false, save.cancel(), "a save that ended is not cancelled again")
+        // a place that does not open: failed, said
+        val failed = m.save { _ -> throw IllegalStateException("cannot write") }!!
+        runCurrent()
+        assertEquals(FileSave.End.FAILED, failed.current.end)
+        assertEquals(Notice(Msg.DOWNLOAD_FAILED, "a.zip"), failed.current.notice)
+    }
+
+    @Test
+    fun theBytesAHostShowsAreTheContentsAndTheRevisionTurnsWithIt() = runTest {
+        val door = Door(Played(png, "b1", type = "image/png"))
+        val m = open(door, NodeAt("s", "f", "FILE", "a.png"))
+        assertContentEquals(png, m.bytes())
+        assertEquals("image/png", m.mediaType())
+        val first = m.current.revision
+        m.reload()
+        runCurrent()
+        assertEquals(first, m.current.revision, "the same content turned the revision")
+        door.replace(Played(pdf, "b2", type = "application/pdf"))
+        m.reload()
+        runCurrent()
+        assertTrue(m.current.revision > first, "a replaced blob did not turn the revision")
+        assertContentEquals(pdf, m.bytes())
+        assertEquals("application/pdf", m.mediaType())
+        assertNull(open(Door(Played("hi\n".encodeToByteArray(), "b3", type = "text/plain"))).bytes(), "a text's bytes are its state's")
+    }
+
+    @Test
+    fun whatThePageSaysWhereItShowsNoContent() = runTest {
+        assertEquals(Msg.FILE_OPENING, FileModel.words(FileModel.Shown.Loading))
+        assertEquals(Msg.FILE_OPEN_FAILED, FileModel.words(FileModel.Shown.Failed))
+        assertEquals(Msg.DEPOT_NOT_UPLOADED, FileModel.words(FileModel.Shown.NotUploaded))
+        assertEquals(Msg.FILE_EMPTY, FileModel.words(FileModel.Shown.Message(FileView.Kind.EMPTY)))
+        // a medium, for a platform that plays none: not shown here, Save a copy offered
+        val medium = open(Door(Played(mp4, "b1", type = "video/mp4")), NodeAt("s", "f", "FILE", "clip.mp4")).current.shown
+        assertEquals(Msg.FILE_UNSUPPORTED, FileModel.words(medium))
+        assertNull(FileModel.words(FileModel.Shown.Pdf(pdf)), "content shows: nothing said")
+        // a cut text says so above it, a whole one says nothing
+        assertEquals(Notice(Msg.FILE_TEXT_TRUNCATED), FileModel.cut(FileModel.Shown.Text("x", truncated = true)))
+        assertNull(FileModel.cut(FileModel.Shown.Text("x", truncated = false)))
     }
 }

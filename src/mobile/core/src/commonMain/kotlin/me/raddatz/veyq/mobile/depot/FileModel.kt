@@ -67,6 +67,8 @@ class FileModel(
     private val shares: Boolean,
     private val viewer: FileRights.Viewer = FileRights.Viewer.MEMBER,
     private val scope: CoroutineScope = CoroutineScope(SupervisorJob() + Dispatchers.Default),
+    /** Where a copy saved runs ([save]): not the page's own [scope], so a save outlives its page. */
+    private val saves: CoroutineScope = CoroutineScope(SupervisorJob() + Dispatchers.Default),
 ) {
     /** What the page reads ([me.raddatz.veyq.mobile.navigation.ShellModel.fileModel] over a tenant, a test over its own). */
     interface Door {
@@ -133,6 +135,8 @@ class FileModel(
         val uploader: Notice? = null,
         /** What the header offers; null while the file is not read. */
         val header: Header? = null,
+        /** Turned each time [shown] shows other content (a replaced blob, a reload after a failure): what a host asks bytes anew by. */
+        val revision: Int = 0,
     )
 
     private val _state = MutableStateFlow(State())
@@ -188,6 +192,43 @@ class FileModel(
         return door.replaceJob(f, source, f.blobId)
     }
 
+    /**
+     * A copy of the file as read now saved through [into] ("Save a copy", the header's download of a file: the file itself),
+     * which opens where the person chose and hands [into]'s producer its sink (natively core's `FileSink`, which removes a
+     * copy that did not finish) and answers whether it kept it. Its content is read a frame at a time, never held whole. Null
+     * where there is nothing to save: the file not read yet, or with no content.
+     */
+    fun save(into: suspend (produce: suspend (sink: (ByteArray) -> Unit) -> Boolean) -> Boolean): FileSave? {
+        val f = file?.takeIf { it.hasContent } ?: return null
+        val name = current.header?.downloadName ?: DepotFiles.downloadName(f, node.name)
+        return FileSave(name, f.size ?: 0, saves) { progress ->
+            into { sink ->
+                var written = 0L
+                door.read(f, 0, Int.MAX_VALUE) { frame ->
+                    sink(frame)
+                    written += frame.size
+                    progress(written)
+                }
+                true
+            }
+        }
+    }
+
+    /** The bytes a host shows of [shown] beside its state (ADR 0128 decision 1): an image's or a PDF's; null for any other. */
+    fun bytes(shown: Shown = current.shown): ByteArray? = when (shown) {
+        is Shown.Image -> shown.bytes
+        is Shown.Pdf -> shown.bytes
+        else -> null
+    }
+
+    /** The sniffed type of [shown]'s content: an image's, a PDF's, a medium's; null where it shows none. */
+    fun mediaType(shown: Shown = current.shown): String? = when (shown) {
+        is Shown.Image -> shown.mediaType
+        is Shown.Pdf -> "application/pdf"
+        is Shown.Media -> shown.mediaType
+        else -> null
+    }
+
     private suspend fun read() = reading.withLock {
         val f = runCatching { door.file(node) }.getOrNull()
         if (f == null) {
@@ -213,7 +254,8 @@ class FileModel(
         val same = before != null && before.blobId == f.blobId && current.shown !is Shown.Failed && current.shown !is Shown.Loading
         if (!same) {
             _state.update { it.copy(shown = Shown.Loading, uploader = null) }
-            _state.update { it.copy(shown = show(f)) }
+            val shown = show(f)
+            _state.update { it.copy(shown = shown, revision = it.revision + 1) }
         }
         if (!same || before?.uploaderKey != f.uploaderKey) {
             val who = runCatching { door.uploader(f) }.getOrNull()
@@ -236,6 +278,23 @@ class FileModel(
     }
 
     companion object {
+        /**
+         * What the page says in the content's place where [shown] shows no content: opening, failed, not uploaded yet, a
+         * message's words — and a medium's for a platform that plays none (the CR's D7: Save a copy offered beside it). Null
+         * where content shows.
+         */
+        fun words(shown: Shown): Msg? = when (shown) {
+            Shown.Loading -> Msg.FILE_OPENING
+            Shown.Failed -> Msg.FILE_OPEN_FAILED
+            Shown.NotUploaded -> Msg.DEPOT_NOT_UPLOADED
+            is Shown.Message -> shown.words
+            is Shown.Media -> FileView.message(FileView.Kind.UNSUPPORTED)
+            is Shown.Image, is Shown.Text, is Shown.Pdf -> null
+        }
+
+        /** What the page says above a text that was cut at [FileView.TEXT_CAP]; null for a whole one and any other content. */
+        fun cut(shown: Shown): Notice? = (shown as? Shown.Text)?.takeIf { it.truncated }?.let { Notice(Msg.FILE_TEXT_TRUNCATED) }
+
         /** The file's own header action: replace its content (or the first upload into an empty file). */
         const val REPLACE = "replace"
         /** The file's own header action on a phone: a copy handed to another app through the system's share sheet. */

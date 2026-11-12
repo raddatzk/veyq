@@ -2008,6 +2008,18 @@
     "en": "“{1}” could not be downloaded. Please try again.",
     "de": "„{1}“ konnte nicht heruntergeladen werden. Bitte versuche es noch einmal."
   },
+  "download_saving": {
+    "en": "Downloading “{1}”… {2} of {3}",
+    "de": "„{1}“ wird heruntergeladen … {2} von {3}"
+  },
+  "download_cancelled": {
+    "en": "The download of “{1}” was cancelled. Nothing was kept.",
+    "de": "Der Download von „{1}“ wurde abgebrochen. Nichts wurde behalten."
+  },
+  "download_cancel": {
+    "en": "Cancel",
+    "de": "Abbrechen"
+  },
   "download_type_zip": {
     "en": "ZIP archive",
     "de": "ZIP-Archiv"
