@@ -370,6 +370,10 @@ object Notices {
         FolderUpload.Outcome.NOTHING -> emptyList()
     }
 
+    /** What a folder upload's walk left out ([FolderUpload.walked]): each link and each entry that did not read, one line each. */
+    fun folderLeftOut(w: FolderUpload.Walked): List<Notice> =
+        w.links.map { Notice(Msg.DEPOT_FOLDER_LINK_SKIPPED, it) } + w.unreadable.map { Notice(Msg.DEPOT_FOLDER_UNREADABLE, it) }
+
     /** A Depot upload that found a file of its name: its replace is offered (the notice's action, [Msg.DEPOT_REPLACE_TITLE]). */
     fun replaceOffered(name: String) = Notice(Msg.DEPOT_REPLACE_CONFIRM, name)
 

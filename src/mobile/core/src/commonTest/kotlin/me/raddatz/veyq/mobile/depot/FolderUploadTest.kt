@@ -42,4 +42,42 @@ class FolderUploadTest {
         val plan = FolderUpload.plan("Café", listOf(e("a")), AppKinds::tokenInput)
         assertEquals("Café", plan.root.name)
     }
+
+    private fun found(path: String, kind: FolderUpload.Kind, reads: Boolean = true) = FolderUpload.Found(
+        path, kind, if (kind == FolderUpload.Kind.FILE && reads) me.raddatz.veyq.mobile.blob.UploadSource.of(path, 1, "text/plain", null) { _, n -> ByteArray(n) } else null,
+    )
+
+    @Test
+    fun aWalkKeepsRegularFilesHiddenOnesTooAndReportsLinksAndWhatDidNotRead() {
+        val walk = listOf(
+            found("a.txt", FolderUpload.Kind.FILE),
+            found(".hidden", FolderUpload.Kind.FILE),
+            found("Photos/.DS_Store", FolderUpload.Kind.FILE),
+            found("Photos", FolderUpload.Kind.DIRECTORY),
+            found("to-home", FolderUpload.Kind.LINK),
+            found("Photos/locked", FolderUpload.Kind.UNREADABLE),
+            found("gone.bin", FolderUpload.Kind.FILE, reads = false),
+            found("fifo", FolderUpload.Kind.OTHER),
+        )
+        assertEquals(listOf(true, true, true, false, false, false, false, false), walk.map(FolderUpload::keeps))
+        val w = FolderUpload.walked(walk)
+        assertEquals(listOf("a.txt", ".hidden", "Photos/.DS_Store"), w.entries.map { it.path })
+        assertEquals(listOf("to-home"), w.links)
+        assertEquals(listOf("Photos/locked", "gone.bin"), w.unreadable)
+        assertEquals(
+            listOf(me.raddatz.veyq.mobile.words.Notice(me.raddatz.veyq.mobile.words.Msg.DEPOT_FOLDER_LINK_SKIPPED, "to-home"),
+                me.raddatz.veyq.mobile.words.Notice(me.raddatz.veyq.mobile.words.Msg.DEPOT_FOLDER_UNREADABLE, "Photos/locked"),
+                me.raddatz.veyq.mobile.words.Notice(me.raddatz.veyq.mobile.words.Msg.DEPOT_FOLDER_UNREADABLE, "gone.bin")),
+            me.raddatz.veyq.mobile.words.Notices.folderLeftOut(w),
+        )
+    }
+
+    @Test
+    fun theRootIsTheDirectorysOwnName() {
+        assertEquals("Trip", FolderUpload.rootName("Trip", "primary:Download/Other"), "the name the picker shows wins")
+        assertEquals("Trip", FolderUpload.rootName(null, "/Users/me/Trip/"))
+        assertEquals("Trip", FolderUpload.rootName(" ", "primary:Download/Trip"))
+        assertEquals("Download", FolderUpload.rootName(null, "primary:Download"))
+        assertEquals("Reise 2026", FolderUpload.rootName(null, "C:\\Users\\me\\Reise 2026"))
+    }
 }

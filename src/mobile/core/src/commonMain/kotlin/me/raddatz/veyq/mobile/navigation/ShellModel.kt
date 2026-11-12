@@ -5,7 +5,9 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.drop
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
@@ -399,7 +401,19 @@ class ShellModel(
      * suite's randomness, and the tenant told ([TenantSession.noteRekeyed]) —, a folder's "Add files only"; [changed] after a
      * node was made.
      */
-    fun shareSheet(node: NodeAt, changed: () -> Unit): ShareSheet = ShareSheet(node, object : ShareSheet.Door {
+    fun shareSheet(node: NodeAt, changed: () -> Unit): ShareSheet = ShareSheet(node, shareDoor(node, node.nodeId, changed), now)
+
+    /**
+     * The share of space [scopeId]'s top level over this tenant ([ShareSheet.topLevel]): "Add files only" alone, its drop
+     * box made at the space's top with its first link; [changed] once it is made.
+     */
+    fun topLevelShareSheet(scopeId: String, changed: () -> Unit): ShareSheet {
+        val top = NodeAt(scopeId, "", NodeRef.FOLDER, "")
+        return ShareSheet.topLevel(scopeId, shareDoor(top, null, changed), now)
+    }
+
+    /** The share sheet's door on [node]; a drop box "Add files only" makes goes under [dropBoxParent] (null: the space's top). */
+    private fun shareDoor(node: NodeAt, dropBoxParent: String?, changed: () -> Unit) = object : ShareSheet.Door {
         val uuid = { NodeCreate.uuid(tenant.account) }
         val writeOnly = node.kind == me.raddatz.veyq.mobile.depot.DepotFiles.DROPBOX
         override val rules get() = tenant.linkRules
@@ -407,7 +421,7 @@ class ShellModel(
         override suspend fun mint(role: String, label: String, password: String, expiresAt: String?) =
             ShareLinks.mint(tenant, node.scopeId, node.nodeId, role, label, password, expiresAt)
         override suspend fun createDropBox(name: String, password: String, expiresAt: String?) =
-            me.raddatz.veyq.mobile.depot.DropBoxes.create(tenant, node.scopeId, node.nodeId, name, password, expiresAt)
+            me.raddatz.veyq.mobile.depot.DropBoxes.create(tenant, node.scopeId, dropBoxParent, name, password, expiresAt)
         override suspend fun edit(shareId: String, edit: ShareLinkChanges.Edit) =
             ShareLinkChanges.edit(tenant, node.scopeId, node.nodeId, shareId, edit, now())
         override suspend fun renew(shareId: String) =
@@ -422,7 +436,7 @@ class ShellModel(
             changed()
             CoroutineScope(Dispatchers.Default).launch { refresh() }
         }
-    }, now)
+    }
 
     /** The report of [node] to the tenant's moderators over this tenant ([ReportSheet], core's [NodeReport]). */
     fun reportSheet(node: NodeAt): ReportSheet = ReportSheet(node, object : ReportSheet.Door {
@@ -460,6 +474,33 @@ class ShellModel(
             override fun replaceJob(file: me.raddatz.veyq.mobile.depot.DepotFiles.File, source: me.raddatz.veyq.mobile.blob.UploadSource, expectedBlobId: String?) =
                 me.raddatz.veyq.mobile.depot.DepotFiles.ReplaceJob(tenant, file, source, expectedBlobId, source.name)
         }, shares)
+
+    /**
+     * The uploads of this tenant over the app's [queue] ([me.raddatz.veyq.mobile.depot.DepotUploads]): files and folders
+     * uploaded into a level, a file's replace, the settle's offer; [changed] after each write (the app reads its lists anew).
+     */
+    fun depotUploads(queue: me.raddatz.veyq.mobile.blob.UploadQueue, changed: () -> Unit): me.raddatz.veyq.mobile.depot.DepotUploads =
+        me.raddatz.veyq.mobile.depot.DepotUploads(queue, object : me.raddatz.veyq.mobile.depot.DepotUploads.Door {
+            override fun uploadJob(scopeId: String, parentId: String?, source: me.raddatz.veyq.mobile.blob.UploadSource, name: String) =
+                me.raddatz.veyq.mobile.depot.DepotFiles.UploadJob(tenant, scopeId, parentId, source, AppKinds::tokenInput, name)
+            override suspend fun prepareFolder(scopeId: String, parentId: String?, rootName: String, entries: List<me.raddatz.veyq.mobile.depot.FolderUpload.Entry>) =
+                me.raddatz.veyq.mobile.depot.FolderUpload.prepare(tenant, scopeId, parentId, rootName, entries, AppKinds::tokenInput)
+            override suspend fun file(scopeId: String, nodeId: String) = me.raddatz.veyq.mobile.depot.DepotFiles.one(tenant, scopeId, nodeId)
+            override fun replaceJob(file: me.raddatz.veyq.mobile.depot.DepotFiles.File, source: me.raddatz.veyq.mobile.blob.UploadSource, expectedBlobId: String?) =
+                me.raddatz.veyq.mobile.depot.DepotFiles.ReplaceJob(tenant, file, source, expectedBlobId, source.name)
+            override fun changed() = changed()
+        })
+
+    /**
+     * Drop box [ref]'s page over this tenant ([me.raddatz.veyq.mobile.depot.DropBoxPage]): its guests' folders, read anew on
+     * every revision of these lists.
+     */
+    fun dropBoxPage(ref: NodeAt): me.raddatz.veyq.mobile.depot.DropBoxPage =
+        me.raddatz.veyq.mobile.depot.DropBoxPage(ref, object : me.raddatz.veyq.mobile.depot.DropBoxPage.Door {
+            override suspend fun folders() = me.raddatz.veyq.mobile.depot.DropBoxes.folders(tenant, ref.scopeId, ref.nodeId)
+            // each read of the lists is a new one (a rebuild after a refresh); a move of the shell alone keeps them
+            override val revisions = state.map { it?.lists }.distinctUntilChanged { a, b -> a === b }
+        })
 
     companion object {
         /**

@@ -41,6 +41,7 @@ class NoticesTest {
         fits(Notices.trashUndoFailed("Pot"))
         fits(Notices.replaceOffered("a.txt"))
         fits(Notices.replaceStale("a.txt"))
+        Notices.folderLeftOut(FolderUpload.Walked(emptyList(), listOf("ln"), listOf("locked"))).forEach(::fits)
     }
 
     @Test

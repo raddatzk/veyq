@@ -1456,6 +1456,14 @@
     "en": "The folder “{1}” could not be created, so nothing in it was uploaded.",
     "de": "Der Ordner „{1}“ konnte nicht angelegt werden, deshalb wurde nichts darin hochgeladen."
   },
+  "depot_folder_link_skipped": {
+    "en": "“{1}” is a link and was left out: an upload never follows one.",
+    "de": "„{1}“ ist eine Verknüpfung und wurde ausgelassen: Ein Upload folgt keiner."
+  },
+  "depot_folder_unreadable": {
+    "en": "“{1}” could not be read and was left out.",
+    "de": "„{1}“ ließ sich nicht lesen und wurde ausgelassen."
+  },
   "depot_uploading": {
     "en": "Uploading “{1}”…",
     "de": "„{1}“ wird hochgeladen…"
@@ -1577,6 +1585,10 @@
   "dropbox_delete_folder_confirm": {
     "en": "“{1}” and everything in it move to the trash. You can restore it from there until it is removed for good.",
     "de": "„{1}“ und alles darin kommen in den Papierkorb. Dort lässt sich alles wiederherstellen, bis es endgültig entfernt wird."
+  },
+  "dropbox_delete_folder_accept": {
+    "en": "Delete",
+    "de": "Löschen"
   },
   "file_send": {
     "en": "Send a copy…",

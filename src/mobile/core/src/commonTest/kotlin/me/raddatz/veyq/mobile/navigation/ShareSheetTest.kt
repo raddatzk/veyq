@@ -32,6 +32,7 @@ class ShareSheetTest {
         var mintAnswer: ShareLinks.Outcome = ShareLinks.Outcome.CREATED
         var rekeys = 0
         var changes = 0
+        var dropBoxEnd: String? = null
         private var next = 0
 
         fun link(id: String, enabled: Boolean = true, mine: Boolean = true, label: String = "", deletable: Boolean = !enabled, at: String = "2026-11-0${links.size + 1}T10:00:00Z") =
@@ -50,6 +51,7 @@ class ShareSheetTest {
         }
         override suspend fun createDropBox(name: String, password: String, expiresAt: String?): DropBoxes.Created {
             sent += "dropbox:$name"
+            dropBoxEnd = expiresAt
             return DropBoxes.Created(DropBoxes.Outcome.CREATED, "box", "https://t/s/box#k=drop")
         }
         override suspend fun edit(shareId: String, edit: ShareLinkChanges.Edit): ShareLinkChanges.Changed {
@@ -237,5 +239,28 @@ class ShareSheetTest {
             assertEquals(day + 1, LocalDays.dayOf(end + 1))
         }
         assertEquals(20_768L, LocalDays.dayOf(LocalDays.endOf(20_768)))
+    }
+
+    @Test
+    fun theTopLevelsShareMakesADropBoxWithItsFirstLinkOnTheCoresDay() = runTest {
+        val server = Server()
+        server.link("a")
+        val s = ShareSheet.topLevel("s", server, { now }).also { it.load() }
+        assertEquals(Msg.SHARE_ROLE_UPLOADER, s.title)
+        assertEquals(emptyList(), s.current.links, "no link roots at the top: nothing listed")
+        val form = assertNotNull(s.current.form, "its form is open from the start")
+        assertEquals(emptyList(), form.roles, "\"Add files only\" alone")
+        assertEquals(LocalDays.dayOf(now), form.today, "today is the core's clock's")
+        assertFalse(form.canSave, "a drop box needs its name")
+        s.label("Receipts")
+        s.endOn(true)
+        s.endDay(form.today + 3)
+        val done = s.save()
+        assertEquals(listOf("dropbox:Receipts"), server.sent, "a drop box, never a link on the space")
+        assertEquals("https://t/s/box#k=drop", done.fresh, "its first link shown once")
+        assertEquals(LocalDays.endOf(form.today + 3), server.dropBoxEnd, "its end the end of the chosen local day")
+        assertNull(done.form)
+        assertEquals(1, server.changes, "the lists are read anew")
+        assertEquals(emptyList(), done.links)
     }
 }

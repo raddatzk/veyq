@@ -162,13 +162,29 @@ class FileModel(
     /** The page went: nothing more is read or watched. */
     fun close() = scope.cancel()
 
+    /** The file as shown when Replace was chosen: what the replace picked after it is expected over. */
+    private var chosen: DepotFiles.File? = null
+
     /**
-     * The replace of the content with [source] as an upload-queue job, expected over the content shown now (the web's
-     * "the blob the member saw"); null while nothing is read or where the replace is not offered.
+     * Replace was chosen (the header's action, before the platform's picker opens): the content shown now is what the
+     * replace will expect (the web's "the blob the member saw"), whatever a reload shows meanwhile. False where nothing is
+     * read or the replace is not offered.
+     */
+    fun chooseReplace(): Boolean {
+        val f = file ?: return false
+        if (current.header?.own?.any { it.id == REPLACE } != true) return false
+        chosen = f
+        return true
+    }
+
+    /**
+     * The replace of the content with [source] as an upload-queue job, expected over the content shown when Replace was
+     * chosen ([chooseReplace]): a peer's replace in between is answered stale and overwrites nothing. Null where Replace
+     * was not chosen; a choice is used once.
      */
     fun replace(source: UploadSource): DepotFiles.ReplaceJob? {
-        val f = file ?: return null
-        if (current.header?.own?.any { it.id == REPLACE } != true) return null
+        val f = chosen ?: return null
+        chosen = null
         return door.replaceJob(f, source, f.blobId)
     }
 

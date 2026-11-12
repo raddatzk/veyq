@@ -174,10 +174,18 @@ object DepotFiles {
      * upload queue (the web's `fileUploadJob`), named [name] (a folder upload's planned name; else the file's own). A name a
      * file of the level holds fails it final with [Codes.EXISTS] and that file in [existing], to offer its replace.
      */
-    class UploadJob(
-        private val tenant: TenantSession, val scopeId: String, val parentId: String?, private val source: UploadSource,
-        private val tokenInput: (String, String) -> String?, override val name: String = source.name,
+    class UploadJob internal constructor(
+        val scopeId: String, val parentId: String?, private val source: UploadSource, override val name: String,
+        /** Sends [source] named [name] (the tenant's [upload], a test's played server). */
+        private val send: suspend (name: String, source: UploadSource, progress: (Double) -> Unit) -> Uploaded,
     ) : UploadQueue.Job {
+        constructor(
+            tenant: TenantSession, scopeId: String, parentId: String?, source: UploadSource,
+            tokenInput: (String, String) -> String?, name: String = source.name,
+        ) : this(scopeId, parentId, source, name, { n, s, p ->
+            upload(tenant, scopeId, parentId, n, s.size, s.type ?: OCTET, s.modifiedAt, tokenInput, s::read, p)
+        })
+
         override val sizeBytes get() = source.size
 
         /** The file a name collision found here. */
@@ -193,7 +201,7 @@ object DepotFiles {
 
         override suspend fun run(progress: (Double) -> Unit) {
             val r = try {
-                upload(tenant, scopeId, parentId, name, source.size, source.type ?: OCTET, source.modifiedAt, tokenInput, source::read, progress)
+                send(name, source, progress)
             } finally {
                 source.close()
             }
@@ -209,10 +217,16 @@ object DepotFiles {
      * [file]'s content replaced with [source] over [expectedBlobId] as a job of the upload queue; content someone replaced
      * meanwhile fails it final with [Codes.STALE] and theirs in [currentBlobId], to offer "Replace anyway".
      */
-    class ReplaceJob(
-        private val tenant: TenantSession, val file: File, private val source: UploadSource, val expectedBlobId: String?,
-        override val name: String,
+    class ReplaceJob internal constructor(
+        val file: File, private val source: UploadSource, val expectedBlobId: String?, override val name: String,
+        /** Sends [source] over [expectedBlobId] (the tenant's [replace], a test's played server). */
+        private val send: suspend (source: UploadSource, expectedBlobId: String?, progress: (Double) -> Unit) -> Uploaded,
     ) : UploadQueue.Job {
+        constructor(tenant: TenantSession, file: File, source: UploadSource, expectedBlobId: String?, name: String) :
+            this(file, source, expectedBlobId, name, { s, expected, p ->
+                replace(tenant, file, s.size, s.type ?: OCTET, s.name, s.modifiedAt, expected, s::read, p)
+            })
+
         override val sizeBytes get() = source.size
 
         /** The content that is there now, after a refusal as stale. */
@@ -223,7 +237,7 @@ object DepotFiles {
 
         override suspend fun run(progress: (Double) -> Unit) {
             val r = try {
-                replace(tenant, file, source.size, source.type ?: OCTET, source.name, source.modifiedAt, expectedBlobId, source::read, progress)
+                send(source, expectedBlobId, progress)
             } finally {
                 source.close()
             }
@@ -258,23 +272,6 @@ object DepotFiles {
         }
     }
 
-    /**
-     * [item]'s offer as the tenant lists it now: the colliding file's content read anew for its expected blob (the app holds
-     * no list of files); null where it offers nothing.
-     */
-    @Throws(Exception::class)
-    suspend fun offerAfter(tenant: TenantSession, item: UploadQueue.Item): Offer? {
-        val existing = (item.job as? UploadJob)?.let { j -> j.existing?.let { one(tenant, j.scopeId, it) } }
-        return offerFor(item) { id -> existing?.takeIf { it.nodeId == id }?.blobId }
-    }
-
-    /** The replace an [offer] makes when taken: a job over the file as it is listed now, or null where it is gone. */
-    @Throws(Exception::class)
-    suspend fun take(tenant: TenantSession, offer: Offer): ReplaceJob? {
-        val file = one(tenant, offer.scopeId, offer.nodeId) ?: return null
-        return ReplaceJob(tenant, file, offer.source, offer.expectedBlobId, offer.source.name)
-    }
-
     private const val OCTET = "application/octet-stream"
 
     /**
@@ -282,9 +279,13 @@ object DepotFiles {
      * `collidingSibling`): the name folded as a file's, each sibling's as its own kind's ([tokenInput]); null where none does.
      */
     @Throws(Exception::class)
-    suspend fun collision(tenant: TenantSession, scopeId: String, parentId: String?, name: String, tokenInput: (String, String) -> String?): OpenNode? {
+    suspend fun collision(tenant: TenantSession, scopeId: String, parentId: String?, name: String, tokenInput: (String, String) -> String?): OpenNode? =
+        collision(tenant.trees()[scopeId].orEmpty(), parentId, name, tokenInput)
+
+    /** [collision] over a space's [nodes] as read: the first sibling under [parentId] whose name folds as [name] does as a file. */
+    fun collision(nodes: List<OpenNode>, parentId: String?, name: String, tokenInput: (String, String) -> String?): OpenNode? {
         val folded = tokenInput(FILE, name) ?: return null
-        return tenant.trees()[scopeId].orEmpty().firstOrNull { it.parentId == parentId && tokenInput(it.kind, it.name) == folded }
+        return nodes.firstOrNull { it.parentId == parentId && tokenInput(it.kind, it.name) == folded }
     }
 
     /**

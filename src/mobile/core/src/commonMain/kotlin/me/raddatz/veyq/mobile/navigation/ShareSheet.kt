@@ -43,6 +43,11 @@ class ShareSheet(
     private val door: Door,
     /** The device's clock (epoch ms): today for the form, whether a link is still open. */
     private val now: () -> Long,
+    /**
+     * The share of a space's top level ([topLevel]): no link roots there, so it offers "Add files only" alone — a drop box
+     * at the top with its first link, its form open from the start; nothing listed.
+     */
+    val atTopLevel: Boolean = false,
     private val scope: CoroutineScope = CoroutineScope(SupervisorJob() + Dispatchers.Default),
 ) {
     /** What the sheet reads and writes ([ShellModel.shareSheet] over a tenant, a test over a server it plays). */
@@ -90,7 +95,7 @@ class ShareSheet(
         val deleting: String? = null,
     )
 
-    private val _state = MutableStateFlow(State())
+    private val _state = MutableStateFlow(if (atTopLevel) State(links = emptyList(), form = uploadOnlyForm()) else State())
     val state: StateFlow<State> = _state.asStateFlow()
     val current: State get() = _state.value
 
@@ -103,6 +108,15 @@ class ShareSheet(
 
     /** The sheet's words by the node's kind. */
     val words: ShareWords = ShareWords.of(node.kind)
+
+    /** The sheet's title: the node's links, or at a space's top level "Add files only". */
+    val title: Msg get() = if (atTopLevel) Msg.SHARE_ROLE_UPLOADER else words.title
+
+    /** The top level's form: a drop box's name, a password and an end, today the core's day. */
+    private fun uploadOnlyForm() = LinkForm.start(
+        door.rules, editing = null, writeOnly = false, uploadOffered = false, uploadOnly = true,
+        today = LocalDays.dayOf(now()), editingEndDay = null,
+    )
 
     /** A drop box's own links: WRITE_ONLY only, never edited or renewed, no name of their own. */
     val dropBox: Boolean = node.kind == DepotFiles.DROPBOX
@@ -119,6 +133,12 @@ class ShareSheet(
     /** The row of link [shareId], while it is listed. */
     fun row(shareId: String): LinkRow? = rows().firstOrNull { it.link.shareId == shareId }
 
+    companion object {
+        /** The share of space [scopeId]'s top level: "Add files only" alone, its drop box made at the top ([Door.createDropBox]). */
+        fun topLevel(scopeId: String, door: Door, now: () -> Long): ShareSheet =
+            ShareSheet(NodeAt(scopeId, "", NodeRef.FOLDER, ""), door, now, atTopLevel = true)
+    }
+
     /** The form's button: create, or save an edit. */
     fun submit(state: State = current): Msg = if (state.editing != null) Msg.SHARE_SAVE else Msg.SHARE_CREATE
 
@@ -132,6 +152,7 @@ class ShareSheet(
     suspend fun load() = withContext(Dispatchers.Default) { reread() }
 
     private suspend fun reread() {
+        if (atTopLevel) return
         val read = runCatching { door.list() }.getOrNull()
         _state.update { if (read == null) it.copy(failed = true) else it.copy(links = read, failed = false) }
     }
@@ -140,6 +161,7 @@ class ShareSheet(
     fun addLink() {
         val s = current
         if (!canMint || s.busy != null || s.saving) return
+        if (atTopLevel) return _state.update { it.copy(form = uploadOnlyForm(), editing = null, problem = null, notice = null, fresh = null) }
         val form = LinkForm.start(
             door.rules, editing = null, writeOnly = dropBox, uploadOffered = node.kind == NodeRef.FOLDER && door.rules.dropBox,
             uploadOnly = false, today = LocalDays.dayOf(now()), editingEndDay = null,

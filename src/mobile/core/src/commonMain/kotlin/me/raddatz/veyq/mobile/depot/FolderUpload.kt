@@ -25,6 +25,43 @@ object FolderUpload {
         val size get() = source.size
     }
 
+    /** What a walk of a picked directory met at one path: a file, a directory, a link, or an entry it could not read. */
+    enum class Kind { FILE, DIRECTORY, LINK, UNREADABLE, OTHER }
+
+    /**
+     * One entry a platform's walk met (its own door: Android's documents provider, Apple's enumerator, the desktops'
+     * `listDirectory`): its path below the picked directory (`/`-separated), what it is, and for a file its [source].
+     */
+    class Found(val path: String, val kind: Kind, val source: UploadSource? = null)
+
+    /**
+     * Whether a walk keeps [found] for the upload (the web's directory input, `docs/apps/depot.md`): a regular file that
+     * reads — hidden ones too (a name starting with a dot is kept, as the web's input and Apple's enumerator hold them);
+     * never a link (a walk does not follow one, so nothing outside the directory goes up), a directory (only files make
+     * nodes), or an entry that did not read.
+     */
+    fun keeps(found: Found): Boolean = found.kind == Kind.FILE && found.source != null
+
+    /** What a walk hands the upload: the [entries] kept, and the paths left out and said ([links], [unreadable]). */
+    class Walked(val entries: List<Entry>, val links: List<String>, val unreadable: List<String>)
+
+    /** [found] split by [keeps]: the files to upload, each link and each entry that did not read reported by its path. */
+    fun walked(found: List<Found>): Walked = Walked(
+        entries = found.filter(::keeps).map { Entry(it.path, it.source!!) },
+        links = found.filter { it.kind == Kind.LINK }.map { it.path },
+        // a file that did not open is as unreadable as an entry the walk could not list
+        unreadable = found.filter { it.kind == Kind.UNREADABLE || (it.kind == Kind.FILE && it.source == null) }.map { it.path },
+    )
+
+    /**
+     * The name the uploaded folder takes: the picked directory's own ([shown], what the platform's picker names it), else
+     * the last part of its [path] (a path's or a document id's, parted at `/`, a backslash and `:`) — never a word of the app's own.
+     */
+    fun rootName(shown: String?, path: String): String {
+        shown?.trim()?.takeIf { it.isNotEmpty() }?.let { return it }
+        return path.split('/', '\\', ':').lastOrNull { it.isNotBlank() }?.trim().orEmpty()
+    }
+
     /** A directory of the plan: its name as it will be made, its subdirectories and its files (each its name and entry). */
     class Dir(val name: String, val dirs: List<Dir>, val files: List<Pair<String, Entry>>)
 
