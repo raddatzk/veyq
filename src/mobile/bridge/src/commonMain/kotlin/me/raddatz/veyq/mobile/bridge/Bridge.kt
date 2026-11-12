@@ -124,6 +124,8 @@ internal class Tenant(
     val download: (suspend (node: NodeAt, deletedName: String, sink: (ByteArray) -> Unit) -> List<NodeExport.Skipped>?)? = shell?.let { s ->
         { node, deletedName, sink -> s.download(node, deletedName, Clock.System.now().toEpochMilliseconds(), sink) }
     },
+    /** A file's page (`ShellModel.fileModel`; the desktops hand no copy to another app, so it offers no "Send a copy"). */
+    val file: ((node: NodeAt) -> me.raddatz.veyq.mobile.depot.FileModel)? = shell?.let { s -> { node -> s.fileModel(node, shares = false) } },
 )
 
 /** A header the host opened, with the most buttons its bar holds. */
@@ -195,6 +197,8 @@ internal class Bridge<A : Connection, T : Any>(compose: () -> Composition<A, T>)
     private val editors = Registry<HeldEditor>()
     private val settings = Registry<HeldSettings>()
     private val creates = Registry<HeldCreate>()
+    private val filePages = Registry<me.raddatz.veyq.mobile.depot.FileModel>()
+    private val saves = Registry<me.raddatz.veyq.mobile.depot.FileSave>()
 
     /** "Manage servers" while it is open, null while closed; its spaces read by [managing]'s job. */
     private val manage = MutableStateFlow<List<ManagedShown>?>(null)
@@ -420,6 +424,27 @@ internal class Bridge<A : Connection, T : Any>(compose: () -> Composition<A, T>)
                 Answer.Bytes(null)
             } ?: Answer.Refused(Answer.Why.NO_SUCH_READER)
             is Call.ReaderClose -> readers.remove(call.reader)?.let { Answer.Done } ?: Answer.Refused(Answer.Why.NO_SUCH_READER)
+            is Call.FileOpen -> tenant.value?.models?.file?.let { make ->
+                val id = ids.incrementAndFetch()
+                filePages.put(id, make(call.node))
+                Answer.FileOpened(id)
+            } ?: noTenant
+            is Call.FileBytes -> filePages[call.file]?.let { f ->
+                val shown = f.current.shown
+                val bytes = f.bytes(shown) ?: return Answer.Refused(Answer.Why.NO_BYTES)
+                payload(bytes)
+                Answer.Bytes(f.mediaType(shown))
+            } ?: noFile
+            is Call.FilePages -> Answer.ReceiptPages(me.raddatz.veyq.mobile.depot.FileView.pagesShown(call.total), me.raddatz.veyq.mobile.depot.FileView.pagesCut(call.total))
+            is Call.FileClose -> filePages.remove(call.file)?.close().done(Answer.Why.NO_SUCH_FILE)
+            is Call.FileSave -> filePages[call.file]?.let { f ->
+                val save = f.save { produce -> parts.files.write(call.path, produce) } ?: return Answer.Refused(Answer.Why.NOTHING_TO_DOWNLOAD)
+                val id = ids.incrementAndFetch()
+                saves.put(id, save)
+                Answer.Saving(id)
+            } ?: noFile
+            is Call.SaveCancel -> saves[call.save]?.let { if (it.cancel()) Answer.Done else Answer.Refused(Answer.Why.SAVE_ENDED) }
+                ?: Answer.Refused(Answer.Why.NO_SUCH_SAVE)
             is Call.HeaderOpen -> tenant.value?.models?.header?.let { make ->
                 val id = ids.incrementAndFetch()
                 headers.put(id, HeldHeader(make(call.node, call.facts, ::closeOpen), call.maxButtons))
@@ -548,6 +573,7 @@ internal class Bridge<A : Connection, T : Any>(compose: () -> Composition<A, T>)
     private val noReport = Answer.Refused(Answer.Why.NO_SUCH_REPORT)
     private val noEditor = Answer.Refused(Answer.Why.NO_SUCH_EDITOR)
     private val noCreate = Answer.Refused(Answer.Why.NO_SUCH_CREATE)
+    private val noFile = Answer.Refused(Answer.Why.NO_SUCH_FILE)
 
     /** A settings change on [id]'s model, answered once its write ended with whether it was stored and why not. */
     private suspend fun stored(id: Long, change: suspend (PotSettings) -> Boolean): Answer {
@@ -616,6 +642,9 @@ internal class Bridge<A : Connection, T : Any>(compose: () -> Composition<A, T>)
         editors.removeAll().forEach { it.model.close() }
         settings.removeAll()
         creates.removeAll().forEach { it.sheet.close() }
+        filePages.removeAll().forEach { it.close() }
+        // a save stops with its tenant: its partial file removed by the sink as its job is cancelled
+        saves.removeAll().forEach { save -> scope.launch { save.cancel() } }
         readers.removeAll()
         headers.removeAll()
         trashes.removeAll()
@@ -671,6 +700,10 @@ internal class Bridge<A : Connection, T : Any>(compose: () -> Composition<A, T>)
         is Watched.PotCreate -> creates[w.create]?.let { held ->
             combine(held.sheet.state, held.name) { s, name -> Update.PotCreate(w.create, shownCreate(held.sheet, s, name)) }
         } ?: flowOf(Update.PotCreate(w.create, null))
+        is Watched.File -> filePages[w.file]?.let { f -> f.state.map { Update.File(w.file, shownFile(f, it)) } }
+            ?: flowOf(Update.File(w.file, null))
+        is Watched.Save -> saves[w.save]?.let { sv -> sv.state.map { Update.Save(w.save, SaveShown(sv.name, it.written, it.total, it.fraction, it.end, it.notice)) } }
+            ?: flowOf(Update.Save(w.save, null))
         is Watched.Pot -> {
             val pictures = tenant.value?.models?.pictures ?: flowOf(emptyMap())
             (pots[w.pot]?.state ?: flowOf(null)).combine(pictures) { s, p -> Update.Pot(w.pot, s, if (s == null) emptyList() else p.keys.sorted()) }
@@ -784,6 +817,29 @@ internal class Bridge<A : Connection, T : Any>(compose: () -> Composition<A, T>)
             gone = s.gone,
             archiveName = s.downloadName ?: NodeExport.fileName(m.node.name),
             cover = s.cover,
+        )
+    }
+
+    /** A file's page as the host draws it ([FileShown]), each field the model's own answer. */
+    private fun shownFile(f: me.raddatz.veyq.mobile.depot.FileModel, s: me.raddatz.veyq.mobile.depot.FileModel.State): FileShown {
+        val shown = s.shown
+        val view = when (shown) {
+            is me.raddatz.veyq.mobile.depot.FileModel.Shown.Loading -> FileShown.View.LOADING
+            is me.raddatz.veyq.mobile.depot.FileModel.Shown.Failed -> FileShown.View.FAILED
+            is me.raddatz.veyq.mobile.depot.FileModel.Shown.NotUploaded -> FileShown.View.NOT_UPLOADED
+            is me.raddatz.veyq.mobile.depot.FileModel.Shown.Message -> FileShown.View.MESSAGE
+            is me.raddatz.veyq.mobile.depot.FileModel.Shown.Image -> FileShown.View.IMAGE
+            is me.raddatz.veyq.mobile.depot.FileModel.Shown.Text -> FileShown.View.TEXT
+            is me.raddatz.veyq.mobile.depot.FileModel.Shown.Pdf -> FileShown.View.PDF
+            is me.raddatz.veyq.mobile.depot.FileModel.Shown.Media -> FileShown.View.MEDIA
+        }
+        return FileShown(
+            node = f.node, view = view, words = me.raddatz.veyq.mobile.depot.FileModel.words(shown), mediaType = f.mediaType(shown),
+            edge = (shown as? me.raddatz.veyq.mobile.depot.FileModel.Shown.Image)?.edge,
+            text = (shown as? me.raddatz.veyq.mobile.depot.FileModel.Shown.Text)?.text, truncated = me.raddatz.veyq.mobile.depot.FileModel.cut(shown),
+            size = (shown as? me.raddatz.veyq.mobile.depot.FileModel.Shown.Media)?.size,
+            revision = s.revision, facts = s.facts, uploader = s.uploader,
+            headerFacts = s.header?.facts, downloadName = s.header?.downloadName,
         )
     }
 

@@ -1054,6 +1054,150 @@ class DispatchTest {
     }
 
     /**
+     * A file's page's door the test plays: each file by its node's name, its content in frames of the suite's size; the
+     * frames of a file named "Held…" wait at the second frame until [let] completes.
+     */
+    private class PlayedFiles(val files: Map<String, Pair<ByteArray, String>>) : me.raddatz.veyq.mobile.depot.FileModel.Door {
+        val let = kotlinx.coroutines.CompletableDeferred<Unit>()
+        private fun frames(name: String) = files.getValue(name).first.toList().chunked(V1.FRAME_PLAINTEXT).map { it.toByteArray() }
+        override suspend fun file(node: NodeAt): me.raddatz.veyq.mobile.depot.DepotFiles.File {
+            val (content, type) = files.getValue(node.name)
+            val chunks = frames(node.name).size
+            return me.raddatz.veyq.mobile.depot.DepotFiles.File(
+                node.scopeId, node.nodeId, "blob-${node.name}", chunks, 0, null, content.size.toLong(), type, node.name, 1_700_000_000_000, null,
+            )
+        }
+        override fun inIdentityFolder(node: NodeAt) = false
+        override suspend fun read(file: me.raddatz.veyq.mobile.depot.DepotFiles.File, first: Int, until: Int, sink: suspend (ByteArray) -> Unit) {
+            val name = file.uploadedName!!
+            val frames = frames(name)
+            for (i in first until minOf(until, frames.size)) {
+                if (i == 1 && name.startsWith("Held")) let.await()
+                sink(frames[i])
+            }
+        }
+        override fun reader(file: me.raddatz.veyq.mobile.depot.DepotFiles.File) = RangeReader(file.size ?: 0, file.chunkCount) { a, b, sink -> read(file, a, b, sink) }
+        override suspend fun uploader(file: me.raddatz.veyq.mobile.depot.DepotFiles.File): me.raddatz.veyq.mobile.depot.Uploaders.Uploader? = null
+        override fun replaceJob(file: me.raddatz.veyq.mobile.depot.DepotFiles.File, source: me.raddatz.veyq.mobile.blob.UploadSource, expectedBlobId: String?) =
+            error("no replace here")
+    }
+
+    @Test
+    fun aFileIsOpenedShownSavedWithItsProgressAndCancelledThroughCalls() = runBlocking {
+        val pdf = "%PDF-1.7\n%âãÏÓ\n1 0 obj<<>>endobj\n%%EOF\n".encodeToByteArray()
+        val text = ByteArray(me.raddatz.veyq.mobile.depot.FileView.TEXT_CAP + V1.FRAME_PLAINTEXT) { ('a' + it % 26).code.toByte() }
+        val zip = byteArrayOf(0x50, 0x4b, 0x03, 0x04) + ByteArray(3 * V1.FRAME_PLAINTEXT) { (it % 241).toByte() }
+        val played = PlayedFiles(mapOf(
+            "a.png" to (png to "image/png"), "notes.txt" to (text to "text/plain"), "a.pdf" to (pdf to "application/pdf"),
+            "a.zip" to (zip to "application/zip"), "Held.zip" to (zip to "application/zip"), "empty.txt" to (ByteArray(0) to "text/plain"),
+        ))
+        val b = Bridge {
+            val hidden = Hidden({}, emptySet())
+            Composition(SessionModel(Door(), hidden, RecentUses({}, emptyList())), hidden, JvmFiles) { _ ->
+                Tenant(
+                    shell = null, pot = null, me = "u1", pictures = pictures, loadPictures = {},
+                    header = { node, facts, _ -> me.raddatz.veyq.mobile.navigation.NodeHeaderModel(node, facts, Played()) },
+                    // a node's download as the shell makes it: the kind decides (a file itself, any other node its ZIP)
+                    download = { node, _, sink ->
+                        me.raddatz.veyq.mobile.navigation.ShellModel.downloadAs(
+                            node.kind, own = { out -> out(zip); true }, zip = { out -> out("PK-archive".encodeToByteArray()); emptyList() }, sink = sink,
+                        )
+                    },
+                    file = { node -> me.raddatz.veyq.mobile.depot.FileModel(node, played, shares = false) },
+                )
+            }
+        }
+        fun at(name: String) = NodeAt("s", "n-$name", "FILE", name)
+        assertEquals(Answer.Refused(Answer.Why.NO_TENANT_OPEN), b.ask(Call.FileOpen(at("a.png"))))
+        b.signedIn()
+        suspend fun open(name: String): Pair<Long, FileShown> {
+            val id = (b.ask(Call.FileOpen(at(name))) as Answer.FileOpened).file
+            val shown = b.watching(Watched.File(id)).until { u -> (u as Update.File).shown?.takeIf { it.view != FileShown.View.LOADING && it.headerFacts != null } }
+            return id to shown
+        }
+
+        // an image: its bytes beside the answer, the core's type and edge; the header's facts and the copy's name the core's
+        val (image, imageShown) = open("a.png")
+        assertEquals(FileShown.View.IMAGE, imageShown.view)
+        assertEquals("image/png", imageShown.mediaType)
+        assertEquals(me.raddatz.veyq.mobile.depot.FileView.IMAGE_EDGE, imageShown.edge)
+        assertEquals(AppKinds.Facts(canWrite = true, hasContent = true), imageShown.headerFacts)
+        assertEquals("a.png", imageShown.downloadName)
+        assertTrue(imageShown.facts.isNotEmpty())
+        val (bytesAnswer, bytes) = b.askWithPayload(Call.FileBytes(image))
+        assertEquals(Answer.Bytes("image/png"), bytesAnswer)
+        assertEquals(png.toList(), bytes!!.toList(), "the bytes are not the file's")
+
+        // a text in the state, cut at its cap and said; it has no bytes beside it
+        val (notes, notesShown) = open("notes.txt")
+        assertEquals(FileShown.View.TEXT, notesShown.view)
+        assertEquals(me.raddatz.veyq.mobile.depot.FileView.TEXT_CAP, notesShown.text!!.length)
+        assertEquals(Msg.FILE_TEXT_TRUNCATED, notesShown.truncated!!.msg)
+        assertEquals(Answer.Refused(Answer.Why.NO_BYTES), b.ask(Call.FileBytes(notes)))
+
+        // a PDF's bytes and its pages' bound; a ZIP and an empty file say why nothing shows
+        val (pdfId, pdfShown) = open("a.pdf")
+        assertEquals(FileShown.View.PDF, pdfShown.view)
+        val (pdfAnswer, pdfBytes) = b.askWithPayload(Call.FileBytes(pdfId))
+        assertEquals(Answer.Bytes("application/pdf"), pdfAnswer)
+        assertEquals(pdf.toList(), pdfBytes!!.toList())
+        assertEquals(Answer.ReceiptPages(30, null), b.ask(Call.FilePages(30)))
+        assertEquals(Answer.ReceiptPages(1000, me.raddatz.veyq.mobile.words.Notice(Msg.FILE_PAGES_CUT, 1000, 1200)), b.ask(Call.FilePages(1200)))
+        val (zipId, zipShown) = open("a.zip")
+        assertEquals(FileShown.View.MESSAGE to Msg.FILE_UNSUPPORTED, zipShown.view to zipShown.words)
+        assertEquals(FileShown.View.MESSAGE to Msg.FILE_EMPTY, open("empty.txt").second.let { it.view to it.words })
+
+        // Save a copy: answered with its id once it runs (watched at once), the file itself written frame by frame
+        val path = java.io.File.createTempFile("veyq-save", ".zip").apply { delete() }
+        val saving = (b.ask(Call.FileSave(zipId, path.path)) as Answer.Saving).save
+        assertTrue((b.watching(Watched.Save(saving)).next() as Update.Save).shown != null, "the save answered before it ran")
+        val saved = b.watching(Watched.Save(saving)).until { u -> (u as Update.Save).shown?.takeIf { it.end != null } }
+        assertEquals(me.raddatz.veyq.mobile.depot.FileSave.End.SAVED, saved.end)
+        assertEquals(me.raddatz.veyq.mobile.words.Notice(Msg.DOWNLOAD_DONE, "a.zip"), saved.notice)
+        assertEquals(zip.size.toLong(), saved.written)
+        assertEquals(zip.toList(), path.readBytes().toList(), "the copy is not the file")
+        assertEquals(Answer.Refused(Answer.Why.SAVE_ENDED), b.ask(Call.SaveCancel(saving)))
+
+        // a save stood midway and cancelled: its progress said, nothing left at its path once the answer came
+        val (held, _) = open("Held.zip")
+        val heldPath = java.io.File.createTempFile("veyq-held", ".zip").apply { delete() }
+        val heldSave = (b.ask(Call.FileSave(held, heldPath.path)) as Answer.Saving).save
+        val midway = b.watching(Watched.Save(heldSave)).until { u -> (u as Update.Save).shown?.takeIf { it.written > 0 } }
+        assertEquals(Msg.DOWNLOAD_SAVING, midway.notice.msg)
+        assertTrue(midway.end == null && midway.fraction > 0.0 && midway.fraction < 1.0, "${midway.fraction}")
+        assertEquals(Answer.Done, b.ask(Call.SaveCancel(heldSave)))
+        assertTrue(!heldPath.exists(), "a cancelled save left its file")
+        val cancelled = (b.watching(Watched.Save(heldSave)).next() as Update.Save).shown!!
+        assertEquals(me.raddatz.veyq.mobile.depot.FileSave.End.CANCELLED, cancelled.end)
+        assertEquals(me.raddatz.veyq.mobile.words.Notice(Msg.DOWNLOAD_CANCELLED, "Held.zip"), cancelled.notice)
+        // a path that does not open: failed, said
+        val nowhere = (b.ask(Call.FileSave(zipId, "/nonexistent-dir/veyq/a.zip")) as Answer.Saving).save
+        assertEquals(Msg.DOWNLOAD_FAILED, b.watching(Watched.Save(nowhere)).until { u -> (u as Update.Save).shown?.takeIf { it.end != null } }.notice.msg)
+
+        // the header's download of a FILE is the file itself, a folder's its ZIP
+        val header = (b.ask(Call.HeaderOpen(at("a.zip"), AppKinds.Facts(canWrite = true, hasContent = true), 2)) as Answer.HeaderOpened).header
+        val headerPath = java.io.File.createTempFile("veyq-header", ".zip")
+        assertTrue((b.ask(Call.HeaderDownload(header, headerPath.path, "deleted")) as Answer.Downloaded).written)
+        assertEquals(zip.toList(), headerPath.readBytes().toList(), "a file's header download wrote its ZIP")
+        val folder = (b.ask(Call.HeaderOpen(NodeAt("s", "f", "FOLDER", "Trip"), AppKinds.Facts(), 2)) as Answer.HeaderOpened).header
+        assertTrue((b.ask(Call.HeaderDownload(folder, headerPath.path, "deleted")) as Answer.Downloaded).written)
+        assertEquals("PK-archive", headerPath.readText())
+        headerPath.delete()
+        path.delete()
+
+        // closed: refused, watched as none; every page and save goes with its tenant
+        assertEquals(Answer.Done, b.ask(Call.FileClose(notes)))
+        assertEquals(Update.File(notes, null), b.watching(Watched.File(notes)).next())
+        listOf(Call.FileBytes(notes), Call.FileSave(notes, "/tmp/x"), Call.FileClose(notes))
+            .forEach { assertEquals(Answer.Refused(Answer.Why.NO_SUCH_FILE), b.ask(it), "$it") }
+        assertEquals(Answer.Done, b.ask(Call.SessionSignOut("a.example#u1")))
+        assertEquals(Answer.Refused(Answer.Why.NO_SUCH_FILE), b.ask(Call.FileBytes(image)), "a page outlived its tenant")
+        assertEquals(Update.Save(saving, null), b.watching(Watched.Save(saving)).next(), "a save outlived its tenant")
+        played.let.complete(Unit)
+        b.shutdown()
+    }
+
+    /**
      * A Pot the test plays (`PotModel.Opened`): Anna and Ben in euros, a dinner Anna paid (so Ben owes her) and a taxi
      * deleted whose receipts stay until [purgeAfter]; each poll, refresh and write recorded. A poll answers "moved" with a
      * lunch added, or — once [hold] is set — waits until it is cancelled, which [pollCancelled] records.

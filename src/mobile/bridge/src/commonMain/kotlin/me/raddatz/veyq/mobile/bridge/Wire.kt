@@ -354,6 +354,35 @@ internal sealed class Call {
     @Serializable @SerialName("Header.CoverRemove") data class HeaderCoverRemove(val header: Long) : Call()
 
     /**
+     * File [node]'s page (`ShellModel.fileModel`, core's `FileModel`) as a model of its own, answered with its id
+     * ([Answer.FileOpened]) for [Watched.File]: what it shows decided by the bytes, its facts, its header's facts. It stays
+     * until [FileClose] or the tenant closes.
+     */
+    @Serializable @SerialName("File.Open") data class FileOpen(val node: NodeAt) : Call()
+
+    /**
+     * The bytes file [file] shows now ([Answer.Bytes], beside the JSON; ADR 0128 decision 1): an image's or a PDF's, asked
+     * again when [FileShown.revision] turns. Refused where it shows neither (a text is in the state, a medium is read through
+     * a reader).
+     */
+    @Serializable @SerialName("File.Bytes") data class FileBytes(val file: Long) : Call()
+
+    /** A PDF viewer's pages of a file's PDF of [total] pages ([Answer.ReceiptPages]: `FileView.pagesShown`, `pagesCut`). */
+    @Serializable @SerialName("File.Pages") data class FilePages(val total: Int) : Call()
+    @Serializable @SerialName("File.Close") data class FileClose(val file: Long) : Call()
+
+    /**
+     * Saves a copy of file [file] ("Save a copy", the file's download: the file itself) into the file at [path], which the
+     * host's save dialog gave (ADR 0128 decision 3: the core opens and writes it, nothing of it crosses): answered at once
+     * with the save's id ([Answer.Saving]) once it runs, for [Watched.Save] and [SaveCancel]. Refused where the file has
+     * nothing to save. A save outlives its page; every save stops with the tenant.
+     */
+    @Serializable @SerialName("File.Save") data class FileSave(val file: Long, val path: String) : Call()
+
+    /** Stops save [save] and answers once it stopped, nothing left at its path ([Answer.Done]; refused where it had ended). */
+    @Serializable @SerialName("Save.Cancel") data class SaveCancel(val save: Long) : Call()
+
+    /**
      * Where a picture of [imageWidth] × [imageHeight] sits in a cover's frame of [frameWidth] × [frameHeight] (core's
      * `CoverFrame`, the web's cropper; asked per change, the math never the host's): from [at] — or, none, from [crop] (a
      * stored cover reopens as framed) or centred (a fresh picture) — moved by [panX], [panY] and zoomed by [zoom] about the
@@ -506,6 +535,10 @@ internal sealed class Answer {
     @Serializable @SerialName("Reader") data class Reader(val reader: Long, val size: Long, val mediaType: String?) : Answer()
 
     @Serializable @SerialName("HeaderOpened") data class HeaderOpened(val header: Long) : Answer()
+    @Serializable @SerialName("FileOpened") data class FileOpened(val file: Long) : Answer()
+
+    /** A copy being saved ([Call.FileSave]): its id, for [Watched.Save] and [Call.SaveCancel]. */
+    @Serializable @SerialName("Saving") data class Saving(val save: Long) : Answer()
     @Serializable @SerialName("TrashOpened") data class TrashOpened(val trash: Long) : Answer()
 
     /** What an action says: its notice, or null where it says nothing (it went through). */
@@ -581,7 +614,7 @@ internal sealed class Answer {
     enum class Why {
         NOT_A_CALL, NO_TENANT_OPEN, NO_SUCH_CONNECTION, NO_SUCH_TENANT, NO_SUCH_POT, NO_SUCH_READER, NO_PICTURE, NOTHING_TO_DOWNLOAD,
         NO_SUCH_HEADER, NO_SUCH_TRASH, NO_SUCH_ROW, NO_SUCH_MOVE, NO_SUCH_SHARE, NO_SUCH_REPORT, NO_COVER, NO_SUCH_ENTRY, NO_SUCH_EDITOR,
-        NO_RECEIPT, NOT_WRITTEN, NO_SUCH_SETTINGS, NO_SUCH_CREATE,
+        NO_RECEIPT, NOT_WRITTEN, NO_SUCH_SETTINGS, NO_SUCH_CREATE, NO_SUCH_FILE, NO_BYTES, NO_SUCH_SAVE, SAVE_ENDED,
 
         /** A change of trust (`TrustChange`): no offer to answer; the person cancelled the prompt; not enrolled; the
          *  password was not the account's. */
@@ -631,6 +664,12 @@ internal sealed class Watched {
 
     /** A report sheet opened by [Call.ReportOpen]. */
     @Serializable @SerialName("Report") data class Report(val report: Long) : Watched()
+
+    /** A file's page opened by [Call.FileOpen]. */
+    @Serializable @SerialName("File") data class File(val file: Long) : Watched()
+
+    /** A copy being saved by [Call.FileSave]. */
+    @Serializable @SerialName("Save") data class Save(val save: Long) : Watched()
 }
 
 /** One state a watch delivers: the first at once, then each change. */
@@ -678,6 +717,12 @@ internal sealed class Update {
 
     /** "New pot"; null once it was closed. */
     @Serializable @SerialName("PotCreate") data class PotCreate(val create: Long, val shown: PotCreateShown?) : Update()
+
+    /** A file's page; null once it was closed (or an id the bridge does not hold). */
+    @Serializable @SerialName("File") data class File(val file: Long, val shown: FileShown?) : Update()
+
+    /** A copy being saved; null for an id the bridge does not hold (its tenant closed). */
+    @Serializable @SerialName("Save") data class Save(val save: Long, val shown: SaveShown?) : Update()
 }
 
 /**
@@ -882,6 +927,53 @@ internal class ReportShown(
  */
 @Serializable
 internal class HistoryShown(val line: List<Piece>, val writer: String?, val at: Long)
+
+/**
+ * A file's page as the host draws it (core's `FileModel`, the Depot CR's D1), each field the model's own answer:
+ * - [view], what shows in the content's place, and [words], what the page says there where it shows no content (opening,
+ *   failed, not uploaded yet, too large, empty, not shown here — and a medium, for a host that does not play one);
+ * - an image ([mediaType], decoded to [edge] pixels on its longest side at most) and a PDF, their bytes through
+ *   [Call.FileBytes], asked again when [revision] turns; a text's [text] (its first megabyte) and, where it was cut, what
+ *   the page says above it ([truncated]); a medium's [mediaType] and [size];
+ * - its [facts] (size, type, modified) and [uploader] line; what its header knows ([headerFacts], for [Call.HeaderFacts]),
+ *   and the name a copy is saved as ([downloadName]). Null where the file is not read yet.
+ */
+@Serializable
+@SerialName("FileShown")
+internal class FileShown(
+    val node: NodeAt,
+    val view: View,
+    @Serializable(with = MsgKey::class) val words: Msg?,
+    val mediaType: String?,
+    val edge: Int?,
+    val text: String?,
+    val truncated: Notice?,
+    val size: Long?,
+    val revision: Int,
+    val facts: List<Piece>,
+    val uploader: Notice?,
+    val headerFacts: AppKinds.Facts?,
+    val downloadName: String?,
+) {
+    /** Named on the wire so no host's own `View` is shadowed. */
+    @Serializable @SerialName("FileViewKind")
+    enum class View { LOADING, FAILED, NOT_UPLOADED, MESSAGE, IMAGE, TEXT, PDF, MEDIA }
+}
+
+/**
+ * A copy being saved as the host draws it (core's `FileSave`): its [name], how much is [written] of [total] ([fraction],
+ * 0 to 1), how it ended ([end]; null while it runs) and what it says ([notice]: its progress, then its end).
+ */
+@Serializable
+@SerialName("SaveShown")
+internal class SaveShown(
+    val name: String,
+    val written: Long,
+    val total: Long,
+    val fraction: Double,
+    val end: me.raddatz.veyq.mobile.depot.FileSave.End?,
+    val notice: Notice,
+)
 
 /**
  * A node's header as the host draws it (`NodeHeaderModel`), each field one core function's answer: the node, whether it

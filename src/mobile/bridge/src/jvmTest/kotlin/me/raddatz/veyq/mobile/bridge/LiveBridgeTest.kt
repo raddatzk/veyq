@@ -1265,6 +1265,221 @@ class LiveBridgeTest {
     }
 
     /**
+     * A file's page and its "Save a copy" through calls, over the real core: a folder "App depot <n>" made at the personal
+     * space's top level, filled by the core's own upload in a second session (`DepotFiles.upload`; the upload calls are a later
+     * phase's) with a JPEG, a text past `TEXT_CAP`, a PDF and a 300 MiB file of drawn bytes; each opened through `File.Open`
+     * and its payload (`File.Bytes`) or text held to the original's SHA-256 (a text's first megabyte); the large one saved
+     * through `File.Save` to a path at its SHA-256, a second save cancelled midway with nothing left at its path. The folder is
+     * trashed and purged however it ends. Runs with `VEYQ_LIVE` alone.
+     */
+    @Test
+    fun aFileIsShownAndSavedThroughCalls() = runBlocking {
+        val origin = System.getenv("VEYQ_LIVE") ?: return@runBlocking
+        val envFile = System.getenv("VEYQ_ENV_FILE")?.let(::File) ?: File(System.getProperty("veyq.repoRoot"), ".run/.env")
+        val env = envFile.readLines()
+            .mapNotNull { l -> l.substringBefore('=', "").takeIf { it.isNotBlank() }?.let { it.trim() to l.substringAfter('=').trim().trim('"', '\'') } }
+            .toMap()
+        // the folder and its files made by the core in a session of its own first: the bridge's tree, read at its sign-in,
+        // then holds them (a session's tree is cached; a refresh does not read another device's writes)
+        val store = object : DeviceStore {
+            val values = ConcurrentHashMap<String, String>()
+            override fun read(key: String) = values[key]
+            override fun write(key: String, value: String) { values[key] = value }
+            override fun remove(key: String) { values.remove(key) }
+        }
+        val account = VeyqAccount.signIn(
+            BouncyCastlePrimitives, origin, env.getValue("VEYQ_EMAIL"), env.getValue("VEYQ_PASSWORD"), env.getValue("VEYQ_SECRET_KEY"),
+            ThisDevice(store, NoDeviceKeys, "bridge live file test, the uploader", BouncyCastlePrimitives),
+        ) { block -> HttpClient(OkHttp, block) }
+        val tenant = account.open(account.tenants.first { origin.contains(it.domain) })
+        val personalScope = tenant.spaces().first { it.kind == "PERSONAL" }.scopeId
+        val folderName = "App depot ${System.currentTimeMillis() % 100_000}"
+        val made = me.raddatz.veyq.mobile.session.FolderCreate.create(tenant, personalScope, null, folderName)
+        val folderId = assertIs<me.raddatz.veyq.mobile.session.NodeCreate.Result.Done>(made, "$made").created.nodeId
+        println("made $folderName")
+        val b = Bridge.live(BouncyCastlePrimitives, { block -> HttpClient(OkHttp, block) }, Config("bridge file test"), hostStore(ConcurrentHashMap()), { NoDeviceKeys }, JvmFiles)
+        suspend fun fresh(): Update.Shell {
+            assertEquals(Answer.Done, b.ask(Call.ShellRefresh, timeout = 1.minutes))
+            return b.watching(Watched.Shell).next() as Update.Shell
+        }
+        try {
+            val jpeg = java.io.ByteArrayOutputStream().also { out ->
+                val image = java.awt.image.BufferedImage(1200, 800, java.awt.image.BufferedImage.TYPE_INT_RGB)
+                val g = image.createGraphics()
+                g.paint = java.awt.GradientPaint(0f, 0f, java.awt.Color(30, 90, 200), 1200f, 800f, java.awt.Color(240, 200, 40))
+                g.fillRect(0, 0, 1200, 800)
+                g.dispose()
+                javax.imageio.ImageIO.write(image, "jpg", out)
+            }.toByteArray()
+            val text = ByteArray(me.raddatz.veyq.mobile.depot.FileView.TEXT_CAP + 200_000) { i -> if (i % 80 == 79) '\n'.code.toByte() else ('a' + (i / 80) % 26).code.toByte() }
+            val pdf = pdfOf(30)
+            val bigSize = 300L shl 20
+            /** The large file's byte at [i]: drawn, never held whole. */
+            fun big(i: Long): Byte = ((i * 2654435761L) ushr 13).toByte()
+            fun bigRead(from: Long, length: Int) = ByteArray(minOf(length.toLong(), bigSize - from).toInt()) { big(from + it) }
+            val bigSha = java.security.MessageDigest.getInstance("SHA-256").let { d ->
+                var at = 0L
+                while (at < bigSize) { val chunk = bigRead(at, 1 shl 20); d.update(chunk); at += chunk.size }
+                d.digest().joinToString("") { "%02x".format(it) }
+            }
+            suspend fun upload(name: String, size: Long, type: String, read: (Long, Int) -> ByteArray) {
+                val up = me.raddatz.veyq.mobile.depot.DepotFiles.upload(
+                    tenant, personalScope, folderId, name, size, type, null, me.raddatz.veyq.mobile.AppKinds::tokenInput, { from, len -> read(from, len) },
+                )
+                assertEquals(me.raddatz.veyq.mobile.depot.DepotFiles.Outcome.DONE, up.outcome, name)
+                println("uploaded $name ($size B)")
+            }
+            fun whole(bytes: ByteArray): (Long, Int) -> ByteArray = { from, len -> bytes.copyOfRange(from.toInt(), minOf(bytes.size, from.toInt() + len)) }
+            upload("photo.jpg", jpeg.size.toLong(), "image/jpeg", whole(jpeg))
+            upload("long.txt", text.size.toLong(), "text/plain", whole(text))
+            upload("thirty.pdf", pdf.size.toLong(), "application/pdf", whole(pdf))
+            upload("big.bin", bigSize, "application/octet-stream", ::bigRead)
+
+            val gate = b.watching(Watched.Session)
+            assertEquals(Answer.Done, b.ask(Call.SessionStart))
+            gate.until { (it as Update.Session).gate as? Gate.SignIn }
+            assertEquals(Answer.Done, b.ask(Call.SessionSignIn(origin, env.getValue("VEYQ_EMAIL"), env.getValue("VEYQ_PASSWORD"), env.getValue("VEYQ_SECRET_KEY")), timeout = 2.minutes))
+            gate.until(2.minutes) { (it as Update.Session).gate as? Gate.Signed }
+            b.watching(Watched.Shell).until(1.minutes) { (it as Update.Shell).takeIf { u -> u.state?.lists?.spaces?.isNotEmpty() == true } }
+
+            val nodes = fresh().state!!.lists.nodes.filter { it.parentId == folderId }
+            fun at(name: String) = nodes.first { it.name == name }.let { me.raddatz.veyq.mobile.navigation.NodeAt(it.scopeId, it.nodeId, it.kind, it.name) }
+            suspend fun open(name: String): Pair<Long, FileShown> {
+                val id = (b.ask(Call.FileOpen(at(name))) as Answer.FileOpened).file
+                return id to b.watching(Watched.File(id)).until(2.minutes) { u -> (u as Update.File).shown?.takeIf { it.view != FileShown.View.LOADING && it.headerFacts != null } }
+            }
+            val (photo, photoShown) = open("photo.jpg")
+            assertEquals(FileShown.View.IMAGE to "image/jpeg", photoShown.view to photoShown.mediaType)
+            val (photoAnswer, photoBytes) = b.askWithPayload(Call.FileBytes(photo), 1.minutes)
+            assertEquals(Answer.Bytes("image/jpeg"), photoAnswer)
+            assertEquals(sha256(jpeg), sha256(photoBytes!!), "the JPEG shown is not the one uploaded")
+            println("photo.jpg shown: ${photoBytes.size} B at ${sha256(photoBytes)}")
+            val (_, longShown) = open("long.txt")
+            assertEquals(FileShown.View.TEXT, longShown.view)
+            assertEquals(me.raddatz.veyq.mobile.words.Msg.FILE_TEXT_TRUNCATED, longShown.truncated?.msg)
+            assertEquals(sha256(text.copyOf(me.raddatz.veyq.mobile.depot.FileView.TEXT_CAP)), sha256(longShown.text!!.encodeToByteArray()), "the text shown is not the file's first megabyte")
+            println("long.txt shown: its first ${longShown.text.length} characters, cut said")
+            val (thirty, thirtyShown) = open("thirty.pdf")
+            assertEquals(FileShown.View.PDF, thirtyShown.view)
+            val (pdfAnswer, pdfBytes) = b.askWithPayload(Call.FileBytes(thirty), 1.minutes)
+            assertEquals(Answer.Bytes("application/pdf"), pdfAnswer)
+            assertEquals(sha256(pdf), sha256(pdfBytes!!))
+            assertEquals(Answer.ReceiptPages(30, null), b.ask(Call.FilePages(30)))
+            println("thirty.pdf shown: ${pdfBytes.size} B at ${sha256(pdfBytes)}")
+
+            // the large file: nothing to show, saved whole to a path at its SHA-256, a second save cancelled midway
+            val (bigId, bigShown) = open("big.bin")
+            assertEquals(FileShown.View.MESSAGE to me.raddatz.veyq.mobile.words.Msg.FILE_UNSUPPORTED, bigShown.view to bigShown.words)
+            val target = File.createTempFile("veyq-big", ".bin").apply { delete() }
+            val started = System.currentTimeMillis()
+            val save = (b.ask(Call.FileSave(bigId, target.path)) as Answer.Saving).save
+            val saved = b.watching(Watched.Save(save)).until(15.minutes) { u -> (u as Update.Save).shown?.takeIf { it.end != null } }
+            assertEquals(me.raddatz.veyq.mobile.depot.FileSave.End.SAVED, saved.end, "${saved.notice}")
+            val savedSha = java.security.MessageDigest.getInstance("SHA-256").let { d ->
+                target.inputStream().use { input -> val buf = ByteArray(1 shl 20); while (true) { val n = input.read(buf); if (n < 0) break; d.update(buf, 0, n) } }
+                d.digest().joinToString("") { "%02x".format(it) }
+            }
+            println("big.bin saved in ${System.currentTimeMillis() - started} ms: ${target.length()} B at $savedSha (uploaded $bigSha)")
+            assertEquals(bigSha, savedSha, "the copy saved is not the file")
+            target.delete()
+            val cancelled = File.createTempFile("veyq-cancel", ".bin").apply { delete() }
+            val second = (b.ask(Call.FileSave(bigId, cancelled.path)) as Answer.Saving).save
+            val midway = b.watching(Watched.Save(second)).until(5.minutes) { u -> (u as Update.Save).shown?.takeIf { it.written >= (20L shl 20) || it.end != null } }
+            assertNull(midway.end, "the second save ended before it was cancelled")
+            assertEquals(Answer.Done, b.ask(Call.SaveCancel(second), timeout = 1.minutes))
+            assertTrue(!cancelled.exists(), "a cancelled save left its file")
+            println("the second save cancelled at ${midway.written} B: nothing at ${cancelled.path}")
+        } finally {
+            // trashed and purged through the bridge's calls where it signed in, else through the core's session
+            val signed = runCatching { fresh().state?.lists?.nodes?.firstOrNull { it.nodeId == folderId } }.getOrNull()
+            if (signed != null) {
+                val h = (b.ask(Call.HeaderOpen(me.raddatz.veyq.mobile.navigation.NodeAt(signed.scopeId, signed.nodeId, signed.kind, signed.name), me.raddatz.veyq.mobile.AppKinds.Facts(), 2)) as Answer.HeaderOpened).header
+                println("trash $folderName: ${(b.ask(Call.HeaderTrash(h), timeout = 1.minutes) as? Answer.Trashed)?.notice?.msg}")
+                val t = (b.ask(Call.TrashOpen(personalScope)) as Answer.TrashOpened).trash
+                val tw = b.watching(Watched.Trash(t))
+                tw.until(1.minutes) { u -> (u as Update.Trash).shown?.rows }.firstOrNull { it.id == folderId }?.let { row ->
+                    val purged = b.ask(Call.TrashPurge(t, row.id), timeout = 2.minutes)
+                    println("purge ${row.name}: $purged")
+                    if (purged == Answer.Done) tw.until(2.minutes) { u -> (u as Update.Trash).shown?.takeIf { s -> s.busy == null && s.rows?.none { it.id == row.id } == true } }
+                }
+                b.ask(Call.TrashClose(t))
+                assertTrue(fresh().state!!.lists.nodes.none { it.nodeId == folderId }, "the folder was left")
+            } else {
+                // the bridge did not sign in: the core's own session trashes and purges it
+                println("trash $folderName (core): ${me.raddatz.veyq.mobile.session.NodeTrash.delete(tenant, personalScope, folderId)}")
+                println("purge $folderName (core): ${me.raddatz.veyq.mobile.session.NodeTrash.purge(tenant, personalScope, folderId)}")
+            }
+            b.shutdown()
+        }
+    }
+
+    /**
+     * A desktop pass's folder (the Depot CR's Phase 3), not a check: with `VEYQ_LIVE_DEPOT_PASS=<name>` it makes a folder of
+     * that name at the personal space's top level and fills it through the core's own upload with what the pass opens —
+     * a JPEG, a text past `TEXT_CAP`, a 30-page PDF, a ZIP, an empty file and a 300 MiB file of drawn bytes —, printing each
+     * one's SHA-256. It stays, for the pass; the pass trashes and purges it.
+     */
+    @Test
+    fun aDesktopPassFolderIsFilled() = runBlocking {
+        val origin = System.getenv("VEYQ_LIVE") ?: return@runBlocking
+        val folderName = System.getenv("VEYQ_LIVE_DEPOT_PASS") ?: return@runBlocking
+        val envFile = System.getenv("VEYQ_ENV_FILE")?.let(::File) ?: File(System.getProperty("veyq.repoRoot"), ".run/.env")
+        val env = envFile.readLines()
+            .mapNotNull { l -> l.substringBefore('=', "").takeIf { it.isNotBlank() }?.let { it.trim() to l.substringAfter('=').trim().trim('"', '\'') } }
+            .toMap()
+        val store = object : DeviceStore {
+            val values = ConcurrentHashMap<String, String>()
+            override fun read(key: String) = values[key]
+            override fun write(key: String, value: String) { values[key] = value }
+            override fun remove(key: String) { values.remove(key) }
+        }
+        val account = VeyqAccount.signIn(
+            BouncyCastlePrimitives, origin, env.getValue("VEYQ_EMAIL"), env.getValue("VEYQ_PASSWORD"), env.getValue("VEYQ_SECRET_KEY"),
+            ThisDevice(store, NoDeviceKeys, "bridge live desktop pass, the uploader", BouncyCastlePrimitives),
+        ) { block -> HttpClient(OkHttp, block) }
+        val tenant = account.open(account.tenants.first { origin.contains(it.domain) })
+        val scope = tenant.spaces().first { it.kind == "PERSONAL" }.scopeId
+        val made = me.raddatz.veyq.mobile.session.FolderCreate.create(tenant, scope, null, folderName)
+        val folderId = assertIs<me.raddatz.veyq.mobile.session.NodeCreate.Result.Done>(made, "$made").created.nodeId
+        val jpeg = java.io.ByteArrayOutputStream().also { out ->
+            val image = java.awt.image.BufferedImage(3000, 2000, java.awt.image.BufferedImage.TYPE_INT_RGB)
+            val g = image.createGraphics()
+            g.paint = java.awt.GradientPaint(0f, 0f, java.awt.Color(30, 90, 200), 3000f, 2000f, java.awt.Color(240, 200, 40))
+            g.fillRect(0, 0, 3000, 2000)
+            g.color = java.awt.Color.WHITE
+            g.fillOval(1100, 600, 800, 800)
+            g.dispose()
+            javax.imageio.ImageIO.write(image, "jpg", out)
+        }.toByteArray()
+        val text = ByteArray(me.raddatz.veyq.mobile.depot.FileView.TEXT_CAP + 200_000) { i -> if (i % 80 == 79) '\n'.code.toByte() else ('a' + (i / 80) % 26).code.toByte() }
+        val zip = java.io.ByteArrayOutputStream().also { out ->
+            java.util.zip.ZipOutputStream(out).use { z -> z.putNextEntry(java.util.zip.ZipEntry("inside.txt")); z.write("inside\n".encodeToByteArray()); z.closeEntry() }
+        }.toByteArray()
+        val bigSize = 300L shl 20
+        fun big(i: Long): Byte = ((i * 2654435761L) ushr 13).toByte()
+        fun bigRead(from: Long, length: Int) = ByteArray(minOf(length.toLong(), bigSize - from).toInt()) { big(from + it) }
+        val bigSha = java.security.MessageDigest.getInstance("SHA-256").let { d ->
+            var at = 0L
+            while (at < bigSize) { val chunk = bigRead(at, 1 shl 20); d.update(chunk); at += chunk.size }
+            d.digest().joinToString("") { "%02x".format(it) }
+        }
+        fun whole(bytes: ByteArray): (Long, Int) -> ByteArray = { from, len -> bytes.copyOfRange(from.toInt(), minOf(bytes.size, from.toInt() + len)) }
+        for ((name, sized) in listOf(
+            "photo.jpg" to Triple(jpeg.size.toLong(), "image/jpeg", whole(jpeg)),
+            "long.txt" to Triple(text.size.toLong(), "text/plain", whole(text)),
+            "thirty.pdf" to Triple(pdfOf(30).size.toLong(), "application/pdf", whole(pdfOf(30))),
+            "archive.zip" to Triple(zip.size.toLong(), "application/zip", whole(zip)),
+            "empty.txt" to Triple(0L, "text/plain", whole(ByteArray(0))),
+            "big.bin" to Triple(bigSize, "application/octet-stream", ::bigRead),
+        )) {
+            val (size, type, read) = sized
+            val up = me.raddatz.veyq.mobile.depot.DepotFiles.upload(tenant, scope, folderId, name, size, type, null, me.raddatz.veyq.mobile.AppKinds::tokenInput, { from, len -> read(from, len) })
+            println("uploaded $name ($size B): ${up.outcome}")
+        }
+        println("$folderName filled; big.bin's SHA-256 $bigSha, photo.jpg's ${sha256(jpeg)}")
+    }
+
+    /**
      * Amsterdam copied through the move sheet beside itself and renamed `App pot <n>`; [body] gets its ref and a reopen
      * (closes the Pot id given, opens the copy afresh and answers its id); the copy is trashed and purged however it ends.
      */
