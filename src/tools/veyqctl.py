@@ -3377,7 +3377,11 @@ def server_finish(run: InitRun, g: GitOps, repo_url: str) -> None:
         lines.append("TLS runs on Let's Encrypt's test certificates: browsers warn, and the admin console's store check "
                      "fails (veyq's server trusts them no more than a browser does). Switch: veyqctl tls production — "
                      "then check the store again.")
-    lines.append(f"Your sudo password: sops decrypt --extract '[\"admin_password\"]' {top / SERVER_SECRETS}")
+    # The key file as sops is handed it when veyqctl decrypts: printed bare, sops looks only where its own default is,
+    # which is not where init kept the key (raddatz.me, 2026-11-12: "no identity matched any of the recipients").
+    key_env = "".join(f"{k}={shlex.quote(v)} " for k, v in run.age_env().items())
+    lines.append(f"Your sudo password: {key_env}sops decrypt --extract '[\"admin_password\"]' "
+                 f"{shlex.quote(str(top / SERVER_SECRETS))}")
     lines.append(f"Keep the age key ({run.age_env().get('SOPS_AGE_KEY_FILE', 'its file')}) in your password manager. "
                  f"With it and this repository, `veyqctl init` sets the server up again.")
     print("\n".join(f"   {line}" for line in lines), flush=True)

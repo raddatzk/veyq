@@ -2585,6 +2585,9 @@ def test_server_path(tmp: pathlib.Path, home: pathlib.Path) -> pathlib.Path:
           and "LocalForward 18443 server.example.org:30443" in config and "name: server-run" in kube
           and "https://127.0.0.1:16443" in kube and host.tunnels == ["closed"]
           and HOST_KEY in (home / ".ssh" / "known_hosts").read_text() and "Synced and Healthy" in out, out[-900:])
+    check("server path: the closing line for the sudo password hands sops the age key's file, as veyqctl's own "
+          "decrypt does (raddatz.me, 2026-11-12)",
+          f"Your sudo password: SOPS_AGE_KEY_FILE={age_key.resolve()} sops decrypt --extract" in out, out[-700:])
     check("server path: on staging the closing lines say the store check fails until `veyqctl tls production`",
           "store check fails" in out and "veyqctl tls production" in out[out.index("Synced and Healthy"):], out[-700:])
 
