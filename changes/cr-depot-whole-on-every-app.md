@@ -1,7 +1,7 @@
 ---
 id: cr-depot-whole-on-every-app
 title: Depot whole on Linux and Windows — the file page, uploads and drop boxes moved into the core first, then bridged and drawn
-status: planned
+status: in-progress
 satisfies: []
 adrs: ["0127", "0128", "0123", "0122", "0047"]
 invariants:
@@ -319,6 +319,62 @@ Android and Apple thinned.
   the simulator container's `tmp` list no `view-*` file during and after playback; Download of a file writes the file
   (its SHA-256 the original's); Send a copy on Android and iOS; unchanged from before otherwise.
 
+**Status: done (2026-11-12).**
+
+**Built:**
+- core `depot/FileModel.kt` (ADR 0127 decision 2): state (`shown` — `Loading`, `Failed`, `NotUploaded`, `Message(kind)`,
+  `Image(bytes, mediaType, edge)`, `Text(text, truncated)`, `Pdf(bytes, pages)`, `Media(reader, mediaType)` —, `facts`,
+  `uploader`, `header`), `watch`, `reload` (the file read anew, its content only where the blob changed), `close`,
+  `replace(source)` (expected over the blob shown); over a `Door` (file, inIdentityFolder, read, reader, uploader,
+  replaceJob). `FileRights`: the opened-file rows of the rights matrix (member, READ, READ_WRITE; replace never in an
+  identity folder, copy a member's only, Send a copy only with content and where the platform shares). `Header`: the
+  doors' `Facts`, the own actions `replace` and `send` (menu), their words, `downloadName`, `mediaType`.
+- `FileView.IMAGE_EDGE` (4096), `PDF_PAGES` (1000) with `pagesShown`/`pagesCut` (`file_pages_cut`, en + de); `FileView.open`
+  over a frame reader, an image and a PDF read whole (capped). `DepotFiles.one`, `reader`, `download`, `offerAfter`,
+  `take` (the app holds no files map; an offer's file is read when it is made and when it is taken).
+- `ShellModel.download` asks the kind (`AppKinds.downloadsItself`/`ownDownload`, `ShellModel.downloadAs`): a FILE writes
+  the file itself, any other node its ZIP. `NodeHeaderModel.State.downloadName` (`AppKinds.downloadName`); the bridge's
+  `HeaderShown.archiveName` follows it, so the desktops' Download of a file is the file under its own name (R7).
+  `ShellModel.fileModel(node, shares)`.
+- Android: `FileScreen` and the file's `KindPage` drawn from `FileModel`; a PDF through a `memfd` into `PdfRenderer`; a
+  medium through `ReaderPlayer` (Memories' player moved out of `MemoryScreen`, shared); the files map, `openFileView`,
+  `readFile`, `downloadFile`, `uploader` gone; Send's copy is the core's download; `view-*` left by earlier builds swept.
+- Apple: `FileScreen` drawn from `FileModel` (`AppModel.fileModel`/`fileState`, the state through the watch only); a PDF by
+  `PDFDocument(data:)` (`PDFPages(data:maxPages:)`; the URL initialiser gone); a medium through `ReaderPlayback.swift`
+  (moved out of `MemoryScreen`), a format iOS does not play said `file_unsupported`; a long text a line a row. The header's
+  download door writes to a path: a Mac's `NSSavePanel` path through `FileSink`, iOS `tmp/downloads/<uuid>/` for
+  `fileMover`; `tmp/shared`, `tmp/downloads` and earlier builds' `view-*` and download directories swept at start.
+  `AppleDepot` keeps `source(…)` and `bytes(shown)`; its `download`, `view`, `read` and `replaceJob` are gone.
+- Beside the phase (the coordinator's item, the owner's report): a list keeps its scroll when an object opened from it is
+  closed — Android `ListStates`, Apple `KeepsScroll`.
+
+**Met:**
+- `FileModelTest` 11/11 and `FileViewTest` green; 24 mutations by `scratchpad/d1/bite.py` (`/bin/cp -f` restore), all 24 bit
+  — the first run's "a text cut at TEXT_CAP" missed as an equivalent mutant (the cap is four whole frames, so dropping the
+  `copyOf` changed nothing) and was replaced by the frames a text reads, which bit (`bite-run1.log`, `bite.log`).
+- `./gradlew :core:jvmTest :core:macosArm64Test :bridge:jvmTest` green.
+- The inventory's first locator finds none of Phase 1's in the file page: no `Shown`/`FileShown`, no `view-` file written,
+  no `VideoView`, no `AVPlayer(url:)`, no PDFKit from a URL, no files map, no app-made `Facts` for a file; its remaining hits
+  are other areas' (Memories' tile decode at 4096, the drop box folder's `Facts()` — Phase 2 —, a Pot's `Facts`, and
+  Android's receipt PDF in `cacheDir`, an Expenses finding, below).
+- `:android:assembleDebug`, `xcodebuild -target Veyq -sdk macosx CODE_SIGNING_ALLOWED=NO` and the signed iOS simulator
+  build (`-scheme Veyq`, iPhone 18 Pro) green; `linux/run.py build` (clippy, `cargo test` 30 passed) and `windows/run.py
+  build` (Veyq.Bridge.Tests and Veyq.Tests passed) green; `validate_mobile_words`, `validate_mobile_platform_guidelines`,
+  `validate_changes` green.
+- Android (throwaway AVD `veyq_d1_throwaway`, Android 36, deleted after), in `App depot 1`, read through `uiautomator dump`:
+  a 3000×2000 JPEG, a 1.38 MB text ("Showing only the first megabyte…"), a three-page PDF (pages drawn from the `memfd`),
+  a 248 MB MP4 and a 222 MB WebM (VP9) played and seeked to 01:46 of 01:50 and 01:31 of 01:35, a ZIP ("This file cannot
+  be shown here…"); the header's Download of the ZIP wrote `App file 6.zip (1)` at the original's SHA-256 (`f4d32d8e…`);
+  Send a copy opened the system's share sheet with the file; `run-as … ls cache` empty during and after every view and
+  playback, `cache/shared/<uuid>/App file 6.zip` after Send, empty again after a restart. The header's menu: Share,
+  Replace…, Rename, Send a copy…, Move, Copy, Report, Delete file.
+- Apple (the booted iPhone 18 Pro, iOS 27, German): the JPEG, the cut text (after the fix below), the PDF, the MP4 shown
+  playing, the WebM said "Diese Datei kann hier nicht angezeigt werden…"; the container's `tmp` held no `view-*` file and no
+  download directory during and after (only the system's `MediaCache` and `TemporaryItems`).
+- The scroll: on the simulator Expenses scrolled to its bottom, "Ui pot" opened, back — still at the bottom
+  (`scratchpad/d1/ios-list-kept-after-back.png`); on the emulator Expenses at its bottom, "Ui pot (3)" opened, back — the
+  bottom rows still shown.
+
 ### Phase 2 — Uploads, folders and drop boxes in the core: `DepotUploads`, `FolderUpload.keeps`, `DropBoxPage`, the top level's sheet, D9
 
 Android and Apple thinned.
@@ -466,3 +522,43 @@ D9's unifications and D3's fix (a file's Download is the file, not a ZIP, on eve
 owner's veto.
 
 ## Retrospective
+
+### Phase 1 (2026-11-12)
+
+- **The opened file's rights are a function of their own, `FileRights`**, the matrix's opened-file rows for a member, a
+  READ and a READ_WRITE guest, though only members use the apps: the header's `Facts` and own actions come from it, so no
+  app builds them. Decided here.
+- **A member replaces nothing in a guest's identity folder** (the matrix's "member, guest's identity folder" column), where
+  both apps offered Replace on every file. A D9 unification, open to the owner's veto.
+- **A file's own header actions stay the kind's** (`FileModel.Header.own`, plan-ordered by `AppKinds.headerOrder`), not
+  core ids in `NodeHeader`: Replace and Send are Depot's, as the web's file page contributes them. The download is core's,
+  and only its content and name are the kind's (`AppKinds.ownDownload`/`downloadName`).
+- **Send a copy and Download are one path:** Send's copy is `ShellModel.download` of the file into the shared directory, so
+  no app reads a file's frames itself any more.
+- **The replace offer reads its file when made and when taken** (`DepotFiles.offerAfter`, `take`): the apps held a map of
+  every file only for that. Phase 2's `DepotUploads` takes these over.
+- **A medium iOS does not play says so** (WebM: AVFoundation plays none): the asset's `isPlayable` through the resource
+  loader, then `file_unsupported` — D7's rule, met on Apple first. Before, a crossed-out player stood there.
+- **A text of a megabyte drew nothing on iOS** in one `Text` (measured: the banner shown, the text blank, unchanged after
+  10 s); it is a line a row in a `LazyVStack` now. The defect predates this CR (the same view drew it).
+- **Earlier builds' leftovers are swept:** Android `cacheDir/view-*`, Apple `tmp/view-*` and a download's `<uuid>`
+  directories — a decrypted copy the old page left at rest (measured: one `view-….pdf` from 2026-11-09 in the simulator's
+  container before this build).
+- **Deviations:** the Apple pass ran on the booted iPhone 18 Pro the brief named, which stays installed and signed in; the
+  macOS build was compiled, not run (no pass on the Mac: its download through the save panel is unproved by hand). On
+  Apple no seek near the end (the tool's screenshots lag the player's controls), no Download and no Send a copy (both need a
+  system sheet the tool cannot drive reliably); Android's pass and the core's tests hold them. The swiftshader emulator
+  decodes 720p at a fraction of real time (75 % frames dropped), so the seeks are proved by the player's position, a frame
+  drawn at the start. One MP4 and one WebM of more than 200 MB each, not a pair per format.
+- **Beside the phase — the owner's report (the coordinator's item): a list lost its scroll** when an object opened from it
+  closed. Cause: the shell shows an object in its list's place and the bar is the object's (ADR 0122), so the list's tab and
+  `NavigationStack` (iOS) or composable (Android) leave the tree and come back new. Android keeps each list's
+  `LazyListState` in the shell by key; on iOS `ScrollViewReader.scrollTo` and `scrollPosition` ran (logged) and moved
+  nothing, so `KeepsScroll` keeps the offset of the list's own `UIScrollView` (found beside its background a moment after
+  it joins the window). Android had the same structure; that it reset there is reasoned, not measured before the fix.
+- **Found, left for its own CR:** Android's receipt viewer writes a decrypted receipt PDF to `cacheDir`
+  (`EntryReceipts.kt`, `createTempFile("receipt", ".pdf")`) — the same rule's breach in Expenses; the `memfd` path here is
+  its answer. The Apple app's URL cache (`Library/Caches/<bundle>/fsCachedData`) holds responses, ciphertext only.
+- **Left in the dev instance by my runs:** nothing; `App depot 1` with its six files was trashed and deleted forever. The
+  throwaway AVD is deleted.
+

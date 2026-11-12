@@ -12,7 +12,9 @@ A Gradle build of its own, run through its own wrapper.
   pictures are read (`session/AvatarsModel`, held as `TenantSession.pictures`: synced when the tenant opens and when
   `peopleRead` gets a different set; every app watches it), and each
   application's own package (`expenses/`: the web's Expenses domain, a Pot's session and what its views show; `depot/`: Depot's files, each one
-  core attachment, and how a file's page shows it; `memories/`: a Memory's gallery, each medium under the key its origin
+  core attachment, and a file's page as a screen model, `FileModel`: what it shows decided by the bytes, an image, a text
+  and a PDF held in memory, a medium read through a `RangeReader`, never a decrypted file written to show one; the header's
+  file actions and the opened file's rights, `FileRights`; `memories/`: a Memory's gallery, each medium under the key its origin
   fixes), which
   uses core's session and is never used by it; an application's spec is generated into `api.<application>`.
 - **The device trust** ([ADR 0123](../../docs/decisions/0123-the-apps-share-a-kotlin-multiplatform-core-under-native-ui.md)
@@ -121,7 +123,9 @@ A Gradle build of its own, run through its own wrapper.
   (`PotWritesTest`, over real seals), of `EntryForm.kt` (`EntryFormTest`, over the vectors), of `ExchangeRates.kt` (`ExchangeRatesTest`), of `Currencies.kt` (`CurrenciesTest`: the web's `Intl` codes and digits), of `Receipts.kt` and core's `blob/Sniff.kt` (`ReceiptsTest`), of `PotShare.kt` (`PotShareTest`), of the Pot's screen models over a Pot the test plays (`PotFixture`, `commonTest`) — `expenses/EntryEditor.kt` (`EntryEditorTest`), `PotModel.kt` with its record, restore, live poll and `PotSettings` (`PotModelTest`), `PotCreateSheet.kt` (`PotCreateSheetTest`), what a receipt is shown as (`ReceiptsShownTest`) and every amount said with its currency (`PotViewMoneyTest`) —, of core's `session/LivePoll.kt` (`LivePollTest`, on virtual time), of core's `session/MemberAvatars.kt` (`MemberAvatarsTest`) and `session/ShareNames.kt` (`ShareNamesTest`), of `PotView.kt`'s people, balances and entries, an entry row's line and badge among them (`PotViewPeopleTest`, `PotViewEntriesTest`), of core's `session/NodeEpochWrite.kt` and `session/NodeMetaWrite.kt` (`NodeEpochWriteTest`, `NodeMetaWriteTest`), of
   core's `session/NodeMove.kt` browser rules, a guest's folder's included (`NodeMoveTest`), of `navigation/NodeHeader.kt`'s plan and
   its narrowing in a guest's folder (`NodeHeaderTest`), of core's `session/CoverFrame.kt` (`CoverFrameTest`), of core's `export/NodeExport.kt` archive (`FolderExportTest`, `ZipTest`) and its streamed `export/Sha256.kt` (`Sha256Test`), of Depot's `depot/FolderUpload.kt` plan (`FolderUploadTest`), of what Depot's rows and file page say (`DepotWordsTest`), of Memories' `memories/MemoryMedia.kt` listed tier and order (`MemoryMediaTest`) and `memories/MediaDetails.kt` (`MediaDetailsTest`, `MediaDetailsShownTest`), of core's `blob/RangeReader.kt` (`RangeReaderTest`), of core's `blob/FileSink.kt`, `FileSource.kt` and `Files.kt` (`FilesTest`, `nativeTest`: on macOS, Linux and Windows, through a non-ASCII name, the directory listed by the platform's own calls), of core's `session/AvatarsModel.kt` (`AvatarsModelTest`), of core's `blob/UploadQueue.kt` (`UploadQueueTest`, the web's `queue.test.ts` rules on virtual time), of core's `session/LinkForm.kt` (`LinkFormTest`: the new-link form's rules) and `session/LinkRow.kt` (`LinkRowTest`: a link's row and what a member may do with it), of Expenses' `expenses/ShareInbox.kt` (`ShareInboxTest`: shared files from arrival to their Pot), of core's `navigation/ShellModel.kt` (`ShellModelTest`: the shell after a read and after a folder on Home's path changed), `navigation/TrashSheet.kt` (`TrashSheetTest`: a space's trash sheet) and `navigation/ShellWords.kt` with `AppKinds`' words (`ShellWordsTest`), of core's `session/SessionModel.kt` (`SessionModelTest`: the start, sign-in, unlock, switcher and sign-out over a door the test plays), of core's `words/Notices.kt` (`NoticesTest`: every outcome's key with as many arguments as its words take), of core's `media/ExifReader.kt` and `media/VideoHeader.kt` and Memories' `memories/MediaMetadata.kt` (`MediaMetadataFixtureTest` over the web's own fixtures, held to what the web's `readExif.fixture.test.ts` and `videoHeader.test.ts` expect; `MediaMetadataNativeTest` on the Apple path; `XmpValueTest`: its XMP reads across line breaks), of `memories/MediaUpload.kt`'s type and core's `crypto/BlobMeta.kt` digest (`MediaUploadTest`), of Depot's `depot/FileView.kt` and core's
-  `blob/Sniff.kt` and `blob/DownloadName.kt` (`FileViewTest`), and of core's `session/NodeRekey.kt` frontier and what it
+  `blob/Sniff.kt` and `blob/DownloadName.kt` (`FileViewTest`), of Depot's `depot/FileModel.kt` with its `FileRights` and
+  `ShellModel.downloadAs` (a file downloads as itself, any other node as its ZIP) (`FileModelTest`, over a file the test
+  plays), and of core's `session/NodeRekey.kt` frontier and what it
   leaves to another device (`NodeRekeyRulesTest`).
 - `./gradlew :bridge:jvmTest` — the bridge (ADR 0123's Consequences, the bridge):
   - `DispatchTest` covers the way in, over a door the test plays: a reader read backwards in uneven ranges and closed
@@ -410,6 +414,10 @@ first in each of its scrolls — `LocalNodeHero.current(inset)` (Android) / `Nod
   app's activity resolves then (`am start` answers "Activity class … does not exist", `devlogin.py` "adb failed",
   measured 2026-11-10) — reinstalling does not help. Unlock it first: `adb shell input keyevent 82`, swipe up, `adb
   shell input text <pin>`, Enter (`adb shell dumpsys trust` then says `deviceLocked=0`).
+- DocumentsUI's multi-select (long-press, then taps) is drawn while `uiautomator dump` still lists the plain list: read
+  "N selected" from a screenshot and press Select by its place. A 220 MB upload from the swiftshader emulator took about
+  20 minutes (2026-11-12): a pass with large files starts their upload first and works on beside it — an app install
+  meanwhile kills the queue.
 - A tablet is tried on the phone emulator: `adb shell wm size 2560x1600` and `wm density 320` (1280 dp, expanded;
   `1600x2560` is 800 dp, medium), `wm size reset` and `wm density reset` after. While the size is changed
   `uiautomator dump` lists every Compose node as invisible (measured 2026-11-10): look with `adb exec-out screencap -p`.
@@ -467,6 +475,21 @@ first in each of its scrolls — `LocalNodeHero.current(inset)` (Android) / `Nod
   others) plus clearing the app's data asks again.
 - A value a sheet shows that its presenter loads after the sheet opened did not reach it on iOS (measured 2026-11-09, the
   lightbox's uploader): the sheet loads what it shows itself, in its own `.task`.
+- A phone shows a file without writing it (ADR 0047): Android hands a PDF to `PdfRenderer` through a `memfd`
+  (`Os.memfd_create`, API 30+: anonymous memory, no path) and plays a medium through `ReaderPlayer`'s `MediaDataSource`
+  over core's `RangeReader` (`ReaderPlayer.kt`, shared with Memories); Apple opens a PDF with `PDFDocument(data:)` and plays
+  through `ReaderPlayback.swift`'s `AVAssetResourceLoader`. The only decrypted copies are the ones the person asked for —
+  "Send a copy" (`cacheDir/shared`, `tmp/shared`) and iOS's download for `fileMover` (`tmp/downloads`) —, both swept at
+  every start; a Mac's download goes to the save panel's path through core's `FileSink`.
+- On iOS one SwiftUI `Text` of a megabyte drew nothing (measured 2026-11-12, a file's cut text): a long text is a line a
+  row in a `LazyVStack` (`FileText`). AVFoundation plays no WebM: a file page reads the asset's `isPlayable` through the
+  resource loader and says `file_unsupported` (D7 of the Depot CR); Android plays it.
+- The shell shows an open object in its list's place and the bar is the object's (ADR 0122), so a list leaves the view
+  tree and is composed anew on the way back, at its top (the owner's report, 2026-11-12). Android keeps each list's
+  `LazyListState` in the shell (`ListStates`, by list key). On iOS neither `ScrollViewReader.scrollTo` nor
+  `scrollPosition` moved that `List` (iOS 27, measured 2026-11-12: the call ran, the list stayed at its top), so
+  `KeepsScroll` keeps the offset of the list's own `UIScrollView` per key, found beside its background a moment after
+  that background joins the window.
 - The Simulator tool's tap does not reliably flip a SwiftUI `Toggle`: a short swipe across it does (measured
   2026-11-09, the report's good-faith switch). A tap with `duration: 0.15` registers where a plain one is often lost.
   The tool cannot type text ("iOS on this simulator does not take a paste from the Mac", 2026-11-11): a pass leaves a
