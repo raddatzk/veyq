@@ -133,4 +133,27 @@ mailed operation; this CR's lessons moved to where they bind and the file delete
 
 ## Retrospective
 
-_(filled by the implementer)_
+### Phase 1
+
+- **The CR's "write one use in each language" step found a defect a compile would not have.** Sharing the eight
+  fields through `allOf` generated clean names in both languages, but the Kotlin generator flattens an `allOf` and
+  dropped `epoch`'s `[integer, "null"]` on the way (`Int` for `Int?`; TypeScript kept `number | null`): the
+  missing-field-binds-0 trap, silently, on the mailed mint that worked yesterday. Only a diff of the generated model
+  against a snapshot taken before the edit showed it. So the shapes are two schemas, with a YAML comment saying why.
+  Candidate rule for changes/README § Phases: a contracts phase that reshapes a schema snapshots `build/generated` and
+  the web client first and diffs the models after, not only "writes one use".
+- **A required response field made optional is a backend red the CR did not predict.** The Kotlin model moves an
+  optional parameter behind the required ones, so `TenantsResource.listMemberInvites`' positional
+  `PendingMemberInvite(...)` stopped compiling (line 219) beside the predicted missing `createMemberInviteLink` /
+  `reissueMemberInviteLink`. changes/README's predicted-reds paragraph covers added and removed fields, not
+  required→optional against positional construction.
+- **The mutation gate grades none of decision 4's code.** `invite.ts` is not in `src/packages/crypto`'s
+  `stryker.mutate.json`, so the exit code the commit records says nothing about the fragment parser and builder; their
+  strength is shown by six hand bites (each red, `invite.conformance.test.ts`). Either the done-when stops citing the
+  exit code as evidence for a change outside the scope, or `invite.ts`' link codec joins the scope.
+- **Cross-variant behaviour was unstated and decided in the contract, flagged for review:** the link re-issue of a
+  mailed invite answers `404 invite_not_found`, the mailed re-issue of a link invite `422 invite_email_mismatch`; a
+  suspended tenant's `410 invite_no_longer_valid` wins over `invite_redeemed`; the register code is
+  `invite_kind_email_mismatch`; the link format got a conformance vector (`invite_link.link_fragment`). A refinement
+  checklist line would catch the first kind: for every new operation over a sum type (mailed | link), say what it
+  answers for the other variant.

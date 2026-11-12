@@ -106,11 +106,17 @@ object TestGrants {
     fun memberInviteJson(
         tenantId: String, email: String, key: TestInviteKey = TestInviteKey(), epoch: Int? = null,
         signerSeed: ByteArray = TestFixtures.IDENTITY_SIGN_SEED,
+    ): String = """"email":"$email","sealedLink":"$SEALED_LINK",""" + memberInviteLinkJson(tenantId, key, epoch, signerSeed)
+
+    /** A link invite request's fields as JSON members (no braces): [memberInviteJson]'s without the address and the
+     *  sealed part, which a link invite never sends (ADR 0129 decision 1). */
+    fun memberInviteLinkJson(
+        tenantId: String, key: TestInviteKey = TestInviteKey(), epoch: Int? = null,
+        signerSeed: ByteArray = TestFixtures.IDENTITY_SIGN_SEED,
     ): String {
         val expiresAt = Instant.now().plus(7, ChronoUnit.DAYS).truncatedTo(ChronoUnit.SECONDS)
-        return """"email":"$email","inviteId":"${key.inviteId}","invitePublicKey":"${key.bundle}",""" +
-            """"inviteKeySignature":"${inviteKeySignature(signerSeed, tenantId, key, expiresAt)}",""" +
-            """"expiresAt":"$expiresAt","sealedLink":"$SEALED_LINK",""" +
+        return """"inviteId":"${key.inviteId}","invitePublicKey":"${key.bundle}",""" +
+            """"inviteKeySignature":"${inviteKeySignature(signerSeed, tenantId, key, expiresAt)}","expiresAt":"$expiresAt",""" +
             """"epoch":${epoch ?: epochOf(tenantId)},"wrappedGrant":"$WRAPPED",$SIGNATURE_JSON,"recipientIdentityDigest":"${digest(key.bundle)}""""
     }
 

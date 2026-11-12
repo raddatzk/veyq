@@ -286,6 +286,14 @@ class OperatorBlindProbeTest {
             Call("POST", "/api/tenants/${s.tenantId}/member-invites/$someId/reissue", """{${TestGrants.memberInviteJson(s.tenantId, "invitee-${UUID.randomUUID()}@example.com", epoch = 0)}}""")
         },
         "revokeMemberInvite" to Probe(Address.TENANT) { s -> Call("DELETE", "/api/tenants/${s.tenantId}/member-invites/$someId") },
+        // A link invite (ADR 0129): owner-gated on the tenant like the mailed mint and re-issue, probed the same way. Its
+        // body is the mailed one's without the address and the sealed part.
+        "createMemberInviteLink" to Probe(Address.TENANT) { s ->
+            Call("POST", "/api/tenants/${s.tenantId}/member-invite-links", """{${TestGrants.memberInviteLinkJson(s.tenantId, epoch = 0)}}""")
+        },
+        "reissueMemberInviteLink" to Probe(Address.TENANT) { s ->
+            Call("POST", "/api/tenants/${s.tenantId}/member-invite-links/$someId/reissue", """{${TestGrants.memberInviteLinkJson(s.tenantId, epoch = 0)}}""")
+        },
         "removeTenantMember" to Probe(Address.TENANT) { s -> Call("DELETE", "/api/tenants/${s.tenantId}/members/$someId") },
         "setTenantMemberRole" to Probe(Address.TENANT) { s -> Call("PATCH", "/api/tenants/${s.tenantId}/members/$someId", """{"role":"OWNER"}""") },
         "getTenantTerms" to Probe(Address.TENANT) { s -> Call("GET", "/api/tenants/${s.tenantId}/terms") },
