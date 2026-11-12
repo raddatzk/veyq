@@ -27,7 +27,7 @@ class PotLiveTest {
     @Test
     fun theSeededPotsReadAndOneExpenseIsAdded() = runTest(timeout = 10.minutes) {
         val origin = System.getenv("VEYQ_LIVE") ?: return@runTest
-        val env = File(System.getProperty("veyq.repoRoot"), ".run/.env").readLines()
+        val env = (System.getenv("VEYQ_ENV_FILE")?.let(::File) ?: File(System.getProperty("veyq.repoRoot"), ".run/.env")).readLines()
             .mapNotNull { l -> l.substringBefore('=', "").takeIf { it.isNotBlank() }?.let { it.trim() to l.substringAfter('=').trim().trim('"', '\'') } }
             .toMap()
         val account = VeyqAccount.signIn(
@@ -89,6 +89,18 @@ class PotLiveTest {
                 assertTrue(after.entries.any { (it.content as? Expense)?.title == "App check" && it.status == Ledger.Status.LIVE })
                 println("[${ref.name}] after the add: balances=${after.balances.mapValues { it.value.toString() }}")
             }
+        }
+        System.getenv("VEYQ_LIVE_POT_THIRD")?.let { potName ->
+            // A third person ("Cleo") who paid an expense split among everyone ("Third check", 30.00): a Pot that settles in
+            // more than one payment, for a desktop pass's "Record all". Both stay.
+            val ref = pots.first { it.name == potName }
+            val pot = PotSession.open(tenant, ref.scopeId, ref.nodeId)!!
+            assertEquals(PotSession.WriteOutcome.WRITTEN, pot.addPerson("Cleo"))
+            val cleo = pot.ledger!!.participants.first { it.name == "Cleo" && it.active }
+            val form = PotView(pot).blankForm(java.time.LocalDate.now().toString())!!.copy(title = "Third check", payers = listOf(EntryForm.Payer(cleo.id, "30")))
+            assertEquals(PotSession.WriteOutcome.WRITTEN, pot.saveEntry(null, form, null))
+            println("[$potName] Cleo added and paid 30.00 for everyone: settle=${pot.ledger!!.settleUp}")
+            assertTrue(pot.ledger!!.settleUp.size > 1, "$potName still settles in one payment")
         }
         System.getenv("VEYQ_LIVE_RECEIPT")?.let { potName ->
             // An entry saved with a receipt (uploaded to the store before the revision), read back to the byte, then dropped.
