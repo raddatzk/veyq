@@ -1,0 +1,129 @@
+name: Dependabot follow
+
+# The writing half of the Dependabot follow (scripts/dependabot_follow.py; .github/dependabot.yml's header says what it
+# follows and why without a language model). It starts when a "Dependabot follow (derive)" run completes green, and it
+# is the one job that holds `contents: write` for a Dependabot pull request.
+#
+# Why `workflow_run` and not a write permission on the pull request's own run (GitHub's guidance against "pwn
+# requests"): a `workflow_run` workflow runs the file on the DEFAULT branch, never the pull request's, so the code that
+# holds the token — this file, the actions it pins, the script it runs from `tool/` — is what was merged, not what a
+# pull request proposes (a github-actions bump rewrites the very `uses:` lines of the workflows it runs in). The pull
+# request's tree is checked out beside it, into `pr/`, as data: nothing in it is executed here, and the metadata the
+# derive run wrote is an artifact this job checks before it writes it (dependabot_follow.py `accept_gradle`).
+#
+# What it may do, and nothing more:
+#   - read the pull request and its commits' author logins (the gate) — never its title or body;
+#   - commit the follow, and push it to the pull request's own `dependabot/…` branch, fast-forward only (a branch that
+#     moved since the derive run refuses the push; the next run follows it);
+#   - never push to any other branch, never merge, never approve. Merging stays with a person.
+# A branch a person has pushed to is left alone (the gate answers `follow=false`).
+#
+# The checks after the push. A push with GITHUB_TOKEN creates the pull request's `pull_request` runs, but as runs that
+# "require approval" (GitHub's events reference, read 2026-11-12) — so Checks on the followed head waits for the person
+# who reviews the pull request to approve it, and the merge waits for `green` as on every pull request. That approval
+# also re-runs the derive half, which then finds nothing left to follow.
+on:
+  workflow_run:
+    workflows:
+      - "Dependabot follow (derive)"
+    types:
+      - completed
+
+concurrency:
+  group: dependabot-follow-${{ github.event.workflow_run.head_branch }}
+  cancel-in-progress: false
+
+permissions: {}
+
+jobs:
+  follow:
+    name: Follow the bump on the Dependabot branch
+    if: github.event.workflow_run.event == 'pull_request' && github.event.workflow_run.conclusion == 'success'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: write # push the follow commit to the Dependabot branch
+      actions: read # download the derive run's artifact
+      pull-requests: read # the gate reads the pull request and its commits
+    steps:
+      - name: Check out the tool (the default branch, never the pull request)
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          path: tool
+          persist-credentials: false
+
+      # PyYAML reads .github/dependabot.yml (which files Dependabot writes); hashed wheels only, as in every job that
+      # holds a write permission (scripts/requirements-release.txt says why).
+      - name: Install PyYAML from hashed wheels
+        run: |
+          python3 -m venv "$RUNNER_TEMP/venv"
+          "$RUNNER_TEMP/venv/bin/pip" install --quiet --require-hashes --only-binary :all: -r tool/scripts/requirements-release.txt
+
+      - name: Is this Dependabot's pull request, untouched by a person?
+        id: gate
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          PR: ${{ github.event.workflow_run.pull_requests[0].number }}
+          HEAD_SHA: ${{ github.event.workflow_run.head_sha }}
+        run: |
+          if [ -z "$PR" ]; then
+            echo "the derive run names no pull request of this repository" >&2
+            echo "follow=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          "$RUNNER_TEMP/venv/bin/python" tool/scripts/dependabot_follow.py gate \
+            --repo "$REPO" --pr "$PR" --head-sha "$HEAD_SHA" | tee -a "$GITHUB_OUTPUT"
+
+      - name: Check out the Dependabot branch (as data)
+        if: steps.gate.outputs.follow == 'true'
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          path: pr
+          ref: ${{ github.event.workflow_run.head_sha }}
+          fetch-depth: 0
+
+      - name: Download what the read-only run derived
+        if: steps.gate.outputs.follow == 'true'
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: dependabot-follow
+          path: ${{ runner.temp }}/derived
+          run-id: ${{ github.event.workflow_run.id }}
+          github-token: ${{ github.token }}
+
+      - name: Follow the bump
+        if: steps.gate.outputs.follow == 'true'
+        env:
+          BASE_REF: ${{ steps.gate.outputs.base_ref }}
+        run: |
+          base=$(git -C pr merge-base "origin/$BASE_REF" HEAD)
+          "$RUNNER_TEMP/venv/bin/python" tool/scripts/dependabot_follow.py follow --tree pr \
+            --config tool/.github/dependabot.yml --base "$base" --derived "$RUNNER_TEMP/derived" \
+            --message "$RUNNER_TEMP/message.txt"
+
+      - name: Push the follow to the Dependabot branch
+        if: steps.gate.outputs.follow == 'true'
+        env:
+          BRANCH: ${{ steps.gate.outputs.branch }}
+        # The checkout is `pr/`, beside `tool/` — no tracked directory, so `cd`, not `working-directory:`.
+        run: |
+          cd pr
+          if [ -z "$(git status --porcelain --untracked-files=all)" ]; then
+            echo "nothing to follow"
+            exit 0
+          fi
+          # The tool rewrites tracked files in place and creates none.
+          if git status --porcelain --untracked-files=all | grep -v '^ M '; then
+            echo "::error::the follow touched the tree in a way it never does (above); nothing is pushed"
+            exit 1
+          fi
+          case "$BRANCH" in
+            dependabot/*) ;;
+            *) echo "::error::refusing to push to '$BRANCH', which is no Dependabot branch"; exit 1 ;;
+          esac
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git commit --all --quiet --file "$RUNNER_TEMP/message.txt"
+          git show --stat HEAD
+          git push origin "HEAD:refs/heads/$BRANCH"
