@@ -111,7 +111,11 @@ impl Inner {
                 self.content.append(&gtk::Label::builder().label(l).wrap(true).xalign(0.0).build());
             }
         }
-        let history = adw::PreferencesGroup::builder().title(words::history_show()).build();
+        // the editor's page is headed "History" by its header bar already; the dialog's header is the entry's
+        let history = adw::PreferencesGroup::new();
+        if self.dialog.is_some() {
+            history.set_title(&words::history_show());
+        }
         for r in rows {
             let by = r.writer.clone().unwrap_or_else(words::history_unknown_writer);
             let row = adw::ActionRow::builder()
