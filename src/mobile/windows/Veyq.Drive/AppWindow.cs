@@ -123,6 +123,16 @@ internal sealed partial class AppWindow(string process)
                 Thread.Sleep(300);
                 return "";
             }
+            case "range":
+            {
+                // a slider (a player's seek bar) set to <percent> of its range through its RangeValue, as a drag would
+                var e = Find(parts[1]);
+                var range = (RangeValuePattern)e.GetCurrentPattern(RangeValuePattern.Pattern);
+                var (min, max) = (range.Current.Minimum, range.Current.Maximum);
+                range.SetValue(min + (max - min) * double.Parse(parts[2], CultureInfo.InvariantCulture) / 100);
+                Thread.Sleep(300);
+                return $"{range.Current.Value} of {min}..{max}";
+            }
             case "size":
                 Size(Window(), int.Parse(parts[1], CultureInfo.InvariantCulture), int.Parse(parts[2], CultureInfo.InvariantCulture));
                 return "";

@@ -1,10 +1,13 @@
 // A file's page (Depot's file viewer; the Depot CR's D1, D4 and D10; Linux's file_page.rs), Fluent's way: the file's
 // content in place — a picture (Image, decoded by WIC at the core's edge at most), a text (a read-only monospace TextBox,
 // the cut said in an InfoBar above it), a PDF (Windows.Data.Pdf, PdfPages.cs: its pages rendered as they come into view
-// and let go when far from it), or what the core says where it shows none — and its facts beneath. Everything is the core's
-// FileModel (File.Open, Watched.File): what shows is decided by the bytes, and an image's and a PDF's bytes come beside the
-// answer (File.Bytes, ADR 0130 decision 1), asked again when the content's revision turns. Nothing decrypted is written
-// to show it (ADR 0047).
+// and let go when far from it), an audio or video played by the system's own player (MediaPlayerElement with its
+// transport controls, over a MediaSource of ReaderStream: the core's reader read in ranges; Media Foundation and the
+// Store's extensions decode it, and what they cannot is said as not shown here), or what the core says where it shows
+// none — and its facts beneath. Everything is the core's FileModel (File.Open, Watched.File): what shows is decided by the
+// bytes, and an image's and a PDF's bytes come beside the answer (File.Bytes, ADR 0130 decision 1), asked again when the
+// content's revision turns; a medium is read through File.Reader (decision 2). Nothing decrypted is written to show it
+// (ADR 0047).
 //
 // "Save a copy" is the header's download of a file: the save picker names the file, the core writes it there frame by
 // frame (File.Save), and the shell's InfoBar says how far it is, with Cancel (ShellView.Saving: Watched.Save,
@@ -14,6 +17,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Runtime.InteropServices.WindowsRuntime;
+using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Automation;
@@ -44,6 +48,8 @@ internal sealed class FilePage : IDisposable
     private (FileViewKind, int)? _drawn;
     private bool _closed;
     private PdfView? _pdf;
+    /// <summary>The medium playing: its player, its source and the stream over the core's reader.</summary>
+    private (MediaPlayerElement Player, Windows.Media.Core.MediaSource Source, ReaderStream Stream)? _media;
 
     public NodeAt Node { get; }
 
@@ -109,6 +115,7 @@ internal sealed class FilePage : IDisposable
         _watch?.Dispose();
         _watch = null;
         _pdf = null;
+        StopMedia();
         if (_id is { } file) Act.Send(new Call.FileClose { file = file });
         _id = null;
     }
@@ -125,6 +132,7 @@ internal sealed class FilePage : IDisposable
         if (_drawn == now) return;
         _drawn = now;
         _pdf = null;
+        StopMedia();
         switch (s.view)
         {
             case FileViewKind.Loading:
@@ -151,6 +159,10 @@ internal sealed class FilePage : IDisposable
                     _content.Content = pdf.Scroll;
                     await pdf.Start();
                 });
+                break;
+            case FileViewKind.Media:
+                _content.Content = Loading(Words.FileOpening());
+                Play(now, s.words);
                 break;
             default:
                 // nothing shows here: what the core says, and Save a copy among the header's commands
@@ -182,6 +194,105 @@ internal sealed class FilePage : IDisposable
             // an exception out of an async void would end the app in combase, with nothing in the log
             Log.Write($"the file did not show: {e.GetType().Name}: {e.Message}");
             _content.Content = Message(Words.FileOpenFailed());
+        }
+    }
+
+    /// <summary>The medium played through a reader the core opened for this page (File.Reader): Media Foundation reads it in
+    /// ranges from its own threads; one the system cannot decode says the core's <paramref name="unplayable"/> words
+    /// instead (Save a copy stays among the header's commands).</summary>
+    private async void Play((FileViewKind, int) asked, string? unplayable)
+    {
+        if (_id is not { } file) return;
+        try
+        {
+            var (answer, _) = await Core.CallAsync(new Call.FileReader { file = file });
+            if (answer is not Answer.Reader { reader: var reader, size: var size, mediaType: var type })
+            {
+                Log.Write($"File.Reader answered {answer.GetType().Name}");
+                if (!_closed && _drawn == asked) _content.Content = Message(Words.FileOpenFailed());
+                return;
+            }
+            if (_closed || _drawn != asked)
+            {
+                // the page went or shows another content meanwhile: the reader is let go
+                Act.Send(new Call.ReaderClose { reader = reader });
+                return;
+            }
+            Log.Write($"file medium: reader {reader}, {size} B, {type ?? "no type"}");
+            var stream = new ReaderStream(size, (at, length) => Range(reader, at, length), () => _ = Core.CallAsync(new Call.ReaderClose { reader = reader }));
+            var source = Windows.Media.Core.MediaSource.CreateFromStream(stream.AsRandomAccessStream(), type ?? "");
+            // the page owns the player: handed to the element and taken back from it before it is let go (a player the
+            // element made itself and that was disposed under it threw E_ABORT when the element left the tree)
+            var mp = new Windows.Media.Playback.MediaPlayer { AutoPlay = false, Source = source };
+            var player = new MediaPlayerElement { AreTransportControlsEnabled = true, Stretch = Stretch.Uniform };
+            player.SetMediaPlayer(mp);
+            AutomationProperties.SetAutomationId(player, "file-medium");
+            AutomationProperties.SetName(player, Words.TabDepotFile());
+            var queue = _root.DispatcherQueue;
+            mp.MediaOpened += (p, _) => Log.Write($"medium opened: {p.PlaybackSession.NaturalDuration.TotalSeconds:0} s, {p.PlaybackSession.NaturalVideoWidth}×{p.PlaybackSession.NaturalVideoHeight}, seekable {p.PlaybackSession.CanSeek}");
+            mp.MediaFailed += (_, e) =>
+            {
+                Log.Write($"the medium does not play here: {e.Error} {e.ExtendedErrorCode?.HResult:X8} {e.ErrorMessage}");
+                queue.TryEnqueue(() =>
+                {
+                    if (_closed || _drawn != asked) return;
+                    StopMedia();
+                    Quietly("the words", () => _content.Content = Message(unplayable is { } w ? Said.Key(w) : Words.FileUnsupported()));
+                });
+            };
+            // the position in the log each fifth second, for a pass to read the play and a seek from
+            var logged = -1L;
+            mp.PlaybackSession.PositionChanged += (session, _) =>
+            {
+                var at = (long)session.Position.TotalSeconds / 5;
+                if (Interlocked.Exchange(ref logged, at) != at)
+                    Log.Write($"medium at {(long)session.Position.TotalSeconds} s of {(long)session.NaturalDuration.TotalSeconds} s");
+            };
+            _media = (player, source, stream);
+            _content.Content = player;
+        }
+        catch (Exception e)
+        {
+            // an exception out of an async void would end the app in combase, with nothing in the log
+            Log.Write($"the medium did not open: {e.GetType().Name}: {e.Message}");
+            if (!_closed && _drawn == asked) _content.Content = Message(unplayable is { } w ? Said.Key(w) : Words.FileUnsupported());
+        }
+    }
+
+    /// <summary>Range <paramref name="at"/>+<paramref name="length"/> of reader <paramref name="reader"/> (Reader.Read),
+    /// awaited off the UI thread.</summary>
+    private static async Task<byte[]> Range(long reader, long at, int length)
+    {
+        var (answer, bytes) = await Core.CallAsync(new Call.ReaderRead { reader = reader, position = at, length = length }).ConfigureAwait(false);
+        return answer is Answer.Bytes && bytes is not null ? bytes : throw new IOException($"Reader.Read answered {answer.GetType().Name}");
+    }
+
+    /// <summary>Stops the medium playing, if one is: the player let go first, then its source and the stream, which lets
+    /// the core's reader go.</summary>
+    private void StopMedia()
+    {
+        if (_media is not { } m) return;
+        _media = null;
+        var mp = m.Player.MediaPlayer;
+        Quietly("pause", () => mp?.Pause());
+        Quietly("element", () => m.Player.SetMediaPlayer(null));
+        Quietly("source", () => { if (mp is not null) mp.Source = null; });
+        Quietly("player", () => mp?.Dispose());
+        Quietly("media source", () => m.Source.Dispose());
+        Quietly("stream", () => m.Stream.Dispose());
+    }
+
+    /// <summary>A step of letting the player go, which may throw while Media Foundation still works (an exception out of a
+    /// dispatcher's callback ends the app in combase): said in the log, the next step taken.</summary>
+    private static void Quietly(string what, Action step)
+    {
+        try
+        {
+            step();
+        }
+        catch (Exception e)
+        {
+            Log.Write($"letting the medium go: {what} threw {e.GetType().Name} {e.HResult:X8}");
         }
     }
 
