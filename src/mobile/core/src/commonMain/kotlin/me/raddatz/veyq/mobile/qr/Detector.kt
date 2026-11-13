@@ -47,7 +47,15 @@ internal class FinderPatternFinder(private val image: BitMatrix) {
     private var hasSkipped = false
     private val crossCheckStateCount = IntArray(5)
 
-    fun find(tryHarder: Boolean): FinderPatternInfo {
+    /** Whether the last [find] stopped scanning once three finder patterns agreed, rather than at the frame's end. */
+    var stoppedEarly = false
+        private set
+
+    /**
+     * The three finder patterns. Upstream stops scanning as soon as three confirmed patterns agree on a module size;
+     * [exhaustive] scans every row instead (the decoder's retry, see `QrDecoder.read`).
+     */
+    fun find(tryHarder: Boolean, exhaustive: Boolean = false): FinderPatternInfo {
         val maxI = image.height
         val maxJ = image.width
         // Search every third row at least, and as far apart as a code of version 20 still allows unless trying harder.
@@ -77,7 +85,7 @@ internal class FinderPatternFinder(private val image: BitMatrix) {
                                     // expensive and didn't improve performance.
                                     iSkip = 2
                                     if (hasSkipped) {
-                                        done = haveMultiplyConfirmedCenters()
+                                        done = !exhaustive && haveMultiplyConfirmedCenters()
                                     } else {
                                         val rowSkip = findRowSkip()
                                         if (rowSkip > stateCount[2]) {
@@ -116,13 +124,14 @@ internal class FinderPatternFinder(private val image: BitMatrix) {
                     iSkip = stateCount[0]
                     if (hasSkipped) {
                         // Found a third one
-                        done = haveMultiplyConfirmedCenters()
+                        done = !exhaustive && haveMultiplyConfirmedCenters()
                     }
                 }
             }
             i += iSkip
         }
 
+        stoppedEarly = done
         val patternInfo = selectBestPatterns()
         Points.orderBestPatterns(patternInfo)
         return FinderPatternInfo(patternInfo[0], patternInfo[1], patternInfo[2])
@@ -582,8 +591,8 @@ internal class AlignmentPatternFinder(
 
 /** Where a code is in a black matrix and its modules sampled out of it. */
 internal object Detector {
-    fun detect(image: BitMatrix, tryHarder: Boolean): BitMatrix {
-        val info = FinderPatternFinder(image).find(tryHarder)
+    /** The modules of the code whose finder patterns [info] names, sampled out of [image]. */
+    fun detect(image: BitMatrix, info: FinderPatternInfo): BitMatrix {
         val topLeft = info.topLeft
         val topRight = info.topRight
         val bottomLeft = info.bottomLeft

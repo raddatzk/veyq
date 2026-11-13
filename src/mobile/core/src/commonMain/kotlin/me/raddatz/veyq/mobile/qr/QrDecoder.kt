@@ -52,8 +52,19 @@ object QrDecoder {
         }
     }
 
-    private fun read(matrix: BitMatrix, tryHarder: Boolean): QrContent? = try {
-        CodeDecoder.decode(Detector.detect(matrix, tryHarder))
+    private fun read(matrix: BitMatrix, tryHarder: Boolean): QrContent? {
+        val finder = FinderPatternFinder(matrix)
+        attempt { CodeDecoder.decode(Detector.detect(matrix, finder.find(tryHarder))) }?.let { return it }
+        if (!finder.stoppedEarly) return null
+        // Not upstream's: ZXing stops scanning once three confirmed finder patterns agree, and in a crisp code a run of
+        // data modules can pass for one (measured: the core's own `veyqkit:` code at 3 px a module, which ZXing does not
+        // read either). Where the first reading stopped early and failed, the whole frame is scanned and the patterns
+        // that fit best are read; a frame with no code never stopped early, so it costs nothing more.
+        return attempt { CodeDecoder.decode(Detector.detect(matrix, FinderPatternFinder(matrix).find(tryHarder, exhaustive = true))) }
+    }
+
+    private inline fun attempt(read: () -> QrContent): QrContent? = try {
+        read()
     } catch (_: QrReadException) {
         null
     } catch (_: IllegalArgumentException) {

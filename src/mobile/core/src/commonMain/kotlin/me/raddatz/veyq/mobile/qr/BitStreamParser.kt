@@ -112,6 +112,8 @@ internal object BitStreamParser {
         // The spec isn't clear on this mode; see section 6.4.5: t does not say which encoding to assuming upon
         // decoding. I have seen ISO-8859-1 used as well as Shift_JIS -- without anything like an ECI designator to
         // give a hint.
+        // An empty segment is the empty text whatever its set (upstream's guess names Shift_JIS for it, which reads as "").
+        if (count == 0) return QrContent.Piece.Text("")
         val encoding = currentCharset ?: guessCharset(readBytes)
         return when (encoding) {
             UTF_8 -> QrContent.Piece.Text(readBytes.decodeToString())

@@ -192,10 +192,56 @@ half**, written into that ADR in phase 6. `SecretFreeSchemaTest` stays as it is:
   - Both desktops' `run.py build` were not run: phases 1–3 add only common Kotlin, so what reaches the desktops is the
     core's compile for their targets, run above (`compileKotlinLinuxX64`, `compileKotlinMingwX64`).
 
-- [ ] **2 the encoder and the PNG** — D2. · Done when: every fixture text encodes and decodes back through phase 1's
+- [x] **2 the encoder and the PNG** — D2. · Done when: every fixture text encodes and decodes back through phase 1's
   decoder at level M, the largest byte payload level M holds (version 40, 2331 bytes) included and one byte more refused; a matrix from the core decodes in the web's `jsqr` (one
   committed PNG read by a test in `src/web/` — the one web line this CR adds) and the web's `qrcode` output decodes in
   the core (phase 1's fixtures); `QrPng` output reads back through `javax.imageio` to the same modules.
+
+  **Status: done (2026-11-13).**
+
+  **Built:**
+  - core `qr/QrEncoder.kt`: ZXing's `Encoder`, `MatrixUtil`, `MaskUtil` (and the parts of `BitArray`, `ByteMatrix` it
+    uses) at level M, sharing the decoder's `Version` table (its alignment centres too) and `ReedSolomonEncoder`. Public:
+    `QrEncoder.encode(text): QrMatrix` — the smallest version, the mask the penalty rules choose, an
+    IllegalArgumentException past version 40 — and `QrMatrix` (`size`, `side` with the 4-module `QUIET_ZONE`,
+    `dark(x, y)` over the drawn grid, the zone included). One segment, as upstream: numeric, alphanumeric, or the text's
+    **UTF-8 bytes without an ECI**, as the web's `qrcode` writes a byte segment (upstream defaults to ISO-8859-1).
+  - core `qr/QrPng.kt`: `QrPng.write(matrix, scale)` — a 1-bit greyscale PNG, stored deflate blocks, CRC-32 and
+    Adler-32, at most `MAX_SIDE` 4096 px; version 40 at scale 8 (1480 px) is about 275 KB.
+  - The interop: `src/web/src/features/account/pairing/__fixtures__/core-pairing-code.png` (the pairing fixture's text at
+    scale 4, 3 676 bytes) and `coreQrCode.test.ts`, the web's one new test, which unpacks it with `node:zlib` and reads it
+    with `jsqr`; the core's `QrPngImageTest` holds the file to `QrPng`'s output (rewritten with `VEYQ_WRITE_QR_FIXTURE=1`).
+    The other direction — the web's `qrcode` read by the core — is phase 1's fixtures.
+
+  **Met:**
+  - `./gradlew :core:jvmTest :core:macosArm64Test :bridge:jvmTest :core:compileKotlinLinuxX64 :core:compileKotlinMingwX64`
+    green; in `src/web`, `pnpm exec vitest run src/features/account/pairing/coreQrCode.test.ts`, `pnpm exec eslint` on it
+    and `pnpm run typecheck` green.
+  - `QrEncoderTest`: the three fixture texts and an empty, a numeric, an alphanumeric, a non-Latin (`Grüße — 漢字 ✓ 🙂`) and
+    a link text each read back through phase 1's decoder at 3 px a module; each at level M (read from its format
+    information) with a light quiet zone of four modules; 2331 bytes are version 40 and read back at 2 px a module, 2332
+    are refused. `QrPngImageTest`: `javax.imageio` reads the kit's code, the 2331-byte code and a one-digit code pixel for
+    pixel as the matrix; `java.util.zip.Inflater` inflates a 131 087-byte stream across three stored blocks with its
+    Adler-32. The corpus still at upstream's thresholds, none misread.
+  - Bites (`scratchpad/bite/bite.py`, `phase2.json`), eleven, ten bit: data not masked, the exhaustive retry removed, the
+    empty-segment rule removed, the PNG's polarity inverted, Adler-32 started at 0, a stored block of 65 536 bytes, the
+    capacity off by one, level L, a quiet zone of 3, the web fixture stale (the zlib header changed) — each its named
+    test red. **Missed, as an equivalent mutant:** `chooseVersion` answering version 40 for an oversized text — the
+    second refusal (`terminateBits`) still refuses it; both turned off together, the test is red. The web side bitten by
+    hand: data not masked, the fixture rewritten from it → `coreQrCode.test.ts` red (`jsqr` reads nothing); restored and
+    rewritten → green.
+
+  **Deviations:**
+  - **Phase 1's decoder gained two rules the round trip found.** (1) ZXing (the port, and ZXing itself, compiled from the
+    pinned commit) does not read the core's own `veyqkit:` code drawn crisp at 3, 4 or 5 px a module: its finder stops
+    once three confirmed patterns agree, and a run of data modules passed for the bottom-left one (rows 132 vs 172 at 3
+    px). `QrDecoder.read` now scans the whole frame again (`FinderPatternFinder.find(exhaustive = true)`) when the first
+    reading stopped early and failed; a frame with no code never stops early, so it costs nothing there, and the
+    corpus' counts did not change. This matters for `cr-app-kit-sign-in`, whose kit page is a crisp rendering. (2) An
+    empty byte segment is the empty text (upstream's guess names Shift_JIS for zero bytes, which the core leaves
+    encoded).
+  - The encoder writes UTF-8 without an ECI (above), and only level M: no caller of the CR asks for another.
+
 - [ ] **3 the scan model** — `QrScan` (D3) in commonMain over a played clock and decoder. · Done when: `commonTest`
   holds one decode in flight (a second frame dropped), a foreign code skipped, the first accepted one settling,
   `Closed` stopping it, an oversized frame refused; core checks green.

@@ -163,7 +163,12 @@ A Gradle build of its own, run through its own wrapper.
   The QR reader (`qr/`, a port of ZXing's QR path; its `NOTICE` beside it) changes only with ZXing's corpus still at
   upstream's thresholds: `QrCorpusTest` (JVM; `:core:fetchQrCorpus` fetches the images into `build/qr-corpus`, each held to
   its SHA-256 in `core/qr/zxing-corpus.sha256`, so the first run needs the network) and `QrDecoderTest` (every target, over
-  the web's own codes in `commonTest/resources/qr`, written once by `core/qr/make_fixtures.py`).
+  the web's own codes in `commonTest/resources/qr`, written once by `core/qr/make_fixtures.py`). The writer (`QrEncoder`,
+  `QrPng`) is held by `QrEncoderTest` (every text read back by the reader, level M, the quiet zone, version 40's 2331 bytes
+  and one more refused), `QrPngTest` and the JVM's `QrPngImageTest` (`javax.imageio` reads the same modules), which also
+  holds the web's interop fixture (`src/web/.../pairing/__fixtures__/core-pairing-code.png`, read by the web's `jsqr` in
+  `coreQrCode.test.ts`) to what `QrPng` writes: a deliberate change to the writer rewrites it with
+  `VEYQ_WRITE_QR_FIXTURE=1 ./gradlew :core:jvmTest --tests '*QrPngImageTest*'`.
 - `./gradlew :bridge:jvmTest` — the bridge (ADR 0123's Consequences, the bridge):
   - `DispatchTest` covers the way in, over a door the test plays: a reader read backwards in uneven ranges and closed
     with the tenant, a picture's bytes and its refusal, a file's page and its Save a copy (`File.*`, `Watched.File`/`Save`,

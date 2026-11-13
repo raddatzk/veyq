@@ -312,6 +312,9 @@ tasks.named<Test>("jvmTest") {
     dependsOn(fetchQrCorpus)
     systemProperty("veyq.qrCorpus", qrCorpus.get().asFile.absolutePath)
     inputs.dir(qrCorpus).withPropertyName("qrCorpus")
+    // The web's interop fixture, which `QrPngImageTest` holds to `QrPng`'s output (and writes anew with this set).
+    inputs.file(rootDir.resolve("../web/src/features/account/pairing/__fixtures__/core-pairing-code.png")).withPropertyName("qrWebFixture")
+    System.getenv("VEYQ_WRITE_QR_FIXTURE")?.let { environment("VEYQ_WRITE_QR_FIXTURE", it); outputs.upToDateWhen { false } }
 }
 
 // The conformance suite reads the vectors from where every client reads them: contracts/crypto/vectors/v1.json.
