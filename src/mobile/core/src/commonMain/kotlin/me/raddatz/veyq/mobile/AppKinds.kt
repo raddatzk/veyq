@@ -198,8 +198,8 @@ object AppKinds {
         FILE -> Header(true, false, true, me.raddatz.veyq.mobile.words.Msg.FILE_DELETE, me.raddatz.veyq.mobile.words.Msg.FILE_DELETE_CONFIRM)
         // a drop box is never renamed: its name is its guests' address
         DROPBOX -> Header(true, true, false, me.raddatz.veyq.mobile.words.Msg.DROPBOX_DELETE, me.raddatz.veyq.mobile.words.Msg.DROPBOX_DELETE_CONFIRM)
-        MEMORY -> Header(false, true, true, me.raddatz.veyq.mobile.words.Msg.MEMORY_DELETE_MEMORY, me.raddatz.veyq.mobile.words.Msg.MEMORY_DELETE_CONFIRM)
-        CHAPTER -> Header(false, true, true, me.raddatz.veyq.mobile.words.Msg.MEMORY_DELETE_CHAPTER, me.raddatz.veyq.mobile.words.Msg.MEMORY_DELETE_CONFIRM)
+        MEMORY -> Header(true, true, true, me.raddatz.veyq.mobile.words.Msg.MEMORY_DELETE_MEMORY, me.raddatz.veyq.mobile.words.Msg.MEMORY_DELETE_CONFIRM)
+        CHAPTER -> Header(true, true, true, me.raddatz.veyq.mobile.words.Msg.MEMORY_DELETE_CHAPTER, me.raddatz.veyq.mobile.words.Msg.MEMORY_DELETE_CONFIRM)
         else -> null
     }
 

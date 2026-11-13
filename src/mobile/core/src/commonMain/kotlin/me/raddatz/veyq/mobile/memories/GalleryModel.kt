@@ -5,10 +5,13 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
@@ -17,8 +20,12 @@ import me.raddatz.veyq.mobile.blob.RangeReader
 import me.raddatz.veyq.mobile.blob.UploadSource
 import me.raddatz.veyq.mobile.depot.FileSave
 import me.raddatz.veyq.mobile.navigation.NodeAt
+import me.raddatz.veyq.mobile.navigation.NodeHeader
 import me.raddatz.veyq.mobile.navigation.NodeRef
+import me.raddatz.veyq.mobile.navigation.ShellModel
+import me.raddatz.veyq.mobile.session.LivePoll
 import me.raddatz.veyq.mobile.words.Msg
+import me.raddatz.veyq.mobile.words.Notice
 
 /**
  * A Memory's or a chapter's page (Memories' `MemoryDetail.vue` with `MediaGrid.vue`, ADR 0130 decision 2): the chapters a
@@ -28,7 +35,15 @@ import me.raddatz.veyq.mobile.words.Msg
  *
  * **When it reads anew is the core's:** on each revision of the shell's lists ([Door.revisions]), and when a medium this
  * device uploaded into this node is in ([Door.uploaded], [MediaUploads]); nothing else re-reads it. A lightbox opened on it
- * ([lightbox]) follows each read. The details' uploaders are read once per gallery for every owner key it shows.
+ * ([lightbox]) follows each read. The details' uploaders are read once per gallery for every owner key it shows. While a
+ * screen shows the page it runs [live] (the web's poll, `mediaRevisionPolling.ts`: core's [LivePoll] at the item lists'
+ * cadence, a conditional read that reads the gallery anew only when the node's media moved), ended when the page closes.
+ *
+ * **One page for a member and a link's guest** (share view = member view, inbox #401): what it offers is
+ * [MemoryRights.of] who looks ([State.rights]) — an upload, a delete, a chapter made —, never a view of its own. A medium
+ * deleted goes the way the rights say: a member's to the trash, out of the rows at once with its Undo offered for
+ * [ShellModel.TRASH_UNDO_MS] ([trash], [undo]: restore is reached only from that Undo, as the web's); a guest's own one is a
+ * purge, asked first and without Undo ([askPurge], [purge]).
  *
  * Each app draws [state] (or [watch]); [close] when the page goes (a lightbox on it closes with it).
  */
@@ -38,6 +53,10 @@ class GalleryModel(
     private val scope: CoroutineScope = CoroutineScope(SupervisorJob() + Dispatchers.Default),
     /** Where an original's save runs ([Lightbox.save]): not the page's own [scope], so a save outlives its page. */
     private val saves: CoroutineScope = CoroutineScope(SupervisorJob() + Dispatchers.Default),
+    /** Who looks: the apps open a gallery as a member today; a link's guest is a source, never another view. */
+    access: MemoryRights.Access = MemoryRights.Access.Member(),
+    /** A clock in milliseconds for the live poll's catch-up gap (only its differences count). */
+    private val now: () -> Long = monotonicMs(),
 ) {
     /** What the page reads ([me.raddatz.veyq.mobile.navigation.ShellModel.galleryModel] over a tenant, a test over its own). */
     interface Door {
@@ -70,6 +89,39 @@ class GalleryModel(
 
         /** The node ids a medium this device uploaded went into, each as it is in ([MediaUploads.uploaded]). */
         val uploaded: Flow<String>
+
+        /**
+         * Whether the node's media moved since the listing [since] (the conditional read, `listNodeMedia` with its revision
+         * as `If-None-Match`: a `304` is no); a throw where the read failed. Absent: never (no live poll).
+         */
+        suspend fun moved(since: MemoryMedia.Gallery): Boolean = false
+
+        /** Medium [mediaId] to the node's trash (a member's delete). Absent: refused. */
+        suspend fun trash(mediaId: String): Removal = Removal.FAILED
+
+        /** Medium [mediaId] back from the trash (a member's Undo). Absent: refused. */
+        suspend fun restore(mediaId: String): Removal = Removal.FAILED
+
+        /** Whether [mediaId] is one this device sent under the guest's link identity (a guest's own set). Absent: none. */
+        fun isOwn(mediaId: String): Boolean = false
+
+        /** A guest's own medium [mediaId] purged for good; whether it went. Absent: refused. */
+        suspend fun purge(mediaId: String): Boolean = false
+
+        /** A chapter [name] made in this Memory. Absent: refused. */
+        suspend fun createChapter(name: String): MemoryCreate.Made = MemoryCreate.Made(null, MemoryCreate.refused(null))
+    }
+
+    /** What a trash or a restore of a medium came to (`deleteMedia`, `restoreMedia`). */
+    enum class Removal {
+        DONE,
+        /** Already gone from this node, or no access (`404`). */
+        GONE,
+        /** The space is being deleted (`409`). */
+        SCOPE_DELETING,
+        /** The operator blocked it: deleted, never restored (`451`). */
+        BLOCKED,
+        FAILED,
     }
 
     /** One medium as the page shows it. */
@@ -101,13 +153,33 @@ class GalleryModel(
         val chapters: List<NodeRef> = emptyList(),
         /** The gallery did not read (the last read stays shown). */
         val failed: Boolean = false,
+        /** What the page offers whoever looks ([MemoryRights.of]); an action shows only where it says yes. */
+        val rights: MemoryRights.Rights = MemoryRights.NONE,
+        /** While a trashed medium's Undo is offered, what it says ("Moved to trash"); null once its window passed. */
+        val undo: Notice? = null,
+        /** A guest's own medium whose purge is asked ([purge] does it, [cancelAsk] does not). */
+        val purging: String? = null,
+        /** What the last delete or Undo left to say (a restore refused, a purge failed); null once seen ([seen]). */
+        val said: Notice? = null,
     ) {
         val count: Int get() = rows?.size ?: 0
     }
 
-    private val _state = MutableStateFlow(State())
+    private val _state = MutableStateFlow(State(rights = MemoryRights.of(access, node.kind)))
     val state: StateFlow<State> = _state.asStateFlow()
     val current: State get() = _state.value
+
+    /** The page's rights (who looks, on this node). */
+    val rights: MemoryRights.Rights get() = current.rights
+
+    /**
+     * The page's own header actions, joining core's where the kind's order puts them (`AppKinds.headerOrder`): adding
+     * photos and videos where the rights let whoever looks upload.
+     */
+    val headerActions: List<NodeHeader.Action> get() = listOfNotNull(NodeHeader.Action(UPLOAD).takeIf { rights.upload })
+
+    /** What the page's own New makes here ([MemoryCreate.offered] on this node, where the rights allow): a chapter on a Memory. */
+    val creates: List<String> get() = MemoryCreate.offered(node.kind).filter { it == MemoryCreate.CHAPTER && rights.createChapter }
 
     class Watch internal constructor(private val job: Job) {
         fun stop() = job.cancel()
@@ -128,6 +200,12 @@ class GalleryModel(
         scope.launch { read() }
     }
 
+    /** The last listing that read: what the live poll asks whether the media moved since. */
+    private var listed: MemoryMedia.Gallery? = null
+
+    /** Media trashed here whose listing may still name them (a read racing the trash): kept out of the rows. */
+    private val pending = HashSet<String>()
+
     private suspend fun read() = reading.withLock {
         val read = runCatching { door.gallery() }.getOrNull()
         val chapters = if (node.kind == MEMORY) {
@@ -135,11 +213,46 @@ class GalleryModel(
         } else {
             emptyList()
         }
+        if (read != null) {
+            listed = read
+            // a trashed one the listing no longer names is settled
+            pending.retainAll(read.items.map { it.mediaId }.toSet())
+        }
         _state.update { s ->
             val withChapters = if (chapters != null) s.copy(chapters = chapters) else s
-            if (read == null) withChapters.copy(failed = true) else withChapters.copy(rows = read.items.map(::Row), failed = false)
+            if (read == null) withChapters.copy(failed = true)
+            else withChapters.copy(rows = read.items.filter { it.mediaId !in pending }.map(::Row), failed = false)
         }
     }
+
+    // ---- the live poll ----
+
+    private val closed = MutableStateFlow(false)
+
+    /**
+     * The page's live poll (the web's `mediaRevisionPolling.ts`, core's [LivePoll] at [LivePoll.ITEMS]) for as long as the
+     * caller runs it — a screen while it shows the page, so nothing is asked in the background: each tick asks whether the
+     * node's media moved since the last listing ([Door.moved], a conditional read) and reads the gallery anew only when they
+     * did. It ends when the page closes.
+     */
+    suspend fun live() {
+        if (closed.value) return
+        val poll = LivePoll(now = now)
+        coroutineScope {
+            val ticking = launch {
+                poll.run {
+                    val since = listed ?: return@run LivePoll.Tick.SKIP
+                    if (door.moved(since)) read()
+                    LivePoll.Tick.DONE
+                }
+            }
+            closed.first { it }
+            ticking.cancel()
+        }
+    }
+
+    /** [live] in the page's own scope, for a platform that cannot run a suspend loop: stopped with [Watch.stop] or the page's close. */
+    fun startLive(): Watch = Watch(scope.launch { live() })
 
     private fun row(mediaId: String): Row? = current.rows?.firstOrNull { it.mediaId == mediaId }
 
@@ -156,8 +269,140 @@ class GalleryModel(
         return runCatching { door.read(row.item, row.item.lightboxBlob) }.getOrNull()
     }
 
-    /** The picked [sources] added to this Memory or chapter (the app's one upload queue); how many were queued. */
-    fun upload(sources: List<UploadSource>): Int = door.upload(sources)
+    /**
+     * The picked [sources] added to this Memory or chapter (the app's one upload queue), where the rights let whoever looks
+     * upload; how many were queued.
+     */
+    fun upload(sources: List<UploadSource>): Int = if (rights.upload) door.upload(sources) else 0
+
+    // ---- a chapter made ----
+
+    /**
+     * A chapter [name] made in this Memory, where the rights allow it ([creates]); the node made (the page opens it), or why
+     * not. The gallery's chapters are read again with the lists.
+     */
+    suspend fun createChapter(name: String): MemoryCreate.Made {
+        if (MemoryCreate.CHAPTER !in creates) return MemoryCreate.Made(null, Notice(Msg.NODE_ILLEGAL_STRUCTURE))
+        if (name.isBlank()) return MemoryCreate.Made(null, Notice(Msg.FOLDER_NAME_EMPTY))
+        return runCatching { door.createChapter(name.trim()) }.getOrElse { MemoryCreate.Made(null, MemoryCreate.refused(null)) }
+    }
+
+    // ---- a medium deleted: a member's trash with its Undo, a guest's own purge asked first ----
+
+    private class Undoing(val mediaId: String, val name: Any)
+
+    private var undoing: Undoing? = null
+    private var undoWindow: Job? = null
+
+    /** The name a refusal says a medium by: its original's sealed name, else its place in the grid (`Item {n}`). */
+    private fun nameOf(mediaId: String): Any {
+        val rows = current.rows.orEmpty()
+        val at = rows.indexOfFirst { it.mediaId == mediaId }
+        return rows.getOrNull(at)?.name?.takeIf { it.isNotBlank() } ?: Notice(Msg.MEMORY_UNNAMED, if (at >= 0) at + 1 else 1)
+    }
+
+    /**
+     * Medium [mediaId] deleted the way the rights say: a member's to the trash — out of the rows at once, its Undo offered
+     * for [ShellModel.TRASH_UNDO_MS] ([State.undo]); a trash that did not go drops the Undo and reads the gallery anew (the
+     * web's) —; a guest's own one asked first ([State.purging], then [purge]). What to say at once, or null.
+     */
+    suspend fun trash(mediaId: String): Notice? {
+        if (row(mediaId) == null) return null
+        return when (rights.deleteMedia) {
+            MemoryRights.DeleteMedia.ANY -> trashAny(mediaId)
+            MemoryRights.DeleteMedia.OWN -> {
+                askPurge(mediaId)
+                null
+            }
+            MemoryRights.DeleteMedia.NONE -> null
+        }
+    }
+
+    private suspend fun trashAny(mediaId: String): Notice {
+        val name = nameOf(mediaId) // before the removal: a refused restore names it
+        pending += mediaId
+        _state.update { s -> s.copy(rows = s.rows?.filter { it.mediaId != mediaId }) }
+        val said = Notice(Msg.MEMORY_MOVED_TO_TRASH)
+        offerUndo(Undoing(mediaId, name), said)
+        val done = runCatching { door.trash(mediaId) }.getOrDefault(Removal.FAILED)
+        if (done != Removal.DONE) {
+            if (undoing?.mediaId == mediaId) endUndo()
+            pending -= mediaId
+            read()
+        }
+        return said
+    }
+
+    private fun offerUndo(u: Undoing, said: Notice) {
+        undoWindow?.cancel()
+        undoing = u
+        _state.update { it.copy(undo = said) }
+        undoWindow = scope.launch {
+            delay(ShellModel.TRASH_UNDO_MS)
+            endUndo()
+        }
+    }
+
+    private fun endUndo() {
+        undoing = null
+        _state.update { it.copy(undo = null) }
+    }
+
+    /**
+     * The Undo of the last trash while it is offered: the medium restored and the gallery read anew (it comes back at its
+     * place). Why not — named with its reason, as the web's —, or null; nothing once its window passed.
+     */
+    suspend fun undo(): Notice? {
+        val u = undoing ?: return null
+        undoWindow?.cancel()
+        endUndo()
+        pending -= u.mediaId
+        val r = runCatching { door.restore(u.mediaId) }.getOrDefault(Removal.FAILED)
+        read()
+        if (r == Removal.DONE) return null
+        val reason = when (r) {
+            Removal.GONE -> Msg.MEMORY_REFUSED_GONE
+            Removal.SCOPE_DELETING -> Msg.MEMORY_REFUSED_SCOPE_DELETING
+            Removal.BLOCKED -> Msg.MEMORY_REFUSED_BLOCKED
+            else -> Msg.MEMORY_REFUSED_FAILED
+        }
+        val said = Notice(Msg.MEMORY_RESTORE_REFUSED, u.name, Notice(reason))
+        _state.update { it.copy(said = said) }
+        return said
+    }
+
+    /** "Delete" on a guest's own medium [mediaId]: asked first (it is purged for good, no Undo). Not for another's. */
+    fun askPurge(mediaId: String) {
+        if (rights.deleteMedia != MemoryRights.DeleteMedia.OWN || row(mediaId) == null || !door.isOwn(mediaId)) return
+        _state.update { it.copy(purging = mediaId) }
+    }
+
+    /** The purge's question, while one is asked: the confirmation's words. */
+    val purgeQuestion: Notice get() = Notice(Msg.MEMORY_DELETE_OWN_CONFIRM)
+
+    /** The question declined: nothing is purged. */
+    fun cancelAsk() = _state.update { it.copy(purging = null) }
+
+    /**
+     * The purge asked, answered: the guest's own medium purged for good, out of the rows; why not ([State.said]: the tile
+     * stays, to try again), or null. Nothing where no purge was asked.
+     */
+    suspend fun purge(): Notice? {
+        val mediaId = current.purging ?: return null
+        _state.update { it.copy(purging = null) }
+        if (rights.deleteMedia != MemoryRights.DeleteMedia.OWN || !door.isOwn(mediaId)) return null
+        val gone = runCatching { door.purge(mediaId) }.getOrDefault(false)
+        if (!gone) {
+            val said = Notice(Msg.MEMORY_DELETE_OWN_FAILED)
+            _state.update { it.copy(said = said) }
+            return said
+        }
+        _state.update { s -> s.copy(rows = s.rows?.filter { it.mediaId != mediaId }) }
+        return null
+    }
+
+    /** What [State.said] said was seen: it goes. */
+    fun seen() = _state.update { it.copy(said = null) }
 
     // ---- the details: the EXIF tier once per medium, the uploaders once per gallery ----
 
@@ -189,10 +434,10 @@ class GalleryModel(
         Lightbox.Details(mediaId, rows, key?.let { uploaders[it] }, MediaDetails.uploaderAt(rows))
     }
 
-    internal fun reader(row: Row): RangeReader? = if (row.isVideo && !row.blocked) door.reader(row.item) else null
+    internal fun reader(row: Row): RangeReader? = if (rights.download && row.isVideo && !row.blocked) door.reader(row.item) else null
 
     internal fun save(row: Row, index: Int, into: suspend (produce: suspend (sink: (ByteArray) -> Unit) -> Boolean) -> Boolean): FileSave? {
-        if (row.blocked) return null
+        if (row.blocked || !rights.download) return null
         val item = row.item
         val name = MediaDetails.downloadName(item, node.name, index)
         return FileSave(name, item.original.size, saves) { progress ->
@@ -221,12 +466,22 @@ class GalleryModel(
     fun close() {
         open?.close()
         open = null
+        closed.value = true
+        undoWindow?.cancel()
         scope.cancel()
     }
 
     companion object {
         const val MEMORY = "MEMORY"
         const val CHAPTER = "CHAPTER"
+
+        /** The page's own header action: photos and videos added ([upload]). */
+        const val UPLOAD = "upload"
+
+        private fun monotonicMs(): () -> Long {
+            val start = kotlin.time.TimeSource.Monotonic.markNow()
+            return { start.elapsedNow().inWholeMilliseconds }
+        }
     }
 }
 
@@ -234,7 +489,13 @@ class GalleryModel(
  * The lightbox over a [GalleryModel] (the web's `MediaLightbox.vue`): the current medium by index over the gallery's rows,
  * kept by its id when the gallery reads anew — a removed one gives way to the one now at its place (its neighbour) —, its
  * picture read when asked ([picture]), a video's original opened for the player ([play]) and **closed by the model** when
- * the lightbox pages away, stops, closes or its gallery does; the details ([details]); the original saved ([save]).
+ * the lightbox pages away, stops, closes or its gallery does; the details ([details]); the original saved ([save]); the
+ * medium deleted as its gallery deletes ([trash]).
+ *
+ * **The slideshow is the web's** (`MediaLightbox.vue`, [SLIDESHOW_MS]): the model runs its clock, no view keeps a timer.
+ * Started where a next medium exists, it steps on every interval through the media in the grid's order — a video shows its
+ * poster for one interval and is never played by it —, ends ON the last medium, and pauses on any [go] or [play] (the
+ * web pauses on any key, pointer or wheel; a platform whose view is touched pauses it with [slideshow] off).
  * Zoom is the platform's; the model knows nothing of it.
  */
 class Lightbox internal constructor(private val gallery: GalleryModel, start: Int, parent: CoroutineScope) {
@@ -250,6 +511,8 @@ class Lightbox internal constructor(private val gallery: GalleryModel, start: In
         val reader: RangeReader? = null,
         /** The last save of an original started here (it outlives the lightbox). */
         val save: FileSave? = null,
+        /** The slideshow: running, paused, ended on the last medium; null before it first started. */
+        val slideshow: Slideshow? = null,
         val closed: Boolean = false,
     ) {
         val count: Int get() = rows.size
@@ -275,6 +538,9 @@ class Lightbox internal constructor(private val gallery: GalleryModel, start: In
         fun stop() = job.cancel()
     }
 
+    /** Where the slideshow stands (the web's `slideshowState`, which a screen reader is told). */
+    enum class Slideshow { PLAYING, PAUSED, ENDED }
+
     /** Calls [listener] with the state now and with each change after (on a background thread). */
     fun watch(listener: (State) -> Unit): Watch = Watch(scope.launch { state.collect { listener(it) } })
 
@@ -297,8 +563,13 @@ class Lightbox internal constructor(private val gallery: GalleryModel, start: In
         stale?.close()
     }
 
-    /** Paged to row [index]: a video playing on the page left is stopped, its reader closed. */
+    /** Paged to row [index] by the person: the slideshow pauses; a video playing on the page left is stopped, its reader closed. */
     fun go(index: Int) {
+        pause()
+        step(index)
+    }
+
+    private fun step(index: Int) {
         var stale: RangeReader? = null
         _state.update { s ->
             if (s.closed || index !in s.rows.indices || index == s.index) return@update s
@@ -306,6 +577,44 @@ class Lightbox internal constructor(private val gallery: GalleryModel, start: In
             s.copy(index = index, reader = null)
         }
         stale?.close()
+    }
+
+    // ---- the slideshow ----
+
+    private var ticking: Job? = null
+
+    /**
+     * The slideshow started ([on]) where a next medium exists — a video playing stops first — or paused. It steps every
+     * [SLIDESHOW_MS] and ends on the last medium.
+     */
+    fun slideshow(on: Boolean) {
+        if (!on) return pause()
+        val s = current
+        if (s.closed || s.slideshow == Slideshow.PLAYING || s.index >= s.count - 1) return
+        stop()
+        _state.update { it.copy(slideshow = Slideshow.PLAYING) }
+        ticking = scope.launch {
+            while (true) {
+                delay(SLIDESHOW_MS)
+                val now = current
+                if (now.index >= now.count - 1) return@launch end()
+                step(now.index + 1)
+                // it stops ON the last medium
+                if (current.index >= current.count - 1) return@launch end()
+            }
+        }
+    }
+
+    private fun pause() {
+        if (current.slideshow != Slideshow.PLAYING) return
+        ticking?.cancel()
+        ticking = null
+        _state.update { it.copy(slideshow = Slideshow.PAUSED) }
+    }
+
+    private fun end() {
+        ticking = null
+        _state.update { it.copy(slideshow = Slideshow.ENDED) }
     }
 
     /** Medium [mediaId]'s picture in the lightbox (its preview, else its original), whole; null where it shows none. */
@@ -318,6 +627,7 @@ class Lightbox internal constructor(private val gallery: GalleryModel, start: In
     fun play(): RangeReader? {
         val s = current
         if (s.closed) return null
+        pause()
         s.reader?.let { return it }
         val row = s.row ?: return null
         val reader = gallery.reader(row) ?: return null
@@ -363,11 +673,27 @@ class Lightbox internal constructor(private val gallery: GalleryModel, start: In
         return save
     }
 
+    /**
+     * The current medium deleted as its gallery deletes it ([GalleryModel.trash]: a member's to the trash with its Undo, a
+     * guest's own one asked first); the lightbox then shows the one now at its place. What to say at once, or null.
+     */
+    suspend fun trash(): Notice? {
+        val row = current.row ?: return null
+        pause()
+        return gallery.trash(row.mediaId)
+    }
+
     /** The lightbox went: its reader closes, nothing more is followed. */
     fun close() {
         var stale: RangeReader? = null
-        _state.update { s -> stale = s.reader; s.copy(reader = null, closed = true) }
+        ticking?.cancel()
+        _state.update { s -> stale = s.reader; s.copy(reader = null, closed = true, slideshow = s.slideshow?.let { if (it == Slideshow.PLAYING) Slideshow.PAUSED else it }) }
         stale?.close()
         scope.cancel()
+    }
+
+    companion object {
+        /** The slideshow's step (the web's `SLIDESHOW_INTERVAL_MS`, `MediaLightbox.vue`; `LightboxSlideshowPinTest` holds it there). */
+        const val SLIDESHOW_MS = 5_000L
     }
 }

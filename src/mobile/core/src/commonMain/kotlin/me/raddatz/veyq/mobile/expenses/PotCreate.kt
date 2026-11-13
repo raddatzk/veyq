@@ -104,7 +104,7 @@ object PotCreate {
                     NodeCreate.Reason.NAME_TAKEN -> Outcome.NAME_TAKEN
                     NodeCreate.Reason.BUSY -> Outcome.BUSY
                     NodeCreate.Reason.BLOCKED -> Outcome.BLOCKED
-                    NodeCreate.Reason.REFUSED -> Outcome.REFUSED
+                    NodeCreate.Reason.NOT_ALLOWED, NodeCreate.Reason.REFUSED -> Outcome.REFUSED
                 },
             )
         }

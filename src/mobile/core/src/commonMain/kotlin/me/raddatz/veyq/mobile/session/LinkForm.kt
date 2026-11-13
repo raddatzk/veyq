@@ -10,23 +10,36 @@ import me.raddatz.veyq.mobile.words.Msg
  */
 class ShareWords(
     val title: Msg, val intro: Msg, val contributor: Msg, val viewerHint: Msg, val contributorHint: Msg, val deleteConfirm: Msg,
+    /** The upload-only role's name and hint ("Add files only", or a Memory's "Add photos only"). */
+    val uploader: Msg = Msg.SHARE_ROLE_UPLOADER, val uploaderHint: Msg = Msg.DROPBOX_UPLOAD_HINT,
 ) {
     /** The hint under the role picked. */
     fun hint(role: String): Msg = when (role) {
         ShareLinks.READ -> viewerHint
-        ShareLinks.WRITE_ONLY -> Msg.DROPBOX_UPLOAD_HINT
+        ShareLinks.WRITE_ONLY -> uploaderHint
         else -> contributorHint
     }
 
     /** A role in this sheet's words. */
     fun roleWord(role: String): Msg = when (role) {
         ShareLinks.READ -> Msg.SHARE_ROLE_VIEWER
-        ShareLinks.WRITE_ONLY -> Msg.SHARE_ROLE_UPLOADER
+        ShareLinks.WRITE_ONLY -> uploader
         else -> contributor
     }
 
     companion object {
         fun of(kind: String): ShareWords = when (kind) {
+            // a Memory's and a chapter's (Memories' `share.*`: the same dialog, its sentences naming the node shared)
+            "MEMORY" -> ShareWords(
+                Msg.SHARE_MEMORY_TITLE, Msg.SHARE_MEMORY_INTRO, Msg.SHARE_MEMORY_ROLE_CONTRIBUTOR,
+                Msg.SHARE_MEMORY_ROLE_VIEWER_HINT, Msg.SHARE_MEMORY_ROLE_CONTRIBUTOR_HINT, Msg.SHARE_MEMORY_DELETE_CONFIRM,
+                Msg.SHARE_MEMORY_ROLE_UPLOADER, Msg.SHARE_MEMORY_ROLE_UPLOADER_HINT,
+            )
+            "CHAPTER" -> ShareWords(
+                Msg.SHARE_CHAPTER_TITLE, Msg.SHARE_CHAPTER_INTRO, Msg.SHARE_MEMORY_ROLE_CONTRIBUTOR,
+                Msg.SHARE_CHAPTER_ROLE_VIEWER_HINT, Msg.SHARE_MEMORY_ROLE_CONTRIBUTOR_HINT, Msg.SHARE_CHAPTER_DELETE_CONFIRM,
+                Msg.SHARE_MEMORY_ROLE_UPLOADER, Msg.SHARE_CHAPTER_ROLE_UPLOADER_HINT,
+            )
             DepotFiles.DROPBOX -> ShareWords(
                 Msg.DROPBOX_SHARE_TITLE, Msg.DROPBOX_SHARE_HINT, Msg.SHARE_ROLE_UPLOADER,
                 Msg.DROPBOX_UPLOAD_HINT, Msg.DROPBOX_UPLOAD_HINT, Msg.DROPBOX_SHARE_DELETE_CONFIRM,
@@ -64,6 +77,11 @@ class LinkForm private constructor(
     val uploadOffered: Boolean,
     /** That role alone (a space's top level): no role to pick. */
     val uploadOnly: Boolean,
+    /**
+     * The third role is a link on this node, not a drop box made (a Memory's or a chapter's "Add photos only": its guests
+     * seal to the node's own drop key); its name is the member's label, optional as any other.
+     */
+    val uploadLink: Boolean,
     val today: Long,
     val role: String,
     val label: String,
@@ -75,7 +93,7 @@ class LinkForm private constructor(
     private fun with(
         role: String = this.role, label: String = this.label, withPassword: Boolean = this.withPassword,
         password: String = this.password, withEnd: Boolean = this.withEnd, endDay: Long = this.endDay,
-    ) = LinkForm(rules, editing, writeOnly, uploadOffered, uploadOnly, today, role, label, withPassword, password, withEnd, endDay)
+    ) = LinkForm(rules, editing, writeOnly, uploadOffered, uploadOnly, uploadLink, today, role, label, withPassword, password, withEnd, endDay)
 
     fun withRole(role: String) = if (role in roles) with(role = role) else this
     fun withLabel(label: String) = with(label = label)
@@ -100,7 +118,7 @@ class LinkForm private constructor(
     val namesIt: Boolean get() = !writeOnly
 
     /** The name field's label: a drop box's name its guests see, else a label only the member sees. */
-    val nameLabel: Msg get() = if (role == ShareLinks.WRITE_ONLY) Msg.SHARE_UPLOAD_NAME else Msg.SHARE_LABEL
+    val nameLabel: Msg get() = if (role == ShareLinks.WRITE_ONLY && !uploadLink) Msg.SHARE_UPLOAD_NAME else Msg.SHARE_LABEL
 
     /** The last day an end may be (the rule's, today counted), or null where any day may. */
     val lastDay: Long? get() = rules.maxDays?.let { today + it - 1 }
@@ -119,7 +137,7 @@ class LinkForm private constructor(
     val canSave: Boolean
         get() {
             val passwordOk = !withPassword || password.trim().length >= PASSWORD_MIN || (hadPassword && password.isEmpty())
-            val named = role != ShareLinks.WRITE_ONLY || writeOnly || label.isNotBlank()
+            val named = role != ShareLinks.WRITE_ONLY || writeOnly || uploadLink || label.isNotBlank()
             return passwordOk && named
         }
 
@@ -149,11 +167,11 @@ class LinkForm private constructor(
          */
         fun start(
             rules: ShareLinks.Rules, editing: ShareLinks.Link?, writeOnly: Boolean, uploadOffered: Boolean, uploadOnly: Boolean,
-            today: Long, editingEndDay: Long?,
+            today: Long, editingEndDay: Long?, uploadLink: Boolean = false,
         ): LinkForm {
             val last = rules.maxDays?.let { today + it - 1 }
             return LinkForm(
-                rules, editing, writeOnly, uploadOffered, uploadOnly, today,
+                rules, editing, writeOnly, uploadOffered, uploadOnly, uploadLink, today,
                 role = if (writeOnly || uploadOnly) ShareLinks.WRITE_ONLY else editing?.role ?: ShareLinks.READ,
                 label = editing?.label.orEmpty(),
                 withPassword = rules.passwordRequired || editing?.passwordRequired == true,

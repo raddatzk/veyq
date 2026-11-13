@@ -1,0 +1,80 @@
+package me.raddatz.veyq.mobile.memories
+
+import me.raddatz.veyq.mobile.AppKinds
+import me.raddatz.veyq.mobile.navigation.NodeAt
+import me.raddatz.veyq.mobile.session.NodeCreate
+import me.raddatz.veyq.mobile.session.TenantSession
+import me.raddatz.veyq.mobile.words.Msg
+import me.raddatz.veyq.mobile.words.Notice
+
+/**
+ * A Memory or a chapter made from New (Memories' `MemoryNodeDialog.vue` with `memoryNodes.ts`' `createMemory` and
+ * `createChapter`): offered where the kinds' placement allows it ([offered]: a Memory at a space's top and in a folder, a
+ * chapter in a Memory), the name trimmed and checked before anything is sent ([check]: empty, a sibling the loaded tree
+ * shows that folds to the same name, named with its kind's noun — core's `collidingSibling`), then made through core's
+ * `NodeCreate` under its kind's slug input (`memories/<slug>`); a refusal said as the dialog says it ([refused]). The new
+ * node opens (the web's).
+ */
+object MemoryCreate {
+    const val MEMORY = "MEMORY"
+    const val CHAPTER = "CHAPTER"
+
+    /**
+     * What Memories' New makes at a level whose node is of [parentKind] (null: a space's top), in this order: a Memory where
+     * its placement allows one (the top, a folder), a chapter where its placement does (a Memory).
+     */
+    fun offered(parentKind: String?): List<String> = listOf(MEMORY, CHAPTER).filter { AppKinds.placement.allows(it, parentKind) }
+
+    /** A node beside the new one, as the loaded tree shows it. */
+    class Sibling(val kind: String, val name: String)
+
+    /**
+     * Why a [kind] named [name] is not made under a parent of [parentKind] among [siblings] — its placement, an empty name, a
+     * sibling folding to the same name (named by its kind) —, or null where it may be sent.
+     */
+    fun check(kind: String, parentKind: String?, name: String, siblings: List<Sibling>): Notice? {
+        val n = name.trim()
+        if (kind !in offered(parentKind)) return Notice(Msg.NODE_ILLEGAL_STRUCTURE)
+        if (n.isEmpty()) return Notice(Msg.FOLDER_NAME_EMPTY)
+        val input = AppKinds.tokenInput(kind, n) ?: return Notice(Msg.NODE_SAVE_FAILED)
+        val taken = siblings.firstOrNull { AppKinds.tokenInput(it.kind, it.name) == input } ?: return null
+        return Notice(Msg.NODE_NAME_TAKEN_BY, Notice(noun(taken.kind)), taken.name)
+    }
+
+    /** A kind's noun with its article, as a name's collision names it (the registry's `nounWithArticle`). */
+    fun noun(kind: String): Msg = when (kind) {
+        MEMORY -> Msg.MEMORY_A_MEMORY
+        CHAPTER -> Msg.MEMORY_A_CHAPTER
+        "EXPENSES_POT" -> Msg.POT_A
+        else -> Msg.NODE_AN_ITEM
+    }
+
+    /** Why the server did not make it, as the dialog says it: a name taken (`409`), not allowed there (`422`), else failed. */
+    fun refused(reason: NodeCreate.Reason?): Notice = when (reason) {
+        NodeCreate.Reason.NAME_TAKEN -> Notice(Msg.MEMORY_SLUG_TAKEN)
+        NodeCreate.Reason.NOT_ALLOWED -> Notice(Msg.NODE_ILLEGAL_STRUCTURE)
+        else -> Notice(Msg.NODE_SAVE_FAILED)
+    }
+
+    /** What a create came to: the node made (to open), or why not. */
+    class Made(val node: NodeAt?, val notice: Notice?)
+
+    /**
+     * Makes a [kind] named [name] in [scopeId] under [parentId] (null: the space's top) over [tenant]: checked against the
+     * loaded tree first, then sent; the tree read before is forgotten after, so the next read lists it.
+     */
+    suspend fun create(tenant: TenantSession, scopeId: String, parentId: String?, kind: String, name: String): Made {
+        val n = name.trim()
+        val tree = runCatching { tenant.trees()[scopeId].orEmpty() }.getOrNull() ?: return Made(null, refused(null))
+        val parentKind = parentId?.let { p -> tree.firstOrNull { it.id == p }?.kind ?: return Made(null, refused(null)) }
+        check(kind, parentKind, n, tree.filter { it.parentId == parentId }.map { Sibling(it.kind, it.name) })?.let { return Made(null, it) }
+        val input = AppKinds.tokenInput(kind, n) ?: return Made(null, refused(null))
+        val r = runCatching { NodeCreate.create(tenant, scopeId, parentId, kind, n, input) }.getOrNull()
+        tenant.forgetTree()
+        return when (r) {
+            is NodeCreate.Result.Done -> Made(NodeAt(scopeId, r.created.nodeId, kind, n), null)
+            is NodeCreate.Result.Refused -> Made(null, refused(r.reason))
+            null -> Made(null, refused(null))
+        }
+    }
+}

@@ -2479,6 +2479,133 @@
     "en": "Memories is switched off here, so nothing can be added.",
     "de": "Erinnerungen ist hier abgeschaltet, deshalb kann nichts dazukommen."
   },
+  "memory_new": {
+    "en": "New Memory",
+    "de": "Neue Erinnerung",
+    "apple_en": "New Memory"
+  },
+  "memory_add_chapter": {
+    "en": "Add chapter",
+    "de": "Kapitel hinzufügen",
+    "apple_en": "Add Chapter"
+  },
+  "memory_create_memory_title": {
+    "en": "Create a Memory",
+    "de": "Erinnerung anlegen"
+  },
+  "memory_create_chapter_title": {
+    "en": "Create a chapter",
+    "de": "Kapitel anlegen"
+  },
+  "memory_a_memory": {
+    "en": "a Memory",
+    "de": "eine Erinnerung"
+  },
+  "memory_a_chapter": {
+    "en": "a chapter",
+    "de": "ein Kapitel"
+  },
+  "memory_slug_taken": {
+    "en": "A folder or Memory with a similar name already exists here.",
+    "de": "Ein Ordner oder eine Erinnerung mit ähnlichem Namen existiert hier bereits."
+  },
+  "memory_moved_to_trash": {
+    "en": "Moved to trash",
+    "de": "In den Papierkorb verschoben"
+  },
+  "memory_restore_refused": {
+    "en": "Not restored: {1}. {2}",
+    "de": "Nicht wiederhergestellt: {1}. {2}"
+  },
+  "memory_refused_gone": {
+    "en": "Already gone from this Memory, or you no longer have access.",
+    "de": "Nicht mehr in dieser Erinnerung, oder du hast keinen Zugriff mehr."
+  },
+  "memory_refused_scope_deleting": {
+    "en": "This space is being deleted.",
+    "de": "Dieser Bereich wird gelöscht."
+  },
+  "memory_refused_blocked": {
+    "en": "Blocked by the operator: it can be deleted, not restored.",
+    "de": "Von der Moderation gesperrt: Es kann gelöscht, aber nicht wiederhergestellt werden."
+  },
+  "memory_refused_failed": {
+    "en": "Please try again.",
+    "de": "Bitte versuche es erneut."
+  },
+  "memory_unnamed": {
+    "en": "Item {1:int}",
+    "de": "Medium {1:int}"
+  },
+  "memory_delete_own_title": {
+    "en": "Delete this photo",
+    "de": "Dieses Foto löschen"
+  },
+  "memory_delete_own_confirm": {
+    "en": "Delete this photo you added? It is removed for everyone who can see it here and cannot be brought back.",
+    "de": "Dieses Foto, das du hinzugefügt hast, löschen? Es verschwindet für alle, die es hier sehen können, und lässt sich nicht zurückholen."
+  },
+  "memory_delete_own_accept": {
+    "en": "Delete photo",
+    "de": "Foto löschen",
+    "apple_en": "Delete Photo"
+  },
+  "memory_delete_own_failed": {
+    "en": "The photo could not be deleted — please try again.",
+    "de": "Das Foto konnte nicht gelöscht werden — bitte erneut versuchen."
+  },
+  "share_memory_title": {
+    "en": "Share this Memory",
+    "de": "Diese Erinnerung teilen"
+  },
+  "share_memory_intro": {
+    "en": "Create a link anyone can open in a browser — no account, no install. It can show this Memory, let people add photos too, or only collect photos without showing anything. You can switch it off anytime.",
+    "de": "Erstelle einen Link, den jede:r im Browser öffnen kann — ohne Konto, ohne Installation. Er kann diese Erinnerung zeigen, zusätzlich Fotos hinzufügen lassen oder nur Fotos einsammeln, ohne etwas zu zeigen. Du kannst ihn jederzeit abschalten."
+  },
+  "share_chapter_title": {
+    "en": "Share this chapter",
+    "de": "Dieses Kapitel teilen"
+  },
+  "share_chapter_intro": {
+    "en": "Create a link anyone can open in a browser — no account, no install. It can show this chapter, let people add photos too, or only collect photos without showing anything. You can switch it off anytime.",
+    "de": "Erstelle einen Link, den jede:r im Browser öffnen kann — ohne Konto, ohne Installation. Er kann dieses Kapitel zeigen, zusätzlich Fotos hinzufügen lassen oder nur Fotos einsammeln, ohne etwas zu zeigen. Du kannst ihn jederzeit abschalten."
+  },
+  "share_memory_role_contributor": {
+    "en": "View + add photos",
+    "de": "Ansehen + Fotos hinzufügen"
+  },
+  "share_memory_role_uploader": {
+    "en": "Add photos only",
+    "de": "Nur Fotos hinzufügen"
+  },
+  "share_memory_role_viewer_hint": {
+    "en": "Anyone with the link can look at this Memory, read-only.",
+    "de": "Wer den Link hat, kann diese Erinnerung ansehen — schreibgeschützt."
+  },
+  "share_memory_role_contributor_hint": {
+    "en": "Anyone with the link can look AND add their own photos — they name themselves once so you can see who added what.",
+    "de": "Wer den Link hat, kann ansehen UND eigene Fotos beisteuern — mit einmaliger Namensangabe, damit du siehst, wer was beigetragen hat."
+  },
+  "share_memory_role_uploader_hint": {
+    "en": "A drop-box: anyone with the link can add photos but cannot see this Memory or what others added. Their uploads are visible to them only until they reload.",
+    "de": "Ein Briefkasten: Wer den Link hat, kann Fotos hinzufügen, aber diese Erinnerung und die Beiträge anderer NICHT sehen. Die eigenen Uploads sind nur bis zum nächsten Neuladen sichtbar."
+  },
+  "share_chapter_role_viewer_hint": {
+    "en": "Anyone with the link can look at this chapter, read-only.",
+    "de": "Wer den Link hat, kann dieses Kapitel ansehen — schreibgeschützt."
+  },
+  "share_chapter_role_uploader_hint": {
+    "en": "A drop-box: anyone with the link can add photos but cannot see this chapter or what others added. Their uploads are visible to them only until they reload.",
+    "de": "Ein Briefkasten: Wer den Link hat, kann Fotos hinzufügen, aber dieses Kapitel und die Beiträge anderer NICHT sehen. Die eigenen Uploads sind nur bis zum nächsten Neuladen sichtbar."
+  },
+  "share_memory_delete_confirm": {
+    "en": "Delete this link for good? It can never be switched on or renewed again. Photos guests added stay in this Memory.",
+    "de": "Diesen Link endgültig löschen? Er lässt sich danach nie wieder einschalten oder erneuern. Fotos, die Gäste hinzugefügt haben, bleiben in dieser Erinnerung."
+  },
+  "share_chapter_delete_confirm": {
+    "en": "Delete this link for good? It can never be switched on or renewed again. Photos guests added stay in this chapter.",
+    "de": "Diesen Link endgültig löschen? Er lässt sich danach nie wieder einschalten oder erneuern. Fotos, die Gäste hinzugefügt haben, bleiben in diesem Kapitel."
+  },
   "upload_title": {
     "note": "the shell's uploads (core's upload queue, the web's `upload.*`)",
     "en": "Uploads",

@@ -88,13 +88,19 @@ object MemoryMedia {
         var since: String? = null
         var mediaRevision = 0
         var deleteRevision = 0
+        var first = true
         var sealedDrop: String? = null
         val wrappedIdentities = HashMap<String, String>()
         while (true) {
             val page = tenant.account.call { api.listNodeMedia(scopeId, nodeId, since = since) }
             rows += page.media
-            mediaRevision = page.mediaRevision
-            deleteRevision = page.deleteRevision
+            // the live poll continues from the FIRST page's revisions (read before its rows: a change committed while the
+            // pages came in moves the server past them, and the next poll reads it)
+            if (first) {
+                mediaRevision = page.mediaRevision
+                deleteRevision = page.deleteRevision
+                first = false
+            }
             page.sealedDropPrivateKey?.let { sealedDrop = it }
             page.uploaderKeys.orEmpty().forEach { wrappedIdentities[it.identityId] = it.wrappedIdentityKey }
             if (!page.more) break
@@ -205,5 +211,39 @@ object MemoryMedia {
         val key = openBlobKey(suite, item.scopeId, item.mediaId, item.key, blob, roleOf(item, blob)) ?: return false
         ApplicationBlobs(tenant).framesTo(item.scopeId, blob.blobId, blob.chunkCount, key, first, minOf(until, blob.chunkCount), sink)
         return true
+    }
+
+    /**
+     * Whether node [nodeId]'s media moved since the listing [since] (the web's live poll, `listNodeMedia` conditional on
+     * its media revision: a `304` is no, nothing read); a throw where the read failed.
+     */
+    @Throws(Exception::class)
+    suspend fun moved(tenant: TenantSession, scopeId: String, nodeId: String, since: Gallery): Boolean {
+        val api = MediaApi(tenant.base, tenant.account.http)
+        val r = tenant.account.respond {
+            api.listNodeMedia(scopeId, nodeId, ifNoneMatch = since.mediaRevision.toString(), sinceDelete = since.deleteRevision, limit = 1)
+        }
+        if (r.status == 304) return false
+        if (!r.success) throw IllegalStateException("media list ${r.status}")
+        return true
+    }
+
+    /** Medium [mediaId] of [scopeId] to its node's trash (`deleteMedia`, idempotent). */
+    suspend fun trash(tenant: TenantSession, scopeId: String, mediaId: String): GalleryModel.Removal = removal {
+        tenant.account.respond { MediaApi(tenant.base, tenant.account.http).deleteMedia(scopeId, mediaId) }.status
+    }
+
+    /** Medium [mediaId] of [scopeId] back from the trash (`restoreMedia`). */
+    suspend fun restore(tenant: TenantSession, scopeId: String, mediaId: String): GalleryModel.Removal = removal {
+        tenant.account.respond { MediaApi(tenant.base, tenant.account.http).restoreMedia(scopeId, mediaId) }.status
+    }
+
+    /** What a trash's or a restore's answer [status] says (`mediaRefusal.ts`' reasons); a throw is a failure. */
+    internal suspend fun removal(status: suspend () -> Int): GalleryModel.Removal = when (runCatching { status() }.getOrDefault(-1)) {
+        in 200..299 -> GalleryModel.Removal.DONE
+        404 -> GalleryModel.Removal.GONE
+        409 -> GalleryModel.Removal.SCOPE_DELETING
+        451 -> GalleryModel.Removal.BLOCKED
+        else -> GalleryModel.Removal.FAILED
     }
 }
