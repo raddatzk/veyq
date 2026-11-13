@@ -33,6 +33,32 @@ internal static class DropSort
         return new Sorted(files, folders, refused);
     }
 
+    /// <summary>What the file system says of a dropped <paramref name="path"/>, for the log — its root's kind and the
+    /// item's attributes, never the path or a name: "Fixed C:, Archive", "Fixed C:, FileNotFoundException".</summary>
+    public static string Facts(string path)
+    {
+        string root;
+        try
+        {
+            var r = System.IO.Path.GetPathRoot(path) ?? "";
+            root = r.StartsWith(@"\\", System.StringComparison.Ordinal) ? $"unc {r}"
+                : r.Length > 0 ? $"{new System.IO.DriveInfo(r).DriveType} {r.TrimEnd('\\')}" : "relative";
+        }
+        catch (System.Exception e)
+        {
+            root = $"unrooted ({e.GetType().Name})";
+        }
+        try
+        {
+            var attributes = System.IO.File.GetAttributes(path);
+            return $"{root}, {attributes}";
+        }
+        catch (System.Exception e)
+        {
+            return $"{root}, {e.GetType().Name}";
+        }
+    }
+
     /// <summary>The calls a sorted drop onto <paramref name="level"/> makes: the files as one batch, then one folder upload
     /// per folder.</summary>
     public static IReadOnlyList<Call> Calls(UploadLevel level, Sorted sorted)

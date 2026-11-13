@@ -36,4 +36,22 @@ public sealed class DropSortTest
         CollectionAssert.AreEqual(new[] { "away.pdf", "phone" }, sorted.Refused.ToArray());
         Assert.AreEqual(0, DropSort.Calls(Trip, sorted).Count, "a drop of nothing local sends nothing");
     }
+
+    [TestMethod]
+    public void ADroppedPathsFactsNameItsRootAndWhatTheFileSystemSaysNeverItsName()
+    {
+        var gone = System.IO.Path.Combine(System.IO.Path.GetTempPath(), "Windows drop gone ü.bin");
+        var facts = DropSort.Facts(gone);
+        StringAssert.EndsWith(facts, "FileNotFoundException", facts);
+        Assert.IsFalse(facts.Contains("Windows drop"), $"the log names the file: {facts}");
+        var here = System.IO.Path.GetTempFileName();
+        try
+        {
+            StringAssert.StartsWith(DropSort.Facts(here), "Fixed ");
+        }
+        finally
+        {
+            System.IO.File.Delete(here);
+        }
+    }
 }
