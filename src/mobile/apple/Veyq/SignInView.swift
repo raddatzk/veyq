@@ -196,7 +196,6 @@ struct KitScannerView: View {
     let onClose: () -> Void
     let onNoCamera: () -> Void
     @State private var watch: QrScanWatch?
-    @Environment(\.scenePhase) private var scenePhase
 
     var body: some View {
         NavigationStack {
@@ -208,9 +207,8 @@ struct KitScannerView: View {
                         .frame(maxWidth: .infinity, maxHeight: .infinity)
                 }
             }
-            // the camera shows the kit's code — the Secret Key: covered whenever the scene is not active, so the
-            // system's app-switcher snapshot, written to the app's Library, never holds a frame of it
-            .overlay { if scenePhase != .active { Role.bg } }
+            // the camera shows the kit's code — the Secret Key: no system snapshot holds a frame of it
+            .secretOnScreen()
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             .background(Role.bg)
             .safeAreaInset(edge: .bottom) {
