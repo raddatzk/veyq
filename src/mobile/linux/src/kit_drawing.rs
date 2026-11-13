@@ -143,6 +143,32 @@ mod tests {
     /// core: `veyq_init` starts it once per process.
     #[test]
     fn the_printed_kits_page_drawn_here_is_read_by_the_core_over_the_bridge() {
+        // The whole case — the drawing here and the core's read — runs on a thread of its own and is waited for KIT_READ
+        // at most: a call, a reply or a gate that never comes fails the test, never hangs the run. (It hung idle in 3 of
+        // 7 `run.py build`s, 2026-11-13: the core's first store read was replied before `veyq_init` had published the
+        // core, the reply dropped and `SessionStart` never answered — fixed in the bridge, `Started`; and a host that
+        // stays silent now fails the ask, `Host.Silent`, so a lost reply is a Failed answer within its 30 s.)
+        let (done, outcome) = std::sync::mpsc::channel();
+        std::thread::spawn(move || {
+            let _ = done.send(draw_and_read_the_printed_kit());
+        });
+        let kit = match outcome.recv_timeout(KIT_READ) {
+            Ok(read) => read.unwrap_or_else(|why| panic!("{why}")),
+            Err(std::sync::mpsc::RecvTimeoutError::Timeout) => panic!("the kit was not drawn and read within {KIT_READ:?}"),
+            // the thread panicked (an assertion of the drawing): its message is on stderr
+            Err(std::sync::mpsc::RecvTimeoutError::Disconnected) => panic!("the kit's drawing failed"),
+        };
+        assert_eq!(kit.email, "alex.beispiel@example.org");
+        assert_eq!(kit.server.as_deref(), Some("https://familie.example.org"));
+        assert_eq!(kit.server_from, wire::ServerFrom::Token);
+    }
+
+    /// How long the drawing and the core's read may take: a few seconds where they end (measured 2 s alone, up to 9 s
+    /// with twice the CPUs busy), and past the host's 30 s, after which a lost reply is answered Failed.
+    const KIT_READ: std::time::Duration = std::time::Duration::from_secs(60);
+
+    /// The printed kit's first page drawn here, then read by the core over the bridge ([read_kit_over_the_bridge]).
+    fn draw_and_read_the_printed_kit() -> Result<wire::KitShown, String> {
         let printed = fixture("kit-printed.pdf");
         match answer(&HostRequest::PdfPages { path: printed.clone() }) {
             Some((HostReply::Value { value: Some(n) }, None)) => assert!(n.parse::<i32>().unwrap() >= 1),
@@ -153,24 +179,8 @@ mod tests {
         assert_eq!(page.bytes.len(), 2400 * page.height as usize);
         assert!(page.height > 3000, "an A4 page 2400 px wide is about 3394 px high: {}", page.height);
         assert!(page.bytes.iter().any(|&b| b < 64) && page.bytes.iter().any(|&b| b > 192), "the page drew nothing");
-
-        // The core's half runs on a thread of its own and is waited for KIT_READ at most: a call or a gate that never
-        // comes fails the test, never hangs the run (it hung idle in 3 of 7 `run.py build`s, 2026-11-13).
-        let (done, outcome) = std::sync::mpsc::channel();
-        std::thread::spawn(move || {
-            let _ = done.send(read_kit_over_the_bridge(printed));
-        });
-        let kit = match outcome.recv_timeout(KIT_READ) {
-            Ok(read) => read.unwrap_or_else(|why| panic!("{why}")),
-            Err(_) => panic!("the core's read of the kit did not end within {KIT_READ:?}"),
-        };
-        assert_eq!(kit.email, "alex.beispiel@example.org");
-        assert_eq!(kit.server.as_deref(), Some("https://familie.example.org"));
-        assert_eq!(kit.server_from, wire::ServerFrom::Token);
+        read_kit_over_the_bridge(printed)
     }
-
-    /// How long the core's read of the kit may take: about a second where it ends (measured 1.4 s for the whole run).
-    const KIT_READ: std::time::Duration = std::time::Duration::from_secs(60);
 
     /// The core started over a store that keeps nothing, the sign-in shown, the printed kit at [printed] read through
     /// `Session.SignInKit`, and the kit the sign-in's gate carries; the core shut down again.
@@ -180,9 +190,10 @@ mod tests {
             return Err("the core did not start".into());
         }
         let (_watch, gates) = bridge::watch(&wire::Watched::Session).ok_or("the session is not watched")?;
-        if !matches!(bridge::call_blocking(&wire::Call::SessionStart), Ok((wire::Answer::Done, None))) {
+        let started = bridge::call_blocking(&wire::Call::SessionStart);
+        if !matches!(started, Ok((wire::Answer::Done, None))) {
             bridge::shutdown();
-            return Err("the start was not answered Done".into());
+            return Err(format!("the start was answered {started:?}, not Done"));
         }
         let answered = bridge::call_blocking(&wire::Call::SessionSignInKit { path: printed, server: String::new() });
         if !matches!(answered, Ok((wire::Answer::Done, None))) {

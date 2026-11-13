@@ -1,4 +1,4 @@
-@file:OptIn(ExperimentalForeignApi::class, ExperimentalNativeApi::class, ExperimentalAtomicApi::class)
+@file:OptIn(ExperimentalForeignApi::class, ExperimentalNativeApi::class)
 
 package me.raddatz.veyq.mobile.bridge
 
@@ -23,8 +23,6 @@ import me.raddatz.veyq.mobile.blob.FileSource
 import me.raddatz.veyq.mobile.crypto.LibsodiumPrimitives
 import me.raddatz.veyq.mobile.session.DeviceKeys
 import me.raddatz.veyq.mobile.session.DeviceStore
-import kotlin.concurrent.atomics.AtomicReference
-import kotlin.concurrent.atomics.ExperimentalAtomicApi
 import kotlin.experimental.ExperimentalNativeApi
 
 // The six C functions of bridge.h (ADR 0123's Consequences, the bridge) — the library's whole surface. Each pointer the
@@ -50,8 +48,6 @@ internal expect fun platformHttpClient(block: HttpClientConfig<*>.() -> Unit): H
  * [Config.window] (`mingwMain`).
  */
 internal expect fun platformDeviceKeys(config: Config, store: DeviceStore): DeviceKeys
-
-private class Running(val bridge: Bridge<*, *>, val host: Host)
 
 /** The files the host names by path, written by core's [FileSink]: one not finished is removed (ADR 0131). */
 private object Files : DeviceFiles {
@@ -95,7 +91,8 @@ private object Files : DeviceFiles {
     private const val READ_STEP = 1 shl 16
 }
 
-private val running = AtomicReference<Running?>(null)
+/** The core and its host: the host reachable by [veyqReply] before the core is composed ([Started]). */
+private val started = Started<Bridge<*, *>> { it.shutdown() }
 
 /** veyq_init's answers. */
 private const val STARTED = 0
@@ -113,27 +110,24 @@ fun veyqInit(config: CPointer<ByteVar>?, host: VeyqHost?, hostCtx: COpaquePointe
     // libsodium's AES-256-GCM needs the CPU's AES instructions (on x86-64 AVX too); without them the core refuses to
     // start (ADR 0123's Consequences, the core on Linux and on Windows).
     runCatching { LibsodiumPrimitives.randomBytes(1) }.onFailure { return NO_AES }
-    if (running.load() != null) return ALREADY_STARTED
     val h = Host { token, json ->
         memScoped { host.invoke(hostCtx, token.toULong(), json.cstr.ptr, null, 0u) }
     }
-    val bridge = Bridge.live(LibsodiumPrimitives, { block -> platformHttpClient(block) }, c, HostStore(h), { platformDeviceKeys(c, it) }, Files, { HostPictures(h, it) })
-    if (!running.compareAndSet(null, Running(bridge, h))) {
-        bridge.shutdown()
-        return ALREADY_STARTED
+    val composed = started.start(h) {
+        Bridge.live(LibsodiumPrimitives, { block -> platformHttpClient(block) }, c, HostStore(it), { platformDeviceKeys(c, it) }, Files, { path -> HostPictures(h, path) })
     }
-    return STARTED
+    return if (composed) STARTED else ALREADY_STARTED
 }
 
 @CName("veyq_call")
 fun veyqCall(request: CPointer<ByteVar>?, bytes: CPointer<UByteVar>?, len: ULong, ctx: COpaquePointer?, answer: VeyqAnswer?) {
-    val r = running.load() ?: return
+    val bridge = started.core ?: return
     if (answer == null) return
     val json = request?.toKString() ?: ""
     // what the host hands beside the call (a scan's frame) is copied before this returns, as bridge.h promises; NULL is
     // none, a non-NULL pointer with length 0 an empty one
     val inbound = bytes?.let { if (len > MAX_INBOUND) null else it.reinterpret<ByteVar>().readBytes(len.toInt()) }
-    r.bridge.call(json, inbound) { a, payload ->
+    bridge.call(json, inbound) { a, payload ->
         memScoped {
             if (payload == null) {
                 answer.invoke(ctx, a.cstr.ptr, null, 0u)
@@ -151,26 +145,27 @@ fun veyqCall(request: CPointer<ByteVar>?, bytes: CPointer<UByteVar>?, len: ULong
 
 @CName("veyq_watch")
 fun veyqWatch(request: CPointer<ByteVar>?, ctx: COpaquePointer?, update: VeyqAnswer?): ULong {
-    val r = running.load() ?: return 0u
+    val bridge = started.core ?: return 0u
     if (update == null) return 0u
     val json = request?.toKString() ?: return 0u
-    return r.bridge.watch(json) { u -> memScoped { update.invoke(ctx, u.cstr.ptr, null, 0u) } }.toULong()
+    return bridge.watch(json) { u -> memScoped { update.invoke(ctx, u.cstr.ptr, null, 0u) } }.toULong()
 }
 
 @CName("veyq_unwatch")
 fun veyqUnwatch(id: ULong) {
-    running.load()?.bridge?.unwatch(id.toLong())
+    started.core?.unwatch(id.toLong())
 }
 
 @CName("veyq_reply")
 fun veyqReply(token: ULong, json: CPointer<ByteVar>?, bytes: CPointer<UByteVar>?, len: ULong) {
-    val r = running.load() ?: return
     // a drawing's pixels (HostReply.Pixels) beside the reply, copied before this returns, as bridge.h promises
     val payload = bytes?.let { if (len > MAX_INBOUND) null else it.reinterpret<ByteVar>().readBytes(len.toInt()) }
-    r.host.reply(token.toLong(), json?.toKString() ?: "", payload)
+    // the host is reached even while veyq_init still composes the core: the composition's first store read is answered
+    // from inside the host function, possibly before veyq_init returned (Started)
+    started.reply(token.toLong(), json?.toKString() ?: "", payload)
 }
 
 @CName("veyq_shutdown")
 fun veyqShutdown() {
-    running.exchange(null)?.bridge?.shutdown()
+    started.shutdown()
 }

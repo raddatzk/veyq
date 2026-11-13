@@ -35,6 +35,7 @@ import kotlin.test.assertIs
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 import kotlin.time.Duration.Companion.milliseconds
+import kotlin.time.Duration.Companion.seconds
 
 /**
  * The dispatch (ADR 0123's Consequences, the bridge) over a session door the test plays, as the host drives it: every
@@ -2300,7 +2301,42 @@ class DispatchTest {
     @Test
     fun aHostThatNeverRepliesFailsTheAskInsteadOfHangingIt() {
         val silent = HostStore(Host(timeout = 200.milliseconds) { _, _ -> })
-        assertFailsWith<kotlinx.coroutines.TimeoutCancellationException> { silent.read("veyq.recent") }
+        // a failure, never a cancellation (withTimeout's): a call's coroutine passes a cancellation on as its own, unanswered
+        assertFailsWith<Host.Silent> { silent.read("veyq.recent") }
+    }
+
+    /** A call is answered even when the host never replies to what it asks: Failed, never no answer at all. */
+    @Test
+    fun aCallWhoseCompositionsHostStaysSilentIsAnsweredFailed() {
+        val silent = Host(timeout = 200.milliseconds) { _, _ -> }
+        val b = Bridge<Connection, Any> { HostStore(silent).read("veyq.recent"); error("the silent host answered") }
+        try {
+            assertIs<Answer.Failed>(runBlocking { b.ask(Call.SessionStart, timeout = 5.seconds) })
+        } finally {
+            b.shutdown()
+        }
+    }
+
+    /**
+     * `veyq_init`'s order ([Started]): the composition asks the host at once and the host replies from inside its host
+     * function, before the start returned — the reply reaches the ask, a second start composes nothing, and a shutdown
+     * stops the core and lets a start follow.
+     */
+    @Test
+    fun aReplyArrivingBeforeTheStartReturnedReachesItsAsk() {
+        val stopped = mutableListOf<String>()
+        val started = Started<String> { stopped += it }
+        val host = Host(timeout = 2.seconds) { token, _ ->
+            started.reply(token, wire.encodeToString(HostReply.serializer(), HostReply.Value("kept")), null)
+        }
+        assertTrue(started.start(host) { h -> HostStore(h).read("veyq.recent")!! })
+        assertEquals("kept", started.core)
+        assertEquals(false, started.start(host) { error("a second core composed") })
+        started.shutdown()
+        assertEquals(listOf("kept"), stopped)
+        assertNull(started.core)
+        assertTrue(started.start(host) { "again" })
+        assertEquals("again", started.core)
     }
 
     private companion object {
