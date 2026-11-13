@@ -47,6 +47,7 @@ Verbs:
   drive <step>...            runs Veyq.Drive's steps (its Program.cs: tree, invoke, select, set, type, key, press,
                              size, maximize, wait, sleep, shot) against the running app through the scheduled task
                              `veyq-drive`, and prints the app's log first, then what each step saw. `shot <name>.png`
+                             (and `screen`'s, `hovershot`'s)
                              lands in src/mobile/build/windows/shots here.
   hello-probe [--timeout S]  the Hello half of the core's WindowsDeviceKeys, which needs the person at the Windows host's
                              console (a PIN is never typed by an agent): links the core's test binary, rebuilds
@@ -1033,14 +1034,16 @@ def fetch(remote: str, local: Path) -> bool:
 
 def drive(steps: list[str]) -> int:
     """Runs [steps] through Veyq.Drive in the logged-on session; prints the app's log, then what each step saw. A
-    `shot <name>` step's PNG lands in SHOTS here."""
+    `shot`, `screen` or `hovershot <name>` step's PNG lands in SHOTS here."""
     shots = []
     lines = []
     for step in steps:
-        if step.split(" ", 1)[0] == "shot":
+        verb = step.split(" ", 1)[0]
+        # `screen` and `hovershot` write a PNG too: a bare name would land in the task's working directory (system32)
+        if verb in ("shot", "screen", "hovershot"):
             name = PureWindowsPath(step.split(" ", 1)[1].strip()).name
             shots.append(name)
-            lines.append(f"shot {REMOTE_RUN / 'shots' / name}")
+            lines.append(f"{verb} {REMOTE_RUN / 'shots' / name}")
         else:
             lines.append(step)
     local = SMOKE_OUT.parent / "steps.txt"

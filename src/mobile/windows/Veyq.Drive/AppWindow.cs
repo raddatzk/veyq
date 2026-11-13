@@ -19,7 +19,9 @@ internal sealed partial class AppWindow(string process)
 
     private AutomationElement Window()
     {
-        var deadline = DateTime.UtcNow.AddSeconds(15);
+        // A freshly copied build's first start took 23 s to its window on the VM under UAC on (2026-11-13: the core
+        // started 20 s after the process), so `run.py run`'s `size` right after the launch waits a minute, not 15 s.
+        var deadline = DateTime.UtcNow.AddSeconds(60);
         while (true)
         {
             foreach (var p in Process.GetProcessesByName(process))
@@ -103,6 +105,13 @@ internal sealed partial class AppWindow(string process)
                 // a system dialog's entry (the save picker's file name) takes what is typed into it: a Value set through
                 // UIA showed there and was not read (the picker saved under the name it had)
                 var e = Find(parts[1]);
+                // the open picker's file name is an Edit inside a ComboBox of the same AutomationId (1148): the ComboBox,
+                // found first, took the focus and nothing typed reached the Edit (2026-11-13, the kit's Windows pass)
+                if (e.Current.ControlType == ControlType.ComboBox &&
+                    e.FindFirst(TreeScope.Children, new PropertyCondition(AutomationElement.ControlTypeProperty, ControlType.Edit)) is { } edit)
+                {
+                    e = edit;
+                }
                 e.SetFocus();
                 Keys.Text(TopLevel(e), parts.Length > 2 ? parts[2] : "");
                 return "";
