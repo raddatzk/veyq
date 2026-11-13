@@ -348,11 +348,13 @@ paths:
         The tenant **owner** admits a new member (uc.spaces.add-member, ADR 0020): mints a single-use,
         time-limited MEMBER-role invite bound to the email and **emailed to that address** — the *tenant* half of
         member-add (a maybe-new person is onboarded by email + cold-birth; the *group* half, adding an
-        existing tenant member, is a separate scope-based operation later). Mail is the **only** channel: the
-        secret is never returned to the caller, because it is minted for the invited person and not for whoever
-        is looking at the owner's screen (ADR 0055). A tenant with no sendable mail settings is therefore
-        refused with `503 mail_unavailable` **before** anything is minted, and a send that errors leaves no
-        invite behind. Distinct from the Server-Owner
+        existing tenant member, is a separate scope-based operation later). This operation's only channel is mail:
+        its secret is never returned to the caller, because it is minted for the invited person and not for whoever
+        is looking at the owner's screen (ADR 0055). The owner's other way, a link bound to nobody that the owner
+        hands over, is a separate operation, `createMemberInviteLink`
+        ([ADR 0129](../../docs/decisions/0129-a-member-invite-is-mailed-or-handed-over-as-a-link.md) decision 1).
+        A tenant with no sendable mail settings is refused with `503 mail_unavailable` **before** anything is
+        minted, and a send that errors leaves no invite behind. Distinct from the Server-Owner
         tenant admin above: this is gated on the caller holding the **OWNER membership** of `{tenantId}` (a
         code check, not the Server-Owner role). The tenant must be ACTIVE.
         **The invite is a placeholder member** ([ADR 0111](../../docs/decisions/0111-an-invitee-grants-itself-a-rotator-re-keys-its-own-scopes-and-a-key-chain-anchors-trust.md) decisions 1-2): the owner's client minted an
@@ -458,7 +460,8 @@ paths:
       summary: List the tenant's pending member invites (owner-gated).
       description: >
         Returns the tenant's currently **pending** MEMBER invites — each an opaque `inviteId`, the invited
-        `email`, its status, and expiry — so the owner can track who has been invited but has not joined yet
+        `email` (absent for a link invite, which is bound to nobody — ADR 0129 decision 2), its status, and expiry —
+        so the owner can track who has been invited but has not joined yet, and which way
         (uc.spaces.manage-member-invites). Consumed/expired/superseded invites are not listed. Gated on the
         caller holding the tenant **OWNER** membership (a code check). Operator-blind: only invite metadata the
         server already stores — never a plaintext secret. What a rotation needs of the open invites — their keys,
@@ -480,6 +483,9 @@ paths:
                   email: partner@example.com
                   inviteStatus: ACTIVE
                   inviteExpiresAt: 2026-07-11T12:00:00Z
+                - inviteId: 2a3b4c5d-6e7f-4a1b-8c2d-3e4f5a6b7c8d
+                  inviteStatus: ACTIVE
+                  inviteExpiresAt: 2026-07-12T09:30:00Z
         "401":
           description: Generic authentication failure.
           content:
@@ -507,9 +513,10 @@ paths:
       operationId: reissueMemberInvite
       summary: Re-issue a pending member invite with a new key, code + link (owner-gated).
       description: >
-        Supersedes the given pending MEMBER invite — its key and grant are dropped with it — and mints a **new
+        Supersedes the given pending **mailed** MEMBER invite — its key and grant are dropped with it — and mints a **new
         invite** for the same email from the body, exactly as `inviteTenantMember` takes it: a new invite key, grant,
-        sealed link and code (the body's `email` must be the old invite's, else `422 invite_email_mismatch`). Emailed to
+        sealed link and code (the body's `email` must be the old invite's, else `422 invite_email_mismatch` — which is
+        also the answer for a link invite, bound to no email; it is re-issued by `reissueMemberInviteLink`). Emailed to
         that address (the old link dies) — for when the invitee lost or ignored the first one, or its code.
         Owner-gated. Never returned to the caller (ADR 0055). Like the first mint, it needs a sendable mailer and is
         refused with `503` without one. Note the ordering cost: the outstanding invite is superseded before the new
@@ -607,8 +614,9 @@ paths:
       operationId: revokeMemberInvite
       summary: Revoke a pending member invite (owner-gated).
       description: >
-        Soft-transitions the given pending MEMBER invite to a terminal state, so a later replay of its secret at
-        `accept` is rejected (`invite_no_longer_valid`) and the reserved email is freed to re-invite. Owner-gated.
+        Soft-transitions the given pending MEMBER invite — mailed or link (ADR 0129 decision 2) — to a terminal state,
+        so a later replay of its secret at `accept` is rejected (`invite_no_longer_valid`) and a mailed invite's
+        reserved email is freed to re-invite. Owner-gated.
         The invite's key and its grant are dropped in the same statement, so no rotation carries it any more
         ([ADR 0111](../../docs/decisions/0111-an-invitee-grants-itself-a-rotator-re-keys-its-own-scopes-and-a-key-chain-anchors-trust.md) decision 2). The tenant does not rotate (ADR 0025): link and code stay a key to the
         epochs granted up to the revoke, useful only with a dump of the ciphertext — the residual ADR 0111
@@ -642,6 +650,210 @@ paths:
             application/json:
               schema: { $ref: "#/components/schemas/ErrorResponse" }
               example: { code: invite_not_found }
+
+  /api/tenants/{tenantId}/member-invite-links:
+    post:
+      tags: [tenants]
+      operationId: createMemberInviteLink
+      summary: Mint a member invite bound to nobody, whose link the owner hands over (owner-gated).
+      description: >
+        The tenant **owner**'s second way to admit a member ([ADR 0129](../../docs/decisions/0129-a-member-invite-is-mailed-or-handed-over-as-a-link.md)
+        decision 1, uc.spaces.add-member): a single-use, time-limited MEMBER-role invite with **no address**. The
+        server mints it, **sends nothing**, and answers the token (`bootstrapSecret`) to the owner who minted it,
+        once. The owner's client builds `…/tenant/accept#<token>.<sealed>.<code>` from it, the sealed part and the
+        code it generated, and the owner hands the link over in a channel of their choice; the sealed part and the
+        code never reach the server, so this request carries no `sealedLink` — and, bound to nobody, no `email`.
+        Whoever opens the link joins: they register with an address they type, or sign in with any account of this
+        instance (an account already a member is refused at accept, `409 already_member`), and a redemption marks no
+        address confirmed (ADR 0129 decisions 2 and 4). Several link invites may be open at once and a mailed mint
+        supersedes none of them; a link mint counts against the tenant's invite budget only, never a recipient's.
+        **Mail is still a precondition** (ADR 0129 decision 3): a tenant with no sendable mail settings is refused
+        with `503 mail_unavailable` before anything is minted, so every account a link creates can be sent its
+        address confirmation. Gated on the caller holding the **OWNER membership** of `{tenantId}` (a code check);
+        the tenant must be ACTIVE. **The invite is a placeholder member** exactly as `inviteTenantMember`'s (ADR 0111
+        decisions 1-2): the same invite key, owner signature and grant of the tenant scope's current epoch, checked
+        the same way, re-granted by every rotation while it is open. Operator-blind: the invite hash, the invite's
+        public key and its opaque signature and grant — less than a mailed invite's, which adds the address and,
+        in the mail, the sealed part.
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/TenantId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/MemberInviteLinkRequest" }
+            example:
+              inviteId: 1f2d3e4a-5b6c-4c3f-8e2a-9b1d4a6e8b2c
+              invitePublicKey: aW52aXRlLXB1YmxpYy1rZXk=
+              inviteKeySignature: c2lnbmF0dXJl
+              expiresAt: 2026-07-11T12:00:00Z
+              epoch: 0
+              wrappedGrant: AQ==
+              grantSignature: c2lnbmF0dXJl
+              recipientIdentityDigest: ZGlnZXN0ZGlnZXN0ZGlnZXN0ZGlnZXN0ZGlnZXN0ZGk=
+      responses:
+        "201":
+          description: A link invite was minted; its token is answered here once and sent nowhere.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/MemberInviteLink" }
+              example:
+                inviteId: 1f2d3e4a-5b6c-4c3f-8e2a-9b1d4a6e8b2c
+                bootstrapSecret: 87olM0gSJLPgnKSjdNkC4pPQyuvMVguyb5kHoJyU9Cc
+                inviteExpiresAt: 2026-07-11T12:00:00Z
+        "400":
+          description: The request was malformed (missing/invalid invite material) — `invalid_request`.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+              example: { code: invalid_request }
+        "401":
+          description: Generic authentication failure.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+              example: { code: authentication_failed }
+        "403":
+          description: The caller is a member of this tenant but not its owner (only the owner may invite members). Or the tenant is suspended (`tenant_suspended`, uc.spaces.scope-access).
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+              example: { code: not_tenant_owner }
+        "404":
+          description: >
+            No tenant with that id — or the caller is not a member of it (deliberately indistinguishable,
+            ADR 0042: membership is the first gate).
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+              example: { code: tenant_not_found }
+        "409":
+          description: >
+            The tenant is not ACTIVE, the invite's grant is of an epoch that is no longer the tenant scope's current one
+            (`stale_epoch` — re-open the scope and rebuild), the invite id is already taken (`id_taken`), or
+            `recipientIdentityDigest` is not SHA-256 of `invitePublicKey` (`recipient_key_not_current`).
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+              example: { code: stale_epoch }
+        "413": { $ref: "_common.openapi.yaml#/components/responses/RequestTooLarge" }
+        "422":
+          description: >
+            Rules no schema states, nothing minted: `invite_expiry_invalid`, `invite_signature_invalid` and
+            `date_time_out_of_range` as for `inviteTenantMember` — `expiresAt` outside the range a stored time holds
+            (1582-10-15T00:00:00Z to 9999-12-31T23:59:59.999Z, with an offset of at most ±18:00), a bound no date-time
+            schema states.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+              example: { code: invite_signature_invalid }
+        "503":
+          description: >
+            This tenant cannot send mail, so none was minted (`mail_unavailable` — the owner configures SMTP under mail
+            settings; ADR 0129 decision 3). Nothing is sent on this path, so there is no `mail_send_failed`.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+              example: { code: mail_unavailable }
+
+  /api/tenants/{tenantId}/member-invite-links/{inviteId}/reissue:
+    post:
+      tags: [tenants]
+      operationId: reissueMemberInviteLink
+      summary: Re-issue a pending link invite with a new key, code + link (owner-gated).
+      description: >
+        Supersedes the given pending **link** invite — its key and grant are dropped with it — and mints a **new link
+        invite** from the body, exactly as `createMemberInviteLink` takes it: a new invite key, grant and token, and on
+        the owner's client a new sealed part and code (ADR 0129 decision 2). The old link dies. Answers the new token to
+        the owner, once, and sends nothing. Owner-gated; refused with `503 mail_unavailable` like the first mint. The
+        supersede and the mint commit together — nothing is sent between them — so a refusal leaves the old invite
+        standing. A mailed invite is re-issued by `reissueMemberInvite`; its id here is `404 invite_not_found`.
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/TenantId"
+        - $ref: "#/components/parameters/InviteId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/MemberInviteLinkRequest" }
+            example:
+              inviteId: 1f2d3e4a-5b6c-4c3f-8e2a-9b1d4a6e8b2c
+              invitePublicKey: aW52aXRlLXB1YmxpYy1rZXk=
+              inviteKeySignature: c2lnbmF0dXJl
+              expiresAt: 2026-07-11T12:00:00Z
+              epoch: 0
+              wrappedGrant: AQ==
+              grantSignature: c2lnbmF0dXJl
+              recipientIdentityDigest: ZGlnZXN0ZGlnZXN0ZGlnZXN0ZGlnZXN0ZGlnZXN0ZGk=
+      responses:
+        "200":
+          description: A fresh link invite was minted (the old one superseded); its token is answered here once.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/MemberInviteLink" }
+              example:
+                inviteId: 1f2d3e4a-5b6c-4c3f-8e2a-9b1d4a6e8b2c
+                bootstrapSecret: 87olM0gSJLPgnKSjdNkC4pPQyuvMVguyb5kHoJyU9Cc
+                inviteExpiresAt: 2026-07-11T12:00:00Z
+        "400":
+          description: The request was malformed — `invalid_request`.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+              example: { code: invalid_request }
+        "401":
+          description: Generic authentication failure.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+              example: { code: authentication_failed }
+        "403":
+          description: The caller is a member of this tenant but not its owner. Or the tenant is suspended (`tenant_suspended`, uc.spaces.scope-access).
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+              example: { code: not_tenant_owner }
+        "404":
+          description: >
+            No such pending link invite for this tenant — unknown, already consumed, already terminal, or a mailed
+            invite (`invite_not_found`); or no such tenant, or the caller is not a member of it (`tenant_not_found`,
+            deliberately indistinguishable, ADR 0042: membership is the first gate).
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+              example: { code: invite_not_found }
+        "409":
+          description: >
+            The new invite's grant is of an epoch that is no longer the tenant scope's current one (`stale_epoch`), its
+            id is taken (`id_taken`), or `recipientIdentityDigest` is not SHA-256 of `invitePublicKey`
+            (`recipient_key_not_current`) — nothing was superseded.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+              example: { code: stale_epoch }
+        "413": { $ref: "_common.openapi.yaml#/components/responses/RequestTooLarge" }
+        "422":
+          description: >
+            Rules no schema states, nothing superseded: `invite_expiry_invalid` and `invite_signature_invalid` as for
+            `inviteTenantMember`; `date_time_out_of_range` — `expiresAt` outside the range a stored time holds
+            (1582-10-15T00:00:00Z to 9999-12-31T23:59:59.999Z, with an offset of at most ±18:00), a bound no date-time
+            schema states.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+              example: { code: invite_signature_invalid }
+        "503":
+          description: >
+            This tenant cannot send mail, so nothing was minted and the previous link invite still stands
+            (`mail_unavailable`, ADR 0129 decision 3).
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+              example: { code: mail_unavailable }
 
   /api/tenants/{tenantId}/members/{userId}:
     patch:
@@ -2240,15 +2452,18 @@ paths:
       operationId: previewTenantInvite
       summary: Preview a tenant invite from its bootstrap secret.
       description: >
-        Returns what the invitee is asked to accept (tenant name, domain, the invited owner email) and
-        whether that email already has an account — so the client picks the sign-in vs. register path — and, for
+        Returns what the invitee is asked to accept (tenant name, domain, the invited email) and
+        whether that email already has an account — so the client picks the sign-in vs. register path; a link
+        invite is bound to no email, so both are absent and the invitee chooses (ADR 0129 decision 2) — and, for
         a MEMBER invite, the invite key, its owner's signature and key chain, the owner's anchor grant, the grant the
         invite carries now and the succession statements between the two (`invite`), which the invitee's client checks against
         the link's sealed part before it trusts any of it (ADR 0111 decisions 1
         and 19). Serving the owner's chain here hands the holder of the token public keys and signatures, as
         `getKeyChain` serves them to a co-member.
         Public: gated only by possession of the bootstrap secret (the URL-fragment token), which is matched
-        by hash and never echoed back. A replayed superseded/consumed/expired secret is 410.
+        by hash and never echoed back. A replayed superseded, revoked or expired secret is `410
+        invite_no_longer_valid`; a consumed one is `410 invite_redeemed`, so whoever opens a link someone else took
+        first can tell (ADR 0129 decision 6) — while the row is kept, until the terminal-invite purge.
       requestBody:
         required: true
         content:
@@ -2283,12 +2498,14 @@ paths:
               example: { code: invite_not_found }
         "410":
           description: >
-            The invite is no longer valid (superseded, consumed, or expired) — or its tenant is suspended, which an
-            invite holder is told exactly as a dead invite (uc.spaces.scope-access A4).
+            The invite was redeemed — consumed by an accept (`invite_redeemed`, ADR 0129 decision 6); or it is no
+            longer valid otherwise — superseded, revoked or expired (`invite_no_longer_valid`) — or its tenant is
+            suspended, which an invite holder is told exactly as a dead invite whatever the invite's own state
+            (`invite_no_longer_valid`, uc.spaces.scope-access A4).
           content:
             application/json:
               schema: { $ref: "#/components/schemas/ErrorResponse" }
-              example: { code: invite_no_longer_valid }
+              example: { code: invite_redeemed }
         "413": { $ref: "_common.openapi.yaml#/components/responses/RequestTooLarge" }
 
   /api/tenants/accept:
@@ -2305,8 +2522,11 @@ paths:
         invite_proof_invalid`) and writes its join record (`sealedJoinRecord`); the server stores the MEMBER
         membership **with** that grant, the profile with the join record, and consumes the invite, dropping its
         key and grant — atomically ([ADR 0111](../../docs/decisions/0111-an-invitee-grants-itself-a-rotator-re-keys-its-own-scopes-and-a-key-chain-anchors-trust.md) decision 3). Any authenticated
-        caller may call this; the caller's email must equal the invited email, else 403 `not_invited_owner`
-        (a domain check, not the Server-Owner role).
+        caller may call this; for an invite bound to an email (an OWNER invite, a mailed MEMBER invite) the caller's
+        email must equal it, else 403 `not_invited_owner` (a domain check, not the Server-Owner role). A link invite
+        is bound to nobody (ADR 0129 decision 2): any account of this instance accepts it, except one already a member
+        of the tenant (`409 already_member`), and its redemption leaves the account's address confirmation as it was
+        (ADR 0129 decision 4) — only a mailed invite's redemption marks the address confirmed.
       security:
         - bearerAuth: []
       requestBody:
@@ -2339,7 +2559,8 @@ paths:
               example: { code: authentication_failed }
         "403":
           description: >
-            The caller is authenticated but is not the invited one (`not_invited_owner`), or a MEMBER invite's
+            The caller is authenticated but is not the invited one — its email is not the one the invite is bound to
+            (`not_invited_owner`; a link invite is bound to none) — or a MEMBER invite's
             `inviteProof` does not verify under the stored invite key (`invite_proof_invalid`).
           content:
             application/json:
@@ -2353,7 +2574,8 @@ paths:
               example: { code: invite_not_found }
         "409":
           description: >
-            A conflict — the tenant is already active (`tenant_not_pending`), the chosen `username` is already
+            A conflict — the tenant is already active (`tenant_not_pending`), the caller is already a member of the
+            tenant a link invite admits to (`already_member`), the chosen `username` is already
             taken in this tenant (`username_taken`), the self-grant names an epoch above the tenant scope's current
             one or `epoch` (the profile fields' seal) is not the current one (`stale_epoch`), or its (or an OWNER invite's tenant birth's) `recipientIdentityDigest` is not the caller's current identity key
             (`recipient_key_not_current`), or a MEMBER invite's `signerIdentityDigest` is not the invite's stored signer
@@ -2442,7 +2664,11 @@ paths:
       description: >
         The canonical email-invite path — the invitee has no account yet. A new MEMBER account is born on
         the device (operator-blind: the server receives only ciphertext + public keys), its **email taken
-        from the invite** (not the body, which binds it), and its id minted by the client (`userId`, [ADR 0072](../../docs/decisions/0072-a-seal-binds-its-object.md)
+        from the invite** for an invite bound to one (the body then carries none — `422 invite_kind_email_mismatch`
+        if it does), or **from the body's `email`** for a link invite, bound to nobody, which requires it (`422
+        invite_kind_email_mismatch` without it; [ADR 0129](../../docs/decisions/0129-a-member-invite-is-mailed-or-handed-over-as-a-link.md)
+        decision 2). A mailed invite's redemption marks the new address confirmed, its token being the proof of the
+        mailbox; a link invite's does not, and the account starts unconfirmed (ADR 0129 decision 4). Its id is minted by the client (`userId`, [ADR 0072](../../docs/decisions/0072-a-seal-binds-its-object.md)
         Decision 3 — the optional `sealedName` is sealed bound to (tenant scope, that id)). In one atomic step the
         server creates the account under that id and, for an OWNER invite, stores the OWNER membership + grant and
         flips the tenant ACTIVE; for a MEMBER invite it stores the MEMBER membership with the self-grant, the
@@ -2499,7 +2725,8 @@ paths:
               example: { code: invite_not_found }
         "409":
           description: >
-            A conflict — the invited email already has an account (`email_taken`, use the sign-in accept), the
+            A conflict — the invited email (or a link invite's typed `email`) already has an account (`email_taken`,
+            use the sign-in accept), the
             chosen `username` is already taken in this tenant (`username_taken`), the `userId` is already taken
             (`id_taken`), the self-grant names an epoch above the tenant scope's current one or `epoch` (the profile fields' seal) is not the current one (`stale_epoch`), or its (or an OWNER invite's tenant birth's)
             `recipientIdentityDigest` is not the new account's identity key (`recipient_key_not_current`), or a MEMBER
@@ -2519,6 +2746,15 @@ paths:
               schema: { $ref: "#/components/schemas/ErrorResponse" }
               example: { code: invite_no_longer_valid }
         "413": { $ref: "_common.openapi.yaml#/components/responses/RequestTooLarge" }
+        "422":
+          description: >
+            A rule no schema states, nothing created: `invite_kind_email_mismatch` — the body's `email` does not fit
+            the invite: absent for a link invite, which requires it, or present for an invite bound to an email, which
+            takes that one (ADR 0129 decision 2).
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+              example: { code: invite_kind_email_mismatch }
 
 components:
   securitySchemes:
@@ -2846,6 +3082,95 @@ components:
       enum: [SENT, FALLBACK_COPYLINK, FAILED]
       example: SENT
 
+    # Its eight fields are MemberInviteRequest's, written twice on purpose: an `allOf` that shares them is flattened by
+    # the Kotlin generator, which drops `epoch`'s nullable type on the way (`Int` for `Int?`), so a missing `epoch` would
+    # bind 0 instead of failing `@NotNull` (measured 2026-11-12). Change both together.
+    MemberInviteLinkRequest:
+      type: object
+      description: >
+        A member invite's material as the owner's client builds it ([ADR 0111](../../docs/decisions/0111-an-invitee-grants-itself-a-rotator-re-keys-its-own-scopes-and-a-key-chain-anchors-trust.md) decisions 1-2): the invite
+        key's public half, the owner's signature over it and a grant of the tenant scope's current epoch to it — a
+        **link** invite's request ([ADR 0129](../../docs/decisions/0129-a-member-invite-is-mailed-or-handed-over-as-a-link.md) decision 1):
+        bound to nobody, and the link's sealed part stays on the owner's client. `MemberInviteRequest` is a mailed
+        invite's: these fields, the address and the sealed part.
+      required: [inviteId, invitePublicKey, inviteKeySignature, expiresAt, epoch, wrappedGrant, grantSignature, recipientIdentityDigest]
+      properties:
+        inviteId:
+          x-veyq-visibility: id
+          type: string
+          format: uuid
+          description: >
+            The client-minted UUIDv4 id of the invite (ADR 0072 Decision 3) — bound into the owner's `invite-key`
+            signature, the link's seal, and the grant's signature as its recipient. Taken ⇒ `409 id_taken`.
+          example: 1f2d3e4a-5b6c-4c3f-8e2a-9b1d4a6e8b2c
+          x-field-extra-annotation: '@field:jakarta.validation.constraints.NotNull'
+        invitePublicKey:
+          type: string
+          description: >
+            The invite key's public bundle (X-Wing encapsulation key + Ed25519 key, `serializeIdentityPublic`), derived
+            by the owner's client from a seed only the link carries. Opaque base64 the server stores and serves.
+          contentEncoding: base64
+          maxLength: 8192
+          example: aW52aXRlLXB1YmxpYy1rZXk=
+          x-field-extra-annotation: '@field:jakarta.validation.constraints.NotBlank @field:jakarta.validation.constraints.Size(max = 8192) @field:jakarta.validation.constraints.Pattern(regexp = "[A-Za-z0-9+/]*={0,2}")'
+        inviteKeySignature:
+          type: string
+          description: >
+            The inviting owner's Ed25519 identity signature over `encode(invite-key: tenantId, inviteId,
+            sha256(invitePublicKey), expiresAt in Unix seconds)`. The server verifies it under the caller's stored
+            identity key before it mints (`422 invite_signature_invalid`) — so a session without the owner's unlocked vault mints
+            no invite — and stores it beside that key; the invitee checks it under the key the owner's chain reaches from the
+            head inside the link's seal.
+          contentEncoding: base64
+          maxLength: 128
+          example: c2lnbmF0dXJl
+          x-field-extra-annotation: '@field:jakarta.validation.constraints.NotBlank @field:jakarta.validation.constraints.Size(max = 128) @field:jakarta.validation.constraints.Pattern(regexp = "[A-Za-z0-9+/]*={0,2}")'
+        expiresAt:
+          x-veyq-visibility: time
+          type: string
+          format: date-time
+          description: >
+            The invite's expiry, in whole seconds — the owner signs it. The server takes it only within one minute of
+            its own invite lifetime from now (`veyq.tenant.invite.ttl`), else `422 invite_expiry_invalid`, and stores it as
+            the invite's expiry.
+          example: 2026-07-11T12:00:00Z
+          x-field-extra-annotation: '@field:jakarta.validation.constraints.NotNull'
+        epoch:
+          x-veyq-visibility: structure
+          # nullable type + @NotNull: a required primitive binds a missing field to 0/false (src/backend/CLAUDE.md)
+          type: [integer, "null"]
+          description: The tenant scope epoch whose key `wrappedGrant` carries — its current one, checked under its row lock (`409 stale_epoch`).
+          minimum: 0
+          example: 0
+          x-field-extra-annotation: '@field:jakarta.validation.constraints.Min(0) @field:jakarta.validation.constraints.NotNull'
+        wrappedGrant:
+          type: string
+          description: >
+            The epoch key sealed to the invite key (`sealTo(scope-grant: tenantId, epoch)`), opaque base64.
+          contentEncoding: base64
+          maxLength: 8192
+          example: AQ==
+          x-field-extra-annotation: '@field:jakarta.validation.constraints.NotBlank @field:jakarta.validation.constraints.Size(max = 8192) @field:jakarta.validation.constraints.Pattern(regexp = "[A-Za-z0-9+/]*={0,2}")'
+        grantSignature:
+          type: string
+          description: >
+            The owner's signature over this grant: the `grant` statement (ADR 0028 Decision 6) with kind `TENANT`, the
+            invite id as `recipientUserId` and the invite bundle as the recipient's identity. Opaque base64.
+          contentEncoding: base64
+          maxLength: 128
+          example: c2lnbmF0dXJl
+          x-field-extra-annotation: '@field:jakarta.validation.constraints.NotBlank @field:jakarta.validation.constraints.Size(max = 128) @field:jakarta.validation.constraints.Pattern(regexp = "[A-Za-z0-9+/]*={0,2}")'
+        recipientIdentityDigest:
+          type: string
+          description: >
+            SHA-256 of the identity bundle the grant is wrapped to — here `invitePublicKey`. The server compares it
+            with the key it stores for the recipient and refuses another (`409 recipient_key_not_current`): a grant
+            names the key it is wrapped to from birth.
+          contentEncoding: base64
+          maxLength: 64
+          example: ZGlnZXN0ZGlnZXN0ZGlnZXN0ZGlnZXN0ZGlnZXN0ZGk=
+          x-field-extra-annotation: '@field:jakarta.validation.constraints.NotBlank @field:jakarta.validation.constraints.Size(max = 64) @field:jakarta.validation.constraints.Pattern(regexp = "[A-Za-z0-9+/]*={0,2}")'
+
     MemberInviteRequest:
       type: object
       description: >
@@ -2955,7 +3280,11 @@ components:
 
     PendingMemberInvite:
       type: object
-      required: [inviteId, email, inviteStatus, inviteExpiresAt]
+      description: >
+        A pending member invite as its owner lists it. `email` is present for a mailed invite and absent for a link
+        invite, which is bound to nobody ([ADR 0129](../../docs/decisions/0129-a-member-invite-is-mailed-or-handed-over-as-a-link.md)
+        decision 2) — the owner tells a link invite by its expiry.
+      required: [inviteId, inviteStatus, inviteExpiresAt]
       properties:
         inviteId:
           x-veyq-visibility: id
@@ -2969,6 +3298,7 @@ components:
             Echoed to the owner so they can see which email an invite is bound to (ADR 0007) — the same plaintext the
             invite was already bound to, not a new disclosure.
           type: string
+          description: The email a mailed invite is bound to; absent for a link invite.
           maxLength: 254
           example: partner@example.com
         inviteStatus:
@@ -2982,9 +3312,10 @@ components:
     MemberInviteState:
       type: object
       description: >
-        A minted member invite, as reported back to the owner who minted it. It deliberately carries **no
-        secret**: a member invite travels by mail only, because the token is minted for the invited person
-        (ADR 0055 §2). `delivery` is kept for shape-parity with the Server-Owner invite responses, but on this
+        A minted **mailed** member invite, as reported back to the owner who minted it. It deliberately carries **no
+        secret**: a mailed invite travels by mail only, because the token is minted for the invited person
+        (ADR 0055 §2). A link invite's answer is `MemberInviteLink`, which carries its token to the owner who hands
+        the link over (ADR 0129 decision 1). `delivery` is kept for shape-parity with the Server-Owner invite responses, but on this
         resource only `SENT` is reachable — the other two outcomes are `503`s, not success bodies.
       required: [email, inviteStatus, inviteExpiresAt, delivery]
       properties:
@@ -3006,6 +3337,29 @@ components:
         delivery:
           $ref: "#/components/schemas/DeliveryResult"
 
+    MemberInviteLink:
+      type: object
+      description: >
+        A minted **link** invite, answered once to the owner who minted it
+        ([ADR 0129](../../docs/decisions/0129-a-member-invite-is-mailed-or-handed-over-as-a-link.md) decision 1): its id,
+        its token and its expiry. The owner's client builds the link `…/tenant/accept#<bootstrapSecret>.<sealed>.<code>`
+        from the token, the sealed part and the code it kept; the server sent nothing and never sees the last two.
+      required: [inviteId, bootstrapSecret, inviteExpiresAt]
+      properties:
+        inviteId:
+          x-veyq-visibility: id
+          type: string
+          format: uuid
+          description: The invite's id — the one the request named, used to re-issue or revoke it.
+          example: 1f2d3e4a-5b6c-4c3f-8e2a-9b1d4a6e8b2c
+        bootstrapSecret:
+          $ref: "#/components/schemas/InviteBootstrapSecret"
+        inviteExpiresAt:
+          x-veyq-visibility: time
+          type: string
+          format: date-time
+          example: 2026-07-11T12:00:00Z
+
     InviteBootstrapSecret:
       x-veyq-visibility: token
       type: string
@@ -3013,10 +3367,12 @@ components:
         The raw single-use invite secret, returned to the **Server Owner** who mints an owner invite — a tenant's
         *bootstrap* invite, or the owner invite into an ownerless tenant ([ADR 0101](../../docs/decisions/0101-an-account-is-erased-on-request-and-only-what-the-law-keeps-stays.md)
         decision 9) — so they can hand it off out-of-band by copying the invite link (`/tenant/accept#<bootstrapSecret>`).
-        These are the only places veyq still does that, because each must work when the tenant cannot send: a
-        `PENDING` tenant has no mail settings by construction, and an ownerless one has nobody left to repair its relay
+        Each of those must work when the tenant cannot send: a `PENDING` tenant has no mail settings by construction,
+        and an ownerless one has nobody left to repair its relay
         ([ADR 0055](../../docs/decisions/0055-mail-is-a-precondition-not-a-capability.md) §3).
-        A **member** invite never carries it. It is the **admission token, not a key** ([ADR 0006](../../docs/decisions/0006-cold-tenant-scope-birth.md));
+        A **mailed member** invite never carries it. A **link** member invite does, to the tenant owner who minted it
+        (`MemberInviteLink`), who builds and hands over the link with the sealed part and code the server never sees
+        ([ADR 0129](../../docs/decisions/0129-a-member-invite-is-mailed-or-handed-over-as-a-link.md) decision 1). It is the **admission token, not a key** ([ADR 0006](../../docs/decisions/0006-cold-tenant-scope-birth.md));
         it rides the URL **fragment** on the invitee side and is matched server-side by hash only (never stored
         plaintext, never echoed in the tenant list — only here at mint time, over TLS to the owner-gated caller).
       maxLength: 128
@@ -3586,7 +3942,11 @@ components:
 
     InvitePreview:
       type: object
-      required: [tenantId, tenantName, domain, ownerEmail, hasAccount, role, handover]
+      description: >
+        What an invite holder is shown before accepting. A link invite is bound to nobody, so it has neither
+        `ownerEmail` nor `hasAccount`: the holder registers with an address they type or signs in with any account
+        ([ADR 0129](../../docs/decisions/0129-a-member-invite-is-mailed-or-handed-over-as-a-link.md) decision 2).
+      required: [tenantId, tenantName, domain, role, handover]
       properties:
         tenantId:
           x-veyq-visibility: id
@@ -3609,13 +3969,17 @@ components:
             Shown to whoever holds the invite's bootstrap secret so they can confirm which email the invite is bound to
             before accepting — the email the invite was already sent to.
           type: string
-          description: The invited email (the field name is historical — it is the invitee's email for any role).
+          description: >
+            The invited email (the field name is historical — it is the invitee's email for any role). Absent for a
+            link invite.
           maxLength: 254
           example: kevin@example.com
         hasAccount:
           x-veyq-visibility: flag
           type: boolean
-          description: True if the invited email already has an account (the client then uses the sign-in accept).
+          description: >
+            True if the invited email already has an account (the client then uses the sign-in accept). Absent for a
+            link invite, bound to no email.
           example: false
         role:
           $ref: "#/components/schemas/InviteRole"
@@ -4231,6 +4595,21 @@ components:
           maxLength: 128
           example: 87olM0gSJLPgnKSjdNkC4pPQyuvMVguyb5kHoJyU9Cc
           x-field-extra-annotation: '@field:com.fasterxml.jackson.databind.annotation.JsonDeserialize(using = me.raddatz.veyq.core.validation.TrimmingStringDeserializer::class) @field:jakarta.validation.constraints.NotBlank @field:jakarta.validation.constraints.Size(max = 128)'
+        email:
+          x-veyq-visibility: pii
+          x-veyq-rationale: >-
+            A link invite is bound to nobody, so the new account's address is the one its holder types (ADR 0129
+            decision 2) — held in plaintext like every account's address, for sign-in, recovery and its confirmation
+            mail.
+          type: string
+          format: email
+          description: >
+            The new account's address, for a **link** invite only — required there, refused for an invite bound to an
+            email (`422 invite_kind_email_mismatch`), whose address the account takes. Starts unconfirmed (ADR 0129
+            decision 4). Server-visible.
+          maxLength: 254
+          example: newbie@example.com
+          x-field-extra-annotation: '@field:com.fasterxml.jackson.databind.annotation.JsonDeserialize(using = me.raddatz.veyq.core.validation.TrimmingStringDeserializer::class) @field:me.raddatz.veyq.core.validation.Mailbox @field:jakarta.validation.constraints.Size(max = 254)'
         username:
           x-veyq-visibility: pii
           x-veyq-rationale: >-

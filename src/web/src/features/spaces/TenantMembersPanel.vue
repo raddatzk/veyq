@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { resealingScopes } from './scopeRekey'
 // uc.spaces.add-member (web, cr-0077) — the "Members" rubric of the tenant settings. Lists the active tenant's
-// members (name/email + role) and, for the tenant OWNER, opens the invite-by-email dialog. Markup + classes mirror the
+// members (name/email + role) and, for the tenant OWNER, opens the invite dialog (a link or a mail, ADR 0129). Markup + classes mirror the
 // create-tenant admin panel (settings-section-header + veyq-list-row + veyq-badge). Operator-blind: only operational
 // metadata is shown — pubkeys/roles, never a key. Every listed member holds the tenant's key from its join on (ADR 0111:
 // an invitee grants itself at accept). Inviting is owner-only (the backend 403s otherwise); the directory is any
@@ -12,6 +12,8 @@ import VeyqButton from '../../shared/ui/VeyqButton.vue'
 import VeyqMessage from '../../shared/ui/VeyqMessage.vue'
 import VeyqIcon from '../../shared/ui/VeyqIcon.vue'
 import InviteMemberDialog from './InviteMemberDialog.vue'
+import InviteLinkResult from './InviteLinkResult.vue'
+import VeyqDialog from '../../shared/ui/VeyqDialog.vue'
 import SpaceIconDialog from './SpaceIconDialog.vue'
 import TenantAvatar from '../../shared/ui/TenantAvatar.vue'
 import PersonAvatar from '../../core/people/PersonAvatar.vue'
@@ -20,6 +22,7 @@ import {
   listMemberInvites,
   listScopeMembers,
   reissueMemberInvite,
+  reissueMemberInviteLink,
   rekeySpace,
   removeTenantMember,
   revokeMemberInvite,
@@ -28,6 +31,7 @@ import {
   memberError,
   prepareInviteCode,
   type InvitePhase,
+  type MemberInviteLinkResult,
   type PendingMemberInvite,
   type ScopeMember,
 } from './members'
@@ -49,7 +53,7 @@ import TrustResetLink from '../account/trustReset/TrustResetLink.vue'
 import CompromiseRotationNotice from './CompromiseRotationNotice.vue'
 import type { CompromiseRotation } from '../../api/generated/scopes'
 
-const { t } = useI18n()
+const { t, locale } = useI18n()
 const toast = useToast()
 const { ask, askWithOptions } = useConfirm()
 
@@ -86,6 +90,16 @@ const reissuedCode = ref('')
 // twice) and the phase its row's status line names - securing on this device, then sending by email (inbox #630).
 const reissuing = ref<string | null>(null)
 const reissuePhase = ref<InvitePhase | null>(null)
+// A link invite's re-issue (ADR 0129 decision 2): the new link, shown once in the dialog the invite dialog's result is
+// drawn in (`InviteLinkResult`) — the server has its token alone.
+const reissuedLink = ref<MemberInviteLinkResult | null>(null)
+const reissuedLinkOpen = computed({
+  get: () => reissuedLink.value !== null,
+  set: (open) => { if (!open) reissuedLink.value = null },
+})
+
+/** A pending invite's expiry, as its row names it. */
+const expiryFormat = computed(() => new Intl.DateTimeFormat(locale.value === 'de' ? 'de-DE' : 'en-US', { dateStyle: 'medium', timeStyle: 'short' }))
 
 const inTenant = computed(() => activeSpace.kind === ScopeKind.Tenant && activeSpace.scopeId !== null)
 
@@ -152,8 +166,9 @@ function fullName(userId: string): string {
   return n ? `${n.firstName} ${n.lastName}`.trim() : ''
 }
 
-async function onInvited() {
-  toast.success(t('members.inviteSent'))
+async function onInvited(way: 'link' | 'mail') {
+  // A link is handed over by the owner, so nothing was sent yet: its result view says what to do.
+  if (way === 'mail') toast.success(t('members.inviteSent'))
   await reload()
 }
 
@@ -212,10 +227,17 @@ async function reissue(invite: PendingMemberInvite) {
   const secret = prepared ?? prepareInviteCode()
   prepared = null
   try {
-    await reissueMemberInvite(activeSpace.tenantId!, invite.inviteId, invite.email, secret, (p) => (reissuePhase.value = p))
-    reissuedCode.value = formatInviteCode(secret.code)
-    reissuedTo.value = invite.email
-    toast.success(t('members.inviteSentTo', { email: invite.email }))
+    const onPhase = (p: InvitePhase) => (reissuePhase.value = p)
+    if (invite.email === undefined) {
+      // A link invite (ADR 0129 decision 2): a new link in its place, shown once - the old one opens nothing any more.
+      reissuedLink.value = await reissueMemberInviteLink(activeSpace.tenantId!, invite.inviteId, secret, onPhase)
+      toast.success(t('members.linkReissued'))
+    } else {
+      await reissueMemberInvite(activeSpace.tenantId!, invite.inviteId, invite.email, secret, onPhase)
+      reissuedCode.value = formatInviteCode(secret.code)
+      reissuedTo.value = invite.email
+      toast.success(t('members.inviteSentTo', { email: invite.email }))
+    }
     await reload()
   } catch (e) {
     secret.ahead.discard() // a failed re-issue's derivation is zeroed; its code is never reused
@@ -539,7 +561,11 @@ async function revoke(invite: PendingMemberInvite) {
         <div class="veyq-list management-list-items">
           <div v-for="invite in pendingInvites" :key="invite.inviteId" class="veyq-list-row invite-row">
             <div class="veyq-row-main">
-              <strong class="veyq-row-title">{{ invite.email }}</strong>
+              <!-- A link invite has no address (ADR 0129 decision 2): it is named by its expiry. -->
+              <strong class="veyq-row-title">{{ invite.email ?? t('members.pendingLink') }}</strong>
+              <span v-if="invite.email === undefined" class="veyq-row-subtitle" data-testid="invite-expiry">
+                {{ t('members.pendingExpires', { date: expiryFormat.format(invite.inviteExpiresAt) }) }}
+              </span>
               <div class="veyq-row-meta">
                 <span class="veyq-badge warning">{{ t('members.statusInvited') }}</span>
               </div>
@@ -549,7 +575,10 @@ async function revoke(invite: PendingMemberInvite) {
                 role="status"
                 data-testid="reissue-progress"
               >
-                <VeyqIcon name="spinner" spin />{{ reissuePhase === 'sending' ? t('members.inviteSending') : t('members.inviteSecuring') }}
+                <VeyqIcon name="spinner" spin />{{
+                  reissuePhase === 'securing' ? t('members.inviteSecuring')
+                  : invite.email === undefined ? t('members.linkCreating') : t('members.inviteSending')
+                }}
               </p>
             </div>
             <div class="management-actions">
@@ -558,8 +587,8 @@ async function revoke(invite: PendingMemberInvite) {
                 variant="secondary"
                 appearance="outlined"
                 size="small"
-                :aria-label="t('members.reissue')"
-                :title="t('members.reissue')"
+                :aria-label="invite.email === undefined ? t('members.reissueLink') : t('members.reissue')"
+                :title="invite.email === undefined ? t('members.reissueLink') : t('members.reissue')"
                 :loading="reissuing === invite.inviteId"
                 :disabled="reissuing !== null"
                 @click="reissue(invite)"
@@ -623,8 +652,20 @@ async function revoke(invite: PendingMemberInvite) {
       v-if="activeSpace.tenantId"
       v-model:visible="inviteOpen"
       :tenant-id="activeSpace.tenantId"
+      :tenant-name="tenantName"
       @invited="onInvited"
     />
+
+    <!-- A link invite's re-issue: the new link, shown once (ADR 0129 decision 2). Kept on a tap beside it, as every
+         result shown once is. -->
+    <VeyqDialog v-model:visible="reissuedLinkOpen" :header="t('members.linkResultTitle')" class="tenant-dialog" keep-on-outside>
+      <div v-if="reissuedLink" class="veyq-form" data-testid="reissued-invite-link">
+        <InviteLinkResult :link="reissuedLink.link" :expires-at="reissuedLink.expiresAt" :space-name="tenantName" />
+        <div class="veyq-dialog-action-row">
+          <VeyqButton :label="t('common.done')" icon="check" @click="reissuedLinkOpen = false" />
+        </div>
+      </div>
+    </VeyqDialog>
 
     <!-- The owner's icon editor (uc.spaces.set-space-icon): pick + frame 1:1; on save the crop is baked + encoded
          on-device and this panel seals + POSTs it. -->

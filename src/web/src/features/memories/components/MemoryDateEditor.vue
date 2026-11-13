@@ -70,7 +70,7 @@ function save() {
 </script>
 
 <template>
-  <VeyqDialog :visible="true" :header="t('memory.date.title')" @update:visible="emit('close')">
+  <VeyqDialog :visible="true" :style="{ minWidth: 'min(25rem, calc(100vw - 2rem))' }" :header="t('memory.date.title')" @update:visible="emit('close')">
     <form class="veyq-form memory-date-editor" @submit.prevent="save">
       <VeyqToggleGroup
         v-model="mode"
@@ -115,9 +115,6 @@ function save() {
 </template>
 
 <style scoped>
-.memory-date-editor {
-  min-width: min(360px, 80vw);
-}
 .memory-date-auto {
   display: grid;
   gap: 0.2rem;

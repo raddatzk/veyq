@@ -143,6 +143,7 @@ onBeforeUnmount(() => controller?.abort())
     :header="current ? t('memory.banner.change') : t('memory.banner.add')"
     :closable="!busy"
     :close-on-escape="!busy"
+    :style="{ width: 'min(42.5rem, calc(100vw - 2rem))', '--veyq-dialog-max-width': 'none' }"
     @update:visible="cancel"
   >
     <div class="veyq-form banner-dialog">
@@ -199,8 +200,10 @@ onBeforeUnmount(() => controller?.abort())
 </template>
 
 <style scoped>
+/* The box carries the width (wider than the layer's 36rem reading column, opted out through
+   `--veyq-dialog-max-width`, so the two previews stay a useful size); a width set here on the content instead
+   overflowed the capped box and clipped the copy and the Save button. */
 .banner-dialog {
-  width: min(640px, 92vw);
   gap: 0.85rem;
 }
 .banner-dialog-copy {

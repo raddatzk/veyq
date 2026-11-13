@@ -37,10 +37,10 @@ dependencies {
     // `veyq.openapi` runs the default, Mustache, so the 4.3 -> 4.5 jump is not on a path the build takes (nor is the
     // generator's `handlebars-jackson2` 4.3.1, a helper module with no release after 4.3.1 to move with it).
     constraints {
-        implementation("com.fasterxml.jackson.core:jackson-core:2.22.4") {
+        implementation("com.fasterxml.jackson.core:jackson-core:2.23.0") {
             because("GHSA-7hhh-6rmp-j9qf, GHSA-p6pp-m3f8-5c89: 2.21.1 (generator) and 2.22.2 (Quarkus plugin), fixed in 2.22.3")
         }
-        implementation("com.fasterxml.jackson.core:jackson-databind:2.22.4") {
+        implementation("com.fasterxml.jackson.core:jackson-databind:2.23.0") {
             because("GHSA-cxp5-3px4-pw24, GHSA-wv8q-qhhj-9h54 and the other 2.21.x ones, fixed in 2.22.3")
         }
         implementation("com.google.guava:guava:${libs.versions.guava.get()}") {

@@ -1,16 +1,18 @@
 <script setup lang="ts">
-// The camera scanner (uc.account.unlock, and uc.account.onboard-device since ADR 0059) — one overlay that owns
+// The camera scanner (uc.account.unlock, uc.account.onboard-device since ADR 0059, the safety number of ADR 0028) — one overlay that owns
 // the camera lifecycle, the permission failure and the no-camera fallback. Entirely client-side: the frames are
 // decoded in-browser with jsQR; nothing leaves the device.
 //
 // **Decoder-agnostic on purpose.** It emits the RAW decoded string and knows nothing about what a payload means
-// — the caller dispatches (`veyqkit:` → the Emergency Kit, `veyqpair:` → a pairing join). That is what lets one
-// scan entry serve both flows instead of a second button whose difference a user cannot see.
+// — each caller mounts its own scanner for its own code (the Secret-Key field a kit, the sign-in card a pairing
+// code, the add-a-device panel a sign-in code, a profile a safety number) and says which strings it takes.
 //
-// `accepts` is why this stayed one component rather than becoming two. A camera sees whatever is in the room,
-// so the loop must keep scanning past a QR that is not ours instead of surfacing it as a failure — and only the
-// caller knows which strings are ours. Without the predicate the component would have to stop on the first
-// decode of anything, which is the Emergency-Kit path's existing behaviour broken.
+// `accepts` is why this stayed one component rather than becoming several. A camera sees whatever is in the room,
+// so the loop must keep scanning past a QR that is not the caller's instead of stopping on it — and only the
+// caller knows which strings are its own. Without the predicate the component would have to stop on the first
+// decode of anything. `refusedText`, where a caller passes one, is said while the loop goes on: a readable code
+// that is not this scanner's (owner 2026-11-12: the Secret-Key field's camera reads a kit and nothing else, and
+// says "not an Emergency Kit" rather than staying silent, so nobody wonders why a code in view is not read).
 import { onMounted, onUnmounted, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import VeyqButton from '../../../shared/ui/VeyqButton.vue'
@@ -18,12 +20,14 @@ import VeyqMessage from '../../../shared/ui/VeyqMessage.vue'
 
 // `hint` / `errorText` are what the overlay says; a scan that is no Emergency-Kit scan (the safety-number compare on a
 // member's profile, ADR 0028 Decision 3) passes its own, every other caller keeps the kit's words.
-const props = defineProps<{ accepts?: (text: string) => boolean; hint?: string; errorText?: string }>()
+const props = defineProps<{ accepts?: (text: string) => boolean; hint?: string; errorText?: string; refusedText?: string }>()
 const emit = defineEmits<{ found: [string]; close: [] }>()
 const { t } = useI18n()
 
 const video = ref<HTMLVideoElement | null>(null)
 const error = ref('')
+/** A readable code was in view that the caller does not take — shown while scanning goes on. */
+const refused = ref(false)
 let stream: MediaStream | null = null
 let raf = 0
 let canvas: HTMLCanvasElement | null = null
@@ -58,6 +62,7 @@ async function scan() {
         emit('found', text)
         return
       }
+      if (text) refused.value = true
     }
   }
   raf = requestAnimationFrame(scan)
@@ -84,6 +89,7 @@ onUnmounted(stop)
       <p class="veyq-form-copy">{{ hint ?? t('unlock.scanHint') }}</p>
       <video ref="video" playsinline muted class="scanner-video"></video>
       <VeyqMessage v-if="error" tone="error">{{ error }}</VeyqMessage>
+      <VeyqMessage v-else-if="refused && refusedText" tone="warn">{{ refusedText }}</VeyqMessage>
       <VeyqButton type="button" :label="t('common.cancel')" icon="times" variant="secondary" appearance="text" @click="cancel" />
     </div>
   </div>

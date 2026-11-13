@@ -51,7 +51,7 @@ EXPECTED_WRITERS = {
     "ScopesStore.rotate": 1,  # a scope rotation's re-grants (foreign and self)
     "TasksStore.complete": 1,  # a grant-delivery completion (foreign)
     "TenantStore.activate": 1,  # the tenant's cold birth (self-grant)
-    "TenantStore.mintMemberInvite": 1,  # a member invite's grant to its invite key (the inviting owner, ADR 0111)
+    "TenantStore.persistMemberInvite": 1,  # a member invite's grant to its invite key (the inviting owner, ADR 0111) — mailed or link mint, link re-issue (ADR 0129)
     "TenantStore.joinAsMember": 1,  # a member invite's accept, sign-in and register alike (the newcomer's self-grant)
     "TenantStore.carryInvites": 1,  # a tenant rotation's re-grant of each open invite it carries (the rotator)
     "ScopesStore.addMember": 1,  # a group add, direct or a consent proposal (the adding owner, ADR 0111 decision 4)

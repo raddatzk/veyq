@@ -11,6 +11,7 @@ vi.mock('./members', () => ({
   listScopeMembers: vi.fn(),
   listMemberInvites: vi.fn(),
   reissueMemberInvite: vi.fn(),
+  reissueMemberInviteLink: vi.fn(),
   revokeMemberInvite: vi.fn(),
   removeTenantMember: vi.fn(),
   rekeySpace: vi.fn(),
@@ -47,7 +48,7 @@ vi.mock('../../app/activeSpace', async (orig) => ({
 }))
 
 import TenantMembersPanel from './TenantMembersPanel.vue'
-import { listScopeMembers, listMemberInvites, reissueMemberInvite, revokeMemberInvite, removeTenantMember, rekeySpace, setTenantMemberRole, memberError, prepareInviteCode, type InvitePhase } from './members'
+import { listScopeMembers, listMemberInvites, reissueMemberInvite, reissueMemberInviteLink, revokeMemberInvite, removeTenantMember, rekeySpace, setTenantMemberRole, memberError, prepareInviteCode, type InvitePhase } from './members'
 import { rekeyScope, rekeyingCause } from '../../core/node/rekey/rekeyScope'
 import { listMyTenants, openMyTenantIcon, revokeScopeShares, scopeLifecycle } from './scopes'
 import { tenantBadges } from '../account/tenantTrust'
@@ -70,6 +71,7 @@ const stubs = {
   VeyqMessage: { template: '<div class="msg"><slot /></div>' },
   VeyqInput: { props: ['modelValue'], template: '<input :value="modelValue" />' },
   InviteMemberDialog: true,
+  VeyqDialog: { props: ['visible', 'header'], template: '<div v-if="visible" class="stub-dialog"><slot /></div>' },
 }
 
 /** A code as `prepareInviteCode` mints it, its link key's derivation stood in for: `discard` is what zeroes it. */
@@ -217,6 +219,63 @@ describe('TenantMembersPanel (uc.spaces.add-member, web)', () => {
     await wrapper.find(`[aria-label="${t('members.revoke')}"]`).trigger('click')
     await flushPromises()
     expect(revokeMemberInvite).not.toHaveBeenCalled()
+  })
+})
+
+// ADR 0129 decisions 2 and 6: a link invite has no address — its row is named by its expiry, and its re-issue is a new link,
+// shown once in the link's result view, never a mail.
+describe('TenantMembersPanel - a pending link invite', () => {
+  const EXPIRES = new Date('2026-11-19T10:00:00Z')
+  const LINKED: PendingMemberInvite[] = [
+    { inviteId: 'inv-link', inviteStatus: 'ACTIVE', inviteExpiresAt: EXPIRES },
+    { inviteId: 'inv-mail', email: 'newbie@x.z', inviteStatus: 'ACTIVE', inviteExpiresAt: EXPIRES },
+  ]
+  const LINK = 'https://acme.example/tenant/accept#tok2.SEALED.ABCDE12345'
+
+  beforeEach(() => {
+    vi.clearAllMocks()
+    clearActiveSpace()
+    activeSpace.kind = ScopeKind.Tenant
+    activeSpace.scopeId = 't-1'
+    activeSpace.tenantId = 't-1'
+  })
+
+  it('reads "Link invitation" with its expiry; a mailed one keeps its address and no expiry line', async () => {
+    const wrapper = await mountPanel('OWNER', LINKED)
+    const [link, mail] = wrapper.findAll('.invite-row')
+    expect(link.get('.veyq-row-title').text()).toBe(t('members.pendingLink'))
+    expect(link.get('[data-testid="invite-expiry"]').text()).toContain('2026')
+    expect(link.find(`[aria-label="${t('members.reissueLink')}"]`).exists()).toBe(true)
+    expect(mail.get('.veyq-row-title').text()).toBe('newbie@x.z')
+    expect(mail.find('[data-testid="invite-expiry"]').exists()).toBe(false)
+    expect(mail.find(`[aria-label="${t('members.reissue')}"]`).exists()).toBe(true)
+  })
+
+  it('its re-issue mints a new link under the prepared code — no mail — and shows it once in the link result', async () => {
+    vi.mocked(reissueMemberInviteLink).mockResolvedValue({ inviteId: 'inv-new', link: LINK, expiresAt: EXPIRES })
+    const wrapper = await mountPanel('OWNER', LINKED)
+    const code = prepared()[0]
+    await wrapper.get('.invite-row').get(`[aria-label="${t('members.reissueLink')}"]`).trigger('click')
+    await flushPromises()
+    expect(reissueMemberInviteLink).toHaveBeenCalledWith('t-1', 'inv-link', code, expect.any(Function))
+    expect(reissueMemberInvite).not.toHaveBeenCalled()
+    const result = wrapper.get('[data-testid="reissued-invite-link"]')
+    expect(result.get<HTMLTextAreaElement>('[data-testid="invite-link-message"]').element.value).toContain(LINK)
+    expect(result.get<HTMLTextAreaElement>('[data-testid="invite-link-message"]').element.value).toContain('Fam')
+    expect(wrapper.find('[data-testid="reissued-invite-code"]').exists()).toBe(false) // no code beside it: it is in the link
+    await result.findAll('button').find((b) => b.text() === t('common.done'))!.trigger('click')
+    expect(wrapper.find('[data-testid="reissued-invite-link"]').exists()).toBe(false)
+  })
+
+  it('control: a refused link re-issue shows no link and zeroes its code', async () => {
+    vi.mocked(reissueMemberInviteLink).mockRejectedValue(httpError(503, 'mail_unavailable'))
+    const wrapper = await mountPanel('OWNER', LINKED)
+    const code = prepared()[0]
+    await wrapper.get('.invite-row').get(`[aria-label="${t('members.reissueLink')}"]`).trigger('click')
+    await flushPromises()
+    expect(wrapper.find('[data-testid="reissued-invite-link"]').exists()).toBe(false)
+    expect(wrapper.text()).toContain(t('members.mailUnavailable'))
+    expect(code.ahead.discard).toHaveBeenCalled()
   })
 })
 

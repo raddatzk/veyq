@@ -13,9 +13,11 @@
 // object URL revoked on navigation / close like the preview's. A video does not zoom.
 // **Slideshow** (same CR): the toolbar's play control advances every 5 s through the items in their grid order
 // (`createVisibilityPoller`); a video shows its poster for one interval, never auto-played; it stops on the last item and
-// pauses on any key, pointer or wheel (the zoom and the details panel included), a hidden tab and `suspendKeys`. One
-// preview is fetched ahead and dropped if it is not shown. While it runs no EXIF read and no place backfill happen —
-// pausing on an item runs them.
+// pauses on any key, pointer or wheel (the zoom and the details panel included), a hidden tab and `suspendKeys`. While it
+// runs no EXIF read and no place backfill happen — pausing on an item runs them.
+// **Paging is instant where it can be** (`../previewCache.ts`): the decrypted previews stay in memory while the lightbox is
+// open, bounded by size, so a step back shows the item at once; once an item's preview is shown its two neighbours are read
+// ahead, which also keeps the slideshow one step ahead. A block or a removal drops the item's bytes, closing drops them all.
 //
 // **One lightbox for a member and a share guest** (inbox #401). It touches no API itself: every byte and seal comes
 // through the loaders the Memory's data source hands in (`../source.ts`, the member's or the guest's — required, so no
@@ -55,6 +57,7 @@ import type { UploaderLabel } from '../useUploaderNames'
 import { personHash } from '../../../core/node/location'
 import { usePanZoom } from '../../../shared/ui/usePanZoom'
 import { createVisibilityPoller } from '../../../shared/state/visibilityPoller'
+import { createPreviewCache, previewKeyOf } from '../previewCache'
 import { exceedsPreview, originalZoomable, previewDownscaled } from '../lightboxZoom'
 import VeyqDateField from '../../../shared/ui/VeyqDateField.vue'
 import VeyqIcon from '../../../shared/ui/VeyqIcon.vue'
@@ -102,7 +105,8 @@ const toast = useToast()
 
 // Byte/metadata access through the source's loaders (see the header). The whole decrypted original is only the whole-blob
 // video fallback (no usable SW); the video and the download stream the ORIGINAL through the chunk provider.
-const previewOf = (it: MediaItem) => props.previewLoader(it)
+// The decrypted previews held while the lightbox is open (bytes, never a URL); every preview read goes through it.
+const previews = createPreviewCache((it) => props.previewLoader(it))
 const originalOf = (it: MediaItem) => props.originalLoader(it)
 const originalProviderOf = (it: MediaItem): ChunkProvider => props.videoChunkProvider(it)
 const metaOf = (it: MediaItem) => props.metaResolver(it)
@@ -163,35 +167,27 @@ const slideshowAnnouncement = computed(() =>
     : slideshowState.value === 'paused' ? t('media.slideshowPaused')
       : slideshowState.value === 'ended' ? t('media.slideshowEnded') : '',
 )
-// The next item's preview, fetched one ahead while playing: its decrypt in flight or done, never an object URL — a URL is
-// minted only for the item on screen, so one fetched ahead and not shown is simply dropped.
-let ahead: { mediaId: string; bytes: Promise<Uint8Array> } | null = null
 // The current preview's load (`loadPreview`), which a tick waits for.
 let previewLoad: Promise<void> = Promise.resolve()
 // The item whose EXIF read and place backfill the running slideshow held back — run when it pauses on that item.
 let detailsDeferred: string | null = null
 
-function prefetchAhead() {
-  const next = props.items[current.value + 1]
-  if (!next || next.blocked || !hasDerivatives(next) || ahead?.mediaId === next.mediaId) return // a blocked one answers 451
-  const bytes = previewOf(next)
-  bytes.catch(() => {}) // a failed prefetch is the show's to retry
-  ahead = { mediaId: next.mediaId, bytes }
-}
-/** The prefetched preview when it is `target`'s; whatever was held is dropped either way. */
-function takeAhead(target: MediaItem): Promise<Uint8Array> | null {
-  const held = ahead
-  ahead = null
-  return held?.mediaId === target.mediaId ? held.bytes.catch(() => previewOf(target)) : null
+/** Whether `it` has a preview to read: not blocked (every byte of a blocked medium answers 451) and with derivatives. */
+const hasPreview = (it: MediaItem | undefined): it is MediaItem => !!it && !it.blocked && hasDerivatives(it)
+/** Read the shown item's two neighbours ahead - after its own preview, so they never queue before the item on screen. */
+function prefetchNeighbours() {
+  for (const at of [current.value + 1, current.value - 1]) {
+    const neighbour = props.items[at]
+    if (hasPreview(neighbour)) previews.prefetch(neighbour)
+  }
 }
 
 async function slideshowTick(signal: AbortSignal) {
   if (!canNext.value) return stopSlideshow('ended')
   current.value += 1
-  await nextTick() // the item's watchers ran: its preview load started (taking the prefetch), its details were held back
+  await nextTick() // the item's watchers ran: its preview load started (the neighbours' read ahead), its details were held back
   if (signal.aborted) return
   if (!canNext.value) return stopSlideshow('ended') // stops ON the last item
-  prefetchAhead()
   await previewLoad
 }
 function startSlideshow() {
@@ -199,7 +195,6 @@ function startSlideshow() {
   zoom.reset()
   playing.value = true
   slideshowState.value = 'playing'
-  prefetchAhead()
   slideshow.start(slideshowTick)
 }
 function stopSlideshow(state: 'paused' | 'ended') {
@@ -207,7 +202,6 @@ function stopSlideshow(state: 'paused' | 'ended') {
   slideshow.stop()
   playing.value = false
   slideshowState.value = state
-  ahead = null
   if (detailsDeferred && detailsDeferred === item.value?.mediaId) void loadDetails()
 }
 const toggleSlideshow = () => (playing.value ? stopSlideshow('paused') : startSlideshow())
@@ -250,16 +244,20 @@ async function loadPreview() {
   stopSwPlayback() // and tear down any SW playback of the previous item (revoke handle + port)
   videoLoading.value = false
   error.value = false
-  if (!item.value || !previewable.value) {
-    ahead = null // a prefetch for another item is not kept
+  if (!item.value || !previewable.value) return
+  const target = item.value
+  const held = previews.peek(target)
+  if (held) { // read before: shown in this tick, no loading state
+    setPreview(new Blob([held as BlobPart]))
+    prefetchNeighbours()
     return
   }
   loading.value = true
-  const target = item.value
   try {
-    const bytes = await (takeAhead(target) ?? previewOf(target)) // the slideshow's prefetch, when it is this item's
+    const bytes = await previews.get(target) // joins a read ahead of this item, when one is in flight
     if (movedOn(target)) return // navigated away, or blocked, while decrypting — drop this result
     setPreview(new Blob([bytes as BlobPart]))
+    prefetchNeighbours()
   } catch {
     if (item.value === target) error.value = true
   } finally {
@@ -335,6 +333,15 @@ watch(zoom.scale, () => void maybeLoadOriginal())
 // original, video) and ends its playback; a lift reads the preview again. One watcher for both, so a step onto an item
 // that differs in both loads once.
 watch([() => item.value?.mediaId, () => !!item.value?.blocked], () => { previewLoad = loadPreview() }, { immediate: true })
+// What the cache may hold follows the gallery's list: an item trashed, purged or blocked meanwhile loses its bytes at once
+// (a lift reads them again); a preview replaced under the same medium is another key. A blocked item's reload above never
+// reads the cache, so the order of the two watchers does not matter.
+watch(
+  () => new Set(props.items.filter((it) => !it.blocked).map(previewKeyOf)),
+  (keys) => previews.retain(keys),
+)
+// A new key (a re-key, another node) re-opens everything: nothing read under the old one is shown.
+watch(() => props.memoryKey, () => previews.clear())
 
 // When the item changes: unseal the listed tier (date + GPS + place) **instantly** from the listed item (no
 // fetch), then lazily fetch + unseal the panel bundle via the exif endpoint (never listed). Finally, resolve
@@ -695,7 +702,7 @@ onBeforeUnmount(() => {
   rootEl.value?.removeEventListener('pointerdown', pauseOnInteraction, { capture: true })
   rootEl.value?.removeEventListener('wheel', pauseOnInteraction, { capture: true })
   slideshow.stop()
-  ahead = null
+  previews.clear()
   stopSwPlayback() // revoke any live SW playback (its port + in-SW plaintext cache) when the lightbox unmounts
 })
 </script>

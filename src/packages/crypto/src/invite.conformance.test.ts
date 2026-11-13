@@ -178,8 +178,41 @@ describe('invite link (#invite_link)', () => {
   })
 
   it('the fragment carries the token and, for a member invite, the sealed part', () => {
-    expect(invite.parseInviteFragment(`#${l.fragment}`)).toEqual({ token: l.token, sealed: l.sealed })
-    expect(invite.parseInviteFragment(l.token)).toEqual({ token: l.token, sealed: null })
+    expect(invite.parseInviteFragment(`#${l.fragment}`)).toEqual({ token: l.token, sealed: l.sealed, code: null })
+    expect(invite.parseInviteFragment(l.fragment)).toEqual({ token: l.token, sealed: l.sealed, code: null })
+    expect(invite.parseInviteFragment(l.token)).toEqual({ token: l.token, sealed: null, code: null })
+    expect(invite.parseInviteFragment(`#${l.token}.`)).toEqual({ token: l.token, sealed: null, code: null })
+  })
+
+  it('a link invite\'s fragment carries the code too, canonical (ADR 0129 decision 1)', () => {
+    expect(invite.parseInviteFragment(`#${l.link_fragment}`)).toEqual({ token: l.token, sealed: l.sealed, code: l.code })
+    // A code as typed is read canonical; one that is no code is null and the page asks for it.
+    expect(invite.parseInviteFragment(`${l.fragment}.${l.typed}`)).toEqual({ token: l.token, sealed: l.sealed, code: l.code })
+    expect(invite.parseInviteFragment(`${l.fragment}.NOTACODE`)).toEqual({ token: l.token, sealed: l.sealed, code: null })
+    expect(invite.parseInviteFragment(`${l.fragment}.${l.code}.${l.code}`)).toEqual({ token: l.token, sealed: l.sealed, code: null })
+    expect(invite.parseInviteFragment(`${l.fragment}.`)).toEqual({ token: l.token, sealed: l.sealed, code: null })
+    // A code with no sealed part to open is no link invite.
+    expect(invite.parseInviteFragment(`${l.token}..${l.code}`)).toEqual({ token: l.token, sealed: null, code: null })
+  })
+
+  it('the builder writes the vector\'s link fragment, which the parser reads back', () => {
+    expect(invite.buildInviteFragment(l.token, l.sealed, l.code)).toBe(l.link_fragment)
+    expect(invite.buildInviteFragment(l.token, l.sealed, l.typed)).toBe(l.link_fragment)
+    const built = invite.buildInviteFragment(l.token, l.sealed, invite.formatInviteCode(l.code))
+    expect(invite.parseInviteFragment(built)).toEqual({ token: l.token, sealed: l.sealed, code: l.code })
+  })
+
+  it('the builder refuses what the parser would split wrong, a password link and a code that is none', () => {
+    expect(() => invite.buildInviteFragment('', l.sealed, l.code)).toThrow(new invite.InviteLinkInvalid('token'))
+    expect(() => invite.buildInviteFragment(`${l.token}.x`, l.sealed, l.code)).toThrow(new invite.InviteLinkInvalid('token'))
+    expect(() => invite.buildInviteFragment(l.token, `${l.sealed}.x`, l.code)).toThrow(new invite.InviteLinkInvalid('encoding'))
+    const raw = Buffer.from(l.sealed.replace(/-/g, '+').replace(/_/g, '/'), 'base64')
+    const password = Uint8Array.from(raw)
+    password[0] = 2
+    expect(() => invite.buildInviteFragment(l.token, b64url(password), l.code)).toThrow(new invite.InviteLinkInvalid('mode'))
+    expect(() => invite.buildInviteFragment(l.token, l.sealed, 'NOTACODE')).toThrow(new invite.InviteLinkInvalid('code'))
+    // Positive control: the same token, sealed part and code build.
+    expect(invite.buildInviteFragment(l.token, l.sealed, l.code)).toBe(`${l.token}.${l.sealed}.${l.code}`)
   })
 })
 

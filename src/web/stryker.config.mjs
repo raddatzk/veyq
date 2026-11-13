@@ -11,8 +11,8 @@
 // tier moved to @veyq/crypto and are gated by src/packages/crypto/stryker.config.mjs. That file's _comment
 // carries the measured evidence for what is in and what is out (ADR 0045 §3).
 //
-// inPlace (not Stryker's default copy-to-sandbox): web suites (identityPins.test.ts,
-// argonParams.conformance.test.ts) read the shared crypto vectors at
+// inPlace (not Stryker's default copy-to-sandbox): a suite the gate runs (naming.conformance.test.ts) reads the
+// shared crypto vectors at
 // ../../../../../contracts/crypto/vectors/v1.json — OUTSIDE the src/web/ sandbox root, so a copied sandbox can't
 // see them and the dry-run fails before a single mutant runs. inPlace mutates the real tree and
 // restores it after; the files are git-tracked, so an interrupted run is recoverable with `git checkout`.
@@ -28,9 +28,12 @@ const config = {
   // pnpm's strict node_modules puts only core's own dependencies there - the runner, this package's dependency, is
   // not among them ("no TestRunner plugins were loaded", the first GitHub run of mutation.yml, 2026-11-05).
   plugins: ['@stryker-mutator/vitest-runner'],
-  // The initial test run is the whole suite (3747 tests): 4 min 57 s on a lightly loaded Apple Silicon machine and
-  // 7 min 39 s under load (2026-11-05), past Stryker's default 5 min, so the gate failed before testing a mutant.
-  dryRunTimeoutMinutes: 20,
+  // Only the scope's own unit tests run (stryker.mutate.json `tests`; vitest.stryker.config.mjs says why the
+  // collection is narrowed rather than Stryker's `testFiles` or vitest's `related`). Until 2026-11-12 the whole suite
+  // ran: the dry run alone took 12.5 min on CI and each of the 18 static mutants ran all 583 files again, so a run
+  // without the incremental cache passed the job's 45 min. Measured locally, cold: the whole suite 18 min 39 s,
+  // the scope's own tests 23 s, with the same status for each of the 157 mutants.
+  vitest: { configFile: 'vitest.stryker.config.mjs' },
   inPlace: true,
   coverageAnalysis: 'perTest',
   reporters: ['clear-text', 'html', 'json'],

@@ -51,6 +51,19 @@ class InviteMailRateLimiterTest {
     }
 
     @Test
+    fun aLinkInviteSpendsTheTenantBudgetAndNoRecipients() {
+        // ADR 0129 decision 2: a link has no recipient, so its mint spends the tenant bucket only.
+        val limiter = InviteMailRateLimiter(perRecipientMax = 1, perTenantMax = 3, windowSeconds = 3600)
+        assertNull(limiter.checkTenant(tenant), "a link mint passes")
+        assertNull(limiter.checkTenant(tenant), "a second one too: no recipient bucket of 1 stands in its way")
+        // Control: a recipient's own bucket is untouched by the links — its first mail passes, its second does not.
+        assertNull(limiter.check(tenant, "x@example.com"), "the links spent no recipient's budget")
+        assertNotNull(limiter.check(tenant, "x@example.com"), "the recipient cap of 1 still holds")
+        // The tenant's three tokens are gone (two links, one mail): the next link is refused.
+        assertNotNull(limiter.checkTenant(tenant), "the link spends the tenant budget the mails spend")
+    }
+
+    @Test
     fun adifferentTenantIsIsolated() {
         val limiter = InviteMailRateLimiter(perRecipientMax = 1, perTenantMax = 1, windowSeconds = 3600)
         assertNull(limiter.check("tenant-A", "x@example.com"))

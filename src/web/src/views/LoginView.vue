@@ -26,11 +26,12 @@ import { useCapabilities } from '../shared/state/useCapabilities'
 import { useAsyncAction } from '../shared/state/useAsyncAction'
 import { CORE_DEVICE_LINKING, CORE_REMEMBER_DEVICE, CORE_REMEMBER_DEVICE_PASSWORDLESS } from '../features/platform/capabilities'
 import { LoginVerifyRequestSessionScopeEnum } from '../api/generated/auth'
-import { parseKit, type KitData } from '@veyq/crypto/emergencyKit'
+import type { KitData } from '@veyq/crypto/emergencyKit'
 import SecretKeyField from '../shared/ui/SecretKeyField.vue'
 import OperatorIdentification from '../core/operator/OperatorIdentification.vue'
 import { parsePairingPayload } from '../features/account/pairing/pairing'
 import JoinDeviceCard from '../features/account/pairing/JoinDeviceCard.vue'
+import KitScanner from '../features/account/emergencyKit/KitScanner.vue'
 import SignInWithCodeCard from '../features/account/pairing/SignInWithCodeCard.vue'
 import { rememberThisDeviceWrap } from '../features/account/deviceRegister'
 import LockedSignOut from '../features/account/sessions/LockedSignOut.vue'
@@ -91,8 +92,8 @@ const remember = ref(false)
 const rememberSupported = isRememberSupported() && hasCapability(CORE_REMEMBER_DEVICE_PASSWORDLESS)
 const deviceWrapSupported = isRememberSupported() && hasCapability(CORE_REMEMBER_DEVICE)
 // Linking a device (uc.account.onboard-device, `core.device-linking`): off, neither direction is offered — no "sign in
-// with code" entry, and a scanned pairing code is not recognised, so the join card never replaces the form. The server
-// refuses every /api/pairing/* call then anyway (422 capability_disabled).
+// with code" entry and no "scan a code from another device" entry, so the join card never replaces the form. The
+// server refuses every /api/pairing/* call then anyway (422 capability_disabled).
 const linkingSupported = hasCapability(CORE_DEVICE_LINKING)
 // uc.account.sessions §E3 — the LOCKED entry point. The screen built for a lost laptop is reached from the
 // device you would actually be holding: a fresh or foreign one, with no Emergency Kit. The Secret-Key field is
@@ -112,6 +113,12 @@ const warning = ref('')
 // join card has replaced the form (routeless, like the locked state above it): this device is being let in from
 // one that is already signed in, so it has no email, no password and no Secret Key to type here.
 const joinSecret = ref('')
+// The *add a device* direction's entry on this card: its own button and its own scanner, which reads a pairing code
+// and nothing else (owner 2026-11-12). It used to ride on the Secret-Key field's camera, which hid the way in behind
+// an icon of a field about something else — and took it away wherever that field is not shown. Offered only where a
+// camera can exist at all; a camera-less device has the other direction, `signInWithCode`, right beside it.
+const scanSupported = typeof navigator !== 'undefined' && !!navigator.mediaDevices?.getUserMedia
+const joinScanOpen = ref(false)
 // uc.account.onboard-device § Main flow — sign in with a QR code. The OTHER direction's entry, and the other
 // routeless card: this device displays a code and the signed-in one scans it. Deliberately NOT gated on
 // `scanSupported` — a camera-less laptop is precisely this direction's case, and ADR 0059 §1's "no direction is
@@ -366,21 +373,14 @@ function applyKit(kit: KitData) {
   error.value = ''
 }
 
-/** Which decoded strings this screen's scanner should stop on. `SecretKeyField` keeps this a caller-supplied
- *  predicate precisely so this screen can widen it — and keeping it a predicate is what lets the camera scan
- *  past a foreign QR instead of reporting it as a failure.
- *
- *  ONE scan entry serves both codes this app produces: an Emergency Kit (`veyqkit:`) and a pairing channel
- *  (`veyqpair:`). A second button would be a second camera lifecycle, a second permission prompt and a second
- *  no-camera path — in the one place where a subtly different second solution is worst — and it would ask the
- *  user to know which of two visually identical codes they are holding. */
-function acceptsScan(text: string): boolean {
-  return parseKit(text) !== null || (linkingSupported && parsePairingPayload(text) !== null)
-}
+/** The join scanner stops on an *add a device* code only: a kit, a sign-in code or anything else in view is
+ *  scanned past — the sign-in code's marker is refused for the reason `pairing.ts` gives (a mis-read would burn the
+ *  write-once answer slot of the other direction's ceremony). */
+const acceptsPairing = (text: string): boolean => parsePairingPayload(text) !== null
 
-/** The half of that dispatch the shared control cannot own: a decoded string it accepted but did not
- *  recognise as a kit is this screen's pairing payload. */
-function onForeignScan(text: string) {
+/** A pairing code was scanned: the join card replaces the form with that code's secret. */
+function onPairingScanned(text: string) {
+  joinScanOpen.value = false
   joinSecret.value = linkingSupported ? (parsePairingPayload(text) ?? '') : ''
 }
 
@@ -498,10 +498,8 @@ onMounted(async () => {
           <SecretKeyField
             v-model="secretKey"
             input-id="unlock-secret-key"
-            :accepts="acceptsScan"
             required
             @kit="applyKit"
-            @scanned="onForeignScan"
           />
           <small class="field-hint">{{ t(heldBack ? 'unlock.deviceHeldBack' : 'unlock.secretKeyHint') }}</small>
         </label>
@@ -540,9 +538,9 @@ onMounted(async () => {
              §E3's entry above is one — the gate on this form is HTML5 constraint validation, which a
              submit-typed control would trip on the very fields this person cannot fill.
 
-             It carries NO `scanSupported` gate, unlike the scan icon in the Secret-Key field. This device only
-             DISPLAYS a code; the camera it needs is on the other one. Gating it here would withhold the entry
-             from exactly the hardware it exists for (ADR 0059 §1). -->
+             It carries NO `scanSupported` gate, unlike the join entry below it. This device only DISPLAYS a code;
+             the camera it needs is on the other one. Gating it here would withhold the entry from exactly the
+             hardware it exists for (ADR 0059 §1). -->
         <VeyqButton
           v-if="!liveSession && linkingSupported"
           type="button"
@@ -551,6 +549,18 @@ onMounted(async () => {
           variant="secondary"
           appearance="text"
           @click="signInWithCode = true"
+        />
+        <!-- The other direction's entry (ADR 0059 §1: whichever device has a camera scans): the signed-in device
+             shows a code under "Add a device", this one scans it. Not tied to the Secret-Key field — a device that
+             already knows this account hides that field and still needs a way to be added. -->
+        <VeyqButton
+          v-if="!liveSession && linkingSupported && scanSupported"
+          type="button"
+          :label="t('pairing.joinEntry')"
+          icon="camera"
+          variant="secondary"
+          appearance="text"
+          @click="joinScanOpen = true"
         />
         <!-- Recovery needs no session, so it is reachable from here even when sign-in keeps failing — which is
              exactly when someone needs it. -->
@@ -577,6 +587,16 @@ onMounted(async () => {
       <div v-else class="login-redirecting" aria-hidden="true">
         <VeyqIcon name="spinner" spin />
       </div>
+      <Teleport to="body">
+        <KitScanner
+          v-if="joinScanOpen"
+          :accepts="acceptsPairing"
+          :hint="t('pairing.joinScanHint')"
+          :error-text="t('pairing.joinScanError')"
+          @found="onPairingScanned"
+          @close="joinScanOpen = false"
+        />
+      </Teleport>
     </template>
     <!-- Who runs this instance (ADR 0035 decision 7): shown where the Server Owner published it, absent otherwise. -->
     <template #footer>

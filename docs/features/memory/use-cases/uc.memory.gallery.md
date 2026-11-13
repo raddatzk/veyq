@@ -53,8 +53,8 @@
    before it closes. **Slideshow:** a play / pause control in the lightbox's toolbar advances every 5 s through the grid order, a
    video showing its poster for one interval (no autoplay), and stops on the last item; any key, pointer or wheel in the
    lightbox (so any zoom or details interaction) pauses it, a hidden tab and a dialog over the lightbox too; the state is
-   announced to a screen reader. A slow preview is waited for, never skipped. The next preview is fetched one ahead and
-   dropped when it is not shown; while it runs, no EXIF read and no place-name backfill happen - they start when the
+   announced to a screen reader. A slow preview is waited for, never skipped. The next preview is read ahead like any
+   neighbour (item 3) and stays held while the lightbox is open; while it runs, no EXIF read and no place-name backfill happen - they start when the
    slideshow pauses on an item. The member and the guest get both (share view = member view; a guest's loaders are its
    source's). Seen in a real browser on 2026-10-14 (a Memory of three 3000 x 2000 JPEGs, 2048 px previews): a
    double-click zoomed to 2x and fetched the original once (two chunks; the image became 3000 x 2000), ArrowRight panned
@@ -63,7 +63,14 @@
    video's poster in a slideshow, a pinch, ctrl+wheel, the 50 MB cap, a share guest's zoom.
 3. **Lightbox:** clicking an item opens it full-view; the client fetches that item's **preview**, decrypts, and
    displays it; **prev/next** page through the grid order. (The preview — not the multi-MB original — keeps the
-   lightbox fast.) A **video** (known from the media type sealed in its original's blob meta, which rides the
+   lightbox fast.) The decrypted previews stay **in memory while the lightbox is open** (owner 2026-11-12,
+   `previewCache.ts`): a step back shows the item at once, and once an item's preview is shown its two neighbours are
+   read ahead, after it, so a step forward usually does too. At most 24 MiB, the least recently shown dropped first; a
+   block or a removal drops the item's bytes, a new key or closing drops all. Never on the device's storage: a cache that
+   outlives the session would, on our reading of § 25 TDDDG, need the member's own choice first. Seen in headless Chrome
+   on 2026-11-12 (the dev instance's Memory of 20 photos): open, two steps forward, two back - the old lightbox showed
+   the loading state on all four steps and read the store twice going back; this one on none of them, with no store
+   read going back. A **video** (known from the media type sealed in its original's blob meta, which rides the
    listing — inbox #397, [ADR 0047](../../../decisions/0047-inline-video-playback-range-streaming.md))
    shows its poster with a **play** control; playing it **streams** the **original** on device — a key-free Service
    Worker answers the `<video>` demuxer's byte-range requests, pulling + decrypting only the covering chunks from

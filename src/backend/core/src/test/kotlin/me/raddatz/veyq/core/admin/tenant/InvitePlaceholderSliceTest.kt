@@ -167,6 +167,24 @@ class InvitePlaceholderSliceTest {
         assertEquals(listOf<Any?>(TestGrants.WRAPPED, 0, signer), grantOf(b.inviteId))
     }
 
+    @Test
+    fun aRotationCarriesAnOpenLinkInviteLikeAMailedOne() {
+        // ADR 0129 decision 2: a link invite is a placeholder member like a mailed one, so a rotation must carry it too.
+        val (tenantId, owner) = seedActiveTenant("ph-rotate-link.example.com")
+        val signer = seedUser(identityPublicKey = SIGNER_KEY)
+        val link = seedInvite(tenantId, signer, email = null)
+        val mailed = seedInvite(tenantId, signer, "mailed@ph-rotate-link.example.com")
+
+        // The link left out: refused, nothing stored.
+        rotate(owner, tenantId, inviteGrants = listOf(mailed)).then().statusCode(409).body("code", equalTo("rotation_incomplete"))
+        assertEquals(listOf<Any?>(TestGrants.WRAPPED, 0, signer), grantOf(link.inviteId), "nothing re-granted")
+
+        // Control: carried with the mailed one, the link holds the new epoch's grant, the rotator its granter.
+        rotate(owner, tenantId, inviteGrants = listOf(mailed, link)).then().statusCode(201).body("epoch", equalTo(1))
+        assertEquals(listOf<Any?>(REGRANT.wrappedGrant, 1, owner), grantOf(link.inviteId))
+        assertEquals(listOf<Any?>(REGRANT.wrappedGrant, 1, owner), grantOf(mailed.inviteId))
+    }
+
     // --- every member reads the open invites, no email (ADR 0111 decision 2) ---
 
     @Test
@@ -334,9 +352,9 @@ class InvitePlaceholderSliceTest {
         return tenantId to ownerId
     }
 
-    /** A MEMBER invite to [email] signed by [signer] (with [SIGNER_KEY]), its grant of `E_0`, stored as the handler does. */
+    /** A MEMBER invite to [email] (null: a link invite, ADR 0129) signed by [signer] (with [SIGNER_KEY]), its grant of `E_0`, stored as the handler does. */
     private fun seedInvite(
-        tenantId: String, signer: String, email: String, secret: String = "ph-${UUID.randomUUID()}",
+        tenantId: String, signer: String, email: String?, secret: String = "ph-${UUID.randomUUID()}",
         expiresAt: Instant = Instant.now().plus(7, ChronoUnit.DAYS),
     ): TestInviteKey {
         val key = TestInviteKey()

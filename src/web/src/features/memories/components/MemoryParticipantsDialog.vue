@@ -49,7 +49,7 @@ function save() {
 </script>
 
 <template>
-  <VeyqDialog :visible="true" :header="t('memory.participants.dialogTitle')" @update:visible="emit('close')">
+  <VeyqDialog :visible="true" :style="{ minWidth: 'min(25rem, calc(100vw - 2rem))' }" :header="t('memory.participants.dialogTitle')" @update:visible="emit('close')">
     <form class="veyq-form memory-participants-dialog" @submit.prevent="save">
       <p class="memory-participants-hint">{{ t('memory.participants.dialogHint') }}</p>
       <VeyqMessage v-if="loadFailed" tone="error">
@@ -85,9 +85,6 @@ function save() {
 </template>
 
 <style scoped>
-.memory-participants-dialog {
-  min-width: min(360px, 80vw);
-}
 .memory-participants-set {
   display: grid;
   gap: 0.15rem;

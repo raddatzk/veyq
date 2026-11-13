@@ -106,9 +106,11 @@ encryption from the platform.
 <tr>
 <td><img src="site/src/assets/website/gallery.en.png" alt="A Memory in the gallery: its chapters on top, the photos below" /></td>
 <td><img src="site/src/assets/website/depot.en.png" alt="A Depot folder in list view: each file with its size and when it changed" /></td>
-<td align="center"><em>More to come — an inventory of the things you own is on the drawing board.</em></td>
+<td><img src="site/src/assets/website/pot.en.png" alt="A Pot on its Overview tab: who is owed, who owes, and the transfers that settle it" /></td>
 </tr>
 </table>
+
+<p align="center"><em>More to come — an inventory of the things you own is on the drawing board.</em></p>
 
 ## How it works
 

@@ -8,7 +8,8 @@
 //   - the component hands back the RAW decoded string, never an interpretation of it (that is the whole
 //     refactor, and a component that re-learns what a payload means would pass every other test here);
 //   - it keeps scanning past a QR the caller does not accept, and gives up the camera when it does — the
-//     existing Emergency-Kit behaviour, which is exactly what a decoder-agnostic loop is most likely to break;
+//     existing Emergency-Kit behaviour, which is exactly what a decoder-agnostic loop is most likely to break —
+//     saying the caller's `refusedText` over such a QR where one is passed, and nothing where none is;
 //   - a camera it cannot have is a message, not a crash, and no code path leaves the stream running.
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { mount, flushPromises, type VueWrapper } from '@vue/test-utils'
@@ -124,6 +125,42 @@ describe('KitScanner (uc.account.unlock + uc.account.onboard-device, web)', () =
     decode.mockReturnValue({ data: 'veyqkit:eyJ2IjoxfQ' })
     await tick()
     expect(emittedFound(w)).toEqual([['veyqkit:eyJ2IjoxfQ']])
+  })
+
+  // The Secret-Key field's case (owner 2026-11-12): a readable code that is not the caller's is SAID, while the
+  // loop goes on — silence there made a pairing code look like a scan that failed for no reason.
+  it('says the refusal text over a QR it does not accept, and still takes the next accepted one', async () => {
+    decode.mockReturnValue({ data: 'veyqpair:SGFuZGxl' })
+    const w = mount(KitScanner, {
+      props: { accepts: (text: string) => text.startsWith('veyqkit:'), refusedText: 'Not a kit.' },
+      global: { plugins: [realI18n()], stubs },
+    })
+    await flushPromises()
+    expect(w.find('.msg').exists()).toBe(false) // control: nothing said before a code was in view
+
+    await tick()
+
+    expect(w.find('.msg').text()).toBe('Not a kit.')
+    expect(emittedFound(w)).toBeUndefined()
+    expect(track.stop).not.toHaveBeenCalled()
+    expect(frames).toHaveLength(1)
+
+    decode.mockReturnValue({ data: 'veyqkit:eyJ2IjoxfQ' })
+    await tick()
+    expect(emittedFound(w)).toEqual([['veyqkit:eyJ2IjoxfQ']])
+  })
+
+  it('says nothing while no frame decodes, even with a refusal text', async () => {
+    decode.mockReturnValue(null)
+    const w = mount(KitScanner, {
+      props: { accepts: () => false, refusedText: 'Not a kit.' },
+      global: { plugins: [realI18n()], stubs },
+    })
+    await flushPromises()
+
+    await tick()
+
+    expect(w.find('.msg').exists()).toBe(false)
   })
 
   it('emits nothing while no frame decodes at all', async () => {

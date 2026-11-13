@@ -117,9 +117,12 @@ describe('level item styles', () => {
     expect(media('(hover: none)')).not.toMatch(/position:\s*absolute/)
   })
 
-  it('a folder\'s compact tile at rest keeps its pressed heart off the name: the heart drawn last, the name leaves room', () => {
+  it('a tile draws its heart last, in the corner, pressed or not; a compact tile at rest keeps it off the name', () => {
     const hover = media('(hover: hover)')
-    expect(rule('.veyq-level-item.is-compact .veyq-level-item-actions > .veyq-button.is-pressed', hover)).toMatch(/order:\s*1/)
+    // every tile, card and compact: drawn after the ⋯ (whose transparent box would otherwise sit between it and the corner),
+    // keyed on the action so a click never moves it from under the pointer
+    expect(rule('.veyq-level-item.is-grid .veyq-level-item-actions > .veyq-button[data-action="favorite"]')).toMatch(/order:\s*1/)
+    expect(css).not.toMatch(/\.is-pressed\s*\{[^}]*order:/)
     // the other buttons keep their box (transparent at rest, never no width): a button with no box is hidden to a test
     // driver's "visible" - lane L1's export-import spec timed out on the ⋯ when it was folded to width 0
     expect(css).not.toMatch(/\.veyq-level-item[^{]*\.veyq-level-item-actions[^{]*\{[^}]*(?:^|[\s;])width:\s*0/m)

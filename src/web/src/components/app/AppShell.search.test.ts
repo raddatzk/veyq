@@ -5,6 +5,8 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { mount, flushPromises } from '@vue/test-utils'
 import { createRouter, createMemoryHistory } from 'vue-router'
 
+// The unconfirmed-address banner reads the account's address; its own place is AppShell.unconfirmedEmail.test.ts.
+vi.mock('../../features/account/email/UnconfirmedEmailBanner.vue', () => ({ default: { render: () => null } }))
 vi.mock('./AppSidebar.vue', () => ({ default: { render: () => null } }))
 vi.mock('../../features/account/profile/FinishProfilePrompt.vue', () => ({ default: { render: () => null } }))
 vi.mock('../../core/operator/OperatorIdentification.vue', () => ({ default: { render: () => null } }))

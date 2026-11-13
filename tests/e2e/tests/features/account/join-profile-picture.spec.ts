@@ -267,6 +267,8 @@ test(
     await page.getByRole('navigation', { name: 'Settings' }).getByRole('button', { name: 'Members', exact: true }).click()
     await page.getByRole('button', { name: 'Invite member' }).click()
     const invite = page.getByRole('dialog', { name: 'Invite member' })
+    // The dialog opens on sharing a link (ADR 0129 decision 1); this member is invited by mail.
+    await invite.getByRole('button', { name: 'Invite by email' }).click()
     await invite.getByLabel('Email address').fill(fresh.email)
     await invite.getByRole('button', { name: 'Send invite' }).click()
     await expect(invite.getByText(`Invitation sent to ${fresh.email}.`)).toBeVisible({ timeout: 30_000 })

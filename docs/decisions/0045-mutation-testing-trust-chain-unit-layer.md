@@ -116,6 +116,14 @@ layer.**
    meta-check** asserts *mutants > 0 over the intended glob* only when that glob has changed files — a run that
    mutates nothing and reports 100% is itself a claim nothing backs.
 
+   **The web gate runs the scope's own unit tests, not the whole suite** (*amended 2026-11-12*): `stryker.mutate.json`
+   names them beside `mutate` (`tests`), and they are vitest's whole collection for the run. The layer is §2's — a
+   mutant counts as killed by its module's unit tests, not by a component suite that kills it for a render reason —
+   and the restriction can only fail closed: fewer tests kill fewer mutants, so a green over the subset is a green
+   over the suite, and a module added without its tests drops the score. Measured: the same status for each of the
+   157 mutants, and a run without the cache from 18 min 39 s to 23 s; the whole suite had passed the job's 45 min on
+   CI once the cache was gone. Why the collection and not Stryker's `testFiles` is in `src/web/vitest.stryker.config.mjs`.
+
    **A change that moves the mutate scope runs the gate; reading the manifest does not settle it.** The threshold
    is an **aggregate over the whole scope**, so a weak new member passes on its siblings' backs: when the
    rate-limit core was re-scoped ([ADR 0052](0052-token-bucket-rate-limit-core.md)) every structural check was

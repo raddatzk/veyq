@@ -3,6 +3,9 @@ package me.raddatz.veyq.core.account.erasure
 import me.raddatz.veyq.core.adminchannel.givenAdminChannel
 import me.raddatz.veyq.core.admin.instance.InstanceMailSettingsEntity
 import me.raddatz.veyq.core.admin.tenant.TenantInviteEntity
+import me.raddatz.veyq.core.admin.tenant.TenantStore
+import me.raddatz.veyq.core.crypto.Tokens
+import me.raddatz.veyq.core.membership.TestInviteKey
 import me.raddatz.veyq.core.admin.tenant.TenantTermsAcceptanceEntity
 import me.raddatz.veyq.core.blob.NodeAttachmentEntity
 import me.raddatz.veyq.core.config.VeyqConfig
@@ -82,6 +85,9 @@ class AccountErasureSliceTest {
     @Inject
     lateinit var moderation: ModerationHandler
 
+    @Inject
+    lateinit var tenants: TenantStore
+
     // --- the request, the lockout and the purge ---
 
     @Test
@@ -149,6 +155,32 @@ class AccountErasureSliceTest {
             assertNull(AccountErasureEntity.findById(u))
             assertEquals(0L, TenantInviteEntity.count("ownerEmail", emailOf(u)), "no invite keeps its address")
             assertEquals("", TenantEntity.findById(invitedTenant)!!.ownerEmail, "nor does the tenant its owner invite went to")
+        }
+    }
+
+    @Test
+    fun theLinkInvitesAnErasedAccountSignedEndAndAnotherSignersStayOpen() {
+        // A link invite is bound to nobody (ADR 0129 decision 2), so only its signer ties it to the erased account: the
+        // erasure ends the member invites it signed (ADR 0111 decision 1), their keys with them.
+        val owner = seedUser()
+        val tenant = seedTenant(owner = owner)
+        val u = seedUser()
+        QuarkusTransaction.requiringNew().run { TenantRoots.join(u, tenant) }
+        val signedByU = TestInviteKey()
+        val signedByOwner = TestInviteKey()
+        tx {
+            for ((key, signer) in listOf(signedByU to u, signedByOwner to owner)) {
+                tenants.mintMemberInvite(tenant, null, Tokens.hash(UUID.randomUUID().toString()), Instant.now().plusSeconds(3600), key.stored(signer))
+            }
+        }
+
+        eraseByOwner(serverOwnerToken(), emailOf(u)).then().statusCode(200)
+
+        tx {
+            val ended = TenantInviteEntity.findById(signedByU.inviteId)!!
+            assertEquals(TenantInviteEntity.SUPERSEDED to null, ended.status to ended.invitePublicKey, "the link its signer erased ends, its key gone")
+            // Control on the same statement: the link another owner signed stays open.
+            assertEquals(TenantInviteEntity.ACTIVE, TenantInviteEntity.findById(signedByOwner.inviteId)!!.status)
         }
     }
 

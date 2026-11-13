@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { useI18n } from 'vue-i18n'
+import VeyqButton from '../../../shared/ui/VeyqButton.vue'
 import VeyqIcon from '../../../shared/ui/VeyqIcon.vue'
 // The one media tile shared by the Galerie, Papierkorb and Beiträge grids (cr-0125). A positioned wrapper with a
 // single clickable image button (emits `open`) + an optional `#overlay` slot (a selection check + a 3-dot menu).
@@ -54,18 +55,19 @@ const { t } = useI18n()
       <span v-else class="media-grid-tile-placeholder" aria-hidden="true" />
     </button>
     <span v-if="isVideo" class="media-tile-play" aria-hidden="true"><VeyqIcon name="play" /></span>
-    <button
+    <VeyqButton
       v-if="markable"
-      type="button"
       class="media-tile-mark"
-      :class="{ 'is-marked': markedByMe, 'has-others': (markCount ?? 0) > (markedByMe ? 1 : 0) }"
+      :class="{ 'is-marked': markedByMe, 'has-count': (markCount ?? 0) > 0 }"
+      :icon="markedByMe ? 'heart-fill' : 'heart'"
+      :label="(markCount ?? 0) > 0 ? String(markCount) : undefined"
       :aria-label="markLabel"
       :aria-pressed="markedByMe === true"
+      variant="secondary"
+      appearance="text"
+      size="small"
       @click.stop="$emit('toggle-mark')"
-    >
-      <VeyqIcon :name="markedByMe ? 'heart-fill' : 'heart'" />
-      <span v-if="(markCount ?? 0) > 0" class="media-tile-mark-count">{{ markCount }}</span>
-    </button>
+    />
     <slot name="overlay" />
   </div>
 </template>
@@ -88,34 +90,42 @@ const { t } = useI18n()
   font-size: 0.75rem;
   text-align: center;
 }
-/* The mark toggle. Always legible over a photo (the scrim), and the COUNT sits beside the heart rather than in a
-   tooltip: it is the standing evidence that a mark is seen by the others, and a tooltip only informs whoever
-   hovers. `.has-others` is the case where the number is not just the caller's own. */
-.media-tile-mark {
+/* The mark toggle: the SAME heart as a card's in the level (core's favourite, `styles/ui.css` "A tile's actions" - owner
+   2026-11-12, one heart everywhere): the layer's small text button at the icon-button size, on the surface veil, in the
+   top-right corner at the card's inset, the filled heart in the favourite colour; shown on hover and while focus is
+   inside - by opacity alone, so it stays in the Tab order -, always where nothing hovers, and always while it says
+   something: marked by the caller, or by anyone at all. The COUNT sits beside the heart rather than in a tooltip: it is
+   the standing evidence that a mark is seen by the others, and a tooltip only informs whoever hovers. */
+.media-tile-mark.veyq-button {
   position: absolute;
-  right: 4px;
-  bottom: 4px;
-  display: inline-flex;
-  gap: 4px;
-  align-items: center;
-  padding: 4px 6px;
-  border: 0;
-  border-radius: var(--app-radius-sm);
-  background: color-mix(in srgb, var(--app-surface) 55%, transparent);
-  color: var(--app-text);
-  font-size: 0.75rem;
-  line-height: 1;
-  cursor: pointer;
-  backdrop-filter: blur(2px);
-}
-.media-tile-mark:hover {
-  background: color-mix(in srgb, var(--app-surface) 80%, transparent);
-}
-.media-tile-mark.is-marked {
-  color: var(--app-favorite);
-}
-.media-tile-mark-count {
+  top: 0.35rem;
+  right: 0.35rem;
+  min-width: 2.55rem;
+  height: 2.55rem;
+  background: color-mix(in srgb, var(--app-surface) 88%, transparent);
   font-variant-numeric: tabular-nums;
+  opacity: 0;
+  transition: opacity 0.15s;
+}
+.media-tile-mark.veyq-button.veyq-button--icon-only {
+  width: 2.55rem;
+}
+.media-tile-mark.veyq-button:not(:disabled):hover {
+  background: var(--app-surface);
+}
+.media-tile:hover .media-tile-mark.veyq-button,
+.media-tile:focus-within .media-tile-mark.veyq-button,
+.media-tile-mark.veyq-button.is-marked,
+.media-tile-mark.veyq-button.has-count {
+  opacity: 1;
+}
+@media (hover: none) {
+  .media-tile-mark.veyq-button {
+    opacity: 1;
+  }
+}
+.media-tile-mark.veyq-button.is-marked {
+  color: var(--app-favorite);
 }
 
 .media-tile {

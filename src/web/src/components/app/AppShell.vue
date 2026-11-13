@@ -8,7 +8,8 @@
 // operator footer (uc.admin.operator-details): who runs the instance and its terms, reachable from every page of the
 // signed-in app as § 5 DDG asks of a provider identification and DSA Art. 14(1) of the terms. Above the route sits the
 // donation banner as a member's (uc.platform.support-the-project, ADR 0124) — on the signed-in app only, never on the
-// public or plain layouts' login, invite, join and recovery pages.
+// public or plain layouts' login, invite, join and recovery pages — and above it, while the account's address is
+// unconfirmed, the banner that says so and cannot be dismissed (ADR 0129 decision 5), on the same pages only.
 import { computed, watch } from 'vue'
 import { RouterView, useRoute } from 'vue-router'
 import { useI18n } from 'vue-i18n'
@@ -24,6 +25,7 @@ import IncompatibleScreen from './IncompatibleScreen.vue'
 import FinishProfilePrompt from '../../features/account/profile/FinishProfilePrompt.vue'
 import OperatorIdentification from '../../core/operator/OperatorIdentification.vue'
 import DonationBanner from '../../core/project/DonationBanner.vue'
+import UnconfirmedEmailBanner from '../../features/account/email/UnconfirmedEmailBanner.vue'
 import ShortcutsDialog from '../../core/shortcuts/ShortcutsDialog.vue'
 
 const route = useRoute()
@@ -37,6 +39,9 @@ const appLayout = computed(() => route.meta.layout === 'app')
 // The anonymous public share viewer (cr-0100) wants the full viewport width for its gallery, not the narrow
 // centered card the login/setup public shell uses.
 const plainLayout = computed(() => route.meta.layout === 'plain')
+// A page of running text in the public shell — the terms and the privacy notice (`meta.reading`) — reads at a text
+// measure, not in the sign-in card's 460 px column, which wrapped it every six words.
+const readingLayout = computed(() => route.meta.reading === true)
 
 // Only the home enters a scope (from its #fragment), so an app page loaded straight — a reload on /settings — would run
 // with none: no tenant sections, no terms gate, no tenant capabilities. Such a page gets the token-less tenant home,
@@ -67,6 +72,7 @@ watch(needsScope, (needs) => { if (needs) void enterScope(TENANT_SCOPE) }, { imm
     </div>
     <div class="app-workspace">
       <main class="content">
+        <UnconfirmedEmailBanner />
         <DonationBanner member />
         <FinishProfilePrompt />
         <RouterView />
@@ -83,7 +89,7 @@ watch(needsScope, (needs) => { if (needs) void enterScope(TENANT_SCOPE) }, { imm
     <RouterView />
   </main>
   <main v-else class="public-shell">
-    <div class="veyq-shell-inner">
+    <div class="veyq-shell-inner" :class="{ 'veyq-shell-inner--reading': readingLayout }">
       <p v-if="serverState.unreachable" class="veyq-banner" role="alert">{{ t('common.unreachable') }}</p>
       <RouterView />
     </div>
@@ -99,5 +105,8 @@ watch(needsScope, (needs) => { if (needs) void enterScope(TENANT_SCOPE) }, { imm
 }
 .veyq-shell-inner {
   width: min(460px, 100%);
+}
+.veyq-shell-inner--reading {
+  width: min(46rem, 100%);
 }
 </style>

@@ -1,11 +1,15 @@
 <script setup lang="ts">
 // Invite a person into the active tenant as a MEMBER (uc.spaces.add-member, cr-0077). Mirrors the create-tenant
 // dialog structure; the data layer is the operator-blind member client. The invite is a placeholder member holding an
-// owner-signed key (ADR 0111 decisions 1-2): its link is mailed, and opens only with a code minted here and shown once —
-// the owner passes it on outside veyq, because the operator mails the link. The owner may choose a password instead.
-// There is deliberately NO copy-link: the invite token is minted for the invited person, so it must not pass
-// through whoever is looking at the owner's screen (ADR 0055 §2). Mail is the only channel, and a tenant that
-// cannot send is refused by the server before anything is minted.
+// owner-signed key (ADR 0111 decisions 1-2), and there are two ways to hand it over (ADR 0129 decision 1), a switch at the
+// top, the link first:
+//   - **Share a link** — no address: the server mints the invite, sends nothing and answers its token; this client builds
+//     `…/tenant/accept#<token>.<sealed>.<code>` and shows it once inside a message the owner may edit, to copy, share or
+//     open in their own mail program (`InviteLinkResult`). The link never passed the server, so the code rides in it.
+//   - **Invite by email** — an address: the server mails the link, which opens only with a code minted here and shown
+//     once (or a password the owner chose) — the owner passes it on outside veyq, because the operator mails the link. Its
+//     operation answers no secret (ADR 0055 § 2).
+// A tenant that cannot send is refused either way before anything is minted (ADR 0129 decision 3).
 // The code is minted as the dialog opens and its link key's Argon2id derivation started then (inbox #566), so the send does
 // not wait for it; while the send runs, a status line says which phase it is in (sealing on this device, then sending).
 import { computed, onBeforeUnmount, ref, watch } from 'vue'
@@ -17,15 +21,31 @@ import { NOT_A_LOGIN } from '../../shared/ui/notALogin'
 import VeyqMessage from '../../shared/ui/VeyqMessage.vue'
 import VeyqPassword from '../../shared/ui/VeyqPassword.vue'
 import VeyqIcon from '../../shared/ui/VeyqIcon.vue'
-import { inviteMember, memberError, prepareInviteCode, type InvitePhase, type InviteSecret } from './members'
+import VeyqToggleGroup from '../../shared/ui/VeyqToggleGroup.vue'
+import InviteLinkResult from './InviteLinkResult.vue'
+import {
+  createMemberInviteLink, inviteMember, memberError, prepareInviteCode,
+  type InvitePhase, type InviteSecret, type MemberInviteLinkResult,
+} from './members'
 import { useAsyncAction } from '../../shared/state/useAsyncAction'
 import { formatInviteCode } from '@veyq/crypto/invite'
 import { MIN_PASSWORD_LENGTH } from '../../shared/passwordPolicy'
 
-const props = defineProps<{ tenantId: string }>()
+const props = defineProps<{ tenantId: string; tenantName: string }>()
 const visible = defineModel<boolean>('visible', { required: true })
-const emit = defineEmits<{ invited: [] }>()
+const emit = defineEmits<{ invited: [way: 'link' | 'mail'] }>()
 const { t } = useI18n()
+
+// Which way this invite goes: a link the owner hands over (the default, ADR 0129 decision 1) or a mail the server sends.
+type Way = 'link' | 'mail'
+const way = ref<Way>('link')
+const wayOptions = computed(() => [
+  { label: t('members.wayLink'), value: 'link' as const },
+  { label: t('members.wayMail'), value: 'mail' as const },
+])
+// The link invite just minted, shown once on the result view; never stored anywhere.
+const minted = ref<MemberInviteLinkResult | null>(null)
+watch(way, () => (error.value = '')) // a refusal of one way says nothing about the other
 
 const email = ref('')
 const error = ref('')
@@ -59,6 +79,8 @@ watch(
   (isVisible) => {
     if (isVisible) {
       error.value = ''
+      way.value = 'link'
+      minted.value = null
       email.value = ''
       sentTo.value = ''
       usePassword.value = false
@@ -76,7 +98,48 @@ async function copyCode() {
   await navigator.clipboard?.writeText(sentCode.value).catch(() => undefined)
 }
 
-const { run: runSubmit, pending: loading } = useAsyncAction(
+/** The refusals both ways share, each as its own line (not the generic failure); [fallback] for the rest. */
+async function refusal(e: unknown, fallback: string): Promise<string> {
+  const { code } = await memberError(e)
+  return code === 'already_member'
+    ? t('members.alreadyMember')
+    : code === 'not_tenant_owner'
+      ? t('members.notOwner')
+      : code === 'rate_limited'
+        ? t('members.inviteRateLimited')
+        : code === 'mail_unavailable'
+          ? t('members.mailUnavailable')
+          : code === 'mail_send_failed'
+            ? t('members.mailSendFailed')
+            : fallback
+}
+
+// The link way (ADR 0129 decision 1): its one button mints a link invite under the code prepared as the dialog opened, and
+// the result view shows the link once. Never the mailed operation — that one would mail and answer no token.
+const { run: runCreateLink, pending: creatingLink } = useAsyncAction(
+  async () => {
+    const secret = prepared ?? prepareInviteCode()
+    prepared = null // this mint owns it now
+    try {
+      minted.value = await createMemberInviteLink(props.tenantId, secret, (p) => (phase.value = p))
+    } catch (e) {
+      secret.ahead.discard() // a failed mint's derivation is zeroed; its code is never reused
+      if (visible.value) prepare()
+      throw e
+    } finally {
+      phase.value = null
+    }
+    emit('invited', 'link') // refresh the pending list behind the dialog
+  },
+  { onError: async (e) => { error.value = await refusal(e, t('members.linkFailed')) } },
+)
+
+async function createLink() {
+  error.value = ''
+  await runCreateLink()
+}
+
+const { run: runSubmit, pending: sending } = useAsyncAction(
   async () => {
     const recipient = email.value.trim().toLowerCase()
     let secret: InviteSecret
@@ -102,26 +165,11 @@ const { run: runSubmit, pending: loading } = useAsyncAction(
     sentCode.value = secret.mode === 'code' ? formatInviteCode(secret.code) : ''
     password.value = ''
     sentTo.value = recipient
-    emit('invited') // refresh the directory behind the dialog
+    emit('invited', 'mail') // refresh the directory behind the dialog
   },
-  {
-    onError: async (e) => {
-      const { code } = await memberError(e)
-      error.value =
-        code === 'already_member'
-          ? t('members.alreadyMember')
-          : code === 'not_tenant_owner'
-            ? t('members.notOwner')
-            : code === 'rate_limited'
-              ? t('members.inviteRateLimited')
-              : code === 'mail_unavailable'
-                ? t('members.mailUnavailable')
-                : code === 'mail_send_failed'
-                  ? t('members.mailSendFailed')
-                  : t('members.inviteFailed')
-    },
-  },
+  { onError: async (e) => { error.value = await refusal(e, t('members.inviteFailed')) } },
 )
+const loading = computed(() => sending.value || creatingLink.value)
 
 async function submit() {
   if (!canSubmit.value) return
@@ -132,7 +180,46 @@ async function submit() {
 
 <template>
   <VeyqDialog v-model:visible="visible" :header="t('members.invite')" class="tenant-dialog" :closable="!loading" :close-on-escape="!loading" keep-on-outside>
-    <form v-if="!sentTo" class="veyq-form" @submit.prevent="submit">
+    <!-- The way: a link the owner hands over (first, the default) or a mail the server sends (ADR 0129 decision 1). Gone
+         once a result is shown. -->
+    <VeyqToggleGroup
+      v-if="!sentTo && !minted"
+      v-model="way"
+      :options="wayOptions"
+      :disabled="loading"
+      class="invite-way"
+      data-testid="invite-way"
+    />
+
+    <!-- The link way: no address, one button; the result below shows the link once. -->
+    <div v-if="way === 'link' && !minted" class="veyq-form">
+      <p class="dialog-intro">{{ t('members.linkIntro') }}</p>
+      <VeyqMessage v-if="error" tone="error">{{ error }}</VeyqMessage>
+      <p v-if="creatingLink && phase" class="dialog-intro invite-progress" role="status" data-testid="invite-progress">
+        <VeyqIcon name="spinner" spin />{{ phase === 'sending' ? t('members.linkCreating') : t('members.inviteSecuring') }}
+      </p>
+      <div class="veyq-dialog-action-row">
+        <VeyqButton
+          :label="t('common.cancel')"
+          icon="times"
+          variant="secondary"
+          appearance="outlined"
+          :disabled="loading"
+          @click="visible = false"
+        />
+        <VeyqButton :label="t('members.linkCreate')" icon="link" :loading="creatingLink" data-testid="invite-link-create" @click="createLink" />
+      </div>
+    </div>
+
+    <div v-else-if="minted" class="veyq-form" data-testid="invite-link-result">
+      <VeyqMessage tone="success">{{ t('members.linkCreated') }}</VeyqMessage>
+      <InviteLinkResult :link="minted.link" :expires-at="minted.expiresAt" :space-name="tenantName" />
+      <div class="veyq-dialog-action-row">
+        <VeyqButton :label="t('common.done')" icon="check" @click="visible = false" />
+      </div>
+    </div>
+
+    <form v-else-if="!sentTo" class="veyq-form" @submit.prevent="submit">
       <p class="dialog-intro">{{ t('members.inviteIntro') }}</p>
       <label>
         {{ t('members.email') }}
@@ -151,7 +238,7 @@ async function submit() {
         @click="usePassword = !usePassword"
       />
       <VeyqMessage v-if="error" tone="error">{{ error }}</VeyqMessage>
-      <p v-if="loading && phase" class="dialog-intro invite-progress" role="status" data-testid="invite-progress">
+      <p v-if="sending && phase" class="dialog-intro invite-progress" role="status" data-testid="invite-progress">
         <VeyqIcon name="spinner" spin />{{ phase === 'sending' ? t('members.inviteSending') : t('members.inviteSecuring') }}
       </p>
       <div class="veyq-dialog-action-row">
@@ -163,7 +250,7 @@ async function submit() {
           :disabled="loading"
           @click="visible = false"
         />
-        <VeyqButton type="submit" :label="t('members.inviteSubmit')" icon="send" :loading="loading" :disabled="!canSubmit" />
+        <VeyqButton type="submit" :label="t('members.inviteSubmit')" icon="send" :loading="sending" :disabled="!canSubmit" />
       </div>
     </form>
 
@@ -204,6 +291,10 @@ async function submit() {
   display: flex;
   align-items: center;
   gap: 0.5rem;
+}
+
+.invite-way {
+  margin-bottom: 1rem;
 }
 
 </style>

@@ -668,6 +668,10 @@ def test_install(tmp: pathlib.Path) -> None:
           env.is_file() and stat.S_IMODE(env.stat().st_mode) == 0o600 and values.get("VEYQ_IMAGE") == "veyq:local"
           and values.get("VEYQ_RELEASE") == "1" and values.get("VEYQ_DOMAIN") == "veyq.test"
           and values.get("PLAIN_REQUIRED") == "1")
+    generated = {k: values.get(k, "") for k in vc.SECRETS}
+    check("install: the generated values are in .env only — never printed, never on a command line",
+          all(generated.values()) and not shown(generated, out.getvalue(), host),
+          str(shown(generated, out.getvalue(), host)) + str([k for k, v in generated.items() if not v]))
     state = vc.read_state(home) if (home / vc.STATE_FILE).is_file() else None
     check("install: state records the release, the project Compose named, the source, and that it is unverified",
           state == vc.State("1.3", "veyq-proof", str(mirror.resolve()), True), str(state))
@@ -1387,6 +1391,16 @@ def run_main(argv: list, host: FakeHost) -> tuple:
     return rc, out.getvalue()
 
 
+def shown(secret: dict, out: str, host: FakeHost) -> list:
+    """The names of the `secret` values (name → value) that are in what veyqctl printed or on a command line it ran —
+    where `--verbose` shows a program's arguments and `ps` reads them. Names only, so a failing check prints no value.
+    This is what holds veyqctl to never showing a secret: CodeQL's py/clear-text-logging-sensitive-data sees every
+    printed line through the one `_print` and guesses by name (a store's name, a Secret's name, a public key), so
+    its alert there is dismissed as a false positive and blind from then on (alerts 35 and 36, 2026-11-12)."""
+    argv = "\n".join(" ".join(c) for c in host.commands)
+    return sorted(name for name, value in secret.items() if value in out or value in argv)
+
+
 def tamper_one_byte(manifest: pathlib.Path) -> None:
     """One byte of the served manifest changed after its bundle was made (the date's last digit)."""
     raw = manifest.read_bytes()
@@ -1909,6 +1923,9 @@ def test_gitops_init(tmp: pathlib.Path) -> None:
           and not any(v in tree_text(top) for v in generated)
           and doc.get("remoteKeys", {}).get("veyq-config-secret-key") == doc["secrets"]["veyq-config-secret-key"][
               vc.CONFIG_SECRET_KEY], str(doc)[:300])
+    named = {f"{s}/{k}": v for s, keys in doc.get("secrets", {}).items() for k, v in keys.items()}
+    check("the generated values are in the hand-over file only — never printed, never on a command line",
+          len(named) == 5 and not shown(named, out, host), str(shown(named, out, host)))
     key = base64_32 = doc["secrets"]["veyq-config-secret-key"][vc.CONFIG_SECRET_KEY]
     import base64 as b64
     check("the config-secret key is base64 of 32 bytes, the RPC secret 64 hex characters",
@@ -2473,6 +2490,11 @@ def test_server_path(tmp: pathlib.Path, home: pathlib.Path) -> pathlib.Path:
     def outside():  # what the run may change outside the repository: the user's SSH and kube files
         return {p.relative_to(home).as_posix(): p.read_text() for p in home.rglob("*") if p.is_file()}
 
+    # what no run may print or put on a command line, whichever way it reaches the deploy key: made, or decrypted
+    private = {"the deploy key's private half": "-----BEGIN OPENSSH PRIVATE KEY-----",
+               "the age key": "AGE-SECRET-KEY-"}
+    leaks, made, decrypted = set(), [], []
+
     def run(top, **kw):
         host = ServerHost(top=top, signed=signed, answers=dict(answers), **kw)
         cwd = os.getcwd()
@@ -2481,6 +2503,9 @@ def test_server_path(tmp: pathlib.Path, home: pathlib.Path) -> pathlib.Path:
             rc, out = run_main(["--source", mirror, "init", "--age-key", age_key, "--release", "1.0"], host)
         finally:
             os.chdir(cwd)
+        leaks.update(shown(private, out, host))
+        made.extend(c for c in host.commands if c[0] == "ssh-keygen" and "-t" in c)
+        decrypted.extend(host.ran("sops", "decrypt"))
         return host, rc, out
 
     # refusals before anything is rendered: a manifest changed after signing, a tree that is not the signed one
@@ -2640,6 +2665,9 @@ def test_server_path(tmp: pathlib.Path, home: pathlib.Path) -> pathlib.Path:
     check("server path: without gh the deploy key is shown with GitHub's page and waited for (no terminal: "
           "refused, nothing pushed)", rc == 1 and "github.com/owner/raddatz.me/settings/keys/new" in out
           and not host.pushed, out[-500:])
+    check("server path: across every run — the deploy key made and decrypted again — neither its private half nor the "
+          "age key is printed or on a command line", made and decrypted and not leaks,
+          f"made={len(made)} decrypted={len(decrypted)} shown={sorted(leaks)}")
     return top
 
 

@@ -13,6 +13,7 @@ import me.raddatz.veyq.core.identity.TenantProfileStore
 import me.raddatz.veyq.core.identity.VeyqUser
 import me.raddatz.veyq.core.identity.WrapData
 import me.raddatz.veyq.core.identity.keychain.KeyChainLink
+import me.raddatz.veyq.core.identity.normalizeEmail
 import me.raddatz.veyq.core.crypto.InviteAcceptProof
 import me.raddatz.veyq.core.membership.ScopeAccess
 import me.raddatz.veyq.core.membership.SignedGrant
@@ -24,7 +25,8 @@ import jakarta.transaction.Transactional
 import java.time.Instant
 import org.jboss.logging.Logger
 
-/** Cold-birth account material for the register-and-accept path (the email comes from the invite). No display
+/** Cold-birth account material for the register-and-accept path (the email comes from the invite, or for a link invite
+ *  from the request, ADR 0129 decision 2). No display
  *  name — identity is the per-tenant `username` (threaded separately) + the sealed name set later (ADR 0023). */
 data class NewAccount(
     val suiteId: String,
@@ -88,8 +90,10 @@ sealed interface PreviewOutcome {
         val tenantId: String,
         val tenantName: String,
         val domain: String,
-        val ownerEmail: String,
-        val hasAccount: Boolean,
+        /** The invited email — null for a link invite, bound to nobody (ADR 0129 decision 2). */
+        val ownerEmail: String?,
+        /** Whether [ownerEmail] has an account — null with it. */
+        val hasAccount: Boolean?,
         val role: String,
         /** An OWNER invite into an ACTIVE tenant (ADR 0101 decision 9): accepted by [TenantAcceptHandler.acceptOwnership]. */
         val handover: Boolean,
@@ -105,6 +109,8 @@ sealed interface PreviewOutcome {
     ) : PreviewOutcome
     data object NotFound : PreviewOutcome, HttpFailure by httpFailure("invite_not_found", FailureStatus.NOT_FOUND)
     data object NoLongerValid : PreviewOutcome, HttpFailure by httpFailure("invite_no_longer_valid", FailureStatus.GONE)
+    /** The invite was consumed by an accept (ADR 0129 decision 6): whoever opens a link someone else took first can tell. */
+    data object Redeemed : PreviewOutcome, HttpFailure by httpFailure("invite_redeemed", FailureStatus.GONE)
 }
 
 sealed interface AcceptOutcome {
@@ -119,6 +125,8 @@ sealed interface AcceptOutcome {
     data object RecipientKeyNotCurrent : AcceptOutcome, HttpFailure by Failures.recipientKeyNotCurrent
     data object StaleEpoch : AcceptOutcome, HttpFailure by Failures.staleEpoch
     data object InviteChanged : AcceptOutcome, HttpFailure by inviteChanged
+    /** A link invite's holder is already a member of the tenant it admits to (ADR 0129 decision 2) — nothing spent. */
+    data object AlreadyMember : AcceptOutcome, HttpFailure by Failures.alreadyMember
 }
 
 /** Result of a member accepting an owner invite into an ACTIVE tenant (`acceptTenantOwnership`, ADR 0101 decision 9). */
@@ -142,6 +150,9 @@ sealed interface RegisterAcceptOutcome {
     data object RecipientKeyNotCurrent : RegisterAcceptOutcome, HttpFailure by Failures.recipientKeyNotCurrent
     data object StaleEpoch : RegisterAcceptOutcome, HttpFailure by Failures.staleEpoch
     data object InviteChanged : RegisterAcceptOutcome, HttpFailure by inviteChanged
+    /** The request's `email` does not fit the invite (ADR 0129 decision 2): absent for a link invite, which requires it,
+     *  or present for an invite bound to an email, which takes that one. */
+    data object KindEmailMismatch : RegisterAcceptOutcome, HttpFailure by httpFailure("invite_kind_email_mismatch", FailureStatus.UNPROCESSABLE)
 }
 
 /**
@@ -162,20 +173,28 @@ class TenantAcceptHandler(
 ) {
     private val log = Logger.getLogger(TenantAcceptHandler::class.java)
 
+    /**
+     * What an invite holder is shown before accepting. A suspended tenant's invite answers as a dead one whatever its own
+     * state (uc.spaces.scope-access A4); otherwise a consumed invite is [PreviewOutcome.Redeemed] (ADR 0129 decision 6),
+     * every other dead one [PreviewOutcome.NoLongerValid].
+     */
     @Transactional
     fun preview(bootstrapSecret: String): PreviewOutcome {
         val invite = store.findInviteByTokenHash(Tokens.hash(bootstrapSecret)) ?: return PreviewOutcome.NotFound
-        if (!isLive(invite)) return PreviewOutcome.NoLongerValid
         val tenant = store.findTenant(invite.tenantId) ?: return PreviewOutcome.NotFound
         if (!access.isTenantLive(tenant.id)) return PreviewOutcome.NoLongerValid
-        // The invited email is the invite's own — for a MEMBER invite it differs from the tenant owner's.
+        if (!isLive(invite)) {
+            return if (invite.status == TenantInviteEntity.CONSUMED) PreviewOutcome.Redeemed else PreviewOutcome.NoLongerValid
+        }
+        // The invited email is the invite's own — for a MEMBER invite it differs from the tenant owner's; a link invite
+        // has none, and the holder chooses between registering and signing in.
         val served = invite.takeIf { it.role == TenantInviteEntity.MEMBER && it.invitePublicKey != null }
         return PreviewOutcome.Found(
             tenantId = tenant.id,
             tenantName = tenant.name,
             domain = tenant.domain,
             ownerEmail = invite.ownerEmail,
-            hasAccount = accounts.findByEmail(invite.ownerEmail) != null,
+            hasAccount = invite.ownerEmail?.let { accounts.findByEmail(it) != null },
             role = invite.role,
             handover = invite.role == TenantInviteEntity.OWNER && tenant.status == TenantEntity.ACTIVE,
             invite = served,
@@ -237,7 +256,9 @@ class TenantAcceptHandler(
         // self-grant below is checked against the identity it holds, and no rotation of this account can publish another
         // between that check and this commit (ADR 0111 decision 10).
         val caller = accounts.lock(userId) ?: return AcceptOutcome.NotInvitedOwner
-        if (caller.email != invite.ownerEmail) return AcceptOutcome.NotInvitedOwner
+        // An invite bound to an address admits only that address; a link invite is bound to nobody (ADR 0129 decision 2).
+        val boundTo = invite.ownerEmail
+        if (boundTo != null && caller.email != boundTo) return AcceptOutcome.NotInvitedOwner
 
         return if (invite.role == TenantInviteEntity.MEMBER) {
             if (!access.isTenantLive(tenant.id)) return AcceptOutcome.NoLongerValid
@@ -246,6 +267,9 @@ class TenantAcceptHandler(
             val current = store.lockTenantScope(tenant.id) ?: return AcceptOutcome.NotFound
             store.refreshInvite(invite)
             if (!isLive(invite)) return AcceptOutcome.NoLongerValid
+            // A link admits anyone but a member: read under the tenant lock a removal and every join take, and refused
+            // before the spend, so the link stays good for the person it was meant for.
+            if (boundTo == null && store.belongsToTenant(userId, tenant.id)) return AcceptOutcome.AlreadyMember
             when (refusal(join, invite, userId, caller.identityPublicKey, current)) {
                 JoinRefusal.MISSING -> return AcceptOutcome.MissingGrant
                 JoinRefusal.PROOF_INVALID -> return AcceptOutcome.InviteProofInvalid
@@ -273,9 +297,10 @@ class TenantAcceptHandler(
                 store.joinAsMember(tenant.id, userId, j.selfGrant, j.epoch)
                 profiles.create(userId, tenant.id, username, name, avatar, j.joinRecord, signer)
             }
-            // A member invite only ever travels by mail (ADR 0055 §2), so redeeming it proves the mailbox — keyed on
-            // the invite's ROLE, never on a delivery value (ADR 0074 Decision 2). Every MEMBER sub-branch above.
-            caller.confirmAddress(invite.ownerEmail)
+            // A mailed member invite's token reached the mailbox, so redeeming it proves the address — keyed on the
+            // invite having been MAILED, never on a delivery value (ADR 0074 Decision 2, ADR 0129 decision 4). A link
+            // invite proves nothing: the account's confirmation is left as it was. Every MEMBER sub-branch above.
+            if (boundTo != null) caller.confirmAddress(boundTo)
             AcceptOutcome.Activated(tenant.id)
         } else {
             val b = birth ?: return AcceptOutcome.MissingGrant
@@ -298,22 +323,27 @@ class TenantAcceptHandler(
      *  Role-branched like [accept]: OWNER activates (grant required), MEMBER joins with its self-grant. */
     fun registerAndAccept(
         bootstrapSecret: String, userId: String, account: NewAccount, birth: OwnerBirth?, join: MemberJoin?, username: String,
-        name: SealedValue?, avatar: SealedValue?, profileEpoch: Int?,
+        name: SealedValue?, avatar: SealedValue?, profileEpoch: Int?, email: String? = null,
     ): RegisterAcceptOutcome {
         if (profileSealUnstated(join, name, avatar, profileEpoch)) return RegisterAcceptOutcome.MissingGrant
         return createOrConflict(conflict = { if (handleLost(userId, bootstrapSecret, username)) RegisterAcceptOutcome.UsernameTaken else null }) {
-            registerAndAcceptOnce(bootstrapSecret, userId, account, birth, join, username, name, avatar, profileEpoch)
+            registerAndAcceptOnce(bootstrapSecret, userId, account, birth, join, username, name, avatar, profileEpoch, email)
         }
     }
 
     private fun registerAndAcceptOnce(
         bootstrapSecret: String, userId: String, account: NewAccount, birth: OwnerBirth?, join: MemberJoin?, username: String,
-        name: SealedValue?, avatar: SealedValue?, profileEpoch: Int?,
+        name: SealedValue?, avatar: SealedValue?, profileEpoch: Int?, email: String?,
     ): RegisterAcceptOutcome {
         val invite = store.findInviteByTokenHash(Tokens.hash(bootstrapSecret)) ?: return RegisterAcceptOutcome.NotFound
         if (!isLive(invite)) return RegisterAcceptOutcome.NoLongerValid
         val tenant = store.findTenant(invite.tenantId) ?: return RegisterAcceptOutcome.NotFound
         if (!access.isTenantLive(tenant.id)) return RegisterAcceptOutcome.NoLongerValid
+        // The new account's address: the one the invite is bound to, or — for a link invite, bound to nobody — the one its
+        // holder typed (ADR 0129 decision 2). Exactly one of the two, else nothing is born.
+        val boundTo = invite.ownerEmail
+        if ((boundTo == null) == (email == null)) return RegisterAcceptOutcome.KindEmailMismatch
+        val address = boundTo ?: normalizeEmail(email!!)
 
         val member = invite.role == TenantInviteEntity.MEMBER
         if (!member && birth == null) return RegisterAcceptOutcome.MissingGrant
@@ -342,18 +372,19 @@ class TenantAcceptHandler(
         // Who rooted a member's join (ADR 0111 decision 21): read before the spend, which drops the invite's signer.
         val signer = invite.signerUserId
         if (!store.consumeLiveInvite(invite.id)) return RegisterAcceptOutcome.NoLongerValid
-        // The account is born for the INVITED email (a MEMBER invite's email differs from the tenant owner's).
+        // The account is born for the INVITED email (a MEMBER invite's email differs from the tenant owner's), or a link
+        // invite's typed one.
         // An owner invite into an ACTIVE tenant goes to a member (ADR 0101 decision 9), never to a new account: a tenant
         // is born only from PENDING (a second birth would collide on the tenant scope's id).
         if (!member && tenant.status != TenantEntity.PENDING) return unspend(RegisterAcceptOutcome.NoLongerValid)
-        if (accounts.findByEmail(invite.ownerEmail) != null) return unspend(RegisterAcceptOutcome.EmailTaken)
+        if (accounts.findByEmail(address) != null) return unspend(RegisterAcceptOutcome.EmailTaken)
         if (profiles.usernameTaken(tenant.id, username)) return unspend(RegisterAcceptOutcome.UsernameTaken)
         // The client-minted account id (ADR 0072): the optional sealed real name is bound to (tenant scope, it).
         if (VeyqUser.findById(userId) != null) return unspend(RegisterAcceptOutcome.IdTaken)
 
         accounts.createAccount(
             userId = userId,
-            email = invite.ownerEmail,
+            email = address,
             serverRole = ServerRoles.MEMBER,
             suiteId = account.suiteId,
             identityPublicKey = account.identityPublicKey,
@@ -364,9 +395,9 @@ class TenantAcceptHandler(
         )
         if (member) {
             store.joinAsMember(tenant.id, userId, join!!.selfGrant, join.epoch)
-            // Mail-only by construction (ADR 0055 §2): the redeemed token is the mailbox proof (ADR 0074 Decision 2).
-            // The OWNER branch is the copy-link and stamps nothing.
-            VeyqUser.findById(userId)!!.confirmAddress(invite.ownerEmail)
+            // A mailed invite's redeemed token is the mailbox proof (ADR 0074 Decision 2). A link invite's is not: the
+            // account starts unconfirmed (ADR 0129 decision 4). The OWNER branch is the copy-link and stamps nothing.
+            if (boundTo != null) VeyqUser.findById(userId)!!.confirmAddress(boundTo)
         } else {
             store.activate(tenant.id, userId, birth!!.grant)
         }

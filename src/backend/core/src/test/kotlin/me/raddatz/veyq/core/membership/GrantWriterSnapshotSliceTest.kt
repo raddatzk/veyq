@@ -152,6 +152,18 @@ class GrantWriterSnapshotSliceTest {
             .`when`().post("/api/tenants/$tenantId/member-invites").then().statusCode(201)
 
         assertEquals(owner to key, inviteSnapshotOf(invite.inviteId))
+
+        // The same writer mints a link invite and re-issues one (ADR 0129 decisions 1-2): the owner's key again.
+        val link = TestInviteKey()
+        given().header("Authorization", bearer(owner)).contentType(ContentType.JSON)
+            .body("""{${TestGrants.memberInviteLinkJson(tenantId, link)}}""")
+            .`when`().post("/api/tenants/$tenantId/member-invite-links").then().statusCode(201)
+        assertEquals(owner to key, inviteSnapshotOf(link.inviteId))
+        val reissued = TestInviteKey()
+        given().header("Authorization", bearer(owner)).contentType(ContentType.JSON)
+            .body("""{${TestGrants.memberInviteLinkJson(tenantId, reissued)}}""")
+            .`when`().post("/api/tenants/$tenantId/member-invite-links/${link.inviteId}/reissue").then().statusCode(200)
+        assertEquals(owner to key, inviteSnapshotOf(reissued.inviteId))
     }
 
     @Test

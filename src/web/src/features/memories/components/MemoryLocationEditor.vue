@@ -200,7 +200,7 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-  <VeyqDialog :visible="true" :header="t('memory.place.title')" @update:visible="emit('close')">
+  <VeyqDialog :visible="true" :style="{ minWidth: 'min(33rem, calc(100vw - 2rem))' }" :header="t('memory.place.title')" @update:visible="emit('close')">
     <form class="veyq-form memory-location-editor" @submit.prevent="save">
       <div v-if="withMap" class="memory-location-mapwrap">
         <MemoryMap
@@ -281,8 +281,9 @@ onBeforeUnmount(() => {
 </template>
 
 <style scoped>
+/* The box carries the width (`:style` on the VeyqDialog) - set here on the content, a vw width overflowed the box
+   on a phone, since the box keeps its padding inside 100vw - 2rem. */
 .memory-location-editor {
-  min-width: min(480px, 90vw);
   display: grid;
   gap: 0.8rem;
 }

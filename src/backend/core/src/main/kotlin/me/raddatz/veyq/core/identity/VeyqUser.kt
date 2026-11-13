@@ -77,9 +77,9 @@ class VeyqUser : PanacheEntityBase {
      * [email] (ADR 0074 Decision 1: the record is bound to the address it confirmed). Returns whether it stamped.
      *
      * The one writer of [emailConfirmedAt], called in the same transaction as each of the events that prove it
-     * (Decision 2): a redeemed MEMBER invite, a completed reset, a confirmation link, and a confirmed change of the
-     * address (Decision 8: `EmailChangeHandler` sets the new [email] and stamps it in one write — the link proved
-     * it). Any other path that changes [email] must clear the stamp in the same write.
+     * (Decision 2): a redeemed **mailed** MEMBER invite (a link invite proves no address, ADR 0129 decision 4), a
+     * completed reset, a confirmation link, and a confirmed change of the address (Decision 8: `EmailChangeHandler` sets
+     * the new [email] and stamps it in one write — the link proved it). Any other path that changes [email] must clear the stamp in the same write.
      */
     fun confirmAddress(address: String, at: Instant = Instant.now()): Boolean {
         if (normalizeEmail(address) != email) return false

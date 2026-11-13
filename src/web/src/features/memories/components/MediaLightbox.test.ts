@@ -124,6 +124,26 @@ function memberProps(memoryKey: Uint8Array) {
     memoryNode: { id: NODE_ID, epoch: 0 },
   }
 }
+/** Seed `n` image media and return the listed items + the live fake store. */
+async function seedImages(memoryKey: Uint8Array, n: number) {
+  const store = galleryFakeStore()
+  fakeApi(mediaApi, store.api)
+  fakeApi(blobApi, store.blob)
+  vi.stubGlobal('fetch', store.fetchStub)
+  for (let i = 0; i < n; i++) {
+    await addMedia(SCOPE_ID, NODE_ID, memoryKey, { blob: new Blob([new Uint8Array(8).fill(i + 1) as BlobPart]), mediaType: 'image/png' }, stubDeriver())
+  }
+  return { store, items: await listMedia(SCOPE_ID, NODE_ID) }
+}
+
+/** The member's props with the preview loader recorded, and how often it read a medium's preview. */
+function recordedPreview(memoryKey: Uint8Array) {
+  const p = memberProps(memoryKey)
+  const previewLoader = vi.fn(p.previewLoader)
+  const readsOf = (item: MediaItem) => previewLoader.mock.calls.filter(([it]) => it.mediaId === item.mediaId).length
+  return { ...p, previewLoader, readsOf }
+}
+
 /** What a share guest's source leaves out: no media-meta door, no EXIF, no delete of this item. */
 const GUEST_WRITES = { mediaMeta: undefined, exifLoader: undefined, canDelete: () => false }
 
@@ -214,9 +234,12 @@ describe('MediaLightbox (preview, prev/next, download)', () => {
     expect(wrapper.emitted('setCover')).toBeFalsy()
   })
 
-  it('pages prev/next through the grid order, fetching the next item’s preview, and clamps at the ends', async () => {
+  it('pages prev/next through the grid order, reading the next item’s preview ahead, and clamps at the ends', async () => {
     const memoryKey = v1.randomBytes(32)
     const { store, items } = await seedTwo(memoryKey)
+    store.blob.presignBlobDownloads.mockClear()
+    const presigned = () =>
+      store.blob.presignBlobDownloads.mock.calls.flatMap((c) => c[0].blobDownloadsBatchRequest.items.map((it) => it.blobId))
 
     const wrapper = mountLightbox(memoryKey, items, 0)
     await flushPromises()
@@ -224,18 +247,138 @@ describe('MediaLightbox (preview, prev/next, download)', () => {
     // at the first item: previous is disabled (clamp), next enabled
     expect(wrapper.find('.lightbox-nav-previous').attributes('disabled')).toBeDefined()
     expect(wrapper.find('.lightbox-nav-next').attributes('disabled')).toBeUndefined()
+    // media 1: PREVIEW=up-5 → read ahead once media 0's preview is shown, never its original (up-3)
+    expect(presigned()).toContain(store.blobIdOfUpload('up-5'))
+    expect(presigned()).not.toContain(store.blobIdOfUpload('up-3'))
 
     store.blob.presignBlobDownloads.mockClear()
     await wrapper.find('.lightbox-nav-next').trigger('click')
     await flushPromises()
 
-    // media 1: PREVIEW=up-5 → next paged to it; now next is disabled at the end
-    const presigned = store.blob.presignBlobDownloads.mock.calls.flatMap(
-      (c) => c[0].blobDownloadsBatchRequest.items.map((it) => it.blobId),
-    )
-    expect(presigned).toContain(store.blobIdOfUpload('up-5'))
+    // next paged to it, shown from what was read ahead; now next is disabled at the end
+    expect(presigned(), 'nothing read again').toEqual([])
+    expect(wrapper.find('.media-lightbox-stage img').attributes('src')).toMatch(/^blob:/)
     expect(wrapper.find('.media-lightbox-title small').text()).toBe(t('media.itemPosition', { index: 2, count: 2 }))
     expect(wrapper.find('.lightbox-nav-next').attributes('disabled')).toBeDefined()
+  })
+
+  // The previews read while the lightbox is open stay in memory (`../previewCache.ts`): a step back is instant, the
+  // neighbours of a shown item are read ahead, and a block, a removal or a new key drops what is held.
+  describe('the previews it holds while open', () => {
+    /** The shown stage: an image, the loading state, or neither yet. */
+    const stage = (w: ReturnType<typeof mountLightbox>) => {
+      const img = w.find('.media-lightbox-stage img')
+      return { src: img.exists() ? img.attributes('src') ?? null : null, loading: w.find('.media-original-loading').exists() }
+    }
+    const position = (w: ReturnType<typeof mountLightbox>) => w.find('.media-lightbox-title small').text()
+
+    it('a step back shows the item at once: no second read, no loading state', async () => {
+      const memoryKey = v1.randomBytes(32)
+      const { items } = await seedImages(memoryKey, 3)
+      const props = recordedPreview(memoryKey)
+      const w = mountLightbox(memoryKey, items, 0, props)
+      await flushPromises()
+      await w.find('.lightbox-nav-next').trigger('click')
+      await flushPromises()
+      expect(position(w)).toBe(t('media.itemPosition', { index: 2, count: 3 }))
+
+      // Every node the stage gains on the way back: the loading state must not be among them, not even for a microtask.
+      const added: Element[] = []
+      let srcChanges = 0
+      const observer = new MutationObserver((records) => {
+        for (const r of records) {
+          if (r.type === 'attributes') srcChanges++
+          r.addedNodes.forEach((n) => n instanceof Element && added.push(n))
+        }
+      })
+      observer.observe(w.element, { childList: true, subtree: true, attributes: true, attributeFilter: ['src'] })
+      await w.find('.lightbox-nav-previous').trigger('click')
+      await flushPromises()
+      observer.disconnect()
+      expect(position(w)).toBe(t('media.itemPosition', { index: 1, count: 3 }))
+      expect(srcChanges + added.filter((n) => n.matches('img')).length, 'control: the observer sees the stage change').toBeGreaterThan(0)
+      expect(added.filter((n) => n.matches('.media-original-loading')), 'no loading state').toEqual([])
+      expect(stage(w)).toEqual({ src: expect.stringMatching(/^blob:/), loading: false })
+      expect(props.readsOf(items[0]), 'read once').toBe(1)
+      w.unmount()
+    })
+
+    it("reads both neighbours ahead, after the shown item's own preview", async () => {
+      const memoryKey = v1.randomBytes(32)
+      const { items } = await seedImages(memoryKey, 4)
+      const props = recordedPreview(memoryKey)
+      const w = mountLightbox(memoryKey, items, 1, props)
+      await flushPromises()
+      expect(items.map(props.readsOf), 'the shown one and its two neighbours, nothing further').toEqual([1, 1, 1, 0])
+      expect(props.previewLoader.mock.calls[0][0].mediaId, 'the shown one first').toBe(items[1].mediaId)
+      w.unmount()
+    })
+
+    it('reads nothing ahead of a blocked neighbour (every byte of it answers 451)', async () => {
+      const memoryKey = v1.randomBytes(32)
+      const { items } = await seedImages(memoryKey, 2)
+      const props = recordedPreview(memoryKey)
+      const w = mountLightbox(memoryKey, [items[0], { ...items[1], blocked: true }], 0, props)
+      await flushPromises()
+      expect(props.readsOf(items[0]), 'control: the shown one is read').toBe(1)
+      expect(props.readsOf(items[1])).toBe(0)
+      w.unmount()
+    })
+
+    it('a block drops the bytes held for the medium: after the lift it is read again', async () => {
+      const memoryKey = v1.randomBytes(32)
+      const { items } = await seedImages(memoryKey, 2)
+      const held = reactive(items.map((it) => ({ ...it })))
+      const props = recordedPreview(memoryKey)
+      const w = mountLightbox(memoryKey, held, 0, props)
+      await flushPromises()
+      expect(props.readsOf(items[1]), 'control: read ahead').toBe(1)
+
+      held[1].blocked = true
+      await flushPromises()
+      delete held[1].blocked
+      await flushPromises()
+      await w.find('.lightbox-nav-next').trigger('click')
+      expect(stage(w).loading, 'nothing held for it any more').toBe(true)
+      await flushPromises()
+      expect(props.readsOf(items[1])).toBe(2)
+      expect(stage(w).src).toMatch(/^blob:/)
+      w.unmount()
+    })
+
+    it('a medium that leaves the list loses its bytes: restored, it is read again', async () => {
+      const memoryKey = v1.randomBytes(32)
+      const { items } = await seedImages(memoryKey, 2)
+      const held = reactive(items.map((it) => ({ ...it })))
+      const props = recordedPreview(memoryKey)
+      const w = mountLightbox(memoryKey, held, 0, props)
+      await flushPromises()
+      expect(props.readsOf(items[1]), 'control: read ahead').toBe(1)
+
+      const [gone] = held.splice(1, 1) // trashed, then restored by the gallery's poll
+      await flushPromises()
+      held.push(gone)
+      await flushPromises()
+      await w.find('.lightbox-nav-next').trigger('click')
+      await flushPromises()
+      expect(props.readsOf(items[1])).toBe(2)
+      w.unmount()
+    })
+
+    it('a new key drops everything held under the old one', async () => {
+      const memoryKey = v1.randomBytes(32)
+      const { items } = await seedImages(memoryKey, 2)
+      const props = recordedPreview(memoryKey)
+      const w = mountLightbox(memoryKey, items, 0, props)
+      await flushPromises()
+      expect(props.readsOf(items[1]), 'control: read ahead').toBe(1)
+
+      await w.setProps({ memoryKey: new Uint8Array(memoryKey) }) // the same bytes, another key object: a re-opened chain
+      await w.find('.lightbox-nav-next').trigger('click')
+      await flushPromises()
+      expect(props.readsOf(items[1])).toBe(2)
+      w.unmount()
+    })
   })
 
   it('revokes the preview object URL on navigation and on close', async () => {
@@ -1511,27 +1654,25 @@ describe('MediaLightbox — slideshow (cr-lightbox-zoom-slideshow)', () => {
     w.unmount()
   })
 
-  it('fetches one preview ahead, shows it without a second fetch, and drops it when it is not shown', async () => {
+  it('stays one preview ahead and shows each without a second fetch, paused or not', async () => {
     const memoryKey = v1.randomBytes(32)
     const { items } = await seed(memoryKey, ['image/png', 'image/jpeg', 'image/png'])
     const props = recorded(memoryKey)
     const w = mountLightbox(memoryKey, items, 0, props)
     await flushPromises()
     const fetchedFor = (i: number) => props.previewLoader.mock.calls.filter(([it]) => it.mediaId === items[i].mediaId).length
-    expect([fetchedFor(0), fetchedFor(1), fetchedFor(2)]).toEqual([1, 0, 0])
+    expect([fetchedFor(0), fetchedFor(1), fetchedFor(2)], 'the next one, ahead, only one').toEqual([1, 1, 0])
     await press(w)
-    expect(fetchedFor(1), 'the next one, ahead').toBe(1)
-    expect(fetchedFor(2), 'only one ahead').toBe(0)
     await advance(5000)
     expect(position(w)).toBe(at(2))
     expect(w.find('.media-lightbox-stage img').attributes('src')).toBeTruthy()
-    expect(fetchedFor(1), 'shown from the prefetch').toBe(1)
+    expect(fetchedFor(1), 'shown from the read ahead').toBe(1)
     expect(fetchedFor(2), 'and the next one ahead').toBe(1)
-    window.dispatchEvent(new KeyboardEvent('keydown', { key: 'x' })) // pause: the prefetch of the third is dropped
+    window.dispatchEvent(new KeyboardEvent('keydown', { key: 'x' })) // pause: what was read ahead stays
     await flushPromises()
     await w.find('.lightbox-nav-next').trigger('click')
     await flushPromises()
-    expect(fetchedFor(2), 'nothing kept for an item that was not on screen').toBe(2)
+    expect(fetchedFor(2), 'kept while the lightbox is open').toBe(1)
     w.unmount()
   })
 

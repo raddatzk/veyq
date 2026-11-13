@@ -43,8 +43,9 @@ data class TenantView(
  *  present only on a freshly-minted invite (so the owner can copy the invite link) — never on a list read. */
 data class InviteView(val ownerEmail: String, val status: String, val expiresAt: Instant, val bootstrapSecret: String? = null)
 
-/** A pending member invite in the owner-facing list (cr-0082) — metadata only, never the secret. */
-data class PendingInviteRow(val inviteId: String, val email: String, val status: String, val expiresAt: Instant)
+/** A pending member invite in the owner-facing list (cr-0082) — metadata only, never the secret. [email] is null for a
+ *  link invite, bound to nobody (ADR 0129 decision 2). */
+data class PendingInviteRow(val inviteId: String, val email: String?, val status: String, val expiresAt: Instant)
 
 /**
  * A member invite's key and grant as the owner's client built them (ADR 0111 decisions 1-2) — what
@@ -250,20 +251,48 @@ class TenantStore(
     fun isOwner(userId: String, tenantId: String): Boolean = membership.isTenantOwner(userId, tenantId)
 
     /**
-     * Mint a single-use MEMBER invite on an active tenant — a placeholder member holding [key] (ADR 0111 decisions 1-2)
-     * — superseding any prior ACTIVE invite to that email (whose key and grant go with it). Refused, nothing written,
+     * Mint a single-use MEMBER invite on an active tenant — a placeholder member holding [key] (ADR 0111 decisions 1-2).
+     * A **mailed** invite ([email] given) supersedes any prior ACTIVE invite to that email (whose key and grant go with
+     * it); a **link** invite ([email] null, ADR 0129 decision 2) is bound to nobody and supersedes none, so several may be
+     * open at once — and a mailed mint never supersedes one, since none has its address. Refused, nothing written,
      * when the grant is not of the tenant scope's current epoch, read under the lock a rotation takes: a rotation that
      * committed in between could not have carried it ([MintMemberInvite.StaleEpoch]); and when the client-minted id is
      * taken. The invite's granter is its signer, the caller.
      */
     @Transactional
-    fun mintMemberInvite(tenantId: String, email: String, tokenHash: String, expiresAt: Instant, key: MemberInviteKey): MintMemberInvite {
+    fun mintMemberInvite(tenantId: String, email: String?, tokenHash: String, expiresAt: Instant, key: MemberInviteKey): MintMemberInvite {
+        refusedMint(tenantId, key)?.let { return it }
+        if (email != null) {
+            TenantInviteEntity.update(
+                "status = ?1, ${TenantInviteEntity.INVITE_KEY_DROPPED} where tenantId = ?2 and ownerEmail = ?3 and status = ?4",
+                TenantInviteEntity.SUPERSEDED, tenantId, email, TenantInviteEntity.ACTIVE,
+            )
+        }
+        return persistMemberInvite(tenantId, email, tokenHash, expiresAt, key)
+    }
+
+    /**
+     * Re-issue a pending **link** invite (ADR 0129 decision 2): end [replacing] — a compare-and-set like [revokeInvite],
+     * its key and grant dropped in the same statement — and mint the new link invite [key] holds, in one transaction. The
+     * mint's own refusals come first, so a refused re-issue writes nothing and the old link still stands. Null when
+     * [replacing] is no longer ACTIVE (a revoke or the expiry sweep took it since the caller read it): nothing written.
+     */
+    @Transactional
+    fun reissueLinkInvite(tenantId: String, replacing: String, tokenHash: String, expiresAt: Instant, key: MemberInviteKey): MintMemberInvite? {
+        refusedMint(tenantId, key)?.let { return it }
+        if (!revokeInvite(replacing)) return null
+        return persistMemberInvite(tenantId, null, tokenHash, expiresAt, key)
+    }
+
+    /** Why a member invite's mint is refused before anything is written, or null when it may go ahead: its grant is not
+     *  of the tenant scope's current epoch (read under the rotation's lock), or its client-minted id is taken. */
+    private fun refusedMint(tenantId: String, key: MemberInviteKey): MintMemberInvite? {
         if (ScopeEntity.lockRow(tenantId)?.currentEpoch != key.epoch) return MintMemberInvite.StaleEpoch
         if (TenantInviteEntity.findById(key.inviteId) != null) return MintMemberInvite.IdTaken
-        TenantInviteEntity.update(
-            "status = ?1, ${TenantInviteEntity.INVITE_KEY_DROPPED} where tenantId = ?2 and ownerEmail = ?3 and status = ?4",
-            TenantInviteEntity.SUPERSEDED, tenantId, email, TenantInviteEntity.ACTIVE,
-        )
+        return null
+    }
+
+    private fun persistMemberInvite(tenantId: String, email: String?, tokenHash: String, expiresAt: Instant, key: MemberInviteKey): MintMemberInvite {
         TenantInviteEntity().apply {
             id = key.inviteId
             this.tenantId = tenantId

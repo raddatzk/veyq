@@ -109,7 +109,8 @@ Operator-blind API service. Loaded in addition to the root `CLAUDE.md` when work
   — a `./gradlew wrapper` that rewrites the JAR owes it a line, cross-checked as its header says). A dependency, plugin or Quarkus bump — **or a new
   module**: a project that applies `io.quarkus` resolves configurations of its own, and the first one resolved five
   POMs no other project did (`:core`'s `quarkusGenerateAppModel`, 2026-10-04) — therefore regenerates
-  the metadata by hand (Dependabot is remembered not to): `GRADLE_USER_HOME=$(mktemp -d) ./gradlew
+  the metadata by hand (Dependabot is remembered not to; on its pull requests `.github/workflows/dependabot-follow*.yml`
+  runs this recipe and the prune below, `.github/dependabot.yml`'s header says how): `GRADLE_USER_HOME=$(mktemp -d) ./gradlew
   --write-verification-metadata sha256 help check quarkusBuild pitest`. **The empty Gradle home is the point** —
   a warm cache hides what a cold one fetches: the first write, from a warm cache, missed
   `okhttp-bom-5.3.2.module`, which every clean build (the Dockerfile's, a fresh CI runner's) resolves. Those four

@@ -323,26 +323,32 @@ acceptanceCriteria:
   - id: the-locked-entry-adds-no-shell-route
     text: >-
       **Both** routeless entries this feature puts on the sign-in form — *sign in with a QR code*, beside
-      uc.account.sessions E3's other ways out, and the *add a device* join the same scan control dispatches to —
+      uc.account.sessions E3's other ways out, and the *add a device* join, *scan a code from another device* —
       read nothing sealed and add no route that is session-gated but not unlock-gated. One property, two
       arrivals: the criterion was first written about the QR direction alone, and the second direction reaches
       the same card, so covering only one would leave the other's regressions unowned. The structural half is
       the existing route-gate guard. What a test owes, per entry: that it is offered on the locked card, that
       choosing it attempts no unlock, and that every path already on that card still behaves exactly as it did
-      — E3's own two ways out **and** the Emergency-Kit scan, which is what a shared, dispatching scan control
-      most plausibly breaks. **The QR entry owes one more, and it is a gate rather than a behaviour: it must be
-      offered on a device with NO camera.** That device only displays a code; the camera it needs is on the
-      other one, so a `scanSupported` gate copied from the scan control beside it would withhold the entry from
-      exactly the hardware the direction exists for (ADR 0059 §1 — no direction is the camera one). It is
-      asserted against the camera-gated scan control in that same state as the control, because "the button is
-      there" is satisfied equally well by a button that is always there and by one that is correctly ungated.
+      — E3's own two ways out **and** the Emergency-Kit scan of the Secret-Key field beside them. The join has
+      its own button and its own scanner, which takes an *add a device* code and nothing else, and the
+      Secret-Key field's camera takes a kit and nothing else (owner 2026-11-12: a pairing code once rode on that
+      field's camera, a way in hidden behind an icon of a field about something else, and gone wherever the
+      field is hidden). So the join owes being offered where the Secret-Key field is not. **The QR entry owes
+      one more, and it is a gate rather than a behaviour: it must be offered on a device with NO camera.** That
+      device only displays a code; the camera it needs is on the other one, so a `scanSupported` gate copied
+      from the join entry beside it would withhold the entry from exactly the hardware the direction exists for
+      (ADR 0059 §1 — no direction is the camera one). It is asserted against the camera-gated join entry in
+      that same state as the control, because "the button is there" is satisfied equally well by a button
+      that is always there and by one that is correctly ungated.
     coverage:
       # The structural half is `scripts/validate_shell_route_gate.py` (neither entry adds a route). The
       # behavioural half is the sign-in form's suite, per entry: each is offered on the locked card, choosing it
-      # attempts no login or unlock, and the card's existing paths still behave — the Emergency-Kit scan through
-      # the widened dispatch, and E3's ways out. The QR entry is asserted with and without a camera against the
-      # camera-gated scan control in the same state, so an always-there button and a correctly ungated one are
-      # told apart.
+      # attempts no login or unlock, and the card's existing paths still behave — the Emergency-Kit scan, and
+      # E3's ways out. Each scanner's predicate is asserted on its own: the join's takes `veyqpair:` and refuses a
+      # kit, a `veyqsignin:` code and a foreign QR; the Secret-Key field's refuses `veyqpair:`. The join is
+      # asserted offered where the Secret-Key field is hidden and absent beside a live session. The QR entry is
+      # asserted with and without a camera against the camera-gated join entry in the same state, so an
+      # always-there button and a correctly ungated one are told apart.
       web: { unit: [src/views/LoginView.test.ts] }
   - id: a-linked-device-inherits-the-marks
     text: >-

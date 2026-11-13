@@ -54,13 +54,15 @@ const router = createRouter({
     // so a member who hasn't accepted the tenant's current terms can ONLY accept or sign out — every attempt to
     // reach a `requiresUnlock` shell route bounces here (below). Not itself unlock-gated: it reads the active
     // tenant from `activeSpace` (set by the shell) and bounces to `/` if none is resolved yet.
-    { path: '/terms', name: 'terms', component: TermsAcceptView },
+    { path: '/terms', name: 'terms', component: TermsAcceptView, meta: { reading: true } },
+    // `meta.reading` (here and on the two pages below): a page of running legal text, which the public shell gives a
+    // reading measure instead of the sign-in card's narrow column (AppShell).
     // The operator section of the terms, public (ADR 0035 decision 6, DSA Art. 14(1)): no session, no gate — what every
     // space's terms carry after their own text, read by anyone. Its record passage is the anchor `#guest-write-record`.
-    { path: OPERATOR_TERMS_PATH, name: 'operator-terms', component: OperatorTermsView },
+    { path: OPERATOR_TERMS_PATH, name: 'operator-terms', component: OperatorTermsView, meta: { reading: true } },
     // The instance privacy notice, public on every tenant host (ADR 0035 decision 8, GDPR Art. 13 at collection): no
     // session, no gate, nothing recorded. Each passage is an anchor the places that collect link (`privacyLink`).
-    { path: PRIVACY_PATH, name: 'privacy-notice', component: PrivacyNoticeView },
+    { path: PRIVACY_PATH, name: 'privacy-notice', component: PrivacyNoticeView, meta: { reading: true } },
     // Public anonymous viewer share (uc.sharing.share-public-viewer, cr-0100). No session gate — an account-less
     // visitor opens ONE Memory read-only; the share key rides the #fragment (`/s/{shareId}#k=<K_share>`), resolved
     // + decrypted client-side. `layout: 'plain'` gives the gallery the full viewport (not the narrow public card).

@@ -10,7 +10,9 @@
 //     (purpose `invite-link`, bound to the tenant and the invite) holds the seed, the head of the owner's key chain when
 //     they signed and the owner's account, under `Argon2id(secret, salt)` — the secret a generated code (`mode` 1) or a
 //     password the owner chose (`mode` 2). The server mails the link and never sees the code, so the operator, who can
-//     guess offline, faces a 50-bit code behind Argon2id at the production profile.
+//     guess offline, faces a 50-bit code behind Argon2id at the production profile. A **link invite** (ADR 0129
+//     decision 1) is never mailed: the owner's client builds `#<token>.<sealed>.<code>` (`buildInviteFragment`), always
+//     with a generated code, and hands it over itself — the server sees neither the sealed part nor the code.
 //   - **The invite keeps its owner's grant as its anchor**: the owner's own grant of the tenant key at the anchor epoch
 //     (`E_a`), beside whatever grant a later rotation carried the invite with (ADR 0111 decision 19).
 //   - **The invitee checks before it trusts** (`checkInvite`): the bundle it derives from the seed must be the one the
@@ -215,13 +217,37 @@ export function parseSealedInviteLink(part: string): SealedInviteLink {
 export const openInviteLink = (address: InviteAddress, kek: Uint8Array, link: SealedInviteLink): InviteLinkPayload =>
   decodeInviteLinkPayload(open({ purpose: 'invite-link', ...address }, kek, link.sealed))
 
-/** The fragment the mailed link carries: the token alone (an owner invite) or `token.sealed` (a member invite). The
- *  token is base64url and so holds no `.`. */
-export function parseInviteFragment(fragment: string): { token: string; sealed: string | null } {
+/** An invite link's fragment, split: the token, the sealed part (a member invite) and the code (a link invite). */
+export type InviteFragment = { token: string; sealed: string | null; code: string | null }
+
+/**
+ * The fragment an invite link carries: the token alone (an owner invite), `token.sealed` (a mailed member invite) or
+ * `token.sealed.code` (a link invite, ADR 0129 decision 1). Token and sealed part are base64url and the code Crockford
+ * base32, so none holds a `.`. The code comes back canonical (`normalizeInviteCode`); one that is no code — or a code
+ * with no sealed part to open — is `null`, and the page then asks for it as for a mailed invite.
+ */
+export function parseInviteFragment(fragment: string): InviteFragment {
   const raw = fragment.startsWith('#') ? fragment.slice(1) : fragment
-  const dot = raw.indexOf('.')
-  if (dot < 0) return { token: raw, sealed: null }
-  return { token: raw.slice(0, dot), sealed: raw.slice(dot + 1) || null }
+  const first = raw.indexOf('.')
+  if (first < 0) return { token: raw, sealed: null, code: null }
+  const second = raw.indexOf('.', first + 1)
+  const sealed = (second < 0 ? raw.slice(first + 1) : raw.slice(first + 1, second)) || null
+  const code = second < 0 || sealed === null ? null : normalizeInviteCode(raw.slice(second + 1))
+  return { token: raw.slice(0, first), sealed, code }
+}
+
+/**
+ * A link invite's fragment, `token.sealed.code` (no `#`): what the owner's client hands over (ADR 0129 decision 1).
+ * Only a `code`-mode sealed part takes one — a password would ride the same link and add nothing — and the code is
+ * written canonical. Refuses an empty token or one that holds a `.`, which the parser would split wrong; the sealed
+ * part must parse (`parseSealedInviteLink`, which refuses a `.` as no base64url).
+ */
+export function buildInviteFragment(token: string, sealed: string, code: string): string {
+  if (token.length === 0 || token.includes('.')) throw new InviteLinkInvalid('token')
+  if (parseSealedInviteLink(sealed).mode !== 'code') throw new InviteLinkInvalid('mode')
+  const canonical = normalizeInviteCode(code)
+  if (canonical === null) throw new InviteLinkInvalid('code')
+  return `${token}.${sealed}.${canonical}`
 }
 
 // ── The invitee's checks ──────────────────────────────────────────────────────────────────────────────

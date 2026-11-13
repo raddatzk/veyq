@@ -55,7 +55,8 @@ export function acceptOwnership(bootstrapSecret: string): Promise<void> {
   return tenantsApi().acceptTenantOwnership({ acceptOwnershipRequest: { bootstrapSecret } })
 }
 
-/** Register a new account cold and accept in one step (public — the email comes from the invite). `username` is
+/** Register a new account cold and accept in one step (public — the email comes from the invite, or, for a link invite
+ *  bound to nobody, is the [email] its holder typed: ADR 0129 decision 2). `username` is
  *  the caller's per-tenant handle; `name` is the OPTIONAL real name sealed at join (ADR 0023) and `avatar` the OPTIONAL
  *  profile picture sealed alongside it (ADR 0084 decision 7), each under a fresh value key `K_tenant` wraps
  *  (`memberName.ts` `sealName`, `memberAvatar.ts` `sealAvatar`, ADR 0115) — every joiner holds `K_tenant` here, from the cold birth or its invite's grant. `birth` is set for an OWNER invite (cold-births the
@@ -69,11 +70,14 @@ export function registerAndAccept(
   name?: SealedMemberName,
   avatar?: SealedMemberAvatar,
   join?: MemberJoin,
+  email?: string,
 ): Promise<TenantActivatedWithUser> {
   return tenantsApi().registerAndAcceptTenantInvite({
     registerAndAcceptRequest: {
       bootstrapSecret,
       userId,
+      // A link invite is bound to nobody: the address is the one its holder typed. An invite bound to one carries none.
+      ...(email !== undefined ? { email } : {}),
       username,
       account: {
         suiteId: material.suiteId,

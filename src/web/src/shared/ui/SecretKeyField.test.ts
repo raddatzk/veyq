@@ -202,41 +202,26 @@ describe('SecretKeyField (uc.account.unlock § One Secret-Key control)', () => {
     }
   })
 
-  it('hands back a scanned payload it does not recognise, and keeps the caller’s predicate', async () => {
-    const accepts = (text: string) => text.startsWith('veyqkit:') || text.startsWith('veyqpair:')
-    const w = mountField({ accepts })
+  // Owner 2026-11-12: this field's camera reads an Emergency Kit and nothing else. A pairing code used to come
+  // through here too (the sign-in screen widened the predicate); it has its own button on that screen now.
+  it('scans for a kit and nothing else, and says so over any other code', async () => {
+    const w = mountField()
 
     await iconLabelled(w, 'unlock.scan')!.trigger('click')
     const scanner = w.findComponent({ name: 'KitScanner' })
-    // ADR 0059 §1 — one scan entry, and recognising a payload stays the caller's job. Asserted through the
-    // predicate the scanner actually receives rather than by identity, because what must hold is that the
-    // caller's answer reaches the camera: a kit-only predicate here would make it report a pairing code as a
-    // failure, and a blanket `true` would make it stop on the first foreign QR in the room.
-    const reaches = scanner.props('accepts') as (text: string) => boolean
-    expect(reaches('veyqpair:aGFuZGxl')).toBe(true)
-    expect(reaches('https://example.com/')).toBe(false)
-    // The control: without a caller predicate the default is kit-only, so the widening above is the host's and
-    // not something this component does for everyone.
-    const bare = mountField()
-    await iconLabelled(bare, 'unlock.scan')!.trigger('click')
-    const byDefault = bare.findComponent({ name: 'KitScanner' }).props('accepts') as (text: string) => boolean
-    expect(byDefault(kitPayload(KIT))).toBe(true)
-    expect(byDefault('veyqpair:aGFuZGxl')).toBe(false)
+    // Asserted through what the scanner actually receives: a wider predicate would stop the camera on a code
+    // this field cannot use, a missing refusal text would leave the person wondering why a code in view is ignored.
+    const accepts = scanner.props('accepts') as (text: string) => boolean
+    expect(accepts(kitPayload(KIT))).toBe(true) // control: the kit is taken
+    expect(accepts('veyqpair:aGFuZGxl')).toBe(false)
+    expect(accepts('veyqsignin:aGFuZGxl')).toBe(false)
+    expect(accepts('https://example.com/')).toBe(false)
+    expect(scanner.props('refusedText')).toBe(t('unlock.notAKit'))
 
-    scanner.vm.$emit('found', 'veyqpair:aGFuZGxl')
+    scanner.vm.$emit('found', kitPayload(KIT))
     await flushPromises()
-
-    expect(w.emitted('scanned')).toEqual([['veyqpair:aGFuZGxl']])
-    expect(w.emitted('kit')).toBeUndefined()
-    expect(w.emitted('update:modelValue')).toBeUndefined()
-
-    // The control: the payload this control DOES own never reaches the host as a foreign string.
-    const kitScan = mountField({ accepts })
-    await iconLabelled(kitScan, 'unlock.scan')!.trigger('click')
-    kitScan.findComponent({ name: 'KitScanner' }).vm.$emit('found', kitPayload(KIT))
-    await flushPromises()
-    expect(kitScan.emitted('kit')).toEqual([[KIT]])
-    expect(kitScan.emitted('scanned')).toBeUndefined()
-    expect(kitScan.emitted('update:modelValue')?.at(-1)).toEqual([KIT.secretKey])
+    expect(w.emitted('kit')).toEqual([[KIT]])
+    expect(w.emitted('update:modelValue')?.at(-1)).toEqual([KIT.secretKey])
+    expect(Object.keys(w.emitted())).not.toContain('scanned') // there is no pass-through any more
   })
 })
