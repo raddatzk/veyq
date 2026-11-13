@@ -4,27 +4,26 @@ import SwiftUI
 import UniformTypeIdentifiers
 import VeyqCore
 
-/// A Memory's or a chapter's page (Memories' `MemoryDetail.vue`, its gallery): the chapters a Memory holds, then every
-/// medium as a square tile of its thumbnail in the grid's order (newest first by capture time), a video marked as one; a
-/// tile opens the lightbox (`Lightbox`).
+/// A Memory's or a chapter's page (Memories' `MemoryDetail.vue`, its gallery), drawn from core's `GalleryModel`: the chapters
+/// a Memory holds, then every medium as a square tile of its thumbnail in the grid's order (newest first by capture time), a
+/// video marked as one; a tile opens the lightbox (`Lightbox`). When it reads anew is the core's.
 struct MemoryScreen: View {
     @Bindable var model: AppModel
     let ref: ObjectRef
-    @State private var gallery: MemoryMedia.Gallery?
-    @State private var failed = false
-    @State private var chapters: [NodeRef] = []
     @State private var open: LightboxStart?
     @State private var pickingPhotos = false
     @State private var photos: [PhotosPickerItem] = []
     @State private var pickingFiles = false
 
-    private var items: [MemoryMedia.Item] { gallery?.items ?? [] }
+    private var node: NodeAt { ref.at }
+    private var state: GalleryModel.State? { model.galleryState(node) }
+    private var rows: [GalleryModel.Row] { state?.rows ?? [] }
 
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 8) {
                 NodeHeroRow()
-                if !chapters.isEmpty {
+                if let chapters = state?.chapters, !chapters.isEmpty {
                     Text(say(.memoryChapters)).font(.headline).padding(.horizontal)
                     ForEach(chapters, id: \.nodeId) { c in
                         Button {
@@ -35,17 +34,19 @@ struct MemoryScreen: View {
                         .padding(.horizontal)
                     }
                 }
-                if failed {
+                if state?.failed == true {
                     Text(say(.memoryGalleryFailed)).foregroundStyle(Role.danger).padding()
-                } else if gallery == nil {
+                } else if state?.rows == nil {
                     ProgressView().frame(maxWidth: .infinity).padding()
-                } else if items.isEmpty {
+                } else if rows.isEmpty {
                     Text(say(.memoryGalleryEmpty)).foregroundStyle(Role.muted).padding()
                 } else {
-                    Text(say(.memoryItems, items.count)).font(.footnote).foregroundStyle(Role.muted).padding(.horizontal)
+                    Text(say(.memoryItems, rows.count)).font(.footnote).foregroundStyle(Role.muted).padding(.horizontal)
                     LazyVGrid(columns: [GridItem(.adaptive(minimum: 104), spacing: 2)], spacing: 2) {
-                        ForEach(Array(items.enumerated()), id: \.element.mediaId) { index, item in
-                            Button { open = LightboxStart(index: index) } label: { MediaTile(model: model, item: item) }
+                        ForEach(Array(rows.enumerated()), id: \.element.mediaId) { index, row in
+                            Button {
+                                if let gallery = model.galleryModel(node) { open = LightboxStart(box: gallery.lightbox(index: Int32(index))) }
+                            } label: { MediaTile(model: model, node: node, row: row) }
                                 .buttonStyle(.plain)
                         }
                     }
@@ -68,30 +69,31 @@ struct MemoryScreen: View {
                 for item in picked {
                     if let file = try? await item.loadTransferable(type: PickedMedia.self) { urls.append(file.url) }
                 }
-                model.uploadMedia(scopeId: ref.scopeId, nodeId: ref.nodeId, label: ref.name, urls: urls, fromPhotos: true)
+                // the page went meanwhile: no upload reads the copies
+                guard let gallery = model.galleryModel(node) else {
+                    urls.forEach(AppModel.removePicked)
+                    return
+                }
+                model.uploadMedia(gallery, urls: urls, fromPhotos: true)
             }
         }
         .background(EmptyView().fileImporter(isPresented: $pickingFiles, allowedContentTypes: [.image, .movie], allowsMultipleSelection: true) { result in
-            guard case .success(let urls) = result, !urls.isEmpty else { return }
-            model.uploadMedia(scopeId: ref.scopeId, nodeId: ref.nodeId, label: ref.name, urls: urls, fromPhotos: false)
+            guard case .success(let urls) = result, !urls.isEmpty, let gallery = model.galleryModel(node) else { return }
+            model.uploadMedia(gallery, urls: urls, fromPhotos: false)
         })
-        // read again whenever the lists are, and when a medium of this device is in
-        .task(id: "\(model.listsRevision)/\(model.galleryRevision)") {
-            if let read = await model.memoryGallery(scopeId: ref.scopeId, nodeId: ref.nodeId) { gallery = read; failed = false } else { failed = true }
-            chapters = MediaDetails.shared.chapters(
-                memoryKind: ref.kind, memoryId: ref.nodeId, scopeNodes: ref.kind == "MEMORY" ? await model.scopeNodes(ref.scopeId) : []
-            )
-        }
+        // the model is the shell's while the page is shown; asking for it here opens it
+        .task(id: ref) { _ = model.galleryModel(node) }
         #if os(iOS)
-        .fullScreenCover(item: $open) { start in Lightbox(model: model, items: items, memoryName: ref.name, index: start.index) }
+        .fullScreenCover(item: $open, onDismiss: { open = nil }) { start in Lightbox(model: model, box: start.box) }
         #else
-        .sheet(item: $open) { start in Lightbox(model: model, items: items, memoryName: ref.name, index: start.index).frame(minWidth: 640, minHeight: 480) }
+        .sheet(item: $open) { start in Lightbox(model: model, box: start.box).frame(minWidth: 640, minHeight: 480) }
         #endif
     }
 }
 
-/// A photo or video the Photos picker handed over, copied to a folder of its own in the app's temporary directory (the
-/// picker's own file is gone once the transfer returns); the uploader removes the folder.
+/// A photo or video the Photos picker handed over, copied to a directory of its own under `AppModel.pickedDir` (the picker's
+/// own file is gone once the transfer returns): the person's own original, never a decrypted veyq copy. The core hands it
+/// back once the queue is done with it (`MediaUploads`), which removes it; what is left is swept at start.
 private struct PickedMedia: Transferable {
     let url: URL
 
@@ -101,7 +103,8 @@ private struct PickedMedia: Transferable {
     }
 
     private static func copy(_ file: URL) throws -> PickedMedia {
-        let dir = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
+        let dir = FileManager.default.temporaryDirectory.appendingPathComponent("picked", isDirectory: true)
+            .appendingPathComponent(UUID().uuidString, isDirectory: true)
         try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
         let copy = dir.appendingPathComponent(file.lastPathComponent)
         try FileManager.default.copyItem(at: file, to: copy)
@@ -109,16 +112,17 @@ private struct PickedMedia: Transferable {
     }
 }
 
-/// Where the lightbox opens (a sheet's item).
+/// Where the lightbox opens (a sheet's item): core's lightbox over the gallery.
 private struct LightboxStart: Identifiable {
-    let index: Int
-    var id: Int { index }
+    let box: VeyqCore.Lightbox
+    var id: ObjectIdentifier { ObjectIdentifier(box) }
 }
 
 /// One square tile: the medium's grid tier cropped to fill, a video marked; an icon where it has no tile to show.
 private struct MediaTile: View {
     let model: AppModel
-    let item: MemoryMedia.Item
+    let node: NodeAt
+    let row: GalleryModel.Row
     @State private var picture: CGImage?
 
     var body: some View {
@@ -132,48 +136,80 @@ private struct MediaTile: View {
                 }
             }
             .overlay {
-                if item.isVideo { Image(systemName: "play.circle.fill").font(.title).foregroundStyle(.white) }
+                if row.isVideo { Image(systemName: "play.circle.fill").font(.title).foregroundStyle(.white) }
             }
             .clipped()
-            .accessibilityLabel(item.name ?? "")
-            .task(id: item.mediaId) {
-                if let blob = item.gridBlob { picture = await model.mediaPicture(item, blob: blob) }
+            .accessibilityLabel(row.name ?? "")
+            .task(id: row.mediaId) {
+                guard let blob = row.tile, let gallery = model.galleryModel(node) else { return }
+                picture = await model.mediaPicture(blob) {
+                    (try? await AppleMemories.shared.tile(gallery: gallery, mediaId: row.mediaId)).map { $0 as Data }
+                }
             }
     }
 }
 
-/// The lightbox (the web's `MediaLightbox.vue`): the gallery paged through on black, each medium's preview fitted, a video's
-/// poster with a play button that streams the original as the player reads it (`MediaVideo`); its bar closes, names the
-/// place in the gallery, opens the details (`MediaDetailsView`) and saves the original through the system's save sheet.
+/// Core's lightbox held for SwiftUI: its state mirrored on the main actor as it changes; closed with the view.
+@MainActor
+@Observable
+final class LightboxBox {
+    let box: VeyqCore.Lightbox
+    private(set) var state: VeyqCore.Lightbox.State
+    @ObservationIgnored private var watch: VeyqCore.Lightbox.Watch?
+
+    init(_ box: VeyqCore.Lightbox) {
+        self.box = box
+        state = box.current
+        watch = box.watch { @Sendable _ in
+            Task { @MainActor [weak self] in
+                if let current = self?.box.current { self?.state = current }
+            }
+        }
+    }
+
+    func close() {
+        watch?.stop()
+        box.close()
+    }
+}
+
+/// The lightbox (the web's `MediaLightbox.vue`), drawn from core's `Lightbox`: the gallery paged through on black, each
+/// medium's preview fitted, a video's poster with a play button that streams the original as the player reads it
+/// (`MediaVideo`); its bar closes, names the place in the gallery, opens the details (`MediaDetailsView`) and saves the
+/// original (core's `FileSave`): a Mac where its save panel says, iOS through the system's save sheet.
 private struct Lightbox: View {
     let model: AppModel
-    let items: [MemoryMedia.Item]
-    let memoryName: String
-    @State var index: Int
+    @State private var held: LightboxBox
     @State private var details = false
     @State private var downloading = false
     @State private var downloaded: URL?
     @State private var failed: String?
     @Environment(\.dismiss) private var dismiss
 
-    private var current: MemoryMedia.Item? { items.indices.contains(index) ? items[index] : nil }
+    init(model: AppModel, box: VeyqCore.Lightbox) {
+        self.model = model
+        _held = State(initialValue: LightboxBox(box))
+    }
+
+    private var state: VeyqCore.Lightbox.State { held.state }
+    private var current: GalleryModel.Row? { state.row }
 
     var body: some View {
         NavigationStack {
             // the pages, then the caption — stacked, not floated over the picture
             VStack(alignment: .leading, spacing: 0) {
-                TabView(selection: $index) {
-                    ForEach(Array(items.enumerated()), id: \.element.mediaId) { i, item in
-                        LightboxPage(model: model, item: item, current: i == index).tag(i)
+                TabView(selection: Binding(get: { Int(state.index) }, set: { held.box.go(index: Int32($0)) })) {
+                    ForEach(Array(state.rows.enumerated()), id: \.element.mediaId) { i, row in
+                        LightboxPage(model: model, held: held, row: row, playing: Int(state.index) == i ? state.reader : nil).tag(i)
                     }
                 }
                 #if os(iOS)
                 .tabViewStyle(.page(indexDisplayMode: .never))
                 #endif
                 VStack(alignment: .leading) {
-                    if let item = current {
-                        Text(item.name ?? "").font(.headline)
-                        if let at = item.meta?.effectiveCapturedAt {
+                    if let row = current {
+                        Text(row.name ?? "").font(.headline)
+                        if let at = row.capturedAt {
                             Text(Date(timeIntervalSince1970: Double(truncating: at) / 1000), format: .dateTime.day().month().year().hour().minute())
                                 .font(.footnote).opacity(0.8)
                         }
@@ -183,7 +219,7 @@ private struct Lightbox: View {
                 .padding()
             }
             .background(Color.black.ignoresSafeArea())
-            .navigationTitle(say(.memoryItemPosition, index + 1, items.count))
+            .navigationTitle(say(.memoryItemPosition, Int(state.index) + 1, state.rows.count))
             #if os(iOS)
             .navigationBarTitleDisplayMode(.inline)
             .toolbarBackground(.black, for: .navigationBar)
@@ -195,36 +231,59 @@ private struct Lightbox: View {
                 }
                 ToolbarItemGroup(placement: .primaryAction) {
                     Button { details = true } label: { Label(say(.memoryDetails), systemImage: "info.circle") }
-                    if let item = current, !item.blocked {
+                    if let row = current, !row.blocked {
                         if downloading {
                             ProgressView()
                         } else {
-                            Button { Task { await download(item) } } label: { Label(say(.memoryDownload), systemImage: "arrow.down.circle") }
+                            Button { Task { await download() } } label: { Label(say(.memoryDownload), systemImage: "arrow.down.circle") }
                         }
                     }
                 }
             }
             .sheet(isPresented: $details) {
-                if let item = current {
-                    MediaDetailsView(model: model, item: item)
+                if let row = current {
+                    MediaDetailsView(box: held.box, row: row)
                         .presentationDetents([.medium, .large])
                 }
             }
+            #if os(iOS)
             .fileMover(isPresented: Binding(get: { downloaded != nil }, set: { if !$0 { cleanUpDownload() } }), file: downloaded) { _ in }
+            #endif
             .alert(failed ?? "", isPresented: Binding(get: { failed != nil }, set: { if !$0 { failed = nil } })) {
                 Button(say(.ok), role: .cancel) {}
             }
         }
         .environment(\.colorScheme, .dark)
+        // the lightbox went: core closes a playing video's reader with it
+        .onDisappear { held.close() }
     }
 
-    /// The original, written to a temporary file under its download name, then offered to the system's save sheet.
-    private func download(_ item: MemoryMedia.Item) async {
-        let name = MediaDetails.shared.downloadName(item: item, memoryName: memoryName, index: Int32(items.firstIndex(of: item) ?? 0))
+    /// The original saved under core's name for it (`FileSave`, written a frame at a time by core's `FileSink`). A Mac asks
+    /// where in its save panel and core writes there; iOS has no other way to a place the person picks than the save sheet
+    /// (`fileMover`), so it writes into the app's downloads directory first, removed once the sheet is done and at start.
+    private func download() async {
+        guard let name = held.box.downloadName() else { return }
+        #if os(macOS)
+        let panel = NSSavePanel()
+        panel.nameFieldStringValue = name
+        guard panel.runModal() == .OK, let url = panel.url else { return }
         downloading = true
-        let url = await model.downloadMedium(item, name: name)
+        let end = try? await AppleMemories.shared.save(lightbox: held.box, path: url.path)
         downloading = false
-        if let url { downloaded = url } else { failed = say(.downloadFailed, name) }
+        if end != .saved { failed = say(.downloadFailed, name) }
+        #else
+        guard let dir = AppModel.downloadDir() else { return }
+        let url = dir.appendingPathComponent(name)
+        downloading = true
+        let end = try? await AppleMemories.shared.save(lightbox: held.box, path: url.path)
+        downloading = false
+        if end == .saved {
+            downloaded = url
+        } else {
+            try? FileManager.default.removeItem(at: dir)
+            failed = say(.downloadFailed, name)
+        }
+        #endif
     }
 
     private func cleanUpDownload() {
@@ -236,28 +295,29 @@ private struct Lightbox: View {
 /// One medium of the lightbox: its preview fitted, a video's poster with its play button, a blocked one said so.
 private struct LightboxPage: View {
     let model: AppModel
-    let item: MemoryMedia.Item
-    let current: Bool
+    let held: LightboxBox
+    let row: GalleryModel.Row
+    /// The current video's original while it plays (core's lightbox holds it); nil otherwise.
+    let playing: RangeReader?
     @State private var picture: CGImage?
     @State private var read = false
-    @State private var playing = false
 
     var body: some View {
         ZStack {
-            if item.blocked {
-                Text(say(.memoryBlocked)).foregroundStyle(.white).padding()
-            } else if playing {
-                MediaVideo(model: model, item: item)
+            if let said = row.said {
+                Text(say(said)).foregroundStyle(.white).padding()
+            } else if let playing {
+                MediaVideo(held: held, row: row, reader: playing)
             } else {
                 if let picture {
                     Image(decorative: picture, scale: 1).resizable().scaledToFit()
                 } else if !read {
                     ProgressView().tint(.white)
-                } else if !item.isVideo {
+                } else if !row.isVideo {
                     Image(systemName: "photo").font(.largeTitle).foregroundStyle(.white)
                 }
-                if item.isVideo {
-                    Button { playing = true } label: {
+                if row.isVideo {
+                    Button { _ = held.box.play() } label: {
                         Image(systemName: "play.circle.fill").font(.system(size: 64)).foregroundStyle(.white)
                     }
                     .buttonStyle(.plain)
@@ -266,11 +326,15 @@ private struct LightboxPage: View {
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        // a video stops when it is paged away from
-        .onChange(of: current) { if !current { playing = false } }
-        .task(id: item.mediaId) {
+        .task(id: row.mediaId) {
             // a video without a poster has none to show: its original is no picture
-            if item.hasPicture { picture = await model.mediaPicture(item, blob: item.lightboxBlob) }
+            if let blob = row.picture {
+                let box = held.box
+                let mediaId = row.mediaId
+                picture = await model.mediaPicture(blob) {
+                    (try? await AppleMemories.shared.picture(lightbox: box, mediaId: mediaId)).map { $0 as Data }
+                }
+            }
             read = true
         }
     }
@@ -278,62 +342,56 @@ private struct LightboxPage: View {
 
 /// A video played as it is read (the web's range playback, ADR 0047): the system's player asks `ReaderLoader` for byte
 /// ranges, each served from the frames that hold it through core's `RangeReader`, so the plaintext is never held whole nor
-/// written anywhere. The system's controls.
+/// written anywhere. The system's controls. The lightbox's model holds the reader and closes it when it pages away or closes.
 private struct MediaVideo: View {
-    let model: AppModel
-    let item: MemoryMedia.Item
+    let held: LightboxBox
+    let row: GalleryModel.Row
+    let reader: RangeReader
     @State private var playback: Playback?
-    @State private var failed = false
 
     var body: some View {
         Group {
             if let playback {
                 VideoPlayer(player: playback.player)
-            } else if failed {
-                Text(say(.memoryVideoFailed)).foregroundStyle(.white).padding()
             } else {
                 ProgressView().tint(.white)
             }
         }
-        .task(id: item.mediaId) {
-            guard let reader = model.mediaReader(item) else {
-                failed = true
-                return
-            }
-            let p = Playback(reader: reader, mime: item.type)
+        .task(id: row.mediaId) {
+            let p = Playback(reader: reader, mime: row.type)
             playback = p
             p.player.play()
         }
         .onDisappear {
             playback?.player.pause()
             playback = nil
+            // the player's view left: the reader goes with it
+            if held.box.current.reader === reader { held.box.stop() }
         }
     }
 }
 
-/// A medium's details (the web's details panel): the capture time and the file's facts at once, the camera's once its
-/// EXIF tier is read, who added it, its place and position; "no details" only where nothing is known.
+/// A medium's details (the web's details panel, core's `Lightbox.details`): the capture time and the file's facts at once,
+/// the camera's once its EXIF tier is read, who added it (read once for the gallery), its place and position; "no details"
+/// only where nothing is known.
 private struct MediaDetailsView: View {
-    let model: AppModel
-    let item: MemoryMedia.Item
-    @State private var exif: MediaDetails.Exif?
-    @State private var uploaders: [String: MediaDetails.Uploader] = [:]
+    let box: VeyqCore.Lightbox
+    let row: GalleryModel.Row
+    @State private var details: VeyqCore.Lightbox.Details?
     @Environment(\.dismiss) private var dismiss
 
-    private var rows: [MediaDetails.Row] { MediaDetails.shared.rows(item: item, exif: exif) }
-
     private var uploader: String? {
-        guard let key = item.ownerKey, let u = uploaders[key] else { return nil }
+        guard let u = details?.uploader else { return nil }
         return say(piece: MediaDetails.shared.uploaderWords(u: u))
     }
 
     var body: some View {
         NavigationStack {
-            let rows = self.rows
+            let rows = details?.rows ?? []
             // who added it stands before the place, as on the web
-            let placeAt = Int(MediaDetails.shared.uploaderAt(rows: rows))
+            let placeAt = Int(details?.uploaderAt ?? 0)
             List {
-                if rows.isEmpty && uploader == nil {
+                if details != nil && rows.isEmpty && uploader == nil {
                     Text(say(.memoryNoDetail)).foregroundStyle(Role.muted)
                 }
                 ForEach(Array(rows.enumerated()), id: \.offset) { i, row in
@@ -349,9 +407,8 @@ private struct MediaDetailsView: View {
             .toolbar {
                 ToolbarItem(placement: .confirmationAction) { Button(say(.shareDone)) { dismiss() } }
             }
-            .task(id: item.mediaId) {
-                uploaders = await model.mediaUploaders(scopeId: item.scopeId, items: [item])
-                exif = await model.mediaExif(item)
+            .task(id: row.mediaId) {
+                details = try? await box.details(mediaId: row.mediaId)
             }
         }
     }

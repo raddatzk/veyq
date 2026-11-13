@@ -509,6 +509,45 @@ class ShellModel(
         })
 
     /**
+     * Memories' uploads of this tenant over the app's [queue] ([me.raddatz.veyq.mobile.memories.MediaUploads]): each picked
+     * medium a job whose tiers the platform's [deriver] makes, a gallery told when its medium is in, [changed] at a batch's
+     * end (the app reads its lists anew), [left] once the queue is done with a picked file.
+     */
+    fun mediaUploads(
+        queue: me.raddatz.veyq.mobile.blob.UploadQueue, deriver: me.raddatz.veyq.mobile.memories.MediaUpload.Deriver,
+        left: (me.raddatz.veyq.mobile.blob.UploadSource) -> Unit, changed: () -> Unit,
+    ): me.raddatz.veyq.mobile.memories.MediaUploads =
+        me.raddatz.veyq.mobile.memories.MediaUploads(queue, object : me.raddatz.veyq.mobile.memories.MediaUploads.Door {
+            override fun job(scopeId: String, nodeId: String, source: me.raddatz.veyq.mobile.blob.UploadSource) =
+                me.raddatz.veyq.mobile.memories.MediaUpload.Job(tenant, scopeId, nodeId, source, deriver, now)
+            override fun changed() = changed()
+            override fun left(source: me.raddatz.veyq.mobile.blob.UploadSource) = left(source)
+        })
+
+    /**
+     * Memory or chapter [ref]'s page over this tenant ([me.raddatz.veyq.mobile.memories.GalleryModel]): its media read anew on
+     * every revision of these lists and when a medium [uploads] sent into it is in; what it adds goes through [uploads].
+     */
+    fun galleryModel(ref: NodeAt, uploads: me.raddatz.veyq.mobile.memories.MediaUploads): me.raddatz.veyq.mobile.memories.GalleryModel =
+        me.raddatz.veyq.mobile.memories.GalleryModel(ref, object : me.raddatz.veyq.mobile.memories.GalleryModel.Door {
+            override suspend fun gallery() = me.raddatz.veyq.mobile.memories.MemoryMedia.list(tenant, ref.scopeId, ref.nodeId)
+            override suspend fun scopeNodes() = this@ShellModel.scopeNodes(ref.scopeId)
+            override suspend fun read(item: me.raddatz.veyq.mobile.memories.MemoryMedia.Item, blob: me.raddatz.veyq.mobile.memories.MemoryMedia.Blob) =
+                me.raddatz.veyq.mobile.memories.MemoryMedia.read(tenant, item, blob)
+            override fun reader(item: me.raddatz.veyq.mobile.memories.MemoryMedia.Item) =
+                me.raddatz.veyq.mobile.memories.MemoryMedia.reader(tenant, item, item.original)
+            override suspend fun stream(item: me.raddatz.veyq.mobile.memories.MemoryMedia.Item, sink: suspend (ByteArray) -> Unit) =
+                me.raddatz.veyq.mobile.memories.MemoryMedia.stream(tenant, item, item.original, sink = sink)
+            override suspend fun exif(item: me.raddatz.veyq.mobile.memories.MemoryMedia.Item) = me.raddatz.veyq.mobile.memories.MediaDetails.exif(tenant, item)
+            override suspend fun uploaders(items: List<me.raddatz.veyq.mobile.memories.MemoryMedia.Item>) =
+                me.raddatz.veyq.mobile.memories.MediaDetails.uploaders(tenant, ref.scopeId, items)
+            override fun upload(sources: List<me.raddatz.veyq.mobile.blob.UploadSource>) = uploads.upload(ref.scopeId, ref.nodeId, ref.name, sources)
+            // each read of the lists is a new one (a rebuild after a refresh); a move of the shell alone keeps them
+            override val revisions = state.map { it?.lists }.distinctUntilChanged { a, b -> a === b }
+            override val uploaded = uploads.uploaded
+        })
+
+    /**
      * Drop box [ref]'s page over this tenant ([me.raddatz.veyq.mobile.depot.DropBoxPage]): its guests' folders, read anew on
      * every revision of these lists.
      */

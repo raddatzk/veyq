@@ -1,7 +1,7 @@
 ---
 id: cr-memories-on-every-app
 title: Memories on every app — the gallery, the lightbox and the uploads moved into core screen models, then bridged and drawn on Linux and Windows
-status: planned
+status: in-progress
 satisfies: []
 adrs: ["0130", "0131", "0123", "0122", "0132", "0047", "0080"]
 invariants:
@@ -317,6 +317,114 @@ No new function reaches a screen.
   order, the lightbox paged, the video played and seeked near the end, the details with camera, place and uploader, an
   original saved (its SHA-256 the upload's); read as text first (`uiautomator dump` / accessibility); `run-as … ls cache` and
   the simulator container's `tmp` show nothing decrypted during and after; unchanged from before otherwise.
+
+**Status: built and unit-proven, every new check bitten; both phones thinned and building, Android's page driven offline
+over a played gallery (2026-11-13). The live case and the signed-in device passes are pending — the dev backend was down
+and was not to be started by this session.**
+
+**Built:**
+- **core `memories/GalleryModel.kt`** — `GalleryModel(node, door)`, opened by `ShellModel.galleryModel(ref, uploads)`:
+  `State(rows, chapters, failed)`, each `Row` what a screen draws (id, name, type, video, blocked, `tile`/`picture` — the
+  blob ids of the grid's and the lightbox's tier, which a platform's decoded cache keys by —, capture time, size, `said`:
+  `memory_blocked` for a blocked one). It reads anew on each revision of the shell's lists and when `MediaUploads` says a
+  medium of this device is in **this** node, nothing else; a Memory's chapters (`MediaDetails.chapters`, the space's nodes
+  read only for a MEMORY). `tile(mediaId)` reads the grid's tier when the platform asks (the core caches no bytes).
+  `lightbox(index)` → **`Lightbox`**: `State(rows, index, reader, save)`, the index kept by the medium's id across a
+  re-read and given to the one now at its place when it went; `go`, `picture(mediaId)`, `play()` (the original's
+  `RangeReader`, only for a video not blocked, held as `State.reader`), `stop()`, `details(mediaId)` (`MediaDetails.rows`
+  with the EXIF tier read once per medium, the uploaders read once per gallery for every owner key it shows — a key not
+  read yet asked with the next), `downloadName()`, `save(into)` (Depot's `FileSave` over the original's frames under
+  `MediaDetails.downloadName`, outliving the lightbox), `close()`. The model closes the reader when the lightbox pages
+  away, the player's view leaves (`stop`), the lightbox or the gallery closes (the tenant's close closes the gallery), or a
+  re-read takes the playing medium away. **`RangeReader.close()`** is new: frames dropped, every read after throws.
+- **core `memories/MediaUploads.kt`** — `ShellModel.mediaUploads(queue, deriver, left, changed)`, one per open tenant over
+  the app's one queue: `upload(scopeId, nodeId, label, sources)` queues `MediaUpload.Job`s (a source that is no medium by
+  `isMedia` is handed back, not queued); the settle is the core's: a medium in names its node on `uploaded` (the gallery
+  reads), a batch's end `changed` (the lists), and each picked file is handed back to the platform (`left`) once the queue
+  is done with it — DONE or CANCELLED, or gone from the queue after it FAILED (abandoned), read from the queue's state —,
+  every one still held on `close()` (the tenant closes), none on `handOver(next)` (the same tenant opened again over the
+  same queue, its successor following them). A failed one's file stays for its retry.
+- **core `MediaUpload`** — the tier spec: `PREVIEW_EDGE` 2048, `PREVIEW_QUALITY` 0.85, `THUMBNAIL_EDGE` 512,
+  `THUMBNAIL_QUALITY` 0.8, `POSTER_AT_MS` 100 and `posterAtMs(duration)` = min(100 ms, duration / 2); `MediaTierSpecTest`
+  (jvmTest) reads `src/web/src/shared/image/mediaDeriver.ts` itself and holds them to it.
+- **core `appleMain` `AppleMemories`** — `tile`, `picture` (as `NSData`, off the main thread), `source(url, …)`,
+  `save(lightbox, path)` (`Lightbox.save` into `FileSink`, awaited to its end), `readRange`, `derived`, `urlOf`; its
+  `read`, `uploadJob` and `download` are gone.
+- **Android** — `MemoryScreen` draws `GalleryModel` (`MemoryGallery`) and `Lightbox`; the pager pages the model and follows
+  its index; the video plays `State.reader`; the details are `Lightbox.details`; Save goes through `CreateDocument` into
+  `AppModel.saveMedium` (`Lightbox.save`, the document deleted where it did not end SAVED, the end said as before).
+  `AppModel` lost `memoryGallery`, `scopeNodes`, `mediaExif`, `mediaUploaders`, `downloadMedium`, `mediaReader`,
+  `galleryRevision`; it holds one `GalleryModel` (closed on the next and with the tenant) and one `MediaUploads` (its
+  `left` does nothing: Android reads the picker's URIs in place). `MediaDerive` reads the core's spec. A debug-only
+  harness, `DevMemory` (extra `veyq.devMemory=1`; logcat `veyq-memory`; a release stub), draws `MemoryGallery` over a
+  played gallery: two chapters, three photos drawn on the device (one with camera, place and GPS, three uploaders: a
+  member, a guest, one who left), a blocked medium, and a video pushed to the app's external files (`veyq-memory.mp4`).
+- **Apple** — `MemoryScreen` draws `GalleryModel` through `AppModel.galleryState` (a watch, as the file page) and
+  `Lightbox` through `LightboxBox`; `MediaTiers` reads the core's spec (`posterAtMs` for the poster's time). **macOS saves
+  an original through `NSSavePanel` into `FileSink`** (`AppleMemories.save`), iOS keeps `fileMover` from the swept
+  `tmp/downloads/`. **The Photos picker's copies go to `tmp/picked/<uuid>/`** (`PickedMedia`), removed by
+  `AppModel.removePicked` (only a directory of `tmp/picked/`) when `MediaUploads` hands the file back — done, cancelled,
+  abandoned, the tenant closed — and by name at start (`sweepTemporary` names `picked`); a pick whose page went before it
+  was queued is removed at once.
+
+**Deviation:** D1/D5 put the settle in `GalleryModel`; it sits in `MediaUploads`, which outlives a page (an upload goes on
+while the person looks elsewhere), and `GalleryModel` reads on its `uploaded`. A re-read on a DONE now happens only for the
+gallery of the node the medium went into — the phones re-read any gallery on screen. The inventory's first locator still
+finds, by name, what stays the platform's by D1, D5 and D7: the decoded-picture cache (`mediaPicture`, now keyed by the
+row's blob id), the platform's pick handed on (`uploadMedia` → `GalleryModel.upload`), `PickedMedia`, iOS's
+`downloadDir`, reads of `MediaUpload.PREVIEW_EDGE`, and the words `memory_gallery_*`; no rule and no copied number.
+
+**Met:** `ANDROID_HOME=$HOME/Library/Android/sdk ./gradlew :core:jvmTest :core:macosArm64Test :bridge:jvmTest
+:android:assembleDebug :android:compileReleaseKotlin` green from `src/mobile` (core jvm 592 tests, 5 skipped — the live
+cases; macosArm64 411; bridge 73, 1 skipped). New: `GalleryModelTest` (10), `MediaUploadsTest` (6), `MediaTierSpecTest` (2).
+**Bitten**, each by a script (mutation → `./gradlew :core:jvmTest --tests <class>` red → restored with `/bin/cp -f`), 27 then 11
+mutations, all red but one — `MediaUploads`' first form, followed through its settle callbacks, let a failed one's file go
+unbitten; it was rewritten to follow the queue's state and that mutation bit in the second run: the tile read from the lightbox's tier; a re-read on any node's upload; none on the lists' revision; a
+chapter reading chapters; the index not kept by id; a re-read that took the playing video, paging away, `stop` and the
+lightbox's close each leaving the reader open; a picture opening a reader; a closed `RangeReader` still reading; blocked not
+said, a blocked original saved; the uploaders read per medium, the EXIF every time; the save without progress, under
+another name, `downloadName` not the saved one; the gallery not told of an upload in, the lists not at a batch's end; a
+failed one's file handed back while a retry may read it; an abandoned one, a cancelled one, the tenant's close handing back
+nothing; one not yet in the queue's state handed back; a hand-over handing back or dropping the files; a non-medium queued;
+the preview's quality, the thumbnail's edge and the poster's halving off the web's. The Apple app builds for macOS
+(`xcodebuild -project Veyq.xcodeproj -scheme Veyq -destination 'platform=macOS' -derivedDataPath ../build/apple-mac
+CODE_SIGN_IDENTITY=- CODE_SIGN_STYLE=Manual DEVELOPMENT_TEAM= CODE_SIGN_ENTITLEMENTS= build`, from `src/mobile/apple`) and
+for the iPhone 18 Pro simulator (`-destination 'platform=iOS Simulator,name=iPhone 18 Pro' -derivedDataPath
+../build/apple-sim`). `windows/run.py build` green (Veyq.Bridge.Tests and Veyq.Tests passed). `linux/run.py build`: clippy
+`-D warnings` and the build green, `cargo test` 42 of 43 — `kit_drawing`'s core read of the printed kit hung past its
+60 s twice (load 7–10), the hang that test's own comment records for 3 of 7 builds on 2026-11-13; nothing of Linux's or the
+bridge's surface changed here. The guards (`/usr/bin/python3 scripts/validate_*.py` but guard_gaps) green before each
+commit. **Android, offline** (throwaway AVD `veyq_memory_tmp`, Pixel 8, API 36; deleted after) over `DevMemory`
+(`adb shell am start -n me.raddatz.veyq/me.raddatz.veyq.mobile.android.MainActivity --es veyq.devMemory 1`, a 20 s
+1280×720 MP4 made by ffmpeg pushed to `/sdcard/Android/data/me.raddatz.veyq/files/veyq-memory.mp4`), read as text by
+`uiautomator dump` and logcat `veyq-memory`: the chapters, "5 items", the grid newest first with the blocked one last, each
+tile its thumbnail's read (none for the blocked one); the lightbox ("2 of 5") read the preview; the details with camera,
+focal length, aperture, exposure, ISO, flash, altitude, "Added by Ada" before the place and position — the uploaders read
+once for all three keys, a second medium's details ("A guest") reading none; the video played through the core's reader to
+its end, sought back to 0:10 and played on; paged away and back it showed its play button again (the reader released);
+`beach.jpg` saved through the system's dialog (34 029 B, the size its details said), `clip.mp4` saved at the pushed file's
+SHA-256 (`50add77b…`), "“clip.mp4” is downloaded." said; `run-as me.raddatz.veyq ls -laR cache files` empty but
+`profileInstalled`. **Apple, offline:** the macOS build started with a `$TMPDIR/picked/0000-test/a.jpg` planted — gone at
+start (the sweep by name); the app stopped by its PID.
+**Pending, live** (the dev backend down, not to be started here): `MemoryLiveTest.aMemoryIsReadThroughItsScreenModels`
+reports skipped without `VEYQ_LIVE`; with the backend up, from `src/mobile`: `VEYQ_LIVE=http://veyq.localhost:8080
+VEYQ_LIVE_MEMORY='Android memory' ANDROID_HOME=$HOME/Library/Android/sdk ./gradlew :core:jvmTest --tests
+'me.raddatz.veyq.mobile.memories.MemoryLiveTest'` (reads only: every tile, picture and details through `GalleryModel`, a
+video's range across a frame's edge and its reader closed when paged away, one original saved at its SHA-256). **Pending,
+devices** (signed in, per the Done-when): make `Android memory` / `Apple memory` on the web with three fixture photos (one
+with GPS and EXIF, `MediaMetadataFixtureTest`'s) and an MP4 > 200 MiB (`ffmpeg`); Android on a throwaway AVD
+(`android/devlogin.py`), Apple on the iPhone 18 Pro (`apple/devlogin.py 'iPhone 18 Pro'`) and the macOS build: the grid in
+order, the lightbox paged, the video played and sought near its end, the details with camera, place and uploader, an
+original saved (its SHA-256 the upload's; on macOS through the save panel), a Photos pick uploaded and its
+`tmp/picked/<uuid>/` gone once it is in (`xcrun simctl get_app_container booted me.raddatz.veyq data` + `ls tmp`), and
+`run-as me.raddatz.veyq ls cache` / the container's `tmp` with nothing decrypted during and after.
+**Retrospective:** "the settle is `GalleryModel`'s" did not survive its first test: an upload outlives the page it was
+started from, so the settle needed an owner per tenant (`MediaUploads`), and the gallery only listens. Following the
+queue's *state* rather than its settle callbacks made the picked files' lifetime survive a tenant opened again over the same
+queue (`handOver`) — callbacks bind to the scope that enqueued. A race guard (a job not yet in the queue's state is not
+gone) bit only once the test published a queue state ahead of the enqueue; an unconfined lane cannot carry
+`limitedParallelism`. The Android harness over a played `GalleryModel.Door` drew every state offline in minutes; Apple got
+none (a Swift `Door` over suspend functions is the cost), so Apple's taps stay with the live pass.
 
 ### Phase 2 — The new functions in the core: create, rights, trash with Undo, the live poll, the slideshow, a Memory's links
 

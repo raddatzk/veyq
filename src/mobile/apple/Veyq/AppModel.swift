@@ -354,6 +354,7 @@ final class AppModel {
                 shellWatch?.stop()
                 shellModel = nil
                 closeDepot()
+                closeMedia()
                 dropHeaders()
                 closeFile()
             } else if managing != nil {
@@ -419,6 +420,7 @@ final class AppModel {
                 shellWatch?.stop()
                 shellModel = nil
                 closeDepot()
+                closeMedia()
                 dropHeaders()
                 closeFile()
             }
@@ -445,7 +447,8 @@ final class AppModel {
         let tenant = opened.tenant
         let t = opened.session
         // the re-key's rules and its background resume are the core's (`AccountDoor.open`/`opened`)
-        if let was = tenantSession, was.account !== account || was.tenant.tenantId != tenant.tenantId { uploads.clear() }
+        let switched = tenantSession.map { was in was.account !== account || was.tenant.tenantId != tenant.tenantId } ?? true
+        if switched { uploads.clear() }
         tenantSession = t
         let pots = PotModel(tenant: t, now: { @Sendable in KotlinLong(value: Int64(Date().timeIntervalSince1970 * 1000)) })
         potWatch?.stop()
@@ -458,6 +461,9 @@ final class AppModel {
         shellWatch?.stop()
         shellModel = model
         openDepot(model, t)
+        closeGallery()
+        galleryShown = nil
+        openMedia(model, switched: switched)
         dropHeaders()
         closeFile()
         try await model.load(openLastUsed: incoming == nil)
@@ -716,89 +722,102 @@ final class AppModel {
         }
     }
 
-    /// Memory or chapter `nodeId`'s gallery (`MemoryMedia.list`); nil when it could not be read.
-    func memoryGallery(scopeId: String, nodeId: String) async -> MemoryMedia.Gallery? {
-        guard let t = tenantSession else { return nil }
-        return try? await MemoryMedia.shared.list(tenant: t, scopeId: scopeId, nodeId: nodeId)
+    // MARK: Memories (core's GalleryModel, Lightbox and MediaUploads)
+
+    /// The Memory or chapter page on screen (core's `GalleryModel`, one at a time) and its watch; read anew as the core says.
+    @ObservationIgnored private var openGallery: (model: GalleryModel, watch: GalleryModel.Watch)?
+
+    /// What the Memory or chapter page on screen shows (`GalleryModel.State`) and of which node, on the main actor.
+    private var galleryShown: (node: NodeAt, state: GalleryModel.State)?
+
+    /// What `node`'s gallery shows, once its model delivered it; nil before, and for any other node.
+    func galleryState(_ node: NodeAt) -> GalleryModel.State? {
+        guard let shown = galleryShown, shown.node == node else { return nil }
+        return shown.state
+    }
+
+    /// The page of Memory or chapter `node` (core's `GalleryModel` over the shell, its uploads through `media`). Called while a
+    /// view is drawn, so it changes nothing observed: the state arrives through the watch.
+    func galleryModel(_ node: NodeAt) -> GalleryModel? {
+        if let held = openGallery, held.model.node == node { return held.model }
+        guard let m = shellModel, let uploads = media else { return nil }
+        closeGallery()
+        let made = m.galleryModel(ref: node, uploads: uploads)
+        let id = ObjectIdentifier(made)
+        let watch = made.watch { @Sendable state in
+            nonisolated(unsafe) let state = state
+            Task { @MainActor [weak self] in
+                // a state of a page closed meanwhile is dropped
+                guard let self, let open = self.openGallery?.model, ObjectIdentifier(open) == id else { return }
+                self.galleryShown = (open.node, state)
+            }
+        }
+        openGallery = (made, watch)
+        return made
+    }
+
+    /// The gallery goes (another opened, the tenant closed): its lightbox and a video's reader close with it.
+    private func closeGallery() {
+        openGallery?.watch.stop()
+        openGallery?.model.close()
+        openGallery = nil
     }
 
     /// Decoded tiers by blob id (a gallery asks for every tile as it scrolls past; the cache lets the system evict).
     private let mediaPictures = NSCache<NSString, CGImageBox>()
 
-    /// `blob` of `item` read and decoded as a picture (a tile, a preview); nil where it does not read or is no picture.
-    func mediaPicture(_ item: MemoryMedia.Item, blob: MemoryMedia.Blob) async -> CGImage? {
-        if let hit = mediaPictures.object(forKey: blob.blobId as NSString) { return hit.image }
-        guard let t = tenantSession,
-              let data = try? await AppleMemories.shared.read(tenant: t, item: item, blob: blob),
-              let image = CoverImages.image(data as Data, maxPixels: 4096) else { return nil }
-        mediaPictures.setObject(CGImageBox(image), forKey: blob.blobId as NSString)
+    /// Blob `blobId`'s bytes as `read` hands them, decoded as a picture and kept; nil where it does not read or is no picture.
+    func mediaPicture(_ blobId: String, read: () async -> Data?) async -> CGImage? {
+        if let hit = mediaPictures.object(forKey: blobId as NSString) { return hit.image }
+        guard let data = await read(), let image = CoverImages.image(data, maxPixels: 4096) else { return nil }
+        mediaPictures.setObject(CGImageBox(image), forKey: blobId as NSString)
         return image
     }
 
-    /// `item`'s heavy EXIF tier (`MediaDetails.exif`); nil where none was sealed or it could not be read.
-    func mediaExif(_ item: MemoryMedia.Item) async -> MediaDetails.Exif? {
-        guard let t = tenantSession else { return nil }
-        return try? await MediaDetails.shared.exif(tenant: t, item: item)
-    }
+    /// Memories' uploads of the open tenant (core's `MediaUploads` over `uploads`): a Photos pick's copy is removed once the
+    /// queue is done with it, and all of them when the tenant closes.
+    @ObservationIgnored private var media: MediaUploads?
 
-    /// Who added each of `items`, by owner key (`MediaDetails.uploaders`); empty where it could not be read.
-    func mediaUploaders(scopeId: String, items: [MemoryMedia.Item]) async -> [String: MediaDetails.Uploader] {
-        guard let t = tenantSession else { return [:] }
-        return (try? await MediaDetails.shared.uploaders(tenant: t, scopeId: scopeId, items: items)) ?? [:]
-    }
-
-    /// `item`'s original written to a temporary file under `name`, for the system's save sheet; nil where it did not read.
-    func downloadMedium(_ item: MemoryMedia.Item, name: String) async -> URL? {
-        guard let t = tenantSession, let dir = Self.downloadDir() else { return nil }
-        let url = dir.appendingPathComponent(name)
-        guard (try? await AppleMemories.shared.download(tenant: t, item: item, path: url.path))?.boolValue == true else {
-            try? FileManager.default.removeItem(at: dir)
-            return nil
-        }
-        return url
-    }
-
-    /// Moves each time a medium this device uploaded is in (a gallery on screen reads itself again).
-    private(set) var galleryRevision = 0
-
-    /// Queues the picked photos and videos (`urls`; `fromPhotos`: copies the Photos picker handed over, whose own dates are
-    /// no capture time, removed once each is in or cancelled) for Memory or chapter `nodeId` (`label` its name;
-    /// `MediaUpload.Job`): each one's tiers derived here (`MediaTiers`) while the one before it is on the wire; each one in
-    /// moves the gallery on screen, the batch's end the lists (the Memory's date range).
-    func uploadMedia(scopeId: String, nodeId: String, label: String, urls: [URL], fromPhotos: Bool) {
-        guard let t = tenantSession else { return }
-        let jobs: [UploadQueueJob] = urls.compactMap { url in
-            guard let p = Picked(url) else { return nil }
-            return AppleMemories.shared.uploadJob(
-                tenant: t, scopeId: scopeId, nodeId: nodeId, url: url, name: p.name, size: p.size, type: p.type,
-                modifiedAt: fromPhotos ? nil : p.modifiedAt.map { KotlinLong(value: $0) }, deriver: MediaDeriver.shared
-            )
-        }
-        uploads.enqueue(jobs: jobs, label: label, key: nodeId, onSettled: { @Sendable item in
-            let done = item.status == .done
-            // a copy is kept while its upload may still be retried
-            if fromPhotos, done || item.status == .cancelled, let job = item.job as? MediaUpload.Job,
-               let url = AppleMemories.shared.urlOf(source: job.picked) {
-                try? FileManager.default.removeItem(at: url.deletingLastPathComponent())
-            }
-            Task { @MainActor [weak self] in if done { self?.galleryRevision += 1 } }
-        }, onFinished: { @Sendable _ in
+    /// Memories' uploads for shell `m`: a new tenant's hand the old one's picks back (its queue was emptied), the same
+    /// tenant opened again carries them on.
+    private func openMedia(_ m: ShellModel, switched: Bool) {
+        let made = m.mediaUploads(queue: uploads, deriver: MediaDeriver.shared, left: { @Sendable source in
+            if let url = AppleMemories.shared.urlOf(source: source) { AppModel.removePicked(url) }
+        }) { @Sendable in
             Task { @MainActor [weak self] in
                 guard let self, let t = self.tenantSession else { return }
                 await self.refreshLists(t)
             }
-        })
+        }
+        if let old = media {
+            if switched { old.close() } else { old.handOver(next: made) }
+        }
+        media = made
     }
 
-    /// `item`'s original read at any offset, for a player (`MemoryMedia.reader`); nil where it does not open here.
-    func mediaReader(_ item: MemoryMedia.Item) -> RangeReader? {
-        guard let t = tenantSession else { return nil }
-        return MemoryMedia.shared.reader(tenant: t, item: item, blob: item.original)
+    private func closeMedia() {
+        closeGallery()
+        galleryShown = nil
+        media?.close()
+        media = nil
     }
 
-    /// Every node of `scopeId` this device opens (a Memory's chapters).
-    func scopeNodes(_ scopeId: String) async -> [NodeRef] {
-        (try? await shellModel?.scopeNodes(scopeId: scopeId)) ?? []
+    /// Queues the picked photos and videos (`urls`; `fromPhotos`: copies the Photos picker handed over, whose own dates are
+    /// no capture time) into `gallery`'s Memory or chapter (core's `MediaUploads`): each one's tiers derived here
+    /// (`MediaTiers`) while the one before it is on the wire; the core reads the gallery anew as each is in, the lists at
+    /// the batch's end, and hands each copy back once the queue is done with it.
+    func uploadMedia(_ gallery: GalleryModel, urls: [URL], fromPhotos: Bool) {
+        let sources: [UploadSource] = urls.compactMap { url in
+            guard let p = Picked(url) else {
+                if fromPhotos { Self.removePicked(url) }
+                return nil
+            }
+            return AppleMemories.shared.source(
+                url: url, name: p.name, size: p.size, type: p.type,
+                modifiedAt: fromPhotos ? nil : p.modifiedAt.map { KotlinLong(value: $0) }
+            )
+        }
+        _ = gallery.upload(sources: sources)
     }
 
     // MARK: The move and copy sheet (core's MoveSheet)
@@ -955,6 +974,19 @@ final class AppModel {
     /// Where copies sent to another app wait to be read: cleared before the next one, when the sheet is done and at start.
     private static var sharedDir: URL { FileManager.default.temporaryDirectory.appendingPathComponent("shared", isDirectory: true) }
 
+    /// Where the Photos picker's copies wait for their upload (`PickedMedia`, one directory each): the person's own originals,
+    /// never a decrypted veyq copy; each removed once the queue is done with it, all of them when the tenant closes and at
+    /// start.
+    static var pickedDir: URL { FileManager.default.temporaryDirectory.appendingPathComponent("picked", isDirectory: true) }
+
+    /// Removes the copy at `url` with its own directory, where it is one of `pickedDir`'s; any other file is left alone.
+    nonisolated static func removePicked(_ url: URL) {
+        let dir = url.deletingLastPathComponent().standardizedFileURL.resolvingSymlinksInPath()
+        let picked = FileManager.default.temporaryDirectory.appendingPathComponent("picked", isDirectory: true).standardizedFileURL.resolvingSymlinksInPath()
+        guard dir.deletingLastPathComponent().path == picked.path else { return }
+        try? FileManager.default.removeItem(at: dir)
+    }
+
     /// Where a download waits for the system's save sheet (iOS's `fileMover`): removed once the sheet is done and at start.
     static var downloadsDir: URL { FileManager.default.temporaryDirectory.appendingPathComponent("downloads", isDirectory: true) }
 
@@ -964,11 +996,14 @@ final class AppModel {
         return (try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)) != nil ? dir : nil
     }
 
-    /// Every decrypted copy the app wrote for the person — a copy sent, a download for the save sheet — swept at start: what
-    /// a crash or a sheet left behind is not kept (ADR 0047: no plaintext at rest but where the person saves it).
+    /// Every decrypted copy the app wrote for the person — a copy sent, a download for the save sheet — and the Photos
+    /// picker's copies, swept at start: what a crash or a sheet left behind is not kept (ADR 0047: no plaintext at rest but
+    /// where the person saves it).
     private static func sweepTemporary() {
         try? FileManager.default.removeItem(at: sharedDir)
         try? FileManager.default.removeItem(at: downloadsDir)
+        // the Photos picker's copies a crash left: not decrypted, but no upload reads them any more
+        try? FileManager.default.removeItem(at: pickedDir)
         // what builds before this rule left there: a viewed file's decrypted copy (`view-…`), a download's own directory
         let tmp = FileManager.default.temporaryDirectory
         for name in (try? FileManager.default.contentsOfDirectory(atPath: tmp.path)) ?? []

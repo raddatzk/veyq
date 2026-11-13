@@ -18,11 +18,13 @@ class MainActivity : ComponentActivity() {
         }
         val devScan = DevScan.requested(intent) // a debug build's QR camera harness, no sign-in (DevScan)
         val devSettings = DevSettings.requested(intent) // a debug build's Settings page over a played account (DevSettings)
+        val devMemory = DevMemory.requested(intent) // a debug build's Memory page over a played gallery (DevMemory)
         setContent {
             VeyqTheme {
                 when {
                     devScan -> DevScan.Screen()
                     devSettings != null -> DevSettings.Screen(devSettings)
+                    devMemory -> DevMemory.Screen(model)
                     else -> AppRoot(model)
                 }
             }
