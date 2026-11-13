@@ -1,0 +1,139 @@
+---
+title: "Install the app"
+description: The veyq app for Linux and Windows, a preview — what it holds, what your computer needs, and how to install, update and remove it.
+sources:
+  - docs/decisions/0133-the-desktop-apps-ship-as-a-flatpak-bundle-and-an-msix-built-in-checks-and-promoted-with-the-release.md
+  - docs/crosscutting/native-apps.md
+  - src/mobile/desktop-identity.json
+  - docs/features/account/enablers/en.account.key-model.md
+---
+
+import { Code } from '@astrojs/starlight/components';
+import identity from '../../../../../src/mobile/desktop-identity.json';
+
+You use veyq in your browser. There is also an **app** for **Linux** and **Windows**: it opens the same spaces with
+the same account, and it locks everything on your computer before it sends it, just as the browser does.
+
+:::caution[A preview, not released yet]
+The app is a **preview**. It holds **Depot** and **Expenses**, your spaces' folders and share links, but not
+**Memories** and no settings yet: for those, keep using the browser.
+
+No veyq release carries the app yet. From the first one that does, its files are on the
+[release page](https://github.com/raddatzk/veyq/releases), marked as a preview, and the steps below are how you
+install them.
+:::
+
+## What your computer needs
+
+- **Linux:** a desktop with **Flatpak**, on an x86-64 or a 64-bit ARM processor.
+- **Windows:** **Windows 11, version 24H2 or later**, on an x64 processor. On a Windows PC with an ARM processor, the
+  x64 app runs under Windows' own emulation. Windows 10 and older versions of Windows 11 cannot install it.
+- **The processor's AES instructions**, and on x86-64 also **PCLMUL** and **AVX**. veyq locks your things with them.
+  Where they are missing, the app says so when it starts and does not open, for example on a Raspberry Pi 4, or on a
+  Windows PC with an ARM processor whose emulation is set to hide AVX (it shows it by default).
+
+## Linux
+
+The app comes as one file per processor: `veyq-<version>-x86_64.flatpak` for most PCs and laptops,
+`veyq-<version>-aarch64.flatpak` for a 64-bit ARM one.
+
+1. Download the file for your processor from the release page.
+2. Install it from a terminal, in the folder where the file is:
+
+   ```sh
+   flatpak install --user veyq-<version>-x86_64.flatpak
+   ```
+
+3. Open **veyq** from your desktop's app list, and [sign in](/getting-started/sign-in/).
+
+**The first install downloads the GNOME runtime from Flathub**, the shared base that GNOME apps run on. That is the
+one thing the app needs from a service veyq does not run: Flathub, the usual place for Flatpak apps, which almost
+every Flatpak desktop already knows. If yours does not, the install offers to add it. The download is large and
+happens once; later installs and updates reuse it. A computer that cannot reach Flathub can take the runtime as a
+file from one that has it installed (`flatpak build-bundle --runtime`) and install that first.
+
+**Words in another language.** The app follows your desktop's language. If you want it in a language your desktop is
+not set to, Flatpak first has to fetch that language. For German:
+
+```sh
+flatpak config --user --set extra-languages de
+flatpak update --user
+```
+
+### What the app may reach
+
+A Flatpak app runs in a sandbox: it gets only what its package asks for. veyq's asks for:
+
+- **The network**, to reach your server and the storage your files are kept in.
+- **Your screen, graphics and sound**, to show its windows and play a video's sound.
+- **Your desktop's password storage**, so this computer can [stay signed in](/getting-started/sign-in/). veyq's
+  entries are kept in a keyring of the app's own.
+
+It does **not** get your files and folders. When you upload a file, or save one, you choose it in your desktop's own
+file dialog, and the app gets that one file and nothing else.
+
+### Update
+
+There is no automatic update. When a new release is out, download its file and install it the same way:
+
+```sh
+flatpak install --user veyq-<newer version>-x86_64.flatpak
+```
+
+The installed app is replaced by the newer one and keeps what it stored on this computer. Installing the same file a
+second time is refused as already installed.
+
+### Remove
+
+<Code lang="sh" code={`flatpak uninstall --user --delete-data ${identity.appId}`} />
+
+This removes the app and everything it stored on this computer, including this computer's sign-in. What you keep in
+veyq stays on your server: sign in again on any device.
+
+## Windows
+
+The app comes as one file, `veyq-<version>-x64.msix`.
+
+:::note[Windows checks who signed the file]
+Windows installs an app package only when it trusts its signature. Which certificate signs veyq's package is not
+decided yet. If Windows needs a step from you to trust it, this page will say so before the first release that
+carries the app.
+:::
+
+1. Download the file from the release page.
+2. Open it with a double-click and choose **Install**. Or, in PowerShell, in the folder where the file is:
+
+   ```powershell
+   Add-AppxPackage -Path .\veyq-<version>-x64.msix
+   ```
+
+3. Open **veyq** from the Start menu, and [sign in](/getting-started/sign-in/).
+
+The app follows Windows' display language.
+
+### Update
+
+There is no automatic update. When a new release is out, install its file the same way. The installed app is
+updated in place and keeps what it stored on this computer.
+
+### Remove
+
+Remove **veyq** like any app, under **Settings → Apps → Installed apps**, or in PowerShell:
+
+<Code lang="powershell" code={`Get-AppxPackage -Name ${identity.appId} | Remove-AppxPackage`} />
+
+This removes the app and everything it stored on this computer. What you keep in veyq stays on your server.
+
+## Signing in with the app
+
+You sign in as in the browser, with your email, your password and, the first time, the Secret Key from your
+[Emergency Kit](/getting-started/emergency-kit/). Instead of typing the Secret Key, choose **Open Emergency Kit** and
+pick the kit's PDF, or a photo or screenshot of its QR code. Where your computer has a camera, **Scan Emergency Kit**
+reads the QR code on the printout.
+
+## Is the file really veyq's?
+
+Every release names its files and signs them, so you can check that a file is the one veyq published before you
+install it: [Verify it yourself](/security/verify-it-yourself/#verifying-a-signed-release). You can also build the app
+yourself from veyq's source code, with one command per system
+([ADR 0133](https://github.com/raddatzk/veyq/blob/main/docs/decisions/0133-the-desktop-apps-ship-as-a-flatpak-bundle-and-an-msix-built-in-checks-and-promoted-with-the-release.md)).

@@ -8,7 +8,8 @@ private. No technical background needed.
 
 ## Using veyq
 
-- [Getting started](/getting-started/): what veyq is, accepting an invitation, your Emergency Kit, signing in
+- [Getting started](/getting-started/): what veyq is, accepting an invitation, your Emergency Kit, signing in,
+  [installing the app](/getting-started/install-the-app/)
 - [Your account](/account/devices-and-sessions/): devices, password, email address, keys, profile
 - [Spaces](/spaces/): your spaces, folders, groups, the trash, download and import
 - [Applications](/applications/): [Memories](/memories/) for photos and videos, [Depot](/depot/) for files,

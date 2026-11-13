@@ -9,6 +9,7 @@ sources:
   - docs/decisions/0045-mutation-testing-trust-chain-unit-layer.md
   - docs/decisions/0040-coverage-gaps-and-http-not-a-surface.md
   - docs/decisions/0057-release-identity-and-deployment-recipe.md
+  - docs/decisions/0133-the-desktop-apps-ship-as-a-flatpak-bundle-and-an-msix-built-in-checks-and-promoted-with-the-release.md
 ---
 
 Every check below lives in the repository and can be run from a checkout. This page says what each one pins,
@@ -313,3 +314,33 @@ identity that publishes veyq, then deploy by digest — is on
 2026-11-10, whose signatures [Verify a release](/run/verify-a-release/) checked as written. What can be proven locally is the tree-side half: deriving the version, building the images, producing the
 release's assets from the tree, and installing an instance from them with `veyqctl`, as the stack end-to-end run
 does (ADR 0057 § Consequences).
+
+### The desktop app's packages
+
+**Decided, not built:** no release carries an app package yet
+([ADR 0133](https://github.com/raddatzk/veyq/blob/main/docs/decisions/0133-the-desktop-apps-ship-as-a-flatpak-bundle-and-an-msix-built-in-checks-and-promoted-with-the-release.md)
+decisions 7, 8 and 10; what a person is told is [Install the app](/getting-started/install-the-app/)). From the first
+release that does, its packages — `veyq-<major>.<minor>-x86_64.flatpak`, `…-aarch64.flatpak` and `…-x64.msix` — are
+the bytes a Checks push run built, smoke-ran and staged, never built again, and each is verified two ways:
+
+- **Its own bundle.** Each package gets a cosign bundle of its own, signed under the release identity, so one file
+  verifies alone: the `cosign verify-blob` that [Verify a release](/run/verify-a-release/) runs on `veyqctl`, with the
+  package in `veyqctl`'s place.
+- **The signed manifest.** `manifest.json` lists each package by sha256 under a key of its own, `apps` — never under
+  `assets`, which `veyqctl` downloads into an instance and the lanes attest. Verify the manifest as that page does,
+  then compare `sha256sum <package>` with its entry under `apps`.
+
+**The MSIX carries a second signature, Windows'.** Windows installs a package only signed, and the signature lives
+inside the file, so signing changes its bytes. Checks builds and tests it unsigned; the release signs the staged
+package and refuses unless the signed package's `AppxBlockMap.xml` — which hashes every file the package carries — is
+byte for byte the tested one's. So the Windows signature adds trust for Windows and changes no payload byte; the
+sha256 under `apps` is the signed file's. That signing leaves the block map unchanged is measured on a development
+certificate and a PFX ([ADR 0123](https://github.com/raddatzk/veyq/blob/main/docs/decisions/0123-the-apps-share-a-kotlin-multiplatform-core-under-native-ui.md)'s
+Consequences, the MSIX); the release's signing job is not built. The Flatpak bundle carries no GPG signature: it has no
+repository to be verified against, so the cosign bundle and the manifest are its provenance.
+
+**Built yourself.** `python3 src/mobile/linux/run.py flatpak` and `python3 src/mobile/windows/run.py package --sign
+<pfx>` build the same packages from a checkout over pinned inputs (the runtime and SDK by commit, the build container
+by digest, crates, NuGet and Gradle by their locks). "Reproducible" means that, not identical bytes: a Flatpak's
+OSTree commit and an MSIX's ZIP carry times, which is why a release carries the tested bytes. A package you sign with
+your own certificate has its own publisher, so Windows installs it beside the released app, not over it.

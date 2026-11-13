@@ -455,7 +455,7 @@ and never rebuilds (D10). The Mac builds only aarch64 locally; x86_64 is CI's.
   `veyq-apps` tags signed (`cosign verify` with the snapshot identity); the promotion's first real run is the next
   release the owner cuts, and its files are verified as the site's page says — recorded in ADR 0057/0091's
   Consequences, or named as owed if no release falls inside the CR.
-- [ ] **7 site — install, update, verify.** A Use page *Install the app* (`getting-started/install-the-app.mdx` and
+- [x] **7 site — install, update, verify.** A Use page *Install the app* (`getting-started/install-the-app.mdx` and
   `de/…`, in the depth of its neighbours, `sources:` the new ADR and native-apps): Linux (the bundle, the runtime from
   Flathub, the measured install and update commands, what the app may reach and why — D3 in plain words), Windows
   (double-click or `Add-AppxPackage`, the certificate step if owner question 2 makes one, x64 under emulation on ARM),
@@ -465,6 +465,39 @@ and never rebuilds (D10). The Mac builds only aarch64 locally; x86_64 is CI's.
   MSIX's trust, no auto-update. `infra/README.md` § Cutting a release: the signer's environment and its rotation. Each
   step the page tells a person to take is walked on the VMs (phases 2 and 4 walked them; a changed step is walked again).
   · **Done when:** `pnpm run check` in `site/` green; the guards green.
+
+  **Status: done (2026-11-13), two Windows steps owed to the next Windows pass** (below). Written while phase 6 is open, so every page
+  says no release carries a package yet.
+  **Built:** `site/…/getting-started/install-the-app.mdx` and its `de/` translation (sidebar after *Sign in*, listed on
+  both start pages): the preview caution (Depot, Expenses, folders and links; no Memories, no settings — native-apps
+  § Built; no release carries it yet, from the first that does on the release page marked preview — the Decided block),
+  the computer's needs (Flatpak on x86-64 or arm64; Windows 11 24H2 on, from the manifest's MinVersion 10.0.26100.0, x64
+  under emulation on ARM; AES, on x86-64 PCLMUL and AVX — native-apps § Open), Linux (the measured `flatpak install
+  --user`, the runtime from Flathub named as the one central dependency with the offline `build-bundle --runtime` way,
+  `extra-languages`, the sandbox's grants in plain words, the measured update and refusal of the same file, `flatpak
+  uninstall --user --delete-data`), Windows (the signer's step said to be undecided and to come before the first
+  release, double-click or `Add-AppxPackage`, update in place, removal), the kit's Open/Scan entries, verification.
+  **The app id is not spelled on any page:** both pages import `src/mobile/desktop-identity.json` (the precedent is
+  `run/capabilities.mdx`'s import of `contracts/`) and render the two removal commands with Starlight's `Code`, so the
+  owner's decision changes them in that one file; `site.yml` now runs on a change of it. The kit pages (EN, DE) gain
+  "open the kit's PDF … or scan it with the app", linking the new page (`cr-app-kit-sign-in` owner question 3, decided:
+  with the apps' packaging). *Verify it yourself* gains § The desktop app's packages (decided, not built: the
+  per-package cosign bundle under the release identity, the sha256 under `apps`, the MSIX's block-map rule, a
+  self-built package's own publisher); *Known limitations* an entry and an overview row (Flathub's runtime as code in
+  the app's process, the undecided signer and what a trusted project certificate means, no auto-update);
+  `infra/README.md` § Cutting a release the Windows signer's environment and its rotation (same subject = a rotation,
+  another = another package family). Back-links for the sources guard: ADR 0133's Consequences, native-apps (§ Platforms;
+  the signer's trust consequence in § Open's MSIX bullet, marked remembered), `en.account.key-model`.
+  **Met:** `pnpm run check` in `site/` (installed by `scripts/pnpm_install_no_deprecated.py --package-dir site`) exit 0:
+  0 errors, 0 warnings, every internal link valid; the built pages carry `app.veyq.Veyq` only from the import
+  (`grep -rn "app\.veyq\|CN=veyq" site/src/content/docs` → nothing). The guards (guard_gaps skipped) print no RED. No
+  guard check added, so nothing to bite. **Walked:** every Linux step and the Windows `Add-AppxPackage` install, update
+  and the removal by `Get-AppxPackage … | Remove-AppxPackage` are phases 2 and 4's measured commands (ADR 0123's
+  Consequences). **Not walked:** the MSIX opened by double-click through App Installer, and removal through Settings →
+  Apps — both stated by ADR 0133 decision 9 or Windows' usual way, owed to the next Windows pass; the offline runtime
+  bundle (ADR 0133 decision 9, "documented, not shipped") — named without a full command for that reason.
+  **Retrospective:** a page that must name a value an owner has not decided can read it from the one file that holds
+  it — an MDX import, as the capabilities page does — instead of a "to be filled" marker that a guard cannot see.
 - [ ] **8 harvest.** Native-apps § Platforms and § Open say what was built and measured; what this CR taught moves to
   where it binds (`src/mobile/CLAUDE.md` § Traps for the sandbox's and the package's traps; `changes/README.md` for a
   working lesson); the CR is deleted. · **Done when:** the guards green with the CR gone.

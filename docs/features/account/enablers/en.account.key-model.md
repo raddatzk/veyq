@@ -325,7 +325,7 @@ Two round-trip tests in two packages cannot keep a writer and a reader in agreem
   email and Secret Key are never read as text. Where the app has a camera, its QR is also **scanned**. The platform
   only picks the file, draws a page or a picture and runs the camera; where to look, in which order and what counts is
   the core's. The kit is read on the device and its key held by the sign-in, never shown again; the server it fills
-  stays editable.
+  stays editable. The site tells a person on [Install the app](../../../../site/src/content/docs/getting-started/install-the-app.mdx).
 - **The printed text follows the writer's UI language; the token never does.** The sheet is one A4 page: the
   email and the Secret Key; where the person signs in — three form fields for addresses, fillable on screen or by
   hand, the first holding the kit's server as a person types it (its host), where the kit has one; the QR with three

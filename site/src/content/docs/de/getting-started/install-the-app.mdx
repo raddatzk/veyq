@@ -1,0 +1,146 @@
+---
+title: "Die App installieren"
+description: Die veyq-App für Linux und Windows, eine Vorschau — was sie kann, was dein Computer braucht und wie du sie installierst, aktualisierst und entfernst.
+sources:
+  - docs/decisions/0133-the-desktop-apps-ship-as-a-flatpak-bundle-and-an-msix-built-in-checks-and-promoted-with-the-release.md
+  - docs/crosscutting/native-apps.md
+  - src/mobile/desktop-identity.json
+  - docs/features/account/enablers/en.account.key-model.md
+---
+
+import { Code } from '@astrojs/starlight/components';
+import identity from '../../../../../../src/mobile/desktop-identity.json';
+
+Du benutzt veyq im Browser. Es gibt auch eine **App** für **Linux** und **Windows**: Sie öffnet dieselben Bereiche
+mit demselben Konto, und sie verschließt alles auf deinem Computer, bevor sie es verschickt, genau wie der Browser.
+
+:::caution[Eine Vorschau, noch nicht veröffentlicht]
+Die App ist eine **Vorschau**. Sie kann **Depot** und **Ausgaben**, die Ordner deiner Bereiche und Links zum Teilen,
+aber noch keine **Erinnerungen** und keine Einstellungen: Dafür benutzt du weiter den Browser.
+
+Noch keine Version von veyq enthält die App. Ab der ersten, die sie enthält, liegen ihre Dateien auf der
+[Seite der Versionen](https://github.com/raddatzk/veyq/releases), als Vorschau gekennzeichnet, und die Schritte unten
+sind der Weg, sie zu installieren.
+:::
+
+## Was dein Computer braucht
+
+- **Linux:** eine Oberfläche mit **Flatpak**, auf einem x86-64- oder einem 64-Bit-ARM-Prozessor.
+- **Windows:** **Windows 11, Version 24H2 oder neuer**, auf einem x64-Prozessor. Auf einem Windows-PC mit
+  ARM-Prozessor läuft die x64-App in der Emulation, die Windows selbst mitbringt. Windows 10 und ältere Versionen von
+  Windows 11 können sie nicht installieren.
+- **Die AES-Befehle des Prozessors**, auf x86-64 außerdem **PCLMUL** und **AVX**. veyq verschließt deine Sachen damit.
+  Wo sie fehlen, sagt die App das beim Start und öffnet sich nicht, zum Beispiel auf einem Raspberry Pi 4 oder auf
+  einem Windows-PC mit ARM-Prozessor, dessen Emulation so eingestellt ist, dass sie AVX verbirgt (von Haus aus zeigt
+  sie es).
+
+## Linux
+
+Die App kommt als eine Datei je Prozessor: `veyq-<version>-x86_64.flatpak` für die meisten PCs und Laptops,
+`veyq-<version>-aarch64.flatpak` für einen mit 64-Bit-ARM-Prozessor.
+
+1. Lade die Datei für deinen Prozessor von der Seite der Versionen herunter.
+2. Installiere sie in einem Terminal, in dem Ordner, in dem die Datei liegt:
+
+   ```sh
+   flatpak install --user veyq-<version>-x86_64.flatpak
+   ```
+
+3. Öffne **veyq** aus der App-Liste deiner Oberfläche und [melde dich an](/de/getting-started/sign-in/).
+
+**Die erste Installation lädt die GNOME-Laufzeit von Flathub herunter**, die gemeinsame Grundlage, auf der
+GNOME-Apps laufen. Das ist das eine, was die App von einem Dienst braucht, den veyq nicht betreibt: Flathub, der
+übliche Ort für Flatpak-Apps, den fast jede Oberfläche mit Flatpak schon kennt. Kennt deine ihn nicht, bietet die
+Installation an, ihn hinzuzufügen. Der Download ist groß und passiert einmal; spätere Installationen und Updates
+verwenden ihn wieder. Ein Computer, der Flathub nicht erreicht, kann die Laufzeit als Datei von einem bekommen, auf
+dem sie installiert ist (`flatpak build-bundle --runtime`), und installiert diese zuerst.
+
+**Wörter in einer anderen Sprache.** Die App folgt der Sprache deiner Oberfläche. Willst du sie in einer Sprache, auf
+die deine Oberfläche nicht eingestellt ist, muss Flatpak diese Sprache zuerst holen. Für Deutsch:
+
+```sh
+flatpak config --user --set extra-languages de
+flatpak update --user
+```
+
+### Was die App erreichen darf
+
+Eine Flatpak-App läuft in einer abgeschotteten Umgebung: Sie bekommt nur, was ihr Paket verlangt. Das von veyq
+verlangt:
+
+- **Das Netz**, um deinen Server zu erreichen und den Speicher, in dem deine Dateien liegen.
+- **Bildschirm, Grafik und Ton**, um ihre Fenster zu zeigen und den Ton eines Videos abzuspielen.
+- **Den Passwortspeicher deiner Oberfläche**, damit dieser Computer [angemeldet bleiben](/de/getting-started/sign-in/)
+  kann. Die Einträge von veyq liegen in einem Schlüsselbund, der nur der App gehört.
+
+Deine Dateien und Ordner bekommt sie **nicht**. Wenn du eine Datei hochlädst oder speicherst, wählst du sie im
+Dateidialog deiner Oberfläche, und die App bekommt genau diese eine Datei und sonst nichts.
+
+### Aktualisieren
+
+Ein automatisches Update gibt es nicht. Ist eine neue Version da, lade ihre Datei herunter und installiere sie genauso:
+
+```sh
+flatpak install --user veyq-<neuere version>-x86_64.flatpak
+```
+
+Die installierte App wird durch die neuere ersetzt und behält, was sie auf diesem Computer gespeichert hat. Dieselbe
+Datei ein zweites Mal zu installieren, wird als schon installiert abgelehnt.
+
+### Entfernen
+
+<Code lang="sh" code={`flatpak uninstall --user --delete-data ${identity.appId}`} />
+
+Das entfernt die App und alles, was sie auf diesem Computer gespeichert hat, auch die Anmeldung dieses Computers. Was
+du in veyq aufbewahrst, bleibt auf deinem Server: Melde dich auf einem beliebigen Gerät wieder an.
+
+## Windows
+
+Die App kommt als eine Datei, `veyq-<version>-x64.msix`.
+
+:::note[Windows prüft, wer die Datei signiert hat]
+Windows installiert ein App-Paket nur, wenn es seiner Signatur vertraut. Welches Zertifikat das Paket von veyq
+signiert, ist noch nicht entschieden. Braucht Windows dafür einen Schritt von dir, steht er auf dieser Seite, bevor die
+erste Version mit der App erscheint.
+:::
+
+1. Lade die Datei von der Seite der Versionen herunter.
+2. Öffne sie mit einem Doppelklick und wähle **Installieren**. Oder in PowerShell, in dem Ordner, in dem die Datei
+   liegt:
+
+   ```powershell
+   Add-AppxPackage -Path .\veyq-<version>-x64.msix
+   ```
+
+3. Öffne **veyq** aus dem Startmenü und [melde dich an](/de/getting-started/sign-in/).
+
+Die App folgt der Anzeigesprache von Windows.
+
+### Aktualisieren
+
+Ein automatisches Update gibt es nicht. Ist eine neue Version da, installiere ihre Datei genauso. Die installierte App
+wird an Ort und Stelle aktualisiert und behält, was sie auf diesem Computer gespeichert hat.
+
+### Entfernen
+
+Entferne **veyq** wie jede App unter **Einstellungen → Apps → Installierte Apps** oder in PowerShell:
+
+<Code lang="powershell" code={`Get-AppxPackage -Name ${identity.appId} | Remove-AppxPackage`} />
+
+Das entfernt die App und alles, was sie auf diesem Computer gespeichert hat. Was du in veyq aufbewahrst, bleibt auf
+deinem Server.
+
+## Mit der App anmelden
+
+Du meldest dich an wie im Browser, mit deiner E-Mail, deinem Passwort und beim ersten Mal dem Secret Key aus deinem
+[Notfall-Kit](/de/getting-started/emergency-kit/). Statt den Secret Key einzutippen, wähle **Notfall-Kit öffnen** und
+wähle das PDF des Kits oder ein Foto oder einen Screenshot seines QR-Codes. Wo dein Computer eine Kamera hat, liest
+**Notfall-Kit scannen** den QR-Code auf dem Ausdruck.
+
+## Ist die Datei wirklich die von veyq?
+
+Jede Version nennt ihre Dateien und signiert sie, sodass du vor der Installation prüfen kannst, ob eine Datei die ist,
+die veyq veröffentlicht hat: [Verify it yourself](/de/security/verify-it-yourself/#verifying-a-signed-release) (auf
+Englisch). Du kannst die App auch selbst aus dem Quellcode von veyq bauen, mit einem Befehl je System
+([ADR 0133](https://github.com/raddatzk/veyq/blob/main/docs/decisions/0133-the-desktop-apps-ship-as-a-flatpak-bundle-and-an-msix-built-in-checks-and-promoted-with-the-release.md),
+auf Englisch).

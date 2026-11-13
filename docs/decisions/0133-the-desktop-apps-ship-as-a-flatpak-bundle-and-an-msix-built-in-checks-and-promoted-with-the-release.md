@@ -178,6 +178,13 @@ What constrains the choice:
   the owner's answer on the identity (decision 12) before the first package is published.
 - **One central dependency:** a Flatpak desktop fetches the GNOME runtime from Flathub. It is said where the bundle is
   offered, with the offline way around it.
+- **What the docs site says.** [Install the app](../../site/src/content/docs/getting-started/install-the-app.mdx) (EN and
+  DE) gives a person the install, update and removal steps measured on the VMs, what the sandbox may reach, the CPU it
+  needs and that the apps are a preview no release carries yet; it reads decision 12's identity from its file, never
+  spells it. [Verify it yourself](../../site/src/content/docs/security/verify-it-yourself.md) § Verifying a signed release
+  says how a package will be checked (decisions 7 and 8), and [Known limitations](../../site/src/content/docs/security/known-limitations.md)
+  carries the runtime from Flathub, the MSIX's trust and the missing auto-update. The signer's environment and its
+  rotation are the maintainer's, in `infra/README.md` § Cutting a release.
 
 ## Alternatives considered
 
