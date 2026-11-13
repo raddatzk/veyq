@@ -130,9 +130,9 @@ The load model is a household. The volume pre-check's largest tree is 5,000 node
        - A photo outside the open Memory opens its Memory by the node's fragment and leaves an in-memory request the
          Memory's page takes once its gallery holds the medium. It is no address: a reload or a copied link carries no
          medium, since a medium's own address does not fit ADR 0015's grammar (an open question).
-   - **(b) Full text over the journal.** This is designed inside the journal's refinement (inbox #18): whether a client
-     reads one compacted snapshot per journal or replays updates decides its cost. It then plugs in as one more
-     document kind.
+   - **(b) Full text over the journal.** One more document kind: the projection of each journal's newest snapshot
+     revision, one sealed text per journal and no replay, keyed by its snapshot revision
+     ([ADR 0133](0133-a-memorys-journal-is-a-sealed-crdt-log-whose-snapshots-only-members-write.md) decision 13).
    - **(c) Semantic search.** Deferred. Embeddings in the browser need WebAssembly or WebGPU, and a model is tens of
      MB. Its natural home is the native apps.
 9. **People and settings are results too: two kinds in the one list of decision 5, after content at an equal match.**
