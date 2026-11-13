@@ -207,4 +207,38 @@ describe('the session ending (uc.account.sign-out, ADR 0070)', () => {
     // every decrypted store in it, would survive. So the assertion is on the document navigation itself.
     expect(replace).toHaveBeenCalledExactlyOnceWith('/login')
   })
+
+  it('waits for the applications\' ending steps before the document load, and tells them this tab started it', async () => {
+    // ADR 0131 decision 5: the music frame forgets the vendor's sign-in before the new document tears it down.
+    const tab = await freshTab()
+    tab.session.accessToken = 'a1'
+    const { onSessionEnding } = await import('./sessionEndingSteps')
+    const started: boolean[] = []
+    onSessionEnding(async (ctx) => {
+      started.push(ctx.startedHere)
+      await new Promise((r) => setTimeout(r, 5))
+      order.push('application-step')
+    })
+
+    await tab.endSession()
+
+    expect(started).toEqual([true])
+    expect(order.indexOf('application-step')).toBeGreaterThanOrEqual(0)
+    expect(order.indexOf('application-step')).toBeLessThan(order.indexOf('document-load'))
+  })
+
+  it('runs the steps on another tab\'s announcement too, saying this tab did not start the ending', async () => {
+    const tab = await freshTab()
+    tab.session.accessToken = 'a1'
+    const { onSessionEnding } = await import('./sessionEndingSteps')
+    const started: boolean[] = []
+    onSessionEnding(async (ctx) => void started.push(ctx.startedHere))
+    const stopListening = tab.listenForSessionEnd()
+
+    new FakeChannel('veyq-session').postMessage({ type: 'ended' })
+    await vi.waitFor(() => expect(replace).toHaveBeenCalled())
+
+    expect(started).toEqual([false])
+    stopListening()
+  })
 })

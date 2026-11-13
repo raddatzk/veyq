@@ -15,7 +15,9 @@
 //    withdrawal in another tab removes it at once -, and Close, which ends the music and keeps the consent.
 // The frame's messages are taken only from that iframe's window and the music host's origin, and parsed against the
 // protocol (`src/music-frame/protocol.ts`). The bar ends what it plays when the shell unmounts it: a sign-out, a lock,
-// leaving the share page.
+// leaving the share page. Before a sign-out's ending loads the sign-in page, the mounted frame is told to forget the
+// vendor's sign-in too, and waited for (the same bounded wait; the consent stays) - `musicEnding.ts`, which also covers the
+// case of no frame mounted.
 import { computed, onBeforeUnmount, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import VeyqButton from '../../../shared/ui/VeyqButton.vue'
@@ -25,18 +27,17 @@ import { parseFrameMessage, playlistLink, type AppMessage } from '../../../music
 import type { MusicService, Playlist } from './musicModel'
 import { setMusicConsent, useMusicConsent } from './useMusicConsent'
 import { closeBar, playlistInBar } from './musicPlayback'
+import { FORGET_WAIT_MS, setLiveFrameForget } from './musicEnding'
 
 const { t, locale } = useI18n()
 const consent = useMusicConsent()
 const { resolvedTheme } = useThemeState()
 
-/** How long a withdrawal waits for the frame's `forgotten` before it removes the frame anyway. */
-const FORGET_WAIT_MS = 1500
-
 const playlist = computed<Playlist | null>(() => playlistInBar.value)
 /** The service whose sign-in the frame is forgetting: the frame stays until it said so, the consent is already gone. */
 const forgetting = ref<MusicService | null>(null)
-let forgetTimer: ReturnType<typeof setTimeout> | null = null
+/** Resolves the forget in flight once the frame said `forgotten` (or its wait is spent); null while none is. */
+let forgotten: (() => void) | null = null
 
 /** The service the frame plays: the bar's playlist's, while the server plays it here and this browser agreed. */
 const frameService = computed<MusicService | null>(() => {
@@ -83,9 +84,29 @@ function playHere() {
   if (playlist.value) setMusicConsent(playlist.value.service, true)
 }
 
+/** Tell the frame to forget the vendor's sign-in and resolve once it said `forgotten`, never later than FORGET_WAIT_MS. A
+ *  frame that is not ready yet is told again when it says `ready` (it may not have heard it before); a forget already in flight
+ *  (Turn music off, then a sign-out) is joined, never sent again. */
+let inFlight: Promise<void> | null = null
+function forgetFrame(): Promise<void> {
+  if (inFlight) return inFlight
+  inFlight = new Promise<void>((resolve) => {
+    const timer = setTimeout(() => done(), FORGET_WAIT_MS)
+    const done = () => {
+      clearTimeout(timer)
+      forgotten = null
+      inFlight = null
+      resolve()
+    }
+    forgotten = done
+    send({ type: 'veyq-music:forget' })
+  })
+  return inFlight
+}
+// While a frame is mounted, a sign-out's ending asks it to forget (`musicEnding.ts`); without one the ending decides itself.
+watch(frameService, (s) => setLiveFrameForget(s ? forgetFrame : null), { immediate: true })
+
 function endForgetting() {
-  if (forgetTimer) clearTimeout(forgetTimer)
-  forgetTimer = null
   forgetting.value = null
   closeBar()
 }
@@ -95,12 +116,16 @@ function turnOff() {
   if (!service) return
   forgetting.value = service
   setMusicConsent(service, false)
-  send({ type: 'veyq-music:forget' })
-  forgetTimer = setTimeout(endForgetting, FORGET_WAIT_MS)
+  void forgetFrame().then(() => {
+    if (forgetting.value === service) endForgetting()
+  })
 }
 
 function close() {
-  if (forgetting.value) return endForgetting()
+  if (forgetting.value) {
+    forgotten?.() // the frame goes now: the forget in flight is given up
+    return endForgetting()
+  }
   closeBar()
 }
 
@@ -110,15 +135,17 @@ function onMessage(e: MessageEvent) {
   if (!m) return
   if (m.type === 'veyq-music:ready') {
     ready.value = true
-    if (playlist.value && !forgetting.value) load(playlist.value)
-  } else if (m.type === 'veyq-music:forgotten' && forgetting.value) {
-    endForgetting()
+    if (forgotten) send({ type: 'veyq-music:forget' })
+    else if (playlist.value && !forgetting.value) load(playlist.value)
+  } else if (m.type === 'veyq-music:forgotten') {
+    forgotten?.()
   }
 }
 window.addEventListener('message', onMessage)
 onBeforeUnmount(() => {
   window.removeEventListener('message', onMessage)
-  if (forgetTimer) clearTimeout(forgetTimer)
+  setLiveFrameForget(null)
+  forgotten?.()
   closeBar()
 })
 </script>

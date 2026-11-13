@@ -356,6 +356,16 @@ describe('registry: lifecycle hooks', () => {
     expect(b).toHaveBeenCalledWith(o, n, ['s1'])
   })
 
+  it('hands an application\'s onSessionEnding to the session ending, which runs it with who started it', async () => {
+    // ADR 0131 decision 5: Memories' music frame forgets the vendor's sign-in before the sign-in page loads.
+    const { runSessionEndingSteps } = await import('../../app/sessionEndingSteps')
+    const r = named('a')
+    const ending = vi.fn(async () => {})
+    r.apps.a.lifecycle(hooks({ onSessionEnding: ending }))
+    await runSessionEndingSteps({ startedHere: true })
+    expect(ending).toHaveBeenCalledWith({ startedHere: true })
+  })
+
   it('a failing hook does not stop the next application, and its error is rethrown afterwards', async () => {
     const r = named('a', 'b')
     const second = vi.fn()
