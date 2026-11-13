@@ -23,12 +23,37 @@ class RangeReader(
     private val lock = Mutex()
     private val held = LinkedHashMap<Int, ByteArray>()
 
+    @kotlin.concurrent.Volatile
+    private var closed = false
+
+    /** Whether [close] was called: every read after throws. */
+    val isClosed: Boolean get() = closed
+
+    /**
+     * Closes the reader (its page went, the player was paged away from): the frames it held are dropped and every read
+     * after throws. A read under way finishes first.
+     */
+    fun close() {
+        closed = true
+        if (lock.tryLock()) {
+            try {
+                held.clear()
+            } finally {
+                lock.unlock()
+            }
+        }
+    }
+
     /**
      * Up to [length] bytes from [position] — fewer only at the end, none from the end on. Throws what reading a frame throws
      * (a frame that does not open, a store that does not answer).
      */
     @Throws(Exception::class)
     suspend fun read(position: Long, length: Int): ByteArray = lock.withLock {
+        if (closed) {
+            held.clear()
+            throw IllegalStateException("reader_closed")
+        }
         if (position < 0 || length < 0) throw IllegalArgumentException("range")
         val n = minOf(length.toLong(), size - position).coerceAtLeast(0).toInt()
         val out = ByteArray(n)

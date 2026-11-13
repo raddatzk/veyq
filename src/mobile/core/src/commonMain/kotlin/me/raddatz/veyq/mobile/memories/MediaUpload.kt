@@ -40,13 +40,28 @@ import me.raddatz.veyq.mobile.session.TenantSession
 object MediaUpload {
     const val SNIFF_BYTES = 1024
 
+    /** The `PREVIEW` tier's long edge in pixels, at most (the web's `mediaDeriver.ts` `TIER_SPECS.PREVIEW`); never enlarged. */
+    const val PREVIEW_EDGE = 2048
+    /** The `PREVIEW` JPEG's quality, 0 to 1. */
+    const val PREVIEW_QUALITY = 0.85
+    /** The `THUMBNAIL` tier's long edge in pixels, at most (`TIER_SPECS.THUMBNAIL`), made from the preview. */
+    const val THUMBNAIL_EDGE = 512
+    /** The `THUMBNAIL` JPEG's quality, 0 to 1. */
+    const val THUMBNAIL_QUALITY = 0.8
+    /** Where a video's poster is taken at most (the web's `min(0.1, duration / 2)`), in milliseconds. */
+    const val POSTER_AT_MS = 100L
+
+    /** Where a video of [durationMs] has its poster taken: [POSTER_AT_MS], or half its length where it is shorter. */
+    fun posterAtMs(durationMs: Long): Long = minOf(POSTER_AT_MS, maxOf(0L, durationMs) / 2)
+
     /** What a platform hands over of a picked file: its bytes at any offset, its given type, name and modification time. */
     class Original(val source: ByteSource, val type: String?, val name: String?, val modifiedAt: Long?)
 
     /**
-     * What the platform derived (the web's `mediaDeriver.ts`): the `PREVIEW` JPEG (long edge ≤ 2048, quality 0.85, upright)
-     * and the `THUMBNAIL` JPEG made from it (≤ 512, 0.8) — a video's poster as both —, and the size as it is shown (a
-     * video's only where its header names none); all null where the original does not decode here (it then goes alone).
+     * What the platform derived (the web's `mediaDeriver.ts`): the `PREVIEW` JPEG (long edge ≤ [PREVIEW_EDGE], quality
+     * [PREVIEW_QUALITY], upright) and the `THUMBNAIL` JPEG made from it (≤ [THUMBNAIL_EDGE], [THUMBNAIL_QUALITY]) — a video's
+     * poster, taken at [posterAtMs], as both —, and the size as it is shown (a video's only where its header names none);
+     * all null where the original does not decode here (it then goes alone).
      */
     class Derived(val preview: ByteArray?, val thumbnail: ByteArray?, val width: Int?, val height: Int?)
 
