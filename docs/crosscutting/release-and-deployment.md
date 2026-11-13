@@ -335,7 +335,9 @@ check is logged and retried with a back-off, and blocks nothing.
   a Flatpak bundle per Linux architecture and an x64 MSIX, built and smoke-run in every Checks run, staged by ORAS as
   `veyq-apps:build-<sha>-<platform>`, named and signed at snapshot with the images, and at promotion re-signed, the MSIX
   Windows-signed with an unchanged block map, each listed by sha256 under the manifest's `apps` (never `assets`, which
-  `veyqctl` installs and the lanes attest) and attached with a `cosign sign-blob` bundle. Not built yet; the first release
-  to carry them is the first after the promotion learns them, marked preview.
+  `veyqctl` installs and the lanes attest) and attached with a `cosign sign-blob` bundle. Checks' part is written
+  (`checks.yml`'s `app-inputs`, `flatpak`, `msix` and the push-only `apps-stage`, the one writer of `veyq-apps`), its
+  first GitHub run owed; the snapshot's, the retention's and the promotion's part is not built. The first release to
+  carry them is the first after the promotion learns them, marked preview.
 - **L3's archive holding the major entry** (ADR 0085 decision 10, inbox #461): the major entry's backup in the
   archive lane L3 restores.
