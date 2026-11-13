@@ -62,7 +62,8 @@ member the writers (member ids and link identity ids, which a member's client na
 holder's **alias** — an opaque per-list handle the list's application derives, never a name and never a member id
 ([ADR 0030](0030-contributor-public-share.md) point 8). The journal's alias is the one its contributors list serves a
 guest ([ADR 0133](0133-a-memorys-journal-is-a-sealed-crdt-log-whose-snapshots-only-members-write.md) decision 9: an
-HMAC of the writer under the journal's own key, which the guest's client names "Anonymous Fox"), so a guest sees the
+HMAC of the writer under the journal's own key, which the guest's client names by an adjective and an animal,
+"Curious Owl", "Fröhlicher Fuchs"), so a guest sees the
 same pseudonym in both places (owner 2026-11-13: pseudonyms, not a count). An application registers the alias with
 the list it declares streamable; a list whose application derives none tells a guest only how many others are there.
 Only editors stream (decision 3), so "here" means "has it open for editing". This tells the operator nothing it does
