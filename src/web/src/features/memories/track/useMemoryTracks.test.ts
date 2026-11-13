@@ -6,6 +6,7 @@ import { nextTick, ref } from 'vue'
 import type { MediaItem } from '../media'
 import { GPX_MEDIA_TYPE, TRACK_COLORS } from './gpx'
 import { useMemoryTracks } from './useMemoryTracks'
+import type { TrackLabel } from './trackLabel'
 
 const enc = (s: string) => new TextEncoder().encode(s)
 const file = (name: string | null, pts: [number, number][]) =>
@@ -15,7 +16,12 @@ const flush = async () => {
   for (let i = 0; i < 10; i++) await nextTick()
 }
 
-function setup(opts: { bytes: Record<string, Uint8Array | Error>; at?: Record<string, number>; names?: Record<string, string> }) {
+function setup(opts: {
+  bytes: Record<string, Uint8Array | Error>
+  at?: Record<string, number>
+  names?: Record<string, string>
+  labels?: Record<string, TrackLabel>
+}) {
   const active = ref(false)
   const key = ref<Uint8Array | null>(new Uint8Array([1]))
   const nodeId = ref('n1')
@@ -40,6 +46,7 @@ function setup(opts: { bytes: Record<string, Uint8Array | Error>; at?: Record<st
     original,
     blobMeta: (it) => ({ v: 1, type: GPX_MEDIA_TYPE, name: opts.names?.[it.mediaId] }),
     capturedAt: (it) => opts.at?.[it.mediaId],
+    label: (it) => opts.labels?.[it.mediaId] ?? { name: null, activity: null },
   })
   return { model, active, key, nodeId, tracks, original, maxInFlight: () => maxInFlight }
 }
@@ -77,6 +84,20 @@ describe('useMemoryTracks', () => {
     expect(byId.c.status).toBe('failed') // no UTF-8 text
     expect(byId.d.status).toBe('ready')
     expect(byId.d.name).toBe('Named by file')
+  })
+
+  // ADR 0130 decision 9: the name a member gave wins over the file's, which stays the edit's hint; the activity rides along.
+  // Lever: `name: fileTrackName` in `entries`.
+  it('names a track by the name a member gave it, else by its file, and carries its activity', async () => {
+    const s = setup({
+      bytes: { a: file('From file', [[1, 1], [2, 2]]), b: file('Kept', [[1, 1], [2, 2]]) },
+      labels: { a: { name: 'Ridge walk', activity: 'hiking' } },
+    })
+    s.active.value = true
+    await flush()
+    const [a, b] = s.model.entries.value
+    expect([a.name, a.ownName, a.fileTrackName, a.activity]).toEqual(['Ridge walk', 'Ridge walk', 'From file', 'hiking'])
+    expect([b.name, b.ownName, b.fileTrackName, b.activity]).toEqual(['Kept', null, 'Kept', null])
   })
 
   it('orders by the listed capture time and colours by that order, stable while tracks are read', async () => {

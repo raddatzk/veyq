@@ -9,6 +9,11 @@
 // its *Turn map services off*. Without a map the list, the numbers, the download, the removal and the add stay (decision 6).
 // Adding checks each picked file on the device (`checkGpxFile`: size, a GPX track, the node's 50) and hands the accepted ones
 // to the detail, which sends them through the one upload queue (`add`); a refused file is named in a toast.
+//
+// A row's Edit (decision 9, the old application's dialog) names the track and gives it an activity, drawn as its line's
+// dash and shown above its name. The detail hands the write in as `editLabel` only where a medium's meta may be edited
+// (`editMeta` and the source's `mediaMeta` door: a member who may write, never a guest); it seals the label into the
+// track's listed tier and throws `MetaConflictError` when a peer's label came first, which the dialog then shows.
 import { computed, nextTick, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import VeyqButton from '../../../shared/ui/VeyqButton.vue'
@@ -26,8 +31,11 @@ import { downloadOriginal, originalDownloadName } from '../download'
 import { checkGpxFile, isGpxFile, GPX_MEDIA_TYPE } from '../track/gpx'
 import { trackFacts } from '../track/trackFacts'
 import { useMemoryTracks, type TrackEntry } from '../track/useMemoryTracks'
+import { activityDash, trackLabelOf, type TrackLabel } from '../track/trackLabel'
+import { MetaConflictError } from '../../../core/node/sealedMetaWrite'
 import MemoryMap, { type MapTrack } from './MemoryMap.vue'
 import MapConsentPrompt from './MapConsentPrompt.vue'
+import TrackEditDialog from './TrackEditDialog.vue'
 
 const props = defineProps<{
   scopeId: string
@@ -48,6 +56,8 @@ const props = defineProps<{
   canReport: boolean
   /** Asked before the picker opens: false when the session must get ready first (a guest names itself). */
   pickReady?: () => boolean
+  /** Seal a track's name and activity (decision 9). Absent: no Edit. Throws `MetaConflictError` when a peer's came first. */
+  editLabel?: (item: MediaItem, label: TrackLabel) => Promise<void>
 }>()
 const emit = defineEmits<{
   /** Files checked as tracks, for the upload queue. */
@@ -69,6 +79,7 @@ const tracksModel = useMemoryTracks({
   original: (item, key) => props.loaders.original(item, key),
   blobMeta: (item, key) => props.loaders.blobMeta(item, key),
   capturedAt: (item, key) => effectiveCapturedAt(props.loaders.meta(item, key)),
+  label: (item, key) => trackLabelOf(props.loaders.meta(item, key)),
 })
 const { entries, hidden, selected, setShown, select } = tracksModel
 
@@ -82,7 +93,7 @@ const mapTracks = computed<MapTrack[]>(() =>
     if (!entry.lines || hidden.value.has(entry.mediaId)) return []
     const name = nameOf(entry, index)
     return [{
-      id: entry.mediaId, color: entry.color, lines: entry.lines, label: name,
+      id: entry.mediaId, color: entry.color, dash: activityDash(entry.activity), lines: entry.lines, label: name,
       startLabel: t('memory.tracks.start', { name }), endLabel: t('memory.tracks.end', { name }),
     }]
   }),
@@ -146,13 +157,48 @@ const rowMenuItems = computed<VeyqMenuItem[]>(() => {
   const entry = menuFor.value
   if (!entry) return []
   return [
+    { key: 'edit', label: t('memory.tracks.edit'), icon: 'pencil', visible: !!props.editLabel, command: () => openEdit(entry) },
     { key: 'download', label: t('memory.tracks.download'), icon: 'download', visible: props.canDownload, command: () => void download(entry) },
     { key: 'report', label: t('report.action'), icon: 'flag', visible: props.canReport, command: () => emit('report', entry.item) },
     { key: 'remove', label: t('memory.tracks.remove'), icon: 'trash', visible: props.canRemove(entry.mediaId), command: () => emit('remove', entry.item) },
   ]
 })
 function hasRowActions(entry: TrackEntry): boolean {
-  return props.canDownload || props.canReport || props.canRemove(entry.mediaId)
+  return !!props.editLabel || props.canDownload || props.canReport || props.canRemove(entry.mediaId)
+}
+
+// --- a row's Edit: its name and activity (decision 9) -----------------------------------------------------------------
+const editing = ref<TrackEntry | null>(null)
+const editSaving = ref(false)
+const editError = ref<'conflict' | 'failed' | null>(null)
+const editDialog = ref<InstanceType<typeof TrackEditDialog> | null>(null)
+function openEdit(entry: TrackEntry) {
+  editError.value = null
+  editing.value = entry
+}
+async function saveEdit(label: TrackLabel) {
+  const entry = editing.value
+  const write = props.editLabel
+  if (!entry || !write || editSaving.value) return
+  editSaving.value = true
+  editError.value = null
+  try {
+    await write(entry.item, label)
+    editing.value = null
+  } catch (e) {
+    editError.value = e instanceof MetaConflictError ? 'conflict' : 'failed'
+    if (e instanceof MetaConflictError) {
+      // the detail patched the track with the peer's tier: show theirs in the fields
+      await nextTick()
+      const now = entries.value.find((it) => it.mediaId === entry.mediaId)
+      if (now) {
+        editing.value = now
+        editDialog.value?.reset({ name: now.ownName, activity: now.activity })
+      }
+    }
+  } finally {
+    editSaving.value = false
+  }
 }
 
 async function download(entry: TrackEntry) {
@@ -239,8 +285,12 @@ function factsOf(entry: TrackEntry): string {
           :aria-label="t('memory.tracks.show', { name: nameOf(entry, index) })"
           @update:model-value="(v: boolean) => setShown(entry.mediaId, v)"
         />
-        <span class="memory-track-swatch" :style="{ backgroundColor: entry.color }" aria-hidden="true" />
+        <!-- the line as the map draws it: the track's colour and its activity's dash -->
+        <svg class="memory-track-swatch" viewBox="0 0 28 8" aria-hidden="true" data-testid="track-swatch">
+          <line x1="2" y1="4" x2="26" y2="4" :stroke="entry.color" stroke-width="4" stroke-linecap="round" :stroke-dasharray="activityDash(entry.activity)" />
+        </svg>
         <button type="button" class="memory-track-main" :disabled="entry.status !== 'ready'" @click="select(entry.mediaId)">
+          <span v-if="entry.activity" class="memory-track-activity" data-testid="track-activity">{{ t(`memory.tracks.activity.${entry.activity}`) }}</span>
           <span class="memory-track-name">{{ nameOf(entry, index) }}</span>
           <span v-if="entry.status === 'loading'" class="memory-track-facts">{{ t('memory.tracks.loading') }}</span>
           <span v-else-if="entry.status === 'failed'" class="memory-track-facts is-failed">{{ t('memory.tracks.unreadable') }}</span>
@@ -260,6 +310,16 @@ function factsOf(entry: TrackEntry): string {
       </li>
     </ul>
     <VeyqMenu ref="rowMenu" :items="rowMenuItems" />
+    <TrackEditDialog
+      v-if="editing && editLabel"
+      ref="editDialog"
+      :label="{ name: editing.ownName, activity: editing.activity }"
+      :fallback-name="editing.fileTrackName"
+      :saving="editSaving"
+      :error="editError"
+      @save="saveEdit"
+      @close="editing = null"
+    />
   </div>
 </template>
 
@@ -318,9 +378,8 @@ function factsOf(entry: TrackEntry): string {
 }
 .memory-track-swatch {
   flex: none;
-  width: 0.9rem;
-  height: 0.9rem;
-  border-radius: 50%;
+  width: 1.75rem;
+  height: 0.5rem;
 }
 .memory-track-main {
   flex: 1;
@@ -339,6 +398,12 @@ function factsOf(entry: TrackEntry): string {
 }
 .memory-track-main:disabled {
   cursor: default;
+}
+.memory-track-activity {
+  color: var(--app-muted);
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
 }
 .memory-track-name {
   font-weight: 600;

@@ -31,6 +31,7 @@ import { sealNodeMeta, unsealNodeMeta } from '../../core/node/nodeMeta'
 import type { ExportNodeContext, ImportNodeContext } from '../../core/export/hooks'
 import type { ManifestNode } from '../../core/export/manifest'
 import type { ScopeKey } from '../spaces/epochs'
+import { TRACK_ACTIVITIES } from './track/trackLabel'
 import { exportMemoryContent, importMemoryContent, validateMemoryContent, MEMORIES_LIMITS, MEMORY_CONTENT, CHAPTER_CONTENT } from './exportImport'
 import { readFileSync } from 'node:fs'
 import { CHAPTER_KIND, MEMORY_KIND } from './kinds'
@@ -114,6 +115,20 @@ describe('exportMemoryContent', () => {
     expect(b).toMatchObject({ capturedAt: new Date(1_700_000_100_000).toISOString(), capturedAtCorrected: true })
     // the upload falls back to the modified time for a missing capture time: the capture time rides there
     expect(payloads.map((p) => p.modifiedAt)).toEqual([1_700_000_000_000, 1_700_000_100_000])
+  })
+
+  // ADR 0130 decision 9: a track's own name and activity travel with it; a medium without them carries no `track`.
+  // Lever: drop the `medium.track` assignment in the walk.
+  it('exports a GPX track\'s own name and activity as its `track`, and nothing for a medium without them', async () => {
+    // media of their own: the listed tier is opened once per medium and seal (`openedListing.ts`), across the tests
+    vi.mocked(listMediaPages).mockResolvedValue({ notModified: false, items: [item('t1'), item('t2')], mediaRevision: 1, deleteRevision: 0, mediaIds: null, cursor: null })
+    vi.mocked(unsealMeta).mockImplementation((_s, _k, it) =>
+      it.mediaId === 't1' ? { v: 1, capturedAt: 1_000, trackName: 'Gipfeltour', trackActivity: 'skiing' } : { v: 1, capturedAt: 2_000, trackActivity: 'paragliding' })
+    const c = (await exportMemoryContent(exportCtx(meta).ctx))!
+    const [a, b] = c.media as { track?: unknown }[]
+    expect(a.track).toEqual({ name: 'Gipfeltour', activity: 'skiing' })
+    expect(b.track, 'a newer client\'s activity is not one this format names').toBeUndefined()
+    expect(validateMemoryContent(c)).toBeNull()
   })
 
   it('an uploaded cover travels as a payload of its own, read through the session\'s source', async () => {
@@ -367,6 +382,13 @@ describe('importMemoryContent', () => {
     expect([setMediaMeta, backfillPlaceName, listMedia].map((f) => vi.mocked(f).mock.calls.length), 'no second pass').toEqual([0, 0, 0])
   })
 
+  it('restores a GPX track\'s own name and activity at birth, beside the rest of its facts', async () => {
+    const track = { file: { path: 'data/n3/t.gpx', size: 1, mediaType: 'application/gpx+xml' }, name: 't.gpx', track: { name: 'Gipfeltour', activity: 'cycling' } }
+    const plain = { file: { path: 'data/n3/u.gpx', size: 1, mediaType: 'application/gpx+xml' }, name: 'u.gpx', track: { name: '  ' } }
+    await importMemoryContent(MEMORY_KIND)(ctx(node({ media: [track, plain] })))
+    expect(vi.mocked(addMedia).mock.calls.map((c) => c[5]?.restored)).toEqual([{ trackName: 'Gipfeltour', trackActivity: 'cycling' }, {}])
+  })
+
   it('creates a chapter under its Memory with the chapter kind', async () => {
     const n = node({ type: CHAPTER_CONTENT, media: [], cover: undefined, date: undefined, location: undefined })
     n.kind = CHAPTER_KIND
@@ -468,6 +490,9 @@ describe('validateMemoryContent: a download\'s Memory checked against its contra
     ['a participant over its length', { ...sound, participants: ['x'.repeat(MEMORIES_LIMITS.participant + 1)] }, 'too_large'],
     ['more participants than the cap', { ...sound, participants: Array.from({ length: MEMORIES_LIMITS.participants + 1 }, () => 'A') }, 'too_large'],
     ['music that is no list', { ...sound, music: { service: 'spotify' } }, 'invalid_manifest'],
+    ['a track label that is no object', { ...sound, media: [{ ...medium, track: 'Ridge' }] }, 'invalid_manifest'],
+    ['a track activity the format does not name', { ...sound, media: [{ ...medium, track: { activity: 'paragliding' } }] }, 'invalid_manifest'],
+    ['a track name over its length', { ...sound, media: [{ ...medium, track: { name: 'x'.repeat(MEMORIES_LIMITS.trackName + 1) } }] }, 'too_large'],
     ['more playlists than the services', { ...sound, music: [{}, {}, {}] }, 'too_large'],
     ['a banner with no file', { ...sound, banner: { medium: 'image' } }, 'invalid_manifest'],
     ['a banner of another medium', { ...sound, banner: { medium: 'audio', file: { path: 'b', size: 1 } } }, 'invalid_manifest'],
@@ -487,7 +512,9 @@ describe('validateMemoryContent: a download\'s Memory checked against its contra
       participant: d.memory.properties.participants.items.maxLength,
       participants: d.memory.properties.participants.maxItems,
       music: d.music.maxItems,
+      trackName: d.medium.properties.track.properties.name.maxLength,
     }).toEqual(MEMORIES_LIMITS)
+    expect(d.medium.properties.track.properties.activity.enum, 'the activities are the client\'s').toEqual([...TRACK_ACTIVITIES])
     expect(d.chapter.properties.music.$ref).toBe('#/$defs/music')
     // the banner has no description, and neither a cover nor a banner names a medium by index
     expect(Object.keys(d.banner.properties)).not.toContain('alt')

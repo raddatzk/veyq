@@ -8,13 +8,21 @@ import type { MediaItem } from '../media'
 import type { OpenedBlobMeta } from '../../../core/blob/meta'
 import type { LatLng } from '../memoryLocation'
 import { parseGpx, simplifyLine, trackColor, trackName, trackStats, type TrackStats } from './gpx'
+import type { TrackActivity, TrackLabel } from './trackLabel'
 
 /** One track as the Map tab lists and draws it. */
 export type TrackEntry = {
   item: MediaItem
   mediaId: string
-  /** The track's own name, else its file name without `.gpx`; null where neither is known (the tab numbers it). */
+  /** The name a member gave it, else the file's own track name, else its file name without `.gpx`; null where none is
+   *  known (the tab numbers it). */
   name: string | null
+  /** What the name falls back to without the member's: the file's own track name, else its file name (an edit's hint). */
+  fileTrackName: string | null
+  /** The name a member gave it (ADR 0130 decision 9); null: named by its file. */
+  ownName: string | null
+  /** The activity a member gave it; null: none (drawn solid, no word). */
+  activity: TrackActivity | null
   /** The file name it was picked under (the download's name). */
   fileName: string | undefined
   color: string
@@ -40,6 +48,8 @@ export interface MemoryTracksCtx {
   blobMeta: (item: MediaItem, key: Uint8Array) => OpenedBlobMeta | null
   /** The listed capture time — the list's order, so a track keeps its colour as others are read. */
   capturedAt: (item: MediaItem, key: Uint8Array) => number | undefined
+  /** The name and activity a member gave it, from its listed tier (ADR 0130 decision 9). */
+  label: (item: MediaItem, key: Uint8Array) => TrackLabel
 }
 
 /** Read and parse one track's original; the decoder refuses bytes that are no UTF-8 text. */
@@ -110,10 +120,15 @@ export function useMemoryTracks(ctx: MemoryTracksCtx) {
     return ordered.map((item, index) => {
       const read = reads.value[item.mediaId]
       const fileName = typeof ctx.blobMeta(item, key)?.name === 'string' ? (ctx.blobMeta(item, key)?.name as string) : undefined
+      const fileTrackName = trackName(read?.status === 'ready' ? read : null, fileName)
+      const label = ctx.label(item, key)
       const entry: TrackEntry = {
         item,
         mediaId: item.mediaId,
-        name: trackName(read?.status === 'ready' ? read : null, fileName),
+        name: label.name ?? fileTrackName,
+        fileTrackName,
+        ownName: label.name,
+        activity: label.activity,
         fileName,
         color: trackColor(index),
         status: read?.status ?? 'loading',

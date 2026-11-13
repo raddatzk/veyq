@@ -51,6 +51,8 @@ import MediaTile from './MediaTile.vue'
 import MemoryBuckets from './MemoryBuckets.vue'
 import MemoryTracks from './MemoryTracks.vue'
 import { GPX_MEDIA_TYPE } from '../track/gpx'
+import type { TrackLabel } from '../track/trackLabel'
+import { MetaConflictError } from '../../../core/node/sealedMetaWrite'
 import OptimisticTile from './OptimisticTile.vue'
 import { enqueueUploads, collectPickedFiles, inferMediaType, retryFile } from '../uploadQueue'
 import { useMediaGalleryLive } from '../useMediaGalleryLive'
@@ -683,6 +685,28 @@ function onRemoveTrack(item: MediaItem) {
   } else if (can.value.deleteMedia === 'any') void onDeleteFromLightbox({ mediaId: item.mediaId })
 }
 
+/**
+ * A track's own name and activity (ADR 0130 decision 9): a medium's meta write, so offered where a medium's meta may be
+ * edited - `editMeta` and the source's `mediaMeta` door, which a guest's source does not carry. The write lands in the
+ * listing as a lightbox's date correction does (the item's tier and revision patched, `onCapturedAtUpdated`); a peer's
+ * label that came first is patched in the same way and the conflict handed back to the dialog.
+ */
+const editTrackLabel = computed(() => {
+  const write = can.value.editMeta ? props.source.mediaMeta : undefined
+  if (!write) return undefined
+  return async (item: MediaItem, label: TrackLabel) => {
+    const key = props.memoryKey
+    if (!key) throw new Error('memory_locked')
+    try {
+      const done = await write.setTrackLabel(item, key, props.node, label)
+      onCapturedAtUpdated({ mediaId: item.mediaId, wrappedMeta: done.wrappedMeta, metaRevision: done.metaRevision })
+    } catch (e) {
+      if (e instanceof MetaConflictError) onCapturedAtUpdated({ mediaId: item.mediaId, ...e.current })
+      throw e
+    }
+  }
+})
+
 // --- a guest's delete of its own media (inbox #361): irreversible — the server purges it and keeps no copy — so asked
 // first, then gone from the grid at once. A member's delete is the lightbox's trash with undo (`useMediaGalleryLive`).
 const deletingOwn = ref<Set<string>>(new Set())
@@ -1005,6 +1029,7 @@ watch(
             :can-download="can.download"
             :can-report="!!canReport"
             :pick-ready="trackPickReady"
+            :edit-label="editTrackLabel"
             @add="enqueueTracks"
             @remove="onRemoveTrack"
             @report="emit('reportMedium', $event)"

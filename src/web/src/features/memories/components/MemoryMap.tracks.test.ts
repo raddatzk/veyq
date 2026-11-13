@@ -82,6 +82,13 @@ describe('MemoryMap tracks', () => {
     expect(ends.map((l) => (l.tooltip as HTMLElement).textContent)).toEqual(['a start', 'a end'])
   })
 
+  // ADR 0130 decision 9: the activity's dash rides every segment of its line; a track without one is solid. Lever: drop
+  // `dashArray` from the polyline's options.
+  it('draws each segment with its track\'s dash, and a track without one solid', () => {
+    mountMap([{ ...track('a', '#000'), dash: '2 8' }, track('b', '#111')])
+    expect(leaflet.layers.filter((l) => l.kind === 'line').map((l) => l.options.dashArray)).toEqual(['2 8', '2 8', undefined, undefined])
+  })
+
   it('hands Leaflet every tooltip as a node with text, never a string of markup', () => {
     mountMap([{ ...track('a', '#000'), label: '<img src=x onerror=alert(1)>' }])
     const tooltips = leaflet.layers.map((l) => l.tooltip).filter((t) => t !== null)

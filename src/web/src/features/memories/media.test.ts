@@ -37,6 +37,8 @@ import {
   readCaptureTime,
   backfillPlaceName,
   PLACE_NAME_MAX_BYTES,
+  TRACK_NAME_MAX_BYTES,
+  setTrackLabel,
   clampPlaceName,
   EXIF_TIER_MAX_B64,
   EXIF_TEXT_MAX_BYTES,
@@ -1329,6 +1331,77 @@ describe('setMediaMeta — sealed capturedAt override in the listed-metadata tie
     const conflicting = vi.fn<MediaApi['updateMediaMeta']>().mockRejectedValueOnce(staleTier(corrected, 2)).mockResolvedValue({})
     fakeApi(mediaApi, { updateMediaMeta: conflicting })
     const err = await setMediaMeta(SCOPE_ID, target(MEDIA_ID, memoryKey, { v: 1, capturedAt: ORIG }, 1), memoryKey, 0, CORRECTED).catch((e) => e)
+    expect(err).toBeInstanceOf(MetaConflictError)
+    expect(conflicting).toHaveBeenCalledTimes(1)
+  })
+})
+
+describe('setTrackLabel — a GPX track\'s own name and activity in the listed tier (ADR 0130 decision 9)', () => {
+  const MEDIA_ID = '5c09e000-0000-4000-8000-000000000a02'
+  const FILE_DATE = Date.UTC(2026, 5, 1, 8, 0, 0)
+  const decode = (key: Uint8Array, sealed: string) => openJson(metaCtx(MEDIA_ID), key, sealed)
+
+  // Lever: seal `{ v: 1, trackName, trackActivity }` in place of the raw tier - the file's date and any newer field go.
+  it('re-seals the raw tier with the label, every other field verbatim, and reads it back (operator-blind)', async () => {
+    const store = fakeStore()
+    fakeApi(mediaApi, store.api)
+    fakeApi(blobApi, store.blob)
+    const memoryKey = v1.randomBytes(32)
+    const tier = { v: 1, capturedAt: FILE_DATE, capturedAtSource: 'file', future: 'kept' }
+
+    const saved = await setTrackLabel(SCOPE_ID, target(MEDIA_ID, memoryKey, tier, 2), memoryKey, 0, { name: '  Gipfeltour  ', activity: 'hiking' })
+
+    expect(store.api.updateMediaMeta.mock.calls[0][0].mediaMetaUpdate.metaRevision).toBe(2)
+    expect(store.captured.updatedMeta).not.toContain('Gipfel')
+    expect(decode(memoryKey, store.captured.updatedMeta!)).toEqual({ ...tier, trackName: 'Gipfeltour', trackActivity: 'hiking' })
+    expect(saved.tier).toMatchObject({ trackName: 'Gipfeltour', trackActivity: 'hiking', capturedAt: FILE_DATE })
+  })
+
+  it('drops the name and the activity for null or blank, keeping the rest', async () => {
+    const store = fakeStore()
+    fakeApi(mediaApi, store.api)
+    fakeApi(blobApi, store.blob)
+    const memoryKey = v1.randomBytes(32)
+    const tier = { v: 1, capturedAt: FILE_DATE, trackName: 'Old', trackActivity: 'running' }
+
+    await setTrackLabel(SCOPE_ID, target(MEDIA_ID, memoryKey, tier), memoryKey, 0, { name: '   ', activity: null })
+
+    expect(decode(memoryKey, store.captured.updatedMeta!)).toEqual({ v: 1, capturedAt: FILE_DATE })
+  })
+
+  // The cap is the listed tier's 512 base64, shared with the capture-time PUT. Worst case: every field a track's tier
+  // carries - the capture time, a correction an import restored, the longest source; a GPX file gives no geometry, GPS or
+  // place - with the longest activity and a name past the clamp in three-byte characters (a photo's full tier alone leaves
+  // no room for a label: the Edit is a track's only). Lever: remove the clamp in `trackLabelFields`.
+  it('clamps the name to its bytes and stays inside the 512 cap on a tier carrying every field a track\'s holds', async () => {
+    const store = fakeStore()
+    fakeApi(mediaApi, store.api)
+    fakeApi(blobApi, store.blob)
+    const memoryKey = v1.randomBytes(32)
+    const full = { v: 1, capturedAt: FILE_DATE, capturedAtOverride: FILE_DATE + 1, capturedAtSource: 'container' }
+
+    const saved = await setTrackLabel(SCOPE_ID, target(MEDIA_ID, memoryKey, full), memoryKey, 0, { name: '山'.repeat(200), activity: 'mountain-biking' })
+
+    expect(saved.wrappedMeta!.length).toBeLessThanOrEqual(512)
+    expect(saved.tier!.trackName).toBe('山'.repeat(TRACK_NAME_MAX_BYTES / 3)) // whole characters, never a split one
+  })
+
+  // A peer's label meanwhile is a conflict (the dialog shows theirs); any other peer write is merged under ours.
+  it('re-applies the label on a peer\'s other write; a peer\'s own label surfaces as a conflict', async () => {
+    const memoryKey = v1.randomBytes(32)
+    const peersDate = sealTier(MEDIA_ID, memoryKey, { v: 1, capturedAt: FILE_DATE, capturedAtOverride: 7 })
+    const updateMediaMeta = vi.fn<MediaApi['updateMediaMeta']>().mockRejectedValueOnce(staleTier(peersDate, 2)).mockResolvedValue({})
+    fakeApi(mediaApi, { updateMediaMeta })
+    await setTrackLabel(SCOPE_ID, target(MEDIA_ID, memoryKey, { v: 1, capturedAt: FILE_DATE }, 1), memoryKey, 0, { name: 'Mine', activity: null })
+    expect(decode(memoryKey, updateMediaMeta.mock.calls[1][0].mediaMetaUpdate.wrappedMeta!)).toEqual({
+      v: 1, capturedAt: FILE_DATE, capturedAtOverride: 7, trackName: 'Mine',
+    })
+
+    const peersLabel = sealTier(MEDIA_ID, memoryKey, { v: 1, capturedAt: FILE_DATE, trackName: 'Theirs' })
+    const conflicting = vi.fn<MediaApi['updateMediaMeta']>().mockRejectedValueOnce(staleTier(peersLabel, 2)).mockResolvedValue({})
+    fakeApi(mediaApi, { updateMediaMeta: conflicting })
+    const err = await setTrackLabel(SCOPE_ID, target(MEDIA_ID, memoryKey, { v: 1, capturedAt: FILE_DATE }, 1), memoryKey, 0, { name: 'Mine', activity: null })
+      .catch((e) => e)
     expect(err).toBeInstanceOf(MetaConflictError)
     expect(conflicting).toHaveBeenCalledTimes(1)
   })
