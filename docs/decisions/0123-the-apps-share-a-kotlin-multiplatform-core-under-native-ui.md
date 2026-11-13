@@ -1090,6 +1090,21 @@ implementation exists but what holds it to the first.
     opening in the core and a Save a copy; a medium played; the QR scan's camera prompt and its `NoCamera` path (the VM
     has no camera); an update that keeps the device trust; the drop from Explorer, which needs UAC on (owner step,
     native-apps § Open).
+    **The trust step under a self-signed `CN=veyq` certificate** (the release's signer, ADR 0133 decision 12; walked
+    2026-11-13 on the same VM, **UAC on**, with a throwaway certificate made there by `New-SelfSignedCertificate`, its
+    key removed from the store after exporting a PFX and `veyq.cer`, the package signed by `run.py package --sign
+    <pfx>`; certificate, package and temporary files removed afterwards, none left in any store): before the step,
+    `Add-AppxPackage` in the logged-on session refuses the package, `0x800B0109` (the signature's root certificate is not
+    trusted); `Import-Certificate -FilePath .\veyq.cer -CertStoreLocation Cert:\LocalMachine\TrustedPeople` from the
+    logged-on user's unelevated session (medium integrity) is refused `0x80070005`, and from an elevated one (high
+    integrity, as a person's **Terminal (Admin)** after the UAC prompt; here ssh's administrator token) succeeds; then
+    `Get-AuthenticodeSignature` of the package says `Valid` with the signer's thumbprint the `.cer`'s
+    (`(Get-PfxCertificate .\veyq.cer).Thumbprint`), and the same unelevated `Add-AppxPackage` installs it (publisher
+    `CN=veyq`, `SignatureKind` `Developer`) — the install itself needs no elevation. Removing the certificate is
+    `Get-ChildItem Cert:\LocalMachine\TrustedPeople | Where-Object Subject -eq 'CN=veyq' | Remove-Item`, elevated.
+    **Not walked:** the UAC prompt itself and the certificate wizard's clicks (double-click the `.cer` → Install
+    Certificate → Local Machine → Trusted People) — both need a person at the console; the install page names them as
+    Windows' usual way.
 - **The device trust on every app** (decision 8 as changed 2026-11-11; [ADR 0130](0130-an-apps-logic-is-the-kotlin-cores-each-platform-draws-only-its-own-ui.md)'s
   Consequences for the desktops' stores). The flows are the core's alone — `session/Account.kt` and `SessionModel.kt`
   enrol, offer, resume, unlock, change the level, sign out and stop trusting through the `DeviceKeys` interface

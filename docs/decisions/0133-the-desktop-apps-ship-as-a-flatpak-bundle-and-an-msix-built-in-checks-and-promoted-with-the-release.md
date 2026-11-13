@@ -106,7 +106,8 @@ What constrains the choice:
    (which hashes every payload file) is byte-identical to the staged one's — so the release's MSIX carries the tested
    payload. **The signer is an input, never a file in the tree:** a PFX and its password as secrets of a GitHub
    environment only the signing job names, or a cloud signer's `signtool /dlib` arguments — the same step either way.
-   A self-builder signs with their own (`run.py package --sign <pfx>`, the password from the environment). The
+   **The release's signer is the project's own self-signed certificate**, subject `CN=veyq` (decision 12; the owner,
+   2026-11-13): its PFX and password are that environment's secrets. A self-builder signs with their own (`run.py package --sign <pfx>`, the password from the environment). The
    manifest's `Publisher` must equal the certificate's subject, so it is a build input defaulting to the release's; a
    self-built package has its own package family and installs beside, not over, the released one. Snapshots are not
    Windows-signed; they are cosign-signed like everything else (decision 8).
@@ -163,10 +164,17 @@ What constrains the choice:
     id (which is also the Linux app's GApplication id, its D-Bus name and its resource path — a sandbox lets an app own
     only names under its own id) and the MSIX's `Publisher`. Every reader — `run.py`, the theme generator, the Linux
     app's build — takes it from there. Both are outward identity, permanent once people install a package: an id changed
-    later is a second app beside the first. The values today are **defaults until the owner decides them**:
-    `app.veyq.Veyq` (the project's domain `veyq.app`, which Flathub verifies an id against) and `CN=veyq` (a project
-    certificate of our own: free, no person's legal name in it). No package is published under them before that
-    decision. Android's and Apple's identifiers are decided with their own distribution.
+    later is a second app beside the first. **The owner decided both (2026-11-13):** `app.veyq.Veyq` — the owner holds
+    the domain `veyq.app`, which Flathub verifies an id against — and `CN=veyq`, the subject of **a self-signed
+    certificate of the project's own**, which signs the released MSIX (decision 7): free, and no person's legal name in
+    it. Windows does not trust it by itself, so a person trusts its public half once, as administrator, before the
+    first install — imported into the computer's (Local Machine) *Trusted People* store, the store Windows checks a
+    sideloaded package's self-signed certificate against (measured on the test VM, ADR 0123's Consequences, the MSIX).
+    **The release carries that public half as a file of its own, `veyq.cer`,** checked like a package (decision 8):
+    listed by sha256 under the manifest's `apps` and given a `cosign sign-blob` bundle, so a person verifies the
+    certificate they are about to trust against the release identity before trusting it — not built, with the
+    promotion. The certificate itself is made with the release's signing environment (an owner step), never in the
+    tree. Android's and Apple's identifiers are decided with their own distribution.
 
 ## Consequences
 
@@ -174,8 +182,8 @@ What constrains the choice:
   guard, then the MSIX, then CI's three jobs, then the release's snapshot, signing and promotion, then the site's
   *Install the app* page. What each measured lands in [native-apps](../crosscutting/native-apps.md) and ADR 0123's
   Consequences (the Linux app, the Windows app).
-- **Owed by a person, not this record:** the release signer's GitHub environment and its secrets (an owner step), and
-  the owner's answer on the identity (decision 12) before the first package is published.
+- **Owed by a person, not this record:** the release certificate (`CN=veyq`, decision 12) and the signing
+  environment's secrets that hold it — an owner step before the first release that carries a package.
 - **One central dependency:** a Flatpak desktop fetches the GNOME runtime from Flathub. It is said where the bundle is
   offered, with the offline way around it.
 - **What the docs site says.** [Install the app](../../site/src/content/docs/getting-started/install-the-app.mdx) (EN and

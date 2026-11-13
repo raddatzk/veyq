@@ -339,6 +339,14 @@ certificate and a PFX ([ADR 0123](https://github.com/raddatzk/veyq/blob/main/doc
 Consequences, the MSIX); the release's signing job is not built. The Flatpak bundle carries no GPG signature: it has no
 repository to be verified against, so the cosign bundle and the manifest are its provenance.
 
+**The certificate Windows is asked to trust.** The release's signer is a self-signed certificate of the project's own,
+subject `CN=veyq` (ADR 0133 decisions 7 and 12), which a person adds to their computer's *Trusted People* before the
+first install ([Install the app](/getting-started/install-the-app/#windows)). Its public half comes with the release as
+`veyq.cer`, verified like a package: its own cosign bundle under the release identity, and its sha256 under `apps`.
+Check it that way before trusting it — the import is trust in whoever holds the key, and nothing revokes it
+([Known limitations](/security/known-limitations/#the-desktop-app-flathubs-runtime-windows-trust-no-auto-update)). Not
+built: no release carries the certificate yet.
+
 **Built yourself.** `python3 src/mobile/linux/run.py flatpak` and `python3 src/mobile/windows/run.py package --sign
 <pfx>` build the same packages from a checkout over pinned inputs (the runtime and SDK by commit, the build container
 by digest, crates, NuGet and Gradle by their locks). "Reproducible" means that, not identical bytes: a Flatpak's
