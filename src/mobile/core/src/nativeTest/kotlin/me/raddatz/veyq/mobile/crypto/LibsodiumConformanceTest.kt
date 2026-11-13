@@ -17,7 +17,7 @@ class LibsodiumConformanceTest {
         val c = Conformance(LibsodiumPrimitives, vectors)
         val failures = c.run(argonAtProductionCost = true)
         assertEquals(emptyList(), failures, failures.joinToString("\n"))
-        assertTrue(c.checked > 40, "only ${c.checked} cases ran")
+        assertTrue(c.checked > 200, "only ${c.checked} cases ran")
         println("libsodium conformance: ${c.checked} cases")
     }
 

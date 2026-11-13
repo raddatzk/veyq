@@ -13,7 +13,7 @@ class ConformanceTest {
         val c = Conformance(BouncyCastlePrimitives, vectors)
         val failures = c.run(argonAtProductionCost = true)
         assertEquals(emptyList(), failures, failures.joinToString("\n"))
-        assertTrue(c.checked > 60, "only ${c.checked} cases ran")
+        assertTrue(c.checked > 200, "only ${c.checked} cases ran")
     }
 
     /** The bite: a primitive that is off by one byte must make the suite red, or the suite proves nothing. */
@@ -26,6 +26,21 @@ class ConformanceTest {
         val failures = Conformance(broken, vectors).run(argonAtProductionCost = false)
         assertTrue(failures.any { it.startsWith("hkdf") }, "a broken HKDF went unnoticed")
         assertTrue(failures.any { it.startsWith("seal.asym") }, "a broken HKDF did not break the asymmetric wrap")
+        assertTrue(failures.any { it.startsWith("pairing_channel handle") }, "a broken HKDF did not break the pairing channel")
+    }
+
+    /** The pairing MACs' bite: an HMAC that drops its key must make each pairing MAC red — the relay's position, a MAC
+     *  computable without the channel key. */
+    @Test
+    fun aKeylessPairingMacIsCaught() {
+        val keyless = object : Primitives by BouncyCastlePrimitives {
+            override fun hmacSha256(key: ByteArray, data: ByteArray) = BouncyCastlePrimitives.sha256(data)
+        }
+        val failures = Conformance(keyless, vectors).run(argonAtProductionCost = false)
+        val all = failures.joinToString("\n")
+        for (name in listOf("answer", "sign_in_answer", "envelope")) {
+            assertTrue(failures.any { it.startsWith("pairing_channel $name:") }, all)
+        }
     }
 
     /** The trust checks' bite: a signature check that says yes to anything must make the chain's and the succession's

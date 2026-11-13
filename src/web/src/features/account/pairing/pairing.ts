@@ -49,6 +49,11 @@ const CODE_REJECT_AT = 250
 const PAIRING_GRANT = { purpose: 'pairing-grant' } as const
 
 const SECRET_BYTES = 32
+const MASTER_KEY_BYTES = 32
+/** What a scan may carry around the payload: ASCII space, tab, CR, LF — not every Unicode space `trim()` takes. */
+const EDGE_WHITESPACE = /^[ \t\r\n]+|[ \t\r\n]+$/g
+/** A 32-byte secret in standard base64, padded or not. */
+const SECRET_TEXT = /^[A-Za-z0-9+/]{43}=?$/
 const decoder = new TextDecoder()
 
 /**
@@ -121,21 +126,28 @@ export function channelKeys(secret: string): PairingChannelKeys {
 /**
  * Read a secret out of a scanned string under one specific marker, or `null`. Anchored at both ends on purpose:
  * the payload IS the whole string, so nothing can ride along after the secret, and a code carrying a host, a
- * path or a query never parses as one of ours (ADR 0059 §4). A payload that is not exactly 32 bytes is not one
- * this client minted.
+ * path or a query never parses as one of ours (ADR 0059 §4). A payload that is not exactly 32 bytes in the
+ * canonical encoding this client mints is not one of ours. The grammar is pinned for every implementation by
+ * `contracts/crypto/vectors/v1.json` § `pairing_channel.payloads` — a change here is a change there first.
  *
  * Both directions share this reader so the two markers cannot drift into two different notions of "a payload of
  * ours" — but each anchors on its OWN prefix, so neither ever accepts the other's code. That refusal is
  * load-bearing, not tidiness: see [SIGNIN_PREFIX].
  */
 function parseMarked(prefix: string, text: string): string | null {
-  const m = new RegExp(`^${prefix}([A-Za-z0-9+/]+={0,2})$`).exec(text.trim())
-  if (!m) return null
+  const t = text.replace(EDGE_WHITESPACE, '')
+  if (!t.startsWith(prefix)) return null
+  const body = t.slice(prefix.length)
+  // 43 symbols are exactly 32 bytes; a leading `/` would read `veyqpair://`, which the minter never writes.
+  if (!SECRET_TEXT.test(body) || body.startsWith('/')) return null
+  let bytes: Uint8Array
   try {
-    return fromB64std(m[1]).length === SECRET_BYTES ? m[1] : null
+    bytes = fromB64std(body)
   } catch {
     return null
   }
+  // Canonical only: a decoder that ignores the last symbol's unused bits would map several texts to one secret.
+  return bytes.length === SECRET_BYTES && b64std(bytes) === body.padEnd(44, '=') ? body : null
 }
 
 /** The displayed code's whole payload in *add a device*: the marker and the secret, nothing else (§4, §11). */
@@ -318,17 +330,7 @@ export const checkNumber = (pub: v1.Identity['pub']): string => v1.fingerprint(p
  * ```
  */
 export function sealGrant(key: Uint8Array, pub: v1.Identity['pub'], grant: PairingGrant): string {
-  const plaintext = v1.utf8(
-    JSON.stringify({
-      v: 1,
-      email: grant.email,
-      masterKey: b64std(grant.masterKey),
-      refreshToken: grant.refreshToken,
-      label: grant.label,
-      ...(grant.marks ? { marks: grant.marks } : {}),
-    }),
-  )
-  const sealed = v1.sealTo(PAIRING_GRANT, pub.kem, plaintext)
+  const sealed = v1.sealTo(PAIRING_GRANT, pub.kem, v1.utf8(writeGrant(grant)))
   return b64std(v1.concat(v1.lp(sealed), v1.lp(v1.pairingMac(key, { purpose: 'pairing-envelope', envelope: sealed }))))
 }
 
@@ -344,16 +346,56 @@ export function openGrant(key: Uint8Array, priv: v1.Identity['priv'], envelope: 
   if (!v1.pairingMacVerifies(key, { purpose: 'pairing-envelope', envelope: sealed }, mac)) {
     throw new PairingRefused('envelope_refused')
   }
-  const plaintext = v1.openAs(PAIRING_GRANT, v1.hybridSecret(priv), sealed)
-  const o = JSON.parse(decoder.decode(plaintext)) as Partial<Record<keyof PairingGrant | 'v', unknown>>
+  return readGrant(decoder.decode(v1.openAs(PAIRING_GRANT, v1.hybridSecret(priv), sealed)))
+}
+
+/**
+ * The grant's plaintext as the envelope carries it: versioned JSON in exactly this key order, no whitespace. Pinned
+ * for every implementation by `contracts/crypto/vectors/v1.json` § `pairing_channel.grant` (its `written` cases).
+ */
+export function writeGrant(grant: PairingGrant): string {
+  return JSON.stringify({
+    v: 1,
+    email: grant.email,
+    masterKey: b64std(grant.masterKey),
+    refreshToken: grant.refreshToken,
+    label: grant.label,
+    ...(grant.marks ? { marks: grant.marks } : {}),
+  })
+}
+
+const unreadable = (): never => {
+  throw new Error('pairing_grant_unreadable')
+}
+
+/**
+ * Read an opened envelope's plaintext, or throw `pairing_grant_unreadable` for anything that is not the shape
+ * {@link writeGrant} writes (a field it does not know is ignored). Held to the same vector section.
+ */
+export function readGrant(text: string): PairingGrant {
+  let parsed: unknown
+  try {
+    parsed = JSON.parse(text)
+  } catch {
+    return unreadable()
+  }
+  if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return unreadable()
+  const o = parsed as Partial<Record<keyof PairingGrant | 'v', unknown>>
   if (o.v !== 1 || typeof o.email !== 'string' || typeof o.masterKey !== 'string'
     || typeof o.refreshToken !== 'string' || typeof o.label !== 'string') {
-    throw new Error('pairing_grant_unreadable')
+    return unreadable()
   }
+  let masterKey: Uint8Array
+  try {
+    masterKey = fromB64std(o.masterKey)
+  } catch {
+    return unreadable()
+  }
+  if (masterKey.length !== MASTER_KEY_BYTES) return unreadable()
   const marks = o.marks === undefined ? undefined : readMarksField(o.marks)
   return {
     email: o.email,
-    masterKey: fromB64std(o.masterKey),
+    masterKey,
     refreshToken: o.refreshToken,
     label: o.label,
     ...(marks ? { marks } : {}),
@@ -366,7 +408,8 @@ const isMark = (n: unknown): n is number => typeof n === 'number' && Number.isSa
  *  refused like any other unreadable body rather than half-read. */
 function readMarksField(raw: unknown): TrustMarks {
   const m = raw as Partial<Record<keyof TrustMarks, unknown>> | null
-  if (!m || typeof m !== 'object' || !isMark(m.pins) || !isMark(m.register) || !m.epochs || typeof m.epochs !== 'object') {
+  if (!m || typeof m !== 'object' || Array.isArray(m) || !isMark(m.pins) || !isMark(m.register) || !m.epochs
+    || typeof m.epochs !== 'object' || Array.isArray(m.epochs)) {
     throw new Error('pairing_grant_unreadable')
   }
   const epochs: Record<string, number> = {}
