@@ -337,7 +337,7 @@ and never rebuilds (D10). The Mac builds only aarch64 locally; x86_64 is CI's.
   detached worktree as the phase text says: the snapshot-and-restore in this worktree is the `changes/README.md`
   protocol, and the porcelain check shows nothing else moved.
 
-- [ ] **4 windows — the MSIX builds, installs and runs on the VM.** `Package.appxmanifest`, the PNG assets,
+- [x] **4 windows — the MSIX builds, installs and runs on the VM.** `Package.appxmanifest`, the PNG assets,
   `run.py package [--sign]`, Release tests. **First measurements, each a stop-and-ask:** (a) a signed MSIX installs and
   **starts** on the VM as it is, UAC off — if Windows refuses, the owner turns UAC on (`EnableLUA 1`, reboot, a console
   logon: an owner step, also wanted by native-apps' open drop) before the rest; (b) the self-contained Windows App SDK
@@ -350,6 +350,38 @@ and never rebuilds (D10). The Mac builds only aarch64 locally; x86_64 is CI's.
   leaves the VM. · **Done when:** `python3 src/mobile/windows/run.py package --sign` exits 0 and the pass above is
   recorded in ADR 0123's Consequences with a screenshot per screen; `run.py build` green (the unpackaged debug loop
   unchanged).
+
+  **Status: done (2026-11-13), its signed-in part owed** (the dev backend was down).
+  **Built:** `Veyq/Package.appxmanifest.in` (a template: `run.py` fills the identity from `desktop-identity.json`, the
+  version `<major>.<minor>.0.0` from `release_assets.tree_release`, `Windows.Desktop` from the project's
+  `TargetPlatformMinVersion`/`TargetPlatformVersion`, read by `dotnet msbuild -getProperty`; red on a placeholder left
+  or XML that does not parse); `Veyq.csproj` packages under `VeyqPackage=true` only (the debug loop stays unpackaged);
+  `generate_theme.py --winui` renders the MSIX images into `msix/` from the `.ico`'s plates; `run.py package [--sign
+  [PFX]] [--smoke]` and `drop-dev-cert`; Veyq.Drive's launch activates a package by AUMID; `in_session` runs deployment in
+  the logged-on session; `powershell()` refuses a script over cmd.exe's line. Capabilities include `webcam` (the QR scan
+  landed). Recorded in ADR 0123's Consequences (the MSIX), ADR 0133 (Built; decision 6's manifest), native-apps § Open,
+  `src/mobile/CLAUDE.md` (the verb, a trap).
+  **Met:** the three first measurements, none a stop: (a) the signed MSIX installs and starts with UAC off, so no owner
+  step for that (the drop still needs UAC on: the app is elevated there); (b) the self-contained Windows App SDK starts
+  in the package; (c) the block map stays byte-identical under the development certificate and under a PFX. `python3
+  src/mobile/windows/run.py package --sign --smoke` exit 0 at `7be4ab7ff` (1.622: built, Release tests 4 + 4 + 33
+  passed, signed with the block map unchanged, installed, `session SignIn`, uninstalled, nothing left). The pass (ADR 0123's Consequences): German sign-in, Start entry, update 1.621 → 1.622 in place
+  keeping the package's data, uninstall leaving nothing; screenshots taken, not committed. Bites, each red by its own
+  message and restored with `/bin/cp -f`: the manifest with a `--` in its comment (`no well-formed XML`), a placeholder
+  renamed (`placeholders run.py does not fill`), the signed side's compared file swapped (`signing changed the block
+  map`), the smoke's awaited line changed (`did not reach its sign-in in 60 s`). `python3 src/mobile/windows/run.py
+  build` green (4 + 4 + 33 passed); the guards (guard_gaps skipped) printed no RED. VM cleaned: no package, the
+  development certificate gone from both stores, `F:\veyq\package` removed, the development data put back.
+  **Owed** (needs a signed-in server; the steps in ADR 0123's Consequences, the MSIX): sign-in, Hello enrolment and a
+  restart that unlocks, the members' pictures, a picked file opening in the core and Save a copy, a medium played, the
+  camera's prompt and `NoCamera`, an update keeping the device trust; the Explorer drop after the owner turns UAC on.
+  **Retrospective:** the session, not UAC, was the obstacle: deployment refuses session 0 (`0x80070005`), which the
+  install's own message does not say — the AppX log does (`Get-AppxLog -ActivityID`). Two failures hid their cause:
+  cmd.exe's line limit on a longer encoded script, and an XML comment's `--` behind the MSIX task's missing assembly;
+  each now fails first, by name. A packaged app writes into a pre-existing `%LOCALAPPDATA%\veyq` in place, so a
+  development VM measures an uninstall only with that moved aside. `MinVersion` 10.0.26100.0 (the project's default)
+  keeps Windows 10 and Windows 11 before 24H2 out: lowering it is a choice for whoever tests there (phase 7's page
+  says it).
 - [ ] **5 ci — Checks builds, tests, smoke-runs and stages the packages.** D10's three jobs, the ORAS step, `green.needs`,
   the budgets (estimates until the first run replaces them), every new action pinned by commit. The guards that read the
   workflows are updated in the same commit, each new assertion bitten (`validate_release_identity.py` that `veyq-apps`

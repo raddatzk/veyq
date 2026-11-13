@@ -297,6 +297,13 @@ A Gradle build of its own, run through its own wrapper.
     `hovershot <file>` (the screen while the next drag is held), `click <x> <y>`, `screen <file>`, `droptargets`, `size`,
     `maximize`, `wait`, `sleep`, `shot <name>.png`) and prints what each saw. Read the log and the tree first; a `shot`
     (to `build/windows/shots/`) is the proof, not the probe.
+  - `package [--sign [PFX]] [--smoke]` builds the MSIX (ADR 0133 decisions 6 and 7): the release DLL, the manifest
+    filled from `Veyq/Package.appxmanifest.in` (identity from `desktop-identity.json`, version from the tree), the
+    tests in Release there, the app in Release as an unsigned self-contained x64 MSIX through the Windows App SDK's
+    MSBuild tooling, fetched to `build/windows/package/`. `--sign` signs a copy with the locked build tools' `signtool`
+    (a PFX here with `VEYQ_MSIX_PFX_PASSWORD`, else a development certificate made on the host) and is red unless
+    `AppxBlockMap.xml` stays byte-identical; `--smoke` installs it, starts it by its AUMID to its sign-in and uninstalls
+    it. `drop-dev-cert` removes the development certificate from both stores there.
   - `register` registers the scheduled tasks `veyq-app` and `veyq-drive` once per Windows host. It is the host owner's
     step: a persistent change on a machine.
 
@@ -690,6 +697,14 @@ first in each of its scrolls — `LocalNodeHero.current(inset)` (Android) / `Nod
   (`0xC000027B`, WER `80070005`). The app and `Veyq.Drive` start in the logged-on session through the scheduled tasks
   `register` sets up. Over ssh `$env:USERDOMAIN` reads `WORKGROUP`, which maps to no SID (`0x80070534`), so `register`
   names the account by `[Security.Principal.WindowsIdentity]::GetCurrent().Name`.
+- The MSIX (2026-11-13, `run.py package`): `Add-AppxPackage` from ssh's session 0 fails `0x80070005` (the AppX log:
+  the PLM does not initialize), so install and uninstall run in the logged-on session (`in_session`). An encoded
+  command is held to cmd.exe's 8191 characters (`Die Befehlszeile ist zu lang`, about 3000 of script): `powershell()`
+  refuses a longer one; split it. The packaged app writes `%LOCALAPPDATA%\veyq` in place where an unpackaged build
+  made it before, and to `Packages\<family>\LocalCache\Local\veyq` where not — a pass that measures what an uninstall
+  leaves moves the development data aside first. A `--` in the manifest's XML comment failed the package build behind
+  an assembly the MSIX task could not load (`System.Security.Permissions`): `run.py` parses the filled manifest first.
+  A packaged build names its .pri `resources.pri`. With UAC off the packaged app starts, elevated like the rest.
 - `run.py` sends every PowerShell script as `-EncodedCommand` (UTF-16LE, base64), so nothing is quoted through cmd.exe,
   and reads what PowerShell prints as the console's code page, CP850 on the German VM. `dotnet` writes UTF-8 there, so
   `run.py` sets its words English (`DOTNET_CLI_UI_LANGUAGE`).

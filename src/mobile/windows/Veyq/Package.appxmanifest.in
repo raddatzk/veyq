@@ -1,0 +1,43 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- The MSIX's manifest (ADR 0133 decision 6): a template. `windows/run.py package` fills each @…@ — the identity from
+     src/mobile/desktop-identity.json, the version from the tree (`<major>.<minor>.0.0`), the device family's versions
+     from the project's TargetPlatformMinVersion and TargetPlatformVersion — into src/mobile/build/generated/msix/, which
+     the package build reads; this file is never built as it is. Capabilities: what the app needs and nothing more —
+     the network (internetClient), a desktop app's full trust (runFullTrust) and the QR scan's camera (webcam); no file
+     system capability: files come and go through the system's pickers and a drop. The images are generate_theme.py's
+     (its Windows output, `msix/`). -->
+<Package
+  xmlns="http://schemas.microsoft.com/appx/manifest/foundation/windows10"
+  xmlns:uap="http://schemas.microsoft.com/appx/manifest/uap/windows10"
+  xmlns:rescap="http://schemas.microsoft.com/appx/manifest/foundation/windows10/restrictedcapabilities"
+  IgnorableNamespaces="uap rescap">
+
+  <Identity Name="@APP_ID@" Publisher="@PUBLISHER@" Version="@VERSION@" ProcessorArchitecture="x64" />
+
+  <Properties>
+    <DisplayName>veyq</DisplayName>
+    <PublisherDisplayName>veyq</PublisherDisplayName>
+    <Logo>Assets\StoreLogo.png</Logo>
+  </Properties>
+
+  <Dependencies>
+    <TargetDeviceFamily Name="Windows.Desktop" MinVersion="@MIN_VERSION@" MaxVersionTested="@MAX_VERSION_TESTED@" />
+  </Dependencies>
+
+  <Resources>
+    <Resource Language="x-generate" />
+  </Resources>
+
+  <Applications>
+    <Application Id="App" Executable="$targetnametoken$.exe" EntryPoint="$targetentrypoint$">
+      <uap:VisualElements DisplayName="veyq" Description="veyq" BackgroundColor="transparent"
+                          Square150x150Logo="Assets\Square150x150Logo.png" Square44x44Logo="Assets\Square44x44Logo.png" />
+    </Application>
+  </Applications>
+
+  <Capabilities>
+    <Capability Name="internetClient" />
+    <rescap:Capability Name="runFullTrust" />
+    <DeviceCapability Name="webcam" />
+  </Capabilities>
+</Package>

@@ -3,6 +3,9 @@
 //   --launch <file>   reads the app's start from <file> — {"exe": …, "args": […], "env": {…}}, args optional — deletes
 //                     it at once, and starts the app with that environment (a secret in it never reaches a command
 //                     line). Writes <file>.started. `run.py hello-probe` starts the core's test binary so, with args.
+//                     {"aumid": …} instead activates an installed package's app by its AUMID (`<family>!App`, run.py
+//                     package --smoke), as Start does: a packaged app takes no environment, and its process id is the
+//                     activation's.
 //   --drive <file>    runs the steps in <file>, one a line, against the app's window, writes what each did to
 //                     <file>.out (UTF-8) and then <file>.done. A step that fails ends the run, said in the output.
 // Steps:
@@ -39,6 +42,7 @@ using System.Collections.Generic;
 using System.Diagnostics;
 using System.Globalization;
 using System.IO;
+using System.Runtime.InteropServices;
 using System.Text;
 using System.Text.Json;
 using System.Threading;
@@ -69,6 +73,13 @@ internal static class Program
             File.Delete(file);
         }
         using var start = JsonDocument.Parse(text);
+        if (start.RootElement.TryGetProperty("aumid", out var aumid))
+        {
+            var manager = (IApplicationActivationManager)new ApplicationActivationManager();
+            manager.ActivateApplication(aumid.GetString()!, null, 0, out var pid);
+            File.WriteAllText(file + ".started", pid.ToString(CultureInfo.InvariantCulture));
+            return 0;
+        }
         var info = new ProcessStartInfo(start.RootElement.GetProperty("exe").GetString()!) { UseShellExecute = false };
         info.WorkingDirectory = Path.GetDirectoryName(info.FileName)!;
         if (start.RootElement.TryGetProperty("args", out var arguments))
@@ -82,6 +93,19 @@ internal static class Program
         using var app = Process.Start(info)!;
         File.WriteAllText(file + ".started", app.Id.ToString(CultureInfo.InvariantCulture));
         return 0;
+    }
+
+    // Start's own activation of a packaged app (shobjidl_core.h); only its first method is called, so only it is declared.
+    [ComImport, Guid("2e941141-7f97-4756-ba1d-9decde894a3d"), InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
+    private interface IApplicationActivationManager
+    {
+        void ActivateApplication([MarshalAs(UnmanagedType.LPWStr)] string appUserModelId,
+            [MarshalAs(UnmanagedType.LPWStr)] string? arguments, int options, out uint processId);
+    }
+
+    [ComImport, Guid("45BA127D-10A8-46EA-8AB7-56EA9078943C")]
+    private class ApplicationActivationManager
+    {
     }
 
     private static int DriveFile(string file)

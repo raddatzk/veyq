@@ -145,8 +145,12 @@ button with its popover and Windows' `AppBarButton` with its flyout, each with C
     Windows 11 provisions them), so where a person removed one the members' pictures fall back to initials (measured
     2026-11-11, the decode test's bite) and a format Media Foundation does not decode is said and offered for saving (the
     VM decoded VP9/Opus and H.264/AAC and refused ProRes, `C00D5212`, said `file_unsupported`; the app ships no codec:
-    patents, the owner's answer of the Depot slice, 2026-11-12). Still to measure in the package: whether a packaged
-    app's picked path opens in the core (ADR 0131) and whether a packaged app takes a drop.
+    patents, the owner's answer of the Depot slice, 2026-11-12). **Built 2026-11-13** (`windows/run.py package`, ADR
+    0123's Consequences, the MSIX): installs, starts to its German sign-in with UAC off (elevated, like every process
+    there), updates in place keeping its data and uninstalls leaving nothing on the VM; a signed copy's block map is the
+    unsigned one's. Still to measure in the package, with a signed-in server: whether a packaged app's picked path
+    opens in the core (ADR 0131), Save a copy, the camera's consent and `NoCamera`, and whether a packaged app takes a
+    drop (it is elevated on the VM as the unpackaged one is: the owner step below answers both).
   - **The visible drop from Explorer was not seen** (2026-11-12): built (`Drops.cs`) and held by `DropSortTest`, but on
     the VM the app gets no drag — no window of it holds an OLE drop target (`Veyq.Drive droptargets`). The VM runs with
     UAC off, every process elevated; that the Windows App SDK takes no drop into an elevated app is remembered from a

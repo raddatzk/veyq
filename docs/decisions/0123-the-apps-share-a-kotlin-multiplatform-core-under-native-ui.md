@@ -1058,6 +1058,38 @@ implementation exists but what holds it to the first.
   from a forum thread, not settled. Two ways around a reboot were measured and dropped (`runas /trustlevel:0x20000` left
   the app elevated; a restricted token started it at medium integrity but still elevated, and its sign-in did not reach
   the server). `DropSortTest` holds the rule; the visible drop is open (native-apps § Open).
+  - **The MSIX** (built 2026-11-13, [ADR 0133](0133-the-desktop-apps-ship-as-a-flatpak-bundle-and-an-msix-built-in-checks-and-promoted-with-the-release.md)
+    decisions 6 and 7; `windows/run.py package [--sign [PFX]] [--smoke]`). The Windows App SDK's single-project MSIX
+    tooling (`Microsoft.Windows.SDK.BuildTools.MSIX` 1.7.251221100, already in the lock) builds it under the .NET SDK's
+    `dotnet build -c Release -p:VeyqPackage=true` — the first Release build of the app; `Veyq.Bridge.Tests` and
+    `Veyq.Tests` pass in Release, the latter against the package's own `resources.pri` (a packaged build's name for it).
+    The manifest is `Veyq/Package.appxmanifest.in` filled by `run.py` (identity from `desktop-identity.json`, version
+    `<major>.<minor>.0.0` from the tree, `Windows.Desktop` from 10.0.26100.0, the project's `TargetPlatformMinVersion`,
+    so Windows 11 24H2 on); capabilities `internetClient`, `runFullTrust` and `webcam`; its images rendered beside the
+    `.ico` (no wide tile: Windows 11 draws none and Quick Look renders only squares). x64, self-contained, 77 MB
+    (`veyq-1.622-x64.msix`, 482 files). `signtool` and `makeappx` are the locked `Microsoft.Windows.SDK.BuildTools`'
+    (10.0.28000.2957), run from the NuGet cache. **On the Windows VM** (Windows 11 Home 26H2 ARM64, UAC off,
+    2026-11-13): (a) the signed package **installs and starts with UAC off** — no owner step needed for that; the app
+    runs elevated (`TokenElevation` 1) as every process there; (b) the self-contained Windows App SDK starts inside the
+    package with no runtime package installed: the core starts and the log says `session SignIn`, the sign-in in
+    **German** (the system's language: a Release build has no `VEYQ_LANGUAGE`), Start lists it (`Get-StartApps`:
+    `veyq`, `app.veyq.Veyq_b17envnammnz6!App`), the title bar carries the icon; (c) signing a copy left
+    `AppxBlockMap.xml` byte-identical (`makeappx unpack` of both, SHA-256 compared; also read with Python's `zipfile`
+    on the Mac), with the development certificate and with a PFX made on the Mac, its password from the environment.
+    Deployment must run in the logged-on session: from ssh's session 0 `Add-AppxPackage` fails `0x80070005` (the AppX
+    log: the PLM does not initialize). **Data:** the app's `%LOCALAPPDATA%` writes go to
+    `Packages\app.veyq.Veyq_b17envnammnz6\LocalCache\Local\veyq` — but where `%LOCALAPPDATA%\veyq` existed before (the
+    unpackaged development build's), the packaged app wrote there in place, so the measurement moved it aside first.
+    **Update in place:** 1.622 installed over a running 1.621 (`Add-AppxPackage -ForceApplicationShutdown`), a file
+    written under 1.621 in its LocalCache was still there, and 1.622 started to its sign-in. **Uninstall** left no
+    package, no `Packages\…` folder, no install folder, no Start entry and nothing under `%LOCALAPPDATA%\veyq`.
+    Screenshots taken (the sign-in in German under 1.621 and 1.622), not committed. **Owed, with a signed-in server**
+    (the dev backend was down; each against the packaged app, `run.py package --sign`, installed with the AppX
+    commands above in the session, the tunnel held as `run.py run` holds it, the owner signing in): sign-in; Windows
+    Hello enrolment (the owner answers the PIN) and a restart that unlocks; the members' pictures; a file picked by path
+    opening in the core and a Save a copy; a medium played; the QR scan's camera prompt and its `NoCamera` path (the VM
+    has no camera); an update that keeps the device trust; the drop from Explorer, which needs UAC on (owner step,
+    native-apps § Open).
 - **The device trust on every app** (decision 8 as changed 2026-11-11; [ADR 0130](0130-an-apps-logic-is-the-kotlin-cores-each-platform-draws-only-its-own-ui.md)'s
   Consequences for the desktops' stores). The flows are the core's alone — `session/Account.kt` and `SessionModel.kt`
   enrol, offer, resume, unlock, change the level, sign out and stop trusting through the `DeviceKeys` interface
