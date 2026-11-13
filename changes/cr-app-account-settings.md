@@ -153,6 +153,62 @@ Apple as a pushed view (iOS) and a Settings scene-style window (macOS `Settings 
   `words/words.json` with German. · Done when: both builds green; on the throwaway AVD, the simulator and the macOS build
   the page is opened, this device renamed, a second session (signed in by the live test's helper) signed out, and
   "Sign out" taken; each pass recorded in `native-apps.md`'s measured list.
+  **Status: built; the page drawn and its actions driven over a played account on Android, drawn on iOS; the live pass
+  (and the Apple taps, the macOS look) pending — the box stays open until they are done (2026-11-13).**
+  **Built:** the drawer's Settings row opens the page on both apps. The page draws core's `AccountSettings.State` and
+  calls core's `AccountSettings` for every action (no rule in either app): **Account** (the address, confirmed or not),
+  **This device** (its name with Rename, the trust line and Manage's changes — the same core state, D2 —, "Stop trusting
+  this device" behind a confirmation; an untrusted device says it needs the Secret Key), **Devices and sessions** (each
+  family named from the register or "This device"/"Signed-in device", its dates in the system's format, "You are here";
+  sign out / sign out here / "Sign out and remove saved key" where `removesKey`, each confirmed with the web's words;
+  "Sign out everywhere else" while `hasOthers`; the register's refusal), **Devices with a saved key** (each removable,
+  "Remove every saved key except this device's"), **Add a device** (shown while `addDevice`, not enabled: the linking is
+  `cr-app-device-linking`'s; drawn as the place it fills, never a control answering "not yet"), **Appearance and
+  language** (phones only, D3) and **Sign out**. A sign-out the model answers (this device's family, "Sign out") closes
+  the page and is followed as Manage's sign-out is. Android (`SettingsScreen.kt`, `SettingsActions`, `AppModel.openSettings`
+  / `settingsActions`): a full-screen destination over the shell as Manage is, Material lists, a session's actions in an
+  overflow menu; "Appearance and language" opens `ACTION_APP_LOCALE_SETTINGS` (Android 13+, the new
+  `res/xml/locales_config.xml` with `android:localeConfig`; app info below 13). Apple (`SettingsView.swift`, `SettingsPage`,
+  `SettingsActions` on `AppModel`): a grouped form; iOS a sheet with its own stack and Done, a session's actions as swipe
+  actions and a context menu, "Appearance and Language" opens the app's page in the system's Settings
+  (`openSettingsURLString`); macOS the app's `Settings { }` window (⌘, and the sidebar's Settings via `openSettings`), a
+  session's actions in a menu at its end. 39 `account_settings_*` words (the web's English and German, "your memories"
+  said as "your data"; Apple's Title Case where a button) and `manage_forget_device`'s `apple_en`. Debug-only harnesses
+  draw the page over a played account with no server: Android `DevSettings` (extra `veyq.devSettings=1|refused`, actions
+  logged to logcat `veyq-settings`; the release source set's stub has none) and Apple `DevSettings.swift`
+  (`VEYQ_DEV_SETTINGS=1|refused`, unified log `veyq-settings:`, `#if DEBUG`).
+  **Deviation:** D4 named a pushed view on iOS; the page is a sheet with its own navigation stack, as Manage servers
+  is — the shell's stacks are core's navigation (one per bar place), and a page pushed onto one of them would be a place
+  the core does not know.
+  **Inbox #886:** the page shows no secret — an address, device names, dates and the trust line; the one field that
+  takes a secret, "Back to your password", is masked (as Manage's), so neither app's snapshot of it holds the password.
+  No snapshot cover is needed for it.
+  **Met:** `ANDROID_HOME=$HOME/Library/Android/sdk ./gradlew :core:jvmTest :core:macosArm64Test :bridge:jvmTest
+  :android:assembleDebug :android:compileReleaseKotlin` green (from `src/mobile`); the Apple app builds for macOS
+  (`xcodebuild -project Veyq.xcodeproj -scheme Veyq -destination 'platform=macOS' -derivedDataPath ../build/apple-mac
+  CODE_SIGN_IDENTITY=- CODE_SIGN_STYLE=Manual DEVELOPMENT_TEAM= CODE_SIGN_ENTITLEMENTS= build`) and for an iPhone 17
+  simulator (iOS 27.0, signed, `-derivedDataPath ../build/apple-sim`); the guards (`scripts/validate_*.py` but
+  guard_gaps) green. No app holds a test target, so no check is new; the words guard was bitten over the new page (a
+  literal `Text("No active sessions.")` in `SettingsView.swift` → `apple-literal` red; restored, green). **Android pass**
+  (throwaway AVD `veyq_settings_tmp`, Pixel 8, API 36; deleted after) over `veyq.devSettings=1`: every section read in
+  the screen's text dump; renamed this device (its session row followed), signed the "Work laptop" session out through
+  its overflow menu and the web's confirmation (the row gone), "Sign out" taken — logcat `veyq-settings: rename`,
+  `signOut f-laptop`, `signOutHere`; "Appearance and language" opened the system's App language page for veyq, German
+  chosen there, and the page came back in German; EN/light and DE/dark looked at; `veyq.devSettings=refused` shows the
+  list's and the register's refusals and no "loading" line. **iOS pass** (throwaway simulator `veyq-settings-tmp`,
+  iPhone 17, iOS 27.0; deleted after): the page drawn in EN/light and DE/dark, and the refused variant, by `simctl io
+  screenshot`. **Pending:** the iOS taps and the macOS look — this session had no grant for the simulator's input nor
+  for the Mac app's window (and an in-app capture of the Mac window draws SwiftUI's layers blank); the Mac harness starts
+  (`open -n --env VEYQ_DEV_SETTINGS=1 <veyq.app> --args -ApplePersistenceIgnoreState YES` — without the flag a restored
+  window of another root opens none) and its window exists. **Pending, live** (with the dev backend up, per app): sign
+  in (`devlogin.py`), open Settings from the drawer, rename this device, sign in a second session with
+  `LiveAccountSettingsTest`'s helper (or a second `devlogin` on another device), sign that one out from the list, take
+  "Sign out"; then record each pass in `native-apps.md`'s measured list.
+  **Retrospective:** a debug harness that plays the screen model's `State` (it is `@Serializable` and public) instead of
+  the model's internal seams draws every state a server can produce without exposing `Door`/`Here` from the core; its
+  limit is that the actions' effects are played, so the rules stay `AccountSettingsTest`'s and the wiring to the real
+  model is proven only by the live pass. A visual pass on Apple needs the owner's grant for the simulator panel or the
+  Mac app's window; ask for it at the start, not after the build.
 - [ ] **3 the bridge** — D4's calls with `WireTest` samples, `DispatchTest` (open, an action, close, a tenant switch
   closing it) and `SecretFreeSchemaTest` unchanged. · Done when: `./gradlew :bridge:jvmTest` green.
 - [ ] **4 Linux and Windows** — the pages (D4). · Done when: `python3 linux/run.py build` and `python3 windows/run.py
