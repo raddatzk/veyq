@@ -55,3 +55,17 @@
   ([security-model](../../../crosscutting/security-model.md) § third-party services).
 - **Share view = member view:** a guest sees the bar and the same choices; the edit is a member's.
 - **Export and rotation:** `music` is exported and imported with the node, and re-keyed with the rest of the meta.
+
+## User impact
+
+A Memory can carry the music it belongs with, and whoever opens it hears it from their own Spotify or Apple Music account,
+without the server learning the playlist and without the service's code ever running where the keys are.
+
+## Related
+
+- Feature: [Memory](../_index.md)
+- End-user view (docs site): [Add background music](../../../../site/src/content/docs/memories/add-background-music.mdx);
+  for Server Owners: [Capabilities § Background music](../../../../site/src/content/docs/run/capabilities.mdx)
+- Decision: [ADR 0131](../../../decisions/0131-a-memorys-background-music-plays-through-the-vendors-sdk-in-a-frame-of-its-own-origin.md)
+- Enabler: [en.memory.node-meta](../enablers/en.memory.node-meta.md) (the sealed `wrappedMeta` the `music` field lives in)
+- Use-cases: [uc.memory.place](uc.memory.place.md) (the map's consent, which this opt-in mirrors), [uc.memory.banner](uc.memory.banner.md)

@@ -7,6 +7,7 @@ sources:
   - docs/decisions/0094-a-clients-address-is-the-hop-the-network-vouches-for.md
   - docs/features/moderation/enablers/en.moderation.guest-write-record.md
   - docs/decisions/0078-production-reads-committed-like-its-tests.md
+  - docs/decisions/0131-a-memorys-background-music-plays-through-the-vendors-sdk-in-a-frame-of-its-own-origin.md
 ---
 
 veyq splits its configuration in two
@@ -43,6 +44,9 @@ By hand, copy the template to `.env` and fill it in: every required variable has
 | `GARAGE_ADMIN_TOKEN` | Yes | — | The bundled Garage's admin token. The application reads it too: it sets the bundled store up with it and derives the store's access keys from it, so there is no store key to set |
 | `ADMIN_DOMAIN` | No | unset | A hostname of the admin surface's own. Unset, the console is reachable from the host only ([First-run setup](/run/first-run/#reach-the-console)); set it only after the Server Owner exists |
 | `ADMIN_PORT` | No | `8081` | The host port the admin surface is published on, on `127.0.0.1` only |
+| `MUSIC_DOMAIN` | No | unset | The music host for background music: a hostname of its own beside `VEYQ_DOMAIN`, routed to the application, which serves the music frame there and nothing else. Unset, no music plays in veyq ([Background music](/run/capabilities/#background-music)) |
+| `MUSIC_SPOTIFY_CLIENT_ID` | No | unset | The client ID of your Spotify app; with `MUSIC_DOMAIN`, Spotify playlists play in veyq |
+| `MUSIC_APPLE_DEVELOPER_TOKEN` | No | unset | A MusicKit developer token (a JWT, valid at most six months); with `MUSIC_DOMAIN`, Apple Music playlists play in veyq until it expires |
 | `VEYQ_ACME_CASERVER` | No | Let's Encrypt production | The ACME directory; point it at the staging directory while testing |
 | `VEYQ_HSTS_ENABLED` | No | `true` | HSTS on the instance and the admin surface ([Hardening](/run/hardening/#tls-hsts-and-csp)) |
 | `VEYQ_MEM_LIMIT` | No | `1g` | The application container's memory limit; the JVM heap is 60 % of it |
@@ -85,6 +89,9 @@ network policy is on, `externalDatabase.jdbcUrl` when `mariadb.enabled` is `fals
 | `admin.image.digest` | — | Its verified digest |
 | `admin.image.pullPolicy` | `IfNotPresent` | |
 | `admin.domain` | — | A hostname of the admin surface's own; unset, it is reached by port-forward only |
+| `music.domain` | — | The music host for background music, as `MUSIC_DOMAIN` above: an HTTPRoute to the application and, under `per-domain`, a listener and certificate of its own |
+| `music.spotifyClientId` | — | As `MUSIC_SPOTIFY_CLIENT_ID` above |
+| `music.appleDeveloperToken` | — | As `MUSIC_APPLE_DEVELOPER_TOKEN` above |
 
 ### The application
 

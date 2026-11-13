@@ -98,6 +98,7 @@ export default defineConfig({
                     'memories/people-in-your-memories',
                     'memories/set-a-cover',
                     'memories/add-a-banner',
+                    'memories/add-background-music',
                     'memories/marked-photos',
                     'memories/contributions',
                     'memories/photo-trash',

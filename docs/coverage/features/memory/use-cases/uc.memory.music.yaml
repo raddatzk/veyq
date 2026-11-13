@@ -1,0 +1,87 @@
+useCase: uc.memory.music
+feature: memory
+title: Background music — a Memory's playlist, played from the viewer's own Spotify or Apple Music account
+# Built by cr-memory-background-music (ADR 0131): the sealed `music` field of the node's meta, the dialog, the music bar
+# with the viewer's opt-in, the music frame on the instance's music host (its own origin, its own policy), the register's
+# three `deployment` entries, the Traefik router and the chart's route. A sign-in and playback with real vendor accounts
+# is owed (inbox #846); lane L1's memory-music.spec.ts drives the dialog and the opt-in, never a vendor.
+acceptanceCriteria:
+  - id: sealed-playlists-in-node-meta
+    text: A MEMORY or CHAPTER node's sealed `wrappedMeta.music` holds at most one playlist per service — a Spotify playlist id, an Apple Music `pl.` id with its storefront — read from a pasted share link; a link that is no playlist of the field's service is refused and nothing is written; an emptied field drops that playlist and an empty list the field; an invalid stored entry is skipped. Both services at their longest ids fit the meta's 8192 characters beside the worst case of every other field. The server sees ciphertext only.
+    coverage:
+      web:
+        unit:
+          - src/features/memories/music/musicModel.test.ts
+          - src/features/memories/music/MusicDialog.test.ts
+          - src/features/memories/banner/bannerModel.test.ts
+  - id: edit-is-editmeta-bar-is-everyones
+    text: The Background music entry of the node's ⋯ menu is offered exactly where the rights grant editMeta (never to a share guest); the music bar above the tabs is the same component for a member and a guest, drawn wherever the node names a playlist.
+    coverage:
+      web:
+        unit:
+          - src/features/memories/components/MemoryDetail.rights.test.ts
+          - src/features/memories/music/MemoryMusic.test.ts
+  - id: opt-in-per-browser-and-service
+    text: Nothing of a service or the music host loads before the viewer's Play here; the consent is this browser's, per service, names the music host and holds only while that host is served; a browser that agreed mounts the frame at once; Turn music off withdraws it at once, tells the frame to forget the vendor's sign-in and removes the frame, and a withdrawal in another tab removes it too. Where the server does not play a service here, only the link that opens it in the service is offered.
+    coverage:
+      web:
+        unit:
+          - src/features/memories/music/useMusicConsent.test.ts
+          - src/features/memories/music/MemoryMusic.test.ts
+  - id: frame-isolated-by-origin-and-protocol
+    text: The vendor's SDK runs only in the music frame, an iframe of the music host with `allow="encrypted-media; autoplay"` and no sandbox; the app hands it, once it says ready, one playlist and the service's public credential, to the music host's origin only, and takes only parsed state messages from that frame's window and origin; the frame obeys only its parent window, from the origin that spoke first, loads one player per playlist, and empties itself on forget.
+    coverage:
+      web:
+        unit:
+          - src/music-frame/protocol.test.ts
+          - src/music-frame/main.test.ts
+          - src/features/memories/music/MemoryMusic.test.ts
+  - id: vendor-sign-in-stays-in-the-frame
+    text: Spotify's sign-in is the Authorization Code flow with PKCE run in the frame — the S256 challenge, the music host's callback as redirect URI, no client secret — and the callback page relays code and state over a BroadcastChannel of the music origin (and to a same-origin opener), clears the address and closes; no vendor token is ever sent to the veyq server.
+    coverage:
+      web:
+        unit:
+          - src/music-frame/spotifyAuth.test.ts
+          - src/music-frame/main.test.ts
+  - id: deployment-configures-the-entries
+    text: memories.music is active only while the deployment sets the music host and at least one service, each child only with its credential, an Apple token past its exp counting as unset; a malformed value refuses the boot; no switch brings an unconfigured entry back; the active entries carry the frame's https address and each credential on its own entry only; Compose routes the music host to the app only when set.
+    coverage:
+      backend:
+        integration:
+          - MusicSettingsTest.nothingConfiguredLeavesAllThreeOff
+          - MusicSettingsTest.eachServiceIsOnWithItsOwnCredentialAndTheParentWithEither
+          - MusicSettingsTest.anAppleTokenPastItsExpIsUnconfiguredFromThatMomentAndOneWithoutExpNever
+          - MusicSettingsTest.aMalformedValueRefusesTheBootNamingItsVariable
+          - CapabilityRegistryTest.aDeploymentEntryTheEnvironmentLeavesUnconfiguredIsNotActiveAndItsSwitchCannotBringItBack
+          - MusicFrameSliceTest.theThreeEntriesAreServedWithTheirValuesOnTheirOwnEntriesOnly
+          - TraefikFileMusicRouteTest.theMusicHostIsRoutedToTheAppOnlyWhenSet
+  - id: policies-follow-the-switch
+    text: While memories.music is active at the instance level the app's CSP names the music origin in frame-src (replacing 'none'), its Permissions-Policy grants that origin encrypted-media and autoplay, and its COOP is same-origin-allow-popups; switched off, all three are as before and the entries leave the set; the privacy notice states the music exactly while it is on.
+    coverage:
+      backend:
+        integration:
+          - MusicFrameSliceTest.whileActiveTheAppMayFrameTheMusicHostAndItsPopupsKeepTheirOpener
+          - MusicFrameSliceTest.switchedOffByTheServerOwnerThePoliciesAreAsBeforeAndTheEntriesLeaveTheSet
+          - MusicFrameSliceTest.thePrivacyNoticeStatesTheMusicWhileItIsOnAndNotAfter
+          - PrivacyNoticeSliceTest.theNoticeIsServedWithoutASessionAndTheReadWritesNothing
+  - id: music-host-serves-the-frame-only
+    text: The music host serves the frame's page and its Spotify callback under its own policy (scripts from itself and the two SDK hosts, no Trusted Types, framed only by the bootstrap domain and the tenants' domains, COOP unsafe-none) and the assets it loads, and answers the API, the app and every other path with a 404; no other host serves the frame's page.
+    coverage:
+      backend:
+        integration:
+          - MusicFrameSliceTest.theMusicHostServesTheFrameUnderItsOwnPolicyFramedOnlyByTheInstancesHosts
+          - MusicFrameSliceTest.theMusicHostAnswersNoApiAndNoApp
+          - MusicFrameSliceTest.noOtherHostServesTheFramesPage
+  - id: export-and-rotation
+    text: A download carries the node's music as its playlists and an import seals them into the new node's meta at birth, dropping an entry that is no playlist; a scope rotation carries the field unchanged under the node's new key.
+    coverage:
+      web:
+        unit:
+          - src/features/memories/exportImport.test.ts
+          - src/core/node/rekey/rekeyScope.test.ts
+gaps:
+  stack: >-
+    Lane L1's browser spec (`tests/e2e/tests/features/memories/memory-music.spec.ts`, written, not yet run) sets a
+    playlist through the dialog and checks the opt-in loads nothing before Play here; no lane signs in to a vendor. A
+    sign-in and playback with real Spotify and Apple Music accounts, through the music frame on a TLS music host, needs
+    vendor accounts and a registered app, and is owed (inbox #846).

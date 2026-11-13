@@ -128,3 +128,7 @@ across sites, and they have no documented control from the page.
   re-minted at least every six months — the Run docs say so.
 - **Not built:** the uploaded audio file (inbox #36's residual), a chapter inheriting its Memory's playlist (#847),
   music that keeps playing across pages (#848).
+
+Published for readers outside the project in [Add background music](../../site/src/content/docs/memories/add-background-music.mdx),
+[Capabilities § Background music](../../site/src/content/docs/run/capabilities.mdx) and
+[Configuration](../../site/src/content/docs/run/configuration.md).

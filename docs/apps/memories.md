@@ -195,6 +195,7 @@ guest moves a Memory, never a chapter); the cover is core's action with core's r
 | create a chapter | ✓ on a `MEMORY` only | ✗ | ✗ | ✗ | ✗ |
 | date, place, cover, banner (the node's sealed meta; the automatic reconcile too) | ✓ | ✗ | ✗ | ✗ | ✗ |
 | see the banner (read from the node's own attachment) | ✓ | ✓ | ✓ | ✓ | ✗ |
+| background music: set the playlists (the node's sealed meta, [uc.memory.music](../features/memory/use-cases/uc.memory.music.md)) / see the bar and play after one's own opt-in | ✓ / ✓ | ✗ / ✓ | ✗ / ✓ | ✗ / ✓ | ✗ / ✗ |
 | rename, delete the node | ✓ | ✗ | ✗ | ✗ | ✗ |
 | narrow the gallery by facts (day, year, place, kind, the original's name; uc.memory.gallery step 8) | ✓ | ✓ | ✗ | ✗ | ✗ |
 | participants (opaque user ids in the node's sealed meta, [ADR 0083](../decisions/0083-memory-participants-are-a-sealed-list-in-the-memorys-metadata.md); a Memory in a tenant or group scope) | ✓ shown and edited; the profile at `#/people/<id>` (its Memories as tiles, rows or the level's map) | ✓ shown, not edited | ✗ not shown | ✗ not shown | ✗ not shown |
