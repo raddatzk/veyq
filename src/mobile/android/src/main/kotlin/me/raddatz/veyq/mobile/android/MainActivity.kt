@@ -16,7 +16,8 @@ class MainActivity : ComponentActivity() {
             devLogin(intent) // a recreation (rotation, dark mode) keeps its session
             receive(intent)
         }
-        setContent { VeyqTheme { AppRoot(model) } }
+        val devScan = DevScan.requested(intent) // a debug build's QR camera harness, no sign-in (DevScan)
+        setContent { VeyqTheme { if (devScan) DevScan.Screen() else AppRoot(model) } }
     }
 
     override fun onResume() {

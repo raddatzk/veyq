@@ -11,6 +11,12 @@
     <uses-permission android:name="android.permission.READ_MEDIA_VISUAL_USER_SELECTED" />
     <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" android:maxSdkVersion="32" />
     <uses-permission android:name="android.permission.ACCESS_MEDIA_LOCATION" />
+    <!-- A QR code read through the camera (an Emergency Kit, linking a device): asked for when a scan opens. The app
+         installs on a device without one, which picks the kit as a file or lets the other device scan (ADR 0059 §1). -->
+    <uses-permission android:name="android.permission.CAMERA" />
+    <uses-feature android:name="android.hardware.camera.any" android:required="false" />
+    <!-- the CAMERA permission implies the back camera as required unless it is said otherwise -->
+    <uses-feature android:name="android.hardware.camera" android:required="false" />
 
     <application
         android:allowBackup="false"
