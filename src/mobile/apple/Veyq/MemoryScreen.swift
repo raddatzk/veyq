@@ -217,6 +217,16 @@ private struct Lightbox: View {
                 }
                 .foregroundStyle(.white)
                 .padding()
+                #if os(macOS)
+                // a Mac's sheet draws its toolbar as a light bottom bar with one primary button: Save fell away and Close and
+                // Details were white on white (measured 2026-11-13) — the actions are a bar of the lightbox's own there
+                HStack {
+                    Button(say(.receiptsClose)) { dismiss() }.keyboardShortcut(.cancelAction)
+                    Spacer()
+                    actions
+                }
+                .padding([.horizontal, .bottom])
+                #endif
             }
             .background(Color.black.ignoresSafeArea())
             .navigationTitle(say(.memoryItemPosition, Int(state.index) + 1, state.rows.count))
@@ -225,25 +235,22 @@ private struct Lightbox: View {
             .toolbarBackground(.black, for: .navigationBar)
             .toolbarBackground(.visible, for: .navigationBar)
             #endif
+            #if os(iOS)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button { dismiss() } label: { Label(say(.receiptsClose), systemImage: "xmark") }
                 }
-                ToolbarItemGroup(placement: .primaryAction) {
-                    Button { details = true } label: { Label(say(.memoryDetails), systemImage: "info.circle") }
-                    if let row = current, !row.blocked {
-                        if downloading {
-                            ProgressView()
-                        } else {
-                            Button { Task { await download() } } label: { Label(say(.memoryDownload), systemImage: "arrow.down.circle") }
-                        }
-                    }
-                }
+                ToolbarItemGroup(placement: .primaryAction) { actions }
             }
+            #endif
             .sheet(isPresented: $details) {
                 if let row = current {
                     MediaDetailsView(box: held.box, row: row)
                         .presentationDetents([.medium, .large])
+                        #if os(macOS)
+                        // a Mac's sheet takes its content's ideal size, which a List has none of: it drew one row's height
+                        .frame(minWidth: 420, minHeight: 440)
+                        #endif
                 }
             }
             #if os(iOS)
@@ -256,6 +263,18 @@ private struct Lightbox: View {
         .environment(\.colorScheme, .dark)
         // the lightbox went: core closes a playing video's reader with it
         .onDisappear { held.close() }
+    }
+
+    /// Details and Save: the iOS toolbar's primary group, a Mac's own bar.
+    @ViewBuilder private var actions: some View {
+        Button { details = true } label: { Label(say(.memoryDetails), systemImage: "info.circle") }
+        if let row = current, !row.blocked {
+            if downloading {
+                ProgressView()
+            } else {
+                Button { Task { await download() } } label: { Label(say(.memoryDownload), systemImage: "arrow.down.circle") }
+            }
+        }
     }
 
     /// The original saved under core's name for it (`FileSave`, written a frame at a time by core's `FileSink`). A Mac asks
@@ -387,29 +406,46 @@ private struct MediaDetailsView: View {
 
     var body: some View {
         NavigationStack {
-            let rows = details?.rows ?? []
-            // who added it stands before the place, as on the web
-            let placeAt = Int(details?.uploaderAt ?? 0)
-            List {
-                if details != nil && rows.isEmpty && uploader == nil {
-                    Text(say(.memoryNoDetail)).foregroundStyle(Role.muted)
-                }
-                ForEach(Array(rows.enumerated()), id: \.offset) { i, row in
-                    if i == placeAt, let uploader { LabeledContent(say(.memoryFieldUploadedBy), value: uploader) }
-                    LabeledContent(Self.label(row.field), value: Self.value(row))
-                }
-                if placeAt == rows.count, let uploader { LabeledContent(say(.memoryFieldUploadedBy), value: uploader) }
-            }
-            .navigationTitle(say(.memoryDetails))
             #if os(iOS)
-            .navigationBarTitleDisplayMode(.inline)
+            list
+                .navigationBarTitleDisplayMode(.inline)
+                .toolbar {
+                    ToolbarItem(placement: .confirmationAction) { Button(say(.shareDone)) { dismiss() } }
+                }
+            #else
+            // the lightbox's dark scheme reaches this sheet, whose toolbar a Mac draws light: Done was white on white —
+            // a row of the sheet's own below the list instead
+            VStack(spacing: 0) {
+                list
+                HStack {
+                    Spacer()
+                    Button(say(.shareDone)) { dismiss() }.keyboardShortcut(.defaultAction)
+                }
+                .padding()
+            }
+            // the sheet's own ground is light: the row takes the scheme's ground with it
+            .background(.background)
             #endif
-            .toolbar {
-                ToolbarItem(placement: .confirmationAction) { Button(say(.shareDone)) { dismiss() } }
+        }
+    }
+
+    private var list: some View {
+        let rows = details?.rows ?? []
+        // who added it stands before the place, as on the web
+        let placeAt = Int(details?.uploaderAt ?? 0)
+        return List {
+            if details != nil && rows.isEmpty && uploader == nil {
+                Text(say(.memoryNoDetail)).foregroundStyle(Role.muted)
             }
-            .task(id: row.mediaId) {
-                details = try? await box.details(mediaId: row.mediaId)
+            ForEach(Array(rows.enumerated()), id: \.offset) { i, row in
+                if i == placeAt, let uploader { LabeledContent(say(.memoryFieldUploadedBy), value: uploader) }
+                LabeledContent(Self.label(row.field), value: Self.value(row))
             }
+            if placeAt == rows.count, let uploader { LabeledContent(say(.memoryFieldUploadedBy), value: uploader) }
+        }
+        .navigationTitle(say(.memoryDetails))
+        .task(id: row.mediaId) {
+            details = try? await box.details(mediaId: row.mediaId)
         }
     }
 
