@@ -103,7 +103,7 @@ describe('MemoryDetail follows rights', () => {
     })
     expect(headerButtonIds(w)).toEqual(['favorite', 'upload', 'share', 'download'])
     // The banner only while none is drawn, the move and copy: ⋯ entries, before report and delete.
-    expect(await headerMenuIds(w)).toEqual(['banner', 'move', 'copy', 'report', 'delete'])
+    expect(await headerMenuIds(w)).toEqual(['banner', 'music', 'move', 'copy', 'report', 'delete'])
   })
 
   it("a member's rights: every header action, all four tabs, the chapter card, the editable cover/date/place, the marks", async () => {
@@ -196,6 +196,28 @@ describe('MemoryDetail follows rights', () => {
       if (setBanner) {
         await chooseHeaderEntry(w, 'banner')
         await vi.waitFor(() => expect(!!dialog(), 'the dialog').toBe(true))
+      }
+      w.unmount()
+      document.body.innerHTML = ''
+    }
+  })
+
+  // uc.memory.music (ADR 0131): whoever writes the node's meta sets its playlists, from the ⋯ menu; nobody else is offered it
+  // (a guest's rights never grant editMeta). The bar itself is every viewer's (MemoryMusic.test.ts).
+  it('the background music dialog opens from the header only with editMeta', async () => {
+    const memoryKey = v1.randomBytes(32)
+    await seedDated(memoryKey)
+    for (const editMeta of [false, true]) {
+      const w = mountWithHeader(MemoryDetail, {
+        props: { source: memberMemorySource({ scopeId: () => SCOPE_ID }), node: node(), scopeId: SCOPE_ID, memoryKey, rights: { ...memberMemoryRights(), editMeta } },
+        global: { plugins: [realI18n()] },
+        attachTo: document.body,
+      })
+      await vi.waitFor(() => expect(w.find('[data-media-id] button').exists()).toBe(true))
+      expect((await headerMenuIds(w)).includes('music'), `the header's entry, editMeta ${editMeta}`).toBe(editMeta)
+      if (editMeta) {
+        await chooseHeaderEntry(w, 'music')
+        await vi.waitFor(() => expect(!!document.body.querySelector('.memory-music-dialog'), 'the dialog').toBe(true))
       }
       w.unmount()
       document.body.innerHTML = ''

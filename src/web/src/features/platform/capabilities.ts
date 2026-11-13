@@ -60,6 +60,16 @@ export const MEMORIES_PLACES = 'memories.places'
  *  `serviceAttribution` (ADR 0018). */
 export const MEMORIES_MAP = 'memories.map'
 
+/** A Memory's background music in the music frame (ADR 0131): served only while the deployment sets the music host and a
+ *  service; its `serviceUrl` is the frame's address. */
+export const MEMORIES_MUSIC = 'memories.music'
+
+/** Spotify playlists in the music frame; the entry's `spotifyClientId` is the Server Owner's Spotify app (ADR 0131). */
+export const MEMORIES_MUSIC_SPOTIFY = 'memories.music.spotify'
+
+/** Apple Music playlists in the music frame; the entry's `appleDeveloperToken` configures MusicKit (ADR 0131). */
+export const MEMORIES_MUSIC_APPLE_MUSIC = 'memories.music.apple-music'
+
 /** The day's exchange rates for Expenses' editor, an outside service: the entry's `serviceUrl` is a `{date}` template of
  *  the ECB's euro reference rates (ADR 0108 decision 8). A link guest learns it from its Pot read, never from here. */
 export const EXPENSES_EXCHANGE_RATES = 'expenses.exchange-rates'

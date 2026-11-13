@@ -61,6 +61,7 @@ export const VEYQ_ICON_NAMES = [
   'map',
   'map-marker',
   'mobile',
+  'music',
   'objects-column',
   'palette',
   'pause',

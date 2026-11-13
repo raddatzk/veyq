@@ -368,8 +368,11 @@ export default defineConfig(({ command }) => {
         // The SW must land at a stable, UNHASHED `/sw.js` so a redeploy is detectable (`updateViaCache:'none'`);
         // the app keeps its hashed assets. `chunk.name === 'media-sw'` → `sw.js` at the dist root; all else keeps
         // the default hashed `assets/` layout.
+        // The third, the music frame (ADR 0131): a page of its own the backend serves on the music host only, under that
+        // host's policy; it imports nothing of the app.
         input: {
           main: fileURLToPath(new URL('./index.html', import.meta.url)),
+          'music-frame': fileURLToPath(new URL('./music-frame.html', import.meta.url)),
           'media-sw': fileURLToPath(new URL('./src/sw/mediaSw.ts', import.meta.url)),
         },
         output: {
