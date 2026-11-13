@@ -341,3 +341,28 @@ Phase 3 (the implementer, 2026-11-13):
 - **A live test's leftovers are part of its design.** The first live runs left device-register entries (a fresh test
   device per login, a linked one per case); the test now takes its devices from `LiveRun`, which removes each after
   the case. Entries from the runs before that stay until the owner clears them.
+- **An independent review (2026-11-13) found six things the phase's own tests had not; each is fixed with a commonTest
+  case that bites** (one mutation, red, `/bin/cp -f` restore):
+  1. *`confirm` was not single-flight* (check, then a move whose result was ignored, then a launch): a double tap
+     delegated twice, the second `404` ended the ceremony mid-seal. Now one atomic move out of CONFIRMING
+     (`advance`, as `enterCode`'s); 32 racing confirmations move it once.
+  2. *A failing seal (`sealGrant`, the Master Key's read) and a seal that did not open after a verified MAC escaped*
+     the SupervisorJob as uncaught (an Android crash) and left the state in SEALING / FINISHING, where no timer ends
+     it. Both now end FAILED; the grant is still wiped in `finally`.
+  3. *The move to FINISHING was unchecked while `finish()` zeroes the keys in place:* a close at the collect let the
+     grant be opened under the all-zero channel key and the all-zero transport seeds — both as good as public, so a
+     relay could seal and MAC a grant this device then spent. Measured by the bite: with the move unchecked, the
+     planted grant reaches the tail. Now the move is atomic and checked, and every use takes a copy of the keys before
+     its move (a close after it zeroes the link's, never the copy).
+  4. *A close in FINISHING could cut the tail after the token was spent* and before its successor was kept (an
+     orphaned family): the tail now runs `NonCancellable` — a close there ends the screen, not the sign-in.
+  5. The transport seeds are now wiped in `finish()`, the minted secret in a `finally` (it stayed when `open` failed).
+  6. *OkHttp's silent retry of the one-shot redeem* (from memory): measured, not reproduced — a server that read the
+     POST and dropped the connection saw it once, also over the generated call on a shared client; OkHttp re-sends
+     only what cannot have reached the server (a failed connect, a stale pooled connection). The redeem now runs
+     through a client of its own, closed after (no pooled connection), still the generated `TokenApi`;
+     `OneShotRedeemTest` holds the one arrival (bite: a second presentation, red). Engines: OkHttp on Android and the
+     JVM, Darwin on Apple, Curl on Linux, WinHttp on Windows. Note the server's one-generation grace (ADR 0004)
+     already re-mints for a caller one generation behind, so a single repeat would rotate, not revoke.
+  Lesson: a bite that stays green after a fix can mean a second, accidental guard — here the zeroed keys hid the
+  unchecked move until the test planted the grant a relay could actually make under them.

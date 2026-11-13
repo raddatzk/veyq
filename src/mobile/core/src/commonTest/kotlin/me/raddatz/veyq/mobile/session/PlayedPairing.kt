@@ -82,11 +82,16 @@ class PlayedServer {
         override val email: String = "p@example.org",
         private val key: ByteArray = ByteArray(32) { (it + 1).toByte() },
         private val marks: PairingMarks? = PairingMarks(3, 4, mapOf("scope-1" to 2L)),
+        /** The Master Key's read fails (a vault that locked meanwhile): what the seal's own failure path must catch. */
+        private val keyFails: Boolean = false,
     ) : DeviceLink.Granter {
         override val relay = Side("trusted")
         val handedKeys = mutableListOf<ByteArray>()
 
-        override fun masterKey(): ByteArray = key.copyOf().also { handedKeys += it }
+        override fun masterKey(): ByteArray {
+            if (keyFails) throw IllegalStateException("vault locked")
+            return key.copyOf().also { handedKeys += it }
+        }
         override suspend fun marks() = marks
 
         override suspend fun delegate(handle: String): String {

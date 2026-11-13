@@ -1,6 +1,13 @@
 package me.raddatz.veyq.mobile.session
 
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.test.TestScope
+import kotlinx.coroutines.withContext
+import me.raddatz.veyq.mobile.crypto.b64
+import me.raddatz.veyq.mobile.crypto.concat
+import me.raddatz.veyq.mobile.crypto.lp
 import kotlinx.coroutines.test.advanceTimeBy
 import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
@@ -45,11 +52,17 @@ class DeviceLinkTest {
         val received = mutableListOf<Received>()
         var fails: Exception? = null
 
+        /** How long the tail works (the token's spend and the successor's keep); [completed] counts the tails that ended. */
+        var takesMs = 0L
+        var completed = 0
+
         class Received(val email: String, val masterKey: ByteArray, val token: String, val label: String, val marks: PairingMarks?)
 
         suspend fun receive(g: PairingGrant) {
             received += Received(g.email, g.masterKey.copyOf(), g.refreshToken, g.label, g.marks)
             fails?.let { throw it }
+            if (takesMs > 0) kotlinx.coroutines.delay(takesMs)
+            completed++
         }
     }
 
@@ -367,6 +380,132 @@ class DeviceLinkTest {
             }
         }
         settle()
+    }
+
+    // ---- the review's findings (2026-11-13): single-flight, failures caught, a close racing the grant, secrets ----
+
+    /** *Add a new device* to the trusted side's CONFIRMING: the new device scanned, answered, the answer verified. */
+    private fun TestScope.confirming(account: PlayedServer.Account, newSide: DeviceLink.Relay, tail: Tail): Pair<DeviceLink, DeviceLink> {
+        val trusted = DeviceLink.showForNewDevice(p, account, backgroundScope)
+        val joining = DeviceLink.scanFromTrusted(p, newSide, tail::receive, scope = backgroundScope)
+        runCurrent()
+        scanning(joining).offer(frameOf(trusted.matrix()!!))
+        runCurrent()
+        settle()
+        assertEquals(Step.CONFIRMING, trusted.current.step)
+        return trusted to joining
+    }
+
+    @Test
+    fun a_double_tap_or_a_race_of_confirmations_delegates_once() = runTest {
+        val server = PlayedServer()
+        val (trusted, joining) = confirming(server.Account(), server.Side("new"), Tail())
+        assertTrue(trusted.confirm("Phone"))
+        assertFalse(trusted.confirm("Phone"), "a second tap confirmed again")
+        settle()
+        assertEquals(1, server.delegations.size, "a double tap delegated twice")
+        assertEquals(Step.DONE, trusted.current.step)
+        assertEquals(Step.DONE, joining.current.step)
+
+        val raced = PlayedServer()
+        val (other, _) = confirming(raced.Account(), raced.Side("new"), Tail())
+        val taken = withContext(Dispatchers.Default) { (1..32).map { async { other.confirm("Phone") } }.awaitAll() }
+        assertEquals(1, taken.count { it }, "racing confirmations moved the link more than once")
+        settle()
+        assertEquals(1, raced.delegations.size)
+        assertEquals(Step.DONE, other.current.step)
+    }
+
+    @Test
+    fun a_seal_that_fails_ends_the_link_failed_instead_of_escaping() = runTest {
+        val server = PlayedServer()
+        val (trusted, joining) = confirming(server.Account(keyFails = true), server.Side("new"), Tail())
+        assertTrue(trusted.confirm("Phone"))
+        settle()
+        assertEquals(Step.ENDED, trusted.current.step, "the link stayed in ${trusted.current.step}")
+        assertEquals(Refusal.FAILED, trusted.current.refusal)
+        assertTrue(server.seals.isEmpty())
+        joining.close()
+    }
+
+    @Test
+    fun an_envelope_whose_mac_verifies_but_whose_seal_does_not_open_ends_failed() = runTest {
+        val server = PlayedServer()
+        val tail = Tail()
+        val trusted = DeviceLink.showForNewDevice(p, server.Account(), backgroundScope)
+        val joining = DeviceLink.scanFromTrusted(p, server.Side("new"), tail::receive, scope = backgroundScope)
+        runCurrent()
+        val key = pairing.channelKey(assertNotNull(PairingPayload.parse(shown(trusted), PairingMarker.ADD_DEVICE)))
+        scanning(joining).offer(frameOf(trusted.matrix()!!))
+        runCurrent()
+        settle()
+        val garbage = ByteArray(1200) { it.toByte() }
+        server.channels.values.single().envelope = b64(concat(lp(garbage), lp(pairing.envelopeMac(key, garbage))))
+        settle()
+        assertEquals(Step.ENDED, joining.current.step, "the link stayed in ${joining.current.step}")
+        assertEquals(Refusal.FAILED, joining.current.refusal)
+        assertTrue(tail.received.isEmpty())
+        trusted.close()
+    }
+
+    /** A relay that runs [onEnvelope] the moment the collect that hands the envelope over returns. */
+    private class Racing(private val inner: DeviceLink.Relay, private val onEnvelope: () -> Unit) : DeviceLink.Relay by inner {
+        override suspend fun collect(handle: String) = inner.collect(handle).also { if (it.envelope != null) onEnvelope() }
+    }
+
+    /**
+     * The close zeroes the link's channel key in place: a grant opened after it would be checked under the all-zero key,
+     * which the relay — holding the transport key off the answer — can MAC under. The relay plants such an envelope and
+     * the screen closes as it is collected: nothing is opened, nothing spent.
+     */
+    @Test
+    fun a_close_between_the_envelope_and_its_opening_opens_and_spends_nothing() = runTest {
+        val server = PlayedServer()
+        val tail = Tail()
+        lateinit var joining: DeviceLink
+        val trusted = DeviceLink.showForNewDevice(p, server.Account(), backgroundScope)
+        joining = DeviceLink.scanFromTrusted(p, Racing(server.Side("new")) { joining.close() }, tail::receive, scope = backgroundScope)
+        runCurrent()
+        val key = pairing.channelKey(assertNotNull(PairingPayload.parse(shown(trusted), PairingMarker.ADD_DEVICE)))
+        scanning(joining).offer(frameOf(trusted.matrix()!!))
+        runCurrent()
+        settle()
+        val channel = server.channels.values.single()
+        assertNotNull(pairing.readTransportAnswer(key, assertNotNull(channel.answer)))
+        // the close zeroes the transport seeds too: the key they then derive is as public as the zero channel key
+        val zeroed = me.raddatz.veyq.mobile.crypto.V1(p).identityPublic(me.raddatz.veyq.mobile.crypto.IdentityPrivate(ByteArray(32), ByteArray(32)))
+        channel.envelope = pairing.sealGrant(ByteArray(32), zeroed, PairingGrant("m@evil", ByteArray(32), "stolen", "Mallory"))
+        settle()
+        assertEquals(Step.ENDED, joining.current.step)
+        assertNull(joining.current.refusal)
+        assertTrue(tail.received.isEmpty(), "a closed link opened a grant under its zeroed key")
+        trusted.close()
+    }
+
+    @Test
+    fun a_close_while_the_tail_runs_lets_it_finish_so_the_spent_tokens_successor_is_kept() = runTest {
+        val server = PlayedServer()
+        val tail = Tail().apply { takesMs = 60_000 }
+        val (trusted, joining) = confirming(server.Account(), server.Side("new"), tail)
+        assertTrue(trusted.confirm("Phone"))
+        settle()
+        assertEquals(Step.FINISHING, joining.current.step)
+        joining.close()
+        advanceTimeBy(61_000)
+        runCurrent()
+        assertEquals(1, tail.completed, "closing the screen cut the sign-in's tail off after the token was spent")
+    }
+
+    @Test
+    fun the_channel_key_and_the_transport_key_end_zeroed() = runTest {
+        val server = PlayedServer()
+        val (trusted, joining) = confirming(server.Account(), server.Side("new"), Tail())
+        val held = joining.heldSecrets()
+        assertEquals(3, held.size)
+        assertTrue(held.all { s -> s.any { it != 0.toByte() } }, "a secret was zero before the end")
+        joining.close()
+        trusted.close()
+        for (s in held + trusted.heldSecrets()) assertTrue(s.all { it == 0.toByte() }, "a secret outlived the link")
     }
 
     private fun b64Handle(secret: ByteArray): String = me.raddatz.veyq.mobile.crypto.b64(pairing.handle(secret))

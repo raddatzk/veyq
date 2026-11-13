@@ -9,6 +9,7 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -16,6 +17,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonObject
@@ -255,10 +257,13 @@ class DeviceLink private constructor(
         when (role) {
             Role.SHOW_FOR_NEW_DEVICE, Role.SHOW_FOR_SIGN_IN -> {
                 val secret = pairing.mintSecret()
-                derive(secret)
-                if (!step { relay.open(handle!!) }) return
-                payload = PairingPayload.of(secret, marker)
-                secret.fill(0)
+                try {
+                    derive(secret)
+                    if (!step { relay.open(handle!!) }) return
+                    payload = PairingPayload.of(secret, marker)
+                } finally {
+                    secret.fill(0)
+                }
                 move(Step.OPENING) { it.copy(step = Step.SHOWING) }
                 if (role == Role.SHOW_FOR_NEW_DEVICE) awaitAnswer() else hintLater(Step.SHOWING)
             }
@@ -289,12 +294,14 @@ class DeviceLink private constructor(
         if (role == Role.SCAN_SIGN_IN_CODE) {
             val code = pairing.drawCode()
             drawn = code
-            move(Step.SCANNING) { it.copy(step = Step.CODE, code = code, hint = null) }
+            if (!advance(Step.SCANNING) { it.copy(step = Step.CODE, code = code, hint = null) }) return null
             scope.launch { awaitAnswer() }
         } else {
-            val number = pairing.checkNumber(transport!!.second)
-            move(Step.SCANNING) { it.copy(step = Step.WAITING, number = number, hint = null) }
-            scope.launch { answerThenAwait(pairing.transportAnswer(channelKey!!, transport.second)) }
+            val pub = transport!!.second
+            val number = pairing.checkNumber(pub)
+            val answer = withKey { pairing.transportAnswer(it, pub) } ?: return null
+            if (!advance(Step.SCANNING) { it.copy(step = Step.WAITING, number = number, hint = null) }) return null
+            scope.launch { answerThenAwait(answer) }
         }
         return Unit
     }
@@ -317,44 +324,60 @@ class DeviceLink private constructor(
         if (role != Role.SHOW_FOR_SIGN_IN || !SIX_DIGITS.matches(code)) return false
         // the one send is the one move out of SHOWING, made atomically before the post: a second call — or one racing
         // this — finds the state moved and sends nothing (the server's answer slot is write-once)
-        val before = current
-        if (before.step != Step.SHOWING) return false
-        if (!_state.compareAndSet(before, before.copy(step = Step.WAITING, hint = null))) return false
-        val answer = pairing.signInAnswer(channelKey!!, transport!!.second, code)
+        if (current.step != Step.SHOWING) return false
+        val answer = withKey { pairing.signInAnswer(it, transport!!.second, code) } ?: return false
+        if (!advance(Step.SHOWING) { it.copy(step = Step.WAITING, hint = null) }) return false
         scope.launch { answerThenAwait(answer) }
         return true
     }
 
     /**
      * The trusted device's slide reached its end (§7): the session delegated, then the grant sealed to the key whose
-     * number was compared or whose proof held, naming the new device [label]. False outside [Step.CONFIRMING] or for a
-     * blank name. Declining is [close]: nothing delegated, nothing sealed, the channel left to expire.
+     * number was compared or whose proof held, naming the new device [label]. False outside [Step.CONFIRMING], for a
+     * blank name, and for every call but the one that moved the link on: a double tap delegates once (the server allows
+     * one delegation; a second's `404` would end the ceremony mid-seal). Declining is [close]: nothing delegated, nothing
+     * sealed, the channel left to expire.
      */
     fun confirm(label: String): Boolean {
         val name = label.trim()
         val g = granter ?: return false
-        if (name.isEmpty() || current.step != Step.CONFIRMING) return false
+        if (name.isEmpty()) return false
         val pub = sealTo ?: return false
-        move(Step.CONFIRMING) { it.copy(step = Step.SEALING) }
+        // the key copied before the move: a close after it zeroes the link's key, never this call's copy
+        val key = channelKey?.copyOf() ?: return false
+        if (!advance(Step.CONFIRMING) { it.copy(step = Step.SEALING) }) {
+            key.fill(0)
+            return false
+        }
         scope.launch {
-            val h = handle!!
-            val token = try {
-                g.delegate(h)
-            } catch (e: CancellationException) {
-                throw e
-            } catch (e: Exception) {
-                return@launch end(refusalOf(e))
-            }
-            val grant = PairingGrant(g.email, g.masterKey(), token, name, runCatching { g.marks() }.getOrNull())
-            val envelope = try {
-                pairing.sealGrant(channelKey!!, pub, grant)
+            try {
+                val h = handle!!
+                val token = try {
+                    g.delegate(h)
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (e: Exception) {
+                    return@launch end(refusalOf(e))
+                }
+                val envelope = try {
+                    val grant = PairingGrant(g.email, g.masterKey(), token, name, runCatching { g.marks() }.getOrNull())
+                    try {
+                        pairing.sealGrant(key, pub, grant)
+                    } finally {
+                        grant.wipe()
+                    }
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (e: Exception) {
+                    return@launch end(Refusal.FAILED)
+                }
+                if (!step { g.seal(h, envelope) }) return@launch
+                move(Step.SEALING) { it.copy(step = Step.DONE) }
+                // terminal here: this device cannot see the new one arrive without spending its grant (see [awaitAnswer])
+                finish()
             } finally {
-                grant.wipe()
+                key.fill(0)
             }
-            if (!step { g.seal(h, envelope) }) return@launch
-            move(Step.SEALING) { it.copy(step = Step.DONE) }
-            // terminal here: this device cannot see the new one arrive without spending its grant (see [awaitAnswer])
-            finish()
         }
         return true
     }
@@ -368,6 +391,7 @@ class DeviceLink private constructor(
     private fun finish() {
         scan?.close()
         channelKey?.fill(0)
+        transport?.first?.let { it.kemSeed.fill(0); it.signSeed.fill(0) }
         payload = null
         job.cancel()
         relay.close()
@@ -377,10 +401,11 @@ class DeviceLink private constructor(
     private suspend fun awaitAnswer() {
         hintLater(if (role == Role.SHOW_FOR_NEW_DEVICE) Step.SHOWING else Step.CODE)
         val answer = poll { it.answer } ?: return
-        val key = channelKey!!
         try {
-            sealTo = if (role == Role.SHOW_FOR_NEW_DEVICE) pairing.readTransportAnswer(key, answer)
-            else pairing.readSignInAnswer(key, drawn!!, answer)
+            sealTo = withKey { key ->
+                if (role == Role.SHOW_FOR_NEW_DEVICE) pairing.readTransportAnswer(key, answer)
+                else pairing.readSignInAnswer(key, drawn!!, answer)
+            } ?: return
         } catch (e: PairingRefused) {
             sealTo = null
             return end(if (e.reason == PairingRefusal.ANSWER_REFUSED) Refusal.REFUSED else Refusal.GONE)
@@ -403,15 +428,31 @@ class DeviceLink private constructor(
         }
         hintLater(Step.WAITING)
         val envelope = poll { it.envelope } ?: return
-        move(Step.WAITING) { it.copy(step = Step.FINISHING, hint = null) }
+        // the key and the transport key copied before the move: a close after it zeroes the link's, never these
+        val key = channelKey?.copyOf() ?: return
+        val t = transport!!.first
+        val priv = IdentityPrivate(t.kemSeed.copyOf(), t.signSeed.copyOf())
         val grant = try {
-            pairing.openGrant(channelKey!!, transport!!.first, envelope)
+            // a close between the poll and here (the state moved to ENDED) opens nothing and spends nothing
+            if (!advance(Step.WAITING) { it.copy(step = Step.FINISHING, hint = null) }) return
+            pairing.openGrant(key, priv, envelope)
         } catch (e: PairingRefused) {
             return end(if (e.reason == PairingRefusal.ENVELOPE_REFUSED) Refusal.REFUSED else Refusal.FAILED)
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            // a MAC that verified over a seal that does not open: no grant, and no state left in FINISHING
+            return end(Refusal.FAILED)
+        } finally {
+            key.fill(0)
+            priv.kemSeed.fill(0)
+            priv.signSeed.fill(0)
         }
         val label = grant.label
         try {
-            receive!!(grant)
+            // the token is spent here: the tail runs to its end even when the screen closes meanwhile, so a spent token's
+            // successor is always kept (a close in FINISHING ends the screen, not the sign-in)
+            withContext(NonCancellable) { receive!!(grant) }
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {
@@ -472,6 +513,32 @@ class DeviceLink private constructor(
         is Off -> Refusal.OFF
         else -> Refusal.FAILED
     }
+
+    /**
+     * The one move out of [from], atomic: true for the caller that made it, false where the link was elsewhere or another
+     * call moved it first — what makes a send, a confirmation and the grant's opening happen once.
+     */
+    private fun advance(from: Step, next: (Shown) -> Shown): Boolean {
+        while (true) {
+            val before = _state.value
+            if (before.step != from) return false
+            if (_state.compareAndSet(before, next(before))) return true
+        }
+    }
+
+    /** [use] over a copy of the channel key, zeroed after; null where the link holds none. A close meanwhile zeroes the
+     *  link's key, never the copy in use. */
+    private inline fun <R> withKey(use: (ByteArray) -> R): R? {
+        val key = channelKey?.copyOf() ?: return null
+        try {
+            return use(key)
+        } finally {
+            key.fill(0)
+        }
+    }
+
+    /** The secrets this link holds (the channel key, the transport key's seeds), for a test that they end zeroed. */
+    internal fun heldSecrets(): List<ByteArray> = listOfNotNull(channelKey, transport?.first?.kemSeed, transport?.first?.signSeed)
 
     /** To the next state, only from [from]: a link closed or ended meanwhile stays where it is. */
     private fun move(from: Step, next: (Shown) -> Shown) = _state.update { if (it.step == from) next(it) else it }

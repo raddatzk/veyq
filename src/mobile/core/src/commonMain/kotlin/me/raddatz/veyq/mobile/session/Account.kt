@@ -29,6 +29,7 @@ import me.raddatz.veyq.mobile.api.infrastructure.ApiClient
 import me.raddatz.veyq.mobile.api.infrastructure.HttpResponse
 import io.ktor.client.request.get
 import io.ktor.client.request.put
+import kotlinx.coroutines.CancellationException
 import io.ktor.client.request.setBody
 import io.ktor.client.statement.bodyAsChannel
 import io.ktor.client.statement.readRawBytes
@@ -737,15 +738,16 @@ class VeyqAccount private constructor(
                 try {
                     grant.marks?.let { TrustMarks(device.store, primitives, masterKey).raise(it) }
                     val r = try {
-                        TokenApi(c.base, c.http).refreshSession(RefreshRequest(grant.refreshToken))
+                        redeemOnce(c.base, grant.refreshToken, client)
+                    } catch (e: CancellationException) {
+                        throw e
                     } catch (e: Exception) {
                         throw SignInFailure(SignInFailure.Reason.UNREACHABLE, e.message)
                     }
                     if (r.status in 400..499) throw SignInFailure(SignInFailure.Reason.SESSION_ENDED, "handed token ${r.status}")
-                    if (!r.success) throw SignInFailure(SignInFailure.Reason.PROTOCOL, "refresh ${r.status}")
-                    val pair = r.body()
-                    c.tokens.access = pair.accessToken
-                    c.tokens.refresh = pair.refreshToken ?: throw SignInFailure(SignInFailure.Reason.PROTOCOL, "no body token")
+                    if (r.status !in 200..299) throw SignInFailure(SignInFailure.Reason.PROTOCOL, "refresh ${r.status}")
+                    c.tokens.access = r.access ?: throw SignInFailure(SignInFailure.Reason.PROTOCOL, "no access token")
+                    c.tokens.refresh = r.refresh ?: throw SignInFailure(SignInFailure.Reason.PROTOCOL, "no body token")
                     val familyId = runCatching { SessionApi(c.base, c.http).listSessionFamilies() }.getOrNull()
                         ?.takeIf { it.success }?.body()?.firstOrNull { it.current == true }?.id
                     finish(c, primitives, grant.email, keyMaterial(c), masterKey, device, familyId, grant.label)
@@ -753,6 +755,35 @@ class VeyqAccount private constructor(
                     masterKey.fill(0)
                     throw e
                 }
+            }
+        }
+
+        /** What [redeemOnce] was answered: the status and, on a 2xx, the two tokens. */
+        internal class Redeemed(val status: Int, val access: String?, val refresh: String?)
+
+        /**
+         * `POST /api/token/refresh` with [token] in the body, sent **once** — a handed-over token presented twice is ADR
+         * 0004's clone case — through a client of its own, closed after: no pooled connection, so OkHttp (the Android app's
+         * engine and the JVM tests') has no stale connection to re-send it on; the one retry it is left with is a connect
+         * that failed, which never reached the server. A request the server read and whose answer it dropped is sent once
+         * (measured, `OneShotRedeemTest`). A lost answer is a failure here, never a second try.
+         */
+        internal suspend fun redeemOnce(
+            base: String,
+            token: String,
+            client: (block: io.ktor.client.HttpClientConfig<*>.() -> Unit) -> HttpClient,
+        ): Redeemed {
+            val once = client {
+                expectSuccess = false
+                install(ContentNegotiation) { json(Json { ignoreUnknownKeys = true }) }
+            }
+            try {
+                val r = TokenApi(base.trimEnd('/'), once).refreshSession(RefreshRequest(token))
+                if (!r.success) return Redeemed(r.status, null, null)
+                val pair = r.body()
+                return Redeemed(r.status, pair.accessToken, pair.refreshToken)
+            } finally {
+                once.close()
             }
         }
 
