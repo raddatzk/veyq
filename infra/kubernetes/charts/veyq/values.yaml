@@ -390,13 +390,22 @@ garage:
   # Three claims, mirroring the compose recipe's three volumes. Snapshots are separate from meta on purpose:
   # `garage meta snapshot` defaults to writing INSIDE metadata_dir, into the very volume a rollback would
   # copy (ADR 0056 §3).
+  # Each claim takes its own storageClass, or the shared one when its own is empty ("" there too: the cluster's
+  # default). The split is for putting `data` — the object blocks — on a network share (an NFS or SMB CSI class)
+  # while `meta` stays on a local block class: meta holds the LMDB database (db_engine in garage-configmap.yaml),
+  # and LMDB's own documentation rules out remote filesystems. Pick the classes before the first install: they are
+  # volumeClaimTemplates, which the API server refuses to change on an existing StatefulSet, and a claim already
+  # bound keeps its class whatever the template says — moving one is a copy of its contents, not a values change.
   persistence:
     storageClass: ""
     meta:
+      storageClass: ""
       size: 1Gi
     data:
+      storageClass: ""
       size: 50Gi
     snapshots:
+      storageClass: ""
       size: 1Gi
   resources:
     limits:
