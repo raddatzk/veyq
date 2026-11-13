@@ -252,6 +252,15 @@ internal sealed class SignInView
         }
     }
 
+    /// <summary>The password and the Secret Key typed, forgotten once the core has left the sign-in (signed in, unlocking):
+    /// the view is built once per window, so without this a sign-out or "Use another account" showed both filled again, a
+    /// press of Sign in away from the account (measured on the VM, 2026-11-13; Linux's <c>SignIn::forget</c>).</summary>
+    public void Forget()
+    {
+        _password.Password = "";
+        _secretKey.Password = "";
+    }
+
     /// <summary>The debug build's dev principal: the form filled, and signed in through it unless it only fills.</summary>
     public void Dev(DevSignIn dev)
     {

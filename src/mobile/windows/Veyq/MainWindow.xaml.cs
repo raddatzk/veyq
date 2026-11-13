@@ -132,6 +132,7 @@ public sealed partial class MainWindow : Window
         if (update is not Update.Session { gate: var gate }) return;
         Log.Write($"session {gate.GetType().Name}{TrustNote(gate)}");
         if (gate is not Gate.Signed) _manage?.Close();
+        if (gate is not Gate.SignIn) _signIn?.Forget();
         switch (gate)
         {
             case Gate.Starting:

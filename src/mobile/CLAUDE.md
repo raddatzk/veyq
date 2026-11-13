@@ -309,7 +309,8 @@ A Gradle build of its own, run through its own wrapper.
     <name>|<name>…` (an Explorer window placed beside the app, its items dragged with SendInput's mouse onto an element),
     `hovershot <file>` (the screen while the next drag is held), `click <x> <y>`, `screen <file>`, `droptargets`, `size`,
     `maximize`, `wait`, `sleep`, `shot <name>.png`) and prints what each saw. Read the log and the tree first; a `shot`
-    (to `build/windows/shots/`) is the proof, not the probe.
+    (to `build/windows/shots/`, as `screen` and `hovershot` land) is the proof, not the probe. `droptargets` proves
+    nothing for WinUI: it listed no OLE drop target while Explorer's drops landed (2026-11-13).
   - `package [--sign [PFX]] [--smoke]` builds the MSIX (ADR 0133 decisions 6 and 7): the release DLL, the manifest
     filled from `Veyq/Package.appxmanifest.in` (identity from `desktop-identity.json`, version from the tree), the
     tests in Release there, the app in Release as an unsigned self-contained x64 MSIX through the Windows App SDK's
@@ -764,7 +765,8 @@ first in each of its scrolls — `LocalNodeHero.current(inset)` (Android) / `Nod
   made it before, and to `Packages\<family>\LocalCache\Local\veyq` where not — a pass that measures what an uninstall
   leaves moves the development data aside first. A `--` in the manifest's XML comment failed the package build behind
   an assembly the MSIX task could not load (`System.Security.Permissions`): `run.py` parses the filled manifest first.
-  A packaged build names its .pri `resources.pri`. With UAC off the packaged app starts, elevated like the rest.
+  A packaged build names its .pri `resources.pri`. With UAC off the packaged app starts, elevated like the rest;
+  with UAC on at medium integrity (`0x2000`); only with UAC on did the (unpackaged) app take a drop from Explorer (2026-11-13).
 - `run.py` sends every PowerShell script as `-EncodedCommand` (UTF-16LE, base64), so nothing is quoted through cmd.exe,
   and reads what PowerShell prints as the console's code page, CP850 on the German VM. `dotnet` writes UTF-8 there, so
   `run.py` sets its words English (`DOTNET_CLI_UI_LANGUAGE`).

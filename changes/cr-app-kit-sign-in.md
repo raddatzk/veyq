@@ -787,11 +787,24 @@ From `src/mobile` unless named:
   Emergency Kit" → the **portal's** chooser → the kit → `kit picked: Ok(Done)`, the Secret Key row "From your Emergency
   Kit — Enter it instead" (no other-server notice: the kit's server is the typed one); the kit file deleted; "Sign in" →
   `session Signed` (the trust offer, the account at its limit, `add wrap 409`), "Not now" → **the shell** (Home of
-  "Familie Raddatz", the shot). English, light. Still open in this phase: (1) on Windows; (2) the camera scans. The
+  "Familie Raddatz", the shot). English, light. Still open in this phase: the camera scans. The
   kit was found afterwards in **GNOME's indexer** database (`~/.cache/tracker3`: the indexer reads `~` recursively, so a
   kit put anywhere under it is indexed, as the fixtures in `~/Documents` were before) — the database removed, then no
   `veyqkit:` under `~/.cache` or `~/.local`. A pass's kit belongs outside the indexed tree (`/tmp`, which the chooser
   reaches by its path) next time.
+  **Pending (1) on Windows — met 2026-11-13** (the VM, **UAC on**, the dev backend up; `run.py run --devlogin --fill`,
+  de-DE dark): a dev kit built as `LiveBridgeTest.aKitSignsIn…` builds it (the principal's email and Secret Key and the
+  origin in a minimal PDF's `/Keywords`, made on the Mac and copied to `%TEMP%\veyq-kit` on the VM) picked in the open
+  picker → `kit picked: Done`, the form "Aus deinem Notfall-Kit" / "Stattdessen eingeben" with the Secret Key field gone
+  and the password `--fill`'s (never typed by the agent), Anmelden → `session Signed` → the shell (Familie Raddatz, Home);
+  shots `kit-1-held-de-dark.png`, `kit-2-signed-de-dark.png`. The kit and its folder removed after. Two defects found and
+  fixed on the way: (a) `Veyq.Drive type` into the open picker's file name typed nothing — the name is an Edit inside a
+  ComboBox of the same AutomationId (`1148`), and the ComboBox, found first, took the focus (two empty reads in the tree);
+  `type` now reaches the ComboBox's Edit (the path then read back in the tree). (b) After "Sign out" the sign-in still held
+  the password (and, after a non-kit sign-in, the Secret Key): the view is built once per window. `SignInView.Forget`,
+  called whenever the gate is not `SignIn` (Linux's `SignIn::forget`); bitten: the build without it showed
+  `#signin-password` filled after Settings' Sign out (de-DE dark), with it both fields read `""` (en-US light,
+  `signin-forgotten-en-light.png`). Still pending on Windows: the camera scan (a laptop with a camera, owner step 2).
   **Deviations:** (1) Windows reads the path through a `FileStream` (`AsRandomAccessStream`), not
   `StorageFile.GetFileFromPathAsync`: no broker, the same bytes, so the CR's first measurement fell away. (2) The Linux
   pass ran on the Fedora VM's GNOME (the portal's chooser, a real session) rather than in Broadway, whose GTK chooser
