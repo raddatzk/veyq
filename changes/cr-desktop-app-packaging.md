@@ -308,13 +308,35 @@ and never rebuilds (D10). The Mac builds only aarch64 locally; x86_64 is CI's.
   sandbox), a receipt's PDF, a medium played and heard, upload and save through the app's dialogs at a document-portal
   path, a drop from Files, the exchange rates over the app's libcurl.
 
-- [ ] **3 linux — the SDK proves the app; the pins are guarded.** `run.py build` runs clippy, test and build in
+- [x] **3 linux — the SDK proves the app; the pins are guarded.** `run.py build` runs clippy, test and build in
   `org.gnome.Sdk//51` (D4). `validate_build_input_pins.py` check 7: the Flatpak manifest's `runtime-version` equals the
   pin file's branch; every pin line is a 64-hex commit per architecture for Platform, Sdk and the Rust extension; every
   manifest source that is fetched (`type: archive`/`file` with a URL) carries a `sha256`; the build container's `FROM`
   is digest-pinned (already `validate_image_pins.py`'s). Bite each clause by snapshot-and-restore on a detached worktree
   (`changes/README.md` § Bite-proof a guard). · **Done when:** the guard is green on the tree and red, by its own label,
   on each of the four injections; `run.py build` green in the SDK.
+
+  **Status: done (2026-11-13).**
+  **Built:** `run.py build` proves the app in `org.gnome.Sdk//51`: flatpak-builder `--stop-at=veyq` builds the
+  manifest's modules before the app (libxcrypt, poppler; from its cache) and `flatpak build` runs `cargo clippy --locked
+  --all-targets -- -D warnings`, `cargo test --locked` and `cargo build --locked` in that build directory, with the
+  rust-stable extension and the runtime's GTK 4.24 and libadwaita 1.10; `in_runtime` and `write_manifest` are shared
+  with `flatpak`. One test is skipped in any build sandbox, named once in `run.py` (`SANDBOX_SKIPS`, filled into the
+  manifest as `@SANDBOX_SKIPS@`): the WebP decode, which glycin runs through `flatpak-spawn --sandbox` (ran in the
+  installed app's sandbox instead, phase 2). `run` keeps the Fedora container (Broadway). `validate_build_input_pins.py`
+  **check 7**: every tracked Flatpak manifest (found by its top-level `runtime`, `sdk`, `modules`, anchored on one under
+  `src/mobile/linux/`) has a `runtime.pins` beside it whose every line is `<id>/<arch>/<branch> <64-hex>`, pinning for
+  aarch64 and x86_64 the manifest's runtime and SDK at its `runtime-version` and every `sdk-extensions` entry; every
+  source fetched by `url` carries a 64-hex `sha256`; the `Containerfile` beside it is `FROM` a digest. `src/mobile/CLAUDE.md`
+  (the `build` verb), native-apps § Platforms.
+  **Met:** `/usr/bin/python3 scripts/validate_build_input_pins.py` green on the tree; five injections by
+  snapshot-and-restore (bytes compared, `git status --porcelain` unchanged across the run), each red (exit 1) by its own
+  label: `runtime-version` `'50'` against the pins' 51; a pin's commit cut to 12 hex; the x86_64 rust-stable line
+  removed; poppler's `sha256` removed; the builder's `FROM fedora:44` without its digest. `python3
+  src/mobile/linux/run.py build` exit 0 in the SDK (clippy clean, 37 passed and 1 filtered, the build). Not done on a
+  detached worktree as the phase text says: the snapshot-and-restore in this worktree is the `changes/README.md`
+  protocol, and the porcelain check shows nothing else moved.
+
 - [ ] **4 windows — the MSIX builds, installs and runs on the VM.** `Package.appxmanifest`, the PNG assets,
   `run.py package [--sign]`, Release tests. **First measurements, each a stop-and-ask:** (a) a signed MSIX installs and
   **starts** on the VM as it is, UAC off — if Windows refuses, the owner turns UAC on (`EnableLUA 1`, reboot, a console

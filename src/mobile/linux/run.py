@@ -21,9 +21,13 @@ Verbs:
   build                      generates what the app is built from but does not keep — the bridge's Rust
                              (`:bridge:generateBindings`) and the samples its round trip reads (`WireTest`), the words'
                              gettext catalogs and Rust (`generate_words.py --gettext`), the theme
-                             (`generate_theme.py --gtk`) — links the bridge's library, and runs in the container
-                             `cargo clippy --locked --all-targets -- -D warnings`, `cargo test --locked` and
-                             `cargo build --locked`. Its exit code is cargo's.
+                             (`generate_theme.py --gtk`) — links the bridge's library, and proves the app in the GNOME
+                             SDK it ships on (ADR 0132 decision 4): flatpak-builder builds the Flatpak's modules before
+                             the app (`--stop-at`, from its cache), and in that build directory, as the app's module
+                             would, `cargo clippy --locked --all-targets -- -D warnings`, `cargo test --locked` (all but
+                             SANDBOX_SKIPS) and `cargo build --locked` run. The pinned runtime as `flatpak` installs it;
+                             the registry and target in the volumes `veyq-flatpak-cargo`/`veyq-flatpak-target-<arch>`.
+                             Its exit code is cargo's.
   run [--port N] [--devlogin [--fill|--unlock]] [--no-secret-service]
                              `build`'s generation and `cargo build`, then the app under `gtk4-broadwayd`, drawn into a
                              browser at http://127.0.0.1:N (default 8095; published on 127.0.0.1 only). It runs under a
@@ -251,11 +255,33 @@ def cargo(docker_platform: str, lib_dir: Path, script: str, docker_args: list[st
 
 
 def build() -> int:
+    """The app proved in the SDK it ships on (ADR 0132 decision 4): the Flatpak's modules before the app built by
+    flatpak-builder (`--stop-at`, from its cache), then clippy, the tests and the build in that build directory."""
     docker_platform, target = arch()
+    flatpak_arch = {"linux/arm64": "aarch64", "linux/amd64": "x86_64"}[docker_platform]
     lib_dir = generate(target)
-    build_image(docker_platform)
-    return cargo(docker_platform, lib_dir, "cargo clippy --locked --all-targets -- -D warnings; "
-                                           "cargo test --locked; cargo build --locked")
+    write_manifest(*tree_version())
+    env = {"CARGO_HOME": "/veyq/cargo", "CARGO_TARGET_DIR": "/veyq/target", "VEYQ_GENERATED": "/veyq/generated",
+           "VEYQ_LIB_DIR": "/veyq/lib", "LD_LIBRARY_PATH": "/veyq/lib:/app/lib",
+           "VEYQ_SAMPLES": "/veyq/generated/bridge/samples", "VEYQ_WORDS_JSON": "/veyq/words.json",
+           "VEYQ_APP_ID": APP_ID, "LANG": "en_US.UTF-8",
+           "PKG_CONFIG_PATH": "/app/lib/pkgconfig:/app/share/pkgconfig",
+           "PATH": "/usr/lib/sdk/rust-stable/bin:/app/bin:/usr/bin"}
+    sandboxed = " ".join(f"--env={k}={v}" for k, v in env.items())
+    skips = " ".join(f"--skip {s}" for s in SANDBOX_SKIPS)
+    script = (
+        "cd /veyq/mobile/build/linux/flatpak; "
+        f"flatpak-builder --user --arch={flatpak_arch} --disable-rofiles-fuse --disable-updates --force-clean "
+        f"--state-dir=/veyq/state/flatpak-builder --stop-at=veyq /veyq/state/sdk-dir {APP_ID}.yml; "
+        f"flatpak build --share=network --filesystem=/veyq {sandboxed} /veyq/state/sdk-dir bash -c "
+        + shlex.quote("set -e; cd /veyq/src; cargo clippy --locked --all-targets -- -D warnings; "
+                      f"cargo test --locked -- {skips}; cargo build --locked"))
+    return in_runtime(flatpak_arch, script, [
+        "-v", f"veyq-flatpak-state-{flatpak_arch}:/veyq/state",
+        "-v", f"veyq-flatpak-cargo:/veyq/cargo", "-v", f"veyq-flatpak-target-{flatpak_arch}:/veyq/target",
+        "-v", f"{repo_layout.MOBILE}:/veyq/mobile:ro", "-v", f"{FLATPAK_OUT}:/veyq/mobile/build/linux/flatpak",
+        "-v", f"{repo_layout.MOBILE_LINUX}:/veyq/src:ro", "-v", f"{GENERATED}:/veyq/generated:ro",
+        "-v", f"{lib_dir}:/veyq/lib:ro", "-v", f"{WORDS / 'words.json'}:/veyq/words.json:ro"])
 
 
 def dev_principal(unlock: bool = False, fill: bool = False) -> dict[str, str]:

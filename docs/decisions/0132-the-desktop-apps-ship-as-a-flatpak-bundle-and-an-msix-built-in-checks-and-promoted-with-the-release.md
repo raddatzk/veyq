@@ -1,7 +1,7 @@
 # ADR 0132 — The desktop apps ship as a Flatpak bundle and an MSIX, built in Checks and promoted with the release
 
 - Status: Accepted
-- Built: partly (not built: decision 6, decision 7, decision 8, decision 10; of decision 9, the MSIX's install and update)
+- Built: partly (not built: decision 6, decision 7, decision 8, decision 10; of decision 1, the x86_64 bundle; of decision 9, the MSIX's install and update)
 - Date: 2026-11-13
 - Model: [native-apps](../crosscutting/native-apps.md)
 
@@ -67,7 +67,8 @@ What constrains the choice:
    (as `run.py build` produces them) and enter the manifest as `type: dir` sources; the Rust crates enter as `cargo vendor
    --locked` output — cargo's own command, checked against `Cargo.lock`'s checksums, no generator tool added. The app's
    module then runs, inside `org.gnome.Sdk//51` with `rust-stable`, `cargo clippy --locked -- -D warnings`, `cargo test
-   --locked` and `cargo build --release --locked`: the app is built and tested against the runtime it ships on (ADR 0129
+   --locked` (all but what a build's sandbox cannot run, each named in `run.py` with why) and `cargo build --release
+   --locked`: the app is built and tested against the runtime it ships on (ADR 0129
    decision 4). `run.py build` proves the app in that SDK; the Fedora container stays the environment of `run.py run`'s
    Broadway passes and `run.py test`'s core binary — a pass's environment, not the proof of the app.
 
