@@ -8,8 +8,11 @@ cr-workflows-split-pipeline-callers): `checks.yml` is the pipeline — every pus
 or `release/<major>.x` STAGES its images (`kind == 'stage'`); `publish.yml` runs no pipeline and builds nothing, and
 signs and names what the publishable commit's wholly green Checks push run staged
 (`needs.checks-run.outputs.kind == 'snapshot'`). "The file" below is both files' jobs read together, each job answering to its own file's gate; what is one file's
-says so. What the split holds besides: no job of a pull request's run writes (`build`, the one job with `packages:
-write`, runs on a push alone; `build-local` is its matrix and steps for a pull request); no job of checks.yml asks for
+says so. What the split holds besides: no job of a pull request's run writes (`build` and `apps-stage`, the two jobs
+with `packages: write`, run on a push alone; `build-local` is `build`'s matrix and steps for a pull request); ORAS
+writes in checks.yml from `apps-stage` alone, pushes `veyq-apps:build-<sha>-<platform>` and nothing else, and that
+job checks out nothing, so its token meets no code of the commit (the desktop apps' packages, ADR 0133 decision 10); no
+job of checks.yml asks for
 `id-token`; `snapshot`, `snapshot-tag` and `checks-run` are publish.yml's own (keyless signing names the file holding
 the signing job); publish.yml calls no workflow, builds nothing, downloads artifacts only from the run `checks-run`
 verified, runs `scripts/snapshot.py checks-run` (exactly `contents: read`, `actions: read`) before its snapshot and
@@ -269,7 +272,10 @@ writes; Publish builds nothing, downloads only from the run it verified and chec
 write. No incident: each new hold was bitten once (a stage dropped from the gate, the snapshot ungated from
 `checks-run`, `packages: write` on `build-local`, `build` on every event, a write in a job a pull request runs, a
 build or a pipeline call in Publish, an artifact from another run, the staged-bytes check dropped or moved after a
-write, the version step staging a pull request, a tag pushed by git, a Helm pin that drifts).
+write, the version step staging a pull request, a tag pushed by git, a Helm pin that drifts). The desktop apps' stage
+(cr-desktop-app-packaging phase 5, 2026-11-13) came with no incident either; each of its holds was bitten once:
+`packages: write` on a build job, `apps-stage` on every event, a checkout in it, an ORAS push from another job, another
+package pushed, the push step ungated (red on `oras login`, which the write pattern now names), no push at all.
 
 The publishable commit's hold was bought by a live defect (2026-11-08, Publish run 42484798393): main's HEAD
 `3ae1ae01c` and its parent changed only `site/**` and `docs/**`, which checks.yml's push filter ignores, so HEAD had no
@@ -433,6 +439,9 @@ SNAPSHOT_TAG_JOB = "snapshot-tag"
 REFUSE_STEP, TAG_STEP = "assert-snapshot-unpublished", "snapshot-tag"
 STAGED_STEP = "assert-staged"  # publish.yml's check that the bytes are the Checks run's (scripts/snapshot.py staged)
 BUILD_JOB, LOCAL_BUILD_JOB = "build", "build-local"
+# The desktop apps' packages (ADR 0133 decision 10): staged as OCI artifacts under this package by this job alone.
+APPS_STAGE_JOB, APPS_PACKAGE = "apps-stage", "veyq-apps"
+ORAS_WRITE = re.compile(r"\boras\s+(?:push|login|tag|attach|cp|copy|manifest\s+push|blob\s+push)\b")
 # Lane L1's orchestrator: assertion 10 finds the lane's job by running it, never by the job's name.
 LANE_ORCHESTRATOR = "scripts/run_stack_e2e.py"
 # The snapshot's decisions (assertion 13): a lane leg's record, the predicates, the write-once refusal.
@@ -484,7 +493,7 @@ PUBLISHES = "needs.checks-run.outputs.kind == 'snapshot'"
 # transparency log, and an attestation to the registry.
 REGISTRY_WRITE_RUN = re.compile(
     r"\b(?:helm\s+push|helm\s+registry\s+login|cosign\s+sign|cosign\s+attest|imagetools\s+create|docker\s+push|docker\s+login"
-    r"|git\s+push|oras\s+push|gh\s+release\s+(?:create|upload|edit|delete|delete-asset))\b"
+    r"|git\s+push|oras\s+(?:push|login|tag|attach|cp|copy)|gh\s+release\s+(?:create|upload|edit|delete|delete-asset))\b"
     r"|\bgh\s+api\b[^\n]*\bgit/refs\b"
 )
 # A write to the repository's refs: a `git push`, or a ref created or moved through the REST API (`gh api … git/refs`),
@@ -1254,14 +1263,45 @@ if workflow_doc:
         writes = sorted(k for k, v in (perms or {}).items() if v == "write") if isinstance(perms, dict) else \
             (["write-all"] if perms == "write-all" else [])
         push_only = " ".join(str(job.get("if") or "").split()) == "github.event_name == 'push'"
-        if name == BUILD_JOB:
+        if name in (BUILD_JOB, APPS_STAGE_JOB):
             if writes != ["packages"] or not push_only:
-                fail(f"{rel_of(CHECKS)}: `{BUILD_JOB}` holds {writes or 'no write'} on `if: {job.get('if')}` — it is the "
-                     f"one job with a write, `packages`, and runs on a push alone, so a pull request's run can write "
-                     f"nothing")
+                fail(f"{rel_of(CHECKS)}: `{name}` holds {writes or 'no write'} on `if: {job.get('if')}` — it is one of "
+                     f"the two jobs with a write, `packages`, and runs on a push alone, so a pull request's run can "
+                     f"write nothing")
         elif writes:
             fail(f"{rel_of(CHECKS)}: job `{name}` holds `{', '.join(writes)}: write` — no job of checks.yml but the "
-                 f"push-only `{BUILD_JOB}` may write; a pull request runs every other one")
+                 f"push-only `{BUILD_JOB}` and `{APPS_STAGE_JOB}` may write; a pull request runs every other one")
+    # The desktop apps' packages (ADR 0133 decision 10): ORAS writes in checks.yml from the push-only `apps-stage`
+    # alone, and only `veyq-apps` there; that job takes the packages the build jobs made as artifacts and checks out
+    # nothing, so the token that can write meets no code of the commit (the build jobs, which run it, hold none).
+    apps_stage = (checks_doc.get("jobs") or {}).get(APPS_STAGE_JOB)
+    if not isinstance(apps_stage, dict):
+        fail(f"{rel_of(CHECKS)} has no `{APPS_STAGE_JOB}` job — nothing stages the desktop apps' packages for the "
+             f"snapshot (ADR 0133 decision 10)")
+    else:
+        for step in job_steps(checks_doc, APPS_STAGE_JOB):
+            if str(step.get("uses") or "").startswith("actions/checkout@"):
+                fail(f"{rel_of(CHECKS)}: `{APPS_STAGE_JOB}` checks out the repository — it holds `packages: write`, "
+                     f"so it runs no code of the commit; it takes the packages as the build jobs' artifacts")
+    apps_pushes = 0
+    for name in sorted(CHECKS_JOBS):
+        for step in job_steps(checks_doc, name):
+            body = str(step.get("run") or "")
+            if not ORAS_WRITE.search(body):
+                continue
+            if name != APPS_STAGE_JOB:
+                fail(f"{rel_of(CHECKS)}: job `{name}`, step `{step.get('name')}` writes with ORAS — only "
+                     f"`{APPS_STAGE_JOB}` stages the desktop apps' packages")
+                continue
+            for line in body.splitlines():
+                if re.search(r"\boras\s+push\b", line):
+                    apps_pushes += 1
+                    if f"/{APPS_PACKAGE}:build-" not in line:
+                        fail(f"{rel_of(CHECKS)}: `{APPS_STAGE_JOB}` pushes `{line.strip()}` — it stages "
+                             f"`{APPS_PACKAGE}:build-<sha>-<platform>` and nothing else")
+    if isinstance(apps_stage, dict) and apps_pushes == 0:
+        fail(f"{rel_of(CHECKS)}: `{APPS_STAGE_JOB}` runs no `oras push` of `{APPS_PACKAGE}` this guard recognises — "
+             f"the desktop apps' packages would never be staged, and this check would hold NOTHING")
     local = (checks_doc.get("jobs") or {}).get(LOCAL_BUILD_JOB) or {}
     build = (checks_doc.get("jobs") or {}).get(BUILD_JOB) or {}
     if " ".join(str(local.get("if") or "").split()) != "github.event_name == 'pull_request'" \

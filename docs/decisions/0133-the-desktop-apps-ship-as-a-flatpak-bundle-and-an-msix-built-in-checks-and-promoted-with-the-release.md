@@ -1,7 +1,7 @@
 # ADR 0133 — The desktop apps ship as a Flatpak bundle and an MSIX, built in Checks and promoted with the release
 
 - Status: Accepted
-- Built: partly (not built: decision 8, decision 10; of decision 1, the x86_64 bundle; of decision 7, the release's signing job — a copy is signed by `run.py package --sign`)
+- Built: partly (not built: decision 8; of decision 10, the snapshot's, the retention's and the promotion's part — Checks' four jobs are written, their first GitHub run owed, and with it the x86_64 bundle of decision 1; of decision 7, the release's signing job — a copy is signed by `run.py package --sign`)
 - Date: 2026-11-13
 - Model: [native-apps](../crosscutting/native-apps.md)
 
@@ -137,9 +137,11 @@ What constrains the choice:
     the bundle built, linted (`flatpak-builder-lint`'s manifest and repo checks) and installed, the app started headless
     until it logs its sign-in; **`msix`** on x64 Windows: the locked restores and the deprecation gate, both test
     projects in Release, the package built, a signed copy installed and started until it logs its sign-in, then
-    uninstalled. `green` needs all three. On a push each package is pushed by **ORAS** to
+    uninstalled. `green` needs all three. On a push the packages are pushed by **ORAS** to
     `ghcr.io/<owner>/veyq-apps:build-<sha>-<platform>`, an OCI artifact cosign signs by digest at snapshot exactly as an
-    image; the snapshot names and signs them, staging retention deletes their staging tags with the images', and the
+    image — by a fourth job, `apps-stage`, on a push alone, which takes the three as the build jobs' artifacts and
+    checks out nothing, so the token that can write meets no code of the commit and the jobs that run that code hold no
+    write (refined while building it, 2026-11-13; `validate_release_identity.py` holds it); the snapshot names and signs them, staging retention deletes their staging tags with the images', and the
     promotion verifies the snapshot signature, re-tags and signs under the release identity, pulls the files, signs the
     MSIX (decision 7), writes `apps` into the manifest before the manifest is signed, `cosign sign-blob`s each package
     and attaches them. A pull request builds and smoke-runs all three and stages nothing.
@@ -149,7 +151,9 @@ What constrains the choice:
     digest (`src/mobile/linux/flatpak/Containerfile`: Fedora's `flatpak` and `flatpak-builder` on the same Fedora image
     the development container builds from, run privileged for bubblewrap), into
     `src/mobile/build/linux/flatpak/veyq-<version>-<arch>.flatpak`; and `python3 src/mobile/windows/run.py package
-    [--sign <pfx>]`. Both take the version from the tree as the pipeline counts it (`scripts/release_assets.py`'s
+    [--sign <pfx>]`. CI runs the same verbs split where its hosts split them: each `run.py inputs` on macOS, then
+    `flatpak --prebuilt` and `package --prebuilt` on the package's own runner (`VEYQ_WINDOWS_SSH=local` there: the
+    runner is the Windows host). Both take the version from the tree as the pipeline counts it (`scripts/release_assets.py`'s
     `tree_release`, the one implementation). "Reproducible" means **one command over pinned inputs** — the runtime and
     SDK by commit, the container by digest, crates by `Cargo.lock`, NuGet by its lock files, Gradle by its verification
     metadata — not bytes identical across two builds (an OSTree commit and a ZIP carry times); that is why a release

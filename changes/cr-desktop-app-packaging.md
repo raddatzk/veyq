@@ -390,6 +390,59 @@ and never rebuilds (D10). The Mac builds only aarch64 locally; x86_64 is CI's.
   `main` (pushing is fine, owner 2026-11-11) shows a green Checks run on GitHub with the four packages staged under
   `build-<sha>-*` and both smokes' log lines; a pull request's run builds them and stages nothing (read in its log).
   `scripts/run_pipeline.py` cannot run a macOS or Windows job: the GitHub run is the proof, as for the stack lanes.
+
+  **Status: built (2026-11-13), its GitHub run owed** (no push from here; the first push to `main` is the proof).
+  **Built:** `checks.yml` gains `app-inputs` (macos-latest, JDK 21, wrapper validation, `linux/run.py inputs` and
+  `windows/run.py inputs`, one artifact), `flatpak` (ubuntu-latest and ubuntu-24.04-arm, the disk made room, `run.py
+  flatpak --arch <a> --prebuilt --smoke`), `msix` (windows-latest, `actions/setup-dotnet` v6.1.0 from `global.json`,
+  `run.py package --prebuilt --sign --smoke` with `VEYQ_WINDOWS_SSH=local`), each keeping its package as an artifact, and
+  **a fourth job `apps-stage`** (push only, `packages: write`, no checkout): it takes the three packages, installs ORAS
+  1.3.6 from its release tarball checked by SHA-256 (the Helm pin's shape, no setup action), and on `kind == 'stage'`
+  pushes `veyq-apps:build-<sha>-{flatpak-x86_64,flatpak-aarch64,msix-x64}` (artifact type
+  `application/vnd.veyq.app-package.v1`, the file under `application/vnd.flatpak` or `application/msix`, version and
+  revision annotated), refusing anything but exactly the three files of the version, and keeps the digests as
+  `app-digests` (never `digest-*`, which publish.yml and the lanes read as the images'). **Against D10:** the push moved
+  from the build jobs into that job, so no job that runs the commit's code holds a write (ADR 0133 decision 10 says so
+  now); three packages, not four as the Done-when says (two bundles and one MSIX). `green` needs all four, `apps-stage`
+  accepted as skipped. `linux/run.py`: `inputs` (the half outside the sandbox, both architectures), `flatpak --prebuilt`
+  and `--smoke` (install, start headless in the sandbox under the runtime's `dbus-run-session` and `gtk4-broadwayd` to
+  `veyq: session SignIn`, uninstall with `--delete-data` under `dbus-run-session`, red if anything stays); the builder
+  image gains `dbus-daemon` for that uninstall. `windows/run.py`: `inputs`, `package --prebuilt`, a `local` host
+  (`VEYQ_WINDOWS_SSH=local`: PowerShell, copies and Veyq.Drive's launch run here, no ssh and no scheduled task, the
+  install saying its session and refusing session 0 by name; `VEYQ_WINDOWS_DIR` refused where it overlaps the tree),
+  the build tools found under `NUGET_PACKAGES` where set. `validate_release_identity.py`: `apps-stage` is the second job
+  that may hold `packages: write` (push only), checks out nothing, is the only job of checks.yml that writes with ORAS and
+  pushes `veyq-apps:build-…` and nothing else; `oras login` counts as a registry write. How veyq is tested: the stage's
+  row and budgets (app-inputs 45, flatpak 60 per architecture, msix 45, apps-stage 10 — estimates). ADR 0133 (Built,
+  decisions 10 and 11), release-and-deployment § Decided, not built, `src/mobile/CLAUDE.md` (the verbs).
+  **Met (locally):** the guards (guard_gaps skipped) print no RED; `actionlint` 1.7.12 (release tarball, checksum
+  checked, in scratch) reports nothing on the new jobs (one style note on the `version` job, pre-existing); YAML parses.
+  Bites, each red by its own message and restored with `/bin/cp -f` (byte-identical): `packages: write` on `flatpak`,
+  `apps-stage` on every event, a checkout in it, an ORAS push from `msix`, another package pushed, the stage step
+  ungated (red on `oras login`), no `oras push`, `green` without `flatpak` (release identity), `msix` without a budget
+  (pipeline shape), `setup-dotnet` by tag (action pins). Each job's script run here: both `inputs` on the Mac (exit 0,
+  9.8 min, the three libraries and every generated input at the artifact's paths); `flatpak --arch aarch64 --prebuilt
+  --smoke` exit 0 (clippy clean, 39 passed and 1 filtered, both lints clean, `veyq-1.628-aarch64.flatpak`, installed,
+  `veyq: session SignIn`, uninstalled with nothing left) — **with one line of `src/sign_in.rs` patched for the run and
+  put back**, see below; the smoke bitten (an awaited line it never says: red after 60 s); `package --prebuilt --sign
+  --smoke` against the Windows VM exit 0 (Release tests 4 + 4 + 33, the block map unchanged, installed, `session
+  SignIn`, uninstalled; the development certificate dropped and `F:\veyq\package` removed after); the stage step's own
+  script in a bash 5 container against an ORAS test double writing an OCI layout: three tags, three digests, the
+  manifest's types and annotations as above, and red with one package missing.
+  **Owed to the first GitHub run** (pending, nothing here proves them): macOS runner's Quick Look rendering the icons
+  and Kotlin/Native's cold download inside 45 min; the x86_64 Flatpak at all (its first build and first start) and
+  either architecture's fit in 60 min and in the runner's disk; whether a GitHub Windows runner's job runs in an
+  interactive session (deployment needs one — the install prints the session and stops on 0 with the trap named; if it
+  is 0, the smoke needs another way into a logged-on session, a decision then), the `local` host itself (never run: no
+  Windows host here runs Python), `setup-dotnet` from `global.json`, and the dev certificate's import into
+  `LocalMachine\TrustedPeople` there; ORAS's real push to GHCR and the package's visibility; a pull request's run
+  staging nothing; every budget.
+  **Retrospective:** **the Linux app does not compile at this branch's HEAD** — `Gate::SignIn` gained `kit`
+  (cr-app-kit-sign-in phase 4's core change) and `src/sign_in.rs:135` destructures it without `..`, so `flatpak` (and
+  `run.py build`) is red until that CR's desktop phases (8, 9) land or someone adds the `..`; not fixed here (another
+  CR's code, and the first CI run is the place it shows). cmd.exe's line limit counts OpenSSH's own `cmd.exe /c` call:
+  a command of 8190 characters was refused, so `powershell()`'s bound is now 8191 less that call, and a script that grew
+  by two lines found it. `flatpak uninstall --delete-data` needs a session bus even for a user installation.
 - [ ] **6 release — snapshot and promotion carry the packages.** `publish.yml`'s snapshot names and signs `veyq-apps`;
   `staging_retention.py` covers it; `release_assets.py` writes `apps` (and refuses an `apps` name that collides with an
   asset); `promote.py`'s check verifies the snapshot signatures of the app artifacts and their `sha-<commit>` naming the

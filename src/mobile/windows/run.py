@@ -76,11 +76,18 @@ Verbs:
                              by its AUMID (Veyq.Drive's launch), waits until its log says `session SignIn`, and
                              uninstalls it, red if anything of the package stays — all in the logged-on session
                              (`veyq-app`): deployment from ssh's session 0 is refused.
+                             `--prebuilt` takes the release DLL and the generated sources `inputs` left in this tree
+                             instead of making them (CI's `msix` job, after `app-inputs` on macOS).
+  inputs                     what `package` makes on this host before the Windows host's part, alone: the bridge's
+                             release DLL, its C# and samples, the words and the theme with the MSIX's images (Quick Look:
+                             a Mac). CI's `app-inputs` runs it and hands the files to `package --prebuilt`.
   drop-dev-cert              removes `package --sign`'s development certificate from both stores on the Windows host.
   register                   registers the two scheduled tasks, interactive only, as the user ssh logs in as: they run
                              on demand in the logged-on session, which an ssh command (session 0) cannot reach. Run once
                              per Windows host, by its owner (a persistent change on that machine).
-The Windows host: `VEYQ_WINDOWS_SSH` (default `kevin@192.168.64.8`, the test VM of docs/crosscutting/native-apps.md),
+The Windows host: `VEYQ_WINDOWS_SSH` (default `kevin@192.168.64.8`, the test VM of docs/crosscutting/native-apps.md;
+`local` when this host is the Windows host — CI's `msix` job on a GitHub Windows runner: PowerShell, copies and the
+launch run here, with no ssh and no scheduled task, so this host's own session must be an interactive one),
 its key `VEYQ_WINDOWS_KEY` (default `~/.ssh/veyq_vms_ed25519`), and a directory there `VEYQ_WINDOWS_DIR` (default
 `F:\\veyq`, the VM's Dev Drive) which this script owns. The host is x64 or ARM64: the binary is x64 and runs under
 Windows' x64 emulation on ARM64. ssh lands in session 0 there, which is enough for a test binary but shows no window:
@@ -159,7 +166,14 @@ REMOTE_APP = REMOTE_DIR / "app"  # the app run.py starts, copied out of the buil
 REMOTE_DRIVE = REMOTE_DIR / "drive"  # Veyq.Drive, which the scheduled tasks run
 REMOTE_RUN = REMOTE_DIR / "run"  # the launch's and the drive's files
 REMOTE_LOG = "AppData/Local/veyq/log.txt"  # the app's log (Log.cs, %LOCALAPPDATA%), from the ssh user's home
-CODE_PAGE = "cp850"  # the console code page PowerShell writes in over ssh on the (German) test VM
+# `local`: this host is the Windows host (CI's msix job). Its directory must be one of its own, never this tree: a verb
+# deletes and unpacks `src` and `bin` there.
+LOCAL = SSH_TARGET == "local"
+if LOCAL and (REMOTE_DIR == PureWindowsPath(ROOT) or PureWindowsPath(ROOT) in PureWindowsPath(REMOTE_DIR).parents
+              or PureWindowsPath(REMOTE_DIR) in PureWindowsPath(ROOT).parents):
+    sys.exit(f"VEYQ_WINDOWS_DIR ({REMOTE_DIR}) overlaps this tree ({ROOT}): name a directory of its own")
+# the console code page PowerShell writes in: over ssh on the (German) test VM CP850, here the console's OEM one
+CODE_PAGE = "oem" if LOCAL else "cp850"
 
 
 def run(*args: str, cwd: Path | None = None, env: dict[str, str] | None = None) -> None:
@@ -172,13 +186,27 @@ def ssh_base(forward: list[str] | None = None) -> list[str]:
             "-i", str(SSH_KEY), *(forward or []), SSH_TARGET]
 
 
+LINE_BOUND = 8191 - len(r"C:\Windows\system32\cmd.exe /c ")  # an encoded command's longest line over ssh
+
+
 def powershell(script: str, forward: list[str] | None = None, quiet: bool = False) -> int:
     """Runs [script] in PowerShell on the Windows host and streams what it prints, decoded from the console's code page.
     The first connection after the host idled can time out once (ssh's 255 before anything ran): it is tried again."""
     encoded = base64.b64encode(("$ProgressPreference = 'SilentlyContinue'\n" + script).encode("utf-16-le")).decode()
+    if LOCAL:
+        # no cmd.exe between: CreateProcess's line holds 32767 characters
+        if not quiet:
+            print(f"+ powershell <{len(script.splitlines())} lines>", flush=True)
+        done = subprocess.run([POWERSHELL_EXE, "-NoProfile", "-NonInteractive", "-EncodedCommand", encoded],
+                              stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
+        sys.stdout.write(done.stdout.decode(CODE_PAGE, errors="replace").replace("\r\n", "\n"))
+        sys.stdout.flush()
+        return done.returncode
     command = ssh_base(forward) + ["powershell", "-NoProfile", "-NonInteractive", "-EncodedCommand", encoded]
-    # cmd.exe, which OpenSSH's default shell on Windows is, takes 8191 characters a line (measured 2026-11-13)
-    if len(" ".join(command[command.index("powershell"):])) > 8191:
+    # cmd.exe, which OpenSSH's default shell on Windows is, takes 8191 characters a line, its own `cmd.exe /c` call
+    # included: a command of 8190 characters was refused ("Die Befehlszeile ist zu lang", measured 2026-11-13), so the
+    # bound leaves room for the call OpenSSH wraps it in
+    if len(" ".join(command[command.index("powershell"):])) > LINE_BOUND:
         sys.exit(f"veyq: a script of {len(script)} characters is too long for one ssh command line: split it")
     for attempt in (1, 2):
         if not quiet:
@@ -199,6 +227,12 @@ def powershell(script: str, forward: list[str] | None = None, quiet: bool = Fals
 
 def copy_to(files: list[Path], remote_dir: PureWindowsPath, as_name: str | None = None) -> None:
     """Copies [files] into [remote_dir] on the Windows host (created if missing); one file may take [as_name] there."""
+    if LOCAL:
+        Path(str(remote_dir)).mkdir(parents=True, exist_ok=True)
+        for f in files:
+            print(f"+ copy {f} {remote_dir}", flush=True)
+            shutil.copy2(f, Path(str(remote_dir)) / (as_name or f.name))
+        return
     if powershell(f"New-Item -ItemType Directory -Force -Path {ps_quote(str(remote_dir))} | Out-Null", quiet=True) != 0:
         sys.exit(f"cannot create {remote_dir} on {SSH_TARGET}")
     target = str(remote_dir).replace("\\", "/") + "/" + (as_name or "")
@@ -565,17 +599,27 @@ def tools_script() -> list[str]:
     """PowerShell lines that set $tools to the pinned build tools' directory for the host's architecture, in the NuGet
     cache the locked restore filled (no Windows SDK is installed)."""
     return [
-        f"$pkg = Join-Path $env:USERPROFILE {ps_quote('.nuget/packages/microsoft.windows.sdk.buildtools/' + build_tools() + '/bin')}",
+        # NuGet's global packages folder: NUGET_PACKAGES where a host sets it (a runner may), else the user's default
+        "$nuget = if ($env:NUGET_PACKAGES) { $env:NUGET_PACKAGES } else { Join-Path $env:USERPROFILE '.nuget/packages' }",
+        f"$pkg = Join-Path $nuget {ps_quote('microsoft.windows.sdk.buildtools/' + build_tools() + '/bin')}",
         "$sdk = @(Get-ChildItem -Directory $pkg)",
         "if ($sdk.Count -ne 1) { Write-Output \"veyq: expected one SDK version under $pkg, found $($sdk.Count)\"; exit 1 }",
         "$tools = Join-Path $sdk[0].FullName $(if ($env:PROCESSOR_ARCHITECTURE -eq 'ARM64') { 'arm64' } else { 'x64' })",
     ]
 
 
-def package(sign: str | None, smoke: bool) -> int:
+# What `inputs` writes beside the DLL, each a directory `package --prebuilt` refuses to go without.
+GENERATED_INPUTS = (GENERATED / "bridge" / "samples", GENERATED / "words" / "windows", GENERATED / "theme" / "windows" / "msix")
+
+
+def package(sign: str | None, smoke: bool, prebuilt: bool = False) -> int:
     version, four_part = msix_version()
     name = f"veyq-{version}-x64"
-    dll = generate("release")
+    dll = DLL_DIR["release"] / "veyq.dll" if prebuilt else generate("release")
+    missing = [p for p in (dll, *GENERATED_INPUTS) if not p.exists()]
+    if missing:
+        sys.exit(f"--prebuilt finds no {', '.join(str(p.relative_to(ROOT)) for p in missing)}: run `run.py inputs` first"
+                 if prebuilt else f"no {', '.join(map(str, missing))}")
     fill_manifest(four_part)
     for project in PROJECTS:
         dotnet("restore", "--locked-mode", project)
@@ -719,7 +763,16 @@ def in_session(name: str, script: str, seconds: int = 300) -> int:
     """Runs [script] in PowerShell in the Windows host's logged-on session (the scheduled task `veyq-app`, Veyq.Drive's
     launch), prints what it wrote and returns its exit code. Package deployment needs that session: from ssh's
     session 0, Add-AppxPackage fails with 0x80070005 (the AppX log: "Fehler beim Initialisieren der PLM", measured
-    2026-11-13). The script goes as a file, so its length is not the command line's."""
+    2026-11-13). The script goes as a file, so its length is not the command line's. On a `local` host the script runs
+    here, in this process's session, which says itself first: session 0 is the trap above, named before it bites."""
+    if LOCAL:
+        return powershell("\n".join([
+            "$session = (Get-Process -Id $PID).SessionId",
+            "Write-Output ('veyq: this host runs in session ' + $session)",
+            "if ($session -eq 0) { Write-Output 'veyq: session 0 cannot deploy a package (0x80070005): run this in a "
+            "logged-on session'; exit 1 }",
+            script,
+        ]))
     ps1, out, done = (REMOTE_RUN / f"{name}{ext}" for ext in (".ps1", ".out", ".done"))
     local = SMOKE_OUT.parent / ps1.name
     local.parent.mkdir(parents=True, exist_ok=True)
@@ -833,7 +886,24 @@ def drop_dev_cert() -> int:
 
 
 def run_task(task: str, wait_for: PureWindowsPath, seconds: int) -> int:
-    """Runs the scheduled [task] in the logged-on session and waits until [wait_for] exists there (at most [seconds])."""
+    """Runs the scheduled [task] in the logged-on session and waits until [wait_for] exists there (at most [seconds]).
+    On a `local` host Veyq.Drive runs here with the task's arguments instead, in this process's session."""
+    if LOCAL:
+        mode = TASKS[task]
+        file = REMOTE_RUN / ("app.json" if mode == "--launch" else "steps.txt")
+        command = [str(REMOTE_DRIVE / (DRIVE + ".exe")), mode, str(file)]
+        print("+ " + " ".join(command), flush=True)
+        try:
+            subprocess.run(command, timeout=seconds)
+        except subprocess.TimeoutExpired:
+            pass
+        deadline = time.monotonic() + seconds
+        while not Path(str(wait_for)).exists():
+            if time.monotonic() > deadline:
+                print(f"veyq: {DRIVE} {mode} wrote no {wait_for.name} in {seconds} s", flush=True)
+                return 4
+            time.sleep(0.2)
+        return 0
     return powershell("\n".join([
         f"schtasks.exe /Run /TN {task} | Out-Null",
         f"if ($LASTEXITCODE -ne 0) {{ Write-Output 'veyq: the scheduled task {task} did not run: register it once (run.py register)'; exit 3 }}",
@@ -942,6 +1012,11 @@ def run_app(width: int | None, height: int | None, devlogin: bool = False, unloc
 def fetch(remote: str, local: Path) -> bool:
     """[remote] (a path on the Windows host) to [local]; False where it is not there."""
     local.parent.mkdir(parents=True, exist_ok=True)
+    if LOCAL:
+        if not Path(remote).is_file():
+            return False
+        shutil.copy2(remote, local)
+        return True
     done = subprocess.run(["scp", "-q", "-o", "BatchMode=yes", "-o", "ConnectTimeout=30", "-i", str(SSH_KEY),
                            f"{SSH_TARGET}:{remote.replace(chr(92), '/')}", str(local)], capture_output=True)
     return done.returncode == 0
@@ -1097,6 +1172,8 @@ def main() -> None:
     k.add_argument("--sign", nargs="?", const="", metavar="PFX",
                    help="sign a copy: with PFX (password in VEYQ_MSIX_PFX_PASSWORD), else the host's development certificate")
     k.add_argument("--smoke", action="store_true", help="with --sign: install the signed copy, start it to its sign-in, uninstall")
+    k.add_argument("--prebuilt", action="store_true", help="take the DLL and sources `inputs` left in this tree")
+    verbs.add_parser("inputs", help="the release DLL and the generated sources with the MSIX's images, alone (CI's app-inputs)")
     verbs.add_parser("drop-dev-cert", help="remove package --sign's development certificate from the Windows host")
     verbs.add_parser("register", help="register the scheduled tasks veyq-app and veyq-drive on the Windows host (owner)")
     args = parser.parse_args()
@@ -1119,7 +1196,10 @@ def main() -> None:
     if args.verb == "package":
         if args.smoke and args.sign is None:
             sys.exit("--smoke installs the signed copy: it goes with --sign")
-        sys.exit(package(args.sign, args.smoke))
+        sys.exit(package(args.sign, args.smoke, args.prebuilt))
+    if args.verb == "inputs":
+        generate("release")
+        sys.exit(0)
     if args.verb == "drop-dev-cert":
         sys.exit(drop_dev_cert())
     if args.verb == "register":
