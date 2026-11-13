@@ -236,13 +236,30 @@ and never rebuilds (D10). The Mac builds only aarch64 locally; x86_64 is CI's.
 
 ## Phases
 
-- [ ] **1 docs — the ADR and the decided state.** Write the next free ADR (`ls docs/decisions | tail -3`) from D1–D11
+- [x] **1 docs — the ADR and the decided state.** Write the next free ADR (`ls docs/decisions | tail -3`) from D1–D11
   with their reasons and the rejected alternatives named here (WinApp CLI, the MSIX Packaging Tool, a self-hosted OSTree
   repository, flatpak-cargo-generator, a scratch image for staging, building the core inside the SDK); move native-apps'
   Flatpak and MSIX bullets to "decided, being built" pointing at it; release-and-deployment § Decided, not built gains
   the app packages. If owner questions 1–3 are not answered by then, the ADR records the recommendation as the default
   and the phase that needs the answer waits. · **Done when:** `for f in scripts/validate_*.py; do /usr/bin/python3 "$f"
   || echo "RED $f"; done` (guard_gaps skipped) prints no `RED`.
+
+  **Status: done (2026-11-13).**
+  **Built:** [ADR 0132](../docs/decisions/0132-the-desktop-apps-ship-as-a-flatpak-bundle-and-an-msix-built-in-checks-and-promoted-with-the-release.md)
+  from D1–D11 with their reasons and the rejected alternatives (WinApp CLI, the MSIX Packaging Tool, a self-hosted OSTree
+  repository or `.appinstaller` feed, flatpak-cargo-generator, a scratch image for staging, the core built inside the SDK,
+  Fedora as the proving ground, an arm64 MSIX), plus **decision 12**: the desktop packages' identity in one place
+  (`src/mobile/desktop-identity.json`, written in phase 2), its values the recommendations of owner questions 1 and 2
+  (`app.veyq.Veyq`, `CN=veyq`) as defaults until the owner decides, no package published under them before. Filed under
+  the Native app topic, and beside it under Release in `docs/decisions/README.md`. native-apps § Open: the MSIX and the
+  Flatpak bullets now "decided, being built", pointing at it, with what is still to measure; release-and-deployment
+  § Decided, not built: the app packages. **One change against D11:** the build container is `fedora:44` at the
+  development image's digest, not Fedora 45 — `validate_image_pins.py` holds one tag per repository across the tree, and
+  Fedora 44's `flatpak-builder` is the same 1.4.12 (`docker run … flatpak-builder --version`, 2026-11-13); the ADR names
+  it under its alternatives.
+  **Met:** the guard loop (`scripts/validate_*.py`, guard_gaps skipped) printed no RED before the edit (this worktree at
+  `2d3018014`) and none after.
+
 - [ ] **2 linux — the Flatpak builds and runs, aarch64, on the developer's machine and the VM.** The container, the
   pin file, the manifest, the metainfo, `run.py flatpak`, the locale directory. **First measurements, each a
   stop-and-ask if it fails:** (a) flatpak-builder runs in the pinned container under Docker on the Mac (bubblewrap's
