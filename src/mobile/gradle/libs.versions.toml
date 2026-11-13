@@ -18,6 +18,10 @@ compose-bom = "2026.09.00"
 activity-compose = "1.13.0"
 lifecycle = "2.11.0"
 core-ktx = "1.19.1"
+# CameraX (AndroidX, Apache-2.0): the Android app's camera for a QR scan (the QR CR, D4). Checked 2026-11-13 on Google's
+# Maven: 1.6.2 is the latest stable of an actively released library (its metadata updated 2026-11-04 with 1.7.0-rc02),
+# nothing in it relocated or deprecated; Google Play services and ML Kit are not pulled in (`camera-mlkit-vision` is a separate artifact, unused).
+camerax = "1.6.2"
 # The one generator version the repository runs (scripts/validate_build_input_pins.py holds every site to it).
 openapi-generator = "7.23.0"
 # Test-only, the core's jvmTest (never shipped): draws the web's Emergency Kit fixtures' pages as the apps' renderers do.
@@ -51,6 +55,10 @@ activity-compose = { module = "androidx.activity:activity-compose", version.ref 
 lifecycle-viewmodel-compose = { module = "androidx.lifecycle:lifecycle-viewmodel-compose", version.ref = "lifecycle" }
 lifecycle-runtime-compose = { module = "androidx.lifecycle:lifecycle-runtime-compose", version.ref = "lifecycle" }
 core-ktx = { module = "androidx.core:core-ktx", version.ref = "core-ktx" }
+camerax-core = { module = "androidx.camera:camera-core", version.ref = "camerax" }
+camerax-camera2 = { module = "androidx.camera:camera-camera2", version.ref = "camerax" }
+camerax-lifecycle = { module = "androidx.camera:camera-lifecycle", version.ref = "camerax" }
+camerax-view = { module = "androidx.camera:camera-view", version.ref = "camerax" }
 
 openapi-generator = { module = "org.openapitools:openapi-generator", version.ref = "openapi-generator" }
 

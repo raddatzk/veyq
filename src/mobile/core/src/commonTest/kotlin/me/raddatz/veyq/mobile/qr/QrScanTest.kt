@@ -113,6 +113,26 @@ class QrScanTest {
     }
 
     @Test
+    fun readySaysWhetherAFrameWouldBeTaken() = runTest {
+        val decoder = PlayedDecoder()
+        val scan = scan(decoder)
+        assertFalse(scan.ready, "before the camera runs")
+        scan.camera(QrScan.Camera.RUNNING)
+        assertTrue(scan.ready)
+        scan.offer(frame(1)); runCurrent()
+        assertFalse(scan.ready, "a decode is in flight")
+        decoder.answer(1, null); runCurrent()
+        assertTrue(scan.ready, "the decode answered")
+        scan.offer(frame(2)); runCurrent()
+        decoder.answer(2, "veyqkit:token"); runCurrent()
+        assertFalse(scan.ready, "found")
+        val closed = scan(PlayedDecoder())
+        closed.camera(QrScan.Camera.RUNNING)
+        closed.close()
+        assertFalse(closed.ready, "closed")
+    }
+
+    @Test
     fun aFrameOverTheLongEdgeIsRefused() = runTest {
         val scan = scan(PlayedDecoder())
         scan.camera(QrScan.Camera.RUNNING)
