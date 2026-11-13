@@ -1,6 +1,17 @@
 package me.raddatz.veyq.mobile.session
 
 import kotlinx.coroutines.test.runTest
+import kotlinx.serialization.json.Json
+import me.raddatz.veyq.mobile.account.KitImport
+import me.raddatz.veyq.mobile.account.KitImportTest
+import me.raddatz.veyq.mobile.account.KitImportTest.Companion.KEY_HEX
+import me.raddatz.veyq.mobile.account.KitImportTest.Companion.KEY_TEXT
+import me.raddatz.veyq.mobile.account.KitImportTest.Companion.TOKEN_A
+import me.raddatz.veyq.mobile.account.KitImportTest.Companion.TOKEN_NO_SRV
+import me.raddatz.veyq.mobile.account.KitImportTest.Companion.latin1
+import me.raddatz.veyq.mobile.crypto.EmergencyKit
+import me.raddatz.veyq.mobile.crypto.SecretKeyText
+import me.raddatz.veyq.mobile.crypto.hex
 import me.raddatz.veyq.mobile.navigation.Connection
 import me.raddatz.veyq.mobile.navigation.Hidden
 import me.raddatz.veyq.mobile.navigation.RecentUses
@@ -11,6 +22,7 @@ import me.raddatz.veyq.mobile.session.SessionModel.Gate
 import me.raddatz.veyq.mobile.words.Msg
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertIs
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
@@ -35,13 +47,29 @@ class SessionModelTest {
         val unopenable = HashSet<String>() // tenant ids
         val servers = mutableListOf<String>()
 
+        /** The Secret Key each sign-in was handed: the text typed, or "bytes:" and the hex of a key handed as bytes. */
+        val keys = mutableListOf<String>()
+
+        /** The byte keys handed, as handed: the model zeroes its copy once the sign-in returns. */
+        val handed = mutableListOf<ByteArray>()
+
+        override val primitives = testPrimitives
         override fun trusted() = records.toList()
         private fun by(server: String): Acc {
             servers += server
             refuse[server]?.let { throw SignInFailure(it) }
             return accounts.getValue(server)
         }
-        override suspend fun signIn(server: String, email: String, password: String, secretKey: String) = by(server)
+        override suspend fun signIn(server: String, email: String, password: String, secretKey: String): Acc {
+            keys += secretKey
+            if (secretKey.isBlank()) throw SignInFailure(SignInFailure.Reason.SECRET_KEY) // as the account's sign-in reads no key
+            return by(server)
+        }
+        override suspend fun signInWithKey(server: String, email: String, password: String, secretKey: ByteArray): Acc {
+            keys += "bytes:" + hex(secretKey)
+            handed += secretKey
+            return by(server)
+        }
         override suspend fun unlockOnDevice(record: TrustedDevice, password: String) = refuse[record.key]?.let { throw SignInFailure(it) } ?: by(record.server)
         override suspend fun resume(record: TrustedDevice) = refuse[record.key]?.let { throw SignInFailure(it) } ?: by(record.server)
         override suspend fun trust(account: Acc, password: String) {
@@ -434,5 +462,180 @@ class SessionModelTest {
         val asked = d.passwords.size
         assertEquals(TrustChange.DONE, m.trustWithPassword(a, "whatever"))
         assertEquals(asked, d.passwords.size)
+    }
+
+    // ---- the Emergency Kit at the sign-in: its key held by the model alone (en.account.key-model § The Emergency Kit) ----
+
+    private val familie = "https://familie.example.org"
+    private val alex = "alex.beispiel@example.org"
+
+    private fun kitDoor() = door().apply { accounts[familie] = a }
+
+    /** The web's fixture kit, read from its token as a scan's or a file's read hands it on. */
+    private fun found(token: String = TOKEN_A, from: KitImport.ServerFrom = KitImport.ServerFrom.TOKEN) =
+        KitImport.Found(EmergencyKit.read(testPrimitives, token)!!, from)
+
+    private fun zeroed(bytes: ByteArray) = bytes.all { it == 0.toByte() }
+
+    @Test
+    fun a_kit_read_fills_email_and_server_and_only_the_model_holds_its_key() = runTest {
+        val d = kitDoor()
+        val m = model(d)
+        m.start()
+        val file = KitImportTest.pdf(KitImportTest.info("($TOKEN_A)"))
+        assertTrue(m.readKit(file, KitImportTest.PlayedPictures()))
+        assertTrue(zeroed(file), "the file's bytes were left as read")
+        val shown = SessionModel.KitShown(alex, familie, KitImport.ServerFrom.TOKEN)
+        assertEquals(Gate.SignIn(server = familie, email = alex, kit = shown), m.current)
+
+        // what the bridge sends and a UI draws: no form of the key, nor the token that carries it
+        val json = Json.encodeToString(Gate.serializer(), m.current)
+        val key = me.raddatz.veyq.mobile.crypto.unhex(KEY_HEX)
+        val forms = listOf(KEY_TEXT, SecretKeyText.fold(KEY_TEXT), KEY_HEX, kotlin.io.encoding.Base64.encode(key), kotlin.io.encoding.Base64.UrlSafe.encode(key).trimEnd('='), "veyqkit:")
+        for (form in forms) assertFalse(form in json, "the gate carries the kit's key ($form): $json")
+
+        val o = m.signIn(familie, alex, "pw", "")!!
+        assertEquals(a, o.account)
+        assertEquals(listOf("bytes:$KEY_HEX"), d.keys, "the empty Secret Key did not sign in with the held kit's")
+        assertTrue(zeroed(d.handed.single()), "the key handed to the door was left unzeroed")
+    }
+
+    @Test
+    fun a_failed_sign_in_keeps_the_kit_and_one_that_succeeded_ends_it_zeroed() = runTest {
+        val d = kitDoor()
+        val m = model(d)
+        m.start()
+        val f = found()
+        assertTrue(m.takeKit(f))
+        d.refuse[familie] = SignInFailure.Reason.CREDENTIALS
+        assertNull(m.signIn(familie, alex, "wrong", ""))
+        val failed = m.current as Gate.SignIn
+        assertEquals(Msg.SIGNIN_ERROR_CREDENTIALS, failed.error)
+        assertEquals(SessionModel.KitShown(alex, familie, KitImport.ServerFrom.TOKEN), failed.kit, "a failed sign-in let the kit go")
+        assertFalse(zeroed(f.kit.secretKey))
+
+        d.refuse.clear()
+        assertEquals(a, m.signIn(familie, alex, "pw", "")!!.account)
+        assertEquals(listOf("bytes:$KEY_HEX", "bytes:$KEY_HEX"), d.keys, "the retry did not use the kit the failure kept")
+        assertTrue(zeroed(f.kit.secretKey), "the held key outlived the sign-in that succeeded")
+
+        // nothing is held for the next sign-in
+        m.addServer()
+        assertNull(m.signIn("b.example", "e", "pw", ""))
+        assertEquals("", d.keys.last())
+    }
+
+    @Test
+    fun a_typed_key_wins_over_a_held_kit_and_ends_it() = runTest {
+        val d = kitDoor()
+        val m = model(d)
+        m.start()
+        val f = found()
+        m.takeKit(f)
+        d.refuse[familie] = SignInFailure.Reason.SECRET_KEY
+        assertNull(m.signIn(familie, alex, "pw", "typed-sk"))
+        assertEquals(listOf("typed-sk"), d.keys, "the held kit's key was used over the typed one")
+        assertNull((m.current as Gate.SignIn).kit)
+        assertTrue(zeroed(f.kit.secretKey), "the typed key left the kit's held")
+        assertNull(m.signIn(familie, alex, "pw", ""))
+        assertEquals("", d.keys.last())
+    }
+
+    @Test
+    fun cancel_leaving_and_the_rows_clear_end_the_held_kit() = runTest {
+        val d = kitDoor()
+        val m = model(d)
+        m.start()
+        m.signIn(familie, alex, "pw", "sk")
+        m.addServer()
+        val first = found()
+        m.takeKit(first)
+        m.cancelAdd()
+        assertIs<Gate.Signed>(m.current)
+        assertTrue(zeroed(first.kit.secretKey), "Cancel left the kit's key held")
+        // a sign-in now (the dev login's way) has no key to fall back on: it fails as a missing key
+        assertNull(m.signIn("b.example", "e", "pw", ""))
+        assertEquals("", d.keys.last())
+        assertEquals(Msg.SIGNIN_ERROR_SECRET_KEY, (m.current as Gate.SignIn).error)
+
+        val second = found(TOKEN_NO_SRV, KitImport.ServerFrom.NONE)
+        m.takeKit(second, typedServer = "b.example")
+        m.clearKit()
+        assertEquals(Gate.SignIn(server = "b.example", email = alex), m.current, "the clear took the filled form with it")
+        assertTrue(zeroed(second.kit.secretKey), "the row's clear left the kit's key held")
+
+        val third = found()
+        m.takeKit(third)
+        val fourth = found()
+        m.takeKit(fourth)
+        assertTrue(zeroed(third.kit.secretKey), "a new kit left the one it replaced held")
+        assertFalse(zeroed(fourth.kit.secretKey))
+        m.otherAccount()
+        assertTrue(zeroed(fourth.kit.secretKey), "a fresh sign-in left the kit's key held")
+    }
+
+    @Test
+    fun a_pasted_token_is_read_as_the_kits_key_and_its_email_and_server_are_not_applied() = runTest {
+        val d = kitDoor()
+        val m = model(d)
+        m.start()
+        assertEquals(b, m.signIn("b.example", "e", "pw", "  $TOKEN_A\n")!!.account)
+        assertEquals(listOf("bytes:$KEY_HEX"), d.keys)
+        assertEquals("https://b.example", d.servers.last())
+        assertTrue(zeroed(d.handed.single()))
+        // a token that does not read goes on as typed, and fails as a wrong Secret Key would
+        m.addServer()
+        val broken = TOKEN_A.dropLast(4)
+        m.signIn("b.example", "e", "pw", broken)
+        assertEquals(broken, d.keys.last())
+    }
+
+    @Test
+    fun a_kit_from_another_server_says_so_and_one_without_a_server_keeps_the_forms() = runTest {
+        val m = model(kitDoor())
+        m.start()
+        m.takeKit(found(), typedServer = "other.example")
+        assertEquals(SessionModel.KitShown(alex, familie, KitImport.ServerFrom.TOKEN, typedServer = "https://other.example"), (m.current as Gate.SignIn).kit)
+        assertEquals(familie, (m.current as Gate.SignIn).server)
+        m.takeKit(found(), typedServer = "Familie.example.org/")
+        assertNull((m.current as Gate.SignIn).kit!!.typedServer, "the same server typed otherwise was said to differ")
+        m.otherAccount()
+        m.takeKit(found())
+        assertNull((m.current as Gate.SignIn).kit!!.typedServer, "an empty form was said to differ")
+
+        m.takeKit(found(TOKEN_NO_SRV, KitImport.ServerFrom.NONE), typedServer = "mine.example")
+        assertEquals(Gate.SignIn(server = "mine.example", email = alex, kit = SessionModel.KitShown(alex, null, KitImport.ServerFrom.NONE)), m.current)
+    }
+
+    @Test
+    fun a_file_without_a_kit_says_so_and_keeps_the_kit_held_before() = runTest {
+        val d = kitDoor()
+        val m = model(d)
+        m.start()
+        val f = found()
+        m.takeKit(f)
+        val file = "not a kit".latin1()
+        assertFalse(m.readKit(file, KitImportTest.PlayedPictures(picture = null)))
+        assertTrue(zeroed(file))
+        val now = m.current as Gate.SignIn
+        assertEquals(Msg.SIGNIN_KIT_UNREADABLE, now.error)
+        assertEquals(familie, now.kit?.server)
+        assertFalse(zeroed(f.kit.secretKey))
+        m.signIn(familie, alex, "pw", "")
+        assertEquals(listOf("bytes:$KEY_HEX"), d.keys)
+    }
+
+    @Test
+    fun outside_the_sign_in_no_kit_is_taken() = runTest {
+        val m = model(kitDoor())
+        m.start()
+        m.signIn(familie, alex, "pw", "sk")
+        val f = found()
+        assertFalse(m.takeKit(f))
+        assertTrue(zeroed(f.kit.secretKey))
+        val file = KitImportTest.pdf(KitImportTest.info("($TOKEN_A)"))
+        assertFalse(m.readKit(file, KitImportTest.PlayedPictures()))
+        assertTrue(zeroed(file))
+        assertIs<Gate.Signed>(m.current)
     }
 }

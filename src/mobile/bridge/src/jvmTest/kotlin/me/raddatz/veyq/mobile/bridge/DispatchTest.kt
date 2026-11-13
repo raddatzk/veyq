@@ -60,6 +60,8 @@ class DispatchTest {
             if (password != "right") throw SignInFailure(SignInFailure.Reason.CREDENTIALS)
             return accounts.getValue(server)
         }
+        override val primitives = BouncyCastlePrimitives
+        override suspend fun signInWithKey(server: String, email: String, password: String, secretKey: ByteArray): Acc = error("no kit reaches this door")
         override suspend fun unlockOnDevice(record: TrustedDevice, password: String) = error("no trusted device")
         override suspend fun resume(record: TrustedDevice) = error("no trusted device")
         override suspend fun trust(account: Acc, password: String) {}
@@ -226,6 +228,8 @@ class DispatchTest {
         override fun trusted() = kept.records.toList()
         override suspend fun signIn(server: String, email: String, password: String, secretKey: String): Acc =
             if (password == "right") account else throw SignInFailure(SignInFailure.Reason.CREDENTIALS)
+        override val primitives = BouncyCastlePrimitives
+        override suspend fun signInWithKey(server: String, email: String, password: String, secretKey: ByteArray): Acc = error("no kit reaches this door")
         override suspend fun unlockOnDevice(record: TrustedDevice, password: String): Acc =
             if (password == "right") account else throw SignInFailure(SignInFailure.Reason.CREDENTIALS)
         override suspend fun resume(record: TrustedDevice): Acc {

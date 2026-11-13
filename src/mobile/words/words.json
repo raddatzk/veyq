@@ -159,6 +159,11 @@
     "en": "Signing in did not work.",
     "de": "Die Anmeldung hat nicht geklappt."
   },
+  "signin_kit_unreadable": {
+    "en": "Couldn’t read that kit. Try another file or enter your Secret Key.",
+    "de": "Konnte das Kit nicht lesen. Versuche eine andere Datei oder gib deinen Secret Key ein.",
+    "note": "An Emergency Kit file was picked and no kit was found in it (the web's kitUnreadable)."
+  },
   "drawer_home": {
     "en": "Home",
     "de": "Home"

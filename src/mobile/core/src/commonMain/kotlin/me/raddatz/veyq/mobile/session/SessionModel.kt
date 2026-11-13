@@ -12,6 +12,9 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
+import me.raddatz.veyq.mobile.account.KitImport
+import me.raddatz.veyq.mobile.account.KitPictures
+import me.raddatz.veyq.mobile.crypto.EmergencyKit
 import me.raddatz.veyq.mobile.crypto.Primitives
 import me.raddatz.veyq.mobile.navigation.Connection
 import me.raddatz.veyq.mobile.navigation.Connections
@@ -32,6 +35,12 @@ import me.raddatz.veyq.mobile.words.MsgKey
  * A UI observes [gate] (or [watch]) and draws the sign-in, the unlock or — once [Gate.Signed] — its shell over the
  * tenant an action returned [Opened]; it holds no account logic of its own. [A] is the account, [T] an opened tenant:
  * [accounts] builds the model over the real ones, a test over its own.
+ *
+ * An Emergency Kit read at the sign-in ([readKit], [takeKit]) fills its email and server into [Gate.SignIn] and leaves
+ * its Secret Key **here**, in the model alone (en.account.key-model § The Emergency Kit): the state, the bridge and every
+ * UI know only that a kit's key is held ([Gate.SignIn.kit]). The key is held exactly as long as the gate shows a kit —
+ * [clearKit], a new kit, a typed key, Cancel and every other way out of the sign-in, and a sign-in that succeeded end
+ * it, its bytes zeroed; a sign-in that failed keeps it.
  */
 class SessionModel<A : Connection, T : Any>(
     private val door: Door<A, T>,
@@ -42,9 +51,15 @@ class SessionModel<A : Connection, T : Any>(
 ) {
     /** What the model does with an account, the platform's suite and HTTP client behind it. */
     interface Door<A : Connection, T : Any> {
+        /** The platform's suite: what a kit's read checks its Secret Key with ([KitImport], [EmergencyKit]). */
+        val primitives: Primitives
+
         /** The accounts this device trusts, most recent first. */
         fun trusted(): List<TrustedDevice>
         suspend fun signIn(server: String, email: String, password: String, secretKey: String): A
+
+        /** The same sign-in with the Secret Key's 32 bytes (a kit's): [secretKey] is this call's, which zeroes it. */
+        suspend fun signInWithKey(server: String, email: String, password: String, secretKey: ByteArray): A
         suspend fun unlockOnDevice(record: TrustedDevice, password: String): A
         suspend fun resume(record: TrustedDevice): A
 
@@ -100,7 +115,10 @@ class SessionModel<A : Connection, T : Any>(
         @Serializable @SerialName("NeedsApp")
         object NeedsApp : Gate()
 
-        /** The full sign-in, with the Secret Key; [server] and [email] filled in where a trusted device's record knew them. */
+        /**
+         * The full sign-in, with the Secret Key; [server] and [email] filled in where a trusted device's record knew them,
+         * or a kit read ([kit]) — whose Secret Key the model holds, never this state.
+         */
         @Serializable @SerialName("SignIn")
         data class SignIn(
             val working: Boolean = false,
@@ -108,6 +126,7 @@ class SessionModel<A : Connection, T : Any>(
             val adding: Boolean = false,
             val server: String? = null,
             val email: String? = null,
+            val kit: KitShown? = null,
         ) : Gate()
 
         /** An account this device trusts: the password alone (DEVICE), or the person's authentication (DEVICE_KEY). */
@@ -123,12 +142,36 @@ class SessionModel<A : Connection, T : Any>(
         data class Signed(val connectionKey: String, val tenantId: String, val switching: Boolean = false, val offer: Offer? = null) : Gate()
     }
 
+    /**
+     * What a sign-in shows of the kit whose Secret Key the model holds: the Secret Key row reads "from your Emergency Kit"
+     * with a way to clear it ([clearKit]). [server] is the kit's (null where neither its token nor its first address field
+     * gave one) and [serverFrom] where it came from; [typedServer] is the different server the form held before the kit
+     * replaced it — the notice that the kit was made at another address (uc.account.unlock), information, never a
+     * refusal; null where there was none or it was the same.
+     */
+    @Serializable
+    data class KitShown(val email: String, val server: String?, val serverFrom: KitImport.ServerFrom, val typedServer: String? = null)
+
     /** A tenant opened: the shell goes over [session]. */
     class Opened<A : Any, T : Any>(val account: A, val tenant: TenantRef, val session: T)
 
     private val _gate = MutableStateFlow<Gate>(Gate.Starting)
     val gate: StateFlow<Gate> = _gate.asStateFlow()
     val current: Gate get() = _gate.value
+
+    /** The Secret Key of the kit [Gate.SignIn.kit] shows; held only while it shows one. */
+    private var heldKey: ByteArray? = null
+
+    /** The gate shown next; a gate without a kit ends the held one (leaving the sign-in, Cancel, a typed key, a success). */
+    private fun show(gate: Gate) {
+        if ((gate as? Gate.SignIn)?.kit == null) dropKey()
+        _gate.value = gate
+    }
+
+    private fun dropKey() {
+        heldKey?.fill(0)
+        heldKey = null
+    }
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
 
@@ -165,7 +208,7 @@ class SessionModel<A : Connection, T : Any>(
         started = true
         val records = door.trusted()
         if (records.isEmpty()) {
-            _gate.value = if (signInElsewhere) Gate.NeedsApp else Gate.SignIn()
+            show(if (signInElsewhere) Gate.NeedsApp else Gate.SignIn())
             return null
         }
         var stopped: TrustedDevice? = null
@@ -188,22 +231,102 @@ class SessionModel<A : Connection, T : Any>(
      * offers a level and the person never said "Not now" for this account here — the offer to stay signed in
      * ([Gate.Signed.offer], ADR 0123 decision 8). A trust that cannot be enrolled leaves the sign-in standing: the next start then asks for
      * the Secret Key again.
+     *
+     * An empty [secretKey] signs in with the held kit's key, where one is held; a typed one wins over it and ends it. A
+     * pasted kit token in its place is read as that kit's key — its email and server not applied, the person is typing
+     * them (uc.account.unlock step 1).
      */
     suspend fun signIn(server: String, email: String, password: String, secretKey: String): Opened<A, T>? {
         started = true // a sign-in (the dev login among them) decides where the app is; the start does not run after it
         val adding = (current as? Gate.SignIn)?.adding == true
-        _gate.value = Gate.SignIn(working = true, adding = adding, server = server, email = email)
+        val typed = secretKey.isNotBlank()
+        val kit = if (typed) null else (current as? Gate.SignIn)?.kit
+        // this call's copy of the key, zeroed by the door: the held one stays for a retry until the sign-in succeeds
+        val key = if (typed) EmergencyKit.read(door.primitives, secretKey)?.secretKey else heldKey?.copyOf()
+        show(Gate.SignIn(working = true, adding = adding, server = server, email = email, kit = kit))
         return try {
-            val account = door.signIn(origin(server), email, password, secretKey)
+            val account = if (key != null) door.signInWithKey(origin(server), email, password, key)
+            else door.signIn(origin(server), email, password, secretKey)
             door.trust(account, password)
             add(account)
             offer = offerFor(account)
             val (held, tenant) = connections.current!!
             openTenant(held, tenant)
         } catch (e: Exception) {
-            _gate.value = Gate.SignIn(error = words(reasonOf(e)), adding = adding, server = server, email = email)
+            show(Gate.SignIn(error = words(reasonOf(e)), adding = adding, server = server, email = email, kit = kit))
             null
+        } finally {
+            key?.fill(0)
         }
+    }
+
+    /**
+     * An Emergency Kit file the person picked, read at the sign-in ([KitImport.read]: [pictures] draws its pages, the
+     * core decides) and taken as [takeKit] takes it; [typedServer] is the form's server as typed now. [bytes] are zeroed
+     * once read. False — the gate saying the kit could not be read, a kit held before kept — where none was found, and
+     * outside the sign-in.
+     */
+    suspend fun readKit(bytes: ByteArray, pictures: KitPictures, typedServer: String? = null): Boolean {
+        val state = current as? Gate.SignIn
+        if (state == null) {
+            bytes.fill(0)
+            return false
+        }
+        show(state.copy(working = true, error = null))
+        val found = try {
+            KitImport.read(door.primitives, bytes, pictures)
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            null
+        } finally {
+            bytes.fill(0)
+        }
+        val now = current as? Gate.SignIn
+        if (now == null) { // the sign-in was left while the file was read
+            found?.kit?.wipe()
+            return false
+        }
+        if (found == null) {
+            show(now.copy(working = false, error = Msg.SIGNIN_KIT_UNREADABLE))
+            return false
+        }
+        return takeKit(found, typedServer)
+    }
+
+    /**
+     * A kit read (a file's, [readKit], or a scanned code's): its email and server into the sign-in's form — a kit with no
+     * server keeps the form's —, its Secret Key held by this model in place of any held before. The model owns
+     * [found]'s kit from here and zeroes its key when it ends. [typedServer] is the form's server as typed now (else the
+     * gate's): a different one the kit's replaced is said ([KitShown.typedServer]). False outside the sign-in.
+     */
+    fun takeKit(found: KitImport.Found, typedServer: String? = null): Boolean {
+        val kit = found.kit
+        val state = current as? Gate.SignIn
+        if (state == null) {
+            kit.wipe()
+            return false
+        }
+        val before = typedServer?.takeIf { it.isNotBlank() } ?: state.server?.takeIf { it.isNotBlank() }
+        val other = before?.takeIf { kit.server != null && origin(it).lowercase() != kit.server }?.let { origin(it) }
+        dropKey()
+        heldKey = kit.secretKey
+        show(
+            state.copy(
+                working = false,
+                error = null,
+                email = kit.email,
+                server = kit.server ?: before,
+                kit = KitShown(kit.email, kit.server, found.serverFrom, other),
+            ),
+        )
+        return true
+    }
+
+    /** The Secret Key row's clear: the held kit's key ends, zeroed; the form keeps the email and server it filled. */
+    fun clearKit() {
+        val state = current as? Gate.SignIn ?: return
+        show(state.copy(kit = null))
     }
 
     /**
@@ -213,7 +336,7 @@ class SessionModel<A : Connection, T : Any>(
     suspend fun unlock(password: String): Opened<A, T>? {
         val state = current as? Gate.Unlock ?: return null
         val record = state.record
-        _gate.value = state.copy(working = true, error = null)
+        show(state.copy(working = true, error = null))
         return try {
             val account = when (record.method) {
                 TrustedDevice.Method.DEVICE -> door.unlockOnDevice(record, password)
@@ -225,12 +348,12 @@ class SessionModel<A : Connection, T : Any>(
             openTenant(held, tenant)
         } catch (e: Exception) {
             val reason = reasonOf(e)
-            _gate.value = when (reason) {
+            show(when (reason) {
                 SignInFailure.Reason.DEVICE_NOT_TRUSTED, SignInFailure.Reason.SESSION_ENDED ->
                     Gate.SignIn(error = words(reason), server = record.server, email = record.email)
                 SignInFailure.Reason.DEVICE_AUTH_CANCELLED -> state.copy(working = false, error = null)
                 else -> state.copy(working = false, error = words(reason))
-            }
+            })
             null
         }
     }
@@ -244,17 +367,17 @@ class SessionModel<A : Connection, T : Any>(
 
     /** From the unlock to the full sign-in, for another account. */
     fun otherAccount() {
-        _gate.value = if (signInElsewhere) Gate.NeedsApp else Gate.SignIn()
+        show(if (signInElsewhere) Gate.NeedsApp else Gate.SignIn())
     }
 
     /** "Add server": the sign-in again, which [cancelAdd] leaves back to the shell. */
     fun addServer() {
-        _gate.value = Gate.SignIn(adding = true)
+        show(Gate.SignIn(adding = true))
     }
 
     fun cancelAdd() {
         val o = opened ?: return
-        _gate.value = signed(o.account.key, o.tenant.tenantId)
+        show(signed(o.account.key, o.tenant.tenantId))
     }
 
     /** The offer's answer: stay signed in at [level] ([stay] for the offer's account); null without an offer. */
@@ -312,7 +435,7 @@ class SessionModel<A : Connection, T : Any>(
 
     private fun endOffer() {
         offer = null
-        (current as? Gate.Signed)?.let { _gate.value = it.copy(offer = null) }
+        (current as? Gate.Signed)?.let { show(it.copy(offer = null)) }
     }
 
     /** The shell's gate, with the offer standing. */
@@ -327,12 +450,12 @@ class SessionModel<A : Connection, T : Any>(
         val was = opened
         val before = connections.current
         connections.switchTo(account, tenant)
-        if (was != null) _gate.value = signed(was.account.key, was.tenant.tenantId, switching = true)
+        if (was != null) show(signed(was.account.key, was.tenant.tenantId, switching = true))
         return try {
             openTenant(account, tenant)
         } catch (e: Exception) {
             before?.let { connections.switchTo(it.first, it.second) }
-            if (was != null) _gate.value = signed(was.account.key, was.tenant.tenantId)
+            if (was != null) show(signed(was.account.key, was.tenant.tenantId))
             null
         }
     }
@@ -445,7 +568,7 @@ class SessionModel<A : Connection, T : Any>(
         val o = Opened(account, tenant, door.open(account, tenant))
         door.opened(o.session)
         opened = o
-        _gate.value = signed(account.key, tenant.tenantId)
+        show(signed(account.key, tenant.tenantId))
         return o
     }
 
@@ -460,11 +583,11 @@ class SessionModel<A : Connection, T : Any>(
     /** The unlock for [preferred], else the most recent account this device trusts, else the sign-in. */
     private suspend fun locked(preferred: TrustedDevice? = null, error: Msg? = null): Opened<A, T>? {
         val record = preferred ?: door.trusted().firstOrNull()
-        _gate.value = when {
+        show(when {
             record != null -> Gate.Unlock(record, error = error)
             signInElsewhere -> Gate.NeedsApp
             else -> Gate.SignIn(error = error)
-        }
+        })
         val pending = pendingUnlock ?: return null
         pendingUnlock = null
         return if (record != null) unlock(pending) else null
@@ -507,7 +630,7 @@ class SessionModel<A : Connection, T : Any>(
 
 /** [SessionModel.Door] over [VeyqAccount]. */
 class AccountDoor(
-    private val primitives: Primitives,
+    override val primitives: Primitives,
     private val device: ThisDevice,
     private val client: (block: HttpClientConfig<*>.() -> Unit) -> HttpClient,
 ) : SessionModel.Door<VeyqAccount, TenantSession> {
@@ -515,6 +638,9 @@ class AccountDoor(
 
     override suspend fun signIn(server: String, email: String, password: String, secretKey: String): VeyqAccount =
         VeyqAccount.signIn(primitives, server, email, password, secretKey, device, client)
+
+    override suspend fun signInWithKey(server: String, email: String, password: String, secretKey: ByteArray): VeyqAccount =
+        VeyqAccount.signInWithKey(primitives, server, email, password, secretKey, device, client)
 
     override suspend fun unlockOnDevice(record: TrustedDevice, password: String): VeyqAccount =
         VeyqAccount.unlockOnDevice(primitives, record, password, device, client)
