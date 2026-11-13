@@ -652,9 +652,9 @@ internal enum class ScanKind {
     SCHEME,
 
     /**
-     * An Emergency Kit's code (`EmergencyKit.read`: a v3 `veyqkit:` token; any other code, an older kit's too, is skipped
-     * and scanning goes on), found as `veyqkit` — the kit itself goes to the sign-in (`SessionModel.takeKit`: email and
-     * server filled, the Secret Key held by the core), never across the bridge.
+     * An Emergency Kit's code, the sign-in's own scan (`SessionModel.scanKit`: a v3 `veyqkit:` token; any other code, an
+     * older kit's too, is skipped and scanning goes on), found as `veyqkit` — the kit itself goes to the sign-in
+     * (`takeKit`: email and server filled, the Secret Key held by the core), never across the bridge.
      */
     KIT,
 }

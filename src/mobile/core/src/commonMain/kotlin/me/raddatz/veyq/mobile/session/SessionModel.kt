@@ -22,6 +22,9 @@ import me.raddatz.veyq.mobile.navigation.Hidden
 import me.raddatz.veyq.mobile.navigation.RecentUses
 import me.raddatz.veyq.mobile.navigation.SpaceRef
 import me.raddatz.veyq.mobile.navigation.TenantRef
+import me.raddatz.veyq.mobile.qr.QrDecoder
+import me.raddatz.veyq.mobile.qr.QrFrame
+import me.raddatz.veyq.mobile.qr.QrScan
 import me.raddatz.veyq.mobile.words.Msg
 import me.raddatz.veyq.mobile.words.MsgKey
 
@@ -330,12 +333,24 @@ class SessionModel<A : Connection, T : Any>(
     }
 
     /**
-     * A scanned code read as a kit (`EmergencyKit.read` with the door's suite): a scan's `accepts` — any other code, an
-     * older kit's too, is null and the scan goes on. Its [KitImport.Found] goes to [takeKit]; a QR carries no form, so
-     * its server is the token's or none.
+     * The sign-in's "Scan Emergency Kit": a QR scan (the camera's view feeds it) whose `accepts` is the kit's parser,
+     * [EmergencyKit.read] — a code that is not a v3 kit is skipped and the scan goes on, as the web's scanner skips one —
+     * and whose kit is taken here as a file's is ([takeKit]): email and server into the form, its Secret Key held by this
+     * model. A QR carries no form, so its server is the token's or none. The code's text and the key never leave the
+     * core: the scan's `Found` says only where the server came from. [typedServer] is the form's server as typed when the
+     * scan opened. A code read after the camera's view closed the scan is still taken (the person held up their kit).
      */
-    fun scannedKit(text: String): KitImport.Found? =
-        EmergencyKit.read(door.primitives, text)?.let { KitImport.Found(it, if (it.server != null) KitImport.ServerFrom.TOKEN else KitImport.ServerFrom.NONE) }
+    fun scanKit(
+        typedServer: String? = null,
+        decode: suspend (QrFrame) -> String? = { QrDecoder.decode(it) },
+        scope: CoroutineScope = CoroutineScope(SupervisorJob() + Dispatchers.Default),
+    ): QrScan<KitImport.ServerFrom> = QrScan(accepts = { text -> takeScanned(text, typedServer) }, decode = decode, scope = scope)
+
+    private fun takeScanned(text: String, typedServer: String?): KitImport.ServerFrom? {
+        val kit = EmergencyKit.read(door.primitives, text) ?: return null
+        val from = if (kit.server != null) KitImport.ServerFrom.TOKEN else KitImport.ServerFrom.NONE
+        return if (takeKit(KitImport.Found(kit, from), typedServer)) from else null
+    }
 
     /**
      * The trusted account's unlock: its password (DEVICE), or the person's authentication again (DEVICE_KEY). A password

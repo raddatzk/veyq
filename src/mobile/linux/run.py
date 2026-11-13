@@ -57,7 +57,17 @@ Verbs:
                              `appstreamcli validate`, flatpak-builder (clippy, test and the release build in the SDK),
                              flatpak-builder-lint's manifest and repo checks, and the bundle
                              `src/mobile/build/linux/flatpak/veyq-<version>-<arch>.flatpak`. Default: this host's
-                             architecture; another one runs under Docker's emulation.
+                             architecture; another one runs under Docker's emulation. `--prebuilt` takes the release
+                             library and the generated sources `inputs` left in this tree instead of making them (CI's
+                             `flatpak` job, after `app-inputs` on macOS: no Gradle, no Quick Look). `--smoke` then
+                             installs the bundle in the same container, starts it headless in its sandbox (under
+                             `dbus-run-session` and `gtk4-broadwayd`, both the runtime's), waits until it logs `session
+                             SignIn`, and uninstalls it with its data.
+  inputs [--arch aarch64|x86_64]...
+                             what `flatpak` builds outside the sandbox, alone (ADR 0133 decision 4): the bridge's release
+                             library for each architecture named (default both), the bridge's Rust and the samples its
+                             round trip reads, the words and the theme, at their paths in this tree. CI's `app-inputs`
+                             runs it on macOS and hands the files to `flatpak --prebuilt`.
 
 cargo's registry and target directory live in the Docker volumes `veyq-linux-cargo` and `veyq-linux-target`, so a
 rebuild is incremental; `docker volume rm` both to start clean.
@@ -416,20 +426,40 @@ def tree_version() -> tuple[str, str]:
     return release_assets.tree_release(ROOT), date
 
 
-def flatpak(flatpak_arch: str) -> int:
-    docker_platform, target = FLATPAK_ARCHES[flatpak_arch]
-    runtime_pins(flatpak_arch)  # refuses a pin file that lacks one, before the long steps
-    version, date = tree_version()
+def release_library(target: str) -> Path:
     lower = target[0].lower() + target[1:]
-    # The core and everything generated, outside the sandbox (decision 4): the release library, the bridge's Rust and
-    # the samples its round trip reads, the words, the theme.
-    run("./gradlew", ":bridge:generateBindings", f":bridge:linkReleaseShared{target}", ":bridge:jvmTest",
+    return repo_layout.MOBILE / "bridge" / "build" / "bin" / lower / "releaseShared" / "libveyq.so"
+
+
+# What `inputs` writes beside the libraries, each a directory `flatpak --prebuilt` refuses to go without.
+GENERATED_INPUTS = (GENERATED / "bridge" / "samples", GENERATED / "linux" / "words", GENERATED / "linux" / "theme")
+
+
+def inputs(flatpak_arches: list[str]) -> int:
+    """The core and everything generated, outside the sandbox (decision 4): the release library of each of
+    [flatpak_arches], the bridge's Rust and the samples its round trip reads, the words, the theme."""
+    targets = [FLATPAK_ARCHES[a][1] for a in flatpak_arches]
+    run("./gradlew", ":bridge:generateBindings", *(f":bridge:linkReleaseShared{t}" for t in targets), ":bridge:jvmTest",
         "--tests", "*WireTest*", cwd=repo_layout.MOBILE)
     run(sys.executable, str(WORDS / "generate_words.py"), "--gettext", str(GENERATED / "linux" / "words"))
     run(sys.executable, str(THEME / "generate_theme.py"), "--gtk", str(GENERATED / "linux" / "theme"))
-    lib = repo_layout.MOBILE / "bridge" / "build" / "bin" / lower / "releaseShared" / "libveyq.so"
-    if not lib.exists():
-        sys.exit(f"no library at {lib}")
+    for target in targets:
+        if not release_library(target).exists():
+            sys.exit(f"no library at {release_library(target)}")
+    return 0
+
+
+def flatpak(flatpak_arch: str, prebuilt: bool = False, smoke: bool = False) -> int:
+    docker_platform, target = FLATPAK_ARCHES[flatpak_arch]
+    runtime_pins(flatpak_arch)  # refuses a pin file that lacks one, before the long steps
+    version, date = tree_version()
+    lib = release_library(target)
+    if not prebuilt:
+        inputs([flatpak_arch])
+    missing = [p for p in (lib, *GENERATED_INPUTS) if not p.exists()]
+    if missing:
+        sys.exit(f"--prebuilt finds no {', '.join(str(p.relative_to(ROOT)) for p in missing)}: run `run.py inputs` first"
+                 if prebuilt else f"no {', '.join(map(str, missing))}")
 
     # The inputs the manifest's `type: dir` sources name, written anew each run.
     inputs, vendor = FLATPAK_OUT / "inputs", FLATPAK_OUT / "vendor"
@@ -476,6 +506,8 @@ def flatpak(flatpak_arch: str) -> int:
         f"flatpak build-bundle --arch={flatpak_arch} --runtime-repo={FLATHUB} /veyq/state/repo {bundle} {APP_ID} stable; "
         f"ls -l {bundle}"
     )
+    if smoke:
+        script += "; " + SMOKE.format(arch=flatpak_arch, bundle=bundle, app=APP_ID, line=SMOKE_SIGN_IN)
     rc = in_runtime(flatpak_arch, script,
                     ["-v", f"veyq-flatpak-state-{flatpak_arch}:/veyq/state",
                      "-v", f"{repo_layout.MOBILE}:/veyq/mobile:ro",
@@ -483,6 +515,31 @@ def flatpak(flatpak_arch: str) -> int:
     if rc == 0:
         print(f"veyq: {FLATPAK_OUT / bundle}", flush=True)
     return rc
+
+
+# What the app logs once it shows its sign-in (main.rs, the session's gate): the smoke's end, as Windows' is.
+SMOKE_SIGN_IN = "veyq: session SignIn"
+# The installed bundle started as a person would get it, but headless: inside its own sandbox a session bus of its own
+# (GApplication registers on one) and the runtime's gtk4-broadwayd for a display, so nothing of the container's is
+# drawn on. Red unless its log says SMOKE_SIGN_IN within 60 s; then uninstalled with its data, red if any is left.
+SMOKE = (
+    "echo '+ the smoke: the bundle installed, started headless to its sign-in, uninstalled'; "
+    "flatpak install --user -y --noninteractive --reinstall --arch={arch} {bundle}; "
+    "flatpak run --user --arch={arch} --command=bash {app} -c "
+    + shlex.quote("exec dbus-run-session -- bash -c 'gtk4-broadwayd :5 & "
+                  "for _ in $(seq 50); do ls \"$XDG_RUNTIME_DIR\"/broadway*.socket >/dev/null 2>&1 && break; sleep 0.1; done; "
+                  "GDK_BACKEND=broadway BROADWAY_DISPLAY=:5 exec veyq'")
+    + " > /tmp/smoke.log 2>&1 & app=$!; "
+    "seen=0; for _ in $(seq 120); do "
+    "if grep -qF '{line}' /tmp/smoke.log; then seen=1; break; fi; kill -0 $app 2>/dev/null || break; sleep 0.5; done; "
+    "kill $app 2>/dev/null || true; wait $app 2>/dev/null || true; "
+    "echo '--- the app'; cat /tmp/smoke.log; "
+    "[ $seen = 1 ] || {{ echo 'veyq: the installed bundle did not reach its sign-in in 60 s'; exit 1; }}; "
+    "dbus-run-session -- flatpak uninstall --user -y --noninteractive --delete-data {app}; "
+    "if flatpak info --user {app} >/dev/null 2>&1 || [ -e ~/.var/app/{app} ]; then "
+    "echo 'veyq: the bundle is still installed, or its data left behind'; exit 1; fi; "
+    "echo 'veyq: the installed bundle showed its sign-in ({line}) and is uninstalled, nothing left'"
+)
 
 
 def write_manifest(version: str, date: str) -> None:
@@ -554,7 +611,13 @@ def main() -> None:
     verbs.add_parser("lock", help="cargo update: write Cargo.lock anew")
     f = verbs.add_parser("flatpak", help="build the Flatpak bundle in the pinned GNOME SDK (ADR 0133)")
     f.add_argument("--arch", choices=sorted(FLATPAK_ARCHES), help="default: this host's architecture")
+    f.add_argument("--prebuilt", action="store_true", help="take the library and sources `inputs` left in this tree")
+    f.add_argument("--smoke", action="store_true", help="install the bundle, start it headless to its sign-in, uninstall")
+    i = verbs.add_parser("inputs", help="the release libraries and the generated sources, alone (CI's app-inputs)")
+    i.add_argument("--arch", choices=sorted(FLATPAK_ARCHES), action="append", help="repeatable; default: both")
     args = parser.parse_args()
+    if args.verb == "inputs":
+        sys.exit(inputs(args.arch or sorted(FLATPAK_ARCHES)))
     if args.verb == "build":
         sys.exit(build())
     if args.verb == "run":
@@ -564,7 +627,8 @@ def main() -> None:
     if args.verb == "lock":
         sys.exit(lock())
     if args.verb == "flatpak":
-        sys.exit(flatpak(args.arch or {"linux/arm64": "aarch64", "linux/amd64": "x86_64"}[arch()[0]]))
+        sys.exit(flatpak(args.arch or {"linux/arm64": "aarch64", "linux/amd64": "x86_64"}[arch()[0]], args.prebuilt,
+                         args.smoke))
     if args.verb == "test":
         sys.exit(test(args.tests))
     if args.verb == "bridge":

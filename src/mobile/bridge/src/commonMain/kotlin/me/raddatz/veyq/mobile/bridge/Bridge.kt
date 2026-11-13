@@ -16,7 +16,6 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
-import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.flowOf
@@ -243,7 +242,7 @@ internal class Bridge<A : Connection, T : Any>(compose: () -> Composition<A, T>)
     private val saves = Registry<me.raddatz.veyq.mobile.depot.FileSave>()
 
     /** The QR scans the host opened ([Call.ScanOpen]): no tenant's, each until [Call.ScanClose] or [shutdown]. */
-    private val scans = Registry<me.raddatz.veyq.mobile.qr.QrScan<Any>>()
+    private val scans = Registry<me.raddatz.veyq.mobile.qr.QrScan<*>>()
 
     /** The app's one upload queue (the phones' `AppModel.uploads`): emptied when the tenant closes. */
     private val queue = me.raddatz.veyq.mobile.blob.UploadQueue()
@@ -688,17 +687,12 @@ internal class Bridge<A : Connection, T : Any>(compose: () -> Composition<A, T>)
             is Call.ShareReactivate -> shares[call.share]?.let { Answer.Said(it.reactivate(call.link).notice) } ?: noShare
             is Call.ScanOpen -> {
                 val id = ids.incrementAndFetch()
-                val scan = me.raddatz.veyq.mobile.qr.QrScan(accepts = scanKind(call.kind, session), decode = parts.decode)
-                scans.put(id, scan)
-                if (call.kind == ScanKind.KIT) {
-                    // the kit a scan settles on goes to the sign-in at once, watched or not (D7: as a file's kit); a scan
-                    // closed first takes nothing
-                    scope.launch {
-                        val end = scan.state.first { it is me.raddatz.veyq.mobile.qr.QrScan.State.Found || it == me.raddatz.veyq.mobile.qr.QrScan.State.Closed }
-                        val found = (end as? me.raddatz.veyq.mobile.qr.QrScan.State.Found)?.value as? me.raddatz.veyq.mobile.account.KitImport.Found
-                        if (found != null) session.takeKit(found, call.server)
-                    }
-                }
+                scans.put(id, when (call.kind) {
+                    ScanKind.SCHEME -> me.raddatz.veyq.mobile.qr.QrScan(accepts = me.raddatz.veyq.mobile.qr.QrSchemes::of, decode = parts.decode)
+                    // the sign-in's own scan (the phones' too): its accepts reads the kit and hands it to the sign-in
+                    // (`takeKit`), so the kit is taken as the code is read, watched or not, and never leaves the core
+                    ScanKind.KIT -> session.scanKit(call.server, parts.decode)
+                })
                 Answer.ScanOpened(id)
             }
             is Call.ScanCamera -> scans[call.scan]?.camera(call.camera).done(Answer.Why.NO_SUCH_SCAN)
@@ -714,15 +708,9 @@ internal class Bridge<A : Connection, T : Any>(compose: () -> Composition<A, T>)
         }
     }
 
-    /** What a scan of [kind] accepts a code as: the core's parser for it, so the code's text stays here. */
-    private fun scanKind(kind: ScanKind, session: SessionModel<A, T>): (String) -> Any? = when (kind) {
-        ScanKind.SCHEME -> me.raddatz.veyq.mobile.qr.QrSchemes::of
-        ScanKind.KIT -> session::scannedKit
-    }
-
-    /** What a scan's [ScanShown.found] says of what it settled on: a scheme as it is, a kit as its scheme alone. */
+    /** What a scan's [ScanShown.found] says of what it settled on: a scheme as it is, a kit (where its server came from) as its scheme alone. */
     private fun foundAs(value: Any): String = when (value) {
-        is me.raddatz.veyq.mobile.account.KitImport.Found -> "veyqkit"
+        is me.raddatz.veyq.mobile.account.KitImport.ServerFrom -> "veyqkit"
         else -> value as String
     }
 
@@ -1152,12 +1140,12 @@ internal class Bridge<A : Connection, T : Any>(compose: () -> Composition<A, T>)
         failed = s.failed, busy = s.busy, errorRow = s.errorRow, error = s.error, renaming = s.renaming, retryName = s.retryName,
     )
 
-    private fun shownScan(s: me.raddatz.veyq.mobile.qr.QrScan.State<Any>): ScanShown = when (s) {
+    private fun shownScan(s: me.raddatz.veyq.mobile.qr.QrScan.State<*>): ScanShown = when (s) {
         me.raddatz.veyq.mobile.qr.QrScan.State.Starting -> ScanShown(ScanState.STARTING, null)
         me.raddatz.veyq.mobile.qr.QrScan.State.NoCamera -> ScanShown(ScanState.NO_CAMERA, null)
         me.raddatz.veyq.mobile.qr.QrScan.State.Denied -> ScanShown(ScanState.DENIED, null)
         me.raddatz.veyq.mobile.qr.QrScan.State.Scanning -> ScanShown(ScanState.SCANNING, null)
-        is me.raddatz.veyq.mobile.qr.QrScan.State.Found -> ScanShown(ScanState.FOUND, foundAs(s.value))
+        is me.raddatz.veyq.mobile.qr.QrScan.State.Found -> ScanShown(ScanState.FOUND, foundAs(s.value!!))
         me.raddatz.veyq.mobile.qr.QrScan.State.Closed -> ScanShown(ScanState.CLOSED, null)
     }
 

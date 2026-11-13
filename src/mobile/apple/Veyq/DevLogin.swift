@@ -10,10 +10,34 @@ import VeyqCore
 /// (`AppModel.readKit`: coordinated, in memory, drawn by PDFKit) — a pass where nothing may click the panel; the outcome
 /// goes to the unified log (`veyq-kit:`), never the kit's email or key. A release build compiles none of this.
 enum DevLogin {
+    /// `VEYQ_DEV_KIT_SCAN=1`: the sign-in opens its "Scan Emergency Kit" sheet once it shows, as its button does (with
+    /// `VEYQ_DEV_CAMERA=<image>` the test camera shows the kit) — a pass where nothing may tap; the outcome goes to the
+    /// unified log (`veyq-kit:`), never the kit's email or key.
+    static var scansKit: Bool {
+        #if DEBUG
+        ProcessInfo.processInfo.environment["VEYQ_DEV_KIT_SCAN"] == "1"
+        #else
+        false
+        #endif
+    }
+
     @MainActor
     static func run(_ model: AppModel) {
         #if DEBUG
         let env = ProcessInfo.processInfo.environment
+        if scansKit {
+            Task { @MainActor in
+                for _ in 0..<600 {
+                    try? await Task.sleep(for: .milliseconds(100))
+                    if case .signIn(_, _, _, _, _, let shown) = model.screen, let shown {
+                        NSLog("veyq-kit: kit held, server from %@, other server said: %@", "\(shown.serverFrom)", shown.typedServer != nil ? "true" : "false")
+                        return
+                    }
+                }
+                NSLog("veyq-kit: no kit within 60 s")
+            }
+            return
+        }
         if let kit = env["VEYQ_DEV_KIT"] {
             Task { @MainActor in
                 for _ in 0..<100 {

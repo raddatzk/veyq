@@ -6,6 +6,11 @@ import kotlinx.cinterop.usePinned
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import me.raddatz.veyq.mobile.qr.QrFrame
+import me.raddatz.veyq.mobile.qr.QrFrames
+import me.raddatz.veyq.mobile.qr.QrScan
+import me.raddatz.veyq.mobile.session.SessionModel
+import me.raddatz.veyq.mobile.session.TenantSession
+import me.raddatz.veyq.mobile.session.VeyqAccount
 import platform.Foundation.NSData
 import platform.Foundation.NSMutableData
 import platform.posix.memcpy
@@ -42,6 +47,18 @@ object AppleKit {
         if (n == 0) return ByteArray(0)
         return ByteArray(n).also { out -> out.usePinned { memcpy(it.addressOf(0), data.bytes, data.length) } }
     }
+
+    /**
+     * The sign-in's kit scan for the Apple camera (`apple/Veyq/QrCamera.swift`): [SessionModel.scanKit] with each decode's
+     * time to [timing] — never the text. Swift sees neither default arguments nor a suspending decoder, and its camera
+     * takes a `QrScan<AnyObject>`; the scan's `Found` carries only where the kit's server came from.
+     */
+    @Suppress("UNCHECKED_CAST")
+    fun scan(
+        session: SessionModel<VeyqAccount, TenantSession>,
+        typedServer: String?,
+        timing: (width: Int, height: Int, millis: Double, read: Boolean) -> Unit,
+    ): QrScan<Any> = session.scanKit(typedServer, QrFrames.timedDecode(timing)) as QrScan<Any>
 
     fun pictures(drawing: KitDrawing): KitPictures = object : KitPictures {
         override suspend fun pdfPages(): Int? = withContext(Dispatchers.Default) { drawing.pdfPages().takeIf { it > 0 } }

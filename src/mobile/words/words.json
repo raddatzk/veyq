@@ -188,17 +188,17 @@
   "signin_kit_scan": {
     "en": "Scan Emergency Kit",
     "de": "Notfall-Kit scannen",
-    "note": "the sign-in's button that scans the QR code of the Emergency Kit with the camera, shown only where there is one"
+    "note": "the sign-in's button that opens the camera on the Emergency Kit's QR code; also the scanner's title"
   },
   "signin_kit_scan_hint": {
     "en": "Point your camera at the QR code in your Emergency Kit.",
     "de": "Richte deine Kamera auf den QR-Code in deinem Notfall-Kit.",
-    "note": "under the camera's picture while the Emergency Kit is scanned (the web's scanHint)"
+    "note": "under the camera's preview while it scans (the web's scanHint)"
   },
   "signin_kit_scan_denied": {
-    "en": "The camera can’t be used. Open your kit’s file or enter your Secret Key.",
-    "de": "Die Kamera kann nicht verwendet werden. Öffne die Datei deines Kits oder gib deinen Secret Key ein.",
-    "note": "the camera was refused (or failed) while scanning the Emergency Kit (the web's scanError: nothing is uploaded)"
+    "en": "Camera unavailable — allow it in Settings, open your kit or enter your Secret Key.",
+    "de": "Kamera nicht verfügbar — erlaube sie in den Einstellungen, öffne dein Kit oder gib deinen Secret Key ein.",
+    "note": "the scanner when the app may not use the camera (the web's scanError, the apps' verbs)"
   },
   "drawer_home": {
     "en": "Home",

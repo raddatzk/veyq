@@ -64,9 +64,9 @@ are the person's notes).
     without the text crossing the bridge — the text stays in the core; for a file the same holds: `KitImport` hands the
     decoded text straight to `EmergencyKit.read`, and only the `Kit` leaves;
   - its fixtures include a `veyqkit:` code; the web's three kit PDFs are this CR's (phase 5).
-  Still open, *until `cr-core-qr-decoder` lands* its phases 4–5: the cameras and the bridge's `Scan.*` calls. Phase 7
-  re-reads every sentence carrying that marker against the merged tree before its first edit
-  (`grep -n "until .cr-core-qr-decoder. lands" changes/cr-app-kit-sign-in.md`).
+  Its phases 4–5 have landed too (re-read at phase 7, 2026-11-13): Android's `QrCamera` (CameraX) and Apple's
+  `QrCamera`/`QrCameraView` (AVFoundation) over a `QrScan`, each with its debug test camera, and the bridge's `Scan.*`
+  calls with one kind, `SCHEME` — a `kit` kind was left to this CR, and joins in phase 9 with the desktops' file entry.
   **Shared files:** both CRs extend ADR 0131 (that CR decision 1 with a call's inbound payload, this one decision 3 with a
   host reply's drawn page, D6), `docs/crosscutting/native-apps.md` § Built and `src/mobile/CLAUDE.md`; each writes its own sentence or bullet, and
   the second to implement starts from the first's commit.
@@ -236,11 +236,13 @@ core's reader cannot follow answers "nothing here" and the order continues.
 
 ### D7 — The scan is the sibling's scanner with the kit's parser; the sign-in only opens it and takes what it found
 
-The sign-in's "Scan Emergency Kit" opens `cr-core-qr-decoder`'s scanner (`QrScan`, landed; *until `cr-core-qr-decoder` lands*
-its phases 4–5: its camera view per app) with `accepts = EmergencyKit.read`: a code that is not a v3 kit is skipped and scanning
-goes on (the web's `accepts`); `Found(kit)` closes the scanner and hands the kit to `SessionModel` exactly as a file's
-kit (D4: email and server filled, the key held in the model; a QR carries no form, so step 4 never applies). On the
-desktops the bridge's `Scan.*` calls carry it; `Update.Scan`'s `Found` says only that the sign-in took a kit.
+The sign-in's "Scan Emergency Kit" opens `cr-core-qr-decoder`'s scanner (`QrScan` and each app's camera view, landed)
+over `SessionModel.scanKit`, whose `accepts` is `EmergencyKit.read`: a code that is not a v3 kit is skipped and scanning
+goes on (the web's `accepts`); the kit it reads is taken by the model inside `accepts` exactly as a file's kit
+(`takeKit`; D4: email and server filled, the key held in the model; a QR carries no form, so step 4 never applies), and
+`Found` carries only where the server came from — so neither the code's text nor the key reaches a UI. The scanner
+closes on `Found`. On the desktops the bridge's `Scan.*` calls carry it with a `kit` kind (phase 9); `Update.Scan`'s
+`Found` says only that the sign-in took a kit.
 - **Where the scanner says `NoCamera`**, the sign-in does not show the scan entry (the file is the way there); `Denied`
   says so with R9's `scanError` shape and keeps the file offered.
 - **Nothing of this CR's own touches a camera:** the permission strings, the camera dependencies and the frame handling
@@ -552,16 +554,91 @@ From `src/mobile` unless named:
   **Bites:** B15 as above (three platforms); B19 `WIDTHS` without the fallback → `aPageThatReadsNothing…`,
   `theQrIsLookedFor…`, `aForeignQrIsPassed…` and the fixture premise red, restored with `/bin/cp -f`, compared equal.
 
-- [ ] **7 every app — scan the kit.** **Entry condition:** `cr-core-qr-decoder`'s scan model, its cameras and its
-  `Scan.*` calls have landed (its phases 3–5); re-read the marked sentences first. D7 on all four sign-ins: the entry,
+- [ ] **7 the core, Android and Apple — scan the kit.** **Split (the coordinator, 2026-11-13):** this phase is the core
+  and the phones' and the Mac's scan; the desktops' (Linux and Windows scanning a kit through the bridge's `Scan.*` with
+  a `kit` kind, the entry hidden on the Windows VM, which has no camera) moved to phase 9 beside their file entry, which
+  needs phase 8's model first. **Entry condition:** `cr-core-qr-decoder`'s scan model and the Android and Apple cameras
+  have landed (its phases 3–4); re-read the marked sentences first. D7 on the Android and Apple sign-ins: the entry,
   `accepts = EmergencyKit.read`, `Found` into D4, `NoCamera` hiding the entry, `Denied` said. A `SessionModelTest` case
-  over a played `QrScan`: a foreign code skipped, a v2 kit skipped, a v3 kit filling the form. Phase 8's bridge calls come
-  first where the desktops need `SignInKit`'s model; the order of phases 7 and 8 is the implementer's.
-  · Done when: core, `:bridge:jvmTest`, `:android:assembleDebug`, the `xcodebuild` builds and both `run.py build` green;
-  **pass** with each app's camera or its debug test camera (the sibling's) showing the printed fixture's page: the
-  scanner opens, skips a non-veyq code, reads the kit, closes, fills the form; on the Windows VM (no camera) the entry is
-  absent. The iPhone pass on a real camera is the owner step (or carried open). No frame on disk: the same measurement as
-  phases 6 and 9. **Bite:** (B18) `accepts` made to take any text → the foreign-code case red.
+  over a played `QrScan`: a foreign code skipped, a v2 kit skipped, a v3 kit filling the form.
+  · Done when: core, `:bridge:jvmTest`, `:android:assembleDebug` and the `xcodebuild` builds green; **pass** with each
+  app's camera or its debug test camera (the sibling's) showing the printed fixture's page: the scanner opens, skips a
+  non-veyq code, reads the kit, closes, fills the form. The iPhone pass on a real camera is the owner step (or carried
+  open). No frame on disk: the same measurement as phase 6. **Bite:** (B18) `accepts` made to take any text → the
+  foreign-code case red.
+
+  **Status: built and passed (2026-11-13); the box stays open for the owner's real-camera passes (an iPhone, this Mac's
+  camera — its first use asks the person through macOS's privacy prompt) and the live sign-in pending since phase 4.**
+  **Re-read first:** the two *"until `cr-core-qr-decoder` lands"* sentences (§ Context, D7) said its cameras and `Scan.*`
+  were still to come; both had landed — rewritten to what is there (`Scan.*` has one kind, `SCHEME`; `kit` joins in
+  phase 9). D7's "`Found(kit)` closes the scanner and hands the kit to `SessionModel`" rewritten to what was built (below).
+  **Built:** core `SessionModel.scanKit(typedServer?, decode, scope)`: a `QrScan<KitImport.ServerFrom>` whose `accepts`
+  reads the code with `EmergencyKit.read` and **takes the kit inside `accepts`** (`takeKit`, `TOKEN` where the token has a
+  server, else `NONE`), so `Found` carries only where the server came from — no `Kit`, no key, no text ever reaches a UI or
+  waits in a scan's state for a UI to hand it on; a kit read outside the sign-in is wiped by `takeKit` and the code
+  skipped. `appleMain` `AppleKit.scan(session, typedServer, timing)` for Swift (no defaults, no suspending decoder; the
+  scan as `QrScan<AnyObject>`). Words `signin_kit_scan` ("Scan Emergency Kit" / "Notfall-Kit scannen"),
+  `signin_kit_scan_hint` and `signin_kit_scan_denied` (the web's `scanHint`/`scanError`, the apps' verbs). **Android**
+  `KitScanner.kt`: a Material 3 full-screen dialog (top app bar, close) over `QrCamera`, the hint under it, `Denied`'s
+  words in its place; closes on `Found`; `NoCamera` drops the entry for the screen. The sign-in's outlined "Scan
+  Emergency Kit" (`QrCodeScanner`) sits **above** "Open Emergency Kit", shown only where `FEATURE_CAMERA_ANY` is (and no
+  scan said `NoCamera`). **Apple** `KitScannerView` (in `SignInView.swift`): a sheet with a `NavigationStack`, Cancel
+  as its cancellation action, the hint as a bottom inset; the scan entry (`qrcode.viewfinder`) **first on iOS/iPadOS,
+  after Open on the Mac** (owner question 1), shown where `QrCamera.available` (a video device, or a debug test camera).
+  Debug only: `VEYQ_DEV_KIT_SCAN=1` opens the sheet once the sign-in shows and `DevLogin` logs `veyq-kit:` what it took.
+  **No frame in a system snapshot** — found on the way, not in the CR: an app's switcher snapshot is a file on disk, and
+  the scanner's shows the kit's code (= the Secret Key). Android: the dialog is `FLAG_SECURE`
+  (`SecureFlagPolicy.SecureOn`); iOS: the camera is covered with the ground colour while the scene is not active.
+  **Two camera fixes the pass found** (the sibling's files): Android's `QrCamera` held the permission's grant in no state,
+  so after "Allow" nothing recomposed and the scan stayed `Starting` (measured: no `Scanning` within 30 s; fixed, the
+  grant a `mutableStateOf`); Apple's `QrCameraView` drew its states in a bare `Group`, so a caller drawing nothing for
+  `Found` made it vanish and reappear — a new camera every ~6 ms (1 296 starts in 9 s, measured; fixed with a `ZStack`
+  over a clear ground).
+  **Met:** `./gradlew :core:jvmTest :core:macosArm64Test :bridge:jvmTest :android:assembleDebug` green (from
+  `src/mobile`, `ANDROID_HOME` set; `SessionModelTest` 29 on the JVM and on macosArm64, 2 new:
+  `a_scanned_kit_skips_codes_that_are_no_v3_kit_and_fills_the_form_with_its_key_held` — a URL, a v2 kit and a
+  `veyqpair:` code skipped, the form untouched, then the kit read with the other-server notice and its held key signing
+  in — and `a_kit_scanned_outside_the_sign_in_is_not_taken_and_the_scan_goes_on`); the macOS build (ad hoc) and the
+  iOS-simulator build `BUILD SUCCEEDED`; the guards (`scripts/validate_*.py` but guard_gaps) green.
+  **Pass, Android** (throwaway AVD `veyq_kit7`, Pixel 8, API 36, deleted after): virtual scene with the printed fixture's
+  page as the wall poster — section 3 of `kit-printed.pdf`'s page 1 (Quick Look at 2000 px, cropped 1280×720 around the
+  code), the scene camera moved over gRPC (`-grpc 8590 -grpc-use-token`: **bound to 127.0.0.1** by `lsof`, the token from
+  the emulator's discovery file `grpc.token`, a wrong token refused `grpc-status 16`) to POSITION -0.15 0.3 3.8, ROTATION
+  0 180 0. The entry tapped (`input tap` at its `uiautomator` bounds), "While using the app" → `state Scanning` →
+  `decoded 640x480 in 75.7 ms, a code read`, `state Found(value=TOKEN)`; the dialog closed, the form showed
+  `https://familie.example.org`, `alex.beispiel@example.org`, "From your Emergency Kit" and the notice (emulator
+  framebuffer `adb emu screenrecord screenshot`; `screencap` is black under `FLAG_SECURE`). A second boot with a
+  non-veyq code (`https://example.org/menu`) as the poster: 26 frames `a code read`, the scan stayed `Scanning`.
+  "Don't allow" → `state Denied`, the dialog saying it; close → the form. **Pass, iOS** (throwaway iPhone 18 Pro, iOS 27,
+  deleted after; the simulator has no camera): without `VEYQ_DEV_CAMERA` the entry is absent (shot); with the foreign
+  code as the test camera 88 frames `a code read`, `Scanning` throughout; with the page's crop `decoded 1280x720 in
+  13.0 ms, a code read`, `Found(value=TOKEN)`, `veyq-kit: kit held, server from TOKEN, other server said: true`, the
+  sheet closed and the German form filled (shot). **Pass, macOS** (the debug build, `VEYQ_DEV_CAMERA` +
+  `VEYQ_DEV_KIT_SCAN`): the foreign code 94 frames read, `Scanning`; the crop `Found(value=TOKEN)` and `veyq-kit: kit
+  held, server from TOKEN`. **Measured on the way:** the whole page as one frame (1414×2000 fitted to 707×1000, the code
+  about 2 px a module) read nothing in 9 s of frames — a camera reads the kit when aimed at its code, as the hint says.
+  **No frame on disk:** Android `run-as me.raddatz.veyq find . -newer kit-marker -type f` → only `files/profileInstalled`
+  (bitten: a planted `cache/frame-planted` listed, removed); the task snapshot `/data/system_ce/0/snapshots/<task>.jpg`
+  (`adb root`) taken on HOME mid-scan is blank — **bitten**: a build without `SecureOn` wrote the camera's code into it
+  (pulled and seen). iOS: the app container's files newer than the marker are the install's SplashBoard launch images
+  only; the scene snapshot written on backgrounding mid-scan (`Library/SplashBoard/Snapshots/sceneID:…/*.ktx`, read with
+  `sips`) shows the sheet with the camera covered — **bitten**: without the cover it holds the code. macOS: no file
+  newer than the marker in the user temp folder, `Library/Caches/me.raddatz.veyq`, `HTTPStorages` (scratchpad
+  `nocopy_mac.py`, bitten by a planted PNG it named).
+  **Bites** (scratchpad `k7/bite.py`, one edit each, `/bin/cp -f` restore, compared equal; `:core:jvmTest --tests
+  '*SessionModelTest*'`): B18 `accepts` answering `NONE` for any text → red; the kit not taken (`accepts` answering its
+  `ServerFrom` without `takeKit`) → red; outside the sign-in settling anyway → red
+  (`a_kit_scanned_outside_the_sign_in…`). The snapshot covers bitten on the devices as above.
+  **Deviations:** (1) the kit is taken inside `accepts`, not after `Found` (D7 said `Found(kit)` hands it on): a UI that
+  watched for `Found` to take the kit would hold the key, and a scan closed between the two would leave it unzeroed. A
+  code read after the view closed the scan is still taken (stated in `scanKit`'s comment). (2) the poster is the page's
+  crop around the code, not the whole page: 640×480 cannot resolve a code a sixth of an A4 page wide (measured on iOS
+  above). (3) No tap on iOS or macOS: the sheet was opened by `VEYQ_DEV_KIT_SCAN` (the button's same call), the
+  simulator tool and computer use not used; the Android entry was tapped. (4) The live sign-in is phase 4's pending step;
+  a scan's held key signs in as a file's (the unit case proves the hand-over).
+  **Owner steps (pending):** a real iPhone (the sign-in's "Notfall-Kit scannen" over a printed fixture kit → the form
+  filled); this Mac's camera (`VEYQ_DEV_KIT_SCAN=1 <build>/Debug/veyq.app/
+  Contents/MacOS/veyq`, allow the camera, a printed kit held up → `veyq-kit: kit held`).
 
 - [ ] **8 bridge — the kit by path, pages drawn by the host.** D6: `Call.SignInKit`, `Call.SignInKitClear`,
   `HostRequest.Pdf.*`/`Picture.Luma`, `HostReply.Pixels` with its payload through `Host.kt`, the generated Rust and C#.
@@ -585,10 +662,9 @@ From `src/mobile` unless named:
   (`DeviceFiles.read`); one that does not read or is past the cap goes to `readKit` as empty bytes over `NoPictures`
   (the gate says `SIGNIN_KIT_UNREADABLE`, nothing is asked of the host); `Done` or `Refused(NO_KIT)`. `bridge.h`'s
   comments say a reply may carry a payload. **The desktops' kit scan (QR CR phase 5's `Scan.*`):** `ScanKind.KIT` and
-  `Scan.Open(kind, server)` (`server` nullable, for the notice); the bridge's scans hold `QrScan<Any>`, a `KIT` scan's
-  `accepts` is the core's new `SessionModel.scannedKit(text)` (`EmergencyKit.read` with the door's suite → `Found`,
-  server from `TOKEN` or `NONE`), and on `Found` the bridge hands it to `SessionModel.takeKit` at once, watched or not;
-  `ScanShown.found` says `veyqkit`, never the text. Tests: `KitDispatchTest` (6) over a played host through a real `Host`
+  `Scan.Open(kind, server)` (`server` nullable, for the notice); the bridge's scans hold `QrScan<*>`; a `KIT` scan is the
+  sign-in's own, phase 7's `SessionModel.scanKit(server, decode)` (its `accepts` reads the kit and takes it, `takeKit`,
+  as the code is read; its `Found` only the `ServerFrom`); `ScanShown.found` says `veyqkit`, never the text. Tests: `KitDispatchTest` (6) over a played host through a real `Host`
   and the web's fixtures by path (`inputs.dir` declared): the PDFKit-saved kit filled with no host request and its held
   key reaching the door's `signInWithKey`, the other server said; the printed kit asked `Pdf.Pages`, page 1 at 2400 and
   2000, page 2 at 2400 (its code there); no kit → `NO_KIT` and the gate's word, a drawing a byte short ignored; a path
@@ -602,18 +678,21 @@ From `src/mobile` unless named:
   `/bin/cp -f` restore, compared equal after; the failing cases read from the test XML): B16 a `secretKey` field on
   `KitShown` → `SecretFreeSchemaTest.nothingTheCoreSendsCarries…` red; B17 a page count asked before `readKit` → the
   four file cases red (the no-request one among them); beyond the CR's two: the reply's payload dropped in `Host.reply`
-  → the printed and picture cases red; the `KIT` scan's `takeKit` never called → the scan case red. (One unrelated
+  → the printed and picture cases red; the `KIT` scan's `takeKit` never called → the scan case red (bitten on this branch's own core entry before the merge
+  with phase 7; the scan case runs unchanged over `scanKit` after it). (One unrelated
   `DispatchTest.aLinkIsMinted…` failure was seen once and not again on the next two runs: a timing flake there.)
   **Pending, live:** `VEYQ_LIVE=http://veyq.localhost:8080 VEYQ_ENV_FILE=<main checkout>/.run/.env ./gradlew
   :bridge:jvmTest --tests '*LiveBridgeTest.aKitSignsIn*'` (from `src/mobile`).
   **Deviations:** (1) the calls are named `Session.SignInKit`/`Session.SignInKitClear` (the session's family) and take
-  the typed server. (2) The tests are a file of their own, `KitDispatchTest`, beside `DispatchTest`. (3) The desktop scan
-  needed a core entry: `SessionModel.scannedKit` — **for the phase-7 merge:** if phase 7 adds its own kit `accepts` in the
-  core (or a `kit` scan kind), keep one and point the bridge's `ScanKind.KIT` at it (`Bridge.scanKind`); the words
-  `signin_kit_scan`, `signin_kit_scan_hint`, `signin_kit_scan_denied` (below) may collide with phase 7's — keep one set.
+  the typed server. (2) The tests are a file of their own, `KitDispatchTest`, beside `DispatchTest`. (3) Built in parallel with phase 7, the
+  desktop scan first had a core entry of its own (`SessionModel.scannedKit`); the merge with phase 7 kept phase 7's one
+  (`scanKit`) and its words (`signin_kit_scan`, `_hint`, `_denied`, EN+DE), and pointed `ScanKind.KIT` at it.
 
-- [ ] **9 Linux and Windows — pick the kit.** D6's hosts and D8: the open dialog (PDF and images filtered), the host's
-  drawing from the path into memory, the Secret Key row's state. **First measurement:** on Windows,
+- [ ] **9 Linux and Windows — pick and scan the kit.** D6's hosts and D8: the open dialog (PDF and images filtered), the host's
+  drawing from the path into memory, the Secret Key row's state. **And D7 on the desktops** (moved here from phase 7):
+  a `kit` kind of `Scan.Open` over `SessionModel.scanKit` (its `Found` only the `ServerFrom`), the scan entry after Open
+  (the file first on a desktop), hidden where the scan says `NoCamera` (the Windows VM), each app's test camera showing
+  the page's code (`VEYQ_DEV_CAMERA`) in its pass, a non-veyq code skipped. **First measurement:** on Windows,
   `StorageFile.GetFileFromPathAsync` on a picked path in the unpackaged app.
   · Done when: `python3 linux/run.py build` and `python3 windows/run.py build` green (each with a test that draws
   `kit-printed.pdf`'s first page through the host's own drawing and hands it to the core over the bridge, where its test
@@ -736,6 +815,22 @@ proof is the tests and passes `src/mobile/CLAUDE.md` § Prove your work names �
 ## Retrospective
 
 (filled at the end)
+
+Phase 7 (the implementer, 2026-11-13):
+- **"No frame on disk" has a writer the app does not own.** The CR's measurement listed the app's own folders; the
+  system's app-switcher snapshot (Android `/data/system_ce/0/snapshots`, iOS `SplashBoard/Snapshots`) is a file too, and
+  a scanner's holds the Secret Key as a code. Found by asking where else a frame lands, closed by `FLAG_SECURE` and an
+  inactive-scene cover, each bitten by a build without it. Next time: a screen that shows a secret names the OS
+  snapshot in its no-copy check.
+- **The sibling's harness passed what the first real caller did not.** Both camera bugs (Android's preview never binding
+  after "Allow", Apple's camera restarting when the caller draws nothing) were invisible to the debug harnesses, whose
+  callers happened to avoid them. A camera CR's pass should include a caller that draws nothing for a state and a first
+  permission grant in the same process.
+- **Take the secret where it is read.** Taking the kit inside `accepts` rather than on `Found` kept the key out of every
+  UI and closed a race the CR's wording would have built. A decision that says "X hands Y to the model" names who holds Y
+  in between.
+- **A whole page is no camera frame.** The printed page as one frame read nothing; the realistic frame is the code
+  aimed at. A pass fixture for a camera says what the camera sees, not what the paper holds.
 
 Phases 8 and 9 (the implementer, 2026-11-13):
 - **A host reply that blocks a core thread wants its drawing off that thread on Windows.** Linux draws on the core's

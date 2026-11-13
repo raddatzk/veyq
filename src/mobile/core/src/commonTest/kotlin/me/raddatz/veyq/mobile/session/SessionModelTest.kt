@@ -1,5 +1,6 @@
 package me.raddatz.veyq.mobile.session
 
+import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
 import kotlinx.serialization.json.Json
 import me.raddatz.veyq.mobile.account.KitImport
@@ -18,8 +19,11 @@ import me.raddatz.veyq.mobile.navigation.RecentUses
 import me.raddatz.veyq.mobile.navigation.SpaceRef
 import me.raddatz.veyq.mobile.navigation.TenantRef
 import me.raddatz.veyq.mobile.navigation.UseKey
+import me.raddatz.veyq.mobile.qr.QrFrame
+import me.raddatz.veyq.mobile.qr.QrScan
 import me.raddatz.veyq.mobile.session.SessionModel.Gate
 import me.raddatz.veyq.mobile.words.Msg
+import kotlin.io.encoding.Base64
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
@@ -636,6 +640,58 @@ class SessionModelTest {
         val file = KitImportTest.pdf(KitImportTest.info("($TOKEN_A)"))
         assertFalse(m.readKit(file, KitImportTest.PlayedPictures()))
         assertTrue(zeroed(file))
+        assertIs<Gate.Signed>(m.current)
+    }
+
+    // ---- the kit scanned (the sign-in's "Scan Emergency Kit"): the kit's parser is the scan's accepts ----
+
+    /** The fixture kit's token rewritten as a version-2 kit: the same email, key and server, a version the apps refuse. */
+    private fun v2Token(): String {
+        val b64 = Base64.UrlSafe.withPadding(Base64.PaddingOption.ABSENT)
+        val json = b64.decode(TOKEN_A.removePrefix("veyqkit:")).decodeToString()
+        check(json.startsWith("{\"v\":3,"))
+        return "veyqkit:" + b64.encode(json.replaceFirst("{\"v\":3,", "{\"v\":2,").encodeToByteArray())
+    }
+
+    /** A frame whose one byte names the text the played decoder reads in it. */
+    private fun frame(n: Int) = QrFrame(1, 1, 1, byteArrayOf(n.toByte()))
+
+    @Test
+    fun a_scanned_kit_skips_codes_that_are_no_v3_kit_and_fills_the_form_with_its_key_held() = runTest {
+        val d = kitDoor()
+        val m = model(d)
+        m.start()
+        val texts = mapOf(1 to "https://example.org/menu", 2 to v2Token(), 3 to "veyqpair:abc", 4 to "see $TOKEN_A")
+        val scan = m.scanKit(typedServer = "other.example", decode = { texts[it.luminance[0].toInt()] }, scope = backgroundScope)
+        scan.camera(QrScan.Camera.RUNNING)
+        for (n in 1..3) {
+            assertTrue(scan.offer(frame(n)))
+            runCurrent()
+            assertEquals(QrScan.State.Scanning, scan.current, "frame $n's code was not skipped")
+            assertEquals(Gate.SignIn(), m.current, "frame $n's code reached the form")
+        }
+        assertTrue(scan.offer(frame(4)))
+        runCurrent()
+        assertEquals(QrScan.State.Found(KitImport.ServerFrom.TOKEN), scan.current)
+        val shown = SessionModel.KitShown(alex, familie, KitImport.ServerFrom.TOKEN, typedServer = "https://other.example")
+        assertEquals(Gate.SignIn(server = familie, email = alex, kit = shown), m.current)
+        assertFalse(scan.offer(frame(4)), "a found scan read on")
+
+        // the held key signs in, as a file's kit's does
+        assertEquals(a, m.signIn(familie, alex, "pw", "")!!.account)
+        assertEquals(listOf("bytes:$KEY_HEX"), d.keys)
+    }
+
+    @Test
+    fun a_kit_scanned_outside_the_sign_in_is_not_taken_and_the_scan_goes_on() = runTest {
+        val m = model(kitDoor())
+        m.start()
+        m.signIn(familie, alex, "pw", "sk")
+        val scan = m.scanKit(decode = { TOKEN_A }, scope = backgroundScope)
+        scan.camera(QrScan.Camera.RUNNING)
+        assertTrue(scan.offer(frame(0)))
+        runCurrent()
+        assertEquals(QrScan.State.Scanning, scan.current)
         assertIs<Gate.Signed>(m.current)
     }
 }

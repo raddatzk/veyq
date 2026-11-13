@@ -17,7 +17,7 @@ struct RootView: View {
         case .signIn(let working, let error, let adding, let server, let email, let kit):
             SignInView(
                 working: working, error: error, adding: adding, server: server, email: email, kit: kit, onCancel: model.cancelAdd,
-                onKit: model.readKit(_:typedServer:), onClearKit: model.clearKit
+                onKit: model.readKit(_:typedServer:), onClearKit: model.clearKit, onScanKit: model.scanKit(typedServer:)
             ) { server, email, password, secretKey in
                 model.signIn(server: server, email: email, password: password, secretKey: secretKey)
             }

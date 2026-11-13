@@ -259,7 +259,13 @@ A Gradle build of its own, run through its own wrapper.
     against the runtime `linux/flatpak/runtime.pins` names, `appstreamcli validate` and `flatpak-builder-lint` (red on
     anything `lint-exceptions.json` does not name). The runtime, SDK and Rust extension live in the volume
     `veyq-flatpak-<arch>` (about 6 GB), flatpak-builder's cache in `veyq-flatpak-state-<arch>`; the first run downloads
-    them. The app id is `desktop-identity.json`'s, never spelled elsewhere.
+    them. The app id is `desktop-identity.json`'s, never spelled elsewhere. `--smoke` installs the bundle in that
+    container, starts it headless in its sandbox (the runtime's `dbus-run-session` and `gtk4-broadwayd`) until it logs
+    `session SignIn`, and uninstalls it with its data; `--prebuilt` takes what `inputs` left in the tree instead of
+    running Gradle and the generators.
+  - `inputs [--arch …]` is `flatpak`'s half outside the sandbox alone: the release libraries (both architectures by
+    default), the bridge's Rust, the words and the theme. CI's `app-inputs` job runs it on macOS and the `flatpak` job
+    runs `flatpak --prebuilt --smoke` on each architecture's runner (ADR 0133 decision 10).
 
   With `VEYQ_LIVE=http://veyq.localhost:8080`, `test --tests '*LiveSignInTest*'` and `bridge` sign in as the seeded
   principal, and `run --devlogin` signs the debug build in through its own sign-in. The backend picks the tenant from
@@ -303,7 +309,10 @@ A Gradle build of its own, run through its own wrapper.
     MSBuild tooling, fetched to `build/windows/package/`. `--sign` signs a copy with the locked build tools' `signtool`
     (a PFX here with `VEYQ_MSIX_PFX_PASSWORD`, else a development certificate made on the host) and is red unless
     `AppxBlockMap.xml` stays byte-identical; `--smoke` installs it, starts it by its AUMID to its sign-in and uninstalls
-    it. `drop-dev-cert` removes the development certificate from both stores there.
+    it. `drop-dev-cert` removes the development certificate from both stores there. `--prebuilt` takes what `inputs`
+    (the release DLL, the generated C#, words and theme with the MSIX's images) left in the tree; CI's `msix` job runs
+    `package --prebuilt --sign --smoke` with `VEYQ_WINDOWS_SSH=local`, the runner itself as the Windows host (no ssh, no
+    scheduled task: the job's own session deploys, and the install says which session that is first).
   - `register` registers the scheduled tasks `veyq-app` and `veyq-drive` once per Windows host. It is the host owner's
     step: a persistent change on a machine.
 

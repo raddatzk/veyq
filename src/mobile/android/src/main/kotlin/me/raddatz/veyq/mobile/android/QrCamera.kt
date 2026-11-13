@@ -20,6 +20,8 @@ import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
@@ -46,17 +48,21 @@ fun <T : Any> QrCamera(scan: QrScan<T>, modifier: Modifier = Modifier, other: @C
     val context = LocalContext.current
     val state by scan.state.collectAsState()
     val hasCamera = remember { context.packageManager.hasSystemFeature(PackageManager.FEATURE_CAMERA_ANY) }
+    // held as state: the grant must recompose this view, or the preview never binds after "Allow" (the scan stayed
+    // Starting, measured 2026-11-13 on the emulator: nothing else changes when the permission dialog closes)
+    var allowed by remember { mutableStateOf(granted(context)) }
     val permission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
-        if (!granted) scan.camera(QrScan.Camera.DENIED) // granted: the preview below binds and says RUNNING
+        allowed = granted // granted: the preview below binds and says RUNNING
+        if (!granted) scan.camera(QrScan.Camera.DENIED)
     }
     LaunchedEffect(scan) {
         when {
             !hasCamera -> scan.camera(QrScan.Camera.NONE)
-            granted(context) -> Unit
+            allowed -> Unit
             else -> permission.launch(Manifest.permission.CAMERA)
         }
     }
-    val previewing = hasCamera && (state == QrScan.State.Scanning || (state == QrScan.State.Starting && granted(context)))
+    val previewing = hasCamera && (state == QrScan.State.Scanning || (state == QrScan.State.Starting && allowed))
     if (previewing) Preview(scan, modifier) else if (state != QrScan.State.Starting) other(state)
 }
 

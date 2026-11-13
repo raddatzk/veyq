@@ -201,6 +201,14 @@ class AppModel(app: Application) : AndroidViewModel(app) {
     /** The Secret Key row's way back to typing: the kit's held key ends. */
     fun clearKit() = session.clearKit()
 
+    /**
+     * The sign-in's kit scan for [KitScanner]'s camera: core's scan with the kit's parser as its `accepts`, the found kit
+     * taken by core (the gate fills the form); [typedServer] is the form's server as typed now. Each decode's time is
+     * logged, never a code's text.
+     */
+    fun scanKit(typedServer: String): me.raddatz.veyq.mobile.qr.QrScan<*> =
+        session.scanKit(typedServer, me.raddatz.veyq.mobile.qr.QrFrames.timedDecode(::qrDecodeTiming))
+
     // ---- staying signed in (ADR 0123 decision 8) ----
 
     private val _trustWorking = MutableStateFlow(false)
