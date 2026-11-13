@@ -46,6 +46,7 @@ fun AppRoot(model: AppModel) {
     val screen by model.screen.collectAsStateWithLifecycle()
     val offer by model.offer.collectAsStateWithLifecycle()
     val trustWorking by model.trustWorking.collectAsStateWithLifecycle()
+    val settings by model.settings.collectAsStateWithLifecycle()
     Surface(modifier = Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
         when (val s = screen) {
             Screen.Starting -> StartingScreen()
@@ -55,6 +56,7 @@ fun AppRoot(model: AppModel) {
             )
             is Screen.Unlock -> UnlockScreen(s, model::unlock, model::otherAccount)
             is Screen.Signed -> offer?.let { OfferScreen(it, trustWorking, model::answerOffer) }
+                ?: settings?.let { SettingsScreen(it, model.settingsActions) }
                 ?: s.managing?.let { ManageScreen(it, model) } ?: ShellScreen(s, model)
         }
     }

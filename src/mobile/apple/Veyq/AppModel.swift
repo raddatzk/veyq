@@ -372,6 +372,59 @@ final class AppModel {
         }
     }
 
+    // MARK: The account's Settings (cr-app-account-settings)
+
+    /// The open Settings page's state (core's `AccountSettings`); nil while it is closed — on iOS a sheet while non-nil.
+    var settings: AccountSettingsState?
+    @ObservationIgnored private var settingsModel: AccountSettings<VeyqAccount, TenantSession>?
+    @ObservationIgnored private var settingsWatch: AccountSettingsWatch?
+
+    /// The drawer's Settings (and a Mac's Settings window): the current account's page, read anew as it opens.
+    func openSettings() {
+        drawerOpen = false
+        guard settingsModel == nil, let account = session.signedTo?.account else { return }
+        let m = AccountSettingsCompanion.shared.of(session: session, account: account)
+        settingsModel = m
+        settings = m.current
+        settingsWatch = m.watch { @Sendable _ in
+            Task { @MainActor [weak self] in self?.syncSettings() }
+        }
+        Task { try? await m.refresh() }
+    }
+
+    func closeSettings() {
+        settingsWatch?.stop()
+        settingsWatch = nil
+        settingsModel = nil
+        settings = nil
+    }
+
+    private func syncSettings() {
+        if let m = settingsModel { settings = m.current }
+    }
+
+    /// Runs `block` on the open page's model; a sign-out it answers closes the page and is followed as Manage's is.
+    private func onSettings(_ block: @escaping @MainActor (AccountSettings<VeyqAccount, TenantSession>) async throws -> SessionModelSignedOut<VeyqAccount, TenantSession>?) {
+        guard let m = settingsModel else { return }
+        Task {
+            guard let out = try? await block(m) else { return }
+            trustLog("settings: signed out here")
+            closeSettings()
+            if out.wasCurrent { uploads.clear() }
+            if let next = out.next {
+                managing = nil
+                try? await show(next)
+            } else if out.wasCurrent {
+                managing = nil
+                shellWatch?.stop()
+                shellModel = nil
+                closeDepot()
+                dropHeaders()
+                closeFile()
+            }
+        }
+    }
+
     /// "Manage servers" as core lists it, for SwiftUI's lists.
     private func managed() -> [ManagedServer] {
         let servers = session.managed().map { c in
@@ -1415,4 +1468,36 @@ final class AppModel {
 final class CGImageBox {
     let image: CGImage
     init(_ image: CGImage) { self.image = image }
+}
+
+/// The Settings page's actions, each a call of core's `AccountSettings` (the page decides nothing).
+extension AppModel: SettingsActions {
+    func renameDevice(_ label: String) { onSettings { try await $0.rename(label: label); return nil } }
+    func signOutFamily(_ familyId: String) { onSettings { try await $0.signOut(familyId: familyId) } }
+    func signOutOthers() { onSettings { try await $0.signOutOthers(); return nil } }
+    func signOutAndRemoveKey(_ familyId: String) { onSettings { try await $0.signOutAndRemoveKey(familyId: familyId); return nil } }
+    func removeSavedKey(_ deviceId: String) { onSettings { try await $0.removeSavedKey(deviceId: deviceId); return nil } }
+    func removeEveryOtherSavedKey() { onSettings { try await $0.removeEveryOtherSavedKey(); return nil } }
+    func stopTrusting() {
+        onSettings { [weak self] m in
+            try await m.stopTrusting()
+            self?.trustLog("settings stop trusting")
+            return nil
+        }
+    }
+    func signOutHere() { onSettings { try await $0.signOutHere() } }
+
+    func settingsStay(_ level: StaySignedIn) async -> TrustChange {
+        guard let m = settingsModel else { return .failed }
+        let change = (try? await m.stay(level: level)) ?? .failed
+        trustLog("settings stay signed in \(level): \(change)")
+        return change
+    }
+
+    func settingsBackToPassword(_ password: String) async -> TrustChange {
+        guard let m = settingsModel else { return .failed }
+        let change = (try? await m.trustWithPassword(password: password)) ?? .failed
+        trustLog("settings back to the password: \(change)")
+        return change
+    }
 }

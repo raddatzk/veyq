@@ -279,7 +279,8 @@
   },
   "manage_forget_device": {
     "en": "Stop trusting this device",
-    "de": "Diesem Gerät nicht mehr vertrauen"
+    "de": "Diesem Gerät nicht mehr vertrauen",
+    "apple_en": "Stop Trusting This Device"
   },
   "manage_trusted_hello": {
     "note": "Manage servers' line for a server staying signed in with Windows Hello (StaySignedIn PRESENCE on Windows); manage_trusted_remembered is the level without a check",
@@ -2678,5 +2679,185 @@
   "account_settings_register_unreadable": {
     "en": "Device names are unavailable: the list of your devices could not be opened. Every session is still listed and can still be ended.",
     "de": "Gerätenamen sind nicht verfügbar: Die Liste deiner Geräte ließ sich nicht öffnen. Jede Sitzung wird weiter angezeigt und lässt sich weiter beenden."
+  },
+  "account_settings_account": {
+    "note": "the account's Settings: the section with the address it signs in with",
+    "en": "Account",
+    "de": "Konto"
+  },
+  "account_settings_email_confirmed": {
+    "note": "under the address: the server holds it as confirmed (the web's emailConfirm.confirmed)",
+    "en": "Confirmed — a reset link will reach you here.",
+    "de": "Bestätigt – ein Link zum Zurücksetzen erreicht dich hier."
+  },
+  "account_settings_email_unconfirmed": {
+    "note": "under the address: not confirmed (the web's emailConfirm.unconfirmed); confirming it is the web's for now",
+    "en": "Not confirmed yet. If you forget your password, the reset link goes to this address, so make sure it is one you read.",
+    "de": "Noch nicht bestätigt. Vergisst du dein Passwort, geht der Link zum Zurücksetzen an diese Adresse – stell sicher, dass du sie liest."
+  },
+  "account_settings_this_device": {
+    "note": "the section about this device, and a session row's name for this device where the register names none",
+    "en": "This device",
+    "de": "Dieses Gerät"
+  },
+  "account_settings_rename": {
+    "en": "Rename this device",
+    "de": "Dieses Gerät umbenennen",
+    "apple_en": "Rename This Device"
+  },
+  "account_settings_rename_placeholder": {
+    "en": "e.g. Work laptop",
+    "de": "z. B. Arbeitslaptop"
+  },
+  "account_settings_rename_hint": {
+    "en": "You are naming the device — every session from it will show this name.",
+    "de": "Du benennst das Gerät — jede Sitzung von diesem Gerät zeigt diesen Namen."
+  },
+  "account_settings_device_untrusted": {
+    "note": "this device keeps no saved unlock for the account (the web's sessions.deviceUntrusted)",
+    "en": "This device has no saved unlock — you’ll need your Secret Key here.",
+    "de": "Dieses Gerät hat keinen gespeicherten Zugang — du brauchst hier deinen Secret Key."
+  },
+  "account_settings_untrust_confirm_title": {
+    "note": "the confirmation of manage_forget_device on the account's Settings",
+    "en": "Stop trusting this device?",
+    "de": "Diesem Gerät nicht mehr vertrauen?"
+  },
+  "account_settings_untrust_confirm": {
+    "en": "This device forgets its saved key. Your next unlock here will need your Secret Key again. You stay signed in, and your other devices are unaffected.",
+    "de": "Dieses Gerät vergisst seinen gespeicherten Schlüssel. Beim nächsten Entsperren brauchst du hier wieder deinen Secret Key. Du bleibst angemeldet, und deine anderen Geräte sind nicht betroffen."
+  },
+  "account_settings_sessions": {
+    "note": "the section's title, the web's (cr-app-account-settings, owner question 3)",
+    "en": "Devices and sessions",
+    "de": "Geräte und Sitzungen"
+  },
+  "account_settings_sessions_sub": {
+    "en": "Everywhere this account is signed in. End any of them from here.",
+    "de": "Überall, wo dieses Konto angemeldet ist. Beende jede Sitzung von hier aus."
+  },
+  "account_settings_sessions_loading": {
+    "en": "Loading your sessions…",
+    "de": "Deine Sitzungen werden geladen …"
+  },
+  "account_settings_sessions_empty": {
+    "en": "No active sessions.",
+    "de": "Keine aktiven Sitzungen."
+  },
+  "account_settings_other_device": {
+    "note": "a session row's name where the device register names no device",
+    "en": "Signed-in device",
+    "de": "Angemeldetes Gerät"
+  },
+  "account_settings_current": {
+    "note": "the badge on this device's session row",
+    "en": "You are here",
+    "de": "Du bist hier"
+  },
+  "account_settings_last_used": {
+    "note": "{1} is a date and time",
+    "en": "Last used {1}",
+    "de": "Zuletzt genutzt {1}"
+  },
+  "account_settings_signed_in": {
+    "note": "{1} is a date and time",
+    "en": "Signed in {1}",
+    "de": "Angemeldet seit {1}"
+  },
+  "account_settings_revoke": {
+    "en": "Sign this device out",
+    "de": "Dieses Gerät abmelden",
+    "apple_en": "Sign This Device Out"
+  },
+  "account_settings_revoke_confirm": {
+    "en": "Sign this device out? It will have to sign in again — and if it was set to stay signed in, it loses its saved key at its next start and then needs your password AND your Secret Key.",
+    "de": "Dieses Gerät abmelden? Es muss sich danach neu anmelden — und wenn es angemeldet bleiben sollte, verliert es beim nächsten Start seinen gespeicherten Schlüssel und braucht dann dein Passwort UND deinen Secret Key."
+  },
+  "account_settings_revoke_self": {
+    "en": "Sign out here",
+    "de": "Hier abmelden",
+    "apple_en": "Sign Out Here"
+  },
+  "account_settings_revoke_self_confirm": {
+    "en": "This is the device you are using. Signing it out takes you back to the sign-in screen.",
+    "de": "Das ist das Gerät, das du gerade benutzt. Beim Abmelden landest du wieder auf der Anmeldeseite."
+  },
+  "account_settings_revoke_others": {
+    "en": "Sign out everywhere else",
+    "de": "Überall sonst abmelden",
+    "apple_en": "Sign Out Everywhere Else"
+  },
+  "account_settings_revoke_others_confirm": {
+    "en": "Sign out every other device? You stay signed in here. Any of them that was set to stay signed in loses its saved key at its next start and then needs your password AND your Secret Key.",
+    "de": "Alle anderen Geräte abmelden? Hier bleibst du angemeldet. Jedes davon, das angemeldet bleiben sollte, verliert beim nächsten Start seinen gespeicherten Schlüssel und braucht dann dein Passwort UND deinen Secret Key."
+  },
+  "account_settings_escalate": {
+    "en": "Sign out and remove saved key",
+    "de": "Abmelden und gespeicherten Schlüssel entfernen",
+    "apple_en": "Sign Out and Remove Saved Key"
+  },
+  "account_settings_escalate_confirm": {
+    "en": "Sign this device out and remove its saved key? Signing out alone still lets it open your data with your password. Without its saved key it needs your password and your Secret Key — so whoever is holding it, including you, will need the Emergency Kit there next time.",
+    "de": "Dieses Gerät abmelden und seinen gespeicherten Schlüssel entfernen? Abmelden allein hindert es nicht daran, deine Daten mit deinem Passwort zu öffnen. Ohne seinen gespeicherten Schlüssel braucht es dein Passwort und deinen Secret Key — wer das Gerät gerade hat, auch du selbst, braucht dort beim nächsten Mal das Notfall-Kit."
+  },
+  "account_settings_saved_keys": {
+    "en": "Devices with a saved key",
+    "de": "Geräte mit gespeichertem Schlüssel"
+  },
+  "account_settings_saved_keys_sub": {
+    "en": "Signed out, but the server still holds a saved key for them — enough to open your data with your password alone.",
+    "de": "Abgemeldet, aber der Server hält für sie noch einen gespeicherten Schlüssel — genug, um deine Daten allein mit deinem Passwort zu öffnen."
+  },
+  "account_settings_saved_key_row": {
+    "en": "Signed out, saved key still here.",
+    "de": "Abgemeldet, gespeicherter Schlüssel noch vorhanden."
+  },
+  "account_settings_remove_key": {
+    "en": "Remove this saved key",
+    "de": "Diesen gespeicherten Schlüssel entfernen",
+    "apple_en": "Remove This Saved Key"
+  },
+  "account_settings_remove_key_confirm": {
+    "note": "{1} is the device's name",
+    "en": "Remove the saved key for “{1}”? It will need your password and your Secret Key to open your data again.",
+    "de": "Den gespeicherten Schlüssel für „{1}“ entfernen? Das Gerät braucht danach dein Passwort und deinen Secret Key, um deine Daten wieder zu öffnen."
+  },
+  "account_settings_remove_other_keys": {
+    "en": "Remove every saved key except this device’s",
+    "de": "Alle gespeicherten Schlüssel außer dem dieses Geräts entfernen",
+    "apple_en": "Remove Every Saved Key Except This Device’s"
+  },
+  "account_settings_remove_other_keys_confirm": {
+    "en": "Remove every saved key except this device’s? Every one of your other devices will need your password AND your Secret Key again — have your Emergency Kit ready. This device keeps its own saved key.",
+    "de": "Alle gespeicherten Schlüssel außer dem dieses Geräts entfernen? Jedes deiner anderen Geräte braucht danach wieder dein Passwort UND deinen Secret Key — halte dein Notfall-Kit bereit. Dieses Gerät behält seinen eigenen gespeicherten Schlüssel."
+  },
+  "account_settings_saved_keys_hint": {
+    "en": "Removing a saved key takes away what the server was keeping for that device; it never reaches into the device itself.",
+    "de": "Einen gespeicherten Schlüssel zu entfernen entzieht dem Gerät, was der Server für es aufbewahrt hat; auf das Gerät selbst greift es nie durch."
+  },
+  "account_settings_add_device": {
+    "note": "the entry to linking another device from this one (ADR 0059 §1), shown while the instance links devices (core.device-linking)",
+    "en": "Add a device",
+    "de": "Gerät hinzufügen",
+    "apple_en": "Add a Device"
+  },
+  "account_settings_add_device_sub": {
+    "en": "Let another device in from this one — no Secret Key, and no password typed over there.",
+    "de": "Lass von hier aus ein weiteres Gerät herein — ohne Secret Key und ohne dort ein Passwort einzutippen."
+  },
+  "account_settings_appearance": {
+    "note": "phones only: opens the system's own page for the app, where its language is chosen; the appearance follows the system (cr-app-account-settings D3)",
+    "en": "Appearance and language",
+    "de": "Darstellung und Sprache",
+    "apple_en": "Appearance and Language"
+  },
+  "account_settings_appearance_sub": {
+    "en": "veyq follows your device’s appearance. Its language is set in your device’s settings for veyq.",
+    "de": "veyq folgt der Darstellung deines Geräts. Seine Sprache stellst du in den Einstellungen deines Geräts für veyq ein."
+  },
+  "account_settings_sign_out_hint": {
+    "note": "under the account's Sign out: what it ends",
+    "en": "Signs this account out on this device. Your other devices stay signed in.",
+    "de": "Meldet dieses Konto auf diesem Gerät ab. Deine anderen Geräte bleiben angemeldet."
   }
 }
