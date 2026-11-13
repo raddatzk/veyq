@@ -10,6 +10,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.receiveAsFlow
@@ -341,6 +342,10 @@ class AppModel(app: Application) : AndroidViewModel(app) {
                 shellModel = null
                 _depot.value?.close()
                 _depot.value = null
+                openGallery?.close()
+                openGallery = null
+                media?.close()
+                media = null
             }
             else -> refreshManaged()
         }
@@ -436,11 +441,14 @@ class AppModel(app: Application) : AndroidViewModel(app) {
         val tenant = opened.tenant
         val t = opened.session
         // the re-key's rules and its background resume are the core's (`AccountDoor.open`/`opened`)
-        tenantSession?.let { was -> if (was.account !== account || was.tenant.tenantId != tenant.tenantId) uploads.clear() }
+        val switched = tenantSession?.let { was -> was.account !== account || was.tenant.tenantId != tenant.tenantId } ?: true
+        if (switched) uploads.clear()
         tenantSession = t
         rows = me.raddatz.veyq.mobile.RowDetails.Read.EMPTY
         openFile?.close()
         openFile = null
+        openGallery?.close()
+        openGallery = null
         val pots = me.raddatz.veyq.mobile.expenses.PotModel(t, System::currentTimeMillis)
         potWatch?.cancel()
         potModel = pots
@@ -450,6 +458,11 @@ class AppModel(app: Application) : AndroidViewModel(app) {
         shellModel = model
         _depot.value?.close()
         _depot.value = model.depotUploads(uploads) { viewModelScope.launch { refreshLists(t) } }
+        // Android reads a pick in place: a file the queue is done with leaves nothing to remove
+        val madeMedia = model.mediaUploads(uploads, deriver, left = {}) { viewModelScope.launch { refreshLists(t) } }
+        // a new tenant's queue was emptied; the same tenant opened again carries its uploads on
+        media?.let { if (switched) it.close() else it.handOver(madeMedia) }
+        media = madeMedia
         startPending = true
         model.load(openLastUsed = shareInbox.waiting.value == null)
         shellWatch = viewModelScope.launch { model.state.collect { it?.let(::publish) } }
@@ -536,9 +549,6 @@ class AppModel(app: Application) : AndroidViewModel(app) {
     }
 
     // ---- the move and copy sheet (core's MoveSheet) ----
-
-    /** Every node of [scopeId] this device opens (a Memory's chapters). */
-    suspend fun scopeNodes(scopeId: String): List<me.raddatz.veyq.mobile.navigation.NodeRef> = shellModel?.scopeNodes(scopeId).orEmpty()
 
     /**
      * The move or copy sheet of [node] (core's `MoveSheet` over the shell: its browser, the guest folder's confirm, the
@@ -746,10 +756,23 @@ class AppModel(app: Application) : AndroidViewModel(app) {
         return m.fileModel(node, shares = true).also { openFile = it }
     }
 
-    /** Memory or chapter [nodeId]'s gallery (`MemoryMedia.list`); null when it could not be read. */
-    suspend fun memoryGallery(scopeId: String, nodeId: String): me.raddatz.veyq.mobile.memories.MemoryMedia.Gallery? {
-        val t = tenantSession ?: return null
-        return runCatching { kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) { me.raddatz.veyq.mobile.memories.MemoryMedia.list(t, scopeId, nodeId) } }.getOrNull()
+    /** The Memory or chapter page on screen (core's `GalleryModel`): one at a time, read anew whenever the lists are. */
+    private var openGallery: me.raddatz.veyq.mobile.memories.GalleryModel? = null
+
+    /** The page of Memory or chapter [node] (core's `GalleryModel` over the shell, its uploads through [media]). */
+    fun galleryModel(node: me.raddatz.veyq.mobile.navigation.NodeAt): me.raddatz.veyq.mobile.memories.GalleryModel? {
+        openGallery?.takeIf { it.node == node }?.let { return it }
+        val m = shellModel ?: return null
+        val uploads = media ?: return null
+        openGallery?.close()
+        return m.galleryModel(node, uploads).also { openGallery = it }
+    }
+
+    /** The gallery page went: its lightbox and any video's reader close with it. */
+    fun closeGallery(gallery: me.raddatz.veyq.mobile.memories.GalleryModel) {
+        if (openGallery !== gallery) return
+        gallery.close()
+        openGallery = null
     }
 
     /** Decoded tiers by blob id, the most recent kept (a gallery asks for every tile as it scrolls past). */
@@ -757,63 +780,49 @@ class AppModel(app: Application) : AndroidViewModel(app) {
         override fun sizeOf(key: String, value: androidx.compose.ui.graphics.ImageBitmap) = value.width * value.height * 4
     }
 
-    /** [blob] of [item] read and decoded as a picture (a tile, a preview); null where it does not read or is no picture. */
-    suspend fun mediaPicture(item: me.raddatz.veyq.mobile.memories.MemoryMedia.Item, blob: me.raddatz.veyq.mobile.memories.MemoryMedia.Blob): androidx.compose.ui.graphics.ImageBitmap? {
-        mediaPictures.get(blob.blobId)?.let { return it }
-        val t = tenantSession ?: return null
+    /** Blob [blobId]'s bytes as [read] hands them, decoded as a picture and kept; null where it does not read or is no picture. */
+    suspend fun mediaPicture(blobId: String, read: suspend () -> ByteArray?): androidx.compose.ui.graphics.ImageBitmap? {
+        mediaPictures.get(blobId)?.let { return it }
         val picture = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
             runCatching {
-                val bytes = me.raddatz.veyq.mobile.memories.MemoryMedia.read(t, item, blob) ?: return@runCatching null
+                val bytes = read() ?: return@runCatching null
                 android.graphics.BitmapFactory.decodeByteArray(bytes, 0, bytes.size)?.asImageBitmap()
             }.getOrNull()
         } ?: return null
-        mediaPictures.put(blob.blobId, picture)
+        mediaPictures.put(blobId, picture)
         return picture
     }
 
-    /** [item]'s heavy EXIF tier (`MediaDetails.exif`); null where none was sealed or it could not be read. */
-    suspend fun mediaExif(item: me.raddatz.veyq.mobile.memories.MemoryMedia.Item): me.raddatz.veyq.mobile.memories.MediaDetails.Exif? {
-        val t = tenantSession ?: return null
-        return runCatching { kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) { me.raddatz.veyq.mobile.memories.MediaDetails.exif(t, item) } }.getOrNull()
-    }
-
-    /** Who added each of [items], by owner key (`MediaDetails.uploaders`); empty where it could not be read. */
-    suspend fun mediaUploaders(scopeId: String, items: List<me.raddatz.veyq.mobile.memories.MemoryMedia.Item>): Map<String, me.raddatz.veyq.mobile.memories.MediaDetails.Uploader> {
-        val t = tenantSession ?: return emptyMap()
-        return runCatching { kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) { me.raddatz.veyq.mobile.memories.MediaDetails.uploaders(t, scopeId, items) } }.getOrDefault(emptyMap())
-    }
-
-    /** [item]'s original streamed into [out] a frame at a time; false where it did not read through. */
-    suspend fun downloadMedium(item: me.raddatz.veyq.mobile.memories.MemoryMedia.Item, out: java.io.OutputStream): Boolean {
-        val t = tenantSession ?: return false
-        return kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
-            runCatching { me.raddatz.veyq.mobile.memories.MemoryMedia.stream(t, item, item.original) { out.write(it) } }.getOrDefault(false)
+    /**
+     * The original [box] shows saved to the document the person made at [uri] (core's `FileSave`, a frame at a time); the
+     * save outlives the lightbox, and half an original is no download: a document it did not fill goes again.
+     */
+    fun saveMedium(box: me.raddatz.veyq.mobile.memories.Lightbox, uri: android.net.Uri) {
+        val resolver = getApplication<Application>().contentResolver
+        val save = box.save { produce ->
+            val out = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) { resolver.openOutputStream(uri) } ?: return@save false
+            out.use { o -> produce { o.write(it) } }
+        } ?: return
+        viewModelScope.launch {
+            val ended = save.state.first { it.end != null }
+            if (ended.end != me.raddatz.veyq.mobile.depot.FileSave.End.SAVED) {
+                kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) { runCatching { android.provider.DocumentsContract.deleteDocument(resolver, uri) } }
+            }
         }
     }
 
-    /** [item]'s original read at any offset, for a player (`MemoryMedia.reader`); null where it does not open here. */
-    fun mediaReader(item: me.raddatz.veyq.mobile.memories.MemoryMedia.Item): me.raddatz.veyq.mobile.blob.RangeReader? =
-        tenantSession?.let { me.raddatz.veyq.mobile.memories.MemoryMedia.reader(it, item, item.original) }
-
-    private val _galleryRevision = MutableStateFlow(0)
-
-    /** Moves each time a medium this device uploaded is in (a gallery on screen reads itself again). */
-    val galleryRevision: StateFlow<Int> = _galleryRevision.asStateFlow()
+    /** Memories' uploads of the open tenant (core's `MediaUploads` over [uploads]): Android reads each pick in place. */
+    private var media: me.raddatz.veyq.mobile.memories.MediaUploads? = null
 
     /**
-     * Queues the photos and videos the system's picker granted ([uris]) for Memory or chapter [nodeId] ([label] its name;
-     * `MediaUpload.Job`): each one's tiers derived here ([MediaDerive]) while the one before it is on the wire, its bytes
-     * read at any offset; each one in moves the gallery on screen, the batch's end the lists (the Memory's date range).
+     * Queues the photos and videos the system's picker granted ([uris]) into [gallery]'s Memory or chapter (core's
+     * `MediaUploads`: each one's tiers derived here ([MediaDerive]) while the one before it is on the wire, its bytes read at
+     * any offset; the core reads the gallery anew as each is in, the lists at the batch's end).
      */
-    fun uploadMedia(scopeId: String, nodeId: String, label: String, uris: List<android.net.Uri>) {
-        val t = tenantSession ?: return
+    fun uploadMedia(gallery: me.raddatz.veyq.mobile.memories.GalleryModel, uris: List<android.net.Uri>) {
         viewModelScope.launch {
-            val jobs = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
-                uris.mapNotNull { pickedMedium(it) }.map { me.raddatz.veyq.mobile.memories.MediaUpload.Job(t, scopeId, nodeId, source(it), deriver, System::currentTimeMillis) }
-            }
-            uploads.enqueue(jobs, label, nodeId, { if (it.status == me.raddatz.veyq.mobile.blob.UploadQueue.Status.DONE) _galleryRevision.value += 1 }) {
-                viewModelScope.launch { refreshLists(t) }
-            }
+            val sources = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) { uris.mapNotNull { pickedMedium(it) }.map { source(it) } }
+            gallery.upload(sources)
         }
     }
 

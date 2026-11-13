@@ -47,12 +47,12 @@ import androidx.compose.material3.ListItemDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -67,11 +67,15 @@ import androidx.compose.ui.viewinterop.AndroidView
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import kotlinx.coroutines.launch
+import kotlinx.coroutines.flow.first
+import me.raddatz.veyq.mobile.blob.RangeReader
 import me.raddatz.veyq.mobile.memories.MediaDetails
-import me.raddatz.veyq.mobile.memories.MemoryMedia
-import me.raddatz.veyq.mobile.navigation.NodeRef
+import me.raddatz.veyq.mobile.memories.GalleryModel
+
 import me.raddatz.veyq.mobile.navigation.ObjectRef
+
+/** Core's lightbox, named apart from this file's composable of the same name. */
+private typealias MemoryLightbox = me.raddatz.veyq.mobile.memories.Lightbox
 
 /** What full media access is on this Android: the photos and videos themselves, and their locations. */
 private fun mediaAccessPermissions(): Array<String> =
@@ -82,30 +86,31 @@ private fun mediaAccessPermissions(): Array<String> =
     }
 
 /**
- * A Memory's or a chapter's page (Memories' `MemoryDetail.vue`, its gallery): the chapters a Memory holds, then every
- * medium as a square tile of its thumbnail in the grid's order (newest first by capture time), a video marked as one; a
- * tile opens the lightbox ([Lightbox]).
+ * A Memory's or a chapter's page (Memories' `MemoryDetail.vue`, its gallery), drawn from core's `GalleryModel`: the chapters
+ * a Memory holds, then every medium as a square tile of its thumbnail in the grid's order (newest first by capture time), a
+ * video marked as one; a tile opens the lightbox ([Lightbox]). When it reads anew is the core's.
  */
 @Composable
 internal fun MemoryScreen(ref: ObjectRef, model: AppModel) {
-    val palette = LocalPalette.current
-    val details by model.rowDetails.collectAsStateWithLifecycle()
-    val uploaded by model.galleryRevision.collectAsStateWithLifecycle()
-    // read again whenever the lists are
-    var gallery by remember { mutableStateOf<MemoryMedia.Gallery?>(null) }
-    var failed by remember { mutableStateOf(false) }
-    var chapters by remember { mutableStateOf<List<NodeRef>>(emptyList()) }
-    LaunchedEffect(ref.nodeId, details, uploaded) {
-        val read = model.memoryGallery(ref.scopeId, ref.nodeId)
-        if (read == null) failed = true else { gallery = read; failed = false }
-        chapters = MediaDetails.chapters(ref.kind, ref.nodeId, if (ref.kind == "MEMORY") model.scopeNodes(ref.scopeId) else emptyList())
+    val gallery = remember(ref.at) { model.galleryModel(ref.at) }
+    if (gallery == null) {
+        CircularProgressIndicator(Modifier.padding(16.dp))
+        return
     }
-    var open by remember { mutableStateOf<Int?>(null) }
+    MemoryGallery(gallery, model)
+}
+
+/** [gallery]'s page as [MemoryScreen] draws it (a debug build's `DevMemory` draws it over a played gallery). */
+@Composable
+internal fun MemoryGallery(gallery: GalleryModel, model: AppModel) {
+    val palette = LocalPalette.current
+    val state by gallery.state.collectAsStateWithLifecycle()
+    var open by remember { mutableStateOf<MemoryLightbox?>(null) }
     val hero = LocalNodeHero.current
-    val items = gallery?.items
+    val rows = state.rows
     // the system's photo picker: photos and videos, several at once
     val pick = rememberLauncherForActivityResult(ActivityResultContracts.PickMultipleVisualMedia()) { uris ->
-        if (uris.isNotEmpty()) model.uploadMedia(ref.scopeId, ref.nodeId, ref.name, uris)
+        if (uris.isNotEmpty()) model.uploadMedia(gallery, uris)
     }
     fun pickMedia() = pick.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageAndVideo))
     // the picker hands a photo over with its location zeroed and under a number: full media access keeps both, so it is
@@ -119,11 +124,11 @@ internal fun MemoryScreen(ref: ObjectRef, model: AppModel) {
         horizontalArrangement = Arrangement.spacedBy(2.dp), verticalArrangement = Arrangement.spacedBy(2.dp),
     ) {
         item(key = "hero", span = { GridItemSpan(maxLineSpan) }) { hero(16.dp) }
-        if (chapters.isNotEmpty()) {
+        if (state.chapters.isNotEmpty()) {
             item(key = "chapters", span = { GridItemSpan(maxLineSpan) }) {
                 Text(stringResource(R.string.memory_chapters), style = MaterialTheme.typography.titleSmall, modifier = Modifier.padding(start = 16.dp, top = 8.dp))
             }
-            items(chapters, key = { "chapter:" + it.nodeId }, span = { GridItemSpan(maxLineSpan) }) { c ->
+            items(state.chapters, key = { "chapter:" + it.nodeId }, span = { GridItemSpan(maxLineSpan) }) { c ->
                 ListItem(
                     headlineContent = { Text(c.name) },
                     leadingContent = { Icon(kindIcon(c.kind), null, tint = role(palette.accent)) },
@@ -133,79 +138,87 @@ internal fun MemoryScreen(ref: ObjectRef, model: AppModel) {
             }
         }
         when {
-            failed -> item(key = "failed", span = { GridItemSpan(maxLineSpan) }) {
+            state.failed -> item(key = "failed", span = { GridItemSpan(maxLineSpan) }) {
                 Text(stringResource(R.string.memory_gallery_failed), color = role(palette.danger), modifier = Modifier.padding(16.dp))
             }
-            items == null -> item(key = "loading", span = { GridItemSpan(maxLineSpan) }) {
+            rows == null -> item(key = "loading", span = { GridItemSpan(maxLineSpan) }) {
                 Box(Modifier.fillMaxWidth().padding(24.dp), contentAlignment = Alignment.Center) { CircularProgressIndicator() }
             }
-            items.isEmpty() -> item(key = "empty", span = { GridItemSpan(maxLineSpan) }) {
+            rows.isEmpty() -> item(key = "empty", span = { GridItemSpan(maxLineSpan) }) {
                 Text(stringResource(R.string.memory_gallery_empty), color = role(palette.muted), modifier = Modifier.padding(16.dp))
             }
             else -> {
                 item(key = "count", span = { GridItemSpan(maxLineSpan) }) {
                     Text(
-                        pluralStringResource(R.plurals.memory_items, items.size, items.size), style = MaterialTheme.typography.bodySmall,
+                        pluralStringResource(R.plurals.memory_items, rows.size, rows.size), style = MaterialTheme.typography.bodySmall,
                         color = role(palette.muted), modifier = Modifier.padding(start = 16.dp, top = 8.dp, bottom = 4.dp),
                     )
                 }
-                items(items, key = { it.mediaId }) { item ->
-                    MediaTile(item, model) { open = items.indexOf(item) }
+                items(rows, key = { it.mediaId }) { row ->
+                    MediaTile(row, gallery, model) { open = gallery.lightbox(rows.indexOf(row)) }
                 }
             }
         }
     }
     }
-    val at = open
-    if (at != null && items != null) Lightbox(items, at, ref.name, model) { open = null }
+    val box = open
+    if (box != null) {
+        Lightbox(box, model) {
+            box.close()
+            open = null
+        }
+    }
 }
 
 /** One square tile: the medium's grid tier cropped to fill, a video marked; an icon where it has no tile to show. */
 @Composable
-private fun MediaTile(item: MemoryMedia.Item, model: AppModel, onOpen: () -> Unit) {
+private fun MediaTile(row: GalleryModel.Row, gallery: GalleryModel, model: AppModel, onOpen: () -> Unit) {
     val palette = LocalPalette.current
-    val picture by produceState<ImageBitmap?>(null, item.mediaId) { value = item.gridBlob?.let { model.mediaPicture(item, it) } }
+    val picture by produceState<ImageBitmap?>(null, row.mediaId) {
+        value = row.tile?.let { blob -> model.mediaPicture(blob) { gallery.tile(row.mediaId) } }
+    }
     Box(Modifier.aspectRatio(1f).background(role(palette.line)).clickable(onClick = onOpen), contentAlignment = Alignment.Center) {
         val p = picture
-        if (p != null) Image(p, item.name, Modifier.fillMaxSize(), contentScale = ContentScale.Crop)
-        else Icon(Icons.Outlined.Image, item.name, tint = role(palette.muted))
-        if (item.isVideo) Icon(Icons.Outlined.PlayCircle, null, tint = Color.White, modifier = Modifier.size(32.dp))
+        if (p != null) Image(p, row.name, Modifier.fillMaxSize(), contentScale = ContentScale.Crop)
+        else Icon(Icons.Outlined.Image, row.name, tint = role(palette.muted))
+        if (row.isVideo) Icon(Icons.Outlined.PlayCircle, null, tint = Color.White, modifier = Modifier.size(32.dp))
     }
 }
 
 /**
- * The lightbox (the web's `MediaLightbox.vue`): the gallery paged through on black, each medium's preview fitted, a video's
- * poster with a play button that streams the original as the player reads it ([MediaVideo]); its bar closes, names the
- * place in the gallery, opens the details ([MediaDetailsSheet]) and saves the original where the person picks, streamed.
+ * The lightbox (the web's `MediaLightbox.vue`), drawn from core's `Lightbox`: the gallery paged through on black, each
+ * medium's preview fitted, a video's poster with a play button that streams the original as the player reads it
+ * ([MediaVideo]); its bar closes, names the place in the gallery, opens the details ([MediaDetailsSheet]) and saves the
+ * original where the person picks, streamed (core's `FileSave`).
  */
 @OptIn(ExperimentalFoundationApi::class, ExperimentalMaterial3Api::class)
 @Composable
-private fun Lightbox(items: List<MemoryMedia.Item>, start: Int, memoryName: String, model: AppModel, onClose: () -> Unit) {
+private fun Lightbox(box: MemoryLightbox, model: AppModel, onClose: () -> Unit) {
     Dialog(onDismissRequest = onClose, properties = DialogProperties(usePlatformDefaultWidth = false)) {
-        val pager = rememberPagerState(start) { items.size }
-        val item = items[pager.currentPage.coerceIn(0, items.size - 1)]
+        val state by box.state.collectAsStateWithLifecycle()
+        val rows = state.rows
+        if (rows.isEmpty()) {
+            LaunchedEffect(Unit) { onClose() }
+            return@Dialog
+        }
+        val pager = rememberPagerState(state.index.coerceAtLeast(0)) { rows.size }
+        // the pager pages the model; a re-read that moved the medium moves the pager
+        LaunchedEffect(pager.currentPage) { box.go(pager.currentPage) }
+        LaunchedEffect(state.index) { if (state.index >= 0 && pager.currentPage != state.index) pager.scrollToPage(state.index) }
+        val row = state.row ?: rows.first()
         val context = LocalContext.current
-        val scope = rememberCoroutineScope()
         val snackbar = remember { SnackbarHostState() }
         var details by remember { mutableStateOf(false) }
-        var saving by remember { mutableStateOf<MemoryMedia.Item?>(null) }
-        val uploaders by produceState<Map<String, MediaDetails.Uploader>>(emptyMap(), items) { value = model.mediaUploaders(items.first().scopeId, items) }
+        val save = state.save
+        val saving = save?.state?.collectAsStateWithLifecycle()?.value?.let { it.end == null } == true
+        // how a save ended, said once
+        LaunchedEffect(save) {
+            val ended = save?.state?.first { it.end != null } ?: return@LaunchedEffect
+            snackbar.showSnackbar(context.text(ended.notice))
+        }
         // the original goes where the person picks (the system's "create document"), streamed there as it is read
         val saveTo = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/octet-stream")) { uri ->
-            val medium = saving
-            if (uri == null || medium == null) {
-                saving = null
-                return@rememberLauncherForActivityResult
-            }
-            val name = MediaDetails.downloadName(medium, memoryName, items.indexOf(medium))
-            scope.launch {
-                val out = runCatching { context.contentResolver.openOutputStream(uri) }.getOrNull()
-                val done = out?.use { model.downloadMedium(medium, it) } == true
-                // half an original is no download: the document goes again
-                if (!done) runCatching { android.provider.DocumentsContract.deleteDocument(context.contentResolver, uri) }
-                saving = null
-                snackbar.showSnackbar(context.getString(if (done) R.string.download_done else R.string.download_failed, name))
-            }
+            if (uri != null) model.saveMedium(box, uri)
         }
         Scaffold(
             containerColor = Color.Black,
@@ -213,21 +226,15 @@ private fun Lightbox(items: List<MemoryMedia.Item>, start: Int, memoryName: Stri
             snackbarHost = { SnackbarHost(snackbar) },
             topBar = {
                 TopAppBar(
-                    title = { Text(stringResource(R.string.memory_item_position, pager.currentPage + 1, items.size)) },
+                    title = { Text(stringResource(R.string.memory_item_position, pager.currentPage + 1, rows.size)) },
                     navigationIcon = {
                         IconButton(onClick = onClose) { Icon(Icons.Filled.Close, stringResource(R.string.memory_close)) }
                     },
                     actions = {
                         IconButton(onClick = { details = true }) { Icon(Icons.Outlined.Info, stringResource(R.string.memory_details)) }
-                        if (!item.blocked) {
-                            IconButton(
-                                onClick = {
-                                    saving = item
-                                    saveTo.launch(MediaDetails.downloadName(item, memoryName, pager.currentPage))
-                                },
-                                enabled = saving == null,
-                            ) {
-                                if (saving != null) CircularProgressIndicator(Modifier.size(20.dp), color = Color.White, strokeWidth = 2.dp)
+                        if (!row.blocked) {
+                            IconButton(onClick = { box.downloadName()?.let { saveTo.launch(it) } }, enabled = !saving) {
+                                if (saving) CircularProgressIndicator(Modifier.size(20.dp), color = Color.White, strokeWidth = 2.dp)
                                 else Icon(Icons.Outlined.Download, stringResource(R.string.memory_download))
                             }
                         }
@@ -240,19 +247,20 @@ private fun Lightbox(items: List<MemoryMedia.Item>, start: Int, memoryName: Stri
             },
         ) { padding ->
             Column(Modifier.padding(padding).fillMaxSize()) {
-                HorizontalPager(pager, Modifier.weight(1f).fillMaxWidth(), key = { items[it].mediaId }) { page ->
-                    LightboxPage(items[page], model, current = pager.currentPage == page)
+                HorizontalPager(pager, Modifier.weight(1f).fillMaxWidth(), key = { rows[it].mediaId }) { page ->
+                    val shown = rows[page]
+                    LightboxPage(shown, box, model, reader = state.reader.takeIf { state.row?.mediaId == shown.mediaId })
                 }
                 Column(Modifier.fillMaxWidth().padding(16.dp)) {
-                    Text(item.name ?: "", color = Color.White, style = MaterialTheme.typography.titleSmall)
-                    item.meta?.effectiveCapturedAt?.let {
+                    Text(row.name ?: "", color = Color.White, style = MaterialTheme.typography.titleSmall)
+                    row.capturedAt?.let {
                         Text(capturedText(it), color = Color.White.copy(alpha = 0.8f), style = MaterialTheme.typography.bodySmall)
                     }
                 }
             }
         }
         if (details) {
-            ModalBottomSheet(onDismissRequest = { details = false }) { MediaDetailsSheet(item, model, uploaders) }
+            ModalBottomSheet(onDismissRequest = { details = false }) { MediaDetailsSheet(row, box) }
         }
     }
 }
@@ -265,27 +273,25 @@ private class Read(val picture: ImageBitmap?)
 
 /** One medium of the lightbox: its preview fitted, a video's poster with its play button, a blocked one said so. */
 @Composable
-private fun LightboxPage(item: MemoryMedia.Item, model: AppModel, current: Boolean) {
-    var playing by remember(item.mediaId) { mutableStateOf(false) }
-    // a video stops when it is paged away from
-    LaunchedEffect(current) { if (!current) playing = false }
+private fun LightboxPage(row: GalleryModel.Row, box: MemoryLightbox, model: AppModel, reader: RangeReader?) {
     Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+        val said = row.said
         when {
-            item.blocked -> Text(stringResource(R.string.memory_blocked), color = Color.White, modifier = Modifier.padding(24.dp))
-            playing -> MediaVideo(item, model)
+            said != null -> Text(say(said), color = Color.White, modifier = Modifier.padding(24.dp))
+            reader != null -> MediaVideo(row, reader, box)
             else -> {
-                val read by produceState<Read?>(null, item.mediaId) {
+                val read by produceState<Read?>(null, row.mediaId) {
                     // a video without a poster has none to show: its original is no picture
-                    value = Read(if (!item.hasPicture) null else model.mediaPicture(item, item.lightboxBlob))
+                    value = Read(row.picture?.let { blob -> model.mediaPicture(blob) { box.picture(row.mediaId) } })
                 }
                 val r = read
                 when {
                     r == null -> CircularProgressIndicator(color = Color.White)
-                    r.picture != null -> Image(r.picture, item.name, Modifier.fillMaxSize(), contentScale = ContentScale.Fit)
-                    !item.isVideo -> Icon(Icons.Outlined.Image, item.name, tint = Color.White, modifier = Modifier.size(64.dp))
+                    r.picture != null -> Image(r.picture, row.name, Modifier.fillMaxSize(), contentScale = ContentScale.Fit)
+                    !row.isVideo -> Icon(Icons.Outlined.Image, row.name, tint = Color.White, modifier = Modifier.size(64.dp))
                 }
-                if (item.isVideo) {
-                    FilledIconButton(onClick = { playing = true }, modifier = Modifier.size(72.dp)) {
+                if (row.isVideo) {
+                    FilledIconButton(onClick = { box.play() }, modifier = Modifier.size(72.dp)) {
                         Icon(Icons.Filled.PlayArrow, stringResource(R.string.memory_play), Modifier.size(40.dp))
                     }
                 }
@@ -294,37 +300,43 @@ private fun LightboxPage(item: MemoryMedia.Item, model: AppModel, current: Boole
     }
 }
 
-/** A video played as it is read (the web's range playback, ADR 0047): core's range reader under the shared player. */
+/**
+ * A video played as it is read (the web's range playback, ADR 0047): core's range reader under the shared player; the
+ * lightbox's model holds the reader and closes it when it pages away or closes.
+ */
 @Composable
-private fun MediaVideo(item: MemoryMedia.Item, model: AppModel) {
-    val reader = remember(item.mediaId) { model.mediaReader(item) }
-    val m = item.meta
-    val aspect = if (m?.width != null && m.height != null) m.width!!.toFloat() / m.height!! else 16f / 9f
-    ReaderPlayer(reader, item.mediaId, aspect) {
+private fun MediaVideo(row: GalleryModel.Row, reader: RangeReader, box: MemoryLightbox) {
+    val w = row.width
+    val h = row.height
+    val aspect = if (w != null && h != null) w.toFloat() / h else 16f / 9f
+    // the player's view left (the page recomposed away): the model's reader goes with it
+    DisposableEffect(reader) { onDispose { if (box.current.reader === reader) box.stop() } }
+    ReaderPlayer(reader, row.mediaId, aspect) {
         Text(stringResource(R.string.memory_video_failed), color = Color.White, modifier = Modifier.padding(24.dp))
     }
 }
 
 /**
- * A medium's details (the web's details panel): the capture time and the file's facts at once, the camera's once its
- * EXIF tier is read, who added it, its place and position; "no details" only where nothing is known.
+ * A medium's details (the web's details panel, core's `Lightbox.details`): the capture time and the file's facts at once,
+ * the camera's once its EXIF tier is read, who added it (read once for the gallery), its place and position; "no details"
+ * only where nothing is known.
  */
 @Composable
-private fun MediaDetailsSheet(item: MemoryMedia.Item, model: AppModel, uploaders: Map<String, MediaDetails.Uploader>) {
-    val exif by produceState<MediaDetails.Exif?>(null, item.mediaId) { value = model.mediaExif(item) }
-    val rows = MediaDetails.rows(item, exif)
-    val uploader = item.ownerKey?.let { uploaders[it] }
-    val uploaderName = uploader?.let { piece(MediaDetails.uploaderWords(it)) }
+private fun MediaDetailsSheet(row: GalleryModel.Row, box: MemoryLightbox) {
+    val details by produceState<me.raddatz.veyq.mobile.memories.Lightbox.Details?>(null, row.mediaId) { value = box.details(row.mediaId) }
+    val d = details
+    val rows = d?.rows.orEmpty()
+    val uploaderName = d?.uploader?.let { piece(MediaDetails.uploaderWords(it)) }
     // who added it stands before the place, as on the web
-    val placeAt = MediaDetails.uploaderAt(rows)
+    val placeAt = d?.uploaderAt ?: 0
     Column(Modifier.fillMaxWidth().verticalScroll(rememberScrollState()).padding(bottom = 24.dp)) {
         Text(stringResource(R.string.memory_details), style = MaterialTheme.typography.titleMedium, modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp))
-        if (rows.isEmpty() && uploaderName == null) {
+        if (d != null && rows.isEmpty() && uploaderName == null) {
             Text(stringResource(R.string.memory_no_detail), color = role(LocalPalette.current.muted), modifier = Modifier.padding(16.dp))
         }
-        rows.forEachIndexed { i, row ->
+        rows.forEachIndexed { i, r ->
             if (i == placeAt && uploaderName != null) DetailRow(stringResource(R.string.memory_field_uploaded_by), uploaderName)
-            DetailRow(detailLabel(row.field), detailValue(row))
+            DetailRow(detailLabel(r.field), detailValue(r))
         }
         if (placeAt == rows.size && uploaderName != null) DetailRow(stringResource(R.string.memory_field_uploaded_by), uploaderName)
     }
