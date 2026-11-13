@@ -2149,6 +2149,7 @@ class DispatchTest {
                     is HostRequest.StoreRead -> HostReply.Value(kept[r.name])
                     is HostRequest.StoreWrite -> if (r.name == "full") HostReply.Failed("disk full") else HostReply.Done.also { kept[r.name] = r.value }
                     is HostRequest.StoreRemove -> HostReply.Done.also { kept.remove(r.name) }
+                    else -> HostReply.Failed("this host draws nothing")
                 }
                 host.reply(token, wire.encodeToString(HostReply.serializer(), reply))
             }

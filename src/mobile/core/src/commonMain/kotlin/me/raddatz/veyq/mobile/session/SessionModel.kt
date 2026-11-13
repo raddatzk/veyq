@@ -330,6 +330,14 @@ class SessionModel<A : Connection, T : Any>(
     }
 
     /**
+     * A scanned code read as a kit (`EmergencyKit.read` with the door's suite): a scan's `accepts` — any other code, an
+     * older kit's too, is null and the scan goes on. Its [KitImport.Found] goes to [takeKit]; a QR carries no form, so
+     * its server is the token's or none.
+     */
+    fun scannedKit(text: String): KitImport.Found? =
+        EmergencyKit.read(door.primitives, text)?.let { KitImport.Found(it, if (it.server != null) KitImport.ServerFrom.TOKEN else KitImport.ServerFrom.NONE) }
+
+    /**
      * The trusted account's unlock: its password (DEVICE), or the person's authentication again (DEVICE_KEY). A password
      * unlock is a sign-in like the full one: the offer follows it where it would follow that one.
      */

@@ -150,12 +150,13 @@ class WireTest {
             Call.PotCreateSpace(16, "scope-2"), Call.PotCreateCurrency(16, "EUR"), Call.PotCreateAddTyped(16, "Ben"), Call.PotCreateAddMember(16, "u-dana"),
             Call.PotCreateRemove(16, 0), Call.PotCreateCreate(16, ""), Call.PotCreateCreate(16, "Cleo"),
             // a QR scan
-            Call.ScanOpen(ScanKind.SCHEME), Call.ScanCamera(40, me.raddatz.veyq.mobile.qr.QrScan.Camera.RUNNING),
+            Call.ScanOpen(ScanKind.SCHEME), Call.ScanOpen(ScanKind.KIT, "familie.example.org"),
+            Call.SessionSignInKit("/home/p/Notfall-Kit.pdf", "familie.example.org"), Call.SessionSignInKitClear, Call.ScanCamera(40, me.raddatz.veyq.mobile.qr.QrScan.Camera.RUNNING),
             Call.ScanCamera(40, me.raddatz.veyq.mobile.qr.QrScan.Camera.NONE), Call.ScanCamera(40, me.raddatz.veyq.mobile.qr.QrScan.Camera.DENIED),
             Call.ScanFrame(40, 1280, 720, 1280), Call.ScanClose(40),
         ),
         Watched.serializer() to listOf(Watched.Session, Watched.Shell, Watched.Pot(3), Watched.PotLive(3), Watched.Manage, Watched.Header(7), Watched.Trash(8), Watched.Move(9), Watched.Share(10), Watched.Report(11), Watched.Editor(12), Watched.PotSettings(15), Watched.PotCreate(16), Watched.File(20), Watched.Save(21), Watched.Uploads, Watched.DropBox(30), Watched.Scan(40)),
-        HostReply.serializer() to listOf(HostReply.Value("s\tn\t1"), HostReply.Value(null), HostReply.Done, HostReply.Failed("disk full")),
+        HostReply.serializer() to listOf(HostReply.Value("s\tn\t1"), HostReply.Value(null), HostReply.Done, HostReply.Failed("disk full"), HostReply.Pixels(2400, 3394)),
         Answer.serializer() to listOf(
             Answer.Done, Answer.Refused(Answer.Why.NO_TENANT_OPEN), Answer.Refused(Answer.Why.TRUST_CANCELLED), Answer.Failed("IllegalStateException"),
             Answer.Groups(listOf(Home.Group(true, lists.nodes.take(1), Msg.HOME_GROUP_FOLDERS), Home.Group(false, lists.nodes.drop(1), null))),
@@ -177,7 +178,7 @@ class WireTest {
             Answer.Refused(Answer.Why.NO_RECEIPT), Answer.Refused(Answer.Why.NOT_WRITTEN),
             Answer.PotSettingsOpened(15), Answer.PotCreateOpened(16), Answer.Stored(true, null), Answer.Stored(false, Notice(Msg.SETTINGS_CURRENCY_FIXED)),
             Answer.Stored(true, Notice(Msg.CREATE_POT_PEOPLE_FAILED)), Answer.Refused(Answer.Why.NO_SUCH_SETTINGS), Answer.Refused(Answer.Why.NO_SUCH_CREATE),
-            Answer.ScanOpened(40), Answer.FrameTaken(true), Answer.FrameTaken(false), Answer.Refused(Answer.Why.NOT_A_FRAME), Answer.Refused(Answer.Why.NO_SUCH_SCAN),
+            Answer.ScanOpened(40), Answer.FrameTaken(true), Answer.FrameTaken(false), Answer.Refused(Answer.Why.NOT_A_FRAME), Answer.Refused(Answer.Why.NO_SUCH_SCAN), Answer.Refused(Answer.Why.NO_KIT),
         ),
         Update.serializer() to listOf(
             Update.Session(Gate.Starting), Update.Session(Gate.NeedsApp), Update.Session(Gate.SignIn(error = Msg.SIGNIN_ERROR_CREDENTIALS, server = "veyq.localhost:8080")),
@@ -347,7 +348,8 @@ class WireTest {
                 ManagedShown("other.example#user-9", "other.example", null, null, emptyList(), emptyList()),
             )),
         ),
-        HostRequest.serializer() to listOf(HostRequest.StoreRead("veyq.recent"), HostRequest.StoreWrite("veyq.recent", "s\tn\t1"), HostRequest.StoreRemove("veyq.recent")),
+        HostRequest.serializer() to listOf(HostRequest.StoreRead("veyq.recent"), HostRequest.StoreWrite("veyq.recent", "s\tn\t1"), HostRequest.StoreRemove("veyq.recent"),
+            HostRequest.PdfPages("/home/p/Notfall-Kit.pdf"), HostRequest.PdfPage("/home/p/Notfall-Kit.pdf", 2, 2400), HostRequest.PictureLuma("/home/p/kit.jpg", 2400)),
     )
 
     /**

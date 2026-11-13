@@ -16,6 +16,7 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.flowOf
@@ -83,6 +84,11 @@ internal class Composition<A : Connection, T : Any>(
     val files: DeviceFiles = DeviceFiles.None,
     /** How a scan's frame is read: the core's decoder; a test plays one it holds. */
     val decode: suspend (me.raddatz.veyq.mobile.qr.QrFrame) -> String? = { me.raddatz.veyq.mobile.qr.QrDecoder.decode(it) },
+    /**
+     * How a kit file the host picked is drawn ([Call.SessionSignInKit]): over the host's requests ([HostPictures]) in the
+     * library; a test plays them, or has none.
+     */
+    val pictures: (path: String) -> me.raddatz.veyq.mobile.account.KitPictures = { NoPictures },
     /** The models over a tenant just opened; null where there are none (a test's tenant that is no `TenantSession`). */
     val tenant: (T) -> Tenant?,
 )
@@ -237,7 +243,7 @@ internal class Bridge<A : Connection, T : Any>(compose: () -> Composition<A, T>)
     private val saves = Registry<me.raddatz.veyq.mobile.depot.FileSave>()
 
     /** The QR scans the host opened ([Call.ScanOpen]): no tenant's, each until [Call.ScanClose] or [shutdown]. */
-    private val scans = Registry<me.raddatz.veyq.mobile.qr.QrScan<String>>()
+    private val scans = Registry<me.raddatz.veyq.mobile.qr.QrScan<Any>>()
 
     /** The app's one upload queue (the phones' `AppModel.uploads`): emptied when the tenant closes. */
     private val queue = me.raddatz.veyq.mobile.blob.UploadQueue()
@@ -311,6 +317,15 @@ internal class Bridge<A : Connection, T : Any>(compose: () -> Composition<A, T>)
             Call.SessionOtherAccount -> Answer.Done.also { session.otherAccount() }
             Call.SessionAddServer -> Answer.Done.also { session.addServer() }
             Call.SessionCancelAdd -> Answer.Done.also { session.cancelAdd() }
+            is Call.SessionSignInKit -> {
+                // the core reads the file by its path, never more than a kit file may hold; one that does not read (or
+                // is past the cap) is read as no kit, and nothing is asked of the host for it
+                val bytes = runCatching { parts.files.read(call.path, me.raddatz.veyq.mobile.account.KitImport.FILE_CAP) }.getOrNull()
+                val read = if (bytes == null) session.readKit(ByteArray(0), NoPictures, call.server)
+                else session.readKit(bytes, parts.pictures(call.path), call.server)
+                if (read) Answer.Done else Answer.Refused(Answer.Why.NO_KIT)
+            }
+            Call.SessionSignInKitClear -> Answer.Done.also { session.clearKit() }
             is Call.SessionForgetDevice -> {
                 val account = session.accounts.firstOrNull { it.key == call.connection } ?: return Answer.Refused(Answer.Why.NO_SUCH_CONNECTION)
                 session.forgetDevice(account)
@@ -673,7 +688,17 @@ internal class Bridge<A : Connection, T : Any>(compose: () -> Composition<A, T>)
             is Call.ShareReactivate -> shares[call.share]?.let { Answer.Said(it.reactivate(call.link).notice) } ?: noShare
             is Call.ScanOpen -> {
                 val id = ids.incrementAndFetch()
-                scans.put(id, me.raddatz.veyq.mobile.qr.QrScan(accepts = scanKind(call.kind), decode = parts.decode))
+                val scan = me.raddatz.veyq.mobile.qr.QrScan(accepts = scanKind(call.kind, session), decode = parts.decode)
+                scans.put(id, scan)
+                if (call.kind == ScanKind.KIT) {
+                    // the kit a scan settles on goes to the sign-in at once, watched or not (D7: as a file's kit); a scan
+                    // closed first takes nothing
+                    scope.launch {
+                        val end = scan.state.first { it is me.raddatz.veyq.mobile.qr.QrScan.State.Found || it == me.raddatz.veyq.mobile.qr.QrScan.State.Closed }
+                        val found = (end as? me.raddatz.veyq.mobile.qr.QrScan.State.Found)?.value as? me.raddatz.veyq.mobile.account.KitImport.Found
+                        if (found != null) session.takeKit(found, call.server)
+                    }
+                }
                 Answer.ScanOpened(id)
             }
             is Call.ScanCamera -> scans[call.scan]?.camera(call.camera).done(Answer.Why.NO_SUCH_SCAN)
@@ -690,8 +715,15 @@ internal class Bridge<A : Connection, T : Any>(compose: () -> Composition<A, T>)
     }
 
     /** What a scan of [kind] accepts a code as: the core's parser for it, so the code's text stays here. */
-    private fun scanKind(kind: ScanKind): (String) -> String? = when (kind) {
+    private fun scanKind(kind: ScanKind, session: SessionModel<A, T>): (String) -> Any? = when (kind) {
         ScanKind.SCHEME -> me.raddatz.veyq.mobile.qr.QrSchemes::of
+        ScanKind.KIT -> session::scannedKit
+    }
+
+    /** What a scan's [ScanShown.found] says of what it settled on: a scheme as it is, a kit as its scheme alone. */
+    private fun foundAs(value: Any): String = when (value) {
+        is me.raddatz.veyq.mobile.account.KitImport.Found -> "veyqkit"
+        else -> value as String
     }
 
     /**
@@ -1120,12 +1152,12 @@ internal class Bridge<A : Connection, T : Any>(compose: () -> Composition<A, T>)
         failed = s.failed, busy = s.busy, errorRow = s.errorRow, error = s.error, renaming = s.renaming, retryName = s.retryName,
     )
 
-    private fun shownScan(s: me.raddatz.veyq.mobile.qr.QrScan.State<String>): ScanShown = when (s) {
+    private fun shownScan(s: me.raddatz.veyq.mobile.qr.QrScan.State<Any>): ScanShown = when (s) {
         me.raddatz.veyq.mobile.qr.QrScan.State.Starting -> ScanShown(ScanState.STARTING, null)
         me.raddatz.veyq.mobile.qr.QrScan.State.NoCamera -> ScanShown(ScanState.NO_CAMERA, null)
         me.raddatz.veyq.mobile.qr.QrScan.State.Denied -> ScanShown(ScanState.DENIED, null)
         me.raddatz.veyq.mobile.qr.QrScan.State.Scanning -> ScanShown(ScanState.SCANNING, null)
-        is me.raddatz.veyq.mobile.qr.QrScan.State.Found -> ScanShown(ScanState.FOUND, s.value)
+        is me.raddatz.veyq.mobile.qr.QrScan.State.Found -> ScanShown(ScanState.FOUND, foundAs(s.value))
         me.raddatz.veyq.mobile.qr.QrScan.State.Closed -> ScanShown(ScanState.CLOSED, null)
     }
 
@@ -1149,6 +1181,8 @@ internal class Bridge<A : Connection, T : Any>(compose: () -> Composition<A, T>)
             /** The device's keys over [store]: the platform's (`platformDeviceKeys`), a test's own on the JVM. */
             keys: (DeviceStore) -> DeviceKeys,
             files: DeviceFiles,
+            /** A kit file's drawings by its path: the host's ([HostPictures]). */
+            pictures: (path: String) -> me.raddatz.veyq.mobile.account.KitPictures = { NoPictures },
             now: () -> Long = { Clock.System.now().toEpochMilliseconds() },
         ): Bridge<VeyqAccount, TenantSession> = Bridge {
             val recent = RecentUses(
@@ -1160,7 +1194,7 @@ internal class Bridge<A : Connection, T : Any>(compose: () -> Composition<A, T>)
                 initial = store.read(HIDDEN)?.lines()?.filter { it.isNotEmpty() }?.toSet().orEmpty(),
             )
             val device = ThisDevice(store, keys(store), config.device, primitives)
-            Composition(SessionModel.accounts(primitives, device, client, hidden, recent), hidden, files) { t ->
+            Composition(SessionModel.accounts(primitives, device, client, hidden, recent), hidden, files, pictures = pictures) { t ->
                 Tenant(ShellModel(t, hidden, recent, now), { PotModel(t, now) }, t.account.userId, t.pictures.state, t.pictures::load)
             }
         }

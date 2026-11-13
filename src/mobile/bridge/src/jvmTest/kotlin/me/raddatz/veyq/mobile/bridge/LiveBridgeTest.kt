@@ -62,6 +62,7 @@ class LiveBridgeTest {
                     is HostRequest.StoreRead -> HostReply.Value(kept[r.name])
                     is HostRequest.StoreWrite -> HostReply.Done.also { kept[r.name] = r.value }
                     is HostRequest.StoreRemove -> HostReply.Done.also { kept.remove(r.name) }
+                    else -> HostReply.Failed("this host draws nothing")
                 }
                 host.reply(token, wire.encodeToString(HostReply.serializer(), reply))
             }
@@ -2261,6 +2262,50 @@ class LiveBridgeTest {
         refs.size
     }
 
+    /**
+     * An Emergency Kit by path (`Session.SignInKit`, the kit CR's phase 8): a kit PDF of the principal (`{v: 3, email, sk,
+     * srv}` as the web writes it, the token in `Keywords` only) written under this module's `build/` and removed however
+     * the case ends — never printed —, read by the core, the form filled (email, server from the token, the key held), and
+     * a sign-in with an empty Secret Key reaching the shell. Signed out after; this host keeps no keys, so nothing is
+     * trusted.
+     */
+    @Test
+    fun aKitSignsInByPathWithAnEmptySecretKey() = runBlocking {
+        val origin = System.getenv("VEYQ_LIVE") ?: return@runBlocking
+        val envFile = System.getenv("VEYQ_ENV_FILE")?.let(::File) ?: File(System.getProperty("veyq.repoRoot"), ".run/.env")
+        val env = envFile.readLines()
+            .mapNotNull { l -> l.substringBefore('=', "").takeIf { it.isNotBlank() }?.let { it.trim() to l.substringAfter('=').trim().trim('"', '\'') } }
+            .toMap()
+        val email = env.getValue("VEYQ_EMAIL")
+        val key = assertNotNull(me.raddatz.veyq.mobile.crypto.SecretKeyText.read(BouncyCastlePrimitives, env.getValue("VEYQ_SECRET_KEY")))
+        val json = kotlinx.serialization.json.buildJsonObject {
+            put("v", kotlinx.serialization.json.JsonPrimitive(3))
+            put("email", kotlinx.serialization.json.JsonPrimitive(email))
+            put("sk", kotlinx.serialization.json.JsonPrimitive(me.raddatz.veyq.mobile.crypto.SecretKeyText.format(BouncyCastlePrimitives, key)))
+            put("srv", kotlinx.serialization.json.JsonPrimitive(origin))
+        }.toString()
+        key.fill(0)
+        val token = "veyqkit:" + kotlin.io.encoding.Base64.UrlSafe.withPadding(kotlin.io.encoding.Base64.PaddingOption.ABSENT).encode(json.encodeToByteArray())
+        val dir = File(System.getProperty("user.dir"), "build/live-kit").apply { mkdirs() }
+        val kit = File(dir, "kit-${System.nanoTime()}.pdf")
+        val b = Bridge.live(BouncyCastlePrimitives, { block -> HttpClient(OkHttp, block) }, Config("bridge kit test"), hostStore(ConcurrentHashMap()), { NoDeviceKeys }, JvmFiles)
+        try {
+            kit.writeBytes("%PDF-1.4\n1 0 obj\n<< /Keywords ($token) >>\nendobj\ntrailer\n<< /Info 1 0 R >>\n%%EOF\n".encodeToByteArray())
+            val gate = b.watching(Watched.Session)
+            assertEquals(Answer.Done, b.ask(Call.SessionStart))
+            gate.until { (it as Update.Session).gate as? Gate.SignIn }
+            assertEquals(Answer.Done, b.ask(Call.SessionSignInKit(kit.path, "")))
+            val form = gate.until { (it as Update.Session).gate.let { g -> (g as? Gate.SignIn)?.takeIf { s -> s.kit != null } } }
+            assertEquals(SessionModel.KitShown(email, origin, me.raddatz.veyq.mobile.account.KitImport.ServerFrom.TOKEN), form.kit)
+            assertEquals(Answer.Done, b.ask(Call.SessionSignIn(form.server!!, form.email!!, env.getValue("VEYQ_PASSWORD"), ""), timeout = 2.minutes))
+            val signed = gate.until(2.minutes) { (it as Update.Session).gate as? Gate.Signed }
+            assertEquals(Answer.Done, b.ask(Call.SessionSignOut(signed.connectionKey)))
+        } finally {
+            kit.delete()
+            b.shutdown()
+        }
+    }
+
     /** A device store the test's host keeps in [kept], answering from its own thread as a UI loop does. */
     private fun hostStore(kept: ConcurrentHashMap<String, String>): HostStore {
         lateinit var host: Host
@@ -2270,6 +2315,7 @@ class LiveBridgeTest {
                     is HostRequest.StoreRead -> HostReply.Value(kept[r.name])
                     is HostRequest.StoreWrite -> HostReply.Done.also { kept[r.name] = r.value }
                     is HostRequest.StoreRemove -> HostReply.Done.also { kept.remove(r.name) }
+                    else -> HostReply.Failed("this host draws nothing")
                 }
                 host.reply(token, wire.encodeToString(HostReply.serializer(), reply))
             }

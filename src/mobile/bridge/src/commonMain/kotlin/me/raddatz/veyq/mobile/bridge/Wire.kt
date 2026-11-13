@@ -100,6 +100,19 @@ internal sealed class Call {
     @Serializable @SerialName("Session.SignOut") data class SessionSignOut(val connection: String) : Call()
 
     /**
+     * "Open Emergency Kit" at the sign-in: the kit file the host's open dialog gave, by its [path] (ADR 0131 decision 3),
+     * read by the core under `KitImport.FILE_CAP` and taken as the phones' kit is (`SessionModel.readKit`); [server] is
+     * the form's server as typed now (the other-server notice's). Where the file needs drawing, the core asks the host
+     * ([HostRequest.PdfPages], [HostRequest.PdfPage], [HostRequest.PictureLuma]). [Answer.Done]: the gate's `kit` says
+     * what the form now holds — its email and server, never the Secret Key, which the core holds; `NO_KIT` where the
+     * file held none (the gate says so) or the sign-in is not shown.
+     */
+    @Serializable @SerialName("Session.SignInKit") data class SessionSignInKit(val path: String, val server: String) : Call()
+
+    /** The Secret Key row's "Enter it instead": the kit's key the core held ends (`SessionModel.clearKit`). */
+    @Serializable @SerialName("Session.SignInKitClear") data object SessionSignInKitClear : Call()
+
+    /**
      * "Manage servers" opened: [Watched.Manage] delivers every server with its trust from now on, each tenant's spaces as
      * they read; [ManageClose] ends it (null again).
      */
@@ -607,8 +620,10 @@ internal sealed class Call {
      * A QR scan (core's `QrScan`, the QR CR's D5) reading codes as [kind] says, answered with its id
      * ([Answer.ScanOpened]) for [Watched.Scan] and the calls below. It starts `STARTING`: the host opens its camera and
      * says what it did ([ScanCamera]). It stays until [ScanClose]; a scan is no tenant's (a sign-in scans before one opens).
+     * [server] is the sign-in form's server as typed for a [ScanKind.KIT] scan (the other-server notice's), null for
+     * every other kind.
      */
-    @Serializable @SerialName("Scan.Open") data class ScanOpen(val kind: ScanKind) : Call()
+    @Serializable @SerialName("Scan.Open") data class ScanOpen(val kind: ScanKind, val server: String? = null) : Call()
 
     /** What the host's camera did: `RUNNING` (frames follow), `NONE` (the device has none), `DENIED` (the app may not). */
     @Serializable @SerialName("Scan.Camera") data class ScanCamera(val scan: Long, val camera: me.raddatz.veyq.mobile.qr.QrScan.Camera) : Call()
@@ -635,6 +650,13 @@ internal sealed class Call {
 internal enum class ScanKind {
     /** A code of any of veyq's schemes (`QrSchemes.of`), found as its scheme alone — the desktops' debug harness's. */
     SCHEME,
+
+    /**
+     * An Emergency Kit's code (`EmergencyKit.read`: a v3 `veyqkit:` token; any other code, an older kit's too, is skipped
+     * and scanning goes on), found as `veyqkit` — the kit itself goes to the sign-in (`SessionModel.takeKit`: email and
+     * server filled, the Secret Key held by the core), never across the bridge.
+     */
+    KIT,
 }
 
 /** A call's one answer; what the call changed arrives as the watched states' updates. */
@@ -764,6 +786,9 @@ internal sealed class Answer {
 
         /** A scan: none by that id; a frame without its plane beside the JSON, or one shorter than its size says. */
         NO_SUCH_SCAN, NOT_A_FRAME,
+
+        /** A kit file ([Call.SessionSignInKit]) in which no kit was read, or one picked while no sign-in is shown. */
+        NO_KIT,
 
         /** A change of trust (`TrustChange`): no offer to answer; the person cancelled the prompt; not enrolled; the
          *  password was not the account's. */
@@ -1488,12 +1513,34 @@ internal sealed class HostRequest {
     @Serializable @SerialName("Store.Read") data class StoreRead(val name: String) : HostRequest()
     @Serializable @SerialName("Store.Write") data class StoreWrite(val name: String, val value: String) : HostRequest()
     @Serializable @SerialName("Store.Remove") data class StoreRemove(val name: String) : HostRequest()
+
+    /**
+     * An Emergency Kit's read (`KitImport`; ADR 0130 decision 1: the platform draws, the core decides), each on the file
+     * at [path] the host itself gave ([Call.SessionSignInKit]) — a path and a number outward, never a byte of the file:
+     * how many pages the platform's renderer opens the PDF with ([HostReply.Value], the count as its text; [HostReply.Failed]
+     * where it does not open).
+     */
+    @Serializable @SerialName("Pdf.Pages") data class PdfPages(val path: String) : HostRequest()
+
+    /** Page [page] (1-based) drawn [width] px wide on white, answered as [HostReply.Pixels]. */
+    @Serializable @SerialName("Pdf.Page") data class PdfPage(val path: String, val page: Int, val width: Int) : HostRequest()
+
+    /** The file decoded as a picture, scaled so its longer side is [longSide] px, over white: [HostReply.Pixels]. */
+    @Serializable @SerialName("Picture.Luma") data class PictureLuma(val path: String, val longSide: Int) : HostRequest()
 }
 
 @Serializable
 internal sealed class HostReply {
     @Serializable @SerialName("Value") data class Value(val value: String?) : HostReply()
     @Serializable @SerialName("Done") data object Done : HostReply()
+
+    /**
+     * A drawing ([HostRequest.PdfPage], [HostRequest.PictureLuma]): its luminance (8 bits a pixel, 0 black, 255 white),
+     * [width] × [height] packed row after row, as `veyq_reply`'s payload beside this JSON (ADR 0131 decision 3, extended
+     * inward: only the host can draw, so a drawn page's pixels ride in beside a reply), never in it. A payload shorter
+     * than the size is no drawing.
+     */
+    @Serializable @SerialName("Pixels") data class Pixels(val width: Int, val height: Int) : HostReply()
 
     /** The host could not do it (a store that does not write): the core's call fails as a store's would. */
     @Serializable @SerialName("Failed") data class Failed(val error: String) : HostReply()

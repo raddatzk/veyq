@@ -32,7 +32,8 @@ import kotlin.experimental.ExperimentalNativeApi
 // the host copies what it keeps. JSON is UTF-8 and NUL-terminated; the byte payload beside it carries the bytes of an
 // `Answer.Bytes` (an avatar, a blob's range), which never travel as base64, and is null with length 0 for every other
 // answer, every update and every host request. Inward, a call carries one where it hands the core bytes (a scan's frame,
-// `Scan.Frame`), copied before veyq_call returns; what veyq_reply is handed beside its JSON is not read.
+// `Scan.Frame`), copied before veyq_call returns, and so does a reply (a kit page's pixels, `HostReply.Pixels`), copied
+// before veyq_reply returns.
 
 /** `void (*)(void *ctx, const char *json, const uint8_t *bytes, size_t len)`: an answer or an update. */
 typealias VeyqAnswer = CPointer<CFunction<(COpaquePointer?, CPointer<ByteVar>?, CPointer<UByteVar>?, ULong) -> Unit>>
@@ -63,20 +64,25 @@ private object Files : DeviceFiles {
             // the parts joined once at the end: a receipt of 10 MiB read by appending would copy it 160 times over
             val parts = ArrayList<ByteArray>()
             var size = 0L
-            while (true) {
-                val part = source.read(size, READ_STEP)
-                parts += part
-                size += part.size
-                if (size > most) throw IllegalStateException("too large")
-                if (part.size < READ_STEP) break
+            try {
+                while (true) {
+                    val part = source.read(size, READ_STEP)
+                    parts += part
+                    size += part.size
+                    if (size > most) throw IllegalStateException("too large")
+                    if (part.size < READ_STEP) break
+                }
+                val out = ByteArray(size.toInt())
+                var at = 0
+                for (p in parts) {
+                    p.copyInto(out, at)
+                    at += p.size
+                }
+                return out
+            } finally {
+                // the parts are copies of the file (a kit's among them): zeroed once joined or given up
+                parts.forEach { it.fill(0) }
             }
-            val out = ByteArray(size.toInt())
-            var at = 0
-            for (p in parts) {
-                p.copyInto(out, at)
-                at += p.size
-            }
-            return out
         } finally {
             source.close()
         }
@@ -111,7 +117,7 @@ fun veyqInit(config: CPointer<ByteVar>?, host: VeyqHost?, hostCtx: COpaquePointe
     val h = Host { token, json ->
         memScoped { host.invoke(hostCtx, token.toULong(), json.cstr.ptr, null, 0u) }
     }
-    val bridge = Bridge.live(LibsodiumPrimitives, { block -> platformHttpClient(block) }, c, HostStore(h), { platformDeviceKeys(c, it) }, Files)
+    val bridge = Bridge.live(LibsodiumPrimitives, { block -> platformHttpClient(block) }, c, HostStore(h), { platformDeviceKeys(c, it) }, Files, { HostPictures(h, it) })
     if (!running.compareAndSet(null, Running(bridge, h))) {
         bridge.shutdown()
         return ALREADY_STARTED
@@ -159,7 +165,9 @@ fun veyqUnwatch(id: ULong) {
 @CName("veyq_reply")
 fun veyqReply(token: ULong, json: CPointer<ByteVar>?, bytes: CPointer<UByteVar>?, len: ULong) {
     val r = running.load() ?: return
-    r.host.reply(token.toLong(), json?.toKString() ?: "")
+    // a drawing's pixels (HostReply.Pixels) beside the reply, copied before this returns, as bridge.h promises
+    val payload = bytes?.let { if (len > MAX_INBOUND) null else it.reinterpret<ByteVar>().readBytes(len.toInt()) }
+    r.host.reply(token.toLong(), json?.toKString() ?: "", payload)
 }
 
 @CName("veyq_shutdown")

@@ -5,6 +5,8 @@ package me.raddatz.veyq.mobile.bridge
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeout
+import me.raddatz.veyq.mobile.account.KitPictures
+import me.raddatz.veyq.mobile.qr.QrFrame
 import me.raddatz.veyq.mobile.session.DeviceAuthFailed
 import me.raddatz.veyq.mobile.session.DeviceKeys
 import me.raddatz.veyq.mobile.session.DeviceStore
@@ -64,12 +66,18 @@ internal class Registry<V> {
  */
 internal class Host(private val timeout: kotlin.time.Duration = TIMEOUT, private val send: (token: Long, request: String) -> Unit) {
     private val tokens = AtomicLong(0)
-    private val waiting = Registry<CompletableDeferred<HostReply>>()
+    private val waiting = Registry<CompletableDeferred<Replied>>()
+
+    /** A reply and the payload the host handed beside it (a drawing's pixels, [HostReply.Pixels]), null where none. */
+    class Replied(val reply: HostReply, val payload: ByteArray?)
 
     /** Asks the host and blocks this core thread until it answers; a host silent for [timeout] fails the ask. */
-    fun ask(request: HostRequest): HostReply {
+    fun ask(request: HostRequest): HostReply = askWithPayload(request).also { it.payload?.fill(0) }.reply
+
+    /** [ask], with the payload the host handed beside its reply, which the caller owns. */
+    fun askWithPayload(request: HostRequest): Replied {
         val token = tokens.incrementAndFetch()
-        val answer = CompletableDeferred<HostReply>()
+        val answer = CompletableDeferred<Replied>()
         waiting.put(token, answer)
         try {
             send(token, wire.encodeToString(HostRequest.serializer(), request))
@@ -79,11 +87,15 @@ internal class Host(private val timeout: kotlin.time.Duration = TIMEOUT, private
         }
     }
 
-    /** The host's answer to [token]; one the core no longer waits for (timed out, or never asked) is dropped. */
-    fun reply(token: Long, json: String) {
+    /**
+     * The host's answer to [token], and [payload] beside it (already the core's own copy); one the core no longer waits
+     * for (timed out, or never asked) is dropped, its payload zeroed.
+     */
+    fun reply(token: Long, json: String, payload: ByteArray? = null) {
         val r = runCatching { wire.decodeFromString(HostReply.serializer(), json) }
             .getOrElse { HostReply.Failed("the host's reply did not read") }
-        waiting[token]?.complete(r)
+        val waiter = waiting[token]
+        if (waiter == null || !waiter.complete(Replied(r, payload))) payload?.fill(0)
     }
 
     companion object {
@@ -107,6 +119,39 @@ internal class HostStore(private val host: Host) : DeviceStore {
     }
 
     private fun HostReply.describe() = (this as? HostReply.Failed)?.error ?: this::class.simpleName
+}
+
+/**
+ * An Emergency Kit file's drawings (core's `KitPictures`; ADR 0130 decision 1: the platform draws, the core decides) asked
+ * of the host for the file at [path], which the host itself picked: a page count, a page or a picture drawn into the
+ * reply's payload ([HostReply.Pixels]). The core's `KitImport` decides whether and what to ask, so a kit found in the
+ * file's bytes asks nothing. A reply that is no drawing of its size answers null, as a platform that cannot draw does.
+ */
+internal class HostPictures(private val host: Host, private val path: String) : KitPictures {
+    override suspend fun pdfPages(): Int? = (host.ask(HostRequest.PdfPages(path)) as? HostReply.Value)?.value?.toIntOrNull()?.takeIf { it > 0 }
+
+    override suspend fun pdfPage(page: Int, width: Int): QrFrame? = drawn(host.askWithPayload(HostRequest.PdfPage(path, page, width)))
+
+    override suspend fun picture(longSide: Int): QrFrame? = drawn(host.askWithPayload(HostRequest.PictureLuma(path, longSide)))
+
+    private fun drawn(r: Host.Replied): QrFrame? {
+        val pixels = r.reply as? HostReply.Pixels
+        val plane = r.payload
+        if (pixels == null || plane == null || pixels.width <= 0 || pixels.height <= 0 ||
+            plane.size.toLong() < pixels.width.toLong() * pixels.height
+        ) {
+            plane?.fill(0)
+            return null
+        }
+        return QrFrame(pixels.width, pixels.height, pixels.width, plane)
+    }
+}
+
+/** A composition that draws nothing (a test's that plays none, and a kit file that did not read: nothing to draw). */
+internal object NoPictures : KitPictures {
+    override suspend fun pdfPages(): Int? = null
+    override suspend fun pdfPage(page: Int, width: Int): QrFrame? = null
+    override suspend fun picture(longSide: Int): QrFrame? = null
 }
 
 /**

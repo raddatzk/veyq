@@ -99,6 +99,8 @@ tasks.named<Test>("jvmTest") {
     )
     systemProperty("veyq.samples", generatedBridge.resolve("samples").absolutePath)
     systemProperty("veyq.repoRoot", rootDir.resolve("../..").canonicalPath)
+    // the web's Emergency Kit fixtures, which KitDispatchTest reads by path
+    inputs.dir(rootDir.resolve("../web/src/features/account/emergencyKit/__fixtures__")).withPropertyName("kitFixtures")
     System.getenv("VEYQ_LIVE")?.let { environment("VEYQ_LIVE", it) }
     System.getenv("VEYQ_ENV_FILE")?.let { environment("VEYQ_ENV_FILE", it) }
     testLogging { showStandardStreams = System.getenv("VEYQ_LIVE") != null }
