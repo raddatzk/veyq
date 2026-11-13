@@ -100,9 +100,9 @@ class NodeHeaderModelTest {
         // a file takes no cover; without content no copy and no download
         assertEquals(all.copy(cover = false), header(file).current.rights)
         assertEquals(all.copy(cover = false, copy = false, download = false), header(file, facts = AppKinds.Facts(hasContent = false)).current.rights)
-        // a drop box is never renamed; a Memory brings no share sheet, no copy, no download
+        // a drop box is never renamed; a Memory shares (its sheet's three roles) but brings no copy, no download
         assertEquals(all.copy(rename = false), header(dropBox).current.rights)
-        assertEquals(all.copy(share = false, copy = false, download = false), header(memory).current.rights)
+        assertEquals(all.copy(copy = false, download = false), header(memory).current.rights)
         // the tenant's links off, no reports taken, the pin set not loaded
         val off = header(folder, Door().apply { links = false; report = false; pinned = null })
         assertEquals(all.copy(favorite = false, share = false, report = false), off.current.rights)

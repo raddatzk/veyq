@@ -33,6 +33,8 @@ object NodeCreate {
         /** The parent is not re-keyed since its space's key changed, and still was not after waiting. */
         BUSY,
         BLOCKED,
+        /** The kind may not be placed there (`422`, `illegal_structure`). */
+        NOT_ALLOWED,
         /** The parent is not there to create in, or the server refused otherwise. */
         REFUSED,
     }
@@ -110,6 +112,7 @@ object NodeCreate {
                     when {
                         status == 409 && code == "slug_taken" -> Reason.NAME_TAKEN
                         status == 451 -> Reason.BLOCKED
+                        status == 422 -> Reason.NOT_ALLOWED
                         else -> Reason.REFUSED
                     },
                 )

@@ -52,7 +52,9 @@ class ShellWordsTest {
         assertFalse(box.renames)
         assertEquals(Notice(Msg.DROPBOX_DELETE_CONFIRM, "Box"), box.deleteQuestion("Box"))
         assertFalse(AppKinds.header("FILE")!!.takesCover)
-        assertFalse(AppKinds.header("MEMORY")!!.shareable)
+        // a Memory and a chapter share through their sheet (READ, READ_WRITE, WRITE_ONLY), as the web's
+        assertTrue(AppKinds.header("MEMORY")!!.shareable)
+        assertTrue(AppKinds.header("CHAPTER")!!.shareable)
         assertEquals(Msg.MEMORY_DELETE_CHAPTER, AppKinds.header("CHAPTER")!!.deleteTitle)
         kotlin.test.assertNull(AppKinds.header("SHARE_BOOKMARK"))
         // each loss said once, the kinds in one order on both platforms

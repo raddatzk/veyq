@@ -443,6 +443,100 @@ D3, D4, D6, D1's `live()`, D2's slideshow, D10's links and header. No app draws 
   (`VEYQ_LIVE_MEMORY_GUESTS`, the Depot CR's way) read back by `GalleryModel` under the guest's `K_up`; purged.
 - Builds as phase 1.
 
+**Status: built and unit-proven, every new check bitten (2026-11-13). The live case is pending — the dev backend was down
+and was not to be started by this session. No app draws the new functions yet (phases 4–6).**
+
+**Built:**
+- **core `memories/MemoryRights.kt`** — the web's `rights.ts` ported, fail-closed: `of(access, kind)` over `Access.Member`
+  (`readonly`: a pending deletion removes every write and the delete; `memoriesOn`: Memories switched off reads only but
+  still trashes; `inIdentityFolder`: no Memory there), `Access.Guest(role)` (READ, READ_WRITE, WRITE_ONLY) and `Access.None`,
+  on a MEMORY, a CHAPTER, a FOLDER and a space's top (null): navigate, download, upload, `deleteMedia` NONE/OWN/ANY,
+  createMemory, createChapter, and the fields no app draws yet (editMeta, setBanner, mark, filterFacts, participants,
+  mediaTrash, buckets). The node-generic rights (share, rename, move, delete, cover) stay core's header's.
+- **core `memories/MemoryCreate.kt`** — `offered(parentKind)`: a Memory where its placement allows one (a space's top, a
+  folder), a chapter only in a Memory; `check` before anything is sent (placement, an empty name, a sibling the loaded tree
+  shows folding to the same name, said `node_name_taken_by` with the sibling's noun: `memory_a_memory`/`memory_a_chapter`);
+  `refused` as `MemoryNodeDialog` says it (409 `memory_slug_taken`, 422 `node_illegal_structure` — `NodeCreate.Reason`
+  gained `NOT_ALLOWED` for it —, else `node_save_failed`); `create` over a tenant through `NodeCreate` with
+  `memories/<slug>`, the new node returned to open. `ShellModel.createMemory(scopeId, parentId, name)` and
+  `createMemoryNode`; `GalleryModel.createChapter(name)` only where `creates` (a Memory, the rights' createChapter) says so.
+- **core `GalleryModel`** — opened with an `access` (the apps: a member; `ShellModel.galleryModel` passes Memories' switch
+  and the identity folder) and a monotonic `now`: `State.rights`; `headerActions` (`upload` where the rights upload, for
+  the header's plan beside core's); `creates`; `upload` refused without the right; a reader and a save refused without
+  `download`. **Trash with Undo** (D6): `trash(mediaId)` by `deleteMedia` — ANY: out of the rows at once (kept out of a
+  racing read until the listing drops it), `deleteMedia`, `State.undo` (`memory_moved_to_trash`) held for
+  `ShellModel.TRASH_UNDO_MS` on the model's clock, a trash that did not go dropping its Undo and reading anew (the web's);
+  `undo()` restores and reads anew, a refused restore said with its reason (`memory_restore_refused` with
+  `memory_refused_gone`/`_scope_deleting`/`_blocked`/`_failed`, the medium by its name or `memory_unnamed`); OWN: asked
+  first (`State.purging`, `purgeQuestion`, `cancelAsk`, `purge()`), only a medium `Door.isOwn` names, no Undo, a failure
+  said (`memory_delete_own_failed`) with the tile kept. **The live poll** (D1): `live()` / `startLive()` — core's `LivePoll`
+  at `ITEMS`, each tick `Door.moved(listed)` (`MemoryMedia.moved`: `listNodeMedia` with the listing's media revision as
+  `If-None-Match`, `limit 1`; a `304` reads nothing), the gallery read anew only when it moved; it ends when the page
+  closes. `MemoryMedia.list` now keeps the FIRST page's revisions (the web's: read before its rows), not the last's.
+  `MemoryMedia.trash`/`restore` map `deleteMedia`/`restoreMedia` to `GalleryModel.Removal`. The door's new members have
+  fail-closed defaults (Android's debug `DevMemory` harness needs none of them).
+- **core `Lightbox`** — **the slideshow** (D2): `slideshow(on)`, `State.slideshow` PLAYING/PAUSED/ENDED, the model's clock
+  stepping every `Lightbox.SLIDESHOW_MS` (5 s, pinned to `MediaLightbox.vue`'s `SLIDESHOW_INTERVAL_MS` by
+  `LightboxPinsTest`, which also pins `TRASH_UNDO_MS` to the gallery's `useUndo`), started only where a next medium
+  exists, a playing video stopped first, a video's poster held one interval and never played, ending ON the last medium;
+  `go` and `play` pause it. `trash()` deletes the current medium as its gallery does.
+- **Links** (D10): `AppKinds.header(MEMORY/CHAPTER).shareable` is true. The share sheet on a Memory or a chapter lists
+  every role in one list (`ShareLinks.list(writeOnly = null)`), its form offers READ, READ_WRITE (the tenant's contribute)
+  and WRITE_ONLY (its drop-box capability) — the last a link on the node itself (`LinkForm.uploadLink`: its name the
+  member's optional label; `LinkRow.mint(dropBoxes = false)`: no drop box made) whose guests seal to the node's own drop
+  key: `ShareLinks.dropFields` (extracted from `mint`) makes it with the first link and seals it under the node's key bound
+  to the node, every later link reuses it. An upload-only row is neither edited nor renewed (core's `ShareLinkChanges`
+  refuses both: a new link instead). `ShareWords` for a Memory and a chapter (`share_memory_*`, `share_chapter_*`, the
+  web's `share.*`), with the upload-only role's own name and hint.
+- **Words** (`words.json`, English and German, the web's): `memory_new`, `memory_add_chapter`, `memory_create_*_title`,
+  `memory_a_memory`, `memory_a_chapter`, `memory_slug_taken`, `memory_moved_to_trash`, `memory_restore_refused`,
+  `memory_refused_*`, `memory_unnamed`, `memory_delete_own_*`, `share_memory_*`, `share_chapter_*`.
+
+**Deviation:** D4 has `AppKinds.Create` gain `MEMORY` and `CHAPTER`; it did not here. That enum crosses the bridge
+(`ShellShown.creates`) and Linux's `draw_new` matches its generated Rust enum exhaustively, so two new entries would turn
+the Linux build red until a desktop draws them — and this phase was not to touch `src/mobile/linux`. The rule is the
+core's now (`MemoryCreate.offered`, `GalleryModel.creates`, `ShellModel.createMemory`); the two entries join
+`AppKinds.Create`, `createsWhere` and `ShellShown.creates` in phase 3 with the bridge, where Linux's match gains its arms in
+the same change. An upload-only link on a Memory is neither edited nor renewed in the apps (the web edits its name and note
+and renews it): core's `ShareLinkChanges` refuses both for a WRITE_ONLY link, as for a drop box's; switching it off and
+minting a new one stays — porting the WRITE_ONLY renew (the drop key's public half sealed anew) is left to phase 3's
+`Share.*` if a desktop pass misses it.
+
+**Met:** `ANDROID_HOME=$HOME/Library/Android/sdk ./gradlew :core:jvmTest :core:macosArm64Test :bridge:jvmTest
+:core:compileKotlinLinuxX64 :core:compileKotlinMingwX64 :android:assembleDebug` green from `src/mobile` (core jvm 619 tests,
+6 skipped — the live cases, `MemoryActionsLiveTest` among them; macosArm64 435; bridge 73, 1 skipped). New: `MemoryRightsTest`
+(6), `MemoryCreateTest` (3), `GalleryActionsTest` (11, virtual time), `DropFieldsTest` (2, over the real suite),
+`ShareSheetTest` +2 (the Memory's and the chapter's sheet), `LightboxPinsTest` (2, jvm: the web's files read);
+`ShellWordsTest` and `NodeHeaderModelTest` now hold a Memory and a chapter shareable. **Bitten**, by a script (mutation →
+`./gradlew :core:jvmTest --tests <its class>` red by the named case → restored with `/bin/cp -f`), 33 mutations, all red: a
+contributor granted `editMeta`, an uploader reading media, a contributor deleting another's medium, an unknown role given a
+viewer's rights; a chapter offered anywhere, no collision checked, a 409 said as failed; a viewer uploading, an uploader
+saving an original, a chapter made in a chapter; a trashed medium left in the rows, the Undo outliving its window, a failed
+trash keeping its Undo, a refused restore said without its reason; a guest's delete trashed without asking, another's
+medium asked for purge, a declined purge still purging; the poll reading every tick, the poll outliving the page; the
+slideshow's interval off the web's, running past the last, a `go` or a `play` not pausing it, starting it leaving a video
+playing; a Memory's upload-only making a drop box, not offered, needing a name; an upload-only link renewable, a Memory's
+sheet in a folder's words; every link a new drop key, a later link replacing it, the drop key bound to no node; a Memory not
+shareable. The full run above ran on the restored tree. Guards (`/usr/bin/python3 scripts/validate_*.py` but guard_gaps)
+green before each commit. Not run here (this phase changed no surface they build): `linux/run.py build`,
+`windows/run.py build`, the Apple builds — the core's Kotlin/Native targets for Linux and Windows compiled, and no bridge
+shape changed (`SecretFreeSchemaTest` unchanged).
+
+**Pending, live** (the dev backend down, not to be started here): `MemoryActionsLiveTest.aMemoryIsMadeTrashedSharedAndFilledByAGuest`
+reports skipped without `VEYQ_LIVE`; with the backend up, from `src/mobile`: `VEYQ_LIVE=http://veyq.localhost:8080
+VEYQ_LIVE_MEMORY_GUESTS=/tmp/veyq-memory-guests.txt ./gradlew :core:jvmTest --tests
+'me.raddatz.veyq.mobile.memories.MemoryActionsLiveTest' --rerun` while a web guest uploads one photo through the address
+written to that file (`VEYQ_LIVE_MEMORY_WAIT_S`, default 300): "App memory <n>" made at the default space's top, its name
+then taken, a chapter, two fixture photos, one trashed and undone, one trashed and purged, two WRITE_ONLY links on one drop
+key, the guest's photo read through `GalleryModel` under its `K_up`, the Memory trashed and purged.
+
+**Retrospective:** the CR's D4 named the enum the wire carries as the place of a core rule; the rule needed no enum, and
+the enum's move belongs to the phase that changes the wire. A Door that grows a phase at a time took fail-closed defaults so
+a harness written against it (Android's `DevMemory`) needs no change — absent door, nothing offered, as the web's sources.
+The drop key was inside `ShareLinks.mint`, reachable only live; extracting `dropFields` let the "first sets, second
+reuses, bound to its node" rule be held in `commonTest` over the real suite. `MemoryMedia.list` kept the last page's
+revisions — harmless before a poll existed, a missed change once one does.
+
 ### Phase 3 — The bridge: gallery, lightbox, uploads by path with the host's tiers, save, reader, create, links
 
 D9.

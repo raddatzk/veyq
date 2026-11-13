@@ -79,19 +79,19 @@ object ShareLinks {
     fun url(origin: String, shareId: String, kShare: ByteArray): String = "${origin.trimEnd('/')}/s/$shareId#k=${b64url(kShare)}"
 
     /**
-     * The READ and READ_WRITE links on node [nodeId] of [scopeId] — or, with [writeOnly], a drop box's WRITE_ONLY links —,
-     * newest first; null when they do not list. Each row is opened at the address of THIS node (never the row's claim): its
-     * label and link rebuilt from the recovery copy.
+     * The READ and READ_WRITE links on node [nodeId] of [scopeId] — or, with [writeOnly], a drop box's WRITE_ONLY links; with
+     * [writeOnly] null every role (a Memory's) —, newest first; null when they do not list. Each row is opened at the
+     * address of THIS node (never the row's claim): its label and link rebuilt from the recovery copy.
      */
     @Throws(Exception::class)
-    suspend fun list(tenant: TenantSession, scopeId: String, nodeId: String, writeOnly: Boolean = false): List<Link>? {
+    suspend fun list(tenant: TenantSession, scopeId: String, nodeId: String, writeOnly: Boolean? = false): List<Link>? {
         val account = tenant.account
         val suite = account.suite
         val (scopeKey, scopeEpoch) = tenant.scopeKey(scopeId) ?: return null
         val r = runCatching { account.respond { SharingApi(tenant.base, account.http).listShares(nodeId) } }.getOrNull() ?: return null
         if (!r.success) return null
         val joins = JoinRecords(suite)
-        return r.body().filter { (it.role == ShareRole.WRITE_ONLY) == writeOnly }.sortedByDescending { it.createdAt }.map { s ->
+        return r.body().filter { writeOnly == null || (it.role == ShareRole.WRITE_ONLY) == writeOnly }.sortedByDescending { it.createdAt }.map { s ->
             val kShare = recover(suite, joins, s, scopeId, nodeId, scopeKey, scopeEpoch)
             try {
                 val label = kShare?.let { k ->
@@ -183,20 +183,9 @@ object ShareLinks {
                 },
                 attempt = {
                     val recovery = Context("share-key-recovery", "scopeId" to scopeId, "nodeId" to nodeId, "shareId" to shareId, "epoch" to scopeEpoch.toLong())
-                    // a drop box's link: its guests seal to the drop key's public half (the node's own key pair, made by its first
-                    // link and reused by every later one: `dropKeysForShare`), and hold no key to the node itself (no wrap)
-                    val drop = if (!writeOnly) null else {
-                        val existing = node.sealedDropPrivateKey?.let {
-                            suite.deserializeDropKey(suite.open(Context("drop-private-key", "scopeId" to scopeId, "nodeId" to nodeId), node.key, unb64(it)))
-                        }
-                        val seed = existing ?: suite.generateDropKey()
-                        val public = b64(suite.seal(Context("drop-public-key"), kShare, suite.serializeHybridPublic(suite.dropKeyPublic(seed))))
-                        val private = if (existing != null) null else {
-                            b64(suite.seal(Context("drop-private-key", "scopeId" to scopeId, "nodeId" to nodeId), node.key, suite.serializeDropKey(seed)))
-                        }
-                        seed.fill(0)
-                        public to private
-                    }
+                    // an upload-only link (a drop box's, a Memory's or a chapter's): its guests seal to the drop key's public half
+                    // and hold no key to the node itself (no wrap)
+                    val drop = if (!writeOnly) null else dropFields(suite, scopeId, nodeId, node.key, node.sealedDropPrivateKey, kShare)
                     val valueKey = suite.p.randomBytes(32)
                     val request = try {
                         CreateShareRequest(
@@ -258,6 +247,28 @@ object ShareLinks {
             }
         } finally {
             kShare.fill(0)
+        }
+    }
+
+    /**
+     * An upload-only link's drop fields (the web's `dropKeysForShare`, ADR 0031 point 7, `v1.json#drop_key`): the drop
+     * key's public half sealed under the link's [kShare] (`drop-public-key`), and — only where the node holds none yet
+     * ([sealedDropPrivateKey] null) — a fresh drop key sealed under the node's key (`drop-private-key` bound to the node), which
+     * the server keeps as the node's own: every later link reuses it, since every upload so far is sealed to it.
+     */
+    internal fun dropFields(
+        suite: me.raddatz.veyq.mobile.crypto.V1, scopeId: String, nodeId: String, nodeKey: ByteArray, sealedDropPrivateKey: String?,
+        kShare: ByteArray,
+    ): Pair<String, String?> {
+        val context = Context("drop-private-key", "scopeId" to scopeId, "nodeId" to nodeId)
+        val existing = sealedDropPrivateKey?.let { suite.deserializeDropKey(suite.open(context, nodeKey, unb64(it))) }
+        val seed = existing ?: suite.generateDropKey()
+        try {
+            val public = b64(suite.seal(Context("drop-public-key"), kShare, suite.serializeHybridPublic(suite.dropKeyPublic(seed))))
+            val private = if (existing != null) null else b64(suite.seal(context, nodeKey, suite.serializeDropKey(seed)))
+            return public to private
+        } finally {
+            seed.fill(0)
         }
     }
 

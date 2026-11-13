@@ -263,4 +263,43 @@ class ShareSheetTest {
         assertEquals(1, server.changes, "the lists are read anew")
         assertEquals(emptyList(), done.links)
     }
+
+    @Test
+    fun aMemoryOffersEveryRoleAndItsAddPhotosOnlyIsALinkOnTheMemoryNotADropBox() = runTest {
+        val memory = NodeAt("s", "m", "MEMORY", "Ostsee 2026")
+        val server = Server()
+        val s = sheet(memory, server)
+        assertEquals(Msg.SHARE_MEMORY_TITLE, s.title)
+        assertEquals(Msg.SHARE_MEMORY_ROLE_UPLOADER, s.words.roleWord(ShareLinks.WRITE_ONLY))
+        assertEquals(Msg.SHARE_MEMORY_ROLE_UPLOADER_HINT, s.words.hint(ShareLinks.WRITE_ONLY))
+        s.addLink()
+        assertEquals(listOf(ShareLinks.READ, ShareLinks.READ_WRITE, ShareLinks.WRITE_ONLY), s.current.form?.roles)
+        s.role(ShareLinks.WRITE_ONLY)
+        val form = s.current.form!!
+        assertTrue(form.canSave, "its name is the member's label, optional")
+        assertEquals(Msg.SHARE_LABEL, form.nameLabel)
+        val done = s.save()
+        assertEquals(listOf("mint"), server.sent, "a link on the Memory: its drop key set by the mint, no drop box made")
+        assertEquals(Triple(ShareLinks.WRITE_ONLY, "", null), server.minted)
+        assertEquals(0, server.changes, "no node was made")
+        assertNotNull(done.fresh)
+        val row = s.rows().single { it.link.role == ShareLinks.WRITE_ONLY }
+        assertFalse(row.canEdit, "core's changes neither edit an upload-only link")
+        assertFalse(row.canRenew, "nor renew one: a new link is minted instead")
+        assertTrue(row.canSwitchOff)
+        // without the tenant's drop box capability, no upload-only role
+        val noDrop = sheet(memory, Server(ShareLinks.Rules(on = true, contribute = true, passwordRequired = false, maxDays = null, dropBox = false)))
+        noDrop.addLink()
+        assertEquals(listOf(ShareLinks.READ, ShareLinks.READ_WRITE), noDrop.current.form?.roles)
+    }
+
+    @Test
+    fun aChaptersSheetNamesTheChapter() = runTest {
+        val s = sheet(NodeAt("s", "c", "CHAPTER", "Day one"), Server())
+        assertEquals(Msg.SHARE_CHAPTER_TITLE, s.title)
+        assertEquals(Msg.SHARE_CHAPTER_ROLE_VIEWER_HINT, s.words.hint(ShareLinks.READ))
+        assertEquals(Msg.SHARE_CHAPTER_ROLE_UPLOADER_HINT, s.words.hint(ShareLinks.WRITE_ONLY))
+        s.addLink()
+        assertEquals(ShareLinks.WRITE_ONLY, s.current.form?.roles?.last())
+    }
 }

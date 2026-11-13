@@ -25,11 +25,14 @@ class LinkRow(val link: ShareLinks.Link, dropBox: Boolean, words: ShareWords) {
     /** Copied or shared: an open link whose address this device can rebuild. */
     val canCopy: Boolean = link.enabled && link.url != null
 
+    /** An upload-only link (a drop box's, a Memory's): core's changes neither edit nor renew one — a new link is minted instead. */
+    private val fixed: Boolean = dropBox || link.role == ShareLinks.WRITE_ONLY
+
     /** Edited in place: an own open link whose address this device can rebuild. */
-    val canEdit: Boolean = !dropBox && link.mine && link.enabled && link.url != null
+    val canEdit: Boolean = !fixed && link.mine && link.enabled && link.url != null
 
     /** Renewed (a new address, the old one closed): an own link, or one switched off. */
-    val canRenew: Boolean = !dropBox && (link.mine || !link.enabled)
+    val canRenew: Boolean = !fixed && (link.mine || !link.enabled)
 
     /** Switched off at once: an own open link. */
     val canSwitchOff: Boolean = link.enabled && link.mine
@@ -44,10 +47,13 @@ class LinkRow(val link: ShareLinks.Link, dropBox: Boolean, words: ShareWords) {
     class Mint(val makesDropBox: Boolean, val role: String, val label: String)
 
     companion object {
-        /** The form's [role] and [label] as minted on a node ([onDropBox]: a drop box, whose links are upload-only and unnamed). */
-        fun mint(role: String, label: String, onDropBox: Boolean): Mint = when {
+        /**
+         * The form's [role] and [label] as minted on a node ([onDropBox]: a drop box, whose links are upload-only and unnamed;
+         * [dropBoxes]: whether the upload-only role makes a drop box — a folder's — or is a link on the node — a Memory's).
+         */
+        fun mint(role: String, label: String, onDropBox: Boolean, dropBoxes: Boolean = true): Mint = when {
             onDropBox -> Mint(false, ShareLinks.WRITE_ONLY, "")
-            role == ShareLinks.WRITE_ONLY -> Mint(true, role, label)
+            role == ShareLinks.WRITE_ONLY && dropBoxes -> Mint(true, role, label)
             else -> Mint(false, role, label)
         }
     }

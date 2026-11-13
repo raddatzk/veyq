@@ -432,7 +432,12 @@ class ShellModel(
     /** The share sheet's door on [node]; a drop box "Add files only" makes goes under [dropBoxParent] (null: the space's top). */
     private fun shareDoor(node: NodeAt, dropBoxParent: String?, changed: () -> Unit) = object : ShareSheet.Door {
         val uuid = { NodeCreate.uuid(tenant.account) }
-        val writeOnly = node.kind == me.raddatz.veyq.mobile.depot.DepotFiles.DROPBOX
+        // a drop box lists its upload-only links, a Memory and a chapter every role in one list, any other kind none
+        val writeOnly: Boolean? = when (node.kind) {
+            me.raddatz.veyq.mobile.depot.DepotFiles.DROPBOX -> true
+            me.raddatz.veyq.mobile.memories.MemoryCreate.MEMORY, me.raddatz.veyq.mobile.memories.MemoryCreate.CHAPTER -> null
+            else -> false
+        }
         override val rules get() = tenant.linkRules
         override suspend fun list() = ShareLinks.list(tenant, node.scopeId, node.nodeId, writeOnly)
         override suspend fun mint(role: String, label: String, password: String, expiresAt: String?) =
@@ -525,8 +530,23 @@ class ShellModel(
         })
 
     /**
-     * Memory or chapter [ref]'s page over this tenant ([me.raddatz.veyq.mobile.memories.GalleryModel]): its media read anew on
-     * every revision of these lists and when a medium [uploads] sent into it is in; what it adds goes through [uploads].
+     * A Memory or a chapter ([kind], `MemoryCreate.offered` where the shell is) named [name] made in [scopeId] under
+     * [parentId] (null: the space's top): the node made, to open, or why not; the lists are read anew.
+     */
+    suspend fun createMemoryNode(scopeId: String, parentId: String?, kind: String, name: String): me.raddatz.veyq.mobile.memories.MemoryCreate.Made {
+        val made = me.raddatz.veyq.mobile.memories.MemoryCreate.create(tenant, scopeId, parentId, kind, name)
+        refresh()
+        return made
+    }
+
+    /** A Memory [name] made in [scopeId] under [parentId] (null: the space's top); the node made, to open, or why not. */
+    suspend fun createMemory(scopeId: String, parentId: String?, name: String): me.raddatz.veyq.mobile.memories.MemoryCreate.Made =
+        createMemoryNode(scopeId, parentId, me.raddatz.veyq.mobile.memories.MemoryCreate.MEMORY, name)
+
+    /**
+     * Memory or chapter [ref]'s page over this tenant ([me.raddatz.veyq.mobile.memories.GalleryModel]), opened as a member:
+     * its media read anew on every revision of these lists, when a medium [uploads] sent into it is in and when its live
+     * poll finds them moved; what it adds goes through [uploads]; a medium trashed and restored, a chapter made.
      */
     fun galleryModel(ref: NodeAt, uploads: me.raddatz.veyq.mobile.memories.MediaUploads): me.raddatz.veyq.mobile.memories.GalleryModel =
         me.raddatz.veyq.mobile.memories.GalleryModel(ref, object : me.raddatz.veyq.mobile.memories.GalleryModel.Door {
@@ -545,7 +565,15 @@ class ShellModel(
             // each read of the lists is a new one (a rebuild after a refresh); a move of the shell alone keeps them
             override val revisions = state.map { it?.lists }.distinctUntilChanged { a, b -> a === b }
             override val uploaded = uploads.uploaded
-        })
+            override suspend fun moved(since: me.raddatz.veyq.mobile.memories.MemoryMedia.Gallery) =
+                me.raddatz.veyq.mobile.memories.MemoryMedia.moved(tenant, ref.scopeId, ref.nodeId, since)
+            override suspend fun trash(mediaId: String) = me.raddatz.veyq.mobile.memories.MemoryMedia.trash(tenant, ref.scopeId, mediaId)
+            override suspend fun restore(mediaId: String) = me.raddatz.veyq.mobile.memories.MemoryMedia.restore(tenant, ref.scopeId, mediaId)
+            override suspend fun createChapter(name: String) =
+                createMemoryNode(ref.scopeId, ref.nodeId, me.raddatz.veyq.mobile.memories.MemoryCreate.CHAPTER, name)
+        }, access = me.raddatz.veyq.mobile.memories.MemoryRights.Access.Member(
+            memoriesOn = "memories" !in tenant.applicationsOff(), inIdentityFolder = inIdentityFolder(ref),
+        ), now = now)
 
     /**
      * Drop box [ref]'s page over this tenant ([me.raddatz.veyq.mobile.depot.DropBoxPage]): its guests' folders, read anew on

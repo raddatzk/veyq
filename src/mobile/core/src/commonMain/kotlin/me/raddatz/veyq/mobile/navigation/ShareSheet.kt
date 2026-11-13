@@ -121,6 +121,12 @@ class ShareSheet(
     /** A drop box's own links: WRITE_ONLY only, never edited or renewed, no name of their own. */
     val dropBox: Boolean = node.kind == DepotFiles.DROPBOX
 
+    /**
+     * A Memory's or a chapter's links: every role in one list, its "Add photos only" a link on the node itself whose guests
+     * seal to the node's own drop key (made by its first such link, reused by every later one: `ShareLinks.mint`).
+     */
+    val memory: Boolean = node.kind == "MEMORY" || node.kind == "CHAPTER"
+
     /** The tenant's link rules: what the form offers and requires. */
     val rules: ShareLinks.Rules get() = door.rules
 
@@ -163,8 +169,8 @@ class ShareSheet(
         if (!canMint || s.busy != null || s.saving) return
         if (atTopLevel) return _state.update { it.copy(form = uploadOnlyForm(), editing = null, problem = null, notice = null, fresh = null) }
         val form = LinkForm.start(
-            door.rules, editing = null, writeOnly = dropBox, uploadOffered = node.kind == NodeRef.FOLDER && door.rules.dropBox,
-            uploadOnly = false, today = LocalDays.dayOf(now()), editingEndDay = null,
+            door.rules, editing = null, writeOnly = dropBox, uploadOffered = (node.kind == NodeRef.FOLDER || memory) && door.rules.dropBox,
+            uploadOnly = false, today = LocalDays.dayOf(now()), editingEndDay = null, uploadLink = memory,
         )
         _state.update { it.copy(form = form, editing = null, problem = null, notice = null) }
     }
@@ -177,7 +183,7 @@ class ShareSheet(
         val link = row.link
         val form = LinkForm.start(
             door.rules, editing = link, writeOnly = dropBox, uploadOffered = false, uploadOnly = false,
-            today = LocalDays.dayOf(now()), editingEndDay = link.expiresAt?.let(LocalDays::dayOf),
+            today = LocalDays.dayOf(now()), editingEndDay = link.expiresAt?.let(LocalDays::dayOf), uploadLink = memory,
         )
         _state.update { it.copy(form = form, editing = shareId, problem = null, notice = null) }
     }
@@ -218,7 +224,7 @@ class ShareSheet(
             reread()
             return@withContext current
         }
-        val mint = LinkRow.mint(form.role, form.label, onDropBox = dropBox)
+        val mint = LinkRow.mint(form.role, form.label, onDropBox = dropBox, dropBoxes = !memory)
         val password = form.submittedPassword.orEmpty()
         if (mint.makesDropBox) {
             val made = runCatching { door.createDropBox(mint.label, password, expiresAt) }.getOrDefault(DropBoxes.Created(DropBoxes.Outcome.FAILED))
