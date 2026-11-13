@@ -74,6 +74,12 @@ class QrScan<T : Any>(
     @Volatile
     private var job: Job? = null
 
+    /**
+     * True when [offer] would take a frame now: the scan is [State.Scanning] and no decode runs. A camera asks before it
+     * copies a frame out of its own buffer, so a frame that would be dropped costs no copy. [offer] still decides.
+     */
+    val ready: Boolean get() = _state.value == State.Scanning && !decoding.value
+
     /** The host's camera state; once a code is found or the scan closed, it changes nothing. */
     fun camera(camera: Camera) {
         _state.update {
