@@ -5,16 +5,13 @@ import ImageIO
 import UniformTypeIdentifiers
 import VeyqCore
 
-/// A picked photo's or video's tiers on an Apple device (the web's `mediaDeriver.ts`, which core's `MediaUpload.Derived`
-/// names): the `PREVIEW` JPEG from the original — upright (ImageIO applies the orientation), its long edge at most 2048,
-/// never enlarged, quality 0.85 — and the `THUMBNAIL` JPEG made from that preview (512, 0.8); a video's poster, the frame
-/// at `min(0.1 s, duration / 2)` turned as it is shown, at the preview's size and quality, as both tiers. All nil where the
+/// A picked photo's or video's tiers on an Apple device, to the core's spec (`MediaUpload`'s, the web's `mediaDeriver.ts`):
+/// the `PREVIEW` JPEG from the original — upright (ImageIO applies the orientation), its long edge at most the spec's,
+/// never enlarged, at its quality — and the `THUMBNAIL` JPEG made from that preview; a video's poster, the frame at
+/// `MediaUpload.posterAtMs` turned as it is shown, at the preview's size and quality, as both tiers. All nil where the
 /// original does not decode here: it then goes up alone.
 enum MediaTiers {
-    static let previewEdge = 2048
-    static let previewQuality = 0.85
-    static let thumbEdge = 512
-    static let thumbQuality = 0.8
+    private static var spec: MediaUpload { MediaUpload.shared }
 
     struct Derived: Sendable {
         var preview: Data?
@@ -39,11 +36,11 @@ enum MediaTiers {
         let options: [CFString: Any] = [
             kCGImageSourceCreateThumbnailFromImageAlways: true,
             kCGImageSourceCreateThumbnailWithTransform: true,
-            kCGImageSourceThumbnailMaxPixelSize: min(previewEdge, max(w, h)),
+            kCGImageSourceThumbnailMaxPixelSize: min(Int(spec.PREVIEW_EDGE), max(w, h)),
         ]
         guard let preview = CGImageSourceCreateThumbnailAtIndex(source, 0, options as CFDictionary),
-              let previewJpeg = jpeg(preview, quality: previewQuality) else { return Derived(width: shownW, height: shownH) }
-        let thumbJpeg = CoverImages.jpeg(previewJpeg, maxPixels: min(thumbEdge, max(preview.width, preview.height)), quality: thumbQuality)
+              let previewJpeg = jpeg(preview, quality: spec.PREVIEW_QUALITY) else { return Derived(width: shownW, height: shownH) }
+        let thumbJpeg = CoverImages.jpeg(previewJpeg, maxPixels: min(Int(spec.THUMBNAIL_EDGE), max(preview.width, preview.height)), quality: spec.THUMBNAIL_QUALITY)
         guard let thumbJpeg else { return Derived(width: shownW, height: shownH) }
         return Derived(preview: previewJpeg, thumbnail: thumbJpeg, width: shownW, height: shownH)
     }
@@ -62,10 +59,10 @@ enum MediaTiers {
         generator.appliesPreferredTrackTransform = true
         generator.requestedTimeToleranceBefore = .zero
         generator.requestedTimeToleranceAfter = .zero
-        let edge = Double(min(previewEdge, max(w, h)))
+        let edge = Double(min(Int(spec.PREVIEW_EDGE), max(w, h)))
         generator.maximumSize = CGSize(width: edge, height: edge)
-        let at = CMTime(seconds: min(0.1, duration.seconds / 2), preferredTimescale: 600)
-        guard let frame = try? await generator.image(at: at).image, let poster = jpeg(frame, quality: previewQuality)
+        let at = CMTime(value: spec.posterAtMs(durationMs: Int64(duration.seconds * 1000)), timescale: 1000)
+        guard let frame = try? await generator.image(at: at).image, let poster = jpeg(frame, quality: spec.PREVIEW_QUALITY)
         else { return Derived(width: w, height: h) }
         return Derived(preview: poster, thumbnail: poster, width: w, height: h)
     }
