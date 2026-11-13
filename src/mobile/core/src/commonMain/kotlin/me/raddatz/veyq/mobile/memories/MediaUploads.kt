@@ -12,6 +12,8 @@ import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.launch
 import me.raddatz.veyq.mobile.blob.UploadQueue
 import me.raddatz.veyq.mobile.blob.UploadSource
+import me.raddatz.veyq.mobile.words.Msg
+import me.raddatz.veyq.mobile.words.Notice
 
 /**
  * Memories' uploads over the app's one [UploadQueue] (the web's `addMedia` through `uploadQueue.ts`; ADR 0130 decision 2):
@@ -121,6 +123,14 @@ class MediaUploads(
                 next.follow(next.queue.state.value)
             }
         }.invokeOnCompletion { scope.cancel() }
+    }
+
+    companion object {
+        /**
+         * What is said of [count] picked files that were not taken ([upload] queues only a medium, `MediaUpload.isMedia`; a
+         * path that did not open is none either), or null where every one was.
+         */
+        fun notTaken(count: Int): Notice? = if (count > 0) Notice(Msg.MEMORY_NOT_MEDIA, count) else null
     }
 
     /** The tenant closes: every picked file still held is handed back, nothing more is followed. */

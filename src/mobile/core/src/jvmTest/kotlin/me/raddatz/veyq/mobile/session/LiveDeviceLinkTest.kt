@@ -30,7 +30,7 @@ import me.raddatz.veyq.mobile.crypto.Pairing
 import me.raddatz.veyq.mobile.crypto.PairingGrant
 import me.raddatz.veyq.mobile.crypto.b64
 import org.junit.Assume.assumeTrue
-import java.io.File
+import kotlin.test.AfterTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
@@ -42,11 +42,13 @@ import kotlin.time.Duration.Companion.minutes
 /**
  * Device linking (`cr-app-device-linking` phase 3) against a running dev instance (`VEYQ_LIVE`), as the seeded principal
  * (`VEYQ_ENV_FILE`, or `.run/.env`). Both sides are core clients: the trusted one a fresh login of the principal, the new
- * one a device with no session. Only the families these cases create are touched, each revoked at the end — never the
- * principal's other sessions. Without `VEYQ_LIVE` every case reports as skipped, never as passed.
+ * one a device with no session. Only the families these cases create are touched — never the principal's other
+ * sessions —, and every device they sign in with is taken off the account after each case (`LiveRun`). Without
+ * `VEYQ_LIVE` every case reports as skipped, never as passed.
  */
 class LiveDeviceLinkTest {
     private val p = BouncyCastlePrimitives
+    private val run = LiveRun()
     private val client = { block: io.ktor.client.HttpClientConfig<*>.() -> Unit -> HttpClient(OkHttp, block) }
 
     /**
@@ -109,7 +111,6 @@ class LiveDeviceLinkTest {
             } finally {
                 linkedFamily?.let { f -> runCatching { trusted.respond { SessionApi(origin, trusted.http).revokeSessionFamily(f) } } }
                 plain.close()
-                leave(trusted)
                 trusted.signOut()
             }
         }
@@ -139,7 +140,6 @@ class LiveDeviceLinkTest {
             val label = "Live link ${if (addDevice) "add" else "sign-in"} ${System.currentTimeMillis()}"
             var linkedFamily: String? = null
             var links = emptyList<DeviceLink>()
-            var linkedLeft = false
             try {
                 trustedPage.refresh()
                 assertTrue(trustedPage.current.addDevice, "the instance does not list core.device-linking")
@@ -192,9 +192,6 @@ class LiveDeviceLinkTest {
                 linkedPage.refresh()
                 assertNull(linkedPage.current.refusal, "the linked session does not read after its rotation")
 
-                // the linked device leaves the register while its session still writes; the trusted one then ends it
-                leave(linked)
-                linkedLeft = true
                 assertNull(trustedPage.signOut(linkedFamily), "signing the linked family out signed the trusted one out")
                 linkedFamily = null
                 linkedPage.refresh()
@@ -205,22 +202,19 @@ class LiveDeviceLinkTest {
                 assertNull(trustedPage.current.refusal, "the granting family no longer reads after its refresh")
             } finally {
                 links.forEach { it.close() }
-                if (!linkedLeft) model.signedTo?.account?.let { leave(it) }
                 linkedFamily?.let { f -> runCatching { trusted.respond { SessionApi(origin, trusted.http).revokeSessionFamily(f) } } }
                 model.signedTo?.account?.let { runCatching { model.signOut(it) } }
-                leave(trusted)
                 trusted.signOut()
             }
         }
     }
 
-    /** This run's [account] takes its device's own entry out of the register again (its family and wrap rows with it). */
-    private suspend fun leave(account: VeyqAccount) {
-        runCatching { account.register().leave(account.thisDevice.id) }.onFailure { println("the register entry of ${account.thisDevice.label} stayed: $it") }
-    }
+    /** A device of this run, taken off the account again by [removeDevices] (`LiveRun`). */
+    private fun device() = run.device("LiveDeviceLinkTest device")
 
-    /** A throwaway device of this test, named so a stray register entry is recognisable as this test's. */
-    private fun device() = ThisDevice(MemoryDeviceStore(), SoftwareDeviceKeys(p), "LiveDeviceLinkTest device", p)
+    /** Every device a case signed in with — the trusted logins and the linked device — removed: wraps, families, register entries. */
+    @AfterTest
+    fun removeDevices() = run.removeAll()
 
     /** Waits (real time, bounded) until [link]'s state meets [done]; a link that ended on the way fails the case. */
     private suspend fun until(link: DeviceLink, done: (DeviceLink.Shown) -> Boolean) {
@@ -262,8 +256,5 @@ class LiveDeviceLinkTest {
         return value!!
     }
 
-    private fun env(): Map<String, String> =
-        (System.getenv("VEYQ_ENV_FILE")?.let(::File) ?: File(System.getProperty("veyq.repoRoot"), ".run/.env")).readLines()
-            .mapNotNull { l -> l.substringBefore('=', "").takeIf { it.isNotBlank() }?.let { it.trim() to l.substringAfter('=').trim().trim('"', '\'') } }
-            .toMap()
+    private fun env(): Map<String, String> = run.env
 }

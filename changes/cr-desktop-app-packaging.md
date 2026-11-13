@@ -250,7 +250,7 @@ and never rebuilds (D10). The Mac builds only aarch64 locally; x86_64 is CI's.
   repository or `.appinstaller` feed, flatpak-cargo-generator, a scratch image for staging, the core built inside the SDK,
   Fedora as the proving ground, an arm64 MSIX), plus **decision 12**: the desktop packages' identity in one place
   (`src/mobile/desktop-identity.json`, written in phase 2), its values the recommendations of owner questions 1 and 2
-  (`app.veyq.Veyq`, `CN=veyq`) as defaults until the owner decides, no package published under them before. Filed under
+  (`app.veyq.Veyq`, `CN=veyq`) as defaults until the owner decides (since decided as recommended: the Decided block), no package published under them before. Filed under
   the Native app topic, and beside it under Release in `docs/decisions/README.md`. native-apps § Open: the MSIX and the
   Flatpak bullets now "decided, being built", pointing at it, with what is still to measure; release-and-deployment
   § Decided, not built: the app packages. **One change against D11:** the build container is `fedora:44` at the
@@ -447,8 +447,11 @@ and never rebuilds (D10). The Mac builds only aarch64 locally; x86_64 is CI's.
   `staging_retention.py` covers it; `release_assets.py` writes `apps` (and refuses an `apps` name that collides with an
   asset); `promote.py`'s check verifies the snapshot signatures of the app artifacts and their `sha-<commit>` naming the
   staged digests; `release.yml` gains the Windows signing job (D7: block-map equality, refusal named) between `promote`
-  and `publish`, and `publish` verifies each package's bundle as it verifies `veyqctl`'s. The signer's secrets live in a
-  GitHub environment only that job names — an **owner step** (creating the environment and its secrets) asked for when
+  and `publish`, and `publish` verifies each package's bundle as it verifies `veyqctl`'s. The release also attaches the
+  signing certificate's public half, `veyq.cer`, under `apps` with a cosign bundle (ADR 0133 decision 12), and the
+  signing job refuses unless its subject is `msixPublisher` and its thumbprint the PFX's. The signer — the project's own
+  self-signed `CN=veyq` certificate (owner question 2, decided) — and its secrets live in a GitHub environment only
+  that job names — an **owner step** (making the certificate, creating the environment and its secrets) asked for when
   this phase starts. · **Done when:** `python3 scripts/promote_selftest.py`, `snapshot_selftest.py`,
   `staging_retention_selftest.py` and `python3 src/tools/veyqctl_selftest.py` (a manifest with `apps` still installs)
   green, each new refusal with a case; the guards green; a dispatched Publish (owner's dispatch) shows the snapshot's
@@ -545,9 +548,17 @@ walked, and `pnpm run check` in `site/` is green. Every guard but guard_gaps gre
 **Decided** (the coordinator, 2026-11-13, under the owner's standing mandate; the owner may overturn any):
 - 3, 4, 5: as recommended — packages from the first release after Phase 6, marked preview; the Store and Flathub each
   their own CR (#882, #881).
-- 1 and 2 stay the owner's: an application ID tied to a domain and a publisher name in a certificate are outward
-  identity. They block only Phase 6 (the first signed, published package); Phases 1–5 build with the recommended
-  values as placeholders and change them in one place.
+- 1 and 2: **the owner decided, 2026-11-13, as recommended** ("veyq.app gehört mir"; on the signer: "machen wir so mit
+  dem Windows Zertifikat"): the desktop packages' id is `app.veyq.Veyq`, and the released MSIX is signed by the
+  project's own self-signed certificate, subject `CN=veyq`, whose public half a person trusts once, as administrator, in
+  Local Machine → Trusted People. Recorded in `src/mobile/desktop-identity.json`, ADR 0133 decisions 7 and 12 and the
+  site; the values were already the built ones, so nothing is renamed. The release carries the public half as
+  `veyq.cer`, under `apps` with a cosign bundle like a package (ADR 0133 decision 12) — Phase 6's, as is making the
+  certificate itself (an owner step with the signing environment). The install page's trust step (Windows) replaces
+  "not decided yet": **walked 2026-11-13 on the VM with UAC on** (a throwaway `CN=veyq` certificate, ADR 0123's
+  Consequences, the MSIX: refused `0x800B0109` before, the unelevated import refused, the elevated import and the
+  unelevated install through, the certificate's removal); **not walked:** the UAC prompt and the certificate wizard's
+  clicks, which need a person at the console.
 
 ## Retrospective
 

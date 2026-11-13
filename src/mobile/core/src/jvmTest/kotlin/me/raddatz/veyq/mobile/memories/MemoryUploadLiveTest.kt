@@ -20,6 +20,8 @@ import kotlin.test.assertEquals
 import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
 import kotlin.time.Duration.Companion.minutes
+import kotlin.test.AfterTest
+import me.raddatz.veyq.mobile.session.LiveRun
 
 /**
  * A member's upload into a Memory on a running dev instance (`VEYQ_LIVE`): `VEYQ_LIVE_MEMORY_UPLOAD=<memory name>` uploads
@@ -29,17 +31,23 @@ import kotlin.time.Duration.Companion.minutes
  * Both stay, for the web's gallery and lightbox to show.
  */
 class MemoryUploadLiveTest {
+    /** Every device this case signs in with, taken off the account again after it, whatever it came to. */
+    private val liveRun = LiveRun()
+
+    @AfterTest
+    fun takeOffTheDevices() = liveRun.removeAll()
+
     @Test
     fun aPhotoAndAVideoAreUploadedAsTheWebUploadsThem() = runTest(timeout = 5.minutes) {
         val origin = System.getenv("VEYQ_LIVE") ?: return@runTest
         val name = System.getenv("VEYQ_LIVE_MEMORY_UPLOAD") ?: return@runTest
         val root = File(System.getProperty("veyq.repoRoot"))
-        val env = File(root, ".run/.env").readLines()
+        val env = (System.getenv("VEYQ_ENV_FILE")?.let(::File) ?: File(root, ".run/.env")).readLines()
             .mapNotNull { l -> l.substringBefore('=', "").takeIf { it.isNotBlank() }?.let { it.trim() to l.substringAfter('=').trim().trim('"', '\'') } }
             .toMap()
         suspend fun signIn() = VeyqAccount.signIn(
             BouncyCastlePrimitives, origin, env.getValue("VEYQ_EMAIL"), env.getValue("VEYQ_PASSWORD"), env.getValue("VEYQ_SECRET_KEY"),
-            testDevice(BouncyCastlePrimitives),
+            liveRun.device(),
         ) { block -> HttpClient(OkHttp, block) }.let { it.open(it.defaultTenant!!) }
         val tenant = signIn()
         val memory = tenant.nodes().first { it.kind == "MEMORY" && it.name == name }

@@ -242,8 +242,9 @@ text goes straight into `DeviceLink` inside the core.
     maximum), the token spent once at `/api/token/refresh` in the body, the family id from `listSessionFamilies`'
     `current`, write moment 1 under the grant's label. No trust is enrolled: `Offer(linked = true)` offers the device's
     DEVICE_KEY levels, even none (the run-only case, D4 / Decided 3), and its "Not now" is not remembered as a decline.
-  - `VeyqAccount.refresh()` split out of `respond` (one rotation, single-flight); `DeviceRegisterStore.leave(deviceId)`
-    (an own entry out, for the live test's throwaway devices).
+  - `VeyqAccount.refresh()` split out of `respond` (one rotation, single-flight). `LiveDeviceLinkTest` takes its devices
+    from `LiveRun` (merged from the live-trust-hygiene work, whose `DeviceRegisterStore.leave` this phase had added
+    too — one kept).
   - Tests: `DeviceLinkTest` (12, over `PlayedServer`, the QR drawn by one link read through the real decoder by the
     other), `SessionModelTest` +3, `TrustMarksLinkTest`, `LiveDeviceLinkTest` (3).
 
@@ -257,7 +258,8 @@ text goes straight into `DeviceLink` inside the core.
     directions between a core login of the principal and a fresh `SessionModel` device: numbers equal, the linked family
     listed on the trusted device under the given name before the linked device's own Settings ran, `current` for the
     linked device, rotating, revoked from the trusted device (then unreadable), the granting family refreshing after;
-    each throwaway device leaves the register, no wrap is enrolled.
+    every device a case signed in with (both trusted logins, the linked device) is taken off the account by
+    `LiveRun.removeAll`; no wrap is enrolled.
   - Bites (scratchpad scripts, `/bin/cp -f` restore, compared equal; each red by its named test's own failure): the
     CR's — `readTransportAnswer` without its MAC check → the forged-answer case; and the envelope opened without its
     MAC, one more collect after the answer, the other direction's code without its hint, a second code sent, no end at
@@ -337,5 +339,5 @@ Phase 3 (the implementer, 2026-11-13):
   before the trusted device had read the answer, so the trusted device's own poll collected it and the case read GONE.
   The real server cannot seal before a delegation; the test now waits for CONFIRMING first.
 - **A live test's leftovers are part of its design.** The first live runs left device-register entries (a fresh test
-  device per login, a linked one per case); the test now names its devices and has each leave the register itself
-  (`DeviceRegisterStore.leave`). Entries from the runs before that stay until the owner clears them.
+  device per login, a linked one per case); the test now takes its devices from `LiveRun`, which removes each after
+  the case. Entries from the runs before that stay until the owner clears them.

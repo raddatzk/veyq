@@ -25,14 +25,18 @@ class AppleLiveSignInTest {
             .lines().mapNotNull { l -> l.substringBefore('=', "").takeIf { it.isNotBlank() }?.let { it.trim() to l.substringAfter('=').trim().trim('"', '\'') } }
             .toMap()
         val account = AppleSessions.signIn(origin, env.getValue("VEYQ_EMAIL"), env.getValue("VEYQ_PASSWORD"), env.getValue("VEYQ_SECRET_KEY"), testDevice(me.raddatz.veyq.mobile.crypto.LibsodiumPrimitives))
-        val session = account.open(account.defaultTenant ?: error("no tenant"))
-        val spaces = session.spaces()
-        val objects = session.objects()
-        println("apple spaces: " + spaces.joinToString { "${it.kind}:${it.name}" })
-        println("apple objects: " + objects.joinToString { "${it.application.id}:${it.name}" })
-        println("apple favorites: " + session.favorites().joinToString { it.name })
-        assertTrue(spaces.any { it.kind == "TENANT" }, "the tenant scope did not open")
-        assertTrue(objects.isNotEmpty(), "no object opened")
-        account.signOut()
+        try {
+            val session = account.open(account.defaultTenant ?: error("no tenant"))
+            val spaces = session.spaces()
+            val objects = session.objects()
+            println("apple spaces: " + spaces.joinToString { "${it.kind}:${it.name}" })
+            println("apple objects: " + objects.joinToString { "${it.application.id}:${it.name}" })
+            println("apple favorites: " + session.favorites().joinToString { it.name })
+            assertTrue(spaces.any { it.kind == "TENANT" }, "the tenant scope did not open")
+            assertTrue(objects.isNotEmpty(), "no object opened")
+        } finally {
+            // the device off the account again, whatever the case came to (the JVM's cases do it through LiveRun)
+            kotlinx.coroutines.withContext(kotlinx.coroutines.NonCancellable) { account.removeThisDevice() }
+        }
     }
 }

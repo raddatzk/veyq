@@ -283,8 +283,9 @@ internal class DeviceRegisterStore(
     }
 
     /**
-     * Takes [deviceId]'s entry out, with every family and wrap row naming it — its own entry only, by the single-writer
-     * rule. Only a live test's throwaway devices use it, to leave the account's register as they found it.
+     * Takes [deviceId] out of the register with every family and wrap row naming it — called by that device itself, as
+     * [rename], so each entry keeps its one writer. A port's addition: the web's register has no such write (what
+     * [VeyqAccount.removeThisDevice] leaves).
      */
     suspend fun leave(deviceId: String) = write(load()) { p ->
         Plain(p.devices - deviceId, p.families.filterValues { it != deviceId }, p.wraps.filterValues { it != deviceId })

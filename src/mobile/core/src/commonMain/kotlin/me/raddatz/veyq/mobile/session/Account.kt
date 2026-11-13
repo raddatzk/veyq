@@ -364,6 +364,29 @@ class VeyqAccount private constructor(
         trusted?.let { forget(it) }
     }
 
+    /**
+     * Takes this device off the account for good, then signs out: its own trust forgotten (its wrap deleted), every other
+     * device wrap the register joins to it deleted, every session family the register joins to it revoked (the current
+     * one by the sign-out), and its entry taken out of the register with every row naming it — its own entry only, so
+     * the register's one-writer rule holds ([DeviceRegisterStore.leave]). Each step is best effort and the next runs
+     * whatever the last answered. No screen offers it yet: the live tests end every device they sign in with through it
+     * (`LiveRun`), so a run leaves the account as it found it.
+     */
+    suspend fun removeThisDevice() {
+        val id = device.id
+        trusted?.let { forget(it) }
+        val plain = runCatching { register().read() }.getOrNull()
+        for (wrap in plain?.wraps.orEmpty().filterValues { it == id }.keys) {
+            runCatching { respond { AccountWrapsApi(server, http).deleteAccountWrap(wrap) } }
+        }
+        val current = runCatching { call { SessionApi(server, http).listSessionFamilies() }.firstOrNull { it.current == true }?.id }.getOrNull()
+        for (family in plain?.families.orEmpty().filterValues { it == id }.keys - setOfNotNull(current)) {
+            runCatching { respond { SessionApi(server, http).revokeSessionFamily(family) } }
+        }
+        runCatching { register().leave(id) }
+        signOut()
+    }
+
     private suspend fun forget(record: TrustedDevice) {
         drop(record)
         device.forget(record.key)

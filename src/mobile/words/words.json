@@ -2509,6 +2509,17 @@
     "en": "A folder or Memory with a similar name already exists here.",
     "de": "Ein Ordner oder eine Erinnerung mit ähnlichem Namen existiert hier bereits."
   },
+  "memory_not_media": {
+    "note": "Memories' Add on a desktop: picked or dropped files that are no photo or video are left out (the core's MediaUploads.notTaken).",
+    "en": {
+      "one": "{1:int} file was not added: only photos and videos go into a Memory.",
+      "other": "{1:int} files were not added: only photos and videos go into a Memory."
+    },
+    "de": {
+      "one": "{1:int} Datei wurde nicht hinzugefügt: In eine Erinnerung kommen nur Fotos und Videos.",
+      "other": "{1:int} Dateien wurden nicht hinzugefügt: In eine Erinnerung kommen nur Fotos und Videos."
+    }
+  },
   "memory_moved_to_trash": {
     "en": "Moved to trash",
     "de": "In den Papierkorb verschoben"

@@ -118,7 +118,7 @@ internal sealed class NodeHeader : IDisposable
             return;
         }
         _id = header;
-        if (_laterSet) Act.Send(new Call.HeaderFacts { header = header, facts = _later, file = _laterFile });
+        if (_laterSet) Act.Send(new Call.HeaderFacts { header = header, facts = _later, file = _laterFile, gallery = null });
         _watch = Core.Watch(new Watched.Header { header = header }, update =>
         {
             if (_closed || update is not Update.Header h) return;
@@ -206,7 +206,7 @@ internal sealed class NodeHeader : IDisposable
     /// <paramref name="file"/>: the page's own actions (Replace) join the plan.</summary>
     public void Facts(Facts? facts, long? file = null)
     {
-        if (_id is { } header) Act.Send(new Call.HeaderFacts { header = header, facts = facts, file = file });
+        if (_id is { } header) Act.Send(new Call.HeaderFacts { header = header, facts = facts, file = file, gallery = null });
         else (_later, _laterFile, _laterSet) = (facts, file, true);
     }
 

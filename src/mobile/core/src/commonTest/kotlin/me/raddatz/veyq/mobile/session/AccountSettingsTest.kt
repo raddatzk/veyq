@@ -320,4 +320,20 @@ class AccountSettingsTest {
         assertEquals(mapOf("w-new" to "dev-new"), plain.wraps)
         assertFalse(store.reconcile(listOf("f-here", "f-new"), null, s.deviceId, "Pixel", "f-here", 6), "nothing to reconcile wrote")
     }
+
+    @Test
+    fun aDeviceLeavingTakesOnlyItsOwnEntryAndRowsEvenAfterAConflict() = runTest {
+        val s = Server()
+        s.another(s.deviceId, "Pixel", "f-here", "w-here")
+        s.another(s.deviceId, "Pixel", "f-here-2", null)
+        s.another("dev-laptop", "Work laptop", "f-laptop", "w-laptop")
+        val store = s.register()
+        // another device signs in between this device's read and its write: its rows stay
+        s.register.before = { s.another("dev-new", "Tablet", "f-new", "w-new") }
+        store.leave(s.deviceId)
+        val plain = store.read()
+        assertEquals(setOf("dev-laptop", "dev-new"), plain.devices.keys)
+        assertEquals(mapOf("f-laptop" to "dev-laptop", "f-new" to "dev-new"), plain.families)
+        assertEquals(mapOf("w-laptop" to "dev-laptop", "w-new" to "dev-new"), plain.wraps)
+    }
 }

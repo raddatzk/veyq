@@ -430,7 +430,7 @@ fn paths_of(picked: &gio::ListModel) -> Vec<String> {
 /// An upload call's answer: how many were queued on stderr, anything else said as the header says it.
 pub fn queued(toasts: &adw::ToastOverlay, answer: Result<Answer, bridge::Unreadable>, what: &str) {
     match answer {
-        Ok(Answer::Queued { count }) => eprintln!("veyq: {what}: {count} queued"),
+        Ok(Answer::Queued { count, .. }) => eprintln!("veyq: {what}: {count} queued"),
         other => header::say(toasts, other, what),
     }
 }

@@ -319,8 +319,7 @@ No new function reaches a screen.
   the simulator container's `tmp` show nothing decrypted during and after; unchanged from before otherwise.
 
 **Status: built and unit-proven, every new check bitten; both phones thinned and building, Android's page driven offline
-over a played gallery (2026-11-13). The live case and the signed-in device passes are pending — the dev backend was down
-and was not to be started by this session.**
+over a played gallery (2026-11-13). The live case is green (2026-11-13, below); the signed-in device passes are pending.**
 
 **Built:**
 - **core `memories/GalleryModel.kt`** — `GalleryModel(node, door)`, opened by `ShellModel.galleryModel(ref, uploads)`:
@@ -406,11 +405,16 @@ its end, sought back to 0:10 and played on; paged away and back it showed its pl
 SHA-256 (`50add77b…`), "“clip.mp4” is downloaded." said; `run-as me.raddatz.veyq ls -laR cache files` empty but
 `profileInstalled`. **Apple, offline:** the macOS build started with a `$TMPDIR/picked/0000-test/a.jpg` planted — gone at
 start (the sweep by name); the app stopped by its PID.
-**Pending, live** (the dev backend down, not to be started here): `MemoryLiveTest.aMemoryIsReadThroughItsScreenModels`
-reports skipped without `VEYQ_LIVE`; with the backend up, from `src/mobile`: `VEYQ_LIVE=http://veyq.localhost:8080
-VEYQ_LIVE_MEMORY='Android memory' ANDROID_HOME=$HOME/Library/Android/sdk ./gradlew :core:jvmTest --tests
-'me.raddatz.veyq.mobile.memories.MemoryLiveTest'` (reads only: every tile, picture and details through `GalleryModel`, a
-video's range across a frame's edge and its reader closed when paged away, one original saved at its SHA-256). **Pending,
+**Live (2026-11-13, measured):** from `src/mobile`, `VEYQ_LIVE=http://veyq.localhost:8080 VEYQ_ENV_FILE=<main
+checkout>/.run/.env VEYQ_LIVE_MEMORY='App memory 7341' ./gradlew :core:jvmTest --tests
+'me.raddatz.veyq.mobile.memories.MemoryLiveTest' --rerun` green, both cases (`aMemoryIsReadThroughItsScreenModels`,
+`aMemoryGalleryIsRead`). The Memory was made for it in the principal's personal space by a scratch `tsx` script over the
+web's `createMemory` and filled by `MemoryUploadLiveTest` (`VEYQ_LIVE_MEMORY_UPLOAD`: the EXIF fixture photo with drawn
+tiers and `dated.mp4` with a poster), trashed and purged after. Read: 2 media, every tile and picture, the photo's 24
+detail rows (camera, place, uploader `MEMBER`), the video's reader opened and closed when paged away, the video's original
+saved at its SHA-256. **Not proven by it:** a range *across* a frame's edge — the fixture video (2 339 B) is shorter than
+one frame, so the read lands at its end; a device pass's > 200 MiB MP4 is what crosses one. The three memory live tests
+read `VEYQ_ENV_FILE` before the checkout's `.run/.env` now (a worktree has none), as `LiveSignInTest` does. **Pending,
 devices** (signed in, per the Done-when): make `Android memory` / `Apple memory` on the web with three fixture photos (one
 with GPS and EXIF, `MediaMetadataFixtureTest`'s) and an MP4 > 200 MiB (`ffmpeg`); Android on a throwaway AVD
 (`android/devlogin.py`), Apple on the iPhone 18 Pro (`apple/devlogin.py 'iPhone 18 Pro'`) and the macOS build: the grid in
@@ -443,8 +447,7 @@ D3, D4, D6, D1's `live()`, D2's slideshow, D10's links and header. No app draws 
   (`VEYQ_LIVE_MEMORY_GUESTS`, the Depot CR's way) read back by `GalleryModel` under the guest's `K_up`; purged.
 - Builds as phase 1.
 
-**Status: built and unit-proven, every new check bitten (2026-11-13). The live case is pending — the dev backend was down
-and was not to be started by this session. No app draws the new functions yet (phases 4–6).**
+**Status: built and unit-proven, every new check bitten (2026-11-13). The live case is green (2026-11-13, below). No app draws the new functions yet (phases 4–6).**
 
 **Built:**
 - **core `memories/MemoryRights.kt`** — the web's `rights.ts` ported, fail-closed: `of(access, kind)` over `Access.Member`
@@ -522,10 +525,13 @@ green before each commit. Not run here (this phase changed no surface they build
 `windows/run.py build`, the Apple builds — the core's Kotlin/Native targets for Linux and Windows compiled, and no bridge
 shape changed (`SecretFreeSchemaTest` unchanged).
 
-**Pending, live** (the dev backend down, not to be started here): `MemoryActionsLiveTest.aMemoryIsMadeTrashedSharedAndFilledByAGuest`
-reports skipped without `VEYQ_LIVE`; with the backend up, from `src/mobile`: `VEYQ_LIVE=http://veyq.localhost:8080
-VEYQ_LIVE_MEMORY_GUESTS=/tmp/veyq-memory-guests.txt ./gradlew :core:jvmTest --tests
-'me.raddatz.veyq.mobile.memories.MemoryActionsLiveTest' --rerun` while a web guest uploads one photo through the address
+**Live (2026-11-13, measured):** from `src/mobile`, `VEYQ_LIVE=http://veyq.localhost:8080 VEYQ_ENV_FILE=<main
+checkout>/.run/.env VEYQ_LIVE_MEMORY_GUESTS=<file> ./gradlew :core:jvmTest --tests
+'me.raddatz.veyq.mobile.memories.MemoryActionsLiveTest' --rerun` green (44 s), the web guest driven by a scratch Playwright
+script in headless system Chrome (`channel: 'chrome'`, a fresh profile): the link read from the file and opened on Vite's
+origin (`:8081`), the name "Live guest" given, `exif-sample.jpg` set on the page's file input; the core read the guest's
+photo (tile and picture 757 B) under its `K_up`, and the Memory ("App memory 57307") was trashed and purged by the test's
+`finally`. What the run does: a web guest uploads one photo through the address
 written to that file (`VEYQ_LIVE_MEMORY_WAIT_S`, default 300): "App memory <n>" made at the default space's top, its name
 then taken, a chapter, two fixture photos, one trashed and undone, one trashed and purged, two WRITE_ONLY links on one drop
 key, the guest's photo read through `GalleryModel` under its `K_up`, the Memory trashed and purged.
@@ -551,6 +557,87 @@ D9.
   edge at the file's SHA-256, the original saved and a second save cancelled with nothing left, one medium trashed and
   undone, a chapter made; purged.
 - Builds as phase 1.
+
+**Status: built, unit-proven and live-proven, every new check bitten (2026-11-13). No desktop draws Memories yet
+(phases 4–5): both hosts answer the new host
+requests `Failed` (an original then goes up alone) and leave New Memory out of their New.**
+
+**Built:**
+- **Wire** (`bridge/.../Wire.kt`): `Shell.CreateMemory`; `Gallery.Open/Close/Reload/Tile/ChapterCover/Trash/Undo/Purge/
+  CancelAsk/Seen/CreateChapter`; `Memory.Upload(gallery, paths)`; `Lightbox.Open/Close/Go/Picture/Slideshow/Details/Trash/Stop`;
+  `Medium.Reader`, `Medium.Save` (onto the Depot CR's `Saving`/`Watched.Save`/`Save.Cancel`); `Watched.Gallery`,
+  `Watched.GalleryLive` (the poll inside the watch's job, as `PotLive`), `Watched.Lightbox`; `Update.Gallery(GalleryShown)`
+  with `GalleryRow`s (blob ids to key a decoded cache by, never bytes), `Update.Lightbox(LightboxShown)` with
+  `SlideshowState`; answers `GalleryOpened`, `LightboxOpened`, `Created(node, notice)`, `MediumDetails(DetailRow…)`;
+  `Queued` gained `notice` (what was left out); `Why` gained `NO_SUCH_GALLERY`, `NO_SUCH_LIGHTBOX`, `NOT_OFFERED`;
+  `Header.Facts` gained `gallery` (the page's own "Add photos" joins the header's plan, as a file page's Replace).
+  `HostRequest.MediaDuration(path)` and `HostRequest.MediaTiers(path, mediaType, previewEdge, previewQuality,
+  thumbnailEdge, thumbnailQuality, posterAtMs)` → `HostReply.Tiers(width, height, previewSize)` with `preview ‖ thumbnail`
+  as the reply's payload.
+- **Dispatch** (`Bridge.kt`): one line per call onto `GalleryModel`, `Lightbox`, `MediaUploads`, `ShellModel.createMemory`;
+  a `Tenant` gained `mediaUploads`, `gallery`, `createMemory`; the bridge holds one `MediaUploads` per open tenant over the
+  app's one queue (the tray stays `DepotUploads`'), the galleries, their lightboxes and each lightbox reader's owner. A
+  reader a lightbox opened is refused (and dropped) once the lightbox's model no longer holds it — paged away, stopped,
+  closed, its gallery or tenant closed. `Memory.Upload` wraps each opened path as a `PathSource` (the path for the host,
+  the reads at offsets through `FileSource`).
+- **Host** (`Host.kt`): `HostTiers`, core's `MediaUpload.Deriver` over the host — `derive` returns at once, the asks run on
+  a scope of their own; a video's poster time is `MediaUpload.posterAtMs` of the length the host tells, so the rule stays
+  the core's; a reply that is no set of both tiers, or a source with no path, goes up alone. `NoTiers` for a composition
+  without a host. `Exports.kt` hands the library `HostTiers(h)`.
+- **Core:** `AppKinds.Create` gained `MEMORY` (`memory_new`) and `CHAPTER` (`memory_add_chapter`); `createsWhere` (a
+  desktop's one New) appends `MEMORY` at every level, a chapter stays a Memory's page's own (`GalleryModel.creates`).
+  `GalleryModel` gained `label(id)` (its upload's words), `deletes(mediaId)` (a row's delete offered: any for a member, a
+  guest's own) and `chapterCover(nodeId)` (only a listed chapter's, `Door.cover` → `NodeCover.openNode` in
+  `ShellModel.galleryModel`); `MediaUploads.notTaken(count)` with the new word `memory_not_media` (English, German).
+- **Apps:** Android's Home New `when` gained the two arms (not in its lists: phase 6); Linux's `draw_new` skips them
+  (`continue`), Windows filters them out of its New — the desktops' Memories are phases 4–5.
+
+**Deviation:** D9's `Gallery.Open(scopeId, nodeId)` takes the `NodeAt` (kind and name are the model's), as `File.Open`;
+`Gallery.CreateChapter`/`Shell.CreateMemory` answer `Created(node, notice)` rather than `Stored`, since the host opens the
+node made; `Memory.Upload` takes no label (the batch is the node's name, `MediaUploads`'). A chapter row carries no
+cover presence: `Gallery.ChapterCover` is refused `NO_COVER` where there is none (the presence needs the node's meta read).
+D9's DispatchTest cases live in a class of their own, `MemoriesDispatchTest` (DispatchTest is 2 500 lines). "Answered once
+queued" holds at Depot's level: the count is what `GalleryModel.upload` queued; the queue's own enqueue is asynchronous
+in both.
+
+**Met:** `ANDROID_HOME=$HOME/Library/Android/sdk ./gradlew :core:jvmTest :core:macosArm64Test :bridge:jvmTest
+:android:assembleDebug` green from `src/mobile` (core jvm 620 tests, 6 skipped — the live cases; macosArm64 436; bridge 76,
+2 skipped — `LiveBridgeTest`'s Memory case among them). `linux/run.py build` green (clippy `-D warnings`, `cargo test` 43
+passed — the kit drawing's hang did not show; Linux's `header.rs` and `uploads.rs` take `Header.Facts`' `gallery: None` and
+`Queued`'s `notice`), `linux/run.py bridge` green, `windows/run.py build` green (Veyq.Bridge.Tests and Veyq.Tests passed; the generated C# makes every field a required
+member, so `NodeHeader.cs` sets `gallery = null`). Guards (`/usr/bin/python3
+scripts/validate_*.py` but guard_gaps) green. New: `MemoriesDispatchTest` (2: every D9 call
+and watch over a played Memory and a played host through a real `Host`; the tiers asked off the deriving thread),
+`GalleryActionsTest` +1, `ShellWordsTest` +`createsWhere`, `WireTest`'s samples of every new shape (the Rust half reads
+them). **Bitten**, by a script (mutation → its class red → restored with `/bin/cp -f`), 17 mutations: a tile read from the
+lightbox's tier; a reader kept when paged away; a page kept past its tenant; a path read whole; an upload answered with
+what it was handed, not what was queued; the Undo kept past its window; a chapter offered outside a Memory; the live poll
+not run; the page's upload missing from the header's plan; the tiers asked on the deriving thread; the payload taken
+whole as the preview; the poster's time not the core's; a key-named field on a gallery's row (`SecretFreeSchemaTest`,
+unchanged, covers the new shapes by derivation); New Memory not among a level's creates; a guest deleting another's
+medium; a cover read for a node that is no chapter; nothing said of files not taken.
+After that merge (its one conflict, `Exports.kt`: `Started.start` kept, `HostTiers(h)` added) the proof ran again, all
+green: the four Gradle tasks (core jvm 620, macosArm64 436), `linux/run.py build` (43 passed), `windows/run.py build` (UAC
+now on the VM: the build ran unchanged, Veyq.Bridge.Tests and Veyq.Tests passed), the guards (`validate_release_identity`
+timed out its `git init` once under the Windows build's load and passed alone).
+**Live, met** (after the merge of the bridge's host race fix, `bca4c0f66`: `HostTiers` asks through the host `Started`
+publishes before composing — `Exports.kt` hands it the same `h` — and a silent host's `Host.Silent` is caught by its
+`runCatching`, so the original goes up alone): `LiveBridgeTest.aMemoryIsMadeFilledByPathPlayedSavedAndEmptiedThroughCalls`
+green against the dev backend in 92 s, from `src/mobile`: `/opt/homebrew/bin/ffmpeg -f lavfi -i testsrc2=size=1920x1080:rate=30
+-t 300 -c:v libvpx-vp9 -deadline realtime -cpu-used 8 -b:v 16M -minrate 16M -maxrate 16M <scratch>/veyq-600.webm` (599 086 462 B),
+then `VEYQ_LIVE=http://veyq.localhost:8080 VEYQ_ENV_FILE=<main checkout>/.run/.env VEYQ_LIVE_MEMORY_WEBM=<that file>
+./gradlew :bridge:jvmTest --tests '*LiveBridgeTest.aMemoryIsMade*' --rerun`: `App memory 68547` made, its name then
+refused as taken, three photos and the WebM in after 50 s with the played host's tiers, each tile at its thumbnail's
+SHA-256, a range across a frame's edge at the file's, the original saved at the file's SHA-256 and a second save cancelled
+with nothing left, a photo trashed and undone, a chapter made; trashed and purged (`TRASHED`, `PURGED`); the WebM deleted
+after. Reported skipped without `VEYQ_LIVE` and `VEYQ_LIVE_MEMORY_WEBM`.
+
+**Retrospective:** the first played upload job prepared twice — the queue prepares ahead while the run awaits the same
+work — so a played job must hold the core job's own once-only lock, or the host is asked twice. A medium leaves the rows a
+moment before its Undo is offered (two state updates): a test waiting for "gone and no Undo" must first see the offer, or
+it takes the instant between them for the window's end. The poll's 20 s cadence would make a dispatch test slow; a clock
+whose first reading is the poll's start and every later one long after makes it tick at once, with no test hook in the
+model.
 
 ### Phase 4 — Linux: Memories drawn
 

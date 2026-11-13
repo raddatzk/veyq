@@ -22,6 +22,8 @@ import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 import kotlin.time.Duration.Companion.seconds
+import kotlin.test.AfterTest
+import me.raddatz.veyq.mobile.session.LiveRun
 
 /**
  * The CR's phase 2 on a running dev instance (`VEYQ_LIVE`), through the core's models: with
@@ -34,6 +36,12 @@ import kotlin.time.Duration.Companion.seconds
  * The Memory is trashed and purged however it ends. Reported skipped without `VEYQ_LIVE`.
  */
 class MemoryActionsLiveTest {
+    /** Every device this case signs in with, taken off the account again after it, whatever it came to. */
+    private val liveRun = LiveRun()
+
+    @AfterTest
+    fun takeOffTheDevices() = liveRun.removeAll()
+
     @Test
     fun aMemoryIsMadeTrashedSharedAndFilledByAGuest() = runBlocking {
         val origin = System.getenv("VEYQ_LIVE")
@@ -42,12 +50,12 @@ class MemoryActionsLiveTest {
         val out = File(outPath!!).also { it.delete() }
         val wait = (System.getenv("VEYQ_LIVE_MEMORY_WAIT_S")?.toLong() ?: 300L).seconds
         val root = File(System.getProperty("veyq.repoRoot"))
-        val env = File(root, ".run/.env").readLines()
+        val env = (System.getenv("VEYQ_ENV_FILE")?.let(::File) ?: File(root, ".run/.env")).readLines()
             .mapNotNull { l -> l.substringBefore('=', "").takeIf { it.isNotBlank() }?.let { it.trim() to l.substringAfter('=').trim().trim('"', '\'') } }
             .toMap()
         val account = VeyqAccount.signIn(
             BouncyCastlePrimitives, origin!!, env.getValue("VEYQ_EMAIL"), env.getValue("VEYQ_PASSWORD"), env.getValue("VEYQ_SECRET_KEY"),
-            testDevice(BouncyCastlePrimitives),
+            liveRun.device(),
         ) { block -> HttpClient(OkHttp, block) }
         val tenant = account.open(account.defaultTenant!!)
         val shell = me.raddatz.veyq.mobile.navigation.ShellModel(

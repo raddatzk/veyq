@@ -13,6 +13,8 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
 import kotlin.time.Duration.Companion.minutes
+import kotlin.test.AfterTest
+import me.raddatz.veyq.mobile.session.LiveRun
 
 /**
  * A cover framed in the app (the web's crop), on a running dev instance (`VEYQ_LIVE`), with `VEYQ_LIVE_COVER_CROP=<pot name>`:
@@ -21,6 +23,12 @@ import kotlin.time.Duration.Companion.minutes
  * it stays, for the web's header and rows (the blue half with the disc), else it is removed again.
  */
 class CoverCropLiveTest {
+    /** Every device this case signs in with, taken off the account again after it, whatever it came to. */
+    private val liveRun = LiveRun()
+
+    @AfterTest
+    fun takeOffTheDevices() = liveRun.removeAll()
+
     @Test
     fun aCoverIsFramedAndReframedWithItsPictureKept() = runTest(timeout = 5.minutes) {
         val origin = System.getenv("VEYQ_LIVE") ?: return@runTest
@@ -30,7 +38,7 @@ class CoverCropLiveTest {
             .toMap()
         val account = VeyqAccount.signIn(
             BouncyCastlePrimitives, origin, env.getValue("VEYQ_EMAIL"), env.getValue("VEYQ_PASSWORD"), env.getValue("VEYQ_SECRET_KEY"),
-            testDevice(BouncyCastlePrimitives),
+            liveRun.device(),
         ) { block -> HttpClient(OkHttp, block) }
         val tenant = account.open(account.defaultTenant!!)
         val ref = tenant.nodes().first { it.kind == PotSession.KIND && it.name == potName }
@@ -84,7 +92,7 @@ class CoverCropLiveTest {
             .toMap()
         val account = VeyqAccount.signIn(
             BouncyCastlePrimitives, origin, env.getValue("VEYQ_EMAIL"), env.getValue("VEYQ_PASSWORD"), env.getValue("VEYQ_SECRET_KEY"),
-            testDevice(BouncyCastlePrimitives),
+            liveRun.device(),
         ) { block -> HttpClient(OkHttp, block) }
         val tenant = account.open(account.defaultTenant!!)
         val ref = tenant.nodes().filter { it.name == name }.also { assertEquals(1, it.size, "no single node named $name") }.single()

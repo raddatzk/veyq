@@ -271,14 +271,16 @@ gh workflow run publish.yml --ref main               # the tip's snapshot now, a
 - **The desktop app's Windows signer** (decided, not built: [ADR 0133](../docs/decisions/0133-the-desktop-apps-ship-as-a-flatpak-bundle-and-an-msix-built-in-checks-and-promoted-with-the-release.md)
   decision 7). The release signs the staged MSIX in a job of its own, with a signer that job receives and nothing else
   sees: a PFX and its password as secrets of a GitHub environment only that job names, or a cloud signer's `signtool
-  /dlib` arguments — the same step either way. Which signer, and so the publisher name, is the owner's (decision 12);
-  creating the environment and its secrets is the owner's step before the first release that carries the app. No
+  /dlib` arguments — the same step either way. The signer is **the project's own self-signed certificate, subject
+  `CN=veyq`** (the owner, 2026-11-13; decision 12), a PFX and its password; making it and creating the environment and
+  its secrets is the owner's step before the first release that carries the app. No
   certificate, key or password is ever committed. **Rotation:** the certificate's subject must equal the MSIX's
   `Publisher`, `msixPublisher` in `src/mobile/desktop-identity.json`. A new certificate under the same subject replaces
   the environment's secrets and nothing else, and installs over the released app as before; a different subject is a
   different package family — the next package installs beside the old app instead of updating it — so it is a change of
-  identity, not a rotation (remembered from MSIX's package identity, not measured). With a project certificate, publish
-  the new public certificate before the first release it signs, since each person trusts it once.
+  identity, not a rotation (remembered from MSIX's package identity, not measured). Each person trusts the certificate
+  itself, once: a new one is a new trust step for everyone, so publish its `veyq.cer` before the first release it signs
+  and say so in that release's notes.
 - **Bumping a pin is part of cutting a release** (ADR 0057 §6), Helm's included: `HELM_VERSION` and `HELM_SHA256`
   at the top of `checks.yml` and `publish.yml` (and `release.yml`; one value, held equal), checked against the published `.sha256sum` and the GitHub release notes.
 
