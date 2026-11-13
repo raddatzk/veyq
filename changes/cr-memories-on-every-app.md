@@ -552,8 +552,8 @@ D9.
   undone, a chapter made; purged.
 - Builds as phase 1.
 
-**Status: built and unit-proven, every new check bitten (2026-11-13). The live case is pending — the dev backend was down
-and was not to be started by this session. No desktop draws Memories yet (phases 4–5): both hosts answer the new host
+**Status: built, unit-proven and live-proven, every new check bitten (2026-11-13). No desktop draws Memories yet
+(phases 4–5): both hosts answer the new host
 requests `Failed` (an original then goes up alone) and leave New Memory out of their New.**
 
 **Built:**
@@ -610,11 +610,21 @@ not run; the page's upload missing from the header's plan; the tiers asked on th
 whole as the preview; the poster's time not the core's; a key-named field on a gallery's row (`SecretFreeSchemaTest`,
 unchanged, covers the new shapes by derivation); New Memory not among a level's creates; a guest deleting another's
 medium; a cover read for a node that is no chapter; nothing said of files not taken.
-**Pending, live** (the dev backend down, not to be started here): `LiveBridgeTest.aMemoryIsMadeFilledByPathPlayedSavedAndEmptiedThroughCalls`
-reports skipped without `VEYQ_LIVE` and `VEYQ_LIVE_MEMORY_WEBM`; with the backend up, from `src/mobile`:
-`/opt/homebrew/bin/ffmpeg -f lavfi -i testsrc2=size=1920x1080:rate=30 -t 300 -c:v libvpx-vp9 -b:v 16M /tmp/veyq-600.webm`
-(about 600 MiB; any WebM over a few frames does), then `VEYQ_LIVE=http://veyq.localhost:8080
-VEYQ_LIVE_MEMORY_WEBM=/tmp/veyq-600.webm ./gradlew :bridge:jvmTest --tests '*LiveBridgeTest.aMemoryIsMade*' --rerun`.
+After that merge (its one conflict, `Exports.kt`: `Started.start` kept, `HostTiers(h)` added) the proof ran again, all
+green: the four Gradle tasks (core jvm 620, macosArm64 436), `linux/run.py build` (43 passed), `windows/run.py build` (UAC
+now on the VM: the build ran unchanged, Veyq.Bridge.Tests and Veyq.Tests passed), the guards (`validate_release_identity`
+timed out its `git init` once under the Windows build's load and passed alone).
+**Live, met** (after the merge of the bridge's host race fix, `bca4c0f66`: `HostTiers` asks through the host `Started`
+publishes before composing — `Exports.kt` hands it the same `h` — and a silent host's `Host.Silent` is caught by its
+`runCatching`, so the original goes up alone): `LiveBridgeTest.aMemoryIsMadeFilledByPathPlayedSavedAndEmptiedThroughCalls`
+green against the dev backend in 92 s, from `src/mobile`: `/opt/homebrew/bin/ffmpeg -f lavfi -i testsrc2=size=1920x1080:rate=30
+-t 300 -c:v libvpx-vp9 -deadline realtime -cpu-used 8 -b:v 16M -minrate 16M -maxrate 16M <scratch>/veyq-600.webm` (599 086 462 B),
+then `VEYQ_LIVE=http://veyq.localhost:8080 VEYQ_ENV_FILE=<main checkout>/.run/.env VEYQ_LIVE_MEMORY_WEBM=<that file>
+./gradlew :bridge:jvmTest --tests '*LiveBridgeTest.aMemoryIsMade*' --rerun`: `App memory 68547` made, its name then
+refused as taken, three photos and the WebM in after 50 s with the played host's tiers, each tile at its thumbnail's
+SHA-256, a range across a frame's edge at the file's, the original saved at the file's SHA-256 and a second save cancelled
+with nothing left, a photo trashed and undone, a chapter made; trashed and purged (`TRASHED`, `PURGED`); the WebM deleted
+after. Reported skipped without `VEYQ_LIVE` and `VEYQ_LIVE_MEMORY_WEBM`.
 
 **Retrospective:** the first played upload job prepared twice — the queue prepares ahead while the run awaits the same
 work — so a played job must hold the core job's own once-only lock, or the host is asked twice. A medium leaves the rows a

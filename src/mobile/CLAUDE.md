@@ -174,7 +174,9 @@ A Gradle build of its own, run through its own wrapper.
   hands it by `QrFramesTest` (a plane fitted to the 1280 px edge at its stride, the timed decode never saying the text)
   and Apple's `AppleQrTest` (a plane through `NSData`).
 - `./gradlew :bridge:jvmTest` — the bridge (ADR 0123's Consequences, the bridge):
-  - `DispatchTest` covers the way in, over a door the test plays: a reader read backwards in uneven ranges and closed
+  - `DispatchTest` covers the way in, over a door the test plays: the host reached by a reply that arrives before the
+    start returned (`Started`, `veyq_init`'s order) and a silent host's ask failed (`Host.Silent`, a call answered
+    `Failed`, never left unanswered), a reader read backwards in uneven ranges and closed
     with the tenant, a picture's bytes and its refusal, a file's page and its Save a copy (`File.*`, `Watched.File`/`Save`,
     `Save.Cancel` over a played file: the bytes and type the core's, a save watched as soon as it is answered, a cancelled
     one leaving nothing, a FILE's header download the file itself; `File.Reader` over a played medium: its ranges the
