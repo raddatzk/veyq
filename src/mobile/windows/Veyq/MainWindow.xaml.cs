@@ -71,7 +71,16 @@ public sealed partial class MainWindow : Window
                 return;
         }
         Log.Write("the core started");
-        _session = Core.Watch(new Watched.Session(), ShowGate, e => Log.Write(e.Message));
+        // a debug build's QR harness: the camera alone, no session (the QR CR, phase 5)
+        if (DevScan.Requested)
+        {
+            var scan = DevScan.Open();
+            Face(scan.View);
+            // closing the window ends the scan and its camera
+            Closed += (_, _) => scan.Dispose();
+            return;
+        }
+        _session =Core.Watch(new Watched.Session(), ShowGate, e => Log.Write(e.Message));
         _shellWatch = Core.Watch(new Watched.Shell(), ShellUpdate, e => Log.Write(e.Message));
         _manageWatch = Core.Watch(new Watched.Manage(), ManageUpdate, e => Log.Write(e.Message));
         if (_session is null || _shellWatch is null || _manageWatch is null)

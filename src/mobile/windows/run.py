@@ -33,7 +33,9 @@ Verbs:
                              (Veyq.Drive's launch); W × H resizes its window. Then it holds the tunnel to the backend
                              (`ssh -R`, VEYQ_LIVE's port, default http://veyq.localhost:8080) until it is ended (Ctrl+C);
                              the app keeps running. A debug build reads VEYQ_THEME (light, dark) and VEYQ_LANGUAGE (en-US,
-                             de-DE) from this host's environment. `--devlogin` hands the debug build the seeded
+                             de-DE) from this host's environment. VEYQ_DEV_SCAN=1 shows its QR harness instead of the
+                             session (no sign-in, no tunnel held); VEYQ_DEV_CAMERA=<image on this host> is its test
+                             camera, copied to the host beside the launch file. `--devlogin` hands the debug build the seeded
                              principal of the env file (VEYQ_ENV_FILE, else `.run/.env`) as VEYQ_DEV_*, inside the
                              launch file Veyq.Drive deletes on reading — never on a command line —, and it signs in
                              through its own sign-in once (DevLogin.cs). `--fill` only fills the sign-in, for the pass to
@@ -216,7 +218,11 @@ def test(pattern: str | None) -> int:
         sys.exit(f"no test binary at {TEST_BINARY}")
     remote = REMOTE_DIR / "test"
     copy_to([TEST_BINARY, VECTORS, NORMALIZATION_TEST], remote)
-    env = {"VEYQ_VECTORS": str(remote / VECTORS.name), "VEYQ_NORMALIZATION_TEST": str(remote / NORMALIZATION_TEST.name)}
+    # the QR reader's fixtures (QrFixtures, read through VEYQ_REPO_ROOT at their repository path)
+    qr_fixtures = "src/mobile/core/src/commonTest/resources/qr"
+    copy_to(sorted((ROOT / qr_fixtures).glob("*.pgm")), remote / "repo" / PureWindowsPath(qr_fixtures))
+    env = {"VEYQ_VECTORS": str(remote / VECTORS.name), "VEYQ_NORMALIZATION_TEST": str(remote / NORMALIZATION_TEST.name),
+           "VEYQ_REPO_ROOT": str(remote / "repo")}
     forward: list[str] | None = None
     secret = remote / "principal.env"
     if os.environ.get("VEYQ_LIVE"):
@@ -530,7 +536,14 @@ def run_app(width: int | None, height: int | None, devlogin: bool = False, unloc
     ))
     if code != 0:
         return code
-    env = {k: os.environ[k] for k in ("VEYQ_THEME", "VEYQ_LANGUAGE") if os.environ.get(k)} | secrets
+    env = {k: os.environ[k] for k in ("VEYQ_THEME", "VEYQ_LANGUAGE", "VEYQ_DEV_SCAN") if os.environ.get(k)} | secrets
+    # a debug build's QR harness's test camera: an image on this host, copied beside the launch file
+    if os.environ.get("VEYQ_DEV_CAMERA"):
+        image = Path(os.environ["VEYQ_DEV_CAMERA"]).resolve()
+        if not image.is_file():
+            sys.exit(f"VEYQ_DEV_CAMERA names no file: {image}")
+        copy_to([image], REMOTE_RUN, as_name=f"dev-camera{image.suffix}")
+        env["VEYQ_DEV_CAMERA"] = str(REMOTE_RUN / f"dev-camera{image.suffix}")
     code = launch(env)
     if code != 0:
         return code
@@ -538,6 +551,9 @@ def run_app(width: int | None, height: int | None, devlogin: bool = False, unloc
         code = drive([f"size {width} {height}"])
         if code != 0:
             return code
+    if os.environ.get("VEYQ_DEV_SCAN"):
+        # the harness signs in nowhere: no tunnel to hold
+        return 0
     forward, live = live_forward(live_origin)
     print(f"veyq: the tunnel to {live} is held until this ends (Ctrl+C); the app keeps running", flush=True)
     try:

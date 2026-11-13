@@ -18,6 +18,15 @@ adw = { package = "libadwaita", version = "0.9", features = ["v1_9"] }
 # (0.26.0 of 2026-02-21 on crates.io, its repository active, measured 2026-11-12); it binds the glib and cairo gtk4 0.11 uses.
 # v0_82: `Document::from_bytes` (a document over the bytes in memory); Fedora 44 carries poppler-glib 26.01.
 poppler = { package = "poppler-rs", version = "0.26", features = ["v0_82"] }
+# A QR scan's camera (the QR CR's D4): the xdg Camera portal through ashpd (MIT, Bilal Elmoussaoui's, the GNOME
+# ecosystem's portal crate; 0.14.0 of 2026-11-05, its repository pushed 2026-11-08, not archived, checked 2026-11-13), on zbus's own
+# executor (`async-io`), never tokio; only its camera portal. The frames through GStreamer's own bindings (gstreamer-rs,
+# MIT/Apache-2.0, gitlab.freedesktop.org/gstreamer; 0.25 binds the glib gtk4 0.11 uses): `pipewiresrc` on the portal's
+# remote, an `appsink` for the core's GRAY8 and the preview's RGBx, `VideoFrameRef` for a plane's stride.
+ashpd = { version = "0.14", default-features = false, features = ["async-io", "camera"] }
+gstreamer = "0.25"
+gstreamer-app = "0.25"
+gstreamer-video = "0.25"
 async-channel = "2"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"

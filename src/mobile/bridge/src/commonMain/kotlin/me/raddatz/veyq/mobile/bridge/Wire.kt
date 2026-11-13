@@ -602,6 +602,39 @@ internal sealed class Call {
 
     /** Sends the report once (`send`): [Answer.Said] with why not, or none (the receipt is [ReportShown.reference]). */
     @Serializable @SerialName("Report.Send") data class ReportSend(val report: Long) : Call()
+
+    /**
+     * A QR scan (core's `QrScan`, the QR CR's D5) reading codes as [kind] says, answered with its id
+     * ([Answer.ScanOpened]) for [Watched.Scan] and the calls below. It starts `STARTING`: the host opens its camera and
+     * says what it did ([ScanCamera]). It stays until [ScanClose]; a scan is no tenant's (a sign-in scans before one opens).
+     */
+    @Serializable @SerialName("Scan.Open") data class ScanOpen(val kind: ScanKind) : Call()
+
+    /** What the host's camera did: `RUNNING` (frames follow), `NONE` (the device has none), `DENIED` (the app may not). */
+    @Serializable @SerialName("Scan.Camera") data class ScanCamera(val scan: Long, val camera: me.raddatz.veyq.mobile.qr.QrScan.Camera) : Call()
+
+    /**
+     * One camera frame: its luminance plane (the Y of YUV, or GRAY8), [width] × [height] at [stride] bytes a row, rides
+     * beside the JSON as `veyq_call`'s inbound payload (ADR 0131 decision 1's other half), never in it. The core fits it to
+     * the scan's bound (`QrFrames.fit`, one rule for every camera) and hands it to the scan. Answered at once
+     * ([Answer.FrameTaken]): taken, or dropped while a decode runs or the scan reads none; the host sends its next frame
+     * after this answer (the call is the backpressure). Refused `NOT_A_FRAME` without a payload or one shorter than the
+     * plane. What a code says never comes back: [ScanShown.found] is what the scan's kind made of it.
+     */
+    @Serializable @SerialName("Scan.Frame") data class ScanFrame(val scan: Long, val width: Int, val height: Int, val stride: Int) : Call()
+
+    /** Ends scan [scan] (`QrScan.close`): a decode in flight finds nothing after it. */
+    @Serializable @SerialName("Scan.Close") data class ScanClose(val scan: Long) : Call()
+}
+
+/**
+ * What a scan reads a code as (`Scan.Open`): the parser the core holds for it, so the code's text stays in the core.
+ * A caller's own kind (an Emergency Kit's, a device link's) joins with its CR.
+ */
+@Serializable
+internal enum class ScanKind {
+    /** A code of any of veyq's schemes (`QrSchemes.of`), found as its scheme alone — the desktops' debug harness's. */
+    SCHEME,
 }
 
 /** A call's one answer; what the call changed arrives as the watched states' updates. */
@@ -712,6 +745,12 @@ internal sealed class Answer {
      */
     @Serializable @SerialName("Stored") data class Stored(val stored: Boolean, val notice: Notice?) : Answer()
 
+    /** A scan opened ([Call.ScanOpen]): its id, for [Watched.Scan] and the scan's calls. */
+    @Serializable @SerialName("ScanOpened") data class ScanOpened(val scan: Long) : Answer()
+
+    /** A frame sent ([Call.ScanFrame]): [taken] to be read, or dropped (a decode runs, or the scan reads none now). */
+    @Serializable @SerialName("FrameTaken") data class FrameTaken(val taken: Boolean) : Answer()
+
     enum class Why {
         NOT_A_CALL, NO_TENANT_OPEN, NO_SUCH_CONNECTION, NO_SUCH_TENANT, NO_SUCH_POT, NO_SUCH_READER, NO_PICTURE, NOTHING_TO_DOWNLOAD,
         NO_SUCH_HEADER, NO_SUCH_TRASH, NO_SUCH_ROW, NO_SUCH_MOVE, NO_SUCH_SHARE, NO_SUCH_REPORT, NO_COVER, NO_SUCH_ENTRY, NO_SUCH_EDITOR,
@@ -722,6 +761,9 @@ internal sealed class Answer {
 
         /** A drop box's page: none by that id; no guest's folder listed by that id; a delete that was not asked. */
         NO_SUCH_DROPBOX, NO_SUCH_FOLDER, NOT_ASKED,
+
+        /** A scan: none by that id; a frame without its plane beside the JSON, or one shorter than its size says. */
+        NO_SUCH_SCAN, NOT_A_FRAME,
 
         /** A change of trust (`TrustChange`): no offer to answer; the person cancelled the prompt; not enrolled; the
          *  password was not the account's. */
@@ -783,6 +825,9 @@ internal sealed class Watched {
 
     /** A drop box's page opened by [Call.DropBoxOpen]. */
     @Serializable @SerialName("DropBox") data class DropBox(val box: Long) : Watched()
+
+    /** A QR scan opened by [Call.ScanOpen]. */
+    @Serializable @SerialName("Scan") data class Scan(val scan: Long) : Watched()
 }
 
 /** One state a watch delivers: the first at once, then each change. */
@@ -842,7 +887,23 @@ internal sealed class Update {
 
     /** A drop box's page; null once it was closed (or an id the bridge does not hold). */
     @Serializable @SerialName("DropBox") data class DropBox(val box: Long, val shown: DropBoxShown?) : Update()
+
+    /** A QR scan; null for an id the bridge does not hold (it was closed). */
+    @Serializable @SerialName("Scan") data class Scan(val scan: Long, val shown: ScanShown?) : Update()
 }
+
+/**
+ * A QR scan as the host draws it (core's `QrScan.State`): the camera's preview while [state] is `STARTING` or
+ * `SCANNING`, the caller's words for every other. [found] is what the scan's kind made of the code it settled on (a
+ * [ScanKind.SCHEME] scan's scheme), never the code's text; null before `FOUND`.
+ */
+@Serializable
+@SerialName("ScanShown")
+internal class ScanShown(val state: ScanState, val found: String?)
+
+/** A scan's state as [ScanShown] names it (its own name: the generated hosts take a type's last name part). */
+@Serializable
+internal enum class ScanState { STARTING, NO_CAMERA, DENIED, SCANNING, FOUND, CLOSED }
 
 /**
  * The uploads as the host draws them (core's `DepotUploads` over the app's one upload queue, the web's `UploadStatusMenu`),

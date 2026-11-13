@@ -149,8 +149,12 @@ class WireTest {
             Call.PotSettingsCancelAsk(15), Call.PotCreateOpen("de_DE.UTF-8"), Call.PotCreateClose(16), Call.PotCreateName(16, "Rom"),
             Call.PotCreateSpace(16, "scope-2"), Call.PotCreateCurrency(16, "EUR"), Call.PotCreateAddTyped(16, "Ben"), Call.PotCreateAddMember(16, "u-dana"),
             Call.PotCreateRemove(16, 0), Call.PotCreateCreate(16, ""), Call.PotCreateCreate(16, "Cleo"),
+            // a QR scan
+            Call.ScanOpen(ScanKind.SCHEME), Call.ScanCamera(40, me.raddatz.veyq.mobile.qr.QrScan.Camera.RUNNING),
+            Call.ScanCamera(40, me.raddatz.veyq.mobile.qr.QrScan.Camera.NONE), Call.ScanCamera(40, me.raddatz.veyq.mobile.qr.QrScan.Camera.DENIED),
+            Call.ScanFrame(40, 1280, 720, 1280), Call.ScanClose(40),
         ),
-        Watched.serializer() to listOf(Watched.Session, Watched.Shell, Watched.Pot(3), Watched.PotLive(3), Watched.Manage, Watched.Header(7), Watched.Trash(8), Watched.Move(9), Watched.Share(10), Watched.Report(11), Watched.Editor(12), Watched.PotSettings(15), Watched.PotCreate(16), Watched.File(20), Watched.Save(21), Watched.Uploads, Watched.DropBox(30)),
+        Watched.serializer() to listOf(Watched.Session, Watched.Shell, Watched.Pot(3), Watched.PotLive(3), Watched.Manage, Watched.Header(7), Watched.Trash(8), Watched.Move(9), Watched.Share(10), Watched.Report(11), Watched.Editor(12), Watched.PotSettings(15), Watched.PotCreate(16), Watched.File(20), Watched.Save(21), Watched.Uploads, Watched.DropBox(30), Watched.Scan(40)),
         HostReply.serializer() to listOf(HostReply.Value("s\tn\t1"), HostReply.Value(null), HostReply.Done, HostReply.Failed("disk full")),
         Answer.serializer() to listOf(
             Answer.Done, Answer.Refused(Answer.Why.NO_TENANT_OPEN), Answer.Refused(Answer.Why.TRUST_CANCELLED), Answer.Failed("IllegalStateException"),
@@ -173,6 +177,7 @@ class WireTest {
             Answer.Refused(Answer.Why.NO_RECEIPT), Answer.Refused(Answer.Why.NOT_WRITTEN),
             Answer.PotSettingsOpened(15), Answer.PotCreateOpened(16), Answer.Stored(true, null), Answer.Stored(false, Notice(Msg.SETTINGS_CURRENCY_FIXED)),
             Answer.Stored(true, Notice(Msg.CREATE_POT_PEOPLE_FAILED)), Answer.Refused(Answer.Why.NO_SUCH_SETTINGS), Answer.Refused(Answer.Why.NO_SUCH_CREATE),
+            Answer.ScanOpened(40), Answer.FrameTaken(true), Answer.FrameTaken(false), Answer.Refused(Answer.Why.NOT_A_FRAME), Answer.Refused(Answer.Why.NO_SUCH_SCAN),
         ),
         Update.serializer() to listOf(
             Update.Session(Gate.Starting), Update.Session(Gate.NeedsApp), Update.Session(Gate.SignIn(error = Msg.SIGNIN_ERROR_CREDENTIALS, server = "veyq.localhost:8080")),
@@ -330,6 +335,9 @@ class WireTest {
                 null, null, null, Msg.DROPBOX_DELETE_FOLDER_ACCEPT,
             )),
             Update.DropBox(30, null),
+            Update.Scan(40, ScanShown(ScanState.STARTING, null)), Update.Scan(40, ScanShown(ScanState.NO_CAMERA, null)),
+            Update.Scan(40, ScanShown(ScanState.DENIED, null)), Update.Scan(40, ScanShown(ScanState.SCANNING, null)),
+            Update.Scan(40, ScanShown(ScanState.FOUND, "veyqpair")), Update.Scan(40, ScanShown(ScanState.CLOSED, null)), Update.Scan(41, null),
             Update.Manage(null), Update.Manage(listOf(
                 ManagedShown("veyq.localhost#user-1", "veyq.localhost:8080", TrustedDevice.Method.DEVICE_KEY, StaySignedIn.LOGIN, listOf(StaySignedIn.PRESENCE, StaySignedIn.LOGIN), listOf(
                     ManagedShown.Tenant(tenant, hidden = false, current = true, shown = true, switchable = false, subtitle = Piece.Said(Notice(Msg.MANAGE_CURRENT)),

@@ -18,10 +18,14 @@ internal suspend fun Bridge<*, *>.ask(json: String, timeout: Duration = 10.secon
 internal suspend fun Bridge<*, *>.askWithPayload(call: Call, timeout: Duration = 10.seconds): Pair<Answer, ByteArray?> =
     askWithPayload(wire.encodeToString(Call.serializer(), call), timeout)
 
-internal suspend fun Bridge<*, *>.askWithPayload(json: String, timeout: Duration = 10.seconds): Pair<Answer, ByteArray?> {
+/** A call with [inbound] beside its JSON (a scan's frame), as `veyq_call` hands it on. */
+internal suspend fun Bridge<*, *>.askWith(call: Call, inbound: ByteArray?, timeout: Duration = 10.seconds): Answer =
+    askWithPayload(wire.encodeToString(Call.serializer(), call), timeout, inbound).also { (a, payload) -> check(payload == null) { "$a came with a payload" } }.first
+
+internal suspend fun Bridge<*, *>.askWithPayload(json: String, timeout: Duration = 10.seconds, inbound: ByteArray? = null): Pair<Answer, ByteArray?> {
     val answered = CompletableDeferred<Pair<String, ByteArray?>>()
     var count = 0
-    call(json) { a, payload -> count++; answered.complete(a to payload) }
+    call(json, inbound) { a, payload -> count++; answered.complete(a to payload) }
     val (a, payload) = withTimeout(timeout) { answered.await() }
     check(count == 1) { "answered $count times" }
     val answer = wire.decodeFromString(Answer.serializer(), a)

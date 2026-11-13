@@ -33,6 +33,9 @@ finish-args:
 # (`flatpak run --command=bash org.gnome.Platform//51`): it carries libsecret, glycin with its WebP loader, GStreamer
 # with giostreamsrc and, through codecs-extra, VP9, H.264 and Opus, the CA bundle at /etc/ssl/cert.pem (what the
 # linked libcurl reads) and the zones; it lacks libcrypt.so.1 (it has libxcrypt's .so.2 alone) and poppler-glib.
+# A QR scan's camera (the QR CR's D4) needs no finish-arg and no module: the Camera portal hands the app a PipeWire
+# remote, and the runtime carries GStreamer's pipewiresrc (libgstpipewire.so) and imagefreeze (measured 2026-11-13,
+# `gst-inspect-1.0` in org.gnome.Platform//51). No --device=all.
 cleanup:
   - /include
   - /lib/pkgconfig

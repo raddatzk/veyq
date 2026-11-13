@@ -11,7 +11,7 @@ use veyq::shell::Shell;
 use veyq::manage::Manage;
 use veyq::sign_in::{Offer, SignIn, Unlock};
 use veyq::theme::APP_ID;
-use veyq::{dev_login, words};
+use veyq::{dev_login, dev_scan, words};
 
 fn main() -> glib::ExitCode {
     words::init();
@@ -130,6 +130,14 @@ fn activate(app: &adw::Application) {
         }
     }
     eprintln!("veyq: the core started");
+    // a debug build's QR harness: the camera alone, no session (the QR CR, phase 5)
+    if dev_scan::requested() {
+        let view = dev_scan::view();
+        screens.window.set_content(Some(&view.widget));
+        // held as long as the window: closing it ends the scan and its camera
+        screens.window.connect_destroy(move |_| view.close());
+        return;
+    }
     let (Some((session_watch, gates)), Some((shell_watch, shells)), Some((manage_watch, managed))) =
         (bridge::watch(&Watched::Session), bridge::watch(&Watched::Shell), bridge::watch(&Watched::Manage))
     else {

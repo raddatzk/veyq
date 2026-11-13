@@ -81,6 +81,8 @@ internal class Composition<A : Connection, T : Any>(
      * [DeviceFiles.None].
      */
     val files: DeviceFiles = DeviceFiles.None,
+    /** How a scan's frame is read: the core's decoder; a test plays one it holds. */
+    val decode: suspend (me.raddatz.veyq.mobile.qr.QrFrame) -> String? = { me.raddatz.veyq.mobile.qr.QrDecoder.decode(it) },
     /** The models over a tenant just opened; null where there are none (a test's tenant that is no `TenantSession`). */
     val tenant: (T) -> Tenant?,
 )
@@ -234,6 +236,9 @@ internal class Bridge<A : Connection, T : Any>(compose: () -> Composition<A, T>)
     private val pageReaders = Registry<Long>()
     private val saves = Registry<me.raddatz.veyq.mobile.depot.FileSave>()
 
+    /** The QR scans the host opened ([Call.ScanOpen]): no tenant's, each until [Call.ScanClose] or [shutdown]. */
+    private val scans = Registry<me.raddatz.veyq.mobile.qr.QrScan<String>>()
+
     /** The app's one upload queue (the phones' `AppModel.uploads`): emptied when the tenant closes. */
     private val queue = me.raddatz.veyq.mobile.blob.UploadQueue()
 
@@ -250,8 +255,10 @@ internal class Bridge<A : Connection, T : Any>(compose: () -> Composition<A, T>)
     /**
      * One call, answered once through [answer] on a core thread — a request that is no [Call] too. The payload beside
      * the JSON is the bytes of an [Answer.Bytes] (never null for one, empty included) and null for every other answer.
+     * [inbound] is what the host handed beside the call's JSON (a [Call.ScanFrame]'s plane), already the core's own copy;
+     * every other call ignores it.
      */
-    fun call(request: String, answer: (json: String, payload: ByteArray?) -> Unit) {
+    fun call(request: String, inbound: ByteArray? = null, answer: (json: String, payload: ByteArray?) -> Unit) {
         val call = runCatching { wire.decodeFromString(Call.serializer(), request) }.getOrNull()
         // An editor's edit is applied here, on the host's thread, in the order the host called: launched, the edits of two
         // keystrokes could land the wrong way round, and the field would end on the first.
@@ -270,7 +277,7 @@ internal class Bridge<A : Connection, T : Any>(compose: () -> Composition<A, T>)
                 when {
                     call == null -> Answer.Refused(Answer.Why.NOT_A_CALL)
                     edited != null -> edited
-                    else -> dispatch(call) { payload = it }
+                    else -> dispatch(call, inbound) { payload = it }
                 }
             } catch (e: CancellationException) {
                 throw e
@@ -287,8 +294,11 @@ internal class Bridge<A : Connection, T : Any>(compose: () -> Composition<A, T>)
     /** [Call.PotCreateName] held: done, or no such sheet. */
     private fun named(c: Call.PotCreateName): Answer = creates[c.create]?.name?.let { it.value = c.name }.done(Answer.Why.NO_SUCH_CREATE)
 
-    /** One line per call; a call whose answer is [Answer.Bytes] hands its bytes to [payload] first. */
-    private suspend fun dispatch(call: Call, payload: (ByteArray) -> Unit): Answer {
+    /**
+     * One line per call; a call whose answer is [Answer.Bytes] hands its bytes to [payload] first, and a call that carries
+     * bytes in reads them from [inbound].
+     */
+    private suspend fun dispatch(call: Call, inbound: ByteArray?, payload: (ByteArray) -> Unit): Answer {
         val parts = parts.await()
         val session = parts.session
         val shell = tenant.value?.models?.shell
@@ -661,7 +671,42 @@ internal class Bridge<A : Connection, T : Any>(compose: () -> Composition<A, T>)
             is Call.ShareDelete -> shares[call.share]?.let { Answer.Said(it.delete().notice) } ?: noShare
             is Call.ShareSwitchOff -> shares[call.share]?.let { Answer.Said(it.switchOff(call.link).notice) } ?: noShare
             is Call.ShareReactivate -> shares[call.share]?.let { Answer.Said(it.reactivate(call.link).notice) } ?: noShare
+            is Call.ScanOpen -> {
+                val id = ids.incrementAndFetch()
+                scans.put(id, me.raddatz.veyq.mobile.qr.QrScan(accepts = scanKind(call.kind), decode = parts.decode))
+                Answer.ScanOpened(id)
+            }
+            is Call.ScanCamera -> scans[call.scan]?.camera(call.camera).done(Answer.Why.NO_SUCH_SCAN)
+            is Call.ScanFrame -> scans[call.scan]?.let { s ->
+                val plane = inbound ?: return Answer.Refused(Answer.Why.NOT_A_FRAME)
+                // asked before the plane is fitted: a frame the scan would drop costs no scaling
+                if (!s.ready) return Answer.FrameTaken(false)
+                val frame = runCatching { me.raddatz.veyq.mobile.qr.QrFrames.fit(call.width, call.height, call.stride, plane) }
+                    .getOrElse { return Answer.Refused(Answer.Why.NOT_A_FRAME) }
+                Answer.FrameTaken(s.offer(frame))
+            } ?: noScan
+            is Call.ScanClose -> scans.remove(call.scan)?.close().done(Answer.Why.NO_SUCH_SCAN)
         }
+    }
+
+    /** What a scan of [kind] accepts a code as: the core's parser for it, so the code's text stays here. */
+    private fun scanKind(kind: ScanKind): (String) -> String? = when (kind) {
+        ScanKind.SCHEME -> me.raddatz.veyq.mobile.qr.QrSchemes::of
+    }
+
+    /**
+     * A code drawn by the core for a host to show (the QR CR's D2, ADR 0131 decision 1): [text] encoded (`QrEncoder`, level
+     * M, its quiet zone) and written as a 1-bit greyscale PNG (`QrPng`) at the largest whole scale that keeps its side
+     * within [px] (at least 1, at most `QrPng.MAX_SIDE`), handed to [payload] and answered `Bytes(image/png)`. The door of
+     * every call that answers a code as a picture — a device link's `Link.Code` (its CR) the first —, so the text a code
+     * holds never crosses the bridge. Refused `NO_BYTES` for a text no code holds.
+     */
+    internal fun drawnCode(text: String, px: Int, payload: (ByteArray) -> Unit): Answer {
+        val matrix = runCatching { me.raddatz.veyq.mobile.qr.QrEncoder.encode(text) }.getOrElse { return Answer.Refused(Answer.Why.NO_BYTES) }
+        // version 40's side (185 modules) fits MAX_SIDE at scale 1, so a scale of at least 1 always writes
+        val scale = maxOf(1, minOf(px, me.raddatz.veyq.mobile.qr.QrPng.MAX_SIDE) / matrix.side)
+        payload(me.raddatz.veyq.mobile.qr.QrPng.write(matrix, scale))
+        return Answer.Bytes("image/png")
     }
 
     /**
@@ -693,6 +738,7 @@ internal class Bridge<A : Connection, T : Any>(compose: () -> Composition<A, T>)
     private val noFile = Answer.Refused(Answer.Why.NO_SUCH_FILE)
     private val noDropBox = Answer.Refused(Answer.Why.NO_SUCH_DROPBOX)
     private val noFolder = Answer.Refused(Answer.Why.NO_SUCH_FOLDER)
+    private val noScan = Answer.Refused(Answer.Why.NO_SUCH_SCAN)
 
     /** A settings change on [id]'s model, answered once its write ended with whether it was stored and why not. */
     private suspend fun stored(id: Long, change: suspend (PotSettings) -> Boolean): Answer {
@@ -841,6 +887,8 @@ internal class Bridge<A : Connection, T : Any>(compose: () -> Composition<A, T>)
             ?: flowOf(Update.Save(w.save, null))
         is Watched.DropBox -> dropBoxes[w.box]?.let { h -> h.page.state.map { Update.DropBox(w.box, shownDropBox(h.page, it)) } }
             ?: flowOf(Update.DropBox(w.box, null))
+        is Watched.Scan -> scans[w.scan]?.let { s -> s.state.map { Update.Scan(w.scan, shownScan(it)) } }
+            ?: flowOf(Update.Scan(w.scan, null))
         Watched.Uploads -> uploads.flatMapLatest { u -> u?.state?.map { Update.Uploads(shownUploads(it)) } ?: flowOf(Update.Uploads(null)) }
         is Watched.Pot -> {
             val pictures = tenant.value?.models?.pictures ?: flowOf(emptyMap())
@@ -1072,12 +1120,22 @@ internal class Bridge<A : Connection, T : Any>(compose: () -> Composition<A, T>)
         failed = s.failed, busy = s.busy, errorRow = s.errorRow, error = s.error, renaming = s.renaming, retryName = s.retryName,
     )
 
+    private fun shownScan(s: me.raddatz.veyq.mobile.qr.QrScan.State<String>): ScanShown = when (s) {
+        me.raddatz.veyq.mobile.qr.QrScan.State.Starting -> ScanShown(ScanState.STARTING, null)
+        me.raddatz.veyq.mobile.qr.QrScan.State.NoCamera -> ScanShown(ScanState.NO_CAMERA, null)
+        me.raddatz.veyq.mobile.qr.QrScan.State.Denied -> ScanShown(ScanState.DENIED, null)
+        me.raddatz.veyq.mobile.qr.QrScan.State.Scanning -> ScanShown(ScanState.SCANNING, null)
+        is me.raddatz.veyq.mobile.qr.QrScan.State.Found -> ScanShown(ScanState.FOUND, s.value)
+        me.raddatz.veyq.mobile.qr.QrScan.State.Closed -> ScanShown(ScanState.CLOSED, null)
+    }
+
     fun unwatch(id: Long) {
         watches.remove(id)?.cancel()
     }
 
     /** Ends everything: the watches, the calls under way, the models. */
     fun shutdown() {
+        scans.removeAll().forEach { it.close() }
         scope.cancel()
     }
 

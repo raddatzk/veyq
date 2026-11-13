@@ -2216,4 +2216,147 @@ class DispatchTest {
             )
         }
     }
+
+    /**
+     * A decoder the scan tests play: each decode waits for a permit from [permits], records the frame's size in [seen] and
+     * reads the frame's first byte as which code it shows (1 a foreign one, 2 a pairing code, else none).
+     */
+    private class PlayedDecoder {
+        val permits = kotlinx.coroutines.channels.Channel<Unit>(kotlinx.coroutines.channels.Channel.UNLIMITED)
+        val seen: MutableList<Pair<Int, Int>> = java.util.Collections.synchronizedList(ArrayList())
+        val decoded = java.util.concurrent.atomic.AtomicInteger()
+
+        suspend fun decode(frame: me.raddatz.veyq.mobile.qr.QrFrame): String? {
+            permits.receive()
+            seen += frame.width to frame.height
+            decoded.incrementAndGet()
+            return when (frame.luminance[0].toInt()) {
+                1 -> "https://example.org/not-ours"
+                2 -> PAIRING_TEXT
+                else -> null
+            }
+        }
+    }
+
+    private fun scanBridge(decode: suspend (me.raddatz.veyq.mobile.qr.QrFrame) -> String?) = Bridge {
+        val hidden = Hidden({}, emptySet())
+        Composition(SessionModel(Door(), hidden, RecentUses({}, emptyList())), hidden, decode = decode) { null }
+    }
+
+    private fun plane(width: Int, height: Int, stride: Int = width, first: Int = 0) = ByteArray(stride * height) { first.toByte() }
+
+    private suspend fun Watching.untilScan(state: ScanState): ScanShown = until { u -> ((u as Update.Scan).shown)?.takeIf { it.state == state } }
+
+    @Test
+    fun aScanTakesFramesBesideItsCallDropsOneWhileItReadsAndSettlesOnItsKindsCodeNeverItsText() = runBlocking {
+        val played = PlayedDecoder()
+        val b = scanBridge(played::decode)
+        assertEquals(Answer.Refused(Answer.Why.NO_SUCH_SCAN), b.askWith(Call.ScanFrame(99, 4, 4, 4), plane(4, 4)), "a frame for no scan")
+        val scan = (b.ask(Call.ScanOpen(ScanKind.SCHEME)) as Answer.ScanOpened).scan
+        val updates = mutableListOf<String>()
+        val raw = b.watch(wire.encodeToString(Watched.serializer(), Watched.Scan(scan))) { updates += it }
+        val w = b.watching(Watched.Scan(scan))
+        w.untilScan(ScanState.STARTING)
+        assertEquals(Answer.FrameTaken(false), b.askWith(Call.ScanFrame(scan, 64, 48, 64), plane(64, 48, first = 2)), "a frame before the camera runs")
+
+        assertEquals(Answer.Done, b.ask(Call.ScanCamera(scan, me.raddatz.veyq.mobile.qr.QrScan.Camera.RUNNING)))
+        w.untilScan(ScanState.SCANNING)
+        assertEquals(Answer.Refused(Answer.Why.NOT_A_FRAME), b.askWith(Call.ScanFrame(scan, 64, 48, 64), null), "no plane beside the call")
+        assertEquals(Answer.Refused(Answer.Why.NOT_A_FRAME), b.askWith(Call.ScanFrame(scan, 64, 48, 64), ByteArray(64 * 47)), "a plane shorter than its size")
+        assertEquals(Answer.Refused(Answer.Why.NOT_A_FRAME), b.askWith(Call.ScanFrame(scan, 64, 48, 60), plane(64, 48)), "a stride under the width")
+
+        // a foreign code: taken, a second frame dropped while it is read, then skipped — the scan goes on
+        assertEquals(Answer.FrameTaken(true), b.askWith(Call.ScanFrame(scan, 64, 48, 70), plane(64, 48, stride = 70, first = 1)))
+        assertEquals(Answer.FrameTaken(false), b.askWith(Call.ScanFrame(scan, 64, 48, 64), plane(64, 48, first = 2)), "a frame while one is read")
+        played.permits.send(Unit)
+        while (played.decoded.get() < 1) kotlinx.coroutines.delay(5.milliseconds)
+        kotlinx.coroutines.delay(50.milliseconds)
+        assertEquals(ScanState.SCANNING, (b.watching(Watched.Scan(scan)).next() as Update.Scan).shown?.state, "a foreign code ended the scan")
+
+        // a camera's 1920x1080 plane is fitted by the core (by 2, to 960x540), never refused; the pairing code settles it
+        var taken = b.askWith(Call.ScanFrame(scan, 1920, 1080, 1920), plane(1920, 1080, first = 2))
+        while (taken == Answer.FrameTaken(false)) taken = b.askWith(Call.ScanFrame(scan, 1920, 1080, 1920), plane(1920, 1080, first = 2))
+        assertEquals(Answer.FrameTaken(true), taken)
+        played.permits.send(Unit)
+        assertEquals(ScanShown(ScanState.FOUND, "veyqpair").let { it.state to it.found }, w.untilScan(ScanState.FOUND).let { it.state to it.found })
+        assertEquals(listOf(64 to 48, 960 to 540), played.seen.toList())
+
+        // found: nothing is read after it, and the camera changes nothing
+        assertEquals(Answer.FrameTaken(false), b.askWith(Call.ScanFrame(scan, 64, 48, 64), plane(64, 48, first = 2)))
+        assertEquals(Answer.Done, b.ask(Call.ScanCamera(scan, me.raddatz.veyq.mobile.qr.QrScan.Camera.NONE)))
+        assertEquals(ScanState.FOUND, (b.watching(Watched.Scan(scan)).next() as Update.Scan).shown?.state)
+
+        assertEquals(Answer.Done, b.ask(Call.ScanClose(scan)))
+        w.untilScan(ScanState.CLOSED)
+        assertEquals(Answer.Refused(Answer.Why.NO_SUCH_SCAN), b.ask(Call.ScanClose(scan)))
+        assertEquals(Answer.Refused(Answer.Why.NO_SUCH_SCAN), b.askWith(Call.ScanFrame(scan, 64, 48, 64), plane(64, 48)))
+        assertEquals(Update.Scan(scan, null).let { wire.encodeToString(Update.serializer(), it) },
+            b.watching(Watched.Scan(scan)).let { wire.encodeToString(Update.serializer(), it.next()) }, "a closed scan's id")
+        b.unwatch(raw)
+        // what crossed outward never held the code's text
+        assertTrue(updates.isNotEmpty() && updates.none { PAIRING_TEXT in it || "not-ours" in it }, updates.toString())
+        b.shutdown()
+    }
+
+    @Test
+    fun aScanSaysTheCamerasNoneOrDenialAndAnotherScanIsItsOwn() = runBlocking {
+        val played = PlayedDecoder()
+        val b = scanBridge(played::decode)
+        val one = (b.ask(Call.ScanOpen(ScanKind.SCHEME)) as Answer.ScanOpened).scan
+        val two = (b.ask(Call.ScanOpen(ScanKind.SCHEME)) as Answer.ScanOpened).scan
+        assertTrue(one != two)
+        assertEquals(Answer.Done, b.ask(Call.ScanCamera(one, me.raddatz.veyq.mobile.qr.QrScan.Camera.NONE)))
+        assertEquals(Answer.Done, b.ask(Call.ScanCamera(two, me.raddatz.veyq.mobile.qr.QrScan.Camera.DENIED)))
+        b.watching(Watched.Scan(one)).untilScan(ScanState.NO_CAMERA)
+        b.watching(Watched.Scan(two)).untilScan(ScanState.DENIED)
+        assertEquals(Answer.FrameTaken(false), b.askWith(Call.ScanFrame(one, 64, 48, 64), plane(64, 48, first = 2)), "no camera, no frame read")
+        assertEquals(Answer.Refused(Answer.Why.NO_SUCH_SCAN), b.ask(Call.ScanCamera(99, me.raddatz.veyq.mobile.qr.QrScan.Camera.RUNNING)))
+        b.shutdown()
+    }
+
+    @Test
+    fun aScanOverTheCoresDecoderReadsTheWebsPairingCode() = runBlocking {
+        // the default composition's decoder, the core's own, over the pairing fixture the web's `qrcode` drew
+        val b = Bridge {
+            val hidden = Hidden({}, emptySet())
+            Composition(SessionModel(Door(), hidden, RecentUses({}, emptyList())), hidden) { null }
+        }
+        val frame = pgm(java.io.File(System.getProperty("veyq.repoRoot"), "src/mobile/core/src/commonTest/resources/qr/pair.pgm").readBytes())
+        val scan = (b.ask(Call.ScanOpen(ScanKind.SCHEME)) as Answer.ScanOpened).scan
+        assertEquals(Answer.Done, b.ask(Call.ScanCamera(scan, me.raddatz.veyq.mobile.qr.QrScan.Camera.RUNNING)))
+        val w = b.watching(Watched.Scan(scan))
+        assertEquals(Answer.FrameTaken(true), b.askWith(Call.ScanFrame(scan, frame.first, frame.second, frame.first), frame.third))
+        assertEquals("veyqpair", w.untilScan(ScanState.FOUND).found)
+        b.shutdown()
+    }
+
+    /** A binary PGM's width, height and pixels. */
+    private fun pgm(bytes: ByteArray): Triple<Int, Int, ByteArray> {
+        val header = Regex("""^P5\s+(\d+)\s+(\d+)\s+255\s""").find(String(bytes, 0, 64, Charsets.ISO_8859_1))!!
+        val (w, h) = header.destructured
+        val start = header.range.last + 1
+        return Triple(w.toInt(), h.toInt(), bytes.copyOfRange(start, start + w.toInt() * h.toInt()))
+    }
+
+    @Test
+    fun aCodeIsDrawnAsAPngBesideTheJsonThatReadsBackToItsText() {
+        val b = scanBridge { null }
+        var png: ByteArray? = null
+        assertEquals(Answer.Bytes("image/png"), b.drawnCode(PAIRING_TEXT, 300) { png = it })
+        val image = javax.imageio.ImageIO.read(java.io.ByteArrayInputStream(png!!))
+        val side = me.raddatz.veyq.mobile.qr.QrEncoder.encode(PAIRING_TEXT).side
+        assertTrue(image.width <= 300 && image.width % side == 0 && image.width / side == 300 / side, "${image.width} px for $side modules")
+        assertEquals(image.width, image.height)
+        val luminance = ByteArray(image.width * image.height) { i -> (image.getRGB(i % image.width, i / image.width) and 0xff).toByte() }
+        assertEquals(PAIRING_TEXT, me.raddatz.veyq.mobile.qr.QrDecoder.decode(me.raddatz.veyq.mobile.qr.QrFrame(image.width, image.height, image.width, luminance)))
+        // fewer pixels than modules: one pixel a module; a text no code holds: refused, no payload
+        assertEquals(Answer.Bytes("image/png"), b.drawnCode(PAIRING_TEXT, 10) { png = it })
+        assertEquals(side, javax.imageio.ImageIO.read(java.io.ByteArrayInputStream(png!!)).width)
+        png = null
+        assertEquals(Answer.Refused(Answer.Why.NO_BYTES), b.drawnCode("x".repeat(2332), 300) { png = it })
+        assertNull(png)
+        b.shutdown()
+    }
 }
+
+private const val PAIRING_TEXT = "veyqpair:3q2-7wABAgMEBQYHCAkKCwwNDg8QERITFBUWFxgZGhscHR4"

@@ -43,7 +43,9 @@ Verbs:
                              `docker run` through its environment, never on its command line. `--fill` only fills the
                              sign-in, for the pass to press Sign in; `--unlock` hands the password alone, which the
                              unlock of a password-trusted account takes, and Manage's way back to the password fills
-                             its field with it once.
+                             its field with it once. VEYQ_DEV_SCAN=1 shows a debug build's QR harness instead of the
+                             session (no sign-in); VEYQ_DEV_CAMERA=<image on this host> is its test camera (mounted
+                             read-only). The container has no Camera portal, so without it the harness says NoCamera.
   lock                       `cargo update`: writes Cargo.lock anew from Cargo.toml (the one way it changes).
   flatpak [--arch aarch64|x86_64]
                              the Flatpak bundle (ADR 0133): the bridge's release library and everything `build`
@@ -126,9 +128,12 @@ def test(pattern: str | None) -> int:
         sys.exit(f"no test binary at {kexe_dir / 'test.kexe'}")
     build_image(docker_platform)
 
-    mounts = {kexe_dir: "/veyq/bin", VECTORS: "/veyq/vectors.json", NORMALIZATION_TEST: "/veyq/NormalizationTest.txt"}
+    # the QR reader's fixtures (QrFixtures, read through VEYQ_REPO_ROOT at their repository path)
+    qr_fixtures = "src/mobile/core/src/commonTest/resources/qr"
+    mounts = {kexe_dir: "/veyq/bin", VECTORS: "/veyq/vectors.json", NORMALIZATION_TEST: "/veyq/NormalizationTest.txt",
+              ROOT / qr_fixtures: f"/veyq/repo/{qr_fixtures}"}
     env = {"VEYQ_VECTORS": "/veyq/vectors.json", "VEYQ_NORMALIZATION_TEST": "/veyq/NormalizationTest.txt",
-           "TZ": ZONE}
+           "VEYQ_REPO_ROOT": "/veyq/repo", "TZ": ZONE}
     # WallClockTest's values are Berlin's. kotlinx-datetime reads the zone from /etc/localtime, glibc from TZ: both set.
     prelude = f"ln -sf /usr/share/zoneinfo/{ZONE} /etc/localtime; "
     filter_arg = " " + shlex.quote(f"--ktest_filter={pattern}") if pattern else ""
@@ -336,6 +341,16 @@ def run_app(port: int, devlogin: bool, unlock: bool = False, fill: bool = False,
     if "VEYQ_LOCALE" in os.environ:
         env["LANG"] = os.environ["VEYQ_LOCALE"]
     env |= {"GDK_BACKEND": "broadway", "BROADWAY_DISPLAY": f":{BROADWAY_DISPLAY}", "XDG_RUNTIME_DIR": "/tmp/xdg"}
+    # a debug build's QR harness (dev_scan.rs) and its test camera, an image on this host mounted read-only
+    docker_args = ["-p", f"127.0.0.1:{port}:{inner}"]
+    if os.environ.get("VEYQ_DEV_SCAN"):
+        env["VEYQ_DEV_SCAN"] = os.environ["VEYQ_DEV_SCAN"]
+    if os.environ.get("VEYQ_DEV_CAMERA"):
+        image = Path(os.environ["VEYQ_DEV_CAMERA"]).resolve()
+        if not image.is_file():
+            sys.exit(f"VEYQ_DEV_CAMERA names no file: {image}")
+        docker_args += ["-v", f"{image}:/veyq/dev-camera{image.suffix}:ro"]
+        env["VEYQ_DEV_CAMERA"] = f"/veyq/dev-camera{image.suffix}"
     print(f"veyq: the app draws into http://127.0.0.1:{port} once cargo built it", flush=True)
     return cargo(docker_platform, lib_dir,
                  "cargo build --locked; mkdir -p -m 700 /tmp/xdg; "
@@ -344,7 +359,7 @@ def run_app(port: int, devlogin: bool, unlock: bool = False, fill: bool = False,
                  "for _ in $(seq 50); do ls /tmp/xdg/broadway*.socket >/dev/null 2>&1 && break; sleep 0.1; done; "
                  + (APP_UNDER_SECRET_SERVICE if secret_service else "exec /veyq/target/debug/veyq"),
                  # gnome-keyring-daemon drops its capabilities at start, which a container refuses unless it may lock memory
-                 docker_args=["-p", f"127.0.0.1:{port}:{inner}"] + (["--cap-add=IPC_LOCK"] if secret_service else []),
+                 docker_args=docker_args + (["--cap-add=IPC_LOCK"] if secret_service else []),
                  env=env, secrets=secrets, volumes={HOME_VOLUME: "/root/.local/share"} if secret_service else None)
 
 
