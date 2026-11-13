@@ -15,6 +15,11 @@ reference; the decisions + rationale live in [ADR 0021](../decisions/0021-operat
   complete narrows that set: `scope-rotation` is offered only to an **owner** of its scope, the only member who may
   commit a rotation ([ADR 0021](../decisions/0021-operator-blind-background-tasks.md) §4). **Capability = opaque
   tags** the worker can process.
+- **A worker is a member's own device** — the web tab, an app while idle, or a headless host the member runs, never a
+  part of the instance ([ADR 0132](../decisions/0132-a-content-job-runs-on-a-members-own-device-and-adds-its-result-to-the-object-later.md) decisions 1 and 8). **Planned, not built:** each worker holds its lease
+  under an id of its own, not the account's, and a decline excludes that worker unless its tag says the account
+  (decision 2); a content job is enqueued once per object and its done row kept while the object lives (decision 3);
+  its result is a derived blob added to the object later (decision 5).
 
 ## The job envelope
 
@@ -106,9 +111,10 @@ module (extraction-ready, not extracted).
   decision 5).
 - **Scope rotation** — a queued rotation of a group whose co-shared member was cut, offered only to an owner of the
   scope ([uc.spaces.complete-queued-rotation](../features/spaces/use-cases/uc.spaces.complete-queued-rotation.md)).
-- **Informing (later):** media derivatives / **transcode** (Uploads — inbox #17),
-  **face-recognition / on-device ML** (Agent — inbox #10/#23) — the heavy consumers that
-  shaped the lease/tags/result.
+- **Planned — a video's playable copy** (`memories-playback-v1`, [ADR 0132](../decisions/0132-a-content-job-runs-on-a-members-own-device-and-adds-its-result-to-the-object-later.md) decision 9): the first
+  content job, enqueued by whoever uploads a video and by a worker's backfill, run only by an app or a headless host.
+- **Later:** text read from a scan (inbox #840), embeddings for semantic search, **face-recognition** (inbox #23) — each
+  a job type an application contributes (ADR 0132 decision 6).
 
 ## Related
 

@@ -4,6 +4,7 @@
 - Built: partly (not built: § 3's sealed body)
 - Date: 2026-07-04
 - Model: [background-tasks](../crosscutting/background-tasks.md)
+- Replaced in part: § 6's lease holder (a worker, not the account) and § 9's first content consumer by ADR 0132 (not built)
 
 ## Context
 

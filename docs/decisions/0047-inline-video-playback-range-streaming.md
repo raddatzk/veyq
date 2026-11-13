@@ -196,15 +196,17 @@ video is made later, by a device that holds the key
   Rejected: on the server — it holds no plaintext (operator-blind), and a transcoder would be a heavy dependency on a
   small self-hosted instance; in the editor's browser tab — a long video is a long job there, and the worker queue
   serves the gallery as well.
-- **One fixed target, not a ladder:** H.264 (the codec every engine plays), long edge 1280, about 2 Mbit/s, the source's
-  frame rate capped at 30, the sound kept where the source has it. Rejected: adaptive streaming — the copy streams
+- **One fixed target, not a ladder:** H.264 (the codec every engine plays), long edge 1920, about 5 Mbit/s, the source's
+  frame rate capped at 30, the sound kept where the source has it. The size is the lightbox's, as an image's preview is (2048): the gallery plays the copy and fetches the original
+  only to download it ([ADR 0132](0132-a-content-job-runs-on-a-members-own-device-and-adds-its-result-to-the-object-later.md) decision 9; owner 2026-11-13: 1920, not 1280, which looks soft full-screen). Rejected: adaptive streaming — the copy streams
   through this shim as any blob does, so a ladder buys nothing but storage.
 - **Additive, never a replacement in place.** The copy goes into a slot of its own beside the original; a reader that
   does not know it plays the original. Rejected: writing the copy into the original's slot — every reader that
   predates the copy would then find other bytes than the slot promised.
 
-Still open, settled with the worker queue: whether a small tier for every gallery video is made, at upload or lazily
-(inbox #493), and whether a banner's original is dropped once its copy exists.
+Which videos get one, and when, is [ADR 0132](0132-a-content-job-runs-on-a-members-own-device-and-adds-its-result-to-the-object-later.md) decision 9: every video, made after its upload by a worker of the
+queue, stored videos too; the gallery then plays the copy and fetches the original only to download it, as for an image.
+Still open: whether a banner's original is dropped once its copy exists.
 
 ## Consequences
 

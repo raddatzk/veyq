@@ -123,7 +123,7 @@ leak; without a Service Worker the video is decrypted whole first, as the lightb
   bounds it but the quota, and nothing holds it whole: the upload and the digest read it by frame.
 - **A browser that cannot decode a frame** of a picked video offers no video banner, with a message saying so; the
   original is the banner only where a poster could be drawn for it.
-- **The small playback copy** (H.264, long edge 1280, about 2 Mbit/s) is
+- **The small playback copy** (H.264, long edge 1920, about 5 Mbit/s) is
   [en.memory.playback-derivative](../features/memory/enablers/en.memory.playback-derivative.md), made by a client worker
   node of the queue of [ADR 0021](0021-operator-blind-background-tasks.md) (inbox #23) — the same enabler a small tier for
   gallery videos would use (inbox #493). It fills the later slot of decision 2.

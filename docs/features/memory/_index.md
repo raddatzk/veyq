@@ -51,7 +51,7 @@ The tree these build on — encrypted names, blinded slugs, a key on every node,
   + denormalized `created_by`; reparent-on-delete + member-gated sub-bucket authz (cr-0123);
   [ADR 0034](../../decisions/0034-media-uploader-buckets.md))
 - [en.memory.playback-derivative](enablers/en.memory.playback-derivative.md) — **planned** with the client worker queue
-  (inbox #23, not V1): a small playable copy of a video — H.264, long edge 1280 — made by a key-holding worker, never on
+  (inbox #23, not V1): a small playable copy of a video — H.264, long edge 1920 — made by a key-holding worker, never on
   the server; until then the banner's video and the gallery's play their originals
   ([ADR 0047](../../decisions/0047-inline-video-playback-range-streaming.md))
 
