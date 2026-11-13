@@ -242,9 +242,53 @@ half**, written into that ADR in phase 6. `SecretFreeSchemaTest` stays as it is:
     encoded).
   - The encoder writes UTF-8 without an ECI (above), and only level M: no caller of the CR asks for another.
 
-- [ ] **3 the scan model** — `QrScan` (D3) in commonMain over a played clock and decoder. · Done when: `commonTest`
+- [x] **3 the scan model** — `QrScan` (D3) in commonMain over a played clock and decoder. · Done when: `commonTest`
   holds one decode in flight (a second frame dropped), a foreign code skipped, the first accepted one settling,
   `Closed` stopping it, an oversized frame refused; core checks green.
+
+  **Status: done (2026-11-13).**
+
+  **Built:**
+  - core `qr/QrScan.kt`: `QrScan<T : Any>(accepts, decode = QrDecoder.decode, scope)` — `state`/`current`/`watch` as the
+    other screen models; `State` `Starting`, `NoCamera`, `Denied`, `Scanning`, `Found(value)`, `Closed`; `camera(Camera)`
+    (`RUNNING`, `NONE`, `DENIED`) from the host; `offer(frame): Boolean` — taken and decoded on the model's scope while
+    `Scanning` and no other decode runs, else dropped (false), a frame over `MAX_EDGE` 1280 px on its long edge an
+    IllegalArgumentException —; `close()`. A code `accepts` maps to null, or whose parse throws, is skipped and the scan
+    goes on; only `Found`'s `T` leaves the model. Once `Found` or `Closed`, no frame is read and the camera changes
+    nothing; a decode still running when the scan closes cannot settle it.
+
+  **Met:**
+  - `./gradlew :core:jvmTest :core:macosArm64Test :bridge:jvmTest :core:compileKotlinLinuxX64 :core:compileKotlinMingwX64`
+    green. `QrScanTest` (commonTest, seven cases): one decode in flight and a second frame dropped; a foreign code skipped
+    and the first accepted one settling, nothing read after it, the camera then changing nothing; a parser that throws
+    skipping its code; `close` stopping the scan even with a decode in flight that ignores cancellation (as the real,
+    CPU-bound decode does); nothing read before the camera runs, `NoCamera` and `Denied` as states; frames over 1280 px
+    refused on either edge; the core's own decoder settling a scan on the rotated fixture, the states watched in order.
+  - Bites (`phase3.json`), seven, all bit: the in-flight guard removed, a foreign code ending the scan, the parser's
+    throw not caught, a decode settling after `close`, an oversized frame taken, a frame read before the camera runs, the
+    camera moving a found scan. The `close` bite first **missed**: the played decoder suspended cancellably, so `close`'s
+    job cancel hid the state guard; the played decoder now has a non-cancellable mode, which the real decoder is, and
+    the bite then bit.
+
+  **Deviations:**
+  - **No played clock**: D3's model has no timing of its own — the backpressure is the in-flight flag, a host sends its
+    next frame when the last call answered —, so the tests play the decoder and the dispatcher (`runTest`), not a clock.
+  - `offer` refuses an oversized frame with an IllegalArgumentException rather than a third answer: a host that sends one
+    has a bug, not a state; phase 5's `Scan.Frame` answers it as a refusal.
+
+  **For phase 4 on, and for `cr-app-kit-sign-in`:**
+  - A still image goes to `QrDecoder.decode(frame, tryHarder = true)` directly, not through `QrScan`: the decoder has no
+    size limit (a 2400×3394 kit page measured above, about 8 MB of luminance and a 1 MB bit matrix); `QrScan`'s 1280 px
+    bound is for a camera's stream only. A page with the code small on it reads; a crisp rendering is what the
+    exhaustive retry of phase 2 exists for.
+  - The text stays in the core: the caller's parser is `accepts` (a `veyqkit:` parser returning its kit data), and the
+    model hands on only `Found(T)`. Through the bridge (phase 5) only luminance comes in — a frame, or a rendered page
+    as one more inbound payload — and the answer names what the model moved to; on Android and Apple a Kotlin or Swift
+    view holds the `QrScan` and observes it, so nothing is bridged at all.
+  - Each host converts its camera's frame to `QrFrame` itself: the Y plane with its row stride (`rowStride` > `width` is
+    taken as is), scaled to at most 1280 px on the long edge. A JVM decode of 1280×720 costs about 1 ms, the native debug
+    test binary's about 14 ms; a release build should be measured once on a device in phase 4.
+
 - [ ] **4 Android and Apple** — the camera views (D4) on the core's `QrScan`, with the test camera; the camera
   dependencies recorded in `gradle/libs.versions.toml` with their maintenance check. · Done when: on the throwaway AVD
   the virtual scene's poster of a fixture code settles a scan; on the simulator the test camera does; on this Mac the
@@ -278,3 +322,22 @@ every `:core:jvmTest`.
 **Decided** (the coordinator, 2026-11-12, under the owner's standing mandate to decide and report; the owner may overturn any):
 - 1: yes, the desktops get a camera (phase 5 as written).
 - 2: the three real-camera passes stay the owner's steps; until then those paths are measured through the test camera only.
+
+## Retrospective
+
+Phases 1–3 (the implementer, 2026-11-13):
+- **The CR's "Kanji left out" could not meet its own bar.** 14 of qrcode-2's 35 images are Japanese, so upstream's
+  thresholds need the Kanji mode and a Shift_JIS byte guess; measured in the first corpus run, solved by keeping such
+  segments as bytes (phase 1's deviation). Root cause: the refine counted the corpus' images (R5) but did not read the
+  expected texts. Next time: a CR that adopts a corpus' thresholds reads what the corpus expects before scoping out a
+  feature.
+- **A round trip found what the corpus did not.** ZXing does not read its own crisp version-10 code at 3–5 px a module
+  (a data run taken for a finder pattern); the corpus is photos and never shows it. The encoder's round trip did, and
+  so would every rendered kit page. Next time: hold a port to its upstream corpus *and* to the product's own outputs,
+  both directions, before calling it done.
+- **Two bites missed first, both for a reason worth keeping:** a capacity check behind a second refusal (equivalent
+  mutant, bitten with both off) and a `close` guard hidden by the played decoder's cancellability (the test now plays
+  the real decoder's non-cancellable decode). The worktree's write hook forbade the Write tool into a worktree created
+  by `git worktree add` until the session entered it (`EnterWorktree` with its path): a brief that has the implementer
+  create its own worktree should say so.
+

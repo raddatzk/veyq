@@ -168,7 +168,9 @@ A Gradle build of its own, run through its own wrapper.
   and one more refused), `QrPngTest` and the JVM's `QrPngImageTest` (`javax.imageio` reads the same modules), which also
   holds the web's interop fixture (`src/web/.../pairing/__fixtures__/core-pairing-code.png`, read by the web's `jsqr` in
   `coreQrCode.test.ts`) to what `QrPng` writes: a deliberate change to the writer rewrites it with
-  `VEYQ_WRITE_QR_FIXTURE=1 ./gradlew :core:jvmTest --tests '*QrPngImageTest*'`.
+  `VEYQ_WRITE_QR_FIXTURE=1 ./gradlew :core:jvmTest --tests '*QrPngImageTest*'`. The scan model `qr/QrScan.kt` is held by
+  `QrScanTest` over a decoder the test plays (one decode in flight, a foreign code skipped, the first accepted one
+  settling, `close` winning over a decode that does not stop, an oversized frame refused).
 - `./gradlew :bridge:jvmTest` — the bridge (ADR 0123's Consequences, the bridge):
   - `DispatchTest` covers the way in, over a door the test plays: a reader read backwards in uneven ranges and closed
     with the tenant, a picture's bytes and its refusal, a file's page and its Save a copy (`File.*`, `Watched.File`/`Save`,
