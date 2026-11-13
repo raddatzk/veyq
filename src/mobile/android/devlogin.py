@@ -5,10 +5,12 @@ Reads VEYQ_EMAIL, VEYQ_PASSWORD, VEYQ_SECRET_KEY and VEYQ_TENANT_DOMAIN from the
 `./gradlew backend:seed`; `VEYQ_ENV_FILE` names another, e.g. the main checkout's from a worktree) and hands them to the debug build as launch extras; nothing is printed. The debug build
 resolves the `*.localhost` tenant to the developer's machine (DevDns), so the server is `<tenant domain>:<port>`.
 
-Usage: devlogin.py [port] [--remember] [--unlock]   (port default 8080, the dev backend)
+Usage: devlogin.py [port] [--remember] [--unlock] [--kit]   (port default 8080, the dev backend)
   --remember  answer the offer after the sign-in with the presence level (the emulator asks for its screen lock)
   --unlock    hand only the password, for the unlock screen of a password-trusted account; it also fills "Manage
               servers"' password field once (the way back to the password trust), for the pass to press
+  --kit       hand only the password, for a sign-in that holds an Emergency Kit: it waits for the kit the pass picks or
+              scans and then signs in with the form's email and server and the kit's held Secret Key
 """
 from __future__ import annotations
 
@@ -39,6 +41,8 @@ def main() -> None:
     e = env()
     if "--unlock" in flags:
         extras = {"veyq.devUnlockPassword": e["VEYQ_PASSWORD"]}
+    elif "--kit" in flags:
+        extras = {"veyq.devKitPassword": e["VEYQ_PASSWORD"]}
     else:
         extras = {
             "veyq.devServer": f"{e['VEYQ_TENANT_DOMAIN']}:{port}",
