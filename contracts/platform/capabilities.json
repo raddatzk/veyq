@@ -296,13 +296,13 @@
         "de": "Die Spotify- oder Apple-Music-Playlist einer Erinnerung spielt, während jemand sie ansieht, über das eigene Konto, nachdem er dem Laden des Players des Dienstes zugestimmt hat. Der Player läuft auf dem Musik-Host dieser Instanz, getrennt von veyq selbst."
       },
       "whenOff": {
-        "en": "No playlist plays in veyq any more and the browser is no longer allowed to load the music host; playlists already set stay and open in the service’s own app. The same holds while the deployment sets no music host.",
-        "de": "Keine Playlist spielt mehr in veyq, und der Browser darf den Musik-Host nicht mehr laden; bereits gesetzte Playlists bleiben und öffnen sich in der App des Dienstes. Dasselbe gilt, solange die Installation keinen Musik-Host setzt."
+        "en": "No playlist plays in veyq any more, a Memory shows no music (no button, no menu entry) and the browser is no longer allowed to load the music host; playlists already set stay in the Memory and are back once it is on again. The same holds while the deployment has not switched the music on or sets no music host.",
+        "de": "Keine Playlist spielt mehr in veyq, eine Erinnerung zeigt keine Musik (keinen Knopf, keinen Menüeintrag), und der Browser darf den Musik-Host nicht mehr laden; bereits gesetzte Playlists bleiben in der Erinnerung und sind wieder da, sobald sie wieder an ist. Dasselbe gilt, solange die Installation die Musik nicht eingeschaltet hat oder keinen Musik-Host setzt."
       },
       "serves": ["uc.memory.music"],
       "source": "deployment",
       "levels": ["instance", "tenant"],
-      "description": "The music frame (ADR 0131): active only while the deployment sets the music host (VEYQ_MUSIC_DOMAIN) and at least one child is configured, and the entry is on at both levels. Carries the frame's address as serviceUrl; the served CSP names the music host in frame-src, the Permissions-Policy allows it encrypted-media and autoplay, and the COOP is same-origin-allow-popups while it is on at the instance level."
+      "description": "The music frame (ADR 0131): released dark (decision 8), so active only while the deployment sets VEYQ_MUSIC_ENABLED=true (default false; false, none of the three entries is configured, whatever else is set) and the music host (VEYQ_MUSIC_DOMAIN) and at least one child is configured, and the entry is on at both levels. Carries the frame's address as serviceUrl; the served CSP names the music host in frame-src, the Permissions-Policy allows it encrypted-media and autoplay, and the COOP is same-origin-allow-popups while it is on at the instance level. The web draws every music surface (the header buttons, the menu entry, the footer bar, the sign-out forget) only while this entry is served."
     },
     "memories.music.spotify": {
       "title": {
