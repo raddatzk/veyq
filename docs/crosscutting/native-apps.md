@@ -55,7 +55,11 @@ media played, Save a copy with its cancel, uploads up to 2 GiB + 1, drop boxes a
 media played, Save a copy with its cancel, uploads up to 2 GiB + 1, drop boxes and the top level's share), 2026-11-12; a
 real GNOME session in the Fedora 45 VM for the drop, the portal's dialogs and the sound, 2026-11-12; the Flatpak installed
 there from its bundle (the runtime from Flathub), started to its sign-in in English and German, the FileChooser portal,
-the secure store's calls, an update and an uninstall, 2026-11-13 (ADR 0123's Consequences, the Flatpak) |
+the secure store's calls, an update and an uninstall, 2026-11-13 (ADR 0123's Consequences, the Flatpak); signed in inside
+the installed Flatpak's sandbox — by an Emergency Kit picked through the portal, the members' pictures, the exchange
+rates, a receipt's PDF uploaded, drawn and saved at document-portal paths, a Depot upload and a drop from Files, H.264
+and VP9 played and heard, the account's Settings from the sidebar (rename, another session signed out, sign-out) in
+English/light and German/dark — 2026-11-13 |
 
 Windows and Linux are wanted (owner 2026-11-09), each with its own native UI over the same core
 ([ADR 0130](../decisions/0130-an-apps-logic-is-the-kotlin-cores-each-platform-draws-only-its-own-ui.md)): Linux GTK 4 and

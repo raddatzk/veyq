@@ -307,6 +307,45 @@ and never rebuilds (D10). The Mac builds only aarch64 locally; x86_64 is CI's.
   signed in through a restart, the members' pictures in the app (glycin's WebP decode itself passed in the installed
   sandbox), a receipt's PDF, a medium played and heard, upload and save through the app's dialogs at a document-portal
   path, a drop from Files, the exchange rates over the app's libcurl.
+  **Signed-in pass (2026-11-13, the Fedora 45 VM's GNOME session against the dev backend through the VM's forwarder),
+  all but one of the owed steps met.** `python3 src/mobile/linux/run.py flatpak` exited 0 at this branch's tip and wrote
+  `veyq-1.689-aarch64.flatpak` (8.2 MB) — after a fix: `flatpak()`'s local `inputs` shadowed the `inputs` verb it calls
+  first, so every run without `--prebuilt` died at once with `UnboundLocalError` (the run before the fix, measured);
+  renamed `staged`. `flatpak install --user` of the bundle pulled the runtime anew (1 min 41 s); the shipped binary
+  (`flatpak run app.veyq.Veyq`) reached `session SignIn`. A release build has no dev sign-in (`dev_login.rs`), so the
+  signed-in steps ran the **debug build of the same tree inside the installed app's sandbox** — `flatpak run --user
+  --command=~/.var/app/app.veyq.Veyq/dev/run.sh app.veyq.Veyq`: the Flatpak's runtime, its `/app` libraries (poppler,
+  libxcrypt, the release `libveyq.so`), its permissions and portals; the principal handed in as `run.py`'s
+  `dev_principal` in a file sourced and deleted at once, never typed. Measured there (each with its screenshot, kept in
+  the session's scratch, not committed): **signed in** (`session Signed`; the trust offer answered "Not now", the
+  account at its trust limit: `add wrap 409`); **members' pictures** — the principal's photo in the sidebar and in
+  "New pot"'s member list beside the letter avatars; **exchange rates** — an entry in EUR on a USD pot filled "Computed
+  from the ECB's euro reference rates of 11/12/2026", rate 1.1081, on a fresh install (no cache), through the app's
+  libcurl out of the sandbox; **a receipt's PDF** — "Add receipt" through the FileChooser portal (`1 receipts picked:
+  Ok(Done)`, the file exported to the app as `/run/user/1000/doc/<id>/Linux receipt.pdf`, `flatpak documents`), saved
+  with the entry (`editor save: done true`), opened (`receipt opened: 4588 B, application/pdf`, `receipt PDF: 1 of 1
+  pages drawn`); **save** — the viewer's "Save a copy" through the portal's save dialog (`receipt saved to
+  /run/user/1000/doc/<id>/Linux saved.pdf: Ok(Done)`, `cmp` equal to the source); **upload** — a Depot folder's
+  "Upload files" through the portal (`upload Linux h264.mp4: Done 100% of 625659 B`, again at a document-portal path);
+  **a drop from Files** — `Linux vp9.webm` dragged from Nautilus onto the folder (`Upload.Files: 1 queued`, `Done 100%
+  of 272718 B`, exported to the app as a document); **a medium played and heard** — H.264/AAC (`medium prepared: 6 s,
+  video true, audio true`; `audio.py`: RMS −21.2 dBFS, ~434 Hz for the 440 Hz tone, the stream `veyq`) and VP9/Opus
+  (RMS −21.1 dBFS, ~651 Hz for 660 Hz); the same shell in **German and dark** (`LANG=de_DE.UTF-8`, `prefer-dark`).
+  **Not met: staying signed in through a restart.** After "Not now" the shipped binary restarted to an empty sign-in —
+  correct for a device that holds no trust, and the only outcome here: the principal is at the server's limit
+  (`409 too_many_devices`), so neither "Stay signed in" nor the password trust can be written on it. It needs an account
+  under the limit (a fresh one, or the principal after its stale trusts are removed — an owner step); the store's own
+  five libsecret calls in this sandbox passed already (above). Found and fixed on the way (the app, not the package):
+  after a sign-out the sign-in page showed the **password and the Secret Key still filled** — the page is built once
+  per window and nothing cleared them, a press of "Sign in" from the account; `SignIn::forget` now empties both
+  whenever the core leaves the sign-in (`main.rs`' gate). Bitten on the VM: the fix's body commented out → after
+  "Sign out" both fields filled (red); restored with `/bin/cp -f` (compared equal) → both empty (green, the screenshot).
+  Cleaned: the pot and the folder deleted and purged from the trash, the two sessions this pass made signed out, the
+  portal's document entries deleted, `flatpak uninstall --user --delete-data app.veyq.Veyq` left `~/.var/app/` empty,
+  GNOME's indexer database removed (it had indexed the dev kit of `cr-app-kit-sign-in`'s pass, which lay under `~`),
+  the VM's helpers stopped by PID. `python3 src/mobile/linux/run.py build` green after the fix (clippy, 43 tests).
+  Seen, not fixed (cosmetic): the release build warns of `dev_login.rs`' unused `AtomicBool`/`Ordering` import, used
+  only under `debug_assertions`.
 
 - [x] **3 linux — the SDK proves the app; the pins are guarded.** `run.py build` runs clippy, test and build in
   `org.gnome.Sdk//51` (D4). `validate_build_input_pins.py` check 7: the Flatpak manifest's `runtime-version` equals the
