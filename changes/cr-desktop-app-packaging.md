@@ -375,6 +375,13 @@ and never rebuilds (D10). The Mac builds only aarch64 locally; x86_64 is CI's.
   **Owed** (needs a signed-in server; the steps in ADR 0123's Consequences, the MSIX): sign-in, Hello enrolment and a
   restart that unlocks, the members' pictures, a picked file opening in the core and Save a copy, a medium played, the
   camera's prompt and `NoCamera`, an update keeping the device trust; the Explorer drop after the owner turns UAC on.
+  **UAC on, 2026-11-13** (the owner turned it on): `package --sign --smoke` exit 0 at 1.687 (installed, `session SignIn`,
+  uninstalled, nothing left); the packaged app at medium integrity, German, `NoCamera` (no scan entry), a kit picked by
+  path opening in the core (`kit picked: Done`); the unpackaged app takes the Explorer drop (ADR 0123's Consequences, the
+  Depot whole). Development certificate dropped, package and temporary files removed. **Still owed — owner steps**, each
+  behind a signed-in packaged app (a Release build has no dev sign-in; the owner signs in): the members' pictures, Save a
+  copy, a medium played, the drop into the package, an update keeping the device trust (needs a free trust slot: the
+  principal is at `409 too_many_devices`), Hello's enrolment (the owner's PIN), the camera's prompt (a PC with a camera).
   **Retrospective:** the session, not UAC, was the obstacle: deployment refuses session 0 (`0x80070005`), which the
   install's own message does not say — the AppX log does (`Get-AppxLog -ActivityID`). Two failures hid their cause:
   cmd.exe's line limit on a longer encoded script, and an XML comment's `--` behind the MSIX task's missing assembly;

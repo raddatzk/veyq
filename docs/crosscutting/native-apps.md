@@ -121,7 +121,8 @@ passed on them again. On Linux and Windows too (2026-11-12): a file's page (an i
 medium **played** through the platform's own player over the core's reader (GTK's `MediaFile`, `MediaPlayerElement`),
 never decrypted whole or to disk; Save a copy with its progress and Cancel; Replace; uploads of files and a folder from
 the system's dialogs and from New, a file of any size read at offsets (2 GiB + 1 measured); drag and drop onto a level or a
-folder's row (Linux; Windows built and tested, not seen, § Open); the drop box page (a guest's folder moved out or deleted
+folder's row (Linux; Windows from Explorer with UAC on, measured 2026-11-13: a file and a folder onto a level and onto a
+folder's row, read back at their SHA-256); the drop box page (a guest's folder moved out or deleted
 after asking, with Undo); "Add files only" at a space's top level; Refresh (F5) reading what another device or a guest
 wrote. Not Send a copy (GNOME has no share target, Windows' share needs a decrypted file another app reads: Save a copy is
 the desktops' way out).
@@ -150,21 +151,19 @@ button with its popover and Windows' `AppBarButton` with its flyout, each with C
     patents, the owner's answer of the Depot slice, 2026-11-12). **Built 2026-11-13** (`windows/run.py package`, ADR
     0123's Consequences, the MSIX): installs, starts to its German sign-in with UAC off (elevated, like every process
     there), updates in place keeping its data and uninstalls leaving nothing on the VM; a signed copy's block map is the
-    unsigned one's. Still to measure in the package, with a signed-in server: whether a packaged app's picked path
-    opens in the core (ADR 0131), Save a copy, the camera's consent and `NoCamera`, and whether a packaged app takes a
-    drop (it is elevated on the VM as the unpackaged one is: the owner step below answers both). **The released MSIX is
+    unsigned one's. With **UAC on** (2026-11-13): installs, starts to its German sign-in at medium integrity (`0x2000`, not
+    elevated) and uninstalls leaving nothing; a picked path opens in the core (ADR 0131: the kit picked at its sign-in,
+    `kit picked: Done`); `NoCamera` (no scan entry, the VM has no camera). Still to measure in the package, each needing a
+    signed-in packaged app — a Release build has no dev sign-in, so **the owner signs it in** (the password is never typed
+    by an agent): the members' pictures, Save a copy, a medium played, a drop (the unpackaged app takes one with UAC on),
+    an update keeping the device trust (which needs a trust slot: the principal is at the server's limit, `409
+    too_many_devices`) and Hello's enrolment (the owner's PIN); the camera's consent prompt on a PC with a camera. **The released MSIX is
     signed by the project's own self-signed certificate, `CN=veyq`** (the owner, 2026-11-13; ADR 0133 decisions 7 and
     12): each person trusts its `veyq.cer` once, elevated, in LocalMachine\TrustedPeople before the first install —
     without it the install is refused `0x800B0109`, unelevated the import is refused, and the install itself needs no
     elevation (measured with UAC on, ADR 0123's Consequences, the MSIX). Their Windows then trusts every package that
     certificate's key signs under `CN=veyq`, not only the one they checked, and nothing revokes it (remembered from the
     MSIX trust model, not measured). The release attaching `veyq.cer` under `apps` with a cosign bundle is not built.
-  - **The visible drop from Explorer was not seen** (2026-11-12): built (`Drops.cs`) and held by `DropSortTest`, but on
-    the VM the app gets no drag — no window of it holds an OLE drop target (`Veyq.Drive droptargets`). The VM runs with
-    UAC off, every process elevated; that the Windows App SDK takes no drop into an elevated app is remembered from a
-    forum thread, not settled. **An owner step:** UAC on (`EnableLUA 1`), reboot, log on at the console once (the VM has
-    no automatic logon, and an agent never types the password or PIN), then `Veyq.Drive drag` as the Depot pass drove it
-    (ADR 0123's Consequences, the Windows app). An x64 PC with UAC on answers it as well.
   - **Idle memory** is 359–459 MiB (WinUI, x64 under Prism emulation on the ARM VM, measured 2026-11-12 by
     `PeakWorkingSet64`); playing a medium and a 2 GiB upload add an amount that does not scale with the file. What it is on
     an x64 PC, and whether de's +243 MiB over a 2 GiB upload (en's +86) is the GC's slack, is unmeasured.

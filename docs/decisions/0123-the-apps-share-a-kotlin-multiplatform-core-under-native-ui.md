@@ -1051,13 +1051,18 @@ implementation exists but what holds it to the first.
   Prism on the ARM VM), so the bound there is the peak's growth over that baseline, which must not scale with the file:
   a medium played added 110–180 MiB whatever its size (607 MB and 118 MB; peak 532–536 MiB), a 2 GiB + 1 upload and its
   save +86 MiB (en) and +243 MiB (de), an order below the file (two samples; a third would tell whether de's is the GC's
-  slack). Audio heard by the owner at the VM. **Not met: the visible drop.** `Veyq.Drive drag` presses and drags as a
-  person does (Explorer shows its drag image over its own window), but the app never sees the drag, and none of its
-  windows holds an OLE drop target (`droptargets`). The VM runs with UAC off (`EnableLUA 0`), so every process is at high
-  integrity (`0x3000`, read from each token); that the Windows App SDK takes no drop into an elevated app is remembered
-  from a forum thread, not settled. Two ways around a reboot were measured and dropped (`runas /trustlevel:0x20000` left
-  the app elevated; a restricted token started it at medium integrity but still elevated, and its sign-in did not reach
-  the server). `DropSortTest` holds the rule; the visible drop is open (native-apps § Open).
+  slack). Audio heard by the owner at the VM. **The visible drop**, not seen on 2026-11-12 while the VM ran with UAC off
+  (`EnableLUA 0`, every process at high integrity, `0x3000` read from each token: the app never saw a drag), **is met
+  with UAC on** (2026-11-13, the owner's step: `EnableLUA 1`, a reboot, a console logon; `run.py run --devlogin`,
+  en-US light; `Veyq.Drive explorer` and `drag` as the Depot pass drove them, nothing changed in `Drops.cs`): a file
+  dragged from Explorer onto the level (`a drag entered <level>: files True`, `dropped onto <level>: 1 files, 0 folders,
+  0 refused`, the drag's caption the level's name in the hovered screenshot), a file onto a folder's row and a folder onto
+  the level and onto a folder's row (its two files under it, nested), each upload `Done`; read back through Save a copy
+  and the folder's download (`Get-FileHash`, the ZIP's entries hashed in place) at the SHA-256 written in Explorer,
+  4 of 4 distinct files; `Windows drop …` purged after. So the cause was the elevation; the forum thread's claim stands as
+  measured on this VM, not as the SDK's documented rule. `droptargets` is no evidence either way: it listed no window
+  holding `OleDropTargetInterface` while the drops landed (WinUI's drop target is not that window property).
+  `DropSortTest` holds the rule.
   - **The MSIX** (built 2026-11-13, [ADR 0133](0133-the-desktop-apps-ship-as-a-flatpak-bundle-and-an-msix-built-in-checks-and-promoted-with-the-release.md)
     decisions 6 and 7; `windows/run.py package [--sign [PFX]] [--smoke]`). The Windows App SDK's single-project MSIX
     tooling (`Microsoft.Windows.SDK.BuildTools.MSIX` 1.7.251221100, already in the lock) builds it under the .NET SDK's
@@ -1088,8 +1093,19 @@ implementation exists but what holds it to the first.
     commands above in the session, the tunnel held as `run.py run` holds it, the owner signing in): sign-in; Windows
     Hello enrolment (the owner answers the PIN) and a restart that unlocks; the members' pictures; a file picked by path
     opening in the core and a Save a copy; a medium played; the QR scan's camera prompt and its `NoCamera` path (the VM
-    has no camera); an update that keeps the device trust; the drop from Explorer, which needs UAC on (owner step,
-    native-apps § Open).
+    has no camera); an update that keeps the device trust; the drop from Explorer.
+    **Measured with UAC on** (2026-11-13, `run.py package --sign --smoke` exit 0 at 1.687: Release tests passed, signed
+    with the block map byte-identical under a development certificate of `CN=veyq` made there and trusted in
+    LocalMachine\TrustedPeople, installed in the logged-on session, `session SignIn`, uninstalled with nothing left; then
+    installed again for the pass): the packaged app runs at medium integrity (`0x2000`, read from its token, as Explorer's),
+    German; no scan entry (`the sign-in's kit scan not offered: no camera`, the `NoCamera` path); a kit picked through the
+    open picker by path opens in the core (`kit picked: Done`, the form filled from it) — so a packaged app's picked path
+    reaches the core as the unpackaged one's (ADR 0131). Uninstalled, the development certificate dropped from both stores
+    (`drop-dev-cert`), `F:\veyq\package` removed. **Still owed**, each behind a signed-in packaged app, which a Release
+    build reaches only through a person's sign-in (no dev sign-in; the agent types no password): the members' pictures,
+    Save a copy, a medium played, the drop (the unpackaged app takes it with UAC on, the Depot whole above), an update
+    keeping the device trust (the principal has no trust slot left, `409 too_many_devices`), Hello's enrolment (the
+    owner's PIN), the camera's prompt (a PC with a camera).
     **The trust step under a self-signed `CN=veyq` certificate** (the release's signer, ADR 0133 decision 12; walked
     2026-11-13 on the same VM, **UAC on**, with a throwaway certificate made there by `New-SelfSignedCertificate`, its
     key removed from the store after exporting a PFX and `veyq.cer`, the package signed by `run.py package --sign

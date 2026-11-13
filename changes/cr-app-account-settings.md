@@ -272,6 +272,16 @@ Apple as a pushed view (iOS) and a Settings scene-style window (macOS `Settings 
   name follows); a second session signed in by `LiveAccountSettingsTest`'s helper (or the web) appears, is signed out from
   its menu after the question, and drops out; "Sign out" ends the page and shows the sign-in. Record each in
   `native-apps.md`'s measured list.
+  **Live, Windows — met 2026-11-13** (the VM, **UAC on**, the dev backend up; `run.py run --devlogin`, the offer answered
+  "Not now"; en-US light, then de-DE dark after a kit sign-in): the pane's Settings item opens the page over the signed-in
+  shell with the principal's address and this device first, "You are here" / "Du bist hier"; this device renamed
+  (`settings rename: Done`, the row's name followed: "Windows pass device", "Windows-Durchlauf") and back to
+  `WIN-D1DBGTHDHGP`; a throwaway session of the principal ("Windows throwaway session", signed in on the Mac by a
+  `LiveRun` device, never committed) listed, signed out from its menu after the question (`settings sign out: Done`) and
+  gone from the list, then taken off the account by `LiveRun.removeAll` (its wraps, families, register entry); "Sign out"
+  → `settings sign out here: Done`, the sign-in shown — and there the password still filled (fixed: `SignInView.Forget`,
+  `cr-app-kit-sign-in` phase 9's Met; after it both fields empty). "Sign out every other" not pressed (the principal).
+  Shots `settings-1…6-en-light.png`, `settings-1/4/5/6-de-dark.png`, not committed.
   **Retrospective:** WinUI's Settings item was a non-selecting item; making it a selecting one with a `Target` of its own let the
   page live in the content with the pane's own selection and back, which is how Windows' apps show settings.
 - [ ] **5 docs and harvest** — `native-apps.md` (§ Built, § Account's open items reduced to what is left);
