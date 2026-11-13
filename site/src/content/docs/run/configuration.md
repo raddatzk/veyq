@@ -159,9 +159,12 @@ network policy is on, `externalDatabase.jdbcUrl` when `mariadb.enabled` is `fals
 | `garage.enabled` | `false` | `true` deploys the bundled Garage and offers it in the console. Off by default here, unlike on Compose: on a cluster it is one node on one claim, with no replication or versioning, and needs a host of its own. Off, set a store of your own after the install ([Storage and email](/run/storage-and-email/)) |
 | `garage.image` | `dxflrs/garage:v2.0.0@sha256:…` | Pinned by digest |
 | `garage.logFilter` | `garage=warn` | The store's `RUST_LOG`. At `info` it logs every request with the reader's address; raise it only to troubleshoot ([Operations](/run/operations/#logs)) |
-| `garage.persistence.storageClass` | — | |
+| `garage.persistence.storageClass` | — | The class of each claim that names none of its own; empty is the cluster's default |
+| `garage.persistence.meta.storageClass` | — | Overrides the shared class for the metadata; keep it a local block class, it holds an LMDB database ([Storage and email](/run/storage-and-email/#the-object-store)) |
 | `garage.persistence.meta.size` | `1Gi` | |
+| `garage.persistence.data.storageClass` | — | Overrides the shared class for the stored media; the one claim that may sit on a network share. Set before the first install |
 | `garage.persistence.data.size` | `50Gi` | The stored media |
+| `garage.persistence.snapshots.storageClass` | — | Overrides the shared class for the snapshots |
 | `garage.persistence.snapshots.size` | `1Gi` | Kept apart from the metadata on purpose |
 | `garage.resources.limits.memory` | `512Mi` | |
 | `garage.resources.requests.cpu` | `100m` | |

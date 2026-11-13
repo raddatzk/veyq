@@ -41,6 +41,25 @@ writes a CORS rule that allows any origin ([Kubernetes](/run/kubernetes/)). Wher
 offers only a store of your own. The same-origin route to the bundled store on Compose exists only while it is the
 store in use or a saved setting waiting for its check, whose test upload travels that route.
 
+**The bundled store's blocks on a network share.** Garage keeps two things apart: its metadata (`veyq-garage-meta`, an
+LMDB database) and the blocks of the objects (`veyq-garage-data`). The blocks may sit on a network share, an SMB or NFS
+export such as a storage box; the metadata may not — LMDB's own documentation rules out remote filesystems, so it stays
+on the server's local disk. What the share holds is ciphertext only, so it decides the store's availability, never its
+confidentiality.
+
+- **On Compose,** declare `veyq-garage-data` in your `compose.override.yml` as a volume of Docker's `local` driver
+  with the share's `driver_opts` (`type: cifs` or `nfs`), and leave the other two alone. Never bind-mount a host
+  directory that is itself the share's mount point: should the share be missing at boot, the store writes into the
+  empty directory beneath it, while a volume that cannot be mounted keeps the store from starting at all. Mount it as
+  the store's user, uid and gid `1000` (for SMB the `uid=1000,gid=1000` mount options): the recipe's
+  `volume-ownership` step chowns each volume's root to that user before the store starts, and a share that does not
+  already present it as owned by `1000` can refuse the chown, which stops that step and the store with it.
+- **On Kubernetes,** give the `data` claim a class of its own, `garage.persistence.data.storageClass`
+  ([Kubernetes](/run/kubernetes/)).
+
+Choose this before the store's first start: the volume is created once, and moving its blocks later is a copy with the
+store stopped. A share that holds the blocks is no backup of them — [Backup and restore](/run/backup-and-restore/).
+
 **A store of your own.** An S3-compatible service, or a Garage you run:
 
 - **S3-compatible:** the bucket must exist; veyq never creates a bucket or writes a CORS rule on a store you bring.
