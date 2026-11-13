@@ -505,10 +505,16 @@ own — ciphertext and metadata included, since the app never chose to keep them
   `blob-downloads-batch`, 39 `files` and 9 blob frames (4.9 MB). `keepNothingOnDisk()` sets no `URLCache`,
   `reloadIgnoringLocalCacheData`, no `HTTPCookieStorage` (cookies never set nor accepted) and no
   `URLCredentialStorage`; the same pass after it left no `Cache.db` and no `fsCachedData` (`NoDiskSessionTest` pins the
-  configuration). Left, before and after alike: CFNetwork's `Library/HTTPStorages/me.raddatz.veyq/httpstorages.sqlite`,
-  whose only table (`alt_services`, HTTP/3 hints) held no row — no cookie table was ever made. The dev backend sends no
-  `Alt-Svc`; one that does would leave its host there, a residual only an ephemeral session (Ktor's
-  `usePreconfiguredSession`) removes.
+  configuration). That still left CFNetwork's per-app storage session on disk,
+  `Library/HTTPStorages/me.raddatz.veyq/httpstorages.sqlite`, whose `alt_services` table (HTTP/3 hints) would record
+  every host answering with `Alt-Svc` (the dev backend sends none, so it held no row). So the core's sessions run on
+  **`ephemeralSessionConfiguration`** (`ephemeralNoDiskConfiguration()`, with `keepNothingOnDisk()` on top), whose
+  storage session — `Alt-Svc`, HSTS — lives in memory only. Ktor builds its own session from the default configuration
+  and only lets that be mutated, so `appleHttpClient` makes the session and hands it over by `usePreconfiguredSession`
+  with Ktor's own `KtorNSURLSessionDelegate` (which carries the engine's responses; closing the client invalidates the
+  session, as it does Ktor's own). Measured 2026-11-13 on a throwaway iOS 27 simulator after a sign-in, a Memory's
+  gallery and a medium's details: the container held no `Cache.db`, no `fsCachedData` and no `HTTPStorages` (before:
+  `HTTPStorages` present); `NoDiskSessionTest` pins the configuration's ephemeral disposition, red on the default one.
 - **OkHttp (Android, `Network.kt`):** no cache and `CookieJar.NO_COOKIES` are OkHttp's defaults, pinned explicitly.
   Measured 2026-11-13 on a throwaway API 36 emulator after the same pass: `run-as me.raddatz.veyq find . -type f`
   listed only `shared_prefs/veyq.trust.xml`, `shared_prefs/veyq-recent.xml` and `files/profileInstalled` — no `cache/`.

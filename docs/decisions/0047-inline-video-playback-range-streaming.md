@@ -237,7 +237,8 @@ Still open, settled with the worker queue: whether a small tier for every galler
   cookie store and no credential store on every engine — ciphertext and metadata are not the stack's to keep either.
   Measured on an iOS simulator: URLSession's default cache had written 67 answers to `Library/Caches` — blob frames,
   `members`, `exif`, and `/api/login/verify` with its tokens in clear; after the session was configured to keep
-  nothing, the same pass left none. Per engine in `src/mobile/CLAUDE.md` § Nothing on disk the app did not choose.
+  nothing, the same pass left none; on an ephemeral session not even CFNetwork's `Library/HTTPStorages` (its
+  `Alt-Svc` and HSTS records) is written. Per engine in `src/mobile/CLAUDE.md` § Nothing on disk the app did not choose.
 - **A download is whole-blob and sequential**, so it adds no access pattern beyond what a whole-blob read already
   shows. The page must stay open while it runs, since it holds the key.
 
