@@ -596,7 +596,8 @@ export type AddMediaOptions = {
    *  every wrap and seal of the medium is under that node's key (ADR 0109 point 6). Every production caller states it
    *  ([UploadTarget.nodeEpoch], the import); absent it is 0, the epoch of a scope never rotated — a suite's fake scope. */
   nodeEpoch?: number
-  /** What an import restores that the bytes cannot carry ([RestoredMediaFacts]); absent for every other upload. */
+  /** What the bytes cannot carry, sealed at birth ([RestoredMediaFacts]): an import's restored facts, or the label a
+   *  track was given as it was added; absent for every other upload. */
   restored?: RestoredMediaFacts
   /** The source's on-device stage, already run ([prepareMedia]) — by the upload queue while the file before it was on
    *  the wire (inbox #220). Absent, [uploadMediaVia] runs it itself. It must be of the same source. */
@@ -641,7 +642,9 @@ export async function prepareMedia(source: AddMediaSource, deriver: MediaDeriver
  * at birth, in the one completion that adds the medium and under the key it lands under — so a rotation and re-key that
  * lands while the import runs cannot leave them to a second write opening a tier the re-key re-sealed (inbox #700), as a
  * copy seals every fact at birth ([addCopiedMedia]). The name is clamped as a backfill clamps it ([clampPlaceName]). A
- * GPX track's own name and activity (ADR 0130 decision 9) are restored the same way, the name clamped as its edit clamps it.
+ * GPX track's own name and activity (ADR 0130 decision 9) are restored the same way, the name clamped as its edit clamps it
+ * - and sealed the same way when a member or guest names a track as they add it (`enqueueUploads`' `facts`), so a track's
+ * label never needs a second write after its upload.
  */
 export type RestoredMediaFacts = { capturedAtOverride?: number; placeName?: string; trackName?: string; trackActivity?: string }
 

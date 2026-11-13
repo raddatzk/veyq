@@ -7,8 +7,10 @@
 //
 // The map follows every map's three states (uc.memory.place A5): no map on this server, the consent prompt, the map with
 // its *Turn map services off*. Without a map the list, the numbers, the download, the removal and the add stay (decision 6).
-// Adding checks each picked file on the device (`checkGpxFile`: size, a GPX track, the node's 50) and hands the accepted ones
-// to the detail, which sends them through the one upload queue (`add`); a refused file is named in a toast.
+// Adding checks each picked file on the device (`checkGpxFile`: size, a GPX track, the node's 50), names a refused one in a
+// toast, and asks a name and an activity for each accepted one (`TrackUploadDialog`, decision 9) before it hands them, each
+// with its label, to the detail, which sends them through the one upload queue and seals the label at birth (`add`).
+// Cancelling that dialog adds nothing.
 //
 // A row's Edit (decision 9, the old application's dialog) names the track and gives it an activity, drawn as its line's
 // dash and shown above its name. The detail hands the write in as `editLabel` only where a medium's meta may be edited
@@ -28,7 +30,7 @@ import { effectiveCapturedAt, type MediaItem } from '../media'
 import { WORLD_VIEW, type LatLng } from '../memoryLocation'
 import type { MediaLoaders } from '../source'
 import { downloadOriginal, originalDownloadName } from '../download'
-import { checkGpxFile, isGpxFile, GPX_MEDIA_TYPE } from '../track/gpx'
+import { checkGpxFile, isGpxFile, trackName, GPX_MEDIA_TYPE } from '../track/gpx'
 import { trackFacts } from '../track/trackFacts'
 import { useMemoryTracks, type TrackEntry } from '../track/useMemoryTracks'
 import { activityDash, trackLabelOf, type TrackLabel } from '../track/trackLabel'
@@ -36,6 +38,7 @@ import { MetaConflictError } from '../../../core/node/sealedMetaWrite'
 import MemoryMap, { type MapTrack } from './MemoryMap.vue'
 import MapConsentPrompt from './MapConsentPrompt.vue'
 import TrackEditDialog from './TrackEditDialog.vue'
+import TrackUploadDialog from './TrackUploadDialog.vue'
 
 const props = defineProps<{
   scopeId: string
@@ -60,8 +63,8 @@ const props = defineProps<{
   editLabel?: (item: MediaItem, label: TrackLabel) => Promise<void>
 }>()
 const emit = defineEmits<{
-  /** Files checked as tracks, for the upload queue. */
-  add: [files: File[]]
+  /** Files checked as tracks, each with the label asked for it, for the upload queue. */
+  add: [tracks: { file: File; label: TrackLabel }[]]
   remove: [item: MediaItem]
   report: [item: MediaItem]
 }>()
@@ -119,6 +122,8 @@ watch([showMap, () => mapTracks.value.length, selected], () => {
 // --- add ---------------------------------------------------------------------------------------------------------
 const fileInput = ref<HTMLInputElement | null>(null)
 const checking = ref(false)
+/** The accepted files the add's dialog asks a label for; null while it is closed. */
+const labelling = ref<{ file: File; fallbackName: string | null }[] | null>(null)
 function pick() {
   if (!props.canAdd || !props.memoryKey) return
   if (props.pickReady && !props.pickReady()) return
@@ -132,18 +137,28 @@ async function onPicked() {
   if (files.length === 0) return
   checking.value = true
   try {
-    const accepted: File[] = []
+    const accepted: { file: File; fallbackName: string | null }[] = []
     for (const file of files) {
       const verdict = isGpxFile(file)
         ? await checkGpxFile(file, props.tracks.length + accepted.length)
         : { problem: 'invalid' as const }
       if ('problem' in verdict) toast.error(t(`memory.tracks.problem.${verdict.problem}`, { name: file.name }))
-      else accepted.push(file.type === GPX_MEDIA_TYPE ? file : new File([file], file.name, { type: GPX_MEDIA_TYPE, lastModified: file.lastModified }))
+      else accepted.push({
+        file: file.type === GPX_MEDIA_TYPE ? file : new File([file], file.name, { type: GPX_MEDIA_TYPE, lastModified: file.lastModified }),
+        fallbackName: trackName(verdict.track, file.name),
+      })
     }
-    if (accepted.length) emit('add', accepted)
+    if (accepted.length) labelling.value = accepted
   } finally {
     checking.value = false
   }
+}
+// Files picked on one node are never added to another: a move to another page drops the open dialog.
+watch(() => props.nodeId, () => { labelling.value = null })
+function addLabelled(labels: TrackLabel[]) {
+  const files = labelling.value
+  labelling.value = null
+  if (files) emit('add', files.map(({ file }, i) => ({ file, label: labels[i] ?? { name: null, activity: null } })))
 }
 
 // --- a row's menu ------------------------------------------------------------------------------------------------
@@ -320,6 +335,7 @@ function factsOf(entry: TrackEntry): string {
       @save="saveEdit"
       @close="editing = null"
     />
+    <TrackUploadDialog v-if="labelling" :files="labelling" @add="addLabelled" @close="labelling = null" />
   </div>
 </template>
 

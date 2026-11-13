@@ -31,6 +31,7 @@ import { coreActionsStandIn, coverStandIn } from '../../../test/nodePage'
 import { setMapsConsent } from '../../../shared/state/useMapConfig'
 import { GPX_MEDIA_TYPE } from '../track/gpx'
 import VeyqSelect from '../../../shared/ui/VeyqSelect.vue'
+import TrackUploadDialog from './TrackUploadDialog.vue'
 import type { MemoryRights } from '../rights'
 
 const SCOPE_ID = '11111111-1111-1111-1111-111111111111'
@@ -113,19 +114,35 @@ describe('MemoryDetail — GPX tracks (uc.memory.tracks)', () => {
     w.unmount()
   })
 
-  it('sends an added GPX file through the upload queue as a GPX medium of this node, apart from the gallery tiles', async () => {
+  // ADR 0130 decision 9: the name and activity asked as the track is added ride with its file into the queue, which seals
+  // them at birth. Lever: drop `facts` in `enqueueTracks`, or emit `add` before the dialog.
+  it('sends an added GPX file, with the name and activity asked for it, through the upload queue as a GPX medium of this node', async () => {
     const w = await mountWithOneTrackAndOnePhoto()
     await mapTab(w).trigger('mousedown')
     await flushPromises()
     const input = w.find('[data-testid="track-file-input"]')
-    Object.defineProperty(input.element, 'files', { value: [new File([GPX], 'second.gpx')], configurable: true })
+    Object.defineProperty(input.element, 'files', { value: [new File([GPX], 'second.gpx'), new File([GPX], 'third.gpx')], configurable: true })
     await input.trigger('change')
     await flushPromises()
+    expect(enqueueUploads, 'nothing is queued while the dialog asks').not.toHaveBeenCalled()
+    const name = document.querySelector<HTMLInputElement>('[data-testid="track-upload-0-name"]')!
+    expect(name.placeholder).toBe('Summit')
+    name.value = 'Morning ridge'
+    name.dispatchEvent(new Event('input'))
+    const select = w.findComponent(TrackUploadDialog).findAllComponents(VeyqSelect)[0]
+    expect(select, 'the first file\'s activity field').toBeDefined()
+    select!.vm.$emit('update:modelValue', 'running')
+    ;(document.querySelector('[data-testid="track-upload-add"]') as HTMLElement).click()
+    await flushPromises()
+
     expect(enqueueUploads).toHaveBeenCalledTimes(1)
     const [target, selections] = vi.mocked(enqueueUploads).mock.calls[0]
     expect(target.nodeId).toBe(NODE_ID)
     expect(target.key).toBe(`${NODE_ID}#tracks`)
-    expect(selections.map((s) => [s.file.name, s.mediaType])).toEqual([['second.gpx', GPX_MEDIA_TYPE]])
+    expect(selections.map((s) => [s.file.name, s.mediaType, s.facts])).toEqual([
+      ['second.gpx', GPX_MEDIA_TYPE, { trackName: 'Morning ridge', trackActivity: 'running' }],
+      ['third.gpx', GPX_MEDIA_TYPE, undefined],
+    ])
     w.unmount()
   })
 

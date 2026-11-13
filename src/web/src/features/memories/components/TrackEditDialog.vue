@@ -3,14 +3,13 @@
 // emptied name gives the track its file's name back (shown as the field's placeholder); "No activity" draws it solid.
 // Presentation only: the Map tab seals the label into the track's listed tier and says how the write went (`saving`,
 // `error`).
-import { computed, ref } from 'vue'
+import { ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import VeyqButton from '../../../shared/ui/VeyqButton.vue'
 import VeyqDialog from '../../../shared/ui/VeyqDialog.vue'
-import VeyqInput from '../../../shared/ui/VeyqInput.vue'
 import VeyqMessage from '../../../shared/ui/VeyqMessage.vue'
-import VeyqSelect, { type VeyqSelectOption } from '../../../shared/ui/VeyqSelect.vue'
-import { TRACK_ACTIVITIES, type TrackActivity, type TrackLabel } from '../track/trackLabel'
+import TrackLabelFields from './TrackLabelFields.vue'
+import { labelChoices, labelFrom, type TrackActivityChoice, type TrackLabel } from '../track/trackLabel'
 
 const props = defineProps<{
   /** The name a member gave it (null: named by its file) and its activity. */
@@ -24,28 +23,20 @@ const props = defineProps<{
 const emit = defineEmits<{ save: [TrackLabel]; close: [] }>()
 const { t } = useI18n()
 
-/** The select's value for no activity: an option's value may not be empty. */
-const NONE = 'none'
-type Choice = TrackActivity | typeof NONE
-
-const name = ref(props.label.name ?? '')
-const activity = ref<Choice>(props.label.activity ?? NONE)
-
-const options = computed<VeyqSelectOption<Choice>[]>(() => [
-  { label: t('memory.tracks.activity.none'), value: NONE },
-  ...TRACK_ACTIVITIES.map((a) => ({ label: t(`memory.tracks.activity.${a}`), value: a })),
-])
+const start = labelChoices(props.label)
+const name = ref(start.name)
+const activity = ref<TrackActivityChoice>(start.activity)
 
 function save() {
   if (props.saving) return
-  const chosen = activity.value
-  emit('save', { name: name.value.trim() || null, activity: chosen === NONE ? null : chosen })
+  emit('save', labelFrom(name.value, activity.value))
 }
 
 /** Show a peer's label in the fields (after a conflict, the Map tab hands it in). */
 function reset(label: TrackLabel) {
-  name.value = label.name ?? ''
-  activity.value = label.activity ?? NONE
+  const next = labelChoices(label)
+  name.value = next.name
+  activity.value = next.activity
 }
 defineExpose({ reset })
 </script>
@@ -53,15 +44,7 @@ defineExpose({ reset })
 <template>
   <VeyqDialog :visible="true" :style="{ minWidth: 'min(28rem, calc(100vw - 2rem))' }" :header="t('memory.tracks.editTitle')" @update:visible="emit('close')">
     <form class="veyq-form" data-testid="track-edit" @submit.prevent="save">
-      <label>
-        {{ t('memory.tracks.nameLabel') }}
-        <VeyqInput v-model="name" fluid data-testid="track-edit-name" :placeholder="fallbackName ?? ''" :disabled="saving" />
-      </label>
-      <p class="track-edit-hint">{{ t('memory.tracks.nameHint') }}</p>
-      <label>
-        {{ t('memory.tracks.activityLabel') }}
-        <VeyqSelect v-model="activity" :options="options" :disabled="saving" data-testid="track-edit-activity" />
-      </label>
+      <TrackLabelFields v-model:name="name" v-model:activity="activity" :fallback-name="fallbackName" :disabled="saving" hint test-id="track-edit" />
       <VeyqMessage v-if="error" tone="error">{{ t(error === 'conflict' ? 'memory.tracks.editConflict' : 'memory.tracks.editFailed') }}</VeyqMessage>
       <div class="veyq-dialog-action-row">
         <VeyqButton :label="t('common.cancel')" icon="times" variant="secondary" appearance="outlined" :disabled="saving" @click="emit('close')" />
@@ -70,11 +53,3 @@ defineExpose({ reset })
     </form>
   </VeyqDialog>
 </template>
-
-<style scoped>
-.track-edit-hint {
-  margin: -0.5rem 0 0;
-  color: var(--app-muted);
-  font-size: 0.875rem;
-}
-</style>

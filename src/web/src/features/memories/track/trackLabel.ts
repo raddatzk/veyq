@@ -29,6 +29,27 @@ export function trackActivityOf(value: unknown): TrackActivity | null {
 /** What a member gave a track: its own name (null: named by its file) and its activity (null: none). */
 export type TrackLabel = { name: string | null; activity: TrackActivity | null }
 
+/** A label field's "no activity" (a select's value may not be empty) - the fields' value, never sealed. */
+export const TRACK_NO_ACTIVITY = 'none'
+/** What a label's activity field holds: an activity, or none. */
+export type TrackActivityChoice = TrackActivity | typeof TRACK_NO_ACTIVITY
+
+/** The fields' values a label's fields start from. */
+export function labelChoices(label: TrackLabel): { name: string; activity: TrackActivityChoice } {
+  return { name: label.name ?? '', activity: label.activity ?? TRACK_NO_ACTIVITY }
+}
+
+/** The label the fields hold: a blank name is none (the file names the track), "No activity" none. */
+export function labelFrom(name: string, activity: TrackActivityChoice): TrackLabel {
+  return { name: name.trim() || null, activity: activity === TRACK_NO_ACTIVITY ? null : activity }
+}
+
+/** A label as the listed tier's fields an upload seals at birth (`RestoredMediaFacts`); none for an empty label. */
+export function trackLabelFacts(label: TrackLabel): Pick<MediaMeta, 'trackName' | 'trackActivity'> | undefined {
+  if (!label.name && !label.activity) return undefined
+  return { ...(label.name ? { trackName: label.name } : {}), ...(label.activity ? { trackActivity: label.activity } : {}) }
+}
+
 /** The label a track's opened listed tier carries. */
 export function trackLabelOf(meta: Pick<MediaMeta, 'trackName' | 'trackActivity'> | null | undefined): TrackLabel {
   const name = typeof meta?.trackName === 'string' && meta.trackName.trim() ? meta.trackName.trim() : null

@@ -51,7 +51,7 @@ import MediaTile from './MediaTile.vue'
 import MemoryBuckets from './MemoryBuckets.vue'
 import MemoryTracks from './MemoryTracks.vue'
 import { GPX_MEDIA_TYPE } from '../track/gpx'
-import type { TrackLabel } from '../track/trackLabel'
+import { trackLabelFacts, type TrackLabel } from '../track/trackLabel'
 import { MetaConflictError } from '../../../core/node/sealedMetaWrite'
 import OptimisticTile from './OptimisticTile.vue'
 import { enqueueUploads, collectPickedFiles, inferMediaType, retryFile } from '../uploadQueue'
@@ -659,7 +659,9 @@ function trackPickReady(): boolean {
   }
   return true
 }
-function enqueueTracks(files: File[]) {
+/** The Map tab's checked files, each with the name and activity asked as it was added (ADR 0130 decision 9), sealed into
+ *  its listed tier by the upload that adds it - a guest's too: the label is part of its own upload, not an edit. */
+function enqueueTracks(tracks: { file: File; label: TrackLabel }[]) {
   const key = props.memoryKey
   const upload = props.source.upload
   if (!key || !can.value.upload || !upload) return
@@ -668,7 +670,7 @@ function enqueueTracks(files: File[]) {
   if (!target) return
   enqueueUploads(
     { ...target, key: `${props.source.batchKey(targetNodeId)}${TRACK_BATCH}` },
-    files.map((file) => ({ file, mediaType: GPX_MEDIA_TYPE })),
+    tracks.map(({ file, label }) => ({ file, mediaType: GPX_MEDIA_TYPE, facts: trackLabelFacts(label) })),
     {
       label: props.node.name,
       onFileDone: () => { if (props.node.id === targetNodeId) void pollMedia() },
