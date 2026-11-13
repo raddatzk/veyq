@@ -3,6 +3,8 @@ package me.raddatz.veyq.core.admin.setup
 import me.raddatz.veyq.core.platform.capabilities.CapabilityRegistry
 import me.raddatz.veyq.core.platform.capabilities.ExternalServiceAddresses
 import me.raddatz.veyq.core.platform.capabilities.ServiceAddress
+import me.raddatz.veyq.core.platform.capabilities.DeployedValues
+import me.raddatz.veyq.core.platform.capabilities.MusicDeployment
 import me.raddatz.veyq.core.platform.capabilities.PlatformMajor
 import me.raddatz.veyq.core.config.VeyqConfig
 import me.raddatz.veyq.core.instance.InstanceStore
@@ -21,6 +23,8 @@ data class SetupState(
     val requirements: Map<String, Int>,
     /** The configured external services' addresses (ADR 0088 decision 7), carried on their entries while active. */
     val services: Map<String, ServiceAddress>,
+    /** The deployment entries' values (ADR 0131 decision 4), carried on their entries while active. */
+    val deployed: Map<String, DeployedValues>,
 )
 
 /** The owner registration payload, mapped from the API request at the resource boundary. */
@@ -57,6 +61,7 @@ class SetupHandler(
     private val instanceStore: InstanceStore,
     private val capabilities: CapabilityRegistry,
     private val services: ExternalServiceAddresses,
+    private val music: MusicDeployment,
     config: VeyqConfig,
 ) {
     // The advertised version (ADR 0032). `major` is the ONLY hard gate and the platform's one major, generated from
@@ -74,6 +79,7 @@ class SetupHandler(
         capabilities = capabilities.active,
         requirements = capabilities.requirements(null),
         services = services.configured(),
+        deployed = music.settings.values(),
     )
 
     fun createOwner(registration: OwnerRegistration): String {

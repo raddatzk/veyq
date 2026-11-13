@@ -9,9 +9,16 @@ import me.raddatz.veyq.core.generated.model.Capability
  * (`scripts/validate_capabilities.py` holds that) and its line here (`CapabilityWireTest` is red on a requirement this
  * function drops).
  */
-fun capabilityWire(id: String, requirements: Map<String, Int>, services: Map<String, ServiceAddress> = emptyMap()): Capability {
+fun capabilityWire(
+    id: String,
+    requirements: Map<String, Int>,
+    services: Map<String, ServiceAddress> = emptyMap(),
+    deployed: Map<String, DeployedValues> = emptyMap(),
+): Capability {
     // An external service's address (ADR 0088 decision 7) rides only on its own entry, which is in a set only while active.
     val service = services[id]?.takeIf { id in CapabilityIds.EXTERNAL_SERVICES }
+    // So do a deployment entry's values (ADR 0131 decision 4): the music frame's address, a service's credential.
+    val values = deployed[id]
     val mine = CapabilityRequirements.ALL.filter { it.capabilityId == id }.mapNotNull { def -> requirements[def.name]?.let { def.name to it } }.toMap()
     return Capability(
         id = id,
@@ -19,7 +26,9 @@ fun capabilityWire(id: String, requirements: Map<String, Int>, services: Map<Str
         linkMaxDays = mine[CapabilityRequirements.LINK_MAX_DAYS],
         addConsent = mine[CapabilityRequirements.ADD_CONSENT]?.let { true },
         passwordMaxDays = mine[CapabilityRequirements.PASSWORD_MAX_DAYS],
-        serviceUrl = service?.url,
+        serviceUrl = service?.url ?: values?.serviceUrl,
         serviceAttribution = service?.attribution,
+        spotifyClientId = values?.spotifyClientId,
+        appleDeveloperToken = values?.appleDeveloperToken,
     )
 }
