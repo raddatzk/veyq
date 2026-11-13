@@ -394,6 +394,55 @@ From `src/mobile` unless named:
   (B12) Cancel no longer clearing → a sign-in after Cancel with an empty key red (it must fail as a missing key); (B13) a
   typed key no longer winning → the door's received key red.
 
+  **Status: built and unit-proven (2026-11-13); the live run is pending (the dev backend was down and not to be
+  started by this phase) — the box stays open until it is green.**
+  **Built:** core `session/SessionModel.kt` — `readKit(bytes, pictures, typedServer?)` (`KitImport.read` with the door's
+  suite; `bytes` zeroed once read; no kit → `Msg.SIGNIN_KIT_UNREADABLE` on the gate, a kit held before kept; a sign-in
+  left during the read wipes what it found), `takeKit(found, typedServer?)` (the entry phase 7's scan hands its `Found`
+  to; the model owns the kit from there), `clearKit()`. The held key is a private `ByteArray` in the model, held
+  **exactly as long as the gate shows a kit**: every gate change goes through one `show(gate)`, which zeroes and drops it
+  for any gate that is not a `SignIn` with a `kit` — so Cancel, `otherAccount`, every way out of the sign-in, a typed
+  key (its gates carry `kit = null`) and a sign-in that succeeded (`Signed`) all end it by one rule; a new kit replaces
+  (zeroes) the one before; a failed sign-in's error gate carries the kit on, so the key stays for the retry. The sign-in
+  hands the door a **copy** (`signInWithKey`), zeroed in a `finally`. A pasted token (any non-blank Secret Key text is
+  tried through `EmergencyKit.read`) signs in with that kit's key, its email and server not applied; a token that does
+  not read goes on as typed text and fails as a wrong Secret Key does. The other-server notice is data:
+  `KitShown.typedServer` = the form's server (typed now, else the gate's) as an origin, where the kit's server replaced
+  a different one (compared case-blind); the words for it are phase 6's. `KitImport.ServerFrom` became `@Serializable`.
+  `Door` gained `primitives` and `signInWithKey(server, email, password, secretKey: ByteArray)`; `AccountDoor` over the
+  new `VeyqAccount.signInWithKey` (the string `signIn` and it share one private body — the key still asked for after the
+  login and the wrap, so a typed sign-in fails in the same order as before; the byte key zeroed in a `finally`). One
+  word: `signin_kit_unreadable` (EN+DE, from the web's `kitUnreadable`, "paste" said as "enter"). The bridge's two test
+  doors gained the two members (`signInWithKey` unreachable there until phase 8).
+  **For `cr-app-device-linking` phase 3 — what changed on the `SignIn` gate:** one field, `kit: KitShown? = null`, last
+  in `Gate.SignIn(working, error, adding, server, email, kit)`; nothing else of its shape. Behaviour a linking entry must
+  keep: any `SignIn` gate shown **without** `kit` ends a held kit key (the `show` rule), so a linking state that stays on
+  the sign-in carries `kit` over with `copy(...)` where the kit should survive, and builds a fresh `SignIn(...)` only
+  where it should not; set the gate through `show`, never `_gate.value`.
+  **Met:** `./gradlew :core:jvmTest :core:macosArm64Test :bridge:jvmTest :core:compileKotlinLinuxX64
+  :core:compileKotlinMingwX64` green (from `src/mobile`; `SessionModelTest` 27 on the JVM and on macosArm64, 8 of them
+  new); the guards (`scripts/validate_*.py` but guard_gaps) green. `LiveSignInTest`'s new case
+  `aKitPdfSignsThePrincipalInWithAnEmptySecretKey` (the kit PDF built in memory from the env file's credentials, the token
+  only in `Keywords` as UTF-16 hex so the read takes step 2; the trust it enrols forgotten and the session signed out in
+  a `finally`; nothing of the kit printed or written) compiles and **reports as skipped** without `VEYQ_LIVE` (JUnit's
+  `Assume`; the test XML: `tests="2" skipped="2"`) — the file's older case, which returned early and showed as passed,
+  now skips the same way. **Bites** (scratchpad `k4/bite.py`, one edit each, `/bin/cp -f` restore, compared equal after;
+  `:core:jvmTest --tests '*SessionModelTest*'`): B11 a body property on `KitShown` carrying `SecretKeyText.format` of
+  the key (outside `equals`, inside the JSON) → `a_kit_read_fills…` red by the JSON check alone; B12 `show` no longer
+  dropping the key on a non-`SignIn` gate → `cancel_leaving_and_the_rows_clear…` and `a_failed_sign_in_keeps…` red; B13
+  the held key used when a key was typed → `a_typed_key_wins…` red; and beyond the CR's three: the pasted token not read
+  → `a_pasted_token…` red; the notice never set → `a_kit_from_another_server…` red; a failed sign-in dropping the kit →
+  `a_failed_sign_in_keeps…` red; the door's copy not zeroed → `a_kit_read_fills…` and `a_pasted_token…` red; the file's
+  bytes not zeroed → `a_kit_read_fills…` and `a_file_without_a_kit…` red; an unreadable file dropping the held kit →
+  `a_file_without_a_kit…` red; a kit taken outside the sign-in → `outside_the_sign_in…` red. **Pending, live:**
+  `VEYQ_LIVE=http://veyq.localhost:8080 VEYQ_ENV_FILE=<main checkout>/.run/.env ./gradlew :core:jvmTest --tests
+  '*LiveSignInTest*'` (from `src/mobile`; `VEYQ_ENV_FILE` only from a worktree).
+  **Deviations:** (1) `takeKit` is public beside `readKit` — phase 7's scan needs the same entry, and the tests hand it
+  a `Kit` whose zeroing they can watch. (2) `readKit` takes the form's server as typed (`typedServer`), since the
+  phones' text field is the UI's until the sign-in; the bridge's `SignInKit` (phase 8) may pass it the same way. (3)
+  Not measured here: both desktops' `run.py build` (the invariant's) — `Gate.SignIn` gained a field their generated
+  types read; phase 8/9 builds them.
+
 - [x] **5 core — step 3 over the sibling's decoder.** **Entry condition:** `cr-core-qr-decoder` has landed on the
   branch (its decoder in the core, green); before the first edit, re-read every *"until `cr-core-qr-decoder` lands"*
   sentence here against the merged tree and correct the CR where it differs. Wire the decoder into D2's step 3 and the
@@ -534,3 +583,10 @@ Phase 5 (the implementer, 2026-11-13):
 - **Playing the drawing, not the decoder.** With the real decoder landed, the test seam moved from "a decoder that
   answers a text" to "a renderer that draws a real code" (`QrEncoder`); no public parameter remains that a caller could
   use to read a code's text past the core.
+
+Phase 4 (the implementer, 2026-11-13):
+- **One gate setter carries the key's lifetime.** "Cleared on Cancel, on leaving, after a success, on a typed key" was
+  four rules at four call sites; routing every gate change through `show()` and tying the key to "the gate shows a kit"
+  made it one rule — and B12's mutation of that rule turned two tests red, not one site's.
+- **An early `return@runTest` reads as a pass.** Two live test files showed their live cases green on every plain run;
+  a JUnit `Assume` before `runTest` is what makes "not run" visible in the report.
