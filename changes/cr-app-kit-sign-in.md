@@ -56,14 +56,17 @@ are the person's notes).
   codes skipped, `Found(T)`, `NoCamera`, `Denied`), a camera view per app (its D4: CameraX, AVFoundation on iOS and macOS,
   `MediaCapture` on Windows, the Camera portal and PipeWire on Linux, each with a debug test camera) and the bridge's
   `Scan.*` calls with frames as `veyq_call`'s inbound payload (its D5). This CR specifies none of it and adds no camera
-  dependency. What this CR assumes of it, *until `cr-core-qr-decoder` lands*:
-  - a decode function callable on one still picture, apart from `QrScan`, that takes a luminance plane **2400 px wide**
-    (a kit page; `QrScan`'s 1280 px cap is the scan model's, not the decoder's) and answers the text or null;
+  dependency. What this CR takes from it — its phases 1–3 have landed (re-read at phase 5, 2026-11-13):
+  - `QrDecoder.decode(QrFrame, tryHarder = true)` reads one still picture apart from `QrScan`, at any size (a
+    2400×3394 kit page measured there); `QrFrame(width, height, rowStride, luminance)` is the drawn page's type, so
+    `KitPictures` answers `QrFrame`s; `QrScan`'s 1280 px cap is the scan model's, not the decoder's;
   - `QrScan`'s `accepts` is where the kit's parser goes, and its `Found(T)` carries the read `Kit` to the sign-in model
-    without the text crossing the bridge;
+    without the text crossing the bridge — the text stays in the core; for a file the same holds: `KitImport` hands the
+    decoded text straight to `EmergencyKit.read`, and only the `Kit` leaves;
   - its fixtures include a `veyqkit:` code; the web's three kit PDFs are this CR's (phase 5).
-  Phases 5 and 7 re-read every sentence carrying the marker *"until `cr-core-qr-decoder` lands"* against the merged
-  tree before their first edit (`grep -n "until .cr-core-qr-decoder. lands" changes/cr-app-kit-sign-in.md`).
+  Still open, *until `cr-core-qr-decoder` lands* its phases 4–5: the cameras and the bridge's `Scan.*` calls. Phase 7
+  re-reads every sentence carrying that marker against the merged tree before its first edit
+  (`grep -n "until .cr-core-qr-decoder. lands" changes/cr-app-kit-sign-in.md`).
   **Shared files:** both CRs extend ADR 0130 (that CR decision 1 with a call's inbound payload, this one decision 3 with a
   host reply's drawn page, D6), `docs/crosscutting/native-apps.md` § Built and `src/mobile/CLAUDE.md`; each writes its own sentence or bullet, and
   the second to implement starts from the first's commit.
@@ -132,16 +135,16 @@ as on the web; the UI says one thing (R9's `kitUnreadable`).
 `account/KitImport.kt` (or beside `SessionModel`, the implementer's choice): `KitImport.read(bytes, pictures): Found?`
 where `pictures` is a platform interface `KitPictures`:
 - `suspend fun pdfPages(): Int?` — the PDF's page count as the platform's renderer opens it (null: it does not open);
-- `suspend fun pdfPage(page: Int, width: Int): Luma?` — page `page` drawn `width` px wide, as 8-bit luminance;
-- `suspend fun picture(longSide: Int): Luma?` — the file decoded as an image, scaled so its longer side is `longSide`.
+- `suspend fun pdfPage(page: Int, width: Int): QrFrame?` — page `page` drawn `width` px wide, as 8-bit luminance;
+- `suspend fun picture(longSide: Int): QrFrame?` — the file decoded as an image, scaled so its longer side is `longSide`.
 
 The order, for a file of at most `KIT_FILE_CAP` (32 MiB — a photographed kit at 200 dpi is 230 KB, a scan app's
 multi-page PDF a few MB; a larger file is refused unread, never read whole):
 1. the bytes read as Latin-1 through `EmergencyKit.read` — a hit ends the read **without opening a page**;
 2. if the bytes start with `%PDF-`: the `Keywords` of the document information through the core's PDF reader (D3);
 3. the QR: pages 1..min(n, 3) drawn 2400 px wide (the web's `KIT_PDF_PAGES`, `KIT_PICTURE_PIXELS`), each decoded by the
-   sibling's decoder (*until `cr-core-qr-decoder` lands*: the function Context assumes); a file that is not a PDF
-   goes to `picture(2400)` and its decode instead;
+   sibling's decoder (`QrDecoder.decode(frame, tryHarder = true)`, the text straight to `EmergencyKit.read`); a file
+   that is not a PDF goes to `picture(2400)` and its decode instead;
 4. **only where the token found carries no `srv`**: the first address field (D3), read as a typed server
    (`SessionModel.origin`, then the same origin check as D1); empty or unreadable → no server.
 
@@ -233,8 +236,8 @@ core's reader cannot follow answers "nothing here" and the order continues.
 
 ### D7 — The scan is the sibling's scanner with the kit's parser; the sign-in only opens it and takes what it found
 
-The sign-in's "Scan Emergency Kit" opens `cr-core-qr-decoder`'s scanner (*until `cr-core-qr-decoder` lands*: `QrScan`
-with its camera view per app) with `accepts = EmergencyKit.read`: a code that is not a v3 kit is skipped and scanning
+The sign-in's "Scan Emergency Kit" opens `cr-core-qr-decoder`'s scanner (`QrScan`, landed; *until `cr-core-qr-decoder` lands*
+its phases 4–5: its camera view per app) with `accepts = EmergencyKit.read`: a code that is not a v3 kit is skipped and scanning
 goes on (the web's `accepts`); `Found(kit)` closes the scanner and hands the kit to `SessionModel` exactly as a file's
 kit (D4: email and server filled, the key held in the model; a QR carries no form, so step 4 never applies). On the
 desktops the bridge's `Scan.*` calls carry it; `Update.Scan`'s `Found` says only that the sign-in took a kit.
@@ -355,8 +358,8 @@ From `src/mobile` unless named:
   no deflate) and `InflateTest` (3); `KitFixtureCases` over the web's three fixtures, run by `jvmTest` `KitFixtureTest`
   and `appleTest` `KitFixtureNativeTest`; `core/build.gradle.kts` declares the fixtures directory an input of every test
   task (`kitFixtures`).
-  **Deviations:** (1) `qr` is a parameter `(Luma) -> String?` *until `cr-core-qr-decoder` lands* (phase 5 replaces it with
-  the decoder; `Luma` may then become that CR's type). (2) The fixture cases run on the JVM and Apple, not in the Linux and
+  **Deviations:** (1) `qr` was a parameter `(Luma) -> String?` until the decoder landed; phase 5 replaced it with the
+  decoder and `Luma` with its `QrFrame`. (2) The fixture cases run on the JVM and Apple, not in the Linux and
   Windows test binaries: their runners mount/copy only the vectors and set no `VEYQ_REPO_ROOT`; every synthetic case, the
   object stream through each platform's zlib included, runs on all four. (3) Step 4 lower-cases the typed field before
   `SessionModel.origin` (a host is case-blind; "Familie.example.org" would otherwise fail the origin check). (4) The files
@@ -391,7 +394,7 @@ From `src/mobile` unless named:
   (B12) Cancel no longer clearing → a sign-in after Cancel with an empty key red (it must fail as a missing key); (B13) a
   typed key no longer winning → the door's received key red.
 
-- [ ] **5 core — step 3 over the sibling's decoder.** **Entry condition:** `cr-core-qr-decoder` has landed on the
+- [x] **5 core — step 3 over the sibling's decoder.** **Entry condition:** `cr-core-qr-decoder` has landed on the
   branch (its decoder in the core, green); before the first edit, re-read every *"until `cr-core-qr-decoder` lands"*
   sentence here against the merged tree and correct the CR where it differs. Wire the decoder into D2's step 3 and the
   picture path. A `jvmTest` draws the fixtures' pages with **Apache PDFBox** as a test-only renderer (Apache-2.0,
@@ -401,6 +404,32 @@ From `src/mobile` unless named:
   the fixture kit through step 3. **Bite:** (B14) pages drawn 600 px wide instead of 2400 → `kit-photo.pdf` red (the
   lever is real: it shows the width matters for the photographed kit; if 600 still reads, the bite names the width that
   fails, measured, and the CR's 2400 is kept as the web's).
+
+  **Status: done (2026-11-13; it needed nothing of phase 4, which stays open).**
+  **Built:** core `account/KitImport.kt` — the stand-in `qr: (Luma) -> String?` parameter and `Luma` are gone:
+  `KitPictures` answers the decoder's `QrFrame`, and `KitImport.read(p, bytes, pictures)` reads each drawn page (and a
+  picture file) with `QrDecoder.decode(frame, tryHarder = true)`, its text straight into `EmergencyKit.read` — only the
+  `Kit` leaves, as only `QrScan`'s `Found` leaves a scan; the frame's luminance zeroed after its decode (the decoder's own
+  working copies are let go, not zeroed: said in the comment). `commonTest`'s `PlayedPictures` no longer plays a decoder:
+  it draws real codes with the core's `QrEncoder` (3 px a module; blank white pages without one), so every
+  `KitImportTest` case runs the real decoder on every target. `jvmTest` `KitFixtureTest` gains `PdfBoxPictures` (a page
+  rendered `width` px wide in 8-bit grey, `ImageType.GRAY`, the scale from the crop box, a quarter-turned page's height
+  taken) and one case per fixture: `kit-printed.pdf` and `kit-photo.pdf` read to the fixture kit (email, key, server from
+  `TOKEN`) through step 3 at 2400 px. Apache PDFBox 3.0.8 (`libs.pdfbox`, `jvmTest` only; Apache-2.0, released
+  2026-07-08 — checked on Maven Central and recorded in `libs.versions.toml`); `verification-metadata.xml` written from an
+  empty Gradle home (+47 lines: pdfbox, pdfbox-io, fontbox, commons-logging 1.4.0 and their parent POMs, nothing else
+  changed).
+  **Met:** `./gradlew :core:jvmTest :core:macosArm64Test :bridge:jvmTest :core:compileKotlinLinuxX64
+  :core:compileKotlinMingwX64` green (`KitFixtureTest` 4 and `KitImportTest` 16 on the JVM, the PDFBox cases about 2 s;
+  `KitImportTest` 16 and `KitFixtureNativeTest` 2 on macosArm64). **Bites** (scratchpad `bite5/bite.py`, one edit each,
+  `/bin/cp -f` restore, compared equal after): B14 `PICTURE_PIXELS` 600 → both fixtures "no kit read" (and the premise
+  case's widths); **measured further: at 1200 the printed kit reads and the photographed one does not** — the width
+  matters for the photo; 2400 kept as the web's. The decoder bypassed (its text taken as null) → both PDFBox cases,
+  `aPictureGoesStraightToItsQr`, `anEncryptedPdf…GoesToItsQr` and `aForeignQrIsPassed…` red; the frame's zeroing removed
+  → `aForeignQrIsPassed…` red.
+  **Deviations:** the fixtures' drawings run on the JVM only (as planned); the native targets run the order over
+  `QrEncoder`-drawn pages. `PdfBoxPictures.picture` answers null (every fixture is a PDF); the picture path's real decode
+  is `aPictureGoesStraightToItsQr`'s.
 
 - [ ] **6 Android + Apple — pick the kit.** D5 and D8: the button on both sign-ins (iPhone, iPad, macOS, Android phone
   and tablet), `KitPictures` per platform, the Secret Key row's "from your Emergency Kit" state with its clear, the
@@ -497,3 +526,11 @@ proof is the tests and passes `src/mobile/CLAUDE.md` § Prove your work names �
 ## Retrospective
 
 (filled at the end)
+
+Phase 5 (the implementer, 2026-11-13):
+- **A fixture loop hides the second fixture from a bite.** B14's first run stopped at `kit-printed.pdf`'s failure and
+  could not say whether the photo — the file the bite is about — failed too; one test case per fixture named both, and
+  a second width (1200) then showed which one the width matters for. Next time: a bite's target file gets its own case.
+- **Playing the drawing, not the decoder.** With the real decoder landed, the test seam moved from "a decoder that
+  answers a text" to "a renderer that draws a real code" (`QrEncoder`); no public parameter remains that a caller could
+  use to read a code's text past the core.
