@@ -55,6 +55,8 @@ import me.raddatz.veyq.mobile.crypto.JoinRecords
 import me.raddatz.veyq.mobile.crypto.Context
 import me.raddatz.veyq.mobile.crypto.IdentityPrivate
 import me.raddatz.veyq.mobile.crypto.OpenRefused
+import me.raddatz.veyq.mobile.crypto.PairingGrant
+import me.raddatz.veyq.mobile.crypto.PairingMarks
 import me.raddatz.veyq.mobile.crypto.b64
 import me.raddatz.veyq.mobile.crypto.Primitives
 import me.raddatz.veyq.mobile.crypto.SecretKeyText
@@ -397,9 +399,12 @@ class VeyqAccount private constructor(
 
     /** Write moment 1 of the device register: this device, the session family its login created, the wrap it holds.
      *  Never on the unlock path: a failure leaves the device unnamed in the sessions list, nothing else. */
-    internal suspend fun recordThisDevice(familyId: String?) {
-        runCatching { register().remember(device.id, device.label, familyId, trusted?.wrapId, now()) }
+    internal suspend fun recordThisDevice(familyId: String?, label: String = device.label) {
+        runCatching { register().remember(device.id, label, familyId, trusted?.wrapId, now()) }
     }
+
+    /** This device's trust-state marks for the account, as a link hands them over (ADR 0059, ADR 0028 Decision 7). */
+    internal suspend fun linkMarks(): PairingMarks = marks.forLink()
 
     /** The account's device register as this device opens it (for a check of what [recordThisDevice] wrote). */
     internal suspend fun readRegister(): DeviceRegisterStore.Plain = register().read()
@@ -418,10 +423,18 @@ class VeyqAccount private constructor(
     internal suspend fun <T : Any> respond(f: suspend () -> HttpResponse<T>): HttpResponse<T> {
         val first = f()
         if (first.status != 401 || tokens.refresh == null) return first
-        val seen = tokens.access
+        refresh(tokens.access)
+        return f()
+    }
+
+    /**
+     * One rotation of the session (ADR 0004, single-flight): the access token [seen] is replaced unless another call
+     * replaced it meanwhile. A refusal is [SignInFailure.Reason.CREDENTIALS].
+     */
+    internal suspend fun refresh(seen: String = tokens.access) {
         tokens.lock.withLock {
             if (tokens.access == seen) {
-                val r = TokenApi(server, http).refreshSession(RefreshRequest(tokens.refresh!!))
+                val r = TokenApi(server, http).refreshSession(RefreshRequest(tokens.refresh ?: throw SignInFailure(SignInFailure.Reason.CREDENTIALS, "no refresh token")))
                 if (!r.success) throw SignInFailure(SignInFailure.Reason.CREDENTIALS, "refresh ${r.status}")
                 val pair = r.body()
                 tokens.access = pair.accessToken
@@ -432,7 +445,6 @@ class VeyqAccount private constructor(
                 }
             }
         }
-        return f()
     }
 
     /** The `code` of an error response's body (`ErrorResponse`), or null. */
@@ -540,6 +552,7 @@ class VeyqAccount private constructor(
             masterKey: ByteArray,
             device: ThisDevice,
             familyId: String?,
+            label: String = device.label,
         ): VeyqAccount {
             val suite = c.suite
             val identity = suite.deserializeIdentityPrivate(suite.open(Context("identity-priv"), masterKey, unb64(material.wrappedIdentityPrivateKey)))
@@ -556,7 +569,7 @@ class VeyqAccount private constructor(
                 mine.serialize(), mine.sign, tenants, device,
             )
             account.trusted?.let { device.touch(it.key) }
-            account.recordThisDevice(familyId)
+            account.recordThisDevice(familyId, label)
             return account
         }
 
@@ -674,6 +687,49 @@ class VeyqAccount private constructor(
                     factor.fill(0)
                 }
                 finish(c, primitives, record.email, material, masterKey, device, session.family.id)
+            }
+        }
+
+        /**
+         * The new device's sign-in from a link's grant (ADR 0059 §2, `cr-app-device-linking` D1): the linker's marks raised
+         * first, then the handed-over refresh token spent **once** at `POST /api/token/refresh` with the token in the body —
+         * the rotation adoption itself runs; an app keeps no cookie, so adoption is the browser's verb — and the family it
+         * belongs to read from `listSessionFamilies`' `current` mark; then the identity under the granted Master Key, and
+         * write moment 1 under the name the grant gave this device (§9). No trust is enrolled here: a linked device enrols at
+         * most a DEVICE_KEY wrap, by the offer that follows (§10). [grant] stays the caller's; its key is copied.
+         *
+         * The token is never presented twice: a second presentation is ADR 0004's clone case, which revokes the family of
+         * the device standing here. A refusal of it is [SignInFailure.Reason.SESSION_ENDED].
+         */
+        suspend fun linked(
+            primitives: Primitives,
+            server: String,
+            grant: PairingGrant,
+            device: ThisDevice,
+            client: (block: io.ktor.client.HttpClientConfig<*>.() -> Unit) -> HttpClient,
+        ): VeyqAccount {
+            val c = connect(primitives, server, client)
+            return guarded(c) {
+                val masterKey = grant.masterKey.copyOf()
+                try {
+                    grant.marks?.let { TrustMarks(device.store, primitives, masterKey).raise(it) }
+                    val r = try {
+                        TokenApi(c.base, c.http).refreshSession(RefreshRequest(grant.refreshToken))
+                    } catch (e: Exception) {
+                        throw SignInFailure(SignInFailure.Reason.UNREACHABLE, e.message)
+                    }
+                    if (r.status in 400..499) throw SignInFailure(SignInFailure.Reason.SESSION_ENDED, "handed token ${r.status}")
+                    if (!r.success) throw SignInFailure(SignInFailure.Reason.PROTOCOL, "refresh ${r.status}")
+                    val pair = r.body()
+                    c.tokens.access = pair.accessToken
+                    c.tokens.refresh = pair.refreshToken ?: throw SignInFailure(SignInFailure.Reason.PROTOCOL, "no body token")
+                    val familyId = runCatching { SessionApi(c.base, c.http).listSessionFamilies() }.getOrNull()
+                        ?.takeIf { it.success }?.body()?.firstOrNull { it.current == true }?.id
+                    finish(c, primitives, grant.email, keyMaterial(c), masterKey, device, familyId, grant.label)
+                } catch (e: Throwable) {
+                    masterKey.fill(0)
+                    throw e
+                }
             }
         }
 

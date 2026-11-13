@@ -282,6 +282,14 @@ internal class DeviceRegisterStore(
         p.copy(devices = p.devices + (deviceId to Entry(label, p.devices[deviceId]?.lastSeenAt ?: now)))
     }
 
+    /**
+     * Takes [deviceId]'s entry out, with every family and wrap row naming it — its own entry only, by the single-writer
+     * rule. Only a live test's throwaway devices use it, to leave the account's register as they found it.
+     */
+    suspend fun leave(deviceId: String) = write(load()) { p ->
+        Plain(p.devices - deviceId, p.families.filterValues { it != deviceId }, p.wraps.filterValues { it != deviceId })
+    }
+
     /** One revision-guarded write of [change] over [base]; a `409` re-reads and applies it again, bounded. */
     private suspend fun write(base: Opened, change: (Plain) -> Plain) {
         var current = base
