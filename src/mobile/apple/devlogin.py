@@ -5,10 +5,13 @@ Reads VEYQ_EMAIL, VEYQ_PASSWORD, VEYQ_SECRET_KEY and VEYQ_TENANT_DOMAIN from the
 `./gradlew backend:seed`; `VEYQ_ENV_FILE` names another, e.g. the main checkout's from a worktree) and hands them to the app as its environment through `simctl launch` (`SIMCTL_CHILD_…`);
 nothing is printed. The simulator resolves the `*.localhost` tenant as the Mac does.
 
-Usage: devlogin.py <device name or UDID> [port] [--remember] [--unlock]   (default port 8080, the dev backend)
+Usage: devlogin.py <device name or UDID> [port] [--remember] [--unlock] [--kit]   (default port 8080, the dev backend)
   --remember  answer the offer after the sign-in with the presence level (the simulator asks for Face ID)
   --unlock    hand only the password, for the unlock screen of a password-trusted account; it also fills "Manage
               servers"' password field once (the way back to the password trust), for the pass to press
+  --kit       hand only the password, for a sign-in that holds an Emergency Kit: it waits for the kit the pass picks or
+              scans (`VEYQ_DEV_KIT`, `VEYQ_DEV_KIT_SCAN` and `VEYQ_DEV_CAMERA` in this environment are passed on) and then
+              signs in with the form's email and server and the kit's held Secret Key
 """
 from __future__ import annotations
 
@@ -42,6 +45,11 @@ def main() -> None:
     child = dict(os.environ)
     if "--unlock" in flags:
         child["SIMCTL_CHILD_VEYQ_DEV_UNLOCK_PASSWORD"] = e["VEYQ_PASSWORD"]
+    elif "--kit" in flags:
+        child["SIMCTL_CHILD_VEYQ_DEV_KIT_PASSWORD"] = e["VEYQ_PASSWORD"]
+        for name in ("VEYQ_DEV_KIT", "VEYQ_DEV_KIT_SCAN", "VEYQ_DEV_CAMERA"):
+            if os.environ.get(name):
+                child[f"SIMCTL_CHILD_{name}"] = os.environ[name]
     else:
         child.update({
             "SIMCTL_CHILD_VEYQ_DEV_SERVER": f"{e['VEYQ_TENANT_DOMAIN']}:{port}",
