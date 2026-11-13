@@ -73,6 +73,17 @@ acceptanceCriteria:
           - src/features/memories/components/MemoryMap.tracks.test.ts
           - src/features/memories/components/MemoryDetail.tracks.test.ts
           - src/features/memories/exportImport.test.ts
+  - id: named-as-added
+    text: Once the picked files passed the checks, a dialog asks each accepted file's name (empty, placeholder the file's own track name, else its file name) and activity (none or one of the ten) with the Edit's two fields - for anyone who may add a track, a READ_WRITE guest included - before anything is queued. Add hands each file to the one upload queue with its label as the facts sealed into its listed tier by the completion that adds it (no meta write follows; the name clamped to 120 UTF-8 bytes; an empty label seals nothing); Cancel, or the page moving to another node, queues nothing.
+    coverage:
+      web:
+        unit:
+          - src/features/memories/components/TrackUploadDialog.test.ts
+          - src/features/memories/components/MemoryTracks.test.ts
+          - src/features/memories/components/MemoryDetail.tracks.test.ts
+          - src/features/memories/uploadQueue.test.ts
+          - src/features/memories/media.test.ts
+          - src/features/memories/track/trackLabel.test.ts
 gaps:
   stack: >-
     Lane L1's browser pass (`tests/e2e/tests/features/memories/memory-tracks.spec.ts`: a GPX file added on the Map tab is no

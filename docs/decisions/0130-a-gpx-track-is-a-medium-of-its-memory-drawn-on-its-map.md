@@ -72,7 +72,8 @@ A Memory's detail gains a **Map** tab after its Chapters tab. It is the slot the
   its distance, duration, climb and descent, each left out where the file does not give it.
 - **Per track, a menu:** **Edit** (decision 9), **Download GPX** (the original, as picked), **Report** (where Report
   is offered) and **Remove**.
-- **Add GPX track**, which takes one or several files.
+- **Add GPX track**, which takes one or several files and, once they passed the checks of decision 2, asks each one's name
+  and activity before anything is uploaded (decision 9).
 
 A track's name is the name a member gave it (decision 9), else the file's own track name, else its `metadata` name, else
 the file name without `.gpx`.
@@ -144,6 +145,12 @@ Amended 2026-11-13 (inbox #841), as the old application did it: a row's **Edit**
   activity's word stands above the name. The colour stays the list's.
 - **The name:** an emptied name drops the field, so the file names the track again; the file's name is the field's
   placeholder.
+- **As a track is added** (amended 2026-11-13, the owner's ask): once the picked files passed the checks, one dialog asks
+  each file's name and activity with the Edit's two fields, both optional; *Add* uploads them, *Cancel* uploads nothing. The
+  label is sealed into the listed tier **at birth**, by the one completion that adds the medium, as an import's restored
+  facts are (`RestoredMediaFacts`, the upload queue's `facts`): no second write, so no conflict and no re-key race. A guest
+  who may add a track (`upload`) is asked too: the label is part of its own upload, as the file is, not an edit of a
+  medium, so the next bullet's rule is untouched.
 - **Who may edit:** the right that edits a medium's capture time, `editMeta`, together with the source's `mediaMeta`
   door. A guest's source has no such door, so no link role edits a label (a `READ_WRITE` guest neither corrects a photo's
   date); a share guest sees the name and the activity exactly as a member does. A member's read-only scope (a pending

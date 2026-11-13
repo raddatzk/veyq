@@ -22,9 +22,12 @@
 2. They pick one or more `.gpx` files.
 3. Each file is read on the device. A file that is too large, is no GPX track, has fewer than two points, or would take the
    node past its track limit is refused with its own message, and nothing of it is uploaded (E1).
-4. Each accepted file is uploaded as a medium through the upload queue, its original the file as picked. It shows in the
-   top bar's upload status, and never as a tile in the gallery.
-5. Once it is listed, the track appears in the list under the map with its colour, its name and its numbers, and as a line
+4. A dialog asks each accepted file's **name** (its placeholder the file's own track name, else the file name) and
+   **activity**, both optional (ADR 0130 decision 9). *Cancel* uploads nothing (A9).
+5. Each accepted file is uploaded as a medium through the upload queue, its original the file as picked, its name and
+   activity sealed into its listed tier by the same upload. It shows in the top bar's upload status, and never as a tile in
+   the gallery.
+6. Once it is listed, the track appears in the list under the map with its colour, its name and its numbers, and as a line
    on the map with a start and an end marker. The map frames the photos and the tracks shown.
 
 ## Alternate / exception flows
@@ -49,6 +52,8 @@
   the row then shows the activity above the name, and the line and the row's swatch take the activity's dash. A peer's
   label saved meanwhile is shown in the dialog with a note instead of being overwritten; a failed save says so and keeps
   the dialog open. Everyone who sees the tab sees the name and the activity.
+- **A9 — cancel the add:** closing the add's dialog, or leaving the page for another node while it is open, uploads none
+  of the picked files.
 - **E1 — a refused file:** more than 25 MiB (*too large*), not a GPX document or one with a document type declaration
   (*not a GPX track*), fewer than two usable points (*too short*), the node already holding 50 tracks (*limit reached*). The
   message names the file; the other files of the pick go on.
@@ -65,8 +70,9 @@
   The bounds are the adding client's: the server cannot see a track to count it (ADR 0130 decision 2).
 - **No new consent.** The map is drawn under the one consent per browser every map uses; the tile service learns the
   viewport, never a line (ADR 0130 decision 6).
-- **A label is sealed.** A track's own name and activity are fields of its listed tier, re-sealed under the medium's key;
-  the server sees a blob of about the same size and learns neither (ADR 0130 decision 9).
+- **A label is sealed.** A track's own name and activity are fields of its listed tier, sealed with the medium as it is
+  added or re-sealed under the medium's key by an Edit; the server sees a blob of about the same size and learns neither
+  (ADR 0130 decision 9).
 - **Not a photo.** A track is in no view of photos: gallery, item count, lightbox, contributions, search, the date and
   place reconcile (ADR 0130 decision 7).
 

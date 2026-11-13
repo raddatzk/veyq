@@ -201,7 +201,7 @@ guest moves a Memory, never a chapter); the cover is core's action with core's r
 | create a chapter | ✓ on a `MEMORY` only | ✗ | ✗ | ✗ | ✗ |
 | date, place, cover, banner (the node's sealed meta; the automatic reconcile too) | ✓ | ✗ | ✗ | ✗ | ✗ |
 | see the banner (read from the node's own attachment) | ✓ | ✓ | ✓ | ✓ | ✗ |
-| the Map tab and its GPX tracks ([uc.memory.tracks](../features/memory/use-cases/uc.memory.tracks.md)): see and download them; add one (the upload right) and remove one (the delete-media right) | ✓ see, add, remove (trash) | ✓ see | ✓ see | ✓ see, add, remove its own (purge) | ✗ |
+| the Map tab and its GPX tracks ([uc.memory.tracks](../features/memory/use-cases/uc.memory.tracks.md)): see and download them; add one (the upload right), naming it and giving it an activity as it is added, and remove one (the delete-media right) | ✓ see, add, remove (trash) | ✓ see | ✓ see | ✓ see, add, remove its own (purge) | ✗ |
 | background music: set the playlists (the node's sealed meta, [uc.memory.music](../features/memory/use-cases/uc.memory.music.md)) / the header's play buttons and the music bar below the shell's footer, playing after one's own opt-in | ✓ / ✓ | ✗ / ✓ | ✗ / ✓ | ✗ / ✓ | ✗ / ✗ |
 | rename, delete the node | ✓ | ✗ | ✗ | ✗ | ✗ |
 | narrow the gallery by facts (day, year, place, kind, the original's name; uc.memory.gallery step 8) | ✓ | ✓ | ✗ | ✗ | ✗ |
