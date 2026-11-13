@@ -25,8 +25,12 @@ FROM fedora:44@sha256:15da97ed9aa94dd3d92c3925eb89520f6c80e07ea7ee24cba848d1f8b6
 #   `GInputStream` through `giostreamsrc`, measured 2026-11-12). The app ships no codec: these stand for what a Fedora
 #   desktop carries — Matroska/WebM, MP4, VP8/VP9 and Opus (good, base), AAC (bad-free's fdk-aac), H.264 (Cisco's
 #   openh264). What none of them decodes (ProRes, HEVC) is said as not shown here, with Save a copy.
+# gstreamer1-devel, gstreamer1-plugins-base-devel, pipewire-gstreamer: a QR scan's camera (the QR CR's D4) — gstreamer-rs
+#   links GStreamer, its app and video libraries, and `pipewiresrc` reads the Camera portal's PipeWire remote; the test
+#   camera (`VEYQ_DEV_CAMERA`) uses good's `imagefreeze` and base's decoders.
 RUN dnf install -y --setopt=install_weak_deps=False \
         gtk4-devel libadwaita-devel poppler-glib-devel rust cargo clippy gcc gettext \
+        gstreamer1-devel gstreamer1-plugins-base-devel pipewire-gstreamer \
         gstreamer1-plugins-good gstreamer1-plugins-bad-free gstreamer1-plugin-openh264 \
         libxcrypt-compat ca-certificates tzdata glibc-langpack-en glibc-langpack-de socat \
         libsecret gnome-keyring dbus-daemon \

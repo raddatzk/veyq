@@ -71,11 +71,7 @@ pub type Answered = (Answer, Option<Vec<u8>>);
 /// this is called, not when its answer is first awaited, so calls arrive in the order they were made (an entry editor's
 /// edits are applied in that order, `Editor.Change`).
 pub fn call(call: &Call) -> impl std::future::Future<Output = Result<Answered, Unreadable>> + use<> {
-    let json = CString::new(serde_json::to_string(call).expect("a Call writes")).expect("JSON holds no NUL");
-    let (tx, rx) = async_channel::bounded::<Result<Answered, Unreadable>>(1);
-    let ctx = Box::into_raw(Box::new(tx)).cast::<c_void>();
-    // SAFETY: the request is read before the call returns; ctx is taken back exactly once, by [answered].
-    unsafe { wire::veyq_call(json.as_ptr(), ptr::null(), 0, ctx, answered) };
+    let rx = send_call(call, None);
     async move { rx.recv().await.unwrap_or_else(|_| unreachable!("the answer's sender is dropped only after it sent")) }
 }
 
@@ -83,12 +79,25 @@ pub fn call(call: &Call) -> impl std::future::Future<Output = Result<Answered, U
 /// medium's range, `reader_stream`), never GTK's main loop — the answer arrives on a core thread, which needs nothing of
 /// the caller's.
 pub fn call_blocking(call: &Call) -> Result<Answered, Unreadable> {
+    call_blocking_with(call, None)
+}
+
+/// [call_blocking] with [inbound] beside the call's JSON (ADR 0131 decision 1's inward half: a scan's camera frame,
+/// `Scan.Frame`), which the core copies before `veyq_call` returns.
+pub fn call_blocking_with(call: &Call, inbound: Option<&[u8]>) -> Result<Answered, Unreadable> {
+    send_call(call, inbound).recv_blocking().unwrap_or_else(|_| unreachable!("the answer's sender is dropped only after it sent"))
+}
+
+/// Hands [call], and [inbound] beside it, to the core; its one answer arrives through the receiver.
+fn send_call(call: &Call, inbound: Option<&[u8]>) -> async_channel::Receiver<Result<Answered, Unreadable>> {
     let json = CString::new(serde_json::to_string(call).expect("a Call writes")).expect("JSON holds no NUL");
     let (tx, rx) = async_channel::bounded::<Result<Answered, Unreadable>>(1);
     let ctx = Box::into_raw(Box::new(tx)).cast::<c_void>();
-    // SAFETY: as [call]'s.
-    unsafe { wire::veyq_call(json.as_ptr(), ptr::null(), 0, ctx, answered) };
-    rx.recv_blocking().unwrap_or_else(|_| unreachable!("the answer's sender is dropped only after it sent"))
+    // a slice's pointer is never NULL, so an empty inbound payload stays one (bridge.h: NULL is none)
+    let (bytes, len) = inbound.map_or((ptr::null(), 0), |b| (b.as_ptr(), b.len()));
+    // SAFETY: the request and the payload are read before the call returns; ctx is taken back exactly once, by [answered].
+    unsafe { wire::veyq_call(json.as_ptr(), bytes, len, ctx, answered) };
+    rx
 }
 
 unsafe extern "C" fn answered(ctx: *mut c_void, json: *const c_char, bytes: *const u8, len: usize) {
