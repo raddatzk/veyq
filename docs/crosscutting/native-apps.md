@@ -152,11 +152,13 @@ button with its popover and Windows' `AppBarButton` with its flyout, each with C
     there), updates in place keeping its data and uninstalls leaving nothing on the VM; a signed copy's block map is the
     unsigned one's. Still to measure in the package, with a signed-in server: whether a packaged app's picked path
     opens in the core (ADR 0131), Save a copy, the camera's consent and `NoCamera`, and whether a packaged app takes a
-    drop (it is elevated on the VM as the unpackaged one is: the owner step below answers both). **Who signs the
-    released MSIX** is the owner's (ADR 0133 decisions 7 and 12): with a project certificate, each person trusts it once,
-    as administrator, before the first install, and their Windows then trusts every package that certificate's key signs,
-    not only veyq's (remembered from the MSIX trust model, not measured); a certificate from a CA or Azure Artifact
-    Signing needs no such step and names a legal person.
+    drop (it is elevated on the VM as the unpackaged one is: the owner step below answers both). **The released MSIX is
+    signed by the project's own self-signed certificate, `CN=veyq`** (the owner, 2026-11-13; ADR 0133 decisions 7 and
+    12): each person trusts its `veyq.cer` once, elevated, in LocalMachine\TrustedPeople before the first install —
+    without it the install is refused `0x800B0109`, unelevated the import is refused, and the install itself needs no
+    elevation (measured with UAC on, ADR 0123's Consequences, the MSIX). Their Windows then trusts every package that
+    certificate's key signs under `CN=veyq`, not only the one they checked, and nothing revokes it (remembered from the
+    MSIX trust model, not measured). The release attaching `veyq.cer` under `apps` with a cosign bundle is not built.
   - **The visible drop from Explorer was not seen** (2026-11-12): built (`Drops.cs`) and held by `DropSortTest`, but on
     the VM the app gets no drag — no window of it holds an OLE drop target (`Veyq.Drive droptargets`). The VM runs with
     UAC off, every process elevated; that the Windows App SDK takes no drop into an elevated app is remembered from a
