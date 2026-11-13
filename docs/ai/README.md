@@ -350,6 +350,11 @@ A refined CR nails **decisions, not keystrokes**:
   server checks against its configuration names the read that serves it — and a new seal or statement purpose is
   checked against `seal.ts`'s tables, where no purpose may sit in two (the CR's `join-record` became the field
   purpose `member-join-record`).
+- **A new operation over one variant says what it answers for the other; a "the client then calls X" names the session
+  X needs.** cr-member-invite-as-a-link added a link invite beside the mailed one and left the cross cases (a link
+  re-issue of a mailed invite, a mailed re-issue of a link) to the contracts phase; and its join page was to ask for the
+  confirmation mail right after a register that issues no session, which the confirmation needs — the implementer signed
+  the new account in first.
 - **Spike when the shape is unclear.** The right abstraction often only emerges from N real usages (that is why
   `core/membership/MembershipStore` came out clean — 5 usages, not a guess). If refinement can't settle the
   shape from reasoning, run a time-boxed subagent spike over the surface and fold the inventory back in — don't

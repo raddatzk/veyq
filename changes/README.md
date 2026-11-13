@@ -76,7 +76,11 @@ a client red names the typed line it expects to fail — and runs `pnpm run chec
 **And a new model's property names are the generator's to keep or change**: cr-bucket-reconcile's `keys` became
 `propertyKeys` in the Kotlin model (a name the generator reserves), found only when phase 2 wrote the first constructor
 call, so the contract was renamed after its phase had committed. A contracts phase that adds a schema writes one use of
-it in each generated language before it commits. **So are its type names, where a schema crosses into `_common`**:
+it in each generated language before it commits, and one that reshapes a schema also diffs the generated models
+against a copy taken before the edit: cr-member-invite-as-a-link shared eight fields through `allOf`, both generators
+named it cleanly and the use compiled, and only the diff showed that the Kotlin generator, flattening the `allOf`, had
+turned `epoch`'s `[integer, "null"]` into `Int` — a missing field binding 0 on an operation that worked the day before.
+**So are its type names, where a schema crosses into `_common`**:
 cr-instance-privacy-notice's `PrivacyNotice`, served by the operator spec, reached `LocalizedMarkdown` through the
 spec's `_common` alias (and, moved into `_common`, through `_common` itself), and both generators named its parts inline
 either way (`PrivacyNoticePassageText`, `PrivacyNoticePassagesInner`, `OperatorSectionRecord`) — the other specs' runs
@@ -738,7 +742,10 @@ A literal grep for the old names finds nothing in that guard, so only running it
 `src/packages/crypto/stryker.mutate.json` and `src/backend/core/pitest.scope.json` admit a file only while it is pure.
 `cr-meta-writes-carry-the-version-they-read` put a PATCH into `nodeMeta.ts`, which is in the web scope; the gate
 (break 95) stayed green at 98.7 % while that file fell from 100 % to 96 %. So the inventory greps the three manifests for
-every file a CR edits, and a file in one keeps its I/O next door.
+every file a CR edits, and a file in one keeps its I/O next door. A done-when that records a gate's exit code as
+evidence for a file outside its manifest records nothing about it: cr-member-invite-as-a-link's crypto commit cited
+`pnpm run mutation --force` for a link codec in `invite.ts`, which the package's manifest does not list; six hand bites
+were its only grade.
 
 ### A move re-points its readers first, on the layout it is about to leave
 
@@ -898,7 +905,10 @@ the one-shot bites a copy too:** an injection into a file the owner's Vite serve
 open page, so the lever goes into a copy beside the file, run by a copy of its test (2026-11-09, five search bites).
 **Batching levers into one run is sound only across disjoint code paths AND disjoint tests:** a test stops at its first
 failed assertion, so two levers that redden the same test leave the second unproven (`cr-queued-rotation-owners-only-no-leased-join`
-paired "derive from the oldest job" with "drop the re-queue's state gate", and the first answered for both).
+paired "derive from the oldest job" with "drop the re-queue's state gate", and the first answered for both). A lever
+that changes a view's ENTRY state reddens every test through that view, so it runs in a round alone
+(cr-member-invite-as-a-link: disabling the join page's auto-open failed every join test first, and the typed-address,
+confirmation and redeemed-message levers needed rounds of their own).
 
 **First check the lever is wired to the mechanism at all.** Both traps below assume the lever *reaches* the code
 path; a CR that specifies a mechanism and, separately, the bite that must break it can name two things that never
@@ -1752,6 +1762,12 @@ the done-when does not ask for is skipped by default. So a phase that changes a 
 is clicked and where (and § above: what the instance must hold for it); a phase that cannot run a browser says so
 and the CR carries the pass as an open item, not a footnote.
 
+**A UI phase that changes what a control shows first greps `tests/e2e` (the shot scripts included) for the visible
+labels of what moved.** An e2e spec reaches a control by its visible English label, never by a symbol, so a locator of
+component and function names misses it: cr-member-invite-as-a-link opened the invite dialog on a new first way, and five
+lane-L1 specs and two shot scripts that fill "Email address" right after "Invite member" fell off their path, found by
+none of the CR's test greps.
+
 ### A layout that switches at a breakpoint is computed on both sides of it at refine
 
 cr-node-header-actions-by-priority fixed a node header's actions to a row of their own up to 540 px and to the right
@@ -2021,7 +2037,10 @@ reds from `grep "capabilities: \["`. The grep found `SetupStatus` fixtures and `
 red came: the client's `getTenantCapabilities` unwrapped `.capabilities`, so no fixture typed the response at all, and
 the field reached the client only once that wrapper returned the whole type (then the two suites mocking it needed
 it). So the locator for a new required response field greps the generated type's name and every function that returns
-or unwraps it, and the CR says whether a wrapper must change to pass the field through.
+or unwraps it, and the CR says whether a wrapper must change to pass the field through. **A required field made
+optional reddens who BUILDS it positionally:** the Kotlin model moves an optional parameter behind the required ones, so
+`TenantsResource`'s positional `PendingMemberInvite(...)` stopped compiling, a red cr-member-invite-as-a-link did not
+predict.
 
 ### A locator for an endpoint's callers greps its route, not only its operation name
 
