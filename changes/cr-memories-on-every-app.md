@@ -558,6 +558,87 @@ D9.
   undone, a chapter made; purged.
 - Builds as phase 1.
 
+**Status: built, unit-proven and live-proven, every new check bitten (2026-11-13). No desktop draws Memories yet
+(phases 4–5): both hosts answer the new host
+requests `Failed` (an original then goes up alone) and leave New Memory out of their New.**
+
+**Built:**
+- **Wire** (`bridge/.../Wire.kt`): `Shell.CreateMemory`; `Gallery.Open/Close/Reload/Tile/ChapterCover/Trash/Undo/Purge/
+  CancelAsk/Seen/CreateChapter`; `Memory.Upload(gallery, paths)`; `Lightbox.Open/Close/Go/Picture/Slideshow/Details/Trash/Stop`;
+  `Medium.Reader`, `Medium.Save` (onto the Depot CR's `Saving`/`Watched.Save`/`Save.Cancel`); `Watched.Gallery`,
+  `Watched.GalleryLive` (the poll inside the watch's job, as `PotLive`), `Watched.Lightbox`; `Update.Gallery(GalleryShown)`
+  with `GalleryRow`s (blob ids to key a decoded cache by, never bytes), `Update.Lightbox(LightboxShown)` with
+  `SlideshowState`; answers `GalleryOpened`, `LightboxOpened`, `Created(node, notice)`, `MediumDetails(DetailRow…)`;
+  `Queued` gained `notice` (what was left out); `Why` gained `NO_SUCH_GALLERY`, `NO_SUCH_LIGHTBOX`, `NOT_OFFERED`;
+  `Header.Facts` gained `gallery` (the page's own "Add photos" joins the header's plan, as a file page's Replace).
+  `HostRequest.MediaDuration(path)` and `HostRequest.MediaTiers(path, mediaType, previewEdge, previewQuality,
+  thumbnailEdge, thumbnailQuality, posterAtMs)` → `HostReply.Tiers(width, height, previewSize)` with `preview ‖ thumbnail`
+  as the reply's payload.
+- **Dispatch** (`Bridge.kt`): one line per call onto `GalleryModel`, `Lightbox`, `MediaUploads`, `ShellModel.createMemory`;
+  a `Tenant` gained `mediaUploads`, `gallery`, `createMemory`; the bridge holds one `MediaUploads` per open tenant over the
+  app's one queue (the tray stays `DepotUploads`'), the galleries, their lightboxes and each lightbox reader's owner. A
+  reader a lightbox opened is refused (and dropped) once the lightbox's model no longer holds it — paged away, stopped,
+  closed, its gallery or tenant closed. `Memory.Upload` wraps each opened path as a `PathSource` (the path for the host,
+  the reads at offsets through `FileSource`).
+- **Host** (`Host.kt`): `HostTiers`, core's `MediaUpload.Deriver` over the host — `derive` returns at once, the asks run on
+  a scope of their own; a video's poster time is `MediaUpload.posterAtMs` of the length the host tells, so the rule stays
+  the core's; a reply that is no set of both tiers, or a source with no path, goes up alone. `NoTiers` for a composition
+  without a host. `Exports.kt` hands the library `HostTiers(h)`.
+- **Core:** `AppKinds.Create` gained `MEMORY` (`memory_new`) and `CHAPTER` (`memory_add_chapter`); `createsWhere` (a
+  desktop's one New) appends `MEMORY` at every level, a chapter stays a Memory's page's own (`GalleryModel.creates`).
+  `GalleryModel` gained `label(id)` (its upload's words), `deletes(mediaId)` (a row's delete offered: any for a member, a
+  guest's own) and `chapterCover(nodeId)` (only a listed chapter's, `Door.cover` → `NodeCover.openNode` in
+  `ShellModel.galleryModel`); `MediaUploads.notTaken(count)` with the new word `memory_not_media` (English, German).
+- **Apps:** Android's Home New `when` gained the two arms (not in its lists: phase 6); Linux's `draw_new` skips them
+  (`continue`), Windows filters them out of its New — the desktops' Memories are phases 4–5.
+
+**Deviation:** D9's `Gallery.Open(scopeId, nodeId)` takes the `NodeAt` (kind and name are the model's), as `File.Open`;
+`Gallery.CreateChapter`/`Shell.CreateMemory` answer `Created(node, notice)` rather than `Stored`, since the host opens the
+node made; `Memory.Upload` takes no label (the batch is the node's name, `MediaUploads`'). A chapter row carries no
+cover presence: `Gallery.ChapterCover` is refused `NO_COVER` where there is none (the presence needs the node's meta read).
+D9's DispatchTest cases live in a class of their own, `MemoriesDispatchTest` (DispatchTest is 2 500 lines). "Answered once
+queued" holds at Depot's level: the count is what `GalleryModel.upload` queued; the queue's own enqueue is asynchronous
+in both.
+
+**Met:** `ANDROID_HOME=$HOME/Library/Android/sdk ./gradlew :core:jvmTest :core:macosArm64Test :bridge:jvmTest
+:android:assembleDebug` green from `src/mobile` (core jvm 620 tests, 6 skipped — the live cases; macosArm64 436; bridge 76,
+2 skipped — `LiveBridgeTest`'s Memory case among them). `linux/run.py build` green (clippy `-D warnings`, `cargo test` 43
+passed — the kit drawing's hang did not show; Linux's `header.rs` and `uploads.rs` take `Header.Facts`' `gallery: None` and
+`Queued`'s `notice`), `linux/run.py bridge` green, `windows/run.py build` green (Veyq.Bridge.Tests and Veyq.Tests passed; the generated C# makes every field a required
+member, so `NodeHeader.cs` sets `gallery = null`). Guards (`/usr/bin/python3
+scripts/validate_*.py` but guard_gaps) green. New: `MemoriesDispatchTest` (2: every D9 call
+and watch over a played Memory and a played host through a real `Host`; the tiers asked off the deriving thread),
+`GalleryActionsTest` +1, `ShellWordsTest` +`createsWhere`, `WireTest`'s samples of every new shape (the Rust half reads
+them). **Bitten**, by a script (mutation → its class red → restored with `/bin/cp -f`), 17 mutations: a tile read from the
+lightbox's tier; a reader kept when paged away; a page kept past its tenant; a path read whole; an upload answered with
+what it was handed, not what was queued; the Undo kept past its window; a chapter offered outside a Memory; the live poll
+not run; the page's upload missing from the header's plan; the tiers asked on the deriving thread; the payload taken
+whole as the preview; the poster's time not the core's; a key-named field on a gallery's row (`SecretFreeSchemaTest`,
+unchanged, covers the new shapes by derivation); New Memory not among a level's creates; a guest deleting another's
+medium; a cover read for a node that is no chapter; nothing said of files not taken.
+After that merge (its one conflict, `Exports.kt`: `Started.start` kept, `HostTiers(h)` added) the proof ran again, all
+green: the four Gradle tasks (core jvm 620, macosArm64 436), `linux/run.py build` (43 passed), `windows/run.py build` (UAC
+now on the VM: the build ran unchanged, Veyq.Bridge.Tests and Veyq.Tests passed), the guards (`validate_release_identity`
+timed out its `git init` once under the Windows build's load and passed alone).
+**Live, met** (after the merge of the bridge's host race fix, `bca4c0f66`: `HostTiers` asks through the host `Started`
+publishes before composing — `Exports.kt` hands it the same `h` — and a silent host's `Host.Silent` is caught by its
+`runCatching`, so the original goes up alone): `LiveBridgeTest.aMemoryIsMadeFilledByPathPlayedSavedAndEmptiedThroughCalls`
+green against the dev backend in 92 s, from `src/mobile`: `/opt/homebrew/bin/ffmpeg -f lavfi -i testsrc2=size=1920x1080:rate=30
+-t 300 -c:v libvpx-vp9 -deadline realtime -cpu-used 8 -b:v 16M -minrate 16M -maxrate 16M <scratch>/veyq-600.webm` (599 086 462 B),
+then `VEYQ_LIVE=http://veyq.localhost:8080 VEYQ_ENV_FILE=<main checkout>/.run/.env VEYQ_LIVE_MEMORY_WEBM=<that file>
+./gradlew :bridge:jvmTest --tests '*LiveBridgeTest.aMemoryIsMade*' --rerun`: `App memory 68547` made, its name then
+refused as taken, three photos and the WebM in after 50 s with the played host's tiers, each tile at its thumbnail's
+SHA-256, a range across a frame's edge at the file's, the original saved at the file's SHA-256 and a second save cancelled
+with nothing left, a photo trashed and undone, a chapter made; trashed and purged (`TRASHED`, `PURGED`); the WebM deleted
+after. Reported skipped without `VEYQ_LIVE` and `VEYQ_LIVE_MEMORY_WEBM`.
+
+**Retrospective:** the first played upload job prepared twice — the queue prepares ahead while the run awaits the same
+work — so a played job must hold the core job's own once-only lock, or the host is asked twice. A medium leaves the rows a
+moment before its Undo is offered (two state updates): a test waiting for "gone and no Undo" must first see the offer, or
+it takes the instant between them for the window's end. The poll's 20 s cadence would make a dispatch test slow; a clock
+whose first reading is the poll's start and every later one long after makes it tick at once, with no test hook in the
+model.
+
 ### Phase 4 — Linux: Memories drawn
 
 D8 (Linux) first, then D11's screens over phase 3's calls: New Memory and New chapter, the gallery with its chapters' covers and

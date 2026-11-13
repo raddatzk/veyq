@@ -110,6 +110,9 @@ class GalleryModel(
 
         /** A chapter [name] made in this Memory. Absent: refused. */
         suspend fun createChapter(name: String): MemoryCreate.Made = MemoryCreate.Made(null, MemoryCreate.refused(null))
+
+        /** Node [nodeId]'s cover picture as stored (core's `NodeCover`), or null where it has none. Absent: none. */
+        suspend fun cover(nodeId: String): ByteArray? = null
     }
 
     /** What a trash or a restore of a medium came to (`deleteMedia`, `restoreMedia`). */
@@ -180,6 +183,28 @@ class GalleryModel(
 
     /** What the page's own New makes here ([MemoryCreate.offered] on this node, where the rights allow): a chapter on a Memory. */
     val creates: List<String> get() = MemoryCreate.offered(node.kind).filter { it == MemoryCreate.CHAPTER && rights.createChapter }
+
+    /** An own header action's words ([headerActions]: adding photos and videos); null for another id. */
+    fun label(id: String): Msg? = if (id == UPLOAD) Msg.MEMORY_ADD else null
+
+    /**
+     * Whether medium [mediaId] offers its delete to whoever looks ([trash]): every one a member's (to the trash), a guest's
+     * own one only (a purge); none where the rights delete nothing or it is not shown.
+     */
+    fun deletes(mediaId: String): Boolean = row(mediaId) != null && when (rights.deleteMedia) {
+        MemoryRights.DeleteMedia.ANY -> true
+        MemoryRights.DeleteMedia.OWN -> door.isOwn(mediaId)
+        MemoryRights.DeleteMedia.NONE -> false
+    }
+
+    /**
+     * Chapter [nodeId]'s cover picture as stored, for its row (the platform decodes it), where it is one of this Memory's
+     * chapters ([State.chapters]); null where it is not, has no cover or did not read.
+     */
+    suspend fun chapterCover(nodeId: String): ByteArray? {
+        if (current.chapters.none { it.nodeId == nodeId }) return null
+        return runCatching { door.cover(nodeId) }.getOrNull()
+    }
 
     class Watch internal constructor(private val job: Job) {
         fun stop() = job.cancel()

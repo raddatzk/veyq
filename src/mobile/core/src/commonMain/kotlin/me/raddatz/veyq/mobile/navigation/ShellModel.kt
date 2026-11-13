@@ -571,6 +571,7 @@ class ShellModel(
             override suspend fun restore(mediaId: String) = me.raddatz.veyq.mobile.memories.MemoryMedia.restore(tenant, ref.scopeId, mediaId)
             override suspend fun createChapter(name: String) =
                 createMemoryNode(ref.scopeId, ref.nodeId, me.raddatz.veyq.mobile.memories.MemoryCreate.CHAPTER, name)
+            override suspend fun cover(nodeId: String) = NodeCover.openNode(tenant, nodeId)
         }, access = me.raddatz.veyq.mobile.memories.MemoryRights.Access.Member(
             memoriesOn = "memories" !in tenant.applicationsOff(), inIdentityFolder = inIdentityFolder(ref),
         ), now = now)

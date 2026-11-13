@@ -22,7 +22,9 @@ import me.raddatz.veyq.mobile.session.ShareLinks
 import me.raddatz.veyq.mobile.words.Msg
 import me.raddatz.veyq.mobile.words.Notice
 import kotlin.test.Test
+import kotlin.test.assertContentEquals
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
@@ -97,6 +99,11 @@ class GalleryActionsTest {
         override suspend fun createChapter(name: String): MemoryCreate.Made {
             sent += "chapter:$name"
             return MemoryCreate.Made(NodeAt("s", "new", "CHAPTER", name), null)
+        }
+        val covers = mutableListOf<String>()
+        override suspend fun cover(nodeId: String): ByteArray? {
+            covers += nodeId
+            return "cover-$nodeId".encodeToByteArray()
         }
     }
 
@@ -310,5 +317,26 @@ class GalleryActionsTest {
         assertEquals(Notice(Msg.NODE_ILLEGAL_STRUCTURE), open(asGuest, access = Access.Guest(ShareLinks.READ_WRITE)).createChapter("X").notice)
         assertEquals(Notice(Msg.FOLDER_NAME_EMPTY), open(Door(three())).createChapter("  ").notice)
         assertEquals(emptyList(), onChapter.sent + asGuest.sent)
+    }
+
+    @Test
+    fun eachMediumSaysWhetherItsDeleteIsOfferedAChaptersCoverIsReadOnlyForItsChaptersAndTheUploadIsWorded() = runTest {
+        val member = open(Door(three()))
+        assertTrue(listOf("a", "b", "c").all(member::deletes), "a member deletes every medium")
+        assertFalse(member.deletes("gone"), "nor one not shown")
+        val door = Door(three())
+        door.own += "c"
+        val guest = open(door, access = Access.Guest(ShareLinks.READ_WRITE))
+        assertEquals(listOf(false, false, true), listOf("a", "b", "c").map(guest::deletes), "a guest only their own")
+        assertFalse(open(Door(three()), access = Access.Guest(ShareLinks.READ)).deletes("a"), "a viewer none")
+        val covers = Door(three())
+        val g = open(covers)
+        assertContentEquals("cover-c1".encodeToByteArray(), g.chapterCover("c1"))
+        assertNull(g.chapterCover("elsewhere"), "a node that is no chapter of this Memory")
+        assertEquals(listOf("c1"), covers.covers)
+        assertEquals(Msg.MEMORY_ADD, g.label(GalleryModel.UPLOAD))
+        assertNull(g.label("share"))
+        assertEquals(null, MediaUploads.notTaken(0))
+        assertEquals(Notice(Msg.MEMORY_NOT_MEDIA, 2), MediaUploads.notTaken(2))
     }
 }

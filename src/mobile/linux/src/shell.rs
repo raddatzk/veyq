@@ -543,6 +543,8 @@ impl Shell {
                 Create::Pot => "win.create-pot",
                 Create::UploadFiles => "win.upload-files",
                 Create::UploadFolder => "win.upload-folder",
+                // New Memory is drawn with Memories' screens (the CR's phase 4); a chapter is a Memory's page's own
+                Create::Memory | Create::Chapter => continue,
             };
             menu.append(Some(&said::key(&c.word)), Some(action));
         }

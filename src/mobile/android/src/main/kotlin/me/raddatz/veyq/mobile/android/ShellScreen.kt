@@ -360,6 +360,8 @@ private fun HomeScreen(s: Screen.Signed, model: AppModel, onEnter: (me.raddatz.v
                     me.raddatz.veyq.mobile.AppKinds.Create.POT -> creatingPot = true
                     me.raddatz.veyq.mobile.AppKinds.Create.UPLOAD_FILES -> pickFiles.launch(arrayOf("*/*"))
                     me.raddatz.veyq.mobile.AppKinds.Create.UPLOAD_FOLDER -> pickFolder.launch(null)
+                    // not among Home's creates on a phone yet: New Memory and New chapter are the CR's phase 6
+                    me.raddatz.veyq.mobile.AppKinds.Create.MEMORY, me.raddatz.veyq.mobile.AppKinds.Create.CHAPTER -> {}
                 }
             })
         }

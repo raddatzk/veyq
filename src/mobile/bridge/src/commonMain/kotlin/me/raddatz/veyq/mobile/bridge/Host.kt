@@ -3,9 +3,15 @@
 package me.raddatz.veyq.mobile.bridge
 
 import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeoutOrNull
 import me.raddatz.veyq.mobile.account.KitPictures
+import me.raddatz.veyq.mobile.blob.UploadSource
+import me.raddatz.veyq.mobile.memories.MediaUpload
 import me.raddatz.veyq.mobile.qr.QrFrame
 import me.raddatz.veyq.mobile.session.DeviceAuthFailed
 import me.raddatz.veyq.mobile.session.DeviceKeys
@@ -191,6 +197,67 @@ internal class HostPictures(private val host: Host, private val path: String) : 
         }
         return QrFrame(pixels.width, pixels.height, pixels.width, plane)
     }
+}
+
+/**
+ * A file the host picked, opened by the core at its [path] (`DeviceFiles.source`): read through [inner] at offsets, as any
+ * source, and named by its path so the host can be asked for its tiers ([HostTiers]) — the path is the host's own, nothing
+ * of the file crosses.
+ */
+internal class PathSource(val path: String, private val inner: UploadSource) :
+    UploadSource(inner.name, inner.size, inner.type, inner.modifiedAt) {
+    override suspend fun read(from: Long, length: Int): ByteArray = inner.read(from, length)
+    override fun close() = inner.close()
+}
+
+/**
+ * A Memories upload's tiers asked of the host ([HostRequest.MediaTiers]; ADR 0130 decision 1: the platform decodes and
+ * encodes, the core holds the spec and decides): the JPEGs ride in beside the reply ([HostReply.Tiers]). [derive] returns at
+ * once — the asks run on [scope], so the queue's thread that called never waits on the host there, and the thread that
+ * sent the call never does at all; a video's poster time is the core's from the length the host tells
+ * ([HostRequest.MediaDuration], `MediaUpload.posterAtMs`). What the host does not decode, a reply that is no set of tiers,
+ * and a source that names no path go up alone ([NONE]).
+ */
+internal class HostTiers(
+    private val host: Host,
+    private val scope: CoroutineScope = CoroutineScope(SupervisorJob() + Dispatchers.Default),
+) : MediaUpload.Deriver {
+    override fun derive(source: UploadSource, type: String, done: (MediaUpload.Derived) -> Unit) {
+        val path = (source as? PathSource)?.path ?: return done(NONE)
+        scope.launch { done(runCatching { tiers(path, type) }.getOrDefault(NONE)) }
+    }
+
+    private fun tiers(path: String, type: String): MediaUpload.Derived {
+        val at = if (type.startsWith("video/")) {
+            MediaUpload.posterAtMs((host.ask(HostRequest.MediaDuration(path)) as? HostReply.Value)?.value?.toLongOrNull() ?: 0L)
+        } else {
+            0L
+        }
+        val r = host.askWithPayload(
+            HostRequest.MediaTiers(
+                path, type, MediaUpload.PREVIEW_EDGE, MediaUpload.PREVIEW_QUALITY, MediaUpload.THUMBNAIL_EDGE, MediaUpload.THUMBNAIL_QUALITY, at,
+            ),
+        )
+        val t = r.reply as? HostReply.Tiers
+        val packed = r.payload
+        // both tiers or none: a preview without its thumbnail (or a payload shorter than the preview) is no set of tiers
+        if (t == null || packed == null || t.previewSize <= 0 || t.previewSize >= packed.size) {
+            packed?.fill(0)
+            return NONE
+        }
+        return MediaUpload.Derived(packed.copyOfRange(0, t.previewSize), packed.copyOfRange(t.previewSize, packed.size), t.width, t.height)
+            .also { packed.fill(0) }
+    }
+
+    companion object {
+        /** No tiers: the original goes up alone. */
+        val NONE = MediaUpload.Derived(null, null, null, null)
+    }
+}
+
+/** A composition that derives no tiers (a test's that plays none): every original goes up alone. */
+internal object NoTiers : MediaUpload.Deriver {
+    override fun derive(source: UploadSource, type: String, done: (MediaUpload.Derived) -> Unit) = done(HostTiers.NONE)
 }
 
 /** A composition that draws nothing (a test's that plays none, and a kit file that did not read: nothing to draw). */
