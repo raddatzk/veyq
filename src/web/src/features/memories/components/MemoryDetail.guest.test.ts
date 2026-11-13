@@ -166,7 +166,7 @@ function expectGuestOnly(w: Page) {
     expect(byLabel(w, label).exists(), label).toBe(false)
     expect(w.findAll('button').some((b) => b.text() === label), label).toBe(false)
   }
-  expect(tabs(w)).toEqual([t('memory.gallery'), t('memory.chapters')]) // no contributions organizer, no media trash
+  expect(tabs(w)).toEqual([t('memory.gallery'), t('memory.chapters'), t('memory.tracks.tab')]) // the map as a member's; no contributions organizer, no media trash
   expect(w.find('.gallery-mark-filter').exists(), 'the mark filter').toBe(false)
   // uc.memory.gallery step 8: a guest has no search, so no filter by facts either (`MemoryDetail.filter.test.ts` mounts the
   // member's field); the toolbar it would sit in is drawn.

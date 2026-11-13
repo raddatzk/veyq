@@ -1,0 +1,48 @@
+---
+title: "Add GPX tracks"
+sources:
+  - docs/features/memory/use-cases/uc.memory.tracks.md
+---
+
+A Memory can show the way you went: a hike, a ride or a sailing day, recorded by your watch, your phone or a bike computer
+as a **GPX file**. Each track is drawn as a line on the Memory's map, beside the photos you took along the way. A Memory
+and each of its chapters can hold their own tracks.
+
+## Add a track
+
+1. Open the Memory (or the chapter) and choose the **Map** tab.
+2. Choose **Add GPX track** and pick one or more `.gpx` files.
+3. Each track is listed under the map with its colour, its name and how far, how long, how far up and how far down it
+   went, and drawn on the map with a green ring where it starts and a red one where it ends.
+
+A track is named after the name inside the file, or else after the file. veyq checks each file on your device before it
+uploads it, and tells you which one it did not add and why: a file larger than 25 MB, a file that is no GPX track, a track
+with fewer than two points, or a Memory that already holds 50 tracks.
+
+## On the map
+
+The map shows your photos where they were taken (each photo at its own location) and every track you have not hidden.
+Untick a track to hide it from the map; click a line or a track's name to pick it out, and the map shows that track
+whole.
+
+The map needs **Map services**, the same setting every map in veyq uses ([Set the location](/memories/set-the-location/#map-services)).
+While they are off, the tab offers to turn them on; the list, the numbers, the download and the removal work without
+them. A track's line never leaves your device: the map provider only learns which part of the map you look at.
+
+## Download or remove a track
+
+The **⋯** beside a track offers **Download GPX**, which saves the file as it was added, and **Remove**. A removed track
+goes to the Memory's **Trash** tab with the photos you removed, and you can bring it back from there
+([Remove photos and bring them back](/memories/photo-trash/)). **Report** is there too, as for a photo.
+
+Tracks are not photos: they are not in the gallery and not in its count, but a download or a copy of the Memory carries
+their files.
+
+## Who can do what
+
+Everyone who may add photos to the Memory can add a track, and everyone who may remove photos can remove one. People you
+share a link with see the tracks as you do; with a link that lets them add photos, they can add a track and remove their
+own.
+
+The server stores each track encrypted, like a photo, and cannot even tell that it is a track: it never sees where you
+went.

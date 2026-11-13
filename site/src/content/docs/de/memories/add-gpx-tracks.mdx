@@ -1,0 +1,51 @@
+---
+title: "GPX-Tracks hinzufügen"
+sources:
+  - docs/features/memory/use-cases/uc.memory.tracks.md
+---
+
+Eine Erinnerung kann den Weg zeigen, den du gegangen bist: eine Wanderung, eine Radtour oder einen Segeltag,
+aufgezeichnet von deiner Uhr, deinem Smartphone oder einem Fahrradcomputer als **GPX-Datei**. Jeder Track erscheint als
+Linie auf der Karte der Erinnerung, neben den Fotos, die du unterwegs gemacht hast. Eine Erinnerung und jedes ihrer
+Kapitel können eigene Tracks haben.
+
+## Einen Track hinzufügen
+
+1. Öffne die Erinnerung (oder das Kapitel) und wähle den Reiter **Karte**.
+2. Wähle **GPX-Track hinzufügen** und such eine oder mehrere `.gpx`-Dateien aus.
+3. Jeder Track steht unter der Karte, mit seiner Farbe, seinem Namen und wie weit, wie lange, wie weit bergauf und wie
+   weit bergab es ging, und erscheint auf der Karte, mit einem grünen Ring am Start und einem roten am Ende.
+
+Ein Track heißt wie der Name in der Datei, sonst wie die Datei. veyq prüft jede Datei auf deinem Gerät, bevor es sie
+hochlädt, und sagt dir, welche es nicht hinzugefügt hat und warum: eine Datei größer als 25 MB, eine Datei, die kein
+GPX-Track ist, ein Track mit weniger als zwei Punkten oder eine Erinnerung, die schon 50 Tracks hat.
+
+## Auf der Karte
+
+Die Karte zeigt deine Fotos dort, wo sie aufgenommen wurden (jedes Foto an seinem eigenen Standort), und jeden Track, den
+du nicht ausgeblendet hast. Nimm das Häkchen bei einem Track weg, um ihn auszublenden; klicke auf eine Linie oder den
+Namen eines Tracks, um ihn hervorzuheben, und die Karte zeigt ihn ganz.
+
+Die Karte braucht die **Kartendienste**, dieselbe Einstellung wie jede Karte in veyq
+([Den Ort festlegen](/de/memories/set-the-location/#kartendienste)). Solange sie aus sind, bietet der Reiter an, sie
+einzuschalten; die Liste, die Zahlen, das Herunterladen und das Entfernen gehen auch ohne sie. Die Linie eines Tracks
+verlässt dein Gerät nie: Der Kartenanbieter erfährt nur, welchen Ausschnitt der Karte du ansiehst.
+
+## Einen Track herunterladen oder entfernen
+
+Das **⋯** neben einem Track bietet **GPX herunterladen**, das die Datei so speichert, wie sie hinzugefügt wurde, und
+**Entfernen**. Ein entfernter Track kommt in den Reiter **Papierkorb** der Erinnerung, zu den Fotos, die du entfernt hast,
+und du kannst ihn dort zurückholen ([Fotos entfernen und zurückholen](/de/memories/photo-trash/)). **Melden** steht dort
+auch, wie bei einem Foto.
+
+Tracks sind keine Fotos: Sie stehen nicht in der Galerie und zählen dort nicht mit, aber ein Download oder eine Kopie der
+Erinnerung nimmt ihre Dateien mit.
+
+## Wer was darf
+
+Alle, die Fotos zur Erinnerung hinzufügen dürfen, können einen Track hinzufügen, und alle, die Fotos entfernen dürfen,
+können einen entfernen. Personen, mit denen du einen Link teilst, sehen die Tracks wie du; mit einem Link, der Fotos
+hinzufügen erlaubt, können sie einen Track hinzufügen und ihre eigenen entfernen.
+
+Der Server speichert jeden Track verschlüsselt, wie ein Foto, und weiß nicht einmal, dass es ein Track ist: Er sieht nie,
+wo du warst.

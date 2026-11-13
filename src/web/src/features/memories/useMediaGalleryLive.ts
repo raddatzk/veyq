@@ -8,7 +8,8 @@ import { useToast } from '../../shared/state/useToast'
 import { useUndo } from '../../shared/state/useUndo'
 import type { TreeNode } from '../../core/node/tree'
 import { hasDerivatives, effectiveCapturedAt, type MediaItem } from './media'
-import { closeListing, openListing, openedMeta } from './openedListing'
+import { closeListing, openListing, openedBlobMeta, openedMeta } from './openedListing'
+import { isTrackMeta } from './track/gpx'
 import type { MemorySource } from './source'
 import { mediaRefusalOf, sealedMediaName } from './mediaRefusal'
 import { startMediaRevisionPolling, stopMediaRevisionPolling } from './mediaRevisionPolling'
@@ -47,11 +48,21 @@ export type MemoryTileItem =
 export function useMediaGalleryLive(ctx: MediaGalleryLiveCtx) {
   const { t } = useI18n()
   const toast = useToast()
-  const items = ref<MediaItem[]>([])
+  // Every listed medium of the node, and what this gallery shows of them: a GPX track is a medium too (ADR 0130 decision
+  // 1), known by its opened `blob-meta`, and no photo - it is left out of `items`, the one list every view of photos
+  // derives from (the grid, the lightbox, the count, the organizer, the search, the date and place reconcile), and is
+  // handed to the Map tab as `tracks` (decision 7). The listing is opened before it is merged, so the meta is there.
+  const listed = ref<MediaItem[]>([])
+  function isTrack(item: MediaItem): boolean {
+    const key = ctx.memoryKey()
+    return !!key && isTrackMeta(openedBlobMeta(ctx.scopeId(), key, item))
+  }
+  const items = computed(() => listed.value.filter((it) => !isTrack(it)))
+  const tracks = computed(() => listed.value.filter(isTrack))
   // Optimistic in-grid upload tiles (uc.memory.upload, cr-0074): the shared queue's still-in-flight files for THIS
   // node (grouping key = the node id) as instant preview tiles, reconciled into the real thumbnail by mediaId.
   // `donorPreviewFor` feeds the thumbnail pipeline the preview to hand off.
-  const listedMediaIds = computed(() => new Set(items.value.map((it) => it.mediaId)))
+  const listedMediaIds = computed(() => new Set(listed.value.map((it) => it.mediaId)))
   const { optimisticTiles, donorPreviewFor, wantPreviews } = useOptimisticTiles(computed(() => ctx.source.batchKey(ctx.node().id)), listedMediaIds)
   // The gallery thumbnail pipeline (cr-0150) — decrypt-per-tile → object-URL map, the single revoke owner of every
   // thumbnail (incl. a donated optimistic preview). Decrypt = the grid tier under K_node (operator-blind).
@@ -99,8 +110,8 @@ export function useMediaGalleryLive(ctx: MediaGalleryLiveCtx) {
   // click opens. The merged list sorts on the same key, so the media order inside it is identical to this.
   const sortedItems = computed(() => {
     const keep = ctx.filter?.() ?? null
-    const listed = keep ? items.value.filter(keep) : items.value
-    return byCaptureTime(listed, capturedAtOf, sortDirection.value)
+    const shown = keep ? items.value.filter(keep) : items.value
+    return byCaptureTime(shown, capturedAtOf, sortDirection.value)
   })
 
   const aspectRatios = computed(() => {
@@ -165,7 +176,7 @@ export function useMediaGalleryLive(ctx: MediaGalleryLiveCtx) {
   function removeFromGrid(mediaId: string) {
     pendingDelete.add(mediaId) // cr-0111: tombstone so a racing live read can't re-add it before the delete commits
     pipeline.dropThumb(mediaId)
-    items.value = items.value.filter((it) => it.mediaId !== mediaId)
+    listed.value = listed.value.filter((it) => it.mediaId !== mediaId)
     lightboxItems.value = lightboxItems.value.filter((it) => it.mediaId !== mediaId)
   }
 
@@ -225,21 +236,21 @@ export function useMediaGalleryLive(ctx: MediaGalleryLiveCtx) {
   /** A date correction from the lightbox → patch the item's sealed tier so the grid re-sorts (no refetch). The item
    *  object is shared with the open lightbox's snapshot, so the reopened detail stays consistent too. */
   function onCapturedAtUpdated(payload: { mediaId: string; wrappedMeta: string | null; metaRevision: number }) {
-    const item = items.value.find((it) => it.mediaId === payload.mediaId)
+    const item = listed.value.find((it) => it.mediaId === payload.mediaId)
     if (!item) return
     item.wrappedMeta = payload.wrappedMeta ?? undefined
     item.metaRevision = payload.metaRevision // the base of the next meta write on this item (ADR 0077)
-    items.value = [...items.value] // reassign so sortedItems recomputes and the grid re-sorts
+    listed.value = [...listed.value] // reassign so sortedItems recomputes and the grid re-sorts
   }
 
   /** Merge a fresh media list into `items` WITHOUT an empty-flash: the pipeline revokes only dropped thumbnails and
    *  donates a done upload's preview for each newly-listed media (its optimistic tile hands off with no gray gap,
    *  the real thumbnail replacing the donation once it decrypts); this keeps the `pendingDelete` tombstone. */
-  function mergeItems(listed: MediaItem[]) {
-    for (const id of [...pendingDelete]) if (!listed.some((m) => m.mediaId === id)) pendingDelete.delete(id) // cr-0111: confirmed gone
-    const visible = listed.filter((m) => !pendingDelete.has(m.mediaId)) // cr-0111: keep optimistically-trashed media out until the delete commits
+  function mergeItems(fresh: MediaItem[]) {
+    for (const id of [...pendingDelete]) if (!fresh.some((m) => m.mediaId === id)) pendingDelete.delete(id) // cr-0111: confirmed gone
+    const visible = fresh.filter((m) => !pendingDelete.has(m.mediaId)) // cr-0111: keep optimistically-trashed media out until the delete commits
     pipeline.reconcile(visible)
-    items.value = visible
+    listed.value = visible
   }
 
   // `reset` (a Memory/chapter switch) clears the grid up front; an incremental reload (post-upload batch) merges
@@ -249,7 +260,7 @@ export function useMediaGalleryLive(ctx: MediaGalleryLiveCtx) {
     const nodeId = ctx.node().id
     if (!key) {
       pipeline.revokeAll()
-      items.value = []
+      listed.value = []
       mediaTag.value = null // E4: no K_node (locked / not openable) → gallery unavailable, no live poll
       deleteRevision.value = 0
       pollSince = undefined
@@ -258,12 +269,12 @@ export function useMediaGalleryLive(ctx: MediaGalleryLiveCtx) {
     }
     if (reset) {
       pipeline.revokeAll()
-      items.value = []
+      listed.value = []
       mediaTag.value = null
       deleteRevision.value = 0
       pollSince = undefined
     }
-    status.value = items.value.length ? 'ready' : 'loading'
+    status.value = listed.value.length ? 'ready' : 'loading'
     try {
       const page = await ctx.source.listMedia(nodeId) // every page of it
       if (ctx.node().id !== nodeId) return // navigated away while listing
@@ -348,7 +359,7 @@ export function useMediaGalleryLive(ctx: MediaGalleryLiveCtx) {
    *  drop any cached media absent from it, revoking its thumbnail. Reassigns `items` so the justified grid re-sorts. */
   function upsertItems(delta: MediaItem[], mediaIds: string[] | null) {
     const blockedNow: string[] = []
-    items.value = reconcileItems(items.value, delta, mediaIds, {
+    listed.value = reconcileItems(listed.value, delta, mediaIds, {
       idOf: (m) => m.mediaId,
       skip: (id) => pendingDelete.has(id), // cr-0111: don't re-add an optimistically-trashed media (a stale pre-commit read)
       patch: (existing, m) => {
@@ -371,7 +382,7 @@ export function useMediaGalleryLive(ctx: MediaGalleryLiveCtx) {
     for (const id of blockedNow) pipeline.dropThumb(id) // revoke the decrypted thumbnail its block withdrew
     // The pipeline reads what the grid wants from the list it holds: hand it the merged one, so a medium the poll added,
     // or one whose block was lifted, gets its thumbnail when its tile is near the viewport.
-    pipeline.reconcile(items.value)
+    pipeline.reconcile(listed.value)
   }
 
   // The live-gallery lifecycle: on a Memory/chapter switch tear down the previous poll, clear the grid, reload, and
@@ -411,6 +422,8 @@ export function useMediaGalleryLive(ctx: MediaGalleryLiveCtx) {
 
   return {
     items,
+    /** The node's GPX tracks (ADR 0130): media, listed and live as every medium, shown on the Map tab only. */
+    tracks,
     thumbs,
     thumbFailed,
     layoutItems,

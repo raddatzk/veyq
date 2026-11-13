@@ -9,10 +9,17 @@
 // via `frame` (→ the geocode `nameAnchor`, and, for a `fixed` place, the position itself). A centre **crosshair**
 // (`crosshair`) marks the framed point; an optional static **`marker`** shows a data-derived position (the medoid
 // of an `auto` place). There is no click-to-drop / drag — the viewport centre IS the pin.
+//
+// A Memory's Map tab (uc.memory.tracks, ADR 0130 decision 4) hands it `tracks` too: each a line per segment in its colour,
+// a start and an end marker, its name as a tooltip built from a text node (Trusted Types: never a string of markup). A
+// click on a line asks for that track (`selectTrack`); the selected one (`selectedTrack`) is drawn heavier.
 import { onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import L from 'leaflet'
 import 'leaflet/dist/leaflet.css'
 import type { LatLng } from '../memoryLocation'
+
+/** One track as the map draws it: its lines (each already simplified), its colour and the words of its tooltips. */
+export type MapTrack = { id: string; color: string; lines: LatLng[][]; label: string; startLabel: string; endLabel: string }
 import VeyqIcon from '../../../shared/ui/VeyqIcon.vue'
 import MapOffButton from './MapOffButton.vue'
 import { createIconElement } from '../../../shared/ui/iconElement'
@@ -30,16 +37,19 @@ const props = defineProps<{
   // "no point set" answer, the one its pill reads - never a second notion of whether the member moved the map.
   crosshairUnset?: boolean
   dots?: LatLng[] // faint context markers (the Memory's photo GPS) — "your photos are here"
+  tracks?: MapTrack[] // the Memory's shown GPX tracks (uc.memory.tracks)
+  selectedTrack?: string | null
 }>()
 // `user` marks a frame the MEMBER produced - a pan or a zoom by hand - vs the opening view and every programmatic move
 // (`setView`, `panTo`, `fitPoints`). The parent uses it to flip an `auto` place to `fixed` the moment the member reframes it,
 // and to set no point at all from a map the member never moved (uc.memory.place E3, inbox #834).
-const emit = defineEmits<{ frame: [{ lat: number; lng: number; zoom: number; user: boolean }] }>()
+const emit = defineEmits<{ frame: [{ lat: number; lng: number; zoom: number; user: boolean }]; selectTrack: [id: string] }>()
 
 const el = ref<HTMLElement | null>(null)
 let map: L.Map | null = null
 let pin: L.Marker | null = null
 let dotLayer: L.LayerGroup | null = null
+let trackLayer: L.LayerGroup | null = null
 // Set by the member's input on the map (below), cleared once the next frame is reported and before every programmatic move.
 // Leaflet tells a user pan by its `dragstart` but has no event that tells a member's zoom (wheel, double click, the zoom
 // buttons, keys, a pinch) from a programmatic one, so the member's input itself is the signal: each of those gestures
@@ -74,6 +84,44 @@ function syncDots(points: LatLng[] | undefined) {
   }
 }
 
+/** A tooltip's content as a text node: Leaflet writes a string with `innerHTML`, which Trusted Types refuses. */
+function tooltipText(text: string): HTMLElement {
+  const span = document.createElement('span')
+  span.textContent = text
+  return span
+}
+
+// The ends of a track: a ring in green where it starts and in red where it ends, as the old application drew them.
+const START_COLOR = '#15803d'
+const END_COLOR = '#b91c1c'
+
+function syncTracks(tracks: MapTrack[] | undefined, selected: string | null | undefined) {
+  if (!map) return
+  if (!trackLayer) trackLayer = L.layerGroup().addTo(map)
+  trackLayer.clearLayers()
+  for (const track of tracks ?? []) {
+    const isSelected = track.id === selected
+    for (const line of track.lines) {
+      if (line.length < 2) continue
+      L.polyline(line.map((p) => [p.lat, p.lng] as [number, number]), {
+        color: track.color, weight: isSelected ? 6 : 4, opacity: isSelected ? 1 : 0.85,
+      })
+        .bindTooltip(tooltipText(track.label), { sticky: true })
+        .on('click', () => emit('selectTrack', track.id))
+        .addTo(trackLayer)
+    }
+    const first = track.lines.find((l) => l.length > 0)?.[0]
+    const lastLine = [...track.lines].reverse().find((l) => l.length > 0)
+    const last = lastLine?.[lastLine.length - 1]
+    const end = (at: LatLng, color: string, label: string) =>
+      L.circleMarker([at.lat, at.lng], { radius: 6, weight: 3, color, fillColor: '#ffffff', fillOpacity: 1 })
+        .bindTooltip(tooltipText(label))
+        .addTo(trackLayer!)
+    if (first) end(first, START_COLOR, track.startLabel)
+    if (last) end(last, END_COLOR, track.endLabel)
+  }
+}
+
 function reportFrame() {
   if (!map) return
   const c = map.getCenter()
@@ -88,6 +136,7 @@ onMounted(() => {
   L.tileLayer(props.tileUrl, { maxZoom: props.maxZoom }).addTo(map)
   addAttribution(map, props.attribution)
   syncDots(props.dots)
+  syncTracks(props.tracks, props.selectedTrack)
   syncPin(props.marker)
   for (const ev of USER_INPUT) el.value.addEventListener(ev, markUserInput, { capture: true, passive: true })
   map.on('moveend', reportFrame)
@@ -97,6 +146,7 @@ onMounted(() => {
 // Keep the static pin + photo dots in sync when the parent recomputes them (e.g. auto re-medoid / mode toggle).
 watch(() => props.marker, (next) => syncPin(next))
 watch(() => props.dots, (next) => syncDots(next))
+watch([() => props.tracks, () => props.selectedTrack] as const, ([tracks, selected]) => syncTracks(tracks, selected))
 
 onBeforeUnmount(() => {
   for (const ev of USER_INPUT) el.value?.removeEventListener(ev, markUserInput, { capture: true })
@@ -104,6 +154,7 @@ onBeforeUnmount(() => {
   map = null
   pin = null
   dotLayer = null
+  trackLayer = null
 })
 
 defineExpose({

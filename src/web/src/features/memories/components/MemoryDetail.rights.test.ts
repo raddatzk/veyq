@@ -106,12 +106,12 @@ describe('MemoryDetail follows rights', () => {
     expect(await headerMenuIds(w)).toEqual(['banner', 'move', 'copy', 'report', 'delete'])
   })
 
-  it("a member's rights: every header action, all four tabs, the chapter card, the editable cover/date/place, the marks", async () => {
+  it("a member's rights: every header action, every tab, the chapter card, the editable cover/date/place, the marks", async () => {
     const w = await mountDetail(memberMemoryRights(), MEMORY_KIND, { canSetCover: true })
     expect(await header(w)).toEqual([...HEADER])
     const offered = await headerActionLabels(w)
     for (const key of EDITED_IN_PLACE) expect(offered, key).not.toContain(t(key))
-    expect(tabs(w)).toEqual([t('memory.gallery'), t('memory.chapters'), t('memory.buckets.title'), t('memory.trash.title')])
+    expect(tabs(w)).toEqual([t('memory.gallery'), t('memory.chapters'), t('memory.tracks.tab'), t('memory.buckets.title'), t('memory.trash.title')])
     expect(w.find('input[type="file"]').exists()).toBe(true)
     expect(w.find('[data-testid="node-header-cover"]').exists(), 'core\'s cover button, where its right says so').toBe(true)
     expect(disabled(w, '.veyq-node-header-chip[data-fact="date"]')).toBe(false)
@@ -122,10 +122,10 @@ describe('MemoryDetail follows rights', () => {
     expect(w.find('.memory-create-card-memory').text()).toBe(t('memory.addChapter'))
   })
 
-  it('no rights: none of them — the gallery alone, nothing editable, no marks read', async () => {
+  it('no rights: none of them — the gallery and the map alone, nothing editable, no marks read', async () => {
     const w = await mountDetail(NO_MEMORY_RIGHTS)
     expect(await header(w)).toEqual([])
-    expect(tabs(w)).toEqual([t('memory.gallery')])
+    expect(tabs(w)).toEqual([t('memory.gallery'), t('memory.tracks.tab')]) // reading, as the gallery: the map and its tracks (uc.memory.tracks)
     expect(w.find('input[type="file"]').exists()).toBe(false)
     expect(w.find('[data-testid="node-header-cover"]').exists(), 'no cover button').toBe(false)
     expect(disabled(w, '.veyq-node-header-chip[data-fact="date"]')).toBe(true)

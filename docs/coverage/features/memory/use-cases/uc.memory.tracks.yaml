@@ -1,0 +1,67 @@
+useCase: uc.memory.tracks
+feature: memory
+title: Memory tracks — GPX tracks on a Memory's map, beside its photos
+# Built by cr-gpx-tracks (ADR 0130): a track is a medium whose original is its GPX file, so the backend adds nothing - its
+# criteria cite the media tests that already pin what the server stores and does. The web adds the Map tab, the client-side
+# reading of a GPX file, and the separation of tracks from every view of photos.
+acceptanceCriteria:
+  - id: a-track-is-a-medium
+    text: An added GPX file is a medium of the Memory or chapter on screen, its original the file as picked, sealed and uploaded through the one upload queue as every original is, its `blob-meta` typed `application/gpx+xml` with its file name; it has no derivatives and no EXIF. The server stores and lists an original of a size without tiers - no type, no name, no role or column that says "track". A client knows a track by the opened `blob-meta` alone (the GPX type, or a generic XML or byte type with a `.gpx` name).
+    coverage:
+      backend:
+        integration:
+          - MediaSliceTest.mediaWithoutDerivativesListsEmptyTiers
+      web:
+        unit:
+          - src/features/memories/track/gpx.test.ts
+          - src/features/memories/components/MemoryDetail.tracks.test.ts
+  - id: parsed-on-the-device-within-bounds
+    text: The file is read on the device only - track segments (`trkpt`), else routes (`rtept`), with elevation and time; waypoints not drawn; a coordinate out of range skipped; a document type declaration refused before parsing. On add, a file over 25 MiB, one that is no GPX, one with fewer than two usable points, or one that would take the node past 50 tracks is refused with its own message naming the file, nothing of it uploaded, the other picked files going on. A stored track that does not open or parse is listed as unreadable by its file name and never drawn.
+    coverage:
+      web:
+        unit:
+          - src/features/memories/track/gpx.test.ts
+          - src/features/memories/track/useMemoryTracks.test.ts
+          - src/features/memories/components/MemoryTracks.test.ts
+  - id: map-tab-lists-and-draws
+    text: A Memory's or chapter's detail has a Map tab drawing its photos' GPS as dots and each of its own tracks as a line per segment in the track's colour (by its place in the list, ordered by capture time) with a start and an end marker; every tooltip is a DOM node, never markup. Under the map each track is listed with a switch that shows or hides it on this view only, its colour, its name (the file's own track name, else its metadata name, else the file name without `.gpx`) and its distance, duration, climb and descent, each left out where the file does not give it; choosing a line or a row selects the track, draws it heavier and frames it. Tracks are read only while the tab is on screen, one at a time, and dropped with the node or its key.
+    coverage:
+      web:
+        unit:
+          - src/features/memories/components/MemoryTracks.test.ts
+          - src/features/memories/components/MemoryMap.tracks.test.ts
+          - src/features/memories/track/useMemoryTracks.test.ts
+          - src/features/memories/track/trackFacts.test.ts
+          - src/features/memories/components/MemoryDetail.tracks.test.ts
+  - id: no-photo
+    text: A track is in no view of photos - not the gallery grid, its item count, the lightbox, the contributions organizer, the search's photo documents, nor the automatic date and place reconcile - while it stays a medium everywhere else (live updates, the media trash, a download, a copy and an export of the Memory).
+    coverage:
+      web:
+        unit:
+          - src/features/memories/useMediaGalleryLive.test.ts
+          - src/features/memories/components/MemoryDetail.tracks.test.ts
+  - id: the-one-map-consent
+    text: The Map tab draws its map under the one per-browser consent every map uses - on a server without a map it says so, with the map services off it shows the consent offer naming the hosts, and with both nothing is requested from a tile service - and the list, the numbers, the download, the removal and the add work in every one of these states.
+    coverage:
+      web:
+        unit:
+          - src/features/memories/components/MemoryTracks.test.ts
+  - id: a-mediums-rights-and-lifecycle
+    text: Adding a track is the `upload` right (a member, a READ_WRITE guest - asked to name itself first); removing one is `deleteMedia` - a member's trash with Undo, a guest's purge of its own, asked first; downloading one is `download`; Report reports it as a medium. A READ or READ_WRITE guest sees the Map tab as a member does. Trash, restore, purge, erasure, re-key, quota and an application switched off reach a track as they reach any medium.
+    coverage:
+      backend:
+        integration:
+          - MediaTrashSliceTest.trashHidesFromListBumpsBothCountersAndDropsFromIdSet
+          - MediaTrashSliceTest.restoreBringsItBackIntoTheGallery
+      web:
+        unit:
+          - src/features/memories/components/MemoryDetail.tracks.test.ts
+          - src/features/memories/components/MemoryTracks.test.ts
+          - src/features/memories/components/MemoryDetail.guest.test.ts
+          - src/features/memories/components/MemoryDetail.rights.test.ts
+gaps:
+  stack: >-
+    Lane L1's browser pass (`tests/e2e/tests/features/memories/memory-tracks.spec.ts`: a GPX file added on the Map tab is no
+    gallery tile, its line and its numbers show under the consent, it hides and shows, the same Memory through a READ link
+    lists it without an add or a removal, the removal moves it to the media trash, the console free of errors) is written,
+    not run; ADR 0040 admits `stack` refs only once a CI run's log shows the suite executed.

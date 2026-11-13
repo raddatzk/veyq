@@ -98,6 +98,7 @@ export default defineConfig({
                     'memories/people-in-your-memories',
                     'memories/set-a-cover',
                     'memories/add-a-banner',
+                    'memories/add-gpx-tracks',
                     'memories/marked-photos',
                     'memories/contributions',
                     'memories/photo-trash',
