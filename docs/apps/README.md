@@ -87,6 +87,9 @@ structure, attachments and guests, and the user interface. What a verified uploa
 | [Expenses](expenses.md) | Built ([ADR 0108](../decisions/0108-expenses-a-pot-is-a-node-its-entries-are-sealed-revisions.md)). Backend `:apps:expenses` (`me.raddatz.veyq.expenses`), contract `contracts/api/expenses/` and the entry format `contracts/expenses/`, web `src/web/src/features/expenses`: a Pot is a node kind, its people and entries sealed revisions in its own table, appended and never overwritten; balances, settle-up and overviews in the client; a `READ` or `READ_WRITE` link; receipts (images and PDFs, blobs of core's blob service held by their entries, [ADR 0112](../decisions/0112-an-applications-stored-blobs-are-managed-by-a-core-service.md)); the day's exchange rates (the ECB's euro reference rates, fetched by the device once a day with the date alone, the tenant's switch reaching a link guest through its Pot read). |
 | [Inventory](inventory.md) | Concept only. |
 
+A concept inside an application: [the live journal](journal.md), a function of Memories — a Memory's markdown,
+written by several people at once as a sealed CRDT log (concept only, inbox #18 and #6).
+
 ## How core and an application meet
 
 **The rule: around a node is core's, behind it the application's** ([ADR 0079](../decisions/0079-veyq-is-a-platform-memories-is-its-first-application.md)
