@@ -572,6 +572,46 @@ From `src/mobile` unless named:
   field added to `Gate.SignIn`'s `kit` → `SecretFreeSchemaTest` red; (B17) the step-1 short-circuit removed in the bridge's
   `KitPictures` path → the "no host request" case red.
 
+  **Status: built and unit-proven (2026-11-13); the live run is pending (the dev backend was down and not to be
+  started) — the box stays open until it is green.**
+  **Built:** wire — `Call.SessionSignInKit(path, server)` (`Session.SignInKit`; `server` the form's as typed, phase 4's
+  `typedServer`) and `Session.SignInKitClear`; `HostRequest.PdfPages(path)`, `PdfPage(path, page, width)`,
+  `PictureLuma(path, longSide)`; `HostReply.Pixels(width, height)`, the luminance packed (stride = width) as
+  `veyq_reply`'s payload; `Answer.Why.NO_KIT`. `Host` carries a reply's payload (`askWithPayload`, `Host.Replied`; a
+  payload nobody waits for is zeroed); `HostPictures(host, path)` is `KitPictures` over those requests (a page count
+  read from `Value`, a drawing shorter than its size answered null); `Exports.kt`'s `veyq_reply` copies the payload
+  (≤ 64 MiB) before it returns, and `Files.read` zeroes its parts once joined. `Composition.pictures` (`NoPictures` by
+  default) and `Bridge.live(…, pictures)`. Dispatch: the file read by path under `KitImport.FILE_CAP`
+  (`DeviceFiles.read`); one that does not read or is past the cap goes to `readKit` as empty bytes over `NoPictures`
+  (the gate says `SIGNIN_KIT_UNREADABLE`, nothing is asked of the host); `Done` or `Refused(NO_KIT)`. `bridge.h`'s
+  comments say a reply may carry a payload. **The desktops' kit scan (QR CR phase 5's `Scan.*`):** `ScanKind.KIT` and
+  `Scan.Open(kind, server)` (`server` nullable, for the notice); the bridge's scans hold `QrScan<Any>`, a `KIT` scan's
+  `accepts` is the core's new `SessionModel.scannedKit(text)` (`EmergencyKit.read` with the door's suite → `Found`,
+  server from `TOKEN` or `NONE`), and on `Found` the bridge hands it to `SessionModel.takeKit` at once, watched or not;
+  `ScanShown.found` says `veyqkit`, never the text. Tests: `KitDispatchTest` (6) over a played host through a real `Host`
+  and the web's fixtures by path (`inputs.dir` declared): the PDFKit-saved kit filled with no host request and its held
+  key reaching the door's `signInWithKey`, the other server said; the printed kit asked `Pdf.Pages`, page 1 at 2400 and
+  2000, page 2 at 2400 (its code there); no kit → `NO_KIT` and the gate's word, a drawing a byte short ignored; a path
+  that does not open and a file of `FILE_CAP + 1` → `NO_KIT`, the host asked nothing, the read capped; a picture file →
+  `Picture.Luma` only, the clear ending the held key; a `KIT` scan skipping a foreign code and a v2 kit, then filling
+  the form, the key at the door, no update carrying `veyqkit:` or a group of the key. `WireTest` samples every new
+  variant; `LiveBridgeTest.aKitSignsInByPathWithAnEmptySecretKey` (a kit PDF of the principal under `build/live-kit`,
+  removed in `finally`, never printed).
+  **Met:** `./gradlew :core:jvmTest :core:macosArm64Test :bridge:jvmTest` green (from `src/mobile`); the guards
+  (`/usr/bin/python3 scripts/validate_*.py` but guard_gaps) green. **Bites** (scratchpad `bite8.py`, one edit each,
+  `/bin/cp -f` restore, compared equal after; the failing cases read from the test XML): B16 a `secretKey` field on
+  `KitShown` → `SecretFreeSchemaTest.nothingTheCoreSendsCarries…` red; B17 a page count asked before `readKit` → the
+  four file cases red (the no-request one among them); beyond the CR's two: the reply's payload dropped in `Host.reply`
+  → the printed and picture cases red; the `KIT` scan's `takeKit` never called → the scan case red. (One unrelated
+  `DispatchTest.aLinkIsMinted…` failure was seen once and not again on the next two runs: a timing flake there.)
+  **Pending, live:** `VEYQ_LIVE=http://veyq.localhost:8080 VEYQ_ENV_FILE=<main checkout>/.run/.env ./gradlew
+  :bridge:jvmTest --tests '*LiveBridgeTest.aKitSignsIn*'` (from `src/mobile`).
+  **Deviations:** (1) the calls are named `Session.SignInKit`/`Session.SignInKitClear` (the session's family) and take
+  the typed server. (2) The tests are a file of their own, `KitDispatchTest`, beside `DispatchTest`. (3) The desktop scan
+  needed a core entry: `SessionModel.scannedKit` — **for the phase-7 merge:** if phase 7 adds its own kit `accepts` in the
+  core (or a `kit` scan kind), keep one and point the bridge's `ScanKind.KIT` at it (`Bridge.scanKind`); the words
+  `signin_kit_scan`, `signin_kit_scan_hint`, `signin_kit_scan_denied` (below) may collide with phase 7's — keep one set.
+
 - [ ] **9 Linux and Windows — pick the kit.** D6's hosts and D8: the open dialog (PDF and images filtered), the host's
   drawing from the path into memory, the Secret Key row's state. **First measurement:** on Windows,
   `StorageFile.GetFileFromPathAsync` on a picked path in the unpackaged app.
@@ -580,6 +620,67 @@ From `src/mobile` unless named:
   project links the core — otherwise the pass alone); **pass** on Broadway and on the VM (`run.py drive`): each fixture
   picked, the form filled, a dev kit signs in. **No copy left:** `find / -xdev -newer <marker>` in the container and
   `%TEMP%` plus the app's LocalState on the VM show nothing of the kit.
+
+  **Status: built and passed up to the filled form on both (2026-11-13); the sign-in with a dev kit is pending (the
+  dev backend was down), and so is a camera scan (neither VM has a camera) — the box stays open.**
+  **Built:** words `signin_kit_scan` ("Scan Emergency Kit" / "Notfall-Kit scannen"), `signin_kit_scan_hint` (the
+  web's `scanHint`), `signin_kit_scan_denied` (the web's `scanError`, "open" for "upload"). **Linux** `kit_drawing.rs`:
+  the host function (`bridge/mod.rs`) answers `Pdf.*`/`Picture.Luma` before the store, on the core's thread — poppler
+  `Document::from_file` on the path, a page through `receipt_viewer::render` on white, a picture through
+  `gdk::Texture::from_filename` scaled by cairo onto white; BT.601 luminance; the reply's pixels zeroed once the core
+  copied them, poppler's drawn rows zeroed after conversion. `sign_in.rs`: the Secret Key row an `AdwActionRow` "From
+  your Emergency Kit" with a flat "Enter it instead" while a kit is held (the `PasswordEntryRow` hidden, emptied when a
+  new kit arrives), `AdwButtonRow`s "Open Emergency Kit" (GTK `FileDialog`, PDF and images) and "Scan Emergency Kit"
+  (shown only where `qr_camera::camera_present()` — the Camera portal's `IsCameraPresent`, or the debug test camera),
+  the other-server notice under the list, a new kit replacing email and server once; the scan an `AdwDialog` over
+  `ScanView` (kind `KIT`, the typed server), closed on `FOUND`, its camera ended with it; the sign-in sends an empty key
+  while a kit is held. `Gate::SignIn`'s `kit` read — the Linux app compiles again (it did not since phase 4).
+  **Windows** `KitDrawing.cs` through the new `Core.Drawer` (set before the core starts; the store's requests still
+  answered at once, a drawing on the thread pool and replied when drawn, its payload zeroed after): `Windows.Data.Pdf`
+  over a `FileStream` on the path (`AsRandomAccessStream`, read in place) rendered by `PdfPages.RenderAsync` into
+  memory, a picture by `BitmapDecoder` with a `BitmapTransform` to the long side; luminance over white. `SignInView`
+  (now given its window): the same rows in Fluent (`signin-kit-open`, `signin-kit-scan` shown only where
+  `QrCamera.PresentAsync` finds a video capture device, `signin-kit-held` with `signin-kit-clear`,
+  `signin-kit-other-server`), the scan a `ContentDialog` over `QrCamera.Open(KIT, server, …)`. `run.py`s: the kit
+  fixtures reach the tests (`VEYQ_KIT_FIXTURES`; Linux a mount in `build` and the Flatpak's inputs, Windows the tree's tar).
+  Tests: Linux `kit_drawing` (3) — luminance at a stride, a path that does not open, and **the printed kit's first page
+  drawn by poppler here, then the core started in the test process and `Session.SignInKit` on `kit-printed.pdf` read
+  through this host's drawing to the fixture kit in the gate**; Windows `KitDrawingTest` (3) — the printed kit's page
+  1 drawn 2400 wide as luminance (`Veyq.Tests` links no core, so the hand-off is the pass's), failures, luminance over
+  white.
+  **Met:** `python3 linux/run.py build` (clippy, 42 tests, the build in the GNOME 51 SDK) and `bridge` green;
+  `python3 windows/run.py build` green (`Veyq.Bridge.Tests` here and there, `Veyq.Tests` 36). **Bites** (one edit,
+  `/bin/cp -f` restore, compared equal): poppler's drawing blanked before its luminance → the Linux core hand-off test
+  red; Windows' pixels filled white before conversion → `ThePrintedKitsFirstPage…` red ("the page drew nothing").
+  **Pass, Linux** (the Fedora 45 VM's GNOME session, the container's debug build and `libveyq.so` copied there; English):
+  "Use another account" → the sign-in with "Open Emergency Kit" and no scan entry (`the sign-in's kit scan not offered:
+  no camera`); `veyq.localhost:8080` typed, then each fixture picked through the **portal's file chooser** (filter "Open
+  Emergency Kit"): `kit-printed.pdf` → `kit picked: Ok(Done)`, the form `https://familie.example.org`,
+  `alex.beispiel@example.org`, "Secret Key — From your Emergency Kit — Enter it instead" and the notice "This kit was made
+  at https://familie.example.org; the server was http://veyq.localhost:8080…" (shot); "Enter it instead" brought the
+  Secret Key entry back (shot); `kit-photo.pdf` and `kit-pdfkit-saved.pdf` → `Ok(Done)` each (3 of 3). Broadway
+  (`run.py run --port 8097 --no-secret-service`): the sign-in up, no scan entry (no portal). **Pass, Windows** (the VM,
+  German): no scan entry (`no camera`); `veyq.localhost:8080` set, each fixture picked in the open picker
+  (`Veyq.Drive`: `select <n>`, `press <n> enter`) → `kit picked: Done` 3 of 3, the form filled, "Aus deinem
+  Notfall-Kit" / "Stattdessen eingeben" and the notice in German (shot `kit-printed-de.png`); the clear brought
+  `#signin-secret-key` back. **No copy left:** Linux — every file under `~`, `/tmp`, `/var/tmp` newer than a marker
+  (the pass's shots aside) held to "carries `veyqkit:` or the fixture's email or starts `%PDF-`" → only
+  `~/.cache/tracker3/files/meta.db-wal`: **GNOME's indexer**, which indexed the fixtures because the pass put them in
+  `~/Documents` — not the app (the chooser's thumbnails and `recently-used.xbel` are the system picker's too, and hold no
+  kit text); Windows — `%TEMP%` and `%LOCALAPPDATA%\veyq` newer than a marker → only the app's `log.txt`, no hit. Both
+  measurements bitten by a planted copy (`~/.cache/veyq-planted.bin`, `%TEMP%\veyq-planted.bin`), named, removed.
+  VMs left clean (fixtures, marker, shots removed; the app stopped by PID; the Broadway container stopped).
+  **Pending:** (1) with the dev backend up, per desktop a kit built from the principal's credentials (as
+  `LiveBridgeTest.aKitSignsIn*` builds it) picked, the password entered by `devlogin`'s way, Sign in → the shell; (2) a
+  camera scan: Linux on the VM with the virtual camera of the QR CR's phase 5 and the owner's **Allow** (its owner
+  step 1), Windows on a laptop with a camera (its step 2) — the sign-in's "Scan Emergency Kit", a printed fixture held
+  up, the dialog closing and the form filled; the debug test camera (`VEYQ_DEV_CAMERA`) through the sign-in's scan was
+  not run either.
+  **Deviations:** (1) Windows reads the path through a `FileStream` (`AsRandomAccessStream`), not
+  `StorageFile.GetFileFromPathAsync`: no broker, the same bytes, so the CR's first measurement fell away. (2) The Linux
+  pass ran on the Fedora VM's GNOME (the portal's chooser, a real session) rather than in Broadway, whose GTK chooser
+  needs the fixtures inside the container; Broadway showed the sign-in only. (3) The no-copy measurement on Linux was
+  `~`, `/tmp`, `/var/tmp` on the VM, not `/` in the container.
 
 - [ ] **10 docs and harvest.** `docs/crosscutting/native-apps.md` § Built (Account and session: the kit, by file on all
   four, by camera wherever the app has one, each measured pass with its date); ADR 0131 decision 3 (a drawn page's pixels ride inward
@@ -635,6 +736,16 @@ proof is the tests and passes `src/mobile/CLAUDE.md` § Prove your work names �
 ## Retrospective
 
 (filled at the end)
+
+Phases 8 and 9 (the implementer, 2026-11-13):
+- **A host reply that blocks a core thread wants its drawing off that thread on Windows.** Linux draws on the core's
+  thread inside the host function (poppler and cairo need no loop); WinRT's async drawing went to the thread pool and
+  replied when done — bridge.h already allowed a reply from any thread, so nothing changed in the core.
+- **The test that proves the hand-off can live where the host's own tests run.** Rust's tests link `libveyq.so`, so
+  one test starts the core and reads a page poppler drew through the real bridge; C#'s app tests link no core, so there
+  only the drawing is held and the pass carries the rest — say which, per platform, in the CR.
+- **A file put in `~/Documents` for a pass is indexed by GNOME's Tracker**: the no-copy scan found it in Tracker's WAL.
+  Next time a pass's fixtures go in a folder no indexer reads (`~/.local/share/…` or `/tmp`).
 
 Phase 6 (the implementer, 2026-11-13):
 - **One renderer's width is not a rule.** 2400 came from the web and held for PDFBox and pdfium; PDFKit's drawing of the
