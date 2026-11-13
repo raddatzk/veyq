@@ -64,5 +64,6 @@ class MainActivity : ComponentActivity() {
             model.devUnlock(it)
             model.devFillPasswordTrust(it)
         }
+        DevLogin.kitPassword(intent)?.let(model::devSignInWithKit)
     }
 }

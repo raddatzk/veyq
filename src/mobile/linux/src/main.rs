@@ -46,6 +46,9 @@ impl Screens {
         if !matches!(gate, Gate::Signed { .. }) {
             self.manage.close();
         }
+        if !matches!(gate, Gate::SignIn { .. }) {
+            self.sign_in.forget();
+        }
         match gate {
             Gate::Starting => self.face(&self.status),
             Gate::SignIn { working, error, .. } => {

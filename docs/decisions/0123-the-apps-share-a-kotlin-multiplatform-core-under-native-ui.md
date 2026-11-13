@@ -896,12 +896,18 @@ implementation exists but what holds it to the first.
     **Update:** `flatpak install --user veyq-1.546-aarch64.flatpak` over 1.545 upgraded in place, keeping
     `~/.var/app/<id>` (a marker file and the keyring); the same file again is refused (`already installed`).
     `flatpak uninstall --user --delete-data app.veyq.Veyq` left nothing under `~/.var/app/`. The VM's GPU is not one the
-    runtime's Mesa drives (Vulkan and EGL fail, GTK draws in software). **Owed, with a signed-in server** (the dev
-    backend was down): sign-in and staying signed in through a restart (the device trust over the Secret portal), the
-    members' pictures, a receipt's PDF, a medium played (H.264 and VP9) and heard, a file uploaded from and saved to a
-    document-portal path through the app's own dialogs, a drop from Files, and the exchange rates over the app's own
-    libcurl — each with its screenshot: install the bundle, `~/veyq-spike/fp.sh de|en` starts it in the session, the
-    owner signs in to the dev instance through the VM's forwarder, and the Depot slice's pass runs as before.
+    runtime's Mesa drives (Vulkan and EGL fail, GTK draws in software). **Signed in** (2026-11-13, bundle 1.689): a
+    release build has no dev sign-in, so the debug build of the same tree ran inside the installed app's sandbox
+    (`flatpak run --command=<a script under ~/.var/app/<id>/>` — the runtime, `/app`'s libraries, the permissions and
+    portals of the package), signed in by the dev principal's values or an Emergency Kit picked through the portal.
+    There: the members' pictures; the ECB's rates fetched by the app's libcurl on a fresh install; a receipt's PDF picked
+    through the FileChooser portal (the app sees `/run/user/<uid>/doc/<id>/<name>`), uploaded, drawn by poppler and saved
+    through the portal's save dialog byte-equal; a Depot upload through the portal and a drop from Files (each a
+    document the portal exported to the app); H.264/AAC and VP9/Opus played and heard (the sink's monitor at about
+    −21 dBFS, the tones' frequencies); the account's Settings; English/light and German/dark. **Still owed:** staying
+    signed in through a restart — the dev principal is at the server's trust limit (`409 too_many_devices`), so no trust
+    could be written; after "Not now" the shipped binary restarted to an empty sign-in, as a device without one must.
+    It needs an account under the limit.
 - **The Windows app** (ADR 0130 decision 5; `src/mobile/windows/`). WinUI 3 in C# on .NET 10, `win-x64`, unpackaged
   and self-contained, the Windows App SDK included, so its build output runs where it is copied. Built 2026-11-10/11.
   - **Packages.** `Microsoft.WindowsAppSDK.WinUI` and `.Foundation` 2.6.5 and `Microsoft.Windows.SDK.BuildTools`, not the

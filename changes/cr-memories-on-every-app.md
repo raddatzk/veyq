@@ -303,7 +303,7 @@ Owner (2026-11-13): on a Mac the lightbox came up as a sheet, which reads as a d
 Preview einer Galerie aus der App als zweites Fenster herausgelöst, das würde ich lieber optional über einen Klick machen".
 **On a Mac the lightbox opens in the main window's content, where the gallery was** (a navigation destination: the toolbar's
 back and Escape return to the gallery — the HIG's in-window navigation), and **in a window of its own only when asked**:
-"Open in New Window" in the lightbox's toolbar and in the File menu (the focused scene's), in a tile's context menu, and on
+"Open in New Window" in the lightbox's own bar (beside Close, Details and Save — a Mac draws its actions there, `07e492ebe`) and in the File menu (the focused scene's), in a tile's context menu, and on
 a ⌘-click of a tile (the HIG's modifier for a new window). The window is a value-based `WindowGroup` whose value carries
 the opaque ids alone (space, node, medium — never a name, a key or bytes) and which the system does not restore at the next
 start; it opens **its own** `GalleryModel` over the shell (`ShellModel.galleryAt` resolves the ids against the lists) and
@@ -455,6 +455,33 @@ order, the lightbox paged, the video played and sought near its end, the details
 original saved (its SHA-256 the upload's; on macOS through the save panel), a Photos pick uploaded and its
 `tmp/picked/<uuid>/` gone once it is in (`xcrun simctl get_app_container booted me.raddatz.veyq data` + `ls tmp`), and
 `run-as me.raddatz.veyq ls cache` / the container's `tmp` with nothing decrypted during and after.
+**Device passes (2026-11-13, the dev backend up; measured).** The Memory was made and filled by `DevMemoryTest`
+(`VEYQ_LIVE=… VEYQ_DEV_MEMORY_FILL=<dir> ./gradlew :core:jvmTest --tests '*DevMemoryTest*' --rerun`: "App memory 84367" by
+`ShellModel.createMemory`, then `a-exif.jpg` (the web's EXIF fixture), two ffmpeg photos and `d-big.mp4` — 241 108 268 B,
+1280×720, 50 s, made with `/opt/homebrew/bin/ffmpeg` — uploaded by `MediaUpload.upload`, the tiers ffmpeg sidecars), and
+purged after by `VEYQ_DEV_MEMORY_PURGE`. **Android** (throwaway AVD, `devlogin.py`): the grid "4 items" newest first; the
+lightbox paged ("1 of 4" … "4 of 4"); the video played through the core's reader, sought to 0:42 and playing on (0:44 — the
+emulator under a load of 100+); the details of `a-exif.jpg`: camera Canon EOS R, lens, exposure, place "48.136944,
+11.575000", "Added by Kevin Raddatz"; both originals saved through the system's dialog — `a-exif.jpg` and `d-big.mp4` at the
+uploads' SHA-256 (`c7b895d6…`, `9ea762fd…`, `sha256sum` on the device); "Add photos" → the photo picker → one photo →
+"5 items" with its name kept; `run-as me.raddatz.veyq ls -laR cache files` before and after: only `profileInstalled` (and
+the pass's own marker). **iOS** (throwaway iPhone 18 Pro, German): the grid, the lightbox paged ("2 von 5" → "1 von 5"),
+the video played; the details with camera, place and "Hinzugefügt von"; `a-exif.jpg` saved through the save sheet into "On
+My iPhone" at the upload's SHA-256; a Photos pick ("+" → Fotomediathek → one photo → ✓) uploaded ("6 Objekte"), the
+container's `tmp/picked/` and `tmp/downloads/` empty after. **macOS** (the ad hoc build, German): the grid; the lightbox;
+the video played; the details; both originals saved through the save panel at the uploads' SHA-256 (the copies removed).
+**Fixed on the way (macOS, `MemoryScreen.swift`):** a Mac's sheet drew the lightbox's toolbar as a light bottom bar with
+one primary button — Save was missing and Close and Details were white on white — and the details sheet collapsed to one
+row's height with its Done white on white too. The lightbox now has a bar of its own on the Mac (Close, Details, Save)
+and the details sheet a minimum size and its own Done. Seen red on the device before the change (the unchanged build),
+green after. **Not done:** seeking near the end on iOS and macOS (the simulator tool's screenshots lag the player's
+controls; AVKit's controls on the Mac expose nothing to accessibility) — the seek across frames is Android's above.
+**Found, not fixed:** the Apple app's `URLSession` (Ktor's Darwin engine) keeps a `URLCache` on disk —
+`Library/Caches/me.raddatz.veyq/Cache.db` and `fsCachedData/` held the `blob-downloads-batch`, `exif` and `members`
+responses and two blobs' ciphertext from the object store after the pass. Nothing decrypted, but metadata the session
+read sits on disk; a decision for the core's HTTP client (no cache, or an in-memory one), named here.
+The box stays open for the Apple seek.
+
 **Retrospective:** "the settle is `GalleryModel`'s" did not survive its first test: an upload outlives the page it was
 started from, so the settle needed an owner per tenant (`MediaUploads`), and the gallery only listens. Following the
 queue's *state* rather than its settle callbacks made the picked files' lifetime survive a tenant opened again over the same
@@ -724,7 +751,7 @@ below; the rest of the phase is as it stands.
   collapses the button; `CreateGridAction` had no caller left and went), each row a `Box` of tiles at their frames, 8 dp
   margins (the grid's gap); `DevMemory` plays a portrait and a square photo besides the landscape ones.
 - **Apple** — `MemoryScreen` draws the rows in a `LazyVStack` at the width `onGeometryChange` measures. **macOS:** a tile
-  opens the lightbox as the page's `navigationDestination` (back and Escape return), its toolbar's and the File menu's
+  opens the lightbox as the page's `navigationDestination` (back and Escape return), its own bar's (after the merge of `07e492ebe`: Close, Details, Save in a bar of the lightbox's own on a Mac) and the File menu's
   "Open in New Window" (`LightboxCommands`, a focused-scene value), a tile's context menu and a ⌘-click open
   `LightboxWindow` through `openWindow(value: LightboxWindowValue)` (ids only; `WindowGroup(id: "lightbox", for:)` with
   `.restorationBehavior(.disabled)`); `AppModel.windowLightbox` opens the window's own gallery and lightbox,
@@ -751,7 +778,7 @@ blocked one, justified to 1 058 px; pier's tile opened "3 of 5". **macOS** (the 
 `DevLogin`'s `VEYQ_DEV_*`, driven through the accessibility tree): an `App memory 94531` with nine photos of four shapes
 (made, filled and purged by a scratch live case over `LiveRun`) drawn in justified rows (four tiles 130 pt high in a
 596 pt grid); a tile opened the lightbox in the window's content ("3 von 9", the window's title), "In neuem Fenster
-öffnen" in its toolbar returned the main window to the gallery and opened a second window on "Shape 3.jpg" ("3 von 9 –
+öffnen" in its toolbar (before that merge) returned the main window to the gallery and opened a second window on "Shape 3.jpg" ("3 von 9 –
 App memory 94531") that read its picture; closing that window left the main one; the toolbar's back returned from an
 inline lightbox to the gallery. **Not driven here** (the background control cannot send them; owner's step on a Mac in
 front): Escape in the inline lightbox, the File menu's item (disabled while the app is not the focused one, as designed),

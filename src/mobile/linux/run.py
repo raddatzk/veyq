@@ -467,14 +467,14 @@ def flatpak(flatpak_arch: str, prebuilt: bool = False, smoke: bool = False) -> i
                  if prebuilt else f"no {', '.join(map(str, missing))}")
 
     # The inputs the manifest's `type: dir` sources name, written anew each run.
-    inputs, vendor = FLATPAK_OUT / "inputs", FLATPAK_OUT / "vendor"
-    shutil.rmtree(inputs, ignore_errors=True)
-    (inputs / "lib").mkdir(parents=True)
-    shutil.copy2(lib, inputs / "lib" / "libveyq.so")
-    shutil.copytree(GENERATED / "bridge", inputs / "generated" / "bridge")
-    shutil.copytree(GENERATED / "linux", inputs / "generated" / "linux")
-    shutil.copy2(WORDS / "words.json", inputs / "words.json")
-    shutil.copytree(ROOT / KIT_FIXTURES, inputs / "kit-fixtures")
+    staged, vendor = FLATPAK_OUT / "inputs", FLATPAK_OUT / "vendor"
+    shutil.rmtree(staged, ignore_errors=True)
+    (staged / "lib").mkdir(parents=True)
+    shutil.copy2(lib, staged / "lib" / "libveyq.so")
+    shutil.copytree(GENERATED / "bridge", staged / "generated" / "bridge")
+    shutil.copytree(GENERATED / "linux", staged / "generated" / "linux")
+    shutil.copy2(WORDS / "words.json", staged / "words.json")
+    shutil.copytree(ROOT / KIT_FIXTURES, staged / "kit-fixtures")
     write_manifest(version, date)
     # The crates, offline: `cargo vendor --locked` in the development image (cargo is there, not in the builder's),
     # each crate checked against Cargo.lock's checksum. Every crate is crates.io's (Cargo.lock has no other source),
@@ -489,7 +489,7 @@ def flatpak(flatpak_arch: str, prebuilt: bool = False, smoke: bool = False) -> i
     sources = set(re.findall(r'^source = "([^"]+)"', (HERE / "Cargo.lock").read_text(), re.MULTILINE))
     if sources != {"registry+https://github.com/rust-lang/crates.io-index"}:
         sys.exit(f"Cargo.lock names sources beside crates.io, which the vendored config does not replace: {sources}")
-    (inputs / "cargo-config.toml").write_text(
+    (staged / "cargo-config.toml").write_text(
         '[source.crates-io]\nreplace-with = "vendored-sources"\n\n'
         '[source.vendored-sources]\ndirectory = "/run/build/veyq/vendor"\n')
 

@@ -211,6 +211,25 @@ Apple as a pushed view (iOS) and a Settings scene-style window (macOS `Settings 
   in (`devlogin.py`), open Settings from the drawer, rename this device, sign in a second session with
   `LiveAccountSettingsTest`'s helper (or a second `devlogin` on another device), sign that one out from the list, take
   "Sign out"; then record each pass in `native-apps.md`'s measured list.
+  **Live passes (2026-11-13, the dev backend up; measured):** the second session is `DevSecondSessionTest`
+  (`VEYQ_LIVE=… VEYQ_DEV_SECOND_SESSION=<label> ./gradlew :core:jvmTest --tests '*DevSecondSessionTest*' --rerun`: a fresh
+  login of the principal that names itself `<label>` through the register, then waits until its page no longer reads and
+  prints after how long; at its limit it signs itself out). **Android** (throwaway AVD, signed in by `devlogin.py`): the
+  drawer's Settings → the address and "This device" first with "You are here"; renamed to "Pass AVD renamed" (the row
+  followed) and back; "Pass throwaway A" listed, signed out from its menu after the question → gone from the list,
+  `DevSecondSessionTest`: `signed out from elsewhere after 74 s`; "Sign out" → the sign-in. **iOS** (throwaway iPhone 18 Pro
+  simulator, German): renamed ("iPhonex", the row followed); "Pass throwaway iOS" signed out by its swipe action and the
+  question → gone, `signed out from elsewhere after 298 s`; "Abmelden" → the sign-in (`settings: signed out here`), no crash.
+  **macOS** (the ad hoc debug build, German, driven through accessibility): the Settings window from the sidebar, renamed
+  ("Pass Mac renamed") and back, "Abmelden" → the sign-in; **not done there:** a session's "Weitere" menu — a menu control the
+  background tools may not open and full-screen control was not available — so "Pass throwaway Mac" was signed out from the
+  Android page instead (`after 582 s`). One Mac session a stopped build left was signed out by
+  `DevSecondSessionTest.aLeftOverSessionIsSignedOut` (`VEYQ_DEV_SIGN_OUT_LABEL`, `VEYQ_DEV_SIGN_OUT_SINCE`: exactly one
+  family of that name signed in that minute, else nothing). **Found:** on macOS the rename alert's field showed the current name only on its
+  first opening; later openings were empty (the binding is set before presenting — the AppKit alert keeps its field). Not
+  fixed here; owner step below. Recorded in `native-apps.md` § Built (Account and session).
+  **Owner step (pending):** on the Mac, the session list's "Weitere" menu → "Dieses Gerät abmelden" on a second session.
+  The box stays open for it.
   **Retrospective:** a debug harness that plays the screen model's `State` (it is `@Serializable` and public) instead of
   the model's internal seams draws every state a server can produce without exposing `Door`/`Here` from the core; its
   limit is that the actions' effects are played, so the rules stay `AccountSettingsTest`'s and the wiring to the real
@@ -272,6 +291,20 @@ Apple as a pushed view (iOS) and a Settings scene-style window (macOS `Settings 
   name follows); a second session signed in by `LiveAccountSettingsTest`'s helper (or the web) appears, is signed out from
   its menu after the question, and drops out; "Sign out" ends the page and shows the sign-in. Record each in
   `native-apps.md`'s measured list.
+  **Live, Linux — met (2026-11-13).** On the Fedora 45 VM's GNOME session, the debug build of this tree inside the
+  installed Flatpak's sandbox (`cr-desktop-app-packaging` phase 2's signed-in pass), signed in as the principal through
+  the dev sign-in (the trust offer "Not now": the account is at its limit, `add wrap 409`). EN/light: the sidebar's
+  **Settings** opened the dialog over the signed-in shell (`settings open`) with the principal's address, the
+  confirmation line, and this device first ("fedora", "You are here"); renamed to "Linux pass device" (`settings
+  rename: Done`, its row followed) and back to "fedora" (`Done`); a second session — `run.py run --devlogin
+  --no-secret-service` in the Broadway container on the Mac, listed as its container id `e157d9a0a242` — signed out from
+  its row's menu ("Sign this device out", the question, then `settings sign out: Done`) and gone from the list; the
+  container stopped. DE/dark (a new sign-in): every group in German, renamed to "Linux Pass" and back (`Done` each), the
+  pass's own earlier session signed out from its menu ("Dieses Gerät abmelden", the question); "Abmelden" →
+  `settings sign out here: Done`, the dialog gone, the sign-in shown. "Sign out everywhere else" and "Remove every saved
+  key" were not touched (the principal's). That sign-in showed the password and Secret Key still filled — fixed in
+  `sign_in.rs`/`main.rs` (`SignIn::forget`, bitten; `cr-desktop-app-packaging` phase 2 has the measurement). Windows
+  still open.
   **Retrospective:** WinUI's Settings item was a non-selecting item; making it a selecting one with a `Target` of its own let the
   page live in the content with the pane's own selection and back, which is how Windows' apps show settings.
 - [ ] **5 docs and harvest** — `native-apps.md` (§ Built, § Account's open items reduced to what is left);

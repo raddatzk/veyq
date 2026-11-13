@@ -285,6 +285,14 @@ impl SignIn {
         show_error(&self.error, error);
     }
 
+    /// The password and the Secret Key typed, forgotten once the core has left the sign-in (signed in, unlocking): the
+    /// page is built once per window, so without this a sign-out or "Use another account" showed them filled again, a
+    /// press of Sign in away from the account (measured on the Fedora VM, 2026-11-13).
+    pub fn forget(&self) {
+        self.password.set_text("");
+        self.secret_key.set_text("");
+    }
+
     /// The debug build's dev principal: the form filled, and signed in through it unless [DevSignIn::fill_only].
     pub fn dev(&self, dev: DevSignIn) {
         self.server.set_text(&dev.server);
