@@ -260,7 +260,7 @@ and never rebuilds (D10). The Mac builds only aarch64 locally; x86_64 is CI's.
   **Met:** the guard loop (`scripts/validate_*.py`, guard_gaps skipped) printed no RED before the edit (this worktree at
   `2d3018014`) and none after.
 
-- [ ] **2 linux — the Flatpak builds and runs, aarch64, on the developer's machine and the VM.** The container, the
+- [x] **2 linux — the Flatpak builds and runs, aarch64, on the developer's machine and the VM.** The container, the
   pin file, the manifest, the metainfo, `run.py flatpak`, the locale directory. **First measurements, each a
   stop-and-ask if it fails:** (a) flatpak-builder runs in the pinned container under Docker on the Mac (bubblewrap's
   privileges); (b) which of D5's libraries the installed runtime lacks (`flatpak run --command=sh org.gnome.Platform//51
@@ -277,6 +277,37 @@ and never rebuilds (D10). The Mac builds only aarch64 locally; x86_64 is CI's.
   `appstreamcli validate` and `flatpak-builder-lint manifest`/`repo` are clean or each remaining warning is named with
   why; the VM pass's list above is recorded in ADR 0123's Consequences with a screenshot per screen as the final proof;
   `python3 src/mobile/linux/run.py build` green.
+
+  **Status: done (2026-11-13), its signed-in part owed** (the dev backend was down, the owner's call).
+  **Built:** `src/mobile/linux/flatpak/` — `manifest.yml` (the id, version and date filled by `run.py`, written as
+  `build/linux/flatpak/<id>.yml`), `metainfo.xml`, `runtime.pins` (Platform, Sdk, rust-stable and org.flatpak.Builder,
+  per architecture), `Containerfile` (`fedora:44` at the development image's digest, see phase 1), `lint-exceptions.json`;
+  `src/mobile/desktop-identity.json` (ADR 0132 decision 12: `appId`, `msixPublisher`), read by `run.py`,
+  `generate_theme.py` and, through `VEYQ_APP_ID`, `build.rs` (the GApplication id, the resource path, the icon's and the
+  desktop entry's names: a sandbox lets the app own only names under its id); `build.rs` binds the catalogs to a
+  build-time `VEYQ_LOCALE_DIR` (`/app/share/locale` in the Flatpak); `run.py flatpak`; `release_assets.py` imports
+  PyYAML only where the recipe's derivation needs it, so `tree_release` runs on a Python without it (the Mac's
+  Homebrew one). **D5 measured** (b): the runtime lacks `libcrypt.so.1` and poppler-glib, now modules (libxcrypt 4.5.2,
+  poppler 26.11.0, sha256-pinned); it carries the rest. **D3 measured:** the Secret portal alone fails the core's
+  availability probe, so the manifest grants `--talk-name=org.freedesktop.secrets` (ADR 0132 decision 3 rewritten to
+  the outcome; security-model's Linux row). **D9 measured:** an update is `flatpak install --user <newer bundle>`.
+  Recorded in ADR 0123's Consequences (the Flatpak), native-apps § Platforms and § Open, `src/mobile/CLAUDE.md`
+  (the verb).
+  **Met:** (a) `python3 src/mobile/linux/run.py flatpak` exits 0 at `b671b1033` and writes
+  `veyq-1.546-aarch64.flatpak` (7.3 MB) — flatpak-builder privileged under Docker on the Mac; `appstreamcli validate
+  --pedantic` passes with one pedantic note, `cid-contains-uppercase-letter` (the recommended id's `V`, owner question
+  1); `flatpak-builder-lint manifest` clean, `repo` red only on `metainfo-missing-screenshots` and
+  `appstream-screenshots-not-mirrored-in-ostree`, both excepted with why (no store page; Flathub's own CR). The VM pass
+  (ADR 0123's Consequences, the Flatpak, with the commands): install from the bundle pulling the runtime, start to the
+  sign-in, German words (after the runtime's `de` locale), the launcher entry, the FileChooser portal and a picked
+  file at its document-portal path, https out of the sandbox, the five libsecret calls under both permissions, update
+  over 1.545, uninstall with `--delete-data` leaving nothing; screenshots taken (sign-in en and de, the portal's
+  dialog, the launcher), not committed. `python3 src/mobile/linux/run.py build` green in the Fedora container
+  (38 passed). **Owed** (needs a signed-in server; the exact steps in ADR 0123's Consequences): sign-in and staying
+  signed in through a restart, the members' pictures in the app (glycin's WebP decode itself passed in the installed
+  sandbox), a receipt's PDF, a medium played and heard, upload and save through the app's dialogs at a document-portal
+  path, a drop from Files, the exchange rates over the app's libcurl.
+
 - [ ] **3 linux — the SDK proves the app; the pins are guarded.** `run.py build` runs clippy, test and build in
   `org.gnome.Sdk//51` (D4). `validate_build_input_pins.py` check 7: the Flatpak manifest's `runtime-version` equals the
   pin file's branch; every pin line is a 64-hex commit per architecture for Platform, Sdk and the Rust extension; every

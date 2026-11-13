@@ -1,7 +1,7 @@
 # ADR 0132 — The desktop apps ship as a Flatpak bundle and an MSIX, built in Checks and promoted with the release
 
 - Status: Accepted
-- Built: no
+- Built: partly (not built: decision 6, decision 7, decision 8, decision 10; of decision 9, the MSIX's install and update)
 - Date: 2026-11-13
 - Model: [native-apps](../crosscutting/native-apps.md)
 
@@ -47,12 +47,17 @@ What constrains the choice:
    `--socket=fallback-x11`, `--share=ipc`, `--device=dri` (GTK's drawing); `--socket=pulseaudio` (a medium's sound
    through GStreamer's sink, which PipeWire answers). **No `--filesystem`:** files come and go through the FileChooser
    and document portals, which GTK uses by itself in a sandbox, and a drop from Files arrives as a document-portal path.
-   **The secure store** is whichever of the two a sandboxed libsecret can reach that answers every call of the core's
-   `LinuxDeviceKeys`: the **Secret portal** (a per-app keyring under `~/.var/app/<id>/data/keyrings`, opened by a
-   secret the host's keyring holds) is preferred, as it needs no hole in the sandbox; the fallback is
-   `--talk-name=org.freedesktop.secrets`, the host's own collection as the development container uses it. Which one the
-   manifest carries, and what each answered, is measured on the test VM and recorded in native-apps and in
-   [security-model](../crosscutting/security-model.md) § What a trusted device rests on. **The camera** adds nothing
+   **The secure store: the app's own keyring behind the Secret portal, reached with
+   `--talk-name=org.freedesktop.secrets`.** Inside a sandbox whose desktop offers the Secret portal, libsecret keeps
+   every item in a keyring of the app's own (`~/.var/app/<id>/data/keyrings`, opened by a secret the portal hands out
+   from the host's keyring), whatever `SECRET_BACKEND` says; but the core first asks whether a Secret Service answers
+   (`secret_service_get_sync`), which only the session bus's `org.freedesktop.secrets` answers — without the name that
+   one call fails and nothing is offered after a sign-in. So the manifest grants the name, and the items still land in
+   the app's own keyring (both measured on the test VM, native-apps § Platforms); where a desktop has no Secret portal,
+   libsecret uses the host's collection through the same name (remembered from libsecret's backend choice, not measured). The alternative — the core asking libsecret's backend
+   instead of the service, which would need no name at all — is a core change, named in native-apps § Open.
+   [security-model](../crosscutting/security-model.md) § What a trusted device rests on says what the device then
+   offers. **The camera** adds nothing
    here: the Camera portal hands the app a PipeWire descriptor. No other `--talk-name`, no `--device=all`, no
    `--filesystem=home`, no bare `--socket=x11`.
 
@@ -118,8 +123,9 @@ What constrains the choice:
    That the runtime comes from Flathub is the one central dependency, said on the install page; an offline host takes the
    runtime as a bundle of its own (`flatpak build-bundle --runtime`), documented, not shipped. The MSIX installs by
    double-click (App Installer) or `Add-AppxPackage`. A person updates by installing the next release's file: the MSIX
-   upgrades in place keeping the app's data (same identity, higher version), the Flatpak bundle by the install command
-   the Linux pass measured (native-apps § Platforms). No auto-update, no repository of our own and no `.appinstaller`
+   upgrades in place keeping the app's data (same identity, higher version), the Flatpak bundle by the same
+   `flatpak install --user <file>`, which upgrades the installed app in place and keeps its data (native-apps
+   § Platforms). No auto-update, no repository of our own and no `.appinstaller`
    feed: each needs a host and a long-lived signing key, and a store gives it if one is wanted.
 
 10. **Built in Checks, staged as OCI artifacts, promoted like the images.** Checks gains three jobs: **`app-inputs`** on

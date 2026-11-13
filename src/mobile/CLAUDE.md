@@ -237,6 +237,12 @@ A Gradle build of its own, run through its own wrapper.
     way back to the password once (the pass presses its button). The app's stderr says `session <gate>, offer: […]`,
     `offer answered: …` and `manage …: Done`/`Refused …`: read it before each shot.
   - `lock` writes `Cargo.lock` anew.
+  - `flatpak [--arch aarch64|x86_64]` builds the Flatpak bundle (ADR 0132) into `build/linux/flatpak/`: the release
+    library and the generated sources here, then flatpak-builder in `linux/flatpak/Containerfile`'s image (privileged)
+    against the runtime `linux/flatpak/runtime.pins` names, `appstreamcli validate` and `flatpak-builder-lint` (red on
+    anything `lint-exceptions.json` does not name). The runtime, SDK and Rust extension live in the volume
+    `veyq-flatpak-<arch>` (about 6 GB), flatpak-builder's cache in `veyq-flatpak-state-<arch>`; the first run downloads
+    them. The app id is `desktop-identity.json`'s, never spelled elsewhere.
 
   With `VEYQ_LIVE=http://veyq.localhost:8080`, `test --tests '*LiveSignInTest*'` and `bridge` sign in as the seeded
   principal, and `run --devlogin` signs the debug build in through its own sign-in. The backend picks the tenant from
