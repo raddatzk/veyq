@@ -5,8 +5,13 @@ import UniformTypeIdentifiers
 import VeyqCore
 
 /// A Memory's or a chapter's page (Memories' `MemoryDetail.vue`, its gallery), drawn from core's `GalleryModel`: the chapters
-/// a Memory holds, then every medium as a square tile of its thumbnail in the grid's order (newest first by capture time), a
+/// a Memory holds, then every medium as a tile of its thumbnail in the justified grid (core's `GalleryModel.layout`, the web's
+/// `MediaGrid.vue`: its aspect kept, each row filled to the width), in the grid's order (newest first by capture time), a
 /// video marked as one; a tile opens the lightbox (`Lightbox`). When it reads anew is the core's.
+///
+/// On a Mac the lightbox opens in the window's content, where the gallery was (back and Escape return to it), and in a
+/// window of its own only when asked: "Open in New Window" in the lightbox's toolbar and the File menu, a tile's context
+/// menu or a ⌘-click on it (`LightboxWindow`). iOS shows it full screen.
 struct MemoryScreen: View {
     @Bindable var model: AppModel
     let ref: ObjectRef
@@ -14,14 +19,22 @@ struct MemoryScreen: View {
     @State private var pickingPhotos = false
     @State private var photos: [PhotosPickerItem] = []
     @State private var pickingFiles = false
+    /// The grid's width between the page's margins, as last measured.
+    @State private var gridWidth: CGFloat = 0
+    #if os(macOS)
+    @Environment(\.openWindow) private var openWindow
+    #endif
 
     private var node: NodeAt { ref.at }
     private var state: GalleryModel.State? { model.galleryState(node) }
     private var rows: [GalleryModel.Row] { state?.rows ?? [] }
+    /// The room between the grid and the page's edges: the grid's own gap, so every side of a tile breathes alike.
+    private static let margin = CGFloat(MediaGridLayout.shared.GAP)
 
     var body: some View {
         ScrollView {
-            VStack(alignment: .leading, spacing: 8) {
+            // lazy: only the rows near the viewport are built (ADR 0105), the grid's rows among the page's own
+            LazyVStack(alignment: .leading, spacing: Self.margin) {
                 NodeHeroRow()
                 if let chapters = state?.chapters, !chapters.isEmpty {
                     Text(say(.memoryChapters)).font(.headline).padding(.horizontal)
@@ -42,17 +55,21 @@ struct MemoryScreen: View {
                     Text(say(.memoryGalleryEmpty)).foregroundStyle(Role.muted).padding()
                 } else {
                     Text(say(.memoryItems, rows.count)).font(.footnote).foregroundStyle(Role.muted).padding(.horizontal)
-                    LazyVGrid(columns: [GridItem(.adaptive(minimum: 104), spacing: 2)], spacing: 2) {
-                        ForEach(Array(rows.enumerated()), id: \.element.mediaId) { index, row in
-                            Button {
-                                if let gallery = model.galleryModel(node) { open = LightboxStart(box: gallery.lightbox(index: Int32(index))) }
-                            } label: { MediaTile(model: model, node: node, row: row) }
-                                .buttonStyle(.plain)
+                    let layout = GalleryModel.companion.layout(rows: rows, width: Double(gridWidth))
+                    let at = Dictionary(uniqueKeysWithValues: rows.enumerated().map { ($0.element.mediaId, $0.offset) })
+                    ForEach(layout.rows, id: \.key) { r in
+                        ZStack(alignment: .topLeading) {
+                            ForEach(r.tiles, id: \.id) { t in
+                                if let index = at[t.id] { tile(rows[index], index: index, frame: t) }
+                            }
                         }
+                        .frame(maxWidth: .infinity, minHeight: CGFloat(r.height), maxHeight: CGFloat(r.height), alignment: .topLeading)
+                        .padding(.horizontal, Self.margin)
                     }
                 }
             }
         }
+        .onGeometryChange(for: CGFloat.self, of: { $0.size.width }) { gridWidth = max(0, $0 - 2 * Self.margin) }
         .navigationTitle(ref.name)
         // photos and videos come from the photo library or from files
         .createMenu(say(.memoryAdd), shown: true) {
@@ -84,11 +101,43 @@ struct MemoryScreen: View {
         // the model is the shell's while the page is shown; asking for it here opens it
         .task(id: ref) { _ = model.galleryModel(node) }
         #if os(iOS)
-        .fullScreenCover(item: $open, onDismiss: { open = nil }) { start in Lightbox(model: model, box: start.box) }
+        .fullScreenCover(item: $open, onDismiss: { open = nil }) { start in
+            Lightbox(model: model, box: start.box, mode: .cover) { open = nil }
+        }
         #else
-        .sheet(item: $open) { start in Lightbox(model: model, box: start.box).frame(minWidth: 640, minHeight: 480) }
+        // in the window's content, where the gallery was: its back (and Escape) return to the gallery
+        .navigationDestination(item: $open) { start in
+            Lightbox(model: model, box: start.box, mode: .inline) { open = nil }
+        }
         #endif
     }
+
+    /// Row `row` (at `index` in the grid's order) as a tile at `frame`: a click opens the lightbox here; on a Mac a ⌘-click
+    /// and its context menu's "Open in New Window" open it in a window of its own.
+    private func tile(_ row: GalleryModel.Row, index: Int, frame: MediaGridLayout.Tile) -> some View {
+        Button {
+            #if os(macOS)
+            if NSEvent.modifierFlags.contains(.command) { return openInWindow(row.mediaId) }
+            #endif
+            if let gallery = model.galleryModel(node) { open = LightboxStart(box: gallery.lightbox(index: Int32(index))) }
+        } label: {
+            MediaTile(model: model, node: node, row: row, width: CGFloat(frame.width), height: CGFloat(frame.height))
+        }
+        .buttonStyle(.plain)
+        .offset(x: CGFloat(frame.left))
+        #if os(macOS)
+        .contextMenu {
+            Button { openInWindow(row.mediaId) } label: { Label(say(.memoryOpenInWindow), systemImage: "macwindow.badge.plus") }
+        }
+        #endif
+    }
+
+    #if os(macOS)
+    /// Medium `mediaId` in a lightbox window of its own (its value carries the ids alone; the window opens its own models).
+    private func openInWindow(_ mediaId: String) {
+        openWindow(value: LightboxWindowValue(scopeId: node.scopeId, nodeId: node.nodeId, mediaId: mediaId))
+    }
+    #endif
 }
 
 /// A photo or video the Photos picker handed over, copied to a directory of its own under `AppModel.pickedDir` (the picker's
@@ -112,22 +161,27 @@ private struct PickedMedia: Transferable {
     }
 }
 
-/// Where the lightbox opens (a sheet's item): core's lightbox over the gallery.
-private struct LightboxStart: Identifiable {
+/// Where the lightbox opens (a cover's or a navigation destination's item): core's lightbox over the gallery.
+private struct LightboxStart: Identifiable, Hashable {
     let box: VeyqCore.Lightbox
     var id: ObjectIdentifier { ObjectIdentifier(box) }
+    static func == (a: Self, b: Self) -> Bool { a.id == b.id }
+    func hash(into hasher: inout Hasher) { hasher.combine(id) }
 }
 
-/// One square tile: the medium's grid tier cropped to fill, a video marked; an icon where it has no tile to show.
+/// One tile at the size the justified grid gave it: the medium's grid tier cropped to fill (its aspect is the tile's,
+/// bounded), a video marked; an icon where it has no tile to show.
 private struct MediaTile: View {
     let model: AppModel
     let node: NodeAt
     let row: GalleryModel.Row
+    let width: CGFloat
+    let height: CGFloat
     @State private var picture: CGImage?
 
     var body: some View {
         Rectangle().fill(Role.line)
-            .aspectRatio(1, contentMode: .fit)
+            .frame(width: width, height: height)
             .overlay {
                 if let picture {
                     Image(decorative: picture, scale: 1).resizable().scaledToFill()
@@ -173,21 +227,35 @@ final class LightboxBox {
     }
 }
 
+/// Where a lightbox is shown: full screen over the app (iOS), in a Mac window's content where the gallery was, or in a Mac
+/// window of its own.
+private enum LightboxMode {
+    case cover, inline, window
+}
+
 /// The lightbox (the web's `MediaLightbox.vue`), drawn from core's `Lightbox`: the gallery paged through on black, each
 /// medium's preview fitted, a video's poster with a play button that streams the original as the player reads it
-/// (`MediaVideo`); its bar closes, names the place in the gallery, opens the details (`MediaDetailsView`) and saves the
-/// original (core's `FileSave`): a Mac where its save panel says, iOS through the system's save sheet.
+/// (`MediaVideo`); its bar closes (full screen; inline its back does, and Escape), names the place in the gallery, opens the
+/// details (`MediaDetailsView`) and saves the original (core's `FileSave`): a Mac where its save panel says, iOS through the
+/// system's save sheet. Inline on a Mac it offers "Open in New Window" (its toolbar, the File menu). However it is shown,
+/// it closes core's lightbox when it goes, and a video's reader with it.
 private struct Lightbox: View {
     let model: AppModel
+    let mode: LightboxMode
+    let onClose: () -> Void
     @State private var held: LightboxBox
     @State private var details = false
     @State private var downloading = false
     @State private var downloaded: URL?
     @State private var failed: String?
-    @Environment(\.dismiss) private var dismiss
+    #if os(macOS)
+    @Environment(\.openWindow) private var openWindow
+    #endif
 
-    init(model: AppModel, box: VeyqCore.Lightbox) {
+    init(model: AppModel, box: VeyqCore.Lightbox, mode: LightboxMode, onClose: @escaping () -> Void) {
         self.model = model
+        self.mode = mode
+        self.onClose = onClose
         _held = State(initialValue: LightboxBox(box))
     }
 
@@ -195,7 +263,24 @@ private struct Lightbox: View {
     private var current: GalleryModel.Row? { state.row }
 
     var body: some View {
-        NavigationStack {
+        if mode == .inline {
+            pages
+        } else {
+            NavigationStack { pages }
+        }
+    }
+
+    #if os(macOS)
+    /// The current medium in a window of its own; the lightbox here returns to the gallery.
+    private func openInWindow() {
+        guard let row = current else { return }
+        let node = held.box.node
+        openWindow(value: LightboxWindowValue(scopeId: node.scopeId, nodeId: node.nodeId, mediaId: row.mediaId))
+        onClose()
+    }
+    #endif
+
+    private var pages: some View {
             // the pages, then the caption — stacked, not floated over the picture
             VStack(alignment: .leading, spacing: 0) {
                 TabView(selection: Binding(get: { Int(state.index) }, set: { held.box.go(index: Int32($0)) })) {
@@ -226,10 +311,18 @@ private struct Lightbox: View {
             .toolbarBackground(.visible, for: .navigationBar)
             #endif
             .toolbar {
-                ToolbarItem(placement: .cancellationAction) {
-                    Button { dismiss() } label: { Label(say(.receiptsClose), systemImage: "xmark") }
+                if mode == .cover {
+                    ToolbarItem(placement: .cancellationAction) {
+                        Button { onClose() } label: { Label(say(.receiptsClose), systemImage: "xmark") }
+                    }
                 }
                 ToolbarItemGroup(placement: .primaryAction) {
+                    #if os(macOS)
+                    if mode == .inline {
+                        Button { openInWindow() } label: { Label(say(.memoryOpenInWindow), systemImage: "macwindow.badge.plus") }
+                            .help(say(.memoryOpenInWindow))
+                    }
+                    #endif
                     Button { details = true } label: { Label(say(.memoryDetails), systemImage: "info.circle") }
                     if let row = current, !row.blocked {
                         if downloading {
@@ -252,10 +345,15 @@ private struct Lightbox: View {
             .alert(failed ?? "", isPresented: Binding(get: { failed != nil }, set: { if !$0 { failed = nil } })) {
                 Button(say(.ok), role: .cancel) {}
             }
-        }
-        .environment(\.colorScheme, .dark)
-        // the lightbox went: core closes a playing video's reader with it
-        .onDisappear { held.close() }
+            #if os(macOS)
+            // Escape returns to the gallery (inline), the File menu's "Open in New Window" detaches it
+            .onExitCommand { if mode == .inline { onClose() } }
+            .focusedSceneValue(\.lightboxToWindow, mode == .inline ? LightboxToWindow(open: openInWindow) : nil)
+            .navigationSubtitle(mode == .window ? held.box.node.name : "")
+            #endif
+            .environment(\.colorScheme, .dark)
+            // the lightbox went: core closes a playing video's reader with it
+            .onDisappear { held.close() }
     }
 
     /// The original saved under core's name for it (`FileSave`, written a frame at a time by core's `FileSink`). A Mac asks
@@ -423,3 +521,71 @@ private struct MediaDetailsView: View {
         return (shown as? MediaDetails.ShownPlain)?.text ?? row.value
     }
 }
+
+/// A Mac's lightbox window's value: the ids alone (opaque; a window's value is what the system may keep), never a name or a
+/// key. (Declared on every platform, as `AppModel.windowLightbox` is; only a Mac opens such a window.)
+struct LightboxWindowValue: Codable, Hashable {
+    let scopeId: String
+    let nodeId: String
+    let mediaId: String
+}
+
+#if os(macOS)
+/// The inline lightbox's "Open in New Window", for the File menu (`LightboxCommands`) while it is the focused scene's.
+struct LightboxToWindow {
+    let open: () -> Void
+}
+
+extension FocusedValues {
+    @Entry var lightboxToWindow: LightboxToWindow?
+}
+
+/// The File menu's "Open in New Window": the inline lightbox in a window of its own; disabled while none is shown.
+struct LightboxCommands: Commands {
+    @FocusedValue(\.lightboxToWindow) private var toWindow
+
+    var body: some Commands {
+        CommandGroup(after: .newItem) {
+            Button(say(.memoryOpenInWindow)) { toWindow?.open() }
+                .disabled(toWindow == nil)
+        }
+    }
+}
+
+/// A lightbox in a window of its own (a Mac, asked for by "Open in New Window"): its own gallery over the shell and its own
+/// core `Lightbox` on the medium the value names — the main window's page is not borrowed, so either goes without the
+/// other. Closing the window closes both (the lightbox's reader with them); the tenant's close closes them too, and the
+/// window with them.
+struct LightboxWindow: View {
+    let model: AppModel
+    let value: LightboxWindowValue
+    @State private var opened: AppModel.WindowLightbox?
+    @State private var missing = false
+    @Environment(\.dismiss) private var dismiss
+
+    var body: some View {
+        Group {
+            if let opened, model.holdsWindowGallery(opened.gallery) {
+                Lightbox(model: model, box: opened.box, mode: .window) { dismiss() }
+            } else if missing {
+                Text(say(.memoryGalleryFailed)).foregroundStyle(Role.muted).padding()
+            } else {
+                ProgressView()
+            }
+        }
+        .frame(minWidth: 480, minHeight: 360)
+        .task {
+            guard opened == nil else { return }
+            opened = model.windowLightbox(value)
+            missing = opened == nil
+        }
+        // the tenant closed (signed out, switched): its galleries went, the window goes with them
+        .onChange(of: opened.map { model.holdsWindowGallery($0.gallery) }) { _, holds in
+            if holds == false { dismiss() }
+        }
+        .onDisappear {
+            if let opened { model.closeWindowGallery(opened.gallery) }
+        }
+    }
+}
+#endif

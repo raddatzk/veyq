@@ -2301,6 +2301,11 @@
     "en": "Close",
     "de": "Schließen"
   },
+  "memory_open_in_window": {
+    "note": "a Mac's lightbox in a window of its own: its toolbar, the File menu, a tile's context menu (Apple's own wording)",
+    "en": "Open in New Window",
+    "de": "In neuem Fenster öffnen"
+  },
   "memory_no_detail": {
     "en": "No details for this item.",
     "de": "Keine Details für dieses Objekt."

@@ -461,7 +461,7 @@ final class AppModel {
         shellWatch?.stop()
         shellModel = model
         openDepot(model, t)
-        closeGallery()
+        closeGallery(windows: true)
         galleryShown = nil
         openMedia(model, switched: switched)
         dropHeaders()
@@ -756,11 +756,44 @@ final class AppModel {
         return made
     }
 
-    /// The gallery goes (another opened, the tenant closed): its lightbox and a video's reader close with it.
-    private func closeGallery() {
+    /// The gallery goes (another opened, the tenant closed): its lightbox and a video's reader close with it. The tenant's
+    /// close passes `windows`: every lightbox window's gallery goes too.
+    private func closeGallery(windows: Bool = false) {
         openGallery?.watch.stop()
         openGallery?.model.close()
         openGallery = nil
+        if windows {
+            windowGalleries.values.forEach { $0.close() }
+            windowGalleries = [:]
+        }
+    }
+
+    /// A lightbox in a window of its own (a Mac's "Open in New Window"): its own gallery and the lightbox on it.
+    struct WindowLightbox {
+        let gallery: GalleryModel
+        let box: VeyqCore.Lightbox
+    }
+
+    /// The galleries the lightbox windows opened, by identity: closed with their window, and all with the tenant.
+    private var windowGalleries: [ObjectIdentifier: GalleryModel] = [:]
+
+    /// A lightbox window's models for `value` (its ids): a gallery of its own over the shell — not the main window's page,
+    /// so each goes without the other — and core's lightbox on the medium named (`lightboxOn`: before the gallery's first
+    /// read it waits for it). Nil where the node is no longer a listed Memory or chapter, or no tenant is open.
+    func windowLightbox(_ value: LightboxWindowValue) -> WindowLightbox? {
+        guard let m = shellModel, let uploads = media, let node = m.galleryAt(scopeId: value.scopeId, nodeId: value.nodeId) else { return nil }
+        let gallery = m.galleryModel(ref: node, uploads: uploads)
+        windowGalleries[ObjectIdentifier(gallery)] = gallery
+        return WindowLightbox(gallery: gallery, box: gallery.lightboxOn(mediaId: value.mediaId))
+    }
+
+    /// Whether lightbox window gallery `gallery` is still open (the tenant's close closed it otherwise).
+    func holdsWindowGallery(_ gallery: GalleryModel) -> Bool { windowGalleries[ObjectIdentifier(gallery)] != nil }
+
+    /// A lightbox window went: its gallery closes, its lightbox and a video's reader with it.
+    func closeWindowGallery(_ gallery: GalleryModel) {
+        gallery.close()
+        windowGalleries[ObjectIdentifier(gallery)] = nil
     }
 
     /// Decoded tiers by blob id (a gallery asks for every tile as it scrolls past; the cache lets the system evict).
@@ -796,7 +829,7 @@ final class AppModel {
     }
 
     private func closeMedia() {
-        closeGallery()
+        closeGallery(windows: true)
         galleryShown = nil
         media?.close()
         media = nil
