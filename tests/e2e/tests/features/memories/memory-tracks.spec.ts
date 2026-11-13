@@ -6,7 +6,9 @@
 //    counts one item, and the track is listed by its own name with its distance - with the map services off (their default),
 //    so the tab offers them and asks no tile service anything;
 //  - refuses a file that is no GPX track, naming it;
-//  - opens the same Memory through a READ link: the Map tab lists the track, with no add and no removal;
+//  - names the track and gives it an activity through its Edit (ADR 0130 decision 9): the row shows both;
+//  - opens the same Memory through a READ link: the Map tab lists the track by that name with its activity, with no add,
+//    no Edit and no removal;
 //  - removes the track: it leaves the list and stands in the media trash.
 // The map itself (tiles from a third party) is not drawn here: the lane's stack reaches no tile service, and the consent's
 // states are the unit tests' (`MemoryTracks.test.ts`). The console is read for errors throughout. Every value typed is a
@@ -23,6 +25,7 @@ test.describe.configure({ mode: 'serial' })
 const stamp = randomBytes(3).toString('hex')
 const memoryName = `Bergtour ${stamp}`
 const trackName = `Gipfelweg ${stamp}`
+const editedName = `Kammweg ${stamp}`
 const gpx = (name: string) => Buffer.from(
   `<?xml version="1.0" encoding="UTF-8"?><gpx version="1.1" creator="e2e" xmlns="http://www.topografix.com/GPX/1/1">` +
   `<trk><name>${name}</name><trkseg>` +
@@ -126,7 +129,23 @@ test('a file that is no GPX track is refused by name, nothing uploaded', { tag: 
   await expect(trackRows(page)).toHaveCount(1)
 })
 
-test('the same Memory through a READ link lists the track, with no add and no removal', { tag: ['@uc.memory.tracks:a-mediums-rights-and-lifecycle'] }, async () => {
+test('the track is named and given an activity through its Edit', { tag: ['@uc.memory.tracks:name-and-activity'] }, async () => {
+  const { page } = member
+  await mapTab(page).click()
+  await page.getByTestId('track-more').click()
+  await page.getByRole('menuitem', { name: 'Edit' }).click()
+  const dialog = page.getByRole('dialog', { name: 'Edit track' })
+  await expect(dialog.getByTestId('track-edit-name')).toHaveAttribute('placeholder', trackName)
+  await dialog.getByTestId('track-edit-name').fill(recordTyped(editedName))
+  await dialog.getByTestId('track-edit-activity').click()
+  await page.getByRole('option', { name: 'Cycling', exact: true }).click()
+  await dialog.getByTestId('track-edit-save').click()
+  await expect(dialog).toBeHidden()
+  await expect(trackRows(page).first().locator('.memory-track-name')).toHaveText(editedName)
+  await expect(trackRows(page).first().getByTestId('track-activity')).toHaveText('Cycling')
+})
+
+test('the same Memory through a READ link lists the track, with no add and no removal', { tag: ['@uc.memory.tracks:a-mediums-rights-and-lifecycle', '@uc.memory.tracks:name-and-activity'] }, async () => {
   const { page } = member
   await headerAction(page, 'Share')
   const manage = page.getByRole('dialog', { name: 'Share this Memory' })
@@ -144,12 +163,14 @@ test('the same Memory through a READ link lists the track, with no add and no re
   await expect(g.getByRole('heading', { level: 1, name: memoryName })).toBeVisible({ timeout: 60_000 })
   await mapTab(g).click()
   await expect(trackRows(g)).toHaveCount(1, { timeout: 60_000 })
-  await expect(trackRows(g).first()).toContainText(trackName)
+  await expect(trackRows(g).first().locator('.memory-track-name')).toHaveText(editedName)
+  await expect(trackRows(g).first().getByTestId('track-activity')).toHaveText('Cycling')
   await expect(g.getByTestId('track-add')).toHaveCount(0)
   // a READ guest may download: the row's menu holds that and nothing that writes
   await g.getByTestId('track-more').click()
   await expect(g.getByRole('menuitem', { name: 'Download GPX' })).toBeVisible()
   await expect(g.getByRole('menuitem', { name: 'Remove' })).toHaveCount(0)
+  await expect(g.getByRole('menuitem', { name: 'Edit' })).toHaveCount(0)
   await g.keyboard.press('Escape')
 })
 
