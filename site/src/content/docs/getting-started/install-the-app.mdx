@@ -94,13 +94,40 @@ veyq stays on your server: sign in again on any device.
 
 The app comes as one file, `veyq-<version>-x64.msix`.
 
-:::note[Windows checks who signed the file]
-Windows installs an app package only when it trusts its signature. Which certificate signs veyq's package is not
-decided yet. If Windows needs a step from you to trust it, this page will say so before the first release that
-carries the app.
-:::
+### Once: trust veyq's certificate
 
-1. Download the file from the release page.
+Windows installs an app package only when it trusts the certificate that signed it. veyq signs its package with a
+certificate of its own, <code>{identity.msixPublisher}</code>. It costs nothing and carries no person's name, but no certificate authority
+vouches for it, so Windows does not know it: until you trust it, Windows refuses to install the app. You do this
+once, as administrator, before the first install; updates need no new step.
+
+1. Download `veyq.cer` from the same release page as the app.
+2. Check that it is veyq's before you trust it: its SHA-256 must be the one the release's signed list names
+   ([Verify it yourself](/security/verify-it-yourself/#the-desktop-apps-packages)). In PowerShell, in the folder
+   where the file is:
+
+   ```powershell
+   Get-FileHash .\veyq.cer
+   ```
+
+   No release carries the certificate and its entry yet; the first one that carries the app will.
+3. Open **PowerShell as administrator** (right-click the Start button, **Terminal (Admin)**), go to that folder and
+   add the certificate to the computer's *Trusted People*:
+
+   ```powershell
+   Import-Certificate -FilePath .\veyq.cer -CertStoreLocation Cert:\LocalMachine\TrustedPeople
+   ```
+
+   Or by clicks: double-click `veyq.cer`, choose **Install Certificate…**, then **Local Machine**, then **Place all
+   certificates in the following store**, **Browse…**, **Trusted People**, and finish.
+
+This trusts the certificate's key, not one file: from now on this Windows installs any package signed with it as
+veyq's. [Known limitations](/security/known-limitations/#the-desktop-app-flathubs-runtime-windows-trust-no-auto-update)
+says what that means.
+
+### Install
+
+1. Download the app's file from the release page.
 2. Open it with a double-click and choose **Install**. Or, in PowerShell, in the folder where the file is:
 
    ```powershell
@@ -123,6 +150,10 @@ Remove **veyq** like any app, under **Settings → Apps → Installed apps**, or
 <Code lang="powershell" code={`Get-AppxPackage -Name ${identity.appId} | Remove-AppxPackage`} />
 
 This removes the app and everything it stored on this computer. What you keep in veyq stays on your server.
+
+The certificate stays trusted until you remove it too, in PowerShell as administrator:
+
+<Code lang="powershell" code={`Get-ChildItem Cert:\\LocalMachine\\TrustedPeople | Where-Object Subject -eq '${identity.msixPublisher}' | Remove-Item`} />
 
 ## Signing in with the app
 
