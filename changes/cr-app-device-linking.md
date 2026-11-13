@@ -179,8 +179,39 @@ text goes straight into `DeviceLink` inside the core.
     trim the same set;
   - `epochs` as a JSON array read as an object of index keys — now refused, as `marks` as an array;
   - a `masterKey` of any length read — now exactly 32 bytes.
-- [ ] **2 the core's crypto** — D3. · Done when: `./gradlew :core:jvmTest :core:macosArm64Test` green, `Conformance`
+- [x] **2 the core's crypto** — D3. · Done when: `./gradlew :core:jvmTest :core:macosArm64Test` green, `Conformance`
   checks `pairing_channel` whole, each D3 bite red once.
+
+  **Status: done (2026-11-13).**
+
+  **Built:**
+  - `crypto/Pairing.kt` (commonMain): `Pairing(primitives)` — `mintSecret` (re-drawn while its base64 starts with
+    `/`), `handle`, `channelKey`, `answerMac`/`signInAnswerMac`/`envelopeMac` and their verifies (constant-time
+    `macEquals`), `checkNumber` (`#fingerprint`'s first group), `drawCode` (six digits, bytes from 250 up drawn
+    again), `mintTransportKey`, and the wire forms the web writes: `transportAnswer`/`signInAnswer`,
+    `readTransportAnswer`/`readSignInAnswer`, `sealGrant`/`openGrant` (MAC first, then the seal), refusals by name
+    (`PairingRefused(PairingRefusal)`). `PairingPayload.of`/`parse(text, PairingMarker)` (the secret stays bytes in the
+    core); `PairingGrant` (`write`/`read`, `wipe`, a `toString` without key or token) with `PairingMarks` — the crypto
+    package's own shape; phase 3 maps it onto `session/TrustMarks`.
+  - `Contexts.kt`: the three pairing statements in `Purposes.STATEMENT`, as `seal.ts` holds them.
+  - `Conformance.pairingChannel()`: `pairing_channel` whole — handle and key, each statement's bytes, MAC and verify,
+    what each MAC does not answer for, the check number against `#fingerprint.digits`, the 32 payload cases under both
+    markers, the grant's accepted (and `written`), refused cases.
+  - `PairingTest` (commonTest, every target): round trips through answer and envelope, each refusal by name with its
+    control, the forced draws, a minted secret under its own marker only, the grant's `toString`/`wipe`.
+    `ConformanceTest`: an HKDF bite now also names the pairing handle; a keyless HMAC turns each pairing MAC red.
+
+  **Met:**
+  - `./gradlew :core:jvmTest :core:macosArm64Test :bridge:jvmTest :core:compileKotlinLinuxX64 :core:compileKotlinMingwX64`
+    green (BouncyCastle on the JVM, libsodium on `macosArm64`, same vectors; libsodium prints 256 cases). One
+    `:bridge:jvmTest` run went red once at load 16 in `DispatchTest`'s share-link test (no pairing code on its path)
+    and was green on its re-run. Both conformance tests now require `checked > 200` (was 60 / 40): with
+    `pairingChannel()` left out the count falls to 185 and the JVM test is red (bitten).
+  - Bites (`/bin/cp -f` restore, then green), all 13 red by a failing test, never by a compile error: the D3 three — the
+    handle's HKDF label swapped for the channel's, the add-a-device MAC over the sign-in statement, a parser that
+    accepts a trailing path — plus a Unicode trim, a leading `/` accepted, a MAC compare that says yes, the check
+    number from the second group, any master-key length, marks past 2^53 − 1, the writer's key order, the draw's
+    rejection removed, the secret's re-draw removed, and the vector bite (a refused payload moved to accepted).
 - [ ] **3 the core's flows** — D4 with `commonTest` over a played relay (both directions and roles; a forged answer,
   a forged envelope, the other direction's code scanned, a wrong six-digit code sent once and the pairing abandoned,
   a timeout); D1's first measurement; `LiveDeviceLinkTest` (`VEYQ_LIVE`): both directions end to end between two core
@@ -225,3 +256,15 @@ the bridge.
 - 1: no typed fallback; two cameraless desktops use the password and Secret Key or the Emergency Kit.
 - 2: the web's words where they exist; the new hint as written.
 - 3: acceptable — a linked Linux device without the Secret Service holds the Master Key for the run only, as a signed-in one does.
+
+## Retrospective
+
+Phases 1–2 (the implementer, 2026-11-13):
+- **Writing the second implementation is what found the first one's loose edges.** All five web findings (phase 1's
+  deviations) surfaced while choosing what Kotlin's `trim`, `Base64` and number parsing should do — none was visible
+  from the web's own tests, which only ever fed it texts it had minted. Next time: a vector section for a parser is
+  written with the second implementation's library behaviour in view (whitespace sets, base64 padding and pad bits,
+  JSON number forms), not only the ADR's rule.
+- **A bite that fails to compile reads as red.** The first bite run counted `BUILD FAILED` only; it was re-run to show
+  each red is a failing test. Next time: a bite script checks for the failing test's name, not the exit code.
+- The ADR leaves canonical base64 and the whitespace set open; this CR's vectors are now where that reading is fixed.

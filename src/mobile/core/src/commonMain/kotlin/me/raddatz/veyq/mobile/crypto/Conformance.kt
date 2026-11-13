@@ -38,6 +38,7 @@ class Conformance(private val p: Primitives, vectorsJson: String) {
         sealAsym()
         fieldSeal()
         grantSignature()
+        pairingChannel()
         secretKeyText()
         emergencyKitToken()
         keyChain()
@@ -540,6 +541,87 @@ class Conformance(private val p: Primitives, vectorsJson: String) {
                 .encode("""{"v":3,"email":"${c.str("email")}","sk":"$key"}""".encodeToByteArray())
             if (EmergencyKit.read(p, token(sk)) == null) fail("the case rebuilt with its own key did not read")
             if (EmergencyKit.read(p, token(sk.dropLast(1) + (if (sk.last() == 'D') 'E' else 'D'))) != null) fail("a mistyped Secret Key read as a kit")
+        }
+    }
+
+    /**
+     * `#pairing_channel` whole (ADR 0059 §4, §11): the handle and channel key, each MAC's statement bytes and value and
+     * what it does not answer for, the check number as `#fingerprint`'s first group, the payload grammar's cases under
+     * both markers, and the grant's plaintext — read, written byte for byte, refused.
+     */
+    private fun pairingChannel() {
+        val pc = v.obj("pairing_channel")
+        val pairing = Pairing(p)
+        val secret = pc.hex("secret")
+        val key = pc.hex("channel_key")
+        check("pairing_channel handle and channel key") {
+            eqHex(pairing.handle(secret), pc.str("handle"))
+            eqHex(pairing.channelKey(secret), pc.str("channel_key"))
+        }
+        val answer = pc.obj("answer")
+        val signIn = pc.obj("sign_in_answer")
+        val envelope = pc.obj("envelope")
+        val transport = answer.hex("transport_key")
+        val code = signIn.str("code")
+        check("pairing_channel answer") {
+            eqHex(encodeContext(Purposes.STATEMENT, Context("pairing-answer", "transportKey" to transport)), answer.str("statement"))
+            eqHex(pairing.answerMac(key, transport), answer.str("mac"))
+            if (!pairing.answerVerifies(key, transport, answer.hex("mac"))) fail("the vector's MAC did not verify")
+        }
+        check("pairing_channel sign_in_answer") {
+            val t = signIn.hex("transport_key")
+            eqHex(encodeContext(Purposes.STATEMENT, Context("pairing-sign-in-answer", "transportKey" to t, "code" to code)), signIn.str("statement"))
+            eqHex(pairing.signInAnswerMac(key, t, code), signIn.str("mac"))
+            if (!pairing.signInAnswerVerifies(key, t, code, signIn.hex("mac"))) fail("the vector's MAC did not verify")
+        }
+        check("pairing_channel envelope") {
+            val e = envelope.hex("envelope")
+            eqHex(encodeContext(Purposes.STATEMENT, Context("pairing-envelope", "envelope" to e)), envelope.str("statement"))
+            eqHex(pairing.envelopeMac(key, e), envelope.str("mac"))
+            if (!pairing.envelopeVerifies(key, e, envelope.hex("mac"))) fail("the vector's MAC did not verify")
+        }
+        // Each MAC answers for its own statement only: the other direction's, another code, the handle as a key.
+        check("pairing_channel MACs answer for nothing else") {
+            val other = if (code == "000000") "000001" else "000000"
+            if (pairing.signInAnswerVerifies(key, transport, code, answer.hex("mac"))) fail("an add-a-device answer passed as a sign-in one")
+            if (pairing.answerVerifies(key, transport, signIn.hex("mac"))) fail("a sign-in answer passed as an add-a-device one")
+            if (pairing.signInAnswerVerifies(key, signIn.hex("transport_key"), other, signIn.hex("mac"))) fail("a sign-in answer passed for another code")
+            if (pairing.answerVerifies(pc.hex("handle"), transport, answer.hex("mac"))) fail("the handle served as the channel key")
+            if (pairing.envelopeVerifies(key, envelope.hex("envelope") + byteArrayOf(0), envelope.hex("mac"))) fail("a longer envelope verified")
+        }
+        check("pairing_channel check number is the fingerprint's first group") {
+            val fp = v.obj("fingerprint")
+            eq(pairing.checkNumber(IdentityPublic(fp.hex("kem"), fp.hex("sign"))), fp.str("digits").split(' ')[0])
+        }
+        for (e in pc.obj("payloads")["cases"]!!.jsonArray) {
+            val c = e.jsonObject
+            check("pairing_channel.payloads ${c.str("name")}") {
+                for ((marker, field) in listOf(PairingMarker.ADD_DEVICE to "veyqpair", PairingMarker.SIGN_IN to "veyqsignin")) {
+                    val expected = (c[field] as? JsonPrimitive)?.takeIf { it.isString }?.content
+                    eq(PairingPayload.parse(c.str("text"), marker)?.let { hex(it) }, expected)
+                }
+            }
+        }
+        val grant = pc.obj("grant")
+        for (e in grant["accepted"]!!.jsonArray) {
+            val c = e.jsonObject
+            check("pairing_channel.grant reads ${c.str("name")}") {
+                val g = PairingGrant.read(c.str("json")) ?: fail("refused")
+                eq(g.email, c.str("email"))
+                eqHex(g.masterKey, c.str("master_key"))
+                eq(g.refreshToken, c.str("refresh_token"))
+                eq(g.label, c.str("label"))
+                eq(g.marks, c["marks"]?.jsonObject?.let { m ->
+                    PairingMarks(m.long("pins"), m.long("register"), m.obj("epochs").mapValues { (_, n) -> n.jsonPrimitive.long })
+                })
+                if ((c["written"] as? JsonPrimitive)?.content == "true") eq(PairingGrant.write(g), c.str("json"))
+            }
+        }
+        for (e in grant["refused"]!!.jsonArray) {
+            val c = e.jsonObject
+            check("pairing_channel.grant refuses ${c.str("name")}") {
+                if (PairingGrant.read(c.str("json")) != null) fail("read as a grant")
+            }
         }
     }
 
