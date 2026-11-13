@@ -4,7 +4,7 @@ package me.raddatz.veyq.mobile.bridge
 
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.runBlocking
-import kotlinx.coroutines.withTimeout
+import kotlinx.coroutines.withTimeoutOrNull
 import me.raddatz.veyq.mobile.account.KitPictures
 import me.raddatz.veyq.mobile.qr.QrFrame
 import me.raddatz.veyq.mobile.session.DeviceAuthFailed
@@ -71,7 +71,7 @@ internal class Host(private val timeout: kotlin.time.Duration = TIMEOUT, private
     /** A reply and the payload the host handed beside it (a drawing's pixels, [HostReply.Pixels]), null where none. */
     class Replied(val reply: HostReply, val payload: ByteArray?)
 
-    /** Asks the host and blocks this core thread until it answers; a host silent for [timeout] fails the ask. */
+    /** Asks the host and blocks this core thread until it answers; a host silent for [timeout] fails the ask ([Silent]). */
     fun ask(request: HostRequest): HostReply = askWithPayload(request).also { it.payload?.fill(0) }.reply
 
     /** [ask], with the payload the host handed beside its reply, which the caller owns. */
@@ -81,11 +81,17 @@ internal class Host(private val timeout: kotlin.time.Duration = TIMEOUT, private
         waiting.put(token, answer)
         try {
             send(token, wire.encodeToString(HostRequest.serializer(), request))
-            return runBlocking { withTimeout(timeout) { answer.await() } }
+            // Never `withTimeout`: its TimeoutCancellationException is a CancellationException, which a call's coroutine
+            // passes on as its own cancellation — the call then ends with no answer at all, and the host waits forever
+            // (measured 2026-11-13: the kit test's SessionStart, its store read's reply lost). A silent host is a failure.
+            return runBlocking { withTimeoutOrNull(timeout) { answer.await() } } ?: throw Silent(timeout)
         } finally {
             waiting.remove(token)
         }
     }
+
+    /** The host did not reply within [timeout]: an ordinary failure of the ask, answered as one ([Answer.Failed]). */
+    class Silent(timeout: kotlin.time.Duration) : IllegalStateException("the host did not reply within $timeout")
 
     /**
      * The host's answer to [token], and [payload] beside it (already the core's own copy); one the core no longer waits
@@ -100,6 +106,46 @@ internal class Host(private val timeout: kotlin.time.Duration = TIMEOUT, private
 
     companion object {
         val TIMEOUT = 30.seconds
+    }
+}
+
+/**
+ * The process's one core between `veyq_init` and `veyq_shutdown`, and the [Host] it asks. The host is published before
+ * [start] composes the core: a composition asks the host at once (the store's first read, from a core thread), and a
+ * host answers from inside its host function — so the reply ([reply]) can arrive before the start has returned. Were the
+ * host published only with the started core, that reply would find nothing, be dropped, and the ask would wait out its
+ * timeout (measured 2026-11-13 under load: the kit test's `SessionStart` never answered, every core thread idle).
+ */
+internal class Started<B : Any>(private val stop: (B) -> Unit) {
+    private class Running<B : Any>(val host: Host) {
+        val core = AtomicReference<B?>(null)
+    }
+
+    private val running = AtomicReference<Running<B>?>(null)
+
+    /** The started core, null before [start] composed it and after [shutdown]. */
+    val core: B? get() = running.load()?.core?.load()
+
+    /** Composes the core over [host], already reachable through [reply]; false (nothing composed) where one runs. */
+    fun start(host: Host, compose: (Host) -> B): Boolean {
+        val r = Running<B>(host)
+        if (!running.compareAndSet(null, r)) return false
+        val core = compose(host)
+        r.core.store(core)
+        // a shutdown while this composed found no core to stop: it is stopped here
+        if (running.load() !== r) stop(core)
+        return true
+    }
+
+    /** The host's reply to [token], and [payload] beside it (the core's own copy), handed to the host that asked. */
+    fun reply(token: Long, json: String, payload: ByteArray?) {
+        val r = running.load()
+        if (r == null) payload?.fill(0) else r.host.reply(token, json, payload)
+    }
+
+    /** Stops the core; a new [start] may follow. */
+    fun shutdown() {
+        running.exchange(null)?.core?.load()?.let(stop)
     }
 }
 
