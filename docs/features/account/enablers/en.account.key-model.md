@@ -285,7 +285,7 @@ it rescuing data.
 The kit is the Secret Key made portable, and it is a **format with two writers and two readers**: `web` writes
 it when an account is born by joining a tenant and when an account is secured (a new Secret Key), `admin-web` when the Server Owner's account is born at setup
 ([ADR 0065](../../../decisions/0065-admin-ui-cli-separate-service.md)); `web` reads it at unlock, and the native apps
-read it at sign-in, their read in the core ([ADR 0129](../../../decisions/0129-an-apps-logic-is-the-kotlin-cores-each-platform-draws-only-its-own-ui.md) decision 1: one Kotlin implementation for every app).
+read it at sign-in, their read in the core ([ADR 0130](../../../decisions/0130-an-apps-logic-is-the-kotlin-cores-each-platform-draws-only-its-own-ui.md) decision 1: one Kotlin implementation for every app).
 Two round-trip tests in two packages cannot keep a writer and a reader in agreement, so the web's codec exists
 **once**, in `@veyq/crypto`, and both readers are pinned by the same fixed-literal vector.
 

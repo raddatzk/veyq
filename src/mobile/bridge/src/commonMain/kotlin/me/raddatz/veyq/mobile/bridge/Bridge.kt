@@ -77,7 +77,7 @@ internal class Composition<A : Connection, T : Any>(
     /** What this device hides, which the switcher's tenants leave out ([ShellShown.servers]). */
     val hidden: Hidden,
     /**
-     * The files the host names by their paths (ADR 0130 decision 3); a test's composition that writes none has
+     * The files the host names by their paths (ADR 0131 decision 3); a test's composition that writes none has
      * [DeviceFiles.None].
      */
     val files: DeviceFiles = DeviceFiles.None,
@@ -163,7 +163,7 @@ internal class HeldCreate(val sheet: PotCreateSheet) {
 }
 
 /**
- * A file on the device the host named by its path, as its save dialog gave it (ADR 0130 decision 3): the core opens and
+ * A file on the device the host named by its path, as its save dialog gave it (ADR 0131 decision 3): the core opens and
  * writes it, and nothing of its content crosses the bridge. Natively core's `FileSink`; a JVM test plays one.
  */
 internal interface DeviceFiles {
@@ -206,7 +206,7 @@ private class Open<A : Connection>(val models: Tenant, val account: A, val tenan
 /**
  * The dispatch (ADR 0123's Consequences, the bridge): each [Call] is one line onto a model's own function, each
  * [Watched] one model's state flow, and the registry of what is open — the tenant's models, the Pots by id, the watches
- * by id. Nothing here decides anything the person sees: a rule found here is a defect to move into the core (ADR 0129
+ * by id. Nothing here decides anything the person sees: a rule found here is a defect to move into the core (ADR 0130
  * decision 1).
  *
  * Every answer and update is delivered on a core thread ([Dispatchers.Default]); [compose] runs there too, so a host
@@ -665,7 +665,7 @@ internal class Bridge<A : Connection, T : Any>(compose: () -> Composition<A, T>)
     }
 
     /**
-     * Holds [reader] for the host until [Call.ReaderClose] or the tenant closes, answered as [Answer.Reader] (ADR 0130
+     * Holds [reader] for the host until [Call.ReaderClose] or the tenant closes, answered as [Answer.Reader] (ADR 0131
      * decision 2): the door of every call that opens a blob for reading in ranges — a Depot file's medium
      * ([Call.FileReader]), Memories' medium (its CR) — and of the test's reader. Refused while no tenant is open.
      */
@@ -676,7 +676,7 @@ internal class Bridge<A : Connection, T : Any>(compose: () -> Composition<A, T>)
         return Answer.Reader(id, reader.size, mediaType)
     }
 
-    /** Closes every reader page [file] opened: a reader's lifetime is its page's (ADR 0130's Consequences). */
+    /** Closes every reader page [file] opened: a reader's lifetime is its page's (ADR 0131's Consequences). */
     private fun closeReadersOf(file: Long) {
         pageReaders.keys().forEach { reader -> if (pageReaders[reader] == file) { pageReaders.remove(reader); readers.remove(reader) } }
     }

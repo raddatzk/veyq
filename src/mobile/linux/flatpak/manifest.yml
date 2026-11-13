@@ -1,4 +1,4 @@
-# The Linux app's Flatpak (ADR 0132). Never built by hand: `python3 src/mobile/linux/run.py flatpak` writes the inputs
+# The Linux app's Flatpak (ADR 0133). Never built by hand: `python3 src/mobile/linux/run.py flatpak` writes the inputs
 # this names, fills `@APP_ID@` from src/mobile/desktop-identity.json (decision 12) and writes the result as
 # `<id>.yml` into src/mobile/build/linux/flatpak/, beside `inputs/` and `vendor/` — every `path:` below is relative to
 # THAT file, not to this one. validate_build_input_pins.py (check 7) reads this file: `runtime-version` against
@@ -106,7 +106,7 @@ modules:
       - for po in inputs/generated/linux/words/*.po; do lang=$(basename "$po" .po); install -d "/app/share/locale/$lang/LC_MESSAGES"; msgfmt --check -o "/app/share/locale/$lang/LC_MESSAGES/veyq.mo" "$po"; done
       # the crates `cargo vendor --locked` wrote (cargo's own check against Cargo.lock's checksums), offline
       - mkdir -p cargo-home && cp inputs/cargo-config.toml cargo-home/config.toml
-      # proved and built against the runtime it ships on (decision 4; ADR 0129 decision 4)
+      # proved and built against the runtime it ships on (decision 4; ADR 0130 decision 4)
       - cargo clippy --offline --locked --all-targets -- -D warnings
       # all but what a build's sandbox cannot run (run.py's SANDBOX_SKIPS, each with why)
       - cargo test --offline --locked -- @SANDBOX_SKIPS@

@@ -198,7 +198,7 @@ internal sealed class Call {
     @Serializable @SerialName("Editor.Close") data class EditorClose(val editor: Long) : Call()
 
     /**
-     * Files picked as editor [editor]'s receipts by their [paths], as the host's open dialog gave them (ADR 0130 decision 3):
+     * Files picked as editor [editor]'s receipts by their [paths], as the host's open dialog gave them (ADR 0131 decision 3):
      * the core opens each and reads at most `Receipts.MAX_BYTES` of it (nothing of its content crosses), names it by its
      * path and types it by its bytes (`Receipts.picked`), and the editor holds each it takes until the save
      * (`EntryEditor.addReceipts`); one it refuses — no image or PDF, too large, the 101st, a path that does not open —
@@ -220,7 +220,7 @@ internal sealed class Call {
     @Serializable @SerialName("Receipt.Pages") data class ReceiptPages(val total: Int) : Call()
 
     /**
-     * Receipt [receipt] of Pot [pot] saved into the file at [path], which the host's save dialog gave (ADR 0130 decision 3:
+     * Receipt [receipt] of Pot [pot] saved into the file at [path], which the host's save dialog gave (ADR 0131 decision 3:
      * the core opens and writes it; nothing is left there on a failure): done, or refused `NO_RECEIPT` (it does not open)
      * or `NOT_WRITTEN` (the file was not written).
      */
@@ -284,7 +284,7 @@ internal sealed class Call {
     @Serializable @SerialName("PotCreate.Create") data class PotCreateCreate(val create: Long, val typed: String) : Call()
 
     /**
-     * Downloads Pot [pot] as the web's ZIP into the file at [path], which the host's save dialog gave (ADR 0130
+     * Downloads Pot [pot] as the web's ZIP into the file at [path], which the host's save dialog gave (ADR 0131
      * decision 3: the core opens it and writes it; nothing of the file crosses). [deletedName] is the host's word for
      * an erased person (`pot_deleted_person`), which the CSV carries. [Answer.Done], or [Answer.Failed] with nothing
      * left at [path].
@@ -333,7 +333,7 @@ internal sealed class Call {
 
     /**
      * Downloads the header's node into the file at [path], which the host's save dialog gave — a file the file itself, any
-     * other node with everything under it as the web's ZIP (`ShellModel.download`; ADR 0130 decision 3: the core opens it, writes it and removes a download
+     * other node with everything under it as the web's ZIP (`ShellModel.download`; ADR 0131 decision 3: the core opens it, writes it and removes a download
      * that did not finish). [deletedName] is the host's word for an erased person, which a Pot's CSV carries.
      * [Answer.Downloaded]. The name the dialog suggests is [HeaderShown.archiveName].
      */
@@ -348,7 +348,7 @@ internal sealed class Call {
 
     /**
      * Sets the cover (`saveCover`): the JPEG the host encoded to the core's spec ([Answer.CoverFit]) and wrote to the file at
-     * [path] (ADR 0130 decision 3: the core reads it; the host removes its file after), framed by [crop] — or, [path]
+     * [path] (ADR 0131 decision 3: the core reads it; the host removes its file after), framed by [crop] — or, [path]
      * null, the stored picture framed anew. [Answer.Said] with why not, or none.
      */
     @Serializable @SerialName("Header.CoverSave") data class HeaderCoverSave(val header: Long, val path: String?, val crop: NodeCover.Crop) : Call()
@@ -364,7 +364,7 @@ internal sealed class Call {
     @Serializable @SerialName("File.Open") data class FileOpen(val node: NodeAt) : Call()
 
     /**
-     * The bytes file [file] shows now ([Answer.Bytes], beside the JSON; ADR 0130 decision 1): an image's or a PDF's, asked
+     * The bytes file [file] shows now ([Answer.Bytes], beside the JSON; ADR 0131 decision 1): an image's or a PDF's, asked
      * again when [FileShown.revision] turns. Refused where it shows neither (a text is in the state, a medium is read through
      * a reader).
      */
@@ -375,7 +375,7 @@ internal sealed class Call {
     @Serializable @SerialName("File.Close") data class FileClose(val file: Long) : Call()
 
     /**
-     * The medium file [file] plays, opened for reading in ranges ([Answer.Reader]: its id, its size, its sniffed type; ADR 0130
+     * The medium file [file] plays, opened for reading in ranges ([Answer.Reader]: its id, its size, its sniffed type; ADR 0131
      * decision 2): a player reads it through [ReaderRead] from a thread of its own, never decrypted whole or to disk (ADR
      * 0047). Refused where the page shows no medium. The reader closes with [ReaderClose], with its page ([FileClose]) and
      * with its tenant.
@@ -384,7 +384,7 @@ internal sealed class Call {
 
     /**
      * Saves a copy of file [file] ("Save a copy", the file's download: the file itself) into the file at [path], which the
-     * host's save dialog gave (ADR 0130 decision 3: the core opens and writes it, nothing of it crosses): answered at once
+     * host's save dialog gave (ADR 0131 decision 3: the core opens and writes it, nothing of it crosses): answered at once
      * with the save's id ([Answer.Saving]) once it runs, for [Watched.Save] and [SaveCancel]. Refused where the file has
      * nothing to save. A save outlives its page; every save stops with the tenant.
      */
@@ -395,7 +395,7 @@ internal sealed class Call {
 
     /**
      * The header's Replace on file [file]'s page, chosen before the host's open dialog opens (`FileModel.chooseReplace`, the
-     * web's rule, ADR 0129's Consequences: the replace expects the content shown now, whatever a peer writes while the dialog is open). Refused
+     * web's rule, ADR 0130's Consequences: the replace expects the content shown now, whatever a peer writes while the dialog is open). Refused
      * where the page offers no replace.
      */
     @Serializable @SerialName("File.ChooseReplace") data class FileChooseReplace(val file: Long) : Call()
@@ -403,7 +403,7 @@ internal sealed class Call {
     /**
      * The files at [paths] (each as the host's open dialog or a drop gave it) uploaded as new files under [parentId] (null:
      * the space's top) of [scopeId], one batch labelled [label] (the level's name as the host shows it) — `DepotUploads.upload`.
-     * The core opens each path itself and reads it at offsets a frame at a time (ADR 0130 decision 3): nothing of a file
+     * The core opens each path itself and reads it at offsets a frame at a time (ADR 0131 decision 3): nothing of a file
      * crosses, and a file of any size is never held whole. A path that is no file that reads is left out. Answered once
      * queued ([Answer.Queued]: how many); a name a file already holds offers its replace through [UploadsShown.said].
      */
@@ -618,7 +618,7 @@ internal sealed class Answer {
     @Serializable @SerialName("Name") data class Name(val name: String) : Answer()
 
     /**
-     * Bytes the UI shows, carried beside this JSON as the callback's payload (`bytes`, `len`), never in it (ADR 0130
+     * Bytes the UI shows, carried beside this JSON as the callback's payload (`bytes`, `len`), never in it (ADR 0131
      * decision 1): an answer of this kind always has a payload, an empty one included. [mediaType] is the core's
      * sniffed type (`Sniff`), null where the core does not know it. (`type` is the wire's tag, so the field is named
      * otherwise.)
@@ -626,7 +626,7 @@ internal sealed class Answer {
     @Serializable @SerialName("Bytes") data class Bytes(val mediaType: String?) : Answer()
 
     /**
-     * A blob opened for reading in ranges (ADR 0130 decision 2): [reader] is its id for [Call.ReaderRead] and
+     * A blob opened for reading in ranges (ADR 0131 decision 2): [reader] is its id for [Call.ReaderRead] and
      * [Call.ReaderClose], [size] its plaintext's length. Every reader of a tenant closes when the tenant does.
      */
     @Serializable @SerialName("Reader") data class Reader(val reader: Long, val size: Long, val mediaType: String?) : Answer()
@@ -739,7 +739,7 @@ internal sealed class Watched {
     @Serializable @SerialName("Pot") data class Pot(val pot: Long) : Watched()
 
     /**
-     * Pot [pot]'s live poll (`PotModel.live`, ADR 0129 decision 2), for as long as this watch stands: a host watches it
+     * Pot [pot]'s live poll (`PotModel.live`, ADR 0130 decision 2), for as long as this watch stands: a host watches it
      * while the Pot's page shows and its window is active, and drops the watch when either ends. It delivers no update of
      * its own — what a tick changed arrives on [Pot]'s. Its lifetime is the poll's, so a page torn down stops it.
      */
@@ -1085,7 +1085,7 @@ internal class ReportShown(
 internal class HistoryShown(val line: List<Piece>, val writer: String?, val at: Long)
 
 /**
- * A file's page as the host draws it (core's `FileModel`, ADR 0129's Consequences), each field the model's own answer:
+ * A file's page as the host draws it (core's `FileModel`, ADR 0130's Consequences), each field the model's own answer:
  * - [view], what shows in the content's place, and [words], what the page says there where it shows no content (opening,
  *   failed, not uploaded yet, too large, empty, not shown here — and a medium, for a host that does not play one);
  * - an image ([mediaType], decoded to [edge] pixels on its longest side at most) and a PDF, their bytes through
@@ -1342,7 +1342,7 @@ internal class TrashShown(
 /**
  * What the shell shows beside its state, each value the core's own function's answer — what the Android and Apple apps
  * ask the core for while they draw (their `AppModel` and shell screens), so a host without Kotlin computes none of it
- * (ADR 0129 decision 1). Built by [Bridge] one line per field; a rule found there is a defect to move into the core.
+ * (ADR 0130 decision 1). Built by [Bridge] one line per field; a rule found there is a defect to move into the core.
  */
 @Serializable
 internal class ShellShown(
@@ -1382,7 +1382,7 @@ internal class ShellShown(
     val me: String?,
     /**
      * The user ids whose picture the core holds (`AvatarsModel`), each asked for with [Call.AvatarPicture]: the letter
-     * for everyone else. A change of the set is a new update; the bytes never ride one (ADR 0130 decision 1).
+     * for everyone else. A change of the set is a new update; the bytes never ride one (ADR 0131 decision 1).
      */
     val pictures: List<String>,
 ) {

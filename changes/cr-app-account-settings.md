@@ -3,9 +3,9 @@ id: cr-app-account-settings
 title: The apps' Settings — the account, this device, devices and sessions, sign out; the entry to "Add a device"
 status: planned
 satisfies: []
-adrs: ["0004", "0005", "0058", "0059", "0122", "0129", "0130"]
+adrs: ["0004", "0005", "0058", "0059", "0122", "0130", "0131"]
 invariants:
-  - "every rule is the core's (ADR 0129 decision 1): the Settings page is one core screen model per signed-in account, each app only draws it"
+  - "every rule is the core's (ADR 0130 decision 1): the Settings page is one core screen model per signed-in account, each app only draws it"
   - "a session family carries no name on the server (ADR 0004): names come from the Master-Key-sealed device register, joined on the device; a locked or unregistered family shows its dates"
   - "a revoke never takes key material (ADR 0058): signing a device out and removing its saved key are two named steps, as on the web"
   - "the bridge only carries — no key, seal, token or password outward (SecretFreeSchemaTest)"
@@ -37,7 +37,7 @@ the trust reset) is **not** in this CR; see Owner question 1.
 
 - **Read first:** `uc.account.sessions` (the list, the two layers, E1–E5, § Devices with a saved key),
   `uc.account.sign-out`, `uc.account.trust-device`, `uc.settings.appearance-language`, `en.account.device-register`;
-  ADR 0004 (§ Session family), ADR 0058 (§5, why "every other saved key" is defined by exclusion), ADR 0129, ADR 0130,
+  ADR 0004 (§ Session family), ADR 0058 (§5, why "every other saved key" is defined by exclusion), ADR 0130, ADR 0131,
   `src/mobile/CLAUDE.md` whole.
 - **The web's reference:** `src/web/src/features/account/sessions/SessionsPanel.vue`, `deviceRegister.ts`,
   `savedKeys.ts`, `trustDevice/DeviceTrustControl.vue`, `login/signOut.ts`, `src/web/src/features/settings/sections.ts`
@@ -64,7 +64,7 @@ Commands from the repo root unless named.
 
 ### D1 — One core screen model, `AccountSettings`, per signed-in account
 
-`session/AccountSettings.kt` in commonMain (ADR 0129 decision 2's shape, tested in `commonTest` over a played door):
+`session/AccountSettings.kt` in commonMain (ADR 0130 decision 2's shape, tested in `commonTest` over a played door):
 - **State:** the email and its confirmation; this device (label, its family id, the trust level and the levels it can
   move to — read from the same source `Manage servers` reads, not a copy); the families (id, created, last used,
   `current`, the register's label or none); the devices with a saved key and no session; whether "Add a device" is

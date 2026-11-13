@@ -7,7 +7,7 @@ use gtk::{gdk, gio, glib};
 
 /// The application's id: its D-Bus name, its resource base path ([RESOURCE_BASE]) and its icon's name — and, packaged,
 /// the Flatpak's id, under which alone a sandbox lets it own a D-Bus name. Defined once, in
-/// `src/mobile/desktop-identity.json` (ADR 0132 decision 12), handed in by build.rs.
+/// `src/mobile/desktop-identity.json` (ADR 0133 decision 12), handed in by build.rs.
 pub const APP_ID: &str = env!("VEYQ_APP_ID");
 
 /// GtkApplication's resource base path for [APP_ID] (`/` and the id with its dots as slashes), where libadwaita loads

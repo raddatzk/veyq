@@ -221,11 +221,11 @@ Still open, settled with the worker queue: whether a small tier for every galler
   same decrypted ranges through the platform equivalent. This ADR governs the **web** playback path (the current
   V1 priority); it does not bind native to a SW.
 - **The apps hold the same rule: no plaintext at rest but where the person saves it** (2026-11-12, Depot on every app;
-  [ADR 0129](0129-an-apps-logic-is-the-kotlin-cores-each-platform-draws-only-its-own-ui.md)'s Consequences for the core's
+  [ADR 0130](0130-an-apps-logic-is-the-kotlin-cores-each-platform-draws-only-its-own-ui.md)'s Consequences for the core's
   file page). An image, a text and a PDF are held in memory only, each capped; a medium is streamed through the core's
   `RangeReader`, only the frames a range needs decrypted, in a bounded cache per page. Android plays through a
   `MediaDataSource` over it and renders a PDF from a `memfd`; Apple plays through an `AVAssetResourceLoader` and opens a
-  PDF from `Data`; Linux plays a `gio::InputStream` and Windows a seekable stream over it ([ADR 0130](0130-the-bridge-carries-shown-bytes-beside-the-json-ranges-through-a-reader-and-files-by-path.md)
+  PDF from `Data`; Linux plays a `gio::InputStream` and Windows a seekable stream over it ([ADR 0131](0131-the-bridge-carries-shown-bytes-beside-the-json-ranges-through-a-reader-and-files-by-path.md)
   decision 2). A decrypted copy is written only where the person chose (a save dialog's path through the core's
   `FileSink`; iOS's `fileMover` from a temporary directory swept at every start) or for a phone's Send a copy, which the
   person asked for and which is swept at the next start. Earlier builds' `view-*` files are swept. Rejected: handing a

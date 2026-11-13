@@ -39,7 +39,7 @@ import kotlinx.serialization.json.jsonObject
  * The dispatch over the real core (ADR 0123's Consequences, the bridge), as a host drives it, on the JVM's suite and
  * HTTP client: signs in through a call as the seeded principal (`.run/.env`, or `VEYQ_ENV_FILE`), watches the shell
  * open, reads Home's groups, searches a name and opens the hit, and opens a Pot and reads its view to balances that sum
- * to zero. Then ADR 0130's channels: the principal's own picture through `Avatar.Picture`, the same bytes as the core's
+ * to zero. Then ADR 0131's channels: the principal's own picture through `Avatar.Picture`, the same bytes as the core's
  * own read in a session of its own (it needs a picture set: Settings, your profile, in the web); and Amsterdam
  * downloaded through `Pot.Download` into a file, every payload of its ZIP to the SHA-256 its manifest names. The device
  * store is a host this test plays, answering from its own thread, and the files a JVM stand-in for core's `FileSink`.
@@ -1016,7 +1016,7 @@ class LiveBridgeTest {
     }
 
     /**
-     * An entry's receipts through calls (ADR 0130) on an `App pot <n>` copy of Amsterdam: a JPEG and a PDF attached by the
+     * An entry's receipts through calls (ADR 0131) on an `App pot <n>` copy of Amsterdam: a JPEG and a PDF attached by the
      * paths an open dialog would give, saved with the entry, read back from a fresh open, each opened (its payload's SHA-256
      * the file's) and saved to a path and read back; the PDF taken off by an edit and gone. With
      * `VEYQ_LIVE_RECEIPT_NO_ROOM=1` the tenant's quota is set to one byte (the seeded principal is the Server Owner; the
@@ -1414,7 +1414,7 @@ class LiveBridgeTest {
     }
 
     /**
-     * Uploads by path through calls, over the real core (ADR 0130 decision 3 and its Consequences), with
+     * Uploads by path through calls, over the real core (ADR 0131 decision 3 and its Consequences), with
      * `VEYQ_LIVE_UPLOAD=1` (it moves more than 2 GiB): a folder "App depot <n>" made at the personal space's top level
      * (`Shell.CreateFolder`); three files by path (`Upload.Files`) and a nested folder with a hidden file and a non-ASCII name
      * (`Upload.Folder`, walked by the core, a link said and never followed), each read back to its SHA-256 by the header's
@@ -1663,7 +1663,7 @@ class LiveBridgeTest {
     }
 
     /**
-     * A medium read in ranges through calls, over the real core (ADR 0130 decision 2 and its Consequences): with
+     * A medium read in ranges through calls, over the real core (ADR 0131 decision 2 and its Consequences): with
      * `VEYQ_LIVE_MEDIUM=<a video file>` (a 600 MiB WebM, made by `ffmpeg` on this machine) a folder "App depot <n>" is made at
      * the personal space's top level and the file uploaded there by the core's own upload in a second session, read from
      * its path at offsets (never held whole); the bridge opens it (`File.Open`: a medium), opens its reader (`File.Reader`:
@@ -1821,7 +1821,7 @@ class LiveBridgeTest {
             println("uploaded $name ($size B): ${up.outcome}")
         }
         // with VEYQ_LIVE_DEPOT_PASS_MEDIA=<file>,<file>…: media made on this machine (ffmpeg), each read from its path at
-        // offsets, never held whole (ADR 0130's Consequences)
+        // offsets, never held whole (ADR 0131's Consequences)
         for (path in System.getenv("VEYQ_LIVE_DEPOT_PASS_MEDIA").orEmpty().split(',').filter { it.isNotBlank() }) {
             val medium = File(path)
             java.io.RandomAccessFile(medium, "r").use { raf ->

@@ -12,7 +12,7 @@ import kotlinx.coroutines.launch
 import kotlin.concurrent.Volatile
 
 /**
- * A scan: the screen model every app's camera view feeds (ADR 0129 decision 2, D3 of the QR CR). The host hands it
+ * A scan: the screen model every app's camera view feeds (ADR 0130 decision 2, D3 of the QR CR). The host hands it
  * greyscale frames ([offer]) and says what its camera did ([camera]); the model decodes one frame at a time off the
  * host's thread and settles on the first code [accepts] maps to a [T] — the kit's `veyqkit:` parser, a pairing parser.
  * A code it does not accept is skipped silently and the scan goes on, as the web's `KitScanner` skips one; what the

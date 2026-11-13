@@ -334,7 +334,7 @@ def write_apple_icon(out: Path, pal: dict[str, dict[str, tuple]]) -> None:
 
 # ---- Linux (libadwaita) ----
 
-# The Linux app's id, which names its icon and its desktop entry: defined once, in desktop-identity.json (ADR 0132
+# The Linux app's id, which names its icon and its desktop entry: defined once, in desktop-identity.json (ADR 0133
 # decision 12), never spelled here.
 APP_ID = json.loads((repo_layout.MOBILE / "desktop-identity.json").read_text())["appId"]
 

@@ -3,12 +3,12 @@ id: cr-app-kit-sign-in
 title: Sign in with the Emergency Kit on every app — the kit read in the core, its page drawn by the platform, its QR scanned on a phone
 status: planned
 satisfies: ["en.account.key-model", "uc.account.unlock"]
-adrs: ["0129", "0130", "0047", "0123", "0059"]
+adrs: ["0130", "0131", "0047", "0123", "0059"]
 invariants:
   - operator-blind E2EE — the kit is read on the device only; nothing of it (file, page, frame, token, Secret Key) reaches the server or any other host; the sign-in sends what a typed sign-in sends
   - no plaintext at rest but where the person saves it (ADR 0047, carried to the apps) — no app copies the kit file, a drawn page or a camera frame to a cache, temp or log; the bytes are read into memory, capped, and zeroed where the language lets us
-  - every rule is the core's (ADR 0129 decision 1) — the token's decode, the read order, steps 1, 2 and 4 and the QR decoder are one Kotlin implementation; a platform only picks, draws a page or a picture, and runs a camera
-  - the bridge only carries (ADR 0130; SecretFreeSchemaTest) — no Secret Key, token or kit byte travels outward; the host's drawn pixels ride inward beside a reply, never in JSON
+  - every rule is the core's (ADR 0130 decision 1) — the token's decode, the read order, steps 1, 2 and 4 and the QR decoder are one Kotlin implementation; a platform only picks, draws a page or a picture, and runs a camera
+  - the bridge only carries (ADR 0131; SecretFreeSchemaTest) — no Secret Key, token or kit byte travels outward; the host's drawn pixels ride inward beside a reply, never in JSON
   - no new dependency that is deprecated, vendor-locked or closed (root CLAUDE.md), each checked and recorded where it is added
   - the web's kit import and the Android/Apple/desktop sign-ins without a kit behave as before; `./gradlew :core:jvmTest :core:macosArm64Test :bridge:jvmTest` and both desktops' `run.py build` stay green in every phase
 ---
@@ -36,14 +36,14 @@ are the person's notes).
 ## Context & constraints
 
 - **Substrate:** branch `claude/windows-cr-f6c73c` at `d313c1f4f` (the Depot CR harvested and deleted, tree clean).
-  Depot's PDF renderers on all four platforms and the bridge's path-based file reads (ADR 0130 decision 3) are this CR's
+  Depot's PDF renderers on all four platforms and the bridge's path-based file reads (ADR 0131 decision 3) are this CR's
   floor.
 - **Read first:**
   - `docs/features/account/enablers/en.account.key-model.md` § The Emergency Kit (the token, "the server is a hint,
     never a check", the web's fallback chain) and § The Secret Key's text form;
   - `docs/features/account/use-cases/uc.account.unlock.md` main flow step 1 and Quality notes (*One Secret-Key control*,
     *A kit from the wrong account warns*, *A kit made at another address says where*);
-  - ADR 0129 (decisions 1, 2, 4, 5), ADR 0130 (all four decisions), ADR 0047's Consequences (*The apps hold the same
+  - ADR 0130 (decisions 1, 2, 4, 5), ADR 0131 (all four decisions), ADR 0047's Consequences (*The apps hold the same
     rule*), ADR 0123 decision 9 (each platform's guideline), ADR 0059 (device linking — the other user of a QR);
   - `src/mobile/CLAUDE.md` whole: Prove your work, each platform's guidelines, the traps;
   - the web as the reference: `src/web/src/features/account/emergencyKit/emergencyKit.ts` (`importKitFromFile`,
@@ -67,7 +67,7 @@ are the person's notes).
   Still open, *until `cr-core-qr-decoder` lands* its phases 4–5: the cameras and the bridge's `Scan.*` calls. Phase 7
   re-reads every sentence carrying that marker against the merged tree before its first edit
   (`grep -n "until .cr-core-qr-decoder. lands" changes/cr-app-kit-sign-in.md`).
-  **Shared files:** both CRs extend ADR 0130 (that CR decision 1 with a call's inbound payload, this one decision 3 with a
+  **Shared files:** both CRs extend ADR 0131 (that CR decision 1 with a call's inbound payload, this one decision 3 with a
   host reply's drawn page, D6), `docs/crosscutting/native-apps.md` § Built and `src/mobile/CLAUDE.md`; each writes its own sentence or bullet, and
   the second to implement starts from the first's commit.
 - **Where what runs** (as in the Depot CR): the Kotlin on this Mac; Linux in the container (`linux/run.py run --port
@@ -152,7 +152,7 @@ multi-page PDF a few MB; a larger file is refused unread, never read whole):
 core's reader cannot follow answers "nothing here" and the order continues.
 - **Why the platform draws and the core decides:** drawing a PDF needs a full renderer (fonts, images, transforms), and
   each platform already ships one (R3); everything else — where to look, in which order, how wide, how many pages, what
-  counts — is a rule and so the core's (ADR 0129 decision 1). Rejected: a PDF renderer in the core (a second renderer
+  counts — is a rule and so the core's (ADR 0130 decision 1). Rejected: a PDF renderer in the core (a second renderer
   beside four that exist, and pdfium/MuPDF are C libraries with their own CVE stream); the platform's own metadata API for
   step 2 (`PDFDocument.documentAttributes`, poppler's `keywords()`) — Android's `PdfRenderer` and `Windows.Data.Pdf` have
   none, so step 2 would be two implementations and two missing.
@@ -200,7 +200,7 @@ core's reader cannot follow answers "nothing here" and the order continues.
 - **The other-server notice** (uc.account.unlock's *A kit made at another address says where*): where the kit's server
   replaced a server the form already held that was different, the state says so as information (R9's `kitOtherServer`
   shape: made at, typed); never a refusal.
-- **Why the model holds it:** the bridge may carry nothing secret outward (ADR 0130, `SecretFreeSchemaTest`), and the
+- **Why the model holds it:** the bridge may carry nothing secret outward (ADR 0131, `SecretFreeSchemaTest`), and the
   phones' UIs have no more reason to hold the key than the desktops' — the person never needs to see it. One rule on all
   four keeps one test.
 
@@ -216,7 +216,7 @@ core's reader cannot follow answers "nothing here" and the order continues.
   `tmp/Inbox`). `KitPictures` over `PDFDocument(data:)` and `CGImageSource`, drawn into an 8-bit grey `CGContext`.
 - On both, the `ByteArray`/`Data` is let go after the read, the Kotlin side zeroed.
 
-### D6 — The desktops hand a path; the core asks the host to draw (ADR 0130 extended inward)
+### D6 — The desktops hand a path; the core asks the host to draw (ADR 0131 extended inward)
 
 - `Call.SignInKit(path)` → the core reads the file by path under `KIT_FILE_CAP` (`FileSource`, as `Editor.AddReceipts`
   does) and runs D2 with a `KitPictures` the bridge implements as **host requests**: `HostRequest.Pdf.Pages(path)`,
@@ -228,7 +228,7 @@ core's reader cannot follow answers "nothing here" and the order continues.
   `StorageFile.GetFileFromPathAsync` → `PdfDocument.LoadFromFileAsync` / `BitmapDecoder`, rendered into an
   `InMemoryRandomAccessStream`, never a file.
 - **What crosses:** inward a path (as every picked file does) and pixels in a reply's payload; outward a path and a
-  page number. No kit byte, token or key crosses outward. This is new for ADR 0130 decision 3 ("nothing of a file's
+  page number. No kit byte, token or key crosses outward. This is new for ADR 0131 decision 3 ("nothing of a file's
   content crosses the bridge"): a drawn page's pixels do, inward, because only the host can draw — recorded there in
   phase 10.
 - **Why the core asks rather than the host looping:** the order (D2) stays one function on all four apps; the phones
@@ -281,7 +281,7 @@ From `src/mobile` unless named:
 
   **Status: done (2026-11-13).**
   **Built:** `en.account.key-model` § The Emergency Kit — two writers and **two readers** (the web; the apps, their read
-  in the core, ADR 0129 decision 1), and a bullet with the apps' order (a)–(d): step (d) only where the token has no
+  in the core, ADR 0130 decision 1), and a bullet with the apps' order (a)–(d): step (d) only where the token has no
   `srv`, fields 2 and 3 never read, the printed text never read, the scan wherever an app has a camera, the platform only
   picks, draws and runs the camera. `uc.account.unlock` step 1 names the apps' sign-in as a place the one control holds
   (file and scan, email and server filled, the key held) and *One Secret-Key control* lists it. Beside the two, from the
@@ -290,7 +290,7 @@ From `src/mobile` unless named:
   **Met:** the guard loop (`for f in scripts/validate_*.py; do /usr/bin/python3 "$f" || echo "RED $f"; done`, guard_gaps
   skipped) showed no RED before the edit (this worktree at `089980f3a`, clean) and none after;
   `git grep -n -iE "one reader|only .web. reads|reads it, at unlock|is the only reader" -- docs site src/packages` → only
-  ADR 0131's unrelated "one reader" (a picture reader).
+  ADR 0132's unrelated "one reader" (a picture reader).
 
 - [x] **2 core — the token codec.** D1: `EmergencyKit.read`, the origin check, `Conformance` reading
   `emergency_kit_token`'s cases and refused tokens on the JVM (BouncyCastle) and over libsodium.
@@ -473,8 +473,8 @@ From `src/mobile` unless named:
   `%TEMP%` plus the app's LocalState on the VM show nothing of the kit.
 
 - [ ] **10 docs and harvest.** `docs/crosscutting/native-apps.md` § Built (Account and session: the kit, by file on all
-  four, by camera wherever the app has one, each measured pass with its date); ADR 0130 decision 3 (a drawn page's pixels ride inward
-  beside a host reply, and why); ADR 0129's Consequences (the kit's read order is the core's, the drawing the platform's);
+  four, by camera wherever the app has one, each measured pass with its date); ADR 0131 decision 3 (a drawn page's pixels ride inward
+  beside a host reply, and why); ADR 0130's Consequences (the kit's read order is the core's, the drawing the platform's);
   ADR 0047's apps bullet (a picked kit is read in memory and never copied); `src/mobile/CLAUDE.md` § Prove your work (the
   new tests and live cases); every code comment that names this CR repointed at the ADR or doc that states the decision;
   the retrospective; the CR deleted.
@@ -486,7 +486,7 @@ Every app's sign-in takes a kit file (all four: Android, the Apple app on iPhone
 wherever the app has a camera, a scanned kit, and fills email, server and a held Secret Key so only the password is
 typed; the read order, the token's decode and steps 1, 2 and 4 are core code held to the vectors' `emergency_kit_token`
 and the web's three fixtures on every `:core:jvmTest`; each bite B1–B18 was seen red once; no pass found a kit's copy on
-any app's disk; `en.account.key-model`, ADR 0129/0130/0047 and `native-apps.md` say what was built. No site page changes
+any app's disk; `en.account.key-model`, ADR 0130/0131/0047 and `native-apps.md` say what was built. No site page changes
 (R10, owner question 3); `docs/coverage/` has no app surface (`SURFACES` in `scripts/validate_coverage.py`), so the apps'
 proof is the tests and passes `src/mobile/CLAUDE.md` § Prove your work names — said there in phase 10.
 

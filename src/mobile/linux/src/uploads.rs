@@ -1,6 +1,6 @@
 //! The uploads (ADR 0123's Consequences, the Linux app's Depot whole), GNOME's way: files and a folder picked through GTK's own dialog (the portal's
 //! on a desktop) and handed to the core by their paths — the core opens and reads each at offsets a frame at a time
-//! (`Upload.Files`, `Upload.Folder`, ADR 0130 decision 3), so nothing of a file crosses and none is held whole —, a file's
+//! (`Upload.Files`, `Upload.Folder`, ADR 0131 decision 3), so nothing of a file crosses and none is held whole —, a file's
 //! Replace chosen before its dialog opens (`File.ChooseReplace`, `Upload.Replace`), and the queue as a header bar
 //! `gtk::MenuButton` shown while it lists anything: its icon's tooltip the core's one line, its popover each batch with its
 //! items, their progress, Cancel and Retry, Cancel all and a finished batch's Close. What the uploads say once — a folder's

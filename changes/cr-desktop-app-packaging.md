@@ -3,7 +3,7 @@ id: cr-desktop-app-packaging
 title: The desktop apps ship — Linux as a Flatpak bundle, Windows as an MSIX, built in Checks and attached to the release
 status: planned
 satisfies: []            # no use case: packaging adds no user operation (Definition of done)
-adrs: ["0057", "0091", "0096", "0122", "0123", "0129", "0130"]
+adrs: ["0057", "0091", "0096", "0122", "0123", "0130", "0131"]
 invariants:
   - "operator-blind E2EE: a package changes where the app runs, never what it sends; no package, manifest or metadata carries anything of an account, and the precise release reaches no wire (ADR 0057 decision 4: the package's metadata names its version, the app's code does not)"
   - "self-hostable by default: every package is built from this repository by one command per platform with pinned inputs, and a release carries it as a file anyone can install and verify without a store, a Flathub account or any veyq-run host; a store or Flathub listing is optional on top (owner questions 4, 5)"
@@ -26,8 +26,8 @@ update and verify the app. Android and the Apple app are not packaged here (inbo
 
 ## Context & constraints
 
-- **Read first:** ADR 0129 decisions 4 and 5 (each desktop's stack; Linux "built and tested against the runtime it ships
-  on"), ADR 0123's Consequences (the Linux app, the Windows app: what each pass measured), ADR 0130 decision 3 (a file
+- **Read first:** ADR 0130 decisions 4 and 5 (each desktop's stack; Linux "built and tested against the runtime it ships
+  on"), ADR 0123's Consequences (the Linux app, the Windows app: what each pass measured), ADR 0131 decision 3 (a file
   by path — whether a sandboxed or packaged app's picked path opens in the core is this CR's to measure), ADR 0057
   decisions 4 and 6, ADR 0091 decision 5, ADR 0096 decision 3 (what a release carries),
   [native-apps](../docs/crosscutting/native-apps.md) § Platforms and § Open (the Flatpak and MSIX bullets are this
@@ -82,7 +82,7 @@ update and verify the app. Android and the Apple app are not packaged here (inbo
 
 **D1 — Formats and architectures.** Linux: a single-file Flatpak bundle per architecture,
 `veyq-<major>.<minor>-x86_64.flatpak` and `…-aarch64.flatpak`. Windows: one MSIX, `veyq-<major>.<minor>-x64.msix`;
-no arm64 MSIX and no `.msixbundle`, because Kotlin/Native has no Windows ARM64 target (ADR 0129 decision 5), and the x64
+no arm64 MSIX and no `.msixbundle`, because Kotlin/Native has no Windows ARM64 target (ADR 0130 decision 5), and the x64
 app runs on the ARM VM under Prism (measured, native-apps § Platforms). The x86_64 Flatpak is the first x86-64 build of
 the Linux app at all (native-apps § Open): CI's smoke on an x86-64 runner is its first run, a real x86-64 desktop is not
 in this CR.
@@ -117,7 +117,7 @@ cannot run inside the SDK without network and gains nothing there. The release l
 (`--gtk`) are produced first and enter the manifest as one `type: dir` source; the Rust crates enter as `cargo vendor
 --locked` output (cargo's own command, checked against `Cargo.lock`'s checksums; no generator tool added). The app module
 then runs, inside `org.gnome.Sdk//51` with `rust-stable`, `cargo clippy --locked -- -D warnings`, `cargo test --locked`
-and `cargo build --release --locked`: that is ADR 0129 decision 4's "built and tested against the runtime it ships
+and `cargo build --release --locked`: that is ADR 0130 decision 4's "built and tested against the runtime it ships
 on". `run.py run`'s Broadway passes and `run.py test`'s core binary stay in the Fedora 44 container (a pass's
 environment, not the proof of the app); `run.py build` gains the SDK as its proving ground once the Flatpak builds
 (phase 3), the Fedora build kept as a quick local loop only if it still answers the same.
@@ -245,7 +245,7 @@ and never rebuilds (D10). The Mac builds only aarch64 locally; x86_64 is CI's.
   || echo "RED $f"; done` (guard_gaps skipped) prints no `RED`.
 
   **Status: done (2026-11-13).**
-  **Built:** [ADR 0132](../docs/decisions/0132-the-desktop-apps-ship-as-a-flatpak-bundle-and-an-msix-built-in-checks-and-promoted-with-the-release.md)
+  **Built:** [ADR 0133](../docs/decisions/0133-the-desktop-apps-ship-as-a-flatpak-bundle-and-an-msix-built-in-checks-and-promoted-with-the-release.md)
   from D1–D11 with their reasons and the rejected alternatives (WinApp CLI, the MSIX Packaging Tool, a self-hosted OSTree
   repository or `.appinstaller` feed, flatpak-cargo-generator, a scratch image for staging, the core built inside the SDK,
   Fedora as the proving ground, an arm64 MSIX), plus **decision 12**: the desktop packages' identity in one place
@@ -269,7 +269,7 @@ and never rebuilds (D10). The Mac builds only aarch64 locally; x86_64 is CI's.
   VM pass was (ADR 0123's Consequences, the Linux app), against the dev instance through the tunnel that pass used:
   install from the bundle file; sign in; German words under `LANGUAGE=de`; the members' pictures (WebP through glycin);
   a receipt's PDF; a medium played (H.264 and VP9); a file uploaded from and saved to the **document portal's** path,
-  opening in the core (ADR 0130's open question); a drop from Files; an https request out of the sandbox (the exchange
+  opening in the core (ADR 0131's open question); a drop from Files; an https request out of the sandbox (the exchange
   rates, `VeyqAccount.outside`); **D3's Secret measurement** — stay signed in over the Secret portal, restart, unlock;
   then the same with `--talk-name` + `SECRET_BACKEND=service`; keep the one D3 says and record both; update by installing
   a bundle of a later commit (the measured command); `flatpak uninstall --delete-data` leaves nothing under
@@ -282,14 +282,14 @@ and never rebuilds (D10). The Mac builds only aarch64 locally; x86_64 is CI's.
   **Built:** `src/mobile/linux/flatpak/` — `manifest.yml` (the id, version and date filled by `run.py`, written as
   `build/linux/flatpak/<id>.yml`), `metainfo.xml`, `runtime.pins` (Platform, Sdk, rust-stable and org.flatpak.Builder,
   per architecture), `Containerfile` (`fedora:44` at the development image's digest, see phase 1), `lint-exceptions.json`;
-  `src/mobile/desktop-identity.json` (ADR 0132 decision 12: `appId`, `msixPublisher`), read by `run.py`,
+  `src/mobile/desktop-identity.json` (ADR 0133 decision 12: `appId`, `msixPublisher`), read by `run.py`,
   `generate_theme.py` and, through `VEYQ_APP_ID`, `build.rs` (the GApplication id, the resource path, the icon's and the
   desktop entry's names: a sandbox lets the app own only names under its id); `build.rs` binds the catalogs to a
   build-time `VEYQ_LOCALE_DIR` (`/app/share/locale` in the Flatpak); `run.py flatpak`; `release_assets.py` imports
   PyYAML only where the recipe's derivation needs it, so `tree_release` runs on a Python without it (the Mac's
   Homebrew one). **D5 measured** (b): the runtime lacks `libcrypt.so.1` and poppler-glib, now modules (libxcrypt 4.5.2,
   poppler 26.11.0, sha256-pinned); it carries the rest. **D3 measured:** the Secret portal alone fails the core's
-  availability probe, so the manifest grants `--talk-name=org.freedesktop.secrets` (ADR 0132 decision 3 rewritten to
+  availability probe, so the manifest grants `--talk-name=org.freedesktop.secrets` (ADR 0133 decision 3 rewritten to
   the outcome; security-model's Linux row). **D9 measured:** an update is `flatpak install --user <newer bundle>`.
   Recorded in ADR 0123's Consequences (the Flatpak), native-apps § Platforms and § Open, `src/mobile/CLAUDE.md`
   (the verb).

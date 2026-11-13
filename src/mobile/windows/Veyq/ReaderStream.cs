@@ -1,4 +1,4 @@
-// A medium's plaintext as a seekable stream (ADR 0130 decision 2; ADR 0123's Consequences, the Windows app's Depot whole; Linux's reader_stream.rs): the
+// A medium's plaintext as a seekable stream (ADR 0131 decision 2; ADR 0123's Consequences, the Windows app's Depot whole; Linux's reader_stream.rs): the
 // MediaPlayerElement reads it through MediaSource.CreateFromStream over AsRandomAccessStream (measured 2026-11-12) in
 // ranges from Media Foundation's own threads, and each range comes from the core's reader (Reader.Read), only the frames it
 // needs decrypted there. Nothing of the medium is written anywhere (ADR 0047); this side holds one window of at most

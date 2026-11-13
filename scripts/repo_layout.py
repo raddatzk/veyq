@@ -36,7 +36,7 @@ MOBILE_ANDROID = MOBILE / "android"
 MOBILE_APPLE = MOBILE / "apple"
 # The Linux app (ADR 0123's Consequences, the Linux app): a Cargo package, built and run in a container by its `run.py`.
 MOBILE_LINUX = MOBILE / "linux"
-# The Windows app (ADR 0129 decision 5): driven on a Windows host from this one by its `run.py`.
+# The Windows app (ADR 0130 decision 5): driven on a Windows host from this one by its `run.py`.
 MOBILE_WINDOWS = MOBILE / "windows"
 # The web client's WebP encoder (ADR 0127): libwebp built by us, in a directory of its own inside the surface that ships it.
 WEBP_ENCODER = WEB / "webp-encoder"

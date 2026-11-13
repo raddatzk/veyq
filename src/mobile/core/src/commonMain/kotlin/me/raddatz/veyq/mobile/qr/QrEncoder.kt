@@ -27,7 +27,7 @@ class QrMatrix internal constructor(val size: Int, private val modules: BooleanA
 }
 
 /**
- * The one QR writer of every app (ADR 0129 decision 1, D2 of the QR CR): a text into a [QrMatrix] at error-correction
+ * The one QR writer of every app (ADR 0130 decision 1, D2 of the QR CR): a text into a [QrMatrix] at error-correction
  * level M (about 15 % of the codewords recoverable), the smallest version it fits, the mask ISO 18004's penalty rules
  * choose. A phone draws the matrix itself; a desktop asks [QrPng] for its picture.
  */

@@ -13,12 +13,12 @@ import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 /**
- * Files by path (ADR 0130 decision 3) on every native target — macOS, Linux and Windows: [FileSink] writes a file of
+ * Files by path (ADR 0131 decision 3) on every native target — macOS, Linux and Windows: [FileSink] writes a file of
  * uneven frames, [FileSource] reads it at offsets and whole, through a name with `ü`, `€` and a CJK character, and the
  * directory as the system lists it ([listDir], the platform's own listing, never the calls under test) holds that name
  * exactly. A sink that fails mid-way leaves nothing behind.
  *
- * A picked directory is walked by the platform's own listing ([PickedPaths.walk], ADR 0130's Consequences): a nested directory
+ * A picked directory is walked by the platform's own listing ([PickedPaths.walk], ADR 0131's Consequences): a nested directory
  * under a non-ASCII name, a hidden file kept, a link reported and never followed, an entry that does not list said.
  *
  * The bites, each measured red: Windows' `openFile` over plain `fopen` (the name listed is another); [FileSink.fill]

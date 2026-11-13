@@ -362,7 +362,7 @@ class AppModel(app: Application) : AndroidViewModel(app) {
         watchAvatars(t)
     }
 
-    // ---- what another app shared (ADR 0131) ----
+    // ---- what another app shared (ADR 0132) ----
 
     /** Files shared to veyq, from their arrival to where they went (core's `ShareInbox`). */
     val shareInbox = me.raddatz.veyq.mobile.expenses.ShareInbox()
@@ -372,7 +372,7 @@ class AppModel(app: Application) : AndroidViewModel(app) {
 
     /**
      * Files arrive: the pick mode starts at the space's Home, never in the object last open, so the person chooses where
-     * they go (ADR 0131 decision 1) — the start does the same while the session is still opening.
+     * they go (ADR 0132 decision 1) — the start does the same while the session is still opening.
      */
     fun receiveShare(incoming: me.raddatz.veyq.mobile.expenses.ShareInbox.Incoming) {
         updateShell { Shell.start(null, it.space) }

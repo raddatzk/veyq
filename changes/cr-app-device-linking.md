@@ -3,7 +3,7 @@ id: cr-app-device-linking
 title: Device linking on every app, both directions — "Add a new device" and "Sign in with a QR code" (ADR 0059)
 status: in-progress
 satisfies: []
-adrs: ["0059", "0004", "0005", "0026", "0028", "0058", "0129", "0130"]
+adrs: ["0059", "0004", "0005", "0026", "0028", "0058", "0130", "0131"]
 invariants:
   - "the QR never carries a server, and no app follows one out of a scan (ADR 0059 §4): each side talks only to the instance it is already signed in to or typed into its sign-in form; the payload parser is anchored at both ends and refuses the other direction's marker"
   - "each direction keeps its own binding step (ADR 0059 §5): Add a new device compares the five-digit number on both screens; Sign in with a QR code transcribes the six-digit code into the new device, one attempt (§6)"
@@ -108,7 +108,7 @@ direction's statement, a parser that accepts a trailing path).
 
 ### D4 — The flows are one core model, `DeviceLink`, with four roles
 
-`session/DeviceLink.kt` (ADR 0129 decision 2's shape): `showForNewDevice()` (trusted, Add a new device),
+`session/DeviceLink.kt` (ADR 0130 decision 2's shape): `showForNewDevice()` (trusted, Add a new device),
 `scanSignInCode()` (trusted, Sign in with a QR code), `scanFromTrusted(server)` and `showForSignIn(server)` (new, from
 the sign-in form). Each role's states mirror the web's cards: the code shown (the QR as a matrix for the phones, a PNG
 for the desktops — `cr-core-qr-decoder` D2), waiting, the number to compare / the code to show / the code to type,
