@@ -3,6 +3,9 @@
 //! `src/mobile/build/generated` there), and links `libveyq.so` from `$VEYQ_LIB_DIR`. Into `OUT_DIR` it writes:
 //! `bridge.rs` and `words.rs` as they are, `locale/<lang>/LC_MESSAGES/veyq.mo` (msgfmt), and `veyq.gresource`
 //! (glib-compile-resources over the theme, under the app's resource base path, where libadwaita finds `style.css`).
+//! The app's id comes from `$VEYQ_APP_ID` (run.py reads it from `src/mobile/desktop-identity.json`, ADR 0132 decision 12);
+//! where the catalogs are read from is `$VEYQ_LOCALE_DIR` when the build sets it (the Flatpak's `/app/share/locale`),
+//! else the build's own `OUT_DIR/locale`.
 use std::env;
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -11,6 +14,15 @@ use std::process::Command;
 fn main() {
     let generated = PathBuf::from(need("VEYQ_GENERATED"));
     let lib_dir = need("VEYQ_LIB_DIR");
+    let app_id = need("VEYQ_APP_ID");
+    if app_id.is_empty() || !app_id.split('.').all(|p| !p.is_empty() && p.chars().all(|c| c.is_ascii_alphanumeric() || c == '_')) {
+        panic!("VEYQ_APP_ID {app_id:?} is no application id (dot-separated, letters, digits and _)");
+    }
+    let resource_base = format!("/{}", app_id.replace('.', "/"));
+    println!("cargo:rerun-if-env-changed=VEYQ_APP_ID");
+    println!("cargo:rerun-if-env-changed=VEYQ_LOCALE_DIR");
+    println!("cargo:rustc-env=VEYQ_APP_ID={app_id}");
+    println!("cargo:rustc-env=VEYQ_RESOURCE_BASE={resource_base}");
     let out = PathBuf::from(env::var("OUT_DIR").expect("cargo sets OUT_DIR"));
     println!("cargo:rerun-if-env-changed=VEYQ_GENERATED");
     println!("cargo:rerun-if-env-changed=VEYQ_LIB_DIR");
@@ -27,14 +39,15 @@ fn main() {
         run(Command::new("msgfmt").arg("--check").arg("-o").arg(dir.join("veyq.mo")).arg(&po));
         println!("cargo:rerun-if-changed={}", po.display());
     }
-    println!("cargo:rustc-env=VEYQ_LOCALE_DIR={}", locale.display());
+    let bound = env::var("VEYQ_LOCALE_DIR").ok().filter(|d| !d.is_empty()).unwrap_or_else(|| locale.display().to_string());
+    println!("cargo:rustc-env=VEYQ_LOCALE_DIR={bound}");
 
     let theme = generated.join("linux/theme");
     let files = files_under(&theme);
     if !files.iter().any(|f| f == Path::new("style.css")) {
         panic!("{}: no style.css — run.py writes it with generate_theme.py --gtk", theme.display());
     }
-    let mut xml = String::from("<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<gresources>\n  <gresource prefix=\"/me/raddatz/veyq\">\n");
+    let mut xml = format!("<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<gresources>\n  <gresource prefix=\"{resource_base}\">\n");
     for f in &files {
         xml += &format!("    <file>{}</file>\n", f.display());
         println!("cargo:rerun-if-changed={}", theme.join(f).display());

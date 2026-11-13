@@ -1,0 +1,5 @@
+{
+  "_": "The desktop packages' outward identity, defined here once (ADR 0132 decision 12). appId: the Flatpak's application id, also the Linux app's GApplication id, D-Bus name and resource path. msixPublisher: the MSIX's Publisher, which must equal the signing certificate's subject. Both are defaults until the owner decides them; no package is published under them before.",
+  "appId": "app.veyq.Veyq",
+  "msixPublisher": "CN=veyq"
+}

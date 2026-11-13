@@ -1,0 +1,132 @@
+# The Linux app's Flatpak (ADR 0132). Never built by hand: `python3 src/mobile/linux/run.py flatpak` writes the inputs
+# this names, fills `@APP_ID@` from src/mobile/desktop-identity.json (decision 12) and writes the result as
+# `<id>.yml` into src/mobile/build/linux/flatpak/, beside `inputs/` and `vendor/` — every `path:` below is relative to
+# THAT file, not to this one. validate_build_input_pins.py (check 7) reads this file: `runtime-version` against
+# runtime.pins, and a `sha256` on every source fetched by URL.
+id: '@APP_ID@'
+runtime: org.gnome.Platform
+runtime-version: '51'
+sdk: org.gnome.Sdk
+sdk-extensions:
+  - org.freedesktop.Sdk.Extension.rust-stable
+command: veyq
+# A single-file bundle carries the app's ref alone, so a split-off .Locale extension would never arrive and every word
+# would be English (decision 5).
+separate-locales: false
+# What the sandbox gets, least first (decision 3): the network (the API and the store's URLs); GTK's drawing; the
+# sound a medium plays through GStreamer's sink. No --filesystem: files come and go through the portals.
+# The secure store: libsecret in a sandbox keeps every item in the app's own keyring behind the Secret portal
+# (~/.var/app/<id>/data/keyrings, whatever SECRET_BACKEND says), but the core first asks whether a Secret Service
+# answers (`secret_service_get_sync`, LinuxDeviceKeys.secretServiceAvailable), which only the session bus's
+# org.freedesktop.secrets answers: without this name the probe fails (ServiceUnknown) and nothing is offered after a
+# sign-in, measured on the Fedora VM 2026-11-13 (native-apps § Platforms). With it, all five calls answer and the items
+# still land in the app's own keyring.
+finish-args:
+  - --share=network
+  - --share=ipc
+  - --socket=wayland
+  - --socket=fallback-x11
+  - --device=dri
+  - --socket=pulseaudio
+  - --talk-name=org.freedesktop.secrets
+# What the runtime lacks of what the app loads (decision 5), measured against org.gnome.Platform//51 on 2026-11-13
+# (`flatpak run --command=bash org.gnome.Platform//51`): it carries libsecret, glycin with its WebP loader, GStreamer
+# with giostreamsrc and, through codecs-extra, VP9, H.264 and Opus, the CA bundle at /etc/ssl/cert.pem (what the
+# linked libcurl reads) and the zones; it lacks libcrypt.so.1 (it has libxcrypt's .so.2 alone) and poppler-glib.
+cleanup:
+  - /include
+  - /lib/pkgconfig
+  - /lib/cmake
+  - /share/man
+  - '*.la'
+  - '*.a'
+modules:
+  # libcrypt.so.1, which Ktor's statically linked libcurl in libveyq.so needs (src/mobile/CLAUDE.md § Traps): libxcrypt
+  # with the glibc-compatible API, as Fedora's libxcrypt-compat builds it. Its sha256 is the release's own
+  # `.sha256sum` asset's, checked against the download on 2026-11-13.
+  - name: libxcrypt
+    buildsystem: autotools
+    config-opts:
+      - --enable-obsolete-api=glibc
+      - --disable-static
+      - --disable-failure-tokens
+      # its -Werror meets the SDK's GCC and glibc 2.42's const-preserving strchr (`discards 'const' qualifier`, measured
+      # 2026-11-13 in crypt-gost-yescrypt.c and crypt-sm3-yescrypt.c): a warning, not a fault of what is built
+      - --disable-werror
+    sources:
+      - type: archive
+        url: https://github.com/besser82/libxcrypt/releases/download/v4.5.2/libxcrypt-4.5.2.tar.xz
+        sha256: 71513a31c01a428bccd5367a32fd95f115d6dac50fb5b60c779d5c7942aec071
+  # poppler-glib, through which poppler-rs draws a receipt's PDF; only the GLib frontend, nothing that reaches the
+  # network or signs (curl, NSS, GPGME off). The sha256 is the download's of 2026-11-13 from poppler.freedesktop.org.
+  - name: poppler
+    buildsystem: cmake-ninja
+    config-opts:
+      - -DCMAKE_BUILD_TYPE=Release
+      - -DENABLE_GLIB=ON
+      - -DENABLE_GOBJECT_INTROSPECTION=OFF
+      - -DENABLE_GTK_DOC=OFF
+      - -DENABLE_QT5=OFF
+      - -DENABLE_QT6=OFF
+      - -DENABLE_CPP=OFF
+      - -DENABLE_UTILS=OFF
+      - -DENABLE_BOOST=OFF
+      - -DENABLE_NSS3=OFF
+      - -DENABLE_GPGME=OFF
+      - -DENABLE_LIBCURL=OFF
+      - -DENABLE_LIBOPENJPEG=none
+      - -DBUILD_GTK_TESTS=OFF
+      - -DBUILD_CPP_TESTS=OFF
+      - -DBUILD_MANUAL_TESTS=OFF
+    sources:
+      - type: archive
+        url: https://poppler.freedesktop.org/poppler-26.11.0.tar.xz
+        sha256: 41c32680160addf5a8dd7a830e4869c01e9f6bee1abb91e44fabd1ba9d7828fb
+  - name: veyq
+    buildsystem: simple
+    build-options:
+      append-path: /usr/lib/sdk/rust-stable/bin
+      env:
+        CARGO_HOME: /run/build/veyq/cargo-home
+        CARGO_TARGET_DIR: /run/build/veyq/target
+        # what build.rs and the tests read (as run.py's container gives them): the generated sources, the release
+        # library, the wire's samples and words.json
+        VEYQ_GENERATED: /run/build/veyq/inputs/generated
+        VEYQ_LIB_DIR: /run/build/veyq/inputs/lib
+        # the release library, and /app/lib, where the modules above put libpoppler.so (the link resolves
+        # libpoppler-glib.so's own NEEDED through it)
+        LD_LIBRARY_PATH: /run/build/veyq/inputs/lib:/app/lib
+        VEYQ_SAMPLES: /run/build/veyq/inputs/generated/bridge/samples
+        VEYQ_WORDS_JSON: /run/build/veyq/inputs/words.json
+        VEYQ_APP_ID: '@APP_ID@'
+        # where the release build reads its catalogs: where this module installs them (decision 5)
+        VEYQ_LOCALE_DIR: /app/share/locale
+    build-commands:
+      # the catalogs first, so the words' test reads the installed ones
+      - for po in inputs/generated/linux/words/*.po; do lang=$(basename "$po" .po); install -d "/app/share/locale/$lang/LC_MESSAGES"; msgfmt --check -o "/app/share/locale/$lang/LC_MESSAGES/veyq.mo" "$po"; done
+      # the crates `cargo vendor --locked` wrote (cargo's own check against Cargo.lock's checksums), offline
+      - mkdir -p cargo-home && cp inputs/cargo-config.toml cargo-home/config.toml
+      # proved and built against the runtime it ships on (decision 4; ADR 0129 decision 4)
+      - cargo clippy --offline --locked --all-targets -- -D warnings
+      # all but what a build's sandbox cannot run (run.py's SANDBOX_SKIPS, each with why)
+      - cargo test --offline --locked -- @SANDBOX_SKIPS@
+      - cargo build --offline --locked --release
+      - install -Dm755 target/release/veyq /app/bin/veyq
+      - install -Dm755 inputs/lib/libveyq.so /app/lib/libveyq.so
+      - install -Dm644 "inputs/generated/linux/theme/@APP_ID@.desktop" "/app/share/applications/@APP_ID@.desktop"
+      - install -Dm644 "inputs/generated/linux/theme/icons/scalable/apps/@APP_ID@.svg" "/app/share/icons/hicolor/scalable/apps/@APP_ID@.svg"
+      - install -Dm644 "inputs/generated/linux/theme/icons/symbolic/apps/@APP_ID@-symbolic.svg" "/app/share/icons/hicolor/symbolic/apps/@APP_ID@-symbolic.svg"
+      - install -Dm644 "inputs/@APP_ID@.metainfo.xml" "/app/share/metainfo/@APP_ID@.metainfo.xml"
+    sources:
+      - type: dir
+        path: ../../../linux
+        skip:
+          - flatpak
+          - Containerfile
+          - run.py
+      - type: dir
+        path: inputs
+        dest: inputs
+      - type: dir
+        path: vendor
+        dest: vendor

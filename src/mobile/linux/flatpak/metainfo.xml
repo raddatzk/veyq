@@ -1,0 +1,37 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- The Linux app's AppStream metainfo (ADR 0132 decision 5). `run.py flatpak` fills @APP_ID@ (desktop-identity.json),
+     @VERSION@ (the tree's <major>.<minor>, as the pipeline counts it) and @DATE@ (the commit's date, not the build's),
+     and the manifest installs the result; `appstreamcli validate` holds it. -->
+<component type="desktop-application">
+  <id>@APP_ID@</id>
+  <metadata_license>CC0-1.0</metadata_license>
+  <project_license>AGPL-3.0-only</project_license>
+  <name>veyq</name>
+  <summary>End-to-end encrypted spaces for your files and shared expenses</summary>
+  <description>
+    <p>
+      veyq keeps what you share sealed on your devices: the server it talks to stores and serves only ciphertext.
+      This app reaches your veyq server and holds its applications Expenses and Depot.
+    </p>
+    <p>
+      It is a preview: Memories and the settings are not in the app yet; the web holds them.
+    </p>
+  </description>
+  <developer id="app.veyq">
+    <name>veyq</name>
+  </developer>
+  <launchable type="desktop-id">@APP_ID@.desktop</launchable>
+  <url type="homepage">https://veyq.app</url>
+  <url type="vcs-browser">https://github.com/raddatzk/veyq</url>
+  <content_rating type="oars-1.1"/>
+  <supports>
+    <control>pointing</control>
+    <control>keyboard</control>
+  </supports>
+  <requires>
+    <display_length compare="ge">360</display_length>
+  </requires>
+  <releases>
+    <release version="@VERSION@" date="@DATE@"/>
+  </releases>
+</component>
