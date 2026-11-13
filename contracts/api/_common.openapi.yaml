@@ -239,7 +239,9 @@ components:
             template, the geocoder's a Nominatim-compatible base, the breach check's the range API's prefix, the
             exchange rates' a `{date}` template of a whole day's table of the ECB's euro reference rates in Frankfurter's v2
             shape (ADR 0108 decision 8).
-            The served CSP names its origin.
+            The served CSP names its origin. On `memories.music` (a `deployment` entry, ADR 0131), while active: the
+            address of the music frame on the instance's music host, which the client embeds as an iframe after the
+            viewer's opt-in; the served CSP names its origin in `frame-src`.
           maxLength: 512
           example: https://tile.openstreetmap.org/{z}/{x}/{y}.png
         serviceAttribution:
@@ -250,6 +252,24 @@ components:
             text (markup is shown literally, never rendered).
           maxLength: 256
           example: © OpenStreetMap contributors
+        spotifyClientId:
+          x-veyq-visibility: public
+          type: string
+          description: >
+            On `memories.music.spotify` only, while active: the client ID of the Server Owner's Spotify app, which the
+            music frame hands Spotify's sign-in (ADR 0131 decision 4). Public by nature: every viewer's browser
+            receives it.
+          pattern: '^[0-9A-Za-z]{8,64}$'
+          example: 0123456789abcdef0123456789abcdef
+        appleDeveloperToken:
+          x-veyq-visibility: public
+          type: string
+          description: >
+            On `memories.music.apple-music` only, while active (configured and not past its `exp`): the MusicKit
+            developer token the music frame configures MusicKit JS with (ADR 0131 decision 4). Public by nature:
+            every viewer's browser receives it.
+          maxLength: 2048
+          example: eyJhbGciOiJFUzI1NiIsImtpZCI6IkFCQzEyM0RFRkcifQ.eyJpc3MiOiJERUYxMjNHSElKIiwiaWF0IjoxNzAwMDAwMDAwLCJleHAiOjE3MTAwMDAwMDB9.c2lnbmF0dXJl
 
     ReportCategory:
       # Shared by the moderation spec (a member's report) and the sharing spec (a guest's) — one report, one shape
