@@ -832,6 +832,32 @@ Phase 7 (the implementer, 2026-11-13):
 - **A whole page is no camera frame.** The printed page as one frame read nothing; the realistic frame is the code
   aimed at. A pass fixture for a camera says what the camera sees, not what the paper holds.
 
+The kit test's hang (2026-11-13, after phases 8 and 9):
+- **Cause: a host reply that arrived before `veyq_init` published the core.** The composition asks the store at once,
+  on a core thread, and the Linux host answers from inside its host function; `veyq_reply` looked the host up through
+  the started core, which `veyq_init` stored only after composing. Under load (twice the CPUs busy) the reply won the
+  race, was dropped, the ask waited its 30 s out — and `withTimeout`'s `TimeoutCancellationException`, a
+  `CancellationException`, failed the composition as *cancelled*, which `Bridge.call` passes on as its own cancellation:
+  `SessionStart` was never answered, every core thread idle (gdb on two hung runs: the test thread in `call_blocking`
+  of `SessionStart`, all `Dispatchers.Default` workers parked). Measured: 2 of 4 runs hung with 28 busy loops beside the
+  suite in the SDK's sandbox, 0 of 36 without. Fixed in the bridge: `Started` publishes the host before it composes, and
+  a silent host fails the ask as `Host.Silent`, an ordinary failure a call answers `Failed`. `DispatchTest`'s
+  `aReplyArrivingBeforeTheStartReturnedReachesItsAsk` and `aCallWhoseCompositionsHostStaysSilentIsAnsweredFailed` bite
+  each (the publish after the compose; `withTimeout` back). The Rust case runs whole — drawing and read — under its 60 s
+  bound. Bitten in the sandbox with a 2 s sleep forcing the race in `veyq_init`: the old order with `withTimeout` red at
+  60–61 s, 3 of 3 (the bound holds and the process exits); the old order with `Host.Silent` red at 30–31 s, 2 of 2, on
+  `Failed { Silent }`; the fixed order under the same sleep green 3 of 3. Fixed, no sleep: 30 of 30 green over the whole
+  suite and 30 of 30 of the case alone with 14 busy loops beside it.
+- **Not this test: a sample file's `open` stalled past 150 s** in `every_sample_the_core_wrote…` while the Mac's load
+  stood at 300–500 (the bind mount, not the bridge). A test's "running for over 60 seconds" under that load names the
+  test that stalls; read it before blaming the one under suspicion.
+- **A timeout in a coroutine is a cancellation unless it is made a failure.** `withTimeout` inside a call's work
+  ends the call unanswered, never failed; a bound on a wait that a caller must hear about is `withTimeoutOrNull` plus
+  a thrown failure. Next time a bridge path waits on the host, its test plays the host silent and expects an answer.
+- **A hang that needs load is a race; reproduce it with load, not with repetition.** 36 quiet runs were green; 28 busy
+  loops beside the suite hung half the runs. The dump of an idle process said "lost wakeup", and reading who publishes
+  what before whom found it.
+
 Phases 8 and 9 (the implementer, 2026-11-13):
 - **A host reply that blocks a core thread wants its drawing off that thread on Windows.** Linux draws on the core's
   thread inside the host function (poppler and cairo need no loop); WinRT's async drawing went to the thread pool and
