@@ -10,7 +10,8 @@
 // **One door per application: its registrar (owner 2026-11-01).** `registerApplication({ id, name })` names the
 // application and answers its SCOPED registrar (`ApplicationRegistrar`), through which it registers everything else:
 // `app.kind(kind, descriptor)` per node kind, `app.route(slug | null)` once, `app.lifecycle(hooks)`, `app.shareBody(rootKind,
-// body)`, `app.folderUploadShare(kind, share)`, `app.personSection(component)`, `app.itemReview(component)`, `app.shortcuts(groups)`. Ownership comes from the call: a kind belongs to the
+// body)`, `app.folderUploadShare(kind, share)`, `app.personSection(component)`, `app.itemReview(component)`, `app.shortcuts(groups)`,
+// `app.footerBar(component)`. Ownership comes from the call: a kind belongs to the
 // application whose registrar registered it, so no list of its kinds exists beside the registrations, and `app.id` is the
 // one place an application's id lives on the web side (its kinds' `contentSchema.application` is read from it). There are
 // no free register functions.
@@ -50,9 +51,16 @@
 // node, whatever the link's root kind, so a kind's rows and `detail` serve it as they serve a member; no guest-only
 // list or body per kind exists (`shareSection` was retired in S3, the embedded Memories body in S5).
 //
-// **No shell slots.** The shell's top bar and sidebar are core's alone: the upload status (`core/blob/UploadStatusMenu.vue`)
-// lists every application's uploads and the Favorites section (`core/favorites/PinnedNodes.vue`) every kind's pins, so no
-// application adds an entry there; a place in the shell for an application is a seam that comes with its first user.
+// **One shell slot: the footer bar (`app.footerBar`, ADR 0131).** The shell's top bar and sidebar are core's alone: the
+// upload status (`core/blob/UploadStatusMenu.vue`) lists every application's uploads and the Favorites section
+// (`core/favorites/PinnedNodes.vue`) every kind's pins, so no application adds an entry there. The one place the shell
+// gives an application is a bar BELOW its footer, which core mounts once per shell - the signed-in app's
+// (`components/app/AppShell.vue`, only while a session is signed in and unlocked) and the share page's
+// (`views/ShareView.vue`) - so it outlives every change of page within that shell: Memories' music player, whose music
+// keeps playing while the viewer moves on. Core draws its frame (`core/footerBar/FooterBars.vue`: in the page's flow after
+// the footer, sticky at the viewport's bottom edge) and nothing of its content; an application switched off here gets
+// none mounted. One per application (a second call throws), the same component never twice. Another place in the shell
+// is a seam that comes with its first user.
 //
 // **Drop pages (`app.shareBody`).** The public share page (`views/ShareView.vue`) is a shell: it resolves the
 // kind-independent half (core/sharing/resolvePublicShare.ts) and runs the password and terms gates. A `READ` or
@@ -679,6 +687,10 @@ export interface ApplicationRegistrar {
   /** Name the keyboard shortcuts of the application's own screens, in the order the overview lists them (see the header).
    *  Throws on a second call, on a group without an entry and on an entry without a key. */
   shortcuts(groups: readonly ShortcutGroup[]): void
+  /** Fill the shell's footer bar (see the header): a component core mounts once per shell, below its footer, for as long
+   *  as that shell stands - every page of the signed-in app, and the share page. It takes no props and draws nothing while
+   *  it has nothing to show. Throws on a second one of this application and on a component another already registered. */
+  footerBar(component: Component): void
 }
 
 export interface Registry {
@@ -708,6 +720,8 @@ export interface Registry {
   searches(): readonly { application: string; search: ApplicationSearch }[]
   /** Every application's shortcut groups, in registration order, each with the application that named them. */
   shortcuts(): readonly { application: string; groups: readonly ShortcutGroup[] }[]
+  /** Every application's footer bar, in registration order, each with the application that registered it. */
+  footerBars(): readonly { application: string; component: Component }[]
   /** Run every application's `onScopeReset`. */
   scopeReset(): void
   /** Run every application's `onScopeEntered`, in registration order; rejects with the first failure after all ran. */
@@ -801,6 +815,7 @@ export function createRegistry(): Registry {
   const itemReviews: Component[] = []
   const searches = new Map<string, ApplicationSearch>()
   const shortcuts = new Map<string, readonly ShortcutGroup[]>()
+  const footerBars = new Map<string, Component>()
   // application id → its route slug, or null for the application with no segment.
   const routes = new Map<string, string | null>()
   const slugs = new Set<string>()
@@ -907,6 +922,11 @@ export function createRegistry(): Registry {
         }
         shortcuts.set(id, Object.freeze(groups.map((g) => Object.freeze({ ...g, entries: Object.freeze([...g.entries]) }))))
       },
+      footerBar(component: Component) {
+        if (footerBars.has(id)) throw new Error(`the footer bar of ${id} is already registered`)
+        if ([...footerBars.values()].includes(component)) throw new Error('this footer bar is already registered')
+        footerBars.set(id, component)
+      },
     })
   }
   return {
@@ -924,6 +944,7 @@ export function createRegistry(): Registry {
     itemReviews: () => [...itemReviews],
     searches: () => [...searches].map(([application, search]) => ({ application, search })),
     shortcuts: () => [...shortcuts].map(([application, groups]) => ({ application, groups })),
+    footerBars: () => [...footerBars].map(([application, component]) => ({ application, component })),
     scopeReset() {
       // Synchronous on purpose: callers (enterScope, clearActiveSpace) rely on the state being gone on return.
       for (const h of lifecycles.values()) h.onScopeReset?.()

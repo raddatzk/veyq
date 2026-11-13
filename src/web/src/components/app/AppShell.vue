@@ -9,7 +9,10 @@
 // signed-in app as § 5 DDG asks of a provider identification and DSA Art. 14(1) of the terms. Above the route sits the
 // donation banner as a member's (uc.platform.support-the-project, ADR 0124) — on the signed-in app only, never on the
 // public or plain layouts' login, invite, join and recovery pages — and above it, while the account's address is
-// unconfirmed, the banner that says so and cannot be dismissed (ADR 0129 decision 5), on the same pages only.
+// unconfirmed, the banner that says so and cannot be dismissed (ADR 0129 decision 5), on the same pages only. Below the
+// footer sits the footer bar the applications fill (`core/footerBar/FooterBars.vue`: Memories' music player, ADR 0131),
+// mounted here once so it outlives every change of page, and only while the session is signed in and unlocked: a
+// sign-out or a lock unmounts it, which ends whatever it plays (a tenant switch is a full navigation to another domain).
 import { computed, watch } from 'vue'
 import { RouterView, useRoute } from 'vue-router'
 import { useI18n } from 'vue-i18n'
@@ -27,6 +30,7 @@ import OperatorIdentification from '../../core/operator/OperatorIdentification.v
 import DonationBanner from '../../core/project/DonationBanner.vue'
 import UnconfirmedEmailBanner from '../../features/account/email/UnconfirmedEmailBanner.vue'
 import ShortcutsDialog from '../../core/shortcuts/ShortcutsDialog.vue'
+import FooterBars from '../../core/footerBar/FooterBars.vue'
 
 const route = useRoute()
 const { serverState } = useServerState()
@@ -42,6 +46,8 @@ const plainLayout = computed(() => route.meta.layout === 'plain')
 // A page of running text in the public shell — the terms and the privacy notice (`meta.reading`) — reads at a text
 // measure, not in the sign-in card's 460 px column, which wrapped it every six words.
 const readingLayout = computed(() => route.meta.reading === true)
+// The footer bar lives as long as the signed-in, unlocked session: never on a page a locked or signed-out browser shows.
+const footerBarOn = computed(() => session.accessToken !== null && vaultState.unlocked)
 
 // Only the home enters a scope (from its #fragment), so an app page loaded straight — a reload on /settings — would run
 // with none: no tenant sections, no terms gate, no tenant capabilities. Such a page gets the token-less tenant home,
@@ -80,6 +86,7 @@ watch(needsScope, (needs) => { if (needs) void enterScope(TENANT_SCOPE) }, { imm
       <footer class="app-operator-footer">
         <OperatorIdentification />
       </footer>
+      <FooterBars v-if="footerBarOn" audience="member" />
     </div>
     <!-- The keyboard shortcut overview (uc.platform.keyboard-shortcuts): `?` and the account menu open it; the member's
          shell only, as a share page has none. -->

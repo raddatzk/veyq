@@ -12,7 +12,10 @@
 //    no key, so there is nothing to render the member's way (Memories' photo drop, Depot's drop box).
 // Anything else — a root kind nobody can render, or none named — is the explicit unavailable state, never a blank page.
 // Above the gates, the donation banner as a guest's (uc.platform.support-the-project: its dismissal stays in this browser);
-// the footer is the instance's, with veyq's own "Why is veyq secure?" and "Donate" in it (`OperatorIdentification`).
+// the footer is the instance's, with veyq's own "Why is veyq secure?" and "Donate" in it (`OperatorIdentification`), and
+// below it the footer bar the applications fill (`core/footerBar/FooterBars.vue`: Memories' music player, ADR 0131), a
+// guest's as a member's (share view = member view), mounted once for the page's life so it plays on while the guest moves
+// through the link's nodes, and torn down when the guest leaves the page. A moderator's review has none.
 //
 // The gates and what lies behind them are core's (`core/sharing/shareGates.ts`, drawn by `core/sharing/ShareGates.vue`),
 // which a bookmark's page runs too for a link it shows in place (ADR 0121); this page is their host for this origin's link,
@@ -58,6 +61,7 @@ import { closeGuestPage, openGuestPage } from '../core/sharing/guestNotice'
 import { openReport, useReportOffered } from '../core/report/report'
 import { linkReportKeys } from '../core/report/reportKeys'
 import ShareReview from '../features/moderation/review/ShareReview.vue'
+import FooterBars from '../core/footerBar/FooterBars.vue'
 
 const route = useRoute()
 const { t, locale } = useI18n()
@@ -142,6 +146,7 @@ watch(
       <button v-if="reportsLink" type="button" class="share-view-report" @click="reportLink">{{ t('report.reportLink') }}</button>
       <OperatorIdentification />
     </footer>
+    <FooterBars audience="guest" />
   </div>
 </template>
 
