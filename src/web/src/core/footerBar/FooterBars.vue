@@ -12,7 +12,13 @@ import { useCapabilities } from '../../shared/state/useCapabilities'
 
 const props = defineProps<{ audience: 'member' | 'guest' }>()
 const { isSwitchedOff } = useCapabilities()
-const bars = computed(() => registry.footerBars().filter((b) => props.audience === 'guest' || !isSwitchedOff(b.application)))
+// A bar registered with a condition (`app.footerBar(component, shown)`) is mounted only while it holds.
+const bars = computed(() =>
+  registry
+    .footerBars()
+    .filter((b) => props.audience === 'guest' || !isSwitchedOff(b.application))
+    .filter((b) => b.shown?.() ?? true),
+)
 </script>
 
 <template>

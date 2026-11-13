@@ -704,6 +704,10 @@ describe('registry: the footer bar (ADR 0131)', () => {
     expect(() => testApp(r).footerBar({ name: 'C' }), 'one per application').toThrow(/already registered/)
     expect(() => testApp(r, 'third').footerBar(A), 'nor the same component by another').toThrow(/already registered/)
     expect(r.footerBars(), 'a refused bar registers nothing').toHaveLength(2)
+    const C = { name: 'C' }
+    const shown = () => false
+    testApp(r, 'third').footerBar(C, shown)
+    expect(r.footerBars()[2], 'a bar registered with a condition carries it').toEqual({ application: 'third', component: C, shown })
   })
 })
 

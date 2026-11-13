@@ -46,6 +46,21 @@ describe('the session ending steps', () => {
     expect(done).toBe(true)
   })
 
+  it('with no step registered starts no budget and resolves at once: the ending is what it was before the steps', async () => {
+    vi.useFakeTimers()
+    let done = false
+    void runSessionEndingSteps({ startedHere: true }).then(() => (done = true))
+    expect(vi.getTimerCount(), 'no budget timer').toBe(0)
+    await Promise.resolve()
+    expect(done).toBe(true)
+    // Control: one step that settles at once still starts the budget, and clears it again.
+    register(async () => {})
+    void runSessionEndingSteps({ startedHere: true })
+    expect(vi.getTimerCount()).toBe(1)
+    await vi.advanceTimersByTimeAsync(0)
+    expect(vi.getTimerCount(), 'cleared once the steps settled').toBe(0)
+  })
+
   it('runs a removed step no more', async () => {
     const step = vi.fn(async () => {})
     onSessionEnding(step)()

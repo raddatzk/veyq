@@ -696,8 +696,10 @@ export interface ApplicationRegistrar {
   shortcuts(groups: readonly ShortcutGroup[]): void
   /** Fill the shell's footer bar (see the header): a component core mounts once per shell, below its footer, for as long
    *  as that shell stands - every page of the signed-in app, and the share page. It takes no props and draws nothing while
-   *  it has nothing to show. Throws on a second one of this application and on a component another already registered. */
-  footerBar(component: Component): void
+   *  it has nothing to show. With [shown], core mounts it only while that answers true (read reactively): a bar that
+   *  exists only under a condition of its application's. Throws on a second one of this application and on a component
+   *  another already registered. */
+  footerBar(component: Component, shown?: () => boolean): void
 }
 
 export interface Registry {
@@ -727,8 +729,9 @@ export interface Registry {
   searches(): readonly { application: string; search: ApplicationSearch }[]
   /** Every application's shortcut groups, in registration order, each with the application that named them. */
   shortcuts(): readonly { application: string; groups: readonly ShortcutGroup[] }[]
-  /** Every application's footer bar, in registration order, each with the application that registered it. */
-  footerBars(): readonly { application: string; component: Component }[]
+  /** Every application's footer bar, in registration order, each with the application that registered it and its
+   *  condition, if any. */
+  footerBars(): readonly { application: string; component: Component; shown?: () => boolean }[]
   /** Run every application's `onScopeReset`. */
   scopeReset(): void
   /** Run every application's `onScopeEntered`, in registration order; rejects with the first failure after all ran. */
@@ -822,7 +825,7 @@ export function createRegistry(): Registry {
   const itemReviews: Component[] = []
   const searches = new Map<string, ApplicationSearch>()
   const shortcuts = new Map<string, readonly ShortcutGroup[]>()
-  const footerBars = new Map<string, Component>()
+  const footerBars = new Map<string, { component: Component; shown?: () => boolean }>()
   // application id → its route slug, or null for the application with no segment.
   const routes = new Map<string, string | null>()
   const slugs = new Set<string>()
@@ -930,10 +933,10 @@ export function createRegistry(): Registry {
         }
         shortcuts.set(id, Object.freeze(groups.map((g) => Object.freeze({ ...g, entries: Object.freeze([...g.entries]) }))))
       },
-      footerBar(component: Component) {
+      footerBar(component: Component, shown?: () => boolean) {
         if (footerBars.has(id)) throw new Error(`the footer bar of ${id} is already registered`)
-        if ([...footerBars.values()].includes(component)) throw new Error('this footer bar is already registered')
-        footerBars.set(id, component)
+        if ([...footerBars.values()].some((b) => b.component === component)) throw new Error('this footer bar is already registered')
+        footerBars.set(id, shown === undefined ? { component } : { component, shown })
       },
     })
   }
@@ -952,7 +955,7 @@ export function createRegistry(): Registry {
     itemReviews: () => [...itemReviews],
     searches: () => [...searches].map(([application, search]) => ({ application, search })),
     shortcuts: () => [...shortcuts].map(([application, groups]) => ({ application, groups })),
-    footerBars: () => [...footerBars].map(([application, component]) => ({ application, component })),
+    footerBars: () => [...footerBars].map(([application, bar]) => ({ application, ...bar })),
     scopeReset() {
       // Synchronous on purpose: callers (enterScope, clearActiveSpace) rely on the state being gone on return.
       for (const h of lifecycles.values()) h.onScopeReset?.()

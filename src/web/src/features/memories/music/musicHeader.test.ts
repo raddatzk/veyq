@@ -34,6 +34,14 @@ beforeEach(() => {
 })
 
 describe('musicHeaderActions', () => {
+  it('TEMPORARY musicReleased off (released dark, ADR 0131 decision 8): a Memory with playlists has no music button at all', () => {
+    capabilityState.musicReleased = false
+    expect(musicHeaderActions([spotify, apple], t)).toEqual([])
+    // Control: released, the same playlists are two buttons.
+    capabilityState.musicReleased = true
+    expect(musicHeaderActions([spotify, apple], t).map((a) => a.id)).toEqual(['music-spotify', 'music-apple-music'])
+  })
+
   it('no playlist, no button', () => {
     expect(musicHeaderActions([], t)).toEqual([])
   })

@@ -84,6 +84,7 @@ import { provideMemoryView, sourceRights, type MemorySource } from '../source'
 import { useConfirm } from '../../../shared/state/useConfirm'
 import { useToast } from '../../../shared/state/useToast'
 import { musicHeaderActions } from '../music/musicHeader'
+import { musicReleased } from '../music/musicRelease'
 import MusicDialog from '../music/MusicDialog.vue'
 import { musicField, unsealMemoryMusic, type Playlist } from '../music/musicModel'
 import { editField, nodeMetaState } from '../../../core/node/nodeMeta'
@@ -211,7 +212,8 @@ const headerActions = computed<NodeHeaderAction[]>(() => [
   ...musicHeaderActions(music.value, t),
   {
     id: 'music', label: t('memory.music.action'), icon: 'music', menuOnly: true,
-    shown: can.value.editMeta, disabled: !props.memoryKey, onClick: () => (musicDialog.value = true),
+    // TEMPORARY: released dark (musicReleased, ADR 0131 decision 8) - no entry while the deployment has not released it.
+    shown: can.value.editMeta && musicReleased(), disabled: !props.memoryKey, onClick: () => (musicDialog.value = true),
   },
   // Move and delete are core's standard actions (`standardNodeActions`, both in the ⋯ menu), granted by `can`; the move is
   // core's dialog (inbox #358): a Memory to the root or a folder, a chapter into another Memory. The rename is the name's own,

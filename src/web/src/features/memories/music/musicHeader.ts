@@ -13,6 +13,7 @@ import { playlistLink } from '../../../music-frame/protocol'
 import type { MusicService, Playlist } from './musicModel'
 import { closeBar, playInBar, playlistInBar, samePlaylist } from './musicPlayback'
 import { useMusicConsent } from './useMusicConsent'
+import { musicReleased } from './musicRelease'
 
 /** The header action id of [service]'s playlist. */
 export const musicActionId = (service: MusicService) => `music-${service}`
@@ -22,6 +23,7 @@ type Translate = (key: string, values?: Record<string, unknown>) => string
 /** The header's music buttons for [music] (the node's playlists, already opened), read reactively: call it inside the
  *  header's computed. */
 export function musicHeaderActions(music: readonly Playlist[], t: Translate): NodeHeaderAction[] {
+  if (!musicReleased()) return [] // TEMPORARY: released dark (ADR 0131 decision 8) - no button at all
   const consent = useMusicConsent()
   return music.map((p) => {
     const service = t(`memory.music.service.${p.service}`)
