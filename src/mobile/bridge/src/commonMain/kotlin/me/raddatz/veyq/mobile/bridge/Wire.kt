@@ -139,6 +139,48 @@ internal sealed class Call {
      */
     @Serializable @SerialName("Manage.PasswordTrust") data class ManagePasswordTrust(val connection: String, val password: String) : Call()
 
+    /**
+     * The account's Settings page (core's `AccountSettings`, `cr-app-account-settings` D4) for the connection whose key is
+     * [connection], answered with its id ([Answer.SettingsOpened]) for [Watched.Settings]; the core reads it at once
+     * (`refresh`). Refused `NO_SUCH_CONNECTION`, or `NO_TENANT_OPEN` (it is reached from an open tenant's drawer). It stays
+     * until [SettingsClose], its account's sign-out here, or the tenant closes. Each action is one call answered once it
+     * ended — [Answer.Done], and why it did not come through is the state's `refusal`.
+     */
+    @Serializable @SerialName("Settings.Open") data class SettingsOpen(val connection: String) : Call()
+    @Serializable @SerialName("Settings.Close") data class SettingsClose(val settings: Long) : Call()
+
+    /** Everything read anew (`refresh`): the address, the sessions, the device names, "Add a device". */
+    @Serializable @SerialName("Settings.Refresh") data class SettingsRefresh(val settings: Long) : Call()
+
+    /** This device's name in the account's device register, as the person typed it (`rename`; a blank one is none). */
+    @Serializable @SerialName("Settings.Rename") data class SettingsRename(val settings: Long, val label: String) : Call()
+
+    /**
+     * Session family [family] signed out (`signOut`). This device's own is the sign-out of this account here: the page
+     * closes and the way in follows, as [SessionSignOut]'s.
+     */
+    @Serializable @SerialName("Settings.SignOut") data class SettingsSignOut(val settings: Long, val family: String) : Call()
+    @Serializable @SerialName("Settings.SignOutOthers") data class SettingsSignOutOthers(val settings: Long) : Call()
+
+    /** ADR 0058's escalation for family [family]: signed out, then its device's saved key removed (`signOutAndRemoveKey`). */
+    @Serializable @SerialName("Settings.SignOutAndRemoveKey") data class SettingsSignOutAndRemoveKey(val settings: Long, val family: String) : Call()
+
+    /** The saved key of [device], a device with one and no session ([SettingsShown.keptDevices]), removed. */
+    @Serializable @SerialName("Settings.RemoveSavedKey") data class SettingsRemoveSavedKey(val settings: Long, val device: String) : Call()
+    @Serializable @SerialName("Settings.RemoveOtherSavedKeys") data class SettingsRemoveOtherSavedKeys(val settings: Long) : Call()
+
+    /** Stay signed in at [level] (one of [SettingsShown.levels]): answered as [ManageStaySignedIn] is, Manage's own call. */
+    @Serializable @SerialName("Settings.StaySignedIn") data class SettingsStaySignedIn(val settings: Long, val level: StaySignedIn) : Call()
+
+    /** Back to the password trust with the person's [password], answered as [ManagePasswordTrust] is. */
+    @Serializable @SerialName("Settings.PasswordTrust") data class SettingsPasswordTrust(val settings: Long, val password: String) : Call()
+
+    /** "Stop trusting this device" (`stopTrusting`): its saved key goes, the session stays. */
+    @Serializable @SerialName("Settings.StopTrusting") data class SettingsStopTrusting(val settings: Long) : Call()
+
+    /** "Sign out" of this account on this device (`signOutHere`): the page closes and the way in follows. */
+    @Serializable @SerialName("Settings.SignOutHere") data class SettingsSignOutHere(val settings: Long) : Call()
+
     @Serializable @SerialName("Shell.Choose") data class ShellChoose(val application: ApplicationId?) : Call()
     @Serializable @SerialName("Shell.SwitchSpace") data class ShellSwitchSpace(val scopeId: String) : Call()
     @Serializable @SerialName("Shell.Enter") data class ShellEnter(val folder: FolderRef) : Call()
@@ -770,6 +812,9 @@ internal sealed class Answer {
     /** A scan opened ([Call.ScanOpen]): its id, for [Watched.Scan] and the scan's calls. */
     @Serializable @SerialName("ScanOpened") data class ScanOpened(val scan: Long) : Answer()
 
+    /** An account's Settings opened ([Call.SettingsOpen]): its id, for [Watched.Settings] and its calls. */
+    @Serializable @SerialName("SettingsOpened") data class SettingsOpened(val settings: Long) : Answer()
+
     /** A frame sent ([Call.ScanFrame]): [taken] to be read, or dropped (a decode runs, or the scan reads none now). */
     @Serializable @SerialName("FrameTaken") data class FrameTaken(val taken: Boolean) : Answer()
 
@@ -786,6 +831,9 @@ internal sealed class Answer {
 
         /** A scan: none by that id; a frame without its plane beside the JSON, or one shorter than its size says. */
         NO_SUCH_SCAN, NOT_A_FRAME,
+
+        /** An account's Settings: none by that id (closed, or its tenant closed). */
+        NO_SUCH_ACCOUNT_PAGE,
 
         /** A kit file ([Call.SessionSignInKit]) in which no kit was read, or one picked while no sign-in is shown. */
         NO_KIT,
@@ -853,6 +901,9 @@ internal sealed class Watched {
 
     /** A QR scan opened by [Call.ScanOpen]. */
     @Serializable @SerialName("Scan") data class Scan(val scan: Long) : Watched()
+
+    /** An account's Settings opened by [Call.SettingsOpen]. */
+    @Serializable @SerialName("Settings") data class Settings(val settings: Long) : Watched()
 }
 
 /** One state a watch delivers: the first at once, then each change. */
@@ -915,7 +966,52 @@ internal sealed class Update {
 
     /** A QR scan; null for an id the bridge does not hold (it was closed). */
     @Serializable @SerialName("Scan") data class Scan(val scan: Long, val shown: ScanShown?) : Update()
+
+    /** An account's Settings; null once it was closed (or an id the bridge does not hold). */
+    @Serializable @SerialName("Settings") data class Settings(val settings: Long, val shown: SettingsShown?) : Update()
 }
+
+/**
+ * An account's Settings page as the host draws it (core's `AccountSettings.State`, `cr-app-account-settings` D1), each
+ * field the core's: the address and whether the server holds it confirmed (null until read); this device's name and how
+ * it trusts the account ([trusted], [level] and the [levels] it may move to, as [ManagedShown]'s); the session families,
+ * this device's first (null until the list first read); the devices with a saved key and no session ([keptDevices]);
+ * whether "Remove every saved key except this device's" ([otherSavedKeys]) and "Sign out every other" ([hasOthers]) have
+ * anything to do; whether "Add a device" is offered ([addDevice], `core.device-linking`); [working] while an action runs;
+ * why the last action or the list did not come through ([refusal]) and why the device names are missing
+ * ([registerRefusal]). A family's id is the server's name for it, no token; nothing of a key crosses.
+ */
+@Serializable
+@SerialName("SettingsShown")
+internal class SettingsShown(
+    val email: String,
+    val emailConfirmed: Boolean?,
+    val device: String,
+    val trusted: TrustedDevice.Method?,
+    val level: StaySignedIn?,
+    val levels: List<StaySignedIn>,
+    val families: List<SettingsFamily>?,
+    val keptDevices: List<SettingsKeptDevice>,
+    val otherSavedKeys: Boolean,
+    val hasOthers: Boolean,
+    val addDevice: Boolean,
+    val working: Boolean,
+    @Serializable(with = MsgKey::class) val refusal: Msg?,
+    @Serializable(with = MsgKey::class) val registerRefusal: Msg?,
+)
+
+/**
+ * One session family: created and last used (epoch ms; null where the server sent none), whether it is this device's,
+ * the register's name for its device (null: the dates show), and whether "Sign out and remove saved key" is offered.
+ */
+@Serializable
+@SerialName("SettingsFamily")
+internal class SettingsFamily(val id: String, val createdAt: Long?, val lastUsedAt: Long?, val current: Boolean, val label: String?, val removesKey: Boolean)
+
+/** A device the register knows that holds a saved key and no session: [Call.SettingsRemoveSavedKey] by its [deviceId]. */
+@Serializable
+@SerialName("SettingsKeptDevice")
+internal class SettingsKeptDevice(val deviceId: String, val label: String)
 
 /**
  * A QR scan as the host draws it (core's `QrScan.State`): the camera's preview while [state] is `STARTING` or

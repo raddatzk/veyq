@@ -2306,6 +2306,57 @@ class LiveBridgeTest {
         }
     }
 
+    /**
+     * The account's Settings through the bridge over the real core (`cr-app-account-settings` phase 3): a fresh login of
+     * the seeded principal opens its page, reads its address and its own family first and marked, renames this device
+     * through the register (the name read back on the page and on its own family's row), and signs out from the page —
+     * the page closes and the sign-in shows. Only the session this test signs in is touched. Without `VEYQ_LIVE` it is
+     * reported as skipped (an assumption), never as passed.
+     */
+    @Test
+    fun anAccountsSettingsAreReadRenamedAndSignedOutThroughCalls() {
+        val origin = System.getenv("VEYQ_LIVE")
+        org.junit.Assume.assumeTrue("VEYQ_LIVE is not set: a live case", origin != null)
+        runBlocking {
+            val envFile = System.getenv("VEYQ_ENV_FILE")?.let(::File) ?: File(System.getProperty("veyq.repoRoot"), ".run/.env")
+            val env = envFile.readLines()
+                .mapNotNull { l -> l.substringBefore('=', "").takeIf { it.isNotBlank() }?.let { it.trim() to l.substringAfter('=').trim().trim('"', '\'') } }
+                .toMap()
+            val b = Bridge.live(BouncyCastlePrimitives, { block -> HttpClient(OkHttp, block) }, Config("bridge settings test"), hostStore(ConcurrentHashMap()), { NoDeviceKeys }, JvmFiles)
+            try {
+                val gate = b.watching(Watched.Session)
+                val shell = b.watching(Watched.Shell)
+                assertEquals(Answer.Done, b.ask(Call.SessionStart))
+                gate.until { (it as Update.Session).gate as? Gate.SignIn }
+                val signIn = Call.SessionSignIn(origin!!, env.getValue("VEYQ_EMAIL"), env.getValue("VEYQ_PASSWORD"), env.getValue("VEYQ_SECRET_KEY"))
+                assertEquals(Answer.Done, b.ask(signIn, timeout = 2.minutes))
+                val signed = gate.until(2.minutes) { (it as Update.Session).gate as? Gate.Signed }
+                shell.until(1.minutes) { (it as Update.Shell).shown }
+
+                val id = assertIs<Answer.SettingsOpened>(b.ask(Call.SettingsOpen(signed.connectionKey))).settings
+                val page = b.watching(Watched.Settings(id))
+                val read = page.until(1.minutes) { (it as Update.Settings).shown?.takeIf { s -> s.families != null && !s.working } }
+                println("settings: ${read.families!!.size} families, ${read.keptDevices.size} kept devices, addDevice=${read.addDevice}, refusal=${read.refusal}")
+                assertNull(read.refusal)
+                assertEquals(env.getValue("VEYQ_EMAIL").trim().lowercase(), read.email.lowercase())
+                assertNotNull(read.emailConfirmed)
+                assertTrue(read.families!!.first().current, "this login's family is not first and marked")
+
+                val name = "App settings bridge ${System.currentTimeMillis()}"
+                assertEquals(Answer.Done, b.ask(Call.SettingsRename(id, name), timeout = 1.minutes))
+                val renamed = page.until(1.minutes) { (it as Update.Settings).shown?.takeIf { s -> s.device == name && !s.working } }
+                assertNull(renamed.refusal)
+                assertEquals(name, renamed.families!!.first().label, "the rename did not reach this family's row")
+
+                assertEquals(Answer.Done, b.ask(Call.SettingsSignOutHere(id), timeout = 1.minutes))
+                assertIs<Gate.SignIn>(gate.until(1.minutes) { (it as Update.Session).gate.takeIf { g -> g is Gate.SignIn } })
+                page.until { (it as Update.Settings).takeIf { u -> u.shown == null } }
+            } finally {
+                b.shutdown()
+            }
+        }
+    }
+
     /** A device store the test's host keeps in [kept], answering from its own thread as a UI loop does. */
     private fun hostStore(kept: ConcurrentHashMap<String, String>): HostStore {
         lateinit var host: Host

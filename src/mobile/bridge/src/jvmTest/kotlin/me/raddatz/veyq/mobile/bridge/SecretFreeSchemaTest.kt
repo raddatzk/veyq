@@ -19,9 +19,11 @@ import kotlin.test.assertTrue
  *
  * Two kinds of name are let through, each by its owner and field, each with why:
  * - inward, what the person typed on its way to the core — the sign-in's password and Secret Key, the unlock's
- *   password, and the password "Manage servers" takes back to the password trust, which cross once and never come back;
- * - an identifier or a catalog key that only shares the word: a connection's key (`host#userId`, it names an account),
- *   a bar place's key (the catalog's name of its words) and a trusted device's wrap id (the server's name for the wrap).
+ *   password, and the password "Manage servers" and Settings take back to the password trust, which cross once and never
+ *   come back;
+ * - an identifier, a catalog key or a flag that only shares the word: a connection's key (`host#userId`, it names an
+ *   account), a bar place's key (the catalog's name of its words), a trusted device's wrap id (the server's name for the
+ *   wrap) and Settings' two flags that say whether removing a saved key is offered.
  *
  * A guest link's address is a key by its nature — `K_share` rides its fragment (`#k=`) — and still crosses outward,
  * since it is what the person copies and hands out. That is the one allowance of its kind, written once ([linkAddresses])
@@ -35,6 +37,7 @@ class SecretFreeSchemaTest {
         "Session.Unlock.password" to "the password the person typed at the unlock, on its way to the core",
         "Manage.PasswordTrust.password" to "the password the person typed to go back to the password trust, on its way to the core",
         "Share.Password.password" to "the password a guest link is to ask for, as the person typed it, on its way to the core",
+        "Settings.PasswordTrust.password" to "the password the person typed on Settings to go back to the password trust, on its way to the core",
     )
     /** The outward fields that carry a guest link's address, its key in the fragment, each with why. */
     private val linkAddresses = mapOf(
@@ -49,6 +52,8 @@ class SecretFreeSchemaTest {
         "Signed.connectionKey" to "a connection's id, host#userId: it names an account and opens nothing",
         "me.raddatz.veyq.mobile.navigation.BarTab.key" to "the catalog's name of a bar place's words",
         "me.raddatz.veyq.mobile.session.TrustedDevice.wrapId" to "the id the server gave this device's wrap: it names the wrap, holds none of it",
+        "SettingsShown.otherSavedKeys" to "whether Settings offers to remove the other devices' saved keys: a flag, no key",
+        "SettingsFamily.removesKey" to "whether a session's row offers \"Sign out and remove saved key\": a flag, no key",
     )
 
     @Test

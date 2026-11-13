@@ -489,6 +489,140 @@ class DispatchTest {
         b.shutdown()
     }
 
+    /**
+     * The account's server as a Settings page reads it (core's `AccountSettings.Door`): its families, its device wraps,
+     * its address and the instance's capability; what was asked of it in [asked]. It keeps no device register, so names
+     * are missing and a rename is refused — the register's rules are the core's (`AccountSettingsTest`).
+     */
+    private class PlayedAccount : me.raddatz.veyq.mobile.session.AccountSettings.Door() {
+        val families = java.util.concurrent.CopyOnWriteArrayList(listOf(family("f-here", current = true), family("f-other")))
+        val wraps = java.util.concurrent.CopyOnWriteArrayList(listOf("w-here", "w-other"))
+        val asked = java.util.concurrent.CopyOnWriteArrayList<String>()
+        override val deviceId = "dev-here"
+        override val fallbackLabel = "Fedora 44"
+        override fun myWrapId() = "w-here"
+        override suspend fun email() = "p@server.example" to false
+        override suspend fun families() = families.toList()
+        override suspend fun revoke(family: String) { asked += "revoke $family"; families.removeIf { it.id == family } }
+        override suspend fun revokeOthers() { asked += "revokeOthers"; families.removeIf { it.current != true } }
+        override suspend fun savedKeys() = wraps.toList()
+        override suspend fun removeSavedKey(wrap: String) { asked += "remove $wrap"; wraps.remove(wrap) }
+        override suspend fun capabilities() = setOf("core.device-linking")
+
+        companion object {
+            fun family(id: String, current: Boolean = false) =
+                me.raddatz.veyq.mobile.api.models.SessionFamily(id, "2026-11-01T10:00:00Z", "2026-11-12T09:30:00Z", current)
+        }
+    }
+
+    /** This device's trust and sign-out as the session holds them ("Manage servers"' source), as the core's own `Held`. */
+    private class HeldBy(private val session: SessionModel<Acc, String>, private val account: Acc) : me.raddatz.veyq.mobile.session.AccountSettings.Here<Acc, String> {
+        override fun trust() = session.managed().first { it.account == account }.let { me.raddatz.veyq.mobile.session.AccountSettings.Trust(it.trusted, it.level, it.levels) }
+        override suspend fun stay(level: StaySignedIn) = session.stay(account, level)
+        override suspend fun trustWithPassword(password: String) = session.trustWithPassword(account, password)
+        override suspend fun stopTrusting() = session.forgetDevice(account)
+        override suspend fun signOut() = session.signOut(account)
+    }
+
+    @Test
+    fun anAccountsSettingsAreOpenedReadActedOnAndClosedWithTheirPageTheirTenantAndTheirSignOut() = runBlocking {
+        val kept = Kept()
+        val played = PlayedAccount()
+        val b = Bridge {
+            val hidden = Hidden({}, emptySet())
+            Composition(
+                SessionModel(TrustingDoor(kept), hidden, RecentUses({}, emptyList())), hidden,
+                settings = { session, account -> me.raddatz.veyq.mobile.session.AccountSettings(played, HeldBy(session, account), "p@a.example") { 0L } },
+            ) { _ -> Tenant(shell = null, pot = null, me = "u1", pictures = pictures, loadPictures = {}) }
+        }
+        assertEquals(Answer.Refused(Answer.Why.NO_TENANT_OPEN), b.ask(Call.SettingsOpen("a.example#u1")), "a page before any tenant opened")
+        b.signIn(StaySignedIn.PRESENCE)
+
+        assertEquals(Answer.Refused(Answer.Why.NO_SUCH_CONNECTION), b.ask(Call.SettingsOpen("b.example#u2")))
+        val id = assertIs<Answer.SettingsOpened>(b.ask(Call.SettingsOpen("a.example#u1"))).settings
+        val page = b.watching(Watched.Settings(id))
+        // the core reads it as it opens: the server's address, its families (this device's first), the wraps, the capability
+        val read = page.until { (it as Update.Settings).shown?.takeIf { s -> s.families != null && !s.working } }
+        assertEquals("p@server.example", read.email)
+        assertEquals(false, read.emailConfirmed)
+        assertEquals("Fedora 44", read.device)
+        assertEquals(TrustedDevice.Method.DEVICE_KEY, read.trusted)
+        assertEquals(StaySignedIn.PRESENCE, read.level)
+        assertEquals(both, read.levels)
+        assertEquals(listOf("f-here" to true, "f-other" to false), read.families!!.map { it.id to it.current })
+        assertEquals(1_793_527_200_000, read.families!!.first().createdAt)
+        assertTrue(read.hasOthers && read.otherSavedKeys && read.addDevice)
+        assertNull(read.refusal)
+
+        // an action is one call onto the model, answered once it ended
+        assertEquals(Answer.Done, b.ask(Call.SettingsSignOut(id, "f-other")))
+        assertEquals(listOf("f-here"), page.until { (it as Update.Settings).shown?.families?.takeIf { f -> f.size == 1 } }.map { it.id })
+        assertEquals(Answer.Done, b.ask(Call.SettingsRemoveOtherSavedKeys(id)))
+        assertEquals(listOf("revoke f-other", "remove w-other"), played.asked)
+        page.until { (it as Update.Settings).shown?.takeIf { s -> !s.otherSavedKeys } }
+        // a door without a register renames nothing, and says so — the call reached the core's rename
+        assertEquals(Answer.Done, b.ask(Call.SettingsRename(id, "Laptop")))
+        assertEquals(Msg.ACCOUNT_SETTINGS_RENAME_FAILED, page.until { (it as Update.Settings).shown?.refusal })
+        // the trust is Manage's, changed through the session
+        assertEquals(Answer.Done, b.ask(Call.SettingsStaySignedIn(id, StaySignedIn.LOGIN)))
+        assertEquals(StaySignedIn.LOGIN, kept.records.single().level)
+        page.until { (it as Update.Settings).shown?.takeIf { s -> s.level == StaySignedIn.LOGIN } }
+        assertEquals(Answer.Refused(Answer.Why.WRONG_PASSWORD), b.ask(Call.SettingsPasswordTrust(id, "wrong")))
+        assertEquals(Answer.Done, b.ask(Call.SettingsStopTrusting(id)))
+        assertTrue(kept.records.isEmpty(), "the device still trusts the account")
+        page.until { (it as Update.Settings).shown?.takeIf { s -> s.trusted == null } }
+
+        // closed: its watch delivers null, and its calls are refused
+        assertEquals(Answer.Done, b.ask(Call.SettingsClose(id)))
+        assertEquals(Update.Settings(id, null), page.until { (it as Update.Settings).takeIf { u -> u.shown == null } })
+        assertEquals(Answer.Refused(Answer.Why.NO_SUCH_ACCOUNT_PAGE), b.ask(Call.SettingsClose(id)))
+        assertEquals(Answer.Refused(Answer.Why.NO_SUCH_ACCOUNT_PAGE), b.ask(Call.SettingsSignOutOthers(id)))
+        assertEquals(Update.Settings(id, null), b.watching(Watched.Settings(id)).next())
+
+        // a tenant switch closes it
+        val second = assertIs<Answer.SettingsOpened>(b.ask(Call.SettingsOpen("a.example#u1"))).settings
+        val secondPage = b.watching(Watched.Settings(second))
+        secondPage.until { (it as Update.Settings).shown }
+        assertEquals(Answer.Done, b.ask(Call.SessionSwitchTo("a.example#u1", "ta2")))
+        secondPage.until { (it as Update.Settings).takeIf { u -> u.shown == null } }
+        assertEquals(Answer.Refused(Answer.Why.NO_SUCH_ACCOUNT_PAGE), b.ask(Call.SettingsRefresh(second)))
+
+        // signing this device's own family out is the sign-out here: the page closes and the sign-in shows
+        val third = assertIs<Answer.SettingsOpened>(b.ask(Call.SettingsOpen("a.example#u1"))).settings
+        val thirdPage = b.watching(Watched.Settings(third))
+        thirdPage.until { (it as Update.Settings).shown?.takeIf { s -> s.families != null && !s.working } }
+        val gate = b.watching(Watched.Session)
+        assertEquals(Answer.Done, b.ask(Call.SettingsSignOut(third, "f-here")))
+        assertIs<Gate.SignIn>(gate.until { (it as Update.Session).gate.takeIf { g -> g is Gate.SignIn } })
+        thirdPage.until { (it as Update.Settings).takeIf { u -> u.shown == null } }
+        assertEquals("revoke f-here", played.asked.last())
+        assertEquals(Answer.Refused(Answer.Why.NO_TENANT_OPEN), b.ask(Call.SettingsOpen("a.example#u1")))
+        b.shutdown()
+    }
+
+    @Test
+    fun signOutOnASettingsPageIsThisAccountsSignOutHere() = runBlocking {
+        val played = PlayedAccount()
+        val b = Bridge {
+            val hidden = Hidden({}, emptySet())
+            Composition(
+                SessionModel(Door(), hidden, RecentUses({}, emptyList())), hidden,
+                settings = { session, account -> me.raddatz.veyq.mobile.session.AccountSettings(played, HeldBy(session, account), "p@a.example") { 0L } },
+            ) { _ -> Tenant(shell = null, pot = null, me = "u1", pictures = pictures, loadPictures = {}) }
+        }
+        b.signedIn()
+        val id = assertIs<Answer.SettingsOpened>(b.ask(Call.SettingsOpen("a.example#u1"))).settings
+        val page = b.watching(Watched.Settings(id))
+        page.until { (it as Update.Settings).shown?.takeIf { s -> s.families != null && !s.working } }
+        val gate = b.watching(Watched.Session)
+        assertEquals(Answer.Done, b.ask(Call.SettingsSignOutHere(id)))
+        assertIs<Gate.SignIn>(gate.until { (it as Update.Session).gate.takeIf { g -> g is Gate.SignIn } })
+        page.until { (it as Update.Settings).takeIf { u -> u.shown == null } }
+        // the sign-out here is the session's: no family was revoked by the page itself
+        assertTrue(played.asked.none { it.startsWith("revoke") }, "${played.asked}")
+        b.shutdown()
+    }
+
     /** What the played header's and trash's doors were asked, and how they answer. */
     private inner class Played : me.raddatz.veyq.mobile.navigation.NodeHeaderModel.Door, me.raddatz.veyq.mobile.navigation.TrashSheet.Door {
         var pinned: Boolean? = false

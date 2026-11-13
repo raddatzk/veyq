@@ -154,8 +154,12 @@ class WireTest {
             Call.SessionSignInKit("/home/p/Notfall-Kit.pdf", "familie.example.org"), Call.SessionSignInKitClear, Call.ScanCamera(40, me.raddatz.veyq.mobile.qr.QrScan.Camera.RUNNING),
             Call.ScanCamera(40, me.raddatz.veyq.mobile.qr.QrScan.Camera.NONE), Call.ScanCamera(40, me.raddatz.veyq.mobile.qr.QrScan.Camera.DENIED),
             Call.ScanFrame(40, 1280, 720, 1280), Call.ScanClose(40),
+            Call.SettingsOpen("veyq.localhost#user-1"), Call.SettingsClose(50), Call.SettingsRefresh(50), Call.SettingsRename(50, "Büro-Laptop"),
+            Call.SettingsSignOut(50, "fam-2"), Call.SettingsSignOutOthers(50), Call.SettingsSignOutAndRemoveKey(50, "fam-2"),
+            Call.SettingsRemoveSavedKey(50, "dev-3"), Call.SettingsRemoveOtherSavedKeys(50), Call.SettingsStaySignedIn(50, StaySignedIn.LOGIN),
+            Call.SettingsPasswordTrust(50, "typed"), Call.SettingsStopTrusting(50), Call.SettingsSignOutHere(50),
         ),
-        Watched.serializer() to listOf(Watched.Session, Watched.Shell, Watched.Pot(3), Watched.PotLive(3), Watched.Manage, Watched.Header(7), Watched.Trash(8), Watched.Move(9), Watched.Share(10), Watched.Report(11), Watched.Editor(12), Watched.PotSettings(15), Watched.PotCreate(16), Watched.File(20), Watched.Save(21), Watched.Uploads, Watched.DropBox(30), Watched.Scan(40)),
+        Watched.serializer() to listOf(Watched.Session, Watched.Shell, Watched.Pot(3), Watched.PotLive(3), Watched.Manage, Watched.Header(7), Watched.Trash(8), Watched.Move(9), Watched.Share(10), Watched.Report(11), Watched.Editor(12), Watched.PotSettings(15), Watched.PotCreate(16), Watched.File(20), Watched.Save(21), Watched.Uploads, Watched.DropBox(30), Watched.Scan(40), Watched.Settings(50)),
         HostReply.serializer() to listOf(HostReply.Value("s\tn\t1"), HostReply.Value(null), HostReply.Done, HostReply.Failed("disk full"), HostReply.Pixels(2400, 3394)),
         Answer.serializer() to listOf(
             Answer.Done, Answer.Refused(Answer.Why.NO_TENANT_OPEN), Answer.Refused(Answer.Why.TRUST_CANCELLED), Answer.Failed("IllegalStateException"),
@@ -178,7 +182,7 @@ class WireTest {
             Answer.Refused(Answer.Why.NO_RECEIPT), Answer.Refused(Answer.Why.NOT_WRITTEN),
             Answer.PotSettingsOpened(15), Answer.PotCreateOpened(16), Answer.Stored(true, null), Answer.Stored(false, Notice(Msg.SETTINGS_CURRENCY_FIXED)),
             Answer.Stored(true, Notice(Msg.CREATE_POT_PEOPLE_FAILED)), Answer.Refused(Answer.Why.NO_SUCH_SETTINGS), Answer.Refused(Answer.Why.NO_SUCH_CREATE),
-            Answer.ScanOpened(40), Answer.FrameTaken(true), Answer.FrameTaken(false), Answer.Refused(Answer.Why.NOT_A_FRAME), Answer.Refused(Answer.Why.NO_SUCH_SCAN), Answer.Refused(Answer.Why.NO_KIT),
+            Answer.SettingsOpened(50), Answer.Refused(Answer.Why.NO_SUCH_ACCOUNT_PAGE), Answer.ScanOpened(40), Answer.FrameTaken(true), Answer.FrameTaken(false), Answer.Refused(Answer.Why.NOT_A_FRAME), Answer.Refused(Answer.Why.NO_SUCH_SCAN), Answer.Refused(Answer.Why.NO_KIT),
         ),
         Update.serializer() to listOf(
             Update.Session(Gate.Starting), Update.Session(Gate.NeedsApp), Update.Session(Gate.SignIn(error = Msg.SIGNIN_ERROR_CREDENTIALS, server = "veyq.localhost:8080")),
@@ -339,6 +343,16 @@ class WireTest {
             Update.Scan(40, ScanShown(ScanState.STARTING, null)), Update.Scan(40, ScanShown(ScanState.NO_CAMERA, null)),
             Update.Scan(40, ScanShown(ScanState.DENIED, null)), Update.Scan(40, ScanShown(ScanState.SCANNING, null)),
             Update.Scan(40, ScanShown(ScanState.FOUND, "veyqpair")), Update.Scan(40, ScanShown(ScanState.CLOSED, null)), Update.Scan(41, null),
+            Update.Settings(50, SettingsShown(
+                email = "p@veyq.localhost", emailConfirmed = true, device = "Büro-Laptop", trusted = TrustedDevice.Method.DEVICE_KEY,
+                level = StaySignedIn.LOGIN, levels = listOf(StaySignedIn.PRESENCE, StaySignedIn.LOGIN),
+                families = listOf(SettingsFamily("fam-1", 1_793_527_200_000, 1_794_475_800_000, current = true, label = "Büro-Laptop", removesKey = false),
+                    SettingsFamily("fam-2", null, null, current = false, label = null, removesKey = true)),
+                keptDevices = listOf(SettingsKeptDevice("dev-3", "Old phone")), otherSavedKeys = true, hasOthers = true, addDevice = true,
+                working = false, refusal = Msg.ACCOUNT_SETTINGS_REVOKE_FAILED, registerRefusal = Msg.ACCOUNT_SETTINGS_REGISTER_UNREADABLE,
+            )),
+            Update.Settings(50, SettingsShown("p@veyq.localhost", null, "Fedora 44", null, null, emptyList(), null, emptyList(), false, false, false, true, null, null)),
+            Update.Settings(51, null),
             Update.Manage(null), Update.Manage(listOf(
                 ManagedShown("veyq.localhost#user-1", "veyq.localhost:8080", TrustedDevice.Method.DEVICE_KEY, StaySignedIn.LOGIN, listOf(StaySignedIn.PRESENCE, StaySignedIn.LOGIN), listOf(
                     ManagedShown.Tenant(tenant, hidden = false, current = true, shown = true, switchable = false, subtitle = Piece.Said(Notice(Msg.MANAGE_CURRENT)),

@@ -54,6 +54,7 @@ import me.raddatz.veyq.mobile.navigation.ShellModel
 import me.raddatz.veyq.mobile.navigation.ShellWords
 import me.raddatz.veyq.mobile.navigation.TenantRef
 import me.raddatz.veyq.mobile.navigation.UseKey
+import me.raddatz.veyq.mobile.session.AccountSettings
 import me.raddatz.veyq.mobile.session.DeviceKeys
 import me.raddatz.veyq.mobile.session.DeviceStore
 import me.raddatz.veyq.mobile.session.SessionModel
@@ -88,6 +89,11 @@ internal class Composition<A : Connection, T : Any>(
      * library; a test plays them, or has none.
      */
     val pictures: (path: String) -> me.raddatz.veyq.mobile.account.KitPictures = { NoPictures },
+    /**
+     * An account's Settings page (core's `AccountSettings`) over the session that holds it: `AccountSettings.of` in the
+     * library; a test plays one over a door of its own, or has none (`Settings.Open` is then refused for the connection).
+     */
+    val settings: (session: SessionModel<A, T>, account: A) -> AccountSettings<A, T>? = { _, _ -> null },
     /** The models over a tenant just opened; null where there are none (a test's tenant that is no `TenantSession`). */
     val tenant: (T) -> Tenant?,
 )
@@ -164,6 +170,18 @@ internal class HeldEditor(val pot: Long, val model: EntryEditor, val separator: 
 /** The settings of Pot [pot] the host opened ([Call.PotSettingsOpen]). */
 internal class HeldSettings(val pot: Long, val model: PotSettings)
 
+/**
+ * An account's Settings the host opened ([Call.SettingsOpen]) for the connection [connection]; [open] turns false as it
+ * closes, so a watch standing on it delivers null once.
+ */
+internal class HeldAccount<A : Connection, T : Any>(val model: AccountSettings<A, T>, val connection: String) {
+    val open = MutableStateFlow(true)
+
+    fun close() {
+        open.value = false
+    }
+}
+
 /** "New pot" the host opened ([Call.PotCreateOpen]) and the name it sent last ([Call.PotCreateName]), never echoed. */
 internal class HeldCreate(val sheet: PotCreateSheet) {
     val name = MutableStateFlow("")
@@ -236,6 +254,9 @@ internal class Bridge<A : Connection, T : Any>(compose: () -> Composition<A, T>)
     private val editors = Registry<HeldEditor>()
     private val settings = Registry<HeldSettings>()
     private val creates = Registry<HeldCreate>()
+
+    /** The accounts' Settings pages the host opened ([Call.SettingsOpen]): closed with the tenant. */
+    private val accountPages = Registry<HeldAccount<A, T>>()
     private val filePages = Registry<me.raddatz.veyq.mobile.depot.FileModel>()
     /** Each reader a file's page opened ([Call.FileReader]), by the reader's id: the page's id, so it closes with it. */
     private val pageReaders = Registry<Long>()
@@ -373,6 +394,33 @@ internal class Bridge<A : Connection, T : Any>(compose: () -> Composition<A, T>)
                 val out = session.signOut(account)
                 if (out.wasCurrent) closeTenant()
                 opened(out.next).also { managed(parts) }
+            }
+            is Call.SettingsOpen -> {
+                if (tenant.value == null) return noTenant
+                val account = session.accounts.firstOrNull { it.key == call.connection } ?: return Answer.Refused(Answer.Why.NO_SUCH_CONNECTION)
+                val model = parts.settings(session, account) ?: return Answer.Refused(Answer.Why.NO_SUCH_CONNECTION)
+                val id = ids.incrementAndFetch()
+                accountPages.put(id, HeldAccount(model, account.key))
+                scope.launch { model.refresh() }
+                Answer.SettingsOpened(id)
+            }
+            is Call.SettingsClose -> accountPages.remove(call.settings)?.close().done(Answer.Why.NO_SUCH_ACCOUNT_PAGE)
+            is Call.SettingsRefresh -> onPage(call.settings) { it.refresh() }
+            is Call.SettingsRename -> onPage(call.settings) { it.rename(call.label) }
+            is Call.SettingsSignOut -> {
+                val held = accountPages[call.settings] ?: return noPage
+                held.model.signOut(call.family)?.let { out -> signedOutHere(parts, call.settings, out) } ?: Answer.Done
+            }
+            is Call.SettingsSignOutOthers -> onPage(call.settings) { it.signOutOthers() }
+            is Call.SettingsSignOutAndRemoveKey -> onPage(call.settings) { it.signOutAndRemoveKey(call.family) }
+            is Call.SettingsRemoveSavedKey -> onPage(call.settings) { it.removeSavedKey(call.device) }
+            is Call.SettingsRemoveOtherSavedKeys -> onPage(call.settings) { it.removeEveryOtherSavedKey() }
+            is Call.SettingsStaySignedIn -> accountPages[call.settings]?.model?.stay(call.level)?.answer()?.also { managed(parts) } ?: noPage
+            is Call.SettingsPasswordTrust -> accountPages[call.settings]?.model?.trustWithPassword(call.password)?.answer()?.also { managed(parts) } ?: noPage
+            is Call.SettingsStopTrusting -> onPage(call.settings) { it.stopTrusting() }.also { managed(parts) }
+            is Call.SettingsSignOutHere -> {
+                val held = accountPages[call.settings] ?: return noPage
+                signedOutHere(parts, call.settings, held.model.signOutHere())
             }
             is Call.ShellChoose -> shell?.choose(call.application).done()
             is Call.ShellSwitchSpace -> shell?.switchSpace(call.scopeId).done()
@@ -759,6 +807,24 @@ internal class Bridge<A : Connection, T : Any>(compose: () -> Composition<A, T>)
     private val noDropBox = Answer.Refused(Answer.Why.NO_SUCH_DROPBOX)
     private val noFolder = Answer.Refused(Answer.Why.NO_SUCH_FOLDER)
     private val noScan = Answer.Refused(Answer.Why.NO_SUCH_SCAN)
+    private val noPage = Answer.Refused(Answer.Why.NO_SUCH_ACCOUNT_PAGE)
+
+    /** [act] on the Settings page [id], answered once it ended. */
+    private suspend fun onPage(id: Long, act: suspend (AccountSettings<A, T>) -> Unit): Answer {
+        val held = accountPages[id] ?: return noPage
+        act(held.model)
+        return Answer.Done
+    }
+
+    /**
+     * The account of Settings page [id] signed out on this device ([out], `SessionModel.signOut`): the page closes, and
+     * the way in follows as `Session.SignOut`'s does.
+     */
+    private suspend fun signedOutHere(parts: Composition<A, T>, id: Long, out: SessionModel.SignedOut<A, T>): Answer {
+        accountPages.remove(id)?.close()
+        if (out.wasCurrent) closeTenant()
+        return opened(out.next).also { managed(parts) }
+    }
 
     /** A settings change on [id]'s model, answered once its write ended with whether it was stored and why not. */
     private suspend fun stored(id: Long, change: suspend (PotSettings) -> Boolean): Answer {
@@ -849,6 +915,7 @@ internal class Bridge<A : Connection, T : Any>(compose: () -> Composition<A, T>)
         shares.removeAll()
         dropBoxes.removeAll().forEach { it.page.close() }
         reports.removeAll()
+        accountPages.removeAll().forEach { it.close() }
     }
 
     /**
@@ -909,6 +976,9 @@ internal class Bridge<A : Connection, T : Any>(compose: () -> Composition<A, T>)
             ?: flowOf(Update.DropBox(w.box, null))
         is Watched.Scan -> scans[w.scan]?.let { s -> s.state.map { Update.Scan(w.scan, shownScan(it)) } }
             ?: flowOf(Update.Scan(w.scan, null))
+        is Watched.Settings -> accountPages[w.settings]?.let { held ->
+            combine(held.model.state, held.open) { s, open -> Update.Settings(w.settings, if (open) shownAccount(s) else null) }
+        } ?: flowOf(Update.Settings(w.settings, null))
         Watched.Uploads -> uploads.flatMapLatest { u -> u?.state?.map { Update.Uploads(shownUploads(it)) } ?: flowOf(Update.Uploads(null)) }
         is Watched.Pot -> {
             val pictures = tenant.value?.models?.pictures ?: flowOf(emptyMap())
@@ -987,6 +1057,24 @@ internal class Bridge<A : Connection, T : Any>(compose: () -> Composition<A, T>)
             canAddReceipt = s.canAddReceipt, refusedPick = s.refusedPick,
         )
     }
+
+    /** An account's Settings as the host draws them ([SettingsShown]), each field the core's state. */
+    private fun shownAccount(s: AccountSettings.State) = SettingsShown(
+        email = s.email,
+        emailConfirmed = s.emailConfirmed,
+        device = s.device.label,
+        trusted = s.device.trust.method,
+        level = s.device.trust.level,
+        levels = s.device.trust.levels,
+        families = s.families?.map { SettingsFamily(it.id, it.createdAt, it.lastUsedAt, it.current, it.label, it.removesKey) },
+        keptDevices = s.savedKeyDevices.map { SettingsKeptDevice(it.deviceId, it.label) },
+        otherSavedKeys = s.otherSavedKeys,
+        hasOthers = s.hasOthers,
+        addDevice = s.addDevice,
+        working = s.working,
+        refusal = s.refusal,
+        registerRefusal = s.registerRefusal,
+    )
 
     /** A Pot's settings as the host draws them ([PotSettingsShown]), each field one core function's answer. */
     private fun shownSettings(s: PotSettings.State, view: me.raddatz.veyq.mobile.expenses.PotView, saving: Boolean) = PotSettingsShown(
@@ -1182,7 +1270,10 @@ internal class Bridge<A : Connection, T : Any>(compose: () -> Composition<A, T>)
                 initial = store.read(HIDDEN)?.lines()?.filter { it.isNotEmpty() }?.toSet().orEmpty(),
             )
             val device = ThisDevice(store, keys(store), config.device, primitives)
-            Composition(SessionModel.accounts(primitives, device, client, hidden, recent), hidden, files, pictures = pictures) { t ->
+            Composition(
+                SessionModel.accounts(primitives, device, client, hidden, recent), hidden, files, pictures = pictures,
+                settings = { session, account -> AccountSettings.of(session, account) },
+            ) { t ->
                 Tenant(ShellModel(t, hidden, recent, now), { PotModel(t, now) }, t.account.userId, t.pictures.state, t.pictures::load)
             }
         }

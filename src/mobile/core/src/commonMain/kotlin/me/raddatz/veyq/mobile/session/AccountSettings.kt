@@ -44,37 +44,41 @@ import me.raddatz.veyq.mobile.words.MsgKey
  * The page is reached from the drawer of an unlocked account; a locked device's "sign every device out" (E3) is the
  * sign-in screen's. A UI observes [state] (or [watch]), calls [refresh] when it opens, and draws; it holds no rule.
  */
-class AccountSettings<A : Connection, T : Any> internal constructor(
+class AccountSettings<A : Connection, T : Any>(
     private val door: Door,
     private val here: Here<A, T>,
     /** The account's own address, shown until the server's copy read. */
     email: String,
     private val now: () -> Long,
 ) {
-    /** The account's server calls and this device's part in them, behind one seam so a test can play the server. */
-    internal interface Door {
+    /**
+     * The account's server calls and this device's part in them, behind one seam so a test can play the server — the
+     * bridge's tests too, which is why it is public; the device register stays the core's ([register]: a door without one
+     * shows no names and renames nothing, as a register that does not open).
+     */
+    abstract class Door {
         /** This device's id in the register ([ThisDevice.id]) and the label it names itself with until renamed. */
-        val deviceId: String
-        val fallbackLabel: String
+        abstract val deviceId: String
+        abstract val fallbackLabel: String
 
         /** The wrap this device's own trust record holds, if any: the one "every other saved key" leaves. */
-        fun myWrapId(): String?
-        suspend fun email(): Pair<String, Boolean>
-        suspend fun families(): List<SessionFamily>
-        suspend fun revoke(family: String)
-        suspend fun revokeOthers()
+        abstract fun myWrapId(): String?
+        abstract suspend fun email(): Pair<String, Boolean>
+        abstract suspend fun families(): List<SessionFamily>
+        abstract suspend fun revoke(family: String)
+        abstract suspend fun revokeOthers()
 
         /** Every device wrap (DEVICE, DEVICE_KEY) the server serves the account; throws when it could not be read. */
-        suspend fun savedKeys(): List<String>
-        suspend fun removeSavedKey(wrap: String)
+        abstract suspend fun savedKeys(): List<String>
+        abstract suspend fun removeSavedKey(wrap: String)
 
         /** The instance's active capabilities (`GET /api/setup`'s manifest). */
-        suspend fun capabilities(): Set<String>
-        fun register(): DeviceRegisterStore
+        abstract suspend fun capabilities(): Set<String>
+        internal open fun register(): DeviceRegisterStore = throw UnsupportedOperationException("this door keeps no device register")
     }
 
     /** This device's trust in the account and its sign-out, as [SessionModel] holds them ("Manage servers"' source). */
-    internal interface Here<A : Connection, T : Any> {
+    interface Here<A : Connection, T : Any> {
         fun trust(): Trust
         suspend fun stay(level: StaySignedIn): TrustChange
         suspend fun trustWithPassword(password: String): TrustChange
@@ -335,7 +339,7 @@ class AccountSettings<A : Connection, T : Any> internal constructor(
     }
 
     /** [Door] over a signed-in [VeyqAccount]: the generated client's calls, each refreshed once on a `401`. */
-    internal class Over(private val account: VeyqAccount) : Door {
+    internal class Over(private val account: VeyqAccount) : Door() {
         override val deviceId: String get() = account.thisDevice.id
         override val fallbackLabel: String get() = account.thisDevice.label
         override fun myWrapId(): String? = account.trusted?.wrapId

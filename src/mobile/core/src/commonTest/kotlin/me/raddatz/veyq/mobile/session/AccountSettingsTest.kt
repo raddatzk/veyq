@@ -49,7 +49,7 @@ class AccountSettingsTest {
         }
     }
 
-    private inner class Server : AccountSettings.Door {
+    private inner class Server : AccountSettings.Door() {
         val register = Register()
         val families = mutableListOf<SessionFamily>()
         val wraps = mutableListOf<String>()
