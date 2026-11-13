@@ -714,6 +714,15 @@ internal sealed class Call {
     @Serializable @SerialName("Gallery.ChapterCover") data class GalleryChapterCover(val gallery: Long, val nodeId: String) : Call()
 
     /**
+     * Gallery [gallery]'s rows laid out as the justified grid [width] wide (core's `GalleryModel.layout`, the CR's D14: the
+     * web's `MediaGrid.vue`; in the host's own unit, a GTK or WinUI view's logical pixels), seen from [top] down [viewHeight]:
+     * [Answer.GridLayout] — the rows a view mounts there (`MediaGridLayout.Layout.window`: the view's and one view each way,
+     * ADR 0105), each with its place and its tiles' frames by medium id, and the grid's whole height. Asked anew when the
+     * width, the rows or the scroll change; the host places what it is given and lays out nothing itself.
+     */
+    @Serializable @SerialName("Gallery.Layout") data class GalleryLayout(val gallery: Long, val width: Double, val top: Double, val viewHeight: Double) : Call()
+
+    /**
      * Medium [mediaId] deleted the way the rights say (`GalleryModel.trash`): a member's to the trash, out of the rows at
      * once — [Answer.Trashed] with what it says and whether its Undo is offered now ([GalleryShown.undo] says when the offer
      * ended: the window is the core's) —; a guest's own one asked first ([GalleryShown.purging]; [Answer.Said] with none).
@@ -933,6 +942,12 @@ internal sealed class Answer {
 
     /** A lightbox opened ([Call.LightboxOpen]): its id, for [Watched.Lightbox] and its calls. */
     @Serializable @SerialName("LightboxOpened") data class LightboxOpened(val lightbox: Long) : Answer()
+
+    /**
+     * A gallery laid out ([Call.GalleryLayout]): the [rows] of the view's window, top to bottom, the grid's whole [height]
+     * (the scroll's extent) and how many rows it has in all ([count]), in the unit the host asked in.
+     */
+    @Serializable @SerialName("GridLayout") data class GridLayout(val rows: List<GridRow>, val height: Double, val count: Int) : Answer()
 
     /** A Memory or a chapter made ([Call.ShellCreateMemory], [Call.GalleryCreateChapter]): the node to open, or why not. */
     @Serializable @SerialName("Created") data class Created(val node: NodeAt?, val notice: Notice?) : Answer()
@@ -1190,6 +1205,19 @@ internal class LightboxShown(
     val downloadName: String?,
     val canTrash: Boolean,
 )
+
+/**
+ * One row of a gallery's justified grid ([Answer.GridLayout], `MediaGridLayout.Row`): its [index] among all rows, its [top]
+ * from the grid's origin, its [height], and its [tiles] left to right.
+ */
+@Serializable
+@SerialName("GridRow")
+internal class GridRow(val index: Int, val top: Double, val height: Double, val tiles: List<GridTile>)
+
+/** One tile of a [GridRow]: medium [mediaId]'s frame, [left] from the row's start and [width] wide (the row's height). */
+@Serializable
+@SerialName("GridTile")
+internal class GridTile(val mediaId: String, val left: Double, val width: Double)
 
 /** Where a lightbox's slideshow stands (`Lightbox.Slideshow`; its own name: the generated hosts take a type's last name part). */
 @Serializable

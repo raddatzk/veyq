@@ -827,6 +827,11 @@ internal class Bridge<A : Connection, T : Any>(compose: () -> Composition<A, T>)
                 payload(bytes)
                 Answer.Bytes(Sniff.image(bytes)?.mime)
             } ?: noGallery
+            is Call.GalleryLayout -> galleries[call.gallery]?.let { g ->
+                val laid = me.raddatz.veyq.mobile.memories.GalleryModel.layout(g.state.value.rows.orEmpty(), call.width)
+                val shown = laid.window(call.top, call.viewHeight).map { laid.rows[it] }
+                Answer.GridLayout(shown.map { r -> GridRow(r.index, r.top, r.height, r.tiles.map { GridTile(it.id, it.left, it.width) }) }, laid.height, laid.rows.size)
+            } ?: noGallery
             is Call.GalleryTrash -> galleries[call.gallery]?.let { g -> trashed(g, g.trash(call.mediaId)) } ?: noGallery
             is Call.GalleryUndo -> galleries[call.gallery]?.let { Answer.Said(it.undo()) } ?: noGallery
             is Call.GalleryPurge -> galleries[call.gallery]?.let { Answer.Said(it.purge()) } ?: noGallery
