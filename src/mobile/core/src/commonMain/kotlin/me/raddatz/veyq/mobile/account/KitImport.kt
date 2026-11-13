@@ -25,7 +25,8 @@ interface KitPictures {
 /**
  * An Emergency Kit read from a file the person picked (en.account.key-model § The Emergency Kit, the apps' order): (a)
  * the token in the file's bytes; (b) the `Keywords` of a PDF's document information ([KitPdf]); (c) the QR on its first
- * [PDF_PAGES] pages drawn [PICTURE_PIXELS] wide — an image file straight to its QR; (d) only where the token found has no
+ * [PDF_PAGES] pages drawn [PICTURE_PIXELS] wide, a page that reads nothing again [FALLBACK_PIXELS] wide — an image file
+ * straight to its QR, at the same two sizes; (d) only where the token found has no
  * server, a PDF's first address field read as a typed server. One function for every app: the phones play [KitPictures]
  * in their process, the desktops through the bridge's host requests.
  */
@@ -35,6 +36,15 @@ object KitImport {
 
     /** The web's `KIT_PICTURE_PIXELS`: a page drawn this wide, an image this long on its longer side. */
     const val PICTURE_PIXELS = 2400
+
+    /**
+     * Where [PICTURE_PIXELS] reads nothing, the page or picture is drawn once more this wide. Measured on the
+     * photographed fixture (`kit-photo.pdf`, its photo 1512 px wide), page 1 decoded by this decoder on macosArm64:
+     * PDFKit's drawing (8-bit grey, or sRGB taken to luminance) reads at every width tried from 1600 to 3600 but
+     * exactly 2400, and not at 1000-1400; PDFBox's reads at 2400 and not at 1200 (`KitFixtureTest`). The resampling
+     * at one width decides, so the order tries a second width rather than one renderer's.
+     */
+    const val FALLBACK_PIXELS = 2000
 
     /** The web's `KIT_PDF_PAGES`: a photographed or scanned kit may have a cover sheet. */
     const val PDF_PAGES = 3
@@ -74,14 +84,18 @@ object KitImport {
     }
 
     private suspend fun fromPictures(p: Primitives, isPdf: Boolean, pictures: KitPictures): Kit? {
-        if (!isPdf) return pictures.picture(PICTURE_PIXELS)?.let { decoded(p, it) }
+        if (!isPdf) {
+            for (size in WIDTHS) pictures.picture(size)?.let { decoded(p, it) }?.let { return it }
+            return null
+        }
         val pages = pictures.pdfPages() ?: return null
         for (page in 1..minOf(pages, PDF_PAGES)) {
-            val drawn = pictures.pdfPage(page, PICTURE_PIXELS) ?: continue
-            decoded(p, drawn)?.let { return it }
+            for (width in WIDTHS) pictures.pdfPage(page, width)?.let { decoded(p, it) }?.let { return it }
         }
         return null
     }
+
+    private val WIDTHS = intArrayOf(PICTURE_PIXELS, FALLBACK_PIXELS)
 
     private fun decoded(p: Primitives, frame: QrFrame): Kit? = try {
         QrDecoder.decode(frame, tryHarder = true)?.let { EmergencyKit.read(p, it) }
