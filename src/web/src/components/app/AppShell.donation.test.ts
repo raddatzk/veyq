@@ -25,6 +25,7 @@ import { setTokens, clearTokens } from '../../app/session'
 import { setUnlocked, clearVault } from '../../app/vault'
 import { getMyProfile } from '../../features/account/profile/profile'
 import { forgetDonationDismissalForTest } from '../../core/project/donationDismissal'
+import { unconfirmedAddress } from '../../features/account/email/unconfirmedAddress'
 import { memberProfile } from '../../test/models'
 import { realI18n } from '../../test/i18n'
 
@@ -52,6 +53,7 @@ async function mountAt(path: string) {
 beforeEach(() => {
   localStorage.clear()
   forgetDonationDismissalForTest()
+  unconfirmedAddress.value = null // the (mocked) banner's answer: a confirmed address, so the donation banner may show
   clearActiveSpace()
   setTokens('access', null)
   setUnlocked(new Uint8Array(32), { kemSeed: new Uint8Array(32), sign: new Uint8Array(32) }, 'device')

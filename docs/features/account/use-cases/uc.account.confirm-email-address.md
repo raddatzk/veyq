@@ -86,7 +86,9 @@ Two other events set the same record without this flow:
 - **Loud, not dismissable** ([ADR 0129](../../../decisions/0129-a-member-invite-is-mailed-or-handed-over-as-a-link.md) decision 5). The banner names the address, sends the confirmation mail
   and has no close; it reads the same state the security settings do, again whenever the tab comes back into view,
   so a confirmation opened in another tab clears it. A share page, the join page and the sign-in page
-  draw none.
+  draw none. While it stands, and until its read has answered, the shell's other notices — the donation banner and the
+  finish-your-profile prompt — wait (owner 2026-11-13): one notice at a time, and that one asks to act. The shell holds
+  the banner's answer as its one copy; nothing asks for the address a second time.
 - **Bound to the address.** The token row records the address it was mailed to, and the confirmation stamps only
   that address. An address change ([uc.account.change-email](uc.account.change-email.md)) stamps the new address
   in the same write, because its link proved it.

@@ -87,6 +87,14 @@ acceptanceCriteria:
         unit:
           - src/features/account/email/UnconfirmedEmailBanner.test.ts
           - src/components/app/AppShell.unconfirmedEmail.test.ts
+  - id: other-notices-wait
+    # Owner 2026-11-13: a newcomer who joined by link met three notices stacked.
+    text: While the banner stands, and until its read has answered, the signed-in app shows neither the donation banner nor the finish-your-profile prompt; both appear once the address is confirmed (also when a confirmation is seen as the tab comes back) or cannot be read. The banner's read is the only one; an unmounted banner or another account signed in leaves the answer unknown until it is read again.
+    coverage:
+      web:
+        unit:
+          - src/components/app/AppShell.unconfirmedEmail.test.ts
+          - src/features/account/email/UnconfirmedEmailBanner.test.ts
 gaps:
   stack: >-
     Lane L1's browser suite (`tests/e2e/tests/features/account/member-invite-link.spec.ts`) drives

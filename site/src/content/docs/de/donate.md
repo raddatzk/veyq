@@ -39,6 +39,6 @@ Der Link führt zu GitHub. veyq verrät GitHub nichts über dich, und diese Seit
 ## Der Hinweis in veyq
 
 Wenn du veyq zum ersten Mal öffnest — angemeldet oder über einen geteilten Link —, fragt eine Zeile oben, ob du es
-unterstützen möchtest, mit einem Link **Spenden**. Schließt du sie mit **×**, kommt sie nicht wieder: in diesem Browser
+unterstützen möchtest, mit einem Link **Spenden** (muss deine E-Mail-Adresse noch bestätigt werden, wartet sie, bis du das getan hast). Schließt du sie mit **×**, kommt sie nicht wieder: in diesem Browser
 und, sobald du angemeldet bist, für dein Konto auf jedem Gerät. Beim Anmelden stört sie nie. Die Fußzeile jeder Seite
 behält einen Link **Spenden**, neben **Wieso ist veyq sicher?**

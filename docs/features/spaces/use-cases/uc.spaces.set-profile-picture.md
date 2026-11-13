@@ -37,7 +37,9 @@
   and sends `sealedAvatar` with the accept request (stored with `avatarRevision` 1).
 - **A3 — skipped at join:** both are optional; once the device holds the tenant key and neither a name nor a picture
   is set, a one-time "finish your profile" notice (and Settings) offers them, until "Not now" or its link dismisses it
-  for that user on that browser (a flag, never an image). Nothing unsealed is cached meanwhile.
+  for that user on that browser (a flag, never an image). Nothing unsealed is cached meanwhile. While the account's
+  address is unconfirmed the notice waits ([uc.account.confirm-email-address](../../account/use-cases/uc.account.confirm-email-address.md)),
+  and shows once it is confirmed.
 - **A5 — the tenant rotated since the picture was saved:** the rotation re-wrapped the picture's own value key under the
   tenant's new key and left the picture byte-identical, so it opens for every member holding that key, as the name does
   ([uc.spaces.edit-profile](uc.spaces.edit-profile.md) A2).
