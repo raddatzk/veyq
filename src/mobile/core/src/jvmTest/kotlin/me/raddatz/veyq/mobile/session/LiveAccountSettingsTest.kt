@@ -5,6 +5,7 @@ import io.ktor.client.engine.okhttp.OkHttp
 import kotlinx.coroutines.test.runTest
 import me.raddatz.veyq.mobile.crypto.BouncyCastlePrimitives
 import me.raddatz.veyq.mobile.words.Msg
+import org.junit.Assume.assumeTrue
 import java.io.File
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -24,79 +25,90 @@ import kotlin.time.Duration.Companion.minutes
  *
  * "Sign out every other" ends every family of an account, so it runs only against a throwaway account the dev seeding
  * made: `VEYQ_LIVE_OTHERS_ENV=<an env file>` with its `VEYQ_EMAIL`, `VEYQ_PASSWORD`, `VEYQ_SECRET_KEY` — never the
- * principal. Without `VEYQ_LIVE` both skip.
+ * principal. Without `VEYQ_LIVE` both report as skipped (an assumption), never as passed.
  */
 class LiveAccountSettingsTest {
     private val p = BouncyCastlePrimitives
     private val client = { block: io.ktor.client.HttpClientConfig<*>.() -> Unit -> HttpClient(OkHttp, block) }
 
     @Test
-    fun aSecondLoginIsListedRenamedSignedOutAndGone() = runTest(timeout = 3.minutes) {
-        val origin = System.getenv("VEYQ_LIVE") ?: return@runTest
-        // `.run/.env` of this checkout, or VEYQ_ENV_FILE's (a worktree has none)
-        val env = env(System.getenv("VEYQ_ENV_FILE")?.let(::File) ?: File(System.getProperty("veyq.repoRoot"), ".run/.env"))
-        val (control, controlPage) = signIn(origin, env)
-        val (second, secondPage) = signIn(origin, env)
-        try {
-            secondPage.refresh()
-            val mine = assertNotNull(secondPage.current.device.familyId, "the server marked no family current")
-            assertEquals(mine, secondPage.current.families!!.first().id)
-            assertTrue(secondPage.current.families!!.first().current)
-            assertEquals(env.getValue("VEYQ_EMAIL").trim().lowercase(), secondPage.current.email.lowercase())
-            assertNotNull(secondPage.current.emailConfirmed)
+    fun aSecondLoginIsListedRenamedSignedOutAndGone() {
+        val origin = needs("VEYQ_LIVE")
+        runTest(timeout = 3.minutes) {
+            // `.run/.env` of this checkout, or VEYQ_ENV_FILE's (a worktree has none)
+            val env = env(System.getenv("VEYQ_ENV_FILE")?.let(::File) ?: File(System.getProperty("veyq.repoRoot"), ".run/.env"))
+            val (control, controlPage) = signIn(origin, env)
+            val (second, secondPage) = signIn(origin, env)
+            try {
+                secondPage.refresh()
+                val mine = assertNotNull(secondPage.current.device.familyId, "the server marked no family current")
+                assertEquals(mine, secondPage.current.families!!.first().id)
+                assertTrue(secondPage.current.families!!.first().current)
+                assertEquals(env.getValue("VEYQ_EMAIL").trim().lowercase(), secondPage.current.email.lowercase())
+                assertNotNull(secondPage.current.emailConfirmed)
 
-            val name = "App settings live ${System.currentTimeMillis()}"
-            secondPage.rename(name)
-            assertNull(secondPage.current.refusal)
-            assertEquals(name, secondPage.current.device.label)
+                val name = "App settings live ${System.currentTimeMillis()}"
+                secondPage.rename(name)
+                assertNull(secondPage.current.refusal)
+                assertEquals(name, secondPage.current.device.label)
 
-            controlPage.refresh()
-            val listed = assertNotNull(controlPage.current.families!!.firstOrNull { it.id == mine }, "the second login is not listed")
-            assertFalse(listed.current)
-            assertEquals(name, listed.label, "the rename did not reach the other device through the register")
+                controlPage.refresh()
+                val listed = assertNotNull(controlPage.current.families!!.firstOrNull { it.id == mine }, "the second login is not listed")
+                assertFalse(listed.current)
+                assertEquals(name, listed.label, "the rename did not reach the other device through the register")
 
-            assertNull(controlPage.signOut(mine), "signing another family out signed this one out")
-            assertNull(controlPage.current.families!!.firstOrNull { it.id == mine }, "the signed-out family is still listed")
+                assertNull(controlPage.signOut(mine), "signing another family out signed this one out")
+                assertNull(controlPage.current.families!!.firstOrNull { it.id == mine }, "the signed-out family is still listed")
 
-            // the control: this device's own family still answers
-            controlPage.refresh()
-            assertNull(controlPage.current.refusal, "the control's own session no longer reads")
-            assertTrue(controlPage.current.families!!.first().current)
+                // the control: this device's own family still answers
+                controlPage.refresh()
+                assertNull(controlPage.current.refusal, "the control's own session no longer reads")
+                assertTrue(controlPage.current.families!!.first().current)
 
-            secondPage.refresh()
-            assertEquals(Msg.ACCOUNT_SETTINGS_LOAD_FAILED, secondPage.current.refusal, "the signed-out session still reads")
-        } finally {
-            second.http.close()
-            control.signOut()
+                secondPage.refresh()
+                assertEquals(Msg.ACCOUNT_SETTINGS_LOAD_FAILED, secondPage.current.refusal, "the signed-out session still reads")
+            } finally {
+                second.http.close()
+                control.signOut()
+            }
         }
     }
 
     @Test
-    fun signingOutEveryOtherEndsTheSecondAndKeepsThisOne() = runTest(timeout = 3.minutes) {
-        val origin = System.getenv("VEYQ_LIVE") ?: return@runTest
-        val file = System.getenv("VEYQ_LIVE_OTHERS_ENV") ?: return@runTest
-        val env = env(File(file))
-        val (control, controlPage) = signIn(origin, env)
-        val (second, secondPage) = signIn(origin, env)
-        try {
-            secondPage.refresh()
-            val theirs = assertNotNull(secondPage.current.device.familyId)
-            controlPage.refresh()
-            assertTrue(controlPage.current.families!!.any { it.id == theirs })
+    fun signingOutEveryOtherEndsTheSecondAndKeepsThisOne() {
+        val origin = needs("VEYQ_LIVE")
+        val file = needs("VEYQ_LIVE_OTHERS_ENV")
+        runTest(timeout = 3.minutes) {
+            val env = env(File(file))
+            val (control, controlPage) = signIn(origin, env)
+            val (second, secondPage) = signIn(origin, env)
+            try {
+                secondPage.refresh()
+                val theirs = assertNotNull(secondPage.current.device.familyId)
+                controlPage.refresh()
+                assertTrue(controlPage.current.families!!.any { it.id == theirs })
 
-            controlPage.signOutOthers()
-            assertNull(controlPage.current.refusal)
-            // the control: this device's own family is all that is left, and it still reads
-            controlPage.refresh()
-            assertNull(controlPage.current.refusal, "signing out every other ended this device's own session")
-            assertEquals(listOf(true), controlPage.current.families!!.map { it.current })
+                controlPage.signOutOthers()
+                assertNull(controlPage.current.refusal)
+                // the control: this device's own family is all that is left, and it still reads
+                controlPage.refresh()
+                assertNull(controlPage.current.refusal, "signing out every other ended this device's own session")
+                assertEquals(listOf(true), controlPage.current.families!!.map { it.current })
 
-            secondPage.refresh()
-            assertEquals(Msg.ACCOUNT_SETTINGS_LOAD_FAILED, secondPage.current.refusal, "the other session still reads")
-        } finally {
-            second.http.close()
-            control.signOut()
+                secondPage.refresh()
+                assertEquals(Msg.ACCOUNT_SETTINGS_LOAD_FAILED, secondPage.current.refusal, "the other session still reads")
+            } finally {
+                second.http.close()
+                control.signOut()
+            }
         }
+    }
+
+    /** The environment variable [name]; where it is not set the case is skipped (an assumption: reported as skipped, never passed). */
+    private fun needs(name: String): String {
+        val value = System.getenv(name)
+        assumeTrue("$name is not set: a live case", value != null)
+        return value!!
     }
 
     /** One login of the account in [env] on a fresh device, with its Settings page. */

@@ -138,7 +138,9 @@ Apple as a pushed view (iOS) and a Settings scene-style window (macOS `Settings 
   `theEscalationRevokesFirst…`, `aFailedRevokeIsSaid…`, `aHalfDoneEscalation…` red; `others` without this device's wrap
   excluded → `everyOtherSavedKey…` red; the reconcile's family prune unfrozen → `aReconcileRetriedAfterAConflict…` red;
   `addDevice` on any capability → `addADeviceIsOffered…` red; the register's label join removed → `theListIs…` and
-  `aRenameIs…` red. `LiveAccountSettingsTest` compiles and skips without `VEYQ_LIVE`. **Pending, live:**
+  `aRenameIs…` red. `LiveAccountSettingsTest` compiles and **reports as skipped** without `VEYQ_LIVE` (and its "every other" case without
+  `VEYQ_LIVE_OTHERS_ENV`): a JUnit `Assume` before `runTest` (`needs(name)`), not an early return, which had shown both
+  cases as passed (fixed 2026-11-13 by `cr-app-kit-sign-in` phase 4; the test XML: `tests="2" skipped="2"`). **Pending, live:**
   `VEYQ_LIVE=http://veyq.localhost:8080 ./gradlew :core:jvmTest --tests '*LiveAccountSettingsTest*'` (from `src/mobile`;
   `VEYQ_ENV_FILE=<main checkout>/.run/.env` from a worktree), and the "every other" case against a throwaway account the
   dev seeding made: `VEYQ_LIVE_OTHERS_ENV=<its env file>` added — never the principal; then the live bite (`signOutOthers`

@@ -582,6 +582,37 @@ class VeyqAccount private constructor(
             secretKey: String,
             device: ThisDevice,
             client: (block: io.ktor.client.HttpClientConfig<*>.() -> Unit) -> HttpClient,
+        ): VeyqAccount = signIn(primitives, server, email, password, device, client) {
+            SecretKeyText.read(primitives, secretKey) ?: throw SignInFailure(SignInFailure.Reason.SECRET_KEY)
+        }
+
+        /**
+         * [signIn] with the Secret Key's 32 bytes, as an Emergency Kit carries them (`SessionModel`'s held kit): the
+         * same sign-in, [secretKey] this call's — zeroed once the key-encryption key is derived, or when it fails.
+         */
+        suspend fun signInWithKey(
+            primitives: Primitives,
+            server: String,
+            email: String,
+            password: String,
+            secretKey: ByteArray,
+            device: ThisDevice,
+            client: (block: io.ktor.client.HttpClientConfig<*>.() -> Unit) -> HttpClient,
+        ): VeyqAccount = try {
+            signIn(primitives, server, email, password, device, client) { secretKey }
+        } finally {
+            secretKey.fill(0)
+        }
+
+        /** The sign-in itself: [secretKey] asked for once the password wrap is read, after the login, and zeroed after use. */
+        private suspend fun signIn(
+            primitives: Primitives,
+            server: String,
+            email: String,
+            password: String,
+            device: ThisDevice,
+            client: (block: io.ktor.client.HttpClientConfig<*>.() -> Unit) -> HttpClient,
+            secretKey: () -> ByteArray,
         ): VeyqAccount {
             val c = connect(primitives, server, client)
             return guarded(c) {
@@ -589,7 +620,7 @@ class VeyqAccount private constructor(
                 val material = keyMaterial(c)
                 val wrap = material.wraps.firstOrNull { it.method == MasterKeyWrap.Method.PASSWORD }
                     ?: throw SignInFailure(SignInFailure.Reason.PROTOCOL, "no password wrap")
-                val sk = SecretKeyText.read(primitives, secretKey) ?: throw SignInFailure(SignInFailure.Reason.SECRET_KEY)
+                val sk = secretKey()
                 val (params, salt) = c.suite.decodeKdfParams(unb64(wrap.kdfParams ?: throw SignInFailure(SignInFailure.Reason.PROTOCOL, "no kdfParams")))
                 val kek = c.suite.kekPasswordSecret(sk, password, salt, params)
                 sk.fill(0)

@@ -45,6 +45,8 @@ object KitImport {
     private val PDF = "%PDF-".encodeToByteArray()
     private val PREFIX = "veyqkit:".encodeToByteArray()
 
+    /** Serializable: the sign-in's state says it (`SessionModel.KitShown`), which the bridge sends as it is. */
+    @kotlinx.serialization.Serializable
     enum class ServerFrom { TOKEN, FIELD, NONE }
 
     /** The kit read, and where its server came from: the token, the first address field, or nowhere. */
