@@ -28,6 +28,8 @@ public sealed partial class MainWindow : Window
         // the title bar's and the taskbar's icon: the exe's own (ApplicationIcon) is not the window's in WinUI 3
         AppWindow.SetIcon(Path.Combine(AppContext.BaseDirectory, "veyq.ico"));
         Root.RequestedTheme = DebugEnv.Theme;
+        // a screen that can show a secret keeps this window out of capture while it shows (ScreenSecrets)
+        ScreenSecrets.Attach(this);
         Heading.Text = Words.AppName();
         Status.Text = Words.Starting();
     }

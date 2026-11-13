@@ -193,7 +193,7 @@ internal sealed class ManageDialog
     {
         var panel = new StackPanel { Spacing = 8, Margin = new Thickness(0, 8, 0, 0) };
         panel.Children.Add(Caption(Words.ManagePasswordTrustHint()));
-        var password = new PasswordBox { Header = Words.SigninPassword() };
+        var password = ScreenSecrets.Guard(new PasswordBox { Header = Words.SigninPassword() });
         AutomationProperties.SetAutomationId(password, "manage-password-field");
         if (DevLogin.TakePasswordTrust() is { } dev) password.Password = dev;
         panel.Children.Add(password);

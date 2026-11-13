@@ -101,7 +101,8 @@ internal sealed class SignInView
         // ScrollViewer's child stretches, the column centres in it
         var stretch = new Grid();
         stretch.Children.Add(column);
-        Page = new ScrollViewer { Content = stretch, HorizontalScrollMode = ScrollMode.Disabled, HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled };
+        // the Secret Key and the password (PasswordBox's peek shows them) and the kit scanner's camera: out of capture
+        Page = ScreenSecrets.Guard(new ScrollViewer { Content = stretch, HorizontalScrollMode = ScrollMode.Disabled, HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled });
         OfferScan();
     }
 

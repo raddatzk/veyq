@@ -74,7 +74,8 @@ internal sealed class UnlockView
         // the sign-in's layout: the capped column centres in a stretching Grid (a trap of src/mobile/CLAUDE.md)
         var stretch = new Grid();
         stretch.Children.Add(column);
-        Page = new ScrollViewer { Content = stretch, HorizontalScrollMode = ScrollMode.Disabled, HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled };
+        // the password (PasswordBox's peek shows it): out of capture
+        Page = ScreenSecrets.Guard(new ScrollViewer { Content = stretch, HorizontalScrollMode = ScrollMode.Disabled, HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled });
     }
 
     private void Unlock()

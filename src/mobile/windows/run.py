@@ -36,7 +36,9 @@ Verbs:
                              de-DE) from this host's environment. VEYQ_DEV_SCAN=1 shows its QR harness instead of the
                              session (no sign-in, no tunnel held); VEYQ_DEV_CAMERA=<image on this host> is its test
                              camera, copied to the host beside the launch file. VEYQ_DEV_SETTINGS=1 shows the account
-                             Settings over a state of its own instead (no sign-in, no tunnel held). `--devlogin` hands the debug build the seeded
+                             Settings over a state of its own instead (no sign-in, no tunnel held). VEYQ_DEV_CAPTURABLE=1
+                             keeps the window capturable while a secret shows (ScreenSecrets), for a pass's shots of the
+                             sign-in, the unlock and the password asks. `--devlogin` hands the debug build the seeded
                              principal of the env file (VEYQ_ENV_FILE, else `.run/.env`) as VEYQ_DEV_*, inside the
                              launch file Veyq.Drive deletes on reading — never on a command line —, and it signs in
                              through its own sign-in once (DevLogin.cs). `--fill` only fills the sign-in, for the pass to
@@ -990,7 +992,7 @@ def run_app(width: int | None, height: int | None, devlogin: bool = False, unloc
     ))
     if code != 0:
         return code
-    env = {k: os.environ[k] for k in ("VEYQ_THEME", "VEYQ_LANGUAGE", "VEYQ_DEV_SCAN", "VEYQ_DEV_SETTINGS") if os.environ.get(k)} | secrets
+    env = {k: os.environ[k] for k in ("VEYQ_THEME", "VEYQ_LANGUAGE", "VEYQ_DEV_SCAN", "VEYQ_DEV_SETTINGS", "VEYQ_DEV_CAPTURABLE") if os.environ.get(k)} | secrets
     # a debug build's QR harness's test camera: an image on this host, copied beside the launch file
     if os.environ.get("VEYQ_DEV_CAMERA"):
         image = Path(os.environ["VEYQ_DEV_CAMERA"]).resolve()
