@@ -27,7 +27,8 @@ Verbs:
                              would, `cargo clippy --locked --all-targets -- -D warnings`, `cargo test --locked` (all but
                              SANDBOX_SKIPS) and `cargo build --locked` run. The pinned runtime as `flatpak` installs it;
                              the registry and target in the volumes `veyq-flatpak-cargo`/`veyq-flatpak-target-<arch>`.
-                             Its exit code is cargo's.
+                             SANDBOX_SKIPS then run in the Fedora 44 container (`cargo test -- --exact`), where glycin
+                             runs without a portal. Its exit code is cargo's.
   run [--port N] [--devlogin [--fill|--unlock]] [--no-secret-service]
                              `build`'s generation and `cargo build`, then the app under `gtk4-broadwayd`, drawn into a
                              browser at http://127.0.0.1:N (default 8095; published on 127.0.0.1 only). It runs under a
@@ -293,7 +294,7 @@ def build() -> int:
         f"flatpak build --share=network --filesystem=/veyq {sandboxed} /veyq/state/sdk-dir bash -c "
         + shlex.quote("set -e; cd /veyq/src; cargo clippy --locked --all-targets -- -D warnings; "
                       f"cargo test --locked -- {skips}; cargo build --locked"))
-    return in_runtime(flatpak_arch, script, [
+    rc = in_runtime(flatpak_arch, script, [
         "-v", f"veyq-flatpak-state-{flatpak_arch}:/veyq/state",
         "-v", f"veyq-flatpak-cargo:/veyq/cargo", "-v", f"veyq-flatpak-target-{flatpak_arch}:/veyq/target",
         "-v", f"{repo_layout.MOBILE}:/veyq/mobile:ro", "-v", f"{FLATPAK_OUT}:/veyq/mobile/build/linux/flatpak",
@@ -301,6 +302,12 @@ def build() -> int:
         "-v", f"{lib_dir}:/veyq/lib:ro", "-v", f"{WORDS / 'words.json'}:/veyq/words.json:ro",
         # the web's Emergency Kit fixtures, which kit_drawing's test draws and hands to the core
         "-v", f"{ROOT / KIT_FIXTURES}:/veyq/kit-fixtures:ro"])
+    if rc != 0:
+        return rc
+    # what the SDK's sandbox cannot run (glycin needs a portal there) runs where a pass runs the app, outside any sandbox
+    build_image(docker_platform)
+    exact = " ".join(shlex.quote(s) for s in SANDBOX_SKIPS)
+    return cargo(docker_platform, lib_dir, f"cargo test --locked -- --exact {exact}")
 
 
 def dev_principal(unlock: bool = False, fill: bool = False) -> dict[str, str]:
@@ -404,7 +411,14 @@ FLATPAK_REFS = ("org.gnome.Platform", "org.gnome.Sdk", "org.freedesktop.Sdk.Exte
 # --sandbox`, for which a build's sandbox has no portal ("Loader process exited early", measured 2026-11-13). The
 # installed app's sandbox has one: the Linux pass runs it there (ADR 0123's Consequences, the Linux app), and
 # `run.py run`'s Fedora container runs it outside any sandbox.
-SANDBOX_SKIPS = ("avatars::tests::a_picture_as_the_web_writes_it_decodes",)
+# A picked medium's tiers (media_tiers) decode and encode through gdk-pixbuf, which goes through glycin for both in the
+# GNOME 51 runtime — its JPEG saver too (measured 2026-11-13: "Loader process exited early" for a save from raw pixels in
+# that sandbox, where GTK's own loader still decodes a JPEG): those run in the Fedora 44 container after the SDK's pass.
+SANDBOX_SKIPS = ("avatars::tests::a_picture_as_the_web_writes_it_decodes",
+                 "media_tiers::tests::a_photo_is_turned_by_its_exif_and_fitted_to_the_cores_edges",
+                 "media_tiers::tests::a_videos_poster_is_its_frame_at_the_cores_moment",
+                 "media_tiers::tests::a_file_that_does_not_decode_has_no_tiers",
+                 "media_tiers::tests::the_reply_packs_the_preview_then_the_thumbnail")
 
 
 def runtime_pins(flatpak_arch: str) -> dict[str, str]:

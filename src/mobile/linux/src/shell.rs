@@ -3,7 +3,8 @@
 //! space shown, its tenant and server; spaces and tenants in its menu), with New beside it and Search under it (Ctrl+F),
 //! and Settings pinned at its foot; the switcher shows the signed-in member's picture beside the tenant. The content
 //! side shows what the core's shell says is open: Home, an application's list, a Pot (its menu at the header's end:
-//! Download), a file ([crate::file_page]), a drop box ([crate::drop_box]), or an object this app does not draw yet. Refresh
+//! Download), a file ([crate::file_page]), a drop box ([crate::drop_box]), a Memory or a chapter ([crate::memory_page], its
+//! lightbox pushed over the content, [crate::lightbox]), or an object this app does not draw yet. Refresh
 //! (F5, Ctrl+R) reads an open Pot anew, else the shell's lists (a guest's new folder, another device's upload); a space's top
 //! level offers its share, "Add files only" ([crate::share_sheet::open_top_level]), beside it. Below 600sp the split view collapses
 //! to a navigation stack. A list keeps where it was scrolled to when the shell draws it anew — after an object opened from
@@ -21,6 +22,7 @@ use gtk::{gio, glib};
 use crate::bridge::{self, wire::Answer, wire::ApplicationId, wire::Call, wire::Create, wire::Facts, wire::NodeAt, wire::ObjectRef, wire::ShellModelState, wire::ShellShown};
 use crate::drop_box::DropBoxPage;
 use crate::file_page::FilePage;
+use crate::memory_page::{self, MemoryPage};
 use crate::header::{self, Header};
 use crate::home::{self, app_icon, app_name, kind_icon};
 use crate::pot::PotPage;
@@ -68,6 +70,8 @@ pub struct Shell {
     top_share: gtk::Button,
     /// An open Pot's "Add entry", the content's creating action, shown once the Pot is read and takes writes.
     add_entry: gtk::Button,
+    /// A Memory's "Add chapter", its page's own creating action, shown where its gallery offers one.
+    add_chapter: gtk::Button,
     refresh_action: gio::SimpleAction,
     header: Rc<RefCell<Option<Header>>>,
     /// A header whose page left while its trash's Undo stands: kept until another takes its place.
@@ -77,6 +81,9 @@ pub struct Shell {
     pot: RefCell<Option<PotPage>>,
     file: RefCell<Option<FilePage>>,
     drop_box: RefCell<Option<DropBoxPage>>,
+    memory: RefCell<Option<MemoryPage>>,
+    /// The content's navigation, where a Memory's lightbox is pushed over the page ([crate::lightbox]).
+    nav: adw::NavigationView,
     /// The upload queue's button in the content's header bar, shown while it lists anything.
     _uploads: Rc<Uploads>,
     /// Where each list was scrolled to, by its place.
@@ -142,6 +149,9 @@ impl Shell {
         let add_entry = create_action::create_action(&words::pot_add(), || {});
         add_entry.set_visible(false);
         content_header.pack_start(&add_entry);
+        let add_chapter = create_action::create_action(&words::memory_add_chapter(), || {});
+        add_chapter.set_visible(false);
+        content_header.pack_start(&add_chapter);
         // the node on screen's actions, GNOME's way: buttons and a menu at the header bar's end (`header`)
         let header_bar = gtk::Box::new(gtk::Orientation::Horizontal, 6);
         content_header.pack_end(&header_bar);
@@ -161,7 +171,10 @@ impl Shell {
         // the upload queue, GNOME Files' way: a header bar button while anything is listed, its popover the list
         let uploads = Uploads::new(&toasts);
         content_header.pack_end(uploads.button());
-        toasts.set_child(Some(&content_view));
+        // the content is the root of a navigation of its own: a Memory's lightbox is pushed over it, back pops it
+        let nav = adw::NavigationView::new();
+        nav.add(&adw::NavigationPage::new(&content_view, &words::app_name()));
+        toasts.set_child(Some(&nav));
         let content = adw::NavigationPage::new(&toasts, &words::app_name());
 
         let split = adw::NavigationSplitView::builder().sidebar(&sidebar_page).content(&content).min_sidebar_width(240.0).max_sidebar_width(360.0).build();
@@ -198,6 +211,7 @@ impl Shell {
             refresh,
             top_share,
             add_entry: add_entry.clone(),
+            add_chapter: add_chapter.clone(),
             refresh_action,
             header: Rc::new(RefCell::new(None)),
             undoing: RefCell::new(None),
@@ -206,6 +220,8 @@ impl Shell {
             pot: RefCell::new(None),
             file: RefCell::new(None),
             drop_box: RefCell::new(None),
+            memory: RefCell::new(None),
+            nav,
             _uploads: uploads,
             scrolls: ListScrolls::default(),
             now: RefCell::new(None),
@@ -275,6 +291,23 @@ impl Shell {
             });
             window.add_action(&action);
         }
+        // a Memory's "Add photos" (the header's own `upload`) and its "Add chapter"
+        let add_media = gio::SimpleAction::new("memory-upload", None);
+        let weak = Rc::downgrade(self);
+        add_media.connect_activate(move |_, _| {
+            let Some(s) = weak.upgrade() else { return };
+            if let Some(page) = s.memory.borrow().as_ref() {
+                page.add();
+            }
+        });
+        window.add_action(&add_media);
+        let weak = Rc::downgrade(self);
+        self.add_chapter.connect_clicked(move |_| {
+            let Some(s) = weak.upgrade() else { return };
+            if let Some(page) = s.memory.borrow().as_ref() {
+                page.create_chapter();
+            }
+        });
         let weak = Rc::downgrade(self);
         self.add_entry.connect_clicked(move |_| {
             let Some(s) = weak.upgrade() else { return };
@@ -287,6 +320,8 @@ impl Shell {
             let Some(s) = weak.upgrade() else { return };
             if let Some(pot) = s.pot.borrow().as_ref() {
                 pot.refresh();
+            } else if let Some(page) = s.memory.borrow().as_ref() {
+                page.reload();
             } else {
                 // the shell's lists read anew from the server: a drop box's page, Home's level and every list follow
                 let toasts = s.toasts.clone();
@@ -355,6 +390,32 @@ impl Shell {
             }
         });
         window.add_action(&create_pot);
+        // New Memory (`Shell.CreateMemory`) in the level shown, named in an alert dialog that asks again with the core's
+        // problem; the Memory made opens (the web's `MemoryNodeDialog`)
+        let create_memory = gio::SimpleAction::new("create-memory", None);
+        let weak = Rc::downgrade(self);
+        create_memory.connect_activate(move |_, _| {
+            let Some(s) = weak.upgrade() else { return };
+            let Some(level) = s.level() else { return };
+            let toasts = s.toasts.clone();
+            header::ask_name(s.window.upcast_ref(), &words::memory_create_memory_title(), &words::node_name(), "", None, &words::folder_create(), move |name, again| {
+                let (toasts, scope_id, parent_id) = (toasts.clone(), level.scope_id.clone(), level.parent_id.clone());
+                glib::spawn_future_local(async move {
+                    match bridge::call(&Call::ShellCreateMemory { scope_id, parent_id, name: name.clone() }).await.map(|(a, _)| a) {
+                        Ok(Answer::Created { node: Some(node), .. }) => {
+                            eprintln!("veyq: new memory: made");
+                            memory_page::open_node(&node);
+                        }
+                        Ok(Answer::Created { notice: Some(n), .. }) => {
+                            eprintln!("veyq: new memory: {}", n.msg);
+                            again(name, said::notice(&n));
+                        }
+                        other => header::say(&toasts, other, "Shell.CreateMemory"),
+                    }
+                });
+            });
+        });
+        window.add_action(&create_memory);
         // the space's trash, from the switcher's menu (`trash`)
         let open_trash = gio::SimpleAction::new("trash", None);
         let weak = Rc::downgrade(self);
@@ -543,8 +604,9 @@ impl Shell {
                 Create::Pot => "win.create-pot",
                 Create::UploadFiles => "win.upload-files",
                 Create::UploadFolder => "win.upload-folder",
-                // New Memory is drawn with Memories' screens (the CR's phase 4); a chapter is a Memory's page's own
-                Create::Memory | Create::Chapter => continue,
+                Create::Memory => "win.create-memory",
+                // a chapter is a Memory's page's own (its "Add chapter"), never a level's
+                Create::Chapter => continue,
             };
             menu.append(Some(&said::key(&c.word)), Some(action));
         }
@@ -656,6 +718,7 @@ impl Shell {
             Some(o) if o.kind == "EXPENSES_POT" => {
                 self.file.borrow_mut().take();
                 self.drop_box.borrow_mut().take();
+                self.memory.borrow_mut().take();
                 let mut pot = self.pot.borrow_mut();
                 if pot.as_ref().is_none_or(|p| p.r#ref != *o) {
                     let page = PotPage::open(o, self.window.upcast_ref(), &self.toasts);
@@ -669,7 +732,7 @@ impl Shell {
                         if let Some(held) = held.upgrade()
                             && let Some(h) = held.borrow().as_ref()
                         {
-                            h.facts(Some(Facts { can_write, has_content: true }), None);
+                            h.facts(Some(Facts { can_write, has_content: true }), None, None);
                         }
                     });
                     *pot = Some(page);
@@ -682,6 +745,7 @@ impl Shell {
             Some(o) if o.kind == "FILE" => {
                 self.pot.borrow_mut().take();
                 self.drop_box.borrow_mut().take();
+                self.memory.borrow_mut().take();
                 let mut file = self.file.borrow_mut();
                 let node = NodeAt { scope_id: o.scope_id.clone(), node_id: o.node_id.clone(), kind: o.kind.clone(), name: o.name.clone() };
                 if file.as_ref().is_none_or(|f| f.node != node) {
@@ -692,7 +756,7 @@ impl Shell {
                         if let Some(held) = held.upgrade()
                             && let Some(h) = held.borrow().as_ref()
                         {
-                            h.facts(Some(facts), Some(id));
+                            h.facts(Some(facts), Some(id), None);
                         }
                     });
                     *file = Some(page);
@@ -702,6 +766,7 @@ impl Shell {
             Some(o) if o.kind == "DEPOT_DROPBOX" => {
                 self.pot.borrow_mut().take();
                 self.file.borrow_mut().take();
+                self.memory.borrow_mut().take();
                 let mut page = self.drop_box.borrow_mut();
                 let node = NodeAt { scope_id: o.scope_id.clone(), node_id: o.node_id.clone(), kind: o.kind.clone(), name: o.name.clone() };
                 if page.as_ref().is_none_or(|p| p.node != node) {
@@ -709,16 +774,52 @@ impl Shell {
                 }
                 page.as_ref().expect("set above").widget().clone().upcast()
             }
+            Some(o) if o.kind == "MEMORY" || o.kind == "CHAPTER" => {
+                self.pot.borrow_mut().take();
+                self.file.borrow_mut().take();
+                self.drop_box.borrow_mut().take();
+                let mut page = self.memory.borrow_mut();
+                let node = NodeAt { scope_id: o.scope_id.clone(), node_id: o.node_id.clone(), kind: o.kind.clone(), name: o.name.clone() };
+                if page.as_ref().is_none_or(|p| p.node != node) {
+                    *page = None;
+                    let opened = MemoryPage::open(&node, self.window.upcast_ref(), &self.toasts, &self.nav);
+                    // each state: the count under the title, its "Add chapter", and once its id, the header's own upload
+                    let held = Rc::downgrade(&self.header);
+                    let (title, add) = (self.content_title.downgrade(), self.add_chapter.downgrade());
+                    let told = Cell::new(None);
+                    opened.on_shown(move |shown, gallery| {
+                        if let Some(title) = title.upgrade() {
+                            title.set_subtitle(&home::glib_escape(&said::notice(&shown.count)));
+                        }
+                        if let Some(add) = add.upgrade() {
+                            add.set_visible(memory_page::offers_chapter(shown));
+                        }
+                        if told.get() != Some(gallery)
+                            && let Some(held) = held.upgrade()
+                            && let Some(h) = held.borrow().as_ref()
+                        {
+                            told.set(Some(gallery));
+                            h.facts(Some(Facts { can_write: true, has_content: true }), None, Some(gallery));
+                        }
+                    });
+                    *page = Some(opened);
+                }
+                let page = page.as_ref().expect("set above");
+                page.hero(self.header.borrow().as_ref().map(Header::hero));
+                page.widget().clone().upcast()
+            }
             Some(o) => {
                 self.pot.borrow_mut().take();
                 self.file.borrow_mut().take();
                 self.drop_box.borrow_mut().take();
+                self.memory.borrow_mut().take();
                 adw::StatusPage::builder().icon_name(kind_icon(&o.kind)).title(o.name.as_str()).description(words::not_built()).build().upcast()
             }
             None => {
                 self.pot.borrow_mut().take();
                 self.file.borrow_mut().take();
                 self.drop_box.borrow_mut().take();
+                self.memory.borrow_mut().take();
                 let list = if shell.application.is_some() { home::list(shown.list.as_ref()) } else { home::home(state, shown, self.drops().as_ref()) };
                 if let Some(scroll) = list.downcast_ref::<gtk::ScrolledWindow>() {
                     self.scrolls.keep(scroll, ListScrolls::place(state));
@@ -730,7 +831,12 @@ impl Shell {
         if !pot_open {
             self.add_entry.set_visible(false);
         }
-        self.refresh.set_visible(pot_open || self.drop_box.borrow().is_some());
+        let memory_open = self.memory.borrow().is_some();
+        if !memory_open {
+            self.add_chapter.set_visible(false);
+            self.content_title.set_subtitle("");
+        }
+        self.refresh.set_visible(pot_open || memory_open || self.drop_box.borrow().is_some());
         self.top_share.set_visible(shown.top_level_share);
         if self.content_view.content().as_ref() != Some(&body) {
             self.content_view.set_content(Some(&body));

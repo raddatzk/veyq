@@ -86,8 +86,13 @@ A Gradle build of its own, run through its own wrapper.
   `pot_settings` (a Pot's Settings place, editable in place) and `pot_create` (New pot),
   `entry_editor` (an entry's editor; `typed`: when a text field is set from the state), `receipt_viewer` (a receipt
   shown from memory: a picture through GTK, a PDF through poppler-rs) and `entry_history`, `file_page` (a Depot file's page
-  and its Save a copy with its toast; a medium played by `gtk::Video` over a `gtk::MediaFile` reading `reader_stream`, a
-  seekable `gio::InputStream` whose reads are `Reader.Read` ranges, `bridge::call_blocking` on GStreamer's thread), `uploads`
+  and its Save a copy with its toast; a medium played by `player` — `gtk::Video` over a `gtk::MediaFile` reading `reader_stream`, a
+  seekable `gio::InputStream` whose reads are `Reader.Read` ranges, `bridge::call_blocking` on GStreamer's thread),
+  `memory_page` (a Memory's or a chapter's page: its chapters with their covers, the justified grid the core lays out and
+  windows — `Gallery.Layout`, only the rows near the view mounted —, a drop of photos and videos, the trash's Undo) with
+  `lightbox` (an `AdwNavigationPage` pushed over the content: zoom, the slideshow, a video through `player`, the details,
+  Save) and `media_tiers` (the host's answer to `Media.Tiers`/`Media.Duration`: gdk-pixbuf over glycin for a photo, turned by
+  its EXIF; a GStreamer `playbin` frame for a video's poster; both JPEGs encoded in memory), `uploads`
   (New's Upload files and Upload folder through GTK's `FileDialog`, a file's Replace, the queue's header bar button and
   popover, what it says as a toast), `drop_box` (a drop box's page: each guest's folder with its menu and files, the delete
   asked), `manage`
@@ -995,6 +1000,13 @@ first in each of its scrolls — `LocalNodeHero.current(inset)` (Android) / `Nod
   junction moved across volumes (`Move-Item F:\ C:\`) arrives as a plain directory with its target's files copied in: make it
   anew with `mklink /J` where it is used.
 
+- A photo's EXIF orientation on Linux: GTK's own loader (`gdk::Texture`) keeps a JPEG as stored; gdk-pixbuf reads it through
+  glycin and turns it (`apply_embedded_orientation`) — measured 2026-11-13 in the Fedora 44 container (an 80×40 JPEG with
+  orientation 6: Texture 80×40, Pixbuf 40×80). In the GNOME 51 SDK's build sandbox glycin has no portal, so gdk-pixbuf
+  neither decodes nor encodes there — its JPEG saver goes through glycin too ("Loader process exited early" for a save from
+  raw pixels) — while GTK's own loader still decodes a JPEG: what needs gdk-pixbuf is in `run.py`'s `SANDBOX_SKIPS`, which
+  `build` then runs in the Fedora container. HEIC does not decode in the Fedora container (glycin-heif without libde265:
+  "No decoding plugin installed for this compression format: HEVC"); a HEIC then goes up alone with its icon.
 - GTK 4.22's media backend is GStreamer, built into libgtk (no `media/` module), and plays a `GInputStream` through
   `giostreamsrc`, seeks included (measured 2026-11-12 in the container: a WebM and an MP4 from a memory stream; GNOME/gtk
   #4062's assert is gone). Its reads arrive on GStreamer's streaming thread, where `reader_stream` waits on the core through
