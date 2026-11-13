@@ -13,6 +13,8 @@
 // threw" are produced just as well by a module that does nothing at all — and every refusal is anchored on its
 // own reason, not on "it threw".
 import { describe, it, expect, vi, afterEach } from 'vitest'
+import { readFileSync } from 'node:fs'
+import { resolve } from 'node:path'
 import * as v1 from '@veyq/crypto/v1'
 import { b64std, fromB64std } from '@veyq/crypto/base64'
 import {
@@ -31,6 +33,8 @@ import {
   checkNumber,
   sealGrant,
   openGrant,
+  readGrant,
+  writeGrant,
   PairingRefused,
   type PairingRefusal,
 } from './pairing'
@@ -443,5 +447,67 @@ describe('the sign-in answer (ADR 0059 §6, §11)', () => {
 
     expect(signIn.length).toBe(transportAnswer(key, transport.pub).length)
     expect(signIn.length).toBeLessThan(8192)
+  })
+})
+
+// The two shapes both implementations must agree on byte for byte (cr-app-device-linking D2): the scanned text's
+// grammar and the envelope's plaintext. Read from the contract, not restated here, so the app core's Conformance and
+// this file answer to one list — a case moved between accepted and refused turns one of them red.
+type PayloadCase = { name: string; text: string; veyqpair: string | null; veyqsignin: string | null }
+type GrantFields = {
+  email: string
+  master_key: string
+  refresh_token: string
+  label: string
+  marks?: { pins: number; register: number; epochs: Record<string, number> }
+}
+type AcceptedGrant = GrantFields & { name: string; json: string; written: boolean }
+const pairingVectors = (
+  JSON.parse(readFileSync(resolve(__dirname, '../../../../../../contracts/crypto/vectors/v1.json'), 'utf8')) as {
+    pairing_channel: {
+      payloads: { cases: PayloadCase[] }
+      grant: { accepted: AcceptedGrant[]; refused: { name: string; json: string }[] }
+    }
+  }
+).pairing_channel
+const hexOf = (u: Uint8Array) => Array.from(u, (b) => b.toString(16).padStart(2, '0')).join('')
+const unhexOf = (h: string) => Uint8Array.from(h.match(/../g)!.map((b) => parseInt(b, 16)))
+const secretHex = (parsed: string | null) => (parsed === null ? null : hexOf(fromB64std(parsed)))
+
+describe('the payload grammar, as the vectors pin it (ADR 0059 §4)', () => {
+  const cases = pairingVectors.payloads.cases
+
+  it('holds both outcomes on each side — the list is not all one answer', () => {
+    expect(cases.some((c) => c.veyqpair !== null)).toBe(true)
+    expect(cases.some((c) => c.veyqsignin !== null)).toBe(true)
+    expect(cases.filter((c) => c.veyqpair === null && c.veyqsignin === null).length).toBeGreaterThan(10)
+  })
+
+  it.each(cases)('$name', (c) => {
+    expect(secretHex(parsePairingPayload(c.text))).toBe(c.veyqpair)
+    expect(secretHex(parseSignInPayload(c.text))).toBe(c.veyqsignin)
+  })
+})
+
+describe('the grant plaintext, as the vectors pin it (ADR 0059 §2, §9)', () => {
+  const fields = (c: GrantFields) => ({
+    email: c.email,
+    masterKey: unhexOf(c.master_key),
+    refreshToken: c.refresh_token,
+    label: c.label,
+    ...(c.marks ? { marks: c.marks } : {}),
+  })
+
+  it.each(pairingVectors.grant.accepted)('reads $name', (c) => {
+    const read = readGrant(c.json)
+    expect({ ...read, masterKey: hexOf(read.masterKey) }).toEqual({ ...fields(c), masterKey: c.master_key })
+  })
+
+  it.each(pairingVectors.grant.accepted.filter((c) => c.written))('writes $name byte for byte', (c) => {
+    expect(writeGrant(fields(c))).toBe(c.json)
+  })
+
+  it.each(pairingVectors.grant.refused)('refuses $name', (c) => {
+    expect(() => readGrant(c.json)).toThrow('pairing_grant_unreadable')
   })
 })
