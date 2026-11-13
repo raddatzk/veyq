@@ -34,7 +34,7 @@ class MemoryLiveTest {
         val origin = System.getenv("VEYQ_LIVE")
         val name = System.getenv("VEYQ_LIVE_MEMORY")
         org.junit.Assume.assumeTrue("VEYQ_LIVE and VEYQ_LIVE_MEMORY are not set: a live case", origin != null && name != null)
-        val env = File(System.getProperty("veyq.repoRoot"), ".run/.env").readLines()
+        val env = (System.getenv("VEYQ_ENV_FILE")?.let(::File) ?: File(System.getProperty("veyq.repoRoot"), ".run/.env")).readLines()
             .mapNotNull { l -> l.substringBefore('=', "").takeIf { it.isNotBlank() }?.let { it.trim() to l.substringAfter('=').trim().trim('"', '\'') } }
             .toMap()
         val account = VeyqAccount.signIn(
@@ -95,7 +95,7 @@ class MemoryLiveTest {
     fun aMemoryGalleryIsRead() = runTest(timeout = 5.minutes) {
         val origin = System.getenv("VEYQ_LIVE") ?: return@runTest
         val name = System.getenv("VEYQ_LIVE_MEMORY") ?: return@runTest
-        val env = File(System.getProperty("veyq.repoRoot"), ".run/.env").readLines()
+        val env = (System.getenv("VEYQ_ENV_FILE")?.let(::File) ?: File(System.getProperty("veyq.repoRoot"), ".run/.env")).readLines()
             .mapNotNull { l -> l.substringBefore('=', "").takeIf { it.isNotBlank() }?.let { it.trim() to l.substringAfter('=').trim().trim('"', '\'') } }
             .toMap()
         val account = VeyqAccount.signIn(

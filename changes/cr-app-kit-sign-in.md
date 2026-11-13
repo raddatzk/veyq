@@ -386,7 +386,7 @@ From `src/mobile` unless named:
   `run.py bridge` is the first link of it into the libraries (Linux's klib links `-lz` dynamically: expect a `NEEDED
   libz.so.1`, remembered from the klib manifest, not measured).
 
-- [ ] **4 core — the sign-in holds the kit.** D4 in `SessionModel`: `readKit`, `clearKit`, `Gate.SignIn.kit`, the held
+- [x] **4 core — the sign-in holds the kit.** D4 in `SessionModel`: `readKit`, `clearKit`, `Gate.SignIn.kit`, the held
   key used, replaced, cleared and zeroed; a pasted token; the other-server notice. `SessionModelTest` over its played
   door.
   · Done when: `./gradlew :core:jvmTest :core:macosArm64Test` green; with `VEYQ_LIVE` a new `LiveSignInTest` case signs
@@ -396,8 +396,7 @@ From `src/mobile` unless named:
   (B12) Cancel no longer clearing → a sign-in after Cancel with an empty key red (it must fail as a missing key); (B13) a
   typed key no longer winning → the door's received key red.
 
-  **Status: built and unit-proven (2026-11-13); the live run is pending (the dev backend was down and not to be
-  started by this phase) — the box stays open until it is green.**
+  **Status: done (2026-11-13): built and unit-proven; the live run green against the dev backend (see Met's end).**
   **Built:** core `session/SessionModel.kt` — `readKit(bytes, pictures, typedServer?)` (`KitImport.read` with the door's
   suite; `bytes` zeroed once read; no kit → `Msg.SIGNIN_KIT_UNREADABLE` on the gate, a kit held before kept; a sign-in
   left during the read wipes what it found), `takeKit(found, typedServer?)` (the entry phase 7's scan hands its `Found`
@@ -436,9 +435,14 @@ From `src/mobile` unless named:
   → `a_pasted_token…` red; the notice never set → `a_kit_from_another_server…` red; a failed sign-in dropping the kit →
   `a_failed_sign_in_keeps…` red; the door's copy not zeroed → `a_kit_read_fills…` and `a_pasted_token…` red; the file's
   bytes not zeroed → `a_kit_read_fills…` and `a_file_without_a_kit…` red; an unreadable file dropping the held kit →
-  `a_file_without_a_kit…` red; a kit taken outside the sign-in → `outside_the_sign_in…` red. **Pending, live:**
-  `VEYQ_LIVE=http://veyq.localhost:8080 VEYQ_ENV_FILE=<main checkout>/.run/.env ./gradlew :core:jvmTest --tests
-  '*LiveSignInTest*'` (from `src/mobile`; `VEYQ_ENV_FILE` only from a worktree).
+  `a_file_without_a_kit…` red; a kit taken outside the sign-in → `outside_the_sign_in…` red. **Live (2026-11-13,
+  measured):** `VEYQ_LIVE=http://veyq.localhost:8080 VEYQ_ENV_FILE=<main checkout>/.run/.env ./gradlew :core:jvmTest --tests
+  '*LiveSignInTest*'` (from `src/mobile`) green — the test XML `tests="2" skipped="0" failures="0"`, both
+  `theSeededPrincipalSignsIn…` and `aKitPdfSignsThePrincipalInWithAnEmptySecretKey` (the kit read, the form filled with the
+  kit's email and server, the sign-in with an empty typed key reaching `Signed` with the tenants and the personal scope).
+  It printed `this device could not be trusted with the account: … add wrap 409`: the principal is at the server's cap of
+  device wraps (`409 too_many_devices`), so the sign-in's best-effort trust was refused — the case does not need it, and
+  which wraps fill the cap (the owner's devices or earlier runs') was not looked at.
   **Deviations:** (1) `takeKit` is public beside `readKit` — phase 7's scan needs the same entry, and the tests hand it
   a `Kit` whose zeroing they can watch. (2) `readKit` takes the form's server as typed (`typedServer`), since the
   phones' text field is the UI's until the sign-in; the bridge's `SignInKit` (phase 8) may pass it the same way. (3)
@@ -546,8 +550,7 @@ From `src/mobile` unless named:
   file carrying `veyqkit:`; macOS every file newer than the marker in the user temp and cache folders and the app's
   `Library` folders, held to "carries `veyqkit:` or a fixture's first 2 KiB or is a PDF" → only two build artifacts with
   the word in source text (a cinterop `protocols*.m`, a Kotlin daemon log; neither has the fixture's token).
-  **Pending, live:** with the dev backend up — `VEYQ_LIVE=http://veyq.localhost:8080 VEYQ_ENV_FILE=<main
-  checkout>/.run/.env ./gradlew :core:jvmTest --tests '*LiveSignInTest*'` (phase 4's) and, per app, a kit built from the
+  **Pending, live:** phase 4's `LiveSignInTest` is green (2026-11-13); still open, with the dev backend up, per app: a kit built from the
   principal's credentials (as `LiveSignInTest.aKitPdfSignsThePrincipalInWithAnEmptySecretKey` builds it, written under
   `build/` and removed after) picked, the password entered by `devlogin.py`'s way, Sign in → the shell with its tenants;
   and the three pickers clicked once by hand (Android's was).
@@ -568,7 +571,7 @@ From `src/mobile` unless named:
   foreign-code case red.
 
   **Status: built and passed (2026-11-13); the box stays open for the owner's real-camera passes (an iPhone, this Mac's
-  camera — its first use asks the person through macOS's privacy prompt) and the live sign-in pending since phase 4.**
+  camera — its first use asks the person through macOS's privacy prompt); phase 4's live sign-in is green (2026-11-13).**
   **Re-read first:** the two *"until `cr-core-qr-decoder` lands"* sentences (§ Context, D7) said its cameras and `Scan.*`
   were still to come; both had landed — rewritten to what is there (`Scan.*` has one kind, `SCHEME`; `kit` joins in
   phase 9). D7's "`Found(kit)` closes the scanner and hands the kit to `SessionModel`" rewritten to what was built (below).
@@ -634,13 +637,13 @@ From `src/mobile` unless named:
   code read after the view closed the scan is still taken (stated in `scanKit`'s comment). (2) the poster is the page's
   crop around the code, not the whole page: 640×480 cannot resolve a code a sixth of an A4 page wide (measured on iOS
   above). (3) No tap on iOS or macOS: the sheet was opened by `VEYQ_DEV_KIT_SCAN` (the button's same call), the
-  simulator tool and computer use not used; the Android entry was tapped. (4) The live sign-in is phase 4's pending step;
+  simulator tool and computer use not used; the Android entry was tapped. (4) The live sign-in is phase 4's, green since 2026-11-13;
   a scan's held key signs in as a file's (the unit case proves the hand-over).
   **Owner steps (pending):** a real iPhone (the sign-in's "Notfall-Kit scannen" over a printed fixture kit → the form
   filled); this Mac's camera (`VEYQ_DEV_KIT_SCAN=1 <build>/Debug/veyq.app/
   Contents/MacOS/veyq`, allow the camera, a printed kit held up → `veyq-kit: kit held`).
 
-- [ ] **8 bridge — the kit by path, pages drawn by the host.** D6: `Call.SignInKit`, `Call.SignInKitClear`,
+- [x] **8 bridge — the kit by path, pages drawn by the host.** D6: `Call.SignInKit`, `Call.SignInKitClear`,
   `HostRequest.Pdf.*`/`Picture.Luma`, `HostReply.Pixels` with its payload through `Host.kt`, the generated Rust and C#.
   `DispatchTest` over a played host: a PDF read by step 1 with no host request, a printed fixture asked page by page, a
   path that does not open, a file over the cap read no further, `Refused(NO_KIT)`; `WireTest`'s samples by derivation.
@@ -649,8 +652,7 @@ From `src/mobile` unless named:
   field added to `Gate.SignIn`'s `kit` → `SecretFreeSchemaTest` red; (B17) the step-1 short-circuit removed in the bridge's
   `KitPictures` path → the "no host request" case red.
 
-  **Status: built and unit-proven (2026-11-13); the live run is pending (the dev backend was down and not to be
-  started) — the box stays open until it is green.**
+  **Status: done (2026-11-13): built and unit-proven; the live run green against the dev backend (see Met's end).**
   **Built:** wire — `Call.SessionSignInKit(path, server)` (`Session.SignInKit`; `server` the form's as typed, phase 4's
   `typedServer`) and `Session.SignInKitClear`; `HostRequest.PdfPages(path)`, `PdfPage(path, page, width)`,
   `PictureLuma(path, longSide)`; `HostReply.Pixels(width, height)`, the luminance packed (stride = width) as
@@ -681,8 +683,9 @@ From `src/mobile` unless named:
   → the printed and picture cases red; the `KIT` scan's `takeKit` never called → the scan case red (bitten on this branch's own core entry before the merge
   with phase 7; the scan case runs unchanged over `scanKit` after it). (One unrelated
   `DispatchTest.aLinkIsMinted…` failure was seen once and not again on the next two runs: a timing flake there.)
-  **Pending, live:** `VEYQ_LIVE=http://veyq.localhost:8080 VEYQ_ENV_FILE=<main checkout>/.run/.env ./gradlew
-  :bridge:jvmTest --tests '*LiveBridgeTest.aKitSignsIn*'` (from `src/mobile`).
+  **Live (2026-11-13, measured):** `VEYQ_LIVE=http://veyq.localhost:8080 VEYQ_ENV_FILE=<main checkout>/.run/.env ./gradlew
+  :bridge:jvmTest --tests '*LiveBridgeTest.aKitSignsIn*'` (from `src/mobile`) green —
+  `aKitSignsInByPathWithAnEmptySecretKey` passed in the test XML (1.2 s).
   **Deviations:** (1) the calls are named `Session.SignInKit`/`Session.SignInKitClear` (the session's family) and take
   the typed server. (2) The tests are a file of their own, `KitDispatchTest`, beside `DispatchTest`. (3) Built in parallel with phase 7, the
   desktop scan first had a core entry of its own (`SessionModel.scannedKit`); the merge with phase 7 kept phase 7's one
