@@ -59,6 +59,8 @@ sealed interface Screen {
         val adding: Boolean = false,
         val server: String? = null,
         val email: String? = null,
+        /** An Emergency Kit read: its Secret Key held by the core, the row says so; null where the key is typed. */
+        val kit: me.raddatz.veyq.mobile.session.SessionModel.KitShown? = null,
     ) : Screen
 
     /** An account this device trusts: the password alone (DEVICE), or the person's authentication (DEVICE_KEY). */
@@ -146,7 +148,7 @@ class AppModel(app: Application) : AndroidViewModel(app) {
             else -> ""
         })
         when (g) {
-            is me.raddatz.veyq.mobile.session.SessionModel.Gate.SignIn -> _screen.value = Screen.SignIn(g.working, g.error, g.adding, g.server, g.email)
+            is me.raddatz.veyq.mobile.session.SessionModel.Gate.SignIn -> _screen.value = Screen.SignIn(g.working, g.error, g.adding, g.server, g.email, g.kit)
             is me.raddatz.veyq.mobile.session.SessionModel.Gate.Unlock -> _screen.value = Screen.Unlock(g.record, g.working, g.error)
             is me.raddatz.veyq.mobile.session.SessionModel.Gate.Signed -> shellModel?.state?.value?.let(::publish)
             else -> _screen.value = Screen.Starting
@@ -183,6 +185,21 @@ class AppModel(app: Application) : AndroidViewModel(app) {
             then?.invoke()
         }
     }
+
+    /**
+     * The Emergency Kit file the person picked ([uri], `OpenDocument`): read into memory ([KitFile], never a copy on
+     * disk) and handed to the core, which finds the kit and holds its Secret Key ([AndroidKitPictures] draws what it asks
+     * for); [typedServer] is the form's server as typed now. What it found shows on the sign-in's gate.
+     */
+    fun readKit(uri: android.net.Uri, typedServer: String) {
+        viewModelScope.launch {
+            val bytes = KitFile.read(getApplication<Application>().contentResolver, uri)
+            AndroidKitPictures(bytes).use { pictures -> session.readKit(bytes, pictures, typedServer) }
+        }
+    }
+
+    /** The Secret Key row's way back to typing: the kit's held key ends. */
+    fun clearKit() = session.clearKit()
 
     // ---- staying signed in (ADR 0123 decision 8) ----
 

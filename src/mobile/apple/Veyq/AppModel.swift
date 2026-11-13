@@ -56,7 +56,8 @@ final class AppModel {
         /// The remembered accounts resuming at start.
         case starting
         /// The full sign-in, with the Secret Key; server and email filled in where a trusted device's record knew them.
-        case signIn(working: Bool, error: Msg?, adding: Bool, server: String?, email: String?)
+        /// `kit`: an Emergency Kit read, whose Secret Key core holds — the row says so, nothing shows the key.
+        case signIn(working: Bool, error: Msg?, adding: Bool, server: String?, email: String?, kit: SessionModelKitShown?)
         /// An account this device trusts: the password alone, or the person's authentication.
         case unlock(record: TrustedDevice, working: Bool, error: Msg?)
         /// In the share extension with no account this device trusts: the app signs in, not the extension (ADR 0132).
@@ -163,7 +164,7 @@ final class AppModel {
         }
         switch session.current {
         case let g as SessionModelGate.SignIn:
-            screen = .signIn(working: g.working, error: g.error, adding: g.adding, server: g.server, email: g.email)
+            screen = .signIn(working: g.working, error: g.error, adding: g.adding, server: g.server, email: g.email, kit: g.kit)
         case let g as SessionModelGate.Unlock:
             screen = .unlock(record: g.record, working: g.working, error: g.error)
         case is SessionModelGate.NeedsApp:
@@ -193,6 +194,25 @@ final class AppModel {
             }
         }
     }
+
+    /// The Emergency Kit file the person picked: read in place into memory (`KitBytes`, coordinated, never copied) off the
+    /// main thread and handed to core, which finds the kit and holds its Secret Key (`KitDrawer` draws what it asks for);
+    /// `typedServer` is the form's server as typed now. What it found shows on the sign-in's gate; the bytes are zeroed
+    /// once core's read ended (core zeroes its own copy).
+    func readKit(_ url: URL, typedServer: String) {
+        Task {
+            let bytes = await Task.detached { KitBytes.read(url) }.value
+            let drawer = KitDrawer(bytes)
+            _ = try? await session.readKit(
+                bytes: AppleKit.shared.bytes(data: bytes.view), pictures: AppleKit.shared.pictures(drawing: drawer), typedServer: typedServer
+            )
+            drawer.close()
+            bytes.clear()
+        }
+    }
+
+    /// The Secret Key row's way back to typing: the kit's held key ends.
+    func clearKit() { session.clearKit() }
 
     // MARK: Staying signed in (ADR 0123 decision 8)
 
