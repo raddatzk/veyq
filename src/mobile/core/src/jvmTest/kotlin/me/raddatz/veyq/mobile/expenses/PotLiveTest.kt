@@ -17,6 +17,8 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
 import kotlin.time.Duration.Companion.minutes
+import kotlin.test.AfterTest
+import me.raddatz.veyq.mobile.session.LiveRun
 
 /**
  * The seeded principal's Pots on a running dev instance (`VEYQ_LIVE`): each opens, its settings read, its revisions open
@@ -24,6 +26,12 @@ import kotlin.time.Duration.Companion.minutes
  * web then shows, the proof that both clients read and write one format — and checks it counts.
  */
 class PotLiveTest {
+    /** Every device this case signs in with, taken off the account again after it, whatever it came to. */
+    private val liveRun = LiveRun()
+
+    @AfterTest
+    fun takeOffTheDevices() = liveRun.removeAll()
+
     @Test
     fun theSeededPotsReadAndOneExpenseIsAdded() = runTest(timeout = 10.minutes) {
         val origin = System.getenv("VEYQ_LIVE") ?: return@runTest
@@ -32,7 +40,7 @@ class PotLiveTest {
             .toMap()
         val account = VeyqAccount.signIn(
             BouncyCastlePrimitives, origin, env.getValue("VEYQ_EMAIL"), env.getValue("VEYQ_PASSWORD"), env.getValue("VEYQ_SECRET_KEY"),
-            testDevice(BouncyCastlePrimitives),
+            liveRun.device(),
         ) { block -> HttpClient(OkHttp, block) }
         val tenant = account.open(account.defaultTenant!!)
         val pots = tenant.objects().filter { it.kind == "EXPENSES_POT" }

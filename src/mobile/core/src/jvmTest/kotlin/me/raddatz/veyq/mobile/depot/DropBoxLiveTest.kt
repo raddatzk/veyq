@@ -12,6 +12,8 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
 import kotlin.time.Duration.Companion.minutes
+import kotlin.test.AfterTest
+import me.raddatz.veyq.mobile.session.LiveRun
 
 /**
  * A drop box the web made and its guests filled, read by a member on a running dev instance (`VEYQ_LIVE`), with
@@ -20,6 +22,12 @@ import kotlin.time.Duration.Companion.minutes
  * to its listed size; each file's SHA-256 is printed, to hold against what the guest dropped.
  */
 class DropBoxLiveTest {
+    /** Every device this case signs in with, taken off the account again after it, whatever it came to. */
+    private val liveRun = LiveRun()
+
+    @AfterTest
+    fun takeOffTheDevices() = liveRun.removeAll()
+
     private suspend fun signIn(): me.raddatz.veyq.mobile.session.TenantSession? {
         val origin = System.getenv("VEYQ_LIVE") ?: return null
         val env = File(System.getProperty("veyq.repoRoot"), ".run/.env").readLines()
@@ -27,7 +35,7 @@ class DropBoxLiveTest {
             .toMap()
         val account = VeyqAccount.signIn(
             BouncyCastlePrimitives, origin, env.getValue("VEYQ_EMAIL"), env.getValue("VEYQ_PASSWORD"), env.getValue("VEYQ_SECRET_KEY"),
-            testDevice(BouncyCastlePrimitives),
+            liveRun.device(),
         ) { block -> HttpClient(OkHttp, block) }
         return account.open(account.defaultTenant!!)
     }
@@ -148,7 +156,7 @@ class DropBoxLiveTest {
             .toMap()
         val account = VeyqAccount.signIn(
             BouncyCastlePrimitives, origin, env.getValue("VEYQ_EMAIL"), env.getValue("VEYQ_PASSWORD"), env.getValue("VEYQ_SECRET_KEY"),
-            testDevice(BouncyCastlePrimitives),
+            liveRun.device(),
         ) { block -> HttpClient(OkHttp, block) }
         val tenant = account.open(account.defaultTenant!!)
         val parent = tenant.nodes().first { it.kind == "FOLDER" && it.parentId == null && it.name == rootName }
@@ -180,7 +188,7 @@ class DropBoxLiveTest {
             .toMap()
         val account = VeyqAccount.signIn(
             BouncyCastlePrimitives, origin, env.getValue("VEYQ_EMAIL"), env.getValue("VEYQ_PASSWORD"), env.getValue("VEYQ_SECRET_KEY"),
-            testDevice(BouncyCastlePrimitives),
+            liveRun.device(),
         ) { block -> HttpClient(OkHttp, block) }
         val tenant = account.open(account.defaultTenant!!)
         val (rootName, boxName) = spec.split('/', limit = 2)

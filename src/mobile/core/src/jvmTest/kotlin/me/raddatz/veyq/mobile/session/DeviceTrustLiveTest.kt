@@ -14,6 +14,7 @@ import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 import kotlin.time.Duration.Companion.minutes
+import kotlin.test.AfterTest
 
 /**
  * The device trust against a running dev instance, as the seeded principal (`VEYQ_LIVE`), as ADR 0123
@@ -26,6 +27,12 @@ import kotlin.time.Duration.Companion.minutes
  * [SoftwareDeviceKeys.authenticates], the fake's extras, play and count the person.
  */
 class DeviceTrustLiveTest {
+    /** Every device this case signs in with, taken off the account again after it, whatever it came to. */
+    private val liveRun = LiveRun()
+
+    @AfterTest
+    fun takeOffTheDevices() = liveRun.removeAll()
+
     private val p = BouncyCastlePrimitives
     private val client = { block: io.ktor.client.HttpClientConfig<*>.() -> Unit -> HttpClient(OkHttp, block) }
     private val bind = "veyq/v1/device-bind".encodeToByteArray()
@@ -41,7 +48,7 @@ class DeviceTrustLiveTest {
         val email = env.getValue("VEYQ_EMAIL")
         val password = env.getValue("VEYQ_PASSWORD")
         val keys = SoftwareDeviceKeys(p)
-        val device = testDevice(p, keys)
+        val device = liveRun.device(keys = keys)
 
         // Signed in with the Secret Key, this device is trusted with the password (what every sign-in holds).
         val first = VeyqAccount.signIn(p, origin, email, password, env.getValue("VEYQ_SECRET_KEY"), device, client)

@@ -247,6 +247,11 @@ kotlin {
         commonTest {
             kotlin.srcDir("src/testDevice/kotlin")
         }
+        // What a live run (`VEYQ_LIVE`) signs in with and takes off the account again (`LiveRun`): JVM only, compiled into
+        // :bridge's JVM tests too (bridge/build.gradle.kts), so every live case cleans up through the one helper.
+        jvmTest {
+            kotlin.srcDir("src/liveTest/kotlin")
+        }
         commonMain.dependencies {
             implementation(libs.coroutines.core)
             implementation(libs.serialization.json)
