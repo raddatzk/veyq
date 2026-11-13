@@ -374,6 +374,17 @@ object Notices {
     fun folderLeftOut(w: FolderUpload.Walked): List<Notice> =
         w.links.map { Notice(Msg.DEPOT_FOLDER_LINK_SKIPPED, it) } + w.unreadable.map { Notice(Msg.DEPOT_FOLDER_UNREADABLE, it) }
 
+    /**
+     * What a picked or dropped upload says of the [names] whose paths did not read (no regular file there, or none that
+     * opens): the one by its name, several by their count; null where every path read. Never silent: a drop the core
+     * queues nothing for would otherwise look taken (the packaged Windows app, 2026-11-13).
+     */
+    fun notRead(names: List<String>): Notice? = when (names.size) {
+        0 -> null
+        1 -> Notice(Msg.DEPOT_FOLDER_UNREADABLE, names.single())
+        else -> Notice(Msg.DEPOT_FILES_UNREADABLE, names.size)
+    }
+
     /** A Depot upload that found a file of its name: its replace is offered (the notice's action, [Msg.DEPOT_REPLACE_TITLE]). */
     fun replaceOffered(name: String) = Notice(Msg.DEPOT_REPLACE_CONFIRM, name)
 

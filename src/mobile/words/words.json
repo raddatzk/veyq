@@ -1506,6 +1506,17 @@
     "en": "“{1}” could not be read and was left out.",
     "de": "„{1}“ ließ sich nicht lesen und wurde ausgelassen."
   },
+  "depot_files_unreadable": {
+    "note": "A Depot upload of several picked or dropped files of which some did not read: the core's Notices.notRead (one is named by depot_folder_unreadable).",
+    "en": {
+      "one": "{1:int} file could not be read and was not uploaded.",
+      "other": "{1:int} files could not be read and were not uploaded."
+    },
+    "de": {
+      "one": "{1:int} Datei ließ sich nicht lesen und wurde nicht hochgeladen.",
+      "other": "{1:int} Dateien ließen sich nicht lesen und wurden nicht hochgeladen."
+    }
+  },
   "depot_drop_not_local": {
     "en": "“{1}” is not on this computer and was not uploaded.",
     "de": "„{1}“ liegt nicht auf diesem Computer und wurde nicht hochgeladen."
