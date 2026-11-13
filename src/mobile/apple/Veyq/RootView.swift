@@ -14,8 +14,11 @@ struct RootView: View {
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             .background(Role.bg)
-        case .signIn(let working, let error, let adding, let server, let email):
-            SignInView(working: working, error: error, adding: adding, server: server, email: email, onCancel: model.cancelAdd) { server, email, password, secretKey in
+        case .signIn(let working, let error, let adding, let server, let email, let kit):
+            SignInView(
+                working: working, error: error, adding: adding, server: server, email: email, kit: kit, onCancel: model.cancelAdd,
+                onKit: model.readKit(_:typedServer:), onClearKit: model.clearKit
+            ) { server, email, password, secretKey in
                 model.signIn(server: server, email: email, password: password, secretKey: secretKey)
             }
         case .unlock(let record, let working, let error):

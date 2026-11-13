@@ -164,6 +164,27 @@
     "de": "Konnte das Kit nicht lesen. Versuche eine andere Datei oder gib deinen Secret Key ein.",
     "note": "An Emergency Kit file was picked and no kit was found in it (the web's kitUnreadable)."
   },
+  "signin_kit_open": {
+    "en": "Open Emergency Kit",
+    "de": "Notfall-Kit öffnen",
+    "note": "the sign-in's button that picks the Emergency Kit file (the web's 'Upload Emergency Kit': nothing is uploaded)"
+  },
+  "signin_kit_held": {
+    "en": "From your Emergency Kit",
+    "de": "Aus deinem Notfall-Kit",
+    "note": "the Secret Key row once a kit was read: the key is held, never shown"
+  },
+  "signin_kit_clear": {
+    "en": "Enter it instead",
+    "de": "Stattdessen eingeben",
+    "apple_en": "Enter It Instead",
+    "note": "the Secret Key row's way back to typing the key, which lets the kit's key go"
+  },
+  "signin_kit_other_server": {
+    "en": "This kit was made at {1}; the server was {2}. If signing in there does not work, try {2}.",
+    "de": "Dieses Kit wurde auf {1} erstellt; vorher stand hier {2}. Klappt die Anmeldung dort nicht, versuch es auf {2}.",
+    "note": "{1} the server the kit names, {2} the server the form held before (the web's kitOtherServer)"
+  },
   "drawer_home": {
     "en": "Home",
     "de": "Home"

@@ -125,14 +125,25 @@ class KitImportTest {
     fun theQrIsLookedForOnTheFirstThreePagesAtTheWebsWidth() = runTest {
         val played = PlayedPictures(pages = 5, qrOn = mapOf(4 to TOKEN_A))
         assertNull(read(pdf(), played))
-        assertEquals(listOf("pages", "page 1@2400", "page 2@2400", "page 3@2400"), played.asked)
+        assertEquals(listOf("pages", "page 1@2400", "page 1@2000", "page 2@2400", "page 2@2000", "page 3@2400", "page 3@2000"), played.asked)
+    }
+
+    @Test
+    fun aPageThatReadsNothingAtTheWebsWidthIsDrawnOnceMoreAtTheFallback() = runTest {
+        // a renderer whose 2400 px drawing does not read (PDFKit's of the photographed kit) and whose fallback one does
+        val played = PlayedPictures(pages = 2, qrOn = mapOf(2 to TOKEN_A), readableAt = KitImport.FALLBACK_PIXELS)
+        assertKit(assertNotNull(read(pdf(), played)), "https://familie.example.org", KitImport.ServerFrom.TOKEN)
+        assertEquals(listOf("pages", "page 1@2400", "page 1@2000", "page 2@2400", "page 2@2000"), played.asked)
+        val picture = PlayedPictures(picture = TOKEN_A, readableAt = KitImport.FALLBACK_PIXELS)
+        assertNotNull(read(byteArrayOf(0x89.toByte()) + "PNG\r\n".latin1(), picture))
+        assertEquals(listOf("picture@2400", "picture@2000"), picture.asked)
     }
 
     @Test
     fun aForeignQrIsPassedAndTheNextPageRead() = runTest {
         val played = PlayedPictures(pages = 5, qrOn = mapOf(1 to "https://example.org", 2 to TOKEN_A))
         assertKit(assertNotNull(read(pdf(), played)), "https://familie.example.org", KitImport.ServerFrom.TOKEN)
-        assertEquals(listOf("pages", "page 1@2400", "page 2@2400"), played.asked)
+        assertEquals(listOf("pages", "page 1@2400", "page 1@2000", "page 2@2400"), played.asked)
         assertTrue(played.drawn.all { f -> f.luminance.all { it == 0.toByte() } }, "a drawn page left unzeroed")
     }
 
@@ -172,6 +183,8 @@ class KitImportTest {
         private val pages: Int? = 5,
         private val qrOn: Map<Int, String> = emptyMap(),
         private val picture: String? = null,
+        /** Where set, a code is drawn only at this width; at any other the page or picture is blank. */
+        private val readableAt: Int? = null,
     ) : KitPictures {
         val asked = mutableListOf<String>()
         val drawn = mutableListOf<QrFrame>()
@@ -179,11 +192,11 @@ class KitImportTest {
         override suspend fun pdfPages(): Int? = pages.also { asked += "pages" }
         override suspend fun pdfPage(page: Int, width: Int): QrFrame? {
             asked += "page $page@$width"
-            return drawing(qrOn[page]).also { drawn += it }
+            return drawing(qrOn[page]?.takeIf { readableAt == null || width == readableAt }).also { drawn += it }
         }
         override suspend fun picture(longSide: Int): QrFrame? {
             asked += "picture@$longSide"
-            return drawing(picture).also { drawn += it }
+            return drawing(picture?.takeIf { readableAt == null || longSide == readableAt }).also { drawn += it }
         }
 
         private fun drawing(text: String?): QrFrame {

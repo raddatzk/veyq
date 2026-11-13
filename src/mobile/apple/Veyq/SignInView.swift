@@ -1,5 +1,6 @@
 import LocalAuthentication
 import SwiftUI
+import UniformTypeIdentifiers
 import VeyqCore
 
 struct SignInView: View {
@@ -8,21 +9,32 @@ struct SignInView: View {
     /// Opened by "Add server": titled so, and left again with Cancel.
     var adding: Bool = false
     var onCancel: () -> Void = {}
+    /// An Emergency Kit read: its Secret Key held by core, never here; the row says where it came from.
+    var kit: SessionModelKitShown?
+    /// The picked kit file's URL (security-scoped, opened in place) and the server as typed now.
+    var onKit: (URL, String) -> Void = { _, _ in }
+    var onClearKit: () -> Void = {}
     let onSignIn: (String, String, String, String) -> Void
 
     @State private var server: String
     @State private var email: String
     @State private var password = ""
     @State private var secretKey = ""
+    @State private var pickingKit = false
 
     init(
         working: Bool, error: Msg?, adding: Bool = false, server: String? = nil, email: String? = nil,
-        onCancel: @escaping () -> Void = {}, onSignIn: @escaping (String, String, String, String) -> Void
+        kit: SessionModelKitShown? = nil, onCancel: @escaping () -> Void = {},
+        onKit: @escaping (URL, String) -> Void = { _, _ in }, onClearKit: @escaping () -> Void = {},
+        onSignIn: @escaping (String, String, String, String) -> Void
     ) {
         self.working = working
         self.error = error
         self.adding = adding
+        self.kit = kit
         self.onCancel = onCancel
+        self.onKit = onKit
+        self.onClearKit = onClearKit
         self.onSignIn = onSignIn
         _server = State(initialValue: server.map(Self.shortServer) ?? "veyq.localhost:8080")
         _email = State(initialValue: email ?? "")
@@ -57,7 +69,34 @@ struct SignInView: View {
                 #endif
                 SecureField(say(.signinPassword), text: $password)
                     .textContentType(.password)
-                SecureField(say(.signinSecretKey), text: $secretKey)
+                if kit != nil {
+                    // the kit's Secret Key is core's, never shown: the row says where it came from; its clear goes back to typing
+                    LabeledContent(say(.signinSecretKey)) {
+                        HStack(spacing: 8) {
+                            Text(say(.signinKitHeld)).foregroundStyle(Role.muted)
+                            Button(action: onClearKit) { Image(systemName: "xmark.circle.fill") }
+                                .buttonStyle(.borderless)
+                                .foregroundStyle(Role.muted)
+                                .accessibilityLabel(say(.signinKitClear))
+                                .help(say(.signinKitClear))
+                                .disabled(working)
+                        }
+                    }
+                } else {
+                    SecureField(say(.signinSecretKey), text: $secretKey)
+                }
+            } footer: {
+                if let kit, let before = kit.typedServer {
+                    Text(say(.signinKitOtherServer, kit.server ?? "", before))
+                }
+            }
+            Section {
+                Button {
+                    pickingKit = true
+                } label: {
+                    Label(say(.signinKitOpen), systemImage: "folder")
+                }
+                .disabled(working)
             }
             if let error {
                 Section { Text(say(error)).foregroundStyle(.red) }
@@ -65,7 +104,7 @@ struct SignInView: View {
             Section {
                 // Confirming is the web's green role (`--app-primary`), not the accent.
                 Button {
-                    onSignIn(server, email, password, secretKey)
+                    onSignIn(server, email, password, kit != nil ? "" : secretKey)
                 } label: {
                     Group { if working { ProgressView() } else { Text(say(.signinTitle)) } }.frame(maxWidth: .infinity)
                 }
@@ -88,6 +127,18 @@ struct SignInView: View {
         // the form a column of its own, the window around it the app's ground (an iPad, a Mac)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(Role.bg)
+        // Files and iCloud Drive on iOS, the open panel on macOS: the file opened in place, never imported as a copy;
+        // the completion reads only its URL and the server typed (the binding is cleared before it runs)
+        .fileImporter(isPresented: $pickingKit, allowedContentTypes: [.pdf, .image]) { result in
+            if case .success(let url) = result { onKit(url, server) }
+        }
+        // a kit read fills the email and the server it gave (core's gate); both stay editable
+        .onChange(of: kit) {
+            guard let kit else { return }
+            email = kit.email
+            if let origin = kit.server { server = origin }
+            secretKey = ""
+        }
     }
 }
 

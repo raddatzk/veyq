@@ -15,6 +15,8 @@ import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.layout.wrapContentWidth
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.material.icons.outlined.Close
+import androidx.compose.material.icons.outlined.FileOpen
 import androidx.compose.material.icons.outlined.Fingerprint
 import androidx.compose.material.icons.outlined.LockOpen
 import androidx.compose.material.icons.outlined.Password
@@ -46,7 +48,10 @@ fun AppRoot(model: AppModel) {
     Surface(modifier = Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
         when (val s = screen) {
             Screen.Starting -> StartingScreen()
-            is Screen.SignIn -> SignInScreen(s, { server, email, password, secretKey -> model.signIn(server, email, password, secretKey) }, model::cancelAdd)
+            is Screen.SignIn -> SignInScreen(
+                s, { server, email, password, secretKey -> model.signIn(server, email, password, secretKey) }, model::cancelAdd,
+                onKit = model::readKit, onClearKit = model::clearKit,
+            )
             is Screen.Unlock -> UnlockScreen(s, model::unlock, model::otherAccount)
             is Screen.Signed -> offer?.let { OfferScreen(it, trustWorking, model::answerOffer) }
                 ?: s.managing?.let { ManageScreen(it, model) } ?: ShellScreen(s, model)
@@ -55,11 +60,29 @@ fun AppRoot(model: AppModel) {
 }
 
 @Composable
-fun SignInScreen(state: Screen.SignIn, onSignIn: (String, String, String, String) -> Unit, onCancel: () -> Unit = {}) {
+fun SignInScreen(
+    state: Screen.SignIn,
+    onSignIn: (String, String, String, String) -> Unit,
+    onCancel: () -> Unit = {},
+    onKit: (android.net.Uri, String) -> Unit = { _, _ -> },
+    onClearKit: () -> Unit = {},
+) {
     var server by rememberSaveable { mutableStateOf(state.server ?: BuildDefaults.SERVER) }
     var email by rememberSaveable { mutableStateOf(state.email.orEmpty()) }
     var password by rememberSaveable { mutableStateOf("") }
     var secretKey by rememberSaveable { mutableStateOf("") }
+    // a kit read fills the email and the server it gave (the core's gate); both stay editable
+    androidx.compose.runtime.LaunchedEffect(state.kit) {
+        if (state.kit != null) {
+            email = state.email.orEmpty()
+            state.server?.let { server = it }
+            secretKey = ""
+        }
+    }
+    // the system's document picker (Storage Access Framework): a PDF or a picture of the kit's QR, read in memory
+    val pickKit = androidx.activity.compose.rememberLauncherForActivityResult(
+        androidx.activity.result.contract.ActivityResultContracts.OpenDocument(),
+    ) { uri -> uri?.let { onKit(it, server) } }
     Column(
         modifier = Modifier.fillMaxSize().safeDrawingPadding().imePadding().verticalScroll(rememberScrollState()).formColumn(),
         verticalArrangement = Arrangement.spacedBy(12.dp),
@@ -77,13 +100,41 @@ fun SignInScreen(state: Screen.SignIn, onSignIn: (String, String, String, String
             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Email))
         OutlinedTextField(password, { password = it }, label = { Text(stringResource(R.string.signin_password)) }, singleLine = true, modifier = Modifier.fillMaxWidth(),
             visualTransformation = PasswordVisualTransformation(), keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password))
-        OutlinedTextField(secretKey, { secretKey = it }, label = { Text(stringResource(R.string.signin_secret_key)) }, singleLine = true, modifier = Modifier.fillMaxWidth(),
-            visualTransformation = PasswordVisualTransformation(), keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password))
+        val kit = state.kit
+        if (kit != null) {
+            // the kit's Secret Key is the core's, never shown: the row says where it came from, its clear goes back to typing
+            OutlinedTextField(
+                stringResource(R.string.signin_kit_held), {}, readOnly = true, singleLine = true, modifier = Modifier.fillMaxWidth(),
+                label = { Text(stringResource(R.string.signin_secret_key)) },
+                trailingIcon = {
+                    androidx.compose.material3.IconButton(onClick = onClearKit, enabled = !state.working) {
+                        androidx.compose.material3.Icon(androidx.compose.material.icons.Icons.Outlined.Close, stringResource(R.string.signin_kit_clear))
+                    }
+                },
+            )
+        } else {
+            OutlinedTextField(secretKey, { secretKey = it }, label = { Text(stringResource(R.string.signin_secret_key)) }, singleLine = true, modifier = Modifier.fillMaxWidth(),
+                visualTransformation = PasswordVisualTransformation(), keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password))
+        }
+        androidx.compose.material3.OutlinedButton(
+            onClick = { pickKit.launch(arrayOf("application/pdf", "image/*")) },
+            enabled = !state.working,
+            modifier = Modifier.fillMaxWidth(),
+        ) {
+            androidx.compose.material3.Icon(androidx.compose.material.icons.Icons.Outlined.FileOpen, null, Modifier.padding(end = 8.dp))
+            Text(stringResource(R.string.signin_kit_open))
+        }
+        kit?.typedServer?.let { before ->
+            Text(
+                stringResource(R.string.signin_kit_other_server, kit.server.orEmpty(), before),
+                style = MaterialTheme.typography.bodySmall, color = role(LocalPalette.current.muted),
+            )
+        }
         state.error?.let { Text(say(it), color = MaterialTheme.colorScheme.error) }
         // Confirming is the web's green role (`--app-primary`), not the accent.
         val palette = LocalPalette.current
         Button(
-            onClick = { onSignIn(server, email, password, secretKey) },
+            onClick = { onSignIn(server, email, password, if (state.kit != null) "" else secretKey) },
             enabled = !state.working,
             shape = MaterialTheme.shapes.small,
             colors = androidx.compose.material3.ButtonDefaults.buttonColors(containerColor = role(palette.primary), contentColor = role(palette.onFill)),

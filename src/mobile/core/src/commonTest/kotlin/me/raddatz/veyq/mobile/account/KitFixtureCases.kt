@@ -48,7 +48,7 @@ abstract class KitFixtureCases {
             assertNull(pdf.field("address1"), name)
             val played = KitImportTest.PlayedPictures(pages = 5)
             assertNull(KitImport.read(p, bytes, played), name)
-            assertEquals(listOf("pages", "page 1@2400", "page 2@2400", "page 3@2400"), played.asked, name)
+            assertEquals(listOf("pages", "page 1@2400", "page 1@2000", "page 2@2400", "page 2@2000", "page 3@2400", "page 3@2000"), played.asked, name)
         }
     }
 }

@@ -492,6 +492,66 @@ From `src/mobile` unless named:
   simulator's app container `tmp`/`Library/Caches` listed after the picks show nothing of the kit; that measurement
   bitten once by a planted file (B15).
 
+  **Status: built and passed up to the sign-in (2026-11-13); the signing in with a dev kit is pending (the dev backend
+  was down and not to be started by this phase) — the box stays open until it is green.**
+  **Built:** words `signin_kit_open` ("Open Emergency Kit" / "Notfall-Kit öffnen"), `signin_kit_held` ("From your
+  Emergency Kit" / "Aus deinem Notfall-Kit"), `signin_kit_clear` ("Enter it instead" / "Stattdessen eingeben", Apple
+  Title Case) and `signin_kit_other_server` (the web's `kitOtherServer` turned to the app's case: the kit's server
+  replaced the one the form held). **Android** `KitFile.kt`: `KitFile.read` — the `OpenDocument` URI through
+  `ContentResolver` into one array of the size the provider says (+1 to see the end without growing), at most
+  `KitImport.FILE_CAP`, an over-cap file read no further and answered empty (the core then says `signin_kit_unreadable`),
+  every array let go zeroed; `AndroidKitPictures` — `PdfRenderer` over Depot's `OpenPdf` `memfd` of the same bytes, a
+  picture through `ImageDecoder` scaled to the long side, BT.601 luminance taken a row at a time, each bitmap cleared and
+  recycled. `AppModel.readKit(uri, typedServer)`/`clearKit()`, `Screen.SignIn.kit`; `SignInScreen`: an outlined
+  "Open Emergency Kit" button under the Secret Key row (`application/pdf`, `image/*`), the row read-only "From your
+  Emergency Kit" with a trailing clear while a kit is held, the other-server notice under the button, email and server
+  taken from the gate when a kit arrives; the sign-in then sends an empty key. **Apple** `KitFile.swift`: `KitBytes.read`
+  — the `.fileImporter` URL (opened in place, never `asCopy`) read under its security scope inside an
+  `NSFileCoordinator` read, straight into one `NSMutableData` with POSIX `read` (no intermediate `Data`), over-cap
+  refused unread, zeroed by `clear()` after the core's read; `KitDrawer` — core's new `KitDrawing` over PDFKit
+  (`PDFDocument(data:)` over the same memory, no copy) and ImageIO (`CGImageSourceCreateThumbnailAtIndex`, drawn up
+  where ImageIO only scales down), each into an 8-bit grey `CGContext`. Core `appleMain` `account/AppleKit.kt`:
+  `KitDrawing`/`KitDrawn` (Swift implements no suspending call, so blocking calls run on `Dispatchers.Default`),
+  `AppleKit.bytes` (one `memcpy`) and `pictures(drawing)`, the drawn buffer zeroed once copied. `AppModel.readKit`/
+  `clearKit`, `ScreenState.signIn(…, kit:)`; `SignInView`: the Secret Key row a `LabeledContent` "From your Emergency
+  Kit" with an `xmark.circle.fill` clear while held, the notice as the section's footer, a "Open Emergency Kit" row
+  (`folder`) under it, `.onChange(of: kit)` filling email and server. The debug build's `DevLogin` reads
+  `VEYQ_DEV_KIT=<path>` through the same `readKit` and logs only where the server came from (`veyq-kit:`).
+  **Deviation (core):** `KitImport.FALLBACK_PIXELS` = 2000 — a page (or picture) that reads nothing at 2400 is drawn
+  once more 2000 wide. Measured first on macOS: PDFKit's drawing of `kit-photo.pdf` read nothing at exactly 2400 (8-bit
+  grey, generic gray 2.2 and sRGB-to-luminance alike) and read at every width tried from 1600 to 3600 but 2400 (decoded on
+  macosArm64; 1000-1400 and a linear-gray drawing never). The resampling at one width decides, so the order tries a
+  second width; PDFBox and Android's `PdfRenderer` read the photo at 2400 already. Tests: `KitImportTest`
+  `aPageThatReadsNothingAtTheWebsWidthIsDrawnOnceMoreAtTheFallback` (page and picture) and the drawing orders in it
+  and `KitFixtureCases` (17 cases). A measurement trap on the way: a gray PNG read back through Java's
+  `BufferedImage.getRGB` is gamma-converted, so a frame that failed in the app decoded on the JVM — compare raw bytes.
+  **Met:** `./gradlew :core:jvmTest :core:macosArm64Test :bridge:jvmTest :android:assembleDebug` green (from
+  `src/mobile`; `KitImportTest` 17 on both targets); `xcodebuild -project Veyq.xcodeproj -scheme Veyq -destination
+  'platform=macOS' … build` and the scheme for a throwaway iPhone 18 Pro simulator (iOS 27) green; the guards
+  (`scripts/validate_*.py` but guard_gaps) green. **Pass, Android** (throwaway AVD `veyq_kit6`, Pixel 8, API 36; deleted
+  after): the three fixtures `adb push`ed to Downloads, each picked in DocumentsUI after a fresh start (server
+  `veyq.localhost:8080`): the form showed `https://familie.example.org`, `alex.beispiel@example.org`, the row "From your
+  Emergency Kit", and the notice, each within 3 s (read with `uiautomator dump`); the clear brought the typed row back;
+  the same at 2560x1600/320 dpi (the form a centred column). **Pass, macOS and iOS:** the computer-use grant for the app
+  and the iOS Simulator tool's access were not given in this session, so no panel could be clicked: the built apps read
+  each fixture through `VEYQ_DEV_KIT` (macOS: the fixture in the scratchpad; iOS: the fixture in the simulator's Files
+  "On My iPhone" storage) — `veyq-kit: kit held, server from TOKEN, other server said: true` for all three on both, and a
+  `simctl io` screenshot of the German form filled. **The pickers themselves (`.fileImporter`, the open panel and the
+  Files sheet) were not clicked — open.** **No copy left** (B15 bitten each time by a planted copy, which each listing
+  then named, removed after): Android `run-as me.raddatz.veyq find . -newer kit-marker` → only ART's
+  `files/profileInstalled`; iOS the app's data container `find . -newer kit-marker -type f` → only iOS's
+  `Saved Application State` scene files (1 KB, no kit text: grep for the email, host and key groups found none), and no
+  file carrying `veyqkit:`; macOS every file newer than the marker in the user temp and cache folders and the app's
+  `Library` folders, held to "carries `veyqkit:` or a fixture's first 2 KiB or is a PDF" → only two build artifacts with
+  the word in source text (a cinterop `protocols*.m`, a Kotlin daemon log; neither has the fixture's token).
+  **Pending, live:** with the dev backend up — `VEYQ_LIVE=http://veyq.localhost:8080 VEYQ_ENV_FILE=<main
+  checkout>/.run/.env ./gradlew :core:jvmTest --tests '*LiveSignInTest*'` (phase 4's) and, per app, a kit built from the
+  principal's credentials (as `LiveSignInTest.aKitPdfSignsThePrincipalInWithAnEmptySecretKey` builds it, written under
+  `build/` and removed after) picked, the password entered by `devlogin.py`'s way, Sign in → the shell with its tenants;
+  and the three pickers clicked once by hand (Android's was).
+  **Bites:** B15 as above (three platforms); B19 `WIDTHS` without the fallback → `aPageThatReadsNothing…`,
+  `theQrIsLookedFor…`, `aForeignQrIsPassed…` and the fixture premise red, restored with `/bin/cp -f`, compared equal.
+
 - [ ] **7 every app — scan the kit.** **Entry condition:** `cr-core-qr-decoder`'s scan model, its cameras and its
   `Scan.*` calls have landed (its phases 3–5); re-read the marked sentences first. D7 on all four sign-ins: the entry,
   `accepts = EmergencyKit.read`, `Found` into D4, `NoCamera` hiding the entry, `Denied` said. A `SessionModelTest` case
@@ -575,6 +635,16 @@ proof is the tests and passes `src/mobile/CLAUDE.md` § Prove your work names �
 ## Retrospective
 
 (filled at the end)
+
+Phase 6 (the implementer, 2026-11-13):
+- **One renderer's width is not a rule.** 2400 came from the web and held for PDFBox and pdfium; PDFKit's drawing of the
+  photographed kit read at every width from 1600 to 3600 except 2400. Only the macOS pass showed it — a played or
+  JVM-drawn page never would. Next time: a platform drawing's pass runs every fixture, not the easiest.
+- **Compare raw bytes, never a picture read back.** A PNG of the failing frame decoded on the JVM because
+  `getRGB` gamma-converts grey; that sent the first fix (1200) the wrong way. The frame as the decoder gets it is the
+  only evidence.
+- **A pass without a hand on the picker.** Neither the app nor the simulator was granted to this session; a debug path
+  through the same read (`VEYQ_DEV_KIT`) proved everything but the picker's own sheet, and said so.
 
 Phase 5 (the implementer, 2026-11-13):
 - **A fixture loop hides the second fixture from a bite.** B14's first run stopped at `kit-printed.pdf`'s failure and
