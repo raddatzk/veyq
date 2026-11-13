@@ -567,8 +567,12 @@ does ([ADR 0133](https://github.com/raddatzk/veyq/blob/main/docs/decisions/0133-
     every computer that trusts the certificate keeps trusting it until someone removes it from that computer's store.
   - **The step is only as good as the file you trust.** The release lists `veyq.cer` in its signed manifest and gives
     it a signature bundle like a package, so you can check it before you trust it
-    ([Verify it yourself](/security/verify-it-yourself/#the-desktop-apps-packages)) — not built yet, like the release's
-    signing job and the certificate itself: no release carries any of them.
+    ([Verify it yourself](/security/verify-it-yourself/#the-desktop-apps-packages)) — the release's signing job is
+    built and has not run, and the certificate is not made yet: no release carries any of them.
+  - **A package installs while the certificate is valid.** The release's signature carries no timestamp (no
+    timestamp authority in the release's path, decision 7), so once the certificate expires Windows refuses to
+    install a package it signed (remembered from Windows' signing rules, not measured); a newer release signed by
+    its successor installs, after the new trust step.
 - **No auto-update.** There is no repository and no update feed of veyq's own (decision 9): a person learns of a new
   release and installs its file, and until then runs the older app. A store listing would bring updates and is not
   built.

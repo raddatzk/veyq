@@ -170,7 +170,9 @@ button with its popover and Windows' `AppBarButton` with its flyout, each with C
     without it the install is refused `0x800B0109`, unelevated the import is refused, and the install itself needs no
     elevation (measured with UAC on, ADR 0123's Consequences, the MSIX). Their Windows then trusts every package that
     certificate's key signs under `CN=veyq`, not only the one they checked, and nothing revokes it (remembered from the
-    MSIX trust model, not measured). The release attaching `veyq.cer` under `apps` with a cosign bundle is not built.
+    MSIX trust model, not measured). The release attaching `veyq.cer` under `apps` with a cosign bundle, and signing the
+    MSIX with that certificate only, is written and has not run (ADR 0133 decision 7; the certificate is the owner's to
+    make).
   - **Idle memory** is 359–459 MiB (WinUI, x64 under Prism emulation on the ARM VM, measured 2026-11-12 by
     `PeakWorkingSet64`); playing a medium and a 2 GiB upload add an amount that does not scale with the file. What it is on
     an x64 PC, and whether de's +243 MiB over a 2 GiB upload (en's +86) is the GC's slack, is unmeasured.
