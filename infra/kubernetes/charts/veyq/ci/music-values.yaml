@@ -27,6 +27,7 @@ gateway:
   tls:
     mode: per-domain
 music:
+  released: true # the TEMPORARY release flag music.released (ADR 0131 decision 8)
   domain: music.veyq.example.org
   spotifyClientId: 0123456789abcdef0123456789abcdef
   appleDeveloperToken: eyJhbGciOiJFUzI1NiJ9.eyJpc3MiOiJjaSJ9.c2ln

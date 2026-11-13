@@ -25,6 +25,8 @@ data class SetupState(
     val services: Map<String, ServiceAddress>,
     /** The deployment entries' values (ADR 0131 decision 4), carried on their entries while active. */
     val deployed: Map<String, DeployedValues>,
+    /** The TEMPORARY music release flag (musicReleased, ADR 0131 decision 8), for the web's one helper. */
+    val musicReleased: Boolean = false,
 )
 
 /** The owner registration payload, mapped from the API request at the resource boundary. */
@@ -80,6 +82,7 @@ class SetupHandler(
         requirements = capabilities.requirements(null),
         services = services.configured(),
         deployed = music.settings.values(),
+        musicReleased = music.released,
     )
 
     fun createOwner(registration: OwnerRegistration): String {

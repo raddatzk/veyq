@@ -21,7 +21,7 @@ spec:
       backendRefs:
         - name: veyq-app
           port: 8080
-{{- with (.Values.music | default dict).domain }}
+{{- with (include "veyq.musicDomain" .) }}
 ---
 # The music host (ADR 0131): the app serves the music frame there and answers nothing else, so the whole host goes to
 # the app, as the bootstrap domain does. Chart-owned like the admin's route; a listener of its own under per-domain.

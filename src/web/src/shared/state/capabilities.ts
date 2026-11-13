@@ -26,6 +26,9 @@ export const capabilityState = reactive({
   // application switched off there is erased, by register id; null while no tenant's set is loaded. A row outlives the
   // switch while a due erasure still runs, so a reader asks `useCapabilities().erasureDay`, which ANDs it with the set.
   tenantErasures: null as Record<string, Date> | null,
+  // TEMPORARY: the setup status's music release flag (musicReleased, ADR 0131 decision 8), read only through
+  // `features/memories/music/musicRelease.ts`; false until discovered. Removed with the flag.
+  musicReleased: false,
   // The instance's advertised version; null until discovered. `major` drives the hard gate, `build` is info-only.
   major: null as number | null,
   build: null as number | null,

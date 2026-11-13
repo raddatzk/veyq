@@ -46,6 +46,9 @@ enableAutoUnmount(afterEach)
 beforeEach(async () => {
   const { defaultServices } = await import('./services')
   defaultServices()
+  // TEMPORARY: every test runs the music as built (musicReleased, ADR 0131 decision 8); the tests of the dark release
+  // switch it off. Removal: delete these two lines with the flag.
+  ;(await import('../shared/state/capabilities')).capabilityState.musicReleased = true
 })
 
 // ─────────────────────────────────────────────────────────────────────────────────────────────────────────

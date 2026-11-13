@@ -124,6 +124,26 @@ describe('a sign-out forgets the music sign-in', () => {
     expect(frames).toHaveLength(0)
   })
 
+  it('TEMPORARY musicReleased off (released dark, ADR 0131 decision 8): skips the music entirely - no frame asked or mounted, no timer, no wait', async () => {
+    vi.useFakeTimers()
+    const { frames } = catchFrames()
+    const live = vi.fn(async () => {})
+    setLiveFrameForget(live)
+    setMusicConsent('apple-music', true)
+    capabilityState.musicReleased = false
+    let done = false
+    void forgetMusicSignIn({ startedHere: true }).then(() => (done = true))
+    await Promise.resolve()
+    expect(done, 'settled within a microtask').toBe(true)
+    expect(vi.getTimerCount()).toBe(0)
+    expect(frames).toHaveLength(0)
+    expect(live).not.toHaveBeenCalled()
+    // Control: released, the same browser's ending asks the live frame.
+    capabilityState.musicReleased = true
+    await forgetMusicSignIn({ startedHere: true })
+    expect(live).toHaveBeenCalledOnce()
+  })
+
   it('mounts nothing while the server names no music host', async () => {
     const { frames } = catchFrames()
     setMusicConsent('apple-music', true)

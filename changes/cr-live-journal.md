@@ -130,10 +130,12 @@ which moves this CR's journal onto core's stream; this CR's poll stays the fallb
 11. **UI** (reuse first, `ui-web-styleguide.md` § Reuse first): a **Journal** tab on a Memory's and a Chapter's detail
     (beside Chapters/Map); the editor with a small toolbar (headings, list, embed menu); a read view for `READ`
     guests and when the switch is off; a contributors popover — on a guest's page each other person a **pseudonym**
-    (ADR 0133 decision 9): `features/memories/journal/journalPseudonym.ts` names an alias from a fixed list of 64
-    animals in EN and DE (each German one with its gender, so "Anonymer Fuchs", "Anonyme Eule", "Anonymes Pferd"; the
-    animal is the alias's first two bytes as an unsigned integer mod 64, the avatar colour its third byte mod the
-    palette), numbers equal animals ("Anonymous Fox 2") in contributor-ordinal order and its own row "You"; a member's
+    (ADR 0133 decision 9): `features/memories/journal/journalPseudonym.ts` names an alias by an adjective and an animal
+    from two fixed lists of 64 each in EN and DE (each German animal with its gender, each German adjective a regular
+    stem, so "Fröhlicher Fuchs", "Fröhliche Eule", "Fröhliches Pferd"; EN "Curious Owl"; the animal is the alias's
+    bytes 0-1 as an unsigned big-endian integer mod 64, the adjective its bytes 2-3 mod 64, the avatar colour its byte 4
+    mod the palette), numbers equal names ("Curious Owl 2") in contributor-ordinal order and its own row "You" (de:
+    "Du"); a member's
     page shows names as before; a **History** panel for members (list, preview,
     Restore with a confirmation, Undo by restoring the one before); the incomplete/mismatch banners; a guest's
     editor shows `GuestWriteRecordNotice`. EN+DE in the i18n files.
@@ -196,7 +198,8 @@ kept log replayed; compaction's jitter and drop on `409`; the flush tick bounds 
 **Phase 5 — web, the editor and its embeds.** Decisions 10, 11 (without History). Unit tests per renderer token and
 placeholder; the editor binds the doc and flushes; the read view for `READ` and the switch off; the guest's editor
 shows the notice; the contributors popover names for a member and pseudonyms for a guest (`journalPseudonym`: the
-same alias the same name, EN and DE with the German adjective agreeing, equal animals numbered in ordinal order with
+same alias the same name, EN and DE with the German adjective agreeing for each gender, both lists 64 distinct words in
+each language, a name's animal and adjective from their own alias bytes, equal names numbered in ordinal order with
 the earlier writer's suffix kept when a later one appends, the guest's own row "You", every list entry a distinct
 animal). A lane L1 spec in `tests/e2e`:
 a member and a `READ_WRITE` guest in two browser contexts type into one journal and both see both texts; a `READ`

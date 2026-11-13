@@ -132,7 +132,8 @@ across sites, and they have no documented control from the page.
        a **hidden frame** of the music host mounted to forget: handed no playlist and no credential, it loads no vendor
        script, and on `forget` clears its origin's local and session storage - the music origin keeps nothing of its own
        there, so everything in it is a vendor's. Every `forget` clears that storage, behind a player's own sign-out too.
-     The **consent stays**: it is this browser's, and only Turn music off withdraws it. A **lock** keeps the session and
+     The **consent stays** - the owner's decision (2026-11-13: a sign-out does *not* withdraw the music consent): it is
+     this browser's, not the account's, and only Turn music off withdraws it. A **lock** keeps the session and
      the person - it is reached by a new document (a reload) or a rotation whose outcome is unknown, which leave no frame
      behind to ask, and the locked screen's own sign-out is a sign-out - so it forgets nothing. A tenant switch forgets
      nothing either: the same person, signed in.
@@ -179,6 +180,29 @@ across sites, and they have no documented control from the page.
 7. **A viewer without the right account sees why.** A Spotify account without Premium, or an Apple ID without a
    subscription, gets the vendor's refusal in plain words and the link to open the playlist in the service's app. No
    preview is played — previews are an embed's feature, not the SDKs'.
+8. **Released dark — off until the owner switches it on** (owner 2026-11-13). The music landed before the owner wanted to
+   release it, so it ships off on every instance, one that sets a music host included, behind ONE **temporary release
+   flag** kept apart from decisions 1-7: `VEYQ_MUSIC_RELEASED=true` switches it on (Compose `MUSIC_RELEASED=true`, the
+   chart's `music.released: true`), default false. Switched on, the music is exactly as decisions 1-7 build it (the
+   `memories.music` entries decide, a missing music host shows the playlists as links); off, the instance is what it was
+   before this ADR. The flag is read through one helper on each side and by nothing else:
+   - **the backend:** `MusicDeployment.released` (`veyq.music.released`), whose one use is `MusicSettings.deployed`: off,
+     none of the three music values is read (a malformed one refuses no boot), so all three entries are unconfigured -
+     and with them everything decisions 2-4 hang on them: no music entry or value on the wire, the app's CSP keeps
+     `frame-src 'none'`, its Permissions-Policy grants no music origin, its COOP stays `same-origin`, no host serves the
+     frame, the Compose router takes no music host (`TenantIngressSinkProducer` asks `MusicFrameHost`), the privacy
+     notice's passage is not rendered (its `switch` is `memories.music`, and a revision bump prompts nobody: nothing
+     accepts the notice). It serves the flag to the web as the setup status's `musicReleased`; the chart renders no
+     music route, listener or variable while `music.released` is false (`veyq.musicDomain`);
+   - **the web:** `features/memories/music/musicRelease.ts` `musicReleased()`, called at the four surfaces: the
+     header's buttons, the ⋯ menu's entry, the footer bar (`app.footerBar(MusicBar, musicReleased)`: core mounts not
+     even its empty frame) and Memories' sign-out step, which returns at once - no frame asked or mounted, no timer
+     (the ending's 2 s budget is started only while a step is registered and cleared the moment the steps settle).
+   **Removal at release:** `git grep -iE 'music[._-]?released'` lists every site - the definition (`VeyqConfig.Music.released`,
+   the setup status's field, `capabilityState.musicReleased`, `musicRelease.ts`), each helper call, the tests that assert
+   the music absent while off (`MusicDarkSliceTest`, the `musicReleased off` cases, the test profile's music block and the
+   web test setup's line), Compose's, the chart's and the e2e overlay's variable, and these doc lines; deleting them leaves
+   the music as built (inbox #859).
 
 ## Consequences
 
@@ -205,6 +229,9 @@ across sites, and they have no documented control from the page.
   ends (the music switched off since, or a page that has not read them yet) mounts no frame, and a browser closed
   without signing out forgets nothing; the next veyq sign-out in it does. That clearing the storage is what MusicKit's
   `unauthorize()` does locally is *remembered*, not measured - the owed live pass checks it.
+- **Released dark** (decision 8, `musicReleased`): lane L1's overlay switches the flag on, so the browser suite sees the
+  music as built; the dark form is proven by the backend's `MusicDarkSliceTest` (this suite's default profile sets a
+  music host and both values but not the flag) and the web's `musicReleased off` unit cases.
 - **Not built:** the uploaded audio file (inbox #36's residual), a chapter inheriting its Memory's playlist (#847), the
   vendors' logo files (#857).
 

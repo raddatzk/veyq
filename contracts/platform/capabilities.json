@@ -302,7 +302,7 @@
       "serves": ["uc.memory.music"],
       "source": "deployment",
       "levels": ["instance", "tenant"],
-      "description": "The music frame (ADR 0131): active only while the deployment sets the music host (VEYQ_MUSIC_DOMAIN) and at least one child is configured, and the entry is on at both levels. Carries the frame's address as serviceUrl; the served CSP names the music host in frame-src, the Permissions-Policy allows it encrypted-media and autoplay, and the COOP is same-origin-allow-popups while it is on at the instance level."
+      "description": "The music frame (ADR 0131): active only while the TEMPORARY release flag VEYQ_MUSIC_RELEASED is on (musicReleased, ADR 0131 decision 8: off by default, and then none of the three entries is configured, whatever else is set; removed at release) and the deployment sets the music host (VEYQ_MUSIC_DOMAIN) and at least one child is configured, and the entry is on at both levels. Carries the frame's address as serviceUrl; the served CSP names the music host in frame-src, the Permissions-Policy allows it encrypted-media and autoplay, and the COOP is same-origin-allow-popups while it is on at the instance level."
     },
     "memories.music.spotify": {
       "title": {

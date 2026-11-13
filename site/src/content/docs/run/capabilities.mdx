@@ -120,7 +120,10 @@ admin console's own first-run screen reaches only the default breach-check addre
 ## Background music
 
 A Memory can name a Spotify and an Apple Music playlist, and a viewer can play it on the Memory's page with their own
-account. The playlists are stored on every instance and always open in the service's own app. **Playing them inside
+account. **Background music is not released yet:** it ships off on every instance - no playlist field, no button, no
+player, no change to the app's security headers or the privacy notice - until you set `MUSIC_RELEASED=true` (Compose)
+or `music.released: true` (the chart) and restart the application; this switch goes away once the music is released.
+With it on, the rest of this section holds. The playlists are stored on every instance and always open in the service's own app. **Playing them inside
 veyq** is optional, and off until you set it up: `memories.music` and its two children are active only while your
 deployment configures them, and then you and a tenant owner can switch each off like any entry.
 

@@ -1,7 +1,9 @@
 # UC: Background music — a Memory's playlist, played from the viewer's own Spotify or Apple Music account
 
 - **ID:** uc.memory.music
-- **Status:** **built** ([ADR 0131](../../../decisions/0131-a-memorys-background-music-plays-through-the-vendors-sdk-in-a-frame-of-its-own-origin.md)).
+- **Status:** **built, released dark** ([ADR 0131](../../../decisions/0131-a-memorys-background-music-plays-through-the-vendors-sdk-in-a-frame-of-its-own-origin.md)
+  decision 8, owner 2026-11-13): off on every instance until the TEMPORARY release flag `VEYQ_MUSIC_RELEASED=true` is
+  set (A8); with it on, everything below holds as built.
   A sign-in and playback with real vendor accounts is owed (inbox #846); lane L1's
   `tests/e2e/tests/features/memories/memory-music.spec.ts` covers setting a playlist and the header's link where the
   server plays none, never the vendor. The vendors' logo files are not added yet (inbox #857): until then the frame draws
@@ -58,6 +60,10 @@
   storage, loading nothing of the vendor. The consent stays. A lock and a tenant switch forget nothing: the same person
   is still signed in.
 - **A7 — Memories switched off.** No music bar is mounted.
+- **A8 — Released dark (TEMPORARY, `musicReleased`).** Until the deployment sets `VEYQ_MUSIC_RELEASED=true` a Memory
+  shows no music at all - no header button, no ⋯ menu entry, no footer bar (not even its empty frame) - a sign-out's
+  ending skips the music at once, and the server serves no music entry, frame or route and keeps the app's policies
+  and the privacy notice as before the music. Playlists already set stay sealed in the meta. Removed with the flag.
 - **A4 — No subscription.** The frame says so in plain words (Spotify Premium; an Apple Music subscription) and keeps the
   link; nothing plays.
 - **A5 — Remove.** Clearing a field and saving drops that service's playlist; clearing both drops `music`.

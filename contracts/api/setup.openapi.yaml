@@ -157,6 +157,16 @@ components:
           example:
             - { id: core.public-shares }
             - { id: core.public-shares.drop-box }
+        musicReleased:
+          x-veyq-visibility: flag
+          type: boolean
+          description: >
+            TEMPORARY release flag of background music (ADR 0131 decision 8, owner 2026-11-13): true only while the
+            deployment sets VEYQ_MUSIC_RELEASED=true. While false the web draws no music surface at all and the server
+            serves none of the three music entries; while true, the music behaves as built (the `memories.music`
+            entries decide). Absent reads as false. Removed when the music is released: `git grep -iE
+            'music[._-]?released'` lists every site.
+          example: false
         suites:
           x-veyq-visibility: public
           type: array

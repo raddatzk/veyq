@@ -1,5 +1,7 @@
 // A Memory's background music in a real browser (uc.memory.music, ADR 0131), on the lane's instance, whose deployment
-// sets no music host: the playlists are stored and opened in the service's own app, and nothing plays in veyq.
+// sets no music host: the playlists are stored and opened in the service's own app, and nothing plays in veyq. The music
+// ships dark (ADR 0131 decision 8): the lane's overlay switches the TEMPORARY release flag VEYQ_MUSIC_RELEASED on first
+// (tests/e2e/stack/docker-compose.e2e.yml, `app`), or none of this is drawn.
 //
 // The owner creates a Memory and, through the ⋯ menu's Background music:
 //  - pastes an album link into the Spotify field: refused in the dialog, Save disabled (E1);

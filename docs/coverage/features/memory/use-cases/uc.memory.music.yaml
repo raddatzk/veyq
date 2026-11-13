@@ -72,6 +72,26 @@ acceptanceCriteria:
         unit:
           - src/music-frame/spotifyAuth.test.ts
           - src/music-frame/main.test.ts
+  - id: released-dark
+    text: "TEMPORARY (musicReleased, ADR 0131 decision 8): until the deployment sets veyq.music.released, whatever else it sets - a music host and both credentials included, none of which is then read or checked - no music entry is served and no music value reaches a client, the setup status says musicReleased false, the app's CSP keeps frame-src 'none', its Permissions-Policy grants no music origin and its COOP stays same-origin, no host serves the frame and the privacy notice has no music passage; the web reads the flag through one helper and draws no header button, no menu entry and no footer bar (not its empty frame), and a sign-out's ending skips the music with no frame, no timer and no wait; an ending with no step registered starts no budget. With the flag on, each is as built (the controls). Removed with the flag."
+    coverage:
+      backend:
+        integration:
+          - MusicSettingsTest.musicReleasedOffTheDeploymentsValuesAreNeitherReadNorChecked
+          - MusicDarkSliceTest.noMusicEntryIsServedAndNoValueReachesAClient
+          - MusicDarkSliceTest.theAppsPoliciesAreAsBeforeTheMusic
+          - MusicDarkSliceTest.noHostServesTheFrame
+          - MusicDarkSliceTest.thePrivacyNoticeHasNoMusicPassage
+          - MusicFrameSliceTest.theThreeEntriesAreServedWithTheirValuesOnTheirOwnEntriesOnly
+      web:
+        unit:
+          - src/shared/state/useCapabilities.test.ts
+          - src/features/memories/music/musicHeader.test.ts
+          - src/features/memories/components/MemoryDetail.rights.test.ts
+          - src/components/app/AppShell.footerBar.test.ts
+          - src/core/applications/registry.test.ts
+          - src/features/memories/music/musicEnding.test.ts
+          - src/app/sessionEndingSteps.test.ts
   - id: deployment-configures-the-entries
     text: memories.music is active only while the deployment sets the music host and at least one service, each child only with its credential, an Apple token past its exp counting as unset; a malformed value refuses the boot; no switch brings an unconfigured entry back; the active entries carry the frame's https address and each credential on its own entry only; Compose routes the music host to the app only when set.
     coverage:

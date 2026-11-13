@@ -74,6 +74,7 @@ export function setTenantCapabilities(entries: Capability[] | null, erasures: re
 export function setCapabilities(status: SetupStatus): void {
   capabilityState.ids = status.capabilities.map((c) => c.id)
   capabilityState.entries = Object.fromEntries(status.capabilities.map((c) => [c.id, c]))
+  capabilityState.musicReleased = status.musicReleased === true // TEMPORARY (musicReleased, ADR 0131 decision 8)
   capabilityState.major = status.version.major
   capabilityState.build = status.version.build
 }

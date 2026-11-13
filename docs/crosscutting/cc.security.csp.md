@@ -97,7 +97,9 @@ Why each non-obvious source is there:
   `memories.music` is active at the instance level ([ADR 0131](../decisions/0131-a-memorys-background-music-plays-through-the-vendors-sdk-in-a-frame-of-its-own-origin.md)):
   the music frame, a page of the instance's own music host, replaces the `'none'` — never a vendor's host, never `https:`.
   The same snapshot that carries the outside services' origins carries it (`ExternalOriginSet.frame`), so it goes with the
-  switch. § *The music frame* has the rest.
+  switch. § *The music frame* has the rest. Released dark (ADR 0131 decision 8): until the TEMPORARY flag
+  `VEYQ_MUSIC_RELEASED=true` the entry is never active, so the policy is `frame-src 'none'` whatever music host is set
+  (`MusicDarkSliceTest`).
 - **`img-src data: blob:` / `media-src blob:`.** These cover the favicon SVG and QR `data:` URLs, and the object
   URLs of decrypted media.
 - **`<tile-origin>` (img-src), `<geocoder-origin>`, `<breach-check-origin>` and `<rates-origin>` (connect-src).** The

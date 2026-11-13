@@ -111,6 +111,19 @@ describe('AppShell — the footer bar (ADR 0131)', () => {
     expect(playlistInBar.value).toBeNull()
   })
 
+  it('TEMPORARY musicReleased off (released dark, ADR 0131 decision 8) mounts no footer bar at all, not even its empty frame', async () => {
+    capabilityState.musicReleased = false
+    const { w } = await mountShell()
+    playInBar({ service: 'spotify', id: '37i9dQZF1DXcBWIGoYBM5M' })
+    await flushPromises()
+    expect(w.find('.app-operator-footer').exists(), 'control: the shell drew its footer').toBe(true)
+    expect(w.find('[data-testid="footer-bars"]').exists()).toBe(false)
+    expect(w.find('iframe').exists()).toBe(false)
+    capabilityState.musicReleased = true
+    await flushPromises()
+    expect(w.find('[data-testid="footer-bars"]').exists(), 'control: released, the bar is mounted').toBe(true)
+  })
+
   it('Memories switched off here mounts no music bar', async () => {
     serve(false)
     const { w } = await mountShell()

@@ -19,6 +19,7 @@
 import { parseFrameMessage } from '../../../music-frame/protocol'
 import type { SessionEndingContext } from '../../../app/sessionEndingSteps'
 import { useMusicConsent } from './useMusicConsent'
+import { musicReleased } from './musicRelease'
 
 /** How long a forget waits for the frame's `forgotten` before it goes on without it. */
 export const FORGET_WAIT_MS = 1500
@@ -60,6 +61,7 @@ export function forgetInHiddenFrame(frameUrl: string, origin: string, waitMs = F
 
 /** Memories' ending step: forget the vendor's sign-in before the sign-in page loads (see the header). */
 export async function forgetMusicSignIn(ctx: SessionEndingContext): Promise<void> {
+  if (!musicReleased()) return // TEMPORARY: released dark (ADR 0131 decision 8) - the ending skips the music entirely
   if (liveFrameForget) return liveFrameForget()
   if (!ctx.startedHere || typeof document === 'undefined') return
   const consent = useMusicConsent()

@@ -71,6 +71,17 @@ data class MusicSettings(
         /** A JWT's three base64url segments, at most the contract's 2048 characters. */
         private val JWT = Regex("^[A-Za-z0-9_-]+\\.[A-Za-z0-9_-]+\\.[A-Za-z0-9_-]+$")
 
+        /** Nothing configured: what the music is while its release flag is off (musicReleased, ADR 0131 decision 8). */
+        val DARK = MusicSettings(null, null, null, null)
+
+        /**
+         * The deployment's settings behind the TEMPORARY release flag (`veyq.music.released`, ADR 0131 decision 8): while
+         * it is off the three values are not read at all — not checked either, so a value left over from a test refuses no
+         * boot — and the instance is what it was before ADR 0131. Removal: call [from] directly.
+         */
+        fun deployed(musicReleased: Boolean, domain: () -> String?, spotifyClientId: () -> String?, appleDeveloperToken: () -> String?): MusicSettings =
+            if (!musicReleased) DARK else from(domain(), spotifyClientId(), appleDeveloperToken())
+
         fun from(domain: String?, spotifyClientId: String?, appleDeveloperToken: String?): MusicSettings {
             val host = domain?.trim()?.lowercase()?.ifEmpty { null }
             require(host == null || HOSTNAME.matches(host)) { "VEYQ_MUSIC_DOMAIN '$domain' is not a host name (ADR 0131)" }
@@ -94,14 +105,22 @@ data class MusicSettings(
     }
 }
 
-/** The production [DeploymentCapabilities]: the environment's `veyq.music.*`, read and checked at boot. */
+/** The production [DeploymentCapabilities]: the environment's `veyq.music.*`, read and checked at boot — only while the
+ *  TEMPORARY release flag `veyq.music.released` is on (ADR 0131 decision 8); dark, every consumer sees no music host. */
 @ApplicationScoped
 class MusicDeployment(config: VeyqConfig) : DeploymentCapabilities {
+    /** The backend's ONE read of the music release flag (musicReleased, ADR 0131 decision 8): the settings below and the
+     *  setup status's `musicReleased`, which the web's one helper reads, are its only users. */
+    val released: Boolean = config.music().released()
+
     val settings: MusicSettings = config.music().let {
-        MusicSettings.from(it.domain().orElse(null), it.spotifyClientId().orElse(null), it.appleDeveloperToken().orElse(null))
+        MusicSettings.deployed(released, { it.domain().orElse(null) }, { it.spotifyClientId().orElse(null) }, { it.appleDeveloperToken().orElse(null) })
     }
 
     init {
+        if (!released && config.music().domain().orElse("").isNotBlank()) {
+            log.info("music: VEYQ_MUSIC_DOMAIN is set but VEYQ_MUSIC_RELEASED is not true, background music stays off (ADR 0131 decision 8)")
+        }
         settings.appleExpiry?.let { expiry ->
             if (!Instant.now().isBefore(expiry)) log.warnf("music: the Apple developer token expired at %s, Apple Music is off (ADR 0131)", expiry)
         }

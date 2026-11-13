@@ -212,7 +212,8 @@ does not carry.
 **A guest reads pseudonyms, never numbers** (owner 2026-11-13). On a link guest's page — the contributors list, and
 "who is here" ([ADR 0134](0134-core-pushes-a-lists-new-position-to-the-clients-that-edit-it-on-a-stream.md) decision 4)
 — every other person, member or guest, is a pseudonym in the way a shared whiteboard names an anonymous visitor:
-**"Anonymous Fox"**, **"Anonyme Eule"**; the guest's own row is **"You"**. A member's page is unchanged: members by
+an **adjective and an animal**, **"Curious Owl"**, **"Fröhlicher Fuchs"** (owner 2026-11-13: not "Anonymous Fox");
+the guest's own row is **"You"** (de: **"Du"**). A member's page is unchanged: members by
 name, guests by the name they gave. So a guest never learns a member's name or another guest's through the journal,
 and still tells the writers apart and sees the same person in both places.
 
@@ -220,18 +221,26 @@ and still tells the writers apart and sees the same person in both places.
   bytes of `HMAC-SHA-256(alias key, writer kind ‖ writer id)` — the journal's alias key (decision 3), the writer a
   member or a link identity. The server serves it to a link guest beside each contributor's ordinal and for each other
   present editor (ADR 0134 decision 4), and marks the guest's own; a member is served none (a member's client names
-  people). The guest's client turns an alias into a name from a fixed list in the client, **EN and DE**: 64 animals,
-  each with its German gender, so the adjective agrees ("Anonymer Fuchs", "Anonyme Eule", "Anonymes Pferd"), the
-  animal the alias's first two bytes modulo 64; the avatar's colour comes from the alias too.
+  people). The guest's client turns an alias into a name from two fixed lists in the client, **EN and DE**:
+  **64 adjectives × 64 animals**, 4096 names. The animal is the alias's bytes 0-1 (an unsigned big-endian integer)
+  modulo 64, the adjective its bytes 2-3 modulo 64, the avatar's colour its byte 4 modulo the palette. Each German
+  animal carries its gender and each German adjective its stem, so the adjective takes the strong ending without an
+  article and agrees: "Fröhlicher Fuchs", "Fröhliche Eule", "Fröhliches Pferd" (EN has no ending: "Cheerful Fox").
+  The adjectives are friendly and say nothing about a person - no look, body, mind or mood a reader could take as a
+  judgement - and each German one inflects regularly (no "dunkel" → "dunkler", no "hoch" → "hoher"), so the
+  ending is the stem plus -er, -e or -es; a test holds both lists to 64 distinct words in each language.
 - **Stable per person within the journal, unlinkable across journals.** The same writer has the same alias in a
   journal for its whole life — across visits, reloads, restores and the server's restarts — because it depends only on
   the stored key and the writer. Another journal has another key, so a guest of two links cannot tell that one person
   wrote in both. Keyed, not a plain hash: a guest who knows a member's id elsewhere (a member of the tenant who also
   holds a link) cannot test it against an alias. An import starts a fresh journal and so a fresh key.
-- **Collisions are numbered by the client.** Two aliases with the same animal in one journal read "Anonymous Fox" and
-  "Anonymous Fox 2", numbered in the order of their contributor ordinals, present editors who have not written after
+- **Collisions are numbered by the client.** Two aliases with the same name (adjective and animal) in one journal read
+  "Curious Owl" and "Curious Owl 2", numbered in the order of their contributor ordinals, present editors who have not written after
   them by alias. A writer's suffix never changes once it wrote (a later writer only appends); a present editor's may,
-  once it writes. With 64 animals, about one journal in seven with five people sees a suffix (1 − 63·62·61·60 / 64⁴ ≈ 0.15).
+  once it writes. With 4096 names, about one journal in 400 with five people sees a suffix
+  (1 − 4095·4094·4093·4092 / 4096⁴ ≈ 0.0024), one in 90 with ten (≈ 0.011), one in 22 with twenty (≈ 0.045); with the
+  64 animals alone it was one in seven with five (≈ 0.15). Two people may still share the animal ("Curious Owl",
+  "Sleepy Owl"), which tells them apart without a number.
 - **The server learns nothing new.** It already knows every writer and every stream holder; the alias is computed from
   those and a key it minted, and the word list lives only in the client — the server never handles a pseudonym.
   **Rejected:** deriving the name in the client from the ordinal — a present editor who has not written has none, and

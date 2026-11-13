@@ -25,6 +25,20 @@ class MusicSettingsTest {
     private val later = token(now.epochSecond + 3600)
 
     @Test
+    fun musicReleasedOffTheDeploymentsValuesAreNeitherReadNorChecked() {
+        val read = mutableListOf<String>()
+        val dark = MusicSettings.deployed(false, { read += "domain"; "music.example.org" }, { read += "spotify"; "not a client id!" }, { read += "apple"; later })
+        assertEquals(MusicSettings.DARK, dark)
+        assertEquals(emptyList<String>(), read, "dark, not one value is read")
+        assertEquals(setOf(MEMORIES_MUSIC, MEMORIES_MUSIC_SPOTIFY, MEMORIES_MUSIC_APPLE_MUSIC), dark.unconfigured(now))
+        assertEquals(emptyMap<String, DeployedValues>(), dark.values())
+        assertEquals(null, dark.frameUrl)
+        // Control: released, the same values are read, and the malformed one refuses the boot.
+        assertThrows<IllegalArgumentException> { MusicSettings.deployed(true, { "music.example.org" }, { "not a client id!" }, { later }) }
+        assertEquals(emptySet<String>(), MusicSettings.deployed(true, { "music.example.org" }, { "abcdef0123456789" }, { later }).unconfigured(now))
+    }
+
+    @Test
     fun nothingConfiguredLeavesAllThreeOff() {
         assertEquals(setOf(MEMORIES_MUSIC, MEMORIES_MUSIC_SPOTIFY, MEMORIES_MUSIC_APPLE_MUSIC), MusicSettings.from(null, null, null).unconfigured(now))
         assertEquals(emptyMap<String, DeployedValues>(), MusicSettings.from("", " ", null).values(), "a blank variable is no value")
