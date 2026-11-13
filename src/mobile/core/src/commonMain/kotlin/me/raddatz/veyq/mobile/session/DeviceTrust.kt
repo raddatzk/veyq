@@ -234,18 +234,59 @@ internal class DeviceRegisterStore(
     suspend fun read(): Plain = load().plain
 
     /** Records this device (keeping a label it has), the [familyId] its login created and the [wrapId] it holds. */
-    suspend fun remember(deviceId: String, label: String, familyId: String?, wrapId: String?, now: Long) {
-        var current = load()
-        repeat(MAX_ATTEMPTS) {
-            val p = current.plain
-            val devices = p.devices + (deviceId to Entry(p.devices[deviceId]?.label ?: label, now))
-            val next = evict(
-                Plain(
-                    devices = devices,
-                    families = if (familyId != null) p.families + (familyId to deviceId) else p.families,
-                    wraps = if (wrapId != null) p.wraps + (wrapId to deviceId) else p.wraps,
-                ),
+    suspend fun remember(deviceId: String, label: String, familyId: String?, wrapId: String?, now: Long) = write(load()) { p ->
+        Plain(
+            devices = p.devices + (deviceId to Entry(p.devices[deviceId]?.label ?: label, now)),
+            families = if (familyId != null) p.families + (familyId to deviceId) else p.families,
+            wraps = if (wrapId != null) p.wraps + (wrapId to deviceId) else p.wraps,
+        )
+    }
+
+    /**
+     * Write moment 3 (the web's `reconcileWithSessions`): against the two lists the server is authoritative for — the
+     * [live] families and the [served] device wraps (null: the wrap list was not read, so no wrap row goes) — the rows
+     * this device saw and the server no longer lists are pruned, and the [currentFamily] the server marked is joined to
+     * this device (a resume never learns its family id at a login). The prunes are frozen from the first read, so a
+     * retry after a `409` removes exactly those ids and a row another device added meanwhile stays. False when nothing
+     * needed writing.
+     */
+    suspend fun reconcile(
+        live: Collection<String>,
+        served: Collection<String>?,
+        deviceId: String,
+        label: String,
+        currentFamily: String?,
+        now: Long,
+    ): Boolean {
+        val base = load()
+        val doomedFamilies = base.plain.families.keys.filter { it !in live }.toSet()
+        val doomedWraps = served?.let { s -> base.plain.wraps.keys.filter { it !in s }.toSet() }.orEmpty()
+        val needsCurrent = currentFamily != null && base.plain.families[currentFamily] != deviceId
+        val needsDevice = deviceId !in base.plain.devices
+        if (doomedFamilies.isEmpty() && doomedWraps.isEmpty() && !needsCurrent && !needsDevice) return false
+        write(base) { p ->
+            Plain(
+                devices = if (needsDevice || needsCurrent) p.devices + (deviceId to Entry(p.devices[deviceId]?.label ?: label, now)) else p.devices,
+                families = (p.families - doomedFamilies) + listOfNotNull(currentFamily?.let { it to deviceId }),
+                wraps = p.wraps - doomedWraps,
             )
+        }
+        return true
+    }
+
+    /**
+     * Names this device [label] — its own entry only: each entry has one writer, its device (en.account.device-register),
+     * so no device renames another. Last write wins: a rename is deliberate.
+     */
+    suspend fun rename(deviceId: String, label: String, now: Long) = write(load()) { p ->
+        p.copy(devices = p.devices + (deviceId to Entry(label, p.devices[deviceId]?.lastSeenAt ?: now)))
+    }
+
+    /** One revision-guarded write of [change] over [base]; a `409` re-reads and applies it again, bounded. */
+    private suspend fun write(base: Opened, change: (Plain) -> Plain) {
+        var current = base
+        repeat(MAX_ATTEMPTS) {
+            val next = evict(change(current.plain))
             val stored = current.revision + 1
             val blob = b64(suite.seal(context(stored), masterKey, utf8(JSON.encodeToString(Plain.serializer(), next))))
             if (api.put(DeviceRegisterUpdate(blob, current.revision))) {
@@ -264,7 +305,45 @@ internal class DeviceRegisterStore(
         return Plain(p.devices.filterKeys { it in keep }, p.families.filterValues { it in keep }, p.wraps.filterValues { it in keep })
     }
 
-    private companion object {
+    /** What the sessions list reads from the register (the web's `RegisterView`). */
+    class View(
+        /** familyId → its device's label; a family the register cannot name is absent. */
+        val names: Map<String, String>,
+        /** familyId → the served wraps of its device, never this device's: what "Sign out and remove saved key" deletes. */
+        val wrapsOfFamily: Map<String, List<String>>,
+        /** deviceId → (label, served wraps) of each device the register knows holding a served wrap and no live family. */
+        val savedKeyDevices: Map<String, Pair<String, List<String>>>,
+    )
+
+    internal companion object {
+        /**
+         * The web's `readRegisterView` over [plain]: the [live] families' names, and — only where the wrap list was read
+         * ([served] not null) — each family's device's served wraps and the devices with a saved key and no live family.
+         * This device ([thisDevice]) is in neither wrap-bearing result: every action they feed reaches another device;
+         * this one's own trust is "Stop trusting this device".
+         */
+        fun view(plain: Plain, live: Collection<String>, served: Collection<String>?, thisDevice: String): View {
+            val wrapsOfDevice = HashMap<String, MutableList<String>>()
+            if (served != null) {
+                for ((wrap, device) in plain.wraps) {
+                    if (wrap !in served || device == thisDevice || device !in plain.devices) continue
+                    wrapsOfDevice.getOrPut(device) { mutableListOf() } += wrap
+                }
+            }
+            val names = HashMap<String, String>()
+            val withLiveFamily = HashSet<String>()
+            val wrapsOfFamily = HashMap<String, List<String>>()
+            for ((family, device) in plain.families) {
+                if (family !in live) continue
+                plain.devices[device]?.let { names[family] = it.label }
+                withLiveFamily += device
+                wrapsOfDevice[device]?.let { wrapsOfFamily[family] = it.toList() }
+            }
+            val saved = wrapsOfDevice.filterKeys { it !in withLiveFamily }
+                .mapValues { (device, wraps) -> plain.devices.getValue(device).label to wraps.toList() }
+            return View(names, wrapsOfFamily, saved)
+        }
+
         const val MAX_ATTEMPTS = 5
         const val MAX_DEVICES = 32
         val JSON = Json { ignoreUnknownKeys = true }

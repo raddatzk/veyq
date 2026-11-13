@@ -2606,5 +2606,36 @@
     "note": "an application the app does not know by name",
     "en": "Application",
     "de": "Anwendung"
+  },
+  "account_settings_load_failed": {
+    "note": "the account's Settings: the list of sessions did not read (the web's sessions.loadFailed)",
+    "en": "Your sessions could not be loaded. Please try again.",
+    "de": "Deine Sitzungen konnten nicht geladen werden. Bitte versuche es erneut."
+  },
+  "account_settings_revoke_failed": {
+    "en": "That session could not be ended. Please try again.",
+    "de": "Die Sitzung konnte nicht beendet werden. Bitte versuche es erneut."
+  },
+  "account_settings_rename_failed": {
+    "en": "The device could not be renamed. Please try again.",
+    "de": "Das Gerät konnte nicht umbenannt werden. Bitte versuche es erneut."
+  },
+  "account_settings_escalate_half_failed": {
+    "note": "Sign out and remove saved key: the session ended, the saved key did not go; the device is listed again under Devices with a saved key",
+    "en": "That device was signed out, but its saved key could NOT be removed — it can still open your data with your password. Try the removal again under “Devices with a saved key”.",
+    "de": "Das Gerät wurde abgemeldet, aber sein gespeicherter Schlüssel konnte NICHT entfernt werden — es kann deine Daten weiterhin mit deinem Passwort öffnen. Versuche das Entfernen unter „Geräte mit gespeichertem Schlüssel“ noch einmal."
+  },
+  "account_settings_key_remove_failed": {
+    "en": "That saved key could not be removed. Please try again.",
+    "de": "Der gespeicherte Schlüssel konnte nicht entfernt werden. Bitte versuche es erneut."
+  },
+  "account_settings_register_rolled_back": {
+    "note": "the device register served older than this device has seen (TrustStateRefused ROLLED_BACK)",
+    "en": "Device names are unavailable: the server returned an older list of your devices than this device has already seen. Every session is still listed and can still be ended.",
+    "de": "Gerätenamen sind nicht verfügbar: Der Server hat eine ältere Liste deiner Geräte geliefert, als dieses Gerät schon gesehen hat. Jede Sitzung wird weiter angezeigt und lässt sich weiter beenden."
+  },
+  "account_settings_register_unreadable": {
+    "en": "Device names are unavailable: the list of your devices could not be opened. Every session is still listed and can still be ended.",
+    "de": "Gerätenamen sind nicht verfügbar: Die Liste deiner Geräte ließ sich nicht öffnen. Jede Sitzung wird weiter angezeigt und lässt sich weiter beenden."
   }
 }
