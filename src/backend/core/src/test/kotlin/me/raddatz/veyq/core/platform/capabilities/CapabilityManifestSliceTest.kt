@@ -46,7 +46,9 @@ class CapabilityManifestSliceTest {
             .then().statusCode(200)
             .body("version.major", equalTo(VERSION_FILE_MAJOR))
             .body("version.build", equalTo(1))
-            .body("capabilities.id", equalTo(CapabilityIds.ADVERTISED))
+            // Every advertised id but the music frame's three: they are served only where the deployment configures them
+            // (ADR 0131 decision 4), which this profile does not (MusicFrameSliceTest's does).
+            .body("capabilities.id", equalTo(CapabilityIds.ADVERTISED - UNCONFIGURED_IN_TEST))
     }
 
     @Test
@@ -73,7 +75,7 @@ class CapabilityManifestSliceTest {
         @Suppress("UNCHECKED_CAST")
         val caps = anon["capabilities"] as List<Map<String, Any>>
         val requirementNames = CapabilityRequirements.ALL.map { it.name }.toSet()
-        val serviceKeys = setOf("serviceUrl", "serviceAttribution")
+        val serviceKeys = setOf("serviceUrl", "serviceAttribution", "spotifyClientId", "appleDeveloperToken")
         caps.forEach { cap ->
             assertEquals(setOf("id"), cap.keys - requirementNames - serviceKeys, "a manifest capability is { id, …values } only")
             assertEquals(emptyList<Any>(), requirementNames.mapNotNull { cap[it] }, "no requirement is set, so none carries a value")

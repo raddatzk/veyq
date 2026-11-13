@@ -574,6 +574,13 @@ here; the server is blind.
   itself (`activeSpace`, `coverStore`, `rotateKeys` tests). A suite that stubs the registry delegates through a
   `Proxy` onto a fresh `createRegistry()` (`ShareView.registry.test.ts`, `SpaceView.registry.test.ts`): a
   hand-listed set of methods silently misses the next one the registry gains.
+- **Never name two files alike save for case** (`MemoryMusic.vue`'s test and `memoryMusic.ts`'s are both
+  `…emoryMusic.test.ts`): macOS's default filesystem is case-insensitive, so writing one there silently replaces the other, and git on
+  Linux would then see two. A component's model takes a name of its own (`musicModel.ts`, `bannerModel.ts`).
+- **The music frame is a page of its own** (`music-frame.html`, `src/music-frame/`, [ADR 0131](../../docs/decisions/0131-a-memorys-background-music-plays-through-the-vendors-sdk-in-a-frame-of-its-own-origin.md)):
+  a third Vite input the backend serves only on the music host, under that host's policy. It imports nothing of the app
+  (no Vue, no i18n, no crypto) and no app module imports a vendor SDK; the app reaches it only through
+  `music-frame/protocol.ts`, which both sides parse every message with.
 - **Markup only through `v-safe-html`** (developer styleguide § 4, [ADR 0117](../../docs/decisions/0117-the-web-client-enforces-trusted-types.md)):
   the built CSP enforces Trusted Types, so a string at any HTML sink or script URL is refused at run time, in a
   browser only. A new library that writes markup or starts a worker is read for its sinks before it lands

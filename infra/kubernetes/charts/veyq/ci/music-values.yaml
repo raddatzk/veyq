@@ -1,0 +1,34 @@
+# The background-music render (ADR 0131) — `lint-values.yaml` plus `music`: the music host (a route to the app and,
+# under per-domain, a listener and certificate of its own) and both services' credentials as the app's environment. A
+# value path no file here sets is a shape nothing renders, so it is a file of its own (scripts/chart_meta_check.py
+# renders every file in this directory on its own and runs all of its assertions over each).
+#
+# NOT a template for an installation — same throwaways as lint-values.yaml; the token is a JWT's shape, signed by
+# nobody.
+domain: veyq.example.org
+image:
+  repository: ghcr.io/example/veyq
+admin:
+  image:
+    repository: ghcr.io/example/veyq-admin
+networkPolicy:
+  ingressFrom:
+    - namespaceSelector:
+        matchLabels:
+          kubernetes.io/metadata.name: traefik
+      podSelector:
+        matchLabels:
+          app.kubernetes.io/name: traefik
+secrets:
+  mariadbPassword: ci-only-not-a-password
+  mariadbRootPassword: ci-only-not-a-password
+gateway:
+  className: traefik
+  tls:
+    mode: per-domain
+music:
+  domain: music.veyq.example.org
+  spotifyClientId: 0123456789abcdef0123456789abcdef
+  appleDeveloperToken: eyJhbGciOiJFUzI1NiJ9.eyJpc3MiOiJjaSJ9.c2ln
+backup:
+  enabled: false

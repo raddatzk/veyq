@@ -85,12 +85,15 @@ class PrivacyNoticeSliceTest {
         val before = rows()
         val logs = capture {
             given().header("X-Forwarded-For", CALLER).`when`().get(PATH).then().statusCode(200)
-                .body("revision", equalTo(1))
+                .body("revision", equalTo(2))
         }
         assertEquals(before, rows(), "reading the notice writes no row")
         assertFalse(logs.contains(CALLER), "the caller's address is in no log line")
         val ids = notice().getList<String>("passages.id")
         for (id in listOf("controller", "account", "reporter-contact", "rights", "right-to-object")) assertTrue(id in ids, id)
+        // A deployment without the music host plays no music, so the notice states none (ADR 0131; MusicFrameSliceTest
+        // reads it on one that has it).
+        assertFalse("background-music" in ids, "no music host: no music passage")
     }
 
     @Test

@@ -81,6 +81,20 @@
         }
       }
     },
+    "music": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "domain": {
+          "anyOf": [
+            { "type": "string", "maxLength": 0 },
+            { "$ref": "#/$defs/hostname" }
+          ]
+        },
+        "spotifyClientId": { "type": "string", "pattern": "^([0-9A-Za-z]{8,64})?$" },
+        "appleDeveloperToken": { "type": "string", "maxLength": 2048, "pattern": "^([A-Za-z0-9_-]+\\.[A-Za-z0-9_-]+\\.[A-Za-z0-9_-]+)?$" }
+      }
+    },
     "backup": {
       "type": "object",
       "required": ["enabled"],

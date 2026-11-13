@@ -14,6 +14,11 @@ import io.quarkus.narayana.jta.QuarkusTransaction
  * would switch the entry off for every later class. [with] refuses to start over a row an earlier test left, and
  * switches everything back on in a `finally`.
  */
+/** The deployment entries `%test` leaves unconfigured (it sets no music host, ADR 0131 decision 4): off in every
+ *  default-profile test however the switches stand, as on a deployment without the music frame. */
+val UNCONFIGURED_IN_TEST: Set<String> =
+    setOf(CapabilityIds.MEMORIES_MUSIC, CapabilityIds.MEMORIES_MUSIC_SPOTIFY, CapabilityIds.MEMORIES_MUSIC_APPLE_MUSIC)
+
 object CapabilitySwitchFixtures {
 
     /** Runs [block] with exactly [ids] switched off, then switches everything back on, even when [block] throws. */

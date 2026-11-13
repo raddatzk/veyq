@@ -11,8 +11,8 @@ guarantee validate_feature_wiring gives the feature graph:
               use-case(s) are built, ADR 0032 §6).
 
 It also checks the catalog is well-formed: a lowercase-dotted id, a non-empty `serves`, and a known `source`
-(`operator-policy`, `infra-preflight`, or `external-service`: an outside service the browser calls, active only while
-its address is configured).
+(`operator-policy`, `infra-preflight`, `external-service`: an outside service the browser calls, active only while
+its address is configured, or `deployment`: active only while the deployment's environment configures it, ADR 0131).
 
 And it checks the catalog is a TREE (ADR 0088 decisions 1 and 2):
     - root  — every id's first segment is in `ROOTS`: `core`, and every application the backend composes, derived
@@ -87,7 +87,7 @@ COVERAGE = ROOT / "docs" / "coverage" / "features"
 
 ID_RE = re.compile(r"^[a-z0-9]+(\.[a-z0-9-]+)*$")
 UC_RE = re.compile(r"^uc\.([a-z0-9-]+)\.[a-z0-9-]+$")
-KNOWN_SOURCES = {"operator-policy", "infra-preflight", "external-service"}
+KNOWN_SOURCES = {"operator-policy", "infra-preflight", "external-service", "deployment"}
 # Who may switch an entry off (ADR 0088 decisions 2 and 12): the Server Owner always, a tenant owner where listed.
 LEVELS = ("instance", "tenant")
 # A requirement's kind (ADR 0088 decision 8) and the type its property has on the wire's `Capability`.

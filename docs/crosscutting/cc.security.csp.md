@@ -93,7 +93,11 @@ Why each non-obvious source is there:
 - **`object-src 'none'` / `frame-src 'none'`.** The app embeds nothing, and a decrypted file is never given a frame: the
   browser's own PDF viewer needs a frame on a `blob:` URL, so Depot draws a PDF itself with pdf.js onto canvases instead
   (§ *A dependency that parses untrusted bytes*; [Depot § The viewer](../apps/depot.md#the-viewer-filedetail--fileviewer-inbox-412)).
-  Widening either is a decision, not a tweak.
+  Widening either is a decision, not a tweak. **The one decided widening: `frame-src <music-origin>`** while
+  `memories.music` is active at the instance level ([ADR 0131](../decisions/0131-a-memorys-background-music-plays-through-the-vendors-sdk-in-a-frame-of-its-own-origin.md)):
+  the music frame, a page of the instance's own music host, replaces the `'none'` — never a vendor's host, never `https:`.
+  The same snapshot that carries the outside services' origins carries it (`ExternalOriginSet.frame`), so it goes with the
+  switch. § *The music frame* has the rest.
 - **`img-src data: blob:` / `media-src blob:`.** These cover the favicon SVG and QR `data:` URLs, and the object
   URLs of decrypted media.
 - **`<tile-origin>` (img-src), `<geocoder-origin>`, `<breach-check-origin>` and `<rates-origin>` (connect-src).** The
@@ -212,6 +216,37 @@ origin, next to the keys. Its threat note, and what keeps it inside the policy a
   before it 6.4.299 of 2026-10-03, monthly releases, not deprecated; the project rule
   on unmaintained dependencies applies — a deprecation or an abandonment makes replacing it in-scope.
 
+## The music frame (ADR 0131)
+
+The music host is the one host whose pages carry a policy other than the app's. The backend serves it the music frame's
+page (`/music-frame`, its Spotify callback `/music-frame/spotify-callback`, both `src/web/music-frame.html`) and the
+build's assets, and answers everything else there with a 404 — the API and the app included; no other host serves the
+frame's page (`AppShellRoutes.musicHost`). Its responses carry (`AppShellRoutes.musicFramePolicy`):
+
+```
+default-src 'none'; base-uri 'none'; object-src 'none'; form-action 'none';
+script-src 'self' https://sdk.scdn.co https://js-cdn.music.apple.com; style-src 'self' 'unsafe-inline';
+img-src 'self' data: https:; media-src 'self' blob: https:; font-src 'self' data: https:; connect-src 'self' https:;
+worker-src 'self' blob:; frame-src https://sdk.scdn.co; frame-ancestors <the bootstrap domain> <every tenant's domain>
+```
+
+- **Scripts from three places only:** the frame's own build, Spotify's SDK host and Apple's MusicKit CDN (whose licence
+  forbids re-hosting it). `frame-src https://sdk.scdn.co` is the player frame Spotify's SDK creates.
+- **`https:` for the rest, on purpose.** The frame holds no veyq key, no session and no content, so what a vendor's
+  player reaches — its APIs, artwork, audio segments, DRM licences on hosts it may move — is the vendor's business, not a
+  leak to fence; enumerating them would break playback on the vendor's next change.
+- **No Trusted Types and `'unsafe-inline'` styles:** MusicKit writes `innerHTML` and injects a `<style>`. Nothing of the
+  app runs there to protect.
+- **`frame-ancestors` names the instance's hosts** (scheme-less, so an `https` frame admits `https` pages): a snapshot
+  recomputed at start and on every tenant write that moves a domain (`MusicFrameHosts`, `TenantHandler`'s reproject).
+- **Other headers:** `Permissions-Policy` grants `encrypted-media` and `autoplay` to the frame and Spotify's player
+  frame, every other feature off; `Cross-Origin-Opener-Policy: unsafe-none`, so the Spotify callback keeps its opener.
+
+On the app's own responses, while the frame is served: `frame-src <music-origin>` (above), `encrypted-media` and
+`autoplay` for that origin in the Permissions-Policy, and **`Cross-Origin-Opener-Policy: same-origin-allow-popups`** —
+MusicKit's sign-in popup, which the frame opens, answers its opener (measured: under `same-origin` a frame's
+`window.open` returns null and the popup has no opener). A page that opens veyq still gets no handle on it.
+
 ## The other response headers
 
 The app shell sends these on the app origin alongside the policy
@@ -230,8 +265,9 @@ The app shell sends these on the app origin alongside the policy
   Over plain HTTP a browser ignores the header, so a local or LAN instance is unaffected.
 
 - **`Cross-Origin-Opener-Policy: same-origin`.** A share link is opened from a mail or another site: the page
-  keeps no handle on its opener, nor the opener on it. Nothing in the client opens a cross-origin window that must
-  talk back (no OAuth or payment popup, no `window.open`; measured 2026-11-05 by `grep`).
+  keeps no handle on its opener, nor the opener on it. Nothing in the app's own code opens a cross-origin window that
+  must talk back (no OAuth or payment popup, no `window.open`; measured 2026-11-05 by `grep`). The music frame's vendor
+  sign-in does, so while that frame is served the value is `same-origin-allow-popups` (§ *The music frame*).
 - **`Cross-Origin-Resource-Policy: same-origin`.** No other origin embeds or reads a response of the instance
   no-cors: the client loads everything from its own origin, and no mail embeds an image from it. **One exception:** while
   `core.public-shares.embeddable` is effective, a guest's operation under `/api/shares/{shareId}`, `/api/setup` and
@@ -245,7 +281,9 @@ The app shell sends these on the app origin alongside the policy
   video's own control); every other feature Chromium knows off — the position and the microphone among them. A name
   Chromium does not know is left out, because it logs an error for it on every page (`bluetooth` and `web-share`,
   in lane L1 on 2026-11-05). The list is `AppShellRoutes.PERMISSIONS_POLICY`, with the call behind each feature; a feature the client starts to use is
-  added there.
+  added there. While the music frame is served, `encrypted-media` names its origin alone and `autoplay` adds it to
+  `self` (`AppShellRoutes.permissionsPolicy`): the vendors' players need DRM and sound in the frame; the app's own
+  document still gets no `encrypted-media`.
 - **Not `Cross-Origin-Embedder-Policy`.** It would refuse the map tiles, which come from another origin that sends
   no CORP of its own ([ADR 0018](../decisions/0018-map-tiles-provider-neutrality.md)).
 

@@ -43,8 +43,12 @@ class AppShellRoutes(
     private val external: ExternalOrigins,
     private val hostSources: HostConnectSources,
     private val hosts: TenantHostResolver,
+    private val music: MusicFrameHost,
 ) {
     private val policy: String? = files.read(AppShell.POLICY_FILE)?.toString(Charsets.UTF_8)
+
+    /** The music frame's page (ADR 0131), from the same build as the shell; served only on the music host. */
+    private val musicFrameHtml: ByteArray? = files.read(MusicFrameHost.PAGE)
 
     // Decided at boot: whether there is a shell, and that its policy is whole. Its store origin is NOT — the store is
     // a runtime setting (ADR 0089 decision 5), so the header's policy is read per response through [cspNow].
@@ -61,7 +65,7 @@ class AppShellRoutes(
         // The same for the outside services a Server Owner may configure later (ADR 0088 decision 7): the policy must
         // carry an `img-src` for the map tiles and a `connect-src` for the geocoder and the breach check.
         if (shell is AppShell.Present) {
-            AppShell.withOrigins(policy!!, listOf("https://boot-check.invalid"), listOf("https://boot-check.invalid"))
+            AppShell.withOrigins(policy!!, listOf("https://boot-check.invalid"), listOf("https://boot-check.invalid"), listOf("https://boot-check.invalid"))
         }
     }
 
@@ -83,7 +87,7 @@ class AppShellRoutes(
         val services = external.current()
         val extra = hostSources.forHost(host)
         emitted[extra]?.let { if (it.storeOrigin == origin && it.external == services) return it.csp }
-        return AppShell.withOrigins(policy!!, listOfNotNull(origin) + services.connect + extra, services.img)
+        return AppShell.withOrigins(policy!!, listOfNotNull(origin) + services.connect + extra, services.img, services.frame)
             .also { emitted[extra] = Emitted(origin, services, it) }
     }
 
@@ -100,6 +104,9 @@ class AppShellRoutes(
             ctx.addHeadersEndHandler { onHeadersEnd(ctx) }
             ctx.next()
         }
+        // Before the static handler and JAX-RS: the music host answers its frame and the assets it loads, nothing else
+        // (no API, no app), and no other host serves the frame's page (ADR 0131 decision 2).
+        router.route().order(RouteConstants.ROUTE_ORDER_BEFORE_DEFAULT).handler { ctx -> musicHost(ctx) }
         if (shell is AppShell.Present) {
             // Last of all. The fallback's contract is "nothing else answers", and the only way to know that
             // without a second copy of every route is to be reached only once everything else has passed: the
@@ -116,31 +123,78 @@ class AppShellRoutes(
         // (ADR 0016). This value sends the origin cross-origin, never a path.
         headers.set(REFERRER_POLICY_HEADER, "strict-origin-when-cross-origin")
         hsts?.let { headers.set(HSTS_HEADER, it) }
+        val host = hosts.hostOf { ctx.request().getHeader(it) }
+        if (host != null && host == music.domain()) {
+            onMusicHeadersEnd(ctx)
+            return
+        }
         // Isolation, on every response like the three above: each takes effect on a document or a no-cors read and is
         // inert on the API's JSON, and an API path opened as a page is a document like any other (cc.security.csp.md).
-        // COOP: a page opened from a mail or another site keeps no handle on the opener, nor it on us; nothing here opens
+        // COOP: a page opened from a mail or another site keeps no handle on the opener, nor it on us; nothing of the app opens
         // a cross-origin popup that must talk back (no OAuth, no payment window). CORP: no other origin embeds or reads
         // a response of ours no-cors — except the answers a cross-origin grant marked (the guest share API while
         // `core.public-shares.embeddable` is on, ADR 0121 decision 3), which any origin may read, with CORS beside it.
         // Not COEP: it would refuse the cross-origin map tiles (ADR 0018).
-        headers.set(COOP_HEADER, "same-origin")
+        // While the music frame is served (ADR 0131 decision 3): `same-origin-allow-popups`, because MusicKit's sign-in
+        // popup, which the frame opens, answers its opener; a page that opens veyq still gets no handle on it.
+        val frame = external.current().frame
+        headers.set(COOP_HEADER, if (frame.isEmpty()) "same-origin" else "same-origin-allow-popups")
         if (CrossOrigin.isGranted(ctx)) {
             CrossOrigin.writeTo(headers)
             headers.set(CORP_HEADER, "cross-origin")
         } else {
             headers.set(CORP_HEADER, "same-origin")
         }
-        headers.set(PERMISSIONS_POLICY_HEADER, PERMISSIONS_POLICY)
+        headers.set(PERMISSIONS_POLICY_HEADER, permissionsPolicy(frame))
 
         val shell = shell as? AppShell.Present ?: return
         val path = ctx.normalizedPath()
         if (isUnder(path, API_PREFIX)) return
         // Every response the shell serves, sw.js included: a worker takes its policy from its own script's
         // response, so this is what puts the playback Service Worker under the policy.
-        headers.set(CSP_HEADER, cspNow(hosts.hostOf { ctx.request().getHeader(it) }))
+        headers.set(CSP_HEADER, cspNow(host))
         // Revalidate everything but the content-hashed chunks, whose name changes whenever their bytes do. An
         // `immutable` index.html or sw.js survives an upgrade by a day and asks for chunks the new image lacks.
         if (!path.startsWith(ASSETS_PREFIX)) headers.set(HttpHeaders.CACHE_CONTROL, "no-cache")
+    }
+
+    /**
+     * The music host's responses (ADR 0131): the frame's own policy — scripts from itself and the two vendors' SDK hosts,
+     * framed only by the instance's hosts, no Trusted Types (MusicKit writes `innerHTML`) — a Permissions-Policy that
+     * lets the frame and Spotify's player frame use EME and autoplay, and no COOP, so the Spotify callback page keeps the
+     * opener that opened it. Nothing of the app's runs here, so nothing of the app's is protected by this policy: what
+     * it guards is the frame's own vendor sign-in against a script nobody chose.
+     */
+    private fun onMusicHeadersEnd(ctx: RoutingContext) {
+        val headers = ctx.response().headers()
+        headers.set(COOP_HEADER, "unsafe-none")
+        headers.set(CORP_HEADER, "same-origin")
+        headers.set(PERMISSIONS_POLICY_HEADER, MUSIC_PERMISSIONS_POLICY)
+        headers.set(CSP_HEADER, musicFramePolicy(music.ancestors()))
+        if (!ctx.normalizedPath().startsWith(ASSETS_PREFIX)) headers.set(HttpHeaders.CACHE_CONTROL, "no-cache")
+    }
+
+    /** The music host's whole surface (ADR 0131 decision 2): the frame's page (and its Spotify callback, the same page),
+     *  the shell's assets the page loads, and a 404 for everything else. On every other host the frame's file is a 404. */
+    private fun musicHost(ctx: RoutingContext) {
+        val domain = music.domain()
+        val path = ctx.normalizedPath()
+        val onMusicHost = domain != null && hosts.hostOf { ctx.request().getHeader(it) } == domain
+        val read = ctx.request().method() == HttpMethod.GET || ctx.request().method() == HttpMethod.HEAD
+        when {
+            !onMusicHost && path != "/${MusicFrameHost.PAGE}" -> ctx.next()
+            !onMusicHost -> ctx.response().setStatusCode(404).end()
+            read && path.startsWith(ASSETS_PREFIX) -> ctx.next()
+            read && (path == MusicFrameHost.PATH || path == MusicFrameHost.CALLBACK_PATH) && musicFrameHtml != null -> {
+                val response = ctx.response().putHeader(HttpHeaders.CONTENT_TYPE, "text/html;charset=UTF-8")
+                if (ctx.request().method() == HttpMethod.HEAD) {
+                    response.putHeader(HttpHeaders.CONTENT_LENGTH, musicFrameHtml.size.toString()).end()
+                } else {
+                    response.end(Buffer.buffer(musicFrameHtml))
+                }
+            }
+            else -> ctx.response().setStatusCode(404).end()
+        }
     }
 
     private fun fallback(ctx: RoutingContext, shell: AppShell.Present) {
@@ -196,6 +250,55 @@ class AppShellRoutes(
                 "magnetometer=(), microphone=(), midi=(), otp-credentials=(), payment=(), publickey-credentials-create=(), " +
                 "publickey-credentials-get=(), screen-wake-lock=(), serial=(), storage-access=(), usb=(), " +
                 "window-management=(), xr-spatial-tracking=()"
+
+        /**
+         * [PERMISSIONS_POLICY] with the music frame's origin(s) [frame] (ADR 0131) allowed `encrypted-media` (the vendors'
+         * DRM) and `autoplay` (their audio); with none, the constant itself. The app's own document gets no
+         * `encrypted-media`: it plays no protected media of its own.
+         */
+        fun permissionsPolicy(frame: List<String>): String {
+            if (frame.isEmpty()) return PERMISSIONS_POLICY
+            val quoted = frame.joinToString(" ") { "\"$it\"" }
+            return PERMISSIONS_POLICY
+                .replace("encrypted-media=()", "encrypted-media=($quoted)")
+                .replace("autoplay=(self)", "autoplay=(self $quoted)")
+        }
+
+        /** Spotify's player frame, which `spotify-player.js` creates inside the music frame (ADR 0131 § Context). */
+        const val SPOTIFY_PLAYER_ORIGIN = "https://sdk.scdn.co"
+
+        /** The music host's Permissions-Policy: EME and autoplay for the frame and Spotify's player frame in it, every
+         *  other feature off. */
+        const val MUSIC_PERMISSIONS_POLICY =
+            "encrypted-media=(self \"$SPOTIFY_PLAYER_ORIGIN\"), autoplay=(self \"$SPOTIFY_PLAYER_ORIGIN\"), " +
+                "fullscreen=(), picture-in-picture=(), camera=(), clipboard-write=(), accelerometer=(), " +
+                "browsing-topics=(), display-capture=(), gamepad=(), geolocation=(), gyroscope=(), hid=(), " +
+                "identity-credentials-get=(), idle-detection=(), local-fonts=(), magnetometer=(), microphone=(), " +
+                "midi=(), otp-credentials=(), payment=(), publickey-credentials-create=(), publickey-credentials-get=(), " +
+                "screen-wake-lock=(), serial=(), usb=(), window-management=(), xr-spatial-tracking=()"
+
+        /**
+         * The music frame's policy (ADR 0131, cc.security.csp § The music frame): its own scripts and the two SDKs'
+         * hosts, Spotify's player frame, any `https` for the vendors' APIs, artwork and audio (the frame holds no veyq
+         * content, so the vendor's reach is the point, not a leak), and framed only by [ancestors] — scheme-less, so an
+         * `https` frame admits `https` pages only. No Trusted Types and inline styles allowed: MusicKit writes
+         * `innerHTML` and injects a `<style>`.
+         */
+        fun musicFramePolicy(ancestors: List<String>): String = listOf(
+            "default-src 'none'",
+            "base-uri 'none'",
+            "object-src 'none'",
+            "form-action 'none'",
+            "script-src 'self' $SPOTIFY_PLAYER_ORIGIN https://js-cdn.music.apple.com",
+            "style-src 'self' 'unsafe-inline'",
+            "img-src 'self' data: https:",
+            "media-src 'self' blob: https:",
+            "font-src 'self' data: https:",
+            "connect-src 'self' https:",
+            "worker-src 'self' blob:",
+            "frame-src $SPOTIFY_PLAYER_ORIGIN",
+            "frame-ancestors ${ancestors.ifEmpty { listOf("'none'") }.joinToString(" ")}",
+        ).joinToString("; ")
 
         fun isUnder(path: String, prefix: String) = path == prefix || path.startsWith("$prefix/")
 

@@ -123,6 +123,9 @@ The tree these build on — encrypted names, blinded slugs, a key on every node,
   **cr-0113** shipped the full data layer + backend + the primary-grouping **"Beiträge"** tab (reusing the
   gallery grid); **cr-0122** the sub-bucket management UI (create / rename / delete, and a Move / Delete selection
   bar); a camera filter is not built
+- [uc.memory.music](use-cases/uc.memory.music.md) — **built** ([ADR 0131](../../decisions/0131-a-memorys-background-music-plays-through-the-vendors-sdk-in-a-frame-of-its-own-origin.md)):
+  background music — one Spotify and one Apple Music playlist sealed in the node's `wrappedMeta.music`, played after the
+  viewer's opt-in by the vendor's SDK in the music frame, a page of the instance's own music host; never in the app origin
 - Memory journal — planned: markdown sealed under `K_node`
 - [uc.memory.tracks](use-cases/uc.memory.tracks.md) — **built (web)** ([ADR 0130](../../decisions/0130-a-gpx-track-is-a-medium-of-its-memory-drawn-on-its-map.md)):
   GPX tracks on a Memory's Map tab beside its photos — each track a medium whose original is its GPX file (no contract,

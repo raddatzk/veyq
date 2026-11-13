@@ -27,11 +27,11 @@ class CapabilityRegistryTest {
 
     private val catalogIds: List<String> = catalog.fieldNames().asSequence().toList()
 
-    private fun registry(vararg off: String) = CapabilityRegistry({ off.toSet() }, { emptySet() }, CapabilityRequirementValues.NONE, ExternalServiceAddresses.ALL)
+    private fun registry(vararg off: String) = CapabilityRegistry({ off.toSet() }, { emptySet() }, CapabilityRequirementValues.NONE, ExternalServiceAddresses.ALL, DeploymentCapabilities.ALL)
 
     /** A registry with nothing off at the instance level and [tenantOff] off in tenant `t1` only. */
     private fun tenantRegistry(instanceOff: Set<String>, vararg tenantOff: String) =
-        CapabilityRegistry({ instanceOff }, { tenant -> if (tenant == "t1") tenantOff.toSet() else emptySet() }, CapabilityRequirementValues.NONE, ExternalServiceAddresses.ALL)
+        CapabilityRegistry({ instanceOff }, { tenant -> if (tenant == "t1") tenantOff.toSet() else emptySet() }, CapabilityRequirementValues.NONE, ExternalServiceAddresses.ALL, DeploymentCapabilities.ALL)
 
     @Test
     fun theRegisterIsEveryCatalogEntryInCatalogOrderWithItsWords() {
@@ -129,7 +129,7 @@ class CapabilityRegistryTest {
     @Test
     fun theSwitchesAreAskedOnEveryCall() {
         var off = emptySet<String>()
-        val registry = CapabilityRegistry({ off }, { emptySet() }, CapabilityRequirementValues.NONE, ExternalServiceAddresses.ALL)
+        val registry = CapabilityRegistry({ off }, { emptySet() }, CapabilityRequirementValues.NONE, ExternalServiceAddresses.ALL, DeploymentCapabilities.ALL)
         assertTrue(registry.isActive(DEVICE_LINKING, null))
         off = setOf(DEVICE_LINKING)
         assertFalse(registry.isActive(DEVICE_LINKING, null), "a switch acts without a new registry, so without a restart")
@@ -183,6 +183,7 @@ class CapabilityRegistryTest {
             override fun tenant(tenantId: String) = if (tenantId == "t1") t1 else emptyMap()
         },
         ExternalServiceAddresses.ALL,
+        DeploymentCapabilities.ALL,
     )
 
     @Test
@@ -221,11 +222,26 @@ class CapabilityRegistryTest {
         val noMap = ExternalServiceAddresses {
             (CapabilityIds.EXTERNAL_SERVICES - CapabilityIds.MEMORIES_MAP).associateWith { ServiceAddress("https://x.example/", null) }
         }
-        val registry = CapabilityRegistry({ emptySet() }, { emptySet() }, CapabilityRequirementValues.NONE, noMap)
+        val registry = CapabilityRegistry({ emptySet() }, { emptySet() }, CapabilityRequirementValues.NONE, noMap, DeploymentCapabilities.ALL)
         assertFalse(registry.isActive(CapabilityIds.MEMORIES_MAP, null))
         assertTrue(registry.isActive(CapabilityIds.MEMORIES_PLACES, null), "control: a configured service is active")
         assertEquals(CapabilityState(CapabilityIds.MEMORIES_MAP, off = false, effective = false), registry.register().single { it.id == CapabilityIds.MEMORIES_MAP })
         assertTrue(registry.tenantRegister("t1").single { it.id == CapabilityIds.MEMORIES_MAP }.serverOff, "the server has it off for every tenant")
+    }
+
+    @Test
+    fun aDeploymentEntryTheEnvironmentLeavesUnconfiguredIsNotActiveAndItsSwitchCannotBringItBack() {
+        // ADR 0131 decision 4: the deployment configures Spotify only - Apple Music is off however the switches stand.
+        val spotifyOnly = DeploymentCapabilities { setOf(CapabilityIds.MEMORIES_MUSIC_APPLE_MUSIC) }
+        val registry = CapabilityRegistry({ emptySet() }, { emptySet() }, CapabilityRequirementValues.NONE, ExternalServiceAddresses.ALL, spotifyOnly)
+        assertFalse(registry.isActive(CapabilityIds.MEMORIES_MUSIC_APPLE_MUSIC, null))
+        assertTrue(registry.isActive(CapabilityIds.MEMORIES_MUSIC_SPOTIFY, null), "control: a configured sibling is active")
+        assertTrue(registry.tenantRegister("t1").single { it.id == CapabilityIds.MEMORIES_MUSIC_APPLE_MUSIC }.serverOff)
+        // The parent off (no music host) takes both children with it.
+        val noHost = CapabilityRegistry({ emptySet() }, { emptySet() }, CapabilityRequirementValues.NONE, ExternalServiceAddresses.ALL) {
+            setOf(CapabilityIds.MEMORIES_MUSIC)
+        }
+        assertFalse(noHost.isActive(CapabilityIds.MEMORIES_MUSIC_SPOTIFY, null))
     }
 
     @Test

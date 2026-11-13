@@ -11,8 +11,10 @@ interface ExternalOrigins {
     fun current(): ExternalOriginSet
 }
 
-/** The origins to append, each list deduplicated and in a stable order so a memo of the emitted policy holds. */
-data class ExternalOriginSet(val connect: List<String>, val img: List<String>) {
+/** The origins to append, each list deduplicated and in a stable order so a memo of the emitted policy holds. [frame] is
+ *  the music frame's origin while `memories.music` is active at the instance level (ADR 0131): `frame-src`, and the
+ *  Permissions-Policy's `encrypted-media` and `autoplay`, name it, and the COOP lets popups keep their opener. */
+data class ExternalOriginSet(val connect: List<String>, val img: List<String>, val frame: List<String> = emptyList()) {
     companion object {
         val NONE = ExternalOriginSet(emptyList(), emptyList())
     }

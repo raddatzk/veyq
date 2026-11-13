@@ -1,0 +1,70 @@
+/* The music frame's own look (ADR 0131): a compact bar inside the Memory's music bar. It shares no stylesheet with the
+   app (a page of another origin), so it carries its few colours itself, light and dark. */
+:root {
+  color-scheme: light dark;
+  --mf-text: #1f2328;
+  --mf-muted: #59636e;
+  --mf-primary: #0b6bcb;
+  --mf-on-primary: #ffffff;
+  --mf-line: #d0d7de;
+  --mf-surface: transparent;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --mf-text: #e6edf3;
+    --mf-muted: #9198a1;
+    --mf-primary: #4493f8;
+    --mf-on-primary: #0d1117;
+    --mf-line: #3d444d;
+  }
+}
+html,
+body {
+  margin: 0;
+  background: var(--mf-surface);
+  color: var(--mf-text);
+  font: 14px/1.4 system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+}
+.mf {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem 0.75rem;
+  padding: 0.5rem 0.25rem;
+}
+.mf-status {
+  margin: 0;
+  flex: 1 1 12rem;
+  color: var(--mf-muted);
+}
+.mf-controls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+}
+.mf-button {
+  font: inherit;
+  padding: 0.3rem 0.8rem;
+  border: 1px solid var(--mf-line);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--mf-text);
+  cursor: pointer;
+}
+.mf-primary {
+  border-color: var(--mf-primary);
+  background: var(--mf-primary);
+  color: var(--mf-on-primary);
+}
+.mf-button:focus-visible,
+.mf-open:focus-visible {
+  outline: 2px solid var(--mf-primary);
+  outline-offset: 2px;
+}
+.mf-open {
+  color: var(--mf-primary);
+}
+[hidden] {
+  display: none !important;
+}

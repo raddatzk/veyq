@@ -1,0 +1,49 @@
+---
+title: "Add background music"
+sources:
+  - docs/features/memory/use-cases/uc.memory.music.md
+  - docs/decisions/0131-a-memorys-background-music-plays-through-the-vendors-sdk-in-a-frame-of-its-own-origin.md
+---
+
+A Memory, and each of its chapters, can have background music: one **Spotify** playlist, one **Apple Music** playlist, or
+one of each. Whoever looks at the Memory can listen to it with their own account while they browse the photos.
+
+## Choose the playlists
+
+1. Open the Memory and choose **Background music** in the **⋯** menu at the top of its page.
+2. Paste the share link of a playlist: in Spotify, **Share** → **Copy link to playlist**; in Apple Music, **Share** →
+   **Copy Link**. Each service has its own field. A link that is not a playlist of that service (an album, a song,
+   another site) is refused, and nothing is saved.
+3. Choose **Save**. To remove a playlist, empty its field and save.
+
+Which playlist you chose is locked together with the Memory on your device; veyq's server cannot read it. A chapter has
+its own music; it does not play its Memory's.
+
+## Listen
+
+Above the gallery, the Memory shows **Background music** with each playlist it has.
+
+- **Open in Spotify** or **Open in Apple Music** opens the playlist in the service's own app or website. That always works,
+  and nothing of the service is loaded into veyq.
+- **Play here** plays it on the Memory's page. Because that loads the service's player, veyq asks first: the bar says
+  which service it is and that the service then learns your IP address, your account with it and this playlist. Nothing
+  is loaded before you choose **Play here**. Your choice is remembered in this browser, for that service.
+
+The player then appears in the bar. Sign in with the service there (its own window opens), then press **Play**. Pause
+and the next track are in the same place. The music stops when you leave the page.
+
+Playing here needs **Spotify Premium** or an **Apple Music subscription**; without one, the player says so and the link
+to the service's app stays. Whoever runs your server decides whether music can be played here at all: if they have not
+set it up, or switched it off, the bar offers only the link.
+
+## Turn it off
+
+**Turn music off** in the bar ends it at once: the player is removed, the service's sign-in in it is forgotten, and veyq
+asks again before the next time. Whoever views the Memory through a link has the same bar and the same choices.
+
+## Who learns what
+
+The service's player runs on a separate address of your server (its music host), apart from veyq itself, so it never
+sees your photos, your other Memories or anything you unlocked. veyq's server never sees which playlist you chose, nor
+your sign-in with the service. The service sees what any player of its own sees: your IP address, your account, the
+playlist and what you listen to.

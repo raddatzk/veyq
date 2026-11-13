@@ -69,6 +69,7 @@ class TenantIngressSinkProducer(
             upstreams = TraefikFileIngressSink.Upstreams(app = upstream.app(), blobs = upstream.blobs(), admin = upstream.admin()),
             bucket = { store.bundledRouteBucket() },
             clientPortHeader = config.http().clientPort().takeIf { it.source() == ClientPortSource.HEADER }?.header(),
+            musicDomain = hostname(config.music().domain().orElse(null), "music.domain"),
         )
     }
 

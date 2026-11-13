@@ -88,7 +88,18 @@ describe('exportMemoryContent', () => {
     location: { name: 'Lisbon', nameSource: 'manual', derivedMode: 'fixed', derived: { lat: 38.7, lng: -9.1 } },
     participants: { userIds: [U1, U2, GONE] },
     cover: { source: { kind: 'media', mediaId: 'b' }, crop: { x: 0, y: 0, width: 1, height: 1 } },
+    music: [{ service: 'apple-music', id: 'pl.u-abc123', storefront: 'de' }, { service: 'spotify', id: '37i9dQZF1DXcBWIGoYBM5M' }, { service: 'tidal', id: 'x' }],
   }
+
+  it('exports the background music the meta names, a valid entry per service in the services\' order (uc.memory.music)', async () => {
+    const { ctx } = exportCtx(meta)
+    const c = (await exportMemoryContent(ctx))!
+    expect(c.music).toEqual([{ service: 'spotify', id: '37i9dQZF1DXcBWIGoYBM5M' }, { service: 'apple-music', id: 'pl.u-abc123', storefront: 'de' }])
+    expect(validateMemoryContent(c)).toBeNull()
+    // control: a node without music exports none
+    const none = (await exportMemoryContent(exportCtx({ ...meta, music: undefined }).ctx))!
+    expect(none.music).toBeUndefined()
+  })
 
   it('exports the media with capture time, correction flag, place and EXIF, and the node\'s date, place, cover and names', async () => {
     const { ctx, payloads } = exportCtx(meta)
@@ -241,6 +252,15 @@ describe('importMemoryContent', () => {
     const src = vi.mocked(addMedia).mock.calls[0][3]
     expect(src).toMatchObject({ mediaType: 'image/jpeg', lastModified: 1_700_000_000_000, name: 'a.jpg' })
     expect(vi.mocked(writeNodeCover), 'a cover is set only by an upload: a photo reference is left out').not.toHaveBeenCalled()
+    expect(raw.music, 'control: an archive without music seals none').toBeUndefined()
+  })
+
+  it('seals the archive\'s background music at birth, dropping an entry that is no playlist (uc.memory.music)', async () => {
+    const music = [{ service: 'spotify', id: '37i9dQZF1DXcBWIGoYBM5M' }, { service: 'spotify', id: 'bad id!' }]
+    const made = await importMemoryContent(MEMORY_KIND)(ctx(node({ music })))
+    const sealer = vi.mocked(createContentNode).mock.calls[0][5]
+    const raw = unsealNodeMeta(made.nodeKey, { scopeId: SCOPE, nodeId: NEW }, sealer!(made.nodeKey, { scopeId: SCOPE, nodeId: NEW, scopeEpoch: 1, placementRevision: 0 }))
+    expect(raw.music).toEqual([{ service: 'spotify', id: '37i9dQZF1DXcBWIGoYBM5M' }])
   })
 
   it('hands each original to the upload as the very object the payload returned, so the digest core remembered for it is read (inbox #555)', async () => {
@@ -447,6 +467,8 @@ describe('validateMemoryContent: a download\'s Memory checked against its contra
     ['a place over its length', { ...sound, location: { name: 'x'.repeat(MEMORIES_LIMITS.place + 1) } }, 'too_large'],
     ['a participant over its length', { ...sound, participants: ['x'.repeat(MEMORIES_LIMITS.participant + 1)] }, 'too_large'],
     ['more participants than the cap', { ...sound, participants: Array.from({ length: MEMORIES_LIMITS.participants + 1 }, () => 'A') }, 'too_large'],
+    ['music that is no list', { ...sound, music: { service: 'spotify' } }, 'invalid_manifest'],
+    ['more playlists than the services', { ...sound, music: [{}, {}, {}] }, 'too_large'],
     ['a banner with no file', { ...sound, banner: { medium: 'image' } }, 'invalid_manifest'],
     ['a banner of another medium', { ...sound, banner: { medium: 'audio', file: { path: 'b', size: 1 } } }, 'invalid_manifest'],
     ['a banner focal point off the medium', { ...sound, banner: { medium: 'image', file: { path: 'b', size: 1 }, focal: { x: 2, y: 0 } } }, 'invalid_manifest'],
@@ -464,7 +486,9 @@ describe('validateMemoryContent: a download\'s Memory checked against its contra
       place: d.place.properties.name.maxLength,
       participant: d.memory.properties.participants.items.maxLength,
       participants: d.memory.properties.participants.maxItems,
+      music: d.music.maxItems,
     }).toEqual(MEMORIES_LIMITS)
+    expect(d.chapter.properties.music.$ref).toBe('#/$defs/music')
     // the banner has no description, and neither a cover nor a banner names a medium by index
     expect(Object.keys(d.banner.properties)).not.toContain('alt')
     expect(Object.keys(d.banner.properties)).not.toContain('mediaIndex')

@@ -114,6 +114,9 @@ listeners and by every route for its parent, so a host cannot have a route witho
 {{- with .Values.admin.domain }}
 - [https-admin, {{ . | quote }}, veyq-admin]
 {{- end }}
+{{- with (.Values.music | default dict).domain }}
+- [https-music, {{ . | quote }}, veyq-music]
+{{- end }}
 {{- end }}
 
 {{/*
