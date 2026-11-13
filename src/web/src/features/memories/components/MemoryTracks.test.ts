@@ -23,6 +23,7 @@ import type { MediaLoaders } from '../source'
 import { GPX_MEDIA_TYPE, TRACK_COLORS, TRACKS_PER_MEMORY } from '../track/gpx'
 import type { MapTrack } from './MemoryMap.vue'
 import TrackEditDialog from './TrackEditDialog.vue'
+import TrackUploadDialog from './TrackUploadDialog.vue'
 import { MetaConflictError } from '../../../core/node/sealedMetaWrite'
 import type { TrackLabel } from '../track/trackLabel'
 
@@ -76,6 +77,14 @@ function mountTab(over: Partial<{
     },
     global: { plugins: [realI18n()], stubs: { MemoryMap: MapStub } },
   })
+}
+
+/** Pick files in the tab's hidden input, as the browser's picker hands them in. */
+async function pickFiles(w: ReturnType<typeof mountTab>, files: File[]) {
+  const input = w.find('[data-testid="track-file-input"]')
+  Object.defineProperty(input.element, 'files', { value: files, configurable: true })
+  await input.trigger('change')
+  await flushPromises()
 }
 
 beforeEach(() => {
@@ -143,26 +152,59 @@ describe('MemoryTracks', () => {
 
   it('checks each picked file on the device: a refused one is named, the good ones go on as GPX files', async () => {
     const w = mountTab()
-    const input = w.find('[data-testid="track-file-input"]').element as HTMLInputElement
     const good = new File([gpxText('New')], 'new.gpx', { type: '' })
     const notGpx = new File(['<gpx/>'], 'photo.jpg', { type: 'image/jpeg' })
     const short = new File(['<gpx><trk><trkseg><trkpt lat="1" lon="1"/></trkseg></trk></gpx>'], 'short.gpx')
-    Object.defineProperty(input, 'files', { value: [good, notGpx, short], configurable: true })
-    await w.find('[data-testid="track-file-input"]').trigger('change')
+    await pickFiles(w, [good, notGpx, short])
+    w.findComponent(TrackUploadDialog).vm.$emit('add', [{ name: null, activity: null }])
     await flushPromises()
-    const added = w.emitted('add')?.[0]?.[0] as File[]
-    expect(added.map((f) => [f.name, f.type])).toEqual([['new.gpx', GPX_MEDIA_TYPE]])
+    const added = w.emitted('add')?.[0]?.[0] as { file: File }[]
+    expect(added.map(({ file }) => [file.name, file.type])).toEqual([['new.gpx', GPX_MEDIA_TYPE]])
     expect(toastError.mock.calls.map(([line]) => line)).toEqual(['photo.jpg is no GPX track.', 'short.gpx has fewer than two points.'])
+  })
+
+  // ADR 0130 decision 9: a name and an activity are asked as a track is added, before anything goes to the queue.
+  // Lever: emit `add` in `onPicked` without the dialog, or drop `label` in `addLabelled`.
+  it('asks each accepted file\'s name and activity before it is added, the file\'s own name as the placeholder', async () => {
+    const w = mountTab()
+    const one = new File([gpxText('Sunrise')], 'one.gpx')
+    const two = new File([gpxText('')], 'Lake loop.gpx')
+    await pickFiles(w, [one, two])
+    expect(w.emitted('add'), 'nothing is added while the dialog asks').toBeUndefined()
+    const dialog = w.findComponent(TrackUploadDialog)
+    expect(dialog.props('files').map((f: { file: File; fallbackName: string | null }) => [f.file.name, f.fallbackName]))
+      .toEqual([['one.gpx', 'Sunrise'], ['Lake loop.gpx', 'Lake loop']])
+    dialog.vm.$emit('add', [{ name: 'Ridge', activity: 'hiking' }, { name: null, activity: 'water' }])
+    await flushPromises()
+    const added = w.emitted('add')?.[0]?.[0] as { file: File; label: TrackLabel }[]
+    expect(added.map(({ file, label }) => [file.name, label])).toEqual([
+      ['one.gpx', { name: 'Ridge', activity: 'hiking' }],
+      ['Lake loop.gpx', { name: null, activity: 'water' }],
+    ])
+    expect(w.findComponent(TrackUploadDialog).exists()).toBe(false)
+  })
+
+  it('adds nothing when the add\'s dialog is cancelled, or when the page moves to another node', async () => {
+    const w = mountTab()
+    await pickFiles(w, [new File([gpxText('X')], 'x.gpx')])
+    w.findComponent(TrackUploadDialog).vm.$emit('close')
+    await flushPromises()
+    expect(w.findComponent(TrackUploadDialog).exists()).toBe(false)
+    expect(w.emitted('add')).toBeUndefined()
+
+    await pickFiles(w, [new File([gpxText('Y')], 'y.gpx')])
+    expect(w.findComponent(TrackUploadDialog).exists()).toBe(true)
+    await w.setProps({ nodeId: 'n2' })
+    expect(w.findComponent(TrackUploadDialog).exists()).toBe(false)
+    expect(w.emitted('add')).toBeUndefined()
   })
 
   it('refuses a file past the node\'s track limit', async () => {
     const many = Array.from({ length: TRACKS_PER_MEMORY }, (_, i) => mediaItem({ mediaId: `t${i}` }))
     const w = mountTab({ tracks: many, bytes: {} })
-    const input = w.find('[data-testid="track-file-input"]').element as HTMLInputElement
-    Object.defineProperty(input, 'files', { value: [new File([gpxText('X')], 'x.gpx')], configurable: true })
-    await w.find('[data-testid="track-file-input"]').trigger('change')
-    await flushPromises()
+    await pickFiles(w, [new File([gpxText('X')], 'x.gpx')])
     expect(w.emitted('add')).toBeUndefined()
+    expect(w.findComponent(TrackUploadDialog).exists(), 'no dialog for nothing accepted').toBe(false)
     expect(toastError).toHaveBeenCalledWith('x.gpx was not added: a Memory holds at most 50 tracks.')
   })
 

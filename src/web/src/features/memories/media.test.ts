@@ -1026,6 +1026,29 @@ describe('addMedia — E2EE-sealed layout + EXIF tiers (cr-0059/cr-0064)', () =>
     expect([plain.capturedAtOverride, plain.placeName]).toEqual([undefined, undefined])
   })
 
+  // ADR 0130 decision 9: a track named as it is added carries its label in the one completion, clamped as its edit clamps
+  // it - no meta write follows. Lever: drop the `trackLabelFields(...)` spread in `sealMetadata`.
+  it('a GPX track\'s name and activity given as it is added are sealed into its listed tier at birth, the name clamped', async () => {
+    const store = fakeStore()
+    fakeApi(mediaApi, store.api)
+    fakeApi(blobApi, store.blob)
+    vi.stubGlobal('fetch', store.fetchStub)
+    const FILE_MTIME = Date.UTC(2026, 5, 1, 8)
+    const LONG_NAME = '山'.repeat(TRACK_NAME_MAX_BYTES) // three bytes each: clamped to whole characters
+
+    const memoryKey = v1.randomBytes(32)
+    const gpx = new Blob(['<gpx><trk><trkseg><trkpt lat="1" lon="1"/><trkpt lat="2" lon="2"/></trkseg></trk></gpx>'])
+    await addMedia(SCOPE_ID, NODE_ID, memoryKey, { blob: gpx, mediaType: 'application/gpx+xml', lastModified: FILE_MTIME, name: 'ridge.gpx' }, stubDeriver(), {
+      restored: { trackName: LONG_NAME, trackActivity: 'mountain-biking' },
+    })
+
+    expect(store.captured.updatedMeta).toBeUndefined()
+    const sealed = store.captured.completeItem.wrappedMeta!
+    expect(sealed).not.toContain('山')
+    const meta = openJson(metaCtx(store.captured.completeItem.mediaId), memoryKey, sealed)
+    expect(meta).toMatchObject({ capturedAt: FILE_MTIME, trackName: '山'.repeat(TRACK_NAME_MAX_BYTES / 3), trackActivity: 'mountain-biking' })
+  })
+
   // The capture-time key has TWO consumers: the metadata tier sealed at upload, and the in-flight upload tile
   // that must know its grid place BEFORE a byte is uploaded (useOptimisticTiles). They agree because they
   // consume one rule — `captureTimeOf` — and this is the bite that says so rather than assuming it. Lever:

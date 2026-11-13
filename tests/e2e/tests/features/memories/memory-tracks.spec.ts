@@ -2,9 +2,10 @@
 // listed on the Memory's Map tab and never in its gallery.
 //
 // The owner creates a Memory with one photo, then:
-//  - adds a GPX file on the Map tab: the upload is a medium of the Memory (one more original on the wire), the gallery still
-//    counts one item, and the track is listed by its own name with its distance - with the map services off (their default),
-//    so the tab offers them and asks no tile service anything;
+//  - adds a GPX file on the Map tab, giving it an activity in the add's dialog (ADR 0130 decision 9) and leaving its name
+//    empty: the upload is a medium of the Memory (one more original on the wire), the gallery still counts one item, and the
+//    track is listed by its file's own name with its distance and that activity - with the map services off (their
+//    default), so the tab offers them and asks no tile service anything;
 //  - refuses a file that is no GPX track, naming it;
 //  - names the track and gives it an activity through its Edit (ADR 0130 decision 9): the row shows both;
 //  - opens the same Memory through a READ link: the Map tab lists the track by that name with its activity, with no add,
@@ -92,8 +93,8 @@ test('a Memory with one photo', { tag: ['@uc.memory.tracks:no-photo'] }, async (
 })
 
 test(
-  'a GPX file added on the Map tab is a medium of the Memory, listed by its name with its numbers, and no gallery tile',
-  { tag: ['@uc.memory.tracks:a-track-is-a-medium', '@uc.memory.tracks:map-tab-lists-and-draws', '@uc.memory.tracks:the-one-map-consent', '@uc.memory.tracks:no-photo'] },
+  'a GPX file added on the Map tab is a medium of the Memory, listed by its name with the activity given as it was added, and no gallery tile',
+  { tag: ['@uc.memory.tracks:a-track-is-a-medium', '@uc.memory.tracks:map-tab-lists-and-draws', '@uc.memory.tracks:the-one-map-consent', '@uc.memory.tracks:no-photo', '@uc.memory.tracks:named-as-added'] },
   async () => {
     const { page } = member
     await mapTab(page).click()
@@ -108,8 +109,17 @@ test(
     const chooser = page.waitForEvent('filechooser')
     await page.getByTestId('track-add').click()
     await (await chooser).setFiles({ name: recordTyped(`tour-${stamp}.gpx`), mimeType: 'application/gpx+xml', buffer: gpx(recordTyped(trackName)) })
+    // the add's dialog: the name left empty (its placeholder the file's own), an activity chosen
+    const adding = page.getByRole('dialog', { name: 'Add track' })
+    await expect(adding.getByTestId('track-upload-0-name')).toHaveAttribute('placeholder', trackName)
+    expect(completes, 'nothing is uploaded while the dialog asks').toEqual([])
+    await adding.getByTestId('track-upload-0-activity').click()
+    await page.getByRole('option', { name: 'Hiking', exact: true }).click()
+    await adding.getByTestId('track-upload-add').click()
+    await expect(adding).toBeHidden()
     await expect(trackRows(page)).toHaveCount(1, { timeout: 90_000 })
     await expect(trackRows(page).first()).toContainText(trackName)
+    await expect(trackRows(page).first().getByTestId('track-activity')).toHaveText('Hiking')
     await expect(trackRows(page).first()).toContainText('km', { timeout: 30_000 })
     expect(completes.length, 'the track was completed as a medium').toBeGreaterThan(0)
 

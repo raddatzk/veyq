@@ -11,7 +11,7 @@
 // media.ts's `onProgress?.(0)` right before the chunk PUTs. That pre-network phase is each job's `prepare`, so the queue
 // runs the next file's while the current one is on the wire (inbox #220). Operator-blind is entirely `addMedia`'s concern.
 import { computed } from 'vue'
-import { addMedia, createBrowserDeriver, prepareMedia, type AddMediaSource, type AddMediaOptions, type PreparedMedia } from './media'
+import { addMedia, createBrowserDeriver, prepareMedia, type AddMediaSource, type AddMediaOptions, type PreparedMedia, type RestoredMediaFacts } from './media'
 import { bannerOriginalOf } from './storedMatch'
 import { retryWhileRekeying } from '../../shared/rekeyRetry'
 import {
@@ -187,7 +187,9 @@ export function collectPickedFiles(input: HTMLInputElement, enqueue: (files: Fil
 /** Enqueue a batch of selected files against a Memory. Returns the batch id, or null when nothing was given. */
 export function enqueueUploads(
   target: UploadTarget,
-  selections: { file: File; mediaType: string }[],
+  /** Each file with its type and, where the picker asked for them, the facts sealed into its listed tier at birth
+   *  (a GPX track's name and activity, ADR 0130 decision 9). */
+  selections: { file: File; mediaType: string; facts?: RestoredMediaFacts }[],
   opts: { label: string; onComplete?: (batch: UploadBatch) => void; onFileDone?: (file: UploadFile) => void } = { label: '' },
 ): string | null {
   // the batch's transport: the share-scoped upload fn, or the authed addMedia over scope/node/K_node (default).
@@ -228,7 +230,7 @@ export function enqueueUploads(
         // the device floor, the key reads and every seal run inside `upload`, after the prepare: it uses no key
         run: async ({ onProgress, signal }) => {
           try {
-            return await upload(source, { onProgress, signal, prepared: await prepare(signal) })
+            return await upload(source, { onProgress, signal, prepared: await prepare(signal), ...(s.facts ? { restored: s.facts } : {}) })
           } finally {
             prepared = null
           }
