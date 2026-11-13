@@ -34,6 +34,8 @@ import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.long
 import kotlinx.serialization.json.jsonObject
+import me.raddatz.veyq.mobile.session.LiveRun
+import kotlin.test.AfterTest
 
 /**
  * The dispatch over the real core (ADR 0123's Consequences, the bridge), as a host drives it, on the JVM's suite and
@@ -46,6 +48,12 @@ import kotlinx.serialization.json.jsonObject
  * Runs only when `VEYQ_LIVE` names an origin of a running dev instance (`./gradlew backend:seed`).
  */
 class LiveBridgeTest {
+    /** Every device this case signs in with, taken off the account again after it, whatever it came to. */
+    private val liveRun = LiveRun()
+
+    @AfterTest
+    fun takeOffTheDevices() = liveRun.removeAll()
+
     @Test
     fun theSeededPrincipalSignsInAndReadsTheShellSearchAndAPotThroughCalls() = runBlocking {
         val origin = System.getenv("VEYQ_LIVE") ?: return@runBlocking
@@ -54,7 +62,7 @@ class LiveBridgeTest {
             .mapNotNull { l -> l.substringBefore('=', "").takeIf { it.isNotBlank() }?.let { it.trim() to l.substringAfter('=').trim().trim('"', '\'') } }
             .toMap()
 
-        val kept = ConcurrentHashMap<String, String>()
+        val kept = liveRun.track(ConcurrentHashMap<String, String>())
         lateinit var host: Host
         host = Host { token, json ->
             thread {
@@ -746,12 +754,7 @@ class LiveBridgeTest {
             val live = b.watching(Watched.PotLive(id))
 
             // another device writes an entry: the poll brings it, within its cadence (20 s ± 20 %)
-            val store = object : DeviceStore {
-                val values = ConcurrentHashMap<String, String>()
-                override fun read(key: String) = values[key]
-                override fun write(key: String, value: String) { values[key] = value }
-                override fun remove(key: String) { values.remove(key) }
-            }
+            val store = liveRun.store()
             val account = VeyqAccount.signIn(
                 BouncyCastlePrimitives, origin, env.getValue("VEYQ_EMAIL"), env.getValue("VEYQ_PASSWORD"), env.getValue("VEYQ_SECRET_KEY"),
                 ThisDevice(store, NoDeviceKeys, "bridge live poll test, the other device", BouncyCastlePrimitives),
@@ -960,12 +963,7 @@ class LiveBridgeTest {
             assertEquals("CHF" to rate, chf.currency to chf.rate)
 
             // a stale save: another device edits the expense meanwhile; the save says so and shows theirs, the next goes on top
-            val store = object : DeviceStore {
-                val values = ConcurrentHashMap<String, String>()
-                override fun read(key: String) = values[key]
-                override fun write(key: String, value: String) { values[key] = value }
-                override fun remove(key: String) { values.remove(key) }
-            }
+            val store = liveRun.store()
             val account = VeyqAccount.signIn(
                 BouncyCastlePrimitives, origin, env.getValue("VEYQ_EMAIL"), env.getValue("VEYQ_PASSWORD"), env.getValue("VEYQ_SECRET_KEY"),
                 ThisDevice(store, NoDeviceKeys, "bridge live editor test, the other device", BouncyCastlePrimitives),
@@ -1240,12 +1238,7 @@ class LiveBridgeTest {
         val env = envFile.readLines()
             .mapNotNull { l -> l.substringBefore('=', "").takeIf { it.isNotBlank() }?.let { it.trim() to l.substringAfter('=').trim().trim('"', '\'') } }
             .toMap()
-        val store = object : DeviceStore {
-            val values = ConcurrentHashMap<String, String>()
-            override fun read(key: String) = values[key]
-            override fun write(key: String, value: String) { values[key] = value }
-            override fun remove(key: String) { values.remove(key) }
-        }
+        val store = liveRun.store()
         val account = VeyqAccount.signIn(
             BouncyCastlePrimitives, origin, env.getValue("VEYQ_EMAIL"), env.getValue("VEYQ_PASSWORD"), env.getValue("VEYQ_SECRET_KEY"),
             ThisDevice(store, NoDeviceKeys, "bridge live receipt test, the Server Owner", BouncyCastlePrimitives),
@@ -1282,12 +1275,7 @@ class LiveBridgeTest {
             .toMap()
         // the folder and its files made by the core in a session of its own first: the bridge's tree, read at its sign-in,
         // then holds them (a session's tree is cached; a refresh does not read another device's writes)
-        val store = object : DeviceStore {
-            val values = ConcurrentHashMap<String, String>()
-            override fun read(key: String) = values[key]
-            override fun write(key: String, value: String) { values[key] = value }
-            override fun remove(key: String) { values.remove(key) }
-        }
+        val store = liveRun.store()
         val account = VeyqAccount.signIn(
             BouncyCastlePrimitives, origin, env.getValue("VEYQ_EMAIL"), env.getValue("VEYQ_PASSWORD"), env.getValue("VEYQ_SECRET_KEY"),
             ThisDevice(store, NoDeviceKeys, "bridge live file test, the uploader", BouncyCastlePrimitives),
@@ -1650,12 +1638,7 @@ class LiveBridgeTest {
         val env = envFile.readLines()
             .mapNotNull { l -> l.substringBefore('=', "").takeIf { it.isNotBlank() }?.let { it.trim() to l.substringAfter('=').trim().trim('"', '\'') } }
             .toMap()
-        val store = object : DeviceStore {
-            val values = ConcurrentHashMap<String, String>()
-            override fun read(key: String) = values[key]
-            override fun write(key: String, value: String) { values[key] = value }
-            override fun remove(key: String) { values.remove(key) }
-        }
+        val store = liveRun.store()
         val account = VeyqAccount.signIn(
             BouncyCastlePrimitives, origin, env.getValue("VEYQ_EMAIL"), env.getValue("VEYQ_PASSWORD"), env.getValue("VEYQ_SECRET_KEY"),
             ThisDevice(store, NoDeviceKeys, device, BouncyCastlePrimitives),
@@ -1681,12 +1664,7 @@ class LiveBridgeTest {
         val env = envFile.readLines()
             .mapNotNull { l -> l.substringBefore('=', "").takeIf { it.isNotBlank() }?.let { it.trim() to l.substringAfter('=').trim().trim('"', '\'') } }
             .toMap()
-        val store = object : DeviceStore {
-            val values = ConcurrentHashMap<String, String>()
-            override fun read(key: String) = values[key]
-            override fun write(key: String, value: String) { values[key] = value }
-            override fun remove(key: String) { values.remove(key) }
-        }
+        val store = liveRun.store()
         val account = VeyqAccount.signIn(
             BouncyCastlePrimitives, origin, env.getValue("VEYQ_EMAIL"), env.getValue("VEYQ_PASSWORD"), env.getValue("VEYQ_SECRET_KEY"),
             ThisDevice(store, NoDeviceKeys, "bridge live medium test, the uploader", BouncyCastlePrimitives),
@@ -1765,12 +1743,7 @@ class LiveBridgeTest {
         val env = envFile.readLines()
             .mapNotNull { l -> l.substringBefore('=', "").takeIf { it.isNotBlank() }?.let { it.trim() to l.substringAfter('=').trim().trim('"', '\'') } }
             .toMap()
-        val store = object : DeviceStore {
-            val values = ConcurrentHashMap<String, String>()
-            override fun read(key: String) = values[key]
-            override fun write(key: String, value: String) { values[key] = value }
-            override fun remove(key: String) { values.remove(key) }
-        }
+        val store = liveRun.store()
         val account = VeyqAccount.signIn(
             BouncyCastlePrimitives, origin, env.getValue("VEYQ_EMAIL"), env.getValue("VEYQ_PASSWORD"), env.getValue("VEYQ_SECRET_KEY"),
             ThisDevice(store, NoDeviceKeys, "bridge live desktop pass, the uploader", BouncyCastlePrimitives),
@@ -2357,8 +2330,175 @@ class LiveBridgeTest {
         }
     }
 
+    /**
+     * Memories through the bridge's calls (the CR "Memories on every app", phase 3), on a running instance: an `App memory
+     * <n>` made by `Shell.CreateMemory` at the personal space's top, three JPEGs drawn here and the WebM at
+     * `VEYQ_LIVE_MEMORY_WEBM` (600 MiB, made by `ffmpeg`) added by path through `Memory.Upload`, their tiers made by a host
+     * this test plays (`Media.Duration`, `Media.Tiers`: ImageIO's JPEGs to the core's spec, a drawn poster for the video), read
+     * back as tiles at the thumbnails' SHA-256; a range of the video across a frame's edge at the file's; the original saved
+     * through `Medium.Save` at its SHA-256 and a second save cancelled with nothing left; one photo trashed and undone; a
+     * chapter made. The Memory is trashed and purged however it ends. Reported skipped without `VEYQ_LIVE` and
+     * `VEYQ_LIVE_MEMORY_WEBM`.
+     */
+    @Test
+    fun aMemoryIsMadeFilledByPathPlayedSavedAndEmptiedThroughCalls() = runBlocking {
+        val origin = System.getenv("VEYQ_LIVE")
+        val webm = System.getenv("VEYQ_LIVE_MEMORY_WEBM")?.let(::File)
+        org.junit.Assume.assumeTrue("VEYQ_LIVE and VEYQ_LIVE_MEMORY_WEBM are not set: a live case", origin != null && webm != null)
+        origin!!
+        assertTrue(webm!!.isFile, "no $webm")
+        val envFile = System.getenv("VEYQ_ENV_FILE")?.let(::File) ?: File(System.getProperty("veyq.repoRoot"), ".run/.env")
+        val env = envFile.readLines()
+            .mapNotNull { l -> l.substringBefore('=', "").takeIf { it.isNotBlank() }?.let { it.trim() to l.substringAfter('=').trim().trim('"', '\'') } }
+            .toMap()
+        // the purge goes through a session of its own: the bridge's tree is cached
+        val store = object : DeviceStore {
+            val values = ConcurrentHashMap<String, String>()
+            override fun read(key: String) = values[key]
+            override fun write(key: String, value: String) { values[key] = value }
+            override fun remove(key: String) { values.remove(key) }
+        }
+        val account = VeyqAccount.signIn(
+            BouncyCastlePrimitives, origin, env.getValue("VEYQ_EMAIL"), env.getValue("VEYQ_PASSWORD"), env.getValue("VEYQ_SECRET_KEY"),
+            ThisDevice(store, NoDeviceKeys, "bridge live memory test, the purge", BouncyCastlePrimitives),
+        ) { block -> HttpClient(OkHttp, block) }
+        val tenant = account.open(account.tenants.first { origin.contains(it.domain) })
+        val personalScope = tenant.spaces().first { it.kind == "PERSONAL" }.scopeId
+
+        // the host's tiers, made here as a platform makes them: a photo through ImageIO to the requested edges, a video's poster drawn
+        val thumbnails = ConcurrentHashMap<String, String>() // file name -> its thumbnail's SHA-256
+        fun jpeg(image: java.awt.image.BufferedImage, edge: Int): ByteArray {
+            val scale = minOf(1.0, edge.toDouble() / maxOf(image.width, image.height))
+            val w = maxOf(1, (image.width * scale).toInt())
+            val h = maxOf(1, (image.height * scale).toInt())
+            val out = java.awt.image.BufferedImage(w, h, java.awt.image.BufferedImage.TYPE_INT_RGB)
+            out.createGraphics().apply { drawImage(image, 0, 0, w, h, null); dispose() }
+            return java.io.ByteArrayOutputStream().also { javax.imageio.ImageIO.write(out, "jpg", it) }.toByteArray()
+        }
+        lateinit var tiersHost: Host
+        tiersHost = Host(timeout = 2.minutes) { token, json ->
+            thread {
+                val r = wire.decodeFromString(HostRequest.serializer(), json)
+                val (reply, payload) = when (r) {
+                    is HostRequest.MediaDuration -> HostReply.Value("10000") to null
+                    is HostRequest.MediaTiers -> {
+                        val image = if (r.mediaType.startsWith("video/")) {
+                            java.awt.image.BufferedImage(1280, 720, java.awt.image.BufferedImage.TYPE_INT_RGB).also { i ->
+                                i.createGraphics().apply { paint = java.awt.Color(20, 120, 60); fillRect(0, 0, 1280, 720); dispose() }
+                            }
+                        } else {
+                            javax.imageio.ImageIO.read(File(r.path))
+                        }
+                        val preview = jpeg(image, r.previewEdge)
+                        val thumbnail = jpeg(javax.imageio.ImageIO.read(java.io.ByteArrayInputStream(preview)), r.thumbnailEdge)
+                        thumbnails[File(r.path).name] = sha256(thumbnail)
+                        HostReply.Tiers(image.width, image.height, preview.size) to preview + thumbnail
+                    }
+                    is HostRequest.StoreRead -> HostReply.Value(null) to null
+                    else -> HostReply.Done to null
+                }
+                tiersHost.reply(token, wire.encodeToString(HostReply.serializer(), reply), payload)
+            }
+        }
+        val b = Bridge.live(
+            BouncyCastlePrimitives, { block -> HttpClient(OkHttp, block) }, Config("bridge memory test"), hostStore(ConcurrentHashMap()), { NoDeviceKeys }, JvmFiles,
+            tiers = HostTiers(tiersHost),
+        )
+        val dir = java.nio.file.Files.createTempDirectory("veyq-live-memory").toFile()
+        val name = "App memory ${System.currentTimeMillis() % 100_000}"
+        var made: me.raddatz.veyq.mobile.navigation.NodeAt? = null
+        try {
+            val photos = (1..3).map { n ->
+                File(dir, "photo-$n.jpg").also { f ->
+                    val image = java.awt.image.BufferedImage(3000 + n * 100, 2000, java.awt.image.BufferedImage.TYPE_INT_RGB)
+                    image.createGraphics().apply {
+                        paint = java.awt.GradientPaint(0f, 0f, java.awt.Color(30 * n, 90, 200), 3000f, 2000f, java.awt.Color(240, 200, 40 * n))
+                        fillRect(0, 0, image.width, image.height)
+                        dispose()
+                    }
+                    javax.imageio.ImageIO.write(image, "jpg", f)
+                }
+            }
+            val gate = b.watching(Watched.Session)
+            assertEquals(Answer.Done, b.ask(Call.SessionStart))
+            gate.until { (it as Update.Session).gate as? Gate.SignIn }
+            assertEquals(Answer.Done, b.ask(Call.SessionSignIn(origin, env.getValue("VEYQ_EMAIL"), env.getValue("VEYQ_PASSWORD"), env.getValue("VEYQ_SECRET_KEY")), timeout = 2.minutes))
+            gate.until(2.minutes) { (it as Update.Session).gate as? Gate.Signed }
+            b.watching(Watched.Shell).until(1.minutes) { (it as Update.Shell).takeIf { u -> u.state?.lists?.spaces?.isNotEmpty() == true } }
+
+            val created = b.ask(Call.ShellCreateMemory(personalScope, null, name), timeout = 1.minutes) as Answer.Created
+            val memory = assertNotNull(created.node, "${created.notice}")
+            made = memory
+            println("made $name")
+            assertEquals(Answer.Created(null, me.raddatz.veyq.mobile.words.Notice(me.raddatz.veyq.mobile.words.Msg.NODE_NAME_TAKEN_BY,
+                me.raddatz.veyq.mobile.words.Notice(me.raddatz.veyq.mobile.words.Msg.MEMORY_A_MEMORY), name)),
+                b.ask(Call.ShellCreateMemory(personalScope, null, name), timeout = 1.minutes), "its name is taken now")
+            val g = (b.ask(Call.GalleryOpen(memory)) as Answer.GalleryOpened).gallery
+            val page = b.watching(Watched.Gallery(g))
+            page.until(1.minutes) { u -> (u as Update.Gallery).shown?.takeIf { it.rows?.isEmpty() == true } }
+
+            val started = System.currentTimeMillis()
+            assertEquals(Answer.Queued(4, null), b.ask(Call.MemoryUpload(g, photos.map { it.path } + webm.path), timeout = 1.minutes))
+            val rows = page.until(30.minutes) { u -> (u as Update.Gallery).shown?.rows?.takeIf { it.size == 4 } }
+            println("four media in ${System.currentTimeMillis() - started} ms")
+            for (row in rows) {
+                val (answer, tile) = b.askWithPayload(Call.GalleryTile(g, row.mediaId), 1.minutes)
+                assertEquals(Answer.Bytes("image/jpeg"), answer, row.name)
+                assertEquals(thumbnails.getValue(row.name!!), sha256(tile!!), "${row.name}'s tile is not the thumbnail its host made")
+            }
+
+            // the video through its reader, a range across a frame's edge at the file's
+            val video = rows.indexOfFirst { it.video }
+            val l = (b.ask(Call.LightboxOpen(g, video)) as Answer.LightboxOpened).lightbox
+            val reader = b.ask(Call.MediumReader(l), timeout = 1.minutes) as Answer.Reader
+            assertEquals(webm.length(), reader.size)
+            val frame = me.raddatz.veyq.mobile.crypto.V1.FRAME_PLAINTEXT.toLong()
+            val range = java.io.RandomAccessFile(webm, "r").use { f -> ByteArray(200).also { f.seek(frame - 100); f.readFully(it) } }
+            assertEquals(sha256(range), sha256(b.askWithPayload(Call.ReaderRead(reader.reader, frame - 100, 200), 1.minutes).second!!), "a range across a frame's edge")
+            assertEquals(Answer.Done, b.ask(Call.LightboxStop(l)))
+
+            // the original saved at its SHA-256; a second save cancelled, nothing left
+            val saved = File(dir, "saved.webm")
+            val save = (b.ask(Call.MediumSave(l, saved.path)) as Answer.Saving).save
+            val end = b.watching(Watched.Save(save)).until(20.minutes) { u -> (u as Update.Save).shown?.takeIf { it.end != null } }
+            assertEquals(me.raddatz.veyq.mobile.depot.FileSave.End.SAVED, end.end)
+            val fileSha = java.security.MessageDigest.getInstance("SHA-256").let { d ->
+                webm.inputStream().use { s -> val buf = ByteArray(1 shl 20); while (true) { val n = s.read(buf); if (n < 0) break; d.update(buf, 0, n) } }
+                d.digest().joinToString("") { "%02x".format(it) }
+            }
+            val savedSha = java.security.MessageDigest.getInstance("SHA-256").let { d ->
+                saved.inputStream().use { s -> val buf = ByteArray(1 shl 20); while (true) { val n = s.read(buf); if (n < 0) break; d.update(buf, 0, n) } }
+                d.digest().joinToString("") { "%02x".format(it) }
+            }
+            assertEquals(fileSha, savedSha, "the saved original is not the file")
+            val cancelled = File(dir, "cancelled.webm")
+            val second = (b.ask(Call.MediumSave(l, cancelled.path)) as Answer.Saving).save
+            b.watching(Watched.Save(second)).until(5.minutes) { u -> (u as Update.Save).shown?.takeIf { it.written > 0 } }
+            assertEquals(Answer.Done, b.ask(Call.SaveCancel(second), timeout = 1.minutes))
+            assertTrue(!cancelled.exists(), "a cancelled save left its file")
+
+            // one photo trashed and undone; a chapter made
+            val photo = rows.first { !it.video }.mediaId
+            assertEquals(Answer.Trashed(me.raddatz.veyq.mobile.words.Notice(me.raddatz.veyq.mobile.words.Msg.MEMORY_MOVED_TO_TRASH), undoable = true),
+                b.ask(Call.GalleryTrash(g, photo), timeout = 1.minutes))
+            assertEquals(Answer.Said(null), b.ask(Call.GalleryUndo(g), timeout = 1.minutes))
+            page.until(1.minutes) { u -> (u as Update.Gallery).shown?.rows?.takeIf { r -> r.size == 4 && r.any { it.mediaId == photo } } }
+            val chapter = b.ask(Call.GalleryCreateChapter(g, "Day one"), timeout = 1.minutes) as Answer.Created
+            assertEquals("CHAPTER", assertNotNull(chapter.node, "${chapter.notice}").kind)
+        } finally {
+            made?.let { m ->
+                tenant.forgetTree() // made through the bridge's session: this one reads its tree anew
+                println("trash $name (core): ${me.raddatz.veyq.mobile.session.NodeTrash.delete(tenant, personalScope, m.nodeId)}")
+                println("purge $name (core): ${me.raddatz.veyq.mobile.session.NodeTrash.purge(tenant, personalScope, m.nodeId)}")
+            }
+            dir.deleteRecursively()
+            b.shutdown()
+        }
+    }
+
     /** A device store the test's host keeps in [kept], answering from its own thread as a UI loop does. */
     private fun hostStore(kept: ConcurrentHashMap<String, String>): HostStore {
+        liveRun.track(kept)
         lateinit var host: Host
         host = Host { token, json ->
             thread {
@@ -2376,12 +2516,7 @@ class LiveBridgeTest {
 
     /** Member [userId]'s picture as the core reads it in a session of its own: a sign-in, the tenant, its sync. */
     private suspend fun coreOwnPicture(origin: String, env: Map<String, String>, tenantId: String, userId: String): ByteArray {
-        val store = object : DeviceStore {
-            val values = ConcurrentHashMap<String, String>()
-            override fun read(key: String) = values[key]
-            override fun write(key: String, value: String) { values[key] = value }
-            override fun remove(key: String) { values.remove(key) }
-        }
+        val store = liveRun.store()
         val account = VeyqAccount.signIn(
             BouncyCastlePrimitives, origin, env.getValue("VEYQ_EMAIL"), env.getValue("VEYQ_PASSWORD"), env.getValue("VEYQ_SECRET_KEY"),
             ThisDevice(store, NoDeviceKeys, "bridge test, the core's own read", BouncyCastlePrimitives),

@@ -56,9 +56,11 @@ kotlin {
         mingwMain.dependencies {
             implementation(libs.ktor.client.winhttp)
         }
-        // core's in-memory device keys (SoftwareDeviceKeys), the fake every flow test runs over, compiled here too.
+        // core's in-memory device keys (SoftwareDeviceKeys), the fake every flow test runs over, and the live runs' cleanup
+        // (LiveRun), compiled here too.
         jvmTest {
             kotlin.srcDir(project(":core").file("src/testDevice/kotlin"))
+            kotlin.srcDir(project(":core").file("src/liveTest/kotlin"))
         }
         jvmTest.dependencies {
             implementation(kotlin("test"))

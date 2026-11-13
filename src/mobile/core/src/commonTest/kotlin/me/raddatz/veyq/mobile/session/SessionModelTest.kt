@@ -1,5 +1,6 @@
 package me.raddatz.veyq.mobile.session
 
+import kotlinx.coroutines.test.advanceTimeBy
 import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
 import kotlinx.serialization.json.Json
@@ -112,6 +113,16 @@ class SessionModelTest {
         override fun staySignedIn() = offered
         override fun declined(account: Acc) = account.key in declined
         override fun setDeclined(account: Acc, declined: Boolean) { if (declined) this.declined += account.key else this.declined -= account.key }
+
+        /** The pairing relay every server shares here, and each grant a link's tail spent (server, label). */
+        val pairing = PlayedServer()
+        val relays = mutableListOf<String>()
+        val linked = mutableListOf<Pair<String, String>>()
+        override fun relay(server: String): DeviceLink.Relay = pairing.Side(server).also { relays += server }
+        override suspend fun linked(server: String, grant: me.raddatz.veyq.mobile.crypto.PairingGrant): Acc {
+            linked += server to grant.label
+            return by(server)
+        }
     }
 
     private val a = Acc("a.example#u1", listOf(TenantRef("ta", "A", "a.example"), TenantRef("ta2", "A2", "a2.example")))
@@ -693,5 +704,79 @@ class SessionModelTest {
         runCurrent()
         assertEquals(QrScan.State.Scanning, scan.current)
         assertIs<Gate.Signed>(m.current)
+    }
+
+    // ---- a link from the sign-in (cr-app-device-linking D4): the app's sign-in tail, a DEVICE_KEY offer only ----
+
+    /** Runs *sign in with a QR code* between [m]'s sign-in and a trusted device over the door's relay, to the end. */
+    private fun kotlinx.coroutines.test.TestScope.linkIn(d: Door, m: SessionModel<Acc, String>, server: String, label: String = "Tablet"): DeviceLink {
+        val link = m.showForSignIn(server, backgroundScope)!!
+        val trusted = DeviceLink.scanSignInCode(testPrimitives, d.pairing.Account(), scope = backgroundScope)
+        runCurrent()
+        trusted.scan!!.camera(QrScan.Camera.RUNNING)
+        trusted.scan!!.offer(frameOf(link.matrix()!!))
+        runCurrent()
+        assertTrue(link.enterCode(trusted.current.code!!))
+        repeat(3) { advanceTimeBy(DeviceLink.POLL_MS + 1); runCurrent() }
+        assertTrue(trusted.confirm(label))
+        repeat(3) { advanceTimeBy(DeviceLink.POLL_MS + 1); runCurrent() }
+        return link
+    }
+
+    @Test
+    fun a_link_from_the_sign_in_opens_the_shell_with_the_linked_offer_and_enrols_no_password_trust() = runTest {
+        val d = door()
+        val m = model(d)
+        m.start()
+        val link = linkIn(d, m, "a.example")
+        assertEquals(DeviceLink.Step.DONE, link.current.step)
+        assertEquals(listOf("https://a.example"), d.relays, "the link did not use the form's server")
+        assertEquals(listOf("https://a.example" to "Tablet"), d.linked)
+        assertEquals(Gate.Signed(a.key, "ta", offer = SessionModel.Offer(a.key, listOf(StaySignedIn.PRESENCE, StaySignedIn.LOGIN), linked = true)), m.current)
+        assertNull(d.trustedWith, "a linked device enrolled a password (DEVICE) trust")
+        assertEquals(listOf("a.example#u1/ta"), d.shown)
+
+        assertEquals(TrustChange.DONE, m.stay(StaySignedIn.LOGIN))
+        assertEquals(listOf(a.key to StaySignedIn.LOGIN), d.stays)
+        assertEquals(Gate.Signed(a.key, "ta"), m.current)
+    }
+
+    @Test
+    fun with_no_level_a_linked_offer_still_shows_and_its_not_now_is_not_remembered() = runTest {
+        val d = door().apply { offered = emptySet(); declined += a.key }
+        val m = model(d)
+        m.start()
+        linkIn(d, m, "a.example")
+        assertEquals(Gate.Signed(a.key, "ta", offer = SessionModel.Offer(a.key, emptyList(), linked = true)), m.current, "the run-only offer was not made")
+        d.declined.clear()
+        assertTrue(m.notNow())
+        assertTrue(d.declined.isEmpty(), "a linked offer's Not now was remembered as a decline")
+        assertEquals(Gate.Signed(a.key, "ta"), m.current)
+    }
+
+    @Test
+    fun a_link_is_offered_only_at_the_sign_in_and_never_in_the_extension_and_keeps_a_held_kit() = runTest {
+        val d = kitDoor()
+        val m = model(d)
+        m.start()
+        val f = found()
+        assertTrue(m.takeKit(f))
+        val before = m.current
+        val link = m.scanFromTrusted(familie, scope = backgroundScope)!!
+        runCurrent()
+        assertEquals(DeviceLink.Step.SCANNING, link.current.step)
+        assertEquals(before, m.current, "opening a link changed the sign-in")
+        assertFalse(zeroed(f.kit.secretKey), "opening a link ended the held kit")
+        link.close()
+
+        linkIn(d, m, "a.example")
+        assertIs<Gate.Signed>(m.current)
+        assertTrue(zeroed(f.kit.secretKey), "the held kit outlived a linked sign-in")
+        assertNull(m.showForSignIn("a.example", backgroundScope), "a link opened over the shell")
+        assertNull(m.scanFromTrusted("a.example", scope = backgroundScope))
+
+        val e = model(door(), elsewhere = true)
+        e.start()
+        assertNull(e.showForSignIn("a.example", backgroundScope), "the share extension links a device")
     }
 }

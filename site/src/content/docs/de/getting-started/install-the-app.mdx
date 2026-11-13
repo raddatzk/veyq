@@ -98,13 +98,42 @@ du in veyq aufbewahrst, bleibt auf deinem Server: Melde dich auf einem beliebige
 
 Die App kommt als eine Datei, `veyq-<version>-x64.msix`.
 
-:::note[Windows prüft, wer die Datei signiert hat]
-Windows installiert ein App-Paket nur, wenn es seiner Signatur vertraut. Welches Zertifikat das Paket von veyq
-signiert, ist noch nicht entschieden. Braucht Windows dafür einen Schritt von dir, steht er auf dieser Seite, bevor die
-erste Version mit der App erscheint.
-:::
+### Einmal: dem Zertifikat von veyq vertrauen
 
-1. Lade die Datei von der Seite der Versionen herunter.
+Windows installiert ein App-Paket nur, wenn es dem Zertifikat vertraut, mit dem es signiert ist. veyq signiert sein
+Paket mit einem eigenen Zertifikat, <code>{identity.msixPublisher}</code>. Es kostet nichts und enthält keinen Namen
+einer Person, aber keine Zertifizierungsstelle bürgt dafür, also kennt Windows es nicht: Bis du ihm vertraust, lehnt
+Windows die Installation der App ab. Das machst du einmal, als Administrator, vor der ersten Installation; Updates
+brauchen keinen neuen Schritt.
+
+1. Lade `veyq.cer` von derselben Seite der Versionen herunter wie die App.
+2. Prüfe, dass sie von veyq ist, bevor du ihr vertraust: Ihr SHA-256 muss der sein, den die signierte Liste der
+   Version nennt ([Verify it yourself](/de/security/verify-it-yourself/#the-desktop-apps-packages), auf Englisch). In
+   PowerShell, in dem Ordner, in dem die Datei liegt:
+
+   ```powershell
+   Get-FileHash .\veyq.cer
+   ```
+
+   Noch trägt keine Version das Zertifikat und seinen Eintrag; die erste mit der App wird es tun.
+3. Öffne **PowerShell als Administrator** (Rechtsklick auf die Start-Schaltfläche, **Terminal (Administrator)**), geh
+   in diesen Ordner und füge das Zertifikat den *Vertrauenswürdigen Personen* des Computers hinzu:
+
+   ```powershell
+   Import-Certificate -FilePath .\veyq.cer -CertStoreLocation Cert:\LocalMachine\TrustedPeople
+   ```
+
+   Oder mit Klicks: Doppelklick auf `veyq.cer`, **Zertifikat installieren…**, dann **Lokaler Computer**, dann **Alle
+   Zertifikate in folgendem Speicher speichern**, **Durchsuchen…**, **Vertrauenswürdige Personen**, und abschließen.
+
+Damit vertraust du dem Schlüssel des Zertifikats, nicht einer Datei: Ab jetzt installiert dieses Windows jedes damit
+signierte Paket als eines von veyq. Was das bedeutet, steht unter
+[Known limitations](/de/security/known-limitations/#the-desktop-app-flathubs-runtime-windows-trust-no-auto-update) (auf
+Englisch).
+
+### Installieren
+
+1. Lade die Datei der App von der Seite der Versionen herunter.
 2. Öffne sie mit einem Doppelklick und wähle **Installieren**. Oder in PowerShell, in dem Ordner, in dem die Datei
    liegt:
 
@@ -129,6 +158,10 @@ Entferne **veyq** wie jede App unter **Einstellungen → Apps → Installierte A
 
 Das entfernt die App und alles, was sie auf diesem Computer gespeichert hat. Was du in veyq aufbewahrst, bleibt auf
 deinem Server.
+
+Das Zertifikat bleibt vertrauenswürdig, bis du es auch entfernst, in PowerShell als Administrator:
+
+<Code lang="powershell" code={`Get-ChildItem Cert:\\LocalMachine\\TrustedPeople | Where-Object Subject -eq '${identity.msixPublisher}' | Remove-Item`} />
 
 ## Mit der App anmelden
 

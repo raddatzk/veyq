@@ -4,6 +4,7 @@ import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
+import me.raddatz.veyq.mobile.crypto.PairingMarks
 import me.raddatz.veyq.mobile.crypto.Primitives
 import me.raddatz.veyq.mobile.crypto.b64
 import me.raddatz.veyq.mobile.crypto.utf8
@@ -101,6 +102,21 @@ internal class TrustMarks(private val store: DeviceStore, primitives: Primitives
         val current = s.held[scopeId]
         val held = if (COMMITMENT.matches(commitment) && (current == null || epoch > current.epoch)) s.held + (scopeId to HeldEpochKey(epoch, commitment)) else s.held
         write(s.copy(epochs = epochs, held = held))
+    }
+
+    /** The marks a linking device hands over inside the grant (ADR 0028 Decision 7): its pins, register and floors. */
+    suspend fun forLink(): PairingMarks = lock.withLock { read().let { PairingMarks(it.pins, it.register, it.epochs) } }
+
+    /**
+     * A linked device starts from the marks its linker held ([forLink]), before it reads a sealed document: each mark the
+     * maximum of those and the ones this device already holds, as the web's `raiseMarks`. The held keys stay this
+     * device's own (the grant carries none).
+     */
+    suspend fun raise(m: PairingMarks) = lock.withLock {
+        val s = read()
+        val epochs = HashMap(s.epochs)
+        for ((scope, e) in m.epochs) if (e > 0 && e > (epochs[scope] ?: 0)) epochs[scope] = e
+        write(s.copy(pins = maxOf(s.pins, m.pins), register = maxOf(s.register, m.register), epochs = epochs))
     }
 
     private companion object {

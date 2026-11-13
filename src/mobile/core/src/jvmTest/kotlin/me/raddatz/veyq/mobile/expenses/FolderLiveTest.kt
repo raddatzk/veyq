@@ -19,6 +19,8 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
 import kotlin.time.Duration.Companion.minutes
+import kotlin.test.AfterTest
+import me.raddatz.veyq.mobile.session.LiveRun
 
 /**
  * A folder downloaded and copied whole (the web's `exportSubtree.ts`, `copySubtree.ts`), on a running dev instance
@@ -31,6 +33,12 @@ import kotlin.time.Duration.Companion.minutes
  * after unless `VEYQ_LIVE_COPY_KEEP` is set.
  */
 class FolderLiveTest {
+    /** Every device this case signs in with, taken off the account again after it, whatever it came to. */
+    private val liveRun = LiveRun()
+
+    @AfterTest
+    fun takeOffTheDevices() = liveRun.removeAll()
+
     @Test
     fun aFolderIsDownloadedAndCopiedWhole() = runTest(timeout = 10.minutes) {
         val origin = System.getenv("VEYQ_LIVE") ?: return@runTest
@@ -40,7 +48,7 @@ class FolderLiveTest {
             .toMap()
         val account = VeyqAccount.signIn(
             BouncyCastlePrimitives, origin, env.getValue("VEYQ_EMAIL"), env.getValue("VEYQ_PASSWORD"), env.getValue("VEYQ_SECRET_KEY"),
-            testDevice(BouncyCastlePrimitives),
+            liveRun.device(),
         ) { block -> HttpClient(OkHttp, block) }
         val tenant = account.open(account.defaultTenant!!)
         val (rootName, folderName) = spec.split('/', limit = 2)

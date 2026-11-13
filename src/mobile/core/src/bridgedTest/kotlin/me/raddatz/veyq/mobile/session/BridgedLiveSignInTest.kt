@@ -36,13 +36,17 @@ class BridgedLiveSignInTest {
             LibsodiumPrimitives, origin, env.getValue("VEYQ_EMAIL"), env.getValue("VEYQ_PASSWORD"), env.getValue("VEYQ_SECRET_KEY"),
             testDevice(LibsodiumPrimitives),
         ) { block -> liveHttpClient(block) }
-        println("$liveEngineName tenants: " + account.tenants.joinToString { "${it.name}@${it.domain}" })
-        for (tenant in account.tenants) {
-            val t = account.open(tenant)
-            println("$liveEngineName [${tenant.name}] spaces: " + t.spaces().joinToString { "${it.kind}:${it.name}" })
-            println("$liveEngineName [${tenant.name}] objects: " + t.objects().joinToString { "${it.application.id}:${it.name}" })
-            assertTrue(t.spaces().any { it.kind == "PERSONAL" }, "the personal scope of ${tenant.name} did not open")
+        try {
+            println("$liveEngineName tenants: " + account.tenants.joinToString { "${it.name}@${it.domain}" })
+            for (tenant in account.tenants) {
+                val t = account.open(tenant)
+                println("$liveEngineName [${tenant.name}] spaces: " + t.spaces().joinToString { "${it.kind}:${it.name}" })
+                println("$liveEngineName [${tenant.name}] objects: " + t.objects().joinToString { "${it.application.id}:${it.name}" })
+                assertTrue(t.spaces().any { it.kind == "PERSONAL" }, "the personal scope of ${tenant.name} did not open")
+            }
+        } finally {
+            // the device off the account again, whatever the case came to (the JVM's cases do it through LiveRun)
+            kotlinx.coroutines.withContext(kotlinx.coroutines.NonCancellable) { account.removeThisDevice() }
         }
-        account.signOut()
     }
 }

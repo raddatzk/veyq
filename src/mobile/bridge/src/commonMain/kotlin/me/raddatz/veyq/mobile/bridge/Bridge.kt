@@ -94,6 +94,11 @@ internal class Composition<A : Connection, T : Any>(
      * library; a test plays one over a door of its own, or has none (`Settings.Open` is then refused for the connection).
      */
     val settings: (session: SessionModel<A, T>, account: A) -> AccountSettings<A, T>? = { _, _ -> null },
+    /**
+     * How a Memories upload's tiers are made (`MediaUpload.Deriver`): asked of the host in the library ([HostTiers]); a test
+     * plays the host, or has none (every original goes up alone).
+     */
+    val tiers: me.raddatz.veyq.mobile.memories.MediaUpload.Deriver = NoTiers,
     /** The models over a tenant just opened; null where there are none (a test's tenant that is no `TenantSession`). */
     val tenant: (T) -> Tenant?,
 )
@@ -149,7 +154,25 @@ internal class Tenant(
      */
     val uploads: ((queue: me.raddatz.veyq.mobile.blob.UploadQueue, changed: () -> Unit) -> me.raddatz.veyq.mobile.depot.DepotUploads)? =
         shell?.let { s -> { queue, changed -> s.depotUploads(queue, changed) } },
+    /**
+     * Memories' uploads over the app's one [queue] (`ShellModel.mediaUploads`): each picked medium's tiers made by [deriver],
+     * [changed] at a batch's end. A desktop reads each picked file in place at its path, so a file the queue is done with
+     * needs nothing done. A test's tenant plays one over a door of its own.
+     */
+    val mediaUploads: ((
+        queue: me.raddatz.veyq.mobile.blob.UploadQueue, deriver: me.raddatz.veyq.mobile.memories.MediaUpload.Deriver, changed: () -> Unit,
+    ) -> me.raddatz.veyq.mobile.memories.MediaUploads)? =
+        shell?.let { s -> { queue, deriver, changed -> s.mediaUploads(queue, deriver, left = {}, changed = changed) } },
+    /** A Memory's or a chapter's page (`ShellModel.galleryModel`) over the tenant's Memories [uploads]. */
+    val gallery: ((node: NodeAt, uploads: me.raddatz.veyq.mobile.memories.MediaUploads) -> me.raddatz.veyq.mobile.memories.GalleryModel)? =
+        shell?.let { s -> { node, uploads -> s.galleryModel(node, uploads) } },
+    /** A Memory made where New makes it (`ShellModel.createMemory`): the node made, or why not. */
+    val createMemory: (suspend (scopeId: String, parentId: String?, name: String) -> me.raddatz.veyq.mobile.memories.MemoryCreate.Made)? =
+        shell?.let { s -> { scopeId, parentId, name -> s.createMemory(scopeId, parentId, name) } },
 )
+
+/** A lightbox the host opened ([Call.LightboxOpen]) over gallery [gallery], its [page]. */
+internal class HeldLightbox(val gallery: Long, val page: me.raddatz.veyq.mobile.memories.GalleryModel, val model: me.raddatz.veyq.mobile.memories.Lightbox)
 
 /**
  * A header the host opened, with the most buttons its bar holds, and the file page whose own actions join its plan
@@ -157,6 +180,9 @@ internal class Tenant(
  */
 internal class HeldHeader(val model: NodeHeaderModel, val maxButtons: Int) {
     val file = MutableStateFlow<Long?>(null)
+
+    /** The Memory's or chapter's page whose own actions join the plan ([Call.HeaderFacts]' `gallery`: its upload). */
+    val gallery = MutableStateFlow<Long?>(null)
 }
 
 /** A drop box's page the host opened, and the header its last delete trashed through (its undo, [Call.DropBoxUndo]). */
@@ -270,6 +296,19 @@ internal class Bridge<A : Connection, T : Any>(compose: () -> Composition<A, T>)
 
     /** The open tenant's uploads over [queue] ([Watched.Uploads]); null while none is open. */
     private val uploads = MutableStateFlow<me.raddatz.veyq.mobile.depot.DepotUploads?>(null)
+
+    /** The open tenant's Memories uploads over the same [queue] (the tray stays [uploads]'); null while none is open. */
+    private val mediaUploads = MutableStateFlow<me.raddatz.veyq.mobile.memories.MediaUploads?>(null)
+
+    /** The Memories' and chapters' pages the host opened ([Call.GalleryOpen]), and their lightboxes: closed with the tenant. */
+    private val galleries = Registry<me.raddatz.veyq.mobile.memories.GalleryModel>()
+    private val lightboxes = Registry<HeldLightbox>()
+
+    /**
+     * Each reader a lightbox opened ([Call.MediumReader]), by the reader's id: the lightbox's id. The lightbox's model closes
+     * its reader (paged away, stopped, closed): a read of one it no longer holds is refused and the id dropped.
+     */
+    private val lightboxReaders = Registry<Long>()
 
     /** "Manage servers" while it is open, null while closed; its spaces read by [managing]'s job. */
     private val manage = MutableStateFlow<List<ManagedShown>?>(null)
@@ -535,10 +574,15 @@ internal class Bridge<A : Connection, T : Any>(compose: () -> Composition<A, T>)
                 Answer.Bytes(Sniff.image(picture)?.mime)
             } ?: noTenant
             is Call.ReaderRead -> readers[call.reader]?.let { r ->
+                if (!stillHeld(call.reader, r)) return Answer.Refused(Answer.Why.NO_SUCH_READER)
                 payload(r.read(call.position, call.length))
                 Answer.Bytes(null)
             } ?: Answer.Refused(Answer.Why.NO_SUCH_READER)
-            is Call.ReaderClose -> readers.remove(call.reader)?.let { pageReaders.remove(call.reader); Answer.Done } ?: Answer.Refused(Answer.Why.NO_SUCH_READER)
+            is Call.ReaderClose -> readers.remove(call.reader)?.let {
+                pageReaders.remove(call.reader)
+                lightboxReaders.remove(call.reader)
+                Answer.Done
+            } ?: Answer.Refused(Answer.Why.NO_SUCH_READER)
             is Call.FileOpen -> tenant.value?.models?.file?.let { make ->
                 val id = ids.incrementAndFetch()
                 filePages.put(id, make(call.node))
@@ -596,6 +640,7 @@ internal class Bridge<A : Connection, T : Any>(compose: () -> Composition<A, T>)
             } ?: noTenant
             is Call.HeaderFacts -> headers[call.header]?.let { h ->
                 h.file.value = call.file
+                h.gallery.value = call.gallery
                 h.model.update(call.facts)
                 Answer.Done
             } ?: noHeader
@@ -753,6 +798,127 @@ internal class Bridge<A : Connection, T : Any>(compose: () -> Composition<A, T>)
                 Answer.FrameTaken(s.offer(frame))
             } ?: noScan
             is Call.ScanClose -> scans.remove(call.scan)?.close().done(Answer.Why.NO_SUCH_SCAN)
+            is Call.ShellCreateMemory -> tenant.value?.models?.createMemory?.let { make ->
+                make(call.scopeId, call.parentId, call.name).let { Answer.Created(it.node, it.notice) }
+            } ?: noTenant
+            is Call.GalleryOpen -> tenant.value?.models?.let { t ->
+                val make = t.gallery ?: return noTenant
+                val uploads = mediaUploads.value ?: return noTenant
+                if (call.node.kind != me.raddatz.veyq.mobile.memories.GalleryModel.MEMORY &&
+                    call.node.kind != me.raddatz.veyq.mobile.memories.GalleryModel.CHAPTER
+                ) return Answer.Refused(Answer.Why.NOT_OFFERED)
+                val id = ids.incrementAndFetch()
+                galleries.put(id, make(call.node, uploads))
+                Answer.GalleryOpened(id)
+            } ?: noTenant
+            is Call.GalleryClose -> galleries.remove(call.gallery)?.let { g ->
+                closeLightboxesOf(call.gallery)
+                g.close()
+                Answer.Done
+            } ?: noGallery
+            is Call.GalleryReload -> galleries[call.gallery]?.reload().done(Answer.Why.NO_SUCH_GALLERY)
+            is Call.GalleryTile -> galleries[call.gallery]?.let { g ->
+                val bytes = g.tile(call.mediaId) ?: return Answer.Refused(Answer.Why.NO_BYTES)
+                payload(bytes)
+                Answer.Bytes(Sniff.image(bytes)?.mime)
+            } ?: noGallery
+            is Call.GalleryChapterCover -> galleries[call.gallery]?.let { g ->
+                val bytes = g.chapterCover(call.nodeId) ?: return Answer.Refused(Answer.Why.NO_COVER)
+                payload(bytes)
+                Answer.Bytes(Sniff.image(bytes)?.mime)
+            } ?: noGallery
+            is Call.GalleryTrash -> galleries[call.gallery]?.let { g -> trashed(g, g.trash(call.mediaId)) } ?: noGallery
+            is Call.GalleryUndo -> galleries[call.gallery]?.let { Answer.Said(it.undo()) } ?: noGallery
+            is Call.GalleryPurge -> galleries[call.gallery]?.let { Answer.Said(it.purge()) } ?: noGallery
+            is Call.GalleryCancelAsk -> galleries[call.gallery]?.cancelAsk().done(Answer.Why.NO_SUCH_GALLERY)
+            is Call.GallerySeen -> galleries[call.gallery]?.seen().done(Answer.Why.NO_SUCH_GALLERY)
+            is Call.GalleryCreateChapter -> galleries[call.gallery]?.let { g -> g.createChapter(call.name).let { Answer.Created(it.node, it.notice) } }
+                ?: noGallery
+            is Call.MemoryUpload -> galleries[call.gallery]?.let { g ->
+                if (!g.rights.upload) return Answer.Refused(Answer.Why.NOT_OFFERED)
+                // each path opened by the core and read at offsets, named by its path for the host's tiers: nothing of a
+                // file crosses, none is held whole
+                val sources = call.paths.mapNotNull { path -> parts.files.source(path)?.let { PathSource(path, it) } }
+                val queued = g.upload(sources)
+                Answer.Queued(queued, me.raddatz.veyq.mobile.memories.MediaUploads.notTaken(call.paths.size - queued))
+            } ?: noGallery
+            is Call.LightboxOpen -> galleries[call.gallery]?.let { g ->
+                // one lightbox a gallery: the one open before is closed by the gallery as this one opens
+                closeLightboxesOf(call.gallery)
+                val id = ids.incrementAndFetch()
+                lightboxes.put(id, HeldLightbox(call.gallery, g, g.lightbox(call.index)))
+                Answer.LightboxOpened(id)
+            } ?: noGallery
+            is Call.LightboxClose -> lightboxes.remove(call.lightbox)?.let { held ->
+                dropReadersOf(call.lightbox)
+                held.model.close()
+                Answer.Done
+            } ?: noLightbox
+            is Call.LightboxGo -> lightboxes[call.lightbox]?.model?.go(call.index).done(Answer.Why.NO_SUCH_LIGHTBOX)
+            is Call.LightboxPicture -> lightboxes[call.lightbox]?.let { held ->
+                val bytes = held.model.picture(call.mediaId) ?: return Answer.Refused(Answer.Why.NO_BYTES)
+                payload(bytes)
+                Answer.Bytes(Sniff.image(bytes)?.mime)
+            } ?: noLightbox
+            is Call.LightboxSlideshow -> lightboxes[call.lightbox]?.model?.slideshow(call.on).done(Answer.Why.NO_SUCH_LIGHTBOX)
+            is Call.LightboxDetails -> lightboxes[call.lightbox]?.let { held ->
+                val d = held.model.details(call.mediaId) ?: return Answer.Refused(Answer.Why.NO_MEDIUM)
+                Answer.MediumDetails(d.rows.map(::detailRow), d.uploader?.let(me.raddatz.veyq.mobile.memories.MediaDetails::uploaderWords), d.uploaderAt)
+            } ?: noLightbox
+            is Call.LightboxTrash -> lightboxes[call.lightbox]?.let { held -> trashed(held.page, held.model.trash()) } ?: noLightbox
+            is Call.LightboxStop -> lightboxes[call.lightbox]?.model?.stop().done(Answer.Why.NO_SUCH_LIGHTBOX)
+            is Call.MediumReader -> lightboxes[call.lightbox]?.let { held ->
+                val reader = held.model.play() ?: return Answer.Refused(Answer.Why.NO_MEDIUM)
+                openReader(reader, held.model.current.row?.type).also { if (it is Answer.Reader) lightboxReaders.put(it.reader, call.lightbox) }
+            } ?: noLightbox
+            is Call.MediumSave -> lightboxes[call.lightbox]?.let { held ->
+                val save = held.model.save { produce -> parts.files.write(call.path, produce) }
+                    ?: return Answer.Refused(Answer.Why.NOTHING_TO_DOWNLOAD)
+                val id = ids.incrementAndFetch()
+                saves.put(id, save)
+                Answer.Saving(id)
+            } ?: noLightbox
+        }
+    }
+
+    /** A medium's delete as its answer: a trash with whether its Undo is offered now, or nothing said (a purge asked). */
+    private fun trashed(g: me.raddatz.veyq.mobile.memories.GalleryModel, notice: Notice?): Answer =
+        if (notice == null) Answer.Said(null) else Answer.Trashed(notice, g.current.undo != null)
+
+    /** One row of a medium's details, as `MediaDetails.shown` says it shows. */
+    private fun detailRow(row: me.raddatz.veyq.mobile.memories.MediaDetails.Row): DetailRow {
+        val label = me.raddatz.veyq.mobile.memories.MediaDetails.label(row.field)
+        return when (val shown = me.raddatz.veyq.mobile.memories.MediaDetails.shown(row)) {
+            is me.raddatz.veyq.mobile.memories.MediaDetails.Shown.Words -> DetailRow(label, shown.notice, null, null, null)
+            is me.raddatz.veyq.mobile.memories.MediaDetails.Shown.Size -> DetailRow(label, null, shown.bytes, null, null)
+            is me.raddatz.veyq.mobile.memories.MediaDetails.Shown.Moment -> DetailRow(label, null, null, shown.epochMs, null)
+            is me.raddatz.veyq.mobile.memories.MediaDetails.Shown.Plain -> DetailRow(label, null, null, null, shown.text)
+        }
+    }
+
+    /**
+     * Whether reader [id] ([r]) is still its holder's: a lightbox's model closes the reader it held (paged away, stopped,
+     * closed), and then its id goes too. A reader no lightbox opened is the host's until it closes it.
+     */
+    private fun stillHeld(id: Long, r: RangeReader): Boolean {
+        val lightbox = lightboxReaders[id] ?: return true
+        if (lightboxes[lightbox]?.model?.current?.reader === r) return true
+        lightboxReaders.remove(id)
+        readers.remove(id)
+        return false
+    }
+
+    /** The readers lightbox [lightbox] opened go from the registry (its model closes them). */
+    private fun dropReadersOf(lightbox: Long) {
+        lightboxReaders.keys().forEach { reader -> if (lightboxReaders[reader] == lightbox) { lightboxReaders.remove(reader); readers.remove(reader) } }
+    }
+
+    /** Gallery [gallery]'s lightboxes close and go from the registry, with the readers they opened. */
+    private fun closeLightboxesOf(gallery: Long) {
+        lightboxes.removeIf { it.gallery == gallery }.forEach { it.model.close() }
+        lightboxReaders.keys().forEach { reader ->
+            val l = lightboxReaders[reader] ?: return@forEach
+            if (lightboxes[l] == null) { lightboxReaders.remove(reader); readers.remove(reader) }
         }
     }
 
@@ -780,7 +946,7 @@ internal class Bridge<A : Connection, T : Any>(compose: () -> Composition<A, T>)
     /**
      * Holds [reader] for the host until [Call.ReaderClose] or the tenant closes, answered as [Answer.Reader] (ADR 0131
      * decision 2): the door of every call that opens a blob for reading in ranges — a Depot file's medium
-     * ([Call.FileReader]), Memories' medium (its CR) — and of the test's reader. Refused while no tenant is open.
+     * ([Call.FileReader]), a Memory's medium ([Call.MediumReader]) — and of the test's reader. Refused while no tenant is open.
      */
     internal fun openReader(reader: RangeReader, mediaType: String?): Answer {
         if (tenant.value == null) return noTenant
@@ -808,6 +974,8 @@ internal class Bridge<A : Connection, T : Any>(compose: () -> Composition<A, T>)
     private val noFolder = Answer.Refused(Answer.Why.NO_SUCH_FOLDER)
     private val noScan = Answer.Refused(Answer.Why.NO_SUCH_SCAN)
     private val noPage = Answer.Refused(Answer.Why.NO_SUCH_ACCOUNT_PAGE)
+    private val noGallery = Answer.Refused(Answer.Why.NO_SUCH_GALLERY)
+    private val noLightbox = Answer.Refused(Answer.Why.NO_SUCH_LIGHTBOX)
 
     /** [act] on the Settings page [id], answered once it ended. */
     private suspend fun onPage(id: Long, act: suspend (AccountSettings<A, T>) -> Unit): Answer {
@@ -889,6 +1057,8 @@ internal class Bridge<A : Connection, T : Any>(compose: () -> Composition<A, T>)
                 filePages.values().forEach { it.reload() }
             }
         }
+        // Memories' batches settle the core's way (`MediaUploads`): a gallery reads when its medium is in, the lists at the end
+        mediaUploads.value = t.mediaUploads?.invoke(queue, parts.await().tiers) { scope.launch { runCatching { t.shell?.refresh() } } }
         scope.launch { runCatching { t.loadPictures() } }
         t.shell?.load(openLastUsed = true)
         return Answer.Done
@@ -899,7 +1069,13 @@ internal class Bridge<A : Connection, T : Any>(compose: () -> Composition<A, T>)
         // the uploads are the tenant's: what still waits or runs is cancelled (the phones' `uploads.clear()` on a switch)
         uploads.value?.close()
         uploads.value = null
+        mediaUploads.value?.close()
+        mediaUploads.value = null
         queue.clear()
+        // a page closes its lightbox, and the lightbox its reader
+        galleries.removeAll().forEach { it.close() }
+        lightboxes.removeAll().forEach { it.model.close() }
+        lightboxReaders.removeAll()
         pots.removeAll().forEach { it.close() }
         editors.removeAll().forEach { it.model.close() }
         settings.removeAll()
@@ -947,8 +1123,15 @@ internal class Bridge<A : Connection, T : Any>(compose: () -> Composition<A, T>)
         // a file page's own actions join its header's plan: read anew as the page's state changes
         is Watched.Header -> headers[w.header]?.let { h ->
             val page = h.file.flatMapLatest { f -> f?.let { filePages[it]?.state } ?: flowOf(null) }
-            combine(h.model.state, page) { _, _ -> Update.Header(w.header, shownHeader(h)) }
+            val gallery = h.gallery.flatMapLatest { g -> g?.let { galleries[it]?.state } ?: flowOf(null) }
+            combine(h.model.state, page, gallery) { _, _, _ -> Update.Header(w.header, shownHeader(h)) }
         } ?: flowOf(Update.Header(w.header, null))
+        is Watched.Gallery -> galleries[w.gallery]?.let { g -> g.state.map { Update.Gallery(w.gallery, shownGallery(g, it)) } }
+            ?: flowOf(Update.Gallery(w.gallery, null))
+        // the poll runs inside this watch's own job: a host's dropped watch cancels it, and it ends with its page
+        is Watched.GalleryLive -> flow { galleries[w.gallery]?.live() }
+        is Watched.Lightbox -> lightboxes[w.lightbox]?.let { held -> held.model.state.map { Update.Lightbox(w.lightbox, shownLightbox(held, it)) } }
+            ?: flowOf(Update.Lightbox(w.lightbox, null))
         is Watched.Trash -> trashes[w.trash]?.let { t -> t.state.map { Update.Trash(w.trash, shownTrash(t, it)) } }
             ?: flowOf(Update.Trash(w.trash, null))
         is Watched.Move -> moves[w.move]?.let { m -> m.state.map { Update.Move(w.move, shownMove(m, it)) } }
@@ -1103,17 +1286,56 @@ internal class Bridge<A : Connection, T : Any>(compose: () -> Composition<A, T>)
         val m = h.model
         val s = m.current
         val page = h.file.value?.let { filePages[it] }?.current?.header
-        fun word(id: String) = page?.label(id) ?: m.label(id, hasCover = s.cover != null)
+        val gallery = h.gallery.value?.let { galleries[it] }
+        fun word(id: String) = page?.label(id) ?: gallery?.label(id) ?: m.label(id, hasCover = s.cover != null)
         fun actions(ids: List<String>) = ids.map { HeaderShown.PlanAction(it, word(it)) }
+        val own = page?.own ?: gallery?.headerActions.orEmpty()
         return HeaderShown(
             node = m.node,
             pinned = s.pinned,
-            plan = m.plan(h.maxButtons, page?.own.orEmpty())?.let { p -> HeaderShown.Plan(actions(p.buttons), actions(p.menu), actions(p.last)) },
+            plan = m.plan(h.maxButtons, own)?.let { p -> HeaderShown.Plan(actions(p.buttons), actions(p.menu), actions(p.last)) },
             deleteQuestion = m.deleteQuestion(),
             undo = s.undo,
             gone = s.gone,
             archiveName = s.downloadName ?: NodeExport.fileName(m.node.name),
             cover = s.cover,
+        )
+    }
+
+    /** A Memory's or a chapter's page as the host draws it ([GalleryShown]), each field the model's own answer. */
+    private fun shownGallery(g: me.raddatz.veyq.mobile.memories.GalleryModel, s: me.raddatz.veyq.mobile.memories.GalleryModel.State) = GalleryShown(
+        node = g.node,
+        rows = s.rows?.map { galleryRow(g, it) },
+        failed = s.failed,
+        count = Notice(Msg.MEMORY_ITEMS, s.count),
+        chapters = s.chapters.map { NodeAt(it.scopeId, it.nodeId, it.kind, it.name) },
+        canUpload = s.rights.upload,
+        canSave = s.rights.download,
+        creates = AppKinds.Create.entries.filter { it.name in g.creates }.map { ShellShown.ShownCreate(it, it.word) },
+        undo = s.undo,
+        purging = s.purging,
+        purgeQuestion = g.purgeQuestion.takeIf { s.purging != null },
+        said = s.said,
+    )
+
+    /** One medium as a gallery's row and a lightbox's page show it ([GalleryRow]). */
+    private fun galleryRow(g: me.raddatz.veyq.mobile.memories.GalleryModel, r: me.raddatz.veyq.mobile.memories.GalleryModel.Row) = GalleryRow(
+        r.mediaId, r.name, r.type, r.isVideo, r.blocked, r.tile, r.picture, r.capturedAt, r.width, r.height, r.said, g.deletes(r.mediaId),
+    )
+
+    /** A lightbox as the host draws it ([LightboxShown]), each field the model's own answer; none once it closed. */
+    private fun shownLightbox(held: HeldLightbox, s: me.raddatz.veyq.mobile.memories.Lightbox.State): LightboxShown? {
+        if (s.closed) return null
+        val row = s.row
+        return LightboxShown(
+            index = s.index,
+            count = s.count,
+            position = row?.let { Notice(Msg.MEMORY_ITEM_POSITION, s.index + 1, s.count) },
+            row = row?.let { galleryRow(held.page, it) },
+            playing = s.playing,
+            slideshow = s.slideshow?.let { SlideshowState.valueOf(it.name) },
+            downloadName = held.model.downloadName()?.takeIf { held.page.rights.download },
+            canTrash = row != null && held.page.deletes(row.mediaId),
         )
     }
 
@@ -1259,6 +1481,8 @@ internal class Bridge<A : Connection, T : Any>(compose: () -> Composition<A, T>)
             files: DeviceFiles,
             /** A kit file's drawings by its path: the host's ([HostPictures]). */
             pictures: (path: String) -> me.raddatz.veyq.mobile.account.KitPictures = { NoPictures },
+            /** A Memories upload's tiers: the host's ([HostTiers]). */
+            tiers: me.raddatz.veyq.mobile.memories.MediaUpload.Deriver = NoTiers,
             now: () -> Long = { Clock.System.now().toEpochMilliseconds() },
         ): Bridge<VeyqAccount, TenantSession> = Bridge {
             val recent = RecentUses(
@@ -1272,7 +1496,7 @@ internal class Bridge<A : Connection, T : Any>(compose: () -> Composition<A, T>)
             val device = ThisDevice(store, keys(store), config.device, primitives)
             Composition(
                 SessionModel.accounts(primitives, device, client, hidden, recent), hidden, files, pictures = pictures,
-                settings = { session, account -> AccountSettings.of(session, account) },
+                settings = { session, account -> AccountSettings.of(session, account) }, tiers = tiers,
             ) { t ->
                 Tenant(ShellModel(t, hidden, recent, now), { PotModel(t, now) }, t.account.userId, t.pictures.state, t.pictures::load)
             }

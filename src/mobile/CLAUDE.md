@@ -34,6 +34,11 @@ A Gradle build of its own, run through its own wrapper.
   read only through the interface: a new store gets a subclass of it, run on its platform. `SoftwareDeviceKeys`
   (`core/src/testDevice/`, compiled into core's `commonTest` and `:bridge`'s `jvmTest`) is the test store; its
   `prompts`/`authenticates` counters are the flows' tests' extras, not the contract.
+- **Device linking** (ADR 0059): `session/DeviceLink` is one ceremony in one of its four roles (trusted or new, showing
+  or scanning), over `crypto/Pairing`; its code reaches a UI only as a picture (`matrix`, `png`) and its scan is its
+  own `QrScan`. The new device's tail is the sign-in's (`SessionModel.scanFromTrusted`/`showForSignIn`,
+  `VeyqAccount.linked`): the handed token spent once at `/api/token/refresh` in the body, never adoption, and no trust
+  enrolled but the offer's DEVICE_KEY levels (`Offer.linked`). `DeviceLinkTest` plays the relay (`PlayedServer`).
 - `android/` — the Android app (Compose). `devlogin.py` signs a debug build on a running emulator in as the seeded dev
   principal (`.run/.env`).
 - `apple/` — the Apple app (SwiftUI, iOS and macOS). `xcodegen` in that directory writes `Veyq.xcodeproj` from
@@ -324,7 +329,12 @@ A Gradle build of its own, run through its own wrapper.
   sets (`select home`), never the one the app reopened.
 - `VEYQ_LIVE=http://veyq.localhost:8080 ./gradlew :core:jvmTest :core:macosArm64Test --tests '*LiveSignInTest*'` —
   signs in to a running dev instance as the seeded principal on both paths and reads its spaces, objects and
-  favorites (`./gradlew backend:seed` at the repository root first). With `VEYQ_LIVE_MEMBER=1` as well,
+  favorites (`./gradlew backend:seed` at the repository root first). Every live case leaves the account as it found
+  it: a JVM case (core's and `:bridge`'s) takes its devices from `LiveRun` (`core/src/liveTest`) and calls its
+  `removeAll` in `@AfterTest`, which signs in once more as each device and runs `VeyqAccount.removeThisDevice` (its
+  wraps, its families, its register entry); a native case calls `removeThisDevice` in a `finally`. A new live case does
+  the same — a run that skipped it filled the principal's wraps to the server's limit and its register with test names.
+  `--tests '*LiveRunTest*'` holds it (the families, register entries and wraps counted before and after; run alone). With `VEYQ_LIVE_MEMBER=1` as well,
   `--tests '*MemberLiveSignInTest*'` signs in as the seeded second member (`VEYQ_USER2_*`), whose TENANT grant the
   owner signed, so it opens only through the key check; the owner starts that run, since that password may be one a
   person chose. `--tests '*DeviceTrustLiveTest*'` walks the device trust (ADR 0123 decision 8) as the seeded principal:

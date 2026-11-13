@@ -5,6 +5,7 @@ import io.ktor.client.engine.okhttp.OkHttp
 import kotlinx.coroutines.test.runTest
 import me.raddatz.veyq.mobile.crypto.BouncyCastlePrimitives
 import java.io.File
+import kotlin.test.AfterTest
 import kotlin.test.Test
 import kotlin.test.assertTrue
 import kotlin.time.Duration.Companion.minutes
@@ -16,6 +17,12 @@ import kotlin.time.Duration.Companion.minutes
  * `VEYQ_LIVE_MEMBER=1`: that member's password may be one a person chose, so the run is the owner's to start.
  */
 class MemberLiveSignInTest {
+    /** The device this case signs in with, taken off the member's account again after it, whatever it came to. */
+    private val liveRun = LiveRun("VEYQ_USER2")
+
+    @AfterTest
+    fun takeOffTheDevices() = liveRun.removeAll()
+
     @Test
     fun theSeededMemberOpensTheTenantTheOwnerGranted() = runTest(timeout = 2.minutes) {
         val origin = System.getenv("VEYQ_LIVE") ?: return@runTest
@@ -23,7 +30,7 @@ class MemberLiveSignInTest {
         val env = File(System.getProperty("veyq.repoRoot"), ".run/.env").readLines()
             .mapNotNull { l -> l.substringBefore('=', "").takeIf { it.isNotBlank() }?.let { it.trim() to l.substringAfter('=').trim().trim('"', '\'') } }
             .toMap()
-        val device = testDevice(BouncyCastlePrimitives)
+        val device = liveRun.device()
         repeat(2) { round ->
             val account = VeyqAccount.signIn(
                 BouncyCastlePrimitives, origin, env.getValue("VEYQ_USER2_EMAIL"), env.getValue("VEYQ_USER2_PASSWORD"), env.getValue("VEYQ_USER2_SECRET_KEY"), device,

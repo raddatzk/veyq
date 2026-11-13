@@ -554,11 +554,21 @@ does ([ADR 0133](https://github.com/raddatzk/veyq/blob/main/docs/decisions/0133-
   that branch Flathub serves (decision 2). Whoever controls what Flathub serves you controls code that runs inside the
   app's process, keys and plaintext included. A host that cannot or will not reach Flathub takes the runtime as a bundle
   from a machine that has it (`flatpak build-bundle --runtime`), with the same trust in that runtime.
-- **Windows trusts the MSIX by its signature, and the signer is not decided.** A sideloaded MSIX installs only under a
-  certificate Windows trusts. Whether the release signs with a project certificate each person trusts once as
-  administrator — after which that Windows trusts every package that certificate's key signs, not only veyq's — or with
-  a certificate Windows already trusts is the owner's decision (decisions 7 and 12). The release's signing job and its
-  signer are not built.
+- **Windows installs the MSIX because you trust veyq's certificate yourself.** A sideloaded MSIX installs only under a
+  certificate Windows trusts. veyq signs its package with a certificate of its own, subject `CN=veyq`, which no
+  certificate authority vouches for (decisions 7 and 12): it costs nothing and carries no person's legal name, and
+  Windows does not trust it by itself. So you trust it once, as administrator, before the first install, by adding its
+  public half, `veyq.cer`, to the computer's *Trusted People* store ([Install the app](/getting-started/install-the-app/#windows)).
+  What that step means:
+  - **It is trust in a key, not in one file.** From then on that Windows installs, without asking, any package signed
+    with the certificate's key under the publisher `CN=veyq` — the next release's, and equally one signed by whoever
+    else holds that key. The key's only intended holder is the release's signing job (decision 7).
+  - **Nothing above it can withdraw it.** With no certificate authority there is no revocation: if the key leaked,
+    every computer that trusts the certificate keeps trusting it until someone removes it from that computer's store.
+  - **The step is only as good as the file you trust.** The release lists `veyq.cer` in its signed manifest and gives
+    it a signature bundle like a package, so you can check it before you trust it
+    ([Verify it yourself](/security/verify-it-yourself/#the-desktop-apps-packages)) — not built yet, like the release's
+    signing job and the certificate itself: no release carries any of them.
 - **No auto-update.** There is no repository and no update feed of veyq's own (decision 9): a person learns of a new
   release and installs its file, and until then runs the older app. A store listing would bring updates and is not
   built.
@@ -566,5 +576,5 @@ does ([ADR 0133](https://github.com/raddatzk/veyq/blob/main/docs/decisions/0133-
 **Decided in:** [ADR 0133](https://github.com/raddatzk/veyq/blob/main/docs/decisions/0133-the-desktop-apps-ship-as-a-flatpak-bundle-and-an-msix-built-in-checks-and-promoted-with-the-release.md)
   decisions 2, 7, 9 and 12.
 
-**Closed by:** nothing recorded for the runtime; the signer by the owner's decision before the first package is
-published; updates by a Flathub or Microsoft Store listing, each its own decision.
+**Closed by:** nothing recorded for the runtime; the certificate step and updates by a Microsoft Store listing (the
+Store signs its package under a certificate Windows already trusts) and a Flathub listing, each its own decision.

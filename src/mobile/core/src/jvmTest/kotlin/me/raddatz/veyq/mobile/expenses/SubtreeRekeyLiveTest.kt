@@ -18,12 +18,20 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
 import kotlin.time.Duration.Companion.minutes
+import kotlin.test.AfterTest
+import me.raddatz.veyq.mobile.session.LiveRun
 
 /**
  * A link's close re-keys its root's whole subtree (ADR 0114), on a running dev instance (`VEYQ_LIVE`), with
  * `VEYQ_LIVE_SUBTREE=<root folder name>`: see the block. Its own class: the live Pot test's one method outgrew the JVM's.
  */
 class SubtreeRekeyLiveTest {
+    /** Every device this case signs in with, taken off the account again after it, whatever it came to. */
+    private val liveRun = LiveRun()
+
+    @AfterTest
+    fun takeOffTheDevices() = liveRun.removeAll()
+
     @Test
     fun aCloseReKeysTheSubtree_andAnInterruptedOneIsResumed() = runTest(timeout = 10.minutes) {
         val origin = System.getenv("VEYQ_LIVE") ?: return@runTest
@@ -31,7 +39,7 @@ class SubtreeRekeyLiveTest {
         val env = (System.getenv("VEYQ_ENV_FILE")?.let(::File) ?: File(System.getProperty("veyq.repoRoot"), ".run/.env")).readLines()
             .mapNotNull { l -> l.substringBefore('=', "").takeIf { it.isNotBlank() }?.let { it.trim() to l.substringAfter('=').trim().trim('"', '\'') } }
             .toMap()
-        val device = testDevice(BouncyCastlePrimitives)
+        val device = liveRun.device()
         val client = { block: io.ktor.client.HttpClientConfig<*>.() -> Unit -> HttpClient(OkHttp, block) }
         val account = VeyqAccount.signIn(
             BouncyCastlePrimitives, origin, env.getValue("VEYQ_EMAIL"), env.getValue("VEYQ_PASSWORD"), env.getValue("VEYQ_SECRET_KEY"),

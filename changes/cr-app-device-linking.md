@@ -212,12 +212,66 @@ text goes straight into `DeviceLink` inside the core.
     accepts a trailing path — plus a Unicode trim, a leading `/` accepted, a MAC compare that says yes, the check
     number from the second group, any master-key length, marks past 2^53 − 1, the writer's key order, the draw's
     rejection removed, the secret's re-draw removed, and the vector bite (a refused payload moved to accepted).
-- [ ] **3 the core's flows** — D4 with `commonTest` over a played relay (both directions and roles; a forged answer,
+- [x] **3 the core's flows** — D4 with `commonTest` over a played relay (both directions and roles; a forged answer,
   a forged envelope, the other direction's code scanned, a wrong six-digit code sent once and the pairing abandoned,
   a timeout); D1's first measurement; `LiveDeviceLinkTest` (`VEYQ_LIVE`): both directions end to end between two core
   clients of the principal, the linked family listed with the label, rotating, revoked at the end, the granting family
   refreshing after (the control). · Done when: core checks and the live test green; a bite — the trusted side sealing
   without verifying the answer's MAC — makes the forged-answer case red.
+
+  **Status: done (2026-11-13).**
+
+  **Built:**
+  - `session/DeviceLink.kt`: one ceremony in one of four `Role`s (`SHOW_FOR_NEW_DEVICE`, `SCAN_SIGN_IN_CODE`,
+    `SCAN_FROM_TRUSTED`, `SHOW_FOR_SIGN_IN`), the web's cards' steps as `Step` (OPENING, SHOWING, SCANNING, CODE,
+    WAITING, CONFIRMING, SEALING, FINISHING, DONE, ENDED), `Refusal` (OFF, GONE, REFUSED, FAILED) and `Hint`
+    (OTHER_DIRECTION, SAME_SERVER); state as `StateFlow<Shown>` + `watch` (ADR 0130 decision 2). The code reaches a UI
+    only as `matrix()`/`png(px)`; scanning roles own their `QrScan<Unit>`, whose parser takes this direction's marker,
+    skips the other's with `OTHER_DIRECTION` (the scan goes on, nothing is answered) and anything else silently.
+    `confirm(label)` (the slide's end: delegate, then seal; a blank name refused), `enterCode` (one atomic move out of
+    SHOWING — the one send), `close`. The trusted side polls only until the answer lands; the new side only for the
+    envelope. Every role asks `/api/setup` for `core.device-linking` first (OFF), a `422 capability_disabled` is OFF too.
+    Polls every 2 s (the web's), a link waiting on the other device says SAME_SERVER after 30 s, ends GONE at the
+    channel's 10 min; an answer to a channel the server does not know ends GONE + SAME_SERVER.
+  - Seams `DeviceLink.Relay` (unauthenticated verbs + `capable`) and `DeviceLink.Granter` (the trusted account:
+    e-mail, a Master Key copy zeroed after the seal, `TrustMarks.forLink`, delegate, seal); `HttpRelay` and
+    `AccountGranter` over the generated `PairingApi`; `DeviceLink.showForNewDevice(account)`/`scanSignInCode(account)`.
+  - The new device's tail: `SessionModel.scanFromTrusted(server)`/`showForSignIn(server)` (null outside the sign-in and
+    in the share extension; the gate — a held kit with it — untouched until the grant is spent), `Door.relay`/`Door.linked`
+    (defaults throw; `AccountDoor` implements them), `VeyqAccount.linked`: marks raised (`TrustMarks.raise`, each the
+    maximum), the token spent once at `/api/token/refresh` in the body, the family id from `listSessionFamilies`'
+    `current`, write moment 1 under the grant's label. No trust is enrolled: `Offer(linked = true)` offers the device's
+    DEVICE_KEY levels, even none (the run-only case, D4 / Decided 3), and its "Not now" is not remembered as a decline.
+  - `VeyqAccount.refresh()` split out of `respond` (one rotation, single-flight). `LiveDeviceLinkTest` takes its devices
+    from `LiveRun` (merged from the live-trust-hygiene work, whose `DeviceRegisterStore.leave` this phase had added
+    too — one kept).
+  - Tests: `DeviceLinkTest` (12, over `PlayedServer`, the QR drawn by one link read through the real decoder by the
+    other), `SessionModelTest` +3, `TrustMarksLinkTest`, `LiveDeviceLinkTest` (3).
+
+  **Met:**
+  - **D1's first measurement holds** (`LiveDeviceLinkTest.aHandedTokenSpentAtRefreshRotatesAndListsAsCurrent`, live): a
+    delegated family's token, collected through a real channel and spent at `/api/token/refresh` with the token in the
+    body, answers 200 with a new body token; exactly one family is `current` for its holder; the successor rotates; the
+    spent token presented again is 401 (the clone case, which revokes that family); the granting family still refreshes.
+  - `./gradlew :core:jvmTest :core:macosArm64Test :bridge:jvmTest :core:compileKotlinLinuxX64 :core:compileKotlinMingwX64`
+    green; live (`VEYQ_LIVE=http://veyq.localhost:8080`, `VEYQ_ENV_FILE`): `LiveDeviceLinkTest` 3/3, not skipped — both
+    directions between a core login of the principal and a fresh `SessionModel` device: numbers equal, the linked family
+    listed on the trusted device under the given name before the linked device's own Settings ran, `current` for the
+    linked device, rotating, revoked from the trusted device (then unreadable), the granting family refreshing after;
+    every device a case signed in with (both trusted logins, the linked device) is taken off the account by
+    `LiveRun.removeAll`; no wrap is enrolled.
+  - Bites (scratchpad scripts, `/bin/cp -f` restore, compared equal; each red by its named test's own failure): the
+    CR's — `readTransportAnswer` without its MAC check → the forged-answer case; and the envelope opened without its
+    MAC, one more collect after the answer, the other direction's code without its hint, a second code sent, no end at
+    the channel's expiry, no SAME_SERVER hint, the capability unchecked, a close that leaves the polls running, a spent
+    token said as FAILED, the handle in the state, a blank name confirmed, a link's offer as a password sign-in's, a
+    link enrolling the password trust, a linked "Not now" remembered, a link opened over the shell, a handed-over mark
+    lowering the device's; live: the family id not read from `current`, the device named by itself not by the grant.
+
+  **Deviations:**
+  - The client keeps its own channel deadline (10 min, the server's ttl) besides the server's 404: the poll's 404 is
+    the web's only end, but a relay that stops answering would otherwise leave a link waiting for ever.
+  - `Shown` carries enums, not `Msg`s: the words are phase 4's.
 - [ ] **4 Android and Apple** — the Settings entry (show and scan), the sign-in form's two entries, the slide, the
   words. · Done when: both builds green; passes on the throwaway AVD, the simulator and the macOS build, **each against
   the web**, driven in headless system Chrome (machine hint: `channel: 'chrome'`, `?devlogin`; the web scans through
@@ -276,3 +330,14 @@ Phases 1–2 (the implementer, 2026-11-13):
 - **A bite that fails to compile reads as red.** The first bite run counted `BUILD FAILED` only; it was re-run to show
   each red is a failing test. Next time: a bite script checks for the failing test's name, not the exit code.
 - The ADR leaves canonical base64 and the whitespace set open; this CR's vectors are now where that reading is fixed.
+
+Phase 3 (the implementer, 2026-11-13):
+- **A bite that stays green can mean a redundant guard, not a missing test.** "A second code sent" did not bite: the
+  `sent` flag sat behind a step check that already refused the second call, and was not atomic against a racing one
+  anyway. Both became one `compareAndSet` out of SHOWING, and the bite then went red.
+- **A played relay must keep the order the real one forces.** The first forged-envelope test planted the envelope
+  before the trusted device had read the answer, so the trusted device's own poll collected it and the case read GONE.
+  The real server cannot seal before a delegation; the test now waits for CONFIRMING first.
+- **A live test's leftovers are part of its design.** The first live runs left device-register entries (a fresh test
+  device per login, a linked one per case); the test now takes its devices from `LiveRun`, which removes each after
+  the case. Entries from the runs before that stay until the owner clears them.

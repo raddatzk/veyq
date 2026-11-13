@@ -7,6 +7,7 @@ import me.raddatz.veyq.mobile.crypto.BouncyCastlePrimitives
 import me.raddatz.veyq.mobile.words.Msg
 import org.junit.Assume.assumeTrue
 import java.io.File
+import kotlin.test.AfterTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
@@ -31,14 +32,21 @@ class LiveAccountSettingsTest {
     private val p = BouncyCastlePrimitives
     private val client = { block: io.ktor.client.HttpClientConfig<*>.() -> Unit -> HttpClient(OkHttp, block) }
 
+    /** Every device a case signs in with, per account, taken off that account again after it, whatever it came to. */
+    private val runs = mutableListOf<LiveRun>()
+
+    @AfterTest
+    fun takeOffTheDevices() = runs.forEach { it.removeAll() }
+
     @Test
     fun aSecondLoginIsListedRenamedSignedOutAndGone() {
         val origin = needs("VEYQ_LIVE")
         runTest(timeout = 3.minutes) {
             // `.run/.env` of this checkout, or VEYQ_ENV_FILE's (a worktree has none)
             val env = env(System.getenv("VEYQ_ENV_FILE")?.let(::File) ?: File(System.getProperty("veyq.repoRoot"), ".run/.env"))
-            val (control, controlPage) = signIn(origin, env)
-            val (second, secondPage) = signIn(origin, env)
+            val run = LiveRun().also { runs += it }
+            val (control, controlPage) = signIn(origin, env, run)
+            val (second, secondPage) = signIn(origin, env, run)
             try {
                 secondPage.refresh()
                 val mine = assertNotNull(secondPage.current.device.familyId, "the server marked no family current")
@@ -80,8 +88,9 @@ class LiveAccountSettingsTest {
         val file = needs("VEYQ_LIVE_OTHERS_ENV")
         runTest(timeout = 3.minutes) {
             val env = env(File(file))
-            val (control, controlPage) = signIn(origin, env)
-            val (second, secondPage) = signIn(origin, env)
+            val run = LiveRun(envFile = File(file)).also { runs += it }
+            val (control, controlPage) = signIn(origin, env, run)
+            val (second, secondPage) = signIn(origin, env, run)
             try {
                 secondPage.refresh()
                 val theirs = assertNotNull(secondPage.current.device.familyId)
@@ -112,8 +121,8 @@ class LiveAccountSettingsTest {
     }
 
     /** One login of the account in [env] on a fresh device, with its Settings page. */
-    private suspend fun signIn(origin: String, env: Map<String, String>): Pair<VeyqAccount, AccountSettings<VeyqAccount, TenantSession>> {
-        val account = VeyqAccount.signIn(p, origin, env.getValue("VEYQ_EMAIL"), env.getValue("VEYQ_PASSWORD"), env.getValue("VEYQ_SECRET_KEY"), testDevice(p), client)
+    private suspend fun signIn(origin: String, env: Map<String, String>, run: LiveRun): Pair<VeyqAccount, AccountSettings<VeyqAccount, TenantSession>> {
+        val account = VeyqAccount.signIn(p, origin, env.getValue("VEYQ_EMAIL"), env.getValue("VEYQ_PASSWORD"), env.getValue("VEYQ_SECRET_KEY"), run.device(), client)
         return account to AccountSettings(AccountSettings.Over(account), Alone(account), account.email) { System.currentTimeMillis() }
     }
 

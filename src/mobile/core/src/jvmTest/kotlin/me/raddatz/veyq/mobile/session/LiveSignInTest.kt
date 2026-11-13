@@ -23,6 +23,7 @@ import kotlin.test.assertIs
 import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
 import kotlin.time.Duration.Companion.minutes
+import kotlin.test.AfterTest
 
 /**
  * Signs in to a running dev instance as the seeded principal (`.run/.env`, or `VEYQ_ENV_FILE`'s in a worktree, which has
@@ -30,6 +31,12 @@ import kotlin.time.Duration.Companion.minutes
  * the server (e.g. `http://veyq.localhost:8080`); without it each case reports as skipped, never as passed.
  */
 class LiveSignInTest {
+    /** Every device this case signs in with, taken off the account again after it, whatever it came to. */
+    private val liveRun = LiveRun()
+
+    @AfterTest
+    fun takeOffTheDevices() = liveRun.removeAll()
+
     private val p = BouncyCastlePrimitives
     private val client = { block: io.ktor.client.HttpClientConfig<*>.() -> Unit -> HttpClient(OkHttp, block) }
 
@@ -39,7 +46,7 @@ class LiveSignInTest {
         runTest(timeout = 2.minutes) {
             val env = env()
             val account = VeyqAccount.signIn(
-                p, origin, env.getValue("VEYQ_EMAIL"), env.getValue("VEYQ_PASSWORD"), env.getValue("VEYQ_SECRET_KEY"), testDevice(p), client,
+                p, origin, env.getValue("VEYQ_EMAIL"), env.getValue("VEYQ_PASSWORD"), env.getValue("VEYQ_SECRET_KEY"), liveRun.device(), client,
             )
             println("tenants: " + account.tenants.joinToString { "${it.name}@${it.domain}" })
             for (tenant in account.tenants) {
@@ -66,7 +73,7 @@ class LiveSignInTest {
             val env = env()
             val email = env.getValue("VEYQ_EMAIL")
             val file = kitPdf(email, env.getValue("VEYQ_SECRET_KEY"), origin)
-            val model = SessionModel.accounts(p, testDevice(p), client, Hidden({}, emptySet()), RecentUses({}, emptyList()))
+            val model = SessionModel.accounts(p, liveRun.device(), client, Hidden({}, emptySet()), RecentUses({}, emptyList()))
             model.start()
             assertTrue(model.readKit(file, NothingDrawn), "the kit was not read")
             val form = assertIs<SessionModel.Gate.SignIn>(model.current)

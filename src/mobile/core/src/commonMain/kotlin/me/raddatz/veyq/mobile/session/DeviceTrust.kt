@@ -282,6 +282,15 @@ internal class DeviceRegisterStore(
         p.copy(devices = p.devices + (deviceId to Entry(label, p.devices[deviceId]?.lastSeenAt ?: now)))
     }
 
+    /**
+     * Takes [deviceId] out of the register with every family and wrap row naming it — called by that device itself, as
+     * [rename], so each entry keeps its one writer. A port's addition: the web's register has no such write (what
+     * [VeyqAccount.removeThisDevice] leaves).
+     */
+    suspend fun leave(deviceId: String) = write(load()) { p ->
+        Plain(p.devices - deviceId, p.families.filterValues { it != deviceId }, p.wraps.filterValues { it != deviceId })
+    }
+
     /** One revision-guarded write of [change] over [base]; a `409` re-reads and applies it again, bounded. */
     private suspend fun write(base: Opened, change: (Plain) -> Plain) {
         var current = base

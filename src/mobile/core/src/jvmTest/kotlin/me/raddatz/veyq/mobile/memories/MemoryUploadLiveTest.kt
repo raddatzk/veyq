@@ -20,6 +20,8 @@ import kotlin.test.assertEquals
 import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
 import kotlin.time.Duration.Companion.minutes
+import kotlin.test.AfterTest
+import me.raddatz.veyq.mobile.session.LiveRun
 
 /**
  * A member's upload into a Memory on a running dev instance (`VEYQ_LIVE`): `VEYQ_LIVE_MEMORY_UPLOAD=<memory name>` uploads
@@ -29,6 +31,12 @@ import kotlin.time.Duration.Companion.minutes
  * Both stay, for the web's gallery and lightbox to show.
  */
 class MemoryUploadLiveTest {
+    /** Every device this case signs in with, taken off the account again after it, whatever it came to. */
+    private val liveRun = LiveRun()
+
+    @AfterTest
+    fun takeOffTheDevices() = liveRun.removeAll()
+
     @Test
     fun aPhotoAndAVideoAreUploadedAsTheWebUploadsThem() = runTest(timeout = 5.minutes) {
         val origin = System.getenv("VEYQ_LIVE") ?: return@runTest
@@ -39,7 +47,7 @@ class MemoryUploadLiveTest {
             .toMap()
         suspend fun signIn() = VeyqAccount.signIn(
             BouncyCastlePrimitives, origin, env.getValue("VEYQ_EMAIL"), env.getValue("VEYQ_PASSWORD"), env.getValue("VEYQ_SECRET_KEY"),
-            testDevice(BouncyCastlePrimitives),
+            liveRun.device(),
         ) { block -> HttpClient(OkHttp, block) }.let { it.open(it.defaultTenant!!) }
         val tenant = signIn()
         val memory = tenant.nodes().first { it.kind == "MEMORY" && it.name == name }

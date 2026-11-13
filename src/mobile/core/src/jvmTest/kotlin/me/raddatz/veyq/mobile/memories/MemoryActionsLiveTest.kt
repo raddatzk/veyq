@@ -22,6 +22,8 @@ import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 import kotlin.time.Duration.Companion.seconds
+import kotlin.test.AfterTest
+import me.raddatz.veyq.mobile.session.LiveRun
 
 /**
  * The CR's phase 2 on a running dev instance (`VEYQ_LIVE`), through the core's models: with
@@ -34,6 +36,12 @@ import kotlin.time.Duration.Companion.seconds
  * The Memory is trashed and purged however it ends. Reported skipped without `VEYQ_LIVE`.
  */
 class MemoryActionsLiveTest {
+    /** Every device this case signs in with, taken off the account again after it, whatever it came to. */
+    private val liveRun = LiveRun()
+
+    @AfterTest
+    fun takeOffTheDevices() = liveRun.removeAll()
+
     @Test
     fun aMemoryIsMadeTrashedSharedAndFilledByAGuest() = runBlocking {
         val origin = System.getenv("VEYQ_LIVE")
@@ -47,7 +55,7 @@ class MemoryActionsLiveTest {
             .toMap()
         val account = VeyqAccount.signIn(
             BouncyCastlePrimitives, origin!!, env.getValue("VEYQ_EMAIL"), env.getValue("VEYQ_PASSWORD"), env.getValue("VEYQ_SECRET_KEY"),
-            testDevice(BouncyCastlePrimitives),
+            liveRun.device(),
         ) { block -> HttpClient(OkHttp, block) }
         val tenant = account.open(account.defaultTenant!!)
         val shell = me.raddatz.veyq.mobile.navigation.ShellModel(

@@ -15,6 +15,7 @@ import kotlinx.serialization.Serializable
 import me.raddatz.veyq.mobile.account.KitImport
 import me.raddatz.veyq.mobile.account.KitPictures
 import me.raddatz.veyq.mobile.crypto.EmergencyKit
+import me.raddatz.veyq.mobile.crypto.PairingGrant
 import me.raddatz.veyq.mobile.crypto.Primitives
 import me.raddatz.veyq.mobile.navigation.Connection
 import me.raddatz.veyq.mobile.navigation.Connections
@@ -98,14 +99,24 @@ class SessionModel<A : Connection, T : Any>(
         /** Whether the person answered [account]'s offer with "Not now" on this device ([ThisDevice.declined]). */
         fun declined(account: A): Boolean
         fun setDeclined(account: A, declined: Boolean)
+
+        /** The pairing relay of the sign-in form's [server] (an origin), for a link from the sign-in (ADR 0059). */
+        fun relay(server: String): DeviceLink.Relay = throw UnsupportedOperationException("this door links no device")
+
+        /** The sign-in from a link's [grant] on [server] ([VeyqAccount.linked]); enrols no trust. */
+        suspend fun linked(server: String, grant: PairingGrant): A = throw UnsupportedOperationException("this door links no device")
     }
 
     /**
      * The offer to stay signed in after a sign-in (ADR 0123 decision 8): the levels this device's store offers ([StaySignedIn], in that
      * order) for the account of connection [connection]. Answered by [stay] or [notNow]; the shell is open beneath it.
+     *
+     * [linked]: the sign-in was a link's (ADR 0059 §10) — this device holds no password trust, so the offer is its only
+     * way to stay signed in, and it is made even with no level: then (and on "Not now") the Master Key is held for this
+     * run only, and the next start needs the password and Secret Key or the Emergency Kit — what the offer says.
      */
     @Serializable
-    data class Offer(val connection: String, val levels: List<StaySignedIn>)
+    data class Offer(val connection: String, val levels: List<StaySignedIn>, val linked: Boolean = false)
 
     /** Where the way in stands; serializable, since the native bridge sends it as it is (ADR 0123's Consequences, the bridge). */
     @Serializable
@@ -353,6 +364,49 @@ class SessionModel<A : Connection, T : Any>(
     }
 
     /**
+     * The sign-in's "Use another device" (*add a new device*, ADR 0059): a scan of the trusted device's code, the link
+     * over the form's [server] — nothing in a scan can change it (§4). Its grant is spent into the account here
+     * ([Door.linked]) and the shell opens over it with the linked offer ([Offer.linked]). The gate stays the sign-in (a
+     * held kit with it) until then. Null outside the sign-in, and in the share extension.
+     */
+    fun scanFromTrusted(
+        server: String,
+        decode: suspend (QrFrame) -> String? = { QrDecoder.decode(it) },
+        scope: CoroutineScope = CoroutineScope(SupervisorJob() + Dispatchers.Default),
+    ): DeviceLink? {
+        if (signInElsewhere || current !is Gate.SignIn) return null
+        val o = origin(server)
+        return DeviceLink.scanFromTrusted(door.primitives, door.relay(o), { linkedIn(o, it) }, decode, scope)
+    }
+
+    /** The sign-in's "Sign in with a QR code" (ADR 0059): this device shows its code over the form's [server]; as [scanFromTrusted]. */
+    fun showForSignIn(
+        server: String,
+        scope: CoroutineScope = CoroutineScope(SupervisorJob() + Dispatchers.Default),
+    ): DeviceLink? {
+        if (signInElsewhere || current !is Gate.SignIn) return null
+        val o = origin(server)
+        return DeviceLink.showForSignIn(door.primitives, door.relay(o), { linkedIn(o, it) }, scope)
+    }
+
+    /** A link's tail (the app's sign-in tail): the account from the grant, no password trust, the linked offer, the shell. */
+    private suspend fun linkedIn(server: String, grant: PairingGrant) {
+        started = true
+        val account = door.linked(server, grant)
+        add(account)
+        offer = linkedOffer(account)
+        val (held, tenant) = connections.current!!
+        openTenant(held, tenant)
+    }
+
+    /** The offer after a link: every level the device has, even none (the run-only case); none where it stays signed in already. */
+    private fun linkedOffer(account: A): Offer? {
+        if (signInElsewhere) return null
+        if (door.trustedBy(account)?.method == TrustedDevice.Method.DEVICE_KEY) return null
+        return Offer(account.key, StaySignedIn.entries.filter { it in door.staySignedIn() }, linked = true)
+    }
+
+    /**
      * The trusted account's unlock: its password (DEVICE), or the person's authentication again (DEVICE_KEY). A password
      * unlock is a sign-in like the full one: the offer follows it where it would follow that one.
      */
@@ -430,10 +484,10 @@ class SessionModel<A : Connection, T : Any>(
     }
 
     /** The offer's "Not now": the password trust stays, and this account is not offered again on this device (ADR 0123 decision 8).
-     *  False without an offer. */
+     *  A linked offer's is not remembered: that device has no password trust to stay with. False without an offer. */
     fun notNow(): Boolean {
         val o = offer ?: return false
-        connections.all.firstOrNull { it.key == o.connection }?.let { door.setDeclined(it, true) }
+        if (!o.linked) connections.all.firstOrNull { it.key == o.connection }?.let { door.setDeclined(it, true) }
         endOffer()
         return true
     }
@@ -715,6 +769,8 @@ class AccountDoor(
     override fun staySignedIn(): Set<StaySignedIn> = device.keys.staySignedIn
     override fun declined(account: VeyqAccount): Boolean = device.declined(account.key)
     override fun setDeclined(account: VeyqAccount, declined: Boolean) = device.setDeclined(account.key, declined)
+    override fun relay(server: String): DeviceLink.Relay = HttpRelay.of(server, client)
+    override suspend fun linked(server: String, grant: PairingGrant): VeyqAccount = VeyqAccount.linked(primitives, server, grant, device, client)
 }
 
 /** What a change of this device's trust came to (ADR 0123 decision 8): [DONE]; the person [CANCELLED] the prompt (an offer stays); the
