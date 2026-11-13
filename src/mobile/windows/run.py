@@ -56,6 +56,27 @@ Verbs:
                              fetches the outcome last, to build/windows/hello-probe.txt here. `--check` stops
                              the probe before its first key: the launch and Hello's availability in that session, no
                              prompt.
+  package [--sign [PFX]] [--smoke]
+                             the MSIX (ADR 0133 decisions 6 and 7): generates as `build` does, but links the bridge's
+                             release DLL; fills Veyq/Package.appxmanifest.in — the identity from
+                             src/mobile/desktop-identity.json (VEYQ_MSIX_PUBLISHER overrides its publisher, which must
+                             equal the signing certificate's subject), the version from the tree as the pipeline counts it
+                             (`<major>.<minor>.0.0`), the device family's from the project — into the generated sources;
+                             gates and tests here as `build` does, then on the Windows host builds Veyq.Drive, runs
+                             Veyq.Bridge.Tests and Veyq.Tests in Release, and builds the app in Release as an unsigned,
+                             self-contained x64 MSIX through the Windows App SDK's MSBuild tooling, fetched to
+                             src/mobile/build/windows/package/veyq-<version>-x64.msix. `--sign` signs a copy there
+                             (`-signed.msix`) with the pinned Microsoft.Windows.SDK.BuildTools' signtool: PFX (a file on
+                             this host, its password in VEYQ_MSIX_PFX_PASSWORD) is copied over for the signing and deleted
+                             after it; without one, a development certificate of the publisher's subject is made on the
+                             Windows host (CurrentUser\\My, its key never leaving it) and trusted there (LocalMachine\\
+                             TrustedPeople), kept for the next run until `drop-dev-cert`. Either way red unless the signed
+                             copy's AppxBlockMap.xml is byte-identical to the unsigned one's (`makeappx unpack` of both):
+                             signing changes no payload byte. `--smoke` (with --sign) installs the signed copy, starts it
+                             by its AUMID (Veyq.Drive's launch), waits until its log says `session SignIn`, and
+                             uninstalls it, red if anything of the package stays — all in the logged-on session
+                             (`veyq-app`): deployment from ssh's session 0 is refused.
+  drop-dev-cert              removes `package --sign`'s development certificate from both stores on the Windows host.
   register                   registers the two scheduled tasks, interactive only, as the user ssh logs in as: they run
                              on demand in the logged-on session, which an ssh command (session 0) cannot reach. Run once
                              per Windows host, by its owner (a persistent change on that machine).
@@ -156,6 +177,9 @@ def powershell(script: str, forward: list[str] | None = None, quiet: bool = Fals
     The first connection after the host idled can time out once (ssh's 255 before anything ran): it is tried again."""
     encoded = base64.b64encode(("$ProgressPreference = 'SilentlyContinue'\n" + script).encode("utf-16-le")).decode()
     command = ssh_base(forward) + ["powershell", "-NoProfile", "-NonInteractive", "-EncodedCommand", encoded]
+    # cmd.exe, which OpenSSH's default shell on Windows is, takes 8191 characters a line (measured 2026-11-13)
+    if len(" ".join(command[command.index("powershell"):])) > 8191:
+        sys.exit(f"veyq: a script of {len(script)} characters is too long for one ssh command line: split it")
     for attempt in (1, 2):
         if not quiet:
             print(f"+ ssh {SSH_TARGET} powershell <{len(script.splitlines())} lines>", flush=True)
@@ -371,14 +395,14 @@ def tree_tar(entries: dict[Path, str], exclude: set[str]) -> bytes:
     return buf.getvalue()
 
 
-def generate() -> Path:
+def generate(kind: str = "debug") -> Path:
     """Writes what the C# is built from but never keeps — the bridge's types and samples, the words, the theme — and
-    links the debug DLL; returns the DLL."""
-    run("./gradlew", ":bridge:generateBindings", ":bridge:linkDebugSharedMingwX64", ":bridge:jvmTest", "--tests",
-        "*WireTest*", cwd=repo_layout.MOBILE)
+    links the DLL of [kind] (`debug`, `release`: the package's); returns the DLL."""
+    link = f":bridge:link{kind.capitalize()}SharedMingwX64"
+    run("./gradlew", ":bridge:generateBindings", link, ":bridge:jvmTest", "--tests", "*WireTest*", cwd=repo_layout.MOBILE)
     run(sys.executable, str(WORDS / "generate_words.py"), "--resw", str(GENERATED / "words" / "windows"))
     run(sys.executable, str(THEME / "generate_theme.py"), "--winui", str(GENERATED / "theme" / "windows"))
-    dll = DLL_DIR["debug"] / "veyq.dll"
+    dll = DLL_DIR[kind] / "veyq.dll"
     if not dll.exists():
         sys.exit(f"no DLL at {dll}")
     return dll
@@ -394,26 +418,35 @@ def push_tree(dll: Path) -> None:
         GENERATED / "bridge": "src/mobile/build/generated/bridge",
         GENERATED / "words" / "windows": "src/mobile/build/generated/words/windows",
         GENERATED / "theme" / "windows": "src/mobile/build/generated/theme/windows",
+        **({GENERATED / "msix": "src/mobile/build/generated/msix"} if (GENERATED / "msix").is_dir() else {}),
         WORDS / "words.json": "src/mobile/words/words.json",
         dll: "bin/veyq.dll",
     }, exclude={"bin", "obj", "TestResults"}))
     copy_to([archive], REMOTE_DIR)
 
 
-def host_script(*steps: str) -> str:
+def host_script(*steps: str, unpack: bool = True) -> str:
     """A PowerShell script for the Windows host: the pushed tree unpacked in place of the last one, every project
-    restored locked, then [steps] (each stops the script on a non-zero exit) in src/mobile/windows."""
+    restored locked, then [steps] (each stops the script on a non-zero exit) in src/mobile/windows. Without [unpack]
+    only the steps, in the tree an earlier script unpacked: an encoded command is held to cmd.exe's 8191 characters
+    ("Die Befehlszeile ist zu lang", about 3000 of script), so a long run goes as several scripts."""
     lines = [
         "$ErrorActionPreference = 'Stop'",
         *(f"$env:{k} = {ps_quote(v)}" for k, v in DOTNET_ENV.items()),
-        f"Remove-Item -Recurse -Force -ErrorAction SilentlyContinue -Path {ps_quote(str(REMOTE_DIR / 'src'))}, {ps_quote(str(REMOTE_DIR / 'bin'))}",
-        f"Set-Location {ps_quote(str(REMOTE_DIR))}",
-        "tar.exe -xf tree.tar; if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }",
-        "Remove-Item -Force tree.tar",
-        f"Set-Location {ps_quote(str(REMOTE_MOBILE / 'windows'))}",
-        "Write-Output ('+ dotnet ' + (dotnet --version))",
-        *(f"dotnet restore --locked-mode {p}; if ($LASTEXITCODE -ne 0) {{ exit $LASTEXITCODE }}" for p in PROJECTS),
     ]
+    if unpack:
+        lines += [
+            f"Remove-Item -Recurse -Force -ErrorAction SilentlyContinue -Path {ps_quote(str(REMOTE_DIR / 'src'))}, {ps_quote(str(REMOTE_DIR / 'bin'))}",
+            f"Set-Location {ps_quote(str(REMOTE_DIR))}",
+            "tar.exe -xf tree.tar; if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }",
+            "Remove-Item -Force tree.tar",
+        ]
+    lines.append(f"Set-Location {ps_quote(str(REMOTE_MOBILE / 'windows'))}")
+    if unpack:
+        lines += [
+            "Write-Output ('+ dotnet ' + (dotnet --version))",
+            *(f"dotnet restore --locked-mode {p}; if ($LASTEXITCODE -ne 0) {{ exit $LASTEXITCODE }}" for p in PROJECTS),
+        ]
     for step in steps:
         lines += [f"Write-Output {ps_quote('+ ' + step.splitlines()[0])}", step,
                   "if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }"]
@@ -453,6 +486,350 @@ def build() -> int:
             f"dotnet test --project {APP_TESTS} --no-restore --arch x64",
         ]),
     ))
+
+
+IDENTITY = json.loads((repo_layout.MOBILE / "desktop-identity.json").read_text())  # ADR 0133 decision 12
+MSIX_TEMPLATE = HERE / APP / "Package.appxmanifest.in"
+PACKAGE_OUT = repo_layout.MOBILE / "build" / "windows" / "package"  # the MSIX here, fetched from the host
+REMOTE_PACKAGE = REMOTE_DIR / "package"
+# the package build's output on the Windows host, below src/mobile/windows: the .pri Veyq.Tests reads in Release
+APP_RELEASE_OUT = PureWindowsPath(APP, "bin", "Release", "net10.0-windows10.0.26100.0", "win-x64")
+DEV_CERT_NAME = "veyq development (run.py package)"  # the development certificate's FriendlyName on the Windows host
+# What the packaged app's log says once it shows its sign-in (MainWindow's ShowGate): the smoke's end.
+SMOKE_SIGN_IN = "session SignIn"
+
+
+def msix_publisher() -> str:
+    """The MSIX's Publisher: VEYQ_MSIX_PUBLISHER (a self-builder's own certificate subject, ADR 0133 decision 7), else
+    desktop-identity.json's."""
+    return os.environ.get("VEYQ_MSIX_PUBLISHER") or IDENTITY["msixPublisher"]
+
+
+def msix_version() -> tuple[str, str]:
+    """The tree's `<major>.<minor>` as the pipeline counts it (release_assets.tree_release, the one count) and the
+    package's four-part version `<major>.<minor>.0.0` (each part at most 65535; the revision 0, as a store requires)."""
+    import release_assets  # noqa: E402 - scripts/, on sys.path above
+    version = release_assets.tree_release(ROOT)
+    if not re.fullmatch(r"[0-9]+\.[0-9]+", version) or any(int(part) > 65535 for part in version.split(".")):
+        sys.exit(f"the version {version} is no <major>.<minor> of two parts of at most 65535 each")
+    return version, f"{version}.0.0"
+
+
+def target_platform() -> tuple[str, str]:
+    """The app project's TargetPlatformMinVersion and TargetPlatformVersion, as MSBuild evaluates them here: the
+    device family's MinVersion and MaxVersionTested."""
+    done = subprocess.run(["dotnet", "msbuild", APP, "-p:Configuration=Release", "-p:VeyqPackage=true",
+                           "-getProperty:TargetPlatformMinVersion", "-getProperty:TargetPlatformVersion"],
+                          cwd=HERE, env=os.environ | DOTNET_ENV, capture_output=True, text=True, check=True)
+    props = json.loads(done.stdout)["Properties"]
+    return props["TargetPlatformMinVersion"], props["TargetPlatformVersion"]
+
+
+def fill_manifest(four_part: str) -> Path:
+    """Package.appxmanifest.in filled into the generated sources (src/mobile/build/generated/msix/), where the package
+    build reads it; red on a placeholder left over."""
+    low, tested = target_platform()
+    fill = {"@APP_ID@": IDENTITY["appId"], "@PUBLISHER@": msix_publisher(), "@VERSION@": four_part,
+            "@MIN_VERSION@": low, "@MAX_VERSION_TESTED@": tested}
+    text = MSIX_TEMPLATE.read_text(encoding="utf-8")
+    for key, value in fill.items():
+        text = text.replace(key, value)
+    left = sorted(set(re.findall(r"@[A-Z_]+@", text)))
+    if left:
+        sys.exit(f"{MSIX_TEMPLATE.name} has placeholders run.py does not fill: {', '.join(left)}")
+    # well-formed here: the package build's manifest task hides an XML error behind an assembly it cannot load
+    # (System.Security.Permissions, under the .NET SDK's MSBuild; a `--` in a comment, measured 2026-11-13)
+    import xml.etree.ElementTree as ET
+    try:
+        ET.fromstring(text)
+    except ET.ParseError as e:
+        sys.exit(f"{MSIX_TEMPLATE.name} is no well-formed XML: {e}")
+    out = GENERATED / "msix" / "Package.appxmanifest"
+    out.parent.mkdir(parents=True, exist_ok=True)
+    out.write_text(text, encoding="utf-8")
+    print(f"veyq: {out.relative_to(repo_layout.MOBILE)}: {IDENTITY['appId']} {four_part}, {fill['@PUBLISHER@']}, "
+          f"Windows.Desktop {low} to {tested}", flush=True)
+    return out
+
+
+def build_tools() -> str:
+    """The pinned Microsoft.Windows.SDK.BuildTools' version (Directory.Packages.props): its makeappx and signtool."""
+    props = (HERE / "Directory.Packages.props").read_text()
+    m = re.search(r'Include="Microsoft\.Windows\.SDK\.BuildTools" Version="\[([0-9.]+)\]"', props)
+    if not m:
+        sys.exit("Directory.Packages.props pins no Microsoft.Windows.SDK.BuildTools")
+    return m.group(1)
+
+
+def tools_script() -> list[str]:
+    """PowerShell lines that set $tools to the pinned build tools' directory for the host's architecture, in the NuGet
+    cache the locked restore filled (no Windows SDK is installed)."""
+    return [
+        f"$pkg = Join-Path $env:USERPROFILE {ps_quote('.nuget/packages/microsoft.windows.sdk.buildtools/' + build_tools() + '/bin')}",
+        "$sdk = @(Get-ChildItem -Directory $pkg)",
+        "if ($sdk.Count -ne 1) { Write-Output \"veyq: expected one SDK version under $pkg, found $($sdk.Count)\"; exit 1 }",
+        "$tools = Join-Path $sdk[0].FullName $(if ($env:PROCESSOR_ARCHITECTURE -eq 'ARM64') { 'arm64' } else { 'x64' })",
+    ]
+
+
+def package(sign: str | None, smoke: bool) -> int:
+    version, four_part = msix_version()
+    name = f"veyq-{version}-x64"
+    dll = generate("release")
+    fill_manifest(four_part)
+    for project in PROJECTS:
+        dotnet("restore", "--locked-mode", project)
+    if not all([deprecation_gate(project) for project in PROJECTS]):
+        return 1
+    dotnet("test", "--project", BRIDGE_TESTS, "-c", "Release", "--no-restore")
+    push_tree(dll)
+    windows = REMOTE_MOBILE / "windows"
+    appx_dir = REMOTE_PACKAGE / "AppPackages"
+    msix = REMOTE_PACKAGE / f"{name}.msix"
+    code = powershell(host_script(
+        BUILD_DRIVE,
+        "\n".join([
+            f"$env:VEYQ_SAMPLES = {ps_quote(str(REMOTE_MOBILE / 'build' / 'generated' / 'bridge' / 'samples'))}",
+            f"dotnet test --project {BRIDGE_TESTS} -c Release --no-restore --arch x64 {NATIVE}",
+        ]),
+    )) or powershell(host_script(
+        "\n".join([
+            f"Remove-Item -Recurse -Force -ErrorAction SilentlyContinue -Path {ps_quote(str(REMOTE_PACKAGE))}",
+            f"dotnet build {APP} -c Release --no-restore {NATIVE} -p:VeyqPackage=true "
+            f"-p:AppxPackageDir={ps_quote(str(appx_dir) + chr(92))}",
+        ]),
+        unpack=False,
+    )) or powershell(host_script(
+        "\n".join([
+            # the package's own .pri: a packaged build names it resources.pri (an unpackaged one <assembly>.pri), and
+            # a .pri that is not there reads as no words at all
+            f"$env:VEYQ_PRI = {ps_quote(str(windows / APP_RELEASE_OUT / 'resources.pri'))}",
+            "if (-not (Test-Path $env:VEYQ_PRI)) { Write-Output \"veyq: no $env:VEYQ_PRI\"; exit 1 }",
+            f"$env:VEYQ_WORDS_JSON = {ps_quote(str(REMOTE_MOBILE / 'words' / 'words.json'))}",
+            f"dotnet test --project {APP_TESTS} -c Release --no-restore --arch x64",
+        ]),
+        "\n".join([
+            f"$built = @(Get-ChildItem -Recurse -File -Filter *.msix -Path {ps_quote(str(appx_dir))})",
+            "if ($built.Count -ne 1) { Write-Output \"veyq: the build wrote $($built.Count) MSIX packages, not one\"; exit 1 }",
+            f"Copy-Item -Path $built[0].FullName -Destination {ps_quote(str(msix))}",
+            f"Remove-Item -Recurse -Force -Path {ps_quote(str(appx_dir))}",
+            f"Write-Output ('veyq: ' + {ps_quote(str(msix))} + ', ' + (Get-Item {ps_quote(str(msix))}).Length + ' bytes')",
+        ]),
+        unpack=False,
+    ))
+    if code != 0:
+        return code
+    PACKAGE_OUT.mkdir(parents=True, exist_ok=True)
+    if not fetch(str(msix), PACKAGE_OUT / msix.name):
+        sys.exit(f"veyq: no {msix.name} to fetch from the host")
+    print(f"package: {PACKAGE_OUT / msix.name}", flush=True)
+    if sign is None:
+        return 0
+    signed = REMOTE_PACKAGE / f"{name}-signed.msix"
+    code = sign_package(msix, signed, sign)
+    if code != 0:
+        return code
+    if not fetch(str(signed), PACKAGE_OUT / signed.name):
+        sys.exit(f"veyq: no {signed.name} to fetch from the host")
+    print(f"signed: {PACKAGE_OUT / signed.name}", flush=True)
+    return smoke_package(signed) if smoke else 0
+
+
+def sign_package(msix: PureWindowsPath, signed: PureWindowsPath, pfx: str) -> int:
+    """Signs a copy of [msix] as [signed] on the Windows host — with [pfx] (a file here, its password in
+    VEYQ_MSIX_PFX_PASSWORD), or where it is empty with the host's development certificate, made and trusted there
+    once — and holds the two block maps byte-identical (ADR 0133 decision 7)."""
+    secrets: list[PureWindowsPath] = []
+    if pfx:
+        source = Path(pfx).expanduser().resolve()
+        if not source.is_file():
+            sys.exit(f"--sign names no file: {source}")
+        password = os.environ.get("VEYQ_MSIX_PFX_PASSWORD")
+        if password is None:
+            sys.exit("--sign <pfx> reads the PFX's password from VEYQ_MSIX_PFX_PASSWORD")
+        local = PACKAGE_OUT / "signer.password"
+        local.write_text(password, encoding="utf-8")
+        try:
+            copy_to([source], REMOTE_PACKAGE, as_name="signer.pfx")
+            copy_to([local], REMOTE_PACKAGE)
+        finally:
+            local.unlink(missing_ok=True)
+        secrets = [REMOTE_PACKAGE / "signer.pfx", REMOTE_PACKAGE / "signer.password"]
+        signer = [
+            f"$password = Get-Content -Raw -Encoding UTF8 -Path {ps_quote(str(secrets[1]))}",
+            f"& (Join-Path $tools 'signtool.exe') sign /q /fd SHA256 /f {ps_quote(str(secrets[0]))} /p $password {ps_quote(str(signed))}",
+        ]
+    else:
+        subject = msix_publisher()
+        signer = [
+            # the development certificate: made once with the publisher's subject, its key kept in this user's store
+            f"$cert = Get-ChildItem Cert:\\CurrentUser\\My | Where-Object {{ $_.Subject -eq {ps_quote(subject)} -and "
+            f"$_.FriendlyName -eq {ps_quote(DEV_CERT_NAME)} -and $_.NotAfter -gt (Get-Date).AddDays(1) }} | Select-Object -First 1",
+            "if (-not $cert) {",
+            f"  $cert = New-SelfSignedCertificate -Type Custom -Subject {ps_quote(subject)} -FriendlyName {ps_quote(DEV_CERT_NAME)} "
+            "-KeyUsage DigitalSignature -CertStoreLocation Cert:\\CurrentUser\\My -NotAfter (Get-Date).AddDays(30) "
+            "-TextExtension @('2.5.29.37={text}1.3.6.1.5.5.7.3.3', '2.5.29.19={text}')",
+            "  Write-Output ('veyq: made the development certificate ' + $cert.Thumbprint)",
+            "}",
+            # trusted for installing on this host only: its public half in the machine's TrustedPeople
+            "if (-not (Test-Path (Join-Path Cert:\\LocalMachine\\TrustedPeople $cert.Thumbprint))) {",
+            f"  $cer = Join-Path {ps_quote(str(REMOTE_PACKAGE))} 'dev.cer'",
+            "  Export-Certificate -Cert $cert -FilePath $cer | Out-Null",
+            "  Import-Certificate -FilePath $cer -CertStoreLocation Cert:\\LocalMachine\\TrustedPeople | Out-Null",
+            "  Remove-Item -Force -Path $cer",
+            "}",
+            f"& (Join-Path $tools 'signtool.exe') sign /q /fd SHA256 /sha1 $cert.Thumbprint /s My {ps_quote(str(signed))}",
+        ]
+    unpacked = REMOTE_PACKAGE / "unpacked"
+    script = "\n".join([
+        "$ErrorActionPreference = 'Stop'",
+        *tools_script(),
+        f"Copy-Item -Force -Path {ps_quote(str(msix))} -Destination {ps_quote(str(signed))}",
+        "try {",
+        *("  " + line for line in signer),
+        "  $code = $LASTEXITCODE",
+        "} finally {",
+        *(f"  Remove-Item -Force -ErrorAction SilentlyContinue -Path {ps_quote(str(f))}" for f in secrets),
+        "}",
+        "if ($code -ne 0) { Write-Output \"veyq: signtool exited $code\"; exit $code }",
+        # the payload unchanged: both packages unpacked by makeappx (which checks each file against its block map),
+        # their block maps compared byte for byte
+        f"Remove-Item -Recurse -Force -ErrorAction SilentlyContinue -Path {ps_quote(str(unpacked))}",
+        "$maps = @()",
+        f"foreach ($p in @({ps_quote(str(msix))}, {ps_quote(str(signed))})) {{",
+        f"  $d = Join-Path {ps_quote(str(unpacked))} ([IO.Path]::GetFileNameWithoutExtension($p))",
+        "  & (Join-Path $tools 'makeappx.exe') unpack /o /p $p /d $d | Out-Null",
+        "  if ($LASTEXITCODE -ne 0) { Write-Output \"veyq: makeappx unpack $p exited $LASTEXITCODE\"; exit 1 }",
+        "  $maps += (Get-FileHash -Algorithm SHA256 -Path (Join-Path $d 'AppxBlockMap.xml')).Hash",
+        "}",
+        f"$sig = Test-Path (Join-Path {ps_quote(str(unpacked / signed.stem))} 'AppxSignature.p7x')",
+        f"Remove-Item -Recurse -Force -Path {ps_quote(str(unpacked))}",
+        "if (-not $sig) { Write-Output 'veyq: the signed copy carries no AppxSignature.p7x'; exit 1 }",
+        "if ($maps[0] -ne $maps[1]) { Write-Output \"veyq: signing changed the block map ($($maps[0]) -> $($maps[1])): the payload is not the one built\"; exit 1 }",
+        "Write-Output ('veyq: signed; AppxBlockMap.xml byte-identical in both (sha256 ' + $maps[0] + ')')",
+        "exit 0",
+    ])
+    return powershell(script)
+
+
+POWERSHELL_EXE = r"C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe"
+
+
+def in_session(name: str, script: str, seconds: int = 300) -> int:
+    """Runs [script] in PowerShell in the Windows host's logged-on session (the scheduled task `veyq-app`, Veyq.Drive's
+    launch), prints what it wrote and returns its exit code. Package deployment needs that session: from ssh's
+    session 0, Add-AppxPackage fails with 0x80070005 (the AppX log: "Fehler beim Initialisieren der PLM", measured
+    2026-11-13). The script goes as a file, so its length is not the command line's."""
+    ps1, out, done = (REMOTE_RUN / f"{name}{ext}" for ext in (".ps1", ".out", ".done"))
+    local = SMOKE_OUT.parent / ps1.name
+    local.parent.mkdir(parents=True, exist_ok=True)
+    local.write_text("$ProgressPreference = 'SilentlyContinue'\n" + script + "\n", encoding="utf-8-sig")
+    powershell(f"New-Item -ItemType Directory -Force -Path {ps_quote(str(REMOTE_RUN))} | Out-Null; Remove-Item -Force "
+               f"-ErrorAction SilentlyContinue -Path {', '.join(ps_quote(str(p)) for p in (out, done))}", quiet=True)
+    copy_to([local], REMOTE_RUN)
+    local.unlink()
+    command = (f"try {{ & {ps_quote(str(ps1))} *> {ps_quote(str(out))}; $c = $LASTEXITCODE }} "
+               f"catch {{ $_ | Out-File -Append -FilePath {ps_quote(str(out))}; $c = 1 }} "
+               f"finally {{ if ($null -eq $c) {{ $c = 0 }}; Set-Content -Path {ps_quote(str(done))} -Value $c }}")
+    start = SMOKE_OUT.parent / "app.json"
+    start.write_text(json.dumps({"exe": POWERSHELL_EXE, "args": ["-NoProfile", "-NonInteractive", "-ExecutionPolicy",
+                                                                 "Bypass", "-Command", command]}))
+    copy_to([start], REMOTE_RUN)
+    start.unlink()
+    code = run_task("veyq-app", done, seconds)
+    shown = SMOKE_OUT.parent / out.name
+    if fetch(str(out), shown):
+        raw = shown.read_bytes()
+        # Windows PowerShell's redirection writes UTF-16LE with its BOM
+        text = raw.decode("utf-16") if raw[:2] == b"\xff\xfe" else raw.decode("utf-8-sig", errors="replace")
+        print(text.replace("\r\n", "\n"), end="", flush=True)
+        shown.unlink()
+    if code != 0:
+        return code
+    result = SMOKE_OUT.parent / done.name
+    if not fetch(str(done), result):
+        sys.exit(f"veyq: {name} wrote no {done.name}")
+    text = result.read_text(encoding="utf-8-sig", errors="replace").strip()
+    result.unlink()
+    powershell(f"Remove-Item -Force -ErrorAction SilentlyContinue -Path {', '.join(ps_quote(str(p)) for p in (ps1, out, done))}",
+               quiet=True)
+    return int(text) if text.lstrip("-").isdigit() else 1
+
+
+def smoke_package(signed: PureWindowsPath) -> int:
+    """Installs [signed] in the Windows host's logged-on session, starts it there by its AUMID, waits until its log says
+    SMOKE_SIGN_IN, then stops and uninstalls it and holds that nothing of it stays."""
+    app_id = IDENTITY["appId"]
+    family = REMOTE_PACKAGE / "family.txt"
+    code = in_session("install", "\n".join([
+        "$ErrorActionPreference = 'Stop'",
+        f"Add-AppxPackage -Path {ps_quote(str(signed))}",
+        f"$p = Get-AppxPackage -Name {ps_quote(app_id)}",
+        "Write-Output ('veyq: installed ' + $p.PackageFullName)",
+        f"Set-Content -NoNewline -Encoding ASCII -Path {ps_quote(str(family))} -Value $p.PackageFamilyName",
+    ]))
+    if code != 0:
+        return code
+    local_family = PACKAGE_OUT / "family.txt"
+    if not fetch(str(family), local_family):
+        sys.exit("veyq: the install named no package family")
+    pfn = local_family.read_text().strip()
+    local_family.unlink()
+    start = SMOKE_OUT.parent / "app.json"
+    start.parent.mkdir(parents=True, exist_ok=True)
+    start.write_text(json.dumps({"aumid": f"{pfn}!App"}))
+    started = REMOTE_RUN / "app.json.started"
+    powershell(f"New-Item -ItemType Directory -Force -Path {ps_quote(str(REMOTE_RUN))} | Out-Null; "
+               f"Remove-Item -Force -ErrorAction SilentlyContinue -Path {ps_quote(str(started))}", quiet=True)
+    copy_to([start], REMOTE_RUN)
+    start.unlink()
+    code = run_task("veyq-app", started, 60)
+    if code == 0:
+        code = powershell("\n".join([
+            # The app's %LOCALAPPDATA% writes land in the package's own LocalCache — unless %LOCALAPPDATA%\veyq was
+            # there before (an unpackaged build's), which the packaged app then writes in place (measured 2026-11-13):
+            # either log, written since the activation (its .started, less a margin for the log begun before it).
+            f"$since = (Get-Item {ps_quote(str(started))}).LastWriteTime.AddSeconds(-10)",
+            f"$logs = @((Join-Path $env:LOCALAPPDATA {ps_quote('Packages/' + pfn + '/LocalCache/Local/veyq/log.txt')}), "
+            "(Join-Path $env:LOCALAPPDATA 'veyq/log.txt'))",
+            "$deadline = (Get-Date).AddSeconds(60)",
+            "while ($true) {",
+            "  $log = $logs | Where-Object { (Test-Path $_) -and (Get-Item $_).LastWriteTime -gt $since } | Select-Object -First 1",
+            f"  if ($log -and (Select-String -Quiet -SimpleMatch {ps_quote(SMOKE_SIGN_IN)} -Path $log)) {{ break }}",
+            "  if ((Get-Date) -gt $deadline) { Write-Output 'veyq: the packaged app did not reach its sign-in in 60 s'; "
+            "if ($log) { Get-Content $log }; exit 1 }",
+            "  Start-Sleep -Milliseconds 500",
+            "}",
+            "Write-Output \"--- $log\"",
+            "Get-Content $log",
+            f"Write-Output {ps_quote('veyq: the packaged app shows its sign-in (' + SMOKE_SIGN_IN + ')')}",
+        ]))
+    uninstall = in_session("uninstall", "\n".join([
+        "$ErrorActionPreference = 'Stop'",
+        f"Get-Process -Name {APP_NAME} -ErrorAction SilentlyContinue | Stop-Process -Force",
+        "Start-Sleep -Seconds 1",
+        f"Get-AppxPackage -Name {ps_quote(app_id)} | Remove-AppxPackage",
+        f"$data = Join-Path $env:LOCALAPPDATA {ps_quote('Packages/' + pfn)}",
+        f"if (Get-AppxPackage -Name {ps_quote(app_id)}) {{ Write-Output 'veyq: the package is still installed'; exit 1 }}",
+        "if (Test-Path $data) { Write-Output \"veyq: $data is left behind\"; exit 1 }",
+        f"Remove-Item -Force -ErrorAction SilentlyContinue -Path {ps_quote(str(REMOTE_RUN / 'app.json'))}",
+        "Write-Output 'veyq: uninstalled; nothing of the package is left'",
+    ]))
+    return code or uninstall
+
+
+def drop_dev_cert() -> int:
+    """Removes `package --sign`'s development certificate (by its FriendlyName) from CurrentUser\\My, key and all, and
+    its public half from LocalMachine\\TrustedPeople."""
+    return powershell("\n".join([
+        f"$mine = @(Get-ChildItem Cert:\\CurrentUser\\My | Where-Object FriendlyName -eq {ps_quote(DEV_CERT_NAME)})",
+        "foreach ($c in $mine) {",
+        "  Get-ChildItem Cert:\\LocalMachine\\TrustedPeople | Where-Object Thumbprint -eq $c.Thumbprint | Remove-Item",
+        "  Remove-Item -DeleteKey -Path (Join-Path Cert:\\CurrentUser\\My $c.Thumbprint)",
+        "  Write-Output ('veyq: removed the development certificate ' + $c.Thumbprint)",
+        "}",
+        "if ($mine.Count -eq 0) { Write-Output 'veyq: no development certificate on this host' }",
+    ]))
 
 
 def run_task(task: str, wait_for: PureWindowsPath, seconds: int) -> int:
@@ -716,6 +1093,11 @@ def main() -> None:
     h = verbs.add_parser("hello-probe", help="run the Hello probe in the logged-on session: the person enters the PIN, then cancels")
     h.add_argument("--timeout", type=int, default=3600)
     h.add_argument("--check", action="store_true", help="stop before the first key: the launch and Hello's availability, no prompt")
+    k = verbs.add_parser("package", help="build the MSIX (Release, unsigned) on the Windows host; --sign signs a copy")
+    k.add_argument("--sign", nargs="?", const="", metavar="PFX",
+                   help="sign a copy: with PFX (password in VEYQ_MSIX_PFX_PASSWORD), else the host's development certificate")
+    k.add_argument("--smoke", action="store_true", help="with --sign: install the signed copy, start it to its sign-in, uninstall")
+    verbs.add_parser("drop-dev-cert", help="remove package --sign's development certificate from the Windows host")
     verbs.add_parser("register", help="register the scheduled tasks veyq-app and veyq-drive on the Windows host (owner)")
     args = parser.parse_args()
     if args.verb == "test":
@@ -734,6 +1116,12 @@ def main() -> None:
         sys.exit(drive(args.steps))
     if args.verb == "hello-probe":
         sys.exit(hello_probe(args.timeout, args.check))
+    if args.verb == "package":
+        if args.smoke and args.sign is None:
+            sys.exit("--smoke installs the signed copy: it goes with --sign")
+        sys.exit(package(args.sign, args.smoke))
+    if args.verb == "drop-dev-cert":
+        sys.exit(drop_dev_cert())
     if args.verb == "register":
         sys.exit(register())
 

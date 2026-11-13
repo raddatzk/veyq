@@ -25,8 +25,9 @@ Outputs (each optional, each a directory this script owns and rewrites whole):
                         ResourceDictionary that makes the web's brand role (`accent`) the app's accent — `SystemAccentColor`
                         and each of its light and dark steps (`WINUI_ACCENT_KEYS`) — under `ThemeDictionaries`, light and
                         dark; everything else is Fluent's own; and the app icon `veyq.ico` (`WINDOWS_ICON_PX`, a PNG frame
-                        each, rendered by Quick Look as Apple's are), the exe's and the window's. MSIX's PNG assets are
-                        the packaging's.
+                        each, rendered by Quick Look as Apple's are), the exe's and the window's; and the MSIX's PNG
+                        assets under `msix/` (`MSIX_ASSETS`, the same plate each at its own size: ADR 0133 decision 6),
+                        which the package build links in as `Assets\\`.
 
 A role the apps paint with that base.css no longer sets is red (exit 1), never a fallback.
 """
@@ -429,17 +430,31 @@ def ico(frames: dict[int, bytes]) -> bytes:
     return head + entries + data
 
 
-def write_windows_icon(out: Path, pal: dict[str, dict[str, tuple]]) -> None:
-    """`veyq.ico`: the light mark on a plate of the web's light surface, each frame rendered at its own size by macOS'
-    Quick Look. One ICO cannot follow the taskbar's theme, and the light mark's grey stroke has no contrast on a dark
-    taskbar nor the dark mark's deep purple on one: the plate keeps the mark on the background it was drawn for."""
+# The MSIX's images (ADR 0133 decision 6), each a file name the package's manifest names (Package.appxmanifest) with
+# its MRT qualifier, and its pixels: the Start and taskbar icon (Square44x44Logo) at the shell's scales and at the target
+# sizes the taskbar and Explorer take unscaled (the `altform-unplated` ones are drawn without the shell's plate, which
+# the icon carries itself), the medium tile (Square150x150Logo) and the package's logo (StoreLogo), 100 to 400 %. No
+# wide tile: Windows 11 draws none, and Quick Look renders only squares.
+MSIX_ASSETS = {
+    **{f"Square44x44Logo.scale-{s}.png": round(44 * s / 100) for s in (100, 125, 150, 200, 400)},
+    **{f"Square44x44Logo.targetsize-{t}{alt}.png": t for t in (16, 24, 32, 48, 256) for alt in ("", "_altform-unplated")},
+    **{f"Square150x150Logo.scale-{s}.png": round(150 * s / 100) for s in (100, 125, 150, 200, 400)},
+    **{f"StoreLogo.scale-{s}.png": round(50 * s / 100) for s in (100, 125, 150, 200, 400)},
+}
+
+
+def plates(pal: dict[str, dict[str, tuple]], sizes: set[int]) -> dict[int, bytes]:
+    """The Windows icon at each of [sizes]: the light mark on a plate of the web's light surface, each a PNG rendered at
+    its own size by macOS' Quick Look. One image cannot follow the taskbar's theme, and the light mark's grey stroke
+    has no contrast on a dark taskbar nor the dark mark's deep purple on one: the plate keeps the mark on the
+    background it was drawn for."""
     import subprocess
     import tempfile
 
     hexrgb = lambda c: "#{:02x}{:02x}{:02x}".format(*(round(v) for v in c[:3]))  # noqa: E731
     frames = {}
     with tempfile.TemporaryDirectory() as tmp:
-        for px in WINDOWS_ICON_PX:
+        for px in sorted(sizes):
             src = Path(tmp) / f"veyq-{px}.svg"
             src.write_text(_icon_svg(BRAND / "logo-light.svg", hexrgb(pal["light"]["surface"]), plate_px=px))
             subprocess.run(["qlmanage", "-t", "-s", str(px), "-o", tmp, str(src)], check=True, capture_output=True)
@@ -447,7 +462,16 @@ def write_windows_icon(out: Path, pal: dict[str, dict[str, tuple]]) -> None:
             if png[:8] != b"\x89PNG\r\n\x1a\n" or png[16:24] != px.to_bytes(4, "big") * 2:
                 sys.exit(f"Quick Look rendered no {px} px PNG for the Windows icon")
             frames[px] = png
-    (out / "veyq.ico").write_bytes(ico(frames))
+    return frames
+
+
+def write_windows_icon(out: Path, pal: dict[str, dict[str, tuple]]) -> None:
+    """`veyq.ico` (a frame per WINDOWS_ICON_PX) and the MSIX's images under `msix/`, all from one rendering per size."""
+    frames = plates(pal, set(WINDOWS_ICON_PX) | set(MSIX_ASSETS.values()))
+    (out / "veyq.ico").write_bytes(ico({px: frames[px] for px in WINDOWS_ICON_PX}))
+    (out / "msix").mkdir()
+    for name, px in MSIX_ASSETS.items():
+        (out / "msix" / name).write_bytes(frames[px])
 
 
 def write_winui(out: Path, pal: dict[str, dict[str, tuple]]) -> None:

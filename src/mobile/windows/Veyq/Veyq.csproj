@@ -1,6 +1,7 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <!-- The veyq app on Windows (ADR 0130 decision 5; ADR 0123's Consequences, the Windows app): WinUI 3 over the core's
-       veyq.dll, unpackaged (MSIX is the packaging's), x64 (Kotlin/Native has no Windows ARM64 target), self-contained
+       veyq.dll, unpackaged in the development loop (run.py build and run), packaged as an MSIX by run.py package (VeyqPackage,
+       below; ADR 0133 decision 6), x64 (Kotlin/Native has no Windows ARM64 target), self-contained
        with the Windows App SDK and .NET, so its build output runs where it is copied. Its words, theme and the bridge's
        types are generated (src/mobile/build/generated, never committed); windows/run.py build writes them first. -->
   <PropertyGroup>
@@ -11,7 +12,7 @@
     <Platforms>x64</Platforms>
     <PlatformTarget>x64</PlatformTarget>
     <UseWinUI>true</UseWinUI>
-    <WindowsPackageType>None</WindowsPackageType>
+    <WindowsPackageType Condition="'$(VeyqPackage)' != 'true'">None</WindowsPackageType>
     <WindowsAppSDKSelfContained>true</WindowsAppSDKSelfContained>
     <SelfContained>true</SelfContained>
     <!-- No trimming or AOT property: one implies an SDK-versioned package, and the lock file would be the SDK's
@@ -33,6 +34,25 @@
          VeyqTheme: a property reads only those set above it. -->
     <ApplicationIcon>$(VeyqTheme)veyq.ico</ApplicationIcon>
   </PropertyGroup>
+  <!-- The MSIX (ADR 0133 decision 6): single-project packaging through the Windows App SDK's own MSBuild tooling
+       (Microsoft.Windows.SDK.BuildTools.MSIX, already in the lock through the Windows App SDK), unsigned — a copy is
+       signed after, so the payload the block map hashes is the one built here (decision 7). The manifest is the
+       template Package.appxmanifest.in filled by run.py package; the images are generate_theme.py's. Still
+       self-contained: the package needs no Windows App Runtime framework package installed. -->
+  <PropertyGroup Condition="'$(VeyqPackage)' == 'true'">
+    <WindowsPackageType>MSIX</WindowsPackageType>
+    <EnableMsixTooling>true</EnableMsixTooling>
+    <GenerateAppxPackageOnBuild>true</GenerateAppxPackageOnBuild>
+    <AppxPackageSigningEnabled>false</AppxPackageSigningEnabled>
+    <AppxBundle>Never</AppxBundle>
+    <AppxSymbolPackageEnabled>false</AppxSymbolPackageEnabled>
+    <GenerateTestArtifacts>false</GenerateTestArtifacts>
+    <GenerateTemporaryStoreCertificate>false</GenerateTemporaryStoreCertificate>
+  </PropertyGroup>
+  <ItemGroup Condition="'$(VeyqPackage)' == 'true'">
+    <AppxManifest Include="$(VeyqGenerated)msix/Package.appxmanifest" />
+    <Content Include="$(VeyqTheme)msix/*.png" Link="Assets/%(Filename)%(Extension)" />
+  </ItemGroup>
   <ItemGroup>
     <PackageReference Include="Microsoft.WindowsAppSDK.WinUI" />
     <PackageReference Include="Microsoft.WindowsAppSDK.Foundation" />
@@ -51,6 +71,8 @@
   <Target Name="VeyqAppGenerated" BeforeTargets="PrepareForBuild">
     <Error Condition="!Exists('$(VeyqWords)Words.g.cs') Or !Exists('$(VeyqTheme)Theme.xaml') Or !Exists('$(VeyqTheme)veyq.ico')"
            Text="No generated words, theme or icon under $(VeyqGenerated): run windows/run.py build." />
+    <Error Condition="'$(VeyqPackage)' == 'true' And !Exists('$(VeyqGenerated)msix/Package.appxmanifest')"
+           Text="No filled package manifest under $(VeyqGenerated)msix: run windows/run.py package." />
     <Error Condition="'$(VeyqNative)' == '' Or !Exists('$(VeyqNative)')"
            Text="VeyqNative names no veyq.dll ('$(VeyqNative)'): windows/run.py build passes the core's DLL." />
   </Target>
