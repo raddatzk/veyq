@@ -13,6 +13,7 @@ sources:
   - docs/decisions/0109-a-scope-rotation-re-keys-every-node-below-it.md
   - docs/decisions/0121-a-received-share-is-browsed-in-place-through-its-own-api.md
   - docs/crosscutting/cc.security.csp.md
+  - docs/decisions/0133-the-desktop-apps-ship-as-a-flatpak-bundle-and-an-msix-built-in-checks-and-promoted-with-the-release.md
 ---
 
 This page collects what veyq does **not** protect against today, in one place. Each entry says why it remains, where
@@ -47,6 +48,7 @@ operator is you, and the active-operator entries do not apply.
 | [Per-instance rate limiting](#rate-limiting-is-per-instance) | online attacker | cc.security.rate-limit | deferred hardening |
 | [One seal implementation, no external audit](#assurance-one-implementation-no-external-audit) | — | ADR 0017 | a second independent implementation |
 | [Losing every way back is final](#losing-every-way-back-is-final) | — | security-model § Recovery | by design (no escrow) |
+| [The desktop app: Flathub's runtime, Windows' trust, no auto-update](#the-desktop-app-flathubs-runtime-windows-trust-no-auto-update) | whoever controls what Flathub serves you; whoever holds the MSIX's signing key | ADR 0133 | nothing recorded; a store listing would bring updates |
 
 ## The operator-served web client is passive-operator only
 
@@ -540,3 +542,29 @@ account keys after a compromise.
   § Consequences.
 
 **Closed by:** by design; escrow would break operator-blindness.
+
+## The desktop app: Flathub's runtime, Windows' trust, no auto-update
+
+The Linux and Windows apps are packaged for a release, which no release carries yet; these hold from the first one that
+does ([ADR 0133](https://github.com/raddatzk/veyq/blob/main/docs/decisions/0133-the-desktop-apps-ship-as-a-flatpak-bundle-and-an-msix-built-in-checks-and-promoted-with-the-release.md)).
+
+- **The Linux app runs on a runtime veyq does not ship.** The Flatpak bundle carries the app; the GNOME runtime under
+  it — GTK, libadwaita, GStreamer, the CA bundle and the rest it loads — comes from Flathub, the one central dependency
+  of a package. veyq builds and tests against one pinned commit of branch 51; a person's machine runs whatever commit of
+  that branch Flathub serves (decision 2). Whoever controls what Flathub serves you controls code that runs inside the
+  app's process, keys and plaintext included. A host that cannot or will not reach Flathub takes the runtime as a bundle
+  from a machine that has it (`flatpak build-bundle --runtime`), with the same trust in that runtime.
+- **Windows trusts the MSIX by its signature, and the signer is not decided.** A sideloaded MSIX installs only under a
+  certificate Windows trusts. Whether the release signs with a project certificate each person trusts once as
+  administrator — after which that Windows trusts every package that certificate's key signs, not only veyq's — or with
+  a certificate Windows already trusts is the owner's decision (decisions 7 and 12). The release's signing job and its
+  signer are not built.
+- **No auto-update.** There is no repository and no update feed of veyq's own (decision 9): a person learns of a new
+  release and installs its file, and until then runs the older app. A store listing would bring updates and is not
+  built.
+
+**Decided in:** [ADR 0133](https://github.com/raddatzk/veyq/blob/main/docs/decisions/0133-the-desktop-apps-ship-as-a-flatpak-bundle-and-an-msix-built-in-checks-and-promoted-with-the-release.md)
+  decisions 2, 7, 9 and 12.
+
+**Closed by:** nothing recorded for the runtime; the signer by the owner's decision before the first package is
+published; updates by a Flathub or Microsoft Store listing, each its own decision.
