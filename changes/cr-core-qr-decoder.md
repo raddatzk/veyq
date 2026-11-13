@@ -1,7 +1,7 @@
 ---
 id: cr-core-qr-decoder
 title: QR codes in the Kotlin core — one decoder and one encoder in common Kotlin, one scan model, a camera per app
-status: planned
+status: in-progress
 satisfies: []
 adrs: ["0129", "0130", "0123", "0059"]
 invariants:
@@ -124,7 +124,7 @@ half**, written into that ADR in phase 6. `SecretFreeSchemaTest` stays as it is:
 
 ## Phases
 
-- [ ] **1 the decoder** — `qr/` in commonMain (D1); ZXing's blackbox sets `qrcode-1..6` fetched by a Gradle task
+- [x] **1 the decoder** — `qr/` in commonMain (D1); ZXing's blackbox sets `qrcode-1..6` fetched by a Gradle task
   pinned by the zxing commit and each file's SHA-256 into `build/` (never committed), read in `jvmTest` through
   `javax.imageio`, each set held to its upstream thresholds per rotation; our own fixtures committed small (≤ 200 KiB
   in all) under `core/src/commonTest/resources/qr/`: a `veyqpair:`, a `veyqsignin:` and a `veyqkit:` code as the web's
@@ -133,13 +133,162 @@ half**, written into that ADR in phase 6. `SecretFreeSchemaTest` stays as it is:
   1280×720 frame measured on JVM and `macosArm64` and recorded. · Done when: `./gradlew :core:jvmTest
   :core:macosArm64Test` green with the corpus at or above every upstream threshold; a bite — Reed–Solomon's correction
   disabled — turns the corpus red.
-- [ ] **2 the encoder and the PNG** — D2. · Done when: every fixture text encodes and decodes back through phase 1's
+
+  **Status: done (2026-11-13).**
+
+  **Built:**
+  - core `qr/` (commonMain): ZXing's QR path ported from tag `zxing-3.5.4`, commit `f651b0a0` (Apache-2.0; `qr/NOTICE`
+    with ZXing's own NOTICE, `qr/LICENSE-ZXING`; each file names its upstream files and what changed) — `BitMatrix`
+    and `BitSource`, `Binarizer` (Hybrid with the global histogram below 40 px), `Geometry` (`PerspectiveTransform`,
+    `GridSampler`), `Detector` (finder and alignment pattern finders), `ReedSolomon` (QR's GF(256): decoder, and the
+    encoder phase 2 uses), `Version` (with `ErrorCorrectionLevel`, `FormatInformation`, `DataMask`, `Mode`),
+    `BitStreamParser` (with `guessCharset`), `QrDecoder`. Public: `QrFrame(width, height, rowStride, luminance)` and
+    `QrDecoder.decode(frame, tryHarder = false): String?`, which tries the frame as it is and then inverted, each also
+    mirrored.
+  - `:core:fetchQrCorpus` (`core/build.gradle.kts`): the 363 files of `qrcode-1..6` from raw.githubusercontent.com at the
+    pinned commit into `build/qr-corpus`, each held to its SHA-256 in `core/qr/zxing-corpus.sha256`; `jvmTest` depends
+    on it. `QrCorpusTest` (jvmTest) runs `AbstractBlackBoxTestCase`'s procedure: each image rotated bicubically to 0°,
+    90°, 180°, 270° (`QrImages.rotate`, upstream's code), its luminance as `BufferedImageLuminanceSource` takes it, read
+    as a pure code first and then through the detector, with and without trying harder; text and `ERRORS_CORRECTED`
+    compared; no misread allowed.
+  - Own fixtures: `core/qr/make_fixtures.py` (Python; the modules from the web's own `qrcode` through `node`) writes ten
+    PGMs (176 418 bytes) under `core/src/commonTest/resources/qr/`: a `veyqpair:`, a `veyqsignin:` (margin 1, black on
+    white) and the v1 vectors' `veyqkit:` with a server (margin 0, `#181426`, page white around), each inverted, and the
+    pairing code rotated 25°, in perspective, blurred and low-contrast with noise and a shadow (seeded; a rerun writes
+    the same bytes, measured by two runs' `shasum`). `QrDecoderTest` (commonTest, every target) reads them through
+    `readRepoFile` (JVM `java.io`, native POSIX).
+
+  **Met:**
+  - `./gradlew :core:jvmTest :core:macosArm64Test :bridge:jvmTest :core:compileKotlinLinuxX64 :core:compileKotlinMingwX64`
+    green. `QrCorpusTest` reads **exactly upstream's thresholds** on every set and rotation, with and without trying
+    harder, none misread (qrcode-1 17/14/17/14 of 20, -2 32/30/31/31 of 35, -3 38/39/36/39 of 42, -4 36/35/35/35 of 48,
+    -5 19 of 19 at each, -6 15/14/13/14 of 15) — the port reads what ZXing reads, no more, no less; the whole corpus in
+    about 4.6 s.
+  - Bites (`scratchpad/bite/bite.py`, one mutation at a time, `/bin/cp -f` restore, then the green run above), all six
+    bit: Reed–Solomon's correction disabled → `QrCorpusTest` red (the CR's bite); the inverted retry removed → the
+    inverted fixtures red; the mirrored retry removed → `aCodeSeenInAMirrorReads` red; Shift_JIS guessed as ISO-8859-1 →
+    the corpus misreads; errors corrected not counted → the corpus' `ERRORS_CORRECTED` red; one pinned hash changed →
+    `:core:fetchQrCorpus` refuses the file.
+  - Every own fixture reads on the JVM and on `macosArm64`, with and without trying harder; a grey frame, noise and the
+    top half of a code read nothing. ZXing itself (compiled from the pinned commit, `PlanarYUVLuminanceSource`) reads the
+    same fixtures the same way, the inverted ones not at all (it tries no inversion).
+  - The per-frame time (`aFramesCostIsMeasured`, printed, never asserted; this Mac, M-series): a 1280×720 frame with a
+    pairing code **1.3 ms on the JVM, 13.5 ms on `macosArm64`**, without a code 1.5 ms / 19.4 ms; a kit page rendered
+    2400×3394 (the code 610 px) 8.6 ms / 82 ms, trying harder 11.7 ms / 143 ms. The native numbers are the debug test
+    binary's (no optimisation); a release framework is faster.
+
+  **Deviations:**
+  - **Kanji, Hanzi and the legacy ECIs are parsed, not decoded** (the CR left them out). Measured: 14 of qrcode-2's 35
+    texts are Japanese (Shift_JIS byte segments and Kanji mode), so upstream's 32-of-35 threshold cannot be met without
+    them. Common Kotlin has no Shift_JIS or GB2312 decoder, and a 7 000-entry table for codes veyq never draws is
+    weight without use. So `BitStreamParser` reads every mode into `QrContent` pieces — text for numeric, alphanumeric
+    and UTF-8/ISO-8859-1/ASCII bytes, the raw bytes and the set's name for the rest —, `QrDecoder.decode` answers null
+    for a code with such a piece, and the corpus test decodes those pieces with the JVM's charsets. Structured append's
+    header is read and ignored; FNC1 is honoured as upstream.
+  - **The pure-code reading is ported** (`QrDecoder.pure`, internal) because upstream's harness tries it first; only the
+    corpus test calls it.
+  - The symbology identifier (`]Q1`) of two metadata files is not compared (the port keeps no result metadata but the
+    errors corrected).
+  - Both desktops' `run.py build` were not run: phases 1–3 add only common Kotlin, so what reaches the desktops is the
+    core's compile for their targets, run above (`compileKotlinLinuxX64`, `compileKotlinMingwX64`).
+
+- [x] **2 the encoder and the PNG** — D2. · Done when: every fixture text encodes and decodes back through phase 1's
   decoder at level M, the largest byte payload level M holds (version 40, 2331 bytes) included and one byte more refused; a matrix from the core decodes in the web's `jsqr` (one
   committed PNG read by a test in `src/web/` — the one web line this CR adds) and the web's `qrcode` output decodes in
   the core (phase 1's fixtures); `QrPng` output reads back through `javax.imageio` to the same modules.
-- [ ] **3 the scan model** — `QrScan` (D3) in commonMain over a played clock and decoder. · Done when: `commonTest`
+
+  **Status: done (2026-11-13).**
+
+  **Built:**
+  - core `qr/QrEncoder.kt`: ZXing's `Encoder`, `MatrixUtil`, `MaskUtil` (and the parts of `BitArray`, `ByteMatrix` it
+    uses) at level M, sharing the decoder's `Version` table (its alignment centres too) and `ReedSolomonEncoder`. Public:
+    `QrEncoder.encode(text): QrMatrix` — the smallest version, the mask the penalty rules choose, an
+    IllegalArgumentException past version 40 — and `QrMatrix` (`size`, `side` with the 4-module `QUIET_ZONE`,
+    `dark(x, y)` over the drawn grid, the zone included). One segment, as upstream: numeric, alphanumeric, or the text's
+    **UTF-8 bytes without an ECI**, as the web's `qrcode` writes a byte segment (upstream defaults to ISO-8859-1).
+  - core `qr/QrPng.kt`: `QrPng.write(matrix, scale)` — a 1-bit greyscale PNG, stored deflate blocks, CRC-32 and
+    Adler-32, at most `MAX_SIDE` 4096 px; version 40 at scale 8 (1480 px) is about 275 KB.
+  - The interop: `src/web/src/features/account/pairing/__fixtures__/core-pairing-code.png` (the pairing fixture's text at
+    scale 4, 3 676 bytes) and `coreQrCode.test.ts`, the web's one new test, which unpacks it with `node:zlib` and reads it
+    with `jsqr`; the core's `QrPngImageTest` holds the file to `QrPng`'s output (rewritten with `VEYQ_WRITE_QR_FIXTURE=1`).
+    The other direction — the web's `qrcode` read by the core — is phase 1's fixtures.
+
+  **Met:**
+  - `./gradlew :core:jvmTest :core:macosArm64Test :bridge:jvmTest :core:compileKotlinLinuxX64 :core:compileKotlinMingwX64`
+    green; in `src/web`, `pnpm exec vitest run src/features/account/pairing/coreQrCode.test.ts`, `pnpm exec eslint` on it
+    and `pnpm run typecheck` green.
+  - `QrEncoderTest`: the three fixture texts and an empty, a numeric, an alphanumeric, a non-Latin (`Grüße — 漢字 ✓ 🙂`) and
+    a link text each read back through phase 1's decoder at 3 px a module; each at level M (read from its format
+    information) with a light quiet zone of four modules; 2331 bytes are version 40 and read back at 2 px a module, 2332
+    are refused. `QrPngImageTest`: `javax.imageio` reads the kit's code, the 2331-byte code and a one-digit code pixel for
+    pixel as the matrix; `java.util.zip.Inflater` inflates a 131 087-byte stream across three stored blocks with its
+    Adler-32. The corpus still at upstream's thresholds, none misread.
+  - Bites (`scratchpad/bite/bite.py`, `phase2.json`), eleven, ten bit: data not masked, the exhaustive retry removed, the
+    empty-segment rule removed, the PNG's polarity inverted, Adler-32 started at 0, a stored block of 65 536 bytes, the
+    capacity off by one, level L, a quiet zone of 3, the web fixture stale (the zlib header changed) — each its named
+    test red. **Missed, as an equivalent mutant:** `chooseVersion` answering version 40 for an oversized text — the
+    second refusal (`terminateBits`) still refuses it; both turned off together, the test is red. The web side bitten by
+    hand: data not masked, the fixture rewritten from it → `coreQrCode.test.ts` red (`jsqr` reads nothing); restored and
+    rewritten → green.
+
+  **Deviations:**
+  - **Phase 1's decoder gained two rules the round trip found.** (1) ZXing (the port, and ZXing itself, compiled from the
+    pinned commit) does not read the core's own `veyqkit:` code drawn crisp at 3, 4 or 5 px a module: its finder stops
+    once three confirmed patterns agree, and a run of data modules passed for the bottom-left one (rows 132 vs 172 at 3
+    px). `QrDecoder.read` now scans the whole frame again (`FinderPatternFinder.find(exhaustive = true)`) when the first
+    reading stopped early and failed; a frame with no code never stops early, so it costs nothing there, and the
+    corpus' counts did not change. This matters for `cr-app-kit-sign-in`, whose kit page is a crisp rendering. (2) An
+    empty byte segment is the empty text (upstream's guess names Shift_JIS for zero bytes, which the core leaves
+    encoded).
+  - The encoder writes UTF-8 without an ECI (above), and only level M: no caller of the CR asks for another.
+
+- [x] **3 the scan model** — `QrScan` (D3) in commonMain over a played clock and decoder. · Done when: `commonTest`
   holds one decode in flight (a second frame dropped), a foreign code skipped, the first accepted one settling,
   `Closed` stopping it, an oversized frame refused; core checks green.
+
+  **Status: done (2026-11-13).**
+
+  **Built:**
+  - core `qr/QrScan.kt`: `QrScan<T : Any>(accepts, decode = QrDecoder.decode, scope)` — `state`/`current`/`watch` as the
+    other screen models; `State` `Starting`, `NoCamera`, `Denied`, `Scanning`, `Found(value)`, `Closed`; `camera(Camera)`
+    (`RUNNING`, `NONE`, `DENIED`) from the host; `offer(frame): Boolean` — taken and decoded on the model's scope while
+    `Scanning` and no other decode runs, else dropped (false), a frame over `MAX_EDGE` 1280 px on its long edge an
+    IllegalArgumentException —; `close()`. A code `accepts` maps to null, or whose parse throws, is skipped and the scan
+    goes on; only `Found`'s `T` leaves the model. Once `Found` or `Closed`, no frame is read and the camera changes
+    nothing; a decode still running when the scan closes cannot settle it.
+
+  **Met:**
+  - `./gradlew :core:jvmTest :core:macosArm64Test :bridge:jvmTest :core:compileKotlinLinuxX64 :core:compileKotlinMingwX64`
+    green. `QrScanTest` (commonTest, seven cases): one decode in flight and a second frame dropped; a foreign code skipped
+    and the first accepted one settling, nothing read after it, the camera then changing nothing; a parser that throws
+    skipping its code; `close` stopping the scan even with a decode in flight that ignores cancellation (as the real,
+    CPU-bound decode does); nothing read before the camera runs, `NoCamera` and `Denied` as states; frames over 1280 px
+    refused on either edge; the core's own decoder settling a scan on the rotated fixture, the states watched in order.
+  - Bites (`phase3.json`), seven, all bit: the in-flight guard removed, a foreign code ending the scan, the parser's
+    throw not caught, a decode settling after `close`, an oversized frame taken, a frame read before the camera runs, the
+    camera moving a found scan. The `close` bite first **missed**: the played decoder suspended cancellably, so `close`'s
+    job cancel hid the state guard; the played decoder now has a non-cancellable mode, which the real decoder is, and
+    the bite then bit.
+
+  **Deviations:**
+  - **No played clock**: D3's model has no timing of its own — the backpressure is the in-flight flag, a host sends its
+    next frame when the last call answered —, so the tests play the decoder and the dispatcher (`runTest`), not a clock.
+  - `offer` refuses an oversized frame with an IllegalArgumentException rather than a third answer: a host that sends one
+    has a bug, not a state; phase 5's `Scan.Frame` answers it as a refusal.
+
+  **For phase 4 on, and for `cr-app-kit-sign-in`:**
+  - A still image goes to `QrDecoder.decode(frame, tryHarder = true)` directly, not through `QrScan`: the decoder has no
+    size limit (a 2400×3394 kit page measured above, about 8 MB of luminance and a 1 MB bit matrix); `QrScan`'s 1280 px
+    bound is for a camera's stream only. A page with the code small on it reads; a crisp rendering is what the
+    exhaustive retry of phase 2 exists for.
+  - The text stays in the core: the caller's parser is `accepts` (a `veyqkit:` parser returning its kit data), and the
+    model hands on only `Found(T)`. Through the bridge (phase 5) only luminance comes in — a frame, or a rendered page
+    as one more inbound payload — and the answer names what the model moved to; on Android and Apple a Kotlin or Swift
+    view holds the `QrScan` and observes it, so nothing is bridged at all.
+  - Each host converts its camera's frame to `QrFrame` itself: the Y plane with its row stride (`rowStride` > `width` is
+    taken as is), scaled to at most 1280 px on the long edge. A JVM decode of 1280×720 costs about 1 ms, the native debug
+    test binary's about 14 ms; a release build should be measured once on a device in phase 4.
+
 - [ ] **4 Android and Apple** — the camera views (D4) on the core's `QrScan`, with the test camera; the camera
   dependencies recorded in `gradle/libs.versions.toml` with their maintenance check. · Done when: on the throwaway AVD
   the virtual scene's poster of a fixture code settles a scan; on the simulator the test camera does; on this Mac the
@@ -173,3 +322,22 @@ every `:core:jvmTest`.
 **Decided** (the coordinator, 2026-11-12, under the owner's standing mandate to decide and report; the owner may overturn any):
 - 1: yes, the desktops get a camera (phase 5 as written).
 - 2: the three real-camera passes stay the owner's steps; until then those paths are measured through the test camera only.
+
+## Retrospective
+
+Phases 1–3 (the implementer, 2026-11-13):
+- **The CR's "Kanji left out" could not meet its own bar.** 14 of qrcode-2's 35 images are Japanese, so upstream's
+  thresholds need the Kanji mode and a Shift_JIS byte guess; measured in the first corpus run, solved by keeping such
+  segments as bytes (phase 1's deviation). Root cause: the refine counted the corpus' images (R5) but did not read the
+  expected texts. Next time: a CR that adopts a corpus' thresholds reads what the corpus expects before scoping out a
+  feature.
+- **A round trip found what the corpus did not.** ZXing does not read its own crisp version-10 code at 3–5 px a module
+  (a data run taken for a finder pattern); the corpus is photos and never shows it. The encoder's round trip did, and
+  so would every rendered kit page. Next time: hold a port to its upstream corpus *and* to the product's own outputs,
+  both directions, before calling it done.
+- **Two bites missed first, both for a reason worth keeping:** a capacity check behind a second refusal (equivalent
+  mutant, bitten with both off) and a `close` guard hidden by the played decoder's cancellability (the test now plays
+  the real decoder's non-cancellable decode). The worktree's write hook forbade the Write tool into a worktree created
+  by `git worktree add` until the session entered it (`EnterWorktree` with its path): a brief that has the implementer
+  create its own worktree should say so.
+
