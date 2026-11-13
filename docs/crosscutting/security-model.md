@@ -142,7 +142,9 @@ member and a guest. Lane L1 drives it in a browser against a fixed ECB table, ne
 **Background music is the fourth instance, and the one that runs a third party's code** ([ADR 0131](../decisions/0131-a-memorys-background-music-plays-through-the-vendors-sdk-in-a-frame-of-its-own-origin.md),
 [uc.memory.music](../features/memory/use-cases/uc.memory.music.md)). A Memory's Spotify or Apple Music playlist plays
 through the vendor's own SDK (Spotify's Web Playback SDK, Apple's MusicKit JS), which the vendor serves and can change at
-any time. The fences:
+any time. It is **released dark** (ADR 0131 decision 8): until the TEMPORARY flag `VEYQ_MUSIC_RELEASED=true` none of
+the below exists - no entry, no frame, no music host served, the app's policies as before (`MusicDarkSliceTest`). The
+fences, once it is on:
 
 - **Never in the app origin.** The app origin holds the viewer's unlocked keys in memory; a script there reads every key
   and every plaintext the viewer can open. The SDK runs only in the **music frame**, a page the backend serves on the

@@ -44,6 +44,7 @@ By hand, copy the template to `.env` and fill it in: every required variable has
 | `GARAGE_ADMIN_TOKEN` | Yes | — | The bundled Garage's admin token. The application reads it too: it sets the bundled store up with it and derives the store's access keys from it, so there is no store key to set |
 | `ADMIN_DOMAIN` | No | unset | A hostname of the admin surface's own. Unset, the console is reachable from the host only ([First-run setup](/run/first-run/#reach-the-console)); set it only after the Server Owner exists |
 | `ADMIN_PORT` | No | `8081` | The host port the admin surface is published on, on `127.0.0.1` only |
+| `MUSIC_RELEASED` | No | `false` | Switches background music on; it is not released yet and stays off on every instance until this is `true`, whatever the three below say. A temporary switch, removed once the music is released ([Background music](/run/capabilities/#background-music)) |
 | `MUSIC_DOMAIN` | No | unset | The music host for background music: a hostname of its own beside `VEYQ_DOMAIN`, routed to the application, which serves the music frame there and nothing else. Unset, no music plays in veyq ([Background music](/run/capabilities/#background-music)) |
 | `MUSIC_SPOTIFY_CLIENT_ID` | No | unset | The client ID of your Spotify app; with `MUSIC_DOMAIN`, Spotify playlists play in veyq |
 | `MUSIC_APPLE_DEVELOPER_TOKEN` | No | unset | A MusicKit developer token (a JWT, valid at most six months); with `MUSIC_DOMAIN`, Apple Music playlists play in veyq until it expires |
@@ -89,6 +90,7 @@ network policy is on, `externalDatabase.jdbcUrl` when `mariadb.enabled` is `fals
 | `admin.image.digest` | — | Its verified digest |
 | `admin.image.pullPolicy` | `IfNotPresent` | |
 | `admin.domain` | — | A hostname of the admin surface's own; unset, it is reached by port-forward only |
+| `music.released` | `false` | As `MUSIC_RELEASED` above; while false the chart renders nothing of the three below |
 | `music.domain` | — | The music host for background music, as `MUSIC_DOMAIN` above: an HTTPRoute to the application and, under `per-domain`, a listener and certificate of its own |
 | `music.spotifyClientId` | — | As `MUSIC_SPOTIFY_CLIENT_ID` above |
 | `music.appleDeveloperToken` | — | As `MUSIC_APPLE_DEVELOPER_TOKEN` above |
