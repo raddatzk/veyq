@@ -121,7 +121,7 @@ impl Page {
             .content_height(720)
             .build();
         dialog.add(&page);
-        let rename = adw::EntryRow::builder().title(words::account_page_rename()).show_apply_button(true).build();
+        let rename = adw::EntryRow::builder().title(words::account_settings_rename()).show_apply_button(true).build();
         let p = Rc::new(Self {
             dialog,
             page,
@@ -210,25 +210,25 @@ impl Page {
     }
 
     fn account(&self, s: &SettingsShown) -> Option<adw::PreferencesGroup> {
-        let group = adw::PreferencesGroup::builder().title(words::account_page_account()).build();
-        let email = adw::ActionRow::builder().title(words::account_page_email()).subtitle(s.email.as_str()).use_markup(false).subtitle_selectable(true).build();
+        let group = adw::PreferencesGroup::builder().title(words::account_settings_account()).build();
+        let email = adw::ActionRow::builder().title(words::account_settings_email()).subtitle(s.email.as_str()).use_markup(false).subtitle_selectable(true).build();
         email.add_css_class("property");
         group.add(&email);
         match s.email_confirmed {
-            Some(true) => group.set_description(Some(&words::account_page_email_confirmed())),
-            Some(false) => group.set_description(Some(&words::account_page_email_unconfirmed())),
+            Some(true) => group.set_description(Some(&words::account_settings_email_confirmed())),
+            Some(false) => group.set_description(Some(&words::account_settings_email_unconfirmed())),
             None => {}
         }
         Some(group)
     }
 
     fn device(self: &Rc<Self>, s: &SettingsShown) -> Option<adw::PreferencesGroup> {
-        let group = adw::PreferencesGroup::builder().title(words::account_page_this_device()).build();
+        let group = adw::PreferencesGroup::builder().title(words::account_settings_this_device()).build();
         // how this device trusts the account, as "Manage servers" says it
         if let Some(line) = manage::trust_line(s.trusted) {
             group.set_description(Some(&line));
         }
-        self.rename.set_tooltip_text(Some(&words::account_page_rename_hint()));
+        self.rename.set_tooltip_text(Some(&words::account_settings_rename_hint()));
         group.add(&self.rename);
         *self.rename_group.borrow_mut() = Some(group.clone());
         for change in manage::changes(s.trusted, s.level, &s.levels) {
@@ -264,7 +264,14 @@ impl Page {
             let weak = Rc::downgrade(self);
             forget.connect_activated(move |_| {
                 if let Some(p) = weak.upgrade() {
-                    p.act("stop trusting", |settings| Call::SettingsStopTrusting { settings });
+                    // asked first, as the phones ask
+                    p.ask_then(
+                        words::account_settings_untrust_confirm_title(),
+                        words::account_settings_untrust_confirm(),
+                        words::manage_forget_device(),
+                        "stop trusting",
+                        |settings| Call::SettingsStopTrusting { settings },
+                    );
                 }
             });
             group.add(&forget);
@@ -273,14 +280,14 @@ impl Page {
     }
 
     fn sessions(self: &Rc<Self>, s: &SettingsShown) -> Option<adw::PreferencesGroup> {
-        let mut hint = words::account_page_sessions_hint();
+        let mut hint = words::account_settings_sessions_sub();
         // the names are missing, the rows still act (ADR 0028 decision 7)
         if let Some(why) = &s.register_refusal {
             hint = format!("{hint}\n\n{}", said::key(why));
         }
-        let group = adw::PreferencesGroup::builder().title(words::account_page_sessions()).description(hint).build();
+        let group = adw::PreferencesGroup::builder().title(words::account_settings_sessions()).description(hint).build();
         let Some(families) = &s.families else {
-            let loading = adw::ActionRow::builder().title(words::account_page_loading()).build();
+            let loading = adw::ActionRow::builder().title(words::account_settings_sessions_loading()).build();
             loading.add_prefix(&adw::Spinner::new());
             group.add(&loading);
             return Some(group);
@@ -289,15 +296,15 @@ impl Page {
             group.add(&self.family(s, f));
         }
         if s.has_others {
-            let others = adw::ButtonRow::builder().title(words::account_page_revoke_others()).build();
+            let others = adw::ButtonRow::builder().title(words::account_settings_revoke_others()).build();
             others.add_css_class("destructive-action");
             let weak = Rc::downgrade(self);
             others.connect_activated(move |_| {
                 if let Some(p) = weak.upgrade() {
                     p.ask_then(
-                        words::account_page_revoke_others(),
-                        words::account_page_revoke_others_confirm(),
-                        words::account_page_revoke_others(),
+                        words::account_settings_revoke_others(),
+                        words::account_settings_revoke_others_confirm(),
+                        words::account_settings_revoke_others(),
                         "sign out every other",
                         |settings| Call::SettingsSignOutOthers { settings },
                     );
@@ -314,12 +321,12 @@ impl Page {
         let title = match (&f.label, f.current) {
             (Some(label), _) => label.clone(),
             (None, true) => s.device.clone(),
-            (None, false) => words::account_page_other_device(),
+            (None, false) => words::account_settings_other_device(),
         };
         let row = adw::ActionRow::builder().title(title).subtitle(family_dates(f)).use_markup(false).subtitle_lines(2).build();
         row.add_prefix(&gtk::Image::from_icon_name(if f.current { "computer-symbolic" } else { "network-workgroup-symbolic" }));
         if f.current {
-            let here = gtk::Label::builder().label(words::account_page_you_are_here()).valign(gtk::Align::Center).build();
+            let here = gtk::Label::builder().label(words::account_settings_current()).valign(gtk::Align::Center).build();
             here.add_css_class("dim-label");
             row.add_suffix(&here);
         }
@@ -333,14 +340,14 @@ impl Page {
             let Some(p) = weak.upgrade() else { return };
             let family = id.clone();
             let (heading, body) = if current {
-                (words::account_page_revoke_self(), words::account_page_revoke_self_confirm())
+                (words::account_settings_revoke_self(), words::account_settings_revoke_self_confirm())
             } else {
-                (words::account_page_revoke(), words::account_page_revoke_confirm())
+                (words::account_settings_revoke(), words::account_settings_revoke_confirm())
             };
             p.ask_then(heading.clone(), body, heading, "sign out", move |settings| Call::SettingsSignOut { settings, family });
         });
         actions.add_action(&revoke);
-        menu.append(Some(&if f.current { words::account_page_revoke_self() } else { words::account_page_revoke() }), Some("family.revoke"));
+        menu.append(Some(&if f.current { words::account_settings_revoke_self() } else { words::account_settings_revoke() }), Some("family.revoke"));
         if f.removes_key {
             let escalate = gio::SimpleAction::new("escalate", None);
             let (weak, id) = (Rc::downgrade(self), f.id.clone());
@@ -348,16 +355,16 @@ impl Page {
                 let Some(p) = weak.upgrade() else { return };
                 let family = id.clone();
                 p.ask_then(
-                    words::account_page_escalate_title(),
-                    words::account_page_escalate_confirm(),
+                    words::account_settings_escalate(),
+                    words::account_settings_escalate_confirm(),
                     // the web's short words: the title's would be cut on the dialog's button
-                    words::account_page_escalate_accept(),
+                    words::account_settings_escalate_accept(),
                     "sign out and remove the saved key",
                     move |settings| Call::SettingsSignOutAndRemoveKey { settings, family },
                 );
             });
             actions.add_action(&escalate);
-            menu.append(Some(&words::account_page_escalate()), Some("family.escalate"));
+            menu.append(Some(&words::account_settings_escalate()), Some("family.escalate"));
         }
         row.insert_action_group("family", Some(&actions));
         let more = gtk::MenuButton::builder().icon_name("view-more-symbolic").menu_model(&menu).valign(gtk::Align::Center).tooltip_text(row.title()).build();
@@ -370,20 +377,20 @@ impl Page {
         if s.kept_devices.is_empty() && !s.other_saved_keys {
             return None;
         }
-        let group = adw::PreferencesGroup::builder().title(words::account_page_saved_keys()).description(words::account_page_saved_keys_hint()).build();
+        let group = adw::PreferencesGroup::builder().title(words::account_settings_saved_keys()).description(words::account_settings_saved_keys_sub()).build();
         for d in &s.kept_devices {
-            let row = adw::ActionRow::builder().title(d.label.as_str()).subtitle(words::account_page_saved_key_row()).use_markup(false).build();
-            let remove = gtk::Button::builder().icon_name("user-trash-symbolic").valign(gtk::Align::Center).tooltip_text(words::account_page_remove_key()).build();
-            remove.update_property(&[gtk::accessible::Property::Label(&words::account_page_remove_key())]);
+            let row = adw::ActionRow::builder().title(d.label.as_str()).subtitle(words::account_settings_saved_key_row()).use_markup(false).build();
+            let remove = gtk::Button::builder().icon_name("user-trash-symbolic").valign(gtk::Align::Center).tooltip_text(words::account_settings_remove_key()).build();
+            remove.update_property(&[gtk::accessible::Property::Label(&words::account_settings_remove_key())]);
             remove.add_css_class("flat");
             let (weak, device, label) = (Rc::downgrade(self), d.device_id.clone(), d.label.clone());
             remove.connect_clicked(move |_| {
                 let Some(p) = weak.upgrade() else { return };
                 let device = device.clone();
                 p.ask_then(
-                    words::account_page_remove_key(),
-                    words::account_page_remove_key_confirm(&label),
-                    words::account_page_remove_key(),
+                    words::account_settings_remove_key(),
+                    words::account_settings_remove_key_confirm(&label),
+                    words::account_settings_remove_key(),
                     "remove a saved key",
                     move |settings| Call::SettingsRemoveSavedKey { settings, device },
                 );
@@ -392,15 +399,15 @@ impl Page {
             group.add(&row);
         }
         if s.other_saved_keys {
-            let others = adw::ButtonRow::builder().title(words::account_page_remove_other_keys()).build();
+            let others = adw::ButtonRow::builder().title(words::account_settings_remove_other_keys()).build();
             others.add_css_class("destructive-action");
             let weak = Rc::downgrade(self);
             others.connect_activated(move |_| {
                 if let Some(p) = weak.upgrade() {
                     p.ask_then(
-                        words::account_page_remove_other_keys(),
-                        words::account_page_remove_other_keys_confirm(),
-                        words::account_page_remove_other_keys(),
+                        words::account_settings_remove_other_keys(),
+                        words::account_settings_remove_other_keys_confirm(),
+                        words::account_settings_remove_other_keys(),
                         "remove every other saved key",
                         |settings| Call::SettingsRemoveOtherSavedKeys { settings },
                     );
@@ -428,7 +435,7 @@ impl Page {
 
 /// A family's dates as its row says them: when it signed in and when it was last used, the ones the server sent.
 pub fn family_dates(f: &SettingsFamily) -> String {
-    let lines: Vec<String> = [f.created_at.map(|t| words::account_page_signed_in(&said::moment(t))), f.last_used_at.map(|t| words::account_page_last_used(&said::moment(t)))]
+    let lines: Vec<String> = [f.created_at.map(|t| words::account_settings_signed_in(&said::moment(t))), f.last_used_at.map(|t| words::account_settings_last_used(&said::moment(t)))]
         .into_iter()
         .flatten()
         .collect();
@@ -447,7 +454,7 @@ mod tests {
     fn a_familys_row_says_the_dates_the_server_sent() {
         let both = family_dates(&family(Some(1_793_527_200_000), Some(1_794_475_800_000)));
         assert_eq!(both.lines().count(), 2, "{both}");
-        assert!(both.starts_with(&words::account_page_signed_in("").trim_end().to_string()), "{both}");
+        assert!(both.starts_with(&words::account_settings_signed_in("").trim_end().to_string()), "{both}");
         assert_eq!(family_dates(&family(None, Some(1_794_475_800_000))).lines().count(), 1);
         assert_eq!(family_dates(&family(None, None)), "");
     }

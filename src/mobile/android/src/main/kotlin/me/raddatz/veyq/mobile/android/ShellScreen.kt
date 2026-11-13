@@ -179,6 +179,7 @@ fun ShellScreen(s: Screen.Signed, model: AppModel) {
             onSpace = { closeDrawerThen { model.switchSpace(it) } },
             onAddServer = { closeDrawerThen { model.openManage() } },
             onNew = { kind -> closeDrawerThen { model.requestNew(kind) } },
+            onSettings = { closeDrawerThen { model.openSettings() } },
             permanent = wide,
         )
     }
@@ -544,6 +545,8 @@ private fun Drawer(
     onAddServer: () -> Unit,
     /** The sidebar's "New": what a level creates ("folder", "pot"), opened on Home. */
     onNew: (String) -> Unit,
+    /** The drawer's Settings: the account's page (`cr-app-account-settings`). */
+    onSettings: () -> Unit,
     /** Open for good beside the content (an expanded window), not over it. */
     permanent: Boolean = false,
 ) {
@@ -594,7 +597,7 @@ private fun Drawer(
             }
             Column(Modifier.padding(horizontal = 14.dp)) {
                 HorizontalDivider(Modifier.padding(bottom = 8.dp), color = role(palette.line))
-                Row(app = Icons.Outlined.Settings, label = stringResource(R.string.drawer_settings), selected = false) {}
+                Row(app = Icons.Outlined.Settings, label = stringResource(R.string.drawer_settings), selected = false, onClick = onSettings)
                 Spacer(Modifier.height(12.dp))
             }
         }

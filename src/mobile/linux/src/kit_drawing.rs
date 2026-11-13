@@ -154,14 +154,40 @@ mod tests {
         assert!(page.height > 3000, "an A4 page 2400 px wide is about 3394 px high: {}", page.height);
         assert!(page.bytes.iter().any(|&b| b < 64) && page.bytes.iter().any(|&b| b > 192), "the page drew nothing");
 
+        // The core's half runs on a thread of its own and is waited for KIT_READ at most: a call or a gate that never
+        // comes fails the test, never hangs the run (it hung idle in 3 of 7 `run.py build`s, 2026-11-13).
+        let (done, outcome) = std::sync::mpsc::channel();
+        std::thread::spawn(move || {
+            let _ = done.send(read_kit_over_the_bridge(printed));
+        });
+        let kit = match outcome.recv_timeout(KIT_READ) {
+            Ok(read) => read.unwrap_or_else(|why| panic!("{why}")),
+            Err(_) => panic!("the core's read of the kit did not end within {KIT_READ:?}"),
+        };
+        assert_eq!(kit.email, "alex.beispiel@example.org");
+        assert_eq!(kit.server.as_deref(), Some("https://familie.example.org"));
+        assert_eq!(kit.server_from, wire::ServerFrom::Token);
+    }
+
+    /// How long the core's read of the kit may take: about a second where it ends (measured 1.4 s for the whole run).
+    const KIT_READ: std::time::Duration = std::time::Duration::from_secs(60);
+
+    /// The core started over a store that keeps nothing, the sign-in shown, the printed kit at [printed] read through
+    /// `Session.SignInKit`, and the kit the sign-in's gate carries; the core shut down again.
+    fn read_kit_over_the_bridge(printed: String) -> Result<wire::KitShown, String> {
         let config = wire::Config { device: "kit-drawing test".into(), window: 0, prompt: String::new() };
-        assert_eq!(bridge::start(&config, DeviceStore::in_memory()), Start::Started);
-        let (_watch, gates) = bridge::watch(&wire::Watched::Session).expect("the session is watched");
-        assert!(matches!(bridge::call_blocking(&wire::Call::SessionStart), Ok((wire::Answer::Done, None))));
+        if bridge::start(&config, DeviceStore::in_memory()) != Start::Started {
+            return Err("the core did not start".into());
+        }
+        let (_watch, gates) = bridge::watch(&wire::Watched::Session).ok_or("the session is not watched")?;
+        if !matches!(bridge::call_blocking(&wire::Call::SessionStart), Ok((wire::Answer::Done, None))) {
+            bridge::shutdown();
+            return Err("the start was not answered Done".into());
+        }
         let answered = bridge::call_blocking(&wire::Call::SessionSignInKit { path: printed, server: String::new() });
         if !matches!(answered, Ok((wire::Answer::Done, None))) {
             bridge::shutdown();
-            panic!("the core read no kit from the pages drawn here: {answered:?}");
+            return Err(format!("the core read no kit from the pages drawn here: {answered:?}"));
         }
         // the gate that carries the kit was sent before the call was answered
         let mut kit = None;
@@ -172,9 +198,6 @@ mod tests {
             }
         }
         bridge::shutdown();
-        let kit = kit.expect("the gate carries the kit");
-        assert_eq!(kit.email, "alex.beispiel@example.org");
-        assert_eq!(kit.server.as_deref(), Some("https://familie.example.org"));
-        assert_eq!(kit.server_from, wire::ServerFrom::Token);
+        kit.ok_or_else(|| "the gate carries no kit".into())
     }
 }

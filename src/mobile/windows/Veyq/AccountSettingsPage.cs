@@ -53,7 +53,7 @@ internal sealed class AccountSettingsPage : IDisposable
         _window = window;
         _closedByCore = closedByCore;
         AutomationProperties.SetAutomationId(_refused, "settings-refused");
-        AutomationProperties.SetName(_name, Words.AccountPageRename());
+        AutomationProperties.SetName(_name, Words.AccountSettingsRename());
         AutomationProperties.SetAutomationId(_name, "settings-name");
         AutomationProperties.SetAutomationId(_rename, "settings-rename");
         _rename.Click += (_, _) => Rename();
@@ -280,29 +280,29 @@ internal sealed class AccountSettingsPage : IDisposable
         _sections.Children.Add(_refused);
 
         // Account
-        _sections.Children.Add(Heading(Words.AccountPageAccount()));
+        _sections.Children.Add(Heading(Words.AccountSettingsAccount()));
         var confirmed = s.emailConfirmed switch
         {
-            true => Words.AccountPageEmailConfirmed(),
-            false => Words.AccountPageEmailUnconfirmed(),
+            true => Words.AccountSettingsEmailConfirmed(),
+            false => Words.AccountSettingsEmailUnconfirmed(),
             null => null,
         };
-        _sections.Children.Add(Card("", Words.AccountPageEmail(), new[] { s.email, confirmed }.OfType<string>(), "settings-email"));
+        _sections.Children.Add(Card("", Words.AccountSettingsEmail(), new[] { s.email, confirmed }.OfType<string>(), "settings-email"));
 
         // This device
-        _sections.Children.Add(Heading(Words.AccountPageThisDevice()));
+        _sections.Children.Add(Heading(Words.AccountSettingsThisDevice()));
         if (_label != s.device)
         {
             // the name is set from the state when it changed, never over what is being typed
             if (_label is null || _name.FocusState == FocusState.Unfocused) _name.Text = s.device;
             _label = s.device;
         }
-        _sections.Children.Add(Card("", Words.AccountPageRename(), new[] { Words.AccountPageRenameHint() }, "settings-device-name", _name, _rename));
+        _sections.Children.Add(Card("", Words.AccountSettingsRename(), new[] { Words.AccountSettingsRenameHint() }, "settings-device-name", _name, _rename));
         _sections.Children.Add(Trust(s));
 
         // Devices and sessions
-        _sections.Children.Add(Heading(Words.AccountPageSessions()));
-        _sections.Children.Add(Caption(Words.AccountPageSessionsHint()));
+        _sections.Children.Add(Heading(Words.AccountSettingsSessions()));
+        _sections.Children.Add(Caption(Words.AccountSettingsSessionsSub()));
         if (s.registerRefusal is { } names)
         {
             var bar = new InfoBar { IsOpen = true, IsClosable = false, Severity = InfoBarSeverity.Warning, Message = Said.Key(names) };
@@ -313,7 +313,7 @@ internal sealed class AccountSettingsPage : IDisposable
         {
             var loading = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8 };
             loading.Children.Add(new ProgressRing { IsActive = true, Width = 16, Height = 16 });
-            loading.Children.Add(Caption(Words.AccountPageLoading()));
+            loading.Children.Add(Caption(Words.AccountSettingsSessionsLoading()));
             _sections.Children.Add(loading);
         }
         else
@@ -321,10 +321,10 @@ internal sealed class AccountSettingsPage : IDisposable
             foreach (var f in families) _sections.Children.Add(Family(s, f));
             if (s.hasOthers)
             {
-                var others = TextButton(Words.AccountPageRevokeOthers(), "settings-revoke-others");
+                var others = TextButton(Words.AccountSettingsRevokeOthers(), "settings-revoke-others");
                 others.Margin = new Thickness(0, 8, 0, 0);
-                others.Click += (_, _) => AskThen("settings-revoke-others-ask", Words.AccountPageRevokeOthers(), Words.AccountPageRevokeOthersConfirm(),
-                    Words.AccountPageRevokeOthers(), "sign out every other", id => new Call.SettingsSignOutOthers { settings = id });
+                others.Click += (_, _) => AskThen("settings-revoke-others-ask", Words.AccountSettingsRevokeOthers(), Words.AccountSettingsRevokeOthersConfirm(),
+                    Words.AccountSettingsRevokeOthers(), "sign out every other", id => new Call.SettingsSignOutOthers { settings = id });
                 _sections.Children.Add(others);
             }
         }
@@ -332,22 +332,22 @@ internal sealed class AccountSettingsPage : IDisposable
         // Devices with a saved key
         if (s.keptDevices.Count > 0 || s.otherSavedKeys)
         {
-            _sections.Children.Add(Heading(Words.AccountPageSavedKeys()));
-            _sections.Children.Add(Caption(Words.AccountPageSavedKeysHint()));
+            _sections.Children.Add(Heading(Words.AccountSettingsSavedKeys()));
+            _sections.Children.Add(Caption(Words.AccountSettingsSavedKeysSub()));
             foreach (var d in s.keptDevices)
             {
-                var remove = TextButton(Words.AccountPageRemoveKey(), $"settings-remove-key:{d.label}");
+                var remove = TextButton(Words.AccountSettingsRemoveKey(), $"settings-remove-key:{d.label}");
                 var (device, label) = (d.deviceId, d.label);
-                remove.Click += (_, _) => AskThen("settings-remove-key-ask", Words.AccountPageRemoveKey(), Words.AccountPageRemoveKeyConfirm(label),
-                    Words.AccountPageRemoveKey(), "remove a saved key", id => new Call.SettingsRemoveSavedKey { settings = id, device = device });
-                _sections.Children.Add(Card("", d.label, new[] { Words.AccountPageSavedKeyRow() }, $"settings-kept:{d.label}", remove));
+                remove.Click += (_, _) => AskThen("settings-remove-key-ask", Words.AccountSettingsRemoveKey(), Words.AccountSettingsRemoveKeyConfirm(label),
+                    Words.AccountSettingsRemoveKey(), "remove a saved key", id => new Call.SettingsRemoveSavedKey { settings = id, device = device });
+                _sections.Children.Add(Card("", d.label, new[] { Words.AccountSettingsSavedKeyRow() }, $"settings-kept:{d.label}", remove));
             }
             if (s.otherSavedKeys)
             {
-                var others = TextButton(Words.AccountPageRemoveOtherKeys(), "settings-remove-other-keys");
+                var others = TextButton(Words.AccountSettingsRemoveOtherKeys(), "settings-remove-other-keys");
                 others.Margin = new Thickness(0, 8, 0, 0);
-                others.Click += (_, _) => AskThen("settings-remove-other-keys-ask", Words.AccountPageRemoveOtherKeys(), Words.AccountPageRemoveOtherKeysConfirm(),
-                    Words.AccountPageRemoveOtherKeys(), "remove every other saved key", id => new Call.SettingsRemoveOtherSavedKeys { settings = id });
+                others.Click += (_, _) => AskThen("settings-remove-other-keys-ask", Words.AccountSettingsRemoveOtherKeys(), Words.AccountSettingsRemoveOtherKeysConfirm(),
+                    Words.AccountSettingsRemoveOtherKeys(), "remove every other saved key", id => new Call.SettingsRemoveOtherSavedKeys { settings = id });
                 _sections.Children.Add(others);
             }
         }
@@ -390,10 +390,12 @@ internal sealed class AccountSettingsPage : IDisposable
         if (s.trusted is not null)
         {
             var forget = TextButton(Words.ManageForgetDevice(), "settings-forget");
-            forget.Click += (_, _) => Do("stop trusting", id => new Call.SettingsStopTrusting { settings = id });
+            // asked first, as the phones ask
+            forget.Click += (_, _) => AskThen("settings-forget-ask", Words.AccountSettingsUntrustConfirmTitle(), Words.AccountSettingsUntrustConfirm(),
+                Words.ManageForgetDevice(), "stop trusting", id => new Call.SettingsStopTrusting { settings = id });
             buttons.Add(forget);
         }
-        var line = TrustWords.Trusted(s.trusted, s.level) ?? Words.AccountPageThisDevice();
+        var line = TrustWords.Trusted(s.trusted, s.level) ?? Words.AccountSettingsThisDevice();
         panel.Children.Add(Card("", line, [], "settings-trust"));
         if (buttons.Count > 0)
         {
@@ -458,22 +460,22 @@ internal sealed class AccountSettingsPage : IDisposable
     /// its dates, "You are here" on this device's, and its actions behind More.</summary>
     private UIElement Family(SettingsShown s, SettingsFamily f)
     {
-        var title = f.label ?? (f.current ? s.device : Words.AccountPageOtherDevice());
+        var title = f.label ?? (f.current ? s.device : Words.AccountSettingsOtherDevice());
         // opened under its button, its right edge on the button's: a wide entry stays inside the window
         var menu = new MenuFlyout { Placement = Microsoft.UI.Xaml.Controls.Primitives.FlyoutPlacementMode.BottomEdgeAlignedRight };
-        var revokeWords = f.current ? Words.AccountPageRevokeSelf() : Words.AccountPageRevoke();
+        var revokeWords = f.current ? Words.AccountSettingsRevokeSelf() : Words.AccountSettingsRevoke();
         var revoke = new MenuFlyoutItem { Text = revokeWords };
         AutomationProperties.SetAutomationId(revoke, $"settings-revoke:{f.id}");
         var family = f.id;
-        revoke.Click += (_, _) => AskThen("settings-revoke-ask", revokeWords, f.current ? Words.AccountPageRevokeSelfConfirm() : Words.AccountPageRevokeConfirm(),
+        revoke.Click += (_, _) => AskThen("settings-revoke-ask", revokeWords, f.current ? Words.AccountSettingsRevokeSelfConfirm() : Words.AccountSettingsRevokeConfirm(),
             revokeWords, "sign out", id => new Call.SettingsSignOut { settings = id, family = family });
         menu.Items.Add(revoke);
         if (f.removesKey)
         {
-            var escalate = new MenuFlyoutItem { Text = Words.AccountPageEscalate() };
+            var escalate = new MenuFlyoutItem { Text = Words.AccountSettingsEscalate() };
             AutomationProperties.SetAutomationId(escalate, $"settings-escalate:{f.id}");
-            escalate.Click += (_, _) => AskThen("settings-escalate-ask", Words.AccountPageEscalateTitle(), Words.AccountPageEscalateConfirm(),
-                Words.AccountPageEscalateAccept(), "sign out and remove the saved key", id => new Call.SettingsSignOutAndRemoveKey { settings = id, family = family });
+            escalate.Click += (_, _) => AskThen("settings-escalate-ask", Words.AccountSettingsEscalate(), Words.AccountSettingsEscalateConfirm(),
+                Words.AccountSettingsEscalateAccept(), "sign out and remove the saved key", id => new Call.SettingsSignOutAndRemoveKey { settings = id, family = family });
             menu.Items.Add(escalate);
         }
         var more = new Button { Content = new FontIcon { Glyph = "", FontSize = 16 }, Flyout = menu };
@@ -483,7 +485,7 @@ internal sealed class AccountSettingsPage : IDisposable
         var end = new List<UIElement>();
         if (f.current)
         {
-            var here = Caption(Words.AccountPageYouAreHere());
+            var here = Caption(Words.AccountSettingsCurrent());
             here.VerticalAlignment = VerticalAlignment.Center;
             end.Add(here);
         }
@@ -494,7 +496,7 @@ internal sealed class AccountSettingsPage : IDisposable
     /// <summary>A family's dates as its card says them: when it signed in and when it was last used, the ones the server sent.</summary>
     public static IEnumerable<string> Dates(SettingsFamily f)
     {
-        if (f.createdAt is { } created) yield return Words.AccountPageSignedIn(Said.Moment(created));
-        if (f.lastUsedAt is { } used) yield return Words.AccountPageLastUsed(Said.Moment(used));
+        if (f.createdAt is { } created) yield return Words.AccountSettingsSignedIn(Said.Moment(created));
+        if (f.lastUsedAt is { } used) yield return Words.AccountSettingsLastUsed(Said.Moment(used));
     }
 }

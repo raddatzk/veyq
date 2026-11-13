@@ -17,7 +17,16 @@ class MainActivity : ComponentActivity() {
             receive(intent)
         }
         val devScan = DevScan.requested(intent) // a debug build's QR camera harness, no sign-in (DevScan)
-        setContent { VeyqTheme { if (devScan) DevScan.Screen() else AppRoot(model) } }
+        val devSettings = DevSettings.requested(intent) // a debug build's Settings page over a played account (DevSettings)
+        setContent {
+            VeyqTheme {
+                when {
+                    devScan -> DevScan.Screen()
+                    devSettings != null -> DevSettings.Screen(devSettings)
+                    else -> AppRoot(model)
+                }
+            }
+        }
     }
 
     override fun onResume() {

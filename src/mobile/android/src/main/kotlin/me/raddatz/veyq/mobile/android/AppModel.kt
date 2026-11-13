@@ -329,18 +329,20 @@ class AppModel(app: Application) : AndroidViewModel(app) {
      */
     fun signOut(account: VeyqAccount) {
         if (session.signedTo?.account == account) uploads.clear()
-        viewModelScope.launch {
-            val out = session.signOut(account)
-            when {
-                out.next != null -> show(out.next!!)
-                out.wasCurrent -> {
-                    shellWatch?.cancel()
-                    shellModel = null
-                    _depot.value?.close()
-                    _depot.value = null
-                }
-                else -> refreshManaged()
+        viewModelScope.launch { signedOut(session.signOut(account)) }
+    }
+
+    /** What a sign-out left: another account opened, nothing (the sign-in or the unlock follows), or Manage read anew. */
+    private suspend fun signedOut(out: me.raddatz.veyq.mobile.session.SessionModel.SignedOut<VeyqAccount, me.raddatz.veyq.mobile.session.TenantSession>) {
+        when {
+            out.next != null -> show(out.next!!)
+            out.wasCurrent -> {
+                shellWatch?.cancel()
+                shellModel = null
+                _depot.value?.close()
+                _depot.value = null
             }
+            else -> refreshManaged()
         }
     }
 
@@ -351,6 +353,74 @@ class AppModel(app: Application) : AndroidViewModel(app) {
             trustLog("manage stop trusting")
             refreshManaged()
         }
+    }
+
+    // ---- the account's Settings (cr-app-account-settings) ----
+
+    /** The signed-in account's Settings while its page is open: core's screen model, drawn by [SettingsScreen]. */
+    private var settingsModel: me.raddatz.veyq.mobile.session.AccountSettings<VeyqAccount, me.raddatz.veyq.mobile.session.TenantSession>? = null
+    private var settingsWatch: kotlinx.coroutines.Job? = null
+    private val _settings = MutableStateFlow<me.raddatz.veyq.mobile.session.AccountSettings.State?>(null)
+
+    /** The open Settings page's state; null while it is closed. */
+    val settings: StateFlow<me.raddatz.veyq.mobile.session.AccountSettings.State?> = _settings.asStateFlow()
+
+    /** The drawer's Settings: the current account's page, read anew as it opens. */
+    fun openSettings() {
+        val account = session.signedTo?.account ?: return
+        val m = me.raddatz.veyq.mobile.session.AccountSettings.of(session, account)
+        settingsWatch?.cancel()
+        settingsModel = m
+        settingsWatch = viewModelScope.launch { m.state.collect { _settings.value = it } }
+        viewModelScope.launch { m.refresh() }
+    }
+
+    fun closeSettings() {
+        settingsWatch?.cancel()
+        settingsWatch = null
+        settingsModel = null
+        _settings.value = null
+    }
+
+    /** Runs [block] on the open page's model; a sign-out it answers closes the page and is followed as Manage's is. */
+    private fun onSettings(block: suspend (me.raddatz.veyq.mobile.session.AccountSettings<VeyqAccount, me.raddatz.veyq.mobile.session.TenantSession>) -> me.raddatz.veyq.mobile.session.SessionModel.SignedOut<VeyqAccount, me.raddatz.veyq.mobile.session.TenantSession>?) {
+        val m = settingsModel ?: return
+        viewModelScope.launch {
+            val out = block(m) ?: return@launch
+            trustLog("settings: signed out here")
+            if (out.wasCurrent) uploads.clear()
+            closeSettings()
+            signedOut(out)
+        }
+    }
+
+    /** The page's actions, each a call of core's model (the page decides nothing). */
+    val settingsActions: SettingsActions = object : SettingsActions {
+        override fun close() = closeSettings()
+        override fun rename(label: String) = onSettings { it.rename(label); null }
+        override fun signOut(familyId: String) = onSettings { it.signOut(familyId) }
+        override fun signOutOthers() = onSettings { it.signOutOthers(); null }
+        override fun signOutAndRemoveKey(familyId: String) = onSettings { it.signOutAndRemoveKey(familyId); null }
+        override fun removeSavedKey(deviceId: String) = onSettings { it.removeSavedKey(deviceId); null }
+        override fun removeEveryOtherSavedKey() = onSettings { it.removeEveryOtherSavedKey(); null }
+        override fun stay(level: me.raddatz.veyq.mobile.session.StaySignedIn, done: (me.raddatz.veyq.mobile.session.TrustChange) -> Unit) = onSettings { m ->
+            val change = m.stay(level)
+            trustLog("settings stay signed in $level: $change")
+            done(change)
+            null
+        }
+        override fun backToPassword(password: String, done: (me.raddatz.veyq.mobile.session.TrustChange) -> Unit) = onSettings { m ->
+            val change = m.trustWithPassword(password)
+            trustLog("settings back to the password: $change")
+            done(change)
+            null
+        }
+        override fun stopTrusting() = onSettings { m ->
+            m.stopTrusting()
+            trustLog("settings stop trusting")
+            null
+        }
+        override fun signOutHere() = onSettings { it.signOutHere() }
     }
 
     private fun refreshManaged() = _screen.update { s ->
