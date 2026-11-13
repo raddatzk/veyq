@@ -422,6 +422,33 @@ order, the lightbox paged, the video played and sought near its end, the details
 original saved (its SHA-256 the upload's; on macOS through the save panel), a Photos pick uploaded and its
 `tmp/picked/<uuid>/` gone once it is in (`xcrun simctl get_app_container booted me.raddatz.veyq data` + `ls tmp`), and
 `run-as me.raddatz.veyq ls cache` / the container's `tmp` with nothing decrypted during and after.
+**Device passes (2026-11-13, the dev backend up; measured).** The Memory was made and filled by `DevMemoryTest`
+(`VEYQ_LIVE=… VEYQ_DEV_MEMORY_FILL=<dir> ./gradlew :core:jvmTest --tests '*DevMemoryTest*' --rerun`: "App memory 84367" by
+`ShellModel.createMemory`, then `a-exif.jpg` (the web's EXIF fixture), two ffmpeg photos and `d-big.mp4` — 241 108 268 B,
+1280×720, 50 s, made with `/opt/homebrew/bin/ffmpeg` — uploaded by `MediaUpload.upload`, the tiers ffmpeg sidecars), and
+purged after by `VEYQ_DEV_MEMORY_PURGE`. **Android** (throwaway AVD, `devlogin.py`): the grid "4 items" newest first; the
+lightbox paged ("1 of 4" … "4 of 4"); the video played through the core's reader, sought to 0:42 and playing on (0:44 — the
+emulator under a load of 100+); the details of `a-exif.jpg`: camera Canon EOS R, lens, exposure, place "48.136944,
+11.575000", "Added by Kevin Raddatz"; both originals saved through the system's dialog — `a-exif.jpg` and `d-big.mp4` at the
+uploads' SHA-256 (`c7b895d6…`, `9ea762fd…`, `sha256sum` on the device); "Add photos" → the photo picker → one photo →
+"5 items" with its name kept; `run-as me.raddatz.veyq ls -laR cache files` before and after: only `profileInstalled` (and
+the pass's own marker). **iOS** (throwaway iPhone 18 Pro, German): the grid, the lightbox paged ("2 von 5" → "1 von 5"),
+the video played; the details with camera, place and "Hinzugefügt von"; `a-exif.jpg` saved through the save sheet into "On
+My iPhone" at the upload's SHA-256; a Photos pick ("+" → Fotomediathek → one photo → ✓) uploaded ("6 Objekte"), the
+container's `tmp/picked/` and `tmp/downloads/` empty after. **macOS** (the ad hoc build, German): the grid; the lightbox;
+the video played; the details; both originals saved through the save panel at the uploads' SHA-256 (the copies removed).
+**Fixed on the way (macOS, `MemoryScreen.swift`):** a Mac's sheet drew the lightbox's toolbar as a light bottom bar with
+one primary button — Save was missing and Close and Details were white on white — and the details sheet collapsed to one
+row's height with its Done white on white too. The lightbox now has a bar of its own on the Mac (Close, Details, Save)
+and the details sheet a minimum size and its own Done. Seen red on the device before the change (the unchanged build),
+green after. **Not done:** seeking near the end on iOS and macOS (the simulator tool's screenshots lag the player's
+controls; AVKit's controls on the Mac expose nothing to accessibility) — the seek across frames is Android's above.
+**Found, not fixed:** the Apple app's `URLSession` (Ktor's Darwin engine) keeps a `URLCache` on disk —
+`Library/Caches/me.raddatz.veyq/Cache.db` and `fsCachedData/` held the `blob-downloads-batch`, `exif` and `members`
+responses and two blobs' ciphertext from the object store after the pass. Nothing decrypted, but metadata the session
+read sits on disk; a decision for the core's HTTP client (no cache, or an in-memory one), named here.
+The box stays open for the Apple seek.
+
 **Retrospective:** "the settle is `GalleryModel`'s" did not survive its first test: an upload outlives the page it was
 started from, so the settle needed an owner per tenant (`MediaUploads`), and the gallery only listens. Following the
 queue's *state* rather than its settle callbacks made the picked files' lifetime survive a tenant opened again over the same

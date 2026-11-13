@@ -486,7 +486,7 @@ From `src/mobile` unless named:
   `QrEncoder`-drawn pages. `PdfBoxPictures.picture` answers null (every fixture is a PDF); the picture path's real decode
   is `aPictureGoesStraightToItsQr`'s.
 
-- [ ] **6 Android + Apple — pick the kit.** D5 and D8: the button on both sign-ins (iPhone, iPad, macOS, Android phone
+- [x] **6 Android + Apple — pick the kit.** D5 and D8: the button on both sign-ins (iPhone, iPad, macOS, Android phone
   and tablet), `KitPictures` per platform, the Secret Key row's "from your Emergency Kit" state with its clear, the
   notices. Neither app has a unit-test target that draws a page today (`src/mobile/CLAUDE.md` § Prove your work names
   none), so the pass below is the platform drawing's proof; the order itself is phase 3's and 5's.
@@ -498,8 +498,8 @@ From `src/mobile` unless named:
   simulator's app container `tmp`/`Library/Caches` listed after the picks show nothing of the kit; that measurement
   bitten once by a planted file (B15).
 
-  **Status: built and passed up to the sign-in (2026-11-13); the signing in with a dev kit is pending (the dev backend
-  was down and not to be started by this phase) — the box stays open until it is green.**
+  **Status: done (2026-11-13): built, the fixtures read on all three, and the dev kit picked by hand in each platform's
+  picker signed in to the shell (the live pass at Met's end).**
   **Built:** words `signin_kit_open` ("Open Emergency Kit" / "Notfall-Kit öffnen"), `signin_kit_held` ("From your
   Emergency Kit" / "Aus deinem Notfall-Kit"), `signin_kit_clear` ("Enter it instead" / "Stattdessen eingeben", Apple
   Title Case) and `signin_kit_other_server` (the web's `kitOtherServer` turned to the app's case: the kit's server
@@ -556,6 +556,19 @@ From `src/mobile` unless named:
   and the three pickers clicked once by hand (Android's was).
   **Bites:** B15 as above (three platforms); B19 `WIDTHS` without the fallback → `aPageThatReadsNothing…`,
   `theQrIsLookedFor…`, `aForeignQrIsPassed…` and the fixture premise red, restored with `/bin/cp -f`, compared equal.
+  **Live pass (2026-11-13, the dev backend up; measured):** the dev kit written by `DevKitTest` (`VEYQ_DEV_KIT_OUT=<scratch>
+  ./gradlew :core:jvmTest --tests '*DevKitTest*'`: `dev-kit.pdf`, the principal's token in `Keywords` as
+  `LiveSignInTest` builds it, server `http://veyq.localhost:8080`; removed after), the password handed by the new
+  `devlogin.py --kit` (Android extra `veyq.devKitPassword`, Apple `VEYQ_DEV_KIT_PASSWORD`, debug builds only: it waits for
+  the kit the sign-in holds and then signs in as the button does, with an empty Secret Key). **Android** (throwaway AVD,
+  Pixel 8, API 36, deleted after): the kit `adb push`ed to Downloads, "Open Emergency Kit" tapped, picked in DocumentsUI →
+  logcat `veyq-kit: dev kit sign-in: kit held, server from TOKEN; signing in`, `gate Signed`, the shell's lists (read by
+  `uiautomator dump`); the kit removed from Downloads after. **iOS** (throwaway iPhone 18 Pro, iOS 27, deleted after): the
+  kit in Files' "On My iPhone", "Notfall-Kit öffnen" tapped, the Files sheet's Browse → `dev-kit` tapped (the iOS Simulator
+  tool) → `kit held, server from TOKEN`, `gate Signed`, the offer answered "Nicht jetzt". **macOS** (the ad hoc debug build):
+  "Notfall-Kit öffnen" → the open panel (Go to Folder for the copy under `~/Downloads/veyq-pass-kit/`, removed right after) →
+  Öffnen → `kit held`, `gate Signed`, the offer answered "Nicht jetzt". The principal is at its device-trust limit, so no
+  device was trusted (`409`, logged), as expected. Each session was signed out from Settings afterwards.
 
 - [ ] **7 the core, Android and Apple — scan the kit.** **Split (the coordinator, 2026-11-13):** this phase is the core
   and the phones' and the Mac's scan; the desktops' (Linux and Windows scanning a kit through the bridge's `Scan.*` with
@@ -639,6 +652,14 @@ From `src/mobile` unless named:
   above). (3) No tap on iOS or macOS: the sheet was opened by `VEYQ_DEV_KIT_SCAN` (the button's same call), the
   simulator tool and computer use not used; the Android entry was tapped. (4) The live sign-in is phase 4's, green since 2026-11-13;
   a scan's held key signs in as a file's (the unit case proves the hand-over).
+  **Live pass, scan → sign in (2026-11-13, the dev backend up; measured):** the dev kit's QR (`DevKitTest`'s
+  `dev-kit-qr.png`, padded to a 1280×720 RGB frame) with `devlogin.py --kit`. **Android** (the throwaway AVD above, its
+  virtual scene's wall poster set to that frame, the scene camera moved over gRPC to POSITION -0.55 0.3 3.9, ROTATION 0 180 0
+  — `-0.15 …` of the earlier pass left the code outside the frame): "Scan Emergency Kit" tapped, camera allowed →
+  `decoded 640x480 in 322.6 ms, a code read`, `Found(value=TOKEN)`, `dev kit sign-in: kit held … signing in`, `gate
+  Signed`. **iOS** (the throwaway simulator, `VEYQ_DEV_CAMERA=<frame>`, `VEYQ_DEV_KIT_SCAN=1`): `decoded 1280x720 in
+  19.1 ms`, `Found(value=TOKEN)`, `gate Signed`. **macOS** (the same variables on the binary): `Found(value=TOKEN)`, `gate
+  Signed`. Signed out after each.
   **Owner steps (pending):** a real iPhone (the sign-in's "Notfall-Kit scannen" over a printed fixture kit → the form
   filled); this Mac's camera (`VEYQ_DEV_KIT_SCAN=1 <build>/Debug/veyq.app/
   Contents/MacOS/veyq`, allow the camera, a printed kit held up → `veyq-kit: kit held`).

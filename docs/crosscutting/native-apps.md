@@ -79,7 +79,10 @@ Windows app).
 
 **Account and session.** Sign-in with password and Secret Key behind the `/api/setup` major gate, each grant judged as
 the web judges it (measured, `LiveSignInTest`, `GrantTrustTest`); several servers and tenants with their switcher,
-hiding tenants and spaces.
+hiding tenants and spaces. The account's Settings page from the drawer, measured
+2026-11-13 against the dev backend: Android (a throwaway AVD) and iOS (a throwaway iPhone 18 Pro simulator) — this
+device renamed, a second session of the account signed out from the list, "Sign out" taken; macOS — renamed and
+renamed back, "Sign out" taken (a session's menu not driven there).
 
 **Device trust, on all four apps** (ADR 0123 decision 8 as changed 2026-11-11; measured 2026-11-11, `DeviceTrustLiveTest`,
 `LiveBridgeTest` and a pass per app, ADR 0123's Consequences, the device trust): every sign-in trusts the device with

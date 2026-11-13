@@ -211,6 +211,25 @@ Apple as a pushed view (iOS) and a Settings scene-style window (macOS `Settings 
   in (`devlogin.py`), open Settings from the drawer, rename this device, sign in a second session with
   `LiveAccountSettingsTest`'s helper (or a second `devlogin` on another device), sign that one out from the list, take
   "Sign out"; then record each pass in `native-apps.md`'s measured list.
+  **Live passes (2026-11-13, the dev backend up; measured):** the second session is `DevSecondSessionTest`
+  (`VEYQ_LIVE=… VEYQ_DEV_SECOND_SESSION=<label> ./gradlew :core:jvmTest --tests '*DevSecondSessionTest*' --rerun`: a fresh
+  login of the principal that names itself `<label>` through the register, then waits until its page no longer reads and
+  prints after how long; at its limit it signs itself out). **Android** (throwaway AVD, signed in by `devlogin.py`): the
+  drawer's Settings → the address and "This device" first with "You are here"; renamed to "Pass AVD renamed" (the row
+  followed) and back; "Pass throwaway A" listed, signed out from its menu after the question → gone from the list,
+  `DevSecondSessionTest`: `signed out from elsewhere after 74 s`; "Sign out" → the sign-in. **iOS** (throwaway iPhone 18 Pro
+  simulator, German): renamed ("iPhonex", the row followed); "Pass throwaway iOS" signed out by its swipe action and the
+  question → gone, `signed out from elsewhere after 298 s`; "Abmelden" → the sign-in (`settings: signed out here`), no crash.
+  **macOS** (the ad hoc debug build, German, driven through accessibility): the Settings window from the sidebar, renamed
+  ("Pass Mac renamed") and back, "Abmelden" → the sign-in; **not done there:** a session's "Weitere" menu — a menu control the
+  background tools may not open and full-screen control was not available — so "Pass throwaway Mac" was signed out from the
+  Android page instead (`after 582 s`). One Mac session a stopped build left was signed out by
+  `DevSecondSessionTest.aLeftOverSessionIsSignedOut` (`VEYQ_DEV_SIGN_OUT_LABEL`, `VEYQ_DEV_SIGN_OUT_SINCE`: exactly one
+  family of that name signed in that minute, else nothing). **Found:** on macOS the rename alert's field showed the current name only on its
+  first opening; later openings were empty (the binding is set before presenting — the AppKit alert keeps its field). Not
+  fixed here; owner step below. Recorded in `native-apps.md` § Built (Account and session).
+  **Owner step (pending):** on the Mac, the session list's "Weitere" menu → "Dieses Gerät abmelden" on a second session.
+  The box stays open for it.
   **Retrospective:** a debug harness that plays the screen model's `State` (it is `@Serializable` and public) instead of
   the model's internal seams draws every state a server can produce without exposing `Door`/`Here` from the core; its
   limit is that the actions' effects are played, so the rules stay `AccountSettingsTest`'s and the wiring to the real
