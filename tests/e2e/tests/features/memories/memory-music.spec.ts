@@ -3,9 +3,10 @@
 //
 // The owner creates a Memory and, through the ⋯ menu's Background music:
 //  - pastes an album link into the Spotify field: refused in the dialog, Save disabled (E1);
-//  - pastes a Spotify playlist and an Apple Music playlist: the bar above the tabs names both, each with its link into
-//    the service; no "Play here" (the server does not play them here, A3), no iframe, and no request leaves the instance
-//    (the device's confinement: no music host, no Spotify, no Apple);
+//  - pastes a Spotify playlist and an Apple Music playlist: the Memory's header offers "Open in Spotify" and "Open in
+//    Apple Music" (the server does not play them here, A3) - never clicked here, as the link leaves the instance -, no
+//    music bar below the footer, no iframe, and no request leaves the instance (the device's confinement: no music host,
+//    no Spotify, no Apple);
 //  - reloads: the sealed playlists open again from the node's meta;
 //  - empties the Spotify field: only Apple Music is left (A5).
 // The console is read for errors throughout. Every value typed is a canary (recordTyped). Labels are src/web/'s own (en).
@@ -14,7 +15,7 @@ import { test } from '../../../src/cspViolations'
 import { randomBytes } from 'node:crypto'
 import { recordTyped } from '../../../src/canaries'
 import { newDevice, signInOwner, watchConsole, type ConsoleErrors, type Device } from '../../../src/devices'
-import { headerAction } from '../../../src/header'
+import { expectHeaderAction, headerAction } from '../../../src/header'
 
 test.describe.configure({ mode: 'serial' })
 
@@ -26,7 +27,8 @@ const APPLE = 'https://music.apple.com/de/playlist/sommer/pl.u-AbC123dEf456'
 let member: Device
 let pageConsole: ConsoleErrors
 
-const bar = (page: Page) => page.getByTestId('memory-music')
+const bar = (page: Page) => page.getByTestId('music-bar')
+const headerMusic = (page: Page, service: 'spotify' | 'apple-music') => page.locator(`[data-action="music-${service}"]`)
 const musicDialog = (page: Page) => page.getByRole('dialog', { name: 'Background music' })
 
 test.beforeAll(async ({ browser }) => {
@@ -55,6 +57,7 @@ test('a link that is no playlist is refused in the dialog', { tag: ['@uc.memory.
   await expect(create).toBeHidden()
   await page.getByRole('button', { name: memoryName, exact: true }).click()
   await expect(page.getByRole('heading', { level: 1, name: memoryName })).toBeVisible()
+  await expect(headerMusic(page, 'spotify'), 'no playlist, no music button').toHaveCount(0)
   await expect(bar(page), 'no playlist, no bar').toHaveCount(0)
 
   await headerAction(page, 'Background music')
@@ -76,13 +79,14 @@ test('both playlists are stored and offered as links only where the server plays
     await dialog.getByRole('button', { name: 'Save', exact: true }).click()
     await expect(dialog).toBeHidden()
 
-    await expect(bar(page).getByRole('link', { name: 'Open in Spotify' })).toHaveAttribute('href', SPOTIFY)
-    await expect(bar(page).getByRole('link', { name: 'Open in Apple Music' })).toHaveAttribute('href', 'https://music.apple.com/de/playlist/pl.u-AbC123dEf456')
-    await expect(bar(page).getByRole('button', { name: 'Play here' }), 'the lane sets no music host: nothing plays here').toHaveCount(0)
+    await expectHeaderAction(page, 'Open in Spotify')
+    await expectHeaderAction(page, 'Open in Apple Music')
+    await expect(page.getByRole('button', { name: 'Play the Spotify playlist' }), 'the lane sets no music host: nothing plays here').toHaveCount(0)
+    await expect(bar(page), 'no music bar below the footer').toHaveCount(0)
     await expect(page.locator('iframe'), 'no frame of any origin').toHaveCount(0)
 
     await page.reload()
-    await expect(bar(page).getByRole('link', { name: 'Open in Spotify' }), 'the sealed playlists open again').toBeVisible({ timeout: 60_000 })
+    await expectHeaderAction(page, 'Open in Spotify') // the sealed playlists open again
   })
 
 test('an emptied field drops its playlist', { tag: ['@uc.memory.music:sealed-playlists-in-node-meta'] }, async () => {
@@ -93,6 +97,6 @@ test('an emptied field drops its playlist', { tag: ['@uc.memory.music:sealed-pla
   await dialog.getByLabel('Spotify playlist').fill('')
   await dialog.getByRole('button', { name: 'Save', exact: true }).click()
   await expect(dialog).toBeHidden()
-  await expect(bar(page).getByRole('link', { name: 'Open in Spotify' })).toHaveCount(0)
-  await expect(bar(page).getByRole('link', { name: 'Open in Apple Music' })).toBeVisible()
+  await expectHeaderAction(page, 'Open in Apple Music')
+  await expect(headerMusic(page, 'spotify')).toHaveCount(0)
 })

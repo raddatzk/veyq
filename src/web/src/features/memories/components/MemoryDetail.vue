@@ -83,7 +83,7 @@ import type { MemoryRights } from '../rights'
 import { provideMemoryView, sourceRights, type MemorySource } from '../source'
 import { useConfirm } from '../../../shared/state/useConfirm'
 import { useToast } from '../../../shared/state/useToast'
-import MemoryMusic from '../music/MemoryMusic.vue'
+import { musicHeaderActions } from '../music/musicHeader'
 import MusicDialog from '../music/MusicDialog.vue'
 import { musicField, unsealMemoryMusic, type Playlist } from '../music/musicModel'
 import { editField, nodeMetaState } from '../../../core/node/nodeMeta'
@@ -206,7 +206,9 @@ const headerActions = computed<NodeHeaderAction[]>(() => [
     id: 'banner', label: memoryBanner.banner.value ? t('memory.banner.change') : t('memory.banner.add'), icon: 'objects-column', menuOnly: true,
     shown: can.value.setBanner && !bannerDrawn.value, disabled: !props.memoryKey, onClick: () => openBannerDialog(),
   },
-  // Background music (uc.memory.music, ADR 0131): whoever writes the node's meta sets its playlists, in the ⋯ menu.
+  // Background music (uc.memory.music, ADR 0131): every viewer starts a playlist in the shell's music bar (or opens it in
+  // the service where this server plays none); whoever writes the node's meta sets the playlists, in the ⋯ menu.
+  ...musicHeaderActions(music.value, t),
   {
     id: 'music', label: t('memory.music.action'), icon: 'music', menuOnly: true,
     shown: can.value.editMeta, disabled: !props.memoryKey, onClick: () => (musicDialog.value = true),
@@ -216,8 +218,8 @@ const headerActions = computed<NodeHeaderAction[]>(() => [
   // in place (`headerRename`).
   ...standardNodeActions(t, { move: can.value.move, delete: can.value.delete }, { move: () => emit('move'), remove: () => emit('delete') }),
 ])
-// --- background music (uc.memory.music, ADR 0131): the node's playlists from its sealed meta, the bar above the tabs for
-// every viewer, and the dialog behind the menu entry where `editMeta` grants it. The save is one read-modify-write of the
+// --- background music (uc.memory.music, ADR 0131): the node's playlists from its sealed meta, the header's buttons that
+// start one in the shell's music bar for every viewer, and the dialog behind the menu entry where `editMeta` grants it. The save is one read-modify-write of the
 // `music` field; a peer's change of it meanwhile re-opens the dialog on it (E2, ADR 0077).
 const music = computed<Playlist[]>(() => (props.memoryKey ? unsealMemoryMusic(props.scopeId, props.memoryKey, props.node) : []))
 const musicDialog = ref(false)
@@ -841,10 +843,7 @@ watch(
     />
 
     <!-- Tabbed detail (cr-0061, ported from the design source): Gallery (the media grid) + Chapters (the
-         nested Memories) + Map (the photos and the GPX tracks, uc.memory.tracks). The journal arrives with its feature.
-         The music bar above them (uc.memory.music) is every viewer's, a guest's included; it draws nothing without a
-         playlist. -->
-    <MemoryMusic :key="node.id" :music="music" />
+         nested Memories) + Map (the photos and the GPX tracks, uc.memory.tracks). The journal arrives with its feature. -->
     <VeyqTabs v-model:value="activeTab" class="memory-tabs">
       <VeyqTabList>
         <VeyqTab value="gallery">{{ t('memory.gallery') }}</VeyqTab>

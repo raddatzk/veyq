@@ -1,8 +1,9 @@
 useCase: uc.memory.music
 feature: memory
 title: Background music — a Memory's playlist, played from the viewer's own Spotify or Apple Music account
-# Built by cr-memory-background-music (ADR 0131): the sealed `music` field of the node's meta, the dialog, the music bar
-# with the viewer's opt-in, the music frame on the instance's music host (its own origin, its own policy), the register's
+# Built by cr-memory-background-music (ADR 0131), reworked to the owner's layout of 2026-11-13: the sealed `music` field
+# of the node's meta, the dialog, the header's play buttons, the music bar in core's footer-bar slot with the viewer's
+# opt-in, the music frame (veyq's own player) on the instance's music host (its own origin, its own policy), the register's
 # three `deployment` entries, the Traefik router and the chart's route. A sign-in and playback with real vendor accounts
 # is owed (inbox #846); lane L1's memory-music.spec.ts drives the dialog and the opt-in, never a vendor.
 acceptanceCriteria:
@@ -15,27 +16,44 @@ acceptanceCriteria:
           - src/features/memories/music/MusicDialog.test.ts
           - src/features/memories/banner/bannerModel.test.ts
   - id: edit-is-editmeta-bar-is-everyones
-    text: The Background music entry of the node's ⋯ menu is offered exactly where the rights grant editMeta (never to a share guest); the music bar above the tabs is the same component for a member and a guest, drawn wherever the node names a playlist.
+    text: The Background music entry of the node's ⋯ menu is offered exactly where the rights grant editMeta (never to a share guest); every viewer of the node's page, a member and a READ guest alike, gets one header button per playlist - a toggle that starts it in the music bar, pressed while it plays there, or the link into the service where the server plays none.
     coverage:
       web:
         unit:
           - src/features/memories/components/MemoryDetail.rights.test.ts
-          - src/features/memories/music/MemoryMusic.test.ts
+          - src/features/memories/music/musicHeader.test.ts
+  - id: bar-in-the-shell-plays-across-pages
+    text: The music bar is Memories' filling of core's one shell slot (`app.footerBar`, one per application, write-once), mounted below the signed-in app's footer and the share page's; the same iframe survives a change of page; a lock or a sign-out unmounts the bar and ends the music; Memories switched off mounts none; another Memory's playlist replaces the bar's only when started - the same service in the same frame, another service in a new one; Close ends the music and keeps the consent; a service no longer offered leaves the bar. Core imports no application for it.
+    coverage:
+      web:
+        unit:
+          - src/core/applications/registry.test.ts
+          - src/components/app/AppShell.footerBar.test.ts
+          - src/features/memories/music/MusicBar.test.ts
+          - src/features/memories/music/musicHeader.test.ts
   - id: opt-in-per-browser-and-service
-    text: Nothing of a service or the music host loads before the viewer's Play here; the consent is this browser's, per service, names the music host and holds only while that host is served; a browser that agreed mounts the frame at once; Turn music off withdraws it at once, tells the frame to forget the vendor's sign-in and removes the frame, and a withdrawal in another tab removes it too. Where the server does not play a service here, only the link that opens it in the service is offered.
+    text: Nothing of a service or the music host loads before the viewer's Play here in the bar; the consent is this browser's, per service, names the music host and holds only while that host is served; a browser that agreed mounts the frame at once; Turn music off withdraws it at once, tells the frame to forget the vendor's sign-in and keeps the frame until it said so (never past the wait), and a withdrawal in another tab removes it too. Where the server does not play a service here, only the link that opens it in the service is offered, in the header.
     coverage:
       web:
         unit:
           - src/features/memories/music/useMusicConsent.test.ts
-          - src/features/memories/music/MemoryMusic.test.ts
+          - src/features/memories/music/MusicBar.test.ts
+          - src/features/memories/music/musicHeader.test.ts
   - id: frame-isolated-by-origin-and-protocol
-    text: The vendor's SDK runs only in the music frame, an iframe of the music host with `allow="encrypted-media; autoplay"` and no sandbox; the app hands it, once it says ready, one playlist and the service's public credential, to the music host's origin only, and takes only parsed state messages from that frame's window and origin; the frame obeys only its parent window, from the origin that spoke first, loads one player per playlist, and empties itself on forget.
+    text: The vendor's SDK runs only in the music frame, an iframe of the music host with `allow="encrypted-media; autoplay"` and no sandbox; the app hands it, once it says ready, one playlist, the service's public credential and its theme (exactly light or dark), to the music host's origin only, and takes only parsed state messages from that frame's window and origin; the frame obeys only its parent window, from the origin that spoke first, loads one vendor per frame, switches a later playlist of that service in place and ignores another service's, and empties itself on forget.
     coverage:
       web:
         unit:
           - src/music-frame/protocol.test.ts
           - src/music-frame/main.test.ts
-          - src/features/memories/music/MemoryMusic.test.ts
+          - src/features/memories/music/MusicBar.test.ts
+  - id: veyq-player-with-vendor-attribution
+    text: The frame draws veyq's own player in the app's tokens and theme - sign-in, previous, play/pause, next, the link back ("Listen on …") - and what plays (title, artist, an https cover; text bounded) only beside the vendor's bundled mark; without one it shows the state alone; a skip the vendor restricts is disabled.
+    coverage:
+      web:
+        unit:
+          - src/music-frame/main.test.ts
+          - src/music-frame/player.test.ts
   - id: vendor-sign-in-stays-in-the-frame
     text: Spotify's sign-in is the Authorization Code flow with PKCE run in the frame — the S256 challenge, the music host's callback as redirect URI, no client secret — and the callback page relays code and state over a BroadcastChannel of the music origin (and to a same-origin opener), clears the address and closes; no vendor token is ever sent to the veyq server.
     coverage:
@@ -82,6 +100,8 @@ acceptanceCriteria:
 gaps:
   stack: >-
     Lane L1's browser spec (`tests/e2e/tests/features/memories/memory-music.spec.ts`, written, not yet run) sets a
-    playlist through the dialog and checks the opt-in loads nothing before Play here; no lane signs in to a vendor. A
+    playlist through the dialog and checks the header's links where the lane serves no music host; no lane signs in to a
+    vendor, and none draws the bar's frame in a browser. The vendors' logo files are not added (inbox #857), so the frame's
+    track display is proven by unit tests with a stand-in mark only. A
     sign-in and playback with real Spotify and Apple Music accounts, through the music frame on a TLS music host, needs
     vendor accounts and a registered app, and is owed (inbox #846).

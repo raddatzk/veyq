@@ -185,8 +185,8 @@ const en = {
         tooMany: '{name} was not added: a Memory holds at most 50 tracks.',
       },
     },
-    // Background music (uc.memory.music, ADR 0131): the bar above the tabs and the dialog behind the menu entry. The
-    // opt-in is worded as a choice, like the map's, and says who learns what.
+    // Background music (uc.memory.music, ADR 0131): the header's buttons, the music bar below the shell's footer and the
+    // dialog behind the menu entry. The opt-in is worded as a choice, like the map's, and says who learns what.
     music: {
       title: 'Background music',
       action: 'Background music',
@@ -202,8 +202,10 @@ const en = {
       consentBody:
         'Playing it here loads {service}’s player from this server’s music host ({host}). {service} then learns your IP address, your {service} account and this playlist.',
       playHere: 'Play here',
+      play: 'Play the {service} playlist',
       open: 'Open in {service}',
       off: 'Turn music off',
+      close: 'Close the player',
       frameTitle: '{service} player',
     },
     // The banner above a Memory (uc.memory.banner): an image or a video, independent of the cover.
@@ -577,8 +579,10 @@ const de: typeof en = {
       consentBody:
         'Hier abzuspielen lädt den Player von {service} vom Musik-Host dieses Servers ({host}). {service} erfährt dann deine IP-Adresse, dein {service}-Konto und diese Playlist.',
       playHere: 'Hier abspielen',
+      play: '{service}-Playlist abspielen',
       open: 'In {service} öffnen',
       off: 'Musik ausschalten',
+      close: 'Player schließen',
       frameTitle: 'Player von {service}',
     },
     banner: {

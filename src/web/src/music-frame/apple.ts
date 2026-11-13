@@ -2,18 +2,20 @@
 // configured with the Server Owner's developer token, signed in through MusicKit's own `authorize()` popup - whose answer
 // reaches its opener, which is why the app's COOP is `same-origin-allow-popups` while the frame is served. MusicKit keeps
 // its sign-in in this origin's storage, as it does on any page. Full tracks need an Apple Music subscription.
-import { loadScript, type MusicPlayer, type Report } from './player'
+import { loadScript, trackOf, type MusicPlayer, type Report, type Show } from './player'
 
 const MUSICKIT = 'https://js-cdn.music.apple.com/musickit/v3/musickit.js'
 
 interface MusicKitInstance {
   isAuthorized: boolean
   isPlaying: boolean
+  nowPlayingItem?: { title?: unknown; artistName?: unknown; artwork?: { url?: unknown } } | null
   authorize(): Promise<string>
   unauthorize(): Promise<void>
   setQueue(options: { playlist: string; startPlaying?: boolean }): Promise<unknown>
   play(): Promise<void>
   pause(): void
+  skipToPreviousItem(): Promise<void>
   skipToNextItem(): Promise<void>
   addEventListener(event: string, cb: (payload: { state?: number }) => void): void
 }
@@ -21,6 +23,7 @@ interface MusicKitInstance {
 interface MusicKitGlobal {
   configure(options: { developerToken: string; app: { name: string; build: string } }): Promise<MusicKitInstance>
   getInstance(): MusicKitInstance
+  formatArtworkURL?(artwork: { url?: unknown }, width: number, height: number): string
 }
 
 declare global {
@@ -33,7 +36,24 @@ declare global {
 const PLAYING = 2
 const PAUSED = 3
 
-export function createApplePlayer(developerToken: string, playlistId: string, report: Report): MusicPlayer {
+/** The size the bar draws a cover at, in device pixels (twice its CSS size). */
+const ARTWORK_PX = 96
+
+/** What [music] says plays, for the frame to draw (`trackOf` checks every field). */
+export function appleTrack(music: Pick<MusicKitInstance, 'nowPlayingItem'>, format?: MusicKitGlobal['formatArtworkURL']) {
+  const item = music.nowPlayingItem
+  if (!item) return null
+  let artwork: unknown = null
+  try {
+    artwork = item.artwork && format ? format(item.artwork, ARTWORK_PX, ARTWORK_PX) : null
+  } catch {
+    artwork = null
+  }
+  return trackOf(item.title, item.artistName, artwork)
+}
+
+export function createApplePlayer(developerToken: string, initialPlaylistId: string, report: Report, show: Show): MusicPlayer {
+  let playlistId = initialPlaylistId
   let music: MusicKitInstance | null = null
   let queued = false
 
@@ -49,6 +69,7 @@ export function createApplePlayer(developerToken: string, playlistId: string, re
         if (state === PLAYING) report('playing')
         else if (state === PAUSED) report('paused')
       })
+      music.addEventListener('nowPlayingItemDidChange', () => show(appleTrack(music!, window.MusicKit?.formatArtworkURL)))
       report(music.isAuthorized ? 'ready' : 'signed-out')
       return music
     } catch {
@@ -82,12 +103,27 @@ export function createApplePlayer(developerToken: string, playlistId: string, re
         report('error', 'subscription-required')
       }
     },
+    async previous() {
+      await music?.skipToPreviousItem()
+    },
     async next() {
       await music?.skipToNextItem()
+    },
+    async switchTo(id: string) {
+      playlistId = id
+      const m = await ready
+      // a playlist already queued: this frame was clicked to play, so the new one starts without another click
+      if (!queued || !m) return
+      try {
+        await m.setQueue({ playlist: playlistId, startPlaying: true })
+      } catch {
+        report('error', 'subscription-required')
+      }
     },
     async forget() {
       const m = await ready
       queued = false
+      show(null)
       await m?.unauthorize().catch(() => undefined)
     },
   }

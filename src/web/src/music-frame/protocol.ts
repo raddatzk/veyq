@@ -40,11 +40,18 @@ export function playlistLink(p: Playlist): string {
 }
 
 export type Locale = 'en' | 'de'
+/** The app's resolved theme: the frame draws in veyq's tokens (the app's own `styles/base.css`, built into the frame's
+ *  sheet) and follows the theme the app shows - a viewer's own choice may differ from the system's, which is all the
+ *  frame could read by itself. */
+export type Theme = 'light' | 'dark'
 
-/** The app → frame messages. `load` mounts one service's player for one playlist; `forget` signs the viewer out with
- *  the vendor (the consent was withdrawn) and is answered by `forgotten`. */
+/** The app → frame messages. `load` mounts one service's player for one playlist - and, sent again for a playlist of the
+ *  SAME service, switches the player to it, keeping the viewer's sign-in (another service gets a new frame from the app);
+ *  `theme` follows the app's theme; `forget` signs the viewer out with the vendor (the consent was withdrawn) and is
+ *  answered by `forgotten`. */
 export type AppMessage =
-  | { type: 'veyq-music:load'; playlist: Playlist; credential: string; locale: Locale }
+  | { type: 'veyq-music:load'; playlist: Playlist; credential: string; locale: Locale; theme: Theme }
+  | { type: 'veyq-music:theme'; theme: Theme }
   | { type: 'veyq-music:forget' }
 
 export type FrameStatus = 'loading' | 'signed-out' | 'ready' | 'playing' | 'paused' | 'error'
@@ -67,10 +74,16 @@ export function parseAppMessage(data: unknown): AppMessage | null {
   if (!data || typeof data !== 'object') return null
   const m = data as Record<string, unknown>
   if (m.type === 'veyq-music:forget') return { type: 'veyq-music:forget' }
+  if (m.type === 'veyq-music:theme') return { type: 'veyq-music:theme', theme: asTheme(m.theme) }
   if (m.type !== 'veyq-music:load') return null
   const playlist = asPlaylist(m.playlist)
   if (!playlist || typeof m.credential !== 'string' || !CREDENTIAL.test(m.credential)) return null
-  return { type: 'veyq-music:load', playlist, credential: m.credential, locale: m.locale === 'de' ? 'de' : 'en' }
+  return { type: 'veyq-music:load', playlist, credential: m.credential, locale: m.locale === 'de' ? 'de' : 'en', theme: asTheme(m.theme) }
+}
+
+/** A theme as the frame takes it: exactly `dark`, else light - never a value it would write anywhere as given. */
+function asTheme(value: unknown): Theme {
+  return value === 'dark' ? 'dark' : 'light'
 }
 
 /** [data] as a frame message, or null: what the app accepts from the frame it mounted. */

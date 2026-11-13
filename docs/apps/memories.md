@@ -202,7 +202,7 @@ guest moves a Memory, never a chapter); the cover is core's action with core's r
 | date, place, cover, banner (the node's sealed meta; the automatic reconcile too) | ✓ | ✗ | ✗ | ✗ | ✗ |
 | see the banner (read from the node's own attachment) | ✓ | ✓ | ✓ | ✓ | ✗ |
 | the Map tab and its GPX tracks ([uc.memory.tracks](../features/memory/use-cases/uc.memory.tracks.md)): see and download them; add one (the upload right) and remove one (the delete-media right) | ✓ see, add, remove (trash) | ✓ see | ✓ see | ✓ see, add, remove its own (purge) | ✗ |
-| background music: set the playlists (the node's sealed meta, [uc.memory.music](../features/memory/use-cases/uc.memory.music.md)) / see the bar and play after one's own opt-in | ✓ / ✓ | ✗ / ✓ | ✗ / ✓ | ✗ / ✓ | ✗ / ✗ |
+| background music: set the playlists (the node's sealed meta, [uc.memory.music](../features/memory/use-cases/uc.memory.music.md)) / the header's play buttons and the music bar below the shell's footer, playing after one's own opt-in | ✓ / ✓ | ✗ / ✓ | ✗ / ✓ | ✗ / ✓ | ✗ / ✗ |
 | rename, delete the node | ✓ | ✗ | ✗ | ✗ | ✗ |
 | narrow the gallery by facts (day, year, place, kind, the original's name; uc.memory.gallery step 8) | ✓ | ✓ | ✗ | ✗ | ✗ |
 | participants (opaque user ids in the node's sealed meta, [ADR 0083](../decisions/0083-memory-participants-are-a-sealed-list-in-the-memorys-metadata.md); a Memory in a tenant or group scope) | ✓ shown and edited; the profile at `#/people/<id>` (its Memories as tiles, rows or the level's map) | ✓ shown, not edited | ✗ not shown | ✗ not shown | ✗ not shown |

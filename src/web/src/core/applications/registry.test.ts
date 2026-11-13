@@ -682,6 +682,21 @@ describe('registry: keyboard shortcuts (uc.platform.keyboard-shortcuts)', () => 
   })
 })
 
+describe('registry: the footer bar (ADR 0131)', () => {
+  it('lists each application\'s bar with its id, in registration order, and refuses a second one or the same component twice', () => {
+    const r = createRegistry()
+    const A = { name: 'A' }
+    const B = { name: 'B' }
+    expect(r.footerBars()).toEqual([])
+    testApp(r).footerBar(A)
+    testApp(r, 'other').footerBar(B)
+    expect(r.footerBars()).toEqual([{ application: 'test', component: A }, { application: 'other', component: B }])
+    expect(() => testApp(r).footerBar({ name: 'C' }), 'one per application').toThrow(/already registered/)
+    expect(() => testApp(r, 'third').footerBar(A), 'nor the same component by another').toThrow(/already registered/)
+    expect(r.footerBars(), 'a refused bar registers nothing').toHaveLength(2)
+  })
+})
+
 describe('registry: item reviews', () => {
   it('lists the claimed reviews in order and refuses the same component twice', () => {
     const r = createRegistry()

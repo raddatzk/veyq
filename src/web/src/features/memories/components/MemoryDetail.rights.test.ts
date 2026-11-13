@@ -28,6 +28,7 @@ import { treeNode, memberMemoryRights, guestAccessOf } from '../../../test/model
 import { chooseHeaderEntry, headerActionLabels, headerButtonIds, headerMenuIds, mountWithHeader } from '../../../test/nodeHeader'
 import type { CoreHeaderAction } from '../../../core/node/nodeHeader'
 import { coreActionsStandIn, coverStandIn } from '../../../test/nodePage'
+import { sealNodeMeta } from '../../../core/node/nodeMeta'
 
 const SCOPE_ID = '11111111-1111-1111-1111-111111111111'
 const NODE_ID = '22222222-2222-2222-2222-222222222222'
@@ -203,7 +204,7 @@ describe('MemoryDetail follows rights', () => {
   })
 
   // uc.memory.music (ADR 0131): whoever writes the node's meta sets its playlists, from the ⋯ menu; nobody else is offered it
-  // (a guest's rights never grant editMeta). The bar itself is every viewer's (MemoryMusic.test.ts).
+  // (a guest's rights never grant editMeta). The header's play buttons are every viewer's (below; the bar: MusicBar.test.ts).
   it('the background music dialog opens from the header only with editMeta', async () => {
     const memoryKey = v1.randomBytes(32)
     await seedDated(memoryKey)
@@ -221,6 +222,29 @@ describe('MemoryDetail follows rights', () => {
       }
       w.unmount()
       document.body.innerHTML = ''
+    }
+  })
+
+  // uc.memory.music (ADR 0131 decision 5): a node's playlists put one button per service in its header, a member's and a
+  // READ guest's alike (share view = member view) - a toggle that starts it in the shell's music bar, or the link into the
+  // service where this server plays none (the test's instance serves no music host).
+  it('a playlist puts its button in the header for a member and a READ guest; none without one', async () => {
+    const memoryKey = v1.randomBytes(32)
+    const music = [{ service: 'spotify', id: '37i9dQZF1DXcBWIGoYBM5M' }, { service: 'apple-music', id: 'pl.u-AbC123', storefront: 'de' }]
+    const withMusic = { ...node(), wrappedMeta: sealNodeMeta(memoryKey, { scopeId: SCOPE_ID, nodeId: NODE_ID }, { v: 1, music }) }
+    for (const [who, rights] of [['member', memberMemoryRights()], ['READ guest', memoryRights(guestAccessOf(ShareRole.Read), { kind: MEMORY_KIND, inIdentityFolder: false, shareable: false })]] as const) {
+      for (const n of [node(), withMusic]) {
+        const w = mountWithHeader(MemoryDetail, {
+          props: { source: memberMemorySource({ scopeId: () => SCOPE_ID }), node: n, scopeId: SCOPE_ID, memoryKey, rights },
+          global: { plugins: [realI18n()] },
+        })
+        await flushPromises()
+        await flushPromises()
+        const ids = [...headerButtonIds(w), ...(await headerMenuIds(w))]
+        const expected = n === withMusic ? ['music-spotify', 'music-apple-music'] : []
+        expect(ids.filter((id) => id.startsWith('music-')), `${who}, ${n === withMusic ? 'two playlists' : 'none'}`).toEqual(expected)
+        w.unmount()
+      }
     }
   })
 

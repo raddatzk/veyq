@@ -147,14 +147,18 @@ any time. The fences:
 - **Never in the app origin.** The app origin holds the viewer's unlocked keys in memory; a script there reads every key
   and every plaintext the viewer can open. The SDK runs only in the **music frame**, a page the backend serves on the
   instance's own **music host** — another origin, which holds no key, no session and no content — embedded as an iframe
-  and spoken to by `postMessage` alone: the app hands it one playlist reference and the service's public credential
-  (the Server Owner's Spotify client ID, the MusicKit developer token), nothing else, and takes from it only a state
+  and spoken to by `postMessage` alone: the app hands it one playlist reference, the service's public credential
+  (the Server Owner's Spotify client ID, the MusicKit developer token) and its theme (exactly `light` or `dark`), nothing
+  else, and takes from it only a state
   word, each message parsed against `src/web/src/music-frame/protocol.ts`. An opaque (sandboxed) origin was measured
   and cannot hold either SDK (ADR 0131 § Context). Sessions are bearer tokens, not cookies, so a same-site music host
   carries no credential to the API, and the music host answers no API.
-- **Opt-in per viewer, per browser and per service, and withdrawable** at the Memory's music bar, as the map's consent is:
+- **Opt-in per viewer, per browser and per service, and withdrawable** at the music bar, as the map's consent is:
   nothing of the vendor's or the music host's loads before **Play here**, and **Turn music off** tells the frame to
-  forget the vendor's sign-in and removes it. A share guest gets the same choice.
+  forget the vendor's sign-in and removes it once it did. A share guest gets the same choice.
+- **The frame belongs to the shell, not to a page** (the bar below the footer plays on across pages, ADR 0131
+  decision 5): what outlives the Memory's page is the one playlist reference already handed to the frame - never a key
+  or a node -, and it goes with the session: a sign-out or a lock unmounts the bar.
 - **The playlist is sealed content** in the node's meta; the server never learns it, nor whether anyone played it.
 - **Vendor tokens never reach the veyq server.** Spotify's sign-in is the PKCE flow inside the frame (the code passes
   the music host's callback URL once and is worthless without the verifier only the frame holds); Apple's is MusicKit's
@@ -173,8 +177,8 @@ forced sign-out at worst (inbox #849).
 
 **Verification:** `MusicFrameSliceTest` (the entries, the policies while on and off, the music host's whole surface and
 its own policy), `MusicSettingsTest`, `TraefikFileMusicRouteTest`; on the client `protocol.test.ts`, `main.test.ts`,
-`spotifyAuth.test.ts` (`src/web/src/music-frame/`) and `MemoryMusic.test.ts`, `useMusicConsent.test.ts`
-(`src/web/src/features/memories/music/`). A sign-in and playback with real vendor accounts is owed (inbox #846).
+`spotifyAuth.test.ts`, `player.test.ts` (`src/web/src/music-frame/`), `MusicBar.test.ts`, `musicHeader.test.ts`,
+`useMusicConsent.test.ts` (`src/web/src/features/memories/music/`) and `AppShell.footerBar.test.ts`. A sign-in and playback with real vendor accounts is owed (inbox #846).
 
 So the veyq operator stays blind by construction; what crosses goes straight to the provider, never through veyq: a
 consented, identity-free request the **user** turned on, the breached-password check's 5-hex prefix, the exchange
