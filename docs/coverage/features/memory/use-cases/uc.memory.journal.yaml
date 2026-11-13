@@ -18,7 +18,7 @@ acceptanceCriteria:
   - id: history-and-restore
     text: Superseded snapshot revisions and their updates are kept for the node trash retention after their replacement (the current one and its predecessor always; one holding a guest's update never for less than the guest-write record's N), then deleted by the server. A member lists them with time and writer, opens one, and restores it as one ordinary edit followed by a compaction; a guest is served no earlier revision and cannot restore.
   - id: contributors
-    text: The journal shows its contributors from the server's contributor rows, written with each writer's first update and kept with the journal; a member is served writer ids and reads members' and guests' names, a guest is served only ordinals and reads no name or member id; an erased account shows as a former member.
+    text: The journal shows its contributors from the server's contributor rows, written with each writer's first update and kept with the journal; a member is served writer ids and reads members' and guests' names, a guest is served only ordinals and each writer's alias (an HMAC of the writer under the journal's own never-served key, stable within the journal, different in another) and reads no name or member id, but a pseudonym per person ("Anonymous Fox", "Anonyme Eule", equal animals numbered, its own row "You"), the same one "who is here" shows it; an erased account shows as a former member.
   - id: embeds
     text: The tokens `::media:`, `::chapter:`, `::map:` and `::track:` inside the sealed text render through the safe renderer as cards in the editor's live preview and in the read view; an embed the viewer cannot open renders as a placeholder; a map or track embed draws only under the map consent.
   - id: guest-session-record
@@ -30,7 +30,7 @@ acceptanceCriteria:
   - id: export-import-search
     text: A Memory's export carries each journal as markdown with every embed token pointing at its exported file, and no CRDT state; an import starts a fresh journal from it with the importer as its only contributor; a member's search finds a journal by the projection of its newest snapshot revision.
   - id: live-and-present
-    text: A writer's edit reaches the other editors within a second through core's stream, which announces positions only and is answered by the list's ordinary read; the editor shows who else has the journal open for editing — names for a member, a count for a guest; with no stream the journal reads on the poll.
+    text: A writer's edit reaches the other editors within a second through core's stream, which announces positions only and is answered by the list's ordinary read; the editor shows who else has the journal open for editing — names for a member, for a guest each other editor's pseudonym from the alias the stream serves it, the contributors list's for the same person; with no stream the journal reads on the poll.
 gaps:
   backend: "Planned, nothing built: no journal tables, operations, list key on the items revision, stream or session row exist (cr-live-journal, cr-live-stream)."
   web: "Planned, nothing built: no journal model, editor, embeds, history or stream client exist (cr-live-journal, cr-live-stream)."

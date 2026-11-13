@@ -58,10 +58,15 @@ with an event that names no reason, and the client's next read meets the real re
 ### 4. Who is here, from the stream itself
 
 The server knows who holds a stream onto a list, so it sends a **`present`** event whenever that set changes: to a
-member the writers (member ids and link identity ids, which a member's client names), to a link guest only how many
-others are there — a link is served no name and no member id ([ADR 0030](0030-contributor-public-share.md) point 8).
+member the writers (member ids and link identity ids, which a member's client names), to a link guest each other
+holder's **alias** — an opaque per-list handle the list's application derives, never a name and never a member id
+([ADR 0030](0030-contributor-public-share.md) point 8). The journal's alias is the one its contributors list serves a
+guest ([ADR 0133](0133-a-memorys-journal-is-a-sealed-crdt-log-whose-snapshots-only-members-write.md) decision 9: an
+HMAC of the writer under the journal's own key, which the guest's client names "Anonymous Fox"), so a guest sees the
+same pseudonym in both places (owner 2026-11-13: pseudonyms, not a count). An application registers the alias with
+the list it declares streamable; a list whose application derives none tells a guest only how many others are there.
 Only editors stream (decision 3), so "here" means "has it open for editing". This tells the operator nothing it does
-not hold already: it holds the streams.
+not hold already: it holds the streams, and the alias is computed from them.
 
 **Live cursors are a later slice** (inbox #854), and their shape is decided here: an ephemeral message sealed under the
 list's content key by the sender (for the journal, `K_jrev`), of one fixed size, posted at most a few times a second

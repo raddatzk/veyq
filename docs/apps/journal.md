@@ -35,7 +35,8 @@ flowchart LR
 | Row | Holds | Operator sees |
 |---|---|---|
 | snapshot revision | number, epoch, `K_jrev` wrapped under `K_node`, folded position, writer, time; sealed state and projection | count, times, size classes, writers |
-| contributor | each writer who ever wrote, with its ordinal (a guest is served only ordinals) | who has written in it |
+| contributor | each writer who ever wrote, with its ordinal (a guest is served only ordinals and aliases) | who has written in it |
+| alias key | 32 random bytes per journal, never served; a writer's alias is an HMAC of its id under it (ADR 0133 decision 9) | that the journal exists |
 | update | snapshot revision, position, writer (member or link identity), time; the sealed envelope (Yjs client id, sequence, update) | every update's time to the millisecond, size class and writer |
 | guest-write record (core) | one row per guest writing session: address, port, `Origin`, identity, journal, first and last time, count | as for every guest write |
 | the stream (core, in memory only) | who holds a stream onto which journal | who has it open for editing, from when to when |

@@ -41,9 +41,11 @@
 - **A2 — a `READ` link guest reads** the journal as it stands, with its embeds; it picks up others' edits on the
   poll, not live. A `WRITE_ONLY` link shows no journal.
 - **A3 — who is here:** the editor shows who else has the journal open for editing — members by name, guests by their
-  guest name, for members; a guest sees only how many others are there.
+  guest name, for members; a guest sees every other one as a pseudonym ("Anonymous Fox", "Anonyme Eule"), the same one
+  the contributors list shows, never a name or a number (ADR 0133 decision 9).
 - **A4 — contributors:** the journal lists who has written in it — the server's attribution, never claimed as proven;
-  a member reads names, a guest none; an erased account shows as a former member.
+  a member reads names; a guest reads a pseudonym per person, stable within the journal and different in every other
+  journal, and "You" for itself; an erased account shows as a former member (to a guest: its pseudonym).
 - **A5 — history and restore (members):** the history lists the kept earlier snapshot revisions with their time and
   writer; a member opens one, reads it, and **Restore** turns the text back into it as one more edit, which the others
   see as any edit and which is undone by restoring the revision before it. Revisions older than the trash retention

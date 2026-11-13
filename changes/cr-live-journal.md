@@ -10,6 +10,7 @@ invariants:
   - "the server takes snapshot n + 1 only over n, and no update under a K_jrev minted below the scope's epoch (ADR 0133 decisions 4, 11)"
   - "a journal update bumps the journal's own list of the node's items revision — never the gallery's, never the scope tree's (ADR 0133 decision 3)"
   - "a guest's journal updates leave one guest-write record row per writing session, and every update keeps its own server time (ADR 0093 § 10)"
+  - "a link guest is served each contributor's alias, never a name or a member or identity id, and the journal's alias key is never served (ADR 0133 decision 9)"
 ---
 
 ## Goal
@@ -75,7 +76,9 @@ which moves this CR's journal onto core's stream; this CR's poll stays the fallb
    - `rekeyJournalRevisions` — the node re-key's re-wrap of every kept `K_jrev` (Expenses' revision re-wrap's shape,
      ADR 0109 decision 3), refusing any change of a body.
    - The share file: `getShareJournal` (a `READ` or `READ_WRITE` guest; ADR 0033 decision 7's digest tag; every writer
-     as its contributor ordinal, no member or identity id anywhere) and `appendShareJournalUpdates` (`READ_WRITE` only).
+     as its contributor ordinal, no member or identity id anywhere; the contributors as `{ ordinal, alias }`, the alias
+     base64 of 8 bytes (ADR 0133 decision 9), and `selfOrdinal` for a `READ_WRITE` guest who wrote) and
+     `appendShareJournalUpdates` (`READ_WRITE` only).
    - Classify every new operation in `OperatorBlindProbeTest`; state `ModuleCompositionTest`'s reds, never stub.
    - The export schema `contracts/export/memories/content.schema.json` gains a node's `journal` (markdown, embed
      tokens rewritten to exported paths).
@@ -91,8 +94,10 @@ which moves this CR's journal onto core's stream; this CR's poll stays the fallb
    for today's callers; `NodeItemsRevisionBumpsTest` and the lock-order tests extend to the journal's writers. Erasure
    still deletes every row of the node.
 4. **Memories' tables** (new migration): `veyq_journal_revision`, `veyq_journal_update` (indexed `(node_id, position,
-   id)`) and `veyq_journal_contributor` (node, writer, ordinal; written with a writer's first update) as ADR 0133
-   decision 3; an update's position is the journal list's bump, stamped in the writer's
+   id)`), `veyq_journal_contributor` (node, writer, ordinal; written with a writer's first update) and
+   `veyq_journal_alias_key` (node, 32 random bytes from the server's CSPRNG, minted in the transaction of the first
+   contributor row, never served, deleted with the journal) as ADR 0133 decision 3; a writer's alias is the first 8
+   bytes of `HMAC-SHA-256(key, kind ‖ writer id)` (kind `m` for a member, `g` for a link identity), computed when served; an update's position is the journal list's bump, stamped in the writer's
    transaction (ADR 0033 decision 3). Both carry their padded sizes; Memories' storage-usage term sums them
    (ADR 0073 § 4's per-application term).
 5. **Numbers:** update ≤ 64 KiB sealed, classes 256 B / 1 KiB / 4 KiB / 16 KiB / 64 KiB; state ≤ 4 MiB, projection ≤
@@ -124,7 +129,12 @@ which moves this CR's journal onto core's stream; this CR's poll stays the fallb
     same renderers; a placeholder for what does not open; maps under the one consent.
 11. **UI** (reuse first, `ui-web-styleguide.md` § Reuse first): a **Journal** tab on a Memory's and a Chapter's detail
     (beside Chapters/Map); the editor with a small toolbar (headings, list, embed menu); a read view for `READ`
-    guests and when the switch is off; a contributors popover; a **History** panel for members (list, preview,
+    guests and when the switch is off; a contributors popover — on a guest's page each other person a **pseudonym**
+    (ADR 0133 decision 9): `features/memories/journal/journalPseudonym.ts` names an alias from a fixed list of 64
+    animals in EN and DE (each German one with its gender, so "Anonymer Fuchs", "Anonyme Eule", "Anonymes Pferd"; the
+    animal is the alias's first two bytes as an unsigned integer mod 64, the avatar colour its third byte mod the
+    palette), numbers equal animals ("Anonymous Fox 2") in contributor-ordinal order and its own row "You"; a member's
+    page shows names as before; a **History** panel for members (list, preview,
     Restore with a confirmation, Undo by restoring the one before); the incomplete/mismatch banners; a guest's
     editor shows `GuestWriteRecordNotice`. EN+DE in the i18n files.
 12. **Export/import/search:** the exporter merges and writes `journal` per node with tokens rewritten; the importer
@@ -169,7 +179,10 @@ and the predecessor's key served with it; a guest's snapshot and history reads r
 update under a revision minted below the scope epoch refused and taken after a compaction; the tail cap, the update
 and snapshot caps, the rate; the retention purge (current and predecessor kept, a guest-holding revision kept to N,
 a held one kept); re-key re-wraps and refuses a body change; erasure and trash; the switch and `451`; the report's
-keys and the hold copy; the storage term; a `READ` guest's digest tag `304`s while nothing it sees moved. Every
+keys and the hold copy; the storage term; a `READ` guest's digest tag `304`s while nothing it sees moved; the alias:
+the same writer's alias equal across reads and a restart, different in another journal, different for two writers, a
+member's and a guest's never equal to a plain hash of their id, no id in the guest's response (with the member's
+response carrying the ids as the control). Every
 negative with its positive control. Done when: `./gradlew check` green.
 
 **Phase 4 — web, the journal model.** Decision 9, the seal purposes in `src/packages/crypto` (`seal.ts`), the
@@ -182,7 +195,10 @@ kept log replayed; compaction's jitter and drop on `409`; the flush tick bounds 
 
 **Phase 5 — web, the editor and its embeds.** Decisions 10, 11 (without History). Unit tests per renderer token and
 placeholder; the editor binds the doc and flushes; the read view for `READ` and the switch off; the guest's editor
-shows the notice; the contributors popover names for a member and none for a guest. A lane L1 spec in `tests/e2e`:
+shows the notice; the contributors popover names for a member and pseudonyms for a guest (`journalPseudonym`: the
+same alias the same name, EN and DE with the German adjective agreeing, equal animals numbered in ordinal order with
+the earlier writer's suffix kept when a later one appends, the guest's own row "You", every list entry a distinct
+animal). A lane L1 spec in `tests/e2e`:
 a member and a `READ_WRITE` guest in two browser contexts type into one journal and both see both texts; a `READ`
 guest sees the text. Done when: `pnpm run check` green, the spec green once, and a **browser pass** on the dev instance
 (`veyq.localhost`): two profiles edit one Memory's journal at once, embed a photo and a track, the guest's notice is

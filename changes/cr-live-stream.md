@@ -7,7 +7,7 @@ adrs: ["0134", "0133", "0033", "0081", "0021", "0103", "0106", "0092", "0030"]
 invariants:
   - "the stream carries positions and who is present, never a sealed or plaintext byte of a list (ADR 0134 decision 2)"
   - "only lists an application declares streamable can be subscribed; the gallery and the level views stay on the poll (ADR 0134 decision 3)"
-  - "a link guest is told how many others are present, never a name or a member id (ADR 0134 decision 4)"
+  - "a link guest is told each other present editor's alias (the journal's, ADR 0133 decision 9), never a name or a member id (ADR 0134 decision 4)"
   - "nothing about a stream is stored, and no log line names a person (ADR 0134 decision 7)"
 ---
 
@@ -48,17 +48,22 @@ read). This CR cites it as planned; re-read its retrospective before phase 1.
 1. **Contract — core's spec, a new tag `live`:** `openLiveStream` (`GET /api/live?list=<nodeId>:<list>&…`, at most
    16, `text/event-stream`) for a member, and `openShareLiveStream` under the share route for a `READ_WRITE` guest.
    Events as schemas: `position` (`nodeId`, `list`, `revision`), `present` (`nodeId`, `list`, and for a member
-   `members` and `identities` ids, for a guest `others` as a count), `closed` (`nodeId`, `list`, no reason) and the
+   `members` and `identities` ids, for a guest `others` as the other holders' aliases, base64 of 8 bytes each, and
+   `self` its own), `closed` (`nodeId`, `list`, no reason) and the
    heartbeat comment. Refusals before the stream starts: `403/404` as the list's read, `409` for a list not
    streamable, `429` past the session's 4 streams, `503 live_capacity` past the instance maximum.
 2. **Streamable lists:** an application declares them on its registrar (Memories: the journal list); core refuses any
-   other. No list of the gallery or a level view is declared.
+   other. No list of the gallery or a level view is declared. A declaration may carry the list's **alias** function
+   `(node, list, holder) → 8 bytes` (ADR 0134 decision 4); Memories' is the journal's (ADR 0133 decision 9, built by
+   `cr-live-journal`), so the hub serves a guest the same alias the contributors list does. A list without one gives a
+   guest a count (no such list exists yet; its case is a test, not a feature).
 3. **Publishing:** core's items-revision bump registers an after-commit hook that hands `(node, list, revision)` to
    the in-process hub; a rolled-back write publishes nothing. The hub fans out to the streams subscribed to that list.
 4. **Gate:** each list's read gate at open and again at every heartbeat (15 s); a failing list sends `closed` and is
    dropped; the stream ends when its last list is dropped or its session ends.
 5. **Presence:** the hub keeps per list the set of stream holders (member id or link identity id); a change sends
-   `present` to each holder, shaped per holder (decision 1). In memory only.
+   `present` to each holder, shaped per holder (decision 1): a guest's lists the other holders' aliases, computed when
+   it is sent (the alias key is read once per list per hub and dropped with the list's last stream). In memory only.
 6. **Transport:** no compression on the stream (ADR 0103's exemption list), a 15 s heartbeat, the configuration value
    `veyq.live.max-streams` (2,000) and 4 per session, the open under core's rate limit. The chart's `HTTPRoute` gets a
    rule for `/api/live` and the share stream's path with `timeouts.request: 0s` and `timeouts.backendRequest: 0s`;
@@ -67,7 +72,8 @@ read). This CR cites it as planned; re-read its retrospective before phase 1.
    share's token-less form), parses SSE, reconnects with jittered backoff after 40 s without a byte, and on every
    (re)connect triggers one read per list; `itemsLive.ts`'s loop takes the stream as its tick source and keeps its
    timer as the fallback (ADR 0033's cadence while streaming, the journal's 2 s while not). The journal editor shows
-   who is here (names for a member from the member list and guest names; "N others" for a guest), reusing the
+   who is here (names for a member from the member list and guest names; for a guest the pseudonyms of
+   `cr-live-journal`'s `journalPseudonym`, the same as its contributors popover, never a count), reusing the
    participants' avatar row.
 
 ## Inventory (locators — run, read as lists)
@@ -90,14 +96,15 @@ guards green; the new operations classified in `OperatorBlindProbeTest`; the pre
 **Phase 2 — backend and both deployment targets.** Decisions 2–6. Tests: a journal update's commit reaches a
 subscribed stream within a second and a rolled-back one never; a gallery list is refused (`409`, with the journal's
 positive control); a member and a `READ_WRITE` guest each open one, a `READ` guest is refused (with its `READ_WRITE`
-control); `present` names ids to a member and only a count to a guest; a closed link and an ended membership end the
+control); `present` names ids to a member and to a guest only the other holders' aliases — each equal to that writer's alias
+in the guest's contributors list, none a member or identity id, and different for the same writer in another journal; a closed link and an ended membership end the
 list at the next heartbeat; the 5th stream of a session `429`s and the instance maximum `503`s; the stream is never
 compressed. On both targets: a stream through Compose's Traefik and through the chart on a kind cluster with one
 Gateway implementation stays open past 2 minutes and delivers an event; the chart's check pins the new rule. Done
 when: `./gradlew check` and the chart's check green, and both target proofs recorded in the commit.
 
 **Phase 3 — web.** Decision 7. Unit tests: the SSE parser (events, comments, split chunks); reconnect after silence
-with one read per list; the fallback timer only while no stream; the presence row for a member and a guest. The lane
+with one read per list; the fallback timer only while no stream; the presence row for a member (names) and a guest (pseudonyms, the contributors popover's for the same alias). The lane
 L1 spec of `cr-live-journal` asserts the other context sees a typed word within 2 s and shows the other as present.
 Done when: `pnpm run check` green, the spec green once, and a **browser pass** on the dev instance: two profiles in
 one journal see each other's typing within a second and each other in the presence row; stopping the backend shows
