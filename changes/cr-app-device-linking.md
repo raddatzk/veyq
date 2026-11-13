@@ -224,11 +224,19 @@ text goes straight into `DeviceLink` inside the core.
   Chrome's fake camera, `--use-fake-device-for-media-stream --use-file-for-fake-video-capture=<the app's code as
   .y4m>`): the app as trusted and as new device in each direction, four runs per app, the app scanning with its test
   camera or the macOS camera; each run's linked family signed out after.
+  **And the code stays out of the system's snapshots** (inbox #886, `src/mobile/CLAUDE.md` § Secrets on screen): the
+  shown pairing code (its QR and its digits) and the scanner's camera are a secret on screen, so Android's screen of
+  them is `FLAG_SECURE` and Apple's is covered while the scene is not active (`.secretOnScreen()`); each bitten as the
+  sweep was — the task snapshot (`/data/system_ce/0/snapshots`) and the SplashBoard snapshot pulled and looked at,
+  without the protection the code visible in it, with it covered.
 - [ ] **5 the bridge** — D6 with `WireTest` samples, `DispatchTest` (open each role, a code picture, confirm, a tenant
   switch closing it) and `SecretFreeSchemaTest` unchanged. · Done when: `./gradlew :bridge:jvmTest` green.
 - [ ] **6 Linux and Windows** — the same screens as phase 4 on the desktops. · Done when: both `run.py build`/`test`
   green; each desktop's pass links with the web in both directions (the desktop showing; and scanning through its test
   camera); `NoCamera` offers only the showing halves on the Windows VM.
+  **And the code stays out of capture** (§ Secrets on screen): Windows' showing screen and its scanner through
+  `ScreenSecrets.Guard`, bitten as the sweep was — `Veyq.Drive`'s `shot` (BitBlt) shows the desktop behind the window,
+  and the code with `VEYQ_DEV_CAPTURABLE=1`; Linux has no capture to keep it from (the section says why).
 - [ ] **7 docs and harvest** — ADR 0059 §2 and ADR 0004 § Transport: D1's sentence; `uc.account.onboard-device`
   notes the apps (no coverage change); `native-apps.md` § Account: the adoption blocker removed, what is built added;
   `site/src/content/docs/account/adding-another-device.mdx` and `getting-started/sign-in.mdx` (with their `de/` twins)
