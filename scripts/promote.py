@@ -38,14 +38,25 @@ signatures, the chart, the git tag, the GitHub Release — stay in the workflow'
      snapshot's commit (`release_assets.py`, with `--unscheduled` when asked, so that refusal comes here too); no
      input this promotion cannot compare (a predecessor, a backup list — lanes L2 and L3, whose rerun is #453's and
      #461's to build); and the tools image is stamped `<major>.<minor>` with the major entry the tree derives now.
+  9. **The desktop apps' packages are the snapshot's, and their signer is set up** (ADR 0133 decision 10; checked
+     after 6) — where the snapshot's commit stages them (its checks.yml has `apps-stage`; a commit from before has none, and its release
+     carries no app file): per platform of `snapshot.APP_PLATFORMS`, `sha-<commit>-<platform>` and
+     `<version>-SNAPSHOT-<platform>` of `veyq-apps` name one artifact of `snapshot.APP_ARTIFACT_TYPE` carrying exactly
+     the file of this version, signed under the snapshot identity, and `<version>-<platform>` is absent or already it;
+     and the release's MSIX signer is committed (`scripts/msix_sign.py certificate`: `src/mobile/windows/veyq.cer`,
+     its subject the MSIX's publisher) — refused here, before any write, rather than in the signing job.
 
 It then writes `plan.json`: the draft, the commit, the version, the three index digests, the chart's state, the asset
 set, the major entry, whether the release becomes `latest` (from `main` only — with check 4, the newest release of the
-highest major) and the names each image gets. On a refusal it writes `refusal.txt`, the sentence the `refused` job
-appends to the draft's notes, and exits 1.
+highest major), the names each image gets, and the app packages' artifact digests (`apps`, per platform) and their
+files' sha256 (`app_layers`, per file name; both empty for a snapshot that staged none). On a refusal it writes
+`refusal.txt`, the sentence the `refused` job appends to the draft's notes, and exits 1.
 
 **assets** holds a produced release to the plan: its asset-set hash is the attested one, its manifest names each
-image as `<registry>/<image>:<version>@<the planned digest>`, and its `majorEntry` is the one the tools image bakes.
+image as `<registry>/<image>:<version>@<the planned digest>`, and its `majorEntry` is the one the tools image bakes;
+its `apps` are exactly the planned packages and `veyq.cer` (none where the plan has none), and each Flatpak's sha256 is
+the staged file's — the release attaches the tested bytes (the MSIX's are its signed copy's, held by
+`scripts/msix_sign.py compare` in the signing job).
 
 Its limit: it reads the registry through Docker Buildx and cosign, and only `scripts/snapshot.py`'s "not found"
 wording reads as absent — any other failure refuses. What `cosign verify-attestation` prints is parsed in both shapes
@@ -82,6 +93,11 @@ RELEASE_BRANCH = re.compile(r"^release/(0|[1-9][0-9]*)\.x$")
 LANE_ORCHESTRATOR = "scripts/run_stack_e2e.py"
 # The pipeline whose `stack` job is lane L1, read at the snapshot's commit for its matrix.
 PIPELINE_WORKFLOW = ".github/workflows/checks.yml"
+# The job of that file that stages the desktop apps' packages (ADR 0133 decision 10): a snapshot's commit that has it
+# staged them, and its release carries them.
+APPS_STAGE_JOB = "apps-stage"
+# The MSIX's certificate as the release attaches it (scripts/msix_sign.py writes it beside the signed package).
+CERTIFICATE_ASSET = "veyq.cer"
 
 
 class Refused(Exception):
@@ -270,6 +286,8 @@ class Plan:
     asset_set: str
     major_entry: str | None
     unscheduled: bool
+    apps: dict[str, str] = dataclasses.field(default_factory=dict)  # platform -> the snapshot's artifact digest
+    app_layers: dict[str, str] = dataclasses.field(default_factory=dict)  # file name -> its sha256 as staged
 
 
 def check(host, *, releases: list[dict], ref: str, repository: str, registry: str, unscheduled: bool,
@@ -326,6 +344,8 @@ def _check(host, draft: Draft, *, ref: str, repository: str, registry: str, unsc
         raise Refused(f"{registry}/{CHART}:{version} exists while the images' `{version}` is not this snapshot's — "
                       f"the chart is another publish's")
 
+    apps, app_layers = check_apps(host, registry=registry, version=version, commit=commit, identity=identity)
+
     archs, shards = host.stack_matrix(commit)
     if not archs or not shards:
         raise Refused(f"the `stack` matrix at {commit} names no architecture or no shard")
@@ -356,7 +376,49 @@ def _check(host, draft: Draft, *, ref: str, repository: str, registry: str, unsc
                       f"image, so release a snapshot built after it (ADR 0085 decision 10)")
     latest = ref == "main"
     return Plan(draft.id, draft.tag, commit, version, major, latest, release_names(version, major, latest), digests,
-                chart, attested, entry, unscheduled)
+                chart, attested, entry, unscheduled, apps, app_layers)
+
+
+def check_apps(host, *, registry: str, version: str, commit: str, identity: str) -> tuple[dict[str, str], dict[str, str]]:
+    """Check 9: the snapshot's app packages, per platform, and the release's MSIX signer; ({}, {}) for a snapshot
+    whose commit stages none."""
+    if not host.stages_apps(commit):
+        return {}, {}
+    host.signer()
+    package = f"{registry}/{snapshot.APP_PACKAGE}"
+    apps: dict[str, str] = {}
+    layers: dict[str, str] = {}
+    for platform, pattern in snapshot.APP_PLATFORMS.items():
+        by_sha = host.inspect(f"{package}:sha-{commit}-{platform}")
+        by_name = host.inspect(f"{package}:{version}-SNAPSHOT-{platform}")
+        if by_sha is None or by_name is None:
+            raise Refused(f"{package} has no snapshot of {commit}'s {platform} package (`sha-{commit}-{platform}` "
+                          f"{'absent' if by_sha is None else 'present'}, `{version}-SNAPSHOT-{platform}` "
+                          f"{'absent' if by_name is None else 'present'}) — its commit stages the desktop apps, so its "
+                          f"snapshot names them")
+        digest = digest_of(by_sha)
+        if digest_of(by_name) != digest:
+            raise Refused(f"{package}: `sha-{commit}-{platform}` and `{version}-SNAPSHOT-{platform}` name two artifacts")
+        want = pattern.format(version=version)
+        try:
+            doc = json.loads(by_sha)
+        except ValueError:
+            doc = {}
+        layer = doc.get("layers") if isinstance(doc, dict) else None
+        titles = [str(((x or {}).get("annotations") or {}).get("org.opencontainers.image.title")) for x in layer or []]
+        if doc.get("artifactType") != snapshot.APP_ARTIFACT_TYPE or titles != [want]:
+            raise Refused(f"{package}@{digest} is a `{doc.get('artifactType')}` carrying {titles}, not one "
+                          f"`{snapshot.APP_ARTIFACT_TYPE}` carrying `{want}` — not the {platform} package of {version}")
+        taken = host.inspect(f"{package}:{version}-{platform}")
+        if taken is not None and digest_of(taken) != digest:
+            raise Refused(f"{package}:{version}-{platform} already names {digest_of(taken)}, not this snapshot's — a "
+                          f"release name is never replaced")
+        if not host.verify_signature(f"{package}@{digest}", identity):
+            raise Refused(f"{package}@{digest} does not verify as a snapshot of this repository "
+                          f"(`publish.yml` on a publishing branch)")
+        apps[platform] = digest
+        layers[want] = str(layer[0].get("digest"))
+    return apps, layers
 
 
 # ---- assets, notes ----------------------------------------------------------------------------------------------
@@ -378,6 +440,18 @@ def check_assets(dest: pathlib.Path, plan: dict, registry: str) -> None:
                       f"`{plan['major_entry']}`")
     if manifest.get("release") != plan["version"] or bool(manifest.get("unscheduled")) != plan["unscheduled"]:
         raise Refused("the manifest names another release or another `unscheduled` than the plan")
+    layers = plan.get("app_layers") or {}
+    want_apps = set(layers) | ({CERTIFICATE_ASSET} if layers else set())
+    got_apps = manifest.get("apps")
+    if not layers and got_apps is not None:
+        raise Refused(f"the manifest lists app files {sorted(got_apps)}, and the snapshot staged none")
+    if layers and (not isinstance(got_apps, dict) or set(got_apps) != want_apps):
+        raise Refused(f"the manifest's apps are {sorted(got_apps or {})}, not the snapshot's packages and the "
+                      f"certificate {sorted(want_apps)}")
+    for name, staged in layers.items():
+        if name.endswith(".flatpak") and f"sha256:{got_apps[name]}" != staged:
+            raise Refused(f"the release's {name} hashes to sha256:{got_apps[name]}, the snapshot staged {staged} — "
+                          f"a Flatpak bundle is attached as tested, byte for byte")
 
 
 NOTE_MARK = "<!-- veyq: promotion refused -->"
@@ -449,6 +523,19 @@ class Host:
         if proc.returncode != 0:
             raise Refused(f"no attestation of {ref} verifies as the snapshot's: {(proc.stderr or '').strip()[-400:]}")
         return proc.stdout
+
+    def stages_apps(self, commit: str) -> bool:
+        import yaml
+        shown = self._run("git", "show", f"{commit}:{PIPELINE_WORKFLOW}", check=False)
+        doc = (yaml.safe_load(shown.stdout) or {}) if shown.returncode == 0 else {}
+        return APPS_STAGE_JOB in (doc.get("jobs") or {})
+
+    def signer(self) -> None:
+        import msix_sign
+        try:
+            msix_sign.certificate()
+        except msix_sign.Refused as e:
+            raise Refused(str(e))
 
     def stack_matrix(self, commit: str) -> tuple[list[str], list[str]]:
         import yaml
@@ -552,7 +639,7 @@ def main() -> int:
         except Refused as e:
             print(f"promote: {e}", file=sys.stderr)
             return 1
-        print(f"release files: the attested asset set, the planned digests and major entry")
+        print("release files: the attested asset set, the planned digests and major entry, the app files as staged")
         return 0
 
     args.out.mkdir(parents=True, exist_ok=True)
@@ -576,7 +663,7 @@ def main() -> int:
     print(f"promote: {plan.tag} ({plan.commit}) may become v{plan.version}: names {', '.join(plan.names)}, "
           f"latest {plan.latest}, asset set {plan.asset_set}")
     write_output(version=plan.version, major=plan.major, commit=plan.commit, release_id=plan.release_id,
-                 latest=str(plan.latest).lower(), chart=plan.chart)
+                 latest=str(plan.latest).lower(), chart=plan.chart, apps=str(bool(plan.apps)).lower())
     return 0
 
 
