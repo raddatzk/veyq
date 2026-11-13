@@ -170,7 +170,9 @@ A Gradle build of its own, run through its own wrapper.
   `coreQrCode.test.ts`) to what `QrPng` writes: a deliberate change to the writer rewrites it with
   `VEYQ_WRITE_QR_FIXTURE=1 ./gradlew :core:jvmTest --tests '*QrPngImageTest*'`. The scan model `qr/QrScan.kt` is held by
   `QrScanTest` over a decoder the test plays (one decode in flight, a foreign code skipped, the first accepted one
-  settling, `close` winning over a decode that does not stop, an oversized frame refused).
+  settling, `close` winning over a decode that does not stop, an oversized frame refused, `ready`), and what a camera
+  hands it by `QrFramesTest` (a plane fitted to the 1280 px edge at its stride, the timed decode never saying the text)
+  and Apple's `AppleQrTest` (a plane through `NSData`).
 - `./gradlew :bridge:jvmTest` — the bridge (ADR 0123's Consequences, the bridge):
   - `DispatchTest` covers the way in, over a door the test plays: a reader read backwards in uneven ranges and closed
     with the tenant, a picture's bytes and its refusal, a file's page and its Save a copy (`File.*`, `Watched.File`/`Save`,

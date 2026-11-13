@@ -294,6 +294,90 @@ half**, written into that ADR in phase 6. `SecretFreeSchemaTest` stays as it is:
   the virtual scene's poster of a fixture code settles a scan; on the simulator the test camera does; on this Mac the
   macOS build scans a code shown on another screen; `NoCamera` and `Denied` each reached once by hand; the Android and
   Apple builds green.
+
+  **Status: built and measured (2026-11-13); the box stays open for the owner's three passes below (the macOS real camera, Apple's `Denied`, a real iPhone).**
+
+  **Built:**
+  - core: `qr/QrFrames.kt` — `fit(width, height, rowStride, luminance)`, a camera's plane taken as it is when it fits
+    `QrScan.MAX_EDGE`, else box-averaged down by the smallest whole factor (one rule for every camera), and
+    `timedDecode(report)`, the core's decoder reporting each frame's size, milliseconds and whether it read — never the
+    text; `QrScan.ready`, so a camera copies a frame out of its buffer only when the scan would take it. `appleMain`
+    `qr/AppleQr.kt`: the scan made for Swift (which sees neither default arguments nor a suspending decoder) and a frame
+    from an `NSData` plane with one `memcpy`.
+  - Android: `QrCamera.kt` — CameraX `Preview` (`PreviewView`) and `ImageAnalysis` (`STRATEGY_KEEP_ONLY_LATEST`, YUV,
+    1280×720 asked, the nearest lower then higher taken) bound to the screen's lifecycle, the Y plane offered; no
+    `FEATURE_CAMERA_ANY`, or a CameraX start that finds no camera, → `NONE`; the `CAMERA` permission asked when the scan
+    opens, refused → `DENIED`. It draws the preview while starting or scanning and hands every other state to its caller
+    (`other`), so the view says no words of its own. Manifest: `CAMERA`, and `camera.any`/`camera` as not required.
+    `DevScan` (debug; release a stub): the extra `veyq.devScan=1` shows the camera alone over a scan accepting any veyq
+    code by its scheme, the states and times to logcat `veyq-scan`. CameraX 1.6.2 (`camera-core`, `-camera2`,
+    `-lifecycle`, `-view`) in `libs.versions.toml` with its check; the verification metadata written from an empty
+    Gradle home (`:android:assembleDebug :android:assembleRelease`: CameraX and what it brings — Guava 33.3.1-android,
+    Media3 1.9.0 through `camera-video`, Dagger 2.59 —, 362 lines).
+  - Apple: `QrCamera.swift` — an `AVCaptureSession` (`.hd1280x720` where offered, `420YpCbCr8BiPlanarFullRange`, late
+    frames discarded), the back camera on iOS, the default on a Mac; no device → `NONE`, authorization asked once,
+    refused → `DENIED`; `QrCameraView` (the preview layer, every other state the caller's) over `QrCameraModel`.
+    `VEYQ_DEV_CAMERA=<image>` (debug): the image drawn grey is the frame offered ten times a second. `DevScan.swift` +
+    `VeyqApp`: `VEYQ_DEV_SCAN=1` (debug) shows the harness. `NSCameraUsageDescription` in `project.yml`; the macOS app is
+    neither sandboxed nor hardened, so no camera entitlement.
+
+  **Met:**
+  - `./gradlew :core:jvmTest --tests '*qr.Qr*' :core:macosArm64Test --tests '*qr.*'` green: `QrFramesTest` 6, `QrScanTest`
+    8, `AppleQrTest` 2 on `macosArm64`. `./gradlew :android:assembleDebug :android:assembleRelease` green (with
+    `ANDROID_HOME`); the macOS build (the brief's `xcodebuild … -destination 'platform=macOS' …`), a Release macOS build
+    and the iOS Simulator build (`-destination 'id=<sim>'`) `BUILD SUCCEEDED`. Guards (`scripts/validate_*.py`, without
+    guard_gaps) green.
+  - **Android, a throwaway AVD** (`veyq_qr_tmp`, android-36 google_apis arm64, deleted after): the virtual scene's wall
+    poster set to the web's interop fixture code (`-virtualscene-poster wall=<png>`; the 1-bit PNG did not load, an
+    8-bit RGB copy did), the scene's camera moved to it over the emulator's gRPC (`-grpc 8590`, `setPhysicalModel`
+    POSITION -0.6 0.3 2.6, ROTATION 0 180 0 by `curl --http2-prior-knowledge`) → logcat `decoded 640x480 in 6.4 ms, a
+    code read`, `state Found(veyqpair)`, the harness showing the scheme. **Denied** by "Don't allow" in the permission
+    dialog (`state Denied`). **NoCamera** with the emulator started `-camera-back none -camera-front none`: the image
+    still claims `camera.any`, CameraX's start threw `InitializationException` out of `ProcessCameraProvider.get()` and
+    **crashed the app** — fixed (caught, `NONE`), then `no camera: InitializationException`, `state NoCamera`; the final
+    build re-ran the Found pass.
+  - **Apple:** the iOS Simulator (a throwaway iPhone 18 Pro, iOS 27.0, deleted after) has no camera: `VEYQ_DEV_SCAN=1`
+    → `state NoCamera`; with `VEYQ_DEV_CAMERA=<1280×720 frame with the pairing code>` → `decoded 1280x720 in 14.1 ms, a
+    code read`, `state Found(veyqpair)`. The macOS debug build with the test camera: `Found(veyqpair)` likewise.
+  - **The time per frame in a release build** (each decode's `veyq-scan` line; this Mac under a load average of 30–250
+    from parallel work, so the tails are the machine's, the medians the decoder's):
+    | build | frame | with a code | no code (median / p90) |
+    |---|---|---|---|
+    | macOS **Release** (Kotlin `linkReleaseFrameworkMacosArm64`; Swift built with `SWIFT_ACTIVE_COMPILATION_CONDITIONS=DEBUG` so the harness exists) | 1280×720 | 1.8–1.9 ms (5 runs) | 6.3 / 8.4 ms (176 frames) |
+    | macOS debug | 1280×720 | 14.6 ms | 19.7 / 21.4 ms |
+    | Android **release** APK (non-debuggable, the harness copied into the release source set for this build only, signed with the debug key; not committed) on the AVD | 640×480 | 89 ms (one frame, under load) | 0.8 / 51 ms (148 frames) |
+    | Android debug on the AVD | 640×480 | 6.0–6.4 ms | 1.4 / 68 ms (796 frames) |
+
+    A frame with no code costs more than one with a code on native (the inverted and mirrored retries run only when
+    the plain reading fails). A release native decode of a 720p frame is well under a frame's 33 ms; no throttling is
+    needed beyond the one-in-flight rule.
+  - Bites (`scratchpad/qr4/bite.py`, one mutation at a time, `/bin/cp -f` restore), five, all bit: `fit` scaling by the
+    floor factor (1281 px kept) → `QrFramesTest` red; `fit` reading rows at the width, not the stride → red; `ready`
+    ignoring a decode in flight → `QrScanTest` red; the timing saying every frame read → `QrFramesTest` red; `AppleQr`
+    ignoring the row stride → `AppleQrTest` red (macosArm64). The platform paths were bitten by the device itself: the
+    no-camera AVD crashed the first build (above), and Denied/NoCamera/Found were each read from the log.
+
+  **Deviations:**
+  - **The emulator's virtual-scene camera delivers 640×480 at most**, not the 1280×720 asked; the 720p path is measured
+    on Apple (the test camera's 1280×720 frame) and in `QrFramesTest`.
+  - **The poster is not in view by default** (it hangs behind the scene camera's start): the pass moves the camera over
+    gRPC, which needs the emulator started with `-grpc <port>` (no auth, and bound on every interface while it ran; the
+    default endpoint asks for a JWT). A one-off for the pass, nothing committed.
+  - **The macOS real-camera pass ("a code shown on another screen") and Apple's `Denied` are not run**: the first camera
+    use asks the person through macOS's privacy prompt, a human step by the brief, and resetting it (`tccutil`) is a
+    system setting not mine to change. Owner's steps below.
+  - The Android release measurement used a build with the debug harness copied in (restored with `/bin/cp -f`, never
+    committed): a release build has no door to the camera without a sign-in, and no caller exists yet.
+
+  **Owner's steps (pending):**
+  1. macOS real camera: `cd src/mobile/apple && xcodebuild -project Veyq.xcodeproj -scheme Veyq -destination
+     'platform=macOS' -derivedDataPath ../build/apple-mac CODE_SIGN_IDENTITY=- CODE_SIGN_STYLE=Manual DEVELOPMENT_TEAM=
+     CODE_SIGN_ENTITLEMENTS= build`, then `VEYQ_DEV_SCAN=1 ../build/apple-mac/Build/Products/Debug/veyq.app/Contents/MacOS/veyq`;
+     allow the camera, hold up a veyq code on another screen (the web's pairing code): the window shows its scheme, and
+     `veyq-scan: state Found(veyqpair)` is printed.
+  2. Apple `Denied`: the same start after refusing (or in System Settings › Privacy & Security › Camera switching veyq
+     off): `veyq-scan: state Denied`.
+  3. A real iPhone's camera (the CR's owner question 2), with `VEYQ_DEV_SCAN=1` in the scheme's environment.
 - [ ] **5 the bridge, Linux and Windows** — D5's calls with `WireTest` samples and `DispatchTest` (a frame in, a
   dropped frame, `Found` updated, `Close`); the Linux camera (D4, the crates recorded in `Cargo.toml` with their
   check) and the Windows camera (D4). **First measurement, stop and ask if it fails:** that the Camera portal and
@@ -340,4 +424,17 @@ Phases 1–3 (the implementer, 2026-11-13):
   the real decoder's non-cancellable decode). The worktree's write hook forbade the Write tool into a worktree created
   by `git worktree add` until the session entered it (`EnterWorktree` with its path): a brief that has the implementer
   create its own worktree should say so.
+
+Phase 4 (the implementer, 2026-11-13):
+- **The device found the bug the build did not.** An emulator started without a camera still claims `camera.any` (the
+  feature list is the system image's), and CameraX's start then throws out of `ProcessCameraProvider.get()`: the first
+  NoCamera pass crashed the app. Next time: a "no camera" state is reached by the device that lacks one, never assumed
+  from a feature flag alone — the CR's "`FEATURE_CAMERA_ANY` absent → `NoCamera`" was only half of it.
+- **The emulator's camera pass cost more than the code.** The virtual scene's poster hangs behind the camera's start, a
+  1-bit PNG silently does not load, and moving the camera needs the emulator's gRPC (JWT by default). The recipe is in
+  phase 4's Met; phase 6 should move it into `src/mobile/CLAUDE.md`'s traps so the next camera pass starts from it.
+- **"Measure the release build on a device" had no door**: a release build reaches the camera only through a caller, and
+  none exists yet. Measured instead through builds made for the measurement (a Release macOS build with the harness
+  condition set, an Android release APK with the harness copied in and restored). A CR that asks for a release-build
+  number should name how that build reaches the code.
 
