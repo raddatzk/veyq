@@ -544,6 +544,13 @@ class ShellModel(
         createMemoryNode(scopeId, parentId, me.raddatz.veyq.mobile.memories.MemoryCreate.MEMORY, name)
 
     /**
+     * Memory or chapter [nodeId] of space [scopeId] as the lists hold it now — what a page opened by its ids alone opens (a
+     * Mac's lightbox window, whose restorable value carries ids, never a name) —; null where it is not listed or is no
+     * Memory or chapter.
+     */
+    fun galleryAt(scopeId: String, nodeId: String): NodeAt? = galleryAt(current?.lists?.nodes.orEmpty(), scopeId, nodeId)
+
+    /**
      * Memory or chapter [ref]'s page over this tenant ([me.raddatz.veyq.mobile.memories.GalleryModel]), opened as a member:
      * its media read anew on every revision of these lists, when a medium [uploads] sent into it is in and when its live
      * poll finds them moved; what it adds goes through [uploads]; a medium trashed and restored, a chapter made.
@@ -588,6 +595,12 @@ class ShellModel(
         })
 
     companion object {
+        /** Memory or chapter [nodeId] of space [scopeId] among [nodes]; null where it is not among them or is another kind. */
+        fun galleryAt(nodes: List<NodeRef>, scopeId: String, nodeId: String): NodeAt? =
+            nodes.firstOrNull { it.scopeId == scopeId && it.nodeId == nodeId }
+                ?.takeIf { it.kind == me.raddatz.veyq.mobile.memories.GalleryModel.MEMORY || it.kind == me.raddatz.veyq.mobile.memories.GalleryModel.CHAPTER }
+                ?.let { NodeAt(it.scopeId, it.nodeId, it.kind, it.name) }
+
         /**
          * A node of [kind]'s download into [sink]: its [own] content where the kind downloads itself
          * ([AppKinds.downloadsItself]: a file, nothing left out) — null where it did not finish —, else the [zip] of it.
