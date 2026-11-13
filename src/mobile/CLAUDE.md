@@ -462,8 +462,11 @@ control (Windows' `PasswordBox` peek). Not covered, on purpose: a share link and
 through another app, whose copy leaves the device anyway. A screenshot or recording the person takes is theirs. One
 mechanism per platform, never a per-screen copy:
 - **Android:** the task snapshot of Recents (`/data/system_ce/0/snapshots/<task>.jpg`). Such a screen is a window of
-  its own flagged secure — a `Dialog` (or a sheet) with `securePolicy = SecureFlagPolicy.SecureOn` (`KitScanner`) —, so
-  the rest of the app stays capturable. The sign-in's fields are masked by `PasswordVisualTransformation` with no
+  its own flagged secure — a `Dialog` (or a sheet) with `securePolicy = SecureFlagPolicy.SecureOn` (`KitScanner`,
+  `DeviceLinkScreen`) —, so the rest of the app stays capturable (bitten 2026-11-13 for the linking screen: without the
+  flag the snapshot held the shown pairing code, with it the snapshot is blank). A pass still shoots such a screen
+  through the emulator's own framebuffer, `adb emu screenrecord screenshot`, which the flag does not reach (`adb
+  screencap` is black). The sign-in's fields are masked by `PasswordVisualTransformation` with no
   reveal: measured 2026-11-13, a typed fixture key's snapshot shows dots, the email in clear beside them.
 - **Apple:** iOS's scene snapshot (`Library/SplashBoard/Snapshots/sceneID:…/*.ktx`, written as the scene leaves the
   foreground). `.secretOnScreen()` (`SecretOnScreen.swift`) covers the view while the scene is not active (bitten
