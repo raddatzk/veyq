@@ -23,7 +23,7 @@ pub fn requested() -> bool {
 /// The harness's view: the camera, then what the scan came to as an icon (and a found code's scheme).
 pub fn view() -> Rc<ScanView> {
     eprintln!("veyq-scan: the scan harness (debug build)");
-    ScanView::open(ScanKind::Scheme, other, |shown| match (&shown.state, &shown.found) {
+    ScanView::open(ScanKind::Scheme, None, other, |shown| match (&shown.state, &shown.found) {
         (ScanState::Found, Some(scheme)) => eprintln!("veyq-scan: state Found({scheme})"),
         (state, _) => eprintln!("veyq-scan: state {state:?}"),
     })

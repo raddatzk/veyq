@@ -159,20 +159,26 @@ unsafe extern "C" fn updated(ctx: *mut c_void, json: *const c_char, _bytes: *con
     let _ = tx.try_send(serde_json::from_str(&text).map_err(Unreadable));
 }
 
-/// The host function: the core's request, answered at once from this (core) thread — the store answers without
-/// waiting for the core, as bridge.h asks.
+/// The host function: the core's request, answered at once from this (core) thread — the store answers, and an
+/// Emergency Kit's page or picture is drawn ([crate::kit_drawing]), without waiting for the core, as bridge.h asks. A
+/// drawing's pixels go beside the reply's JSON and are zeroed once the core copied them.
 unsafe extern "C" fn host(ctx: *mut c_void, token: u64, json: *const c_char, _bytes: *const u8, _len: usize) {
     // SAFETY: ctx is the DeviceStore [start] handed the core, alive for the process.
     let store = unsafe { &*ctx.cast::<DeviceStore>() };
     // SAFETY: a NUL-terminated string valid during this call, copied here.
     let text = unsafe { CStr::from_ptr(json) }.to_string_lossy();
-    let reply = match serde_json::from_str::<HostRequest>(&text) {
-        Ok(request) => store.answer(request),
-        Err(_) => HostReply::Failed { error: "the host could not read the request".into() },
+    let (reply, mut payload) = match serde_json::from_str::<HostRequest>(&text) {
+        Ok(request) => crate::kit_drawing::answer(&request).unwrap_or_else(|| (store.answer(request), None)),
+        Err(_) => (HostReply::Failed { error: "the host could not read the request".into() }, None),
     };
     let reply = CString::new(serde_json::to_string(&reply).expect("a HostReply writes")).expect("JSON holds no NUL");
-    // SAFETY: the reply is read before the call returns.
-    unsafe { wire::veyq_reply(token, reply.as_ptr(), ptr::null(), 0) };
+    // a slice's pointer is never NULL, so an empty drawing stays a payload (bridge.h: NULL is none)
+    let (bytes, len) = payload.as_ref().map_or((ptr::null(), 0), |b| (b.as_ptr(), b.len()));
+    // SAFETY: the reply and the payload are read before the call returns.
+    unsafe { wire::veyq_reply(token, reply.as_ptr(), bytes, len) };
+    if let Some(p) = payload.as_mut() {
+        p.fill(0);
+    }
 }
 
 /// The device's store (`DeviceStore` of the core: its trust marks, the trusted accounts, this device's id): names and
@@ -205,6 +211,8 @@ impl DeviceStore {
             HostRequest::StoreRead { name } => return HostReply::Value { value: values.get(&name).cloned() },
             HostRequest::StoreWrite { name, value } => values.insert(name, value.clone()).as_ref() != Some(&value),
             HostRequest::StoreRemove { name } => values.remove(&name).is_some(),
+            // a drawing is answered before the store is asked ([host]); none reaches it
+            _ => return HostReply::Failed { error: "the device store answers only its own requests".into() },
         };
         if changed && let Err(e) = self.save(&values) {
             return HostReply::Failed { error: format!("the device store did not write: {}", e.kind()) };

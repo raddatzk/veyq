@@ -73,18 +73,38 @@ internal sealed class QrCamera : IDisposable
 
     /// <summary>Opens a scan of <paramref name="kind"/> and its camera. <paramref name="draw"/> draws every state but the
     /// preview's (the caller's words); <paramref name="changed"/> hears each state. Called on the UI thread.</summary>
-    public static QrCamera Open(ScanKind kind, Func<ScanShown, UIElement?> draw, Action<ScanShown> changed)
+    public static QrCamera Open(ScanKind kind, Func<ScanShown, UIElement?> draw, Action<ScanShown> changed) => Open(kind, null, draw, changed);
+
+    /// <summary><see cref="Open(ScanKind, Func{ScanShown, UIElement?}, Action{ScanShown})"/> with the sign-in form's
+    /// server as typed, for a KIT scan (the other-server notice's).</summary>
+    public static QrCamera Open(ScanKind kind, string? server, Func<ScanShown, UIElement?> draw, Action<ScanShown> changed)
     {
         var camera = new QrCamera(draw, changed);
-        _ = camera.StartAsync(kind);
+        _ = camera.StartAsync(kind, server);
         return camera;
     }
 
-    private async Task StartAsync(ScanKind kind)
+    /// <summary>Whether a scan here has a camera (a video capture device, or a debug build's test camera): asked before a
+    /// scan's entry shows (no camera, no entry); the camera itself starts only with a scan.</summary>
+    public static async Task<bool> PresentAsync()
+    {
+        if (DevCamera() is not null) return true;
+        try
+        {
+            return (await DeviceInformation.FindAllAsync(DeviceClass.VideoCapture)).Count > 0;
+        }
+        catch (Exception e)
+        {
+            Log.Write($"veyq-scan: the cameras were not listed ({e.GetType().Name})");
+            return false;
+        }
+    }
+
+    private async Task StartAsync(ScanKind kind, string? server)
     {
         try
         {
-            var (answer, _) = await Core.CallAsync(new Call.ScanOpen { kind = kind });
+            var (answer, _) = await Core.CallAsync(new Call.ScanOpen { kind = kind, server = server });
             if (answer is not Answer.ScanOpened opened)
             {
                 Log.Write($"Scan.Open answered {answer.GetType().Name}");

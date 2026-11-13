@@ -10,7 +10,9 @@
 // Threads: every answer, update and host request arrives on a core thread. An answer completes a Task whose
 // continuations never run there (RunContinuationsAsynchronously): awaited on the UI thread, it resumes on the UI thread's
 // SynchronizationContext (WinUI's is its DispatcherQueue's). An update is posted to the SynchronizationContext its watch
-// was started on. The host function answers at once, from the core's thread, without waiting for the core (bridge.h).
+// was started on. The host function answers the store at once, from the core's thread, without waiting for the core
+// (bridge.h); an Emergency Kit's drawing (Pdf.*, Picture.Luma) is the app's (Drawer: Windows' own renderer, which this
+// net10.0 library cannot reach), answered from the thread pool when it is drawn, its pixels beside the reply.
 using System;
 using System.Collections.Generic;
 using System.Runtime.CompilerServices;
@@ -46,6 +48,14 @@ public static unsafe class Core
 
     /// <summary>The watches' contexts, freed at Shutdown (an update may arrive after its veyq_unwatch until then).</summary>
     private static readonly List<GCHandle> Kept = [];
+
+    /// <summary>
+    /// What draws an Emergency Kit file the core asks for (<c>Pdf.Pages</c>, <c>Pdf.Page</c>, <c>Picture.Luma</c>; ADR 0130
+    /// decision 1: the platform draws, the core decides): the app's, set before the core starts; null for a request it
+    /// does not draw. Its task's payload (a drawing's luminance) goes beside the reply and is zeroed once the core copied
+    /// it. Without one, every such request is answered failed.
+    /// </summary>
+    public static Func<HostRequest, Task<(HostReply Reply, byte[]? Payload)>?>? Drawer { get; set; }
 
     /// <summary>
     /// Starts the core once per process with <paramref name="store"/> as the device's store, which the core reads from its own
@@ -179,7 +189,10 @@ public static unsafe class Core
         }
     }
 
-    /// <summary>The host function: the core's request, answered at once from this (core) thread.</summary>
+    /// <summary>
+    /// The host function: the core's request — the store's answered at once from this (core) thread, a drawing handed to
+    /// <see cref="Drawer"/> and answered when drawn (bridge.h: a reply may come from any thread).
+    /// </summary>
     [UnmanagedCallersOnly(CallConvs = [typeof(CallConvCdecl)])]
     private static void Host(void* ctx, ulong token, byte* json, byte* bytes, nuint len)
     {
@@ -188,6 +201,11 @@ public static unsafe class Core
         {
             var store = (DeviceStore)GCHandle.FromIntPtr((nint)ctx).Target!;
             var request = JsonSerializer.Deserialize(Copy(json), WireContext.Default.HostRequest) ?? throw new JsonException("null");
+            if (request is HostRequest.PdfPages or HostRequest.PdfPage or HostRequest.PictureLuma)
+            {
+                Draw(token, request);
+                return;
+            }
             reply = store.Answer(request);
         }
         catch (JsonException)
@@ -198,9 +216,43 @@ public static unsafe class Core
         {
             reply = new HostReply.Failed { error = $"the host failed: {e.GetType().Name}" };
         }
+        Reply(token, reply, null);
+    }
+
+    /// <summary>A drawing asked of <see cref="Drawer"/> on the thread pool, off the core's thread; whatever happens, one reply.</summary>
+    private static void Draw(ulong token, HostRequest request)
+    {
+        // (this class is unsafe, where no await may stand: the drawing's task is continued instead)
+        Task.Run(() => Drawer?.Invoke(request) ?? Task.FromResult<(HostReply, byte[]?)>((new HostReply.Failed { error = "this host draws nothing" }, null)))
+            .ContinueWith(t =>
+            {
+                var drawn = t.IsCompletedSuccessfully
+                    ? t.Result
+                    : (new HostReply.Failed { error = $"the drawing failed: {t.Exception?.InnerException?.GetType().Name}" }, null);
+                try
+                {
+                    Reply(token, drawn.Item1, drawn.Item2);
+                }
+                catch (Exception e)
+                {
+                    Fault(e);
+                }
+                finally
+                {
+                    if (drawn.Item2 is { } p) Array.Clear(p);
+                }
+            }, TaskScheduler.Default);
+    }
+
+    /// <summary>The reply to <paramref name="token"/>, <paramref name="payload"/> beside it (read before this returns).</summary>
+    private static void Reply(ulong token, HostReply reply, byte[]? payload)
+    {
+        // an empty array's pointer is NULL under `fixed`: one byte stands for it, never read
+        var held = payload is { Length: 0 } ? new byte[1] : payload;
         fixed (byte* p = Utf8(JsonSerializer.Serialize(reply, WireContext.Default.HostReply)))
+        fixed (byte* b = held)
         {
-            Native.veyq_reply(token, p, null, 0);
+            Native.veyq_reply(token, p, payload is null ? null : b, (nuint)(payload?.Length ?? 0));
         }
     }
 

@@ -28,7 +28,7 @@ struct Screens {
     window: adw::ApplicationWindow,
     status: adw::ToolbarView,
     status_page: adw::StatusPage,
-    sign_in: SignIn,
+    sign_in: Rc<SignIn>,
     unlock: Unlock,
     offer: Offer,
     shell: Rc<Shell>,

@@ -101,6 +101,8 @@ modules:
         LD_LIBRARY_PATH: /run/build/veyq/inputs/lib:/app/lib
         VEYQ_SAMPLES: /run/build/veyq/inputs/generated/bridge/samples
         VEYQ_WORDS_JSON: /run/build/veyq/inputs/words.json
+        # the web's Emergency Kit fixtures (fake data), which kit_drawing's test draws and hands to the core
+        VEYQ_KIT_FIXTURES: /run/build/veyq/inputs/kit-fixtures
         VEYQ_APP_ID: '@APP_ID@'
         # where the release build reads its catalogs: where this module installs them (decision 5)
         VEYQ_LOCALE_DIR: /app/share/locale

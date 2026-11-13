@@ -116,6 +116,8 @@ from pathlib import Path, PureWindowsPath
 from urllib.parse import urlsplit
 
 ROOT = Path(__file__).resolve().parents[3]
+# The web's Emergency Kit fixtures, pushed with the tree for Veyq.Tests' KitDrawingTest (VEYQ_KIT_FIXTURES).
+KIT_FIXTURES = "src/web/src/features/account/emergencyKit/__fixtures__"
 sys.path.insert(0, str(ROOT / "scripts"))
 import repo_layout  # noqa: E402
 
@@ -420,6 +422,8 @@ def push_tree(dll: Path) -> None:
         GENERATED / "theme" / "windows": "src/mobile/build/generated/theme/windows",
         **({GENERATED / "msix": "src/mobile/build/generated/msix"} if (GENERATED / "msix").is_dir() else {}),
         WORDS / "words.json": "src/mobile/words/words.json",
+        # the web's Emergency Kit fixtures (fake data), which KitDrawingTest draws
+        ROOT / KIT_FIXTURES: KIT_FIXTURES,
         dll: "bin/veyq.dll",
     }, exclude={"bin", "obj", "TestResults"}))
     copy_to([archive], REMOTE_DIR)
@@ -483,6 +487,7 @@ def build() -> int:
         "\n".join([
             f"$env:VEYQ_PRI = {ps_quote(str(windows / APP_OUT / f'{APP_NAME}.pri'))}",
             f"$env:VEYQ_WORDS_JSON = {ps_quote(str(REMOTE_MOBILE / 'words' / 'words.json'))}",
+            f"$env:VEYQ_KIT_FIXTURES = {ps_quote(str(REMOTE_DIR / PureWindowsPath(KIT_FIXTURES)))}",
             f"dotnet test --project {APP_TESTS} --no-restore --arch x64",
         ]),
     ))
@@ -606,6 +611,7 @@ def package(sign: str | None, smoke: bool) -> int:
             f"$env:VEYQ_PRI = {ps_quote(str(windows / APP_RELEASE_OUT / 'resources.pri'))}",
             "if (-not (Test-Path $env:VEYQ_PRI)) { Write-Output \"veyq: no $env:VEYQ_PRI\"; exit 1 }",
             f"$env:VEYQ_WORDS_JSON = {ps_quote(str(REMOTE_MOBILE / 'words' / 'words.json'))}",
+            f"$env:VEYQ_KIT_FIXTURES = {ps_quote(str(REMOTE_DIR / PureWindowsPath(KIT_FIXTURES)))}",
             f"dotnet test --project {APP_TESTS} -c Release --no-restore --arch x64",
         ]),
         "\n".join([

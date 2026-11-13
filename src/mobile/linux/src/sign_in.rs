@@ -2,13 +2,21 @@
 //! the Secret Key ([SignIn]), the unlock of an account this device trusts ([Unlock]) and, right after a sign-in, the offer
 //! to stay signed in ([Offer]) — drawn as GNOME draws a form: a clamped boxed list of rows and one suggested button. The
 //! person's input goes to the core as one call; the core decides what it means and answers with the next gate.
-use std::cell::RefCell;
+//!
+//! The sign-in also takes the Emergency Kit (en.account.key-model § The Emergency Kit): "Open Emergency Kit" under the
+//! Secret Key row picks the file (GTK's open dialog, PDFs and pictures) and hands the core its path
+//! (`Session.SignInKit`), which reads it and asks this side to draw its pages ([crate::kit_drawing]); "Scan Emergency
+//! Kit" beside it, only where the Camera portal names a camera, scans its code ([crate::qr_camera], kind `KIT`). Either
+//! way the gate's `kit` fills the email and the server and the Secret Key row says "From your Emergency Kit" — the key
+//! itself the core holds, never this side.
+use std::cell::{Cell, RefCell};
 use std::rc::Rc;
 
 use adw::prelude::*;
 use gtk::glib;
 
-use crate::bridge::{self, wire::Answer, wire::Call, wire::Gate, wire::Method, wire::StaySignedIn, wire::Why};
+use crate::bridge::{self, wire::Answer, wire::Call, wire::Gate, wire::KitShown, wire::Method, wire::ScanKind, wire::ScanShown, wire::ScanState, wire::StaySignedIn, wire::Why};
+use crate::qr_camera::ScanView;
 use crate::dev_login::DevSignIn;
 use crate::{said, theme, words};
 
@@ -73,6 +81,14 @@ pub struct SignIn {
     email: adw::EntryRow,
     password: adw::PasswordEntryRow,
     secret_key: adw::PasswordEntryRow,
+    /// The Secret Key row while a kit's key is held: "From your Emergency Kit", and the way back to typing it.
+    kit_row: adw::ActionRow,
+    open_kit: adw::ButtonRow,
+    scan_kit: adw::ButtonRow,
+    /// The kit's server replaced a different one the form held: said, never refused.
+    other_server: gtk::Label,
+    /// The kit the form last showed, so a new one fills the email and the server once.
+    shown_kit: RefCell<Option<KitShown>>,
     submit: gtk::Button,
     cancel: gtk::Button,
     spinner: adw::Spinner,
@@ -80,7 +96,7 @@ pub struct SignIn {
 }
 
 impl SignIn {
-    pub fn new() -> Self {
+    pub fn new() -> Rc<Self> {
         let server = adw::EntryRow::new();
         server.set_title(&words::signin_server());
         server.set_input_purpose(gtk::InputPurpose::Url);
@@ -91,11 +107,20 @@ impl SignIn {
         password.set_title(&words::signin_password());
         let secret_key = adw::PasswordEntryRow::new();
         secret_key.set_title(&words::signin_secret_key());
+        let kit_row = adw::ActionRow::builder().title(words::signin_secret_key()).subtitle(words::signin_kit_held()).visible(false).build();
+        let clear = gtk::Button::builder().label(words::signin_kit_clear()).valign(gtk::Align::Center).build();
+        clear.add_css_class("flat");
+        kit_row.add_suffix(&clear);
+        // the file first on a desktop (the kit CR's owner question 1); the scan only where there is a camera
+        let open_kit = adw::ButtonRow::builder().title(words::signin_kit_open()).start_icon_name("document-open-symbolic").build();
+        let scan_kit = adw::ButtonRow::builder().title(words::signin_kit_scan()).start_icon_name("camera-photo-symbolic").visible(false).build();
 
         let fields = adw::PreferencesGroup::new();
-        for row in [server.upcast_ref::<gtk::Widget>(), email.upcast_ref(), password.upcast_ref(), secret_key.upcast_ref()] {
+        for row in [server.upcast_ref::<gtk::Widget>(), email.upcast_ref(), password.upcast_ref(), secret_key.upcast_ref(), kit_row.upcast_ref(), open_kit.upcast_ref(), scan_kit.upcast_ref()] {
             fields.add(row);
         }
+        let other_server = gtk::Label::builder().wrap(true).xalign(0.0).visible(false).build();
+        other_server.add_css_class("dim-label");
         // Staying signed in is no longer chosen here: the core offers it after the sign-in (ADR 0123 decision 8), drawn by `Offer`
         let error = error_label();
         let submit = gtk::Button::builder().label(words::signin_submit()).halign(gtk::Align::Center).build();
@@ -105,44 +130,157 @@ impl SignIn {
         cancel.add_css_class("flat");
         let spinner = adw::Spinner::builder().visible(false).build();
         let heading = gtk::Label::new(Some(&words::signin_title()));
-        let page = page(&heading, &[fields.upcast_ref(), error.upcast_ref(), submit.upcast_ref(), cancel.upcast_ref(), spinner.upcast_ref()]);
+        let page = page(&heading, &[fields.upcast_ref(), other_server.upcast_ref(), error.upcast_ref(), submit.upcast_ref(), cancel.upcast_ref(), spinner.upcast_ref()]);
 
-        let s = Self { page, heading, server, email, password, secret_key, submit, cancel, spinner, error };
+        let s = Rc::new(Self {
+            page,
+            heading,
+            server,
+            email,
+            password,
+            secret_key,
+            kit_row,
+            open_kit,
+            scan_kit,
+            other_server,
+            shown_kit: RefCell::new(None),
+            submit,
+            cancel,
+            spinner,
+            error,
+        });
         let ask = s.asker();
         let on_click = ask.clone();
         s.submit.connect_clicked(move |_| on_click());
         // Enter in the last field signs in, as a form's default button does
         s.secret_key.connect_entry_activated(move |_| ask());
         s.cancel.connect_clicked(|_| bridge::send(Call::SessionCancelAdd));
+        clear.connect_clicked(|_| bridge::send(Call::SessionSignInKitClear));
+        let w = Rc::downgrade(&s);
+        s.open_kit.connect_activated(move |_| if let Some(s) = w.upgrade() {
+            s.pick_kit();
+        });
+        let w = Rc::downgrade(&s);
+        s.scan_kit.connect_activated(move |_| if let Some(s) = w.upgrade() {
+            s.scan();
+        });
+        // the scan's entry only where the Camera portal names a camera (D7: no camera, no entry)
+        let w = Rc::downgrade(&s);
+        glib::spawn_future_local(async move {
+            let present = crate::qr_camera::camera_present().await;
+            eprintln!("veyq: the sign-in's kit scan {}", if present { "offered" } else { "not offered: no camera" });
+            if let Some(s) = w.upgrade() {
+                s.scan_kit.set_visible(present);
+            }
+        });
         s
     }
 
-    /// The sign-in the form holds, sent.
+    /// The sign-in the form holds, sent; while a kit's key is held the Secret Key is sent empty, so the core signs in with it.
     fn asker(&self) -> impl Fn() + Clone + 'static {
-        let (server, email, password, secret_key) = (self.server.clone(), self.email.clone(), self.password.clone(), self.secret_key.clone());
+        let (server, email, password, secret_key, kit_row) =
+            (self.server.clone(), self.email.clone(), self.password.clone(), self.secret_key.clone(), self.kit_row.clone());
         move || {
+            let typed = if kit_row.is_visible() { String::new() } else { secret_key.text().trim().to_string() };
             bridge::send(Call::SessionSignIn {
                 server: server.text().trim().to_string(),
                 email: email.text().trim().to_string(),
                 password: password.text().to_string(),
-                secret_key: secret_key.text().trim().to_string(),
+                secret_key: typed,
             });
         }
     }
 
-    /// Draws [gate] (a `Gate.SignIn`): the server and the email it knows, working or not, the core's error.
+    /// "Open Emergency Kit": GTK's open dialog for a PDF or a picture; the core reads the file at the path picked.
+    fn pick_kit(self: &Rc<Self>) {
+        let parent = self.page.root().and_downcast::<gtk::Window>();
+        let w = Rc::downgrade(self);
+        glib::spawn_future_local(async move {
+            let kits = gtk::FileFilter::new();
+            kits.add_mime_type("application/pdf");
+            kits.add_mime_type("image/*");
+            kits.set_name(Some(&words::signin_kit_open()));
+            let filters = gtk::gio::ListStore::new::<gtk::FileFilter>();
+            filters.append(&kits);
+            let dialog = gtk::FileDialog::builder().title(words::signin_kit_open()).filters(&filters).default_filter(&kits).modal(true).build();
+            let file = match dialog.open_future(parent.as_ref()).await {
+                Ok(file) => file,
+                Err(e) => {
+                    eprintln!("veyq: no kit picked ({e})");
+                    return;
+                }
+            };
+            // the core opens the path itself; one that is no UTF-8 does not cross the wire
+            let Some(path) = file.path().and_then(|p| p.to_str().map(str::to_owned)) else {
+                eprintln!("veyq: the kit's path is no UTF-8");
+                return;
+            };
+            let Some(s) = w.upgrade() else { return };
+            let server = s.server.text().trim().to_string();
+            let answered = bridge::call(&Call::SessionSignInKit { path, server }).await.map(|(a, _)| a);
+            // the outcome alone: never the path or anything of the kit
+            eprintln!("veyq: kit picked: {answered:?}");
+        });
+    }
+
+    /// "Scan Emergency Kit": the camera in a dialog over a scan of kind `KIT`; the kit it finds goes to the sign-in in
+    /// the core, and the dialog closes on it.
+    fn scan(self: &Rc<Self>) {
+        let hint = gtk::Label::builder().label(words::signin_kit_scan_hint()).wrap(true).justify(gtk::Justification::Center).build();
+        hint.add_css_class("dim-label");
+        let column = gtk::Box::builder().orientation(gtk::Orientation::Vertical).spacing(12).margin_start(12).margin_end(12).margin_bottom(12).build();
+        let view_slot = gtk::Box::builder().vexpand(true).height_request(320).build();
+        column.append(&view_slot);
+        column.append(&hint);
+        let content = adw::ToolbarView::new();
+        content.add_top_bar(&adw::HeaderBar::new());
+        content.set_content(Some(&column));
+        let dialog = adw::Dialog::builder().title(words::signin_kit_scan()).content_width(520).content_height(480).child(&content).build();
+        let closing = dialog.downgrade();
+        let found = Rc::new(Cell::new(false));
+        let seen = found.clone();
+        let view = ScanView::open(ScanKind::Kit, Some(self.server.text().trim().to_string()), scan_said, move |shown| {
+            eprintln!("veyq: kit scan {:?}", shown.state);
+            if shown.state == ScanState::Found && !seen.replace(true) && let Some(d) = closing.upgrade() {
+                d.close();
+            }
+        });
+        view_slot.append(&view.widget);
+        view.widget.set_hexpand(true);
+        // the scan and its camera end with the dialog, however it closes
+        dialog.connect_closed(move |_| view.close());
+        dialog.present(self.page.root().as_ref());
+    }
+
+    /// Draws [gate] (a `Gate.SignIn`): the server and the email it knows, a kit's own replacing them once, the Secret Key
+    /// row as typed or as the kit's, working or not, the core's error.
     pub fn show(&self, gate: &Gate) {
-        let Gate::SignIn { working, error, server, email, adding } = gate else { return };
-        if let Some(server) = server.as_deref().filter(|_| self.server.text().is_empty()) {
+        let Gate::SignIn { working, error, server, email, adding, kit } = gate else { return };
+        let new_kit = kit.is_some() && *self.shown_kit.borrow() != *kit;
+        *self.shown_kit.borrow_mut() = kit.clone();
+        if let Some(server) = server.as_deref().filter(|_| new_kit || self.server.text().is_empty()) {
             self.server.set_text(server);
         }
-        if let Some(email) = email.as_deref().filter(|_| self.email.text().is_empty()) {
+        if let Some(email) = email.as_deref().filter(|_| new_kit || self.email.text().is_empty()) {
             self.email.set_text(email);
+        }
+        self.secret_key.set_visible(kit.is_none());
+        self.kit_row.set_visible(kit.is_some());
+        if new_kit {
+            self.secret_key.set_text("");
+        }
+        match kit.as_ref().and_then(|k| Some((k.server.as_deref()?, k.typed_server.as_deref()?))) {
+            Some((made_at, before)) => {
+                self.other_server.set_label(&words::signin_kit_other_server(made_at, before));
+                self.other_server.set_visible(true);
+            }
+            None => self.other_server.set_visible(false),
         }
         self.heading.set_label(&if *adding { words::signin_add_title() } else { words::signin_title() });
         self.cancel.set_visible(*adding);
         self.cancel.set_sensitive(!working);
         self.submit.set_sensitive(!working);
+        self.open_kit.set_sensitive(!working);
         self.spinner.set_visible(*working);
         show_error(&self.error, error);
     }
@@ -159,9 +297,19 @@ impl SignIn {
     }
 }
 
-impl Default for SignIn {
-    fn default() -> Self {
-        Self::new()
+/// What the kit's scan shows but its camera: no camera or a refused one says to open the file or type the key instead
+/// (the web's `scanError`); a found kit closes the dialog, so it shows nothing.
+fn scan_said(shown: &ScanShown) -> Option<gtk::Widget> {
+    match shown.state {
+        ScanState::NoCamera | ScanState::Denied => Some(
+            adw::StatusPage::builder()
+                .icon_name("camera-disabled-symbolic")
+                .description(glib::markup_escape_text(&words::signin_kit_scan_denied()).as_str())
+                .vexpand(true)
+                .build()
+                .upcast(),
+        ),
+        _ => None,
     }
 }
 

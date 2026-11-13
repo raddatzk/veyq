@@ -104,7 +104,13 @@ pub struct ScanView {
 impl ScanView {
     /// Opens a scan of [kind] and its camera. [other] draws every state but the preview's (the caller's words: what to do
     /// without a camera, what was found); [changed] hears each state.
-    pub fn open(kind: ScanKind, other: impl Fn(&ScanShown) -> Option<gtk::Widget> + 'static, changed: impl Fn(&ScanShown) + 'static) -> Rc<ScanView> {
+    /// [server] is the sign-in form's server as typed, for a `KIT` scan (the other-server notice's), None for any other.
+    pub fn open(
+        kind: ScanKind,
+        server: Option<String>,
+        other: impl Fn(&ScanShown) -> Option<gtk::Widget> + 'static,
+        changed: impl Fn(&ScanShown) + 'static,
+    ) -> Rc<ScanView> {
         let picture = gtk::Picture::builder().content_fit(gtk::ContentFit::Contain).hexpand(true).vexpand(true).build();
         let other_box = gtk::Box::builder().orientation(gtk::Orientation::Vertical).hexpand(true).vexpand(true).valign(gtk::Align::Fill).build();
         let widget = gtk::Stack::new();
@@ -121,7 +127,7 @@ impl ScanView {
         });
         let v = view.clone();
         glib::spawn_future_local(async move {
-            let scan = match bridge::call(&Call::ScanOpen { kind }).await {
+            let scan = match bridge::call(&Call::ScanOpen { kind, server }).await {
                 Ok((Answer::ScanOpened { scan }, _)) => scan,
                 other => {
                     eprintln!("veyq: Scan.Open answered {other:?}");
@@ -297,6 +303,18 @@ impl ScanView {
 impl Drop for ScanView {
     fn drop(&mut self) {
         self.close();
+    }
+}
+
+/// Whether a scan here has a camera: the Camera portal names one (`IsCameraPresent`), or a debug build's test camera is set.
+/// Asked before a scan's entry shows (no camera, no entry); the access itself is asked only when a scan starts.
+pub async fn camera_present() -> bool {
+    if dev_camera().is_some() {
+        return true;
+    }
+    match ashpd::desktop::camera::Camera::new().await {
+        Ok(portal) => portal.is_present().await.unwrap_or(false),
+        Err(_) => false,
     }
 }
 

@@ -46,6 +46,8 @@ public sealed partial class MainWindow : Window
             store = DeviceStore.InMemory();
         }
         Start started;
+        // an Emergency Kit's pages and pictures are drawn by Windows' own renderer when the core asks (KitDrawing)
+        Core.Drawer = KitDrawing.Answer;
         try
         {
             // the window owns Windows Hello's prompt, in the app's words (ADR 0130's Consequences)
@@ -128,7 +130,7 @@ public sealed partial class MainWindow : Window
                 Face(null);
                 break;
             case Gate.SignIn signIn:
-                _signIn ??= new SignInView();
+                _signIn ??= new SignInView(this);
                 _signIn.Show(signIn);
                 Face(_signIn.Page);
                 if (!signIn.working && signIn.error is null && DevLogin.Take() is { } dev) _signIn.Dev(dev);

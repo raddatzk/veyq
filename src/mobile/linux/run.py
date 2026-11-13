@@ -269,7 +269,7 @@ def build() -> int:
     env = {"CARGO_HOME": "/veyq/cargo", "CARGO_TARGET_DIR": "/veyq/target", "VEYQ_GENERATED": "/veyq/generated",
            "VEYQ_LIB_DIR": "/veyq/lib", "LD_LIBRARY_PATH": "/veyq/lib:/app/lib",
            "VEYQ_SAMPLES": "/veyq/generated/bridge/samples", "VEYQ_WORDS_JSON": "/veyq/words.json",
-           "VEYQ_APP_ID": APP_ID, "LANG": "en_US.UTF-8",
+           "VEYQ_APP_ID": APP_ID, "LANG": "en_US.UTF-8", "VEYQ_KIT_FIXTURES": "/veyq/kit-fixtures",
            "PKG_CONFIG_PATH": "/app/lib/pkgconfig:/app/share/pkgconfig",
            "PATH": "/usr/lib/sdk/rust-stable/bin:/app/bin:/usr/bin"}
     sandboxed = " ".join(f"--env={k}={v}" for k, v in env.items())
@@ -286,7 +286,9 @@ def build() -> int:
         "-v", f"veyq-flatpak-cargo:/veyq/cargo", "-v", f"veyq-flatpak-target-{flatpak_arch}:/veyq/target",
         "-v", f"{repo_layout.MOBILE}:/veyq/mobile:ro", "-v", f"{FLATPAK_OUT}:/veyq/mobile/build/linux/flatpak",
         "-v", f"{repo_layout.MOBILE_LINUX}:/veyq/src:ro", "-v", f"{GENERATED}:/veyq/generated:ro",
-        "-v", f"{lib_dir}:/veyq/lib:ro", "-v", f"{WORDS / 'words.json'}:/veyq/words.json:ro"])
+        "-v", f"{lib_dir}:/veyq/lib:ro", "-v", f"{WORDS / 'words.json'}:/veyq/words.json:ro",
+        # the web's Emergency Kit fixtures, which kit_drawing's test draws and hands to the core
+        "-v", f"{ROOT / KIT_FIXTURES}:/veyq/kit-fixtures:ro"])
 
 
 def dev_principal(unlock: bool = False, fill: bool = False) -> dict[str, str]:
@@ -377,6 +379,8 @@ FLATPAK = HERE / "flatpak"
 FLATPAK_BUILDER_TAG = "veyq-flatpak-builder"
 FLATPAK_OUT = repo_layout.MOBILE / "build" / "linux" / "flatpak"
 FLATHUB = "https://dl.flathub.org/repo/flathub.flatpakrepo"
+# The web's Emergency Kit fixtures (fake data): kit_drawing's test reads them through VEYQ_KIT_FIXTURES.
+KIT_FIXTURES = "src/web/src/features/account/emergencyKit/__fixtures__"
 # Flatpak's architecture -> (Docker platform, Kotlin/Native target)
 FLATPAK_ARCHES = {"aarch64": ("linux/arm64", "LinuxArm64"), "x86_64": ("linux/amd64", "LinuxX64")}
 # The refs a build installs; their commits are runtime.pins'. org.flatpak.Builder carries flatpak-builder-lint.
@@ -435,6 +439,7 @@ def flatpak(flatpak_arch: str) -> int:
     shutil.copytree(GENERATED / "bridge", inputs / "generated" / "bridge")
     shutil.copytree(GENERATED / "linux", inputs / "generated" / "linux")
     shutil.copy2(WORDS / "words.json", inputs / "words.json")
+    shutil.copytree(ROOT / KIT_FIXTURES, inputs / "kit-fixtures")
     write_manifest(version, date)
     # The crates, offline: `cargo vendor --locked` in the development image (cargo is there, not in the builder's),
     # each crate checked against Cargo.lock's checksum. Every crate is crates.io's (Cargo.lock has no other source),
