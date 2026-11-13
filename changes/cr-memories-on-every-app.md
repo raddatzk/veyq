@@ -433,4 +433,10 @@ one).
 D2's slideshow rule (the web's), D2b's one uploader read per gallery (Android's), D5's tier spec in the core, D6's Undo window
 (the node trash's 6 s) and D7's macOS save are technical unifications, open to the owner's veto.
 
+
+**Decided** (the coordinator, 2026-11-13, under the owner's standing mandate; the owner may overturn any):
+- 1: as recommended — the hero shows only once a cover exists, on the desktops too.
+- 2: as recommended — the D12 cut holds; curation is the next CR (#890).
+- 3: as recommended — a folder dropped on a gallery is said not to be taken; no folder upload into a Memory in this CR.
+
 ## Retrospective
