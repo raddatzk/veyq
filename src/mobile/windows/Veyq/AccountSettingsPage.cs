@@ -421,7 +421,7 @@ internal sealed class AccountSettingsPage : IDisposable
     {
         var panel = new StackPanel { Spacing = 8 };
         panel.Children.Add(Caption(Words.ManagePasswordTrustHint()));
-        var password = new PasswordBox { Header = Words.SigninPassword(), MaxWidth = 360, HorizontalAlignment = HorizontalAlignment.Left };
+        var password = ScreenSecrets.Guard(new PasswordBox { Header = Words.SigninPassword(), MaxWidth = 360, HorizontalAlignment = HorizontalAlignment.Left });
         AutomationProperties.SetAutomationId(password, "settings-password-field");
         if (DevLogin.TakePasswordTrust() is { } dev) password.Password = dev;
         panel.Children.Add(password);

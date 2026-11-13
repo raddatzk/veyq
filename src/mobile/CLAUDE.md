@@ -102,7 +102,7 @@ A Gradle build of its own, run through its own wrapper.
   `ShareDays`, `ReportDialog`, `CoverDialog`, every `ContentDialog` shown through `Dialogs.Show`),
   `AvatarsHeld` (`Held<T>`, no control, Linux's `avatars::Held` rule for rule; `AvatarsTest`) and `Avatars` (decodes
   each picture through `BitmapImage`, sets it on every `PersonPicture` of that id), `Act` (sends a
-  call, logs its answer), `PotSettingsView` (a Pot's Settings place, editable in place), `PotCreateDialog` (New pot),
+  call, logs its answer), `ScreenSecrets` (the window out of capture while a secret shows, § Secrets on screen), `PotSettingsView` (a Pot's Settings place, editable in place), `PotCreateDialog` (New pot),
   `FilePage` (a Depot file's page; its Save a copy's `InfoBar` is `ShellView.Saving`; a medium in a `MediaPlayerElement` over
   `MediaSource.CreateFromStream` of `ReaderStream`, a seekable .NET `Stream` whose reads are `Reader.Read` ranges, through
   `AsRandomAccessStream`; `ReaderStreamTest`), `Uploads` (New's Upload files and Upload folder through `FileOpenPicker`
@@ -439,6 +439,45 @@ A Gradle build of its own, run through its own wrapper.
 - `xcodebuild -project apple/Veyq.xcodeproj -target Veyq -sdk macosx build CODE_SIGNING_ALLOWED=NO` (or
   `-sdk iphonesimulator`) — the Apple app compiles. On a fresh checkout run `./gradlew :core:assembleVeyqCoreDebugXCFramework`
   once first: Xcode looks for the framework before the project's own pre-build step can make it.
+
+## Secrets on screen
+
+A screen that shows a secret of the person's own account **in clear** — the Secret Key, the password, the kit
+scanner's camera (the kit's code is the Secret Key), the pairing code a trusted device shows (`cr-app-device-linking`)
+— stays out of what the system captures of the app **on its own and keeps on disk** (inbox #886, found by
+`cr-app-kit-sign-in` phase 7). A masked field shows dots and needs nothing — unless the platform reveals it on a
+control (Windows' `PasswordBox` peek). Not covered, on purpose: a share link and its password, made to be handed on
+through another app, whose copy leaves the device anyway. A screenshot or recording the person takes is theirs. One
+mechanism per platform, never a per-screen copy:
+- **Android:** the task snapshot of Recents (`/data/system_ce/0/snapshots/<task>.jpg`). Such a screen is a window of
+  its own flagged secure — a `Dialog` (or a sheet) with `securePolicy = SecureFlagPolicy.SecureOn` (`KitScanner`) —, so
+  the rest of the app stays capturable. The sign-in's fields are masked by `PasswordVisualTransformation` with no
+  reveal: measured 2026-11-13, a typed fixture key's snapshot shows dots, the email in clear beside them.
+- **Apple:** iOS's scene snapshot (`Library/SplashBoard/Snapshots/sceneID:…/*.ktx`, written as the scene leaves the
+  foreground). `.secretOnScreen()` (`SecretOnScreen.swift`) covers the view while the scene is not active (bitten
+  2026-11-13: without it the snapshot of the scanner held the key's text the test camera showed). macOS keeps no
+  snapshot of the app's windows: Mission Control and the switcher draw them live, and `~/Library/Saved Application
+  State` holds no `me.raddatz.veyq` entry after every pass so far (measured 2026-11-13 by listing it; phase 7 found no
+  frame in the temp folder, the caches or `HTTPStorages`). The modifier is harmless there.
+  A `SecureField` is masked; iOS echoes the last typed character for a moment, a residual not measured (the
+  simulator took no typing in the sweep).
+- **Windows:** Recall's snapshots (Windows 11, Copilot+ PCs) are written to disk on their own, and a `PasswordBox`'s
+  peek shows its secret in clear. `ScreenSecrets.Guard(element)` excludes the window from capture
+  (`SetWindowDisplayAffinity`, `WDA_EXCLUDEFROMCAPTURE`, Electron's `setContentProtection` and Signal's screen
+  security) while the element is loaded: the sign-in (its scanner is a `ContentDialog` in the same window), the unlock,
+  and Manage's and Settings' password asks. A capture through the compositor sees the desktop behind the window
+  (bitten 2026-11-13 on the VM: `Veyq.Drive`'s BitBlt `shot` of the filled sign-in and of its scanner showed the
+  wallpaper; the same build with `VEYQ_DEV_CAPTURABLE=1` showed the scanner holding the Secret Key the test camera
+  read); that Recall honours it is remembered (Microsoft's and Signal's word), not measured — no Copilot+ PC here. A
+  debug build started with `VEYQ_DEV_CAPTURABLE=1` (`run.py run` passes it on) keeps the window capturable, for a
+  pass's shots of these screens.
+- **Linux:** nothing to add. GNOME's overview and Alt+Tab draw live windows and keep no snapshot, and under Wayland no
+  app captures another's window without the person's consent through the screenshot portal — nor is there a protocol
+  for a window to refuse one (remembered: GNOME Shell 51 on the Fedora 45 VM, not measured). An X11 session captures
+  anything, which no flag of the app's changes.
+
+A new screen that shows such a secret names its snapshot in its no-copy check and is bitten as the sweep was: the
+snapshot pulled and looked at, without the protection the secret in it, with it covered.
 
 ## Each platform's guidelines
 
