@@ -319,8 +319,7 @@ No new function reaches a screen.
   the simulator container's `tmp` show nothing decrypted during and after; unchanged from before otherwise.
 
 **Status: built and unit-proven, every new check bitten; both phones thinned and building, Android's page driven offline
-over a played gallery (2026-11-13). The live case and the signed-in device passes are pending — the dev backend was down
-and was not to be started by this session.**
+over a played gallery (2026-11-13). The live case is green (2026-11-13, below); the signed-in device passes are pending.**
 
 **Built:**
 - **core `memories/GalleryModel.kt`** — `GalleryModel(node, door)`, opened by `ShellModel.galleryModel(ref, uploads)`:
@@ -406,11 +405,16 @@ its end, sought back to 0:10 and played on; paged away and back it showed its pl
 SHA-256 (`50add77b…`), "“clip.mp4” is downloaded." said; `run-as me.raddatz.veyq ls -laR cache files` empty but
 `profileInstalled`. **Apple, offline:** the macOS build started with a `$TMPDIR/picked/0000-test/a.jpg` planted — gone at
 start (the sweep by name); the app stopped by its PID.
-**Pending, live** (the dev backend down, not to be started here): `MemoryLiveTest.aMemoryIsReadThroughItsScreenModels`
-reports skipped without `VEYQ_LIVE`; with the backend up, from `src/mobile`: `VEYQ_LIVE=http://veyq.localhost:8080
-VEYQ_LIVE_MEMORY='Android memory' ANDROID_HOME=$HOME/Library/Android/sdk ./gradlew :core:jvmTest --tests
-'me.raddatz.veyq.mobile.memories.MemoryLiveTest'` (reads only: every tile, picture and details through `GalleryModel`, a
-video's range across a frame's edge and its reader closed when paged away, one original saved at its SHA-256). **Pending,
+**Live (2026-11-13, measured):** from `src/mobile`, `VEYQ_LIVE=http://veyq.localhost:8080 VEYQ_ENV_FILE=<main
+checkout>/.run/.env VEYQ_LIVE_MEMORY='App memory 7341' ./gradlew :core:jvmTest --tests
+'me.raddatz.veyq.mobile.memories.MemoryLiveTest' --rerun` green, both cases (`aMemoryIsReadThroughItsScreenModels`,
+`aMemoryGalleryIsRead`). The Memory was made for it in the principal's personal space by a scratch `tsx` script over the
+web's `createMemory` and filled by `MemoryUploadLiveTest` (`VEYQ_LIVE_MEMORY_UPLOAD`: the EXIF fixture photo with drawn
+tiers and `dated.mp4` with a poster), trashed and purged after. Read: 2 media, every tile and picture, the photo's 24
+detail rows (camera, place, uploader `MEMBER`), the video's reader opened and closed when paged away, the video's original
+saved at its SHA-256. **Not proven by it:** a range *across* a frame's edge — the fixture video (2 339 B) is shorter than
+one frame, so the read lands at its end; a device pass's > 200 MiB MP4 is what crosses one. The three memory live tests
+read `VEYQ_ENV_FILE` before the checkout's `.run/.env` now (a worktree has none), as `LiveSignInTest` does. **Pending,
 devices** (signed in, per the Done-when): make `Android memory` / `Apple memory` on the web with three fixture photos (one
 with GPS and EXIF, `MediaMetadataFixtureTest`'s) and an MP4 > 200 MiB (`ffmpeg`); Android on a throwaway AVD
 (`android/devlogin.py`), Apple on the iPhone 18 Pro (`apple/devlogin.py 'iPhone 18 Pro'`) and the macOS build: the grid in
@@ -443,8 +447,7 @@ D3, D4, D6, D1's `live()`, D2's slideshow, D10's links and header. No app draws 
   (`VEYQ_LIVE_MEMORY_GUESTS`, the Depot CR's way) read back by `GalleryModel` under the guest's `K_up`; purged.
 - Builds as phase 1.
 
-**Status: built and unit-proven, every new check bitten (2026-11-13). The live case is pending — the dev backend was down
-and was not to be started by this session. No app draws the new functions yet (phases 4–6).**
+**Status: built and unit-proven, every new check bitten (2026-11-13). The live case is green (2026-11-13, below). No app draws the new functions yet (phases 4–6).**
 
 **Built:**
 - **core `memories/MemoryRights.kt`** — the web's `rights.ts` ported, fail-closed: `of(access, kind)` over `Access.Member`
@@ -522,10 +525,13 @@ green before each commit. Not run here (this phase changed no surface they build
 `windows/run.py build`, the Apple builds — the core's Kotlin/Native targets for Linux and Windows compiled, and no bridge
 shape changed (`SecretFreeSchemaTest` unchanged).
 
-**Pending, live** (the dev backend down, not to be started here): `MemoryActionsLiveTest.aMemoryIsMadeTrashedSharedAndFilledByAGuest`
-reports skipped without `VEYQ_LIVE`; with the backend up, from `src/mobile`: `VEYQ_LIVE=http://veyq.localhost:8080
-VEYQ_LIVE_MEMORY_GUESTS=/tmp/veyq-memory-guests.txt ./gradlew :core:jvmTest --tests
-'me.raddatz.veyq.mobile.memories.MemoryActionsLiveTest' --rerun` while a web guest uploads one photo through the address
+**Live (2026-11-13, measured):** from `src/mobile`, `VEYQ_LIVE=http://veyq.localhost:8080 VEYQ_ENV_FILE=<main
+checkout>/.run/.env VEYQ_LIVE_MEMORY_GUESTS=<file> ./gradlew :core:jvmTest --tests
+'me.raddatz.veyq.mobile.memories.MemoryActionsLiveTest' --rerun` green (44 s), the web guest driven by a scratch Playwright
+script in headless system Chrome (`channel: 'chrome'`, a fresh profile): the link read from the file and opened on Vite's
+origin (`:8081`), the name "Live guest" given, `exif-sample.jpg` set on the page's file input; the core read the guest's
+photo (tile and picture 757 B) under its `K_up`, and the Memory ("App memory 57307") was trashed and purged by the test's
+`finally`. What the run does: a web guest uploads one photo through the address
 written to that file (`VEYQ_LIVE_MEMORY_WAIT_S`, default 300): "App memory <n>" made at the default space's top, its name
 then taken, a chapter, two fixture photos, one trashed and undone, one trashed and purged, two WRITE_ONLY links on one drop
 key, the guest's photo read through `GalleryModel` under its `K_up`, the Memory trashed and purged.

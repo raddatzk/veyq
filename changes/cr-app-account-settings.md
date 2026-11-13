@@ -105,14 +105,14 @@ Apple as a pushed view (iOS) and a Settings scene-style window (macOS `Settings 
 
 ## Phases
 
-- [ ] **1 the core** — `AccountSettings` (D1), its `commonTest` (each action, the E1/E2/E5 paths, the label join, a
+- [x] **1 the core** — `AccountSettings` (D1), its `commonTest` (each action, the E1/E2/E5 paths, the label join, a
   family the register does not know shown with its dates, `Add a device` gated on the capability), and
   `LiveAccountSettingsTest` (`VEYQ_LIVE`): a second login of the principal is listed, renamed through the register,
   signed out, and gone from the list; the principal's own family still refreshes afterwards (the control). · Done when:
   `./gradlew :core:jvmTest :core:macosArm64Test` green and the live test green with `VEYQ_LIVE=http://veyq.localhost:8080`;
   a bite — `signOutOthers` that also revokes `current` — turns the live control red.
-  **Status: built and unit-proven (2026-11-13); the live run is pending (the dev backend was down, not to be started by
-  this phase) — the box stays open until it is green.**
+  **Status: done (2026-11-13): built and unit-proven; both live cases and the live bite run against the dev backend (see
+  Met's end).**
   **Built:** core `session/AccountSettings.kt` — `AccountSettings<A, T>`, one per signed-in account, `state` (a
   `StateFlow` of a `@Serializable` `State`, ready for phase 3's bridge) and `watch`; state: the email and `emailConfirmed`
   (the server's copy, `getAccountEmail`; the account's own address until read), `Device(label, familyId, Trust)`,
@@ -140,11 +140,18 @@ Apple as a pushed view (iOS) and a Settings scene-style window (macOS `Settings 
   `addDevice` on any capability → `addADeviceIsOffered…` red; the register's label join removed → `theListIs…` and
   `aRenameIs…` red. `LiveAccountSettingsTest` compiles and **reports as skipped** without `VEYQ_LIVE` (and its "every other" case without
   `VEYQ_LIVE_OTHERS_ENV`): a JUnit `Assume` before `runTest` (`needs(name)`), not an early return, which had shown both
-  cases as passed (fixed 2026-11-13 by `cr-app-kit-sign-in` phase 4; the test XML: `tests="2" skipped="2"`). **Pending, live:**
-  `VEYQ_LIVE=http://veyq.localhost:8080 ./gradlew :core:jvmTest --tests '*LiveAccountSettingsTest*'` (from `src/mobile`;
-  `VEYQ_ENV_FILE=<main checkout>/.run/.env` from a worktree), and the "every other" case against a throwaway account the
-  dev seeding made: `VEYQ_LIVE_OTHERS_ENV=<its env file>` added — never the principal; then the live bite (`signOutOthers`
-  also revoking `current`) must turn that case's control red.
+  cases as passed (fixed 2026-11-13 by `cr-app-kit-sign-in` phase 4; the test XML: `tests="2" skipped="2"`). **Live
+  (2026-11-13, measured):** `VEYQ_LIVE=http://veyq.localhost:8080 VEYQ_ENV_FILE=<main checkout>/.run/.env
+  VEYQ_LIVE_OTHERS_ENV=<the throwaway's env file> ./gradlew :core:jvmTest --tests '*LiveAccountSettingsTest*' --rerun` (from
+  `src/mobile`) green, `tests="2" skipped="0" failures="0"`. The throwaway account was made the seeders' way, by a scratch
+  `tsx` script over the web's own modules (as `fuzz-seed.mts` onboards its peer): the principal signed in and unlocked,
+  `inviteMember` with a code, the link read out of Mailpit, `registerThroughMemberInvite` for a cold-born
+  `live-others-<n>@veyq.localhost` with a generated password — written 0600 to a scratchpad env file, never printed, deleted
+  after; never the principal. **Live bite:** `signOutOthers` also revoking this device's family
+  (`door.revoke(current.device.familyId)` after `revokeOthers`) → `signingOutEveryOther…` red (its first check after the
+  call, `LiveAccountSettingsTest.kt:92`: the page's reload refused, `ACCOUNT_SETTINGS_LOAD_FAILED`); restored with
+  `/bin/cp -f` (compared equal), green again. Afterwards the throwaway member was removed from the tenant
+  (`removeTenantMember`); its account stays on the dev instance (no API deletes an account).
   **Retrospective:** R4's `listInstanceCapabilities` was a refine slip a read of its `x-veyq-channel: admin` would have
   caught; a capability a member's screen gates on is always `/api/setup`'s (or the tenant's) manifest. The CR's live bite
   needs "every other" driven live, which its own Context reserves for a throwaway account — so the bite lives in the
@@ -211,7 +218,7 @@ Apple as a pushed view (iOS) and a Settings scene-style window (macOS `Settings 
   Mac app's window; ask for it at the start, not after the build.
 - [x] **3 the bridge** — D4's calls with `WireTest` samples, `DispatchTest` (open, an action, close, a tenant switch
   closing it) and `SecretFreeSchemaTest` unchanged. · Done when: `./gradlew :bridge:jvmTest` green.
-  **Status: built and proven over played doors (2026-11-13); the live case is pending (the dev backend was down).**
+  **Status: built and proven over played doors (2026-11-13); the live case green (2026-11-13, see Met's end).**
   **Built:** `Wire.kt` — `Settings.Open(connection)` → `Answer.SettingsOpened(settings)` (refused `NO_SUCH_CONNECTION`, or
   `NO_TENANT_OPEN`: the page is reached from an open tenant's drawer), `Settings.Close/Refresh/Rename/SignOut/SignOutOthers/
   SignOutAndRemoveKey/RemoveSavedKey/RemoveOtherSavedKeys/StaySignedIn/PasswordTrust/StopTrusting/SignOutHere` (each answered
@@ -234,9 +241,10 @@ Apple as a pushed view (iOS) and a Settings scene-style window (macOS `Settings 
   out → the sign-in) and `signOutOnASettingsPageIsThisAccountsSignOutHere`; `WireTest` samples of every new variant;
   `SecretFreeSchemaTest` over the new shapes. **Bites** (one edit each, `/bin/cp -f` restore, green after): `Settings.SignOut` made a no-op, `closeTenant` keeping the pages, the watch ignoring the close → `anAccountsSettings…` red; `Settings.SignOutHere` a no-op → `signOutOnASettingsPage…` red; the `removesKey` allowance or the typed password's removed, and a `wrapId` added to `SettingsKeptDevice` → `SecretFreeSchemaTest` red; the `Watched.Settings` sample dropped → `WireTest` red (by derivation). A rerun of `DispatchTest` after the bites once failed `aLinkIsMinted…` (an existing case, untouched here) and was green twice on `--rerun`: a timing flake under load, named here.
   `LiveBridgeTest.anAccountsSettingsAreReadRenamedAndSignedOutThroughCalls` compiles and reports as skipped without `VEYQ_LIVE`
-  (a JUnit `Assume`). **Pending, live:** `VEYQ_LIVE=http://veyq.localhost:8080 VEYQ_ENV_FILE=<main checkout>/.run/.env
-  ./gradlew :bridge:jvmTest --tests '*LiveBridgeTest.anAccountsSettings*' --rerun` (from `src/mobile`): a fresh login of the
-  principal reads its page, renames this device, signs out from the page; only that login's family is touched.
+  (a JUnit `Assume`). **Live (2026-11-13, measured):** `VEYQ_LIVE=http://veyq.localhost:8080 VEYQ_ENV_FILE=<main
+  checkout>/.run/.env ./gradlew :bridge:jvmTest --tests '*LiveBridgeTest.anAccountsSettings*'` (from `src/mobile`) green
+  (3.3 s in the test XML): a fresh login of the principal reads its page, renames this device, signs out from the page;
+  only that login's family is touched.
   **Retrospective:** the CR's "SecretFreeSchemaTest unchanged" overlooked that the state it named carries two `…Key…` flags —
   a refine reads the field names against the check's regex.
 - [x] **4 Linux and Windows** — the pages (D4). · Done when: `python3 linux/run.py build` and `python3 windows/run.py
