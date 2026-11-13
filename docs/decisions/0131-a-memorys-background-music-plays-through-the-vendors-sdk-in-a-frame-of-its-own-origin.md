@@ -117,8 +117,25 @@ across sites, and they have no documented control from the page.
      per frame's life).
    - **Teardown:** the signed-in app mounts the bar only while the session is signed in and unlocked, so a **sign-out** or
      a **lock** unmounts it and ends the music; a **tenant switch** is a full navigation to the other tenant's domain and
-     ends it with the page. A teardown removes the frame without forgetting the vendor's sign-in: that sign-in, like the
-     consent, is this browser's, and only **Turn music off** forgets it. Memories switched off here gets no bar.
+     ends it with the page. Memories switched off here gets no bar.
+   - **A sign-out forgets the vendor's sign-in; a lock does not** (owner 2026-11-13, inbox #858): on a shared computer
+     the next person's start of a service must not be signed in as the one who signed out. Every session ending - this
+     tab's sign-out (the locked screen's included), a refresh the server refused, an account erasure, another tab's
+     announcement - first runs the applications' ending steps (an application's lifecycle hook `onSessionEnding`, run
+     by `app/sessionEnd.ts` through `app/sessionEndingSteps.ts`, all together bounded at 2 s, a failing step ignored),
+     and only then loads the sign-in page. Memories' step (`features/memories/music/musicEnding.ts`):
+     - **a frame is mounted:** the bar tells it `forget` and waits for `forgotten`, at most 1.5 s - the wait of **Turn
+       music off**, and a sign-out right after Turn music off joins that forget rather than sending another;
+     - **none is** (the bar was closed, or nothing played on this page): only Apple Music's sign-in outlives its frame
+       (MusicKit keeps it in the music origin's storage; Spotify's token lives in the frame's memory), so only a browser
+       whose consent covers Apple Music at the music host served now, and only in the tab that started the ending, gets
+       a **hidden frame** of the music host mounted to forget: handed no playlist and no credential, it loads no vendor
+       script, and on `forget` clears its origin's local and session storage - the music origin keeps nothing of its own
+       there, so everything in it is a vendor's. Every `forget` clears that storage, behind a player's own sign-out too.
+     The **consent stays**: it is this browser's, and only Turn music off withdraws it. A **lock** keeps the session and
+     the person - it is reached by a new document (a reload) or a rotation whose outcome is unknown, which leave no frame
+     behind to ask, and the locked screen's own sign-out is a sign-out - so it forgets nothing. A tenant switch forgets
+     nothing either: the same person, signed in.
    - **The share page** mounts the same footer bar below its own footer, for a guest exactly as for a member (share view =
      member view): it plays on while the guest moves through the link's nodes and ends when the guest leaves the page.
 
@@ -181,7 +198,13 @@ across sites, and they have no documented control from the page.
   re-minted at least every six months — the Run docs say so.
 - **Withdrawal waits for the frame.** Removing the frame in the same tick as the `forget` would destroy it before the
   message is handled, and MusicKit's sign-in in the music origin's storage would stay; the bar keeps the frame until
-  `forgotten` (at most 1.5 s).
+  `forgotten` (at most 1.5 s). A sign-out waits the same way, so it can take up to 1.5 s longer where music was played.
+- **What a sign-out's forget leaves** (decision 5): the hidden frame clears only the storage of the music origin the
+  browser lets this site's frame see - in a browser that partitions a frame's storage by top-level site, this site's
+  partition, which is the one the bar's frame wrote. A page whose capabilities do not name the music host when the session
+  ends (the music switched off since, or a page that has not read them yet) mounts no frame, and a browser closed
+  without signing out forgets nothing; the next veyq sign-out in it does. That clearing the storage is what MusicKit's
+  `unauthorize()` does locally is *remembered*, not measured - the owed live pass checks it.
 - **Not built:** the uploaded audio file (inbox #36's residual), a chapter inheriting its Memory's playlist (#847), the
   vendors' logo files (#857).
 
