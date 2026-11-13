@@ -221,6 +221,87 @@ final class AppModel {
         AppleKit.shared.scan(session: session, typedServer: typedServer, timing: QrCamera.timing)
     }
 
+    // MARK: Device linking (ADR 0059; cr-app-device-linking)
+
+    /// The ceremony on screen (`DeviceLinkView`), and its state as core last said it; nil while none is open.
+    private(set) var link: DeviceLink?
+    private(set) var linkShown: DeviceLink.Shown?
+    @ObservationIgnored private var linkWatch: DeviceLink.Watch?
+    /// How the link on screen was opened, for "Start Over": the same role, the same server.
+    @ObservationIgnored private var linkMake: (@MainActor () -> DeviceLink?)?
+
+    /// Settings' "Show a Code" (*add a new device*, the trusted side): this account's code for the new device to scan.
+    func linkShow() {
+        guard let account = session.signedTo?.account else { return }
+        openLink { AppleLink.shared.showForNewDevice(account: account) }
+    }
+
+    /// Settings' "Scan a Code" (*sign in with a QR code*, the trusted side): the new device's code, scanned here.
+    func linkScan() {
+        guard let account = session.signedTo?.account else { return }
+        openLink { AppleLink.shared.scanSignInCode(account: account, timing: QrCamera.timing) }
+    }
+
+    /// The sign-in's "Scan a Code from Another Device", over the form's server as typed now (nothing in a scan changes it).
+    func scanFromTrusted(server: String) {
+        let session = session
+        openLink { AppleLink.shared.scanFromTrusted(session: session, server: server, timing: QrCamera.timing) }
+    }
+
+    /// The sign-in's "Sign In with a QR Code", over the form's server as typed now.
+    func showForSignIn(server: String) {
+        let session = session
+        openLink { AppleLink.shared.showForSignIn(session: session, server: server) }
+    }
+
+    /// "Start Over": a new ceremony of the same role — a new secret, never the old one retried (ADR 0059 §6).
+    func linkAgain() {
+        guard let make = linkMake else { return }
+        openLink(make)
+    }
+
+    /// The ceremony's sheet went: the link ends (its polls stop, its scan closes, nothing more is sent).
+    func closeLink() {
+        linkWatch?.stop()
+        linkWatch = nil
+        link?.close()
+        link = nil
+        linkShown = nil
+    }
+
+    private func openLink(_ make: @escaping @MainActor () -> DeviceLink?) {
+        closeLink()
+        guard let made = make() else { return }
+        linkMake = make
+        link = made
+        linkShown = made.current
+        // core calls the watch on its own threads: @Sendable, back on the main actor (src/mobile/CLAUDE.md § Traps)
+        nonisolated(unsafe) let watched = made
+        linkWatch = made.watch { @Sendable shown in
+            nonisolated(unsafe) let shown = shown
+            Task { @MainActor [weak self] in self?.linkChanged(watched, shown) }
+        }
+    }
+
+    /// Its steps go to the unified log (`veyq-link:`): the step, the refusal and the hint — never a code, a number or a name.
+    private func linkChanged(_ made: DeviceLink, _ shown: DeviceLink.Shown) {
+        guard made === link else { return }
+        linkShown = shown
+        NSLog("veyq-link: %@: %@%@%@", "\(made.role)", "\(shown.step)", shown.refusal.map { ", \($0)" } ?? "", shown.hint.map { ", hint \($0)" } ?? "")
+        // the new device is signed in: the shell opens over the account the grant made, its offer over it
+        if (made.role == .scanFromTrusted || made.role == .showForSignIn) && shown.step == .done {
+            closeLink()
+            Task { if let opened = session.signedTo { try? await show(opened) } }
+        }
+    }
+
+    #if DEBUG
+    /// A pass's sign-out of the current server (`DevLogin`'s `VEYQ_DEV_LINK_DIR/signout`), as Settings' "Sign Out".
+    func devSignOut() {
+        if let account = session.signedTo?.account { signOut(account) }
+    }
+    #endif
+
     // MARK: Staying signed in (ADR 0123 decision 8)
 
     /// The offer to stay signed in a sign-in left open (core's `Gate.Signed.offer`), a sheet over the shell; nil once answered.

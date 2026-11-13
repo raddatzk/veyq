@@ -16,6 +16,9 @@ struct SignInView: View {
     var onClearKit: () -> Void = {}
     /// The kit's scan core makes for the server as typed now; nil where the app offers none.
     var onScanKit: ((String) -> QrScan<AnyObject>)?
+    /// The two linking entries (ADR 0059 §1) over the server as typed now; nil where the app offers none (the extension).
+    var onScanFromTrusted: ((String) -> Void)?
+    var onShowForSignIn: ((String) -> Void)?
     let onSignIn: (String, String, String, String) -> Void
 
     @State private var server: String
@@ -33,6 +36,7 @@ struct SignInView: View {
         kit: SessionModelKitShown? = nil, onCancel: @escaping () -> Void = {},
         onKit: @escaping (URL, String) -> Void = { _, _ in }, onClearKit: @escaping () -> Void = {},
         onScanKit: ((String) -> QrScan<AnyObject>)? = nil,
+        onScanFromTrusted: ((String) -> Void)? = nil, onShowForSignIn: ((String) -> Void)? = nil,
         onSignIn: @escaping (String, String, String, String) -> Void
     ) {
         self.working = working
@@ -43,6 +47,8 @@ struct SignInView: View {
         self.onKit = onKit
         self.onClearKit = onClearKit
         self.onScanKit = onScanKit
+        self.onScanFromTrusted = onScanFromTrusted
+        self.onShowForSignIn = onShowForSignIn
         self.onSignIn = onSignIn
         _server = State(initialValue: server.map(Self.shortServer) ?? "veyq.localhost:8080")
         _email = State(initialValue: email ?? "")
@@ -107,6 +113,20 @@ struct SignInView: View {
                 openButton
                 scanButton
                 #endif
+            }
+            if onScanFromTrusted != nil || onShowForSignIn != nil {
+                // ADR 0059 §1: another device lets this one in, over the server above (nothing in a scan changes it) —
+                // scanning its code where a camera can be, showing this one's code on every device
+                Section {
+                    if let onScanFromTrusted, !noCamera {
+                        Button { onScanFromTrusted(server) } label: { Label(say(.signinLinkScan), systemImage: "qrcode.viewfinder") }
+                            .disabled(working)
+                    }
+                    if let onShowForSignIn {
+                        Button { onShowForSignIn(server) } label: { Label(say(.signinLinkShow), systemImage: "qrcode") }
+                            .disabled(working)
+                    }
+                }
             }
             if let error {
                 Section { Text(say(error)).foregroundStyle(.red) }
@@ -383,6 +403,8 @@ enum TrustWords {
 /// means, then "Not Now", and where to change it later. It is answered, never swiped away; a cancelled prompt keeps it.
 struct OfferSheet: View {
     let levels: [StaySignedIn]
+    /// The sign-in was a link's (ADR 0059 §10): no password reached this device, so "Not Now" says what the next start needs.
+    var linked = false
     let working: Bool
     let onAnswer: (StaySignedIn?) -> Void
 
@@ -399,7 +421,7 @@ struct OfferSheet: View {
                         let words = TrustWords.level(level)
                         choice(words.title, words.hint, prominent: i == 0) { onAnswer(level) }
                     }
-                    choice(say(.offerNotNow), say(.offerNotNowHint), prominent: false, plain: true) { onAnswer(nil) }
+                    choice(say(.offerNotNow), linked ? say(.offerNotNowLinkedHint) : say(.offerNotNowHint), prominent: false, plain: true) { onAnswer(nil) }
                 }
                 if working { ProgressView() }
                 Text(say(.offerFooter, say(.switcherManage)))

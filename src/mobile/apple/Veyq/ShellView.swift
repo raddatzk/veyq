@@ -40,6 +40,9 @@ struct ShellView: View {
         .sheet(isPresented: Binding(get: { model.settings != nil }, set: { if !$0 { model.closeSettings() } })) {
             SettingsPage(model: model)
         }
+        #else
+        // a ceremony opened while the Settings window is closed sits over the main window (ADR 0059)
+        .deviceLinkSheet(model, here: model.settings == nil)
         #endif
     }
 

@@ -17,10 +17,14 @@ struct RootView: View {
         case .signIn(let working, let error, let adding, let server, let email, let kit):
             SignInView(
                 working: working, error: error, adding: adding, server: server, email: email, kit: kit, onCancel: model.cancelAdd,
-                onKit: model.readKit(_:typedServer:), onClearKit: model.clearKit, onScanKit: model.scanKit(typedServer:)
+                onKit: model.readKit(_:typedServer:), onClearKit: model.clearKit, onScanKit: model.scanKit(typedServer:),
+                onScanFromTrusted: linkEntry(model.scanFromTrusted(server:)),
+                onShowForSignIn: linkEntry(model.showForSignIn(server:))
             ) { server, email, password, secretKey in
                 model.signIn(server: server, email: email, password: password, secretKey: secretKey)
             }
+            // a device-linking ceremony from the sign-in's two entries (ADR 0059)
+            .deviceLinkSheet(model)
         case .unlock(let record, let working, let error):
             UnlockView(record: record, working: working, error: error, onUnlock: model.unlock(password:), onOther: model.otherAccount)
         case .needsApp:
@@ -37,8 +41,13 @@ struct RootView: View {
             ShellView(model: model)
                 // the offer to stay signed in a sign-in left open (ADR 0123 decision 8), over the shell until it is answered
                 .sheet(isPresented: Binding(get: { model.offer != nil }, set: { _ in })) {
-                    OfferSheet(levels: model.offer?.levels ?? [], working: model.trustWorking, onAnswer: model.answerOffer)
+                    OfferSheet(levels: model.offer?.levels ?? [], linked: model.offer?.linked ?? false, working: model.trustWorking, onAnswer: model.answerOffer)
                 }
         }
+    }
+
+    /// A linking entry of the sign-in, or none in the share extension (the app signs in there, ADR 0132).
+    private func linkEntry(_ open: @escaping (String) -> Void) -> ((String) -> Void)? {
+        model.inExtension ? nil : open
     }
 }
