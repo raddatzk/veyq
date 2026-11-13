@@ -20,6 +20,10 @@ lifecycle = "2.11.0"
 core-ktx = "1.19.1"
 # The one generator version the repository runs (scripts/validate_build_input_pins.py holds every site to it).
 openapi-generator = "7.23.0"
+# Test-only, the core's jvmTest (never shipped): draws the web's Emergency Kit fixtures' pages as the apps' renderers do.
+# Apache-2.0, an Apache project, maintained (3.0.8 released 2026-07-08, checked on Maven Central 2026-11-13); JVM-only,
+# which is why it is no candidate for the apps' own drawing.
+pdfbox = "3.0.8"
 
 [libraries]
 ktor-client-core = { module = "io.ktor:ktor-client-core", version.ref = "ktor" }
@@ -36,6 +40,7 @@ serialization-json = { module = "org.jetbrains.kotlinx:kotlinx-serialization-jso
 kotlinx-datetime = { module = "org.jetbrains.kotlinx:kotlinx-datetime", version.ref = "kotlinx-datetime" }
 kotlincrypto-sha3 = { module = "org.kotlincrypto.hash:sha3", version.ref = "kotlincrypto-sha3" }
 bouncycastle = { module = "org.bouncycastle:bcprov-jdk18on", version.ref = "bouncycastle" }
+pdfbox = { module = "org.apache.pdfbox:pdfbox", version.ref = "pdfbox" }
 compose-bom = { module = "androidx.compose:compose-bom", version.ref = "compose-bom" }
 compose-material3 = { module = "androidx.compose.material3:material3" }
 compose-material3-adaptive-navigation-suite = { module = "androidx.compose.material3:material3-adaptive-navigation-suite" }

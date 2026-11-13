@@ -264,6 +264,10 @@ kotlin {
             implementation(libs.ktor.client.okhttp)
             implementation(libs.bouncycastle)
         }
+        jvmTest.dependencies {
+            // Test-only: draws the web's kit fixtures' pages so the kit's whole read order runs on them (`KitFixtureTest`).
+            implementation(libs.pdfbox)
+        }
         appleMain.dependencies {
             implementation(libs.ktor.client.darwin)
         }
