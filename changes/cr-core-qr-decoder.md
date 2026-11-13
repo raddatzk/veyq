@@ -384,6 +384,104 @@ half**, written into that ADR in phase 6. `SecretFreeSchemaTest` stays as it is:
   `pipewiresrc` run in the container's session at all (Broadway has no camera, so the test camera is the proof there
   and a real Linux session's camera the owner's step). · Done when: `./gradlew :bridge:jvmTest` and both `run.py
   build`/`test` green; each desktop's test camera settles a scan in its pass; the Windows VM's `NoCamera` seen.
+
+  **Status: built and measured (2026-11-13); the box stays open, as phase 4's, for the owner's real-camera passes below
+  (the Allow of the Fedora VM's portal dialog or a Linux laptop, a Windows laptop).**
+
+  **Built:**
+  - bridge (D5): `Scan.Open(kind)` → `ScanOpened(scan)`, `Scan.Camera(scan, camera)` (core's `QrScan.Camera`),
+    `Scan.Frame(scan, width, height, stride)` with the plane as `veyq_call`'s **inbound payload** → `FrameTaken(taken)`,
+    refused `NOT_A_FRAME` (no payload, a plane shorter than its size, a stride under the width) or `NO_SUCH_SCAN`;
+    `Scan.Close`; `Watched.Scan` → `Update.Scan(scan, ScanShown(state, found))`, `found` what the kind made of the code.
+    `ScanKind` has one kind, `SCHEME` (core's new `qr/QrSchemes.of`: `veyqpair`, `veyqsignin`, `veyqkit`, the scheme
+    alone) — the desktops' harness's; `kit` and `link` join with their CRs. **The bridge fits the frame**
+    (`QrFrames.fit`), so a host sends its camera's plane as it is and no host repeats the scaling rule; `ready` is asked
+    before the fit. Scans are no tenant's (a sign-in scans before one opens) and close on `shutdown`. `Bridge.call` takes
+    `inbound`; `Exports.kt` copies it before `veyq_call` returns (NULL none, length 0 empty, over 64 MiB not read);
+    `bridge.h`'s comment says so. A drawn code: `Bridge.drawnCode(text, px, payload)` → `Bytes(image/png)` at the
+    largest whole scale within `px` (at least 1), refused `NO_BYTES` past version 40 — the door `Link.Code` (device
+    linking D6) calls; no wire call draws yet (below).
+  - Linux (`linux/src/qr_camera.rs`, `ScanView`): ashpd 0.14 (`async-io` + `camera`, no tokio) for the Camera portal
+    (no portal or `IsCameraPresent` false → `NONE`, the access refused → `DENIED`), `pipewiresrc fd=<portal remote>`,
+    one pipeline teed to a `GRAY8` appsink whose frames go to the core from GStreamer's thread
+    (`bridge::call_blocking_with`, behind a leaky one-frame queue) and an `RGBx` appsink drawn as a `gdk::MemoryTexture`;
+    `RUNNING` with the first frame, `NONE` on a pipeline error before it. Test camera `VEYQ_DEV_CAMERA` (debug):
+    `filesrc ! decodebin ! imagefreeze` at 10 fps. `dev_scan.rs` + `main.rs`: `VEYQ_DEV_SCAN=1` (debug) shows the
+    harness instead of the session. `bridge::call_blocking_with` carries the payload. Crates in `Cargo.toml` with their
+    check (ashpd 0.14.0 of 2026-11-05, repository pushed 2026-11-08, not archived; gstreamer-rs 0.25 on glib 0.22);
+    `Cargo.lock` gained only additions (`cargo update --workspace`: no existing crate moved). `Containerfile`:
+    `gstreamer1-devel`, `-plugins-base-devel`, `pipewire-gstreamer`. `run.py run` passes `VEYQ_DEV_SCAN` and mounts
+    `VEYQ_DEV_CAMERA`'s image.
+  - Windows (`windows/Veyq/QrCamera.cs`): `MediaCapture` on the first `VideoCapture` device (`Cpu`, exclusive), a
+    `MediaFrameReader` in NV12 (its Y plane read through `IMemoryBufferByteAccess`; any other format `Convert`ed to
+    Gray8), the preview a `MediaPlayerElement` over `MediaSource.CreateFromMediaFrameSource`; no device or a failed start
+    → `NONE`, `UnauthorizedAccessException` → `DENIED`; one frame in flight (`Interlocked`). Test camera
+    `VEYQ_DEV_CAMERA` (debug): the image decoded `Bgra8` (the decoder hands no Gray8: `ArgumentException`, measured),
+    converted, offered ten times a second. `DevScan.cs` + `MainWindow`: `VEYQ_DEV_SCAN=1`. `Core.CallAsync(call,
+    inbound)` (an empty array stays an empty payload). `run.py run` passes `VEYQ_DEV_SCAN`, copies `VEYQ_DEV_CAMERA`'s
+    image beside the launch file and holds no tunnel for the harness.
+  - Flatpak: **no finish-arg and no module added** — `org.gnome.Platform//51` carries `pipewiresrc`
+    (`libgstpipewire.so`) and `imagefreeze` (measured with `gst-inspect-1.0` in the runtime); the manifest says so.
+
+  **Met:**
+  - `./gradlew :core:jvmTest :core:macosArm64Test :bridge:jvmTest` green; `python3 linux/run.py build` (clippy, 39
+    tests, the build in the GNOME 51 SDK) and `test --tests '*Qr*'`, `python3 windows/run.py build` and `test --tests
+    '*Qr*'` green (31 tests each, after the deviation below); the guards (`scripts/validate_*.py`, without guard_gaps) green. `DispatchTest`: a frame before the
+    camera runs dropped; no payload, a short plane, a stride under the width refused; a foreign code taken, a second
+    frame dropped while it is read, then skipped; a 1920×1080 plane fitted to 960×540, the pairing code settling
+    `FOUND(veyqpair)`; nothing read after it, the camera changing nothing; `Close` → `CLOSED`, the id gone; no update
+    carries the code's text; `NONE`/`DENIED` per scan; the core's own decoder over the web's pairing fixture through
+    the bridge; a drawn code read back by `javax.imageio` and the core's decoder, its scale within `px`, version 40 + 1
+    refused. `WireTest` samples every new variant (Rust's round trip reads them); `SecretFreeSchemaTest` unchanged.
+  - **Linux, the container** (`VEYQ_DEV_SCAN=1 run.py run --port 8097 --no-secret-service`): with
+    `VEYQ_DEV_CAMERA=<the rotated pairing fixture as PNG>` → `camera running, 160x160 at a stride of 160`, `1 frames
+    taken`, `state Found(veyqpair)` (shot: the scheme under the check); without it → `no Camera portal (… /tmp/xdg/bus
+    …)`, `state NoCamera`. The CR's first measurement — the portal and `pipewiresrc` in the container's session — is
+    answered "no portal there": the container is no desktop, so the real path was measured on the VM.
+  - **Linux, the Fedora 45 VM's GNOME session** (the container's debug build and `libveyq.so` copied there): no camera →
+    `the Camera portal names no camera`, `state NoCamera`. **A virtual camera**: `gst-launch-1.0 filesrc … ! pngdec !
+    imagefreeze ! … ! pipewiresink mode=provide stream-properties="props,media.class=Video/Source,media.role=Camera"` —
+    the portal then answered `IsCameraPresent` true and GNOME asked "Allow Apps to Use the Camera?"; **Deny** →
+    `the camera's access was refused (Portal request was cancelled)`, `state Denied` (shot). The denial the permission
+    store kept (`devices/camera`, app id `""`: `no`) was deleted again, the VM left as found.
+  - **Windows VM** (`VEYQ_DEV_SCAN=1 windows/run.py run`): `no video capture device`, `state NoCamera` (shot); with
+    `VEYQ_DEV_CAMERA=<the same PNG>` → `camera running, 160x160 at a stride of 160`, `1 frames taken`, `state
+    Found(veyqpair)` (shot `qr-found.png`: the check and `veyqpair`). The app starts in ~25 s under emulation.
+  - Bites (`scratchpad/qr5/bite.py`, one mutation at a time, `/bin/cp -f` restore), nine, all bit: a scheme with
+    nothing after its colon accepted → `QrSchemesTest` red; the frame handed on unfitted, the inbound payload ignored,
+    `FOUND` without what it was found as, a `Close` that does not close, a kind that takes any code as its text (the
+    "never its text" assertion), the camera's state dropped, a drawn code at one pixel a module → `DispatchTest` red;
+    Rust's plane read at the width, not the stride → `a_gray8_plane_is_taken_at_its_stride…` red (`run.py build`).
+    `Exports.kt`'s inbound copy and C#'s `CallAsync(call, inbound)` are bitten by the passes themselves: `FOUND` on
+    either desktop is reached only through them.
+
+  **Deviations:**
+  - **No wire call draws a code yet.** D5 names none, and a call must name what it draws: the text is the core's (a
+    device link's), so the door is `Bridge.drawnCode` (tested), and `Link.Code(link, px)` of `cr-app-device-linking`
+    is its first caller. No host draws a core PNG in this phase; GTK and WinUI draw the avatars' PNGs already.
+  - **The frame is fitted by the bridge, not the host** (D3 said "the host scales down"): one rule for every camera,
+    none in Rust or C#.
+  - **The Linux real-path `FOUND` is not run**: the portal asks the person, and granting the camera on the VM is a
+    permission an agent does not give. Denied was measured instead; Allow is the owner's step (below).
+  - `Cargo.lock` was written by `cargo update --workspace` on this Mac, not `run.py lock` (`cargo update`, which would
+    have moved every crate): only additions.
+  - **`run.py test` on both desktops could not read the QR fixtures** (phases 1–4 compiled the Linux and mingw targets
+    but never ran them there): 8 tests of `QrDecoderTest`, `QrFramesTest` and `QrScanTest` failed with `VEYQ_REPO_ROOT
+    is not set`. Each `run.py test` now hands the fixtures over at their repository path (Linux a read-only mount,
+    Windows copied beside the binary) and sets `VEYQ_REPO_ROOT`: `--tests '*Qr*'` 31 of 31 on both (the 8 red before
+    the change are its bite).
+  - The harnesses' icons are icons, not words (Linux `object-select`/`camera-photo`/`dialog-warning`, Windows Segoe
+    CheckMark/Camera/Blocked); the container's icon theme lacks `emblem-ok-symbolic`, so GTK's own `object-select` is
+    used.
+
+  **Owner's steps (pending):**
+  1. Linux real path on the Fedora VM (or a laptop): build the debug app (`linux/run.py run` builds it in the
+     `veyq-linux-target` volume), copy `veyq` and `bridge/build/bin/linuxArm64/debugShared/libveyq.so` to the VM, start
+     the virtual camera above (or use a real one) and the app with the session's `XDG_RUNTIME_DIR`, `WAYLAND_DISPLAY`,
+     `DBUS_SESSION_BUS_ADDRESS`, `LD_LIBRARY_PATH` and `VEYQ_DEV_SCAN=1`; press **Allow**: stderr `camera running`,
+     `state Found(veyqpair)`.
+  2. A Windows laptop's camera: `VEYQ_DEV_SCAN=1 windows/run.py run` against it (`VEYQ_WINDOWS_SSH`), a veyq code held
+     up: `veyq-scan: state Found(…)` in the log; and Settings › Privacy › Camera off: `state Denied`.
 - [ ] **6 docs and harvest** — a new ADR (numbered when written): *QR codes are read and drawn by the core* (D1–D3,
   the rejected alternatives with R2–R4); ADR 0131 decision 1 gains the inbound payload (D5); `native-apps.md` (what is
   built); `src/mobile/CLAUDE.md` gains each platform's camera trap met on the way. · Done when: the trust-chain guards
@@ -438,3 +536,17 @@ Phase 4 (the implementer, 2026-11-13):
   condition set, an Android release APK with the harness copied in and restored). A CR that asks for a release-build
   number should name how that build reaches the code.
 
+
+Phase 5 (the implementer, 2026-11-13):
+- **The CR's first measurement had a wrong place.** "The Camera portal and `pipewiresrc` in the container's session" can
+  only answer "no portal" (the container runs no desktop and no xdg-desktop-portal); the real path needed a desktop
+  session. The Fedora VM had one, and a PipeWire `Video/Source` node with `media.role=Camera` made by `pipewiresink
+  mode=provide` is a virtual camera the portal counts — no kernel module, no root. Next time: a CR that names "the
+  container's session" for a desktop service says which session runs that service.
+- **The portal's dialog is a person's.** The real path's `FOUND` stops at GNOME's "Allow Apps to Use the Camera?", a
+  permission an agent does not grant; Deny is the measured state, and the permission store keeps it (`devices/camera`,
+  app id `""`), which a pass must undo. Next time: name the grant as the owner's step in the CR, with the recipe.
+- **The desktops' first scale rule would have been two copies.** D3 left the scaling to the host; with the bridge in
+  between, `QrFrames.fit` runs in the core at no cost, and Rust and C# send their camera's plane as it is.
+- WinUI's `BitmapDecoder` hands no `Gray8` (`ArgumentException`, measured on the VM): decode `Bgra8` and convert, as a
+  camera's non-NV12 frame is.
