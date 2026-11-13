@@ -127,6 +127,9 @@ class VeyqAccount private constructor(
     /** This device's own store: what an application keeps per device and not per account (the day's exchange rates). */
     internal val deviceStore: DeviceStore get() = device.store
 
+    /** This installation as the account's device register names it: its id there and the label it starts with. */
+    internal val thisDevice: ThisDevice get() = device
+
     /** A presigned `PUT` of [bytes] to the object store through the [outside] client: exactly `Content-Type:
      *  application/octet-stream` (it is part of the signature) and no bearer; the status, or 0 when the store was not
      *  reached. The answer's body is read to its end. */
@@ -382,7 +385,7 @@ class VeyqAccount private constructor(
         throw SignInFailure(SignInFailure.Reason.PROTOCOL, "add wrap ${r.status}")
     }
 
-    private fun register() = DeviceRegisterStore(suite, object : RegisterApi {
+    internal fun register() = DeviceRegisterStore(suite, object : RegisterApi {
         override suspend fun get(): DeviceRegister = call { AccountDeviceRegisterApi(server, http).getDeviceRegister() }
         override suspend fun put(update: DeviceRegisterUpdate): Boolean {
             val r = respond { AccountDeviceRegisterApi(server, http).putDeviceRegister(update) }
