@@ -3,10 +3,9 @@ package me.raddatz.veyq.mobile.account
 import me.raddatz.veyq.mobile.crypto.EmergencyKit
 import me.raddatz.veyq.mobile.crypto.Kit
 import me.raddatz.veyq.mobile.crypto.Primitives
+import me.raddatz.veyq.mobile.qr.QrDecoder
+import me.raddatz.veyq.mobile.qr.QrFrame
 import me.raddatz.veyq.mobile.session.SessionModel
-
-/** A picture as 8-bit luminance, row after row, [width] × [height] bytes: what a QR decoder reads. */
-class Luma(val width: Int, val height: Int, val pixels: ByteArray)
 
 /**
  * What a platform draws for a kit's read (ADR 0129 decision 1: the platform draws, the core decides): a PDF's pages
@@ -16,11 +15,11 @@ interface KitPictures {
     /** The PDF's page count as the platform's renderer opens it; null where it does not open. */
     suspend fun pdfPages(): Int?
 
-    /** Page [page] (1-based) drawn [width] px wide. */
-    suspend fun pdfPage(page: Int, width: Int): Luma?
+    /** Page [page] (1-based) drawn [width] px wide, as luminance (0 black, 255 white). */
+    suspend fun pdfPage(page: Int, width: Int): QrFrame?
 
-    /** The file decoded as an image, scaled so its longer side is [longSide] px. */
-    suspend fun picture(longSide: Int): Luma?
+    /** The file decoded as an image, scaled so its longer side is [longSide] px, as luminance. */
+    suspend fun picture(longSide: Int): QrFrame?
 }
 
 /**
@@ -52,16 +51,18 @@ object KitImport {
     class Found(val kit: Kit, val serverFrom: ServerFrom)
 
     /**
-     * The kit in [bytes], or null. [qr] decodes a drawn picture's QR to its text (the core's decoder; the platform never
-     * decodes). Never throws for a file it cannot read; each drawn picture's pixels are zeroed once decoded.
+     * The kit in [bytes], or null. A drawn picture's QR is read by the core's [QrDecoder] (a still image: trying harder,
+     * at any size; the platform never decodes) and its text goes straight to [EmergencyKit.read] — only the read [Kit]
+     * leaves, as only `QrScan`'s `Found` leaves a scan. Never throws for a file it cannot read; each drawn picture's
+     * pixels are zeroed once decoded (the decoder's own working copies are let go, not zeroed).
      */
-    suspend fun read(p: Primitives, bytes: ByteArray, pictures: KitPictures, qr: (Luma) -> String?): Found? {
+    suspend fun read(p: Primitives, bytes: ByteArray, pictures: KitPictures): Found? {
         if (bytes.size > FILE_CAP) return null
         val isPdf = bytes.size >= PDF.size && PDF.indices.all { bytes[it] == PDF[it] }
         val pdf by lazy { KitPdf.parse(bytes) }
         val kit = tokenInBytes(bytes)?.let { EmergencyKit.read(p, it) }
             ?: (if (isPdf) pdf.keywords()?.let { EmergencyKit.read(p, it) } else null)
-            ?: fromPictures(p, isPdf, pictures, qr)
+            ?: fromPictures(p, isPdf, pictures)
             ?: return null
         if (kit.server != null) return Found(kit, ServerFrom.TOKEN)
         val typed = if (isPdf) pdf.field(ADDRESS_FIELD)?.trim()?.takeIf { it.isNotEmpty() } else null
@@ -70,20 +71,20 @@ object KitImport {
         return Found(Kit(kit.email, kit.secretKey, server), ServerFrom.FIELD)
     }
 
-    private suspend fun fromPictures(p: Primitives, isPdf: Boolean, pictures: KitPictures, qr: (Luma) -> String?): Kit? {
-        if (!isPdf) return pictures.picture(PICTURE_PIXELS)?.let { decoded(p, it, qr) }
+    private suspend fun fromPictures(p: Primitives, isPdf: Boolean, pictures: KitPictures): Kit? {
+        if (!isPdf) return pictures.picture(PICTURE_PIXELS)?.let { decoded(p, it) }
         val pages = pictures.pdfPages() ?: return null
         for (page in 1..minOf(pages, PDF_PAGES)) {
             val drawn = pictures.pdfPage(page, PICTURE_PIXELS) ?: continue
-            decoded(p, drawn, qr)?.let { return it }
+            decoded(p, drawn)?.let { return it }
         }
         return null
     }
 
-    private fun decoded(p: Primitives, luma: Luma, qr: (Luma) -> String?): Kit? = try {
-        qr(luma)?.let { EmergencyKit.read(p, it) }
+    private fun decoded(p: Primitives, frame: QrFrame): Kit? = try {
+        QrDecoder.decode(frame, tryHarder = true)?.let { EmergencyKit.read(p, it) }
     } finally {
-        luma.pixels.fill(0)
+        frame.luminance.fill(0)
     }
 
     /**

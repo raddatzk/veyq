@@ -10,9 +10,11 @@ import kotlinx.coroutines.test.runTest
 import me.raddatz.veyq.mobile.crypto.concat
 import me.raddatz.veyq.mobile.crypto.hex
 import me.raddatz.veyq.mobile.crypto.unhex
+import me.raddatz.veyq.mobile.qr.QrEncoder
+import me.raddatz.veyq.mobile.qr.QrFrame
 import me.raddatz.veyq.mobile.session.testPrimitives
 
-/** The kit's read order (KitImport) and the core's PDF reader (KitPdf) over PDFs built here, a renderer and a QR played. */
+/** The kit's read order (KitImport) and the core's PDF reader (KitPdf) over PDFs built here, a renderer played; its QR codes are read by the core's decoder. */
 class KitImportTest {
     private val p = testPrimitives
 
@@ -131,7 +133,7 @@ class KitImportTest {
         val played = PlayedPictures(pages = 5, qrOn = mapOf(1 to "https://example.org", 2 to TOKEN_A))
         assertKit(assertNotNull(read(pdf(), played)), "https://familie.example.org", KitImport.ServerFrom.TOKEN)
         assertEquals(listOf("pages", "page 1@2400", "page 2@2400"), played.asked)
-        assertTrue(played.drawn.all { l -> l.pixels.all { it == 0.toByte() } }, "a drawn page left unzeroed")
+        assertTrue(played.drawn.all { f -> f.luminance.all { it == 0.toByte() } }, "a drawn page left unzeroed")
     }
 
     @Test
@@ -150,7 +152,7 @@ class KitImportTest {
 
     // ---- the played platform and the PDFs ----
 
-    private suspend fun read(bytes: ByteArray, played: PlayedPictures) = KitImport.read(p, bytes, played, played::qr)
+    private suspend fun read(bytes: ByteArray, played: PlayedPictures) = KitImport.read(p, bytes, played)
 
     private fun assertKit(found: KitImport.Found, server: String?, from: KitImport.ServerFrom) {
         assertEquals("alex.beispiel@example.org", found.kit.email)
@@ -162,26 +164,38 @@ class KitImportTest {
     private fun assertNoRawToken(bytes: ByteArray) =
         assertTrue("veyqkit:" !in CharArray(bytes.size) { (bytes[it].toInt() and 0xff).toChar() }.concatToString(), "the premise: no raw token")
 
-    /** A renderer whose page n is one pixel of value n, and a decoder that answers [qrOn]'s text for it. */
+    /**
+     * A renderer whose page n carries [qrOn]'s text as a real QR code (the core's encoder, 3 px a module) and is blank
+     * white without one; a picture carries [picture]'s. What it draws is read by the core's own decoder.
+     */
     class PlayedPictures(
         private val pages: Int? = 5,
         private val qrOn: Map<Int, String> = emptyMap(),
         private val picture: String? = null,
     ) : KitPictures {
         val asked = mutableListOf<String>()
-        val drawn = mutableListOf<Luma>()
+        val drawn = mutableListOf<QrFrame>()
 
         override suspend fun pdfPages(): Int? = pages.also { asked += "pages" }
-        override suspend fun pdfPage(page: Int, width: Int): Luma? {
+        override suspend fun pdfPage(page: Int, width: Int): QrFrame? {
             asked += "page $page@$width"
-            return Luma(1, 1, byteArrayOf(page.toByte())).also { drawn += it }
+            return drawing(qrOn[page]).also { drawn += it }
         }
-        override suspend fun picture(longSide: Int): Luma? {
+        override suspend fun picture(longSide: Int): QrFrame? {
             asked += "picture@$longSide"
-            return Luma(1, 1, byteArrayOf(-1))
+            return drawing(picture).also { drawn += it }
         }
 
-        fun qr(luma: Luma): String? = luma.pixels[0].toInt().let { if (it == -1) picture else qrOn[it] }
+        private fun drawing(text: String?): QrFrame {
+            if (text == null) return QrFrame(64, 64, 64, ByteArray(64 * 64) { -1 })
+            val code = QrEncoder.encode(text)
+            val side = code.side * SCALE
+            return QrFrame(side, side, side, ByteArray(side * side) { if (code.dark(it % side / SCALE, it / side / SCALE)) 0 else -1 })
+        }
+
+        private companion object {
+            const val SCALE = 3
+        }
     }
 
     companion object {
