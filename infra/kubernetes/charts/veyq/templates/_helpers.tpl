@@ -102,6 +102,16 @@ parentRefs:
 {{- end }}
 
 {{/*
+The music host (ADR 0131), or nothing: only while the TEMPORARY release flag music.released is on (decision 8) and
+music.domain is set. The one answer the listener and the route read, so neither appears for a dark instance whatever its
+domain says. Removal of the flag: `{{ $m.domain | default "" }}` alone.
+*/}}
+{{- define "veyq.musicDomain" -}}
+{{- $m := .Values.music | default dict -}}
+{{- if $m.released }}{{ $m.domain | default "" }}{{ end -}}
+{{- end }}
+
+{{/*
 The chart's own hosts, one per HTTPS listener under `per-domain`: [listener name, hostname, certificate (= the
 route's own object name, exactly as the backend names a tenant's)]. The store's host only with garage.enabled. One list, read by gateway.yaml for the
 listeners and by every route for its parent, so a host cannot have a route without a listener or the reverse.
@@ -114,7 +124,7 @@ listeners and by every route for its parent, so a host cannot have a route witho
 {{- with .Values.admin.domain }}
 - [https-admin, {{ . | quote }}, veyq-admin]
 {{- end }}
-{{- with (.Values.music | default dict).domain }}
+{{- with (include "veyq.musicDomain" .) }}
 - [https-music, {{ . | quote }}, veyq-music]
 {{- end }}
 {{- end }}

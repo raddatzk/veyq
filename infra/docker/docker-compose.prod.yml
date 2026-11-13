@@ -190,7 +190,9 @@ services:
       VEYQ_TENANT_INGRESS_UPSTREAM_BLOBS: http://garage:3900
       VEYQ_TENANT_INGRESS_UPSTREAM_ADMIN: http://admin:8080
       # Background music (ADR 0131), all optional and off while MUSIC_DOMAIN is unset: the music host the app serves
-      # the music frame on (its router is rendered with the others), and the two services' public credentials.
+      # the music frame on (its router is rendered with the others), and the two services' public credentials. Released
+      # dark: off unless the TEMPORARY release flag MUSIC_RELEASED=true (decision 8; removed at release).
+      VEYQ_MUSIC_RELEASED: ${MUSIC_RELEASED:-false}
       VEYQ_MUSIC_DOMAIN: ${MUSIC_DOMAIN:-}
       VEYQ_MUSIC_SPOTIFY_CLIENT_ID: ${MUSIC_SPOTIFY_CLIENT_ID:-}
       VEYQ_MUSIC_APPLE_DEVELOPER_TOKEN: ${MUSIC_APPLE_DEVELOPER_TOKEN:-}

@@ -130,7 +130,11 @@ spec:
                   name: {{ include "veyq.secretName" . }}
                   key: mariadbPassword
             {{- with .Values.music }}
-            # Background music (ADR 0131), each only when set — see music in values.yaml. Compose passes the same three.
+            {{- if .released }}
+            # Background music (ADR 0131), only while the TEMPORARY release flag music.released is on (decision 8) and
+            # each only when set — see music in values.yaml. Compose passes the same four.
+            - name: VEYQ_MUSIC_RELEASED
+              value: "true"
             {{- with .domain }}
             - name: VEYQ_MUSIC_DOMAIN
               value: {{ . | quote }}
@@ -142,6 +146,7 @@ spec:
             {{- with .appleDeveloperToken }}
             - name: VEYQ_MUSIC_APPLE_DEVELOPER_TOKEN
               value: {{ . | quote }}
+            {{- end }}
             {{- end }}
             {{- end }}
             {{- with .Values.app.trustedProxies }}
