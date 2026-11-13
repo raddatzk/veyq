@@ -233,6 +233,11 @@ Still open, settled with the worker queue: whether a small tier for every galler
   file "deleted after", which a crash leaves. Measured: `run-as … ls cache` empty during and after every view and playback
   on an Android emulator; `find / -xdev -newer <marker>` in the Linux container and `%TEMP%` on the Windows VM showed
   nothing of a played medium (ADR 0123's Consequences).
+- **Nor does the apps' HTTP stack keep anything** (2026-11-13): the core's clients run with no response cache, no
+  cookie store and no credential store on every engine — ciphertext and metadata are not the stack's to keep either.
+  Measured on an iOS simulator: URLSession's default cache had written 67 answers to `Library/Caches` — blob frames,
+  `members`, `exif`, and `/api/login/verify` with its tokens in clear; after the session was configured to keep
+  nothing, the same pass left none. Per engine in `src/mobile/CLAUDE.md` § Nothing on disk the app did not choose.
 - **A download is whole-blob and sequential**, so it adds no access pattern beyond what a whole-blob read already
   shows. The page must stay open while it runs, since it holds the key.
 
