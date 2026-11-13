@@ -8,7 +8,8 @@ teilst, und warum sie privat bleiben. Kein technisches Vorwissen nötig.
 
 ## veyq benutzen
 
-- [Erste Schritte](/de/getting-started/): was veyq ist, eine Einladung annehmen, dein Notfall-Kit, anmelden
+- [Erste Schritte](/de/getting-started/): was veyq ist, eine Einladung annehmen, dein Notfall-Kit, anmelden,
+  [die App installieren](/de/getting-started/install-the-app/)
 - [Dein Konto](/de/account/devices-and-sessions/): Geräte, Passwort, E-Mail-Adresse, Schlüssel, Profil
 - [Bereiche](/de/spaces/): deine Bereiche, Ordner, Gruppen, der Papierkorb, Herunterladen und Importieren
 - [Anwendungen](/de/applications/): [Erinnerungen](/de/memories/) für Fotos und Videos, [Depot](/de/depot/)

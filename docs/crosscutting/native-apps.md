@@ -63,6 +63,8 @@ libadwaita in Rust, Windows WinUI 3 in C#, both over the core as a Kotlin/Native
 2026-11-10). Each has its first slice built (ADR 0123's Consequences: the core on Linux and on Windows, the bridge, the
 Linux app and the Windows app), and the bridge's channels for shown bytes, a blob's ranges and files by path ([ADR 0131](../decisions/0131-the-bridge-carries-shown-bytes-beside-the-json-ranges-through-a-reader-and-files-by-path.md)),
 proved by the members' pictures and a Pot's download on both. On Windows that core is x64 only: Kotlin/Native has no Windows ARM64 target.
+The desktop apps' packages, a preview, are described to a person on the docs site's
+[Install the app](../../site/src/content/docs/getting-started/install-the-app.mdx).
 
 ## Built, by area
 
@@ -150,7 +152,11 @@ button with its popover and Windows' `AppBarButton` with its flyout, each with C
     there), updates in place keeping its data and uninstalls leaving nothing on the VM; a signed copy's block map is the
     unsigned one's. Still to measure in the package, with a signed-in server: whether a packaged app's picked path
     opens in the core (ADR 0131), Save a copy, the camera's consent and `NoCamera`, and whether a packaged app takes a
-    drop (it is elevated on the VM as the unpackaged one is: the owner step below answers both).
+    drop (it is elevated on the VM as the unpackaged one is: the owner step below answers both). **Who signs the
+    released MSIX** is the owner's (ADR 0133 decisions 7 and 12): with a project certificate, each person trusts it once,
+    as administrator, before the first install, and their Windows then trusts every package that certificate's key signs,
+    not only veyq's (remembered from the MSIX trust model, not measured); a certificate from a CA or Azure Artifact
+    Signing needs no such step and names a legal person.
   - **The visible drop from Explorer was not seen** (2026-11-12): built (`Drops.cs`) and held by `DropSortTest`, but on
     the VM the app gets no drag — no window of it holds an OLE drop target (`Veyq.Drive droptargets`). The VM runs with
     UAC off, every process elevated; that the Windows App SDK takes no drop into an elevated app is remembered from a

@@ -14,6 +14,7 @@ on:
     paths:
       - "site/**"
       - "contracts/platform/capabilities.json"
+      - "src/mobile/desktop-identity.json"
       - "scripts/pnpm_install_no_deprecated.py"
       - ".github/workflows/site.yml"
   pull_request:
@@ -22,6 +23,7 @@ on:
     paths:
       - "site/**"
       - "contracts/platform/capabilities.json"
+      - "src/mobile/desktop-identity.json"
       - "scripts/pnpm_install_no_deprecated.py"
       - ".github/workflows/site.yml"
   workflow_dispatch:
