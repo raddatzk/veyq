@@ -280,8 +280,9 @@ its seed travels sealed together with the owner's key-chain head, so an invitee 
 seed, walks the owner's chain from that head to the key that signed the invite, and accepts a tenant key only as the
 owner's own grant or one the tenant's succession statements lead to from it trusts nothing the server served
 unchecked. The seal
-is mandatory because the server mails the link: without the code, the operator holds the link but cannot open it
-except by guessing offline. The newcomer then grants the epoch to itself, so no other member has to be online
+is mandatory for a mailed invite because the server mails its link: without the code, the operator holds the link but
+cannot open it except by guessing offline. An invite the owner shares as a link carries its code and never passes the
+server, which answers only its token ([ADR 0129](https://github.com/raddatzk/veyq/blob/main/docs/decisions/0129-a-member-invite-is-mailed-or-handed-over-as-a-link.md)). The newcomer then grants the epoch to itself, so no other member has to be online
 ([ADR 0111](https://github.com/raddatzk/veyq/blob/main/docs/decisions/0111-an-invitee-grants-itself-a-rotator-re-keys-its-own-scopes-and-a-key-chain-anchors-trust.md)
 decisions 1–5 and 19). Every other wrap to a member in a tenant — a rotation's re-grant, a grant delivery, a group add —
 goes only to a key the recipient's key chain reaches from the step their join record names, rooted at an owner this

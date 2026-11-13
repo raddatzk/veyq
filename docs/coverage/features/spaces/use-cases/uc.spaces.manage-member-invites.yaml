@@ -11,10 +11,10 @@ title: Manage pending member invites (list, re-issue link, revoke)
 # (MemberInviteManagementSliceTest); the .http covers the anonymous-401 boundary/authz.
 acceptanceCriteria:
   - id: list-pending-member-invites
-    text: The tenant owner lists the tenant's pending (ACTIVE, unexpired) MEMBER invites — each an email + invite status + expiry — beside the joined-member directory. Owner-gated (a non-owner gets 403); operator-blind (only invite metadata the server already stores; never the secret). Consumed/expired invites are not listed.
+    text: The tenant owner lists the tenant's pending (ACTIVE, unexpired) MEMBER invites — each an email + invite status + expiry, a link invite without an email and shown as "Link invitation" with its expiry — beside the joined-member directory. Owner-gated (a non-owner gets 403); operator-blind (only invite metadata the server already stores; never the secret). Consumed/expired invites are not listed.
     coverage:
       backend:
-        integration: [MemberInviteManagementSliceTest.ownerListsPendingMemberInvitesOutsiderIs404, MemberInviteManagementSliceTest.manageOnAnUnknownTenantIs404NotFound, TenantOwnerGateTest.ordinaryMemberWhoOwnsScopesIsRefusedAtEveryOwnerGatedEndpoint, TenantOwnerGateTest.realRootScopeOwnerStillPasses]
+        integration: [MemberInviteLinkSliceTest.linkInvitesCoexistAndAMailedMintSupersedesNoneOfThem, MemberInviteManagementSliceTest.ownerListsPendingMemberInvitesOutsiderIs404, MemberInviteManagementSliceTest.manageOnAnUnknownTenantIs404NotFound, TenantOwnerGateTest.ordinaryMemberWhoOwnsScopesIsRefusedAtEveryOwnerGatedEndpoint, TenantOwnerGateTest.realRootScopeOwnerStillPasses]
       web:
         unit: [src/features/spaces/TenantMembersPanel.test.ts]
   - id: reissue-mails-a-fresh-link
@@ -33,11 +33,24 @@ acceptanceCriteria:
         integration: [MemberInviteManagementSliceTest.reissueSupersedesOldSecretAndMailsAUsableFreshLink, MemberInviteManagementSliceTest.aReissueForAnotherAddressIsRefusedAndLeavesTheInviteAlone, MemberInviteManagementSliceTest.reissueOnATenantThatCannotSendIsRefusedAndLeavesTheOutstandingInviteAlone, MemberInviteManagementSliceTest.reissueAndRevokeOfAnUnknownInviteAre404, MemberInviteManagementSliceTest.aReissueBuiltAtTheEpochARotationLeftIsStale]
       web:
         unit: [src/features/spaces/TenantMembersPanel.test.ts, src/features/spaces/memberInvite.test.ts]
+  - id: reissue-a-link-gives-a-new-link
+    # ADR 0129 decision 2. The old invite ends (compare-and-set) and the new one is minted in one transaction, the
+    # mint's own refusals first, so a refused re-issue leaves the old link standing.
+    text: >-
+      The owner re-issues a pending link invite as a whole new invite — new token, invite key, grant and code — and is
+      answered the new token, which the client shows once in the same link result as the first mint; the old link is
+      dead, and nothing is mailed. A refused re-issue (409 `stale_epoch`) leaves the old link standing. Each way re-issues only its own kind: a mailed invite's id at the link re-issue is 404 `invite_not_found`,
+      a link invite's at the mailed re-issue 422 `invite_email_mismatch`, each leaving the invite as it was.
+    coverage:
+      backend:
+        integration: [MemberInviteLinkSliceTest.aLinkIsReissuedWithANewTokenAndKeyAndTheOldOneDies, MemberInviteLinkSliceTest.eachWayReissuesOnlyItsOwnKindOfInvite, TenantOwnerGateTest.ordinaryMemberWhoOwnsScopesIsRefusedAtEveryOwnerGatedEndpoint]
+      web:
+        unit: [src/features/spaces/TenantMembersPanel.test.ts, src/features/spaces/memberInvite.test.ts]
   - id: revoke-member-invite
     text: The owner revokes a pending member invite — it is soft-transitioned to a terminal state, in the statement that nulls its invite key, grant and anchor, so a later replay of its secret at accept is rejected (invite_no_longer_valid); an expired invite loses them the same way. It touches no already-joined member and rotates nothing; the reserved email is freed to re-invite. A non-owner is 403.
     coverage:
       backend:
-        integration: [MemberInviteManagementSliceTest.revokeMakesTheSecretNoLongerAcceptableAndDropsItFromTheList, MemberInviteManagementSliceTest.reissueAndRevokeOfAnUnknownInviteAre404, InvitePlaceholderSliceTest.revokingOrExpiringAnInviteDropsItsKeyAndGrant, InviteAnchorSliceTest.anInviteThatEndsDropsItsAnchor]
+        integration: [MemberInviteLinkSliceTest.aLinkInviteIsRevokedLikeAMailedOne, MemberInviteManagementSliceTest.revokeMakesTheSecretNoLongerAcceptableAndDropsItFromTheList, MemberInviteManagementSliceTest.reissueAndRevokeOfAnUnknownInviteAre404, InvitePlaceholderSliceTest.revokingOrExpiringAnInviteDropsItsKeyAndGrant, InviteAnchorSliceTest.anInviteThatEndsDropsItsAnchor]
       web:
         unit: [src/features/spaces/TenantMembersPanel.test.ts]
         e2e: [src/features/spaces/memberInvite.e2e.test.ts]
@@ -59,7 +72,7 @@ acceptanceCriteria:
       web:
         unit: [src/features/spaces/TenantMembersPanel.test.ts]
   - id: invite-secret-never-logged
-    text: The raw invite bootstrap token — a redeemable secret — is never emitted to a log, in any launch mode. Every invite the shared delivery mailer sends (mint, resend, re-issue) logs only non-secret metadata (email + expiry); the secret reaches the invitee via the API response only. A production runtime logs a secret-free "not delivered" warning instead of the link.
+    text: The raw invite bootstrap token — a redeemable secret — is never emitted to a log, in any launch mode. Every invite the shared delivery mailer sends (mint, resend, re-issue) logs only non-secret metadata (email + expiry); the secret leaves the server only in the mail or in the response to whoever minted it. A production runtime logs a secret-free "not delivered" warning instead of the link.
     coverage:
       backend:
         integration: [TenantInviteMailerLogTest.neverLogsTheRawBootstrapToken]

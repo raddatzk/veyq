@@ -3,18 +3,25 @@ title: "Eine Einladung annehmen"
 sources:
   - docs/features/spaces/use-cases/uc.spaces.add-member.md
   - docs/features/account/enablers/en.account.key-model.md
+  - docs/features/account/use-cases/uc.account.confirm-email-address.md
 ---
 
 import Screenshot from '../../../../components/Screenshot.astro';
 
-In veyq kommst du, wenn dich jemand einlädt, der einen Bereich besitzt. Die Einladung kommt per E-Mail, auf Deutsch und
-Englisch, mit einem Link, der bis zu dem genannten Zeitpunkt gilt. Die Person, die dich eingeladen hat, gibt dir
-außerdem selbst einen **Code** weiter, per Nachricht oder persönlich: Der Link allein öffnet die Einladung nicht.
+In veyq kommst du, wenn dich jemand einlädt, der einen Bereich besitzt, auf einem von zwei Wegen:
+
+- **Ein Link, den dir die Person selbst schickt**, in einer Nachricht oder einer eigenen E-Mail. Er öffnet die
+  Einladung von selbst, einmal.
+- **Eine E-Mail von veyq**, auf Deutsch und Englisch, mit einem Link, der bis zu dem genannten Zeitpunkt gilt. Die
+  Person, die dich eingeladen hat, gibt dir außerdem selbst einen **Code** weiter, per Nachricht oder persönlich: Dieser
+  Link allein öffnet die Einladung nicht.
 
 ## Den Code eingeben
 
-1. Öffne den Link aus der E-Mail. Die Seite **Einladung annehmen** sagt, welchem Bereich du beitreten sollst.
-2. Gib den **Code** ein, den dir die einladende Person weitergegeben hat, und wähle **Weiter**. Groß- und
+1. Öffne den Link. Die Seite **Einladung annehmen** sagt, welchem Bereich du beitreten sollst. Ein Link, den dir die
+   Person selbst geschickt hat, trägt seinen Code, deshalb geht die Seite gleich weiter zu deinem Konto.
+2. Bei einer Einladung aus der E-Mail von veyq gib den **Code** ein, den dir die einladende Person weitergegeben hat,
+   und wähle **Weiter**. Groß- und
    Kleinschreibung, Leerzeichen und der Bindestrich spielen keine Rolle. Hat die Person stattdessen ein Passwort für
    die Einladung gewählt, fragt die Seite nach dem **Passwort für die Einladung**.
 
@@ -33,7 +40,9 @@ verlässt.
 
 <Screenshot id="getting-started-accept-form" shows="Die Seite Einladung annehmen mit dem Namen des Bereichs, den Feldern Benutzername und Passwort und der Schaltfläche Weiter" />
 
-Deine E-Mail-Adresse ist die, an die die Einladung ging; du tippst sie nicht ein. Wurdest du eingeladen, einen neuen
+Bei einer Einladung per E-Mail ist deine E-Mail-Adresse die, an die sie ging; du tippst sie nicht ein. Mit einem Link,
+den dir jemand geschickt hat, gibst du vor dem Passwort deine **E-Mail** ein; hast du auf diesem Server schon ein Konto,
+wähle **Ich habe schon ein Konto** und melde dich stattdessen damit an. Wurdest du eingeladen, einen neuen
 Bereich zu **besitzen**, gibt es keinen Code einzugeben, und die letzte Schaltfläche unten heißt **Annehmen &
 aktivieren**.
 
@@ -50,22 +59,31 @@ Die Seite sagt dann **Du bist „Familie Beispiel“ beigetreten.**, mit dem Nam
 melde dich mit deiner E-Mail, deinem Passwort und dem Secret Key aus dem gerade gesicherten Kit an:
 [Anmelden](/de/getting-started/sign-in/).
 
-Den geteilten Bereich siehst du sofort: Die Einladung trug seinen Schlüssel, verschlossen unter dem Code, und dein
+Bist du mit einem neuen Konto über einen Link beigetreten, sagt die Seite außerdem, dass eine Bestätigung an deine
+Adresse unterwegs ist. Öffne den Link aus dieser Mail, während du angemeldet bist. Bis dahin zeigt jede Seite, dass
+deine E-Mail-Adresse nicht bestätigt ist, mit **Bestätigungsmail senden**: Ein Link zum Zurücksetzen des Passworts geht
+an diese Adresse, deshalb stellt veyq früh sicher, dass er dich erreicht ([Deine E-Mail-Adresse](/de/account/change-email/)).
+
+Den geteilten Bereich siehst du sofort: Die Einladung trug seinen Schlüssel, verschlossen unter ihrem Code, und dein
 Gerät hat ihn beim Beitritt übernommen. Dafür muss niemand sonst online sein.
 
 ## Wenn es nicht klappt
 
-- **Diese Einladung ist nicht mehr gültig.** Sie ist abgelaufen, wurde zurückgezogen oder erneut gesendet, oder sie
-  wurde schon benutzt. Bitte die Person, die dich eingeladen hat, um eine neue.
-- **Dieser Einladungslink ist ungültig.** Der Link ist unvollständig. Öffne ihn noch einmal aus der E-Mail.
+- **Diese Einladung ist nicht mehr gültig.** Sie ist abgelaufen, wurde zurückgezogen oder erneut gesendet. Bitte die
+  Person, die dich eingeladen hat, um eine neue.
+- **Dieser Einladungslink wurde schon benutzt. Sag es der Person, die dich eingeladen hat — sie kann dir einen neuen
+  schicken.** Jemand hat ihn vor dir geöffnet. Warst du es nicht, sag es der Person, damit sie weiß, wer sonst
+  beigetreten sein könnte.
+- **Du bist schon Mitglied dieses Bereichs.** Das Konto, mit dem du dich angemeldet hast, ist schon darin.
+- **Dieser Einladungslink ist ungültig.** Der Link ist unvollständig. Öffne ihn noch einmal von dort, wo du ihn bekommen
+  hast.
 - **Dieser Code öffnet die Einladung nicht.** Der Code ist vertippt, oder er gehört zu einer anderen Einladung. Prüfe
   ihn und versuche es noch einmal.
 - **Diese Einladung lässt sich nicht prüfen — bitte um eine neue.** Die Einladung passt nicht zu der Person, die sie
-  geschickt hat, deshalb sendet dein Gerät nichts. Schickt die Person sie erneut, bekommst du einen neuen Link und sie
-  einen neuen Code zum Weitergeben.
+  geschickt hat, deshalb sendet dein Gerät nichts. Schickt die Person sie erneut, bekommst du einen neuen Link.
 - **Diese E-Mail hat bereits ein Konto — bitte stattdessen anmelden.** Du hast auf diesem Server schon ein veyq-Konto
-  mit dieser Adresse. Nach dem Code fragt die Seite nach deinem Passwort und deinem Secret Key statt nach einem neuen
-  Passwort.
+  mit dieser Adresse. Die Seite fragt nach deinem Passwort und deinem Secret Key statt nach einem neuen Passwort; mit
+  einem Link, den dir jemand geschickt hat, wähle **Ich habe schon ein Konto**.
 
 Dein Passwort und dein Secret Key verlassen dein Gerät nie. veyq macht daraus auf deinem Gerät Schlüssel, und der
 Server bekommt immer nur verschlossene Daten: [Sind meine Daten sicher?](/de/privacy/is-my-data-safe/)

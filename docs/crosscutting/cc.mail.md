@@ -46,7 +46,7 @@ tenant can send:
 
 | Mail | To | Decided by |
 |---|---|---|
-| member invite | the invited address | [ADR 0055](../decisions/0055-mail-is-a-precondition-not-a-capability.md) § 2, [uc.spaces.add-member](../features/spaces/use-cases/uc.spaces.add-member.md) |
+| member invite, the mailed way (a link invite is handed over by its owner and mailed by nobody) | the invited address | [ADR 0055](../decisions/0055-mail-is-a-precondition-not-a-capability.md) § 2, [ADR 0129](../decisions/0129-a-member-invite-is-mailed-or-handed-over-as-a-link.md) decision 1, [uc.spaces.add-member](../features/spaces/use-cases/uc.spaces.add-member.md) |
 | password reset | the account's address | [ADR 0054](../decisions/0054-password-recovery-two-factor-release.md) § 4 |
 | address confirmation | the account's address | [ADR 0074](../decisions/0074-address-control-is-recorded-where-nothing-else-proves-it.md) § 6, [uc.account.confirm-email-address](../features/account/use-cases/uc.account.confirm-email-address.md) |
 | address change: the link, and the notice | the new address; the old address | ADR 0074 § 8, [uc.account.change-email](../features/account/use-cases/uc.account.change-email.md) |
@@ -111,7 +111,9 @@ No capability, manifest entry or setup flag says whether an instance can mail
 ([ADR 0055](../decisions/0055-mail-is-a-precondition-not-a-capability.md)). Each action that needs a tenant's mail
 refuses at the moment it cannot work:
 
-- **A member invite** — first mint and re-issue — is refused before any mint when the tenant cannot send. The mint
+- **A member invite** — first mint and re-issue, mailed or as a link — is refused before any mint when the tenant
+  cannot send: a link invite sends nothing itself, but the account it creates is sent its address confirmation at once
+  ([ADR 0129](../decisions/0129-a-member-invite-is-mailed-or-handed-over-as-a-link.md) decision 3). The mailed mint
   commits before the send, so a hung SMTP server holds no database connection; a send that fails compensates in a
   second short transaction by soft-revoking the invite (`SUPERSEDED`, reaped by `TenantInvitePurge`). A failed
   re-issue leaves no live invite, and the rate-limit budget is not refunded. The response's `delivery` keeps its
@@ -124,10 +126,13 @@ refuses at the moment it cannot work:
 
 `veyq_user.email_confirmed_at` records that the account holder showed, at that time, that they read the mail sent to
 this address ([ADR 0074](../decisions/0074-address-control-is-recorded-where-nothing-else-proves-it.md)). It is set by
-redeeming a `MEMBER` invite, completing a password reset, opening a confirmation link, and confirming an address
+redeeming a mailed `MEMBER` invite, completing a password reset, opening a confirmation link, and confirming an address
 change (which stamps the new address); a path that changes the address otherwise clears it in the same write. The
-bootstrap owner's redemption and first-run setup set nothing. **It gates nothing**; it is shown in the account's
-security settings and offered once in the tenant's mail settings after a save that leaves the relay able to send.
+bootstrap owner's redemption, a link invite's redemption and first-run setup set nothing. **It gates nothing**; it is shown in
+the account's security settings, while it is unset every page of the signed-in app carries a banner that names the
+address and sends the confirmation mail
+([ADR 0129](../decisions/0129-a-member-invite-is-mailed-or-handed-over-as-a-link.md) decision 5), and the tenant's mail
+settings offer it once after a save that leaves the relay able to send.
 
 A confirmation token (`veyq_email_confirmation`) is a 256-bit random value stored only as its SHA-256, bound to the
 account and the address it was mailed to; it expires after `PT24H`, a fresh request supersedes it, consumption is a

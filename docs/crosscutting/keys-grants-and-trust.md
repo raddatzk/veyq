@@ -148,9 +148,12 @@ The newcomer has no identity yet, so the owner grants the epoch to a key that st
    epoch under the tenant scope's lock, and keeps that grant a second time as the invite's **anchor**. Minting is
    owner-only; the expiry is the instance's `veyq.tenant.invite.ttl`.
 2. **Link.** The seed and the owner's **key-chain head** (`myChainHead`: their own chain walked to the identity the vault
-   holds) travel in the mailed link's fragment, **always sealed** (`invite-link` v2, bound to tenant and invite) under
-   `Argon2id` of a **code** — 10 Crockford base32 characters, 50 bits — or a password the owner chooses. The owner
-   passes the code on outside veyq; the server appends the sealed part to the mail and keeps no copy.
+   holds) travel in the link's fragment, **always sealed** (`invite-link` v2, bound to tenant and invite) under
+   `Argon2id` of a **code** — 10 Crockford base32 characters, 50 bits — or a password the owner chooses. Mailed, the
+   owner passes the code on outside veyq and the server appends the sealed part to the mail, keeping no copy. As a link
+   ([ADR 0129](../decisions/0129-a-member-invite-is-mailed-or-handed-over-as-a-link.md)), the server answers the owner's
+   client the token and sends nothing; the client writes `#<token>.<sealed>.<code>` itself, the code a generated one,
+   and the owner hands the link over — the server never receives its sealed part or code.
 3. **Carried by every rotation.** Each tenant rotation re-grants each open invite, or declares it pending — any
    member reads the open invites' keys for this (`listOpenInvites`, no email). The anchor moves only with a rotation the
    invite's signer commits under the invite's signer key; any other rotation leaves the owner's grant as the anchor.
@@ -170,7 +173,7 @@ The newcomer has no identity yet, so the owner grants the epoch to a key that st
    is redeemable only once a later rotation or its owner carries it to the current epoch: the join record is sealed
    under the current key and an accept stating another epoch is `409 stale_epoch` (`TenantAcceptHandler.profileSeal`).
 5. **Revoking an invite is removing a member.** Accept, revoke, supersede, expiry and the erasure of the signer's or the
-   addressee's account null its key, grant and anchor. The tenant does not rotate on it, so a revoked link with its code
+   addressee's account (a link invite has none) null its key, grant and anchor. The tenant does not rotate on it, so a revoked link with its code
    and a dump from before the revoke still opens the tenant key of that epoch, and with it what a dump taken before the
    tenant's next rotation holds.
 
@@ -198,7 +201,7 @@ sequenceDiagram
   O->>S: invite key + owner signature + grant (epoch n, recipientIdentityDigest)
   S->>S: verify owner signature under stored identity, epoch current under lock, keep the grant as anchor
   S-->>N: mail: link with sealed {seed, owner head}
-  Note over O,N: the code travels outside veyq
+  Note over O,N: the code travels outside veyq — or the owner hands over a link carrying token, sealed part and code, and nothing is mailed
   N->>S: preview
   S-->>N: invite, owner's chain, anchor, carried grant, succession statements
   N->>N: open seal with code, walk chain from head, check signatures, verify succession from anchor to carried key

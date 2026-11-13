@@ -4,6 +4,7 @@
 - Built: yes
 - Date: 2026-11-02
 - Model: [Applications](../apps/README.md)
+- Replaced in part: § Context's "no path adds a derivative later", for derived roles, by ADR 0132 (not built)
 
 ## Context
 

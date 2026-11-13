@@ -73,7 +73,9 @@ A tenant's mail is never yours to configure: each tenant's owner sets up that te
 in the app (Settings → Email): host, port, sender, username, password and STARTTLS
 ([uc.admin.tenant-mail-settings](https://github.com/raddatzk/veyq/blob/main/docs/features/admin/use-cases/uc.admin.tenant-mail-settings.md)).
 Two things veyq mails have no substitute, because they are addressed to the person concerned: an invitation to join
-the tenant, and a password-reset link. A tenant without working mail refuses both, and says so.
+the tenant by email, and a password-reset link. A tenant owner may instead share an invitation as a link, but that too
+needs the tenant's mail, because the account it creates is sent its address confirmation at once. A tenant without
+working mail refuses all three, and says so.
 
 What is yours:
 

@@ -97,10 +97,11 @@ key and an Ed25519 signing key), which the server relays from its directory. Wha
   chain (a retired one only for an epoch at or below the device's epoch floor).
 - **A tenant invite is anchored by its link.** The invitee's client derives the invite key from the seed sealed in the
   link and walks the owner's key chain from the head sealed beside it to the key that signed the invite, so the
-  operator, which mails the link, cannot swap the key or the owner in it, and an owner who secured their account since
+  operator, which mails a mailed invite's link, cannot swap the key or the owner in it, and an owner who secured their account since
   is followed through their chain. The tenant key it is handed must be the owner's own grant kept beside the invite,
   or be reached from it through the tenant's succession statements, so the operator cannot hand the newcomer a key of its choosing. The seal opens only with a code
-  the owner passes on outside veyq (50 bits behind Argon2id), or a password the owner chose
+  the owner passes on outside veyq (50 bits behind Argon2id), or a password the owner chose; an invite the owner shares
+  as a link carries its code, and the server never receives it
   ([ADR 0111](https://github.com/raddatzk/veyq/blob/main/docs/decisions/0111-an-invitee-grants-itself-a-rotator-re-keys-its-own-scopes-and-a-key-chain-anchors-trust.md)
   decisions 1 and 19).
 
@@ -118,7 +119,11 @@ The same gap covers further cases:
   mints an invite, the server checks that the invite key carries the caller's own owner signature, so a stolen owner
   password without the unlocked vault cannot invite an account of the attacker's (ADR 0111 § What stays open).
 - **A tenant invite guessed open.** The operator holds every mailed link, sealed part included, and can guess the code
-  offline; a weak password the owner chose instead falls faster.
+  offline; a weak password the owner chose instead falls faster. An invite shared as a link never passes it.
+- **An invite shared as a link is a bearer credential.** Whoever reads it in the channel the owner chose can join
+  first; the person it was meant for is then told it was already used, which detects the theft and does not prevent
+  it ([ADR 0129](https://github.com/raddatzk/veyq/blob/main/docs/decisions/0129-a-member-invite-is-mailed-or-handed-over-as-a-link.md) decision 6). Its holder also chooses the account's address, which no mail has proven; the
+  account stays unconfirmed, with a banner on every page, until the mailed confirmation is opened.
 - **A shared-scope grant signed by a granter identity the operator fabricated**, where the pin alone decides: the
   tenant scope's own grant, and a group's grant outside the active tenant — in a device's first grant of that scope:
   a later epoch must be reached through succession statements from the key the device held, which the operator never
