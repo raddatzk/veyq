@@ -42,6 +42,13 @@
 - **A6 — a chapter:** a chapter holds tracks of its own; a Memory's Map tab draws its own tracks only.
 - **A7 — photos on the map:** every photo with GPS in its listed tier is a dot at its own position; nothing is placed on a
   line by its time.
+- **A8 — name and activity:** a row's **Edit**, where a medium's meta may be edited (`editMeta` with the source's meta
+  door: a member who may write, never a link guest), opens a dialog with a name (its placeholder the file's name; emptied,
+  the file names the track again) and an activity (none, or one of ten: hiking, walking, running, cycling, mountain biking,
+  road cycling, gravel cycling, skiing, water, other). Saving seals both into the track's listed tier (ADR 0130 decision 9);
+  the row then shows the activity above the name, and the line and the row's swatch take the activity's dash. A peer's
+  label saved meanwhile is shown in the dialog with a note instead of being overwritten; a failed save says so and keeps
+  the dialog open. Everyone who sees the tab sees the name and the activity.
 - **E1 — a refused file:** more than 25 MiB (*too large*), not a GPX document or one with a document type declaration
   (*not a GPX track*), fewer than two usable points (*too short*), the node already holding 50 tracks (*limit reached*). The
   message names the file; the other files of the pick go on.
@@ -58,6 +65,8 @@
   The bounds are the adding client's: the server cannot see a track to count it (ADR 0130 decision 2).
 - **No new consent.** The map is drawn under the one consent per browser every map uses; the tile service learns the
   viewport, never a line (ADR 0130 decision 6).
+- **A label is sealed.** A track's own name and activity are fields of its listed tier, re-sealed under the medium's key;
+  the server sees a blob of about the same size and learns neither (ADR 0130 decision 9).
 - **Not a photo.** A track is in no view of photos: gallery, item count, lightbox, contributions, search, the date and
   place reconcile (ADR 0130 decision 7).
 
