@@ -14,6 +14,8 @@ struct SignInView: View {
     /// The picked kit file's URL (security-scoped, opened in place) and the server as typed now.
     var onKit: (URL, String) -> Void = { _, _ in }
     var onClearKit: () -> Void = {}
+    /// The kit's scan core makes for the server as typed now; nil where the app offers none.
+    var onScanKit: ((String) -> QrScan<AnyObject>)?
     let onSignIn: (String, String, String, String) -> Void
 
     @State private var server: String
@@ -21,11 +23,16 @@ struct SignInView: View {
     @State private var password = ""
     @State private var secretKey = ""
     @State private var pickingKit = false
+    /// The kit's scan while its sheet shows.
+    @State private var scan: QrScan<AnyObject>?
+    /// A scan found no camera after all, or the device has none: no scan entry on this screen.
+    @State private var noCamera = !QrCamera.available
 
     init(
         working: Bool, error: Msg?, adding: Bool = false, server: String? = nil, email: String? = nil,
         kit: SessionModelKitShown? = nil, onCancel: @escaping () -> Void = {},
         onKit: @escaping (URL, String) -> Void = { _, _ in }, onClearKit: @escaping () -> Void = {},
+        onScanKit: ((String) -> QrScan<AnyObject>)? = nil,
         onSignIn: @escaping (String, String, String, String) -> Void
     ) {
         self.working = working
@@ -35,6 +42,7 @@ struct SignInView: View {
         self.onCancel = onCancel
         self.onKit = onKit
         self.onClearKit = onClearKit
+        self.onScanKit = onScanKit
         self.onSignIn = onSignIn
         _server = State(initialValue: server.map(Self.shortServer) ?? "veyq.localhost:8080")
         _email = State(initialValue: email ?? "")
@@ -91,12 +99,14 @@ struct SignInView: View {
                 }
             }
             Section {
-                Button {
-                    pickingKit = true
-                } label: {
-                    Label(say(.signinKitOpen), systemImage: "folder")
-                }
-                .disabled(working)
+                // the scan first on a phone or tablet, the file first on a Mac (the CR's owner question 1)
+                #if os(iOS)
+                scanButton
+                openButton
+                #else
+                openButton
+                scanButton
+                #endif
             }
             if let error {
                 Section { Text(say(error)).foregroundStyle(.red) }
@@ -132,12 +142,118 @@ struct SignInView: View {
         .fileImporter(isPresented: $pickingKit, allowedContentTypes: [.pdf, .image]) { result in
             if case .success(let url) = result { onKit(url, server) }
         }
+        .onAppear {
+            #if DEBUG
+            // a pass where nothing may tap the entry (`DevLogin`'s `VEYQ_DEV_KIT_SCAN`): the scan opens as the button opens it
+            if ProcessInfo.processInfo.environment["VEYQ_DEV_KIT_SCAN"] == "1", let onScanKit, !noCamera, scan == nil { scan = onScanKit(server) }
+            #endif
+        }
+        .sheet(isPresented: Binding(get: { scan != nil }, set: { if !$0 { scan = nil } })) {
+            if let scan {
+                KitScannerView(scan: scan, onClose: { self.scan = nil }, onNoCamera: { noCamera = true })
+            }
+        }
         // a kit read fills the email and the server it gave (core's gate); both stay editable
         .onChange(of: kit) {
             guard let kit else { return }
             email = kit.email
             if let origin = kit.server { server = origin }
             secretKey = ""
+        }
+    }
+}
+
+private extension SignInView {
+    var openButton: some View {
+        Button {
+            pickingKit = true
+        } label: {
+            Label(say(.signinKitOpen), systemImage: "folder")
+        }
+        .disabled(working)
+    }
+
+    @ViewBuilder var scanButton: some View {
+        if let onScanKit, !noCamera {
+            Button {
+                scan = onScanKit(server)
+            } label: {
+                Label(say(.signinKitScan), systemImage: "qrcode.viewfinder")
+            }
+            .disabled(working)
+        }
+    }
+}
+
+/// The sign-in's "Scan Emergency Kit" sheet over `QrCameraView`, whose scan core made with the kit's parser as its
+/// `accepts`: a code that is not a kit is skipped by core and the camera goes on; a kit is taken by core (the form fills
+/// from the gate) and the sheet closes. Where the device turns out to have no camera, `onNoCamera` drops the sign-in's
+/// entry and the sheet closes; a refused camera is said here, the kit's file and the typed key still on the form beneath.
+/// The scan closes with the sheet. Its states go to the unified log (`veyq-scan:`): where the found kit's server came
+/// from, never a code's text.
+struct KitScannerView: View {
+    let scan: QrScan<AnyObject>
+    let onClose: () -> Void
+    let onNoCamera: () -> Void
+    @State private var watch: QrScanWatch?
+    @Environment(\.scenePhase) private var scenePhase
+
+    var body: some View {
+        NavigationStack {
+            QrCameraView(scan: scan) { state in
+                if state is QrScanStateDenied {
+                    Text(say(.signinKitScanDenied))
+                        .multilineTextAlignment(.center)
+                        .padding(24)
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                }
+            }
+            // the camera shows the kit's code — the Secret Key: covered whenever the scene is not active, so the
+            // system's app-switcher snapshot, written to the app's Library, never holds a frame of it
+            .overlay { if scenePhase != .active { Role.bg } }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .background(Role.bg)
+            .safeAreaInset(edge: .bottom) {
+                Text(say(.signinKitScanHint))
+                    .font(.callout)
+                    .multilineTextAlignment(.center)
+                    .foregroundStyle(Role.muted)
+                    .padding()
+                    .frame(maxWidth: .infinity)
+                    .background(Role.bg)
+            }
+            .navigationTitle(say(.signinKitScan))
+            #if os(iOS)
+            .navigationBarTitleDisplayMode(.inline)
+            #endif
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button(say(.signinCancel), action: onClose)
+                }
+            }
+        }
+        #if os(macOS)
+        .frame(minWidth: 520, minHeight: 460)
+        #endif
+        .onAppear {
+            // core calls the watch on its own threads; the sheet's closures run back on the main actor
+            nonisolated(unsafe) let close = onClose
+            nonisolated(unsafe) let noCamera = onNoCamera
+            watch = scan.watch { @Sendable state in
+                NSLog("veyq-scan: kit scan: state %@", String(describing: state))
+                let found = state is QrScanStateFound<AnyObject>
+                let none = state is QrScanStateNoCamera
+                guard found || none else { return }
+                Task { @MainActor in
+                    if none { noCamera() }
+                    close()
+                }
+            }
+        }
+        .onDisappear {
+            watch?.stop()
+            watch = nil
+            scan.close()
         }
     }
 }

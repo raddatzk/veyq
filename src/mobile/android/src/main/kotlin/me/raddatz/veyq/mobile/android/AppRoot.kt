@@ -20,6 +20,7 @@ import androidx.compose.material.icons.outlined.FileOpen
 import androidx.compose.material.icons.outlined.Fingerprint
 import androidx.compose.material.icons.outlined.LockOpen
 import androidx.compose.material.icons.outlined.Password
+import androidx.compose.material.icons.outlined.QrCodeScanner
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
@@ -50,7 +51,7 @@ fun AppRoot(model: AppModel) {
             Screen.Starting -> StartingScreen()
             is Screen.SignIn -> SignInScreen(
                 s, { server, email, password, secretKey -> model.signIn(server, email, password, secretKey) }, model::cancelAdd,
-                onKit = model::readKit, onClearKit = model::clearKit,
+                onKit = model::readKit, onClearKit = model::clearKit, onScanKit = model::scanKit,
             )
             is Screen.Unlock -> UnlockScreen(s, model::unlock, model::otherAccount)
             is Screen.Signed -> offer?.let { OfferScreen(it, trustWorking, model::answerOffer) }
@@ -66,6 +67,7 @@ fun SignInScreen(
     onCancel: () -> Unit = {},
     onKit: (android.net.Uri, String) -> Unit = { _, _ -> },
     onClearKit: () -> Unit = {},
+    onScanKit: ((String) -> me.raddatz.veyq.mobile.qr.QrScan<*>)? = null,
 ) {
     var server by rememberSaveable { mutableStateOf(state.server ?: BuildDefaults.SERVER) }
     var email by rememberSaveable { mutableStateOf(state.email.orEmpty()) }
@@ -83,6 +85,14 @@ fun SignInScreen(
     val pickKit = androidx.activity.compose.rememberLauncherForActivityResult(
         androidx.activity.result.contract.ActivityResultContracts.OpenDocument(),
     ) { uri -> uri?.let { onKit(it, server) } }
+    // the camera's scan of the kit's QR, first on a phone or tablet; offered while the device may have a camera — a
+    // scan that finds none drops the entry for this screen (an emulator names a camera feature it lacks)
+    val context = androidx.compose.ui.platform.LocalContext.current
+    var noCamera by rememberSaveable {
+        mutableStateOf(!context.packageManager.hasSystemFeature(android.content.pm.PackageManager.FEATURE_CAMERA_ANY))
+    }
+    var scan by androidx.compose.runtime.remember { mutableStateOf<me.raddatz.veyq.mobile.qr.QrScan<*>?>(null) }
+    scan?.let { KitScanner(it, onClose = { scan = null }, onNoCamera = { noCamera = true }) }
     Column(
         modifier = Modifier.fillMaxSize().safeDrawingPadding().imePadding().verticalScroll(rememberScrollState()).formColumn(),
         verticalArrangement = Arrangement.spacedBy(12.dp),
@@ -115,6 +125,16 @@ fun SignInScreen(
         } else {
             OutlinedTextField(secretKey, { secretKey = it }, label = { Text(stringResource(R.string.signin_secret_key)) }, singleLine = true, modifier = Modifier.fillMaxWidth(),
                 visualTransformation = PasswordVisualTransformation(), keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password))
+        }
+        if (onScanKit != null && !noCamera) {
+            androidx.compose.material3.OutlinedButton(
+                onClick = { scan = onScanKit(server) },
+                enabled = !state.working,
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                androidx.compose.material3.Icon(androidx.compose.material.icons.Icons.Outlined.QrCodeScanner, null, Modifier.padding(end = 8.dp))
+                Text(stringResource(R.string.signin_kit_scan))
+            }
         }
         androidx.compose.material3.OutlinedButton(
             onClick = { pickKit.launch(arrayOf("application/pdf", "image/*")) },
