@@ -161,3 +161,31 @@ describe('SafeHtml', () => {
     expect(typeof notSafe).toBe('string')
   })
 })
+
+describe('the one XML door', () => {
+  // A DOMParser refuses a plain string under the built CSP's Trusted Types, and jsdom has none, so a bare parse is green
+  // in every unit test and blocked in every browser (a GPX upload, 2026-11-13, found only by lane L1). So no source file
+  // but this module parses markup or XML itself: everything goes through `parseInertXml`.
+  it('no source outside trustedTypes.ts calls parseFromString', async () => {
+    const { readdirSync, readFileSync, statSync } = await import('node:fs')
+    const { join, relative } = await import('node:path')
+    const root = join(__dirname, '..', '..')
+    const offenders: string[] = []
+    const walk = (dir: string): void => {
+      for (const name of readdirSync(dir)) {
+        const path = join(dir, name)
+        if (statSync(path).isDirectory()) {
+          if (name !== 'api' && name !== 'test') walk(path)
+          continue
+        }
+        if (!/\.(ts|vue)$/.test(name) || /\.test\.ts$/.test(name)) continue
+        const rel = relative(root, path)
+        if (rel === join('shared', 'security', 'trustedTypes.ts')) continue
+        const code = readFileSync(path, 'utf8').replace(/^\s*(\/\/|\*).*$/gm, '')
+        if (/parseFromString\s*\(/.test(code)) offenders.push(rel)
+      }
+    }
+    walk(root)
+    expect(offenders).toEqual([])
+  })
+})

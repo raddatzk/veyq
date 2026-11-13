@@ -3,6 +3,7 @@
 // learns that it is a track. Everything here is pure: what counts as a track, how its file is read, what is drawn and the
 // numbers shown beside it. No key, no request.
 import type { OpenedBlobMeta } from '../../../core/blob/meta'
+import { parseInertXml } from '../../../shared/security/trustedTypes'
 
 /** The type a track's original is sealed under (its `blob-meta`), set by the track's own upload. */
 export const GPX_MEDIA_TYPE = 'application/gpx+xml'
@@ -102,7 +103,9 @@ export function parseGpx(text: string): ParsedTrack {
   if (/<!DOCTYPE|<!ENTITY/i.test(text)) throw new GpxError('invalid')
   let doc: Document
   try {
-    doc = new DOMParser().parseFromString(text, 'application/xml')
+    // Through the policy's inert-XML door: the built CSP enforces Trusted Types, under which a DOMParser refuses a plain
+    // string (ADR 0117) - a bare parse here blocked every GPX upload in the shipped build while jsdom stayed green.
+    doc = parseInertXml(text, 'application/xml')
   } catch {
     throw new GpxError('invalid')
   }
