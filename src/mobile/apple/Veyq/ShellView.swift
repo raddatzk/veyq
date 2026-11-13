@@ -35,6 +35,12 @@ struct ShellView: View {
         .sheet(isPresented: Binding(get: { model.managing != nil }, set: { if !$0 { model.managing = nil } })) {
             ManageView(model: model)
         }
+        #if os(iOS)
+        // the account's Settings: a sheet with its own stack and Done, as Manage servers (the shell's stacks are core's)
+        .sheet(isPresented: Binding(get: { model.settings != nil }, set: { if !$0 { model.closeSettings() } })) {
+            SettingsPage(model: model)
+        }
+        #endif
     }
 
     private var wide: some View {
@@ -72,13 +78,23 @@ struct DrawerList: View {
     /// The split view's sidebar, always beside: what it opens is a top-level destination with no back (core's
     /// `Shell.openAtTop`); the iPhone's drawer opens as a list does, back leading where it was.
     var atTop = false
+    #if os(macOS)
+    @Environment(\.openSettings) private var openSettings
+    #endif
 
     // Settings pinned at the foot, below what scrolls (owner 2026-11-10)
     var body: some View {
         VStack(spacing: 0) {
             list
             Divider()
-            Button { } label: {
+            Button {
+                // the account's Settings: the app's Settings window on a Mac (⌘,), a sheet on iOS
+                #if os(macOS)
+                openSettings()
+                #else
+                model.openSettings()
+                #endif
+            } label: {
                 HStack(spacing: 12) {
                     Tile(symbol: "gearshape")
                     Text(say(.drawerSettings)).foregroundStyle(Role.controlText)
