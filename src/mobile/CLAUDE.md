@@ -231,7 +231,7 @@ A Gradle build of its own, run through its own wrapper.
   writes a desktop pass's links out for the web's guest page — each case's doc says what it reads.
 - `python3 linux/run.py <verb>` — everything Linux. From the repository root the launcher runs the same verbs as
   `./gradlew linux:coreTest`, `linux:bridge`, `linux:build` and `linux:run`. The Kotlin is cross-compiled here by this
-  build's Gradle, and the rest runs in the Fedora 44 image (Docker). Each verb is in `run.py`'s docstring:
+  build's Gradle, and the rest runs in the Fedora 44 image or, for `build` and `flatpak`, the GNOME SDK (Docker). Each verb is in `run.py`'s docstring:
   - `test [--tests <pattern>]` runs the core's Linux test binary. That is the whole common suite, the conformance over
     libsodium, `NormalizationTest` and `WallClockTest`; any change to the suite, to `nfc`/`nfkd` or to the wall clock
     runs it. It runs inside a session bus of its own with gnome-keyring-daemon, whose login collection a password drawn
@@ -239,7 +239,11 @@ A Gradle build of its own, run through its own wrapper.
     Secret Service probe runs twice more, without a session bus and with `libsecret-1.so.0` moved away.
   - `bridge` checks `libveyq.so`'s exports and runs the C smoke.
   - `build` generates the bridge's Rust, the words and the theme, then runs `cargo clippy -- -D warnings`,
-    `cargo test` and `cargo build` (remembered: about 25 s after a Rust edit alone).
+    `cargo test` and `cargo build` in the GNOME 51 SDK the Flatpak ships on (ADR 0132 decision 4): flatpak-builder builds
+    the Flatpak's modules before the app (`--stop-at`, from its cache) and cargo runs in that build directory (`flatpak
+    build`), so the app links against the runtime's GTK and libadwaita and the manifest's poppler. One test is skipped
+    there (`SANDBOX_SKIPS` in `run.py`: glycin needs a portal a build's sandbox lacks); `run` still builds and draws in
+    the Fedora 44 container, a pass's environment.
   - `run [--port N] [--devlogin [--fill|--unlock]] [--no-secret-service]` serves the app under `gtk4-broadwayd` at
     `http://127.0.0.1:8095`, for the browser pane. `LANGUAGE=de VEYQ_LOCALE=de_DE.UTF-8` gives German, and
     `ADW_DEBUG_COLOR_SCHEME=prefer-dark` gives dark. It runs under a session bus with gnome-keyring-daemon, its home's
@@ -250,6 +254,12 @@ A Gradle build of its own, run through its own wrapper.
     way back to the password once (the pass presses its button). The app's stderr says `session <gate>, offer: […]`,
     `offer answered: …` and `manage …: Done`/`Refused …`: read it before each shot.
   - `lock` writes `Cargo.lock` anew.
+  - `flatpak [--arch aarch64|x86_64]` builds the Flatpak bundle (ADR 0132) into `build/linux/flatpak/`: the release
+    library and the generated sources here, then flatpak-builder in `linux/flatpak/Containerfile`'s image (privileged)
+    against the runtime `linux/flatpak/runtime.pins` names, `appstreamcli validate` and `flatpak-builder-lint` (red on
+    anything `lint-exceptions.json` does not name). The runtime, SDK and Rust extension live in the volume
+    `veyq-flatpak-<arch>` (about 6 GB), flatpak-builder's cache in `veyq-flatpak-state-<arch>`; the first run downloads
+    them. The app id is `desktop-identity.json`'s, never spelled elsewhere.
 
   With `VEYQ_LIVE=http://veyq.localhost:8080`, `test --tests '*LiveSignInTest*'` and `bridge` sign in as the seeded
   principal, and `run --devlogin` signs the debug build in through its own sign-in. The backend picks the tenant from

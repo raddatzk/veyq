@@ -28,8 +28,8 @@ unsafe extern "C" {
 /// Binds the domain to the catalogs build.rs compiled, before the first word is looked up. The language is the
 /// person's (`LANGUAGE`, `LC_MESSAGES`, `LANG`; GTK sets the locale when it starts). A debug build run outside the
 /// container it was built in (the Fedora test VM's session), where the build's directory does not exist, reads them
-/// from `VEYQ_LOCALE_DIR` in its environment; a release build only from where it was built, until packaging installs
-/// them (native-apps § Open, the Flatpak).
+/// from `VEYQ_LOCALE_DIR` in its environment; a release build only from the directory its build named — the Flatpak's
+/// `/app/share/locale`, where its manifest installs them (ADR 0132 decision 5).
 pub fn init() {
     #[cfg(debug_assertions)]
     if let Some(dir) = std::env::var("VEYQ_LOCALE_DIR").ok().filter(|d| !d.is_empty()) {

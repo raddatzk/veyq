@@ -60,9 +60,8 @@ import sys
 
 try:
     import yaml
-except ModuleNotFoundError:  # pragma: no cover - same shape as the guards
-    print("PyYAML is required (pip install pyyaml)", file=sys.stderr)
-    sys.exit(2)
+except ModuleNotFoundError:  # pragma: no cover - the recipe's derivation refuses without it (recipe_reads)
+    yaml = None  # tree_release needs no YAML: the app packages' build counts the version where PyYAML is absent
 
 import repo_layout  # noqa: E402 - where the deployment files and the test harnesses live (ADR 0106)
 
@@ -129,6 +128,9 @@ def recipe_reads(compose: pathlib.Path = COMPOSE) -> tuple[dict[str, list[str]],
     reads: dict[str, list[str]] = {}
     errors: list[str] = []
     name = compose.name
+    if yaml is None:
+        print("PyYAML is required (pip install pyyaml)", file=sys.stderr)
+        sys.exit(2)
     try:
         doc = yaml.safe_load(compose.read_text()) or {}
     except (OSError, yaml.YAMLError) as e:

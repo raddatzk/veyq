@@ -5,8 +5,14 @@
 //! same icon to hicolor, which the theme searches anyway.
 use gtk::{gdk, gio, glib};
 
-/// The application's id: its D-Bus name, its resource base path (`/me/raddatz/veyq`) and its icon's name.
-pub const APP_ID: &str = "me.raddatz.veyq";
+/// The application's id: its D-Bus name, its resource base path ([RESOURCE_BASE]) and its icon's name — and, packaged,
+/// the Flatpak's id, under which alone a sandbox lets it own a D-Bus name. Defined once, in
+/// `src/mobile/desktop-identity.json` (ADR 0132 decision 12), handed in by build.rs.
+pub const APP_ID: &str = env!("VEYQ_APP_ID");
+
+/// GtkApplication's resource base path for [APP_ID] (`/` and the id with its dots as slashes), where libadwaita loads
+/// `style.css` itself; build.rs compiles the theme's resource under it.
+pub const RESOURCE_BASE: &str = env!("VEYQ_RESOURCE_BASE");
 
 static RESOURCE: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/veyq.gresource"));
 
@@ -17,7 +23,7 @@ pub fn register() {
 }
 
 /// The resource path GtkApplication adds to the icon theme: its resource base path's `icons/`.
-pub const ICONS: &str = "/me/raddatz/veyq/icons";
+pub const ICONS: &str = concat!(env!("VEYQ_RESOURCE_BASE"), "/icons");
 
 /// Makes the app icon the windows' icon (X11 reads the name; Wayland's shell matches the app id to the desktop entry)
 /// and says on stderr whether the display's icon theme resolves it. After the application's startup, which adds
@@ -49,7 +55,7 @@ mod tests {
     #[test]
     fn the_desktop_entry_names_the_app_icon() {
         let resource = gio::Resource::from_data(&glib::Bytes::from_static(RESOURCE)).unwrap();
-        let entry = resource.lookup_data(&format!("/me/raddatz/veyq/{APP_ID}.desktop"), gio::ResourceLookupFlags::NONE).unwrap();
+        let entry = resource.lookup_data(&format!("{RESOURCE_BASE}/{APP_ID}.desktop"), gio::ResourceLookupFlags::NONE).unwrap();
         let file = glib::KeyFile::new();
         file.load_from_bytes(&entry, glib::KeyFileFlags::NONE).unwrap();
         let get = |key: &str| file.string("Desktop Entry", key).map(|v| v.to_string()).unwrap_or_else(|e| panic!("{key}: {e}"));
@@ -63,14 +69,14 @@ mod tests {
     fn the_resource_carries_the_stylesheet_and_the_icons() {
         let resource = gio::Resource::from_data(&glib::Bytes::from_static(RESOURCE)).unwrap();
         for path in [
-            "/me/raddatz/veyq/style.css".to_string(),
-            format!("/me/raddatz/veyq/icons/scalable/apps/{APP_ID}.svg"),
-            format!("/me/raddatz/veyq/icons/symbolic/apps/{APP_ID}-symbolic.svg"),
+            format!("{RESOURCE_BASE}/style.css"),
+            format!("{ICONS}/scalable/apps/{APP_ID}.svg"),
+            format!("{ICONS}/symbolic/apps/{APP_ID}-symbolic.svg"),
         ] {
             let bytes = resource.lookup_data(&path, gio::ResourceLookupFlags::NONE).unwrap_or_else(|e| panic!("{path}: {e}"));
             assert!(!bytes.is_empty(), "{path} is empty");
         }
-        let css = resource.lookup_data("/me/raddatz/veyq/style.css", gio::ResourceLookupFlags::NONE).unwrap();
+        let css = resource.lookup_data(&format!("{RESOURCE_BASE}/style.css"), gio::ResourceLookupFlags::NONE).unwrap();
         let css = std::str::from_utf8(&css).unwrap();
         assert!(css.contains("--accent-bg-color:") && css.contains("prefers-color-scheme: dark"), "{css}");
     }

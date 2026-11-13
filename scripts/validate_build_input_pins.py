@@ -30,6 +30,13 @@ the code*, changes/README.md):
      `vX.Y.Z` libwebp tag, its 40-hex commit, and an `image` that is exactly the `FROM` of the `Dockerfile` beside it;
      each of its `sha256` lines hashes the committed file it names; and every tracked file under its `wasm/` but the
      hand-written `.d.mts` has a line — an output nothing pins is an output nothing rebuilt.
+  7. **The Flatpak's inputs are pinned** (ADR 0132 decisions 2 and 11). Every tracked Flatpak manifest (a YAML file
+     with top-level `runtime`, `sdk` and `modules`) has a `runtime.pins` beside it, each of whose lines is
+     `<id>/<arch>/<branch> <64-hex commit>`; for each architecture it names (both of `aarch64` and `x86_64`, decision
+     1) it pins the manifest's `runtime` and `sdk` at the manifest's `runtime-version` and every `sdk-extensions`
+     entry; every source of every module that is fetched by `url` carries a `sha256`; and the `Containerfile` beside it
+     builds `FROM` an image pinned by digest — the same rule `validate_image_pins.py` holds tree-wide, held here too
+     so the Flatpak's build cannot lose it to a rename.
 
 **The defect that bought it.** Live when this guard was written (2026-09-27, cr-build-inputs-pinned): the npm
 wrapper downloaded the generator JAR with no checksum and ran any file already in its storage dir, the wrapper
@@ -59,7 +66,10 @@ it (the release image build) is covered because that job `needs:` one that valid
 check, and a script that calls `gradlew` indirectly is invisible. Check 6 proves
 the committed encoder is the bytes the pin names, not that the pin is what libwebp's tag builds to: only a rebuild
 proves that (`src/web/webp-encoder/build.py`, CI's `webp-encoder` job), and a swapped `.wasm` with a matching new pin
-line is green here, as with check 5. The Dockerfile `FROM` lines are `validate_image_pins.py`'s, npm packages are the lockfile's, and the pnpm version is `validate_pnpm_installs_gated.py`'s.
+line is green here, as with check 5. Check 7 proves the pins are well-formed and
+agree with the manifest, not that a commit is one Flathub serves or the one a build installed: `run.py flatpak` moves
+each ref to its commit (`flatpak update --commit=`), which fails on a commit Flathub does not have, and prints the
+installed list. The Dockerfile `FROM` lines are `validate_image_pins.py`'s, npm packages are the lockfile's, and the pnpm version is `validate_pnpm_installs_gated.py`'s.
 """
 from __future__ import annotations  # `str | None` below — the repo's guards run on Python 3.9
 
@@ -314,6 +324,86 @@ def check_webp_encoder(files: list[str]) -> None:
             fail(f"{rel} is part of the encoder's output and no `sha256` line of {WEBP_PIN} pins it")
 
 
+FLATPAK_ARCHES = ("aarch64", "x86_64")
+PIN_LINE = re.compile(r"^(?P<id>[A-Za-z0-9_.-]+)/(?P<arch>[a-z0-9_]+)/(?P<branch>[A-Za-z0-9_.-]+) (?P<commit>\S+)$")
+FROM_DIGEST = re.compile(r"^\S+@sha256:[0-9a-f]{64}$")
+
+
+def flatpak_manifests(files: list[str]) -> list[str]:
+    """Every tracked YAML file that is a Flatpak manifest: top-level `runtime`, `sdk` and `modules`."""
+    found = []
+    for rel in files:
+        if not rel.endswith((".yml", ".yaml")) or rel.startswith(".github/"):
+            continue
+        try:
+            doc = yaml.safe_load((ROOT / rel).read_text())
+        except yaml.YAMLError:
+            continue  # not this guard's: validate_image_pins.py names a YAML file that does not parse
+        if isinstance(doc, dict) and {"runtime", "sdk", "modules"} <= doc.keys():
+            found.append(rel)
+    return found
+
+
+def fetched_sources(modules: object, where: str):
+    """(where, source) for every source of every module, nested modules included."""
+    for m in modules if isinstance(modules, list) else []:
+        if not isinstance(m, dict):
+            continue  # a module given by file name is a manifest of its own
+        name = f"{where} > {m.get('name', '?')}"
+        for s in m.get("sources") or []:
+            if isinstance(s, dict):
+                yield name, s
+        yield from fetched_sources(m.get("modules"), name)
+
+
+def check_flatpak(files: list[str]) -> None:
+    manifests = flatpak_manifests(files)
+    if not any(m.startswith(f"{repo_layout.rel(repo_layout.MOBILE_LINUX)}/") for m in manifests):
+        fail(f"no tracked Flatpak manifest under {repo_layout.rel(repo_layout.MOBILE_LINUX)}/ — the Linux app's "
+             f"(ADR 0132) moved or stopped being one; re-anchor check 7")
+    for rel in manifests:
+        doc = yaml.safe_load((ROOT / rel).read_text())
+        here = pathlib.PurePosixPath(rel).parent
+        branch = str(doc.get("runtime-version", ""))
+        pins_rel = f"{here}/runtime.pins"
+        pins: dict[tuple[str, str], tuple[str, str]] = {}
+        if pins_rel not in files:
+            fail(f"{rel}: no tracked {pins_rel} pins its runtime by commit")
+        else:
+            for raw in (ROOT / pins_rel).read_text().splitlines():
+                if not raw.strip() or raw.startswith("#"):
+                    continue
+                m = PIN_LINE.match(raw)
+                if not m or not HEX64.match(m["commit"]):
+                    fail(f"{pins_rel}: `{raw}` is not `<id>/<arch>/<branch> <64-hex commit>`")
+                    continue
+                if (m["id"], m["arch"]) in pins:
+                    fail(f"{pins_rel}: {m['id']}/{m['arch']} is pinned twice")
+                pins[(m["id"], m["arch"])] = (m["branch"], m["commit"])
+        wanted = {doc["runtime"]: branch, doc["sdk"]: branch}
+        for ext in doc.get("sdk-extensions") or []:
+            wanted.setdefault(str(ext), None)
+        for arch in FLATPAK_ARCHES:
+            for ident, want in wanted.items():
+                got = pins.get((ident, arch))
+                if got is None:
+                    fail(f"{pins_rel}: no {arch} commit for {ident}, which {rel} builds on")
+                elif want is not None and got[0] != want:
+                    fail(f"{pins_rel}: {ident}/{arch} is pinned at branch {got[0]}, but {rel}'s runtime-version is "
+                         f"{want!r} — a build would install one branch and pin another")
+        for where, source in fetched_sources(doc.get("modules"), rel):
+            if "url" in source and not HEX64.match(str(source.get("sha256", ""))):
+                fail(f"{where}: the source {source['url']} is fetched without a 64-hex `sha256`")
+        container = f"{here}/Containerfile"
+        froms = re.findall(r"^\s*FROM\s+(\S+)", (ROOT / container).read_text(), re.MULTILINE | re.IGNORECASE) \
+            if container in files else []
+        if not froms:
+            fail(f"{rel}: no tracked {container} names the image its build runs in")
+        for ref in froms:
+            if not FROM_DIGEST.match(ref):
+                fail(f"{container}: FROM {ref} is not pinned by digest (`repo:tag@sha256:<64 hex>`)")
+
+
 def main() -> int:
     files = tracked()
     if files:
@@ -322,13 +412,14 @@ def main() -> int:
         check_wrapper_jar(files)
         check_verification(files)
         check_webp_encoder(files)
+        check_flatpak(files)
     if errors:
         for e in errors:
             print(f"::error::build-input pins: {e}")
         return 1
     print("build-input pins: one generator version, pinned and verified on every generate:api; "
           "wrapper distribution checksummed, wrapper JAR pinned; Gradle dependency verification on; "
-          "the WebP encoder is its pinned build")
+          "the WebP encoder is its pinned build; the Flatpak's runtime, sources and builder image pinned")
     return 0
 
 

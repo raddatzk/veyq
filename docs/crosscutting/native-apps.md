@@ -51,9 +51,11 @@ Consequences).
 | Windows | the core and the bridge for x64 (`veyq.dll`), cross-compiled on the developer's Mac; the app on a Windows host (`src/mobile/windows/run.py build`), unpackaged and self-contained | WinUI 3 in C#, Fluent, over the core as `veyq.dll` through the bridge | `NavigationView` with its own thresholds: Left from 1008 epx, LeftCompact (icons) from 641, LeftMinimal below; the switcher its pane header, Search its `AutoSuggestBox` (Ctrl+E, Ctrl+F), Settings at its foot, New the first command of the content's `CommandBar` | an ARM64 Windows 11 VM under x64 emulation, driven through UI Automation, 2026-11-11 (the first slice: sign-in, the shell, Home, a Pot read only, Search; maximized, 800 and 500 wide); the members' pictures and a Pot's download through the system's save picker, its ZIP imported by the web, 2026-11-11; the device trust, the owner answering Windows Hello, 2026-11-11; a node's header with every action on it, 2026-11-12; Expenses whole (the entry editor, receipts with a PDF through `Windows.Data.Pdf`, settle-up, history and restore, settings and people, New pot, the live poll), 2026-11-12; Depot whole (a file's page with
 media played, Save a copy with its cancel, uploads up to 2 GiB + 1, drop boxes and the top level's share; the drop not seen,
 § Open), 2026-11-12; no x64 PC |
-| Linux | the core and the bridge for arm64 and x86-64, cross-compiled on the developer's Mac; the app for arm64, in a Fedora 44 container (`src/mobile/linux/run.py build`) | GTK 4 and libadwaita in Rust, over the core as `libveyq.so` through the bridge | `AdwNavigationSplitView` with libadwaita's `AdwSidebar` (240–360 sp), collapsing below 600 sp to a navigation stack, the sidebar in its page mode; the switcher the sidebar's title menu, Search a search bar under it (Ctrl+F), Settings at its foot | Broadway in Fedora 44 arm64, drawn into a browser, 2026-11-10 (the first slice: sign-in, the shell, Home, a Pot read only, Search; 1100 × 750 and 500 × 750); the members' pictures and a Pot's download through GTK's save dialog, its ZIP imported by the web, 2026-11-11; the device trust over gnome-keyring in the container, 2026-11-11; a node's header with every action on it, 2026-11-12; Expenses whole (the entry editor, receipts with a PDF through poppler-glib, settle-up, history and restore, settings and people, New pot, the live poll), 2026-11-12; Depot whole (a file's page with
+| Linux | the core and the bridge for arm64 and x86-64, cross-compiled on the developer's Mac; the app for arm64, proved and built in the GNOME 51 SDK it ships on (`src/mobile/linux/run.py build`) and drawn in a Fedora 44 container for a pass (`run.py run`), and as an aarch64 Flatpak bundle on `org.gnome.Platform//51` (`run.py flatpak`, [ADR 0132](../decisions/0132-the-desktop-apps-ship-as-a-flatpak-bundle-and-an-msix-built-in-checks-and-promoted-with-the-release.md)) | GTK 4 and libadwaita in Rust, over the core as `libveyq.so` through the bridge | `AdwNavigationSplitView` with libadwaita's `AdwSidebar` (240–360 sp), collapsing below 600 sp to a navigation stack, the sidebar in its page mode; the switcher the sidebar's title menu, Search a search bar under it (Ctrl+F), Settings at its foot | Broadway in Fedora 44 arm64, drawn into a browser, 2026-11-10 (the first slice: sign-in, the shell, Home, a Pot read only, Search; 1100 × 750 and 500 × 750); the members' pictures and a Pot's download through GTK's save dialog, its ZIP imported by the web, 2026-11-11; the device trust over gnome-keyring in the container, 2026-11-11; a node's header with every action on it, 2026-11-12; Expenses whole (the entry editor, receipts with a PDF through poppler-glib, settle-up, history and restore, settings and people, New pot, the live poll), 2026-11-12; Depot whole (a file's page with
 media played, Save a copy with its cancel, uploads up to 2 GiB + 1, drop boxes and the top level's share), 2026-11-12; a
-real GNOME session in the Fedora 45 VM for the drop, the portal's dialogs and the sound, 2026-11-12 |
+real GNOME session in the Fedora 45 VM for the drop, the portal's dialogs and the sound, 2026-11-12; the Flatpak installed
+there from its bundle (the runtime from Flathub), started to its sign-in in English and German, the FileChooser portal,
+the secure store's calls, an update and an uninstall, 2026-11-13 (ADR 0123's Consequences, the Flatpak) |
 
 Windows and Linux are wanted (owner 2026-11-09), each with its own native UI over the same core
 ([ADR 0129](../decisions/0129-an-apps-logic-is-the-kotlin-cores-each-platform-draws-only-its-own-ui.md)): Linux GTK 4 and
@@ -137,14 +139,14 @@ button with its popover and Windows' `AppBarButton` with its flyout, each with C
 
 **Platforms and form factors**
 - Windows beyond its first slice (the next slice is Linux's and Windows' together, owner 2026-11-10):
-  - **Packaging:** MSIX with its signing and its PNG assets (the app's `.ico` is the build's already: `generate_theme.py --winui`). It must depend on the Store's Webp
-    Image Extensions, or the app decodes WebP itself: without the package every member's picture is drawn as initials
-    (measured 2026-11-11, the decode test's bite). Whether a packaged app's picked path still opens in the core is
-    checked there (ADR 0130), and whether a packaged app takes a drop. **The media codecs:** the app ships none and plays
-    what Media Foundation decodes (Owner question of the Depot slice, 2026-11-12: patents); the VM decoded VP9/Opus and
-    H.264/AAC and refused ProRes (`C00D5212`, said `file_unsupported`). Whether the MSIX depends on the Store's media
-    extensions (VP9, Web Media, HEVC; remembered names, not checked) or leaves a format said and offered for saving is
-    packaging's question.
+  - **Packaging — decided, being built** ([ADR 0132](../decisions/0132-the-desktop-apps-ship-as-a-flatpak-bundle-and-an-msix-built-in-checks-and-promoted-with-the-release.md)): an MSIX, x64, self-contained, built `-c Release` through the
+    Windows App SDK's own MSBuild tooling, unsigned in Checks and signed at promotion with its block map unchanged; no
+    package dependency on the WebP or media extensions (a sideloaded MSIX can depend only on framework packages, and
+    Windows 11 provisions them), so where a person removed one the members' pictures fall back to initials (measured
+    2026-11-11, the decode test's bite) and a format Media Foundation does not decode is said and offered for saving (the
+    VM decoded VP9/Opus and H.264/AAC and refused ProRes, `C00D5212`, said `file_unsupported`; the app ships no codec:
+    patents, the owner's answer of the Depot slice, 2026-11-12). Still to measure in the package: whether a packaged
+    app's picked path opens in the core (ADR 0130) and whether a packaged app takes a drop.
   - **The visible drop from Explorer was not seen** (2026-11-12): built (`Drops.cs`) and held by `DropSortTest`, but on
     the VM the app gets no drag — no window of it holds an OLE drop target (`Veyq.Drive droptargets`). The VM runs with
     UAC off, every process elevated; that the Windows App SDK takes no drop into an elevated app is remembered from a
@@ -185,18 +187,17 @@ button with its popover and Windows' `AppBarButton` with its flyout, each with C
     store`/`lookup`/`clear` over ssh into the session bus) — `pam_oo7` unlocks the `login` collection at sign-in; the
     session is Wayland; Flathub offers `org.gnome.Platform`/`Sdk` 49, 50 and 51 for aarch64 (`flatpak remote-ls
     --runtime --arch=aarch64 flathub`); and Fedora 45 lacks `libcrypt.so.1` as Fedora 44 does (`ldd` of the app).
-  - **The Flatpak** on the GNOME runtime. It installs the generated icon and desktop entry (`generate_theme.py --gtk`) to hicolor and `applications/`. It must carry GTK 4.22 and libadwaita 1.9, `libcrypt.so.1`, a CA bundle and
-    the zoneinfo, libsecret (for the device trust; the host's Secret Service or its portal answers over D-Bus),
-    poppler-glib (a receipt's PDF, `poppler-rs` over it), and glycin's loaders, through which GTK 4.22 decodes WebP (without them every member's picture is
-    drawn as initials, measured 2026-11-11), and GStreamer's plugins, through which GTK's `MediaFile` plays a medium (the
-    container carries `gstreamer1-plugins-good`, `-bad-free` and `gstreamer1-plugin-openh264`; GTK's own backend plays
-    the core's stream, so no `gst-plugin-gtk4`). The app ships no codec (patents): whether the Flatpak pulls the
-    runtime's codecs extension or leaves a format said and offered for saving is packaging's question. It installs the
-    message catalogs where gettext finds them in place (`share/locale`): a debug build reads them from the build's
-    directory or `VEYQ_LOCALE_DIR`, which exists only in the container (on the VM every word was English under
-    `LANGUAGE=de`, measured 2026-11-12). Whether the document portal's path opens in the core is checked there
-    (ADR 0130). The app's build and tests move into that runtime's SDK (`org.gnome.Sdk`), replacing the Fedora 44
-    container as what the app is proved against (ADR 0129 decision 4); Fedora stays only as a test VM's system.
+  - **The Flatpak — built, its signed-in pass owed** ([ADR 0132](../decisions/0132-the-desktop-apps-ship-as-a-flatpak-bundle-and-an-msix-built-in-checks-and-promoted-with-the-release.md);
+    what was measured: ADR 0123's Consequences, the Flatpak). Still open: the pass with a signed-in server — staying
+    signed in over the Secret portal through a restart, the members' pictures, a receipt's PDF, a medium played and
+    heard, a file through the app's own dialogs at a document-portal path opening in the core (ADR 0130), a drop from
+    Files, the exchange rates over the app's own libcurl; the x86_64 bundle (CI's, ADR 0132 decision 10). **The
+    `org.freedesktop.secrets` name** the manifest grants exists only for the core's first question
+    (`secret_service_get_sync` in `LinuxDeviceKeys.secretServiceAvailable`): asking libsecret's backend instead
+    (`secret_backend_get_sync`, which a sandbox answers with the portal's keyring) would let the manifest drop the name —
+    a core change with its probe cases in `run.py test`, not taken here. **A desktop whose system language is not the
+    person's** has no runtime locale for it until `flatpak config --set extra-languages <lang>` (the VM's case; a German
+    desktop has its own).
   - **Other desktops** (ADR 0129 decision 4: one libadwaita app for all). Not measured yet, remembered only: KWallet
     answers the Secret Service, KDE's portal the file chooser and the colour scheme. The desktop-session slice checks
     them under Fedora's KDE Plasma edition beside GNOME — staying signed in through KWallet (and through KeePassXC's

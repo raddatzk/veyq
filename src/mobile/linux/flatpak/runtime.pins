@@ -1,0 +1,14 @@
+# The Flathub commits a Flatpak build of the Linux app installs (ADR 0132 decision 2), one line each:
+# `<id>/<arch>/<branch> <commit>`. `run.py flatpak` installs each ref and moves it to this commit
+# (`flatpak update --commit=`); the manifest names only the branch. validate_build_input_pins.py (check 7) holds the
+# Platform's and the Sdk's branch to the manifest's `runtime-version` and every commit to 64 hex, for both architectures.
+# Read with `flatpak remote-info flathub <id>//<branch> --arch=<arch>` on 2026-11-13; a bump is a new read of the same.
+# org.flatpak.Builder is not built from: it carries flatpak-builder-lint, the manifest's and the repo's lint.
+org.gnome.Platform/aarch64/51 90c984972c455ab43d4575cae99f8b29ac50da6c1489d69c4a95fdadd9622f47
+org.gnome.Sdk/aarch64/51 9db4cc16057dce75ff4d9f6d8dab152142754db1bf83b6b8adafc81fd2fad762
+org.freedesktop.Sdk.Extension.rust-stable/aarch64/26.08 01077b20b3ee53d7dc98fcb60711ddd680c8c32e7a04d514cd85923002a7c409
+org.flatpak.Builder/aarch64/stable 407fe008ab96d6b9e199d01c95523bef08341090be6e300f2717d7858890db57
+org.gnome.Platform/x86_64/51 2ec125d2f3248842418f8f25d95d9eb25409c9a932461fcb33bd18a331112663
+org.gnome.Sdk/x86_64/51 f0bca3a94edac6ec083b2860785504597175d118aff847fc83bc0457739f4dd3
+org.freedesktop.Sdk.Extension.rust-stable/x86_64/26.08 14774cebefeaa23a41f088a9f8ad61e98c1a32f605a3aee655744d59fe414ebc
+org.flatpak.Builder/x86_64/stable 50461ee00afa8ae6b133762447dcff6348781568ebebaf0293eed8242f79f20a

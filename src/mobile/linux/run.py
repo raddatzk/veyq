@@ -21,9 +21,13 @@ Verbs:
   build                      generates what the app is built from but does not keep — the bridge's Rust
                              (`:bridge:generateBindings`) and the samples its round trip reads (`WireTest`), the words'
                              gettext catalogs and Rust (`generate_words.py --gettext`), the theme
-                             (`generate_theme.py --gtk`) — links the bridge's library, and runs in the container
-                             `cargo clippy --locked --all-targets -- -D warnings`, `cargo test --locked` and
-                             `cargo build --locked`. Its exit code is cargo's.
+                             (`generate_theme.py --gtk`) — links the bridge's library, and proves the app in the GNOME
+                             SDK it ships on (ADR 0132 decision 4): flatpak-builder builds the Flatpak's modules before
+                             the app (`--stop-at`, from its cache), and in that build directory, as the app's module
+                             would, `cargo clippy --locked --all-targets -- -D warnings`, `cargo test --locked` (all but
+                             SANDBOX_SKIPS) and `cargo build --locked` run. The pinned runtime as `flatpak` installs it;
+                             the registry and target in the volumes `veyq-flatpak-cargo`/`veyq-flatpak-target-<arch>`.
+                             Its exit code is cargo's.
   run [--port N] [--devlogin [--fill|--unlock]] [--no-secret-service]
                              `build`'s generation and `cargo build`, then the app under `gtk4-broadwayd`, drawn into a
                              browser at http://127.0.0.1:N (default 8095; published on 127.0.0.1 only). It runs under a
@@ -41,6 +45,17 @@ Verbs:
                              unlock of a password-trusted account takes, and Manage's way back to the password fills
                              its field with it once.
   lock                       `cargo update`: writes Cargo.lock anew from Cargo.toml (the one way it changes).
+  flatpak [--arch aarch64|x86_64]
+                             the Flatpak bundle (ADR 0132): the bridge's release library and everything `build`
+                             generates, the crates by `cargo vendor --locked`, the metainfo and the manifest filled from
+                             `flatpak/` with the id (src/mobile/desktop-identity.json), the version (the tree's, as the
+                             pipeline counts it) and the commit's date; then, in the image of `flatpak/Containerfile`
+                             (privileged: bubblewrap), the runtime, SDK and Rust extension installed from Flathub at the
+                             commits `flatpak/runtime.pins` names (the volume `veyq-flatpak-<arch>` keeps them),
+                             `appstreamcli validate`, flatpak-builder (clippy, test and the release build in the SDK),
+                             flatpak-builder-lint's manifest and repo checks, and the bundle
+                             `src/mobile/build/linux/flatpak/veyq-<version>-<arch>.flatpak`. Default: this host's
+                             architecture; another one runs under Docker's emulation.
 
 cargo's registry and target directory live in the Docker volumes `veyq-linux-cargo` and `veyq-linux-target`, so a
 rebuild is incremental; `docker volume rm` both to start clean.
@@ -58,10 +73,12 @@ Docker must answer `docker build` / `docker run`; the image is `veyq-linux-dev`,
 from __future__ import annotations
 
 import argparse
+import json
 import os
 import platform
 import re
 import shlex
+import shutil
 import subprocess
 import sys
 from pathlib import Path
@@ -73,6 +90,8 @@ import repo_layout  # noqa: E402
 
 HERE = repo_layout.MOBILE_LINUX
 IMAGE = "veyq-linux-dev"
+# The Linux app's id (ADR 0132 decision 12): its GApplication id, its D-Bus name, its Flatpak's id. Defined only there.
+APP_ID = json.loads((repo_layout.MOBILE / "desktop-identity.json").read_text())["appId"]
 # What Kotlin/Native defines in a shared library beside its @CName functions: its C API's entry (`lib<name>_symbols`),
 # two of its runtime's, and the ELF init/fini (read with `nm -D --defined-only` on 2026-11-10, Kotlin 2.4.21).
 KOTLIN_NATIVE_EXPORTS = {"libveyq_symbols", "IsInstance", "Konan_cxa_demangle", "__cxa_demangle", "_init", "_fini"}
@@ -230,17 +249,39 @@ def cargo(docker_platform: str, lib_dir: Path, script: str, docker_args: list[st
               WORDS / "words.json": "/veyq/words.json"}
     base = {"CARGO_HOME": "/veyq/cargo", "CARGO_TARGET_DIR": "/veyq/target", "VEYQ_GENERATED": "/veyq/generated",
             "VEYQ_LIB_DIR": "/veyq/lib", "LD_LIBRARY_PATH": "/veyq/lib", "VEYQ_SAMPLES": "/veyq/generated/bridge/samples",
-            "VEYQ_WORDS_JSON": "/veyq/words.json", "LANG": "en_US.UTF-8"}
+            "VEYQ_WORDS_JSON": "/veyq/words.json", "VEYQ_APP_ID": APP_ID, "LANG": "en_US.UTF-8"}
     return in_container(docker_platform, mounts, base | (env or {}), f"set -e; cd /veyq/src; {script}",
                         volumes=CARGO_VOLUMES | (volumes or {}), docker_args=docker_args, secrets=secrets)
 
 
 def build() -> int:
+    """The app proved in the SDK it ships on (ADR 0132 decision 4): the Flatpak's modules before the app built by
+    flatpak-builder (`--stop-at`, from its cache), then clippy, the tests and the build in that build directory."""
     docker_platform, target = arch()
+    flatpak_arch = {"linux/arm64": "aarch64", "linux/amd64": "x86_64"}[docker_platform]
     lib_dir = generate(target)
-    build_image(docker_platform)
-    return cargo(docker_platform, lib_dir, "cargo clippy --locked --all-targets -- -D warnings; "
-                                           "cargo test --locked; cargo build --locked")
+    write_manifest(*tree_version())
+    env = {"CARGO_HOME": "/veyq/cargo", "CARGO_TARGET_DIR": "/veyq/target", "VEYQ_GENERATED": "/veyq/generated",
+           "VEYQ_LIB_DIR": "/veyq/lib", "LD_LIBRARY_PATH": "/veyq/lib:/app/lib",
+           "VEYQ_SAMPLES": "/veyq/generated/bridge/samples", "VEYQ_WORDS_JSON": "/veyq/words.json",
+           "VEYQ_APP_ID": APP_ID, "LANG": "en_US.UTF-8",
+           "PKG_CONFIG_PATH": "/app/lib/pkgconfig:/app/share/pkgconfig",
+           "PATH": "/usr/lib/sdk/rust-stable/bin:/app/bin:/usr/bin"}
+    sandboxed = " ".join(f"--env={k}={v}" for k, v in env.items())
+    skips = " ".join(f"--skip {s}" for s in SANDBOX_SKIPS)
+    script = (
+        "cd /veyq/mobile/build/linux/flatpak; "
+        f"flatpak-builder --user --arch={flatpak_arch} --disable-rofiles-fuse --disable-updates --force-clean "
+        f"--state-dir=/veyq/state/flatpak-builder --stop-at=veyq /veyq/state/sdk-dir {APP_ID}.yml; "
+        f"flatpak build --share=network --filesystem=/veyq {sandboxed} /veyq/state/sdk-dir bash -c "
+        + shlex.quote("set -e; cd /veyq/src; cargo clippy --locked --all-targets -- -D warnings; "
+                      f"cargo test --locked -- {skips}; cargo build --locked"))
+    return in_runtime(flatpak_arch, script, [
+        "-v", f"veyq-flatpak-state-{flatpak_arch}:/veyq/state",
+        "-v", f"veyq-flatpak-cargo:/veyq/cargo", "-v", f"veyq-flatpak-target-{flatpak_arch}:/veyq/target",
+        "-v", f"{repo_layout.MOBILE}:/veyq/mobile:ro", "-v", f"{FLATPAK_OUT}:/veyq/mobile/build/linux/flatpak",
+        "-v", f"{repo_layout.MOBILE_LINUX}:/veyq/src:ro", "-v", f"{GENERATED}:/veyq/generated:ro",
+        "-v", f"{lib_dir}:/veyq/lib:ro", "-v", f"{WORDS / 'words.json'}:/veyq/words.json:ro"])
 
 
 def dev_principal(unlock: bool = False, fill: bool = False) -> dict[str, str]:
@@ -314,6 +355,161 @@ def lock() -> int:
                         writable={repo_layout.MOBILE_LINUX: "/veyq/src"}, volumes={"veyq-linux-cargo": "/veyq/cargo"})
 
 
+# ---- the Flatpak (ADR 0132) ----
+
+FLATPAK = HERE / "flatpak"
+# the local tag of flatpak/Containerfile's build (pinned there by digest), as IMAGE is the Containerfile's beside it
+FLATPAK_BUILDER_TAG = "veyq-flatpak-builder"
+FLATPAK_OUT = repo_layout.MOBILE / "build" / "linux" / "flatpak"
+FLATHUB = "https://dl.flathub.org/repo/flathub.flatpakrepo"
+# Flatpak's architecture -> (Docker platform, Kotlin/Native target)
+FLATPAK_ARCHES = {"aarch64": ("linux/arm64", "LinuxArm64"), "x86_64": ("linux/amd64", "LinuxX64")}
+# The refs a build installs; their commits are runtime.pins'. org.flatpak.Builder carries flatpak-builder-lint.
+FLATPAK_REFS = ("org.gnome.Platform", "org.gnome.Sdk", "org.freedesktop.Sdk.Extension.rust-stable", "org.flatpak.Builder")
+# The one test a Flatpak's build cannot run: inside a Flatpak, glycin runs its loader through `flatpak-spawn
+# --sandbox`, for which a build's sandbox has no portal ("Loader process exited early", measured 2026-11-13). The
+# installed app's sandbox has one: the Linux pass runs it there (ADR 0123's Consequences, the Linux app), and
+# `run.py run`'s Fedora container runs it outside any sandbox.
+SANDBOX_SKIPS = ("avatars::tests::a_picture_as_the_web_writes_it_decodes",)
+
+
+def runtime_pins(flatpak_arch: str) -> dict[str, str]:
+    """runtime.pins' lines for [flatpak_arch]: `<id>//<branch>` -> commit."""
+    pins = {}
+    for line in (FLATPAK / "runtime.pins").read_text().splitlines():
+        if line.strip() and not line.startswith("#"):
+            ref, commit = line.split()
+            ident, ref_arch, branch = ref.split("/")
+            if ref_arch == flatpak_arch:
+                pins[f"{ident}//{branch}"] = commit
+    missing = [r for r in FLATPAK_REFS if not any(p.startswith(r + "//") for p in pins)]
+    if missing:
+        sys.exit(f"runtime.pins names no {flatpak_arch} commit for {', '.join(missing)}")
+    return pins
+
+
+def tree_version() -> tuple[str, str]:
+    """The tree's `<major>.<minor>` as the pipeline counts it (release_assets.tree_release, the one count) and the
+    commit's date, `YYYY-MM-DD`: what the metainfo's one release says, the same for the same commit."""
+    import release_assets  # noqa: E402 - scripts/, on sys.path above
+    date = subprocess.run(["git", "log", "-1", "--format=%cs", "HEAD"], cwd=ROOT, capture_output=True, text=True,
+                          check=True).stdout.strip()
+    return release_assets.tree_release(ROOT), date
+
+
+def flatpak(flatpak_arch: str) -> int:
+    docker_platform, target = FLATPAK_ARCHES[flatpak_arch]
+    runtime_pins(flatpak_arch)  # refuses a pin file that lacks one, before the long steps
+    version, date = tree_version()
+    lower = target[0].lower() + target[1:]
+    # The core and everything generated, outside the sandbox (decision 4): the release library, the bridge's Rust and
+    # the samples its round trip reads, the words, the theme.
+    run("./gradlew", ":bridge:generateBindings", f":bridge:linkReleaseShared{target}", ":bridge:jvmTest",
+        "--tests", "*WireTest*", cwd=repo_layout.MOBILE)
+    run(sys.executable, str(WORDS / "generate_words.py"), "--gettext", str(GENERATED / "linux" / "words"))
+    run(sys.executable, str(THEME / "generate_theme.py"), "--gtk", str(GENERATED / "linux" / "theme"))
+    lib = repo_layout.MOBILE / "bridge" / "build" / "bin" / lower / "releaseShared" / "libveyq.so"
+    if not lib.exists():
+        sys.exit(f"no library at {lib}")
+
+    # The inputs the manifest's `type: dir` sources name, written anew each run.
+    inputs, vendor = FLATPAK_OUT / "inputs", FLATPAK_OUT / "vendor"
+    shutil.rmtree(inputs, ignore_errors=True)
+    (inputs / "lib").mkdir(parents=True)
+    shutil.copy2(lib, inputs / "lib" / "libveyq.so")
+    shutil.copytree(GENERATED / "bridge", inputs / "generated" / "bridge")
+    shutil.copytree(GENERATED / "linux", inputs / "generated" / "linux")
+    shutil.copy2(WORDS / "words.json", inputs / "words.json")
+    write_manifest(version, date)
+    # The crates, offline: `cargo vendor --locked` in the development image (cargo is there, not in the builder's),
+    # each crate checked against Cargo.lock's checksum. Every crate is crates.io's (Cargo.lock has no other source),
+    # so the config points that one source at the vendored copy, `/run/build/veyq/vendor` in the SDK's build.
+    build_image(docker_platform)
+    shutil.rmtree(vendor, ignore_errors=True)
+    rc = in_container(docker_platform, {repo_layout.MOBILE_LINUX: "/veyq/src"}, {"CARGO_HOME": "/veyq/cargo"},
+                      "set -e; cd /veyq/src; cargo vendor --locked --quiet /veyq/out/vendor",
+                      writable={FLATPAK_OUT: "/veyq/out"}, volumes={"veyq-linux-cargo": "/veyq/cargo"})
+    if rc:
+        return rc
+    sources = set(re.findall(r'^source = "([^"]+)"', (HERE / "Cargo.lock").read_text(), re.MULTILINE))
+    if sources != {"registry+https://github.com/rust-lang/crates.io-index"}:
+        sys.exit(f"Cargo.lock names sources beside crates.io, which the vendored config does not replace: {sources}")
+    (inputs / "cargo-config.toml").write_text(
+        '[source.crates-io]\nreplace-with = "vendored-sources"\n\n'
+        '[source.vendored-sources]\ndirectory = "/run/build/veyq/vendor"\n')
+
+    # The build, in the builder's image: the pinned runtime, flatpak-builder, the checks, the bundle.
+    bundle = f"veyq-{version}-{flatpak_arch}.flatpak"
+    # red on anything but lint-exceptions.json's, each named there with why
+    lint = ("flatpak run --user --filesystem=/veyq --command=flatpak-builder-lint org.flatpak.Builder --exceptions "
+            "--user-exceptions /veyq/mobile/build/linux/flatpak/lint-exceptions.json")
+    script = (
+        "cd /veyq/mobile/build/linux/flatpak; "  # the manifest's paths are relative to where it lies
+        f"appstreamcli validate --no-net --pedantic --explain inputs/{APP_ID}.metainfo.xml; "
+        f"flatpak-builder --user --arch={flatpak_arch} --disable-rofiles-fuse --disable-updates --force-clean "
+        # the state, the build directory and the repository share the volume (flatpak-builder wants one filesystem,
+        # and a host directory under Docker Desktop is a slow one); only the bundle lands in the tree's build/
+        f"--state-dir=/veyq/state/flatpak-builder --default-branch=stable --repo=/veyq/state/repo "
+        f"/veyq/state/build-dir {APP_ID}.yml; "
+        f"echo '+ flatpak-builder-lint manifest'; {lint} manifest {APP_ID}.yml; "
+        f"echo '+ flatpak-builder-lint repo'; {lint} repo /veyq/state/repo; "
+        f"flatpak build-bundle --arch={flatpak_arch} --runtime-repo={FLATHUB} /veyq/state/repo {bundle} {APP_ID} stable; "
+        f"ls -l {bundle}"
+    )
+    rc = in_runtime(flatpak_arch, script,
+                    ["-v", f"veyq-flatpak-state-{flatpak_arch}:/veyq/state",
+                     "-v", f"{repo_layout.MOBILE}:/veyq/mobile:ro",
+                     "-v", f"{FLATPAK_OUT}:/veyq/mobile/build/linux/flatpak"])
+    if rc == 0:
+        print(f"veyq: {FLATPAK_OUT / bundle}", flush=True)
+    return rc
+
+
+def write_manifest(version: str, date: str) -> None:
+    """The manifest, the metainfo and the linter's exceptions, filled from `flatpak/` with the id, the version, the
+    commit's date and the tests a build's sandbox skips, into src/mobile/build/linux/flatpak/."""
+    fill = {"@APP_ID@": APP_ID, "@VERSION@": version, "@DATE@": date,
+            "@SANDBOX_SKIPS@": " ".join(f"--skip {s}" for s in SANDBOX_SKIPS)}
+
+    def filled(text: str) -> str:
+        for k, v in fill.items():
+            text = text.replace(k, v)
+        return text
+
+    (FLATPAK_OUT / "inputs").mkdir(parents=True, exist_ok=True)
+    (FLATPAK_OUT / "inputs" / f"{APP_ID}.metainfo.xml").write_text(filled((FLATPAK / "metainfo.xml").read_text()))
+    (FLATPAK_OUT / f"{APP_ID}.yml").write_text(filled((FLATPAK / "manifest.yml").read_text()))
+    # flatpak-builder-lint's exceptions, each with its reason, keyed by the id as the linter reads them
+    exceptions = json.loads((FLATPAK / "lint-exceptions.json").read_text())
+    (FLATPAK_OUT / "lint-exceptions.json").write_text(json.dumps({APP_ID: exceptions}, indent=2))
+
+
+def in_runtime(flatpak_arch: str, script: str, docker_args: list[str]) -> int:
+    """Runs bash [script] in the builder's image (privileged: bubblewrap) after it installed the runtime, the SDK, the
+    Rust extension and flatpak-builder-lint from Flathub and moved each to its runtime.pins commit, all kept in the
+    volume `veyq-flatpak-<arch>`. Returns the script's exit code."""
+    docker_platform, _ = FLATPAK_ARCHES[flatpak_arch]
+    pins = runtime_pins(flatpak_arch)
+    run("docker", "build", "--platform", docker_platform, "-t", FLATPAK_BUILDER_TAG, "-f", str(FLATPAK / "Containerfile"),
+        str(FLATPAK))
+    flags = f"--user -y --noninteractive --arch={flatpak_arch}"
+    moves = "; ".join(
+        f'[ "$(flatpak info --user --arch={flatpak_arch} --show-commit {ref})" = {commit} ] '
+        f"|| flatpak update {flags} --commit={commit} {ref}" for ref, commit in pins.items())
+    prelude = (
+        "set -e; "
+        f"flatpak remote-add --user --if-not-exists flathub {FLATHUB}; "
+        f"flatpak install {flags} flathub {' '.join(pins)}; "
+        f"{moves}; "
+        "echo '+ the pinned commits'; "
+        f"flatpak list --user --arch={flatpak_arch} --columns=ref,active; ")
+    docker = (["docker", "run", "--rm", "--privileged", "--platform", docker_platform,
+               "-v", f"veyq-flatpak-{flatpak_arch}:/root/.local/share/flatpak"] + docker_args
+              + [FLATPAK_BUILDER_TAG, "bash", "-c", prelude + script])
+    print("+ " + " ".join(docker), flush=True)
+    return subprocess.run(docker).returncode
+
+
 def arch() -> tuple[str, str]:
     try:
         return ARCHES[platform.machine()]
@@ -336,6 +532,8 @@ def main() -> None:
     r.add_argument("--no-secret-service", action="store_true",
                    help="no session bus and no kept home: nothing is kept, every start signs in")
     verbs.add_parser("lock", help="cargo update: write Cargo.lock anew")
+    f = verbs.add_parser("flatpak", help="build the Flatpak bundle in the pinned GNOME SDK (ADR 0132)")
+    f.add_argument("--arch", choices=sorted(FLATPAK_ARCHES), help="default: this host's architecture")
     args = parser.parse_args()
     if args.verb == "build":
         sys.exit(build())
@@ -345,6 +543,8 @@ def main() -> None:
         sys.exit(run_app(args.port, args.devlogin, args.unlock, args.fill, not args.no_secret_service))
     if args.verb == "lock":
         sys.exit(lock())
+    if args.verb == "flatpak":
+        sys.exit(flatpak(args.arch or {"linux/arm64": "aarch64", "linux/amd64": "x86_64"}[arch()[0]]))
     if args.verb == "test":
         sys.exit(test(args.tests))
     if args.verb == "bridge":

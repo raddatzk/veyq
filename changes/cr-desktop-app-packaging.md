@@ -236,14 +236,31 @@ and never rebuilds (D10). The Mac builds only aarch64 locally; x86_64 is CI's.
 
 ## Phases
 
-- [ ] **1 docs — the ADR and the decided state.** Write the next free ADR (`ls docs/decisions | tail -3`) from D1–D11
+- [x] **1 docs — the ADR and the decided state.** Write the next free ADR (`ls docs/decisions | tail -3`) from D1–D11
   with their reasons and the rejected alternatives named here (WinApp CLI, the MSIX Packaging Tool, a self-hosted OSTree
   repository, flatpak-cargo-generator, a scratch image for staging, building the core inside the SDK); move native-apps'
   Flatpak and MSIX bullets to "decided, being built" pointing at it; release-and-deployment § Decided, not built gains
   the app packages. If owner questions 1–3 are not answered by then, the ADR records the recommendation as the default
   and the phase that needs the answer waits. · **Done when:** `for f in scripts/validate_*.py; do /usr/bin/python3 "$f"
   || echo "RED $f"; done` (guard_gaps skipped) prints no `RED`.
-- [ ] **2 linux — the Flatpak builds and runs, aarch64, on the developer's machine and the VM.** The container, the
+
+  **Status: done (2026-11-13).**
+  **Built:** [ADR 0132](../docs/decisions/0132-the-desktop-apps-ship-as-a-flatpak-bundle-and-an-msix-built-in-checks-and-promoted-with-the-release.md)
+  from D1–D11 with their reasons and the rejected alternatives (WinApp CLI, the MSIX Packaging Tool, a self-hosted OSTree
+  repository or `.appinstaller` feed, flatpak-cargo-generator, a scratch image for staging, the core built inside the SDK,
+  Fedora as the proving ground, an arm64 MSIX), plus **decision 12**: the desktop packages' identity in one place
+  (`src/mobile/desktop-identity.json`, written in phase 2), its values the recommendations of owner questions 1 and 2
+  (`app.veyq.Veyq`, `CN=veyq`) as defaults until the owner decides, no package published under them before. Filed under
+  the Native app topic, and beside it under Release in `docs/decisions/README.md`. native-apps § Open: the MSIX and the
+  Flatpak bullets now "decided, being built", pointing at it, with what is still to measure; release-and-deployment
+  § Decided, not built: the app packages. **One change against D11:** the build container is `fedora:44` at the
+  development image's digest, not Fedora 45 — `validate_image_pins.py` holds one tag per repository across the tree, and
+  Fedora 44's `flatpak-builder` is the same 1.4.12 (`docker run … flatpak-builder --version`, 2026-11-13); the ADR names
+  it under its alternatives.
+  **Met:** the guard loop (`scripts/validate_*.py`, guard_gaps skipped) printed no RED before the edit (this worktree at
+  `2d3018014`) and none after.
+
+- [x] **2 linux — the Flatpak builds and runs, aarch64, on the developer's machine and the VM.** The container, the
   pin file, the manifest, the metainfo, `run.py flatpak`, the locale directory. **First measurements, each a
   stop-and-ask if it fails:** (a) flatpak-builder runs in the pinned container under Docker on the Mac (bubblewrap's
   privileges); (b) which of D5's libraries the installed runtime lacks (`flatpak run --command=sh org.gnome.Platform//51
@@ -260,13 +277,66 @@ and never rebuilds (D10). The Mac builds only aarch64 locally; x86_64 is CI's.
   `appstreamcli validate` and `flatpak-builder-lint manifest`/`repo` are clean or each remaining warning is named with
   why; the VM pass's list above is recorded in ADR 0123's Consequences with a screenshot per screen as the final proof;
   `python3 src/mobile/linux/run.py build` green.
-- [ ] **3 linux — the SDK proves the app; the pins are guarded.** `run.py build` runs clippy, test and build in
+
+  **Status: done (2026-11-13), its signed-in part owed** (the dev backend was down, the owner's call).
+  **Built:** `src/mobile/linux/flatpak/` — `manifest.yml` (the id, version and date filled by `run.py`, written as
+  `build/linux/flatpak/<id>.yml`), `metainfo.xml`, `runtime.pins` (Platform, Sdk, rust-stable and org.flatpak.Builder,
+  per architecture), `Containerfile` (`fedora:44` at the development image's digest, see phase 1), `lint-exceptions.json`;
+  `src/mobile/desktop-identity.json` (ADR 0132 decision 12: `appId`, `msixPublisher`), read by `run.py`,
+  `generate_theme.py` and, through `VEYQ_APP_ID`, `build.rs` (the GApplication id, the resource path, the icon's and the
+  desktop entry's names: a sandbox lets the app own only names under its id); `build.rs` binds the catalogs to a
+  build-time `VEYQ_LOCALE_DIR` (`/app/share/locale` in the Flatpak); `run.py flatpak`; `release_assets.py` imports
+  PyYAML only where the recipe's derivation needs it, so `tree_release` runs on a Python without it (the Mac's
+  Homebrew one). **D5 measured** (b): the runtime lacks `libcrypt.so.1` and poppler-glib, now modules (libxcrypt 4.5.2,
+  poppler 26.11.0, sha256-pinned); it carries the rest. **D3 measured:** the Secret portal alone fails the core's
+  availability probe, so the manifest grants `--talk-name=org.freedesktop.secrets` (ADR 0132 decision 3 rewritten to
+  the outcome; security-model's Linux row). **D9 measured:** an update is `flatpak install --user <newer bundle>`.
+  Recorded in ADR 0123's Consequences (the Flatpak), native-apps § Platforms and § Open, `src/mobile/CLAUDE.md`
+  (the verb).
+  **Met:** (a) `python3 src/mobile/linux/run.py flatpak` exits 0 at `b671b1033` and writes
+  `veyq-1.546-aarch64.flatpak` (7.3 MB) — flatpak-builder privileged under Docker on the Mac; `appstreamcli validate
+  --pedantic` passes with one pedantic note, `cid-contains-uppercase-letter` (the recommended id's `V`, owner question
+  1); `flatpak-builder-lint manifest` clean, `repo` red only on `metainfo-missing-screenshots` and
+  `appstream-screenshots-not-mirrored-in-ostree`, both excepted with why (no store page; Flathub's own CR). The VM pass
+  (ADR 0123's Consequences, the Flatpak, with the commands): install from the bundle pulling the runtime, start to the
+  sign-in, German words (after the runtime's `de` locale), the launcher entry, the FileChooser portal and a picked
+  file at its document-portal path, https out of the sandbox, the five libsecret calls under both permissions, update
+  over 1.545, uninstall with `--delete-data` leaving nothing; screenshots taken (sign-in en and de, the portal's
+  dialog, the launcher), not committed. `python3 src/mobile/linux/run.py build` green in the Fedora container
+  (38 passed). **Owed** (needs a signed-in server; the exact steps in ADR 0123's Consequences): sign-in and staying
+  signed in through a restart, the members' pictures in the app (glycin's WebP decode itself passed in the installed
+  sandbox), a receipt's PDF, a medium played and heard, upload and save through the app's dialogs at a document-portal
+  path, a drop from Files, the exchange rates over the app's libcurl.
+
+- [x] **3 linux — the SDK proves the app; the pins are guarded.** `run.py build` runs clippy, test and build in
   `org.gnome.Sdk//51` (D4). `validate_build_input_pins.py` check 7: the Flatpak manifest's `runtime-version` equals the
   pin file's branch; every pin line is a 64-hex commit per architecture for Platform, Sdk and the Rust extension; every
   manifest source that is fetched (`type: archive`/`file` with a URL) carries a `sha256`; the build container's `FROM`
   is digest-pinned (already `validate_image_pins.py`'s). Bite each clause by snapshot-and-restore on a detached worktree
   (`changes/README.md` § Bite-proof a guard). · **Done when:** the guard is green on the tree and red, by its own label,
   on each of the four injections; `run.py build` green in the SDK.
+
+  **Status: done (2026-11-13).**
+  **Built:** `run.py build` proves the app in `org.gnome.Sdk//51`: flatpak-builder `--stop-at=veyq` builds the
+  manifest's modules before the app (libxcrypt, poppler; from its cache) and `flatpak build` runs `cargo clippy --locked
+  --all-targets -- -D warnings`, `cargo test --locked` and `cargo build --locked` in that build directory, with the
+  rust-stable extension and the runtime's GTK 4.24 and libadwaita 1.10; `in_runtime` and `write_manifest` are shared
+  with `flatpak`. One test is skipped in any build sandbox, named once in `run.py` (`SANDBOX_SKIPS`, filled into the
+  manifest as `@SANDBOX_SKIPS@`): the WebP decode, which glycin runs through `flatpak-spawn --sandbox` (ran in the
+  installed app's sandbox instead, phase 2). `run` keeps the Fedora container (Broadway). `validate_build_input_pins.py`
+  **check 7**: every tracked Flatpak manifest (found by its top-level `runtime`, `sdk`, `modules`, anchored on one under
+  `src/mobile/linux/`) has a `runtime.pins` beside it whose every line is `<id>/<arch>/<branch> <64-hex>`, pinning for
+  aarch64 and x86_64 the manifest's runtime and SDK at its `runtime-version` and every `sdk-extensions` entry; every
+  source fetched by `url` carries a 64-hex `sha256`; the `Containerfile` beside it is `FROM` a digest. `src/mobile/CLAUDE.md`
+  (the `build` verb), native-apps § Platforms.
+  **Met:** `/usr/bin/python3 scripts/validate_build_input_pins.py` green on the tree; five injections by
+  snapshot-and-restore (bytes compared, `git status --porcelain` unchanged across the run), each red (exit 1) by its own
+  label: `runtime-version` `'50'` against the pins' 51; a pin's commit cut to 12 hex; the x86_64 rust-stable line
+  removed; poppler's `sha256` removed; the builder's `FROM fedora:44` without its digest. `python3
+  src/mobile/linux/run.py build` exit 0 in the SDK (clippy clean, 37 passed and 1 filtered, the build). Not done on a
+  detached worktree as the phase text says: the snapshot-and-restore in this worktree is the `changes/README.md`
+  protocol, and the porcelain check shows nothing else moved.
+
 - [ ] **4 windows — the MSIX builds, installs and runs on the VM.** `Package.appxmanifest`, the PNG assets,
   `run.py package [--sign]`, Release tests. **First measurements, each a stop-and-ask:** (a) a signed MSIX installs and
   **starts** on the VM as it is, UAC off — if Windows refuses, the owner turns UAC on (`EnableLUA 1`, reboot, a console

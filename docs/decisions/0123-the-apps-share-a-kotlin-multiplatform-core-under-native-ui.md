@@ -863,6 +863,45 @@ implementation exists but what holds it to the first.
   files, Upload folder… and Save a copy (saved at the originals' SHA-256); **audio heard on the default sink's monitor**
   (`parec`): a 440 Hz WebM (Opus) and a 550 Hz MP4 (AAC) at RMS −21.1 dBFS while playing, silence paused. Not produced: a
   drop without a local path in the session (Files offers no copy out of its trash; `cargo test` holds the refusal).
+  - **The Flatpak** (built 2026-11-13, [ADR 0132](0132-the-desktop-apps-ship-as-a-flatpak-bundle-and-an-msix-built-in-checks-and-promoted-with-the-release.md);
+    `src/mobile/linux/flatpak/`, `run.py flatpak`). The app id is `src/mobile/desktop-identity.json`'s (`app.veyq.Veyq`
+    until the owner decides it), and with it the GApplication id, the resource path and the icon's and desktop entry's
+    names: a sandbox lets an app own only D-Bus names under its own id. flatpak-builder runs privileged in the pinned
+    Fedora 44 image under Docker on the Mac (bubblewrap's namespaces), its state, build directory and repository in a
+    volume (it wants one filesystem). Against `org.gnome.Platform//51` (GTK 4.24.1, libadwaita 1.10.0) the runtime
+    carries libsecret, glycin with its WebP loader, GStreamer with `giostreamsrc` and, through `codecs-extra`, VP9,
+    H.264 (`avdec_h264`) and Opus, the CA bundle at `/etc/ssl/cert.pem` (the path the linked libcurl reads) and the
+    zones; it lacks `libcrypt.so.1` and poppler-glib, built as modules (libxcrypt 4.5.2 with the glibc API and
+    `--disable-werror`, which the SDK's GCC and glibc otherwise fail; poppler 26.11.0's GLib frontend alone). `cargo
+    clippy`, `cargo test` and the release build run in the SDK; one test cannot run in a build's sandbox (the WebP decode:
+    glycin spawns its loader through `flatpak-spawn --sandbox`, for which a build has no portal) and ran in the installed
+    app's sandbox instead (`flatpak run --command=<the test binary>`, 1 passed). `appstreamcli validate --pedantic` passes
+    with one note (`cid-contains-uppercase-letter`, the recommended id's capital); `flatpak-builder-lint`'s manifest
+    check is clean and its repo check names only the missing screenshots (`lint-exceptions.json`, each with why). The
+    aarch64 bundle is 7.3 MB.
+    **On the Fedora 45 VM's GNOME session** (2026-11-13): `flatpak install --user veyq-1.545-aarch64.flatpak` on a
+    machine with no runtime pulled the GNOME 51 runtime with its `codecs-extra`, GL and `.Locale` from Flathub (the
+    bundle's `--runtime-repo` added the user remote) in 6 min; the app starts, the core starts and the sign-in shows
+    (`session SignIn`); the launcher shows the icon and name, the running window is matched to its entry, Software shows
+    the metainfo's summary. **German words** under `LANG=de_DE.UTF-8 LANGUAGE=de` — once the runtime's `.Locale` carries
+    German: Flatpak installs the languages of the system's locale (the VM's is `en_US`), so there GTK fell back to `C`
+    and every word was English until `flatpak config --user --set extra-languages de` and an update (a German desktop
+    has it). The **FileChooser portal** answers from inside the sandbox, and a file picked there is readable at
+    `/run/flatpak/doc/<id>/<name>`, whole; an **https** request leaves the sandbox (`curl` against a public host through
+    the runtime's CA bundle, 200, verified). **The secure store** (the core's five libsecret calls over its schema,
+    through PyGObject in the app's sandbox): under the Secret portal alone, store, lookup and clear answer in the app's
+    own keyring, which persists across processes, but `secret_service_get_sync` fails (`ServiceUnknown`); with
+    `--talk-name=org.freedesktop.secrets` all five answer, the items still in the app's keyring (none in the host's
+    collection), `SECRET_BACKEND=service` changing nothing — so the manifest grants the name (ADR 0132 decision 3).
+    **Update:** `flatpak install --user veyq-1.546-aarch64.flatpak` over 1.545 upgraded in place, keeping
+    `~/.var/app/<id>` (a marker file and the keyring); the same file again is refused (`already installed`).
+    `flatpak uninstall --user --delete-data app.veyq.Veyq` left nothing under `~/.var/app/`. The VM's GPU is not one the
+    runtime's Mesa drives (Vulkan and EGL fail, GTK draws in software). **Owed, with a signed-in server** (the dev
+    backend was down): sign-in and staying signed in through a restart (the device trust over the Secret portal), the
+    members' pictures, a receipt's PDF, a medium played (H.264 and VP9) and heard, a file uploaded from and saved to a
+    document-portal path through the app's own dialogs, a drop from Files, and the exchange rates over the app's own
+    libcurl — each with its screenshot: install the bundle, `~/veyq-spike/fp.sh de|en` starts it in the session, the
+    owner signs in to the dev instance through the VM's forwarder, and the Depot slice's pass runs as before.
 - **The Windows app** (ADR 0129 decision 5; `src/mobile/windows/`). WinUI 3 in C# on .NET 10, `win-x64`, unpackaged
   and self-contained, the Windows App SDK included, so its build output runs where it is copied. Built 2026-11-10/11.
   - **Packages.** `Microsoft.WindowsAppSDK.WinUI` and `.Foundation` 2.6.5 and `Microsoft.Windows.SDK.BuildTools`, not the
