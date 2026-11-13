@@ -198,6 +198,22 @@ function names(w: World) {
 
 let kitPdf = ''
 
+/** The space's owner confirms their address: the bootstrap owner starts unconfirmed (ADR 0074 decision 2), and the app
+ *  then carries the banner that cannot be dismissed (ADR 0129 decision 5) on every page. The shots show the app as a
+ *  member with a confirmed address sees it, as everyone a mailed invite brought in already is. */
+async function confirmAddress(w: World, page: Page, email: string): Promise<void> {
+  const banner = page.getByRole('region', { name: w.t('Email address not confirmed', 'E-Mail-Adresse nicht bestätigt') })
+  await banner.getByRole('button', { name: w.t('Send confirmation mail', 'Bestätigungsmail senden') }).click()
+  let link = ''
+  await expect.poll(async () => {
+    const mails = await mailsTo(email, /./)
+    link = mails.map((m) => /https:\/\/\S+\/confirm-email#\S+/.exec(m.text)?.[0] ?? '').find(Boolean) ?? ''
+    return link
+  }, { timeout: 60_000 }).not.toBe('')
+  await page.goto(link)
+  await expect(page.getByText(w.t('Your email address is confirmed.', 'Deine E-Mail-Adresse ist bestätigt.'))).toBeVisible({ timeout: 60_000 })
+}
+
 seed('space', async (w) => {
   const link = await createTenant(w)
   w.owner = await w.device()
@@ -207,6 +223,7 @@ seed('space', async (w) => {
   await saveKit(w, page, w.cast.owner)
   await acceptAndSignIn(w, page, w.cast.owner)
   await setUpMail(w, page)
+  await confirmAddress(w, page, w.cast.owner.email)
   const invite = await inviteMember(w, page, w.cast.member)
   w.member = await w.device()
   await openLink(w.member.page, invite.link)
@@ -349,6 +366,18 @@ shot('owners-invite', async (w) => {
   await d.getByRole('button', { name: w.t('Invite by email', 'Per E-Mail einladen') }).click()
   await d.getByLabel(w.t('Email address', 'E-Mail-Adresse')).fill(w.t('jordan@family.example', 'jonas@familie.example'))
   await capture(w, 'owners-invite', d)
+  await closeDialogs(page)
+})
+
+shot('owners-invite-link', async (w) => {
+  const { page } = w.owner
+  await openSettings(w, page, w.t('Members', 'Mitglieder'))
+  await page.getByRole('button', { name: w.t('Invite member', 'Mitglied einladen') }).click()
+  const d = dialog(page, w.t('Invite member', 'Mitglied einladen'))
+  // The dialog opens on sharing a link (ADR 0129 decision 1).
+  await d.getByRole('button', { name: w.t('Create link', 'Link erstellen') }).click()
+  await expect(d.getByTestId('invite-link-result')).toBeVisible({ timeout: 60_000 })
+  await capture(w, 'owners-invite-link', d)
   await closeDialogs(page)
 })
 
