@@ -504,6 +504,65 @@ and never rebuilds (D10). The Mac builds only aarch64 locally; x86_64 is CI's.
   `veyq-apps` tags signed (`cosign verify` with the snapshot identity); the promotion's first real run is the next
   release the owner cuts, and its files are verified as the site's page says — recorded in ADR 0057/0091's
   Consequences, or named as owed if no release falls inside the CR.
+
+  **Status: built (2026-11-13), its runs owed** — no push from here, and the signer is the owner's to make. The
+  Windows-side signing has never run (the Windows VM was down; on GitHub it runs on `windows-latest`): pending for the
+  first real release.
+  **Built:** `scripts/msix_sign.py` (+ selftest, in `guards`): `certificate` holds the committed signer
+  `src/mobile/windows/veyq.cer` (repo_layout `MSIX_CERTIFICATE`) to `msixPublisher` as Windows writes a subject;
+  `compare` refuses unless signing added exactly `AppxSignature.p7x` and `AppxMetadata/CodeIntegrity.cat`, rewrote
+  only `[Content_Types].xml`, left `AppxBlockMap.xml` and every payload file byte-identical, and the p7x's one signer
+  (issuer + serial) is that certificate, carried byte for byte; `sign` (Windows) takes signtool from the pinned
+  `Microsoft.Windows.SDK.BuildTools` 10.0.28000.2957 `.nupkg` held to a measured sha256 (the lock's contentHash leaves
+  nuget.org's signature out, so it is not the file's), writes the PFX from `VEYQ_MSIX_PFX_BASE64` for one call and
+  deletes it, signs without a timestamp. `snapshot.py`: `APP_PLATFORMS`, `staged --apps`, `check-unpublished --apps`.
+  `publish.yml`'s `snapshot`: fetches `app-digests` from the Checks run, ORAS (the one pin) tags
+  `<version>-SNAPSHOT-<platform>` and `sha-<commit>-<platform>`, reads them back, `cosign sign`s each by digest;
+  `staging_retention.py` reads `build-<sha>-<platform>` (`--image veyq-apps`). `release.yml`: `check` (promote.py check
+  9: the packages as the snapshot's — type, file name, signature, release name free — and the signer committed, else
+  refused before any write; a commit without `apps-stage` releases none) → `apps` (pull by digest, packages read) →
+  `msix-sign` (windows-latest, environment `msix-signing`, contents read, secrets `MSIX_PFX_BASE64`/`MSIX_PFX_PASSWORD`
+  in the signing step's env only) → `promote` (`oras tag <version>-<platform>`, sign; `release_assets.py --app-file`
+  lists the two bundles, the signed MSIX and `veyq.cer` under `apps`; `promote.py assets` holds them to the plan, each
+  Flatpak's sha256 to the staged layer; `cosign sign-blob` each into `<name>.bundle`) → `publish` verifies every app
+  bundle and sha256 and holds the attached set to assets + apps + bundles. Steps of `apps`/`msix-sign`/`promote` are
+  gated `env.APPS == 'true'` per step, never per job (assertion 16). `validate_release_identity.py` assertion 14
+  widened (seven jobs, needs, `refused` on every pre-publication failure, the app bundle loop) and **assertion 18**.
+  Docs: ADR 0133 (Built, decisions 7, 10, 12, Consequences), release-and-deployment, native-apps, infra/README §
+  Cutting a release (the owner's four steps, rotation), Verify it yourself, Known limitations (no timestamp),
+  Verify a release, How veyq is tested (budgets apps 10, msix-sign 15).
+  **Against the phase text:** the Windows job runs *before* `promote`, not between `promote` and `publish`, so the
+  manifest is produced and signed once, after every byte it lists exists. The expected signer is pinned in the tree
+  (the committed `veyq.cer`), so "thumbprint the PFX's" is proven by the signed package's signer, not by reading the
+  PFX (an encrypted PKCS #12 needs its password and crypto the guard host lacks).
+  **Met (locally):** the guards (guard_gaps skipped) print no RED; the selftests green (msix_sign, promote, snapshot,
+  staging_retention, `veyqctl_selftest.py` with "a release with app files installs, and none of them lands");
+  `actionlint` 1.7.12 (release tarball, checksum checked, scratch) reports only the pre-existing style note on
+  `version`; YAML parses. Dry-runs (scratch, deleted after): `msix_sign.py compare` on a real pair `run.py package
+  --sign` made on the VM (veyq-1.687) — green with the dev certificate extracted from its p7x (thumbprint = openssl's
+  fingerprint), red with a throwaway `CN=veyq` certificate of another key, red with the signed copy as "staged";
+  `certificate` on openssl-made throwaways: `CN=veyq` held (thumbprint = its PFX's), `CN=veyq, O=veyq` refused; ORAS
+  1.3.6 against an OCI layout: push as `apps-stage` does, `oras tag` of both snapshot names, `manifest fetch
+  --descriptor` reading each back to the digest, the raw manifest hashing to it, the title annotation = file name,
+  pull restoring the files; `release_assets.py --app-file` + a cosign `sign-blob`/`verify-blob` round trip with a
+  throwaway key (offline, `--use-signing-config=false --tlog-upload=false`), the publish step's sha256 and
+  file-set checks green, a byte appended red, a lost bundle red. Bites, each red by its own label and restored with
+  `/bin/cp -f` (or in a copy of the tree of its own): 17 on the guard (listed in its docstring) and 18 on the
+  selftests (block map, payload, signer, second signer, additions, subject, RDN order, signtool pin; app signature,
+  type, signer check, Flatpak bytes, apps optional; bundle collision, apps under assets; platform tags; a moved app
+  tag, a missing platform).
+  **Owner steps** (infra/README.md § Cutting a release): make the `CN=veyq` certificate and its PFX; commit its public
+  half as `src/mobile/windows/veyq.cer`; create the environment `msix-signing` (deployment branches `main`,
+  `release/*`; a reviewer if wanted); store `MSIX_PFX_BASE64` and `MSIX_PFX_PASSWORD` there; then the first Publish
+  dispatch. **Owed to the first runs:** the snapshot's `oras tag`/`cosign sign` on GHCR (and `imagetools inspect --raw`
+  of an ORAS artifact hashing to its digest, as `staged` and `check` read it — measured on ORAS's own fetch only);
+  `cosign verify` of the `veyq-apps` tags under the snapshot identity; the Windows job (Python, the nupkg download,
+  signtool with the PFX); a promotion with packages, verified as the site's page says — recorded in ADR 0057/0091's
+  Consequences then.
+  **Retrospective:** signing an MSIX also adds `AppxMetadata/CodeIntegrity.cat` — the real pair from phase 4 showed
+  it; a check written from the docs alone would have refused the first release. Pinning the signer in the tree turns a
+  silent secret swap into a refusal and a rotation into a reviewed commit. A step-level gate keeps an optional job from
+  skipping everything after it.
 - [x] **7 site — install, update, verify.** A Use page *Install the app* (`getting-started/install-the-app.mdx` and
   `de/…`, in the depth of its neighbours, `sources:` the new ADR and native-apps): Linux (the bundle, the runtime from
   Flathub, the measured install and update commands, what the app may reach and why — D3 in plain words), Windows
