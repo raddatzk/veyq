@@ -444,6 +444,14 @@ paths:
             application/json:
               schema: { $ref: "#/components/schemas/ErrorResponse" }
               example: { code: invite_signature_invalid }
+        "429":
+          description: >
+            Too many invites in a short time — per invited address and per tenant (`rate_limited`, nothing minted);
+            retry after the `Retry-After` seconds.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+              example: { code: rate_limited }
         "503":
           description: >
             This tenant cannot send mail, so the invite cannot reach anyone and none was minted
@@ -589,6 +597,14 @@ paths:
             application/json:
               schema: { $ref: "#/components/schemas/ErrorResponse" }
               example: { code: stale_epoch }
+        "429":
+          description: >
+            Too many invites in a short time — per invited address and per tenant (`rate_limited`, nothing minted);
+            retry after the `Retry-After` seconds.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+              example: { code: rate_limited }
         "503":
           description: >
             This tenant cannot send mail, so nothing was minted and the previous invite still stands
@@ -749,6 +765,14 @@ paths:
             application/json:
               schema: { $ref: "#/components/schemas/ErrorResponse" }
               example: { code: invite_signature_invalid }
+        "429":
+          description: >
+            Too many invites in a short time — the tenant's invite budget, which a link invite spends alone because it
+            names no address (`rate_limited`, nothing minted); retry after the `Retry-After` seconds.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+              example: { code: rate_limited }
         "503":
           description: >
             This tenant cannot send mail, so none was minted (`mail_unavailable` — the owner configures SMTP under mail
@@ -846,6 +870,14 @@ paths:
             application/json:
               schema: { $ref: "#/components/schemas/ErrorResponse" }
               example: { code: invite_signature_invalid }
+        "429":
+          description: >
+            Too many invites in a short time — the tenant's invite budget, which a link invite spends alone because it
+            names no address (`rate_limited`, nothing minted); retry after the `Retry-After` seconds.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+              example: { code: rate_limited }
         "503":
           description: >
             This tenant cannot send mail, so nothing was minted and the previous link invite still stands
