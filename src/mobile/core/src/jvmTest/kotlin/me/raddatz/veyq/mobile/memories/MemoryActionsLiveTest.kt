@@ -42,7 +42,7 @@ class MemoryActionsLiveTest {
         val out = File(outPath!!).also { it.delete() }
         val wait = (System.getenv("VEYQ_LIVE_MEMORY_WAIT_S")?.toLong() ?: 300L).seconds
         val root = File(System.getProperty("veyq.repoRoot"))
-        val env = File(root, ".run/.env").readLines()
+        val env = (System.getenv("VEYQ_ENV_FILE")?.let(::File) ?: File(root, ".run/.env")).readLines()
             .mapNotNull { l -> l.substringBefore('=', "").takeIf { it.isNotBlank() }?.let { it.trim() to l.substringAfter('=').trim().trim('"', '\'') } }
             .toMap()
         val account = VeyqAccount.signIn(

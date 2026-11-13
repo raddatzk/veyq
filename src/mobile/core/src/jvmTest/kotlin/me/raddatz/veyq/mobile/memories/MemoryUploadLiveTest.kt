@@ -34,7 +34,7 @@ class MemoryUploadLiveTest {
         val origin = System.getenv("VEYQ_LIVE") ?: return@runTest
         val name = System.getenv("VEYQ_LIVE_MEMORY_UPLOAD") ?: return@runTest
         val root = File(System.getProperty("veyq.repoRoot"))
-        val env = File(root, ".run/.env").readLines()
+        val env = (System.getenv("VEYQ_ENV_FILE")?.let(::File) ?: File(root, ".run/.env")).readLines()
             .mapNotNull { l -> l.substringBefore('=', "").takeIf { it.isNotBlank() }?.let { it.trim() to l.substringAfter('=').trim().trim('"', '\'') } }
             .toMap()
         suspend fun signIn() = VeyqAccount.signIn(
