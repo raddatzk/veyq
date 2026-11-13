@@ -6,8 +6,8 @@
  *
  * Memory: a pointer the host passes in is read before the function returns. A pointer the core passes to a callback is
  * valid only during that call — the host copies what it keeps. JSON is UTF-8 and NUL-terminated; the byte payload beside
- * it carries bytes the UI shows (an avatar, a tile) so they never travel as base64, and is NULL with length 0 where
- * there are none.
+ * it carries bytes the UI shows (an avatar, a tile) so they never travel as base64 and, inward, bytes a call hands the
+ * core (a scan's camera frame), and is NULL with length 0 where there are none.
  *
  * Threads: every answer, update and host request arrives on a core thread, never the host's UI thread; the host hands
  * it to its own loop. veyq_call, veyq_watch, veyq_unwatch and veyq_reply may be called from any thread. The host

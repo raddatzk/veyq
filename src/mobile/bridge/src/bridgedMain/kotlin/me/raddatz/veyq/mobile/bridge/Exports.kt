@@ -14,6 +14,7 @@ import kotlinx.cinterop.addressOf
 import kotlinx.cinterop.cstr
 import kotlinx.cinterop.invoke
 import kotlinx.cinterop.memScoped
+import kotlinx.cinterop.readBytes
 import kotlinx.cinterop.reinterpret
 import kotlinx.cinterop.toKString
 import kotlinx.cinterop.usePinned
@@ -30,8 +31,8 @@ import kotlin.experimental.ExperimentalNativeApi
 // host hands in is read before the function returns; each pointer handed to the host is valid only during that call, so
 // the host copies what it keeps. JSON is UTF-8 and NUL-terminated; the byte payload beside it carries the bytes of an
 // `Answer.Bytes` (an avatar, a blob's range), which never travel as base64, and is null with length 0 for every other
-// answer, every update and every host request. Inward, no call or reply carries one yet: what veyq_call and veyq_reply
-// are handed beside the JSON is not read.
+// answer, every update and every host request. Inward, a call carries one where it hands the core bytes (a scan's frame,
+// `Scan.Frame`), copied before veyq_call returns; what veyq_reply is handed beside its JSON is not read.
 
 /** `void (*)(void *ctx, const char *json, const uint8_t *bytes, size_t len)`: an answer or an update. */
 typealias VeyqAnswer = CPointer<CFunction<(COpaquePointer?, CPointer<ByteVar>?, CPointer<UByteVar>?, ULong) -> Unit>>
@@ -96,6 +97,9 @@ private const val ALREADY_STARTED = 1
 private const val CONFIG_REFUSED = 2
 private const val NO_AES = 3
 
+/** The most a call carries in beside its JSON: a camera's 4K luminance plane is 8 MiB; more is no frame, so none is read. */
+private const val MAX_INBOUND: ULong = 67_108_864uL // 64 MiB
+
 @CName("veyq_init")
 fun veyqInit(config: CPointer<ByteVar>?, host: VeyqHost?, hostCtx: COpaquePointer?): Int {
     if (host == null) return CONFIG_REFUSED
@@ -120,7 +124,10 @@ fun veyqCall(request: CPointer<ByteVar>?, bytes: CPointer<UByteVar>?, len: ULong
     val r = running.load() ?: return
     if (answer == null) return
     val json = request?.toKString() ?: ""
-    r.bridge.call(json) { a, payload ->
+    // what the host hands beside the call (a scan's frame) is copied before this returns, as bridge.h promises; NULL is
+    // none, a non-NULL pointer with length 0 an empty one
+    val inbound = bytes?.let { if (len > MAX_INBOUND) null else it.reinterpret<ByteVar>().readBytes(len.toInt()) }
+    r.bridge.call(json, inbound) { a, payload ->
         memScoped {
             if (payload == null) {
                 answer.invoke(ctx, a.cstr.ptr, null, 0u)
