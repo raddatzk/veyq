@@ -19,7 +19,8 @@ import 'leaflet/dist/leaflet.css'
 import type { LatLng } from '../memoryLocation'
 
 /** One track as the map draws it: its lines (each already simplified), its colour and the words of its tooltips. */
-export type MapTrack = { id: string; color: string; lines: LatLng[][]; label: string; startLabel: string; endLabel: string }
+/** A track as the map draws it; `dash` is its activity's (ADR 0130 decision 9), absent for a solid line. */
+export type MapTrack = { id: string; color: string; dash?: string; lines: LatLng[][]; label: string; startLabel: string; endLabel: string }
 import VeyqIcon from '../../../shared/ui/VeyqIcon.vue'
 import MapOffButton from './MapOffButton.vue'
 import { createIconElement } from '../../../shared/ui/iconElement'
@@ -104,7 +105,7 @@ function syncTracks(tracks: MapTrack[] | undefined, selected: string | null | un
     for (const line of track.lines) {
       if (line.length < 2) continue
       L.polyline(line.map((p) => [p.lat, p.lng] as [number, number]), {
-        color: track.color, weight: isSelected ? 6 : 4, opacity: isSelected ? 1 : 0.85,
+        color: track.color, weight: isSelected ? 6 : 4, opacity: isSelected ? 1 : 0.85, dashArray: track.dash,
       })
         .bindTooltip(tooltipText(track.label), { sticky: true })
         .on('click', () => emit('selectTrack', track.id))

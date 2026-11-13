@@ -59,6 +59,20 @@ acceptanceCriteria:
           - src/features/memories/components/MemoryTracks.test.ts
           - src/features/memories/components/MemoryDetail.guest.test.ts
           - src/features/memories/components/MemoryDetail.rights.test.ts
+  - id: name-and-activity
+    text: Where a medium's meta may be edited (`editMeta` and the source's `mediaMeta` door - no link role), a track's row offers Edit, a dialog with a name (placeholder the file's name; emptied, the field is dropped and the file names the track again) and an activity (none or one of the ten - hiking, walking, running, cycling, mountain-biking, road-cycling, gravel-cycling, skiing, water, other). Saving re-seals the track's raw listed tier with `trackName` (clamped to 120 UTF-8 bytes, the tier inside its 512-base64 cap) and `trackActivity`, every other field verbatim, through the one version-checked meta write; a peer's label meanwhile is a conflict the dialog shows, another peer write is merged. The list shows the member's name over the file's, the activity's word above it, and the line and the row's swatch in the activity's dash (the old application's patterns). A download carries the label as the medium's `track`, an import seals it at birth, a copy carries the tier verbatim.
+    coverage:
+      web:
+        unit:
+          - src/features/memories/track/trackLabel.test.ts
+          - src/features/memories/media.test.ts
+          - src/features/memories/source.test.ts
+          - src/features/memories/track/useMemoryTracks.test.ts
+          - src/features/memories/components/TrackEditDialog.test.ts
+          - src/features/memories/components/MemoryTracks.test.ts
+          - src/features/memories/components/MemoryMap.tracks.test.ts
+          - src/features/memories/components/MemoryDetail.tracks.test.ts
+          - src/features/memories/exportImport.test.ts
 gaps:
   stack: >-
     Lane L1's browser pass (`tests/e2e/tests/features/memories/memory-tracks.spec.ts`: a GPX file added on the Map tab is no

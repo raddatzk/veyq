@@ -119,6 +119,13 @@ export type MediaMeta = {
    */
   placeName?: string
   placeLevel?: string
+  /**
+   * A GPX track's own name and its activity, as a member gave them (uc.memory.tracks A8, ADR 0130 decision 9): a track has
+   * no geometry, GPS or place name, so the two ride the room those leave in the 512-base64 tier. The name is clamped to
+   * [TRACK_NAME_MAX_BYTES]; the activity is an opaque token here, read by `track/trackLabel.ts`.
+   */
+  trackName?: string
+  trackActivity?: string
 }
 
 /**
@@ -492,6 +499,7 @@ function sealMetadata(
     gpsLat: meta.gpsLat,
     gpsLng: meta.gpsLng,
     placeName: placeName === undefined ? undefined : clampPlaceName(placeName),
+    ...trackLabelFields(restored.trackName ?? null, restored.trackActivity ?? null),
   }
   const hasMeta = metaHasContent(metaTier)
   const wrappedMeta = hasMeta ? sealJson(memoryKey, prune(metaTier), mediaMetaContext(media.scopeId, media.mediaId)) : null
@@ -632,9 +640,10 @@ export async function prepareMedia(source: AddMediaSource, deriver: MediaDeriver
  * member CORRECTED (`capturedAtOverride`) and a place name the bytes do not carry. Both are sealed into the listed tier
  * at birth, in the one completion that adds the medium and under the key it lands under — so a rotation and re-key that
  * lands while the import runs cannot leave them to a second write opening a tier the re-key re-sealed (inbox #700), as a
- * copy seals every fact at birth ([addCopiedMedia]). The name is clamped as a backfill clamps it ([clampPlaceName]).
+ * copy seals every fact at birth ([addCopiedMedia]). The name is clamped as a backfill clamps it ([clampPlaceName]). A
+ * GPX track's own name and activity (ADR 0130 decision 9) are restored the same way, the name clamped as its edit clamps it.
  */
-export type RestoredMediaFacts = { capturedAtOverride?: number; placeName?: string }
+export type RestoredMediaFacts = { capturedAtOverride?: number; placeName?: string; trackName?: string; trackActivity?: string }
 
 /** One logical media to complete: the original session + its role-tagged derivative sessions + the sealed metadata. */
 export type CompleteDecl = {
@@ -1093,6 +1102,51 @@ function clampUtf8(s: string, maxBytes: number): string {
 }
 
 /**
+ * The clamp on a GPX track's own name (ADR 0130 decision 9), in UTF-8 bytes for the reason [PLACE_NAME_MAX_BYTES] is: the
+ * listed tier's 512-base64 cap, shared with the capture-time PUT. A track's tier carries no geometry, GPS or place name, so
+ * the name may be longer than a place's; that a maximal name and the longest activity still seal inside the cap on a tier
+ * carrying every field a track's tier holds is asserted (`media.test.ts`), not reasoned about. A photo's full tier leaves
+ * no room for a label, which is why only a track is offered one.
+ */
+export const TRACK_NAME_MAX_BYTES = 120
+
+/** The listed tier's fields for a track's label: a blank name or no activity is the field left out. */
+function trackLabelFields(name: string | null, activity: string | null): Pick<MediaMeta, 'trackName' | 'trackActivity'> {
+  const n = cleanStr(name)
+  const a = cleanStr(activity)
+  return { trackName: n === undefined ? undefined : clampUtf8(n, TRACK_NAME_MAX_BYTES), trackActivity: a }
+}
+
+/**
+ * Set a GPX track's own **name** and **activity** (uc.memory.tracks A8, ADR 0130 decision 9) - null for either drops it, so
+ * the track is named by its file again, or drawn without an activity. The same read-modify-write as the capture-time
+ * correction ([setMediaMeta]): the whole listed tier re-sealed under the medium's key with every other field verbatim, PUT
+ * at the revision it was listed at; a peer's label written meanwhile throws `MetaConflictError`, any other peer's write
+ * merges. Operator-blind: the server sees a re-sealed blob of about the same size.
+ */
+export async function setTrackLabel(
+  scopeId: string,
+  media: MediaMetaTarget,
+  memoryKey: Uint8Array,
+  nodeEpoch: number,
+  label: { name: string | null; activity: string | null },
+  opts: MediaMetaWriteOptions = {},
+): Promise<MediaMetaWrite> {
+  const opened = unsealMeta(scopeId, memoryKey, media as MediaItem)
+  const next = trackLabelFields(label.name, label.activity)
+  return persistMeta(scopeId, media, memoryKey, nodeEpoch, (raw, { retry, state }) => {
+    if (retry && (cleanStr(raw.trackName) !== opened?.trackName || cleanStr(raw.trackActivity) !== opened?.trackActivity)) {
+      throw new MetaConflictError(state)
+    }
+    if (next.trackName === undefined) delete raw.trackName
+    else raw.trackName = next.trackName
+    if (next.trackActivity === undefined) delete raw.trackActivity
+    else raw.trackActivity = next.trackActivity
+    return raw
+  }, opts)
+}
+
+/**
  * Seal a media's resolved **place name** into the listed tier (read-modify-write from the RAW tier, exactly as the
  * capture-time override does — every other field rides along verbatim). A backfill: if
  * the tier it re-bases on after a `409` already carries a name, nothing is written. Operator-blind: the name is
@@ -1137,8 +1191,8 @@ export type MediaMetaWriteOptions = {
 
 /**
  * Re-seal a metadata tier under the media's key and PUT it with the `metaRevision` it was built from
- * (`updateMediaMeta`, ADR 0077) — the one write path behind the capturedAt edit ([setMediaMeta]) and the place
- * backfill ([backfillPlaceName]). `edit` gets the RAW tier (every field verbatim, never [unsealMeta]'s projection) and returns the next
+ * (`updateMediaMeta`, ADR 0077) — the one write path behind the capturedAt edit ([setMediaMeta]), the place
+ * backfill ([backfillPlaceName]) and a track's label ([setTrackLabel]). `edit` gets the RAW tier (every field verbatim, never [unsealMeta]'s projection) and returns the next
  * one, or null for no write; on a `409 stale_revision` it re-runs on the tier the conflict handed back. A present
  * tier that does not open is refused (`MetaUnreadableError`), never rebuilt from empty (#273). The key is the one
  * the media's origin fixes ([mediaKey]): a member editing what a WRITE_ONLY guest added re-seals under that guest's

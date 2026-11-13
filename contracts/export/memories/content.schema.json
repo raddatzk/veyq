@@ -150,6 +150,33 @@
         "capturedAtCorrected": {
           "const": true,
           "description": "Present when the member had corrected the capture time (an override); an import restores it as one."
+        },
+        "track": {
+          "description": "A GPX track's own name and activity, as a member gave them (uc.memory.tracks, ADR 0130 decision 9). Present only on a track that has either; an import seals them into the track's listed tier again.",
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "name": {
+              "type": "string",
+              "maxLength": 1024,
+              "description": "The name a member gave the track; without one the track is named by its file."
+            },
+            "activity": {
+              "enum": [
+                "hiking",
+                "walking",
+                "running",
+                "cycling",
+                "mountain-biking",
+                "road-cycling",
+                "gravel-cycling",
+                "skiing",
+                "water",
+                "other"
+              ],
+              "description": "The activity, drawn as the line's dash."
+            }
+          }
         }
       }
     },

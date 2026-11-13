@@ -23,7 +23,8 @@
 //  - a capture time the file lacks is carried by the payload's modified time (the upload falls back to it); one the member
 //    CORRECTED is restored as an override, and the place name too, both sealed into the listed tier by the upload that adds
 //    the medium (`RestoredMediaFacts`) - never a second write after it, which a rotation landing in between would refuse
-//    (inbox #700).
+//    (inbox #700). A GPX track's own name and activity (ADR 0130 decision 9) travel as the medium's `track` and are
+//    restored the same way.
 //  - the importer is the uploader of every medium; the exported contributor stays text. Participants are not restored:
 //    their ids mean nothing in the target (ADR 0083).
 //
@@ -67,6 +68,7 @@ import { normalizeLocation } from './memoryLocation'
 import { musicField, normalizeMusic } from './music/musicModel'
 import { unsealMemoryParticipants } from './memoryParticipants'
 import { CHAPTER_KIND } from './kinds'
+import { trackActivityOf, trackLabelOf, type TrackActivity } from './track/trackLabel'
 import { normalizeMemoryCover } from './memoryCover'
 import { MIME_TO_EXT } from '../../core/blob/meta'
 import { CENTRE, normalizeBanner, normalizeFocal, sealedBanner, type Banner, type BannerMedium } from './banner/bannerModel'
@@ -87,6 +89,8 @@ export type ExportedMedium = {
   location?: { lat?: number; lon?: number; place?: string }
   exif?: Record<string, unknown>
   contributor?: string
+  /** A GPX track's own name and activity (ADR 0130 decision 9); absent where it has neither. */
+  track?: { name?: string; activity?: TrackActivity }
   /** A copy's only (see the header); never in an archive. */
   copy?: CopiedMedium
 }
@@ -167,6 +171,10 @@ export const exportMemoryContent: ExportContentHook = async (ctx) => {
     const lat = meta?.gpsLat
     const lon = meta?.gpsLng
     if (lat !== undefined || lon !== undefined || meta?.placeName) medium.location = { lat, lon, place: meta?.placeName }
+    const label = trackLabelOf(meta)
+    if (label.name !== null || label.activity !== null) {
+      medium.track = { ...(label.name !== null ? { name: label.name } : {}), ...(label.activity !== null ? { activity: label.activity } : {}) }
+    }
     if (exif) medium.exif = { ...exif }
     const contributor = contributorOf(item, people)
     if (contributor) medium.contributor = contributor
@@ -291,7 +299,7 @@ async function coverOf(
 
 /** The contract's `maxLength` / `maxItems` of Memories' fields (Memories' own `contracts/export/memories/content.schema.json`);
  *  `exportImport.test.ts` pins each to the schema. */
-export const MEMORIES_LIMITS = { name: 1024, contributor: 1024, place: 1024, participant: 1024, participants: 100, music: 2 } as const
+export const MEMORIES_LIMITS = { name: 1024, contributor: 1024, place: 1024, participant: 1024, participants: 100, music: 2, trackName: 1024 } as const
 
 const DATE = /^\d{4}-\d{2}-\d{2}$/
 const isObj = (v: unknown): v is Record<string, unknown> => typeof v === 'object' && v !== null && !Array.isArray(v)
@@ -319,6 +327,12 @@ export function validateMemoryContent(content: ManifestContent): ContentProblem 
       if (!isObj(l) || (l.lat !== undefined && !isNum(l.lat, -90, 90)) || (l.lon !== undefined && !isNum(l.lon, -180, 180))) return shape(`medium ${i} location`)
       const p = long(`medium ${i} place`, l.place, MEMORIES_LIMITS.place)
       if (p) return p
+    }
+    if (m.track !== undefined) {
+      const tr = m.track
+      if (!isObj(tr) || (tr.activity !== undefined && trackActivityOf(tr.activity) === null)) return shape(`medium ${i} track`)
+      const n = long(`medium ${i} track name`, tr.name, MEMORIES_LIMITS.trackName)
+      if (n) return n
     }
   }
   const d = content.date
@@ -484,11 +498,18 @@ async function addOriginal(
 }
 
 /** What a download's medium restores beside its bytes, sealed at birth (`RestoredMediaFacts`, inbox #700): its corrected
- *  capture time as an override, and its place name. A time that was not corrected is the bytes' own, read again. */
+ *  capture time as an override, its place name, and a track's own name and activity. A time that was not corrected is the
+ *  bytes' own, read again. */
 function restoredFacts(medium: ExportedMedium): RestoredMediaFacts {
   const at = medium.capturedAtCorrected ? isoToMs(medium.capturedAt) : undefined
   const place = typeof medium.location?.place === 'string' ? medium.location.place : undefined
-  return { ...(at !== undefined ? { capturedAtOverride: at } : {}), ...(place ? { placeName: place } : {}) }
+  const track = isObj(medium.track) ? medium.track : undefined
+  return {
+    ...(at !== undefined ? { capturedAtOverride: at } : {}),
+    ...(place ? { placeName: place } : {}),
+    ...(typeof track?.name === 'string' && track.name.trim() ? { trackName: track.name } : {}),
+    ...(trackActivityOf(track?.activity) ? { trackActivity: track!.activity } : {}),
+  }
 }
 
 /** A copy's medium as `addCopiedMedia` takes it: the original and each tier read by frame, the facts as the walk read them.

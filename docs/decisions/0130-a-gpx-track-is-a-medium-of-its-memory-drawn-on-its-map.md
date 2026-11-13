@@ -70,12 +70,12 @@ A Memory's detail gains a **Map** tab after its Chapters tab. It is the slot the
   an end marker. Choosing a line or a row selects the track, draws it heavier and frames it.
 - **The list under the map:** a switch that shows or hides the track on the map (this view only), its colour, its name, and
   its distance, duration, climb and descent, each left out where the file does not give it.
-- **Per track, a menu:** **Download GPX** (the original, as picked), **Report** (where Report is offered) and
-  **Remove**.
+- **Per track, a menu:** **Edit** (decision 9), **Download GPX** (the original, as picked), **Report** (where Report
+  is offered) and **Remove**.
 - **Add GPX track**, which takes one or several files.
 
-A track's name is the file's own track name, else its `metadata` name, else the file name without `.gpx`. There is no
-rename and no activity type in this slice (inbox #841).
+A track's name is the name a member gave it (decision 9), else the file's own track name, else its `metadata` name, else
+the file name without `.gpx`.
 
 ### 5. The photos sit at their own place, never on the line by time
 
@@ -120,6 +120,39 @@ What a medium does, a track does. There is no second path to keep in step.
   download stay; add and remove go.
 - **Quota:** counted as media.
 - **Reports** (ADR 0093): a track is reportable as an `ITEM`, Memories' medium report.
+
+### 9. A member names a track and gives it an activity, in its sealed listed tier
+
+Amended 2026-11-13 (inbox #841), as the old application did it: a row's **Edit** opens a dialog with a **name** and an
+**activity**.
+
+- **Where it lives:** two fields of the track's **listed meta tier**, `trackName` and `trackActivity`, written by the one
+  meta write a medium has (`updateMediaMeta`, ADR 0077's version-checked PUT, `setTrackLabel`) as a read-modify-write of the
+  raw tier, every other field verbatim. No contract, route or column is added; the server sees a re-sealed blob of about
+  the same size. Not the EXIF tier: a track has none, it is sealed only at upload and has no write, and the list needs the
+  name without a read per track.
+- **The cap:** the listed tier is 512 base64 and shared with the capture-time write. A track's tier holds only its
+  capture fields (a GPX file gives no geometry, GPS or place), so the name is clamped to **120 UTF-8 bytes**; that a maximal
+  name and the longest activity seal inside the cap on every field a track's tier holds is asserted in `media.test.ts`. A
+  photo's full tier leaves no room for a label, which is one reason only a track is offered one.
+- **The activities:** the old application's ten, as sealed tokens: `hiking`, `walking`, `running`, `cycling`,
+  `mountain-biking`, `road-cycling`, `gravel-cycling`, `skiing`, `water`, `other`, or none. A value this client does not
+  know (a newer client's) reads as none and stays in the tier untouched until the label is edited.
+- **How it is drawn:** the activity is the line's dash, the old application's patterns (`track/trackLabel.ts`
+  `activityDash`): on foot, other and none solid, running dotted, the three cyclings dashed, mountain biking dash-dot,
+  skiing a long dash-dot, water a fine dot. The row's swatch is a short line in the track's colour and dash, and the
+  activity's word stands above the name. The colour stays the list's.
+- **The name:** an emptied name drops the field, so the file names the track again; the file's name is the field's
+  placeholder.
+- **Who may edit:** the right that edits a medium's capture time, `editMeta`, together with the source's `mediaMeta`
+  door. A guest's source has no such door, so no link role edits a label (a `READ_WRITE` guest neither corrects a photo's
+  date); a share guest sees the name and the activity exactly as a member does. A member's read-only scope (a pending
+  deletion, Memories switched off) edits nothing.
+- **A conflict:** a peer's label written meanwhile is not overwritten: the dialog shows theirs and says so; any other
+  peer write to the tier (a date correction) is merged.
+- **Download, copy, import:** a copy carries the listed tier verbatim. A download carries the label as the medium's
+  optional `track` (`contracts/export/memories/content.schema.json`, an additive field: no version bump), and an import
+  seals it into the new track's tier at birth, with the rest of its restored facts.
 
 ## Consequences
 

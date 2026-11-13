@@ -22,6 +22,9 @@ import type { MediaItem } from '../media'
 import type { MediaLoaders } from '../source'
 import { GPX_MEDIA_TYPE, TRACK_COLORS, TRACKS_PER_MEMORY } from '../track/gpx'
 import type { MapTrack } from './MemoryMap.vue'
+import TrackEditDialog from './TrackEditDialog.vue'
+import { MetaConflictError } from '../../../core/node/sealedMetaWrite'
+import type { TrackLabel } from '../track/trackLabel'
 
 const KEY = new Uint8Array(32)
 const gpxText = (name: string) =>
@@ -42,11 +45,11 @@ const MapStub = defineComponent({
   },
 })
 
-function loaders(bytes: Record<string, string>): MediaLoaders {
+function loaders(bytes: Record<string, string>, labels: Record<string, { trackName?: string; trackActivity?: string }> = {}): MediaLoaders {
   return {
     original: vi.fn(async (it: MediaItem) => new TextEncoder().encode(bytes[it.mediaId])),
     blobMeta: (it: MediaItem) => ({ type: GPX_MEDIA_TYPE, name: `${it.mediaId}.gpx` }),
-    meta: () => null,
+    meta: (it: MediaItem) => (labels[it.mediaId] ? { v: 1, ...labels[it.mediaId] } : null),
     chunk: vi.fn(),
   } as unknown as MediaLoaders
 }
@@ -54,6 +57,8 @@ function loaders(bytes: Record<string, string>): MediaLoaders {
 function mountTab(over: Partial<{
   tracks: MediaItem[]; canAdd: boolean; canRemove: (id: string) => boolean; canDownload: boolean; canReport: boolean
   pickReady: () => boolean; photoPoints: { lat: number; lng: number }[]; bytes: Record<string, string>
+  labels: Record<string, { trackName?: string; trackActivity?: string }>
+  editLabel: (item: MediaItem, label: TrackLabel) => Promise<void>
 }> = {}) {
   const tracks = over.tracks ?? [mediaItem({ mediaId: 'a' }), mediaItem({ mediaId: 'b' })]
   return mount(MemoryTracks, {
@@ -61,12 +66,13 @@ function mountTab(over: Partial<{
       scopeId: 's1', nodeId: 'n1', memoryName: 'Alps', memoryKey: KEY, tracks,
       photoPoints: over.photoPoints ?? [{ lat: 47, lng: 10 }],
       active: true,
-      loaders: loaders(over.bytes ?? { a: gpxText('Morning'), b: gpxText('Evening') }),
+      loaders: loaders(over.bytes ?? { a: gpxText('Morning'), b: gpxText('Evening') }, over.labels),
       canAdd: over.canAdd ?? true,
       canRemove: over.canRemove ?? (() => true),
       canDownload: over.canDownload ?? true,
       canReport: over.canReport ?? true,
       pickReady: over.pickReady,
+      editLabel: over.editLabel,
     },
     global: { plugins: [realI18n()], stubs: { MemoryMap: MapStub } },
   })
@@ -204,5 +210,54 @@ describe('MemoryTracks', () => {
     const none = mountTab({ canRemove: () => false, canDownload: false, canReport: false })
     await flushPromises()
     expect(none.find('[data-testid="track-more"]').exists()).toBe(false)
+  })
+
+  // ADR 0130 decision 9: the name a member gave wins, the activity is a word above it and the line's dash - in the row's
+  // swatch and on the map. Lever: `dash: activityDash(...)` in `mapTracks`, or the swatch's `stroke-dasharray`.
+  it('lists a track by the name a member gave it, with its activity, and draws the activity as the line\'s dash', async () => {
+    const w = mountTab({ labels: { a: { trackName: 'Ridge run', trackActivity: 'running' } } })
+    await flushPromises()
+    const rows = w.findAll('[data-testid="track-row"]')
+    expect(rows.map((r) => r.find('.memory-track-name').text())).toEqual(['Ridge run', 'Evening'])
+    expect(rows[0].find('[data-testid="track-activity"]').text()).toBe('Running')
+    expect(rows[1].find('[data-testid="track-activity"]').exists()).toBe(false)
+    expect(rows.map((r) => r.find('[data-testid="track-swatch"] line').attributes('stroke-dasharray'))).toEqual(['2 8', undefined])
+    const drawn = mapProps[mapProps.length - 1]
+    expect(drawn.tracks?.map((t) => [t.id, t.label, t.dash])).toEqual([['a', 'Ridge run', '2 8'], ['b', 'Evening', undefined]])
+  })
+
+  it('offers Edit only where the detail hands in the write, and saves the name and activity through it', async () => {
+    const editLabel = vi.fn(async () => {})
+    const w = mountTab({ editLabel, labels: { a: { trackName: 'Ridge run', trackActivity: 'running' } } })
+    await flushPromises()
+    await w.findAll('[data-testid="track-more"]')[0].trigger('click')
+    const items = (w.findComponent(VeyqMenu).props('items') as VeyqMenuItem[]).filter((i) => i.visible !== false)
+    expect(items.map((i) => i.key)).toEqual(['edit', 'download', 'report', 'remove'])
+    items[0].command!(new Event('click'))
+    await flushPromises()
+    const dialog = w.findComponent(TrackEditDialog)
+    expect(dialog.props('label')).toEqual({ name: 'Ridge run', activity: 'running' })
+    expect(dialog.props('fallbackName')).toBe('Morning') // the file's own track name, the field's placeholder
+    dialog.vm.$emit('save', { name: null, activity: 'cycling' })
+    await flushPromises()
+    expect(editLabel).toHaveBeenCalledWith(expect.objectContaining({ mediaId: 'a' }), { name: null, activity: 'cycling' })
+    expect(w.findComponent(TrackEditDialog).exists()).toBe(false)
+  })
+
+  it('keeps the dialog open with the reason when the save does not land', async () => {
+    const editLabel = vi.fn<(item: MediaItem, label: TrackLabel) => Promise<void>>()
+      .mockRejectedValueOnce(new MetaConflictError({ wrappedMeta: null, metaRevision: 3 }))
+      .mockRejectedValueOnce(new Error('offline'))
+    const w = mountTab({ editLabel })
+    await flushPromises()
+    await w.findAll('[data-testid="track-more"]')[0].trigger('click')
+    ;(w.findComponent(VeyqMenu).props('items') as VeyqMenuItem[]).find((i) => i.key === 'edit')!.command!(new Event('click'))
+    await flushPromises()
+    w.findComponent(TrackEditDialog).vm.$emit('save', { name: 'Mine', activity: null })
+    await flushPromises()
+    expect(w.findComponent(TrackEditDialog).props('error')).toBe('conflict')
+    w.findComponent(TrackEditDialog).vm.$emit('save', { name: 'Mine', activity: null })
+    await flushPromises()
+    expect(w.findComponent(TrackEditDialog).props('error')).toBe('failed')
   })
 })

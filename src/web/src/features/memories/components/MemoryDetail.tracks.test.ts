@@ -2,7 +2,8 @@
 // uc.memory.tracks (ADR 0130) through the member's whole detail: a GPX file stored as a medium of the Memory - sealed and
 // uploaded by the real upload code into the in-memory store, listed back through the member's source - is no photo (not
 // in the gallery, not in the count) and is the Map tab's track; the tab's add sends a GPX file through the one upload queue
-// as a GPX-typed medium of the node on screen, grouped apart from the gallery's tiles; its removal is a photo's trash.
+// as a GPX-typed medium of the node on screen, grouped apart from the gallery's tiles; its removal is a photo's trash; its
+// Edit (decision 9) seals a name and an activity into its listed tier where a medium's meta may be edited.
 import { describe, it, expect, vi, beforeEach, afterEach, type Mock } from 'vitest'
 
 vi.mock('leaflet', () => ({ default: {} }))
@@ -29,6 +30,8 @@ import { mountWithHeader } from '../../../test/nodeHeader'
 import { coreActionsStandIn, coverStandIn } from '../../../test/nodePage'
 import { setMapsConsent } from '../../../shared/state/useMapConfig'
 import { GPX_MEDIA_TYPE } from '../track/gpx'
+import VeyqSelect from '../../../shared/ui/VeyqSelect.vue'
+import type { MemoryRights } from '../rights'
 
 const SCOPE_ID = '11111111-1111-1111-1111-111111111111'
 const NODE_ID = '22222222-2222-2222-2222-222222222222'
@@ -39,6 +42,7 @@ const deriver: MediaDeriver = {
 }
 
 let deleteMedia: Mock<MediaApi['deleteMedia']>
+let updateMediaMeta: Mock<MediaApi['updateMediaMeta']>
 beforeEach(() => {
   vi.clearAllMocks()
   setMapsConsent(false) // the list works without the map (decision 6); the map is MemoryTracks' own test
@@ -46,6 +50,7 @@ beforeEach(() => {
   stubApi(itemFavoritesApi, { getItemFavorites: [] })
   const store = galleryFakeStore()
   deleteMedia = vi.fn<MediaApi['deleteMedia']>(async () => undefined)
+  updateMediaMeta = store.api.updateMediaMeta
   fakeApi(mediaApi, { ...store.api, deleteMedia })
   fakeApi(blobApi, store.blob)
   vi.stubGlobal('fetch', store.fetchStub)
@@ -57,14 +62,14 @@ afterEach(() => {
   vi.unstubAllGlobals()
 })
 
-async function mountWithOneTrackAndOnePhoto() {
+async function mountWithOneTrackAndOnePhoto(rights: MemoryRights = memberMemoryRights()) {
   const memoryKey = v1.randomBytes(32)
   await addMedia(SCOPE_ID, NODE_ID, memoryKey, { blob: new Blob([new Uint8Array(8).fill(1) as BlobPart]), mediaType: 'image/jpeg', name: 'IMG_1.jpg' }, deriver)
   await addMedia(SCOPE_ID, NODE_ID, memoryKey, { blob: new Blob([GPX]), mediaType: GPX_MEDIA_TYPE, name: 'summit.gpx' }, deriver)
   const w = mountWithHeader(MemoryDetail, {
     props: {
       source: memberMemorySource({ scopeId: () => SCOPE_ID }), node: treeNode({ id: NODE_ID, kind: MEMORY_KIND, name: 'Alps', parentId: null }),
-      scopeId: SCOPE_ID, memoryKey, scopeKey: { epoch: 0, key: v1.randomBytes(32) }, chapters: [], rights: memberMemoryRights(), canReport: true,
+      scopeId: SCOPE_ID, memoryKey, scopeKey: { epoch: 0, key: v1.randomBytes(32) }, chapters: [], rights, canReport: true,
     },
     global: { plugins: [realI18n()], provide: coreActionsStandIn([], coverStandIn({ canSet: false })) },
     attachTo: document.body,
@@ -121,6 +126,50 @@ describe('MemoryDetail — GPX tracks (uc.memory.tracks)', () => {
     expect(target.nodeId).toBe(NODE_ID)
     expect(target.key).toBe(`${NODE_ID}#tracks`)
     expect(selections.map((s) => [s.file.name, s.mediaType])).toEqual([['second.gpx', GPX_MEDIA_TYPE]])
+    w.unmount()
+  })
+
+  // Lever: hand `MemoryTracks` no `edit-label` (the Edit is gone), or skip `onCapturedAtUpdated` (the row keeps its name).
+  it('names a track and gives it an activity through its Edit, sealed into its listed tier', async () => {
+    const w = await mountWithOneTrackAndOnePhoto()
+    await mapTab(w).trigger('mousedown')
+    await flushPromises()
+    await w.find('[data-testid="track-more"]').trigger('click')
+    await flushPromises()
+    const edit = Array.from(document.querySelectorAll('[role="menuitem"]')).find((el) => el.textContent?.includes(t('memory.tracks.edit')))
+    expect(edit, 'the row menu offers the Edit').toBeDefined()
+    ;(edit as HTMLElement).click()
+    await flushPromises()
+    const name = document.querySelector<HTMLInputElement>('[data-testid="track-edit-name"]')!
+    expect(name.placeholder).toBe('Summit')
+    name.value = 'Gipfeltour'
+    name.dispatchEvent(new Event('input'))
+    w.findComponent(VeyqSelect).vm.$emit('update:modelValue', 'cycling')
+    await flushPromises()
+    document.querySelector<HTMLFormElement>('[data-testid="track-edit"]')!.dispatchEvent(new Event('submit', { cancelable: true }))
+    await flushPromises()
+    await flushPromises()
+
+    expect(updateMediaMeta).toHaveBeenCalledTimes(1)
+    expect(JSON.stringify(updateMediaMeta.mock.calls[0][0])).not.toContain('Gipfeltour') // sealed, never plaintext
+    const row = w.find('[data-testid="track-row"]')
+    expect(row.find('.memory-track-name').text()).toBe('Gipfeltour')
+    expect(row.find('[data-testid="track-activity"]').text()).toBe('Cycling')
+    expect(row.find('[data-testid="track-swatch"] line').attributes('stroke-dasharray')).toBe('10 7')
+    expect(document.querySelector('[data-testid="track-edit"]')).toBeNull()
+    w.unmount()
+  })
+
+  // The same right as a medium's capture time: a member who may not write (here a pending deletion) is offered no Edit.
+  it('offers no Edit where a medium\'s meta may not be edited', async () => {
+    const w = await mountWithOneTrackAndOnePhoto(memberMemoryRights({ readonly: true }))
+    await mapTab(w).trigger('mousedown')
+    await flushPromises()
+    await w.find('[data-testid="track-more"]').trigger('click')
+    await flushPromises()
+    const entries = Array.from(document.querySelectorAll('[role="menuitem"]')).map((el) => el.textContent?.trim())
+    expect(entries, 'the menu is open (a positive control)').toContain(t('memory.tracks.download'))
+    expect(entries).not.toContain(t('memory.tracks.edit'))
     w.unmount()
   })
 })
