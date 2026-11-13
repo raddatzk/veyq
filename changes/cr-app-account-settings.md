@@ -291,6 +291,20 @@ Apple as a pushed view (iOS) and a Settings scene-style window (macOS `Settings 
   name follows); a second session signed in by `LiveAccountSettingsTest`'s helper (or the web) appears, is signed out from
   its menu after the question, and drops out; "Sign out" ends the page and shows the sign-in. Record each in
   `native-apps.md`'s measured list.
+  **Live, Linux — met (2026-11-13).** On the Fedora 45 VM's GNOME session, the debug build of this tree inside the
+  installed Flatpak's sandbox (`cr-desktop-app-packaging` phase 2's signed-in pass), signed in as the principal through
+  the dev sign-in (the trust offer "Not now": the account is at its limit, `add wrap 409`). EN/light: the sidebar's
+  **Settings** opened the dialog over the signed-in shell (`settings open`) with the principal's address, the
+  confirmation line, and this device first ("fedora", "You are here"); renamed to "Linux pass device" (`settings
+  rename: Done`, its row followed) and back to "fedora" (`Done`); a second session — `run.py run --devlogin
+  --no-secret-service` in the Broadway container on the Mac, listed as its container id `e157d9a0a242` — signed out from
+  its row's menu ("Sign this device out", the question, then `settings sign out: Done`) and gone from the list; the
+  container stopped. DE/dark (a new sign-in): every group in German, renamed to "Linux Pass" and back (`Done` each), the
+  pass's own earlier session signed out from its menu ("Dieses Gerät abmelden", the question); "Abmelden" →
+  `settings sign out here: Done`, the dialog gone, the sign-in shown. "Sign out everywhere else" and "Remove every saved
+  key" were not touched (the principal's). That sign-in showed the password and Secret Key still filled — fixed in
+  `sign_in.rs`/`main.rs` (`SignIn::forget`, bitten; `cr-desktop-app-packaging` phase 2 has the measurement). Windows
+  still open.
   **Retrospective:** WinUI's Settings item was a non-selecting item; making it a selecting one with a `Target` of its own let the
   page live in the content with the pane's own selection and back, which is how Windows' apps show settings.
 - [ ] **5 docs and harvest** — `native-apps.md` (§ Built, § Account's open items reduced to what is left);

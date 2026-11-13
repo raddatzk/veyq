@@ -779,6 +779,19 @@ From `src/mobile` unless named:
   step 1), Windows on a laptop with a camera (its step 2) — the sign-in's "Scan Emergency Kit", a printed fixture held
   up, the dialog closing and the form filled; the debug test camera (`VEYQ_DEV_CAMERA`) through the sign-in's scan was
   not run either.
+  **Pending (1), Linux — met (2026-11-13).** On the Fedora 45 VM's GNOME session, the debug build of this tree run inside
+  the installed Flatpak's sandbox (`cr-desktop-app-packaging` phase 2's signed-in pass, how and why there), against the
+  dev backend: a kit PDF built from the principal's credentials as `LiveBridgeTest.aKitSignsIn*` builds it (`{v: 3,
+  email, sk, srv}` in `Keywords`, `srv` the typed `http://veyq.localhost:8080`; written mode 600, never printed) under
+  `~/veyq-spike/kit/`; the form filled by `run.py`'s `--devlogin --fill` values (so the password is never typed); "Open
+  Emergency Kit" → the **portal's** chooser → the kit → `kit picked: Ok(Done)`, the Secret Key row "From your Emergency
+  Kit — Enter it instead" (no other-server notice: the kit's server is the typed one); the kit file deleted; "Sign in" →
+  `session Signed` (the trust offer, the account at its limit, `add wrap 409`), "Not now" → **the shell** (Home of
+  "Familie Raddatz", the shot). English, light. Still open in this phase: (1) on Windows; (2) the camera scans. The
+  kit was found afterwards in **GNOME's indexer** database (`~/.cache/tracker3`: the indexer reads `~` recursively, so a
+  kit put anywhere under it is indexed, as the fixtures in `~/Documents` were before) — the database removed, then no
+  `veyqkit:` under `~/.cache` or `~/.local`. A pass's kit belongs outside the indexed tree (`/tmp`, which the chooser
+  reaches by its path) next time.
   **Deviations:** (1) Windows reads the path through a `FileStream` (`AsRandomAccessStream`), not
   `StorageFile.GetFileFromPathAsync`: no broker, the same bytes, so the CR's first measurement fell away. (2) The Linux
   pass ran on the Fedora VM's GNOME (the portal's chooser, a real session) rather than in Broadway, whose GTK chooser
