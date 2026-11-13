@@ -40,6 +40,7 @@ class MusicFrameSliceTest {
 
     class MusicConfigured : QuarkusTestProfile {
         override fun getConfigOverrides() = mapOf(
+            "veyq.music.released" to "true", // the release flag (musicReleased, ADR 0131 decision 8); MusicDarkSliceTest: dark
             "veyq.music.domain" to MUSIC_HOST,
             "veyq.music.spotify-client-id" to CLIENT_ID,
             "veyq.music.apple-developer-token" to APPLE_TOKEN,
@@ -67,6 +68,7 @@ class MusicFrameSliceTest {
         assertEquals("https://$MUSIC_HOST/music-frame", byId[CapabilityIds.MEMORIES_MUSIC]?.get("serviceUrl"))
         assertEquals(CLIENT_ID, byId[CapabilityIds.MEMORIES_MUSIC_SPOTIFY]?.get("spotifyClientId"))
         assertEquals(APPLE_TOKEN, byId[CapabilityIds.MEMORIES_MUSIC_APPLE_MUSIC]?.get("appleDeveloperToken"))
+        assertEquals(true, given().`when`().get("/api/setup").then().extract().path<Boolean>("musicReleased"), "musicReleased: the web's helper")
         caps.filter { it["id"] != CapabilityIds.MEMORIES_MUSIC_SPOTIFY }.forEach { assertEquals(null, it["spotifyClientId"], "${it["id"]}") }
         caps.filter { it["id"] != CapabilityIds.MEMORIES_MUSIC_APPLE_MUSIC }.forEach { assertEquals(null, it["appleDeveloperToken"], "${it["id"]}") }
     }

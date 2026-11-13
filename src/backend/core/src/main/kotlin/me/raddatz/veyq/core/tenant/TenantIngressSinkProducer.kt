@@ -1,5 +1,6 @@
 package me.raddatz.veyq.core.tenant
 
+import me.raddatz.veyq.core.appshell.MusicFrameHost
 import me.raddatz.veyq.core.blobstore.StoreSettings
 import me.raddatz.veyq.core.config.VeyqConfig
 import me.raddatz.veyq.core.config.VeyqConfig.ClientPortSource
@@ -36,6 +37,9 @@ class TenantIngressSinkProducer(
      * bare JVM has neither, and should not have to.
      */
     private val kubernetes: Instance<KubernetesClient>,
+    /** The music host, from the one source that knows it (ADR 0131 decision 2): none while the TEMPORARY release flag
+     *  musicReleased is off (decision 8), so no router names a host for it. */
+    private val music: MusicFrameHost,
 ) {
 
     @Produces
@@ -69,7 +73,7 @@ class TenantIngressSinkProducer(
             upstreams = TraefikFileIngressSink.Upstreams(app = upstream.app(), blobs = upstream.blobs(), admin = upstream.admin()),
             bucket = { store.bundledRouteBucket() },
             clientPortHeader = config.http().clientPort().takeIf { it.source() == ClientPortSource.HEADER }?.header(),
-            musicDomain = hostname(config.music().domain().orElse(null), "music.domain"),
+            musicDomain = music.domain(),
         )
     }
 

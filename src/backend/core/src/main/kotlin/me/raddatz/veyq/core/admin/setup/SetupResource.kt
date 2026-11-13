@@ -42,6 +42,7 @@ class SetupResource(private val handler: SetupHandler) : SetupApi {
                 instanceSalt = state.instanceSalt,
                 version = Version(major = state.versionMajor, build = state.versionBuild),
                 capabilities = state.capabilities.map { capabilityWire(it, state.requirements, state.services, state.deployed) },
+                musicReleased = state.musicReleased, // TEMPORARY (musicReleased, ADR 0131 decision 8)
             ),
         ).build()
     }

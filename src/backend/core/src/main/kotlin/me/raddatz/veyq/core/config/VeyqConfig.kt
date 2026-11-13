@@ -67,6 +67,14 @@ interface VeyqConfig {
      * `MusicDeployment`, which refuses to boot on a malformed value rather than serve a frame that cannot work.
      */
     interface Music {
+        /**
+         * TEMPORARY release flag `veyq.music.released` (`VEYQ_MUSIC_RELEASED`, ADR 0131 decision 8, owner 2026-11-13),
+         * false by default: background music ships dark. Read once, by `MusicDeployment.released`, and by nothing else.
+         * Removal at release: `git grep -iE 'music[._-]?released'` lists every site (inbox, ADR 0131 decision 8).
+         */
+        @WithDefault("false")
+        fun released(): Boolean
+
         /** The music host (`VEYQ_MUSIC_DOMAIN`), a host name of its own; absent ⇒ no music frame and the three entries off. */
         fun domain(): Optional<String>
 
