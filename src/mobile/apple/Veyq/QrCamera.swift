@@ -30,7 +30,7 @@ final class QrCamera: NSObject, AVCaptureVideoDataOutputSampleBufferDelegate, @u
     }
 
     // called on core's threads: @Sendable, never main-actor isolated (src/mobile/CLAUDE.md § Traps)
-    private static let timing: @Sendable (KotlinInt, KotlinInt, KotlinDouble, KotlinBoolean) -> Void = { w, h, ms, read in
+    static let timing: @Sendable (KotlinInt, KotlinInt, KotlinDouble, KotlinBoolean) -> Void = { w, h, ms, read in
         NSLog("veyq-scan: decoded %dx%d in %.1f ms, %@ read", w.intValue, h.intValue, ms.doubleValue, read.boolValue ? "a code" : "nothing")
     }
 
@@ -64,6 +64,15 @@ final class QrCamera: NSObject, AVCaptureVideoDataOutputSampleBufferDelegate, @u
             self.testFrames = nil
             if self.session.isRunning { self.session.stopRunning() }
         }
+    }
+
+    /// Whether this device has a camera a scan could open (a debug build's test camera counts): where it has none, a
+    /// caller offers no scan at all — the iOS Simulator, a Mac without one.
+    static var available: Bool {
+        #if DEBUG
+        if ProcessInfo.processInfo.environment["VEYQ_DEV_CAMERA"] != nil { return true }
+        #endif
+        return device() != nil
     }
 
     /// The back camera on a phone, the built-in or attached one on a Mac.
@@ -152,15 +161,17 @@ struct QrCameraView<Other: View>: View {
     @State private var model: QrCameraModel?
 
     var body: some View {
-        Group {
+        // a ZStack over a clear ground, never a bare Group: a caller's `other` that draws nothing for a state (the kit's
+        // scanner on `Found`) would make the Group vanish, its `onDisappear` drop the model and its `onAppear` make a new
+        // one at once — a camera restarted every few milliseconds (measured 2026-11-13 on the iOS Simulator)
+        ZStack {
+            Color.clear
             if let model, !(model.state is QrScanStateStarting || model.state is QrScanStateScanning) {
                 other(model.state)
             } else if let picture = model?.camera.testPicture {
                 Image(decorative: picture, scale: 1).resizable().scaledToFit()
             } else if let model {
                 CameraPreview(session: model.camera.session)
-            } else {
-                Color.clear
             }
         }
         .onAppear {

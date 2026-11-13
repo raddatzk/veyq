@@ -214,6 +214,13 @@ final class AppModel {
     /// The Secret Key row's way back to typing: the kit's held key ends.
     func clearKit() { session.clearKit() }
 
+    /// The sign-in's kit scan for `KitScannerView`'s camera: core's scan with the kit's parser as its `accepts`, the found
+    /// kit taken by core (the gate fills the form); `typedServer` is the form's server as typed now. Its `Found` carries
+    /// only where the kit's server came from; each decode's time is logged, never a code's text.
+    func scanKit(typedServer: String) -> QrScan<AnyObject> {
+        AppleKit.shared.scan(session: session, typedServer: typedServer, timing: QrCamera.timing)
+    }
+
     // MARK: Staying signed in (ADR 0123 decision 8)
 
     /// The offer to stay signed in a sign-in left open (core's `Gate.Signed.offer`), a sheet over the shell; nil once answered.
