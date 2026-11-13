@@ -85,13 +85,23 @@ public static unsafe class Core
     /// member's picture, a blob's range), copied out of the callback; null for every other answer. Before the core started
     /// it is never answered.
     /// </summary>
-    public static Task<(Answer Answer, byte[]? Payload)> CallAsync(Call call)
+    public static Task<(Answer Answer, byte[]? Payload)> CallAsync(Call call) => CallAsync(call, null);
+
+    /// <summary>
+    /// <see cref="CallAsync(Call)"/> with <paramref name="inbound"/> beside the call's JSON (ADR 0131 decision 1's inward
+    /// half: a scan's camera frame, <c>Scan.Frame</c>), which the core copies before <c>veyq_call</c> returns. Null is no
+    /// payload; an empty array an empty one.
+    /// </summary>
+    public static Task<(Answer Answer, byte[]? Payload)> CallAsync(Call call, byte[]? inbound)
     {
         var answer = new TaskCompletionSource<(Answer, byte[]?)>(TaskCreationOptions.RunContinuationsAsynchronously);
         var handle = GCHandle.Alloc(answer);
+        // an empty array's pointer is NULL under `fixed`: one byte stands for it, never read, so empty stays apart from none
+        var held = inbound is { Length: 0 } ? new byte[1] : inbound;
         fixed (byte* json = Utf8(JsonSerializer.Serialize(call, WireContext.Default.Call)))
+        fixed (byte* bytes = held)
         {
-            Native.veyq_call(json, null, 0, (void*)GCHandle.ToIntPtr(handle), &Answered);
+            Native.veyq_call(json, inbound is null ? null : bytes, (nuint)(inbound?.Length ?? 0), (void*)GCHandle.ToIntPtr(handle), &Answered);
         }
         return answer.Task;
     }
