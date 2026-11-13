@@ -3,7 +3,7 @@
 // language — the space's name, the link with its code, its expiry and that it works once — and editable, with three
 // actions over what the field holds NOW: copy it, give it to the system share sheet (only where the browser has one), or
 // open it in the owner's own mail program (`mailto:`). Shown once: the link is held nowhere, the server has only its token.
-// Drawn by the invite dialog after a mint and by the members panel after a link's re-issue (decision 6).
+// Drawn by the invite dialog after a mint and by the members panel after a link's re-issue (ADR 0129 decision 2).
 import { computed, onBeforeUnmount, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import VeyqButton from '../../shared/ui/VeyqButton.vue'

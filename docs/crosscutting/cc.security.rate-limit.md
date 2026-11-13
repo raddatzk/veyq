@@ -81,7 +81,9 @@ class-level; `SetupResource.createServerOwner` and `TenantsResource.previewTenan
 **All of them share one bucket per IP**, deliberately: it bounds an attacker's total public-surface spend
 instead of handing them a fresh budget per route. That shared bucket is also why the tenant-invite mint does
 **not** use this key — an authenticated owner sits behind one address and would be counted against the same
-bucket as anonymous login traffic, so its bound is per-(tenant,recipient) instead.
+bucket as anonymous login traffic, so its bound is per-(tenant,recipient) instead, and a member invite as a link, which
+has no recipient, spends the per-tenant bucket alone (`InviteMailRateLimiterTest.aLinkInviteSpendsTheTenantBudgetAndNoRecipients`,
+`MemberInviteLinkSliceTest.linkMintsSpendTheTenantsBudgetOnly`).
 
 > The runtime tests below hit the class-level endpoints, proving mechanism **and** wiring in one. The three
 > method-level account-creation endpoints are pinned instead by a **static** check that they carry `key = IP`

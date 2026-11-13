@@ -7,12 +7,15 @@ title: Confirm the address a password reset is sent to
 acceptanceCriteria:
   - id: member-invite-redemption-confirms
     # Each test's control is the neighbouring OWNER redemption (the bootstrap copy-link), which must stay unconfirmed.
-    text: Redeeming a MEMBER invite confirms the account's address, on both the register and the sign-in branch, because a member invite only ever arrives by mail. Redeeming the Server Owner's bootstrap OWNER invite, and first-run setup, confirm nothing.
+    text: Redeeming a mailed MEMBER invite confirms the account's address, on both the register and the sign-in branch, because its token arrived at that address. Redeeming a member invite link confirms nothing (ADR 0129 decision 4) — a new account starts with the address its holder typed unconfirmed and its client asks for the confirmation mail once, an existing account keeps what it had — and nor do redeeming the Server Owner's bootstrap OWNER invite and first-run setup.
     coverage:
       backend:
         integration:
           - EmailConfirmationSliceTest.memberInviteRedemptionConfirms
           - EmailConfirmationSliceTest.existingAccountMemberAcceptConfirms
+          - MemberInviteLinkSliceTest.aLinkRegistrationTakesTheTypedAddressUnconfirmedAndAMailedOneStillConfirms
+          - MemberInviteLinkSliceTest.anyAccountAcceptsALinkAndItsAddressConfirmationIsLeftAsItWas
+      web: { unit: [src/views/TenantJoinView.link.test.ts] }
   - id: completed-reset-confirms
     text: Completing a password reset (the mailed token plus the Secret-Key proof) confirms the account's address. A release that is never completed confirms nothing.
     coverage:
@@ -75,3 +78,18 @@ acceptanceCriteria:
           - src/features/account/email/EmailAddressSection.test.ts
           - src/features/tenant/TenantMailSettingsPanel.test.ts
         e2e: [src/features/account/email/emailConfirmation.e2e.test.ts]
+  - id: unconfirmed-account-banner
+    # ADR 0129 decision 5, replacing ADR 0074 decision 3's "settings and the mail settings, nowhere else".
+    text: While the account's address is unconfirmed, every page of the signed-in app carries a banner above the route that names the address and sends the confirmation mail ("sent" after it), says where the space cannot send that an owner must set up mail, and has no close; it reads the address the server holds, again when the tab comes back into view or another account signs in, and goes once the address is confirmed. A share page, the sign-in page and the join page draw none and ask for no address.
+    coverage:
+      backend: { integration: [EmailConfirmationSliceTest.theReadShowsTheServersAddress] }
+      web:
+        unit:
+          - src/features/account/email/UnconfirmedEmailBanner.test.ts
+          - src/components/app/AppShell.unconfirmedEmail.test.ts
+gaps:
+  stack: >-
+    Lane L1's browser suite (`tests/e2e/tests/features/account/member-invite-link.spec.ts`) drives
+    `unconfirmed-account-banner`: the newcomer a link registered carries the banner until the mailed link confirms the
+    address. Green only in local runs of the lane (the V1 heavy stage), and ADR 0040 admits `stack` refs only once a CI
+    run's log shows the suite executed.

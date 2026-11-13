@@ -1,10 +1,10 @@
 # UC: Confirm the address a password reset is sent to
 
 - **ID:** uc.account.confirm-email-address
-- **Primary actor:** A signed-in account holder, typically a **tenant's first owner**. Theirs is the one account
-  class whose address nothing has proven, because they were admitted by the Server Owner's copy-link
-  ([ADR 0055](../../../decisions/0055-mail-is-a-precondition-not-a-capability.md) §3). Any account holder may
-  confirm, and may confirm again.
+- **Primary actor:** A signed-in account holder whose address nothing has proven: a **tenant's first owner**,
+  admitted by the Server Owner's copy-link ([ADR 0055](../../../decisions/0055-mail-is-a-precondition-not-a-capability.md)
+  §3), or an account a **member invite link** created, with the address its holder typed
+  ([ADR 0129](../../../decisions/0129-a-member-invite-is-mailed-or-handed-over-as-a-link.md) decision 4). Any account holder may confirm, and may confirm again.
 - **Goal:** Show, while it can still be acted on, that the mailbox a reset would reach is one they read. A wrong
   or unread address then surfaces now, not on the day a forgotten password needs it
   ([ADR 0074](../../../decisions/0074-address-control-is-recorded-where-nothing-else-proves-it.md)).
@@ -18,10 +18,12 @@
 
 ## Main flow
 
-1. The actor opens their account's security settings. The tenant owner can also start from the mail settings
-   after a successful save ([uc.admin.tenant-mail-settings](../../admin/use-cases/uc.admin.tenant-mail-settings.md)).
+1. The actor starts from the banner every page of the signed-in app carries while the address is unconfirmed
+   (**Send confirmation mail**), or from their account's security settings. The tenant owner can also start from the
+   mail settings after a successful save ([uc.admin.tenant-mail-settings](../../admin/use-cases/uc.admin.tenant-mail-settings.md)).
    The screen shows the address **as the server holds it**, which is the address a reset will mail, and whether
-   it is confirmed.
+   it is confirmed. A new account a link invite created asks once on its own, right after the join
+   ([uc.spaces.add-member](../../spaces/use-cases/uc.spaces.add-member.md) A5).
 2. The actor asks for a confirmation mail.
 3. The server takes these steps in order:
    - It checks that the `Host`'s tenant can send.
@@ -45,7 +47,8 @@
 
 Two other events set the same record without this flow:
 
-- **Redeeming a member invite**, which only ever arrives by mail.
+- **Redeeming a mailed member invite**, whose token arrived at that address. A link invite's redemption sets
+  nothing: a new account starts unconfirmed, an existing one keeps what it had.
 - **Completing a password reset** ([uc.account.recover-access](uc.account.recover-access.md)).
 
 ## Alternate / exception flows
@@ -55,7 +58,7 @@ Two other events set the same record without this flow:
   - No link is offered to copy, because a link shown on the actor's own screen proves nothing about their
     mailbox.
   - The screen says that this space cannot send mail, so password reset is unavailable here too, and that the
-    space owner has to set mail up.
+    space owner has to set mail up; the banner says the same and stays.
   - A send that fails after the mint answers the same way, and the fresh token is superseded, so no live token is
     left without a mail behind it.
 - **A2 — The actor is not a member of the `Host`'s tenant.** Step 3 is refused with the tenant's not-found
@@ -80,6 +83,10 @@ Two other events set the same record without this flow:
 
 - **A fact, not a gate.** No request is refused because an account is unconfirmed. Recovery proves address
   control at use time, and gating it here would strand the very accounts this flow is for.
+- **Loud, not dismissable** ([ADR 0129](../../../decisions/0129-a-member-invite-is-mailed-or-handed-over-as-a-link.md) decision 5). The banner names the address, sends the confirmation mail
+  and has no close; it reads the same state the security settings do, again whenever the tab comes back into view,
+  so a confirmation opened in another tab clears it. A share page, the join page and the sign-in page
+  draw none.
 - **Bound to the address.** The token row records the address it was mailed to, and the confirmation stamps only
   that address. An address change ([uc.account.change-email](uc.account.change-email.md)) stamps the new address
   in the same write, because its link proved it.
@@ -97,15 +104,16 @@ You find out now, not on the day you need it, that a password-reset link would a
 - **Use-cases:** [uc.account.recover-access](uc.account.recover-access.md) (the flow this keeps reachable, and
   one of the four events that set the record),
   [uc.spaces.add-member](../../spaces/use-cases/uc.spaces.add-member.md) (the mailed member invite, another of
-  the four), [uc.admin.create-tenant](../../admin/use-cases/uc.admin.create-tenant.md) (the copy-link
+  the four, and the link invite that sets nothing), [uc.admin.create-tenant](../../admin/use-cases/uc.admin.create-tenant.md) (the copy-link
   bootstrap that leaves the first owner unconfirmed),
   [uc.admin.tenant-mail-settings](../../admin/use-cases/uc.admin.tenant-mail-settings.md) (where the owner is
   prompted).
 - **Cross-cutting:** [security-model](../../../crosscutting/security-model.md) (the address, the stamp and the
   send-fact as server-visible metadata).
-- **End-user view (docs site):** [Your email address](../../../../site/src/content/docs/account/change-email.mdx)
+- **End-user view (docs site):** [Your email address](../../../../site/src/content/docs/account/change-email.mdx),
+  [Accept an invitation](../../../../site/src/content/docs/getting-started/accept-an-invitation.mdx)
 - **Decisions:** [ADR 0074](../../../decisions/0074-address-control-is-recorded-where-nothing-else-proves-it.md)
-  (what the record means, what sets it, what it gates),
+  (what the record means, what sets it, what it gates), [ADR 0129](../../../decisions/0129-a-member-invite-is-mailed-or-handed-over-as-a-link.md) (the link invite and the banner),
   [ADR 0054](../../../decisions/0054-password-recovery-two-factor-release.md) (the token lifecycle and relay rule
   it copies), [ADR 0055](../../../decisions/0055-mail-is-a-precondition-not-a-capability.md) (no mail, no link),
   [ADR 0049](../../../decisions/0049-email-delivery-boundary.md) (what the mail may carry).

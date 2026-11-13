@@ -1,7 +1,7 @@
 # ADR 0129 — A member invite is mailed, or handed over by its owner as a link that opens by itself
 
 - Status: Accepted
-- Built: no
+- Built: yes
 - Date: 2026-11-12
 - Model: [scopes-and-tenancy](../crosscutting/scopes-and-tenancy.md)
 
@@ -100,3 +100,4 @@ purge, so this holds for the retention window after expiry; after it the token i
   [ADR 0074](0074-address-control-is-recorded-where-nothing-else-proves-it.md) decisions 2 and 3,
   [ADR 0111](0111-an-invitee-grants-itself-a-rotator-re-keys-its-own-scopes-and-a-key-chain-anchors-trust.md) decision 1
 - [cc.mail](../crosscutting/cc.mail.md), [security-model](../crosscutting/security-model.md)
+- Security area of the docs site: [Threat model](../../site/src/content/docs/security/threat-model.md)

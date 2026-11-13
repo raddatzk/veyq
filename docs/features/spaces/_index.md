@@ -46,9 +46,11 @@ the **ciphertext grant** (the scope key sealed to a member's identity); it never
 - ★ [List & switch spaces](use-cases/uc.spaces.switch-spaces.md) — **built (web)** (tenant switcher +
   per-space `#fragment` switching; enter-tenant + Personal↔Tenant)
 - ★ [Add a member to the shared tenant space](use-cases/uc.spaces.add-member.md) — **built (web)** (the invite is
-  a placeholder member — an owner-signed invite key holding a grant of `K_SC`, its link mailed and sealed under a
-  code the owner passes on; the invitee checks it, grants itself and writes a join record;
-  [ADR 0111](../../decisions/0111-an-invitee-grants-itself-a-rotator-re-keys-its-own-scopes-and-a-key-chain-anchors-trust.md) decisions 1–3, a mail-only invite,
+  a placeholder member — an owner-signed invite key holding a grant of `K_SC`, its link sealed under a code and either
+  mailed, the owner passing the code on, or handed over by the owner with the code inside; the invitee checks it,
+  grants itself and writes a join record;
+  [ADR 0111](../../decisions/0111-an-invitee-grants-itself-a-rotator-re-keys-its-own-scopes-and-a-key-chain-anchors-trust.md) decisions 1–3,
+  [ADR 0129](../../decisions/0129-a-member-invite-is-mailed-or-handed-over-as-a-link.md), mail a precondition of both,
   [ADR 0055](../../decisions/0055-mail-is-a-precondition-not-a-capability.md))
 - [Edit your profile in a space](use-cases/uc.spaces.edit-profile.md) — **built (web)** (change your per-tenant
   username and your real name, sealed under a field key derived from its own value key, whose wrap `K_tenant` holds on the device; empty both name fields to remove the name;
