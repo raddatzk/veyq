@@ -245,7 +245,9 @@ worker-src 'self' blob:; frame-src https://sdk.scdn.co; frame-ancestors <the boo
 On the app's own responses, while the frame is served: `frame-src <music-origin>` (above), `encrypted-media` and
 `autoplay` for that origin in the Permissions-Policy, and **`Cross-Origin-Opener-Policy: same-origin-allow-popups`** —
 MusicKit's sign-in popup, which the frame opens, answers its opener (measured: under `same-origin` a frame's
-`window.open` returns null and the popup has no opener). A page that opens veyq still gets no handle on it.
+`window.open` returns null and the popup has no opener). A page that opens veyq still gets no handle on it. The frame is
+mounted by the shell's footer bar on any page of the app and the share page (ADR 0131 decision 5), not by one page; that
+moves no value, since these headers ride every app response while the frame is served.
 
 ## The other response headers
 
