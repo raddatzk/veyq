@@ -169,7 +169,7 @@ fun ManageScreen(servers: List<ManagedServer>, model: AppModel) {
 }
 
 /** "Manage servers"' line for how this device trusts a server, by its method and, staying signed in, its level. */
-private fun trustedLine(method: me.raddatz.veyq.mobile.session.TrustedDevice.Method, level: me.raddatz.veyq.mobile.session.StaySignedIn?): Int = when {
+internal fun trustedLine(method: me.raddatz.veyq.mobile.session.TrustedDevice.Method, level: me.raddatz.veyq.mobile.session.StaySignedIn?): Int = when {
     method != me.raddatz.veyq.mobile.session.TrustedDevice.Method.DEVICE_KEY -> R.string.manage_trusted_password
     level == me.raddatz.veyq.mobile.session.StaySignedIn.LOGIN -> R.string.manage_trusted_remembered
     else -> R.string.manage_trusted_presence
