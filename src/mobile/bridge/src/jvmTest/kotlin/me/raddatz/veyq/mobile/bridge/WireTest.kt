@@ -82,6 +82,9 @@ class WireTest {
         canCreateHere = true, topLevelShare = false, headed = me.raddatz.veyq.mobile.navigation.NodeAt("scope-1", "folder-1", "FOLDER", "Holidays"),
         me = "user-1", pictures = listOf("user-1", "user-2"),
     )
+    private val memory = me.raddatz.veyq.mobile.navigation.NodeAt("scope-1", "m-1", "MEMORY", "Ostsee 2026")
+    private val photo = GalleryRow("m1", "IMG_0001.jpg", "image/jpeg", video = false, blocked = false, tile = "blob-t1", picture = "blob-p1",
+        capturedAt = 1_790_000_000_000, width = 4000, height = 3000, said = null, canDelete = true)
     private val record = TrustedDevice("http://veyq.localhost:8080", "p@example.org", "user-1", TrustedDevice.Method.DEVICE, "wrap-1", "veyq.device.ab")
 
     /** Each root's values: every variant of a sealed root once. */
@@ -158,9 +161,19 @@ class WireTest {
             Call.SettingsSignOut(50, "fam-2"), Call.SettingsSignOutOthers(50), Call.SettingsSignOutAndRemoveKey(50, "fam-2"),
             Call.SettingsRemoveSavedKey(50, "dev-3"), Call.SettingsRemoveOtherSavedKeys(50), Call.SettingsStaySignedIn(50, StaySignedIn.LOGIN),
             Call.SettingsPasswordTrust(50, "typed"), Call.SettingsStopTrusting(50), Call.SettingsSignOutHere(50),
+            // Memories
+            Call.ShellCreateMemory("scope-1", null, "Ostsee 2026"), Call.ShellCreateMemory("scope-1", "folder-1", "Tag eins"),
+            Call.GalleryOpen(memory), Call.GalleryClose(60), Call.GalleryReload(60), Call.GalleryTile(60, "m1"), Call.GalleryChapterCover(60, "c1"),
+            Call.GalleryTrash(60, "m1"), Call.GalleryUndo(60), Call.GalleryPurge(60), Call.GalleryCancelAsk(60), Call.GallerySeen(60),
+            Call.GalleryCreateChapter(60, "Tag zwei"), Call.MemoryUpload(60, listOf("/home/p/Bilder/Strand 中文.jpg", "C:\\Users\\p\\clip.webm")),
+            Call.MemoryUpload(60, emptyList()), Call.LightboxOpen(60, 2), Call.LightboxClose(61), Call.LightboxGo(61, 3), Call.LightboxPicture(61, "m1"),
+            Call.LightboxSlideshow(61, true), Call.LightboxDetails(61, "m1"), Call.LightboxTrash(61), Call.LightboxStop(61), Call.MediumReader(61),
+            Call.MediumSave(61, "/home/p/Downloads/IMG_0001.jpg"), Call.HeaderFacts(7, me.raddatz.veyq.mobile.AppKinds.Facts(), null, 60),
         ),
-        Watched.serializer() to listOf(Watched.Session, Watched.Shell, Watched.Pot(3), Watched.PotLive(3), Watched.Manage, Watched.Header(7), Watched.Trash(8), Watched.Move(9), Watched.Share(10), Watched.Report(11), Watched.Editor(12), Watched.PotSettings(15), Watched.PotCreate(16), Watched.File(20), Watched.Save(21), Watched.Uploads, Watched.DropBox(30), Watched.Scan(40), Watched.Settings(50)),
-        HostReply.serializer() to listOf(HostReply.Value("s\tn\t1"), HostReply.Value(null), HostReply.Done, HostReply.Failed("disk full"), HostReply.Pixels(2400, 3394)),
+        Watched.serializer() to listOf(Watched.Session, Watched.Shell, Watched.Pot(3), Watched.PotLive(3), Watched.Manage, Watched.Header(7), Watched.Trash(8), Watched.Move(9), Watched.Share(10), Watched.Report(11), Watched.Editor(12), Watched.PotSettings(15), Watched.PotCreate(16), Watched.File(20), Watched.Save(21), Watched.Uploads, Watched.DropBox(30), Watched.Scan(40), Watched.Settings(50),
+            Watched.Gallery(60), Watched.GalleryLive(60), Watched.Lightbox(61)),
+        HostReply.serializer() to listOf(HostReply.Value("s\tn\t1"), HostReply.Value(null), HostReply.Done, HostReply.Failed("disk full"), HostReply.Pixels(2400, 3394),
+            HostReply.Tiers(2048, 1536, 412_000), HostReply.Tiers(null, null, 0)),
         Answer.serializer() to listOf(
             Answer.Done, Answer.Refused(Answer.Why.NO_TENANT_OPEN), Answer.Refused(Answer.Why.TRUST_CANCELLED), Answer.Failed("IllegalStateException"),
             Answer.Groups(listOf(Home.Group(true, lists.nodes.take(1), Msg.HOME_GROUP_FOLDERS), Home.Group(false, lists.nodes.drop(1), null))),
@@ -183,6 +196,16 @@ class WireTest {
             Answer.PotSettingsOpened(15), Answer.PotCreateOpened(16), Answer.Stored(true, null), Answer.Stored(false, Notice(Msg.SETTINGS_CURRENCY_FIXED)),
             Answer.Stored(true, Notice(Msg.CREATE_POT_PEOPLE_FAILED)), Answer.Refused(Answer.Why.NO_SUCH_SETTINGS), Answer.Refused(Answer.Why.NO_SUCH_CREATE),
             Answer.SettingsOpened(50), Answer.Refused(Answer.Why.NO_SUCH_ACCOUNT_PAGE), Answer.ScanOpened(40), Answer.FrameTaken(true), Answer.FrameTaken(false), Answer.Refused(Answer.Why.NOT_A_FRAME), Answer.Refused(Answer.Why.NO_SUCH_SCAN), Answer.Refused(Answer.Why.NO_KIT),
+            Answer.GalleryOpened(60), Answer.LightboxOpened(61), Answer.Created(memory, null), Answer.Created(null, Notice(Msg.MEMORY_SLUG_TAKEN)),
+            Answer.Queued(2, Notice(Msg.MEMORY_NOT_MEDIA, listOf(1))), Answer.Refused(Answer.Why.NOT_OFFERED), Answer.Refused(Answer.Why.NO_SUCH_GALLERY),
+            Answer.MediumDetails(
+                listOf(
+                    DetailRow(Msg.MEMORY_FIELD_CAPTURED, null, null, 1_790_000_000_000, null), DetailRow(Msg.MEMORY_FIELD_FILE_SIZE, null, 34_029, null, null),
+                    DetailRow(Msg.MEMORY_FIELD_FLASH, Notice(Msg.MEMORY_FLASH_FIRED), null, null, null), DetailRow(Msg.MEMORY_FIELD_CAMERA, null, null, null, "Canon EOS R6"),
+                ),
+                Piece.Said(Notice(Msg.MEMORY_UPLOADER_GUEST)), 1,
+            ),
+            Answer.MediumDetails(emptyList(), null, 0),
         ),
         Update.serializer() to listOf(
             Update.Session(Gate.Starting), Update.Session(Gate.NeedsApp), Update.Session(Gate.SignIn(error = Msg.SIGNIN_ERROR_CREDENTIALS, server = "veyq.localhost:8080")),
@@ -361,9 +384,29 @@ class WireTest {
                 )),
                 ManagedShown("other.example#user-9", "other.example", null, null, emptyList(), emptyList()),
             )),
+            Update.Gallery(60, GalleryShown(
+                node = memory, rows = listOf(photo, GalleryRow("m2", null, "video/webm", video = true, blocked = true, tile = null, picture = null,
+                    capturedAt = null, width = null, height = null, said = Msg.MEMORY_BLOCKED, canDelete = false)),
+                failed = true, count = Notice(Msg.MEMORY_ITEMS, listOf(2)),
+                chapters = listOf(me.raddatz.veyq.mobile.navigation.NodeAt("scope-1", "c1", "CHAPTER", "Tag eins")), canUpload = true, canSave = true,
+                creates = listOf(ShellShown.ShownCreate(me.raddatz.veyq.mobile.AppKinds.Create.CHAPTER, Msg.MEMORY_ADD_CHAPTER)),
+                undo = Notice(Msg.MEMORY_MOVED_TO_TRASH), purging = "m1", purgeQuestion = Notice(Msg.MEMORY_DELETE_OWN_CONFIRM),
+                said = Notice(Msg.MEMORY_RESTORE_REFUSED, listOf("IMG_0001.jpg", Notice(Msg.MEMORY_REFUSED_GONE))),
+            )),
+            Update.Gallery(60, GalleryShown(memory, null, false, Notice(Msg.MEMORY_ITEMS, listOf(0)), emptyList(), false, false, emptyList(), null, null, null, null)),
+            Update.Gallery(62, null),
+            Update.Lightbox(61, LightboxShown(2, 5, Notice(Msg.MEMORY_ITEM_POSITION, listOf(3, 5)), photo, playing = true, slideshow = SlideshowState.PLAYING,
+                downloadName = "IMG_0001.jpg", canTrash = true)),
+            Update.Lightbox(61, LightboxShown(-1, 0, null, null, playing = false, slideshow = null, downloadName = null, canTrash = false)),
+            Update.Lightbox(61, LightboxShown(0, 1, null, photo, false, SlideshowState.PAUSED, null, false)),
+            Update.Lightbox(61, LightboxShown(0, 1, null, photo, false, SlideshowState.ENDED, null, false)),
+            Update.Lightbox(63, null),
         ),
         HostRequest.serializer() to listOf(HostRequest.StoreRead("veyq.recent"), HostRequest.StoreWrite("veyq.recent", "s\tn\t1"), HostRequest.StoreRemove("veyq.recent"),
-            HostRequest.PdfPages("/home/p/Notfall-Kit.pdf"), HostRequest.PdfPage("/home/p/Notfall-Kit.pdf", 2, 2400), HostRequest.PictureLuma("/home/p/kit.jpg", 2400)),
+            HostRequest.PdfPages("/home/p/Notfall-Kit.pdf"), HostRequest.PdfPage("/home/p/Notfall-Kit.pdf", 2, 2400), HostRequest.PictureLuma("/home/p/kit.jpg", 2400),
+            HostRequest.MediaDuration("/home/p/Videos/clip.webm"),
+            HostRequest.MediaTiers("C:\\Users\\p\\Bilder\\IMG_0001.HEIC", "image/heic", 2048, 0.85, 512, 0.8, 0),
+            HostRequest.MediaTiers("/home/p/Videos/clip.webm", "video/webm", 2048, 0.85, 512, 0.8, 100)),
     )
 
     /**

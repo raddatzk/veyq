@@ -117,7 +117,7 @@ fun veyqInit(config: CPointer<ByteVar>?, host: VeyqHost?, hostCtx: COpaquePointe
     val h = Host { token, json ->
         memScoped { host.invoke(hostCtx, token.toULong(), json.cstr.ptr, null, 0u) }
     }
-    val bridge = Bridge.live(LibsodiumPrimitives, { block -> platformHttpClient(block) }, c, HostStore(h), { platformDeviceKeys(c, it) }, Files, { HostPictures(h, it) })
+    val bridge = Bridge.live(LibsodiumPrimitives, { block -> platformHttpClient(block) }, c, HostStore(h), { platformDeviceKeys(c, it) }, Files, { HostPictures(h, it) }, HostTiers(h))
     if (!running.compareAndSet(null, Running(bridge, h))) {
         bridge.shutdown()
         return ALREADY_STARTED

@@ -604,7 +604,8 @@ internal sealed class ShellView
         {
             // what the core offers here (AppKinds.createsWhere): a folder and a Pot, on Home files and a folder uploaded too
             _commands.PrimaryCommands.Add(CreateAction.Menu(Words.DrawerNew(), "new",
-                shown.creates.Select(c => (Said.Key(c.word), $"new:{c.create}", c.create switch
+                // New Memory is drawn with Memories' screens (the CR's phase 5); a chapter is a Memory's page's own
+                shown.creates.Where(c => c.create is not (Create.Memory or Create.Chapter)).Select(c => (Said.Key(c.word), $"new:{c.create}", c.create switch
                 {
                     Create.Folder => (Action?)NewFolder,
                     Create.Pot => () => PotCreateDialog.Open(_window, Say),

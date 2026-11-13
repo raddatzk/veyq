@@ -144,7 +144,7 @@ impl Header {
             };
             inner.id.set(Some(header));
             if let Some((facts, file)) = inner.later.borrow_mut().take() {
-                bridge::send(Call::HeaderFacts { header, facts, file });
+                bridge::send(Call::HeaderFacts { header, facts, file, gallery: None });
             }
             let Some((watch, updates)) = bridge::watch(&Watched::Header { header }) else { return };
             *inner.watch.borrow_mut() = Some(watch);
@@ -158,7 +158,7 @@ impl Header {
     /// actions (Replace) join the plan.
     pub fn facts(&self, facts: Option<Facts>, file: Option<i64>) {
         match self.inner.id.get() {
-            Some(header) => bridge::send(Call::HeaderFacts { header, facts, file }),
+            Some(header) => bridge::send(Call::HeaderFacts { header, facts, file, gallery: None }),
             None => *self.inner.later.borrow_mut() = Some((facts, file)),
         }
     }

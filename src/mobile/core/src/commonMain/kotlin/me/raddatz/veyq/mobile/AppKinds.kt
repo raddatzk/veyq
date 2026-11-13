@@ -166,6 +166,10 @@ object AppKinds {
         POT(me.raddatz.veyq.mobile.words.Msg.CREATE_POT),
         UPLOAD_FILES(me.raddatz.veyq.mobile.words.Msg.DEPOT_UPLOAD),
         UPLOAD_FOLDER(me.raddatz.veyq.mobile.words.Msg.DEPOT_UPLOAD_FOLDER),
+        /** A Memory made where the level is (`MemoryCreate`; a space's top or a folder, its placement's). */
+        MEMORY(me.raddatz.veyq.mobile.words.Msg.MEMORY_NEW),
+        /** A chapter made in a Memory: the Memory's page's own New (`GalleryModel.creates`), never a level's. */
+        CHAPTER(me.raddatz.veyq.mobile.words.Msg.MEMORY_ADD_CHAPTER),
     }
 
     /** Home's "New": a folder, a Pot, files or a folder uploaded here. */
@@ -176,9 +180,10 @@ object AppKinds {
 
     /**
      * What a desktop's one "New" offers where the shell is ([isHome]: a level of Home, a space's top or a folder): Home's
-     * — files and a folder uploaded there too, as on the phones —, else the drawer's.
+     * — files and a folder uploaded there too, as on the phones —, else the drawer's; and a Memory, whose placement every
+     * level New makes into allows (a space's top, a folder: `MemoryCreate.offered`). A chapter is a Memory's page's own.
      */
-    fun createsWhere(isHome: Boolean): List<Create> = if (isHome) homeCreates else drawerCreates
+    fun createsWhere(isHome: Boolean): List<Create> = (if (isHome) homeCreates else drawerCreates) + Create.MEMORY
 
     /**
      * What core's header reads of a kind (the web's `KindRegistration`): whether it brings a share sheet, takes a cover and

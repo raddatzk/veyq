@@ -366,9 +366,10 @@ internal sealed class Call {
 
     /**
      * What the kind's page knows now (`NodeHeaderModel.update`) and, for a file's page, its id ([file]): the page's own
-     * actions (`FileModel.Header.own`: Replace) join the plan, worded by the page.
+     * actions (`FileModel.Header.own`: Replace) join the plan, worded by the page; for a Memory's or a chapter's page, its
+     * gallery's id ([gallery]): its own (`GalleryModel.headerActions`: adding photos and videos) join it the same way.
      */
-    @Serializable @SerialName("Header.Facts") data class HeaderFacts(val header: Long, val facts: AppKinds.Facts?, val file: Long? = null) : Call()
+    @Serializable @SerialName("Header.Facts") data class HeaderFacts(val header: Long, val facts: AppKinds.Facts?, val file: Long? = null, val gallery: Long? = null) : Call()
     @Serializable @SerialName("Header.Close") data class HeaderClose(val header: Long) : Call()
 
     /** Pins or unpins (`toggleFavorite`): [Answer.Said] with the failure's notice, or none. */
@@ -682,6 +683,112 @@ internal sealed class Call {
 
     /** Ends scan [scan] (`QrScan.close`): a decode in flight finds nothing after it. */
     @Serializable @SerialName("Scan.Close") data class ScanClose(val scan: Long) : Call()
+
+    /**
+     * A Memory [name] made where New makes it (`ShellModel.createMemory`: in [scopeId] under [parentId], null the space's
+     * top; `MemoryCreate` checks the name against the loaded tree before anything is sent): [Answer.Created] — the node made,
+     * which the host opens ([ShellOpen]), or why not, as the web's `MemoryNodeDialog` says it.
+     */
+    @Serializable @SerialName("Shell.CreateMemory") data class ShellCreateMemory(val scopeId: String, val parentId: String?, val name: String) : Call()
+
+    /**
+     * Memory or chapter [node]'s page (`ShellModel.galleryModel`, core's `GalleryModel`, opened as a member over the tenant's
+     * Memories uploads), answered with its id ([Answer.GalleryOpened]) for [Watched.Gallery] and the calls below; refused
+     * `NOT_OFFERED` for another kind. It reads anew on each revision of the shell's lists, when a medium this device sent
+     * into it is in, and, while [Watched.GalleryLive] stands, when its media moved. It stays until [GalleryClose] or the
+     * tenant closes (its lightbox and that lightbox's reader with it).
+     */
+    @Serializable @SerialName("Gallery.Open") data class GalleryOpen(val node: NodeAt) : Call()
+    @Serializable @SerialName("Gallery.Close") data class GalleryClose(val gallery: Long) : Call()
+
+    /** The gallery read anew now (a desktop's Refresh, F5 / Ctrl+R). */
+    @Serializable @SerialName("Gallery.Reload") data class GalleryReload(val gallery: Long) : Call()
+
+    /**
+     * Medium [mediaId]'s tile: the grid's tier, whole ([Answer.Bytes], beside the JSON; ADR 0131 decision 1) for the host to
+     * decode and cache by the row's [GalleryRow.tile]; refused `NO_BYTES` where the row draws its icon or it did not read.
+     */
+    @Serializable @SerialName("Gallery.Tile") data class GalleryTile(val gallery: Long, val mediaId: String) : Call()
+
+    /** Chapter [nodeId]'s cover picture as stored ([Answer.Bytes]), for its row; refused `NO_COVER` where it has none. */
+    @Serializable @SerialName("Gallery.ChapterCover") data class GalleryChapterCover(val gallery: Long, val nodeId: String) : Call()
+
+    /**
+     * Medium [mediaId] deleted the way the rights say (`GalleryModel.trash`): a member's to the trash, out of the rows at
+     * once — [Answer.Trashed] with what it says and whether its Undo is offered now ([GalleryShown.undo] says when the offer
+     * ended: the window is the core's) —; a guest's own one asked first ([GalleryShown.purging]; [Answer.Said] with none).
+     */
+    @Serializable @SerialName("Gallery.Trash") data class GalleryTrash(val gallery: Long, val mediaId: String) : Call()
+
+    /** The last trash's Undo while offered (`GalleryModel.undo`): [Answer.Said] with why it was not restored, or none. */
+    @Serializable @SerialName("Gallery.Undo") data class GalleryUndo(val gallery: Long) : Call()
+
+    /** The purge asked, answered (`purge`): [Answer.Said] with why it did not go, or none. [GalleryCancelAsk] declines it. */
+    @Serializable @SerialName("Gallery.Purge") data class GalleryPurge(val gallery: Long) : Call()
+    @Serializable @SerialName("Gallery.CancelAsk") data class GalleryCancelAsk(val gallery: Long) : Call()
+
+    /** What [GalleryShown.said] said was seen (`seen`): it goes. */
+    @Serializable @SerialName("Gallery.Seen") data class GallerySeen(val gallery: Long) : Call()
+
+    /**
+     * A chapter [name] made in the gallery's Memory (`GalleryModel.createChapter`, offered where [GalleryShown.creates] holds
+     * it): [Answer.Created], the chapter to open or why not.
+     */
+    @Serializable @SerialName("Gallery.CreateChapter") data class GalleryCreateChapter(val gallery: Long, val name: String) : Call()
+
+    /**
+     * The files at [paths] (each as the host's open dialog or a drop gave it) added to gallery [gallery]'s Memory or chapter
+     * (`GalleryModel.upload` onto the app's one queue, `MediaUploads`): the core opens each path and reads it at offsets a
+     * frame at a time (ADR 0131 decision 3), each one's tiers asked of the host on the queue's own thread
+     * ([HostRequest.MediaTiers]). One that is no photo or video, or no file that reads, is left out. Answered once queued
+     * ([Answer.Queued]: how many, and what is said of those left out); refused `NOT_OFFERED` where the rights add nothing.
+     */
+    @Serializable @SerialName("Memory.Upload") data class MemoryUpload(val gallery: Long, val paths: List<String>) : Call()
+
+    /**
+     * The lightbox over gallery [gallery] at row [index] (`GalleryModel.lightbox`, core's `Lightbox`: one per gallery, an
+     * open one closes), answered with its id ([Answer.LightboxOpened]) for [Watched.Lightbox] and the calls below. It
+     * follows the gallery's reads (its medium kept by id) and closes with [LightboxClose] or its gallery.
+     */
+    @Serializable @SerialName("Lightbox.Open") data class LightboxOpen(val gallery: Long, val index: Int) : Call()
+    @Serializable @SerialName("Lightbox.Close") data class LightboxClose(val lightbox: Long) : Call()
+
+    /** Paged to row [index] by the person (`go`): the slideshow pauses, a video playing on the page left is closed. */
+    @Serializable @SerialName("Lightbox.Go") data class LightboxGo(val lightbox: Long, val index: Int) : Call()
+
+    /** Medium [mediaId]'s picture in the lightbox: its preview, else its original, whole ([Answer.Bytes]); refused `NO_BYTES`. */
+    @Serializable @SerialName("Lightbox.Picture") data class LightboxPicture(val lightbox: Long, val mediaId: String) : Call()
+
+    /** The slideshow started ([on]) or paused (`slideshow`): its clock is the core's ([LightboxShown.slideshow]). */
+    @Serializable @SerialName("Lightbox.Slideshow") data class LightboxSlideshow(val lightbox: Long, val on: Boolean) : Call()
+
+    /**
+     * Medium [mediaId]'s details (`Lightbox.details`: the EXIF tier read once per medium, the uploaders once per gallery):
+     * [Answer.MediumDetails]; refused `NO_MEDIUM` where it is not in the gallery.
+     */
+    @Serializable @SerialName("Lightbox.Details") data class LightboxDetails(val lightbox: Long, val mediaId: String) : Call()
+
+    /** The current medium deleted as its gallery deletes it ([GalleryTrash]'s answers). */
+    @Serializable @SerialName("Lightbox.Trash") data class LightboxTrash(val lightbox: Long) : Call()
+
+    /** The player's view went (`stop`): the medium's reader closes. */
+    @Serializable @SerialName("Lightbox.Stop") data class LightboxStop(val lightbox: Long) : Call()
+
+    /**
+     * The current medium's original opened for the player (`Lightbox.play`; ADR 0131 decision 2): [Answer.Reader], read
+     * through [ReaderRead] from the player's own thread, never decrypted whole or to disk (ADR 0047); refused `NO_MEDIUM`
+     * for a picture, a blocked medium or where the rights download nothing. The core closes it when the lightbox pages away,
+     * the player stops ([LightboxStop]), the lightbox, its gallery or the tenant closes: a read after that is refused.
+     */
+    @Serializable @SerialName("Medium.Reader") data class MediumReader(val lightbox: Long) : Call()
+
+    /**
+     * The current medium's original saved into the file at [path], which the host's save dialog gave (`Lightbox.save` under
+     * [LightboxShown.downloadName]; ADR 0131 decision 3: the core opens and writes it): answered at once with the save's id
+     * ([Answer.Saving]) for [Watched.Save] and [SaveCancel], as a file's Save a copy. Refused `NOTHING_TO_DOWNLOAD` for a
+     * blocked medium or where the rights download nothing. A save outlives its lightbox; every save stops with the tenant.
+     */
+    @Serializable @SerialName("Medium.Save") data class MediumSave(val lightbox: Long, val path: String) : Call()
 }
 
 /**
@@ -734,8 +841,11 @@ internal sealed class Answer {
     /** A copy being saved ([Call.FileSave]): its id, for [Watched.Save] and [Call.SaveCancel]. */
     @Serializable @SerialName("Saving") data class Saving(val save: Long) : Answer()
 
-    /** An upload call's files queued ([Call.UploadFiles], [Call.UploadFolder], [Call.UploadReplace]): how many. */
-    @Serializable @SerialName("Queued") data class Queued(val count: Int) : Answer()
+    /**
+     * An upload call's files queued ([Call.UploadFiles], [Call.UploadFolder], [Call.UploadReplace], [Call.MemoryUpload]): how
+     * many, and what is said of those left out ([notice]: `MediaUploads.notTaken`; null where none was).
+     */
+    @Serializable @SerialName("Queued") data class Queued(val count: Int, val notice: Notice? = null) : Answer()
     @Serializable @SerialName("TrashOpened") data class TrashOpened(val trash: Long) : Answer()
 
     /** What an action says: its notice, or null where it says nothing (it went through). */
@@ -818,6 +928,21 @@ internal sealed class Answer {
     /** A frame sent ([Call.ScanFrame]): [taken] to be read, or dropped (a decode runs, or the scan reads none now). */
     @Serializable @SerialName("FrameTaken") data class FrameTaken(val taken: Boolean) : Answer()
 
+    /** A Memory's or a chapter's page opened ([Call.GalleryOpen]): its id, for [Watched.Gallery] and its calls. */
+    @Serializable @SerialName("GalleryOpened") data class GalleryOpened(val gallery: Long) : Answer()
+
+    /** A lightbox opened ([Call.LightboxOpen]): its id, for [Watched.Lightbox] and its calls. */
+    @Serializable @SerialName("LightboxOpened") data class LightboxOpened(val lightbox: Long) : Answer()
+
+    /** A Memory or a chapter made ([Call.ShellCreateMemory], [Call.GalleryCreateChapter]): the node to open, or why not. */
+    @Serializable @SerialName("Created") data class Created(val node: NodeAt?, val notice: Notice?) : Answer()
+
+    /**
+     * A medium's details ([Call.LightboxDetails]), in the web's order: each row with its label and how it shows; who added
+     * it ([uploader]; null: not known) and where that row stands among them ([uploaderAt], `MediaDetails.uploaderAt`).
+     */
+    @Serializable @SerialName("MediumDetails") data class MediumDetails(val rows: List<DetailRow>, val uploader: Piece?, val uploaderAt: Int) : Answer()
+
     enum class Why {
         NOT_A_CALL, NO_TENANT_OPEN, NO_SUCH_CONNECTION, NO_SUCH_TENANT, NO_SUCH_POT, NO_SUCH_READER, NO_PICTURE, NOTHING_TO_DOWNLOAD,
         NO_SUCH_HEADER, NO_SUCH_TRASH, NO_SUCH_ROW, NO_SUCH_MOVE, NO_SUCH_SHARE, NO_SUCH_REPORT, NO_COVER, NO_SUCH_ENTRY, NO_SUCH_EDITOR,
@@ -834,6 +959,9 @@ internal sealed class Answer {
 
         /** An account's Settings: none by that id (closed, or its tenant closed). */
         NO_SUCH_ACCOUNT_PAGE,
+
+        /** Memories: no page or lightbox by that id; what the page does not offer whoever looks (its rights, its kind). */
+        NO_SUCH_GALLERY, NO_SUCH_LIGHTBOX, NOT_OFFERED,
 
         /** A kit file ([Call.SessionSignInKit]) in which no kit was read, or one picked while no sign-in is shown. */
         NO_KIT,
@@ -904,6 +1032,19 @@ internal sealed class Watched {
 
     /** An account's Settings opened by [Call.SettingsOpen]. */
     @Serializable @SerialName("Settings") data class Settings(val settings: Long) : Watched()
+
+    /** A Memory's or a chapter's page opened by [Call.GalleryOpen]. */
+    @Serializable @SerialName("Gallery") data class Gallery(val gallery: Long) : Watched()
+
+    /**
+     * Gallery [gallery]'s live poll (`GalleryModel.live`, the web's `mediaRevisionPolling.ts`), for as long as this watch
+     * stands: a host watches it while the page shows and its window is active. It delivers no update of its own — a moved
+     * gallery arrives on [Gallery]'s — and ends with the watch or the page.
+     */
+    @Serializable @SerialName("GalleryLive") data class GalleryLive(val gallery: Long) : Watched()
+
+    /** A lightbox opened by [Call.LightboxOpen]. */
+    @Serializable @SerialName("Lightbox") data class Lightbox(val lightbox: Long) : Watched()
 }
 
 /** One state a watch delivers: the first at once, then each change. */
@@ -969,7 +1110,105 @@ internal sealed class Update {
 
     /** An account's Settings; null once it was closed (or an id the bridge does not hold). */
     @Serializable @SerialName("Settings") data class Settings(val settings: Long, val shown: SettingsShown?) : Update()
+
+    /** A Memory's or a chapter's page; null once it was closed (or its tenant was). */
+    @Serializable @SerialName("Gallery") data class Gallery(val gallery: Long, val shown: GalleryShown?) : Update()
+
+    /** A lightbox; null once it was closed (or its gallery was). */
+    @Serializable @SerialName("Lightbox") data class Lightbox(val lightbox: Long, val shown: LightboxShown?) : Update()
 }
+
+/**
+ * A Memory's or a chapter's page as the host draws it (core's `GalleryModel`, ADR 0130 decision 2; one view for a member and
+ * a link's guest, whose rights only remove functions), each field the model's own answer:
+ * - its [node], its [rows] in the grid's order (null while the first read runs), [failed] (the last read did not: the rows
+ *   before stay), how many it holds ([count], `memory_items`), and a Memory's [chapters] (each cover through
+ *   [Call.GalleryChapterCover]);
+ * - what it offers whoever looks: [canUpload] ([Call.MemoryUpload]; the header's own "upload" too), [canSave] (a medium's
+ *   original saved and played), each row's delete ([GalleryRow.canDelete]) and its New ([creates]: a chapter on a Memory);
+ * - a trash's Undo while the core offers it ([undo]: the host shows Undo until this is null again), the guest's own medium
+ *   whose purge is asked ([purging], with its question), and what the last delete or Undo left to say ([said], until
+ *   [Call.GallerySeen]).
+ * The tiles' bytes never ride here: a row names its tier's blob ([GalleryRow.tile]), asked with [Call.GalleryTile].
+ */
+@Serializable
+@SerialName("GalleryShown")
+internal class GalleryShown(
+    val node: NodeAt,
+    val rows: List<GalleryRow>?,
+    val failed: Boolean,
+    val count: Notice,
+    val chapters: List<NodeAt>,
+    val canUpload: Boolean,
+    val canSave: Boolean,
+    val creates: List<ShellShown.ShownCreate>,
+    val undo: Notice?,
+    val purging: String?,
+    val purgeQuestion: Notice?,
+    val said: Notice?,
+)
+
+/**
+ * One medium of a gallery (`GalleryModel.Row`): its id, its original's sealed name and type (claims), whether it is a video
+ * or blocked (its lightbox then says [said]), the blob its tile draws ([tile]; null: the icon) and its lightbox shows
+ * ([picture]; null: a video without a poster, or blocked) — what a host's decoded cache keys by —, its capture time (epoch
+ * ms, the host says it), its size as shown, and whether its delete is offered ([canDelete], `GalleryModel.deletes`).
+ */
+@Serializable
+@SerialName("GalleryRow")
+internal class GalleryRow(
+    val mediaId: String,
+    val name: String?,
+    val mediaType: String?,
+    val video: Boolean,
+    val blocked: Boolean,
+    val tile: String?,
+    val picture: String?,
+    val capturedAt: Long?,
+    val width: Int?,
+    val height: Int?,
+    @Serializable(with = MsgKey::class) val said: Msg?,
+    val canDelete: Boolean,
+)
+
+/**
+ * A lightbox as the host draws it (core's `Lightbox`): where it is ([index] of [count], [position] its words; -1 and none
+ * where the gallery holds none), the current medium ([row]; its picture through [Call.LightboxPicture], a video through
+ * [Call.MediumReader]), whether its reader is open ([playing]), the slideshow's state (null before it first started; the
+ * model runs its clock), what its original is saved as ([downloadName], what a save dialog proposes; null for none) and
+ * whether its delete is offered ([canTrash]). A video never plays by itself.
+ */
+@Serializable
+@SerialName("LightboxShown")
+internal class LightboxShown(
+    val index: Int,
+    val count: Int,
+    val position: Notice?,
+    val row: GalleryRow?,
+    val playing: Boolean,
+    val slideshow: SlideshowState?,
+    val downloadName: String?,
+    val canTrash: Boolean,
+)
+
+/** Where a lightbox's slideshow stands (`Lightbox.Slideshow`; its own name: the generated hosts take a type's last name part). */
+@Serializable
+internal enum class SlideshowState { PLAYING, PAUSED, ENDED }
+
+/**
+ * One row of a medium's details (`MediaDetails.Row`, shown by `MediaDetails.shown`): its [label], and its value — in words
+ * ([words]), a size the host writes its way ([size], bytes), a moment it says its way ([moment], epoch ms), or as read
+ * ([text]); exactly one of them.
+ */
+@Serializable
+@SerialName("DetailRow")
+internal class DetailRow(
+    @Serializable(with = MsgKey::class) val label: Msg,
+    val words: Notice?,
+    val size: Long?,
+    val moment: Long?,
+    val text: String?,
+)
 
 /**
  * An account's Settings page as the host draws it (core's `AccountSettings.State`, `cr-app-account-settings` D1), each
@@ -1552,7 +1791,7 @@ internal class ShellShown(
     val canGoBack: Boolean,
     val isHome: Boolean,
     val drawerOpensAtStart: Boolean,
-    /** What the sidebar's New offers (`AppKinds.drawerCreates`), each with its words. */
+    /** What the level's New offers (`AppKinds.createsWhere`), each with its words. */
     val creates: List<ShownCreate>,
     /** Whether New is offered where the shell is (`ShellModel.canCreateHere`: never in a guest's folder). */
     val canCreateHere: Boolean,
@@ -1623,6 +1862,26 @@ internal sealed class HostRequest {
 
     /** The file decoded as a picture, scaled so its longer side is [longSide] px, over white: [HostReply.Pixels]. */
     @Serializable @SerialName("Picture.Luma") data class PictureLuma(val path: String, val longSide: Int) : HostRequest()
+
+    /**
+     * A picked video's length (a Memories upload, [Call.MemoryUpload]; ADR 0130 decision 1: the platform decodes, the core
+     * decides): [HostReply.Value], its milliseconds as text; null or [HostReply.Failed] where the platform cannot tell. The
+     * core takes the poster's time from it (`MediaUpload.posterAtMs`) for [MediaTiers].
+     */
+    @Serializable @SerialName("Media.Duration") data class MediaDuration(val path: String) : HostRequest()
+
+    /**
+     * The tiers of the picked photo or video at [path] (the web's `mediaDeriver.ts`, the core's spec in the request): the
+     * `PREVIEW` JPEG — upright, its long edge at most [previewEdge] px, never enlarged, at [previewQuality] (0–1) — and the
+     * `THUMBNAIL` JPEG made from it ([thumbnailEdge], [thumbnailQuality]); a video's poster is its frame at [posterAtMs],
+     * as both. Asked on the upload queue's own thread, never the host's: answered [HostReply.Tiers] with the JPEGs as the
+     * reply's payload, or a [HostReply.Tiers] with no size where the platform does not decode it (the original then goes
+     * alone). [mediaType] is the core's type of the file (its bytes'): a path and numbers outward, never a byte of it.
+     */
+    @Serializable @SerialName("Media.Tiers") data class MediaTiers(
+        val path: String, val mediaType: String, val previewEdge: Int, val previewQuality: Double, val thumbnailEdge: Int,
+        val thumbnailQuality: Double, val posterAtMs: Long,
+    ) : HostRequest()
 }
 
 @Serializable
@@ -1637,6 +1896,13 @@ internal sealed class HostReply {
      * than the size is no drawing.
      */
     @Serializable @SerialName("Pixels") data class Pixels(val width: Int, val height: Int) : HostReply()
+
+    /**
+     * A picked medium's tiers ([HostRequest.MediaTiers]): the preview's [previewSize] bytes then the thumbnail's, packed as
+     * `veyq_reply`'s payload beside this JSON (ADR 0131 decision 3 extended inward, as [Pixels]), never in it, and the size
+     * it is shown at ([width] × [height], upright; null where unknown). [previewSize] 0 and no payload: not decoded here.
+     */
+    @Serializable @SerialName("Tiers") data class Tiers(val width: Int?, val height: Int?, val previewSize: Int) : HostReply()
 
     /** The host could not do it (a store that does not write): the core's call fails as a store's would. */
     @Serializable @SerialName("Failed") data class Failed(val error: String) : HostReply()
