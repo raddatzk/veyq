@@ -491,6 +491,34 @@ mechanism per platform, never a per-screen copy:
 A new screen that shows such a secret names its snapshot in its no-copy check and is bitten as the sweep was: the
 snapshot pulled and looked at, without the protection the secret in it, with it covered.
 
+## Nothing on disk the app did not choose
+
+The core's HTTP clients keep **nothing on disk** on any platform: no response cache, no cookie store, no credential
+store. ADR 0047's rule (no plaintext at rest but where the person saves it) extends to what an HTTP stack keeps on its
+own — ciphertext and metadata included, since the app never chose to keep them. The session token is the app's to keep
+(in a header, ADR 0004; the device's wraps in the Keychain or its platform equivalent), never a stack's. Per engine:
+- **Darwin (Apple, `appleHttpClient` in `Apple.kt`):** Ktor starts from `defaultSessionConfiguration`, whose shared
+  `URLCache` wrote every answer to `Library/Caches/me.raddatz.veyq/Cache.db` + `fsCachedData` — measured 2026-11-13 on
+  an iOS 27 simulator after a sign-in, a Memory's gallery and a medium's details: 67 responses, among them
+  `/api/login/verify` with its access and refresh token in clear, `key-material`, `members`, `exif`,
+  `blob-downloads-batch`, 39 `files` and 9 blob frames (4.9 MB). `keepNothingOnDisk()` sets no `URLCache`,
+  `reloadIgnoringLocalCacheData`, no `HTTPCookieStorage` (cookies never set nor accepted) and no
+  `URLCredentialStorage`; the same pass after it left no `Cache.db` and no `fsCachedData` (`NoDiskSessionTest` pins the
+  configuration). Left, before and after alike: CFNetwork's `Library/HTTPStorages/me.raddatz.veyq/httpstorages.sqlite`,
+  whose only table (`alt_services`, HTTP/3 hints) held no row — no cookie table was ever made. The dev backend sends no
+  `Alt-Svc`; one that does would leave its host there, a residual only an ephemeral session (Ktor's
+  `usePreconfiguredSession`) removes.
+- **OkHttp (Android, `Network.kt`):** no cache and `CookieJar.NO_COOKIES` are OkHttp's defaults, pinned explicitly.
+  Measured 2026-11-13 on a throwaway API 36 emulator after the same pass: `run-as me.raddatz.veyq find . -type f`
+  listed only `shared_prefs/veyq.trust.xml`, `shared_prefs/veyq-recent.xml` and `files/profileInstalled` — no `cache/`.
+- **Curl (Linux, `Engine.linux.kt`):** libcurl has no response cache, and its cookie engine starts only with
+  `CURLOPT_COOKIEFILE`/`COOKIEJAR`, which Ktor's engine never sets (remembered from libcurl's docs; the engine's klib
+  references no cookie option). Not measured here.
+- **WinHTTP (Windows, `Engine.mingw.kt`):** WinHTTP has no response cache (unlike WinINet), and the cookies it handles
+  live in the session handle's memory, never on disk (remembered from Microsoft's docs). Not measured here.
+A new engine, or a new client built outside these factories, states its cache and cookie store here and is measured
+as the Darwin one was: the app's container listed after a pass.
+
 ## Each platform's guidelines
 
 Apple's HIG and Material 3 win over a look shared with the web ([ADR 0123](../../docs/decisions/0123-the-apps-share-a-kotlin-multiplatform-core-under-native-ui.md)
