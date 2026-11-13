@@ -34,6 +34,11 @@ A Gradle build of its own, run through its own wrapper.
   read only through the interface: a new store gets a subclass of it, run on its platform. `SoftwareDeviceKeys`
   (`core/src/testDevice/`, compiled into core's `commonTest` and `:bridge`'s `jvmTest`) is the test store; its
   `prompts`/`authenticates` counters are the flows' tests' extras, not the contract.
+- **Device linking** (ADR 0059): `session/DeviceLink` is one ceremony in one of its four roles (trusted or new, showing
+  or scanning), over `crypto/Pairing`; its code reaches a UI only as a picture (`matrix`, `png`) and its scan is its
+  own `QrScan`. The new device's tail is the sign-in's (`SessionModel.scanFromTrusted`/`showForSignIn`,
+  `VeyqAccount.linked`): the handed token spent once at `/api/token/refresh` in the body, never adoption, and no trust
+  enrolled but the offer's DEVICE_KEY levels (`Offer.linked`). `DeviceLinkTest` plays the relay (`PlayedServer`).
 - `android/` — the Android app (Compose). `devlogin.py` signs a debug build on a running emulator in as the seeded dev
   principal (`.run/.env`).
 - `apple/` — the Apple app (SwiftUI, iOS and macOS). `xcodegen` in that directory writes `Veyq.xcodeproj` from
