@@ -42,7 +42,11 @@ This is a property with several triggers, so it lives here and not under any one
    server half is out of reach, since the session is already dead).
 2. The media service worker is told to drop every playback it holds, together with its decrypted read-ahead
    ([ADR 0047](../../../decisions/0047-inline-video-playback-range-streaming.md)). It lives outside the page, so
-   the page going away does not take it along.
+   the page going away does not take it along. Beside it, the applications' **ending steps** run (an application's
+   lifecycle hook `onSessionEnding`; all together at most 2 s, a failing one ignored): what an application left
+   outside the page — Memories' music frame forgets the vendor's sign-in
+   ([ADR 0131](../../../decisions/0131-a-memorys-background-music-plays-through-the-vendors-sdk-in-a-frame-of-its-own-origin.md)
+   decision 5, [uc.memory.music](../../memory/use-cases/uc.memory.music.md) A6).
 3. The other tabs of this instance are told the session ended — only by the tab that ended it, so the message
    never echoes.
 4. The tab loads the sign-in page as a **new document**. That discards everything the page held in memory,

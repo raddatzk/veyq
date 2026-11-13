@@ -51,7 +51,12 @@
   while it plays leaves the bar.
 - **A6 — Sign-out, lock, tenant switch, leaving a share.** The bar lives as long as the signed-in, unlocked session (the
   share page: as long as the page): a sign-out or a lock removes it and ends the music, a tenant switch is a navigation to
-  another domain. The vendor's sign-in is not forgotten by it - only Turn music off forgets it.
+  another domain. **A sign-out also forgets the vendor's sign-in** (owner 2026-11-13; ADR 0131 decision 5), so the next
+  person on a shared computer does not start the service signed in as this one: before the sign-in page loads, a mounted
+  frame is told to forget and waited for (at most a moment); with none mounted, a browser that agreed to Apple Music - the
+  one service whose sign-in outlives its frame - gets a hidden frame of the music host that clears the music origin's
+  storage, loading nothing of the vendor. The consent stays. A lock and a tenant switch forget nothing: the same person
+  is still signed in.
 - **A7 — Memories switched off.** No music bar is mounted.
 - **A4 — No subscription.** The frame says so in plain words (Spotify Premium; an Apple Music subscription) and keeps the
   link; nothing plays.

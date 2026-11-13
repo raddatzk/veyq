@@ -100,6 +100,25 @@ describe('the music frame', () => {
     expect(document.body.children).toHaveLength(0)
   })
 
+  it('a forget with no player (a sign-out mounted it only for that) loads nothing, clears this origin\'s storage and says so', async () => {
+    // ADR 0131 decision 5: MusicKit keeps its sign-in in the music origin's storage, which outlives every frame.
+    const { win, parent, sent, receive } = frameWindow()
+    const store = (entries: Record<string, string>) => {
+      const m = new Map(Object.entries(entries))
+      return { clear: () => m.clear(), get size() { return m.size } }
+    }
+    const local = store({ 'music.ABCDE.media-user-token': 'token-of-the-last-person' })
+    const session = store({ some: 'thing' })
+    Object.assign(win, { localStorage: local, sessionStorage: session })
+    const { made, players } = fakePlayers()
+    startFrame(win, players)
+    receive({ source: parent as unknown as Window, origin: 'https://veyq.example.org', data: { type: 'veyq-music:forget' } })
+    await vi.waitFor(() => expect(sent.at(-1)?.[0]).toEqual({ type: 'veyq-music:forgotten' }))
+    expect(made, 'no vendor player is made to forget').toHaveLength(0)
+    expect(local.size).toBe(0)
+    expect(session.size).toBe(0)
+  })
+
   it('draws in the app\'s theme: dark with the load, and follows a theme message from the parent alone', async () => {
     const { win, parent, receive } = frameWindow()
     const { made, players } = fakePlayers()

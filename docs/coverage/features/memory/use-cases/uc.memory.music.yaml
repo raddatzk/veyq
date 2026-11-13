@@ -39,6 +39,17 @@ acceptanceCriteria:
           - src/features/memories/music/useMusicConsent.test.ts
           - src/features/memories/music/MusicBar.test.ts
           - src/features/memories/music/musicHeader.test.ts
+  - id: sign-out-forgets-the-vendor-sign-in
+    text: Every session ending (a sign-out, a refused refresh, an account erasure, another tab's announcement) runs the applications' ending steps before it loads the sign-in page, bounded and past a failing step; Memories' step tells a mounted frame to forget and waits for forgotten (never past the wait; a forget already in flight is joined), keeping the consent; with no frame mounted it mounts a hidden frame of the music host only in the tab that started the ending, only for a browser whose consent covers Apple Music at the host served now, tells it forget once it is ready - from that frame's window and origin only - and removes it once it said forgotten or the wait is spent; a frame told forget with no player loads none and clears its origin's storage. A lock forgets nothing.
+    coverage:
+      web:
+        unit:
+          - src/app/sessionEndingSteps.test.ts
+          - src/app/sessionEnd.test.ts
+          - src/core/applications/registry.test.ts
+          - src/features/memories/music/musicEnding.test.ts
+          - src/features/memories/music/MusicBar.test.ts
+          - src/music-frame/main.test.ts
   - id: frame-isolated-by-origin-and-protocol
     text: The vendor's SDK runs only in the music frame, an iframe of the music host with `allow="encrypted-media; autoplay"` and no sandbox; the app hands it, once it says ready, one playlist, the service's public credential and its theme (exactly light or dark), to the music host's origin only, and takes only parsed state messages from that frame's window and origin; the frame obeys only its parent window, from the origin that spoke first, loads one vendor per frame, switches a later playlist of that service in place and ignores another service's, and empties itself on forget.
     coverage:

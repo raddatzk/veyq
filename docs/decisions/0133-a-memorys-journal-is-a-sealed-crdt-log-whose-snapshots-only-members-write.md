@@ -91,8 +91,10 @@ In Memories' own tables, keyed by the journal's node:
   4 KiB, 16 KiB, 64 KiB); 64 KiB is the cap, so a long paste is several updates.
 - **A contributor** — one row per writer who ever wrote an update to the journal (decision 9), with its ordinal in
   the order they first wrote. A member is served the writer ids; a link guest only the ordinals, which stand for a
-  writer wherever the guest's client needs one (decision 5), so a link is served no member id
-  ([ADR 0030](0030-contributor-public-share.md) point 8).
+  writer wherever the guest's client needs one (decision 5), each with the writer's **alias** (decision 9), so a link
+  is served no member id ([ADR 0030](0030-contributor-public-share.md) point 8).
+- **The alias key** — 32 random bytes the server mints with the journal's first contributor row and keeps in a row of
+  its own beside them; never served to anyone, deleted with the journal (decision 9).
 - **The position is core's.** The journal is a second list in its node beside the gallery's media, and ADR 0033 left
   exactly that open ("a second list in one node would add a `list` column to the key — not built until a kind needs
   it"): core's `veyq_node_items_revision` gains a list key, the gallery keeps its list, and the journal's updates and
@@ -207,6 +209,35 @@ list as a former member, as an Expenses entry does (ADR 0108 decision 2). **Reje
 it would show an unproven attribution at the finest grain, and keeping it costs per-item writer data the projection
 does not carry.
 
+**A guest reads pseudonyms, never numbers** (owner 2026-11-13). On a link guest's page — the contributors list, and
+"who is here" ([ADR 0134](0134-core-pushes-a-lists-new-position-to-the-clients-that-edit-it-on-a-stream.md) decision 4)
+— every other person, member or guest, is a pseudonym in the way a shared whiteboard names an anonymous visitor:
+**"Anonymous Fox"**, **"Anonyme Eule"**; the guest's own row is **"You"**. A member's page is unchanged: members by
+name, guests by the name they gave. So a guest never learns a member's name or another guest's through the journal,
+and still tells the writers apart and sees the same person in both places.
+
+- **Derived from an alias the server computes, named by the client.** A writer's **alias** in a journal is the first 8
+  bytes of `HMAC-SHA-256(alias key, writer kind ‖ writer id)` — the journal's alias key (decision 3), the writer a
+  member or a link identity. The server serves it to a link guest beside each contributor's ordinal and for each other
+  present editor (ADR 0134 decision 4), and marks the guest's own; a member is served none (a member's client names
+  people). The guest's client turns an alias into a name from a fixed list in the client, **EN and DE**: 64 animals,
+  each with its German gender, so the adjective agrees ("Anonymer Fuchs", "Anonyme Eule", "Anonymes Pferd"), the
+  animal the alias's first two bytes modulo 64; the avatar's colour comes from the alias too.
+- **Stable per person within the journal, unlinkable across journals.** The same writer has the same alias in a
+  journal for its whole life — across visits, reloads, restores and the server's restarts — because it depends only on
+  the stored key and the writer. Another journal has another key, so a guest of two links cannot tell that one person
+  wrote in both. Keyed, not a plain hash: a guest who knows a member's id elsewhere (a member of the tenant who also
+  holds a link) cannot test it against an alias. An import starts a fresh journal and so a fresh key.
+- **Collisions are numbered by the client.** Two aliases with the same animal in one journal read "Anonymous Fox" and
+  "Anonymous Fox 2", numbered in the order of their contributor ordinals, present editors who have not written after
+  them by alias. A writer's suffix never changes once it wrote (a later writer only appends); a present editor's may,
+  once it writes. With 64 animals, about one journal in seven with five people sees a suffix (1 − 63·62·61·60 / 64⁴ ≈ 0.15).
+- **The server learns nothing new.** It already knows every writer and every stream holder; the alias is computed from
+  those and a key it minted, and the word list lives only in the client — the server never handles a pseudonym.
+  **Rejected:** deriving the name in the client from the ordinal — a present editor who has not written has none, and
+  an ordinal minted at the first stream opening would store who opened a journal; a plain hash of the ids — testable
+  by anyone who knows an id; numbering the guests as today — what the owner asked to replace.
+
 ### 10. Embeds are tokens inside the sealed text
 
 The old syntax, inside the sealed text, so the server never learns which photo a passage shows:
@@ -271,7 +302,7 @@ found by the text of its last snapshot. Guests have no search.
   by a flush tick of at most one update a second, the size classes and no time stored without a reader. **Not
   minimised:** cover traffic (empty updates on a tick) would hide whether someone types but not that the journal is
   open, for a row a second per open editor — rejected, the residual named.
-- **New in core:** a list key on the node items revision. **New in Memories:** three tables (snapshot revisions, updates, contributors), the journal's operations
+- **New in core:** a list key on the node items revision. **New in Memories:** four tables (snapshot revisions, updates, contributors, the alias key), the journal's operations
   on the member and the share API, and its term in the storage usage. **New dependencies (web):** `yjs`,
   `y-codemirror.next`, CodeMirror 6.
 - **Kept text:** the trash retention's worth of earlier snapshot revisions per journal (decision 8's residual).

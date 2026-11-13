@@ -37,6 +37,18 @@ export function relayCallback(win: Window = window): boolean {
   return true
 }
 
+/** Clear this origin's local and session storage (in a partitioning browser: this partition's). Storage that is
+ *  disabled or refuses is left as it is: there is nothing else to clear it with. */
+export function clearOriginStorage(win: Window): void {
+  for (const area of ['localStorage', 'sessionStorage'] as const) {
+    try {
+      win[area].clear()
+    } catch {
+      /* disabled storage */
+    }
+  }
+}
+
 /** Apply the app's theme: the token sheet's dark roles sit under `:root.veyq-dark`, as in the app. */
 export function applyTheme(doc: Document, theme: Theme): void {
   doc.documentElement.classList.toggle('veyq-dark', theme === 'dark')
@@ -252,7 +264,11 @@ export function startFrame(
     else if (m.type === 'veyq-music:theme') applyTheme(doc, m.theme)
     else
       void (async () => {
-        await player?.forget()
+        await player?.forget().catch(() => undefined)
+        // This origin keeps nothing of its own, so all its web storage is a vendor's: MusicKit's sign-in sits there. A
+        // frame mounted only to forget (a sign-out with no player on screen, ADR 0131 decision 5) loads no vendor script
+        // and clears it here; behind a player's own sign-out it is the belt to its braces.
+        clearOriginStorage(win)
         player = null
         view = null
         service = null

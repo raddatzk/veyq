@@ -85,7 +85,8 @@
 // `allowed`), never names the kind, and the node it created is a row of the level like any other, its links its own dialog's.
 //
 // **Lifecycle hooks (`app.lifecycle`).** What runs when a scope is entered or reset and when the master key
-// rotates. Registered through the application's registrar - so a hook set cannot exist for an application this build does
+// rotates, and (optional) what runs before a session ending loads the sign-in page (`onSessionEnding`, handed to
+// `app/sessionEndingSteps.ts`, which the ending runs bounded). Registered through the application's registrar - so a hook set cannot exist for an application this build does
 // not have -, once per application (a second registration throws);
 // several applications may each contribute, and the registry runs them all. The master-key hook is REQUIRED of every hook
 // set: material an application seals under the Master Key (Memories' item marks) is unverifiable after a rotation that
@@ -141,6 +142,7 @@
 // overview (`core/shortcuts/ShortcutsDialog.vue`) lists them after core's own, for an application switched on here only.
 import { nothingOfItsOwnToRekey, type RekeyContentHook, type ScopeRekeyParticipant } from '../node/rekey/hooks'
 import { defineAsyncComponent, type Component } from 'vue'
+import { onSessionEnding, type SessionEndingContext } from '../../app/sessionEndingSteps'
 import { FOLDER_KIND, type NodeKind } from '../node/kind'
 import type { NodeParent, TreeNode } from '../node/tree'
 import type { Level } from '../node/browse'
@@ -637,6 +639,11 @@ export interface LifecycleHooks {
   /** The Master Key rotates (uc.account.rotate-keys): re-seal everything the application sealed under `oldMk` so
    *  `newMk` opens it. `scopeIds` are the scopes the caller can see. Runs after the rotation's publish commit. */
   onMasterKeyRotated(oldMk: Uint8Array, newMk: Uint8Array, scopeIds: string[]): Promise<void>
+  /** The session ends (sign-out, a refused refresh, another tab's announcement): undo what the application left OUTSIDE
+   *  this page, before the ending loads the sign-in page as a new document - Memories' music frame forgets the vendor's
+   *  sign-in (ADR 0131 decision 5). Bounded by the ending (`app/sessionEndingSteps.ts`): it is given up after its budget,
+   *  and a rejection is ignored. Not run on a lock. */
+  onSessionEnding?(ctx: SessionEndingContext): Promise<void>
 }
 
 /** An application of this build, as `registerApplication` named it. */
@@ -882,6 +889,7 @@ export function createRegistry(): Registry {
           throw new Error(`application ${id} registered no onMasterKeyRotated hook (it is required)`)
         }
         lifecycles.set(id, { ...hooks })
+        if (hooks.onSessionEnding) onSessionEnding(hooks.onSessionEnding.bind(hooks))
       },
       scopeRekey(participant: ScopeRekeyParticipant) {
         if (scopeRekeys.has(id)) throw new Error(`the scope re-key of ${id} is already registered`)

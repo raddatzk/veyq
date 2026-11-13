@@ -8,6 +8,7 @@ import { setThemePreference } from '../../../shared/state/useThemeState'
 import { MEMORIES_MUSIC, MEMORIES_MUSIC_APPLE_MUSIC, MEMORIES_MUSIC_SPOTIFY } from '../../platform/capabilities'
 import { setMusicConsent } from './useMusicConsent'
 import { closeBar, playInBar, playlistInBar } from './musicPlayback'
+import { forgetMusicSignIn } from './musicEnding'
 import type { Playlist } from './musicModel'
 
 // The music bar (uc.memory.music, ADR 0131 decision 5) - Memories' footer bar, one per shell, the same for a member and a
@@ -145,6 +146,58 @@ describe('MusicBar', () => {
     await flushPromises()
     expect(w.find('[data-testid="music-frame"]').exists()).toBe(false)
     expect(playlistInBar.value).toBeNull()
+    w.unmount()
+  })
+
+  it('a sign-out\'s ending tells the mounted frame to forget and waits for it; the consent and the music stay', async () => {
+    // ADR 0131 decision 5 (owner 2026-11-13): the next person on this computer must not start the service signed in.
+    setMusicConsent('apple-music', true)
+    serve(false, true)
+    const w = mountBar()
+    playInBar(apple)
+    await flushPromises()
+    const { win, say } = frameWindow(w)
+    let done = false
+    const ending = forgetMusicSignIn({ startedHere: true }).then(() => (done = true))
+    expect(win.postMessage).toHaveBeenCalledWith({ type: 'veyq-music:forget' }, ORIGIN)
+    await flushPromises()
+    expect(done, 'the ending waits for the frame').toBe(false)
+    say({ type: 'veyq-music:forgotten' })
+    await ending
+    expect(localStorage.getItem('veyq:music-consent'), 'the consent is this browser\'s: a sign-out keeps it').not.toBeNull()
+    expect(w.find('[data-testid="music-frame"]').exists(), 'the new document removes the frame, not the forget').toBe(true)
+    w.unmount()
+  })
+
+  it('a sign-out after "Turn music off" joins its forget instead of sending another', async () => {
+    setMusicConsent('spotify', true)
+    const w = mountBar()
+    playInBar(spotify)
+    await flushPromises()
+    const { win, say } = frameWindow(w)
+    await w.find('[data-testid="music-off"]').trigger('click')
+    const ending = forgetMusicSignIn({ startedHere: true })
+    expect(win.postMessage.mock.calls.filter(([m]) => (m as { type: string }).type === 'veyq-music:forget')).toHaveLength(1)
+    say({ type: 'veyq-music:forgotten' })
+    await ending
+    await flushPromises()
+    expect(w.find('[data-testid="music-frame"]').exists()).toBe(false)
+    w.unmount()
+  })
+
+  it('once the bar is gone, its frame is no longer the one a sign-out asks', async () => {
+    setMusicConsent('spotify', true)
+    const w = mountBar()
+    playInBar(spotify)
+    await flushPromises()
+    const { win } = frameWindow(w)
+    await w.find('[data-testid="music-close"]').trigger('click')
+    await flushPromises()
+    let done = false
+    void forgetMusicSignIn({ startedHere: true }).then(() => (done = true)) // Spotify only: nothing outlives the frame
+    await flushPromises()
+    expect(done, 'no wait for a frame that is gone').toBe(true)
+    expect(win.postMessage).not.toHaveBeenCalledWith({ type: 'veyq-music:forget' }, ORIGIN)
     w.unmount()
   })
 
