@@ -12,6 +12,8 @@ import java.security.MessageDigest
 import kotlin.test.Test
 import kotlin.test.assertTrue
 import kotlin.time.Duration.Companion.minutes
+import kotlin.test.AfterTest
+import me.raddatz.veyq.mobile.session.LiveRun
 
 /**
  * A Memory the web made and filled, read on a running dev instance (`VEYQ_LIVE`): `VEYQ_LIVE_MEMORY=<memory name>` lists
@@ -22,6 +24,12 @@ import kotlin.time.Duration.Companion.minutes
  * back, and the two must be the same bytes (a video's playback reads it so).
  */
 class MemoryLiveTest {
+    /** Every device this case signs in with, taken off the account again after it, whatever it came to. */
+    private val liveRun = LiveRun()
+
+    @AfterTest
+    fun takeOffTheDevices() = liveRun.removeAll()
+
     /**
      * The same Memory through the screen models both phones draw (`GalleryModel`, `Lightbox`; the CR's phase 1):
      * `VEYQ_LIVE_MEMORY=<memory name>` opens its gallery over a shell, reads every tile and picture the rows name, every
@@ -39,7 +47,7 @@ class MemoryLiveTest {
             .toMap()
         val account = VeyqAccount.signIn(
             BouncyCastlePrimitives, origin!!, env.getValue("VEYQ_EMAIL"), env.getValue("VEYQ_PASSWORD"), env.getValue("VEYQ_SECRET_KEY"),
-            testDevice(BouncyCastlePrimitives),
+            liveRun.device(),
         ) { block -> HttpClient(OkHttp, block) }
         val tenant = account.open(account.defaultTenant!!)
         val shell = me.raddatz.veyq.mobile.navigation.ShellModel(
@@ -100,7 +108,7 @@ class MemoryLiveTest {
             .toMap()
         val account = VeyqAccount.signIn(
             BouncyCastlePrimitives, origin, env.getValue("VEYQ_EMAIL"), env.getValue("VEYQ_PASSWORD"), env.getValue("VEYQ_SECRET_KEY"),
-            testDevice(BouncyCastlePrimitives),
+            liveRun.device(),
         ) { block -> HttpClient(OkHttp, block) }
         val tenant = account.open(account.defaultTenant!!)
         if (name == "*") {

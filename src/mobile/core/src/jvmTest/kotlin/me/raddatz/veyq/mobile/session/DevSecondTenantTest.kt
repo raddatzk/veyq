@@ -15,6 +15,7 @@ import java.util.UUID
 import kotlin.test.Test
 import kotlin.test.assertTrue
 import kotlin.time.Duration.Companion.minutes
+import kotlin.test.AfterTest
 
 /**
  * Dev seeding, not a test of the product: gives the seeded principal a second tenant on the dev instance, so the app's
@@ -27,6 +28,12 @@ import kotlin.time.Duration.Companion.minutes
  * `VEYQ_ADMIN_BASE`, default `http://127.0.0.1:8090`.
  */
 class DevSecondTenantTest {
+    /** Every device this case signs in with, taken off the account again after it, whatever it came to. */
+    private val liveRun = LiveRun()
+
+    @AfterTest
+    fun takeOffTheDevices() = liveRun.removeAll()
+
     @Test
     fun seedASecondTenantForThePrincipal() = runTest(timeout = 2.minutes) {
         val origin = System.getenv("VEYQ_LIVE") ?: return@runTest
@@ -39,7 +46,7 @@ class DevSecondTenantTest {
             .mapNotNull { l -> l.substringBefore('=', "").takeIf { it.isNotBlank() }?.let { it.trim() to l.substringAfter('=').trim().trim('"', '\'') } }
             .toMap()
         val account = VeyqAccount.signIn(
-            BouncyCastlePrimitives, origin, env.getValue("VEYQ_EMAIL"), env.getValue("VEYQ_PASSWORD"), env.getValue("VEYQ_SECRET_KEY"), testDevice(BouncyCastlePrimitives),
+            BouncyCastlePrimitives, origin, env.getValue("VEYQ_EMAIL"), env.getValue("VEYQ_PASSWORD"), env.getValue("VEYQ_SECRET_KEY"), liveRun.device(),
         ) { block -> HttpClient(OkHttp, block) }
         if (account.tenants.any { it.domain == domain }) {
             println("seed: $domain already exists")
@@ -71,7 +78,7 @@ class DevSecondTenantTest {
         println("seed: $name ($domain) created and accepted, personal scope $personalId")
 
         val again = VeyqAccount.signIn(
-            BouncyCastlePrimitives, origin, env.getValue("VEYQ_EMAIL"), env.getValue("VEYQ_PASSWORD"), env.getValue("VEYQ_SECRET_KEY"), testDevice(BouncyCastlePrimitives),
+            BouncyCastlePrimitives, origin, env.getValue("VEYQ_EMAIL"), env.getValue("VEYQ_PASSWORD"), env.getValue("VEYQ_SECRET_KEY"), liveRun.device(),
         ) { block -> HttpClient(OkHttp, block) }
         val opened = again.open(again.tenants.first { it.domain == domain })
         assertTrue(opened.spaces().map { it.kind }.containsAll(listOf("TENANT", "PERSONAL")), "the new tenant's grants did not open")

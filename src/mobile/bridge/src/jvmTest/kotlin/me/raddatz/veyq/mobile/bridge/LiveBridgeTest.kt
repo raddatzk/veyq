@@ -34,6 +34,8 @@ import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.long
 import kotlinx.serialization.json.jsonObject
+import me.raddatz.veyq.mobile.session.LiveRun
+import kotlin.test.AfterTest
 
 /**
  * The dispatch over the real core (ADR 0123's Consequences, the bridge), as a host drives it, on the JVM's suite and
@@ -46,6 +48,12 @@ import kotlinx.serialization.json.jsonObject
  * Runs only when `VEYQ_LIVE` names an origin of a running dev instance (`./gradlew backend:seed`).
  */
 class LiveBridgeTest {
+    /** Every device this case signs in with, taken off the account again after it, whatever it came to. */
+    private val liveRun = LiveRun()
+
+    @AfterTest
+    fun takeOffTheDevices() = liveRun.removeAll()
+
     @Test
     fun theSeededPrincipalSignsInAndReadsTheShellSearchAndAPotThroughCalls() = runBlocking {
         val origin = System.getenv("VEYQ_LIVE") ?: return@runBlocking
@@ -54,7 +62,7 @@ class LiveBridgeTest {
             .mapNotNull { l -> l.substringBefore('=', "").takeIf { it.isNotBlank() }?.let { it.trim() to l.substringAfter('=').trim().trim('"', '\'') } }
             .toMap()
 
-        val kept = ConcurrentHashMap<String, String>()
+        val kept = liveRun.track(ConcurrentHashMap<String, String>())
         lateinit var host: Host
         host = Host { token, json ->
             thread {
@@ -746,12 +754,7 @@ class LiveBridgeTest {
             val live = b.watching(Watched.PotLive(id))
 
             // another device writes an entry: the poll brings it, within its cadence (20 s ± 20 %)
-            val store = object : DeviceStore {
-                val values = ConcurrentHashMap<String, String>()
-                override fun read(key: String) = values[key]
-                override fun write(key: String, value: String) { values[key] = value }
-                override fun remove(key: String) { values.remove(key) }
-            }
+            val store = liveRun.store()
             val account = VeyqAccount.signIn(
                 BouncyCastlePrimitives, origin, env.getValue("VEYQ_EMAIL"), env.getValue("VEYQ_PASSWORD"), env.getValue("VEYQ_SECRET_KEY"),
                 ThisDevice(store, NoDeviceKeys, "bridge live poll test, the other device", BouncyCastlePrimitives),
@@ -960,12 +963,7 @@ class LiveBridgeTest {
             assertEquals("CHF" to rate, chf.currency to chf.rate)
 
             // a stale save: another device edits the expense meanwhile; the save says so and shows theirs, the next goes on top
-            val store = object : DeviceStore {
-                val values = ConcurrentHashMap<String, String>()
-                override fun read(key: String) = values[key]
-                override fun write(key: String, value: String) { values[key] = value }
-                override fun remove(key: String) { values.remove(key) }
-            }
+            val store = liveRun.store()
             val account = VeyqAccount.signIn(
                 BouncyCastlePrimitives, origin, env.getValue("VEYQ_EMAIL"), env.getValue("VEYQ_PASSWORD"), env.getValue("VEYQ_SECRET_KEY"),
                 ThisDevice(store, NoDeviceKeys, "bridge live editor test, the other device", BouncyCastlePrimitives),
@@ -1240,12 +1238,7 @@ class LiveBridgeTest {
         val env = envFile.readLines()
             .mapNotNull { l -> l.substringBefore('=', "").takeIf { it.isNotBlank() }?.let { it.trim() to l.substringAfter('=').trim().trim('"', '\'') } }
             .toMap()
-        val store = object : DeviceStore {
-            val values = ConcurrentHashMap<String, String>()
-            override fun read(key: String) = values[key]
-            override fun write(key: String, value: String) { values[key] = value }
-            override fun remove(key: String) { values.remove(key) }
-        }
+        val store = liveRun.store()
         val account = VeyqAccount.signIn(
             BouncyCastlePrimitives, origin, env.getValue("VEYQ_EMAIL"), env.getValue("VEYQ_PASSWORD"), env.getValue("VEYQ_SECRET_KEY"),
             ThisDevice(store, NoDeviceKeys, "bridge live receipt test, the Server Owner", BouncyCastlePrimitives),
@@ -1282,12 +1275,7 @@ class LiveBridgeTest {
             .toMap()
         // the folder and its files made by the core in a session of its own first: the bridge's tree, read at its sign-in,
         // then holds them (a session's tree is cached; a refresh does not read another device's writes)
-        val store = object : DeviceStore {
-            val values = ConcurrentHashMap<String, String>()
-            override fun read(key: String) = values[key]
-            override fun write(key: String, value: String) { values[key] = value }
-            override fun remove(key: String) { values.remove(key) }
-        }
+        val store = liveRun.store()
         val account = VeyqAccount.signIn(
             BouncyCastlePrimitives, origin, env.getValue("VEYQ_EMAIL"), env.getValue("VEYQ_PASSWORD"), env.getValue("VEYQ_SECRET_KEY"),
             ThisDevice(store, NoDeviceKeys, "bridge live file test, the uploader", BouncyCastlePrimitives),
@@ -1650,12 +1638,7 @@ class LiveBridgeTest {
         val env = envFile.readLines()
             .mapNotNull { l -> l.substringBefore('=', "").takeIf { it.isNotBlank() }?.let { it.trim() to l.substringAfter('=').trim().trim('"', '\'') } }
             .toMap()
-        val store = object : DeviceStore {
-            val values = ConcurrentHashMap<String, String>()
-            override fun read(key: String) = values[key]
-            override fun write(key: String, value: String) { values[key] = value }
-            override fun remove(key: String) { values.remove(key) }
-        }
+        val store = liveRun.store()
         val account = VeyqAccount.signIn(
             BouncyCastlePrimitives, origin, env.getValue("VEYQ_EMAIL"), env.getValue("VEYQ_PASSWORD"), env.getValue("VEYQ_SECRET_KEY"),
             ThisDevice(store, NoDeviceKeys, device, BouncyCastlePrimitives),
@@ -1681,12 +1664,7 @@ class LiveBridgeTest {
         val env = envFile.readLines()
             .mapNotNull { l -> l.substringBefore('=', "").takeIf { it.isNotBlank() }?.let { it.trim() to l.substringAfter('=').trim().trim('"', '\'') } }
             .toMap()
-        val store = object : DeviceStore {
-            val values = ConcurrentHashMap<String, String>()
-            override fun read(key: String) = values[key]
-            override fun write(key: String, value: String) { values[key] = value }
-            override fun remove(key: String) { values.remove(key) }
-        }
+        val store = liveRun.store()
         val account = VeyqAccount.signIn(
             BouncyCastlePrimitives, origin, env.getValue("VEYQ_EMAIL"), env.getValue("VEYQ_PASSWORD"), env.getValue("VEYQ_SECRET_KEY"),
             ThisDevice(store, NoDeviceKeys, "bridge live medium test, the uploader", BouncyCastlePrimitives),
@@ -1765,12 +1743,7 @@ class LiveBridgeTest {
         val env = envFile.readLines()
             .mapNotNull { l -> l.substringBefore('=', "").takeIf { it.isNotBlank() }?.let { it.trim() to l.substringAfter('=').trim().trim('"', '\'') } }
             .toMap()
-        val store = object : DeviceStore {
-            val values = ConcurrentHashMap<String, String>()
-            override fun read(key: String) = values[key]
-            override fun write(key: String, value: String) { values[key] = value }
-            override fun remove(key: String) { values.remove(key) }
-        }
+        val store = liveRun.store()
         val account = VeyqAccount.signIn(
             BouncyCastlePrimitives, origin, env.getValue("VEYQ_EMAIL"), env.getValue("VEYQ_PASSWORD"), env.getValue("VEYQ_SECRET_KEY"),
             ThisDevice(store, NoDeviceKeys, "bridge live desktop pass, the uploader", BouncyCastlePrimitives),
@@ -2359,6 +2332,7 @@ class LiveBridgeTest {
 
     /** A device store the test's host keeps in [kept], answering from its own thread as a UI loop does. */
     private fun hostStore(kept: ConcurrentHashMap<String, String>): HostStore {
+        liveRun.track(kept)
         lateinit var host: Host
         host = Host { token, json ->
             thread {
@@ -2376,12 +2350,7 @@ class LiveBridgeTest {
 
     /** Member [userId]'s picture as the core reads it in a session of its own: a sign-in, the tenant, its sync. */
     private suspend fun coreOwnPicture(origin: String, env: Map<String, String>, tenantId: String, userId: String): ByteArray {
-        val store = object : DeviceStore {
-            val values = ConcurrentHashMap<String, String>()
-            override fun read(key: String) = values[key]
-            override fun write(key: String, value: String) { values[key] = value }
-            override fun remove(key: String) { values.remove(key) }
-        }
+        val store = liveRun.store()
         val account = VeyqAccount.signIn(
             BouncyCastlePrimitives, origin, env.getValue("VEYQ_EMAIL"), env.getValue("VEYQ_PASSWORD"), env.getValue("VEYQ_SECRET_KEY"),
             ThisDevice(store, NoDeviceKeys, "bridge test, the core's own read", BouncyCastlePrimitives),
