@@ -46,6 +46,8 @@ Verbs:
                              its field with it once. VEYQ_DEV_SCAN=1 shows a debug build's QR harness instead of the
                              session (no sign-in); VEYQ_DEV_CAMERA=<image on this host> is its test camera (mounted
                              read-only). The container has no Camera portal, so without it the harness says NoCamera.
+                             VEYQ_DEV_SETTINGS=1 opens a debug build's account Settings over a state of its own
+                             instead of the session (no sign-in, no server).
   lock                       `cargo update`: writes Cargo.lock anew from Cargo.toml (the one way it changes).
   flatpak [--arch aarch64|x86_64]
                              the Flatpak bundle (ADR 0133): the bridge's release library and everything `build`
@@ -357,6 +359,9 @@ def run_app(port: int, devlogin: bool, unlock: bool = False, fill: bool = False,
     docker_args = ["-p", f"127.0.0.1:{port}:{inner}"]
     if os.environ.get("VEYQ_DEV_SCAN"):
         env["VEYQ_DEV_SCAN"] = os.environ["VEYQ_DEV_SCAN"]
+    # the account Settings' harness (dev_settings.rs)
+    if os.environ.get("VEYQ_DEV_SETTINGS"):
+        env["VEYQ_DEV_SETTINGS"] = os.environ["VEYQ_DEV_SETTINGS"]
     if os.environ.get("VEYQ_DEV_CAMERA"):
         image = Path(os.environ["VEYQ_DEV_CAMERA"]).resolve()
         if not image.is_file():

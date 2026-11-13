@@ -82,6 +82,13 @@ public sealed partial class MainWindow : Window
             Closed += (_, _) => scan.Dispose();
             return;
         }
+        // a debug build's Settings harness: the page over a state of its own, no session (cr-app-account-settings phase 4)
+        if (DevSettings.Requested)
+        {
+            Log.Write("the settings harness (debug build)");
+            Face(AccountSettingsPage.Showing(this, DevSettings.Fake()).Page);
+            return;
+        }
         _session =Core.Watch(new Watched.Session(), ShowGate, e => Log.Write(e.Message));
         _shellWatch = Core.Watch(new Watched.Shell(), ShellUpdate, e => Log.Write(e.Message));
         _manageWatch = Core.Watch(new Watched.Manage(), ManageUpdate, e => Log.Write(e.Message));

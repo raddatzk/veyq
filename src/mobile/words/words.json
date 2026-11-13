@@ -2678,5 +2678,129 @@
   "account_settings_register_unreadable": {
     "en": "Device names are unavailable: the list of your devices could not be opened. Every session is still listed and can still be ended.",
     "de": "Gerätenamen sind nicht verfügbar: Die Liste deiner Geräte ließ sich nicht öffnen. Jede Sitzung wird weiter angezeigt und lässt sich weiter beenden."
+  },
+  "account_page_account": {
+    "en": "Account",
+    "de": "Konto"
+  },
+  "account_page_email": {
+    "en": "Email address",
+    "de": "E-Mail-Adresse"
+  },
+  "account_page_email_confirmed": {
+    "en": "Confirmed — a reset link will reach you here.",
+    "de": "Bestätigt – ein Link zum Zurücksetzen erreicht dich hier."
+  },
+  "account_page_email_unconfirmed": {
+    "en": "Not confirmed yet. If you forget your password, the reset link goes to this address, so make sure it is one you read.",
+    "de": "Noch nicht bestätigt. Vergisst du dein Passwort, geht der Link zum Zurücksetzen an diese Adresse – stell sicher, dass du sie liest."
+  },
+  "account_page_this_device": {
+    "en": "This device",
+    "de": "Dieses Gerät"
+  },
+  "account_page_rename": {
+    "en": "Rename this device",
+    "de": "Dieses Gerät umbenennen"
+  },
+  "account_page_rename_hint": {
+    "en": "You are naming the device — every session from it will show this name.",
+    "de": "Du benennst das Gerät — jede Sitzung von diesem Gerät zeigt diesen Namen."
+  },
+  "account_page_sessions": {
+    "en": "Devices and sessions",
+    "de": "Geräte und Sitzungen"
+  },
+  "account_page_sessions_hint": {
+    "en": "Everywhere this account is signed in. End any of them from here.",
+    "de": "Überall, wo dieses Konto angemeldet ist. Beende jede Sitzung von hier aus."
+  },
+  "account_page_loading": {
+    "en": "Loading your sessions…",
+    "de": "Deine Sitzungen werden geladen …"
+  },
+  "account_page_you_are_here": {
+    "en": "You are here",
+    "de": "Du bist hier"
+  },
+  "account_page_other_device": {
+    "en": "Signed-in device",
+    "de": "Angemeldetes Gerät"
+  },
+  "account_page_signed_in": {
+    "en": "Signed in {1}",
+    "de": "Angemeldet seit {1}"
+  },
+  "account_page_last_used": {
+    "en": "Last used {1}",
+    "de": "Zuletzt genutzt {1}"
+  },
+  "account_page_revoke": {
+    "en": "Sign this device out",
+    "de": "Dieses Gerät abmelden"
+  },
+  "account_page_revoke_confirm": {
+    "en": "Sign this device out? It will have to sign in again — and if it was set to stay signed in, it loses its saved key at its next start and then needs your password AND your Secret Key.",
+    "de": "Dieses Gerät abmelden? Es muss sich danach neu anmelden — und wenn es angemeldet bleiben sollte, verliert es beim nächsten Start seinen gespeicherten Schlüssel und braucht dann dein Passwort UND deinen Secret Key."
+  },
+  "account_page_revoke_self": {
+    "en": "Sign out here",
+    "de": "Hier abmelden"
+  },
+  "account_page_revoke_self_confirm": {
+    "en": "This is the device you are using. Signing it out takes you back to the sign-in screen.",
+    "de": "Das ist das Gerät, das du gerade benutzt. Beim Abmelden landest du wieder auf der Anmeldeseite."
+  },
+  "account_page_revoke_others": {
+    "en": "Sign out everywhere else",
+    "de": "Überall sonst abmelden"
+  },
+  "account_page_revoke_others_confirm": {
+    "en": "Sign out every other device? You stay signed in here. Any of them that was set to stay signed in loses its saved key at its next start and then needs your password AND your Secret Key.",
+    "de": "Alle anderen Geräte abmelden? Hier bleibst du angemeldet. Jedes davon, das angemeldet bleiben sollte, verliert beim nächsten Start seinen gespeicherten Schlüssel und braucht dann dein Passwort UND deinen Secret Key."
+  },
+  "account_page_escalate": {
+    "en": "Sign out and remove this device’s saved key",
+    "de": "Abmelden und gespeicherten Schlüssel entfernen"
+  },
+  "account_page_escalate_title": {
+    "en": "Sign out and remove the saved key",
+    "de": "Abmelden und gespeicherten Schlüssel entfernen"
+  },
+  "account_page_escalate_confirm": {
+    "en": "Sign this device out and remove its saved key? Signing out alone still lets it open your data with your password. Without its saved key it needs your password and your Secret Key — so whoever is holding it, including you, will need the Emergency Kit there next time.",
+    "de": "Dieses Gerät abmelden und seinen gespeicherten Schlüssel entfernen? Abmelden allein hindert es nicht daran, deine Daten mit deinem Passwort zu öffnen. Ohne seinen gespeicherten Schlüssel braucht es dein Passwort und deinen Secret Key — wer das Gerät gerade hat, auch du selbst, braucht dort beim nächsten Mal das Notfall-Kit."
+  },
+  "account_page_escalate_accept": {
+    "en": "Sign out + remove key",
+    "de": "Abmelden + Schlüssel entfernen"
+  },
+  "account_page_saved_keys": {
+    "en": "Devices with a saved key",
+    "de": "Geräte mit gespeichertem Schlüssel"
+  },
+  "account_page_saved_keys_hint": {
+    "en": "Signed out, but the server still holds a saved key for them — enough to open your data with your password alone.",
+    "de": "Abgemeldet, aber der Server hält für sie noch einen gespeicherten Schlüssel — genug, um deine Daten allein mit deinem Passwort zu öffnen."
+  },
+  "account_page_saved_key_row": {
+    "en": "Signed out, saved key still here.",
+    "de": "Abgemeldet, gespeicherter Schlüssel noch vorhanden."
+  },
+  "account_page_remove_key": {
+    "en": "Remove this saved key",
+    "de": "Diesen gespeicherten Schlüssel entfernen"
+  },
+  "account_page_remove_key_confirm": {
+    "en": "Remove the saved key for “{1}”? It will need your password and your Secret Key to open your data again.",
+    "de": "Den gespeicherten Schlüssel für „{1}“ entfernen? Das Gerät braucht danach dein Passwort und deinen Secret Key, um deine Daten wieder zu öffnen."
+  },
+  "account_page_remove_other_keys": {
+    "en": "Remove every saved key except this device’s",
+    "de": "Alle gespeicherten Schlüssel außer dem dieses Geräts entfernen"
+  },
+  "account_page_remove_other_keys_confirm": {
+    "en": "Remove every saved key except this device’s? Every one of your other devices will need your password AND your Secret Key again — have your Emergency Kit ready. This device keeps its own saved key.",
+    "de": "Alle gespeicherten Schlüssel außer dem dieses Geräts entfernen? Jedes deiner anderen Geräte braucht danach wieder dein Passwort UND deinen Secret Key — halte dein Notfall-Kit bereit. Dieses Gerät behält seinen eigenen gespeicherten Schlüssel."
   }
 }

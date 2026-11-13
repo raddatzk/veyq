@@ -2,7 +2,8 @@
 // draw theirs: a NavigationView whose pane is Left, LeftCompact or LeftMinimal by the window's width (its own
 // thresholds), holding the one switcher (spaces and tenants; the signed-in member's picture beside them) as its header,
 // Search as its AutoSuggestBox (Ctrl+E, Ctrl+F), Home, Favorites, Recent and the applications as its items, and Settings
-// at its foot. The content shows what the core's shell says is open — Home, an application's list, a Pot, a file
+// at its foot, which opens the account's Settings (AccountSettingsPage) in the content. The content shows what the core's
+// shell says is open — Home, an application's list, a Pot, a file
 // (FilePage), a drop box (DropBoxPage), or an object this app does not draw yet — under its title and a CommandBar whose first command is New; an
 // open Pot's Download is among its secondary commands (the bar's own More), an InfoBar under the bar says how a download
 // went, and another follows a file's Save a copy with its progress and Cancel. A list keeps where it was scrolled to when
@@ -45,6 +46,8 @@ internal sealed class ShellView
     private readonly ListScrolls _scrolls = new();
     private FilePage? _file;
     private DropBoxPage? _dropBox;
+    /// <summary>The account's Settings while the pane's Settings item shows it, in place of what the shell says.</summary>
+    private AccountSettingsPage? _account;
     private readonly Window _window;
     private readonly ContentControl _body;
     private readonly NavigationViewItem _settings;
@@ -108,9 +111,9 @@ internal sealed class ShellView
             else if (e.ChosenSuggestion is not null) Log.Write($"a chosen hit reached no hit ({e.ChosenSuggestion.GetType().Name})");
         };
 
-        // Settings at the foot, in the app's own words (the pane's built-in item says WinUI's); it does nothing yet, as
-        // on the other apps
-        _settings = new NavigationViewItem { Content = Words.DrawerSettings(), Icon = HomeView.Glyph(""), SelectsOnInvoked = false };
+        // Settings at the foot, in the app's own words (the pane's built-in item says WinUI's): the account's page, in the
+        // content as Windows' own apps show their settings
+        _settings = new NavigationViewItem { Content = Words.DrawerSettings(), Icon = HomeView.Glyph(""), Tag = new Target.Settings() };
         AutomationProperties.SetAutomationId(_settings, "settings");
 
         _title = new TextBlock { Style = (Style)Application.Current.Resources["SubtitleTextBlockStyle"], TextTrimming = TextTrimming.CharacterEllipsis, VerticalAlignment = VerticalAlignment.Center };
@@ -175,7 +178,12 @@ internal sealed class ShellView
         {
             if (!_drawing && e.SelectedItemContainer?.Tag is Target target) Choose(target);
         };
-        _nav.BackRequested += (_, _) => Act.Send(new Call.ShellBack());
+        // back from Settings is back to what the shell shows
+        _nav.BackRequested += (_, _) =>
+        {
+            if (_account is not null) CloseSettings();
+            else Act.Send(new Call.ShellBack());
+        };
 
         // F5 and Ctrl+R refresh an open Pot (its CommandBar's Refresh), else the shell's lists, as Explorer and Edge refresh
         foreach (var (key, modifiers) in new[] { (VirtualKey.F5, VirtualKeyModifiers.None), (VirtualKey.R, VirtualKeyModifiers.Control) })
@@ -211,10 +219,20 @@ internal sealed class ShellView
         public sealed record Application(ApplicationId Id) : Target;
 
         public sealed record Object(ObjectRef Ref) : Target;
+
+        public sealed record Settings : Target;
     }
 
     private void Choose(Target target)
     {
+        if (target is Target.Settings)
+        {
+            OpenSettings();
+            ClosePaneIfOverlay();
+            return;
+        }
+        // anything else chosen leaves Settings: what the shell shows comes back, also where the choice changes nothing
+        if (_account is not null) CloseSettings();
         switch (target)
         {
             case Target.Home:
@@ -229,6 +247,30 @@ internal sealed class ShellView
                 break;
         }
         ClosePaneIfOverlay();
+    }
+
+    /// <summary>Opens the account's Settings for the connection the shell shows, in the content.</summary>
+    private void OpenSettings()
+    {
+        if (_account is not null || _shown is not { } shown) return;
+        _account = AccountSettingsPage.Open(_window, shown.connection, () => CloseSettings());
+        Redraw();
+    }
+
+    /// <summary>Leaves Settings (back, another item, or the core closed it): the page closes, the shell's content returns.</summary>
+    private void CloseSettings()
+    {
+        if (_account is null) return;
+        _account.Dispose();
+        _account = null;
+        Redraw();
+    }
+
+    private void Redraw()
+    {
+        if (_state is not { } state || _shown is not { } shown) return;
+        DrawPane(state, shown);
+        DrawContent(state, shown);
     }
 
     private void ClosePaneIfOverlay()
@@ -426,7 +468,7 @@ internal sealed class ShellView
         try
         {
             _nav.MenuItemsSource = items;
-            _nav.SelectedItem = selected;
+            _nav.SelectedItem = _account is not null ? _settings : selected;
         }
         finally
         {
@@ -436,6 +478,16 @@ internal sealed class ShellView
 
     private void DrawContent(ShellModelState state, ShellShown shown)
     {
+        if (_account is { } account)
+        {
+            // the account's Settings in place of what the shell shows; back leaves it
+            _shown = shown;
+            _title.Text = Words.DrawerSettings();
+            _nav.IsBackEnabled = true;
+            if (!ReferenceEquals(_body.Content, account.Page)) _body.Content = account.Page;
+            DrawCommands();
+            return;
+        }
         var shell = state.shell;
         // the title as every app heads the screen: the open object, the chosen application, the folder, the space
         _title.Text = shell.openObject is { } open ? open.name
@@ -544,7 +596,7 @@ internal sealed class ShellView
     {
         _commands.PrimaryCommands.Clear();
         _commands.SecondaryCommands.Clear();
-        if (_shown is not { } shown) return;
+        if (_shown is not { } shown || _account is not null) return;
         var page = _pot;
         // a Pot's page creates one thing, an entry (as Android's and Apple's Pot screens): the level's New is not offered
         // beside it — two Add commands side by side would ask which one adds what

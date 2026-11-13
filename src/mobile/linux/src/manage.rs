@@ -208,8 +208,8 @@ impl Manage {
     }
 }
 
-/// Says what a change of trust was answered, where it did not happen, as a toast over [dialog].
-fn said_change(dialog: &adw::PreferencesDialog, answered: Result<Answer, bridge::Unreadable>) {
+/// Says what a change of trust was answered, where it did not happen, as a toast over [dialog] (Settings' too).
+pub(crate) fn said_change(dialog: &adw::PreferencesDialog, answered: Result<Answer, bridge::Unreadable>) {
     let text = match answered {
         Ok(Answer::Done) => return,
         // a prompt cancelled: nothing changed, and nothing to say
@@ -237,6 +237,12 @@ fn change_level(dialog: &adw::PreferencesDialog, connection: String, level: Stay
 /// "Back to your password": the password asked for over [dialog] (ADR 0005 §9 keeps one convenience wrap per device, so
 /// the password trust is re-created, which takes it), then sent to the core, which checks it first.
 fn ask_password(dialog: &adw::PreferencesDialog, connection: String) {
+    ask_password_then(dialog, "manage back to the password", move |password| Call::ManagePasswordTrust { connection: connection.clone(), password });
+}
+
+/// The password asked for over [dialog], then sent to the core as [call] makes it (Manage's, Settings'); [what] names
+/// the step on stderr.
+pub(crate) fn ask_password_then(dialog: &adw::PreferencesDialog, what: &'static str, call: impl Fn(String) -> Call + 'static) {
     let password = adw::PasswordEntryRow::builder().title(words::signin_password()).build();
     let rows = gtk::ListBox::builder().selection_mode(gtk::SelectionMode::None).build();
     rows.add_css_class("boxed-list");
@@ -265,10 +271,11 @@ fn ask_password(dialog: &adw::PreferencesDialog, connection: String) {
         }
         let typed = password.text().to_string();
         password.set_text("");
-        let (parent, connection) = (parent.clone(), connection.clone());
+        let parent = parent.clone();
+        let sent = call(typed);
         glib::spawn_future_local(async move {
-            let answered = bridge::call(&Call::ManagePasswordTrust { connection, password: typed }).await.map(|(a, _)| a);
-            eprintln!("veyq: manage back to the password: {}", answer_kind(&answered));
+            let answered = bridge::call(&sent).await.map(|(a, _)| a);
+            eprintln!("veyq: {what}: {}", answer_kind(&answered));
             said_change(&parent, answered);
         });
     });
@@ -276,7 +283,7 @@ fn ask_password(dialog: &adw::PreferencesDialog, connection: String) {
 }
 
 /// An answer's kind alone, for stderr.
-fn answer_kind(answered: &Result<Answer, bridge::Unreadable>) -> String {
+pub(crate) fn answer_kind(answered: &Result<Answer, bridge::Unreadable>) -> String {
     match answered {
         Ok(Answer::Refused { why }) => format!("Refused {why:?}"),
         Ok(a) => serde_json::to_value(a).ok().and_then(|v| v["type"].as_str().map(str::to_owned)).unwrap_or_default(),

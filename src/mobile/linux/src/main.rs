@@ -11,7 +11,7 @@ use veyq::shell::Shell;
 use veyq::manage::Manage;
 use veyq::sign_in::{Offer, SignIn, Unlock};
 use veyq::theme::APP_ID;
-use veyq::{dev_login, dev_scan, words};
+use veyq::{dev_login, dev_scan, dev_settings, words};
 
 fn main() -> glib::ExitCode {
     words::init();
@@ -107,6 +107,15 @@ fn activate(app: &adw::Application) {
     let m = manage.clone();
     open_manage.connect_activate(move |_, _| m.open());
     window.add_action(&open_manage);
+    // the sidebar's Settings: the account's page, for the connection the shell shows (`account_settings`)
+    let open_settings = gtk::gio::SimpleAction::new("account-settings", Some(glib::VariantTy::STRING));
+    let w = window.clone();
+    open_settings.connect_activate(move |_, connection| {
+        if let Some(connection) = connection.and_then(|c| c.get::<String>()) {
+            veyq::account_settings::open(&w, connection);
+        }
+    });
+    window.add_action(&open_settings);
     let said = shell.clone();
     let offer = Offer::new(Rc::new(move |text: String| said.say(&text)));
     let screens = Rc::new(Screens { window: window.clone(), status, status_page, sign_in: SignIn::new(), unlock: Unlock::new(), offer, shell, manage });
@@ -136,6 +145,12 @@ fn activate(app: &adw::Application) {
         screens.window.set_content(Some(&view.widget));
         // held as long as the window: closing it ends the scan and its camera
         screens.window.connect_destroy(move |_| view.close());
+        return;
+    }
+    // a debug build's Settings harness: the page over a state of its own, no session (`cr-app-account-settings` phase 4)
+    if dev_settings::requested() {
+        eprintln!("veyq: the settings harness (debug build)");
+        veyq::account_settings::show(&screens.window, &dev_settings::fake());
         return;
     }
     let (Some((session_watch, gates)), Some((shell_watch, shells)), Some((manage_watch, managed))) =

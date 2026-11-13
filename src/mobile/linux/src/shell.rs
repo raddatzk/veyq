@@ -82,6 +82,8 @@ pub struct Shell {
     /// Where each list was scrolled to, by its place.
     scrolls: ListScrolls,
     now: RefCell<Option<(ShellModelState, ShellShown)>>,
+    /// The connection the shell shows, whose Settings the sidebar's foot opens.
+    connection: Rc<RefCell<Option<String>>>,
     started: Cell<bool>,
 }
 
@@ -111,12 +113,20 @@ impl Shell {
 
         let sidebar = adw::Sidebar::new();
         let scroll = gtk::ScrolledWindow::builder().hscrollbar_policy(gtk::PolicyType::Never).vexpand(true).child(&sidebar).build();
-        // Settings pinned at the foot, below what scrolls (owner 2026-11-10); it does nothing yet, as on the other apps
+        // Settings pinned at the foot, below what scrolls (owner 2026-11-10): the account's page (`win.account-settings`)
         let settings = adw::ActionRow::builder().title(words::drawer_settings()).activatable(true).build();
         settings.add_prefix(&gtk::Image::from_icon_name("emblem-system-symbolic"));
         let foot = gtk::ListBox::builder().selection_mode(gtk::SelectionMode::None).build();
         foot.add_css_class("navigation-sidebar");
         foot.append(&settings);
+        let opens = window.clone();
+        let shown_now: Rc<RefCell<Option<String>>> = Rc::new(RefCell::new(None));
+        let connection = shown_now.clone();
+        foot.connect_row_activated(move |_, _| {
+            if let Some(c) = connection.borrow().clone() {
+                let _ = WidgetExt::activate_action(&opens, "win.account-settings", Some(&c.to_variant()));
+            }
+        });
         let sidebar_view = adw::ToolbarView::new();
         sidebar_view.add_top_bar(&sidebar_header);
         sidebar_view.add_top_bar(&search_bar);
@@ -199,6 +209,7 @@ impl Shell {
             _uploads: uploads,
             scrolls: ListScrolls::default(),
             now: RefCell::new(None),
+            connection: shown_now,
             started: Cell::new(false),
         });
         shell.connect(window);
@@ -464,6 +475,7 @@ impl Shell {
         let first = !self.started.replace(true);
         self._uploads.start();
         avatars::listed(&format!("{}\n{}", shown.connection, shown.tenant.tenant_id), &shown.pictures);
+        *self.connection.borrow_mut() = Some(shown.connection.clone());
         *self.now.borrow_mut() = Some((state, shown));
         self.draw_switcher();
         self.draw_new();
