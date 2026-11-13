@@ -94,7 +94,7 @@ without the server learning the playlist and without the service's code ever run
 ## Related
 
 - Feature: [Memory](../_index.md)
-- End-user view (docs site): [Add background music](../../../../site/src/content/docs/memories/add-background-music.mdx);
+- End-user view (docs site): withdrawn while the music is released dark (owner 2026-11-13; back with inbox #859);
   for Server Owners: [Capabilities § Background music](../../../../site/src/content/docs/run/capabilities.mdx)
 - Decision: [ADR 0131](../../../decisions/0131-a-memorys-background-music-plays-through-the-vendors-sdk-in-a-frame-of-its-own-origin.md)
 - Enabler: [en.memory.node-meta](../enablers/en.memory.node-meta.md) (the sealed `wrappedMeta` the `music` field lives in)

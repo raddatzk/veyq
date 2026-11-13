@@ -235,6 +235,7 @@ across sites, and they have no documented control from the page.
 - **Not built:** the uploaded audio file (inbox #36's residual), a chapter inheriting its Memory's playlist (#847), the
   vendors' logo files (#857).
 
-Published for readers outside the project in [Add background music](../../site/src/content/docs/memories/add-background-music.mdx),
-[Capabilities § Background music](../../site/src/content/docs/run/capabilities.mdx) and
-[Configuration](../../site/src/content/docs/run/configuration.md).
+Published for readers outside the project in [Capabilities § Background music](../../site/src/content/docs/run/capabilities.mdx) and
+[Configuration](../../site/src/content/docs/run/configuration.md). The Use page *Add background music* (EN+DE) is
+withdrawn from the site while the music is released dark (owner 2026-11-13) and comes back from git history with the
+flag's removal (inbox #859).
