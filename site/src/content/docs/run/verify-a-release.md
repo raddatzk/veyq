@@ -16,7 +16,10 @@ its signature `veyqctl.bundle`, and a `manifest.json` naming the three images by
 sha256, with its signature `manifest.json.bundle` ([ADR 0057](https://github.com/raddatzk/veyq/blob/main/docs/decisions/0057-release-identity-and-deployment-recipe.md) §3,
 [ADR 0096](https://github.com/raddatzk/veyq/blob/main/docs/decisions/0096-veyqctl-manages-an-instance-from-immutable-releases.md)).
 A release signs the images, the chart, `veyqctl` and the manifest keylessly with cosign, under one identity: veyq's
-release workflow, which is not the pipeline that signs every snapshot (below).
+release workflow, which is not the pipeline that signs every snapshot (below). From the first release that carries
+the desktop app, its packages and `veyq.cer` come beside these files, listed by sha256 under the manifest's `apps` and
+each with a `.bundle` of its own; they are no part of a server, `veyqctl` never fetches them, and how a person checks
+one is [Verify it yourself](/security/verify-it-yourself/#the-desktop-apps-packages).
 
 On Docker Compose, `veyqctl` runs every check below itself, before it pulls anything: the manifest's signature first,
 because every other check trusts what the manifest names. You verify one thing by hand: `veyqctl`, the first time you
@@ -168,6 +171,6 @@ every file the manifest lists matched its sha256 (`shasum -a 256 -c`, macOS's eq
 `0.2478-SNAPSHOT`'s app digest, never promoted, is refused under the identity above (its certificate names
 `publish.yml`). A promoted release's digests are its snapshot's bytes, so they also verify under the snapshot
 identity — which is why the release identity, not the snapshot's, is the check. Before it publishes, the promotion
-verifies `manifest.json` and `veyqctl` against their bundles the way this page does, and refuses to publish a release
-that fails it. `veyqctl upgrade`'s refusal of a digest one hex digit off was run against a release produced from the
+verifies `manifest.json` and `veyqctl` against their bundles the way this page does — and each app file against its
+own, with its sha256 under `apps` (written, not yet run) — and refuses to publish a release that fails it. `veyqctl upgrade`'s refusal of a digest one hex digit off was run against a release produced from the
 tree; no upgrade between two published releases has run yet.

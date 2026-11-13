@@ -53,6 +53,16 @@ def children_of(digest: str) -> set[str]:
     return CHILDREN.get(digest, set())
 
 
+# The desktop apps' packages (ADR 0133 decision 10): one artifact manifest per platform, no children. Commit A's goes
+# alone; commit B's carries its snapshot's tags beside the staging one and stays; a recent one stays.
+APPS = [v(31, dg(31), OLD, f"build-{A}-msix-x64"),
+        v(32, dg(32), OLD, f"build-{B}-flatpak-x86_64", f"sha-{B}-flatpak-x86_64", "0.12-SNAPSHOT-flatpak-x86_64"),
+        v(33, dg(33), NEW, f"build-{C}-flatpak-aarch64"),
+        v(34, dg(34), OLD, f"build-{A}-flatpak-aarch64", "0.12-flatpak-aarch64")]
+app_deleted = {d.version_id for d in sr.select(APPS, lambda d: set(), {TIP}, NOW, 30)}
+if app_deleted != {31}:
+    failures.append(f"of the app packages {sorted(app_deleted)} are deleted, not exactly the old unpublished one (31)")
+
 deleted = {d.version_id for d in sr.select(VERSIONS, children_of, {TIP}, NOW, 30)}
 want = {1, 2, 3, 4, 15}
 for vid in sorted(want - deleted):
@@ -74,4 +84,4 @@ if failures:
     sys.exit(1)
 print("staging retention selftest OK: an old unpublished staging index goes with its children, a published one alone, "
       "and a branch tip, a recent push, a release's tag, an unrelated untagged version and a child another kept index "
-      "names all stay")
+      "names all stay; a desktop app's staging package goes alone unless a snapshot or release names it")

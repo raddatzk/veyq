@@ -715,6 +715,28 @@ def test_install(tmp: pathlib.Path) -> None:
           rc == 1 and not host.ran("up") and not (missing_home / vc.ENV_FILE).exists())
 
 
+def test_apps_ignored(tmp: pathlib.Path) -> None:
+    """A release that carries the desktop apps' files (ADR 0133 decision 8) lists them under `apps`, beside its
+    `assets`: veyqctl reads named keys only, so the manifest still parses, and an install takes the assets alone."""
+    apps = {"veyq-1.4-x86_64.flatpak": "flatpak bundle", "veyq-1.4-x64.msix": "msix", "veyq.cer": "certificate"}
+    m = vc.parse_manifest(manifest_bytes(apps={n: sha(b.encode()) for n, b in apps.items()}), "v1.12")
+    check("apps: a manifest with an `apps` key parses, its assets unchanged",
+          sorted(m.assets) == sorted(vc.REQUIRED_ASSETS))
+    mirror = tmp / "mirror-apps"
+    write_release(mirror, "v1.4", manifest_edit=lambda doc: doc.update(apps={n: sha(b.encode()) for n, b in apps.items()}))
+    for name, body in apps.items():
+        (mirror / "v1.4" / name).write_text(body)
+    home = tmp / "home-apps"
+    host = FakeHost(local_images={"veyq:local", "veyq-admin:local"}, project="veyq-apps")
+    with contextlib.redirect_stdout(io.StringIO()) as out:
+        rc = vc.main(["--home", str(home), "--source", str(mirror), "install", "--unsigned-local",
+                      "--set", "VEYQ_DOMAIN=veyq.test", "--set", "OPERATOR_EMAIL=ops@veyq.test",
+                      "--set", "PLAIN_REQUIRED=1", "--set", "QUOTED=q"], host)
+    landed = sorted(p.name for p in (home / "releases/1.4").iterdir()) if (home / "releases/1.4").is_dir() else []
+    check("apps: a release with app files installs, and none of them lands in the instance",
+          rc == 0 and landed and not set(apps) & set(landed), f"rc {rc}, landed {landed}: {out.getvalue()[-400:]}")
+
+
 def test_status() -> None:
     def healthy(*rows) -> bool:
         with contextlib.redirect_stdout(io.StringIO()):
@@ -3068,6 +3090,7 @@ def main() -> int:
         test_signature_gate()
         test_status()
         test_install(tmp)
+        test_apps_ignored(tmp)
         test_upgrade_selector(tmp)
         test_upgrade_order(tmp)
         test_upgrade_refusals(tmp)

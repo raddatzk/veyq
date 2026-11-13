@@ -267,20 +267,41 @@ gh workflow run publish.yml --ref main               # the tip's snapshot now, a
   Major `0` is pre-release: it exercises the whole path and promises no upgrade path.
 - **The packages must be pullable.** The first publish creates `veyq`, `veyq-admin`, `veyq-tools` and `charts/veyq` under the
   owner's GHCR packages. Make all four public, or every operator needs registry credentials — and the chart has no
-  `imagePullSecrets` value, so public is the state it supports.
-- **The desktop app's Windows signer** (decided, not built: [ADR 0133](../docs/decisions/0133-the-desktop-apps-ship-as-a-flatpak-bundle-and-an-msix-built-in-checks-and-promoted-with-the-release.md)
-  decision 7). The release signs the staged MSIX in a job of its own, with a signer that job receives and nothing else
-  sees: a PFX and its password as secrets of a GitHub environment only that job names, or a cloud signer's `signtool
-  /dlib` arguments — the same step either way. The signer is **the project's own self-signed certificate, subject
-  `CN=veyq`** (the owner, 2026-11-13; decision 12), a PFX and its password; making it and creating the environment and
-  its secrets is the owner's step before the first release that carries the app. No
-  certificate, key or password is ever committed. **Rotation:** the certificate's subject must equal the MSIX's
-  `Publisher`, `msixPublisher` in `src/mobile/desktop-identity.json`. A new certificate under the same subject replaces
-  the environment's secrets and nothing else, and installs over the released app as before; a different subject is a
-  different package family — the next package installs beside the old app instead of updating it — so it is a change of
-  identity, not a rotation (remembered from MSIX's package identity, not measured). Each person trusts the certificate
-  itself, once: a new one is a new trust step for everyone, so publish its `veyq.cer` before the first release it signs
-  and say so in that release's notes.
+  `imagePullSecrets` value, so public is the state it supports. `veyq-apps` (the desktop apps' packages, created by the
+  first Checks push that stages them) need not be public: a person takes a package from its release, and only the
+  repository's own workflows read it, which a package their token created grants (remembered from GHCR's defaults,
+  not measured — the first publish shows it).
+- **The desktop app's Windows signer** (built, never run: [ADR 0133](../docs/decisions/0133-the-desktop-apps-ship-as-a-flatpak-bundle-and-an-msix-built-in-checks-and-promoted-with-the-release.md)
+  decisions 7 and 12). `release.yml`'s `msix-sign` job signs the staged MSIX on Windows with **the project's own
+  self-signed certificate, subject `CN=veyq`** (the owner, 2026-11-13), and refuses unless the payload and the block
+  map are unchanged and the signer is the certificate committed as `src/mobile/windows/veyq.cer`
+  (`scripts/msix_sign.py`). Until that file exists, a promotion of a snapshot that staged the app packages is refused at
+  `check`, by name, before it writes anything. **Setting it up — the owner's, once, before the first release that
+  carries the app:**
+  1. Make the certificate on a Windows machine you trust, its key exportable, valid as long as released packages
+     should install (the signature carries no timestamp, so a package installs only while its certificate is valid):
+     ```powershell
+     $c = New-SelfSignedCertificate -Type Custom -Subject 'CN=veyq' -FriendlyName 'veyq release signing' `
+       -KeyUsage DigitalSignature -KeyExportPolicy Exportable -KeyAlgorithm RSA -KeyLength 3072 -CertStoreLocation Cert:\CurrentUser\My `
+       -NotAfter (Get-Date).AddYears(5) -TextExtension @('2.5.29.37={text}1.3.6.1.5.5.7.3.3', '2.5.29.19={text}')
+     Export-PfxCertificate -Cert $c -FilePath veyq.pfx -Password (Read-Host -AsSecureString 'PFX password')
+     Export-Certificate -Cert $c -FilePath veyq.cer
+     ```
+  2. Commit `veyq.cer` as `src/mobile/windows/veyq.cer` (public: the tree's pin of the signer;
+     `python3 scripts/msix_sign.py certificate` prints its subject and thumbprint and refuses another subject).
+  3. Create the environment: GitHub → Settings → Environments → **New environment** `msix-signing`; under *Deployment
+     branches and tags*, **Selected branches**: `main` and `release/*` (the branches a release is promoted from); a
+     required reviewer if each signing should wait for one.
+  4. Its two secrets (environment secrets, never repository ones): `MSIX_PFX_BASE64` — the PFX as base64
+     (`[Convert]::ToBase64String([IO.File]::ReadAllBytes('veyq.pfx'))`, or `base64 -i veyq.pfx` on a Mac) — and
+     `MSIX_PFX_PASSWORD`. Then delete `veyq.pfx` and the certificate's key from the machine you made it on, or keep
+     them offline: the environment is the one place the release reads them from.
+  No key, PFX or password is ever committed. **Rotation:** a new certificate under the same subject replaces
+  `veyq.cer` (a commit) and the two secrets together — the signing job refuses a PFX that is not the committed
+  certificate's — and installs over the released app as before; a different subject is a different package family —
+  the next package installs beside the old app instead of updating it — so it is a change of identity, not a rotation
+  (remembered from MSIX's package identity, not measured). Each person trusts the certificate itself, once: a new one
+  is a new trust step for everyone, so say so in the notes of the first release it signs.
 - **Bumping a pin is part of cutting a release** (ADR 0057 §6), Helm's included: `HELM_VERSION` and `HELM_SHA256`
   at the top of `checks.yml` and `publish.yml` (and `release.yml`; one value, held equal), checked against the published `.sha256sum` and the GitHub release notes.
 

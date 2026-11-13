@@ -317,7 +317,8 @@ does (ADR 0057 § Consequences).
 
 ### The desktop app's packages
 
-**Decided, not built:** no release carries an app package yet
+**Built, not yet run:** the workflows that stage, sign and attach the packages are written, and no release carries
+an app package yet
 ([ADR 0133](https://github.com/raddatzk/veyq/blob/main/docs/decisions/0133-the-desktop-apps-ship-as-a-flatpak-bundle-and-an-msix-built-in-checks-and-promoted-with-the-release.md)
 decisions 7, 8 and 10; what a person is told is [Install the app](/getting-started/install-the-app/)). From the first
 release that does, its packages — `veyq-<major>.<minor>-x86_64.flatpak`, `…-aarch64.flatpak` and `…-x64.msix` — are
@@ -333,19 +334,25 @@ the bytes a Checks push run built, smoke-ran and staged, never built again, and 
 **The MSIX carries a second signature, Windows'.** Windows installs a package only signed, and the signature lives
 inside the file, so signing changes its bytes. Checks builds and tests it unsigned; the release signs the staged
 package and refuses unless the signed package's `AppxBlockMap.xml` — which hashes every file the package carries — is
-byte for byte the tested one's. So the Windows signature adds trust for Windows and changes no payload byte; the
-sha256 under `apps` is the signed file's. That signing leaves the block map unchanged is measured on a development
-certificate and a PFX ([ADR 0123](https://github.com/raddatzk/veyq/blob/main/docs/decisions/0123-the-apps-share-a-kotlin-multiplatform-core-under-native-ui.md)'s
-Consequences, the MSIX); the release's signing job is not built. The Flatpak bundle carries no GPG signature: it has no
-repository to be verified against, so the cosign bundle and the manifest are its provenance.
+byte for byte the tested one's, every payload file with it, and unless its one signer is the certificate committed in
+the repository as `src/mobile/windows/veyq.cer` — a key swapped in
+without a reviewed commit signs nothing
+([`scripts/msix_sign.py`](https://github.com/raddatzk/veyq/blob/main/scripts/msix_sign.py)). So the Windows signature
+adds trust for Windows and changes no payload byte; the sha256 under `apps` is the signed file's, and each Flatpak
+bundle's is the staged file's, which the promotion compares. That signing leaves the block map unchanged is measured
+on a development certificate and a PFX
+([ADR 0123](https://github.com/raddatzk/veyq/blob/main/docs/decisions/0123-the-apps-share-a-kotlin-multiplatform-core-under-native-ui.md)'s
+Consequences, the MSIX); the release's signing job has not run yet. The Flatpak bundle carries no GPG signature: it has
+no repository to be verified against, so the cosign bundle and the manifest are its provenance.
 
 **The certificate Windows is asked to trust.** The release's signer is a self-signed certificate of the project's own,
 subject `CN=veyq` (ADR 0133 decisions 7 and 12), which a person adds to their computer's *Trusted People* before the
 first install ([Install the app](/getting-started/install-the-app/#windows)). Its public half comes with the release as
-`veyq.cer`, verified like a package: its own cosign bundle under the release identity, and its sha256 under `apps`.
-Check it that way before trusting it — the import is trust in whoever holds the key, and nothing revokes it
-([Known limitations](/security/known-limitations/#the-desktop-app-flathubs-runtime-windows-trust-no-auto-update)). Not
-built: no release carries the certificate yet.
+`veyq.cer`, verified like a package: its own cosign bundle under the release identity, and its sha256 under `apps`;
+it is the same file as the repository's `src/mobile/windows/veyq.cer`. Check it that way before trusting it — the
+import is trust in whoever holds the key, and nothing revokes it
+([Known limitations](/security/known-limitations/#the-desktop-app-flathubs-runtime-windows-trust-no-auto-update)). No
+release carries the certificate yet: it is made, and committed, before the first release that carries the app.
 
 **Built yourself.** `python3 src/mobile/linux/run.py flatpak` and `python3 src/mobile/windows/run.py package --sign
 <pfx>` build the same packages from a checkout over pinned inputs (the runtime and SDK by commit, the build container
