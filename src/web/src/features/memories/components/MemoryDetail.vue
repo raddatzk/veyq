@@ -56,6 +56,7 @@ import { MetaConflictError } from '../../../core/node/sealedMetaWrite'
 import OptimisticTile from './OptimisticTile.vue'
 import { enqueueUploads, collectPickedFiles, inferMediaType, retryFile } from '../uploadQueue'
 import { useMediaGalleryLive } from '../useMediaGalleryLive'
+import { useTabScroll } from '../tabScroll'
 import { isMarkedByMe, markCount, markedByAnyone, clearItemFavorites } from '../itemFavoritesStore'
 import { ItemMarksTooMany } from '../itemFavorites'
 import MediaLightbox from './MediaLightbox.vue'
@@ -417,6 +418,18 @@ const galleryVideoIds = computed(() => videoIdSet(items.value))
 const trashVideoIds = computed(() => videoIdSet(trashedItems.value))
 
 const activeTab = ref<'gallery' | 'chapters' | 'map' | 'beitraege' | 'trash'>('gallery') // local (the #fragment carries the tree path, cr-0031)
+// A member's tab switch keeps the page where it stands (`tabScroll.ts`): the row stays stuck, the tab opens where it was left.
+const tabScroll = useTabScroll(activeTab, {
+  root: () => detailEl.value?.querySelector<HTMLElement>('.memory-tabs') ?? null,
+  stickyTop: () => {
+    const row = detailEl.value?.querySelector<HTMLElement>('.memory-tabs .veyq-tabs__bar')
+    const top = row ? parseFloat(getComputedStyle(row).top) : 0
+    return Number.isFinite(top) ? top : 0
+  },
+})
+function onTabPicked(tab: string) {
+  void tabScroll.select(tab as typeof activeTab.value)
+}
 const fileInput = ref<HTMLInputElement | null>(null)
 
 // --- Memory date (cr-0067, uc.memory.date) → extracted into `useMemoryDate` (cr-0145). The effective range
@@ -811,6 +824,7 @@ watch(
   [() => props.node.id, () => props.memoryKey] as const, // one by one (see `useMediaGalleryLive`'s)
   () => {
     activeTab.value = 'gallery'
+    tabScroll.forget()
     resetTrash() // cr-0110/0111: drop the previous Memory's trash listing/thumbs/selection
     factChips.value = [] // the filter by facts is about the Memory you are in, as the mark filter is
     factText.value = ''
@@ -846,7 +860,7 @@ watch(
 
     <!-- Tabbed detail (cr-0061, ported from the design source): Gallery (the media grid) + Chapters (the
          nested Memories) + Map (the photos and the GPX tracks, uc.memory.tracks). The journal arrives with its feature. -->
-    <VeyqTabs v-model:value="activeTab" class="memory-tabs">
+    <VeyqTabs :value="activeTab" class="memory-tabs" @update:value="onTabPicked">
       <VeyqTabList>
         <VeyqTab value="gallery">{{ t('memory.gallery') }}</VeyqTab>
         <VeyqTab v-if="can.navigate" value="chapters">
@@ -1270,6 +1284,11 @@ watch(
   top: var(--app-sticky-top, 0px);
   z-index: 6;
   background: var(--app-bg);
+}
+/* However short a tab is, the page stays long enough for the row to stay stuck over it, so a switch never pulls the page
+   back up (`tabScroll.ts`): the panels fill the viewport below the sticky stack. */
+.memory-tabs :deep(.veyq-tab-panels) {
+  min-height: calc(100dvh - var(--media-grid-occluded-top, 0px));
 }
 /* The Chapters tab's view toggle, right-aligned above the card grid. */
 .chapters-toolbar {
