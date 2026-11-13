@@ -353,6 +353,14 @@ walked, and `pnpm run check` in `site/` is green. Every guard but guard_gaps gre
    **Recommendation:** ask Flathub after question 1 is settled, as its own CR; the release bundle stays the
    self-hostable path either way.
 
+
+**Decided** (the coordinator, 2026-11-13, under the owner's standing mandate; the owner may overturn any):
+- 3, 4, 5: as recommended — packages from the first release after Phase 6, marked preview; the Store and Flathub each
+  their own CR (#882, #881).
+- 1 and 2 stay the owner's: an application ID tied to a domain and a publisher name in a certificate are outward
+  identity. They block only Phase 6 (the first signed, published package); Phases 1–5 build with the recommended
+  values as placeholders and change them in one place.
+
 ## Retrospective
 
 _(filled at close)_
