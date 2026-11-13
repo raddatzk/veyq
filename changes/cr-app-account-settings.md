@@ -111,6 +111,42 @@ Apple as a pushed view (iOS) and a Settings scene-style window (macOS `Settings 
   signed out, and gone from the list; the principal's own family still refreshes afterwards (the control). · Done when:
   `./gradlew :core:jvmTest :core:macosArm64Test` green and the live test green with `VEYQ_LIVE=http://veyq.localhost:8080`;
   a bite — `signOutOthers` that also revokes `current` — turns the live control red.
+  **Status: built and unit-proven (2026-11-13); the live run is pending (the dev backend was down, not to be started by
+  this phase) — the box stays open until it is green.**
+  **Built:** core `session/AccountSettings.kt` — `AccountSettings<A, T>`, one per signed-in account, `state` (a
+  `StateFlow` of a `@Serializable` `State`, ready for phase 3's bridge) and `watch`; state: the email and `emailConfirmed`
+  (the server's copy, `getAccountEmail`; the account's own address until read), `Device(label, familyId, Trust)`,
+  `families` (id, created/last used as epoch ms, `current`, the register's label or null, `removesKey`), this device
+  first, `savedKeyDevices`, `otherSavedKeys`, `addDevice`, `working`, `refusal`, `registerRefusal`, `hasOthers`; actions as
+  D1 names them, plus `stopTrusting()` (Manage's `forgetDevice`). Two seams: `Door` (the server; `Over` is the real one
+  over `VeyqAccount`, every call through the generated client) and `Here` (`Held` over `SessionModel`: the trust read
+  from `managed()` — Manage servers' source — and `stay`/`trustWithPassword`/`forgetDevice`/`signOut` delegated);
+  `AccountSettings.of(session, account)` is the platforms' entry. `refresh` is the web's loader: the list first, then the
+  register half reconciled (write moment 3, which also joins the server's `current` family to this device — a resume never
+  learns its family id at a login) and read, never able to take the list down (E4; a refused register is named, an
+  unreadable wrap list prunes nothing and offers no wrap action). `DeviceRegisterStore` gained `reconcile` (deltas frozen
+  from the first read, as the web's), `rename` (this device's own entry only), the pure `view` (the web's
+  `readRegisterView`) and one shared revision-guarded `write`, which `remember` now uses unchanged in behaviour.
+  `VeyqAccount.register()` became internal and `thisDevice` was added. Seven `account_settings_*` refusal words in
+  `words/words.json` (the web's English and German; "your memories" said as "your data", the app holds every application).
+  **Deviation:** "Add a device" reads `core.device-linking` from `GET /api/setup`'s manifest (the web's
+  `hasCapability`), not `listInstanceCapabilities` as R4 named — that one is the admin channel, Server-Owner only.
+  **Met:** `./gradlew :core:jvmTest :core:macosArm64Test :bridge:jvmTest :core:compileKotlinLinuxX64
+  :core:compileKotlinMingwX64` green (`AccountSettingsTest` 14 cases on the JVM and macosArm64); the guards
+  (`scripts/validate_*.py` but guard_gaps) green. **Bites** (one edit each, `/bin/cp -f` restore): `signOutOthers` also
+  revoking `current` → `signingOutEveryOtherKeepsThisOne` red; the escalation's removal before its revoke →
+  `theEscalationRevokesFirst…`, `aFailedRevokeIsSaid…`, `aHalfDoneEscalation…` red; `others` without this device's wrap
+  excluded → `everyOtherSavedKey…` red; the reconcile's family prune unfrozen → `aReconcileRetriedAfterAConflict…` red;
+  `addDevice` on any capability → `addADeviceIsOffered…` red; the register's label join removed → `theListIs…` and
+  `aRenameIs…` red. `LiveAccountSettingsTest` compiles and skips without `VEYQ_LIVE`. **Pending, live:**
+  `VEYQ_LIVE=http://veyq.localhost:8080 ./gradlew :core:jvmTest --tests '*LiveAccountSettingsTest*'` (from `src/mobile`;
+  `VEYQ_ENV_FILE=<main checkout>/.run/.env` from a worktree), and the "every other" case against a throwaway account the
+  dev seeding made: `VEYQ_LIVE_OTHERS_ENV=<its env file>` added — never the principal; then the live bite (`signOutOthers`
+  also revoking `current`) must turn that case's control red.
+  **Retrospective:** R4's `listInstanceCapabilities` was a refine slip a read of its `x-veyq-channel: admin` would have
+  caught; a capability a member's screen gates on is always `/api/setup`'s (or the tenant's) manifest. The CR's live bite
+  needs "every other" driven live, which its own Context reserves for a throwaway account — so the bite lives in the
+  throwaway case, not the principal's.
 - [ ] **2 Android and Apple** — the drawer row opens the page (D3, D4's phone forms); the words added to
   `words/words.json` with German. · Done when: both builds green; on the throwaway AVD, the simulator and the macOS build
   the page is opened, this device renamed, a second session (signed in by the live test's helper) signed out, and
