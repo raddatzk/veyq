@@ -2,7 +2,8 @@
 
 - Status: Accepted
 - Built: partly (not built: § 1 a field on its own other than a node's name, and the reporter's handover of a guest's
-  identity key; § 11 the records' extension while proceedings are pending)
+  identity key; § 10 a journal guest's row per writing session; § 11 the records' extension while proceedings are
+  pending)
 - Date: 2026-10-16
 - Model: [Moderation](../features/moderation/_index.md)
 
@@ -343,6 +344,23 @@ The retention setting's form and its no-extension rule are [ADR 0092](0092-logs-
   a member writes or anyone reads. The port and the exact time are kept because behind carrier-grade NAT only address,
   port and time together name a subscriber
   ([ADR 0094](0094-a-clients-address-is-the-hop-the-network-vouches-for.md)).
+- **A guest who writes a journal by the second leaves one row per writing session, not one per update**
+  ([ADR 0133](0133-a-memorys-journal-is-a-sealed-crdt-log-whose-snapshots-only-members-write.md) decision 7; owner
+  2026-11-13). A typing guest sends about one update a second, so a row per update would keep thousands of rows of
+  address and port for one afternoon's text. **A session** is the run of journal updates one share identity sends to
+  one journal through the same client address, source port and `Origin`: it starts with the first such update that
+  finds no open session, and ends when **15 minutes** pass without one, or at the first update whose address, port or
+  `Origin` differs, which starts a new session. Its row holds what a per-write row holds — the address, the port where
+  known, the `Origin`, the share identity, the journal as its object — with the server time of its **first and last**
+  update in milliseconds and its count of updates; its retention runs from its last update. **Why the evidence purpose
+  still holds, on our reading** (not a reviewed answer, § Legal basis, Still open 16): the purpose is to name, once a
+  guest's text is reported, the subscriber behind the write, and an access provider resolves an address, a port and a
+  point in time. Every update keeps its own exact server time and its writer on its update row, which the hold copies
+  with the session rows, and no update can fall into a session with another address, port or `Origin` than its own,
+  because a change opens a new row. So the rows answer for every reported update what a row per update would have
+  answered, with fewer rows of personal data — which is what data minimisation (Art. 5(1)(c)) asks. The update rows of a
+  guest's session are kept at least as long as the session's row: a snapshot revision that holds a guest's update is
+  kept past its replacement for the trash retention and never for less than this record's N (ADR 0133 decision 8).
 - **The origin is kept because the address alone stopped being enough evidence** once the guest API answers every
   origin ([ADR 0121](0121-a-received-share-is-browsed-in-place-through-its-own-api.md) decision 3): a hostile page that
   knows a writing link can make any visitor's browser write through it, and the record would then name that bystander's
@@ -622,3 +640,6 @@ differs, should one come, is a legal duty that wins over what is built (`CLAUDE.
 14. Whether switching an application off is a moderation decision.
 15. Whether keeping a guest write's `Origin` beside its address stays within § 10's purpose and data minimisation
     (our reading: yes, the same evidence purpose and retention, § 10).
+16. Whether one row per guest writing session of a journal, beside each update's own time on its update row, serves
+    the evidence purpose as a row per write would (our reading: yes, § 10 — no update shares a row with another
+    address, port or `Origin`).

@@ -1,0 +1,38 @@
+useCase: uc.memory.journal
+feature: memory
+title: Memory journal — write a Memory's or a Chapter's text together, live
+status: planned
+# Refined 2026-11-13 (ADR 0133, ADR 0134, ADR 0093 § 10); nothing is built. cr-live-journal turns these gaps into refs
+# for the log on ADR 0033's poll, the guests' writes and the history; cr-live-stream for live delivery and who is here.
+acceptanceCriteria:
+  - id: one-journal-per-node
+    text: A Memory and each Chapter have one journal each, keyed by the node; nothing joins them on the server. A journal is a Yjs `Y.Text` of markdown whose updates are sealed under the snapshot revision's own random `K_jrev` (wrapped under `K_node`, bound to scope, node and revision), each bound to journal, snapshot revision and a client-minted update id, padded to a size class and capped at 64 KiB; it bumps its own list of the node's items revision and never the gallery's or the scope tree's.
+  - id: write-together
+    text: A member and a `READ_WRITE` link guest edit the same journal at once; each client flushes at most one sealed update a second and applies every update in the server's order, and every client with it open converges on the same text. A `READ` guest reads the merged text with its embeds on the poll; a `WRITE_ONLY` link has no journal.
+  - id: members-compact
+    text: Only a member's client writes a snapshot revision (CRDT state and projection, sealed under a fresh `K_jrev`); the server takes `n + 1` only over `n` (`409 stale_revision`), takes updates for `n` until `n + 1` exists and refuses later ones with `409`, and serves `n`'s updates past the folded position as the new snapshot's tail; a guest's snapshot is refused.
+  - id: snapshot-checked
+    text: A client that holds the predecessor checks a new snapshot's state byte for byte against the predecessor's state plus the updates it folds and says so, naming the snapshot's writer, where it differs; a snapshot that does not open is skipped for the newest one that does, with every kept update after it replayed.
+  - id: gaps-and-writer-ids
+    text: Each update's envelope carries its Yjs client id and a gapless sequence per client id; a client that sees a gap says the journal is incomplete and holds that writer's later updates; a client id is pinned to the server-attested writer (for a guest's client, the writer's ordinal) of its first update and a reuse by another writer is dropped; an update that does not open is skipped and marked.
+  - id: history-and-restore
+    text: Superseded snapshot revisions and their updates are kept for the node trash retention after their replacement (the current one and its predecessor always; one holding a guest's update never for less than the guest-write record's N), then deleted by the server. A member lists them with time and writer, opens one, and restores it as one ordinary edit followed by a compaction; a guest is served no earlier revision and cannot restore.
+  - id: contributors
+    text: The journal shows its contributors from the server's contributor rows, written with each writer's first update and kept with the journal; a member is served writer ids and reads members' and guests' names, a guest is served only ordinals and reads no name or member id; an erased account shows as a former member.
+  - id: embeds
+    text: The tokens `::media:`, `::chapter:`, `::map:` and `::track:` inside the sealed text render through the safe renderer as cards in the editor's live preview and in the read view; an embed the viewer cannot open renders as a placeholder; a map or track embed draws only under the map consent.
+  - id: guest-session-record
+    text: A `READ_WRITE` guest's journal updates leave one guest-write record row per writing session — one share identity, one journal, one address, port and `Origin`, ended by 15 minutes without an update or by a change of any of the three — holding its first and last time and its count, its expiry counted from the last; the guest's editor shows the record's first-layer sentence.
+  - id: bounds
+    text: The server enforces the update cap, the snapshot caps, a rate per writer and a cap on the tail (past it updates are refused until a member compacts), and counts the journal's rows in the tenant's storage usage.
+  - id: platform-machinery
+    text: A rotation re-wraps every kept `K_jrev` without changing a body, an update to a snapshot revision minted below the scope's epoch is refused and a member's client compacts under a fresh key; the journal goes with its node's trash, restore and purge; `memories.journal` or Memories off leaves it read-only; a content block refuses updates, snapshots and restores with `451`; a report of the journal carries the current and the predecessor's `K_jrev` and the hold copies their rows.
+  - id: export-import-search
+    text: A Memory's export carries each journal as markdown with every embed token pointing at its exported file, and no CRDT state; an import starts a fresh journal from it with the importer as its only contributor; a member's search finds a journal by the projection of its newest snapshot revision.
+  - id: live-and-present
+    text: A writer's edit reaches the other editors within a second through core's stream, which announces positions only and is answered by the list's ordinary read; the editor shows who else has the journal open for editing — names for a member, a count for a guest; with no stream the journal reads on the poll.
+gaps:
+  backend: "Planned, nothing built: no journal tables, operations, list key on the items revision, stream or session row exist (cr-live-journal, cr-live-stream)."
+  web: "Planned, nothing built: no journal model, editor, embeds, history or stream client exist (cr-live-journal, cr-live-stream)."
+  crypto: "Planned: the journal's seal purposes (the `K_jrev` wrap, update, state, projection) get their vectors in cr-live-journal's contracts phase."
+  stack: "Planned: a lane L1 spec of two writers in two browser contexts comes with cr-live-journal's web phase."

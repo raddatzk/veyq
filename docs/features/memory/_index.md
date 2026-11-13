@@ -127,7 +127,9 @@ The tree these build on — encrypted names, blinded slugs, a key on every node,
   background music — one Spotify and one Apple Music playlist sealed in the node's `wrappedMeta.music`, played after the
   viewer's opt-in by the vendor's SDK in the music frame, a page of the instance's own music host; never in the app origin;
   started from the header, played in the shell's music bar below the footer, which plays on across pages
-- Memory journal — planned: markdown sealed under `K_node`
+- [uc.memory.journal](use-cases/uc.memory.journal.md) — **planned** ([ADR 0133](../../decisions/0133-a-memorys-journal-is-a-sealed-crdt-log-whose-snapshots-only-members-write.md)):
+  a journal per Memory and per Chapter — markdown as a sealed Yjs log with snapshot revisions only members write and
+  restore, written live by members and `READ_WRITE` guests, embeds as tokens in the sealed text
 - [uc.memory.tracks](use-cases/uc.memory.tracks.md) — **built (web)** ([ADR 0130](../../decisions/0130-a-gpx-track-is-a-medium-of-its-memory-drawn-on-its-map.md)):
   GPX tracks on a Memory's Map tab beside its photos — each track a medium whose original is its GPX file (no contract,
   table or role of its own; the server cannot tell it from a photo), read and drawn on the device only, several per Memory
