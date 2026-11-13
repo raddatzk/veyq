@@ -106,6 +106,11 @@ jobs:
       - name: Staging retention self-test
         run: .venv/bin/python scripts/staging_retention_selftest.py
 
+      # How release.yml's `msix-sign` holds a signed MSIX to the staged one and to the committed certificate
+      # (scripts/msix_sign.py, ADR 0133 decision 7): proven on every commit, not first on the day of a release.
+      - name: MSIX signing self-test
+        run: .venv/bin/python scripts/msix_sign_selftest.py
+
       # What dependabot-follow.yml writes onto a Dependabot branch, and the forgeries it refuses
       # (scripts/dependabot_follow.py): proven on every commit that could change it, before its next push.
       - name: Dependabot follow self-test
