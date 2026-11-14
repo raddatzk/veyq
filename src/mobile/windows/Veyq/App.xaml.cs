@@ -12,7 +12,8 @@ public partial class App : Application
 
     public App()
     {
-        Log.Start();
+        Log.Start(AppData.Folder);
+        Log.Write(AppData.Packaged ? "data in the package's own folder" : "data in %LOCALAPPDATA%\\veyq (unpackaged)");
         UnhandledException += (_, e) => Log.Write($"unhandled exception: {e.Exception}");
         System.AppDomain.CurrentDomain.UnhandledException += (_, e) => Log.Write($"unhandled exception: {e.ExceptionObject}");
         TaskScheduler.UnobservedTaskException += (_, e) => Log.Write($"unobserved task exception: {e.Exception}");

@@ -40,7 +40,7 @@ public sealed partial class MainWindow : Window
         DeviceStore store;
         try
         {
-            store = DeviceStore.OpenDefault();
+            store = DeviceStore.OpenIn(AppData.Folder);
         }
         catch (Exception e) when (e is IOException or UnauthorizedAccessException or System.Text.Json.JsonException)
         {
