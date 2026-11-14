@@ -47,7 +47,7 @@ internal sealed class AccountSettingsPage : IDisposable
     private string? _told;
     private SettingsShown? _last;
     /// <summary>The account this page is of (none for the debug harness's), for the device link's calls; whether a camera
-    /// is there for "Scan a code" (cr-core-qr-decoder D4: no camera, no entry).</summary>
+    /// is there for "Scan a code" (ADR 0141 decision 4: no camera, no entry).</summary>
     private string? _connection;
     private bool _camera;
 

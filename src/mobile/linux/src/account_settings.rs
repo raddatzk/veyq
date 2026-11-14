@@ -162,7 +162,7 @@ impl Page {
                 p.link(|connection| Call::LinkScanSignInCode { connection });
             }
         });
-        // the scan's row only where the Camera portal names a camera (cr-core-qr-decoder D4: no camera, no entry)
+        // the scan's row only where the Camera portal names a camera (ADR 0141 decision 4: no camera, no entry)
         let row = scan.downgrade();
         glib::spawn_future_local(async move {
             let present = crate::qr_camera::camera_present().await;
