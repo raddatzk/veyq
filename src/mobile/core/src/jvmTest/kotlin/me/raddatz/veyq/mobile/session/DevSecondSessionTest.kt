@@ -13,7 +13,7 @@ import kotlin.test.fail
 
 /**
  * Dev tooling, not a test of the product: a second session of the seeded principal for an app's Settings pass
- * (`cr-app-account-settings` phase 2), to be signed out from the app's list. With `VEYQ_LIVE` and
+ * (`uc.account.sessions`), to be signed out from the app's list. With `VEYQ_LIVE` and
  * `VEYQ_DEV_SECOND_SESSION=<label>` it signs in on a fresh device, names itself `<label>` through the register (the row
  * the app's list shows), and waits until its page no longer reads — signed out from elsewhere —, printing after how
  * long; at `VEYQ_DEV_SECOND_SESSION_WAIT_S` (default 900) it signs itself out and fails. Only its own session is touched.

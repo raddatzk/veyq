@@ -547,7 +547,7 @@ private fun Drawer(
     onAddServer: () -> Unit,
     /** The sidebar's "New": what a level creates ("folder", "pot"), opened on Home. */
     onNew: (String) -> Unit,
-    /** The drawer's Settings: the account's page (`cr-app-account-settings`). */
+    /** The drawer's Settings: the account's page (`uc.account.sessions`). */
     onSettings: () -> Unit,
     /** Open for good beside the content (an expanded window), not over it. */
     permanent: Boolean = false,

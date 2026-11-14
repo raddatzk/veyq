@@ -7,7 +7,7 @@ import kotlin.test.Test
 
 /**
  * Dev tooling, not a test of the product: writes the seeded principal's Emergency Kit for a device pass of the apps'
- * kit sign-in (`cr-app-kit-sign-in` phases 6 and 7) — `dev-kit.pdf`, the token in its `Keywords` as
+ * kit sign-in (`en.account.key-model` § The Emergency Kit) — `dev-kit.pdf`, the token in its `Keywords` as
  * [LiveSignInTest.aKitPdfSignsThePrincipalInWithAnEmptySecretKey] builds it, for a picker, and `dev-kit-qr.png`, its QR
  * drawn by the core's [QrPng] (8 px a module), for a camera (Android's virtual-scene poster, Apple's `VEYQ_DEV_CAMERA`).
  * The password stays out: the pass hands it through `devlogin.py --kit`.

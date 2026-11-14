@@ -371,6 +371,16 @@ A refined CR nails **decisions, not keystrokes**:
   functions in their own `AppModel` and not from any state. Each surfaced only when building the phase after. A
   refine that puts an interface between two sides greps what the existing callers call through it, and what each call
   carries.
+- **A refine's measurement is taken where the product's own path runs, not where it is convenient.** The QR decoder's
+  refine counted ZXing's corpus images but never read their expected texts, and scoped out the Kanji its own threshold
+  needed; ZXing's corpus is photos, and only a round trip through the core's own crisp code found a finder bug every
+  rendered kit page would have hit; "the Camera portal in the container's session" could only answer "no portal" (the
+  container runs no desktop); "no camera" read from a feature flag missed the emulator that claims one and crashed;
+  and a release-build timing had no door until a build was made for it. So a CR that adopts a corpus reads what it
+  expects, holds a port to the product's outputs as well, names which session runs a desktop service, reaches a
+  device state on a device that has it, and names how a build it wants measured reaches the code. A signing check
+  written from the docs alone would have refused the first release: signing an MSIX also adds
+  `AppxMetadata/CodeIntegrity.cat`, which only a real signed pair showed.
 - **A standing change on a machine is an owner step done before the implementation; a question that could stop a phase
   is its first measurement.** The Windows app's implementer could not register two scheduled tasks on the test VM (its
   auto-mode classifier refused them as persistence, as the CR foresaw), so a phase's visible proof waited on the owner,

@@ -1,4 +1,4 @@
-// Debug builds only — the account's Settings drawn without a server (cr-app-account-settings phase 4's visual pass), as
+// Debug builds only — the account's Settings drawn without a server (a visual pass's harness, uc.account.sessions), as
 // DevScan is the camera's and as Linux's dev_settings.rs: started with VEYQ_DEV_SETTINGS=1, the window shows an
 // AccountSettingsPage alone over Fake, a state as the core would send it (every card the page has: this device, a named
 // and an unnamed other session, one whose saved key can go, a device with a saved key and no session). No page is open in

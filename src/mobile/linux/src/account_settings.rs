@@ -1,4 +1,4 @@
-//! The account's Settings (`cr-app-account-settings`; the web's Settings hub, its `SessionsPanel` the reference), GNOME's
+//! The account's Settings (`uc.account.sessions`; the web's Settings hub, its `SessionsPanel` the reference), GNOME's
 //! way: an `AdwPreferencesDialog` opened from the sidebar's Settings, as "Manage servers" is ([crate::manage]). One page
 //! of groups, each titled as the web's sections are:
 //!

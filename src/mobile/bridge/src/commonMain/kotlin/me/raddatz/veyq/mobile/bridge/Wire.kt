@@ -140,7 +140,7 @@ internal sealed class Call {
     @Serializable @SerialName("Manage.PasswordTrust") data class ManagePasswordTrust(val connection: String, val password: String) : Call()
 
     /**
-     * The account's Settings page (core's `AccountSettings`, `cr-app-account-settings` D4) for the connection whose key is
+     * The account's Settings page (core's `AccountSettings`, `uc.account.sessions`) for the connection whose key is
      * [connection], answered with its id ([Answer.SettingsOpened]) for [Watched.Settings]; the core reads it at once
      * (`refresh`). Refused `NO_SUCH_CONNECTION`, or `NO_TENANT_OPEN` (it is reached from an open tenant's drawer). It stays
      * until [SettingsClose], its account's sign-out here, or the tenant closes. Each action is one call answered once it
@@ -1300,7 +1300,7 @@ internal class DetailRow(
 )
 
 /**
- * An account's Settings page as the host draws it (core's `AccountSettings.State`, `cr-app-account-settings` D1), each
+ * An account's Settings page as the host draws it (core's `AccountSettings.State`, `uc.account.sessions`), each
  * field the core's: the address and whether the server holds it confirmed (null until read); this device's name and how
  * it trusts the account ([trusted], [level] and the [levels] it may move to, as [ManagedShown]'s); the session families,
  * this device's first (null until the list first read); the devices with a saved key and no session ([keptDevices]);

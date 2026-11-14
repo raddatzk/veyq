@@ -150,7 +150,7 @@ fn activate(app: &adw::Application) {
         screens.window.connect_destroy(move |_| view.close());
         return;
     }
-    // a debug build's Settings harness: the page over a state of its own, no session (`cr-app-account-settings` phase 4)
+    // a debug build's Settings harness: the page over a state of its own, no session (`uc.account.sessions`)
     if dev_settings::requested() {
         eprintln!("veyq: the settings harness (debug build)");
         veyq::account_settings::show(&screens.window, &dev_settings::fake());

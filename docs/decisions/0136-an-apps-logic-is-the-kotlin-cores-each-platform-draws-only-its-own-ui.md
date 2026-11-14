@@ -128,6 +128,19 @@ four times.
   decision 3). The platform's save or open dialog chooses the file and hands over its path; the core opens it and reads
   or writes it (`blob/FileSink`, `blob/FileSource`), removing a download that did not finish. The Apple app did so
   first (`AppleDepot`); Linux and Windows do so through the bridge, where nothing of a file's content crosses.
+- **An Emergency Kit's read is the core's; drawing its pages is the platform's** (2026-11-13, the kit at sign-in on all
+  four apps; `en.account.key-model` § The Emergency Kit). The token's decode, the read order (the raw token in the
+  bytes, the PDF's `Keywords`, the QR on the first three pages, the first address field only where the token has no
+  server), the tolerant PDF reader (an object scan, not an xref walk; inflate through each platform's zlib) and the QR
+  decoder ([ADR 0141](0141-qr-codes-are-read-and-drawn-by-the-core.md)) are one Kotlin implementation
+  (`account/KitImport`, `account/KitPdf`, `crypto/EmergencyKit`). A platform picks the file and draws a page or a
+  picture to luminance through its own renderer (`PdfRenderer`, PDFKit, poppler, `Windows.Data.Pdf`) behind
+  `KitPictures` — rejected: a PDF renderer in the core (a fifth beside four, pdfium and MuPDF C libraries with their own
+  CVE stream) and each platform's metadata API for `Keywords` (Android's and Windows' renderers have none). **One
+  renderer's width is no rule:** PDFKit's drawing of the photographed kit read at every width from 1600 to 3600 but the
+  web's 2400, so a page that reads nothing is drawn once more 2000 wide (`KitImport.FALLBACK_PIXELS`). **The sign-in
+  model holds the kit's Secret Key, never a UI**: the gate says only *that* a kit's key is held, and the key lives
+  exactly as long as a sign-in gate shows a kit (one setter, `show`, ends it on every other gate), zeroed when it goes.
 - **When the members' pictures are read is the core's** (`session/AvatarsModel`, decision 1): Android and Apple had
   each synced them when a tenant opened, a rule in two apps before a third and fourth copy. They now watch the core's
   model, and Linux and Windows read its id set through the bridge (ADR 0137 decision 1).

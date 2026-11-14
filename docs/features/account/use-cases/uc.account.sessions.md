@@ -233,6 +233,11 @@ Key again.
   the request arrived on; that is self-knowledge about the caller, not a new fact about the account. The flag
   exists so the UI can keep "this is you" and "sign out everywhere else" honest.
 - **Only active families are listed.** Revoked and expired ones are noise, and the purge removes them anyway.
+- **The apps hold the same panel** on their account's Settings page (Android, the Apple app, Linux, Windows): one core
+  screen model (`session/AccountSettings` in `src/mobile/core`, [ADR 0136](../../../decisions/0136-an-apps-logic-is-the-kotlin-cores-each-platform-draws-only-its-own-ui.md)
+  decision 2) with the web's orderings and this use-case's E1–E5, the names joined from the register on the device, each
+  app only drawing it. Its locked-device path (E3) stays the sign-in's and is not on that page. The apps are no coverage
+  surface: their proof is the tests and passes [`src/mobile/CLAUDE.md`](../../../../src/mobile/CLAUDE.md) § Prove your work names.
 - **A best-effort name is a starting point, not an identity.** A browser cannot read a machine name, so the
   register seeds a device's label from a browser + platform guess — and, because the label lives in a
   user-owned register rather than on a per-login family, the user can **rename it**. Two identical guesses are
