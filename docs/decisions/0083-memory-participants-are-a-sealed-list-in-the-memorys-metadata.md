@@ -67,13 +67,27 @@ names, snapshots or anything beyond opaque ids, this decision must be re-decided
 A per-share opt-in is a possible later decision, **not made now**.
 
 **5. A participant opens a member profile — members only.** Clicking a participant opens a profile page at the fragment
-**`#people/<userId>`**, never reachable from a share. `people` is a reserved route segment, so no application claims it
+**`#people/<username>`** (amended 2026-11-14, below; it was `#people/<userId>`), never reachable from a share. `people` is a reserved route segment, so no application claims it
 and no node at a scope root ever has the profile's path (the routing is
 [uc.memory.participants](../features/memory/use-cases/uc.memory.participants.md)'s).
 Not `~people` (the `~` prefix is the personal-scope token), and not a history-mode path: those reach the server's access
 logs, a fragment does not.
 A foreign `~username` stays a personal-scope token, never a profile
 ([ADR 0015](0015-operator-blind-readable-urls.md)).
+
+**5a. The token names the member by username (amended 2026-11-14, owner).** The token after `people/` is the member's
+username in the tenant: unique there and plaintext ([ADR 0023](0023-per-tenant-member-identity.md)), and already in the
+roster every member's client reads, so a fragment carrying it — which never reaches the server — tells nobody anything
+new. It is the **user id** where no username can stand: a former member, whom no roster names; a roster not read yet; and
+a username shaped like a user id (the username pattern `[A-Za-z0-9_.-]+` admits a canonical UUID). The reader
+(`findPerson`, `core/people/directory.ts`) takes a token shaped like a canonical UUID as that id and nothing else, any
+other as a username matched exactly against the tenant roster — so every id link, one written before this amendment or a
+former member's, keeps naming its person, and a member who picks another's id as their username cannot take over the
+other's links. An id link to a current member is replaced in the address by the username link (the same page).
+**The price, accepted:** a username is changeable (ADR 0023), so a username link stops working after a rename — the page
+says no member of the space goes by that name — and once another member takes the freed name it opens *that* member's
+page. The page shows who it is about (name, picture, safety number), so nothing is compared against the wrong person
+unseen, but a username link is no permalink; the id link stays one.
 
 **6. Profile content.** The **display name** (the sealed real name, falling back to the username — the rule in decision
 9), an **avatar** (the member's picture, [ADR 0084](0084-a-members-profile-picture-is-a-sealed-attribute-of-their-tenant-profile.md), else a letter), and below them **every Memory in which

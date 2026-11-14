@@ -54,7 +54,7 @@ import { useObjectUrl } from '../../../shared/state/useObjectUrls'
 import { formatBytes } from '../../../shared/formatBytes'
 import type { MediaMetaDoor } from '../source'
 import type { UploaderLabel } from '../useUploaderNames'
-import { personHash } from '../../../core/node/location'
+import { profileHash } from '../../../core/people/directory'
 import { usePanZoom } from '../../../shared/ui/usePanZoom'
 import { createVisibilityPoller } from '../../../shared/state/visibilityPoller'
 import { createPreviewCache, previewKeyOf } from '../previewCache'
@@ -936,7 +936,7 @@ onBeforeUnmount(() => {
             <template v-if="uploader">
               <dt>{{ t('media.uploadedBy') }}</dt>
               <dd data-testid="lightbox-uploader">
-                <RouterLink v-if="uploader.userId" :to="{ hash: personHash(uploader.userId) }" class="media-lightbox-uploader-link" @click="close()">{{ uploader.name }}</RouterLink>
+                <RouterLink v-if="uploader.userId" :to="{ hash: profileHash(uploader.userId) }" class="media-lightbox-uploader-link" @click="close()">{{ uploader.name }}</RouterLink>
                 <template v-else>{{ uploader.name }}</template>
               </dd>
             </template>

@@ -184,7 +184,7 @@ here; the server is blind.
   guest exclusion is the interface's (`memoryRights().participants` is false for every share role, fail-closed) and the ids are what keep the
   residual harmless; if participants ever carry names, ADR 0083 decision 4 is open again. The write merges on `409` through
   `editParticipantsOf` (`core/node/nodeMeta.ts`), not `editField`. Names come from `core/people/directory.ts` (real name, else username, from the
-  TENANT's member list). A person's profile is the fragment `#people/<userId>` (`parseHash().person` / `personHash` in `location.ts`, the one door;
+  TENANT's member list). A person's profile is the fragment `#people/<username>` (`parseHash().person` / `personHash` in `location.ts`, the one door; a user id where no username can stand - a former member, a username shaped like an id -, and an id-shaped token is always read as the id, ADR 0083 decision 5a: every link is built by `profileHash` and every token resolved by `findPerson`, `core/people/directory.ts`;
   `people` is in `RESERVED_ROUTE_SEGMENTS` and numbered away from a root folder's name); core draws `core/people/PersonProfile.vue` and an application adds a
   section with its registrar's `app.personSection` (Memories: `PersonMemories.vue` over `participantIndex.ts`, which holds Memory keys and so is dropped on
   every scope reset). A share view never links to a profile.
@@ -207,7 +207,7 @@ here; the server is blind.
   `disabled`; consecutive chips one row), `people` (`label`, `people: { userId | null, name, former? }[]`, `caption`, `status`; drawn by
   `core/people/PersonGroup.vue` - one person avatar + name, several three overlapping avatars or two + "+N" with a hover card listing everyone;
   `onEdit` + `editLabel`/`emptyLabel` make the fact the way to the application's editor: a pencil beside the people, the empty chip while nobody
-  is listed) or `text`; a BANNER is `{ component, props }`, drawn above the row (Memories'; a drawn one opens its own dialog). **People link to `#people/<id>` and show a member's picture only
+  is listed) or `text`; a BANNER is `{ component, props }`, drawn above the row (Memories'; a drawn one opens its own dialog). **People link to `#people/<username>` and show a member's picture only
   where `linkPeople` says so** - `NodePage` sets it for a member's access alone, the prop's default is false, so a share page links nobody
   whatever an application hands it. The leading visual is core's and **as tall as the rows core draws beside it** (owner 2026-11-04): each row kind
   (title, subtitle, chips, people, text) has a fixed block-size token in `styles/ui.css` (`--veyq-node-header-row-*`), the header sets the row

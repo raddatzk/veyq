@@ -15,6 +15,7 @@ import { copyScopeKey, zeroScopeKey, type ScopeKey } from '../../features/spaces
 import { openMemberName, type MemberName } from '../../features/account/profile/memberName'
 import { ScopeKind } from '../../api/generated/scopes'
 import { syncAvatars, resetAvatars } from './avatarCache'
+import { isUserIdToken, personHash } from '../node/location'
 
 export { avatarUrlOf } from './avatarCache'
 
@@ -56,6 +57,26 @@ const snapshot = shallowRef<Map<string, Person> | null>(null)
  *  Synchronous and reactive; {@link loadTenantPeople} fills it, and the shell starts that read when a tenant space opens. */
 export function personNow(userId: string): Person | undefined {
   return snapshot.value?.get(userId)
+}
+
+/** The member a profile token names (`#people/<token>`, ADR 0083 decision 5) among `people`: a token shaped like a user id
+ *  is that id and nothing else - never a username, so a member who picks another's id as their username cannot take over
+ *  the other's links -; any other token is a username, matched exactly (the server keeps it unique in the tenant). */
+export function findPerson(people: ReadonlyMap<string, Person>, token: string): Person | undefined {
+  if (isUserIdToken(token)) return people.get(token)
+  for (const p of people.values()) if (p.username === token) return p
+  return undefined
+}
+
+/** {@link findPerson} over the roster as already read: synchronous and reactive, undefined before the first read. */
+export function personOfTokenNow(token: string): Person | undefined {
+  return snapshot.value ? findPerson(snapshot.value, token) : undefined
+}
+
+/** The fragment of `userId`'s profile page, by their username where the roster as already read knows it (reactive: a link
+ *  drawn before the read follows it), else by the id - a former member, or no roster yet. Every profile link is built here. */
+export function profileHash(userId: string): string {
+  return personHash(userId, personNow(userId)?.username)
 }
 
 /** Every member of the tenant as last read, or none before the first read and after a sign-out (reactive, like

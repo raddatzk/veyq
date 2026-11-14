@@ -157,7 +157,7 @@ A node's address is a readable path in the URL **fragment**, resolved on the dev
 `src/web/src/core/node/location.ts`: `parseHash` and `buildHash` (a folder ends in a slash, kept on parse, emitted on
 build), `segmentsOf` (equal slugs numbered per class — `anna`, `anna-2` — in `compareByCreation` order: the
 server-observed `NodeSummary.createdAt`, `veyq_node.created_at DATETIME(3)`, then the node id) and `personHash`
-(`#people/<userId>`, ADR 0083). An application decides its route segment once in the registry (`app.route(slug)`; Depot alone
+(`#people/<username>`, ADR 0083). An application decides its route segment once in the registry (`app.route(slug)`; Depot alone
 takes `app.route(null)`; `RESERVED_ROUTE_SEGMENTS` cannot be claimed —
 [Applications](../../../apps/README.md)). A group token resolves through `openGroupByToken`
 (`src/web/src/features/spaces/scopes.ts`): a slug two of the member's groups share opens neither.

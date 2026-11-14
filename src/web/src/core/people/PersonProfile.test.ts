@@ -5,7 +5,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { mount, flushPromises } from '@vue/test-utils'
 import { defineComponent, h } from 'vue'
 
-vi.mock('./directory', async (orig) => ({ ...(await orig<typeof import('./directory')>()), loadTenantPeople: vi.fn(), personNow: vi.fn(() => undefined) }))
+vi.mock('./directory', async (orig) => ({ ...(await orig<typeof import('./directory')>()), loadTenantPeople: vi.fn(), personOfTokenNow: vi.fn(() => undefined) }))
 vi.mock('../../features/account/profile/profile', async (orig) => ({
   ...(await orig<typeof import('../../features/account/profile/profile')>()),
   getMyProfile: vi.fn(),
@@ -33,7 +33,7 @@ vi.mock('../applications/registry', async (orig) => {
 })
 
 import PersonProfile from './PersonProfile.vue'
-import { loadTenantPeople, personNow, type Person } from './directory'
+import { loadTenantPeople, personOfTokenNow, type Person } from './directory'
 import { realI18n, t } from '../../test/i18n'
 import { account } from '../../app/account'
 import { getMyProfile, updateMyProfile, openOwnNameKey, setMyAvatar, clearMyAvatar, sealName } from '../../features/account/profile/profile'
@@ -48,21 +48,21 @@ const ANNA = 'aaaaaaaa-0000-4000-8000-000000000001'
 const load = vi.mocked(loadTenantPeople)
 const anna: Person = { userId: ANNA, username: 'anna', realName: 'Anna Meyer', displayName: 'Anna Meyer' }
 
-async function mountPage(userId = ANNA) {
-  const w = mount(PersonProfile, { props: { userId }, global: { plugins: [realI18n()] } })
+async function mountPage(token = ANNA) {
+  const w = mount(PersonProfile, { props: { token }, global: { plugins: [realI18n()] } })
   await flushPromises()
   return w
 }
 
 beforeEach(() => {
   vi.clearAllMocks()
-  vi.mocked(personNow).mockReturnValue(undefined)
+  vi.mocked(personOfTokenNow).mockReturnValue(undefined)
   account.userId = ''
 })
 
 describe('PersonProfile', () => {
   it('shows a member the device already knows at once, without waiting for the read', async () => {
-    vi.mocked(personNow).mockReturnValue(anna)
+    vi.mocked(personOfTokenNow).mockReturnValue(anna)
     load.mockReturnValue(new Promise(() => {}))
     const w = await mountPage()
     expect(w.get('h1').text()).toBe('Anna Meyer')
@@ -114,10 +114,46 @@ describe('PersonProfile', () => {
   it('re-reads when the route moves to another person', async () => {
     load.mockResolvedValue(new Map([[ANNA, anna]]))
     const w = await mountPage()
-    await w.setProps({ userId: 'other' })
+    await w.setProps({ token: 'bbbbbbbb-0000-4000-8000-000000000002' })
     await flushPromises()
     expect(load).toHaveBeenCalledTimes(2)
     expect(w.get('h1').text()).toBe('Former member')
+  })
+})
+
+// The address names a member by their username (ADR 0083 decision 5, amended 2026-11-14); an id still names its person.
+describe('PersonProfile - the token of the address', () => {
+  it('opens a member by their username, and hands the sections and the safety number their id', async () => {
+    load.mockResolvedValue(new Map([[ANNA, anna]]))
+    const w = await mountPage('anna')
+    expect(w.get('h1').text()).toBe('Anna Meyer')
+    expect(w.get('.section-stub').text()).toBe(`${ANNA}|Anna Meyer`)
+    expect(w.get('.their-safety-stub').text()).toBe(`${ANNA}|Anna Meyer|anna`)
+  })
+
+  it('matches the username exactly: another case is nobody', async () => {
+    load.mockResolvedValue(new Map([[ANNA, anna]]))
+    const w = await mountPage('Anna')
+    expect(w.get('h1').text()).toBe('Unknown member')
+  })
+
+  it('a username no member holds names nobody: it says so, greyed, and draws no section and no safety number', async () => {
+    load.mockResolvedValue(new Map([[ANNA, anna]]))
+    const w = await mountPage('bert')
+    expect(w.get('h1').text()).toBe('Unknown member')
+    expect(w.get('.person-head').classes()).toContain('is-former')
+    expect(w.get('.person-username').text()).toBe('No member of this space goes by ~bert. The name may have changed.')
+    expect(w.find('.section-stub').exists()).toBe(false)
+    expect(w.find('.their-safety-stub').exists()).toBe(false)
+  })
+
+  it('a token shaped like an id is that id: a member whose USERNAME is another\'s id does not take the other\'s page', async () => {
+    const BERT = 'bbbbbbbb-0000-4000-8000-000000000002'
+    const mallory: Person = { userId: 'cccccccc-0000-4000-8000-000000000003', username: ANNA, realName: null, displayName: ANNA }
+    load.mockResolvedValue(new Map([[mallory.userId, mallory], [BERT, { ...anna, userId: BERT, username: 'bert', displayName: 'Bert' }]]))
+    const w = await mountPage(ANNA) // Anna has left; Mallory chose her id as a username
+    expect(w.get('h1').text()).toBe('Former member')
+    expect(w.get('.section-stub').text()).toBe(`${ANNA}|`)
   })
 })
 

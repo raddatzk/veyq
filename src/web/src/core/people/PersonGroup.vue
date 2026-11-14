@@ -6,7 +6,7 @@
 // A former member is greyed, unlinked and pictureless; a person with no member identity (a guest) is their name alone.
 //
 // **Links and pictures only where `link` says so** (src/web/CLAUDE.md, "A member's profile picture"): a member's page passes
-// it, and each member then links to their profile `#people/<userId>` and shows their picture. A share page never does - its
+// it, and each member then links to their profile `#people/<username>` and shows their picture. A share page never does - its
 // header defaults to `false` (fail closed) - so no profile link and no member picture fetch reach a guest's page, whatever
 // people an application hands it.
 import { computed, ref } from 'vue'
@@ -16,7 +16,7 @@ import VeyqAvatar from '../../shared/ui/VeyqAvatar.vue'
 import VeyqAvatarGroup from '../../shared/ui/VeyqAvatarGroup.vue'
 import VeyqHoverCard from '../../shared/ui/VeyqHoverCard.vue'
 import PersonAvatar from './PersonAvatar.vue'
-import { personHash } from '../node/location'
+import { profileHash } from './directory'
 import type { NodeHeaderPerson } from '../node/nodeHeader'
 
 const props = withDefaults(
@@ -98,7 +98,7 @@ function onFocusOut(e: FocusEvent) {
       <RouterLink
         v-if="linked(single)"
         class="veyq-person-row"
-        :to="{ hash: personHash(single.userId!) }"
+        :to="{ hash: profileHash(single.userId!) }"
         :aria-label="t('people.open', { name: single.name })"
         data-testid="person-link"
       >
@@ -142,7 +142,7 @@ function onFocusOut(e: FocusEvent) {
             <RouterLink
               v-if="linked(p)"
               class="veyq-person-row"
-              :to="{ hash: personHash(p.userId!) }"
+              :to="{ hash: profileHash(p.userId!) }"
               :aria-label="t('people.open', { name: p.name })"
               data-testid="person-link"
               @click="closeNow()"
