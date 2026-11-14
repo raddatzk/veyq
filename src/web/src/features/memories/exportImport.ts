@@ -2,10 +2,7 @@
 // place, its cover and - as TEXT - who was there. Core carries only the tree and the payload bytes, so everything below
 // travels inside the hook's own `content`:
 //
-//   { type: 'memories.memory' | 'memories.chapter', schema, media: [...], date?, location?, participants?, cover?, banner?, music? }
-//
-// The background music (uc.memory.music, ADR 0131) travels as the playlists the meta names, and an import seals them
-// into the new node's meta at birth, beside the date and the place; an entry that is no playlist is dropped.
+//   { type: 'memories.memory' | 'memories.chapter', schema, media: [...], date?, location?, participants?, cover?, banner? }
 //
 // The banner (uc.memory.banner) travels as its own files - `banner.jpg`, or the video as it is plus `banner-poster.jpg` -
 // with its frame and focal point; an import uploads the files into the new node's banner slots as they are (the archive
@@ -65,7 +62,6 @@ import {
 import { guestMemorySource, memberMemorySource, type MemorySource } from './source'
 import { normalizeDate } from './memoryDate'
 import { normalizeLocation } from './memoryLocation'
-import { musicField, normalizeMusic } from './music/musicModel'
 import { unsealMemoryParticipants } from './memoryParticipants'
 import { CHAPTER_KIND } from './kinds'
 import { trackActivityOf, trackLabelOf, type TrackActivity } from './track/trackLabel'
@@ -191,8 +187,6 @@ export const exportMemoryContent: ExportContentHook = async (ctx) => {
     .map((id) => people?.get(id)?.displayName)
     .filter((n): n is string => !!n)
   if (names.length > 0) content.participants = names
-  const music = normalizeMusic(raw.music)
-  if (music.length > 0) content.music = music
 
   const cover = normalizeMemoryCover(raw.cover, node.id)
   if (cover) content.cover = await coverOf(ctx, source, cover)
@@ -299,7 +293,7 @@ async function coverOf(
 
 /** The contract's `maxLength` / `maxItems` of Memories' fields (Memories' own `contracts/export/memories/content.schema.json`);
  *  `exportImport.test.ts` pins each to the schema. */
-export const MEMORIES_LIMITS = { name: 1024, contributor: 1024, place: 1024, participant: 1024, participants: 100, music: 2, trackName: 1024 } as const
+export const MEMORIES_LIMITS = { name: 1024, contributor: 1024, place: 1024, participant: 1024, participants: 100, trackName: 1024 } as const
 
 const DATE = /^\d{4}-\d{2}-\d{2}$/
 const isObj = (v: unknown): v is Record<string, unknown> => typeof v === 'object' && v !== null && !Array.isArray(v)
@@ -356,9 +350,6 @@ export function validateMemoryContent(content: ManifestContent): ContentProblem 
     }
   }
   // A cover without a file (an older archive's photo reference by `mediaIndex`) is not restored, and not a refusal.
-  const music = content.music
-  if (music !== undefined && !Array.isArray(music)) return shape('music is not a list')
-  if (Array.isArray(music) && music.length > MEMORIES_LIMITS.music) return { code: 'too_large', message: `more than ${MEMORIES_LIMITS.music} playlists` }
   const c = content.cover
   if (c !== undefined && (!isObj(c) || (c.file !== undefined && !isPayload(c.file)))) return shape('cover')
   const b = content.banner
@@ -399,10 +390,8 @@ export function importMemoryContent(kind: NodeKind): ImportContentHook {
     const media = (Array.isArray(content.media) ? content.media : []) as ExportedMedium[]
     const date = normalizeDate(content.date)
     const location = normalizeLocation(content.location)
-    const music = musicField(normalizeMusic(content.music))
-    const sealer = date || location || music
-      ? (key: Uint8Array, addr: Parameters<typeof sealNodeMeta>[1]) =>
-        sealNodeMeta(key, addr, { v: 1, ...(date ? { date } : {}), ...(location ? { location } : {}), ...(music ? { music } : {}) })
+    const sealer = date || location
+      ? (key: Uint8Array, addr: Parameters<typeof sealNodeMeta>[1]) => sealNodeMeta(key, addr, { v: 1, ...(date ? { date } : {}), ...(location ? { location } : {}) })
       : undefined
     const created = await createContentNode(ctx.scopeId, ctx.epochs, ctx.parent, kind, ctx.name, sealer, ctx.createOptions)
     const nodeId = created.nodeId

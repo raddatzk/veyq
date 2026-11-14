@@ -118,7 +118,7 @@ describe('sealedBanner / bannerBlobIds', () => {
  * (`content.openapi.yaml`, and `memory-banner.openapi.yaml` the same), shared with everything else a Memory seals there.
  * The worst case: 100 participants, an uploaded cover, a place with every field and its name at its bound in 4-byte
  * characters (the one field a member types without another bound - `MAX_PLACE_NAME`), a range date, and a video banner
- * with its poster, a type and its file's digest, and both playlists of the background music at their longest ids. Bite: lift the place name's bound (`boundPlaceName`) to 1000 and the
+ * with its poster, a type and its file's digest. Bite: lift the place name's bound (`boundPlaceName`) to 1000 and the
  * clamp below, then the seal, go red.
  */
 describe('the meta budget', () => {
@@ -152,8 +152,6 @@ describe('the meta budget', () => {
         sha256: DIGEST,
         framing: { frame: 'fit', focal: { x: 0.33333, y: 0.66666 } },
       }),
-      // uc.memory.music: both services at their longest ids (the protocol's bounds)
-      music: [{ service: 'spotify', id: 'x'.repeat(24) }, { service: 'apple-music', id: 'pl.' + 'x'.repeat(48), storefront: 'de' }],
     }
     const sealed = sealNodeMeta(key, address, meta)
     expect(sealed.length).toBeLessThanOrEqual(8192)

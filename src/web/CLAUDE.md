@@ -475,13 +475,10 @@ here; the server is blind.
   detail asks the page's `move` door, moving through the session's one door (`core/node/move.ts` `nodeMover`: the member's `moveNode`, a `READ_WRITE`
 
   guest's `placeShareNodeAsGuest`, none otherwise) and explaining each server refusal by its code; and FOLDER's share dialog
-  `core/sharing/FolderShareDialog.vue` is pre-registered); ONE shell slot, `app.footerBar(component)` (once per application,
-  ADR 0131): a bar core mounts once per shell BELOW its footer (`core/footerBar/FooterBars.vue`, sticky at the viewport's
-  bottom) - the signed-in app's only while signed in and unlocked, the share page's for the page's life - so it outlives a
-  change of page (Memories' music bar, `AppShell.footerBar.test.ts` pins the very iframe across a navigation); the top bar
-  and the sidebar stay core's alone (the upload status `core/blob/UploadStatusMenu.vue` lists every application's batches
-  of the one core queue, the Favorites `core/favorites/PinnedNodes.vue` every kind's pins), and another place there for an
-  application is a seam that comes with its first user; a kind registered `listed: false` is no row of the level at all - neither its own nor the
+  `core/sharing/FolderShareDialog.vue` is pre-registered); no shell slot - the top bar and the sidebar are core's alone
+  (the upload status `core/blob/UploadStatusMenu.vue` lists every application's batches of the one core queue, the
+  Favorites `core/favorites/PinnedNodes.vue` every kind's pins), and a place there for an application is a seam that comes
+  with its first user; a kind registered `listed: false` is no row of the level at all - neither its own nor the
   unsupported one (`registry.listed(kind)`, read by `LevelView`; it brings no `list`, `app.kind` throws on both): the seam
   for a kind an application reaches another way (Inventory's one pool per space; its navigation entry is
   [docs/apps § Decided, not built](../../docs/apps/README.md#decided-not-built)); `app.route(slug)` — ONCE, for every kind
@@ -565,7 +562,7 @@ here; the server is blind.
   role badge and the breadcrumb up to the link's root (`ShareTreePage`), and the two `WRITE_ONLY` drop pages
   (`*ShareBody.vue`, claimed — `scripts/validate_web_share_bodies_are_drop_pages.py`). Every other separate guest body
   drifted from its member twin (#356, #361, #363) and was deleted. **Limits, stated:** the dialogs are per kind
-  (cr-files-application P4c) and the shell has one application slot, the footer bar; the level view (its list items `veyq-level-item`) and core's `FolderNameDialog` carry core `veyq-*` classes (`styles/ui.css`, dark twins in
+  (cr-files-application P4c) and the shell has no application slot; the level view (its list items `veyq-level-item`) and core's `FolderNameDialog` carry core `veyq-*` classes (`styles/ui.css`, dark twins in
   `dark.css`) and core `node.*` i18n keys since cr-files-application P4d, which Memories' own dialogs and detail read
   too for the shared labels; the kind is an open string token (the generated client has no `NodeKind` enum), so core names its one
   `FOLDER_KIND` (`core/node/kind.ts`), each application its own (`features/memories/kinds.ts`, `features/depot/kinds.ts`), and no compiler lists the
@@ -577,15 +574,9 @@ here; the server is blind.
   itself (`activeSpace`, `coverStore`, `rotateKeys` tests). A suite that stubs the registry delegates through a
   `Proxy` onto a fresh `createRegistry()` (`ShareView.registry.test.ts`, `SpaceView.registry.test.ts`): a
   hand-listed set of methods silently misses the next one the registry gains.
-- **Never name two files alike save for case** (`MusicBar.vue`'s test and a `musicBar.ts`'s would both be
-  `…usicBar.test.ts`): macOS's default filesystem is case-insensitive, so writing one there silently replaces the other, and git on
-  Linux would then see two. A component's model takes a name of its own (`musicModel.ts`, `bannerModel.ts`).
-- **The music frame is a page of its own** (`music-frame.html`, `src/music-frame/`, [ADR 0131](../../docs/decisions/0131-a-memorys-background-music-plays-through-the-vendors-sdk-in-a-frame-of-its-own-origin.md)):
-  a third Vite input the backend serves only on the music host, under that host's policy. It imports nothing of the app
-  (no Vue, no i18n, no crypto) but its token sheet - `musicFrame.css` `@import`s `styles/base.css`, so the frame draws in
-  veyq's `--app-*` roles and the app sends only its resolved theme - and no app module imports a vendor SDK; the app
-  reaches it only through `music-frame/protocol.ts`, which both sides parse every message with. What plays is drawn only
-  beside the vendor's own mark (`music-frame/brand.ts`, ADR 0131 decision 6).
+- **Never name two files alike save for case** (a `Banner.vue`'s test and a `banner.ts`'s would both be
+  `…anner.test.ts`): macOS's default filesystem is case-insensitive, so writing one there silently replaces the other, and git on
+  Linux would then see two. A component's model takes a name of its own (`bannerModel.ts`).
 - **Markup only through `v-safe-html`** (developer styleguide § 4, [ADR 0117](../../docs/decisions/0117-the-web-client-enforces-trusted-types.md)):
   the built CSP enforces Trusted Types, so a string at any HTML sink or script URL is refused at run time, in a
   browser only. A new library that writes markup or starts a worker is read for its sinks before it lands

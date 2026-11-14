@@ -188,29 +188,6 @@ const en = {
         tooMany: '{name} was not added: a Memory holds at most 50 tracks.',
       },
     },
-    // Background music (uc.memory.music, ADR 0131): the header's buttons, the music bar below the shell's footer and the
-    // dialog behind the menu entry. The opt-in is worded as a choice, like the map's, and says who learns what.
-    music: {
-      title: 'Background music',
-      action: 'Background music',
-      dialogHint:
-        'Paste the share link of a Spotify or an Apple Music playlist. Viewers hear it from their own account, after they agree to load the service’s player.',
-      spotifyLabel: 'Spotify playlist',
-      appleLabel: 'Apple Music playlist',
-      spotifyPlaceholder: 'https://open.spotify.com/playlist/…',
-      applePlaceholder: 'https://music.apple.com/…/playlist/…',
-      notAPlaylist: 'This is not a playlist link of this service.',
-      save: 'Save',
-      service: { spotify: 'Spotify', 'apple-music': 'Apple Music' },
-      consentBody:
-        'Playing it here loads {service}’s player from this server’s music host ({host}). {service} then learns your IP address, your {service} account and this playlist.',
-      playHere: 'Play here',
-      play: 'Play the {service} playlist',
-      open: 'Open in {service}',
-      off: 'Turn music off',
-      close: 'Close the player',
-      frameTitle: '{service} player',
-    },
     // The banner above a Memory (uc.memory.banner): an image or a video, independent of the cover.
     banner: {
       add: 'Add banner',
@@ -569,27 +546,6 @@ const de: typeof en = {
         tooShort: '{name} hat weniger als zwei Punkte.',
         tooMany: '{name} wurde nicht hinzugefügt: Eine Erinnerung hat höchstens 50 Tracks.',
       },
-    },
-    music: {
-      title: 'Hintergrundmusik',
-      action: 'Hintergrundmusik',
-      dialogHint:
-        'Füge den Teilen-Link einer Spotify- oder Apple-Music-Playlist ein. Wer die Erinnerung ansieht, hört sie über das eigene Konto, nachdem er dem Laden des Players des Dienstes zugestimmt hat.',
-      spotifyLabel: 'Spotify-Playlist',
-      appleLabel: 'Apple-Music-Playlist',
-      spotifyPlaceholder: 'https://open.spotify.com/playlist/…',
-      applePlaceholder: 'https://music.apple.com/…/playlist/…',
-      notAPlaylist: 'Das ist kein Playlist-Link dieses Dienstes.',
-      save: 'Speichern',
-      service: { spotify: 'Spotify', 'apple-music': 'Apple Music' },
-      consentBody:
-        'Hier abzuspielen lädt den Player von {service} vom Musik-Host dieses Servers ({host}). {service} erfährt dann deine IP-Adresse, dein {service}-Konto und diese Playlist.',
-      playHere: 'Hier abspielen',
-      play: '{service}-Playlist abspielen',
-      open: 'In {service} öffnen',
-      off: 'Musik ausschalten',
-      close: 'Player schließen',
-      frameTitle: 'Player von {service}',
     },
     banner: {
       add: 'Banner hinzufügen',

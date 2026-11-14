@@ -25,14 +25,6 @@ beforeEach(() => {
 })
 
 describe('useCapabilities', () => {
-  it('TEMPORARY musicReleased (ADR 0131 decision 8): the setup status\'s flag is kept, absent reads as false', async () => {
-    const { musicReleased } = await import('../../features/memories/music/musicRelease')
-    setCapabilities(status({ musicReleased: true }))
-    expect(musicReleased()).toBe(true)
-    setCapabilities(status())
-    expect(musicReleased(), 'absent: dark').toBe(false)
-  })
-
   it('hasCapability reflects the discovered manifest; false before discovery and for absent ids', () => {
     const { hasCapability } = useCapabilities()
     expect(hasCapability('core.public-shares')).toBe(false) // not discovered yet ⇒ hide

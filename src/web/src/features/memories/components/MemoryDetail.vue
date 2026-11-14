@@ -84,12 +84,6 @@ import type { MemoryRights } from '../rights'
 import { provideMemoryView, sourceRights, type MemorySource } from '../source'
 import { useConfirm } from '../../../shared/state/useConfirm'
 import { useToast } from '../../../shared/state/useToast'
-import { musicHeaderActions } from '../music/musicHeader'
-import { musicReleased } from '../music/musicRelease'
-import MusicDialog from '../music/MusicDialog.vue'
-import { musicField, unsealMemoryMusic, type Playlist } from '../music/musicModel'
-import { editField, nodeMetaState } from '../../../core/node/nodeMeta'
-import { useMetaWriteFeedback } from '../useMetaWriteFeedback'
 import MemoryBanner from '../banner/MemoryBanner.vue'
 import BannerDialog from '../banner/BannerDialog.vue'
 import { useMemoryBanner } from '../banner/useMemoryBanner'
@@ -208,39 +202,11 @@ const headerActions = computed<NodeHeaderAction[]>(() => [
     id: 'banner', label: memoryBanner.banner.value ? t('memory.banner.change') : t('memory.banner.add'), icon: 'objects-column', menuOnly: true,
     shown: can.value.setBanner && !bannerDrawn.value, disabled: !props.memoryKey, onClick: () => openBannerDialog(),
   },
-  // Background music (uc.memory.music, ADR 0131): every viewer starts a playlist in the shell's music bar (or opens it in
-  // the service where this server plays none); whoever writes the node's meta sets the playlists, in the ⋯ menu.
-  ...musicHeaderActions(music.value, t),
-  {
-    id: 'music', label: t('memory.music.action'), icon: 'music', menuOnly: true,
-    // TEMPORARY: released dark (musicReleased, ADR 0131 decision 8) - no entry while the deployment has not released it.
-    shown: can.value.editMeta && musicReleased(), disabled: !props.memoryKey, onClick: () => (musicDialog.value = true),
-  },
   // Move and delete are core's standard actions (`standardNodeActions`, both in the ⋯ menu), granted by `can`; the move is
   // core's dialog (inbox #358): a Memory to the root or a folder, a chapter into another Memory. The rename is the name's own,
   // in place (`headerRename`).
   ...standardNodeActions(t, { move: can.value.move, delete: can.value.delete }, { move: () => emit('move'), remove: () => emit('delete') }),
 ])
-// --- background music (uc.memory.music, ADR 0131): the node's playlists from its sealed meta, the header's buttons that
-// start one in the shell's music bar for every viewer, and the dialog behind the menu entry where `editMeta` grants it. The save is one read-modify-write of the
-// `music` field; a peer's change of it meanwhile re-opens the dialog on it (E2, ADR 0077).
-const music = computed<Playlist[]>(() => (props.memoryKey ? unsealMemoryMusic(props.scopeId, props.memoryKey, props.node) : []))
-const musicDialog = ref(false)
-const { editorFailed: musicFailed } = useMetaWriteFeedback((payload) => emit('metaUpdated', payload))
-async function onMusicSave(list: Playlist[]) {
-  const key = props.memoryKey
-  const write = can.value.editMeta ? props.source.nodeMeta : undefined
-  if (!key || !write) return
-  const nodeId = props.node.id
-  const openedWith = music.value.length > 0 ? music.value : undefined
-  try {
-    const { state } = await write.write(nodeId, key, nodeMetaState(props.node), editField('music', musicField(list), openedWith))
-    emit('metaUpdated', { nodeId, ...state })
-  } catch (e) {
-    await musicFailed(nodeId, e, () => (musicDialog.value = true))
-  }
-}
-
 /** The Memory's name, renamed in place in the header (the page's door), where `can` grants the rename. */
 const headerRename = computed(() => standardNodeRename({ rename: can.value.rename }, props.renameTo ? { renameTo: props.renameTo } : {}))
 
@@ -1170,13 +1136,6 @@ watch(
       :current-src="memoryBanner.pictureUrl.value"
       :save="bannerEditor.save"
       @close="bannerDialog = false"
-    />
-
-    <MusicDialog
-      v-if="musicDialog && memoryKey && can.editMeta"
-      :music="music"
-      @save="onMusicSave"
-      @close="musicDialog = false"
     />
 
     <MemoryDateEditor

@@ -1,10 +1,9 @@
 // The Memories application's lifecycle hooks (ADR 0079; registered in `register.ts`). The shell calls them through
-// the registry at the moments an application holds state it must keep in step with the platform: a scope is reset, a
-// scope is entered, the Master Key rotates, the session ends (the music frame forgets the vendor's sign-in, ADR 0131).
+// the registry at the three moments an application holds state it must keep in step with the platform: a scope is
+// reset, a scope is entered, the Master Key rotates.
 import type { LifecycleHooks } from '../../core/applications/registry'
 import { retagItemMarksUnderNewMasterKey } from './itemFavorites'
 import { resetParticipantIndex } from './participantIndex'
-import { forgetMusicSignIn } from './music/musicEnding'
 
 export const memoriesLifecycle: LifecycleHooks = {
   // (The covers are core's since inbox #411 and the node pins since #409: `app/activeSpace` clears both and `rotateKeys` re-seals
@@ -25,7 +24,4 @@ export const memoriesLifecycle: LifecycleHooks = {
       /* see above */
     }
   },
-
-  // A sign-out forgets the vendor's sign-in in the music frame, a lock does not (ADR 0131 decision 5, `music/musicEnding.ts`).
-  onSessionEnding: forgetMusicSignIn,
 }

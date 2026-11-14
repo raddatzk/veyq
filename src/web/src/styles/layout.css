@@ -11,7 +11,7 @@
   overflow-x: clip;
 }
 
-/* A column whose route grows, so the operator footer (and the footer bars below it) sits at the bottom of the
+/* A column whose route grows, so the operator footer sits at the bottom of the
    viewport on a short page instead of right under the last row of content (owner 2026-11-13). */
 .app-workspace {
   grid-column: 2;

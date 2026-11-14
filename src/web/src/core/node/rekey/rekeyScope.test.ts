@@ -237,8 +237,8 @@ beforeEach(() => {
   const coverWrap = b64std(v1.seal(blobKeyContext(SCOPE, coverRef), K.root, kBlob))
   const meta = sealNodeMeta(K.root, { scopeId: SCOPE, nodeId: ids.root }, {
     v: 1, cover: { source: { kind: 'upload', ref: { blobId: ids.cover, chunkCount: 1, byteSize: 10, wrappedBlobKey: coverWrap, ownerId: ids.root, role: 'COVER' } }, crop: { x: 0, y: 0, width: 1, height: 1 } },
-    // a plain field of an application's (Memories' background music, ADR 0131): carried as it is
-    music: [{ service: 'spotify', id: '37i9dQZF1DXcBWIGoYBM5M' }],
+    // a plain field of an application's, one core does not know: carried as it is
+    plainSample: [{ kind: 'sample', id: 'p1' }],
   })
   const drop = v1.generateDropKey()
   OLD_DROP_PRIVATE = b64std(v1.seal({ purpose: 'drop-private-key', scopeId: SCOPE, nodeId: ids.box }, K.box, v1.serializeDropKey(drop)))
@@ -319,7 +319,7 @@ describe('rekeyScope (ADR 0109, real crypto)', () => {
     const inMeta = (meta.cover as { source: { ref: { wrappedBlobKey: string } } }).source.ref.wrappedBlobKey
     expect(unwrapBlobKey(SCOPE, newRoot, { blobId: ids.cover, ownerId: ids.root, role: 'COVER', wrappedBlobKey: inMeta })).toEqual(before)
     expect(() => unwrapBlobKey(SCOPE, K.root, { blobId: ids.cover, ownerId: ids.root, role: 'COVER', wrappedBlobKey: inMeta })).toThrow(v1.OpenRefused)
-    expect(meta.music, 'a plain field of the meta rides along unchanged').toEqual([{ service: 'spotify', id: '37i9dQZF1DXcBWIGoYBM5M' }])
+    expect(meta.plainSample, 'a plain field of the meta rides along unchanged').toEqual([{ kind: 'sample', id: 'p1' }])
     const reader = server.identities.find((i) => i.identityId === ids.reader)!
     expect(new TextDecoder().decode(v1.openField(identityNameContext(SCOPE, ids.link, ids.reader), newRoot, fromB64std(reader.sealedDisplayName)))).toBe('Ada')
   })
