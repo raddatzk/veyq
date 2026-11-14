@@ -9,12 +9,12 @@
 //! - **Devices and sessions**: every session family, this device's first and marked, each named from the register or
 //!   by its dates, its sign-out (and, where the core offers it, "Sign out and remove saved key") in the row's menu, every
 //!   step asked first in an `AdwAlertDialog`; "Sign out everywhere else";
+//! - **Add a device** (only while the core offers it, `addDevice`: `core.device-linking`): "Show a code" and, where the
+//!   Camera portal names a camera, "Scan a code" — each a ceremony of [crate::device_link] over this dialog;
 //! - **Devices with a saved key**: each removable, and "Remove every saved key except this device's";
 //! - **Sign out** of this account here.
 //!
-//! Theme and language follow the system (D3): no row for them. "Add a device" is the core's (`addDevice`) but no screen
-//! of this app yet, so it is left out until `cr-app-device-linking` builds one, never drawn as a control that answers
-//! "not yet". Every state is the core's (`Settings.Open`, `Watched.Settings`: `SettingsShown`), every action one call;
+//! Theme and language follow the system (D3): no row for them. Every state is the core's (`Settings.Open`, `Watched.Settings`: `SettingsShown`), every action one call;
 //! why one did not come through is the state's `refusal`, said as a toast.
 use std::cell::{Cell, RefCell};
 use std::rc::{Rc, Weak};
@@ -40,11 +40,16 @@ struct Page {
     watch: RefCell<Option<Watch>>,
     label: RefCell<Option<String>>,
     refusal: RefCell<Option<String>>,
+    /// The account this page is of (none for the debug harness's), for the device link's calls.
+    connection: RefCell<Option<String>>,
+    /// "Add a device", built once: its scan row shows once the Camera portal named a camera.
+    add_device: adw::PreferencesGroup,
 }
 
 /// Opens [connection]'s Settings over [window]; the core reads and delivers what it shows.
 pub fn open(window: &adw::ApplicationWindow, connection: String) {
     let page = Page::new();
+    page.connection.replace(Some(connection.clone()));
     let weak = Rc::downgrade(&page);
     glib::spawn_future_local(async move {
         let settings = match bridge::call(&Call::SettingsOpen { connection }).await.map(|(a, _)| a) {
@@ -122,6 +127,16 @@ impl Page {
             .build();
         dialog.add(&page);
         let rename = adw::EntryRow::builder().title(words::account_settings_rename()).show_apply_button(true).build();
+        let add_device = adw::PreferencesGroup::builder()
+            .title(words::account_settings_add_device())
+            .description(words::account_settings_add_device_sub())
+            .build();
+        let show = adw::ActionRow::builder().title(words::link_show()).subtitle(words::link_intro()).activatable(true).build();
+        show.add_suffix(&gtk::Image::from_icon_name("go-next-symbolic"));
+        let scan = adw::ActionRow::builder().title(words::link_scan()).subtitle(words::link_scan_intro()).activatable(true).visible(false).build();
+        scan.add_suffix(&gtk::Image::from_icon_name("go-next-symbolic"));
+        add_device.add(&show);
+        add_device.add(&scan);
         let p = Rc::new(Self {
             dialog,
             page,
@@ -132,6 +147,29 @@ impl Page {
             watch: RefCell::new(None),
             label: RefCell::new(None),
             refusal: RefCell::new(None),
+            connection: RefCell::new(None),
+            add_device,
+        });
+        let weak = Rc::downgrade(&p);
+        show.connect_activated(move |_| {
+            if let Some(p) = weak.upgrade() {
+                p.link(|connection| Call::LinkShowForNewDevice { connection });
+            }
+        });
+        let weak = Rc::downgrade(&p);
+        scan.connect_activated(move |_| {
+            if let Some(p) = weak.upgrade() {
+                p.link(|connection| Call::LinkScanSignInCode { connection });
+            }
+        });
+        // the scan's row only where the Camera portal names a camera (cr-core-qr-decoder D4: no camera, no entry)
+        let row = scan.downgrade();
+        glib::spawn_future_local(async move {
+            let present = crate::qr_camera::camera_present().await;
+            eprintln!("veyq: Settings' link scan {}", if present { "offered" } else { "not offered: no camera" });
+            if let Some(row) = row.upgrade() {
+                row.set_visible(present);
+            }
         });
         let weak = Rc::downgrade(&p);
         rename.connect_apply(move |row| {
@@ -140,6 +178,15 @@ impl Page {
             p.act("rename", move |settings| Call::SettingsRename { settings, label });
         });
         p
+    }
+
+    /// Opens the device link [make] builds for this page's account over the dialog (`cr-app-device-linking`).
+    fn link(&self, make: impl FnOnce(String) -> Call) {
+        let Some(connection) = self.connection.borrow().clone() else {
+            eprintln!("veyq: settings add a device: no account in the core");
+            return;
+        };
+        crate::device_link::open(&self.dialog, make(connection));
     }
 
     /// Sends the call [make] builds for this page's id; the answer goes to stderr, a change of trust's to a toast.
@@ -188,7 +235,8 @@ impl Page {
         for g in self.groups.borrow_mut().drain(..) {
             self.page.remove(&g);
         }
-        let groups = vec![self.account(s), self.device(s), self.sessions(s), self.saved_keys(s), self.sign_out()];
+        let add_device = s.add_device.then(|| self.add_device.clone());
+        let groups = vec![self.account(s), self.device(s), add_device, self.sessions(s), self.saved_keys(s), self.sign_out()];
         for g in groups.iter().flatten() {
             self.page.add(g);
         }

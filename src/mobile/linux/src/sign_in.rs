@@ -9,6 +9,10 @@
 //! Kit" beside it, only where the Camera portal names a camera, scans its code ([crate::qr_camera], kind `KIT`). Either
 //! way the gate's `kit` fills the email and the server and the Secret Key row says "From your Emergency Kit" — the key
 //! itself the core holds, never this side.
+//!
+//! Below them the two ways in from another device (ADR 0059 §1; `cr-app-device-linking`): "Scan a code from another
+//! device", only where a camera is, and "Sign in with a QR code" — each a ceremony of [crate::device_link] over the
+//! server the form names (nothing a scan reads changes it).
 use std::cell::{Cell, RefCell};
 use std::rc::Rc;
 
@@ -85,6 +89,9 @@ pub struct SignIn {
     kit_row: adw::ActionRow,
     open_kit: adw::ButtonRow,
     scan_kit: adw::ButtonRow,
+    /// The two device-linking entries; the scan only where a camera is.
+    link_scan: adw::ButtonRow,
+    link_show: adw::ButtonRow,
     /// The kit's server replaced a different one the form held: said, never refused.
     other_server: gtk::Label,
     /// The kit the form last showed, so a new one fills the email and the server once.
@@ -119,6 +126,11 @@ impl SignIn {
         for row in [server.upcast_ref::<gtk::Widget>(), email.upcast_ref(), password.upcast_ref(), secret_key.upcast_ref(), kit_row.upcast_ref(), open_kit.upcast_ref(), scan_kit.upcast_ref()] {
             fields.add(row);
         }
+        let link_scan = adw::ButtonRow::builder().title(words::signin_link_scan()).start_icon_name("camera-photo-symbolic").visible(false).build();
+        let link_show = adw::ButtonRow::builder().title(words::signin_link_show()).build();
+        let links = adw::PreferencesGroup::new();
+        links.add(&link_scan);
+        links.add(&link_show);
         let other_server = gtk::Label::builder().wrap(true).xalign(0.0).visible(false).build();
         other_server.add_css_class("dim-label");
         // Staying signed in is no longer chosen here: the core offers it after the sign-in (ADR 0123 decision 8), drawn by `Offer`
@@ -130,7 +142,7 @@ impl SignIn {
         cancel.add_css_class("flat");
         let spinner = adw::Spinner::builder().visible(false).build();
         let heading = gtk::Label::new(Some(&words::signin_title()));
-        let page = page(&heading, &[fields.upcast_ref(), other_server.upcast_ref(), error.upcast_ref(), submit.upcast_ref(), cancel.upcast_ref(), spinner.upcast_ref()]);
+        let page = page(&heading, &[fields.upcast_ref(), other_server.upcast_ref(), error.upcast_ref(), submit.upcast_ref(), cancel.upcast_ref(), spinner.upcast_ref(), links.upcast_ref()]);
 
         let s = Rc::new(Self {
             page,
@@ -142,6 +154,8 @@ impl SignIn {
             kit_row,
             open_kit,
             scan_kit,
+            link_scan,
+            link_show,
             other_server,
             shown_kit: RefCell::new(None),
             submit,
@@ -164,13 +178,22 @@ impl SignIn {
         s.scan_kit.connect_activated(move |_| if let Some(s) = w.upgrade() {
             s.scan();
         });
-        // the scan's entry only where the Camera portal names a camera (D7: no camera, no entry)
+        let w = Rc::downgrade(&s);
+        s.link_scan.connect_activated(move |_| if let Some(s) = w.upgrade() {
+            s.link(|server| Call::LinkScanFromTrusted { server });
+        });
+        let w = Rc::downgrade(&s);
+        s.link_show.connect_activated(move |_| if let Some(s) = w.upgrade() {
+            s.link(|server| Call::LinkShowForSignIn { server });
+        });
+        // the scans' entries only where the Camera portal names a camera (D7: no camera, no entry)
         let w = Rc::downgrade(&s);
         glib::spawn_future_local(async move {
             let present = crate::qr_camera::camera_present().await;
-            eprintln!("veyq: the sign-in's kit scan {}", if present { "offered" } else { "not offered: no camera" });
+            eprintln!("veyq: the sign-in's kit and link scans {}", if present { "offered" } else { "not offered: no camera" });
             if let Some(s) = w.upgrade() {
                 s.scan_kit.set_visible(present);
+                s.link_scan.set_visible(present);
             }
         });
         s
@@ -189,6 +212,11 @@ impl SignIn {
                 secret_key: typed,
             });
         }
+    }
+
+    /// A device link from the sign-in over the server the form names (`Link.ScanFromTrusted`, `Link.ShowForSignIn`).
+    fn link(&self, make: impl FnOnce(String) -> Call) {
+        crate::device_link::open(&self.page, make(self.server.text().trim().to_string()));
     }
 
     /// "Open Emergency Kit": GTK's open dialog for a PDF or a picture; the core reads the file at the path picked.
@@ -281,6 +309,8 @@ impl SignIn {
         self.cancel.set_sensitive(!working);
         self.submit.set_sensitive(!working);
         self.open_kit.set_sensitive(!working);
+        self.link_scan.set_sensitive(!working);
+        self.link_show.set_sensitive(!working);
         self.spinner.set_visible(*working);
         show_error(&self.error, error);
     }
