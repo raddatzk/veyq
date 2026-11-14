@@ -164,7 +164,7 @@ services:
   #     published loopback port — a container reaches the host's 127.0.0.1 on Docker Desktop and not on a Linux
   #     runner, so the run would differ between a laptop and CI.
   browser:
-    image: mcr.microsoft.com/playwright:v1.64.1-noble@sha256:7852dc5a7d72f5fe458a597d690f6c42fbc8e9e26ddfa95f8e6ef552558d9bbf
+    image: mcr.microsoft.com/playwright:v1.64.1-noble@sha256:2f05f8a734509a7b3f26a912639488ee08f58a7b292d14d62271bcff9038768f
     profiles: [browser]
     cap_drop: [ALL]
     security_opt: [no-new-privileges:true]
@@ -209,7 +209,7 @@ services:
   # static file server from the Playwright image this file already pins (`python3 -m http.server`), with the recipe's
   # x-hardened triple and a non-root uid; it writes nothing.
   release-mirror:
-    image: mcr.microsoft.com/playwright:v1.64.1-noble@sha256:7852dc5a7d72f5fe458a597d690f6c42fbc8e9e26ddfa95f8e6ef552558d9bbf
+    image: mcr.microsoft.com/playwright:v1.64.1-noble@sha256:2f05f8a734509a7b3f26a912639488ee08f58a7b292d14d62271bcff9038768f
     cap_drop: [ALL]
     security_opt: [no-new-privileges:true]
     read_only: true
