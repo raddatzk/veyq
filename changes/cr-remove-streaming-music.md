@@ -140,4 +140,27 @@ deleted.
 
 ## Retrospective
 
-_(filled by the implementer)_
+- **As planned.** The inventory held; each phase ended green by its own done-when. The cheapest correct removal was to
+  reverse-apply the commits that built the feature (`git log -i --grep music`, `git apply -R --reject` per surface, the
+  rejects merged by hand), then read the reversed diff: it reached sites no locator named (the test CSP fixture's
+  `frame-src 'none'`, `AppShellSliceTest`'s policy constants, a `layout.css` comment on "the footer bars", the separate
+  seam commit `bcbb6c756`). The fixture's `frame-src 'none'` was kept on purpose: it is what the positive control reads.
+- **What the CR got wrong or left out.**
+  - The done-when's `git grep -il music` spare list cannot hold: decision 4's own importer test must spell `music`, and
+    phase 2's positive control must name the former `VEYQ_MUSIC_*` variables and `memories.music` ids
+    (`exportImport.test.ts`, `FormerMusicSettingsSliceTest.kt`, `CapabilityRegistryTest.kt`, `:core`'s
+    `build.gradle.kts`), as do `docs/features/memory/_index.md`'s background-music row and `docs/decisions/README.md`'s
+    ADR titles. Spared by name in the report.
+  - "An instance with every former `VEYQ_MUSIC_*` variable set" cannot be built in `application-test.properties`: a key
+    under `veyq.` that maps to nothing refuses the boot there (SRCFG00050), while the same keys in the environment are
+    ignored. The control sets them in `:core`'s test task environment, which is also the operator's form.
+  - The chart upgrade check needed no decision: the schema's root does not close its properties, so the predecessor's
+    `ci/music-values.yaml` renders as is.
+  - Not settled, handed back: release v1.215 ships the three `memories.music` ids, and the catalog's note and ADR 0088
+    decision 10 say an id is never removed from V1 on. ADR 0135 removes them; nothing records that this removal is the
+    sanctioned exception, nor reserves the ids against reuse.
+- **Process.** Phases 2-4 left the doc trust chain red until phase 5 (coverage refs to the deleted tests) - accepted
+  by the CR's order, against the README's "criteria move with their tests"; for a removal the coverage file goes in
+  the first phase that deletes a test it cites.
+- **Next time:** a removal CR names the commits that built what it removes and reverse-applies them as its inventory's
+  cross-check, and its "lists only" locator spares the tests its own decisions require.

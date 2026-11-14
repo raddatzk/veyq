@@ -10,7 +10,6 @@ sources:
   - docs/features/admin/use-cases/uc.admin.capability-requirements.md
   - docs/features/admin/use-cases/uc.admin.configure-external-services.md
   - docs/features/platform/use-cases/uc.platform.switch-application-off.md
-  - docs/decisions/0131-a-memorys-background-music-plays-through-the-vendors-sdk-in-a-frame-of-its-own-origin.md
   - docs/features/platform/use-cases/uc.platform.erase-switched-off-application.md
   - contracts/platform/capabilities.json
   - docs/features/expenses/use-cases/uc.expenses.exchange-rates.md
@@ -116,44 +115,6 @@ a mirror or a Frankfurter you run yourself. An address without its placeholders,
 takes none, is refused. A tenant owner may switch the maps, the place names and the exchange rates off for their own
 space, and the exchange rates' switch reaches that space's link guests too; the policy follows your level only. The
 admin console's own first-run screen reaches only the default breach-check address.
-
-## Background music
-
-A Memory can name a Spotify and an Apple Music playlist, and a viewer can play it on the Memory's page with their own
-account. **Background music is not released yet:** it ships off on every instance - no playlist field, no button, no
-player, no change to the app's security headers or the privacy notice - until you set `MUSIC_RELEASED=true` (Compose)
-or `music.released: true` (the chart) and restart the application; this switch goes away once the music is released.
-With it on, the rest of this section holds. The playlists are stored on every instance and always open in the service's own app. **Playing them inside
-veyq** is optional, and off until you set it up: `memories.music` and its two children are active only while your
-deployment configures them, and then you and a tenant owner can switch each off like any entry.
-
-The services' players are their own code, which they serve and change. They never run on your instance's domain, where a
-member's unlocked keys are: your server serves a **music frame**, a page of its own on a **music host** of its own,
-and the players run there ([threat model](/security/threat-model/)). So the first thing is a hostname:
-
-- **The music host.** A name beside your instance's, ideally a sibling (`music.example.org` next to
-  `veyq.example.org`; Firefox and Safari keep a frame of another site from its own sign-in window). Point its DNS at your
-  server, then set `MUSIC_DOMAIN` (Compose) or `music.domain` (the chart). Compose's Traefik gets its certificate like
-  the others; on Kubernetes the chart adds the route and, under `per-domain`, the listener.
-
-Then one or both services:
-
-- **Spotify.** Create an app in the [Spotify developer dashboard](https://developer.spotify.com/dashboard) with the Web
-  Playback SDK and the Web API, and register the redirect URI `https://<music host>/music-frame/spotify-callback`. Set
-  its client ID as `MUSIC_SPOTIFY_CLIENT_ID` / `music.spotifyClientId` — no secret: the frame signs in with PKCE. **What
-  it costs:** a new app runs in Spotify's Development Mode, which (since 2026) needs the app's owner to have Spotify
-  Premium and lets **at most five listeners** use it, each one added by you, by e-mail, in the dashboard; the larger
-  quota is open only to organisations with a large audience. Every listener needs **Spotify Premium** too.
-- **Apple Music.** With a membership of the [Apple Developer Program](https://developer.apple.com/programs/) (a yearly
-  fee), create a MusicKit identifier and key, and sign a **developer token** (an ES256 JWT) with it; set it as
-  `MUSIC_APPLE_DEVELOPER_TOKEN` / `music.appleDeveloperToken`. A token lives **at most six months**: when it expires,
-  Apple Music switches itself off (the application logs it), and you sign a new one. Listeners need an **Apple Music
-  subscription**.
-
-The client ID and the token are public by nature: every viewer's browser receives them, as the services intend. The
-viewers' own sign-ins never reach your server, and neither does which playlist a Memory names. With music on, the
-privacy notice gains a section on what the service learns; each viewer agrees per browser before anything of the
-service loads, and turns it off at the Memory.
 
 ## Requirements
 

@@ -3,7 +3,7 @@
 - **ID:** uc.memory.background-music
 - **Status:** **planned** ([ADR 0135](../../../decisions/0135-background-music-is-a-nodes-own-audio-media-played-by-cores-player.md),
   the player [en.platform.audio-player](../../platform/enablers/en.platform.audio-player.md)). Nothing is built. It
-  replaces the streaming playlists of [uc.memory.music](uc.memory.music.md), which are removed.
+  replaces the Spotify and Apple Music playlists, which ADR 0135 removed.
 - **Primary actor:** Anyone who may upload into the Memory or Chapter on screen (`memoryRights.upload`): a member who
   may write its scope, or a guest of a link that may upload. **Secondary:** anyone who opens it — a member, or a guest
   of any link onto it — listens.

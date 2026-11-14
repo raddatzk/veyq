@@ -3,7 +3,7 @@
 - Status: Superseded by 0135
 - Built: yes
 - Date: 2026-11-12
-- Model: [uc.memory.music](../features/memory/use-cases/uc.memory.music.md) · [security-model](../crosscutting/security-model.md) § third-party services · [cc.security.csp](../crosscutting/cc.security.csp.md) § The music frame
+- Model: [uc.memory.background-music](../features/memory/use-cases/uc.memory.background-music.md)
 
 ## Context
 
