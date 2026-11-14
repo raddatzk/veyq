@@ -110,6 +110,23 @@ its subject. **Spot-check the first two before phase 2.**
      The low rate does not bound the peak in Chrome (it decodes at the file's rate, then resamples), and bounds it in
      Safari for the MP3 only; the 200 MiB WAV peaks at 1.4–1.5 GB in both. "A few hundred KB per minute" holds for the
      decoded buffer that is kept, not for the decode. The scan itself costs 0–2 ms.
+   - **Settled after the measurement (2026-11-14, ADR 0135 decisions 3–4 edited):** nothing is decoded whole except a
+     short file of a container that needs it.
+     - **Duration:** from an `<audio preload="metadata">` on an object URL of the local file. A file whose metadata
+       does not load within 10 s (an error, or a duration that is not finite) is refused as "this browser cannot play
+       it". That replaces the decode refusal.
+     - **Trim,** at most 30 s from each end:
+       - **WAV:** parse `fmt `/`data` (integer PCM of 8/16/24/32 bit, and 32-bit float) and read the samples of both
+         ends by `Blob.slice`.
+       - **MP3 and ADTS:** `decodeAudioData` on the first and the last 4 MiB, each in its own `OfflineAudioContext`.
+         The tail's silence is counted back from the slice's end.
+       - **M4A, FLAC, Ogg,** a slice that does not decode, and any other case: a whole-file decode only for a duration
+         of 7 minutes or less. Beyond that, `trimStartMs = 0` and `trimEndMs = durationMs`.
+       - **A trim decode that fails** gives no trim. It is never a refusal.
+     - **Measure** in Chrome and the real Safari and record in the commit: that a 4 MiB head slice and a tail slice of
+       an MP3 and of an ADTS file decode (if one does not in a browser, that format falls under the 7-minute rule
+       there), and the peak RSS for a 7-minute M4A in both browsers.
+     - **The cap stays 200 MiB.** The WAV path no longer decodes, so the 200 MiB WAV no longer costs 1.4 GiB.
 4. **The Music tab** is `MemoryMusic.vue`, a panel `music` beside `map`.
    - **The list:** the node's audio media from `useMediaGalleryLive` (a `music` computed beside `tracks`), each with
      its title (the `blob-meta` name without its extension) and its length.

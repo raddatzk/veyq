@@ -66,15 +66,24 @@ What exists to build on, read on `main` at `8574dda3b`:
    - **Who adds one:** whoever may upload media to that node — a member, or a guest whose link may upload. Share
      view = member view.
 3. **The sealed type comes from the bytes.** It is taken from core's `sniffStream`, not from the browser's MIME
-   guess, and never `video/mp4` for an M4A. A file whose container is not one of those audio types, or that the
-   uploading browser cannot decode, is refused before anything is written: its facts (decision 4) could not be
-   measured. At playback, a track the listening browser cannot play is skipped.
+   guess, and never `video/mp4` for an M4A. A file whose container is not one of those audio types, or whose
+   metadata the uploading browser's `<audio>` element cannot load, is refused before anything is written: that
+   browser could not play it, and its duration (decision 4) could not be read. At playback, a track the listening
+   browser cannot play is skipped.
 4. **Its facts are sealed into the listed tier at birth.** They are the duration and the trimmed span (`trimStartMs`,
    `trimEndMs`), beside the file's name in `blob-meta`.
-   - **How the span is found:** at upload the client decodes the file in an `OfflineAudioContext` at a low sample rate
-     and scans 20 ms windows from both ends. Silence is any window whose peak stays below **−60 dBFS**. A trim that
-     would leave less than one second keeps the whole file.
-   - **Why at upload:** detecting at playback would decode every track on every device.
+   - **The duration** comes from an `<audio>` element's metadata for the local file. Nothing is decoded for it.
+   - **How the span is found:** the client scans 20 ms windows from both ends, at most 30 s from each. Silence is any
+     window whose peak stays below **−60 dBFS**. A trim that would leave less than one second keeps the whole file.
+     The samples are read only where that is cheap, because decoding a whole file costs far more memory than its
+     decoded buffer keeps: a 10-minute MP3 grew Chrome by about 540 MiB, and a 200 MiB WAV grew Chrome and Safari by
+     about 1.4–1.5 GiB (measured at implement, 2026-11-14). So:
+     - **WAV:** the PCM samples at both ends are read straight from the file, whatever its size.
+     - **MP3 and ADTS AAC:** a slice from each end is decoded. Their frames decode without the rest of the file.
+     - **Other containers (M4A, FLAC, Ogg),** and a slice that does not decode: the whole file is decoded only up to
+       7 minutes long.
+     - **Otherwise** the track has no trim and plays whole. A failed scan never refuses a file the browser can play.
+   - **Why at upload:** detecting at playback would read every track on every device.
    - **Where it lives:** in the listed tier, so a re-key carries it unchanged (ADR 0109).
    - **Export:** an additive `audio` field on the medium. An import restores it, and runs the detection where the
      field is absent.
@@ -133,8 +142,8 @@ What exists to build on, read on `main` at `8574dda3b`:
 - **Residuals:**
   - A phone may suspend a hidden tab, and with it the page that decrypts the chunks, so background playback with the
     screen off is up to the browser.
-  - Decoding a long file at upload costs memory on a phone. The 200 MiB cap and the low sample rate are the bounds, and
-    the build measures them.
+  - A long M4A, FLAC or Ogg file keeps the silence at its ends, because decoding it whole would cost a phone too much
+    memory (decision 4).
   - Leftovers stay in place and nothing reads them: playlists sealed into a node's meta while the flag was on, a
     `memories.music…` switch row, the browser's `veyq:music-consent` key. The switch rows are filtered out by
     `CapabilityIds.ADVERTISED`.

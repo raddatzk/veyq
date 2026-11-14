@@ -20,9 +20,9 @@
 
 1. With the Memory or Chapter open, the user opens its **Music** tab and chooses **Add music**.
 2. They pick one or more audio files.
-3. On the device, each file is identified from its bytes and decoded. Its length is measured, and silence at its start
-   and end is found (ADR 0135 decisions 3–4). A file that is too large, is no audio, or that this browser cannot decode
-   is refused with its own message, and nothing of it is uploaded (E1).
+3. On the device, each file is identified from its bytes and its length is read. Where that is cheap, the silence at
+   its start and end is found (ADR 0135 decisions 3–4). A file that is too large, is no audio, or that this browser
+   cannot play is refused with its own message, and nothing of it is uploaded (E1).
 4. Each accepted file is uploaded as a medium through the upload queue, with its facts sealed by the same upload. It
    shows in the top bar's upload status.
 5. Once it is listed, the track appears in the Music tab with its title (the file name without its extension) and its
@@ -52,8 +52,8 @@
 - **A5 — Lock, sign-out, tenant switch, leaving a share.** A lock removes the bar and ends the music, and a sign-out or
   tenant switch loads a new page. A guest's music lasts as long as the share page.
 - **A6 — Memories switched off.** No button, no tab, no bar for Memories' music.
-- **E1 — Refused file.** Over 200 MiB, not an audio container core knows, or not decodable in this browser: refused
-  before upload, with the reason.
+- **E1 — Refused file.** Over 200 MiB, not an audio container core knows, or not playable in this browser: refused
+  before upload, with the reason. A file whose silence cannot be found cheaply is not refused; it plays whole.
 - **E2 — Unplayable here.** A track this browser cannot play is skipped. If none plays, the bar says so and closes.
 - **E3 — No Web Audio.** The tracks follow each other without a fade.
 
