@@ -841,6 +841,13 @@ D2's slideshow rule (the web's), D2b's one uploader read per gallery (Android's)
   iOS unchanged.
 - The coordinator (2026-11-13, under that mandate): the web's justified grid on every app, phones included, the phones at
   the web's narrow target height (D14); the desktops draw it in phases 4 and 5.
+- The coordinator (2026-11-14, after `main` moved): `main` made a GPX track (ADR 0130) and a music track (ADR 0135) media of a
+  Memory or Chapter, recognised by their sealed `blob-meta` type (`application/gpx+xml`, `audio/*`) and kept out of every
+  photo view — the gallery, the lightbox, the cover choice, the space's media list (ADR 0135 decision 2; an unclaimed type
+  stays a tile). The apps do the same, in the core (`GalleryModel`/`Lightbox`, held to the web's rule by a case per type),
+  from the phase that touches the gallery next (phase 4) for every app; the apps' media picker refuses audio as the web's
+  gallery picker does. The Music tab and core's player (#906) and the tracks and their map (#907) on the apps are not this
+  CR; the journal on the apps is `main`'s #855.
 - 1: as recommended — the hero shows only once a cover exists, on the desktops too.
 - 2: as recommended — the D12 cut holds; curation is the next CR (#890).
 - 3: as recommended — a folder dropped on a gallery is said not to be taken; no folder upload into a Memory in this CR.
