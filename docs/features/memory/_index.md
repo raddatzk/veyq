@@ -126,7 +126,11 @@ The tree these build on — encrypted names, blinded slugs, a key on every node,
 - [uc.memory.music](use-cases/uc.memory.music.md) — **built** ([ADR 0131](../../decisions/0131-a-memorys-background-music-plays-through-the-vendors-sdk-in-a-frame-of-its-own-origin.md)):
   background music — one Spotify and one Apple Music playlist sealed in the node's `wrappedMeta.music`, played after the
   viewer's opt-in by the vendor's SDK in the music frame, a page of the instance's own music host; never in the app origin;
-  started from the header, played in the shell's music bar below the footer, which plays on across pages
+  started from the header, played in the shell's music bar below the footer, which plays on across pages;
+  **superseded** by [ADR 0135](../../decisions/0135-background-music-is-a-nodes-own-audio-media-played-by-cores-player.md), removed by cr-remove-streaming-music
+- [uc.memory.background-music](use-cases/uc.memory.background-music.md) — **planned** ([ADR 0135](../../decisions/0135-background-music-is-a-nodes-own-audio-media-played-by-cores-player.md)):
+  background music from the node's own audio files — each a medium kept out of every photo view, listed in a Music tab,
+  played by core's player as one endless, shuffled, crossfading playlist that plays on across pages
 - [uc.memory.journal](use-cases/uc.memory.journal.md) — **planned** ([ADR 0133](../../decisions/0133-a-memorys-journal-is-a-sealed-crdt-log-whose-snapshots-only-members-write.md)):
   a journal per Memory and per Chapter — markdown as a sealed Yjs log with snapshot revisions only members write and
   restore, written live by members and `READ_WRITE` guests, embeds as tokens in the sealed text
