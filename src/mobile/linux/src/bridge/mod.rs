@@ -159,16 +159,19 @@ unsafe extern "C" fn updated(ctx: *mut c_void, json: *const c_char, _bytes: *con
     let _ = tx.try_send(serde_json::from_str(&text).map_err(Unreadable));
 }
 
-/// The host function: the core's request, answered at once from this (core) thread — the store answers, and an
-/// Emergency Kit's page or picture is drawn ([crate::kit_drawing]), without waiting for the core, as bridge.h asks. A
-/// drawing's pixels go beside the reply's JSON and are zeroed once the core copied them.
+/// The host function: the core's request, answered at once from this (core) thread — the store answers, an Emergency
+/// Kit's page or picture is drawn ([crate::kit_drawing]) and a picked medium's tiers are made ([crate::media_tiers], on the
+/// upload queue's thread the core asks from), without waiting for the core, as bridge.h asks. A drawing's pixels and the
+/// tiers go beside the reply's JSON and are zeroed once the core copied them.
 unsafe extern "C" fn host(ctx: *mut c_void, token: u64, json: *const c_char, _bytes: *const u8, _len: usize) {
     // SAFETY: ctx is the DeviceStore [start] handed the core, alive for the process.
     let store = unsafe { &*ctx.cast::<DeviceStore>() };
     // SAFETY: a NUL-terminated string valid during this call, copied here.
     let text = unsafe { CStr::from_ptr(json) }.to_string_lossy();
     let (reply, mut payload) = match serde_json::from_str::<HostRequest>(&text) {
-        Ok(request) => crate::kit_drawing::answer(&request).unwrap_or_else(|| (store.answer(request), None)),
+        Ok(request) => crate::kit_drawing::answer(&request)
+            .or_else(|| crate::media_tiers::answer(&request))
+            .unwrap_or_else(|| (store.answer(request), None)),
         Err(_) => (HostReply::Failed { error: "the host could not read the request".into() }, None),
     };
     let reply = CString::new(serde_json::to_string(&reply).expect("a HostReply writes")).expect("JSON holds no NUL");

@@ -722,6 +722,100 @@ the share sheet's Memory roles, Memories' list with covers.
   upload; no plaintext written (`find / -xdev -newer <marker>` in the writable paths). In the Fedora VM's session: a drop of
   three photos from Files onto the gallery and the video's sound.
 
+**Status: built, unit-proven and passed in the container (en/light, de/dark) and the Fedora VM's session, every new check
+bitten (2026-11-14).** Memories' list draws no cover thumbnails yet (below); the GPX/music rule of the 2026-11-14 decision is
+in the core for every app.
+
+**Built:**
+- **Bridge** — `Gallery.Layout(gallery, width, top, viewHeight)` → `Answer.GridLayout(rows, height, count)`: the core lays the
+  gallery's rows out (`GalleryModel.layout`, D14) at the host's width and hands only the rows of the view's window
+  (`MediaGridLayout.Layout.window`, ADR 0105), each `GridRow(index, top, height, tiles: GridTile(mediaId, left, width))`; the
+  host places frames and lays out nothing (`WireTest` samples both shapes, `MemoriesDispatchTest` holds the order, the
+  justified width, the widow's height, the gap, another width and the window).
+- **Core** — `memories/GalleryMedium`: a GPX track (`application/gpx+xml`, or a `.gpx` name under a generic XML or byte type)
+  and a music track (`audio/*`) are no photo view's media, the web's `isGalleryMedium` (ADR 0135 decision 2, ADR 0130);
+  `GalleryModel`'s rows — so the grid, the count and the lightbox on every app — leave them out, an unclaimed type stays a row.
+  A picked or dropped audio file is no medium to upload (`MediaUpload.isMedia`, held).
+- **Linux** (`src/mobile/linux/src`): `memory_page` (a Memory's or a chapter's page: the head's cover, the chapters as a
+  boxed list with their covers through `Gallery.ChapterCover`, the justified grid as a `gtk::Fixed` of row widgets placed at
+  the core's frames, only the window's rows mounted, laid out anew on a width change (a frame tick) and on the scroll, tiles
+  decoded by GTK and held at 400 px, at most 400 of them, least recently shown out; "Add photos" — the header's own `upload`
+  — through GTK's file dialog filtered to images and videos; a drop of files onto the page as one `Memory.Upload`, a folder
+  said with `memory_drop_folder` and not taken; the trash's Undo toast held while the state offers it; the live poll's watch
+  while the page stands; Refresh reads it anew); `lightbox` (an `AdwNavigationPage` pushed over the content, over black:
+  Previous/Next, ←/→ and a swipe, zoom by Ctrl+wheel, pinch and `+`/`-`/`0`, the core's slideshow, Details in an
+  `AdwDialog`, Save through GTK's save dialog with the file page's progress toast, Move to trash; a video's poster with Play,
+  played through `player`); `player` (the file page's `gtk::Video` over the core's reader, made shared); `media_tiers` (the
+  host's `Media.Tiers`/`Media.Duration`, see the measurements); New Memory in the shell's New (`Shell.CreateMemory`, the
+  made Memory opens), Add chapter as the page's own creating action (`Gallery.CreateChapter`); `header::DRAWN` gains
+  `upload`. Words (English, German): `memory_slideshow_start`/`_pause`, `memory_previous`, `memory_next`, `memory_trash`,
+  `memory_drop_folder`. `run.py build` runs `SANDBOX_SKIPS` in the Fedora container after the SDK's pass.
+
+**D8's Linux measurements (2026-11-13, the Fedora 44 container and the GNOME 51 SDK's build sandbox):**
+- An 80×40 JPEG with EXIF orientation 6: `gdk::Texture` (GTK's own JPEG loader, in both) keeps it 80×40 — **GTK does not
+  turn by EXIF**; gdk-pixbuf (through glycin) reads orientation 6 and `apply_embedded_orientation` gives 40×80. The tiers
+  therefore decode through gdk-pixbuf.
+- **HEIC does not decode in the Fedora container**: glycin-heif is there, libheif has no HEVC decoder ("a suitable decoder
+  plugin is libde265"); such a photo goes up alone with its icon (the phones' rule). In the GNOME 51 runtime not measured
+  (the build sandbox's glycin cannot start a loader at all).
+- **gdk-pixbuf's JPEG saver goes through glycin in the GNOME 51 runtime too**: a save from raw pixels in the build sandbox
+  failed "Loader process exited early" (no portal there); in the Fedora container it saves. The installed Flatpak has the
+  portal glycin needs (the avatars' WebP, `SANDBOX_SKIPS`' first entry); the tiers' tests run in the Fedora container.
+- The GStreamer poster: the SDK carries `playbin`, `appsink`, `videoflip`, `vp9dec`, `qtdemux` and `avdec_h264` (no
+  `openh264dec`); the container `openh264dec`. A WebM's and an MP4's poster made in the pass (1920×1080, 1280×720), the
+  test's VP8 clip's frame at 1.5 s blue and at 0.1 s red.
+
+**Met:** `./gradlew --continue :core:jvmTest :bridge:jvmTest` from `src/mobile`: bridge 78 (2 skipped, the live cases) green; core
+662 (10 skipped) with one failure, `DeviceLinkTest.a_double_tap_or_a_race_of_confirmations_delegates_once`, the one phase 6
+already found red alone in `session/DeviceLink`, which this phase does not touch — left to its owner.
+`python3 src/mobile/linux/run.py build` green (clippy `-D warnings`; the SDK's `cargo test` 46 passed with 5 skipped, the
+Fedora container's 5 skipped ones passed). Guards (`/usr/bin/python3 scripts/validate_*.py` but guard_gaps) green.
+**Bitten** (mutation → its test red → restored with `/bin/cp -f`), 17 of 17 red: the layout's window not applied, its width
+ignored (`MemoriesDispatchTest`); a photo not turned by its EXIF, a poster not sought, the tiers packed thumbnail first, an
+undecodable file answered with a size, a photo enlarged (`media_tiers`); a dropped folder sent, a dropped folder not said,
+the held tiles unbounded, a shown tile not made the most recent (`memory_page`); `upload` not drawn (`header`); the gallery
+without the GPX/music filter, a `.gpx` name under a generic type kept, an audio type not normalised, audio taken as a medium
+(core).
+**Container pass** (`VEYQ_LIVE=http://veyq.localhost:8080 run.py run --port 8097 --devlogin --no-secret-service`, driven from
+headless Chrome, the app's stderr read first): "App memory 41207" made from New (opened, "0 items"); a chapter "Day one"
+made with Add chapter (opened, back shows it in the Memory's chapters); through the dialog the web's GPS/EXIF fixture, a
+1600×900 JPEG stored with orientation 6 (tiers 900×1600, drawn upright in the grid and the lightbox), a 20 s H.264/AAC MP4
+(poster 1280×720) and a 602 163 153 B VP9/Opus WebM (poster 1920×1080, the upload done) — the grid justified (a widow row at
+200), each tile from this host's thumbnail; the lightbox "3 of 4" paged, zoomed (1.25, 1.56, 1.95 by `+` and Ctrl+wheel,
+`0` back), the slideshow run from the third to the last ("ENDED" on 4 of 4), the details (camera, lens, focal length,
+aperture, "Added by"), the WebM played through the core's reader and sought to 269 s of 300 s (the seek took about a
+minute to land — 16 Mb/s read through the reader a range at a time), the GPS photo's original saved through GTK's save
+dialog at its SHA-256 (`c7b895d6…`, equal to the file uploaded), a medium trashed ("Moved to trash" with Undo) and undone
+(back to its row); a READ link and a WRITE_ONLY link made in the share sheet (their addresses read back by
+`LiveBridgeTest.theLinksOfAFolder*`), a guest's photo added through the WRITE_ONLY link on the web's guest page (headless
+Chrome, Vite's origin) shown in the gallery by the live poll within 6 s, its row justified across the width. The app's
+`VmHWM` 406 208 kB (397 MiB) after the WebM's upload, play and seek — under 400 MiB, narrowly. Files written in the container
+after a marker (`find / -xdev -newer`, less `/proc`, `/sys`, `/dev` and the picked files): the saved original, GTK's
+`settings/keyfile`, GStreamer's registry, the device store and GTK's `recently-used.xbel` — nothing decrypted. German/dark:
+the words ("4 Objekte", "Kapitel", the lightbox's), ←/→ paging, Escape back to the gallery, the window made narrower laid
+the grid out anew (744 px: three tiles and a widow). **Fixed on the way:** ← and → did not page (the picture's scroll took
+them first: the lightbox's shortcuts run in the capture phase now); a narrower window did not shrink the page (the grid's
+rows handed their width on as the page's minimum through `hscrollbar Never`: `External` now) — each seen red in the pass,
+green after. **Fedora VM** (GNOME 51 session, the debug build beside its catalogs, a forwarder of mine on 192.168.64.1 and
+the VM's own, both stopped by PID after): three photos dragged from Files onto the gallery went up as one batch
+(`memory upload: 3 files`, "7 items", tiles from this host's tiers); the MP4 played in the lightbox and its sound read from
+the default sink's monitor: −21.1 dBFS RMS, ~436 Hz (the clip's 440 Hz sine), the stream `veyq`. The Memory was trashed and
+purged after (`DevMemoryTest`, `VEYQ_DEV_MEMORY_PURGE`).
+
+**Deviation:** D10's "each Memory row in Memories' list its cover thumbnail" is not built: the bridge has no row-cover read
+(the phones read `NodeCover.openFramed` in their app models), and adding one is a wire change Windows draws in phase 5 —
+left to phase 5 with the bridge call, both desktops at once; a chapter row draws its cover. D11's `gtk::ListView` of rows
+became a `gtk::Fixed` of the window's rows the core names (D14's own alternative, `Layout.window`): a `ListView` would have
+had to recycle the page's head (the hero, the chapters) as an item. The guest's own purge (`purging`) is drawn but not
+driven: the apps open a gallery as a member only (D3).
+
+**Retrospective:** GTK's own loader not turning a JPEG by its EXIF was the phase's first surprise — the cover dialog had it
+too and nobody saw it; and in the GNOME 51 runtime gdk-pixbuf saves through glycin as well, so "the cover's `savev` was
+passed" held only for the container. A test that needs glycin belongs where a pass runs the app, which `run.py build` now
+does for `SANDBOX_SKIPS`. Two pass bugs (keys taken by a scroll, a laid-out width becoming a minimum) were visible only
+with a real window — the unit tests could not see either. The crash of the Mac mid-phase left a bite's mutation in
+`Bridge.kt` twice: a bite script's backup now lives beside the build, and the tree is diffed before anything is committed.
+
 ### Phase 5 — Windows: Memories drawn
 
 D8 (Windows) first, then the same screens as phase 4 in Fluent.

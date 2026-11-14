@@ -36,6 +36,9 @@ class MediaUploadTest {
         assertTrue(MediaUpload.isMedia("image/heic", null))
         assertTrue(MediaUpload.isMedia(null, "clip.MKV"))
         assertFalse(MediaUpload.isMedia("application/pdf", "doc.pdf"))
+        // a music track is the Music tab's (ADR 0135), never a photo view's upload: the picker and a drop refuse it, said
+        assertFalse(MediaUpload.isMedia("audio/mpeg", "song.mp3"))
+        assertFalse(MediaUpload.isMedia(null, "song.flac"))
     }
 
     @Test

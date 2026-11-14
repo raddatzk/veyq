@@ -20,7 +20,7 @@ use gtk::{gdk, glib};
 use crate::bridge::{self, Watch, wire::Answer, wire::Call, wire::Facts, wire::FileShown, wire::FileViewKind, wire::NodeAt,
     wire::SaveEnd, wire::Update, wire::Watched};
 use crate::home::glib_escape;
-use crate::reader_stream::{CoreReader, ReaderStream};
+use crate::player::Playing;
 use crate::{said, words};
 
 /// The width a page of a PDF is laid out at, in logical pixels.
@@ -51,8 +51,8 @@ struct Inner {
     on_facts: RefCell<Option<OnFacts>>,
     /// The PDF shown, its pages rendered as they come into view.
     pdf: RefCell<Option<Rc<PdfPages>>>,
-    /// The medium playing and its stream over the core's reader.
-    media: RefCell<Option<(gtk::MediaFile, ReaderStream)>>,
+    /// The medium playing over the core's reader.
+    media: RefCell<Option<Playing>>,
 }
 
 impl FilePage {
@@ -163,8 +163,9 @@ impl FilePage {
     }
 }
 
-/// A save's toast: its progress with Cancel while it runs, replaced by how it ended.
-async fn saving(save: i64, toasts: &adw::ToastOverlay) {
+/// A save's toast: its progress with Cancel while it runs, replaced by how it ended (a file's Save a copy, a Memory's
+/// original saved from its lightbox).
+pub async fn saving(save: i64, toasts: &adw::ToastOverlay) {
     let Some((_watch, updates)) = bridge::watch(&Watched::Save { save }) else { return };
     let toast = adw::Toast::builder().title("").timeout(0).button_label(words::download_cancel()).build();
     toast.connect_button_clicked(move |_| {
@@ -302,39 +303,16 @@ impl Inner {
                 }
             };
             let Some(inner) = inner else { return };
-            let stream = ReaderStream::new(size.max(0) as u64, CoreReader(reader));
-            let media = gtk::MediaFile::for_input_stream(&stream);
             let weak = Rc::downgrade(&inner);
-            media.connect_error_notify(move |media| {
-                let Some(error) = media.error() else { return };
-                eprintln!("veyq: the medium does not play here: {error}");
-                let (weak, unplayable) = (weak.clone(), unplayable.clone());
-                // let go of the player once its own signal returned
-                glib::idle_add_local_once(move || {
-                    if let Some(inner) = weak.upgrade() {
-                        inner.stop_media();
-                        inner.replace(&message(&unplayable.as_deref().map(said::key).unwrap_or_else(words::file_unsupported)));
-                    }
-                });
-            });
-            media.connect_prepared_notify(|media| {
-                if media.is_prepared() {
-                    eprintln!("veyq: medium prepared: {} s, video {}, audio {}, seekable {}", media.duration() / 1_000_000,
-                        media.has_video(), media.has_audio(), media.is_seekable());
+            let playing = Playing::new(reader, size, &words::tab_depot_file(), false, move || {
+                // let go of the player, then say what the core says of a medium not shown here
+                if let Some(inner) = weak.upgrade() {
+                    inner.stop_media();
+                    inner.replace(&message(&unplayable.as_deref().map(said::key).unwrap_or_else(words::file_unsupported)));
                 }
             });
-            // the position on stderr each fifth second, for a pass to read the play and a seek from
-            let logged = Cell::new(-1i64);
-            media.connect_timestamp_notify(move |media| {
-                let at = media.timestamp() / 5_000_000;
-                if at != logged.get() {
-                    logged.set(at);
-                    eprintln!("veyq: medium at {} s of {} s", media.timestamp() / 1_000_000, media.duration() / 1_000_000);
-                }
-            });
-            let video = gtk::Video::builder().media_stream(&media).vexpand(true).build();
-            video.update_property(&[gtk::accessible::Property::Label(&words::tab_depot_file())]);
-            *inner.media.borrow_mut() = Some((media, stream));
+            let video = playing.video.clone();
+            *inner.media.borrow_mut() = Some(playing);
             inner.replace(&video);
         });
     }
@@ -343,12 +321,8 @@ impl Inner {
     /// lets the core's reader go.
     fn stop_media(&self) {
         let held = self.media.borrow_mut().take();
-        if let Some((media, stream)) = held {
-            media.pause();
-            media.clear();
-            if let Err(e) = stream.close(gtk::gio::Cancellable::NONE) {
-                eprintln!("veyq: the medium's stream did not close: {e}");
-            }
+        if let Some(playing) = held {
+            playing.stop();
         }
     }
 

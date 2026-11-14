@@ -304,6 +304,29 @@ class MemoriesDispatchTest {
         assertContentEquals("cover-c1".encodeToByteArray(), b.askWithPayload(Call.GalleryChapterCover(g, "c1")).second)
         assertEquals(Answer.Refused(Answer.Why.NO_COVER), b.ask(Call.GalleryChapterCover(g, "f")), "a node that is no chapter of this Memory")
 
+        // the justified grid is the core's (D14): every row 4:3, so 1 000 wide (target 200) holds all four in one justified row,
+        // 500 wide (target 150) three justified and a widow at the target height; the host only places the frames
+        val wide = b.ask(Call.GalleryLayout(g, 1000.0, 0.0, 600.0)) as Answer.GridLayout
+        assertEquals(listOf(listOf("a", "clip", "raw", "bad")), wide.rows.map { r -> r.tiles.map { it.mediaId } }, "the grid's rows in its order")
+        val row = wide.rows.single()
+        assertEquals(1000.0, row.tiles.last().let { it.left + it.width }, 1e-9, "a full row justified to the width")
+        assertEquals((1000.0 - 3 * 8.0) / (4 * 4.0 / 3.0), row.height, 1e-9)
+        assertEquals(row.height, wide.height, 1e-9)
+        val narrow = b.ask(Call.GalleryLayout(g, 500.0, 0.0, 600.0)) as Answer.GridLayout
+        assertEquals(listOf(3, 1), narrow.rows.map { it.tiles.size }, "laid out anew at another width")
+        assertEquals(listOf(0, 1), narrow.rows.map { it.index })
+        assertEquals(150.0, narrow.rows[1].height, 1e-9, "the widow keeps the target height")
+        assertEquals(narrow.rows[0].height + 8.0, narrow.rows[1].top, 1e-9, "the gap between rows")
+        // only the rows near the view are handed over (ADR 0105): a short view at the top mounts the first row (and its
+        // one view below), a view far past the end none — the grid's height and its count stay the whole grid's
+        val top = b.ask(Call.GalleryLayout(g, 500.0, 0.0, 10.0)) as Answer.GridLayout
+        assertEquals(listOf(0), top.rows.map { it.index }, "the window, not every row")
+        assertEquals(narrow.height to 2, top.height to top.count)
+        val past = b.ask(Call.GalleryLayout(g, 500.0, 5000.0, 10.0)) as Answer.GridLayout
+        assertEquals(emptyList(), past.rows.map { it.index })
+        assertEquals(2, past.count)
+        assertEquals(Answer.Refused(Answer.Why.NO_SUCH_GALLERY), b.ask(Call.GalleryLayout(-1, 500.0, 0.0, 600.0)))
+
         // the header's plan holds the page's own "Add photos" once the page is named
         val header = (b.ask(Call.HeaderOpen(memory, AppKinds.Facts(), 3)) as Answer.HeaderOpened).header
         assertEquals(Answer.Done, b.ask(Call.HeaderFacts(header, AppKinds.Facts(), gallery = g)))

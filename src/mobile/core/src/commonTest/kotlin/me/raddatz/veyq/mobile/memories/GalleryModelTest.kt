@@ -135,6 +135,31 @@ class GalleryModelTest {
         assertEquals("t-b", rows.first().tile)
     }
 
+    /**
+     * A GPX track and a music track are media of a Memory that another view claims (ADR 0135 decision 2, the web's
+     * `isGalleryMedium`): no row, no count, no lightbox page; a type no view claims stays a row with its icon.
+     */
+    @Test
+    fun aTrackAndAMusicTrackAreNoPhotoViewsMedia() = runTest {
+        val door = Door(
+            listOf(
+                item("photo", at = 30),
+                item("route", at = 20, type = "application/gpx+xml", thumbnail = false, preview = false, name = "route.gpx"),
+                item("walk", at = 19, type = "application/octet-stream", thumbnail = false, preview = false, name = "Walk.GPX"),
+                item("song", at = 18, type = "audio/mpeg", thumbnail = false, preview = false, name = "song.mp3"),
+                item("notes", at = 10, type = "application/pdf", thumbnail = false, preview = false, name = "notes.pdf"),
+            ),
+        )
+        val g = open(door)
+        assertEquals(listOf("photo", "notes"), g.current.rows?.map { it.mediaId }, "a track and a music track are no photo view's")
+        assertEquals(2, g.current.count)
+        val box = g.lightbox(0)
+        assertEquals(2, box.current.count, "the lightbox pages the photo view's media only")
+        assertTrue(GalleryMedium.shows("image/heic", "a.heic") && GalleryMedium.shows(null, null), "an unclaimed type stays")
+        assertTrue(!GalleryMedium.shows("application/xml", "a.gpx") && GalleryMedium.shows("application/xml", "a.xml"))
+        assertTrue(!GalleryMedium.shows(" Audio/OGG ", "x"), "the type read as the web reads it")
+    }
+
     @Test
     fun itReadsAnewOnTheListsRevisionAndOnAnOwnUploadIntoItNotOtherwise() = runTest {
         val door = Door(listOf(item("a", at = 1)))

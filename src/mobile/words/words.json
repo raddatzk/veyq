@@ -2335,6 +2335,39 @@
     "en": "The video couldn’t be played.",
     "de": "Das Video konnte nicht abgespielt werden."
   },
+  "memory_slideshow_start": {
+    "note": "The lightbox's slideshow, started (the web's slideshowStart).",
+    "en": "Start slideshow",
+    "de": "Diashow starten",
+    "apple_en": "Start Slideshow"
+  },
+  "memory_slideshow_pause": {
+    "note": "The lightbox's slideshow, paused (the web's slideshowPause).",
+    "en": "Pause slideshow",
+    "de": "Diashow anhalten",
+    "apple_en": "Pause Slideshow"
+  },
+  "memory_previous": {
+    "note": "The lightbox's previous medium (the web's previous).",
+    "en": "Previous",
+    "de": "Zurück"
+  },
+  "memory_next": {
+    "note": "The lightbox's next medium (the web's next).",
+    "en": "Next",
+    "de": "Weiter"
+  },
+  "memory_trash": {
+    "note": "A medium moved to the trash from the lightbox (the web's delete).",
+    "en": "Move to trash",
+    "de": "In den Papierkorb",
+    "apple_en": "Move to Trash"
+  },
+  "memory_drop_folder": {
+    "note": "A folder dropped onto a Memory's gallery on a desktop is not taken (the CR's owner question 3).",
+    "en": "“{1}” is a folder and was not added: drop its photos and videos instead.",
+    "de": "„{1}“ ist ein Ordner und wurde nicht hinzugefügt: Zieh stattdessen seine Fotos und Videos hierher."
+  },
   "memory_blocked": {
     "en": "This item was blocked by the operator.",
     "de": "Dieses Objekt wurde vom Betreiber gesperrt."

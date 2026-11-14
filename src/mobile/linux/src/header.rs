@@ -28,7 +28,7 @@ use crate::{said, words};
 pub const MAX_BUTTONS: i32 = 2;
 
 /// The header's ids drawn so far; every other id of the plan is left out until its phase.
-pub const DRAWN: &[&str] = &["favorite", "share", "rename", "delete", "download", "move", "copy", "report", "cover", "replace"];
+pub const DRAWN: &[&str] = &["favorite", "share", "rename", "delete", "download", "move", "copy", "report", "cover", "replace", "upload"];
 
 /// Whether [id] is drawn for a node of [kind].
 pub fn drawn(id: &str, _kind: &str) -> bool {
@@ -36,15 +36,20 @@ pub fn drawn(id: &str, _kind: &str) -> bool {
 }
 
 /// The window's action an id fires (`win.header-<id>`; a Pot's download is the Pot page's `win.pot-download`, a file's its
-/// page's Save a copy, `win.file-save`, and a file's own Replace its page's `win.file-replace`).
+/// page's Save a copy, `win.file-save`, a file's own Replace its page's `win.file-replace`, and a Memory's or a chapter's
+/// own "Add photos" its page's `win.memory-upload`).
 pub fn action_of(id: &str, kind: &str) -> String {
     match (id, kind) {
         ("download", "EXPENSES_POT") => "win.pot-download".into(),
         ("download", "FILE") => "win.file-save".into(),
         ("replace", _) => "win.file-replace".into(),
+        ("upload", _) => "win.memory-upload".into(),
         _ => format!("win.header-{id}"),
     }
 }
+
+/// What a page told before the core answered the open: its facts, a file page's id, a gallery's id.
+type Later = (Option<Facts>, Option<i64>, Option<i64>);
 
 /// The header of one node, opened in the core when made and closed when dropped.
 pub struct Header {
@@ -63,7 +68,7 @@ struct Inner {
     /// Whether it still draws into the bar: a header kept for its Undo after its page left does not.
     on_bar: Cell<bool>,
     /// Facts the page learnt before the core answered the open (and a file page's id): sent once it did.
-    later: RefCell<Option<(Option<Facts>, Option<i64>)>>,
+    later: RefCell<Option<Later>>,
     /// A state showed the trash's undo offered: its end is the next state without it.
     seen_undo: Cell<bool>,
     /// The node's head: its cover, cut as stored, drawn 16:9 across the width it is given; hidden while it has none.
@@ -143,8 +148,8 @@ impl Header {
                 return;
             };
             inner.id.set(Some(header));
-            if let Some((facts, file)) = inner.later.borrow_mut().take() {
-                bridge::send(Call::HeaderFacts { header, facts, file, gallery: None });
+            if let Some((facts, file, gallery)) = inner.later.borrow_mut().take() {
+                bridge::send(Call::HeaderFacts { header, facts, file, gallery });
             }
             let Some((watch, updates)) = bridge::watch(&Watched::Header { header }) else { return };
             *inner.watch.borrow_mut() = Some(watch);
@@ -154,12 +159,12 @@ impl Header {
         Self { node: node.clone(), inner }
     }
 
-    /// What the kind's page knows now (a Pot read: whether it takes writes) and, for a file's page, its id: the page's own
-    /// actions (Replace) join the plan.
-    pub fn facts(&self, facts: Option<Facts>, file: Option<i64>) {
+    /// What the kind's page knows now (a Pot read: whether it takes writes) and, for a file's page or a Memory's, its id:
+    /// the page's own actions (a file's Replace, a gallery's "Add photos") join the plan.
+    pub fn facts(&self, facts: Option<Facts>, file: Option<i64>, gallery: Option<i64>) {
         match self.inner.id.get() {
-            Some(header) => bridge::send(Call::HeaderFacts { header, facts, file, gallery: None }),
-            None => *self.inner.later.borrow_mut() = Some((facts, file)),
+            Some(header) => bridge::send(Call::HeaderFacts { header, facts, file, gallery }),
+            None => *self.inner.later.borrow_mut() = Some((facts, file, gallery)),
         }
     }
 
@@ -492,6 +497,7 @@ pub fn icon_of(id: &str) -> &'static str {
         "report" => "dialog-warning-symbolic",
         "cover" => "image-x-generic-symbolic",
         "replace" => "document-revert-symbolic",
+        "upload" => "insert-image-symbolic",
         _ => "view-more-symbolic",
     }
 }
@@ -565,6 +571,8 @@ mod tests {
         assert_eq!(action_of("download", "FILE"), "win.file-save", "a file's download is its page's Save a copy");
         assert!(drawn("replace", "FILE"), "a file's own Replace is drawn");
         assert_eq!(action_of("replace", "FILE"), "win.file-replace", "a file's Replace is its page's");
+        assert!(drawn("upload", "MEMORY"), "a Memory's own Add photos is drawn");
+        assert_eq!(action_of("upload", "CHAPTER"), "win.memory-upload", "a gallery's Add photos is its page's");
         assert!(!drawn("an-applications-own", "FOLDER"), "an application's own action is its page's");
         assert_eq!(action_of("report", "FOLDER"), "win.header-report");
         assert_eq!(action_of("cover", "EXPENSES_POT"), "win.header-cover");
