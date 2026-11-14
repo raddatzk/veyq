@@ -23,6 +23,8 @@
 //   scroll <id> [percent]     a scrolled view (its ScrollPattern: a ScrollViewer, a list) moved to percent of its height
 //                             (100 by default)
 //   range <id> <percent>      a slider (a player's seek bar) set to percent of its range (its RangeValue)
+//   slide <id> <from> <to>    a mouse drag across the element (SendInput) from <from> to <to>, each a percent of its
+//                             width at its middle: the device link's slide, which a RangeValue set does not confirm
 //   size <w> <h>              the window restored and resized to w × h (in its own pixels)
 //   maximize                  the window maximized
 //   wait <id> [seconds]       until an element with that AutomationId is there (10 s by default)

@@ -145,6 +145,16 @@ internal sealed partial class AppWindow(string process)
                 Thread.Sleep(300);
                 return $"{range.Current.Value} of {min}..{max}";
             }
+            case "slide":
+            {
+                // a pointer's drag across an element (the device link's slide) from <from> to <to>, each a percent of its
+                // width at its vertical middle, with SendInput's mouse as a hand drags; `range` is the one move a drag is not
+                var e = Find(parts[1]);
+                var r = e.Current.BoundingRectangle;
+                int At(string percent) => (int)(r.Left + r.Width * double.Parse(percent, CultureInfo.InvariantCulture) / 100);
+                var y = (int)(r.Top + r.Height / 2);
+                return Mouse.Drag(At(parts[2]), y, At(parts[3]), y);
+            }
             case "size":
                 Size(Window(), int.Parse(parts[1], CultureInfo.InvariantCulture), int.Parse(parts[2], CultureInfo.InvariantCulture));
                 return "";

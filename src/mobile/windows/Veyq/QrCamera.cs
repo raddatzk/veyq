@@ -80,7 +80,16 @@ internal sealed class QrCamera : IDisposable
     public static QrCamera Open(ScanKind kind, string? server, Func<ScanShown, UIElement?> draw, Action<ScanShown> changed)
     {
         var camera = new QrCamera(draw, changed);
-        _ = camera.StartAsync(kind, server);
+        _ = camera.StartAsync(new Call.ScanOpen { kind = kind, server = server, link = null });
+        return camera;
+    }
+
+    /// <summary>Opens device link <paramref name="link"/>'s own scan (kind LINK, cr-app-device-linking D6) and its camera:
+    /// what it reads goes straight into the link in the core, never back here; the link's state says what came of it.</summary>
+    public static QrCamera OpenLink(long link, Func<ScanShown, UIElement?> draw, Action<ScanShown> changed)
+    {
+        var camera = new QrCamera(draw, changed);
+        _ = camera.StartAsync(new Call.ScanOpen { kind = ScanKind.Link, server = null, link = link });
         return camera;
     }
 
@@ -100,11 +109,11 @@ internal sealed class QrCamera : IDisposable
         }
     }
 
-    private async Task StartAsync(ScanKind kind, string? server)
+    private async Task StartAsync(Call.ScanOpen opening)
     {
         try
         {
-            var (answer, _) = await Core.CallAsync(new Call.ScanOpen { kind = kind, server = server, link = null });
+            var (answer, _) = await Core.CallAsync(opening);
             if (answer is not Answer.ScanOpened opened)
             {
                 Log.Write($"Scan.Open answered {answer.GetType().Name}");
