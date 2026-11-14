@@ -9,7 +9,9 @@ import me.raddatz.veyq.mobile.navigation.RecentUses
 import org.junit.Assume.assumeTrue
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertNotNull
+import kotlin.test.assertTrue
 
 /**
  * [LiveRun]'s promise against a running dev instance (`VEYQ_LIVE`): a live case leaves the account as it found it. A
@@ -20,14 +22,19 @@ import kotlin.test.assertNotNull
  *
  * Its bite: with the case's in-body [LiveRun.removeAll] left out the counts stay one higher and the last assertion fails
  * (its `finally` still takes the device off). A live case of another run against the same account in the same seconds
- * moves the counts too: run it alone. It is skipped where the register has no room for two more entries below
- * [DeviceRegisterStore.MAX_DEVICES].
+ * moves the counts too: run it alone. The register is compared by its entries: the case's own is there during the case
+ * and gone after, and nothing else was added. Where it is full ([DeviceRegisterStore.MAX_DEVICES]), the meter's and the
+ * case's entries each evict the least recently seen other one (#894) — what every sign-in at the cap does — so there
+ * the entries after are a subset of those before, and exactly them where the register had room (measured 2026-11-14:
+ * the dev principal's register held 31 entries, the meter's left out).
  */
 class LiveRunTest {
     private val p = BouncyCastlePrimitives
     private val client = { block: io.ktor.client.HttpClientConfig<*>.() -> Unit -> HttpClient(OkHttp, block) }
 
-    private data class Counts(val families: Int, val devices: Int, val wraps: Int)
+    private data class Counts(val families: Int, val devices: Set<String>, val wraps: Int) {
+        override fun toString() = "Counts(families=$families, devices=${devices.size}, wraps=$wraps)"
+    }
 
     @Test
     fun aLiveCaseLeavesTheAccountAsItFoundIt() = runBlocking {
@@ -36,15 +43,12 @@ class LiveRunTest {
         assumeTrue("VEYQ_LIVE is not set: a live case", origin != null)
         val before = counts()
         println("[live run] before: $before")
-        // the meter and the case each add an entry: past the register's cap a write evicts another device's (#894), and
-        // the count no longer says what the case left
-        assumeTrue(
-            "the register holds ${before.devices} devices: no room for the meter and the case below its cap",
-            before.devices + 2 <= DeviceRegisterStore.MAX_DEVICES,
-        )
+        // the meter and the case each add an entry: past the register's cap a write evicts another device's (#894)
+        val roomy = before.devices.size + 2 <= DeviceRegisterStore.MAX_DEVICES
 
         try {
-            val model = SessionModel.accounts(p, run.device(), client, Hidden({}, emptySet()), RecentUses({}, emptyList()))
+            val case = run.device()
+            val model = SessionModel.accounts(p, case, client, Hidden({}, emptySet()), RecentUses({}, emptyList()))
             model.start()
             val opened = assertNotNull(
                 model.signIn(origin!!, run.env.getValue("VEYQ_EMAIL"), run.env.getValue("VEYQ_PASSWORD"), run.env.getValue("VEYQ_SECRET_KEY")),
@@ -54,12 +58,18 @@ class LiveRunTest {
             val trusted = opened.account.trusted != null
             val during = counts()
             println("[live run] during: $during (the device ${if (trusted) "trusted" else "not trusted: no wrap slot free"})")
-            assertEquals(Counts(before.families + 1, before.devices + 1, before.wraps + if (trusted) 1 else 0), during, "the case's sign-in did not show")
+            assertEquals(before.families + 1, during.families, "the case's sign-in made no session family")
+            assertEquals(before.wraps + if (trusted) 1 else 0, during.wraps, "the case's trust did not show as a wrap")
+            assertTrue(case.id in during.devices, "the case's device is not in the register")
+            assertTrue(before.devices.containsAll(during.devices - case.id), "the register holds an entry the case did not explain")
 
             run.removeAll() // the bite: without this line the counts stay one higher and the assertion below fails
             val after = counts()
             println("[live run] after: $after")
-            assertEquals(before, after, "the live case left something behind")
+            assertEquals(before.families, after.families, "the live case left a session family behind")
+            assertEquals(before.wraps, after.wraps, "the live case left a wrap behind")
+            assertFalse(case.id in after.devices, "the live case left its register entry behind")
+            if (roomy) assertEquals(before.devices, after.devices, "the register changed") else assertTrue(before.devices.containsAll(after.devices))
         } finally {
             run.removeAll() // nothing left once the line above ran; the bitten run's device otherwise
         }
@@ -76,7 +86,7 @@ class LiveRunTest {
         return try {
             Counts(
                 door.families().count { it.current != true },
-                account.readRegister().devices.keys.count { it != device.id },
+                account.readRegister().devices.keys - device.id,
                 door.savedKeys().size,
             )
         } finally {

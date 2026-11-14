@@ -2,6 +2,7 @@ package me.raddatz.veyq.mobile.session
 
 import io.ktor.client.HttpClient
 import io.ktor.client.engine.darwin.Darwin
+import io.ktor.client.engine.darwin.KtorNSURLSessionDelegate
 import kotlinx.cinterop.ExperimentalForeignApi
 import kotlinx.cinterop.addressOf
 import kotlinx.cinterop.usePinned
@@ -12,6 +13,7 @@ import me.raddatz.veyq.mobile.crypto.Primitives
 import platform.Foundation.NSData
 import platform.Foundation.NSHTTPCookieAcceptPolicy
 import platform.Foundation.NSURLRequestReloadIgnoringLocalCacheData
+import platform.Foundation.NSURLSession
 import platform.Foundation.NSURLSessionConfiguration
 import platform.Foundation.NSUserDefaults
 import platform.Foundation.create
@@ -158,9 +160,30 @@ internal fun NSURLSessionConfiguration.keepNothingOnDisk() {
     setURLCredentialStorage(null)
 }
 
-/** Ktor's Darwin engine (URLSession) over a session that keeps nothing on disk ([keepNothingOnDisk]). */
+/**
+ * The configuration every core session runs on: an **ephemeral** one ([keepNothingOnDisk] on top). Clearing the
+ * stores of the default configuration is not enough — CFNetwork still keeps a per-app storage session on disk,
+ * `Library/HTTPStorages/<bundle id>/httpstorages.sqlite`, whose `alt_services` table records every host that answers
+ * with `Alt-Svc` (measured 2026-11-13). An ephemeral configuration's storage session lives in memory only, so nothing
+ * of the session reaches disk; the stores it would keep in memory are cleared as well.
+ */
+internal fun ephemeralNoDiskConfiguration(): NSURLSessionConfiguration =
+    NSURLSessionConfiguration.ephemeralSessionConfiguration.apply { keepNothingOnDisk() }
+
+/**
+ * Ktor's Darwin engine (URLSession) over an ephemeral session that keeps nothing on disk ([ephemeralNoDiskConfiguration]).
+ * Ktor builds its own session from `defaultSessionConfiguration` and only lets that be mutated, so the session is made
+ * here and handed over with Ktor's own [KtorNSURLSessionDelegate], which carries the engine's responses; closing the
+ * client invalidates it as it does Ktor's own. A nil delegate queue gives the session its own serial queue.
+ */
 fun appleHttpClient(block: io.ktor.client.HttpClientConfig<*>.() -> Unit): HttpClient = HttpClient(Darwin) {
-    engine { configureSession { keepNothingOnDisk() } }
+    engine {
+        val delegate = KtorNSURLSessionDelegate()
+        usePreconfiguredSession(
+            NSURLSession.sessionWithConfiguration(ephemeralNoDiskConfiguration(), delegate, delegateQueue = null),
+            delegate,
+        )
+    }
     block()
 }
 

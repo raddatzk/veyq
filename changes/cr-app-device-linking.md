@@ -443,7 +443,10 @@ Phase 3 (the implementer, 2026-11-13):
   case that bites** (one mutation, red, `/bin/cp -f` restore):
   1. *`confirm` was not single-flight* (check, then a move whose result was ignored, then a launch): a double tap
      delegated twice, the second `404` ended the ceremony mid-seal. Now one atomic move out of CONFIRMING
-     (`advance`, as `enterCode`'s); 32 racing confirmations move it once.
+     (`advance`, as `enterCode`'s); 32 racing confirmations move it once. That race first awaited the racers on
+     `Dispatchers.Default` from a suspended `runTest` body, which let the scheduler jump virtual time to the channel's
+     end while they waited for a thread (red under load, `expected 1 but was 0`); since 2026-11-14 they run on threads
+     of their own behind one gate while the test thread blocks, 20 links per run, and check-then-act is red 20/20 runs.
   2. *A failing seal (`sealGrant`, the Master Key's read) and a seal that did not open after a verified MAC escaped*
      the SupervisorJob as uncaught (an Android crash) and left the state in SEALING / FINISHING, where no timer ends
      it. Both now end FAILED; the grant is still wiped in `finally`.

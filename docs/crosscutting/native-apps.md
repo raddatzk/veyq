@@ -89,7 +89,9 @@ device renamed, a second session of the account signed out from the list, "Sign 
 renamed back, "Sign out" taken (a session's menu not driven there).
 
 **Device trust, on all four apps** (ADR 0123 decision 8 as changed 2026-11-11; measured 2026-11-11, `DeviceTrustLiveTest`,
-`LiveBridgeTest` and a pass per app, ADR 0123's Consequences, the device trust): every sign-in trusts the device with
+`LiveBridgeTest` and a pass per app, ADR 0123's Consequences, the device trust; the two live tests again 2026-11-14,
+once the principal had wrap slots free again, and `LiveRunTest` with the case's device trusted — families 20 → 21 →
+20, wraps 14 → 15 → 14): every sign-in trusts the device with
 the password; an offer after it to stay signed in at each level the device's store has, or "Not now"; "Manage servers"
 changes the level, goes back to the password trust or stops trusting; the unlock screen. What each store guarantees is
 [security-model](security-model.md) § What a trusted device rests on.
