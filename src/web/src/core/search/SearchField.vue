@@ -50,8 +50,8 @@ import { breadcrumb } from '../../app/breadcrumb'
 import { ScopeKind } from '../../api/generated/scopes'
 import { registry } from '../applications/registry'
 import { FOLDER_KIND } from '../node/kind'
-import { hashForNode, parseHash, personHash, TENANT_SCOPE } from '../node/location'
-import { loadTenantPeople, tenantPeopleNow } from '../people/directory'
+import { hashForNode, parseHash, TENANT_SCOPE } from '../node/location'
+import { loadTenantPeople, profileHash, tenantPeopleNow } from '../people/directory'
 import PersonAvatar from '../people/PersonAvatar.vue'
 import { useSettingsSections } from '../../features/settings/sections'
 import { searchContribution } from './contribution'
@@ -155,7 +155,7 @@ const content = computed(() => {
 })
 /** The members and the settings sections (ADR 0125 decision 9): documents of no space, each opening itself. */
 const elsewhere = computed<SearchDocument[]>(() => [
-  ...personDocuments(people.value, (userId) => void router.push({ name: 'home', hash: personHash(userId) })),
+  ...personDocuments(people.value, (userId) => void router.push({ name: 'home', hash: profileHash(userId) })),
   ...settingsDocuments(sections.offered.value, (id) => void router.push(`/settings/${id}`)),
 ])
 const documents = computed(() => [...content.value, ...elsewhere.value])

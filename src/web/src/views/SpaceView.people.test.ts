@@ -1,5 +1,5 @@
 // @vitest-environment happy-dom
-// The profile route of the shell host (ADR 0083 decision 5): `#people/<userId>` shows core's profile page INSTEAD of a
+// The profile route of the shell host (ADR 0083 decision 5): `#people/<username>` shows core's profile page INSTEAD of a
 // level, in the tenant scope; a folder called "People" is numbered away so no node ever lands on it, and the host never
 // polls the tree for a page that is no level. The page itself is PersonProfile.test.ts's.
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
@@ -30,14 +30,20 @@ vi.mock('../core/node/treeStore', async () => {
   const { reactive } = await import('vue')
   return { treeStore: reactive({ nodes: [], loaded: true, error: false }), loadTree: vi.fn(async () => {}), patchNodeMeta: vi.fn(), pollTree: vi.fn(async () => false) }
 })
-vi.mock('../core/people/directory', () => ({ loadTenantPeople: vi.fn(async () => new Map()), personNow: vi.fn(() => undefined) }))
+vi.mock('../core/people/directory', async () => {
+  const { personHash } = await import('../core/node/location')
+  const personOfTokenNow = vi.fn((_token: string): import('../core/people/directory').Person | undefined => undefined)
+  // As the real one: the username of the member the roster (here the mocked lookup) knows by this id, else the id.
+  const profileHash = (userId: string) => personHash(userId, personOfTokenNow(userId)?.username)
+  return { loadTenantPeople: vi.fn(async () => new Map()), personOfTokenNow, profileHash }
+})
 vi.mock('../core/people/PersonProfile.vue', async () => {
   const { defineComponent, h } = await import('vue')
-  return { default: defineComponent({ name: 'PersonProfileStub', props: ['userId'], setup: (p) => () => h('div', { class: 'profile-stub' }, p.userId) }) }
+  return { default: defineComponent({ name: 'PersonProfileStub', props: ['token'], setup: (p) => () => h('div', { class: 'profile-stub' }, p.token) }) }
 })
 
 import SpaceView from './SpaceView.vue'
-import { personNow } from '../core/people/directory'
+import { personOfTokenNow } from '../core/people/directory'
 import { treeStore } from '../core/node/treeStore'
 import { enterScope } from '../app/activeSpace'
 import { breadcrumb } from '../app/breadcrumb'
@@ -50,8 +56,9 @@ import { realI18n } from '../test/i18n'
 
 const UID = '3f2c9e1a-0000-4000-8000-00000000abcd'
 const mounted: { unmount(): void }[] = []
+let router: ReturnType<typeof createRouter>
 async function mountAt(hash: string) {
-  const router = createRouter({ history: createMemoryHistory(), routes: [{ path: '/', name: 'home', component: { template: '<div />' } }] })
+  router = createRouter({ history: createMemoryHistory(), routes: [{ path: '/', name: 'home', component: { template: '<div />' } }] })
   await router.replace({ name: 'home', hash })
   await router.isReady()
   const wrapper = mount(SpaceView, { global: { plugins: [router, realI18n()] } })
@@ -62,6 +69,7 @@ async function mountAt(hash: string) {
 afterEach(() => { mounted.splice(0).forEach((w) => w.unmount()) })
 beforeEach(() => {
   vi.clearAllMocks()
+  vi.mocked(personOfTokenNow).mockReturnValue(undefined)
   vi.mocked(listMyTenants).mockResolvedValue([])
   treeStore.nodes = [
     treeNode({ id: 'people', kind: FOLDER_KIND, name: 'People', parentId: null }),
@@ -69,7 +77,7 @@ beforeEach(() => {
   ]
 })
 
-describe('SpaceView: #people/<userId>', () => {
+describe('SpaceView: #people/<username>', () => {
   it('shows the profile page of the person instead of a level, in the tenant scope', async () => {
     const w = await mountAt(`#people/${UID}`)
     expect(w.get('.profile-stub').text()).toBe(UID)
@@ -79,11 +87,22 @@ describe('SpaceView: #people/<userId>', () => {
     expect(decodeURIComponent(breadcrumb.trail[1].hash)).toBe(`#people/${UID}`)
   })
 
-  it('names the page by the person\'s ~handle from the roster already on the device', async () => {
-    // The roster read is mocked below; the crumb answers from what `personNow` knows, with no wait on the page.
-    vi.mocked(personNow).mockReturnValue({ userId: UID, username: 'anna', realName: null, displayName: 'anna' })
-    await mountAt(`#people/${UID}`)
+  it('names the page by the person\'s ~handle from the roster already on the device, and its address by the username', async () => {
+    // The roster read is mocked; the crumb answers from what the directory knows now, with no wait on the page.
+    vi.mocked(personOfTokenNow).mockReturnValue({ userId: UID, username: 'anna', realName: null, displayName: 'anna' })
+    const w = await mountAt(`#people/${UID}`)
     expect(breadcrumb.trail.map((c) => c.name)).toEqual(['Shared', 'Profile', '~anna'])
+    // An id link to a member the roster knows becomes the username link - a replace, the same page.
+    expect(router.currentRoute.value.hash).toBe('#people/anna')
+    expect(w.get('.profile-stub').text()).toBe('anna')
+    expect(decodeURIComponent(breadcrumb.trail[2].hash)).toBe('#people/anna')
+  })
+
+  it('hands the page a username token as written, and keeps the address of a username nobody holds', async () => {
+    const w = await mountAt('#people/bert')
+    expect(w.get('.profile-stub').text()).toBe('bert')
+    expect(router.currentRoute.value.hash).toBe('#people/bert')
+    expect(breadcrumb.trail.map((c) => c.name)).toEqual(['Shared', 'Profile'])
   })
 
   it('a folder called "People" is not the route: it opens as people-2, and the profile page stays away', async () => {

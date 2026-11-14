@@ -1714,7 +1714,7 @@ const en = {
   // dialogs). Core serves every application's nodes, so no value here names one (inbox #375); Memories' own dialogs and
   // detail read the shared ones (name label, rename, delete, the structure/save errors) from here too, and keep their own
   // wording where it names a Memory (`memory.slugTaken`, `memory.deleteMemoryTitle`).
-  // A member's profile page (`#people/<userId>`, ADR 0083) - core's frame; each application adds its own section.
+  // A member's profile page (`#people/<username>`, ADR 0083) - core's frame; each application adds its own section.
   people: {
     profile: 'Profile',
     loading: 'Loading…',
@@ -1722,6 +1722,9 @@ const en = {
     retry: 'Try again',
     formerMember: 'Former member',
     formerMemberHint: 'No longer in this space.',
+    // A profile address whose username no member holds (`#people/<username>`, renamed since, or never one).
+    unknownMember: 'Unknown member',
+    unknownMemberHint: 'No member of this space goes by ~{username}. The name may have changed.',
     // People under a node's name in its header (core's `PersonGroup`): the group's summary and a person's profile link.
     groupSummary: '{label} ({count}): {names}',
     open: 'Open the profile of {name}',
@@ -3935,7 +3938,7 @@ const de: typeof en = {
     accessEndedHint: 'Vielleicht wurdest du aus der Gruppe entfernt, oder sie wurde gelöscht. Wähle einen anderen Bereich.',
     unsupportedKind: 'Dieser Client kann diese Art von Eintrag nicht öffnen.',
   },
-  // Das Profil eines Mitglieds (`#people/<userId>`, ADR 0083) - der Rahmen des Kerns; jede Anwendung ergänzt einen Abschnitt.
+  // Das Profil eines Mitglieds (`#people/<username>`, ADR 0083) - der Rahmen des Kerns; jede Anwendung ergänzt einen Abschnitt.
   people: {
     profile: 'Profil',
     loading: 'Wird geladen…',
@@ -3943,6 +3946,9 @@ const de: typeof en = {
     retry: 'Erneut versuchen',
     formerMember: 'Ehemaliges Mitglied',
     formerMemberHint: 'Nicht mehr in diesem Bereich.',
+    // Eine Profiladresse, deren Benutzernamen kein Mitglied trägt (`#people/<username>`, inzwischen umbenannt oder nie vergeben).
+    unknownMember: 'Unbekanntes Mitglied',
+    unknownMemberHint: 'Kein Mitglied dieses Bereichs heißt ~{username}. Vielleicht wurde der Name geändert.',
     groupSummary: '{label} ({count}): {names}',
     open: 'Profil von {name} öffnen',
   },

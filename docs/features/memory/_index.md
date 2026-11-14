@@ -113,7 +113,7 @@ The tree these build on — encrypted names, blinded slugs, a key on every node,
 - [uc.memory.participants](use-cases/uc.memory.participants.md) — **built (web)** (inbox #20,
   [ADR 0083](../../decisions/0083-memory-participants-are-a-sealed-list-in-the-memorys-metadata.md)): who was there — a
   sealed `participants` list in the Memory's `wrappedMeta` (no server-visible relation), shown in the header for members
-  only (the interface shows a guest none; the list holds opaque ids only), a member profile at `#people/<userId>` listing the person's Memories, uploader names in the
+  only (the interface shows a guest none; the list holds opaque ids only), a member profile at `#people/<username>` listing the person's Memories, uploader names in the
   lightbox
 - [uc.memory.buckets](use-cases/uc.memory.buckets.md) — **built (web)** (cr-0113, curation authz relaxed to
   member-gated by cr-0123) ([ADR 0034](../../decisions/0034-media-uploader-buckets.md),

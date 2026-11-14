@@ -48,7 +48,7 @@ import { provideSearchContributions } from '../core/search/contribution'
 import LevelView from '../core/node/LevelView.vue'
 import { useReturnTo } from '../core/node/returnTo'
 import PersonProfile from '../core/people/PersonProfile.vue'
-import { loadTenantPeople, personNow } from '../core/people/directory'
+import { loadTenantPeople, personOfTokenNow, profileHash } from '../core/people/directory'
 import { registry } from '../core/applications/registry'
 import { favoritesStore, loadFavoritesFor } from '../core/favorites/favoritesStore'
 import { memberAccess, memberTreeSource } from '../core/access'
@@ -229,8 +229,16 @@ const rootLabel = computed(() =>
       : t('shell.personal'),
 )
 
-// The shown profile's handle for the last crumb, from the roster already on the device (empty until it is read).
-const personHandle = computed(() => (place.value.person ? personNow(place.value.person)?.username ?? null : null))
+// The shown profile's member, from the roster already on the device (none until it is read, or for a token nobody holds).
+const shownPerson = computed(() => (place.value.person ? personOfTokenNow(place.value.person) ?? null : null))
+const personHandle = computed(() => shownPerson.value?.username ?? null)
+// The page's address names the member as every link does (ADR 0083 decision 5): an id link to a member whose username the
+// roster knows becomes `#people/<username>` - a replace, the same page, as `stayOn` does for a renumbered slug. A token
+// nobody holds stays as written.
+const shownHash = computed(() => (shownPerson.value ? profileHash(shownPerson.value.userId) : place.value.person ? personHash(place.value.person) : ''))
+watch(shownHash, (hash) => {
+  if (hash && place.value.person && parseHash(hash).person !== place.value.person) void router.replace({ hash })
+}, { immediate: true })
 watch(
   [() => route.hash, () => treeStore.nodes, rootLabel, personHandle],
   () =>
@@ -239,8 +247,8 @@ watch(
         ? // a person's profile (ADR 0083) is no node: the space root, then the page
           [
             { id: null, name: rootLabel.value, hash: hashForNode(treeStore.nodes, null, TENANT_SCOPE) },
-            { id: null, name: t('people.profile'), hash: personHash(place.value.person) },
-            ...(personHandle.value ? [{ id: null, name: `~${personHandle.value}`, hash: personHash(place.value.person) }] : []),
+            { id: null, name: t('people.profile'), hash: shownHash.value },
+            ...(personHandle.value ? [{ id: null, name: `~${personHandle.value}`, hash: shownHash.value }] : []),
           ]
         : breadcrumbOf(treeStore.nodes, currentNodeId.value, rootLabel.value, currentScope.value),
     ),
@@ -324,7 +332,7 @@ function stayOn(shown: string | null) {
       <VeyqMessage v-for="banner in applicationOffBanners" :key="banner.id" tone="warn" class="application-off-banner">
         {{ banner.text }}
       </VeyqMessage>
-      <PersonProfile v-if="place.person" :key="place.person" :user-id="place.person" />
+      <PersonProfile v-if="place.person" :key="shownPerson?.userId ?? place.person" :token="place.person" />
       <!-- uc.moderation.take-a-measure: a node a moderator blocked does not open — its placeholder, with no reason; a member
            the statement of reasons names reads it below (uc.moderation.object-to-a-measure). -->
       <template v-else-if="currentNode?.blockedByOperator">

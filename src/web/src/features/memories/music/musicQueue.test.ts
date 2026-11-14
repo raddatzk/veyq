@@ -32,6 +32,10 @@ describe('musicQueue', () => {
     expect(q.key).toBe(musicQueueKey('s1', 'n1'))
     expect([q.album, q.startId]).toEqual(['Lisbon', 'w'])
     expect(q.href, 'no href given: the album links nowhere').toBeUndefined()
+    // A7: a track a member renamed plays under its own name (the listed tier's `trackName`), not its file's
+    const renamed = input([mediaItem({ mediaId: 'a' })])
+    const named = musicQueue({ ...renamed, loaders: { ...renamed.loaders, meta: () => ({ v: 1, trackName: 'Sunrise' }) } })
+    expect(named.tracks[0].title).toBe('Sunrise')
     expect(musicQueue({ ...input([mediaItem({ mediaId: 'a' })]), href: '/#memories/lisbon' }).href).toBe('/#memories/lisbon')
     expect(q.tracks.map(({ id, title, startMs, endMs }) => ({ id, title, startMs, endMs }))).toEqual([
       { id: 'a', title: 'a Song', startMs: 300, endMs: 8000 },

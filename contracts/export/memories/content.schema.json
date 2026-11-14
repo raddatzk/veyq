@@ -146,7 +146,7 @@
           "description": "Present when the member had corrected the capture time (an override); an import restores it as one."
         },
         "track": {
-          "description": "A GPX track's own name and activity, as a member gave them (uc.memory.tracks, ADR 0130 decision 9). Present only on a track that has either; an import seals them into the track's listed tier again.",
+          "description": "A GPX track's own name and activity, as a member gave them (uc.memory.tracks, ADR 0130 decision 9), or a music track's own name (uc.memory.background-music A7, ADR 0135 decision 4; it has no activity). Present only on a track that has either; an import seals them into the track's listed tier again.",
           "type": "object",
           "additionalProperties": false,
           "properties": {

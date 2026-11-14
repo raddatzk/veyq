@@ -120,7 +120,8 @@ async function openSettingsOn(device: Device, account: Account, section: string)
 /** A row of Who's who, by the per-tenant handle it shows (`@handle`). */
 const whoRow = (page: Page, handle: string): Locator => page.getByTestId('who-is-who').locator('.member-row').filter({ hasText: `@${handle}` })
 
-/** Who's who on [device], and the profile of the member [handle] opened from their row; returns their user id. */
+/** Who's who on [device], and the profile of the member [handle] opened from their row; returns the token its address
+ *  names them by - their username, or their user id until the roster is read (ADR 0083 decision 5a: both open the page). */
 async function openProfileFromWhoIsWho(device: Device, account: Account, handle: string): Promise<string> {
   const { page } = device
   await openSettingsOn(device, account, 'Who’s who')
@@ -131,13 +132,13 @@ async function openProfileFromWhoIsWho(device: Device, account: Account, handle:
 }
 
 /**
- * One's own profile page (`#people/<own id>`, ADR 0083): the shell links to it from nowhere, so the address is typed. The
- * number, the chain code and the QR open in a dialog from the page's "Show" (owner 2026-11-14); returns the dialog's QR.
+ * One's own profile page (`#people/<own token>`, ADR 0083): the shell links to it from nowhere, so the address is typed.
+ * The number, the chain code and the QR open in a dialog from the page's "Show" (owner 2026-11-14); returns the dialog's QR.
  */
-async function openOwnProfile(device: Device, account: Account, userId: string): Promise<Locator> {
+async function openOwnProfile(device: Device, account: Account, token: string): Promise<Locator> {
   const { page } = device
   await reachHome(device, account)
-  await page.goto(`${safetyOrigin()}/#people/${encodeURIComponent(userId)}`)
+  await page.goto(`${safetyOrigin()}/#people/${encodeURIComponent(token)}`)
   await expect(page.getByTestId('my-safety-number')).toBeVisible({ timeout: 60_000 })
   await page.getByTestId('my-safety-open').click()
   const qr = page.getByTestId('my-safety-dialog').getByRole('img', { name: 'Your safety number as a code for another member to scan' })

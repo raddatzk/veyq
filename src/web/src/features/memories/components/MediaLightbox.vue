@@ -54,7 +54,7 @@ import { useObjectUrl } from '../../../shared/state/useObjectUrls'
 import { formatBytes } from '../../../shared/formatBytes'
 import type { MediaMetaDoor } from '../source'
 import type { UploaderLabel } from '../useUploaderNames'
-import { personHash } from '../../../core/node/location'
+import { profileHash } from '../../../core/people/directory'
 import { usePanZoom } from '../../../shared/ui/usePanZoom'
 import { createVisibilityPoller } from '../../../shared/state/visibilityPoller'
 import { createPreviewCache, previewKeyOf } from '../previewCache'
@@ -62,6 +62,7 @@ import { exceedsPreview, originalZoomable, previewDownscaled } from '../lightbox
 import VeyqDateField from '../../../shared/ui/VeyqDateField.vue'
 import VeyqIcon from '../../../shared/ui/VeyqIcon.vue'
 import AudioMiniControls from '../../../core/audio/AudioMiniControls.vue'
+import { audioPlayer } from '../../../core/audio/player'
 
 const props = defineProps<{
   memoryKey: Uint8Array
@@ -207,7 +208,9 @@ function stopSlideshow(state: 'paused' | 'ended') {
 }
 const toggleSlideshow = () => (playing.value ? stopSlideshow('paused') : startSlideshow())
 // The music's controls in the top bar (core's `AudioMiniControls`) are no interaction with the slideshow either: music and
-// slideshow run together.
+// slideshow run together. While they are drawn, a narrow screen gives them a row of their own under the title and the
+// actions (`has-music`, memories.css), which no longer fit one row beside them.
+const musicShown = computed(() => audioPlayer().nowPlaying.value !== null)
 const isSlideshowToggle = (target: EventTarget | null) => target instanceof Element && !!target.closest('[data-slideshow-toggle], [data-audio-controls]')
 /** Any pointer or wheel in the lightbox pauses — the zoom's gestures and the details panel included; the toggle is its own. */
 function pauseOnInteraction(event: Event) {
@@ -714,6 +717,7 @@ onBeforeUnmount(() => {
   <div
     ref="rootEl"
     class="media-lightbox"
+    :class="{ 'has-music': musicShown }"
     role="dialog"
     aria-modal="true"
     data-shortcuts-over
@@ -936,7 +940,7 @@ onBeforeUnmount(() => {
             <template v-if="uploader">
               <dt>{{ t('media.uploadedBy') }}</dt>
               <dd data-testid="lightbox-uploader">
-                <RouterLink v-if="uploader.userId" :to="{ hash: personHash(uploader.userId) }" class="media-lightbox-uploader-link" @click="close()">{{ uploader.name }}</RouterLink>
+                <RouterLink v-if="uploader.userId" :to="{ hash: profileHash(uploader.userId) }" class="media-lightbox-uploader-link" @click="close()">{{ uploader.name }}</RouterLink>
                 <template v-else>{{ uploader.name }}</template>
               </dd>
             </template>
