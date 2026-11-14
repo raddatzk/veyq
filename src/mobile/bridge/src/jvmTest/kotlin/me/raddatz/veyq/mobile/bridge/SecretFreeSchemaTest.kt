@@ -83,6 +83,44 @@ class SecretFreeSchemaTest {
             .map { (at, _) -> "$at: a link's address" }
     }
 
+    /**
+     * A device link (`cr-app-device-linking` D6) crosses as its state alone: no field of any shape is named like the
+     * pairing's secrets (the code's text, the channel's handle or key, the grant, its envelope, the transport key), and
+     * the link's own outward shapes carry exactly these fields — the code itself is a picture beside the JSON
+     * (`Link.Code`), the five-digit number and the six digits are on screen by design. A field added to them is red here
+     * until it is named below, with why.
+     */
+    @Test
+    fun aDeviceLinkCrossesAsItsStateAlone() {
+        assertEquals(emptyList(), pairingNamed(Roots.all))
+        val schema = Schema(Roots.all)
+        val fields = schema.types.values.flatMap { t -> schema.fields(t) }.distinctBy { it.owner to it.name }
+            .groupBy({ it.owner }, { it.name })
+        assertEquals(
+            mapOf(
+                "LinkShown" to listOf("role", "step", "number", "code", "label", "refusal", "hint"),
+                "Link" to listOf("link", "shown"),
+                "LinkOpened" to listOf("link"),
+            ),
+            mapOf(
+                "LinkShown" to fields["me.raddatz.veyq.mobile.bridge.LinkShown"].orEmpty() + fields["LinkShown"].orEmpty(),
+                "Link" to fields.entries.single { (owner, names) -> owner.endsWith("Link") && "shown" in names }.value,
+                "LinkOpened" to fields.entries.single { (owner, _) -> owner.endsWith("LinkOpened") }.value,
+            ),
+        )
+        // the check against what it must refuse
+        assertEquals(listOf("Paired.handle", "Paired.payload", "Paired.grantEnvelope", "Paired.channel", "Paired.transport"), pairingNamed(listOf(Paired.serializer())))
+    }
+
+    @Serializable @kotlinx.serialization.SerialName("Paired")
+    class Paired(val number: String, val handle: String, val payload: String, val grantEnvelope: String, val channel: String, val transport: String)
+
+    private fun pairingNamed(roots: List<KSerializer<*>>): List<String> {
+        val schema = Schema(roots)
+        return schema.types.values.flatMap { t -> schema.fields(t) }.distinctBy { it.owner to it.name }
+            .filter { PAIRING.containsMatchIn(it.name) }.map { "${it.owner}.${it.name}" }
+    }
+
     @Test
     fun whatTheHostSendsCarriesNoneButWhatThePersonTyped() {
         assertEquals(emptyList(), leaks(Roots.inward, identifiers + typedIn))
@@ -156,5 +194,6 @@ class SecretFreeSchemaTest {
     companion object {
         private val SECRET = Regex("key|seal|token|secret|passw|private|wrap", RegexOption.IGNORE_CASE)
         private val ADDRESS = Regex("url|address", RegexOption.IGNORE_CASE)
+        private val PAIRING = Regex("handle|payload|grant|envelope|channel|transport|marker", RegexOption.IGNORE_CASE)
     }
 }

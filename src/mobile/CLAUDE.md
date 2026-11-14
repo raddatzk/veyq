@@ -38,7 +38,8 @@ A Gradle build of its own, run through its own wrapper.
   or scanning), over `crypto/Pairing`; its code reaches a UI only as a picture (`matrix`, `png`) and its scan is its
   own `QrScan`. The new device's tail is the sign-in's (`SessionModel.scanFromTrusted`/`showForSignIn`,
   `VeyqAccount.linked`): the handed token spent once at `/api/token/refresh` in the body, never adoption, and no trust
-  enrolled but the offer's DEVICE_KEY levels (`Offer.linked`). `DeviceLinkTest` plays the relay (`PlayedServer`).
+  enrolled but the offer's DEVICE_KEY levels (`Offer.linked`). `DeviceLinkTest` plays the relay (`PlayedServer`, in
+  `testDevice`, so `:bridge`'s `LinkDispatchTest` plays the same one).
 - `android/` — the Android app (Compose). `devlogin.py` signs a debug build on a running emulator in as the seeded dev
   principal (`.run/.env`).
 - `apple/` — the Apple app (SwiftUI, iOS and macOS). `xcodegen` in that directory writes `Veyq.xcodeproj` from
@@ -78,6 +79,13 @@ A Gradle build of its own, run through its own wrapper.
   deleted only after `DropBox.AskDelete` (`DropBox.Delete`: trashed through a header with a guest folder's facts, `DropBox.Undo`);
   a space's top level's "Add files only" is `Share.OpenTopLevel(scopeId)` onto the `Share.*` calls, offered where
   `ShellShown.topLevelShare` says.
+  A device link (ADR 0059) is opened by its role's call — the trusted device's `Link.ShowForNewDevice`/`ScanSignInCode`
+  over a connection (a tenant open; they close with it), the new device's `Link.ScanFromTrusted`/`ShowForSignIn` over the
+  sign-in form's server — answered `LinkOpened(link)` for `Watched.Link` (`LinkShown`: the core's `DeviceLink.Shown`).
+  Its code crosses only as `Link.Code`'s PNG (`drawnCode`), a scanning role's camera goes through `Scan.*` of kind `LINK`
+  (the link's own scan), and `Link.Confirm`, `Link.EnterCode` and `Link.Close` are the core's own moves; once a new
+  device's link is done, the account it signed in is the open tenant, as after a sign-in call (a close while its grant is
+  spent ends the screen, never that sign-in).
   The generated layer copies a payload once (Rust `Option<Vec<u8>>`, C# `byte[]?`); no screen touches a pointer.
 - `linux/` — the Linux app (ADR 0136 decision 4): a Cargo package in Rust (gtk4-rs, libadwaita-rs), with `Cargo.lock`
   committed and every cargo run `--locked`. `src/lib.rs` is the library: `bridge` (the safe wrapper over the six
@@ -199,12 +207,21 @@ A Gradle build of its own, run through its own wrapper.
     (`PotSettings.*`, `Watched.PotSettings`: each change answered `Stored` once its write ended, an erase only once asked,
     a closed Pot closing them) and New pot (`PotCreate.*`, `Watched.PotCreate` over a played sheet: the name applied in the
     order sent, the members of the space chosen, the refusal in the answer), each bitten by making it a no-op.
+  - `LinkDispatchTest` links two bridges with each other over a played relay (core's `PlayedServer`), as two hosts drive
+    them: both directions through `Link.*` and a link's `Scan.*`, the code read back from `Link.Code`'s PNG as a camera
+    would, the new bridge's account open after; a blank name, a second or a racing confirmation (32 at once delegate once),
+    a short or second code refused `NOT_TAKEN`; a close while the grant is spent still opening the account; a tenant switch
+    closing the trusted link and stopping its polls; nothing sent outward carrying the code's text, a handle or a token.
+    With `VEYQ_LIVE`, `LiveLinkBridgeTest` links two bridges over the real core both ways (the trusted Settings listing the
+    linked family by its name), every device taken off after (`LiveRun`); without it both report skipped.
   - `WireTest` writes and reads back a sample of every variant of every sealed type the wire reaches. The samples go
     to `build/generated/bridge/samples`, which the Rust test reads.
   - `SecretFreeSchemaTest` checks that nothing the core sends has a field named like a key, seal, token, secret or
     password, and that no byte array travels in JSON (a field, a list's element, a map's value). An address crosses
     outward only in a field it names: a share link's, a key by its `#k=` (`linkAddresses`), and a public page's
-    (`publicAddresses`); a new one is added there by name, never as a blanket rule.
+    (`publicAddresses`); a new one is added there by name, never as a blanket rule. No field anywhere is named like a
+    pairing secret (a handle, payload, grant, envelope, channel, transport or marker), and a device link's outward shapes
+    carry exactly the fields it names.
   - `BridgeHeaderTest` holds `bridge.h` against Kotlin/Native's headers, Linux's and mingw's.
 
   A root or sealed variant added to the wire is in the samples by derivation. With `VEYQ_LIVE` set,

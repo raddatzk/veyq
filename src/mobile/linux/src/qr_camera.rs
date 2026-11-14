@@ -127,7 +127,7 @@ impl ScanView {
         });
         let v = view.clone();
         glib::spawn_future_local(async move {
-            let scan = match bridge::call(&Call::ScanOpen { kind, server }).await {
+            let scan = match bridge::call(&Call::ScanOpen { kind, server, link: None }).await {
                 Ok((Answer::ScanOpened { scan }, _)) => scan,
                 other => {
                     eprintln!("veyq: Scan.Open answered {other:?}");
