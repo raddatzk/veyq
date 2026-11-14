@@ -406,8 +406,8 @@ text goes straight into `DeviceLink` inside the core.
   - Core: `DeviceLink.scanSignInCode(account, decode)` (the bridge's decoder); `DeviceLink.png` scaled by the drawn grid's
     side (it divided by the code's size without the quiet zone: a large `px` overran `QrPng.MAX_SIDE` and threw).
     `PlayedPairing.kt` moved from `commonTest` to `testDevice`, so `:bridge`'s tests play the same relay.
-  - Hosts: the Rust `Call::ScanOpen` literal gains `link: None` (the only change the generated types forced); C# compiles
-    as it was.
+  - Hosts: the only changes the generated types forced — the Rust `Call::ScanOpen` literal gains `link: None`, the C#
+    initializer `link = null` (a generated record's nullable field is `required`).
   - Tests: `LinkDispatchTest` (7), `SecretFreeSchemaTest.aDeviceLinkCrossesAsItsStateAlone`, `WireTest` samples of every
     new call, answer, update and enum value, `LiveLinkBridgeTest` (2).
 
@@ -430,7 +430,11 @@ text goes straight into `DeviceLink` inside the core.
     device's tenant not opened at DONE → the end-to-end case; `Link.Close` in FINISHING not held off → the close case; trusted
     links outliving the tenant → the switch case; a refused confirmation answered `Done` → the race case; a link scan's found
     scheme wrong → both end-to-end cases; a trusted link without a tenant → the refusals case.
-  - PROOF_PLACEHOLDER
+  - After merging `claude/windows-cr-f6c73c` (at be14a6da8): `./gradlew :core:jvmTest :bridge:jvmTest` green (core 662,
+    bridge's classes all green, the live ones skipped); `linux/run.py build` green (clippy, cargo tests, build);
+    `windows/run.py build` green (`Veyq.Bridge.Tests` here and there, `Veyq.Tests`, the app and `Veyq.Drive` built); guards
+    (`scripts/validate_*.py` but guard_gaps) green. The bites ran at load 160–220 (another agent's runaway): slow, none
+    red by a timeout.
 
   **Retrospective:**
   - **A close and a sign-in are two lifetimes.** The core's rule (a close in FINISHING ends the screen, not the sign-in)
