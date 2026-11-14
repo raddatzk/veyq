@@ -1,7 +1,7 @@
 ---
 id: cr-background-music-from-own-audio
 title: Background music from a node's own audio files — a Music tab in Memories, and core's shuffled, crossfading player that plays on across pages
-status: in-progress
+status: done
 satisfies: ["uc.memory.background-music", "en.platform.audio-player"]
 adrs: ["0135", "0130", "0047", "0093", "0082", "0109", "0079", "0033", "0026"]
 invariants:
@@ -243,4 +243,23 @@ where they bind, and this file is deleted.
 
 ## Retrospective
 
-_(filled by the implementer)_
+- **Planning: two premises about browser APIs were stated, not measured, and each cost a stop.** Decision 3's "a decode
+  resamples, so a long track stays a few hundred KB per minute" was false at implement (a 10-minute MP3 +540 MiB in
+  Chrome, a 200 MiB WAV +1.4-1.5 GiB in both engines, at 8 kHz as at 44.1 kHz); the settlement's own premises then failed
+  too (an MP3 tail slice does not decode in Safari unless frame-aligned; a raw ADTS file's element duration is an
+  estimate, 18 min in Safari and 8 h in Chrome). Root cause: the refine read code and docs, and no browser. Fix, moved to
+  `changes/README.md`: a browser API's cost and behaviour are measured at refine with a ten-line page in every engine the
+  done-when names.
+- **Execution: the first browser pass of the player found a defect that was core's, not the CR's.** `registerPlayback`
+  handed out a `/__media/` URL before the service worker held the registration; a playlist (one registration every few
+  seconds) met the race where a lightbox never did, and the queue ended at its third track. I first suspected my own
+  code and spent several traces on it before an isolated probe of the protocol reproduced it. Next time: when a feature
+  drives an existing protocol harder than its first users, probe the protocol alone first (rule moved to
+  `changes/README.md`). Also: a bare `stop()` inside the player compiled against the DOM's `window.stop()` - typecheck
+  green, behaviour wrong; the unit test caught it (comment at the line).
+- **Process: what this machine could not prove is named, not papered over.** No Safari pass ran (Playwright's WebKit
+  build does not match this Playwright, the real Safari cannot be clicked from here), no iPhone; the measurements opened
+  tabs in the owner's real Safari, which I could not close. The built-in pane registers no service worker, so the
+  `/__media/` path was proved in headless system Chrome instead. The full image build could not reach
+  services.gradle.org, so the lane ran on an overlay of this worktree's fast-jar on `veyq:local`. Next time: ask at
+  refine which browsers a done-when can really reach on this machine, and write the CR's passes to those.

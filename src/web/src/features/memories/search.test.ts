@@ -99,7 +99,7 @@ describe('the open Memory\'s media as documents', () => {
     expect(open).toHaveBeenCalledWith('v1')
   })
 
-  // cr-background-music-from-own-audio decision 1: the search asks the gallery's predicate - an image or a video is a
+  // en.memory.media § Which media a photo view shows: the search asks the gallery's predicate - an image or a video is a
   // document, music, a GPX track and an unknown type are none (it used to count everything that was no video as a photo).
   it('makes documents of images and videos only: no music, no GPX track, no type nobody decided on', () => {
     const types: Record<string, string> = { p1: 'image/jpeg', v1: 'video/mp4', s1: 'audio/mpeg', t1: 'application/gpx+xml', u1: 'application/x-unknown' }

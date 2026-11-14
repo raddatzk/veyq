@@ -1,4 +1,4 @@
-// What a photo view of a Memory shows (ADR 0135 decision 2, cr-background-music-from-own-audio decision 1): only a medium
+// What a photo view of a Memory shows (ADR 0135 decision 2; en.memory.media § Which media a photo view shows): only a medium
 // whose original is an image or a video. One predicate, asked by every reader that treats a medium as a photo - the
 // gallery's list (`useMediaGalleryLive`'s `items`, which the grid, the lightbox, the count, the organizer, the date and
 // place reconcile and the open Memory's search documents derive from) and the space's search (`search.ts`). A GPX track

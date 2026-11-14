@@ -300,7 +300,7 @@ describe('useMediaGalleryLive — a lightbox Undo whose restore is refused (inbo
     expect(vm.items.map((i) => i.mediaId)).toEqual(['pic', 'bare'])
   })
 
-  // cr-background-music-from-own-audio decision 1 (ADR 0135 decision 2): ONE positive predicate, `isGalleryMedium`, decides
+  // en.memory.media § Which media a photo view shows (ADR 0135 decision 2): ONE positive predicate, `isGalleryMedium`, decides
   // what a photo view shows - an image or a video. A music track goes to `music`, a GPX track to `tracks`, and a type nobody
   // decided on to neither list and no photo view; a medium without any meta (older than `blob-meta`) stays a photo. Lever:
   // `items` filtering out tracks and music by name again (the unknown type then shows as a tile).
