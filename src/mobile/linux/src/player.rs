@@ -1,4 +1,4 @@
-//! A medium played from the core's reader (ADR 0131 decision 2), shared by a Depot file's page ([crate::file_page]) and a
+//! A medium played from the core's reader (ADR 0137 decision 2), shared by a Depot file's page ([crate::file_page]) and a
 //! Memory's lightbox ([crate::lightbox]): GTK's own player (`gtk::Video`) over a `gtk::MediaFile` reading
 //! [crate::reader_stream] — the core's ranges, decrypted in memory, never a file — from GStreamer's thread, the system's
 //! GStreamer decoding it. What it cannot decode raises the stream's error, handed to the page to say its words.

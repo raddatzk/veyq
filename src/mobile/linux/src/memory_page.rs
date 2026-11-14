@@ -1,4 +1,4 @@
-//! A Memory's or a chapter's page (the CR "Memories on every app" phase 4, D11; ADR 0130 decision 2), GNOME's way: the
+//! A Memory's or a chapter's page (the CR "Memories on every app" phase 4, D11; ADR 0136 decision 2), GNOME's way: the
 //! node's head (its cover, [crate::header]), a Memory's chapters as a boxed list of rows with their covers, and the media
 //! as the web's justified grid (D14) — every tile's frame the core's (`Gallery.Layout`: `GalleryModel.layout`), only the
 //! rows near the view mounted (the core's `Layout.window`, ADR 0105), each tile the grid tier's thumbnail decoded by GTK
