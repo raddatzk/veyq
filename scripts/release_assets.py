@@ -1,15 +1,18 @@
 #!/usr/bin/env python3
 """Produce one veyq release as files, in the mirror layout `veyqctl` reads (ADR 0096).
 
-    python3 scripts/release_assets.py <out> --app <ref> --admin <ref> [--tools <ref>] [--unscheduled]
+    python3 scripts/release_assets.py <out> --app <ref> --admin <ref> [--tools <ref>] [--unscheduled] \\
+        [--app-file <file> …]
     python3 scripts/release_assets.py --major-entry <release>   # what the tools image bakes as its major entry
     python3 scripts/release_assets.py --asset-set <out>/<tag>   # the hash of a produced release's asset set
 
 writes, for the release the tree names (`v<major>.<minor>`, counted the way the pipeline's version step counts it):
 
     <out>/releases.json           every release in <out>: tag, date, prerelease flag, manifest — merged, never replaced
-    <out>/<tag>/manifest.json     release, date, the images, unscheduled, majorEntry, every asset with its sha256
+    <out>/<tag>/manifest.json     release, date, the images, unscheduled, majorEntry, every asset with its sha256,
+                                  and — when a release carries them — every app file with its sha256 under `apps`
     <out>/<tag>/<asset>           the recipe set, and the tools that operate it
+    <out>/<tag>/<app file>        the desktop apps' packages and the MSIX's certificate (`--app-file`, ADR 0139)
 
 The same three questions — which releases exist, what does one's manifest say, give me one asset — are answered
 by a local directory, an HTTP mirror and the GitHub Releases adapter alike, so the stack lane and the self-test run
@@ -36,6 +39,13 @@ after it has added two `cosign sign-blob` bundles, which no manifest lists becau
 the manifest names (from GitHub, a mirror or a directory alike), and `veyqctl.bundle`, which vouches for `veyqctl`
 where no manifest has been checked yet: the operator's first fetch by hand. A release produced here and never
 published carries neither, and `veyqctl` installs it only `--unsigned-local`.
+
+**The desktop apps' files are not assets** (ADR 0139 decisions 8 and 12). `--app-file` copies a file beside the assets
+and lists it by sha256 under the manifest's `apps`, never under `assets`: `veyqctl` downloads every asset into an
+instance and the lanes attest the asset set, and an app package is neither the recipe nor installed by a lane, so it
+changes neither (`asset_set_digest` reads `assets` alone). The publish gives each app file a `<name>.bundle` of its own
+(`cosign sign-blob`), so a name is refused that an asset, a reserved name or another app file's bundle already takes,
+as is one GitHub would rename. A release with no app file has no `apps` key at all.
 
 **The images are named by digest.** A reference with a registry path (`/`) must carry `@sha256:<64 hex>`; only a
 local build's bare `name:tag` may go without one, which is what `veyqctl --unsigned-local` accepts and nothing
@@ -341,8 +351,27 @@ def major_entry(release: str) -> str | None:
     return f"{found.group(1)}.{found.group(2)}" if found else None
 
 
+def check_app_files(files: list[pathlib.Path], assets: list[str]) -> dict[str, pathlib.Path]:
+    """The app files by name, refused where a name is no file, is not one GitHub publishes as given, or would take
+    (with its `.bundle`) the name of an asset, a reserved file or another app file."""
+    taken = set(assets) | {MANIFEST, RELEASES, VEYQCTL_BUNDLE, MANIFEST_BUNDLE}
+    by_name: dict[str, pathlib.Path] = {}
+    for path in files:
+        name = path.name
+        if not path.is_file():
+            raise ReleaseError(f"--app-file `{path}` is not a file")
+        if not ASSET_NAME.match(name):
+            raise ReleaseError(f"--app-file `{name}` is not a name a GitHub Release publishes as given")
+        for own in (name, f"{name}.bundle"):
+            if own in taken or own in by_name or any(own == f"{n}.bundle" for n in by_name):
+                raise ReleaseError(f"--app-file `{name}` would publish `{own}`, a name the release already carries — "
+                                   f"an app file is listed under `apps`, never in an asset's or a bundle's place")
+        by_name[name] = path
+    return by_name
+
+
 def produce(out: pathlib.Path, app: str, admin: str, unscheduled: bool, tools: str | None = None, *,
-            release: str | None = None) -> pathlib.Path:
+            release: str | None = None, app_files: list[pathlib.Path] | None = None) -> pathlib.Path:
     """Produce one release into `out`: the tree's, or — `release` — another one by name, which only the stack lane's
     stub mirror asks for (`scripts/run_stack_e2e.py`: a release newer than the one its instance is stamped with, in the
     layout the instance's release check reads, ADR 0090 decision 1). The command line has no way to pass it, so the
@@ -370,6 +399,9 @@ def produce(out: pathlib.Path, app: str, admin: str, unscheduled: bool, tools: s
     dest.mkdir()
     try:
         written = write_assets(dest, release)
+        apps = check_app_files(app_files or [], written)
+        for name, source in apps.items():
+            shutil.copyfile(source, dest / name)
         # The asset list is what `veyqctl` downloads — from any source alike, and an HTTP mirror cannot be listed —
         # and each sha256 is what it checks a downloaded file against before it lands in `releases/<release>/`.
         assets = {name: hashlib.sha256((dest / name).read_bytes()).hexdigest() for name in written}
@@ -380,6 +412,9 @@ def produce(out: pathlib.Path, app: str, admin: str, unscheduled: bool, tools: s
         # tools image bakes ([major_entry]): `veyqctl` crosses into this release only from it (ADR 0096 decision 5).
         manifest = {"release": release, "date": date, "images": images, "unscheduled": unscheduled,
                     "majorEntry": major_entry(release), "assets": assets}
+        if apps:
+            # what a person checks a downloaded app file against once the manifest verified (ADR 0139 decision 8)
+            manifest["apps"] = {name: hashlib.sha256((dest / name).read_bytes()).hexdigest() for name in sorted(apps)}
         (dest / MANIFEST).write_text(json.dumps(manifest, indent=2) + "\n")
     except BaseException:
         shutil.rmtree(dest, ignore_errors=True)
@@ -425,6 +460,9 @@ def main() -> int:
     parser.add_argument("--tools", default=None,
                         help="the tools image (ADR 0098), by digest (or a local build's name:tag); manifest images.tools")
     parser.add_argument("--unscheduled", action="store_true", help="mark an unscheduled major release")
+    parser.add_argument("--app-file", action="append", default=[], type=pathlib.Path, metavar="FILE",
+                        help="a desktop app's package or the MSIX's certificate, listed under the manifest's `apps` "
+                             "(ADR 0139); repeatable")
     parser.add_argument("--major-entry", metavar="RELEASE", default=None,
                         help="print the release the tools image of RELEASE bakes as its major entry (empty: none), "
                              "and write nothing")
@@ -448,7 +486,7 @@ def main() -> int:
     if args.out is None or not args.app or not args.admin:
         parser.error("<out>, --app and --admin are required to produce a release")
     try:
-        dest = produce(args.out, args.app, args.admin, args.unscheduled, args.tools)
+        dest = produce(args.out, args.app, args.admin, args.unscheduled, args.tools, app_files=args.app_file)
     except ReleaseError as e:
         print(f"release_assets: {e}", file=sys.stderr)
         return 1

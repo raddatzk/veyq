@@ -94,19 +94,30 @@ class LiveSignInTest {
     }
 
     /** A kit PDF of the account: `{v: 3, email, sk, srv}` as the web writes it, the token in `Keywords` as UTF-16BE hex. */
-    private fun kitPdf(email: String, secretKey: String, server: String): ByteArray {
-        val key = assertNotNull(SecretKeyText.read(p, secretKey), "VEYQ_SECRET_KEY does not read as a Secret Key")
-        val json = buildJsonObject {
-            put("v", 3)
-            put("email", email)
-            put("sk", SecretKeyText.format(p, key))
-            put("srv", server)
-        }.toString().encodeToByteArray()
-        key.fill(0)
-        val token = "veyqkit:" + Base64.UrlSafe.withPadding(Base64.PaddingOption.ABSENT).encode(json)
-        json.fill(0)
-        val utf16 = "feff" + hex(token.flatMap { listOf((it.code shr 8).toByte(), it.code.toByte()) }.toByteArray())
-        return KitImportTest.pdf(KitImportTest.info("<$utf16>"))
+    private fun kitPdf(email: String, secretKey: String, server: String): ByteArray = Companion.kitPdf(kitToken(email, secretKey, server))
+
+    companion object {
+        /** The kit's token, `veyqkit:` and `{v: 3, email, sk, srv}` as the web writes it (base64url, unpadded). */
+        internal fun kitToken(email: String, secretKey: String, server: String): String {
+            val p = BouncyCastlePrimitives
+            val key = assertNotNull(SecretKeyText.read(p, secretKey), "VEYQ_SECRET_KEY does not read as a Secret Key")
+            val json = buildJsonObject {
+                put("v", 3)
+                put("email", email)
+                put("sk", SecretKeyText.format(p, key))
+                put("srv", server)
+            }.toString().encodeToByteArray()
+            key.fill(0)
+            val token = "veyqkit:" + Base64.UrlSafe.withPadding(Base64.PaddingOption.ABSENT).encode(json)
+            json.fill(0)
+            return token
+        }
+
+        /** A PDF that carries [token] in its document information's `Keywords` only, as UTF-16BE hex (no page draws it). */
+        internal fun kitPdf(token: String): ByteArray {
+            val utf16 = "feff" + hex(token.flatMap { listOf((it.code shr 8).toByte(), it.code.toByte()) }.toByteArray())
+            return KitImportTest.pdf(KitImportTest.info("<$utf16>"))
+        }
     }
 
     /** A platform that draws nothing: the kit is in the `Keywords`, no page is needed. */

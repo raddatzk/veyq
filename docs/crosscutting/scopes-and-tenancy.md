@@ -181,7 +181,7 @@ an owner of the tenant's root scope. The mechanics behind a row — what a grant
 |---|---|
 | Create a tenant, suspend, reactivate or delete it, change its domain and quota; invite its first owner | the **Server Owner** — no scope role, no key ([ADR 0006](../decisions/0006-cold-tenant-scope-birth.md), [ADR 0066](../decisions/0066-tenant-suspension.md)) |
 | Invite one of a tenant's members to own it | the **Server Owner** ([ADR 0101](../decisions/0101-an-account-is-erased-on-request-and-only-what-the-law-keeps-stays.md) decision 9) |
-| Invite a person into a tenant (by email); list, re-issue and revoke invites | a tenant owner, from an unlocked vault |
+| Invite a person into a tenant (by email or as a link); list, re-issue and revoke invites | a tenant owner, from an unlocked vault |
 | Remove a member from the tenant | a tenant owner, by the removal cascade only; never the last owner |
 | Give the tenant a new lock (*"re-key this space"*), alone or after a removal | a tenant owner, from an unlocked vault ([ADR 0025](../decisions/0025-forward-secrecy-policy-per-scope.md) § 2) |
 | Make a tenant member an owner, or demote one | a tenant owner; never the last owner |
@@ -216,13 +216,14 @@ erased), and email-inviting someone who is not yet a tenant member into a group.
   is removed from the tenant passes or is tombstoned as the bullet *Several owners, never none* says
   ([uc.spaces.remove-tenant-member](../features/spaces/use-cases/uc.spaces.remove-tenant-member.md)).
 
-### Reaching a person — email into a tenant, username within it
+### Reaching a person — an invite into a tenant, username within it
 
 Who you can address depends on whether they already exist on the server:
 
-- **Into a tenant — by email**, the only out-of-band channel: the Server Owner's owner invite and a tenant owner's
-  member invite are mailed links, whether or not the person already has an account. The email is **operational
-  metadata** the server must hold to send mail.
+- **Into a tenant — an invite, out of band.** The Server Owner's owner invite and a tenant owner's mailed member
+  invite name an address, whether or not the person already has an account; the email is **operational metadata**
+  the server must hold to send mail. A tenant owner's member invite **as a link** names nobody: the owner hands it
+  over themselves, and whoever opens it joins ([ADR 0129](../decisions/0129-a-member-invite-is-mailed-or-handed-over-as-a-link.md)).
 - **Into a group — by username**, a **per-tenant, unique-within-tenant** handle on the member's tenant profile
   ([ADR 0023](../decisions/0023-per-tenant-member-identity.md)), fully **in-app**; no email needed. A username
   resolves only within the tenant, so person lookup stays **non-enumerable** across tenants.

@@ -176,6 +176,26 @@ class AppModel(app: Application) : AndroidViewModel(app) {
     }
 
     /**
+     * The debug build's kit sign-in (`devlogin.py --kit`): the password waits for the Emergency Kit the sign-in holds —
+     * picked or scanned by the pass — and then signs in as the form's button does (its email and server, an empty Secret
+     * Key: the core's held one). Logged to `veyq-kit`, never the email, the key or the password.
+     */
+    fun devSignInWithKit(password: String) {
+        viewModelScope.launch {
+            val s = kotlinx.coroutines.withTimeoutOrNull(300_000) {
+                screen.first { it is Screen.SignIn && it.kit != null && !it.working } as Screen.SignIn
+            }
+            if (s == null) {
+                android.util.Log.i("veyq-kit", "dev kit sign-in: no kit held within 300 s")
+                return@launch
+            }
+            val kit = s.kit!!
+            android.util.Log.i("veyq-kit", "dev kit sign-in: kit held, server from ${kit.serverFrom}; signing in")
+            signIn(s.server ?: kit.server.orEmpty(), s.email ?: kit.email, password, "")
+        }
+    }
+
+    /**
      * The full sign-in, which holds the password trust; the core's offer to stay signed in follows it ([offer]). [then]
      * runs once it opened — the debug build's `--remember` answers the offer there, as a person would.
      */
@@ -536,7 +556,7 @@ class AppModel(app: Application) : AndroidViewModel(app) {
         watchAvatars(t)
     }
 
-    // ---- what another app shared (ADR 0132) ----
+    // ---- what another app shared (ADR 0138) ----
 
     /** Files shared to veyq, from their arrival to where they went (core's `ShareInbox`). */
     val shareInbox = me.raddatz.veyq.mobile.expenses.ShareInbox()
@@ -546,7 +566,7 @@ class AppModel(app: Application) : AndroidViewModel(app) {
 
     /**
      * Files arrive: the pick mode starts at the space's Home, never in the object last open, so the person chooses where
-     * they go (ADR 0132 decision 1) — the start does the same while the session is still opening.
+     * they go (ADR 0138 decision 1) — the start does the same while the session is still opening.
      */
     fun receiveShare(incoming: me.raddatz.veyq.mobile.expenses.ShareInbox.Incoming) {
         updateShell { Shell.start(null, it.space) }

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""The one entry point for everything Windows of the veyq app (ADR 0130 decision 5), run on this host (a Mac or Linux):
+"""The one entry point for everything Windows of the veyq app (ADR 0136 decision 5), run on this host (a Mac or Linux):
 everything Kotlin is cross-compiled here by Gradle (Kotlin/Native's `mingwX64`); what needs Windows runs on a Windows
 host reached over ssh. No Windows host builds Kotlin.
 
@@ -47,6 +47,7 @@ Verbs:
   drive <step>...            runs Veyq.Drive's steps (its Program.cs: tree, invoke, select, set, type, key, press,
                              size, maximize, wait, sleep, shot) against the running app through the scheduled task
                              `veyq-drive`, and prints the app's log first, then what each step saw. `shot <name>.png`
+                             (and `screen`'s, `hovershot`'s)
                              lands in src/mobile/build/windows/shots here.
   hello-probe [--timeout S]  the Hello half of the core's WindowsDeviceKeys, which needs the person at the Windows host's
                              console (a PIN is never typed by an agent): links the core's test binary, rebuilds
@@ -60,7 +61,7 @@ Verbs:
                              the probe before its first key: the launch and Hello's availability in that session, no
                              prompt.
   package [--sign [PFX]] [--smoke]
-                             the MSIX (ADR 0133 decisions 6 and 7): generates as `build` does, but links the bridge's
+                             the MSIX (ADR 0139 decisions 6 and 7): generates as `build` does, but links the bridge's
                              release DLL; fills Veyq/Package.appxmanifest.in — the identity from
                              src/mobile/desktop-identity.json (VEYQ_MSIX_PUBLISHER overrides its publisher, which must
                              equal the signing certificate's subject), the version from the tree as the pipeline counts it
@@ -530,7 +531,7 @@ def build() -> int:
     ))
 
 
-IDENTITY = json.loads((repo_layout.MOBILE / "desktop-identity.json").read_text())  # ADR 0133 decision 12
+IDENTITY = json.loads((repo_layout.MOBILE / "desktop-identity.json").read_text())  # ADR 0139 decision 12
 MSIX_TEMPLATE = HERE / APP / "Package.appxmanifest.in"
 PACKAGE_OUT = repo_layout.MOBILE / "build" / "windows" / "package"  # the MSIX here, fetched from the host
 REMOTE_PACKAGE = REMOTE_DIR / "package"
@@ -542,7 +543,7 @@ SMOKE_SIGN_IN = "session SignIn"
 
 
 def msix_publisher() -> str:
-    """The MSIX's Publisher: VEYQ_MSIX_PUBLISHER (a self-builder's own certificate subject, ADR 0133 decision 7), else
+    """The MSIX's Publisher: VEYQ_MSIX_PUBLISHER (a self-builder's own certificate subject, ADR 0139 decision 7), else
     desktop-identity.json's."""
     return os.environ.get("VEYQ_MSIX_PUBLISHER") or IDENTITY["msixPublisher"]
 
@@ -691,7 +692,7 @@ def package(sign: str | None, smoke: bool, prebuilt: bool = False) -> int:
 def sign_package(msix: PureWindowsPath, signed: PureWindowsPath, pfx: str) -> int:
     """Signs a copy of [msix] as [signed] on the Windows host — with [pfx] (a file here, its password in
     VEYQ_MSIX_PFX_PASSWORD), or where it is empty with the host's development certificate, made and trusted there
-    once — and holds the two block maps byte-identical (ADR 0133 decision 7)."""
+    once — and holds the two block maps byte-identical (ADR 0139 decision 7)."""
     secrets: list[PureWindowsPath] = []
     if pfx:
         source = Path(pfx).expanduser().resolve()
@@ -1033,14 +1034,16 @@ def fetch(remote: str, local: Path) -> bool:
 
 def drive(steps: list[str]) -> int:
     """Runs [steps] through Veyq.Drive in the logged-on session; prints the app's log, then what each step saw. A
-    `shot <name>` step's PNG lands in SHOTS here."""
+    `shot`, `screen` or `hovershot <name>` step's PNG lands in SHOTS here."""
     shots = []
     lines = []
     for step in steps:
-        if step.split(" ", 1)[0] == "shot":
+        verb = step.split(" ", 1)[0]
+        # `screen` and `hovershot` write a PNG too: a bare name would land in the task's working directory (system32)
+        if verb in ("shot", "screen", "hovershot"):
             name = PureWindowsPath(step.split(" ", 1)[1].strip()).name
             shots.append(name)
-            lines.append(f"shot {REMOTE_RUN / 'shots' / name}")
+            lines.append(f"{verb} {REMOTE_RUN / 'shots' / name}")
         else:
             lines.append(step)
     local = SMOKE_OUT.parent / "steps.txt"

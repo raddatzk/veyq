@@ -3,7 +3,7 @@
 //! `src/mobile/build/generated` there), and links `libveyq.so` from `$VEYQ_LIB_DIR`. Into `OUT_DIR` it writes:
 //! `bridge.rs` and `words.rs` as they are, `locale/<lang>/LC_MESSAGES/veyq.mo` (msgfmt), and `veyq.gresource`
 //! (glib-compile-resources over the theme, under the app's resource base path, where libadwaita finds `style.css`).
-//! The app's id comes from `$VEYQ_APP_ID` (run.py reads it from `src/mobile/desktop-identity.json`, ADR 0133 decision 12);
+//! The app's id comes from `$VEYQ_APP_ID` (run.py reads it from `src/mobile/desktop-identity.json`, ADR 0139 decision 12);
 //! where the catalogs are read from is `$VEYQ_LOCALE_DIR` when the build sets it (the Flatpak's `/app/share/locale`),
 //! else the build's own `OUT_DIR/locale`.
 use std::env;

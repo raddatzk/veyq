@@ -5,16 +5,16 @@
 // `EmailAddressSection.vue` sends, and it says "sent"), says where the space cannot send that an owner must set up mail,
 // and has no close button: an account whose address does not reach it cannot be recovered, so it stays until confirmed.
 // Its source of truth is the server's copy, the read the Security section uses — asked when the shell mounts, when the
-// signed-in account changes and when the tab comes back into view (a confirmation opened in another tab), never stored.
+// signed-in account changes and when the tab comes back into view (a confirmation opened in another tab), never stored
+// beyond the page: what it read is the shell's one copy (`unconfirmedAddress.ts`), which holds the other notices back.
 import { onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import VeyqButton from '../../../shared/ui/VeyqButton.vue'
 import { account } from '../../../app/account'
 import { getAccountEmail, requestEmailConfirmation, requestErrorKey } from './emailConfirmation'
+import { unconfirmedAddress as unconfirmed } from './unconfirmedAddress'
 
 const { t } = useI18n()
-/** The unconfirmed address, or null while it is confirmed, unknown or unreadable (a banner that cannot decide shows nothing). */
-const unconfirmed = ref<string | null>(null)
 const sending = ref(false)
 const sent = ref(false)
 const failure = ref('')
@@ -49,11 +49,15 @@ onMounted(() => {
   void read()
   document.addEventListener('visibilitychange', onVisible)
 })
-onBeforeUnmount(() => document.removeEventListener('visibilitychange', onVisible))
+onBeforeUnmount(() => {
+  document.removeEventListener('visibilitychange', onVisible)
+  unconfirmed.value = undefined // no banner, nothing known: the next shell asks again
+})
 watch(() => account.userId, (now, before) => {
   if (now !== before) {
     sent.value = false
     failure.value = ''
+    unconfirmed.value = undefined // the last account's answer is not this one's
     void read()
   }
 })

@@ -37,6 +37,8 @@ import {
   readCaptureTime,
   backfillPlaceName,
   PLACE_NAME_MAX_BYTES,
+  TRACK_NAME_MAX_BYTES,
+  setTrackLabel,
   clampPlaceName,
   EXIF_TIER_MAX_B64,
   EXIF_TEXT_MAX_BYTES,
@@ -1024,6 +1026,58 @@ describe('addMedia — E2EE-sealed layout + EXIF tiers (cr-0059/cr-0064)', () =>
     expect([plain.capturedAtOverride, plain.placeName]).toEqual([undefined, undefined])
   })
 
+  // ADR 0130 decision 9: a track named as it is added carries its label in the one completion, clamped as its edit clamps
+  // it - no meta write follows. Lever: drop the `trackLabelFields(...)` spread in `sealMetadata`.
+  it('a GPX track\'s name and activity given as it is added are sealed into its listed tier at birth, the name clamped', async () => {
+    const store = fakeStore()
+    fakeApi(mediaApi, store.api)
+    fakeApi(blobApi, store.blob)
+    vi.stubGlobal('fetch', store.fetchStub)
+    const FILE_MTIME = Date.UTC(2026, 5, 1, 8)
+    const LONG_NAME = '山'.repeat(TRACK_NAME_MAX_BYTES) // three bytes each: clamped to whole characters
+
+    const memoryKey = v1.randomBytes(32)
+    const gpx = new Blob(['<gpx><trk><trkseg><trkpt lat="1" lon="1"/><trkpt lat="2" lon="2"/></trkseg></trk></gpx>'])
+    await addMedia(SCOPE_ID, NODE_ID, memoryKey, { blob: gpx, mediaType: 'application/gpx+xml', lastModified: FILE_MTIME, name: 'ridge.gpx' }, stubDeriver(), {
+      restored: { trackName: LONG_NAME, trackActivity: 'mountain-biking' },
+    })
+
+    expect(store.captured.updatedMeta).toBeUndefined()
+    const sealed = store.captured.completeItem.wrappedMeta!
+    expect(sealed).not.toContain('山')
+    const meta = openJson(metaCtx(store.captured.completeItem.mediaId), memoryKey, sealed)
+    expect(meta).toMatchObject({ capturedAt: FILE_MTIME, trackName: '山'.repeat(TRACK_NAME_MAX_BYTES / 3), trackActivity: 'mountain-biking' })
+  })
+
+  // ADR 0135 decision 4: a music track's facts ride its listed tier, sealed by the one completion. The cap is the tier's 512
+  // base64: worst case, an import restoring every fact an audio medium can carry - a corrected time, the longest place
+  // name (an archive may give one to any medium) and the three facts at the largest integer a number holds; an audio file
+  // gives no geometry, GPS or EXIF. Lever: drop the `audioFactFields(...)` spread in `sealMetadata`.
+  it('a music track\'s facts are sealed into its listed tier at birth, inside the 512 cap at their worst case', async () => {
+    const store = fakeStore()
+    fakeApi(mediaApi, store.api)
+    fakeApi(blobApi, store.blob)
+    vi.stubGlobal('fetch', store.fetchStub)
+    const memoryKey = v1.randomBytes(32)
+    const MAX = Number.MAX_SAFE_INTEGER
+    const song = new Blob([new Uint8Array([0x49, 0x44, 0x33, 4]) as BlobPart])
+    await addMedia(SCOPE_ID, NODE_ID, memoryKey, { blob: song, mediaType: 'audio/mpeg', lastModified: Date.UTC(2026, 5, 1), name: 'song.mp3' }, stubDeriver(), {
+      restored: { capturedAtOverride: Date.UTC(2099, 11, 31), placeName: 'Ä'.repeat(PLACE_NAME_MAX_BYTES), durationMs: MAX, trimStartMs: MAX - 2, trimEndMs: MAX - 1 },
+    })
+
+    expect(store.captured.updatedMeta).toBeUndefined()
+    const sealed = store.captured.completeItem.wrappedMeta!
+    expect(sealed.length).toBeLessThanOrEqual(512)
+    expect(openJson(metaCtx(store.captured.completeItem.mediaId), memoryKey, sealed)).toMatchObject({ durationMs: MAX, trimStartMs: MAX - 2, trimEndMs: MAX - 1 })
+    const [item] = await listMedia(SCOPE_ID, NODE_ID)
+    expect(unsealMeta(SCOPE_ID, memoryKey, item), 'the opened tier carries them').toMatchObject({ durationMs: MAX, trimStartMs: MAX - 2, trimEndMs: MAX - 1 })
+
+    // facts that make no span are sealed as none: the track then plays whole
+    await addMedia(SCOPE_ID, NODE_ID, memoryKey, { blob: song, mediaType: 'audio/mpeg', lastModified: 1 }, stubDeriver(), { restored: { durationMs: 10, trimStartMs: 9, trimEndMs: 5 } })
+    const broken = openJson(metaCtx(store.captured.completeItem.mediaId), memoryKey, store.captured.completeItem.wrappedMeta!)
+    expect([broken.durationMs, broken.trimStartMs, broken.trimEndMs]).toEqual([undefined, undefined, undefined])
+  })
+
   // The capture-time key has TWO consumers: the metadata tier sealed at upload, and the in-flight upload tile
   // that must know its grid place BEFORE a byte is uploaded (useOptimisticTiles). They agree because they
   // consume one rule — `captureTimeOf` — and this is the bite that says so rather than assuming it. Lever:
@@ -1329,6 +1383,77 @@ describe('setMediaMeta — sealed capturedAt override in the listed-metadata tie
     const conflicting = vi.fn<MediaApi['updateMediaMeta']>().mockRejectedValueOnce(staleTier(corrected, 2)).mockResolvedValue({})
     fakeApi(mediaApi, { updateMediaMeta: conflicting })
     const err = await setMediaMeta(SCOPE_ID, target(MEDIA_ID, memoryKey, { v: 1, capturedAt: ORIG }, 1), memoryKey, 0, CORRECTED).catch((e) => e)
+    expect(err).toBeInstanceOf(MetaConflictError)
+    expect(conflicting).toHaveBeenCalledTimes(1)
+  })
+})
+
+describe('setTrackLabel — a GPX track\'s own name and activity in the listed tier (ADR 0130 decision 9)', () => {
+  const MEDIA_ID = '5c09e000-0000-4000-8000-000000000a02'
+  const FILE_DATE = Date.UTC(2026, 5, 1, 8, 0, 0)
+  const decode = (key: Uint8Array, sealed: string) => openJson(metaCtx(MEDIA_ID), key, sealed)
+
+  // Lever: seal `{ v: 1, trackName, trackActivity }` in place of the raw tier - the file's date and any newer field go.
+  it('re-seals the raw tier with the label, every other field verbatim, and reads it back (operator-blind)', async () => {
+    const store = fakeStore()
+    fakeApi(mediaApi, store.api)
+    fakeApi(blobApi, store.blob)
+    const memoryKey = v1.randomBytes(32)
+    const tier = { v: 1, capturedAt: FILE_DATE, capturedAtSource: 'file', future: 'kept' }
+
+    const saved = await setTrackLabel(SCOPE_ID, target(MEDIA_ID, memoryKey, tier, 2), memoryKey, 0, { name: '  Gipfeltour  ', activity: 'hiking' })
+
+    expect(store.api.updateMediaMeta.mock.calls[0][0].mediaMetaUpdate.metaRevision).toBe(2)
+    expect(store.captured.updatedMeta).not.toContain('Gipfel')
+    expect(decode(memoryKey, store.captured.updatedMeta!)).toEqual({ ...tier, trackName: 'Gipfeltour', trackActivity: 'hiking' })
+    expect(saved.tier).toMatchObject({ trackName: 'Gipfeltour', trackActivity: 'hiking', capturedAt: FILE_DATE })
+  })
+
+  it('drops the name and the activity for null or blank, keeping the rest', async () => {
+    const store = fakeStore()
+    fakeApi(mediaApi, store.api)
+    fakeApi(blobApi, store.blob)
+    const memoryKey = v1.randomBytes(32)
+    const tier = { v: 1, capturedAt: FILE_DATE, trackName: 'Old', trackActivity: 'running' }
+
+    await setTrackLabel(SCOPE_ID, target(MEDIA_ID, memoryKey, tier), memoryKey, 0, { name: '   ', activity: null })
+
+    expect(decode(memoryKey, store.captured.updatedMeta!)).toEqual({ v: 1, capturedAt: FILE_DATE })
+  })
+
+  // The cap is the listed tier's 512 base64, shared with the capture-time PUT. Worst case: every field a track's tier
+  // carries - the capture time, a correction an import restored, the longest source; a GPX file gives no geometry, GPS or
+  // place - with the longest activity and a name past the clamp in three-byte characters (a photo's full tier alone leaves
+  // no room for a label: the Edit is a track's only). Lever: remove the clamp in `trackLabelFields`.
+  it('clamps the name to its bytes and stays inside the 512 cap on a tier carrying every field a track\'s holds', async () => {
+    const store = fakeStore()
+    fakeApi(mediaApi, store.api)
+    fakeApi(blobApi, store.blob)
+    const memoryKey = v1.randomBytes(32)
+    const full = { v: 1, capturedAt: FILE_DATE, capturedAtOverride: FILE_DATE + 1, capturedAtSource: 'container' }
+
+    const saved = await setTrackLabel(SCOPE_ID, target(MEDIA_ID, memoryKey, full), memoryKey, 0, { name: '山'.repeat(200), activity: 'mountain-biking' })
+
+    expect(saved.wrappedMeta!.length).toBeLessThanOrEqual(512)
+    expect(saved.tier!.trackName).toBe('山'.repeat(TRACK_NAME_MAX_BYTES / 3)) // whole characters, never a split one
+  })
+
+  // A peer's label meanwhile is a conflict (the dialog shows theirs); any other peer write is merged under ours.
+  it('re-applies the label on a peer\'s other write; a peer\'s own label surfaces as a conflict', async () => {
+    const memoryKey = v1.randomBytes(32)
+    const peersDate = sealTier(MEDIA_ID, memoryKey, { v: 1, capturedAt: FILE_DATE, capturedAtOverride: 7 })
+    const updateMediaMeta = vi.fn<MediaApi['updateMediaMeta']>().mockRejectedValueOnce(staleTier(peersDate, 2)).mockResolvedValue({})
+    fakeApi(mediaApi, { updateMediaMeta })
+    await setTrackLabel(SCOPE_ID, target(MEDIA_ID, memoryKey, { v: 1, capturedAt: FILE_DATE }, 1), memoryKey, 0, { name: 'Mine', activity: null })
+    expect(decode(memoryKey, updateMediaMeta.mock.calls[1][0].mediaMetaUpdate.wrappedMeta!)).toEqual({
+      v: 1, capturedAt: FILE_DATE, capturedAtOverride: 7, trackName: 'Mine',
+    })
+
+    const peersLabel = sealTier(MEDIA_ID, memoryKey, { v: 1, capturedAt: FILE_DATE, trackName: 'Theirs' })
+    const conflicting = vi.fn<MediaApi['updateMediaMeta']>().mockRejectedValueOnce(staleTier(peersLabel, 2)).mockResolvedValue({})
+    fakeApi(mediaApi, { updateMediaMeta: conflicting })
+    const err = await setTrackLabel(SCOPE_ID, target(MEDIA_ID, memoryKey, { v: 1, capturedAt: FILE_DATE }, 1), memoryKey, 0, { name: 'Mine', activity: null })
+      .catch((e) => e)
     expect(err).toBeInstanceOf(MetaConflictError)
     expect(conflicting).toHaveBeenCalledTimes(1)
   })

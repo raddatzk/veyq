@@ -1,7 +1,7 @@
 <Project Sdk="Microsoft.NET.Sdk">
-  <!-- The veyq app on Windows (ADR 0130 decision 5; ADR 0123's Consequences, the Windows app): WinUI 3 over the core's
+  <!-- The veyq app on Windows (ADR 0136 decision 5; ADR 0123's Consequences, the Windows app): WinUI 3 over the core's
        veyq.dll, unpackaged in the development loop (run.py build and run), packaged as an MSIX by run.py package (VeyqPackage,
-       below; ADR 0133 decision 6), x64 (Kotlin/Native has no Windows ARM64 target), self-contained
+       below; ADR 0139 decision 6), x64 (Kotlin/Native has no Windows ARM64 target), self-contained
        with the Windows App SDK and .NET, so its build output runs where it is copied. Its words, theme and the bridge's
        types are generated (src/mobile/build/generated, never committed); windows/run.py build writes them first. -->
   <PropertyGroup>
@@ -34,7 +34,7 @@
          VeyqTheme: a property reads only those set above it. -->
     <ApplicationIcon>$(VeyqTheme)veyq.ico</ApplicationIcon>
   </PropertyGroup>
-  <!-- The MSIX (ADR 0133 decision 6): single-project packaging through the Windows App SDK's own MSBuild tooling
+  <!-- The MSIX (ADR 0139 decision 6): single-project packaging through the Windows App SDK's own MSBuild tooling
        (Microsoft.Windows.SDK.BuildTools.MSIX, already in the lock through the Windows App SDK), unsigned — a copy is
        signed after, so the payload the block map hashes is the one built here (decision 7). The manifest is the
        template Package.appxmanifest.in filled by run.py package; the images are generate_theme.py's. Still

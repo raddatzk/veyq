@@ -42,6 +42,8 @@ class NoticesTest {
         fits(Notices.replaceOffered("a.txt"))
         fits(Notices.replaceStale("a.txt"))
         Notices.folderLeftOut(FolderUpload.Walked(emptyList(), listOf("ln"), listOf("locked"))).forEach(::fits)
+        fits(Notices.notRead(listOf("a.txt")))
+        fits(Notices.notRead(listOf("a.txt", "b.txt")))
     }
 
     @Test
@@ -58,6 +60,9 @@ class NoticesTest {
         assertEquals(Notice(Msg.COPY_FAILED_ROLLED_BACK), Notices.subtreeCopyRefused(null))
         assertEquals(listOf(Notice(Msg.DEPOT_FOLDER_NO_ROOM, "Up", Bytes(1234))), Notices.folderUpload(FolderUpload.Report(FolderUpload.Outcome.NO_ROOM, "Up", 1234)))
         assertTrue(Notices.folderUpload(FolderUpload.Report(FolderUpload.Outcome.NOTHING, "Up")).isEmpty())
+        assertNull(Notices.notRead(emptyList()), "every path read: nothing to say")
+        assertEquals(Notice(Msg.DEPOT_FOLDER_UNREADABLE, "a.txt"), Notices.notRead(listOf("a.txt")))
+        assertEquals(Notice(Msg.DEPOT_FILES_UNREADABLE, 2), Notices.notRead(listOf("a.txt", "b.txt")))
     }
 
     @Test

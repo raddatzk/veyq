@@ -3,9 +3,9 @@ id: cr-app-account-settings
 title: The apps' Settings — the account, this device, devices and sessions, sign out; the entry to "Add a device"
 status: planned
 satisfies: []
-adrs: ["0004", "0005", "0058", "0059", "0122", "0130", "0131"]
+adrs: ["0004", "0005", "0058", "0059", "0122", "0136", "0137"]
 invariants:
-  - "every rule is the core's (ADR 0130 decision 1): the Settings page is one core screen model per signed-in account, each app only draws it"
+  - "every rule is the core's (ADR 0136 decision 1): the Settings page is one core screen model per signed-in account, each app only draws it"
   - "a session family carries no name on the server (ADR 0004): names come from the Master-Key-sealed device register, joined on the device; a locked or unregistered family shows its dates"
   - "a revoke never takes key material (ADR 0058): signing a device out and removing its saved key are two named steps, as on the web"
   - "the bridge only carries — no key, seal, token or password outward (SecretFreeSchemaTest)"
@@ -37,7 +37,7 @@ the trust reset) is **not** in this CR; see Owner question 1.
 
 - **Read first:** `uc.account.sessions` (the list, the two layers, E1–E5, § Devices with a saved key),
   `uc.account.sign-out`, `uc.account.trust-device`, `uc.settings.appearance-language`, `en.account.device-register`;
-  ADR 0004 (§ Session family), ADR 0058 (§5, why "every other saved key" is defined by exclusion), ADR 0130, ADR 0131,
+  ADR 0004 (§ Session family), ADR 0058 (§5, why "every other saved key" is defined by exclusion), ADR 0136, ADR 0137,
   `src/mobile/CLAUDE.md` whole.
 - **The web's reference:** `src/web/src/features/account/sessions/SessionsPanel.vue`, `deviceRegister.ts`,
   `savedKeys.ts`, `trustDevice/DeviceTrustControl.vue`, `login/signOut.ts`, `src/web/src/features/settings/sections.ts`
@@ -64,7 +64,7 @@ Commands from the repo root unless named.
 
 ### D1 — One core screen model, `AccountSettings`, per signed-in account
 
-`session/AccountSettings.kt` in commonMain (ADR 0130 decision 2's shape, tested in `commonTest` over a played door):
+`session/AccountSettings.kt` in commonMain (ADR 0136 decision 2's shape, tested in `commonTest` over a played door):
 - **State:** the email and its confirmation; this device (label, its family id, the trust level and the levels it can
   move to — read from the same source `Manage servers` reads, not a copy); the families (id, created, last used,
   `current`, the register's label or none); the devices with a saved key and no session; whether "Add a device" is
@@ -211,6 +211,25 @@ Apple as a pushed view (iOS) and a Settings scene-style window (macOS `Settings 
   in (`devlogin.py`), open Settings from the drawer, rename this device, sign in a second session with
   `LiveAccountSettingsTest`'s helper (or a second `devlogin` on another device), sign that one out from the list, take
   "Sign out"; then record each pass in `native-apps.md`'s measured list.
+  **Live passes (2026-11-13, the dev backend up; measured):** the second session is `DevSecondSessionTest`
+  (`VEYQ_LIVE=… VEYQ_DEV_SECOND_SESSION=<label> ./gradlew :core:jvmTest --tests '*DevSecondSessionTest*' --rerun`: a fresh
+  login of the principal that names itself `<label>` through the register, then waits until its page no longer reads and
+  prints after how long; at its limit it signs itself out). **Android** (throwaway AVD, signed in by `devlogin.py`): the
+  drawer's Settings → the address and "This device" first with "You are here"; renamed to "Pass AVD renamed" (the row
+  followed) and back; "Pass throwaway A" listed, signed out from its menu after the question → gone from the list,
+  `DevSecondSessionTest`: `signed out from elsewhere after 74 s`; "Sign out" → the sign-in. **iOS** (throwaway iPhone 18 Pro
+  simulator, German): renamed ("iPhonex", the row followed); "Pass throwaway iOS" signed out by its swipe action and the
+  question → gone, `signed out from elsewhere after 298 s`; "Abmelden" → the sign-in (`settings: signed out here`), no crash.
+  **macOS** (the ad hoc debug build, German, driven through accessibility): the Settings window from the sidebar, renamed
+  ("Pass Mac renamed") and back, "Abmelden" → the sign-in; **not done there:** a session's "Weitere" menu — a menu control the
+  background tools may not open and full-screen control was not available — so "Pass throwaway Mac" was signed out from the
+  Android page instead (`after 582 s`). One Mac session a stopped build left was signed out by
+  `DevSecondSessionTest.aLeftOverSessionIsSignedOut` (`VEYQ_DEV_SIGN_OUT_LABEL`, `VEYQ_DEV_SIGN_OUT_SINCE`: exactly one
+  family of that name signed in that minute, else nothing). **Found:** on macOS the rename alert's field showed the current name only on its
+  first opening; later openings were empty (the binding is set before presenting — the AppKit alert keeps its field). Not
+  fixed here; owner step below. Recorded in `native-apps.md` § Built (Account and session).
+  **Owner step (pending):** on the Mac, the session list's "Weitere" menu → "Dieses Gerät abmelden" on a second session.
+  The box stays open for it.
   **Retrospective:** a debug harness that plays the screen model's `State` (it is `@Serializable` and public) instead of
   the model's internal seams draws every state a server can produce without exposing `Door`/`Here` from the core; its
   limit is that the actions' effects are played, so the rules stay `AccountSettingsTest`'s and the wiring to the real
@@ -272,6 +291,29 @@ Apple as a pushed view (iOS) and a Settings scene-style window (macOS `Settings 
   name follows); a second session signed in by `LiveAccountSettingsTest`'s helper (or the web) appears, is signed out from
   its menu after the question, and drops out; "Sign out" ends the page and shows the sign-in. Record each in
   `native-apps.md`'s measured list.
+  **Live, Linux — met (2026-11-13).** On the Fedora 45 VM's GNOME session, the debug build of this tree inside the
+  installed Flatpak's sandbox (`cr-desktop-app-packaging` phase 2's signed-in pass), signed in as the principal through
+  the dev sign-in (the trust offer "Not now": the account is at its limit, `add wrap 409`). EN/light: the sidebar's
+  **Settings** opened the dialog over the signed-in shell (`settings open`) with the principal's address, the
+  confirmation line, and this device first ("fedora", "You are here"); renamed to "Linux pass device" (`settings
+  rename: Done`, its row followed) and back to "fedora" (`Done`); a second session — `run.py run --devlogin
+  --no-secret-service` in the Broadway container on the Mac, listed as its container id `e157d9a0a242` — signed out from
+  its row's menu ("Sign this device out", the question, then `settings sign out: Done`) and gone from the list; the
+  container stopped. DE/dark (a new sign-in): every group in German, renamed to "Linux Pass" and back (`Done` each), the
+  pass's own earlier session signed out from its menu ("Dieses Gerät abmelden", the question); "Abmelden" →
+  `settings sign out here: Done`, the dialog gone, the sign-in shown. "Sign out everywhere else" and "Remove every saved
+  key" were not touched (the principal's). That sign-in showed the password and Secret Key still filled — fixed in
+  `sign_in.rs`/`main.rs` (`SignIn::forget`, bitten; `cr-desktop-app-packaging` phase 2 has the measurement).
+  **Live, Windows — met 2026-11-13** (the VM, **UAC on**, the dev backend up; `run.py run --devlogin`, the offer answered
+  "Not now"; en-US light, then de-DE dark after a kit sign-in): the pane's Settings item opens the page over the signed-in
+  shell with the principal's address and this device first, "You are here" / "Du bist hier"; this device renamed
+  (`settings rename: Done`, the row's name followed: "Windows pass device", "Windows-Durchlauf") and back to
+  `WIN-D1DBGTHDHGP`; a throwaway session of the principal ("Windows throwaway session", signed in on the Mac by a
+  `LiveRun` device, never committed) listed, signed out from its menu after the question (`settings sign out: Done`) and
+  gone from the list, then taken off the account by `LiveRun.removeAll` (its wraps, families, register entry); "Sign out"
+  → `settings sign out here: Done`, the sign-in shown — and there the password still filled (fixed: `SignInView.Forget`,
+  `cr-app-kit-sign-in` phase 9's Met; after it both fields empty). "Sign out every other" not pressed (the principal).
+  Shots `settings-1…6-en-light.png`, `settings-1/4/5/6-de-dark.png`, not committed.
   **Retrospective:** WinUI's Settings item was a non-selecting item; making it a selecting one with a `Target` of its own let the
   page live in the content with the pane's own selection and back, which is how Windows' apps show settings.
 - [ ] **5 docs and harvest** — `native-apps.md` (§ Built, § Account's open items reduced to what is left);

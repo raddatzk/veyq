@@ -574,6 +574,9 @@ here; the server is blind.
   itself (`activeSpace`, `coverStore`, `rotateKeys` tests). A suite that stubs the registry delegates through a
   `Proxy` onto a fresh `createRegistry()` (`ShareView.registry.test.ts`, `SpaceView.registry.test.ts`): a
   hand-listed set of methods silently misses the next one the registry gains.
+- **Never name two files alike save for case** (a `Banner.vue`'s test and a `banner.ts`'s would both be
+  `…anner.test.ts`): macOS's default filesystem is case-insensitive, so writing one there silently replaces the other, and git on
+  Linux would then see two. A component's model takes a name of its own (`bannerModel.ts`).
 - **Markup only through `v-safe-html`** (developer styleguide § 4, [ADR 0117](../../docs/decisions/0117-the-web-client-enforces-trusted-types.md)):
   the built CSP enforces Trusted Types, so a string at any HTML sink or script URL is refused at run time, in a
   browser only. A new library that writes markup or starts a worker is read for its sinks before it lands

@@ -25,7 +25,7 @@ import me.raddatz.veyq.mobile.session.ShareLinkChanges
 import me.raddatz.veyq.mobile.session.ShareLinks
 
 /**
- * What a screen says, as the catalog's key and its arguments (ADR 0130 decisions 1 and 3): each platform renders it in
+ * What a screen says, as the catalog's key and its arguments (ADR 0136 decisions 1 and 3): each platform renders it in
  * the person's language. An argument is a `String`, an `Int`, a [Bytes] (a size the platform formats its own way),
  * a [Moment], an [Amount], another [Notice] (a word inside the sentence) or a [Joined] list of those.
  */
@@ -373,6 +373,17 @@ object Notices {
     /** What a folder upload's walk left out ([FolderUpload.walked]): each link and each entry that did not read, one line each. */
     fun folderLeftOut(w: FolderUpload.Walked): List<Notice> =
         w.links.map { Notice(Msg.DEPOT_FOLDER_LINK_SKIPPED, it) } + w.unreadable.map { Notice(Msg.DEPOT_FOLDER_UNREADABLE, it) }
+
+    /**
+     * What a picked or dropped upload says of the [names] whose paths did not read (no regular file there, or none that
+     * opens): the one by its name, several by their count; null where every path read. Never silent: a drop the core
+     * queues nothing for would otherwise look taken (the packaged Windows app, 2026-11-13).
+     */
+    fun notRead(names: List<String>): Notice? = when (names.size) {
+        0 -> null
+        1 -> Notice(Msg.DEPOT_FOLDER_UNREADABLE, names.single())
+        else -> Notice(Msg.DEPOT_FILES_UNREADABLE, names.size)
+    }
 
     /** A Depot upload that found a file of its name: its replace is offered (the notice's action, [Msg.DEPOT_REPLACE_TITLE]). */
     fun replaceOffered(name: String) = Notice(Msg.DEPOT_REPLACE_CONFIRM, name)

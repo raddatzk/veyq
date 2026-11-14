@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import base64
 import copy
+import hashlib
 import json
 import pathlib
 import sys
@@ -52,6 +53,13 @@ class World:
         self.tools = {"release": "0.12", "majorEntry": None}
         self.entry = None
         self.matrix = (ARCHS, SHARDS)
+        self.apps_staged = True
+        self.signer_refusal = ""
+        for i, (platform, pattern) in enumerate(snapshot.APP_PLATFORMS.items()):
+            raw = self.app_artifact(pattern.format(version="0.12"), h(500 + i))
+            self.registry[f"{REG}/{snapshot.APP_PACKAGE}:sha-{COMMIT}-{platform}"] = raw
+            self.registry[f"{REG}/{snapshot.APP_PACKAGE}:0.12-SNAPSHOT-{platform}"] = raw
+            self.signed.add(f"{REG}/{snapshot.APP_PACKAGE}@{promote.digest_of(raw)}")
         n = 100
         for image in promote.IMAGES:
             per_arch = {}
@@ -73,6 +81,14 @@ class World:
                 for arch in ARCHS:
                     lines.append(self.envelope(image, d, arch, promote.digest_of(per_arch[arch])))
                 self.atts[f"{REG}/{image}@{d}"] = "\n".join(lines)
+
+    @staticmethod
+    def app_artifact(title: str, layer: str, artifact_type: str = snapshot.APP_ARTIFACT_TYPE) -> str:
+        return json.dumps({"mediaType": "application/vnd.oci.image.manifest.v1+json", "artifactType": artifact_type,
+                           "layers": [{"digest": layer, "annotations": {"org.opencontainers.image.title": title}}]})
+
+    def app(self, platform: str) -> str:
+        return promote.digest_of(self.registry[f"{REG}/{snapshot.APP_PACKAGE}:sha-{COMMIT}-{platform}"])
 
     @staticmethod
     def statement(image: str, subject: str, arch: str, per_arch: str, **predicate) -> dict:
@@ -117,6 +133,11 @@ class World:
         return self.atts.get(ref, "")
 
     def stack_matrix(self, commit): return self.matrix
+    def stages_apps(self, commit): return self.apps_staged
+
+    def signer(self):
+        if self.signer_refusal:
+            raise promote.Refused(self.signer_refusal)
     def produce_asset_set(self, commit, unscheduled):
         if unscheduled and self.produced == "REFUSE":
             raise promote.Refused("the release files cannot be produced: --unscheduled marks a release that changes "
@@ -163,6 +184,13 @@ if plan:
         failures.append("the plan names other digests, another commit or another draft")
     if plan.chart != "absent" or plan.asset_set != SET:
         failures.append("the plan's chart state or asset set is wrong")
+    if plan.apps != {p: w.app(p) for p in snapshot.APP_PLATFORMS} or plan.app_layers != {
+            pattern.format(version="0.12"): h(500 + i) for i, pattern in enumerate(snapshot.APP_PLATFORMS.values())}:
+        failures.append(f"the plan names other app packages: {plan.apps} {plan.app_layers}")
+w = World(); w.apps_staged = False; w.signer_refusal = "no signer"
+old = holds("a snapshot whose commit stages no app package (and no signer set up)", w)
+if old and (old.apps or old.app_layers):
+    failures.append("a snapshot that staged no app package plans some")
 w = World()
 w.ref_major_value = 0
 w.releases[0]["tag_name"] = "snapshot-0.12"
@@ -172,6 +200,8 @@ if branch_plan and (branch_plan.latest or branch_plan.names != ["0.12", "0"]):
 w = World()
 for image in promote.IMAGES:  # a half-done promotion of THIS snapshot: its names already there
     w.registry[f"{REG}/{image}:0.12"] = w.registry[f"{REG}/{image}:sha-{COMMIT}"]
+w.registry.update({f"{REG}/{snapshot.APP_PACKAGE}:0.12-{p}": w.registry[f"{REG}/{snapshot.APP_PACKAGE}:sha-{COMMIT}-{p}"]
+                   for p in snapshot.APP_PLATFORMS})
 w.registry[f"{REG}/{promote.CHART}:0.12"] = "{}"
 resumed = holds("a promotion that runs again after failing half-way", w)
 if resumed and resumed.chart != "present":
@@ -234,6 +264,33 @@ w = World(); w.registry[f"{REG}/veyq:0.12"] = w.registry[f"{REG}/veyq-admin:sha-
 refuses("an image's release name names another index", w, "already names")
 w = World(); w.registry[f"{REG}/{promote.CHART}:0.12"] = "{}"
 refuses("a chart released without its images", w, "the chart is another publish's")
+
+# ---- 9. the desktop apps' packages -------------------------------------------------------------------------------------
+APPS_AT = f"{REG}/{snapshot.APP_PACKAGE}"
+w = World(); del w.registry[f"{APPS_AT}:sha-{COMMIT}-msix-x64"]
+refuses("an app package without its sha- name", w, "has no snapshot of")
+w = World(); del w.registry[f"{APPS_AT}:0.12-SNAPSHOT-flatpak-aarch64"]
+refuses("an app package without its -SNAPSHOT name", w, "has no snapshot of")
+w = World(); w.registry[f"{APPS_AT}:0.12-SNAPSHOT-msix-x64"] = w.registry[f"{APPS_AT}:sha-{COMMIT}-flatpak-x86_64"]
+refuses("an app package's two snapshot names disagree", w, "name two artifacts")
+w = World()
+for name in (f"sha-{COMMIT}-msix-x64", "0.12-SNAPSHOT-msix-x64"):
+    w.registry[f"{APPS_AT}:{name}"] = World.app_artifact("veyq-0.11-x64.msix", h(600))
+w.signed.add(f"{APPS_AT}@{w.app('msix-x64')}")
+refuses("an app artifact carrying another version's file", w, "not the msix-x64 package of 0.12")
+w = World()
+for name in (f"sha-{COMMIT}-flatpak-x86_64", "0.12-SNAPSHOT-flatpak-x86_64"):
+    w.registry[f"{APPS_AT}:{name}"] = World.app_artifact("veyq-0.12-x86_64.flatpak", h(601), "application/vnd.oci.image.config.v1+json")
+w.signed.add(f"{APPS_AT}@{w.app('flatpak-x86_64')}")
+refuses("an artifact of another type", w, "not one `application/vnd.veyq.app-package.v1`")
+w = World(); w.signed.discard(f"{APPS_AT}@{w.app('flatpak-aarch64')}")
+refuses("an unsigned app package", w, "does not verify as a snapshot")
+w = World(); w.registry[f"{APPS_AT}:0.12-msix-x64"] = w.registry[f"{APPS_AT}:sha-{COMMIT}-flatpak-x86_64"]
+refuses("an app package's release name taken", w, "a release name is never replaced")
+w = World(); w.registry[f"{APPS_AT}:sha-{COMMIT}-msix-x64"] = "ERROR"
+refuses("a registry error reading an app package", w, "other than `not found`")
+w = World(); w.signer_refusal = "src/mobile/windows/veyq.cer does not exist: the release's MSIX signer is not set up"
+refuses("no committed signer while the snapshot staged packages", w, "signer is not set up")
 
 # ---- 7. attestations ---------------------------------------------------------------------------------------------
 w = World(); w.atts[f"{REG}/veyq@{w.digest('veyq')}"] = ""
@@ -332,7 +389,55 @@ with tempfile.TemporaryDirectory(prefix="promote_selftest_") as tmp:
     dest = release_assets.produce(pathlib.Path(tmp), refs["veyq"], refs["veyq-admin"], False, refs["veyq-tools"],
                                   release="0.12")
     good = {"version": "0.12", "digests": digests, "asset_set": release_assets.asset_set_digest(dest),
-            "major_entry": json.loads((dest / "manifest.json").read_text())["majorEntry"], "unscheduled": False}
+            "major_entry": json.loads((dest / "manifest.json").read_text())["majorEntry"], "unscheduled": False,
+            "apps": {}, "app_layers": {}}
+    # the same release with the app files beside it (ADR 0139 decision 8): the assets and their hash unchanged
+    files = pathlib.Path(tmp) / "app-files"
+    files.mkdir()
+    layers = {}
+    for pattern in snapshot.APP_PLATFORMS.values():
+        name = pattern.format(version="0.12")
+        (files / name).write_bytes(name.encode())
+        layers[name] = "sha256:" + hashlib.sha256(name.encode()).hexdigest()
+    (files / promote.CERTIFICATE_ASSET).write_bytes(b"cer")
+    with_apps = release_assets.produce(pathlib.Path(tmp) / "with-apps", refs["veyq"], refs["veyq-admin"], False,
+                                       refs["veyq-tools"], release="0.12", app_files=sorted(files.iterdir()))
+    app_plan = {**good, "apps": {p: h(700 + i) for i, p in enumerate(snapshot.APP_PLATFORMS)}, "app_layers": layers}
+    if release_assets.asset_set_digest(with_apps) != good["asset_set"]:
+        failures.append("assets: the app files change the asset set's hash")
+    for label, plan_, at, says in (
+        ("the app files as planned", app_plan, with_apps, None),
+        ("app files the snapshot did not stage", good, with_apps, "the snapshot staged none"),
+        ("the planned app files missing", app_plan, dest, "not the snapshot's packages"),
+        ("a Flatpak that is not the staged one",
+         {**app_plan, "app_layers": {**layers, "veyq-0.12-x86_64.flatpak": h(9)}}, with_apps, "attached as tested"),
+    ):
+        try:
+            promote.check_assets(at, copy.deepcopy(plan_), REG)
+            if says:
+                failures.append(f"assets: {label} passes")
+        except promote.Refused as e:
+            if not says:
+                failures.append(f"assets: {label} refused: {e}")
+            elif says not in str(e):
+                failures.append(f"assets: {label} refused without `{says}`: {e}")
+    for k, (label, names, says) in enumerate((
+        ("an app file named like an asset", ["veyqctl"], "already carries"),
+        ("an app file named like a bundle", ["manifest.json.bundle"], "already carries"),
+        ("an app file whose bundle is another's name", ["a", "a.bundle"], "already carries"),
+        ("an app file GitHub would rename", [".hidden"], "publishes as given"),
+    )):
+        odd = pathlib.Path(tmp) / f"odd-{k}"
+        odd.mkdir()
+        for n in names:
+            (odd / n).write_bytes(b"x")
+        try:
+            release_assets.produce(odd / "out", refs["veyq"], refs["veyq-admin"], False, refs["veyq-tools"],
+                                   release="0.12", app_files=[odd / n for n in names])
+            failures.append(f"produce: {label} passes")
+        except release_assets.ReleaseError as e:
+            if says not in str(e):
+                failures.append(f"produce: {label} refused without `{says}`: {e}")
     for label, change, says in (
         ("the produced files", {}, None),
         ("another asset set", {"asset_set": SET}, "hash to"),
@@ -357,4 +462,4 @@ if failures:
     sys.exit(1)
 print("promote selftest OK: a promotable snapshot holds from main (latest) and from its release branch (not latest), "
       "a half-done promotion resumes, and every refusal — draft, branch, commit, newer, snapshot, names, "
-      "attestations, inputs, stamp — is reached and named")
+      "attestations, inputs, stamp, app packages — is reached and named; the app files leave the asset set as it is")

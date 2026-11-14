@@ -46,6 +46,7 @@ import {
   listTrash,
   purgeMedia,
   setMediaMeta,
+  setTrackLabel,
   backfillPlaceName,
   type MediaMetaWriteOptions,
   downloadRef,
@@ -176,10 +177,12 @@ export interface NodeMetaDoor {
   ) => ReturnType<typeof writeNodeMeta>
 }
 
-/** A medium's own meta writes from the lightbox (capture-time correction, the resolved place name). */
+/** A medium's own meta writes: the lightbox's (capture-time correction, the resolved place name) and the Map tab's (a GPX
+ *  track's own name and activity, ADR 0130 decision 9). */
 export interface MediaMetaDoor {
   set(target: MediaMetaTarget, key: Uint8Array, node: NodeAt, overrideMs: number | null): Promise<MediaMetaWrite>
   backfillPlace(target: MediaMetaTarget, key: Uint8Array, node: NodeAt, placeName: string, placeLevel?: string): Promise<MediaMetaWrite>
+  setTrackLabel(target: MediaMetaTarget, key: Uint8Array, node: NodeAt, label: { name: string | null; activity: string | null }): Promise<MediaMetaWrite>
 }
 
 /** A Memory's banner (uc.memory.banner, ADR 0102): the upload of its bytes and the one write of its slots and the meta
@@ -372,6 +375,7 @@ export function memberMemorySource(from: { scopeId: () => string }): MemorySourc
       set: (target, key, node, overrideMs) => setMediaMeta(scope(), target, key, node.epoch, overrideMs, mediaMetaOptions(node.id)),
       backfillPlace: (target, key, node, name, level) =>
         backfillPlaceName(scope(), target, key, node.epoch, name, level, mediaMetaOptions(node.id)),
+      setTrackLabel: (target, key, node, label) => setTrackLabel(scope(), target, key, node.epoch, label, mediaMetaOptions(node.id)),
     },
     marks: {
       load: (nodeId, scopeKey) => loadItemFavoritesFor(scope(), nodeId, scopeKey),

@@ -10,6 +10,9 @@ import kotlinx.coroutines.withContext
 import me.raddatz.veyq.mobile.crypto.LibsodiumPrimitives
 import me.raddatz.veyq.mobile.crypto.Primitives
 import platform.Foundation.NSData
+import platform.Foundation.NSHTTPCookieAcceptPolicy
+import platform.Foundation.NSURLRequestReloadIgnoringLocalCacheData
+import platform.Foundation.NSURLSessionConfiguration
 import platform.Foundation.NSUserDefaults
 import platform.Foundation.create
 import platform.LocalAuthentication.LAContext
@@ -18,7 +21,7 @@ import platform.posix.memcpy
 
 /**
  * The device's trust marks and records in UserDefaults: no secret (`TrustMarks`), kept across launches, gone with the app.
- * On iOS they are the app group's ([defaults] its suite), which the share extension reads too (ADR 0132).
+ * On iOS they are the app group's ([defaults] its suite), which the share extension reads too (ADR 0138).
  */
 class UserDefaultsStore(private val defaults: NSUserDefaults) : DeviceStore {
     override fun read(key: String): String? = defaults.stringForKey(key)
@@ -139,9 +142,31 @@ private fun NSData.toByteArray(): ByteArray {
     return ByteArray(n).also { out -> out.usePinned { memcpy(it.addressOf(0), bytes, length) } }
 }
 
+/**
+ * A session that keeps nothing on disk (`src/mobile/CLAUDE.md` § Nothing on disk the app did not choose). The default
+ * configuration Ktor's Darwin engine starts from writes every cacheable response — API answers and blob ciphertext — to
+ * `Library/Caches/<bundle id>/Cache.db` and `fsCachedData` (measured 2026-11-13 on an iOS simulator), keeps cookies in
+ * the shared `HTTPCookieStorage` (`Library/Cookies`) and credentials in the shared `URLCredentialStorage`. The core
+ * needs none of them: the session token travels in a header (ADR 0004), and the `outside` client promises no cookie.
+ */
+internal fun NSURLSessionConfiguration.keepNothingOnDisk() {
+    setURLCache(null)
+    setRequestCachePolicy(NSURLRequestReloadIgnoringLocalCacheData)
+    setHTTPCookieStorage(null)
+    setHTTPShouldSetCookies(false)
+    setHTTPCookieAcceptPolicy(NSHTTPCookieAcceptPolicy.NSHTTPCookieAcceptPolicyNever)
+    setURLCredentialStorage(null)
+}
+
+/** Ktor's Darwin engine (URLSession) over a session that keeps nothing on disk ([keepNothingOnDisk]). */
+fun appleHttpClient(block: io.ktor.client.HttpClientConfig<*>.() -> Unit): HttpClient = HttpClient(Darwin) {
+    engine { configureSession { keepNothingOnDisk() } }
+    block()
+}
+
 /** The Apple app's door into its accounts: libsodium's primitives and the platform's HTTP client (URLSession). */
 object AppleSessions {
-    private val client = { block: io.ktor.client.HttpClientConfig<*>.() -> Unit -> HttpClient(Darwin, block) }
+    private val client = { block: io.ktor.client.HttpClientConfig<*>.() -> Unit -> appleHttpClient(block) }
 
     /** This installation: [defaults] for its records and marks (the app group's on iOS), the Keychain for its keys. */
     fun device(keychain: KeychainBridge, label: String, prompt: String, defaults: NSUserDefaults): ThisDevice =

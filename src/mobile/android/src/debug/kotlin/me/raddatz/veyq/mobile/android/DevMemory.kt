@@ -59,15 +59,16 @@ object DevMemory {
     private fun played(video: File?): Played {
         val bytes = HashMap<String, ByteArray>()
         val items = ArrayList<MemoryMedia.Item>()
-        fun photo(id: String, colour: Int, at: Long, meta: MemoryMedia.Meta? = null, name: String, owner: String) {
-            val original = jpeg(colour, name, 1600, 1200)
+        // each its own shape, so the justified grid shows aspects kept: landscape, portrait, square
+        fun photo(id: String, colour: Int, at: Long, meta: MemoryMedia.Meta? = null, name: String, owner: String, w: Int = 1600, h: Int = 1200) {
+            val original = jpeg(colour, name, w, h)
             bytes["o-$id"] = original
-            bytes["p-$id"] = jpeg(colour, "$name (preview)", 1600, 1200)
-            bytes["t-$id"] = jpeg(colour, name, 512, 384)
+            bytes["p-$id"] = jpeg(colour, "$name (preview)", w, h)
+            bytes["t-$id"] = jpeg(colour, name, 512, 512 * h / w)
             items += MemoryMedia.Item(
                 "s", "m", id, blob("o-$id", original.size.toLong()), blob("t-$id", bytes.getValue("t-$id").size.toLong()),
                 blob("p-$id", bytes.getValue("p-$id").size.toLong()),
-                meta ?: MemoryMedia.Meta(1600, 1200, at, null, "exif", null, null, null, null), "image/jpeg", name, owner, false, ByteArray(0),
+                meta ?: MemoryMedia.Meta(w, h, at, null, "exif", null, null, null, null), "image/jpeg", name, owner, false, ByteArray(0),
             )
         }
         photo(
@@ -75,7 +76,8 @@ object DevMemory {
             MemoryMedia.Meta(1600, 1200, 1_784_016_900_000, null, "exif", 54.079, 10.889, "Kühlungsborn", "city"), "beach.jpg", "user:u1",
         )
         photo("dunes", Color.rgb(0xf9, 0xa8, 0x25), 1_784_000_000_000, name = "dunes.jpg", owner = "share:g1")
-        photo("pier", Color.rgb(0x43, 0xa0, 0x47), 1_783_900_000_000, name = "pier.jpg", owner = "user:u2")
+        photo("pier", Color.rgb(0x43, 0xa0, 0x47), 1_783_900_000_000, name = "pier.jpg", owner = "user:u2", w = 1200, h = 1600)
+        photo("shell", Color.rgb(0x8e, 0x24, 0xaa), 1_783_850_000_000, name = "shell.jpg", owner = "user:u1", w = 1200, h = 1200)
         items += MemoryMedia.Item(
             "s", "m", "blocked", blob("o-blocked", 100), null, null, MemoryMedia.Meta(1600, 1200, 1_783_800_000_000, null, "exif", null, null, null, null),
             "image/jpeg", "blocked.jpg", "user:u1", true, ByteArray(0),

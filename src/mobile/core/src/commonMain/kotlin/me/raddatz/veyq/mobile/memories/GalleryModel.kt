@@ -28,10 +28,10 @@ import me.raddatz.veyq.mobile.words.Msg
 import me.raddatz.veyq.mobile.words.Notice
 
 /**
- * A Memory's or a chapter's page (Memories' `MemoryDetail.vue` with `MediaGrid.vue`, ADR 0130 decision 2): the chapters a
+ * A Memory's or a chapter's page (Memories' `MemoryDetail.vue` with `MediaGrid.vue`, ADR 0136 decision 2): the chapters a
  * Memory holds, then its media as [Row]s in the grid's order ([MemoryMedia.order]), each tile the grid's tier
  * ([MemoryMedia.Item.gridBlob]) read when the platform asks for it ([tile]) — the core caches no bytes; decoding and the
- * decoded picture's cache are the platform's (ADR 0130 decision 1).
+ * decoded picture's cache are the platform's (ADR 0136 decision 1).
  *
  * **When it reads anew is the core's:** on each revision of the shell's lists ([Door.revisions]), and when a medium this
  * device uploaded into this node is in ([Door.uploaded], [MediaUploads]); nothing else re-reads it. A lightbox opened on it
@@ -145,6 +145,8 @@ class GalleryModel(
         val capturedAt: Long? get() = item.meta?.effectiveCapturedAt
         val width: Int? get() = item.meta?.width
         val height: Int? get() = item.meta?.height
+        /** Its tile's aspect in the justified grid ([MediaGridLayout.displayAspect] of its sealed dimensions). */
+        val aspect: Double get() = MediaGridLayout.displayAspect(width, height)
         /** What the lightbox says in its picture's place: a blocked medium's words; null otherwise. */
         val said: Msg? get() = if (item.blocked) Msg.MEMORY_BLOCKED else null
     }
@@ -487,6 +489,16 @@ class GalleryModel(
         return Lightbox(this, index, scope).also { open = it }
     }
 
+    /**
+     * The lightbox opened on medium [mediaId] (one at a time: an open one closes) — a page opened anew for it, a window of
+     * its own on a Mac, before its first read: it shows that medium once the rows hold it, else the first.
+     */
+    fun lightboxOn(mediaId: String): Lightbox {
+        open?.close()
+        val at = current.rows?.indexOfFirst { it.mediaId == mediaId } ?: -1
+        return Lightbox(this, maxOf(at, 0), scope, wanted = mediaId.takeIf { at < 0 }).also { open = it }
+    }
+
     /** The page went: nothing more is read or watched; its lightbox closes (its reader with it). */
     fun close() {
         open?.close()
@@ -502,6 +514,15 @@ class GalleryModel(
 
         /** The page's own header action: photos and videos added ([upload]). */
         const val UPLOAD = "upload"
+
+        /**
+         * [rows] laid out as the justified grid [width] wide (the web's `MediaGrid.vue`, [MediaGridLayout]): each tile's frame
+         * in the platform's unit, every row justified to the width but the last, the row height aiming at
+         * [MediaGridLayout.targetHeight] of the width (a phone two to four tiles a row). A platform lays [State.rows] out
+         * with it whenever the rows or its width change, and draws only the rows near its viewport.
+         */
+        fun layout(rows: List<Row>, width: Double): MediaGridLayout.Layout =
+            MediaGridLayout.justify(rows.map { MediaGridLayout.Source(it.mediaId, it.aspect) }, width, MediaGridLayout.targetHeight(width))
 
         private fun monotonicMs(): () -> Long {
             val start = kotlin.time.TimeSource.Monotonic.markNow()
@@ -523,7 +544,13 @@ class GalleryModel(
  * web pauses on any key, pointer or wheel; a platform whose view is touched pauses it with [slideshow] off).
  * Zoom is the platform's; the model knows nothing of it.
  */
-class Lightbox internal constructor(private val gallery: GalleryModel, start: Int, parent: CoroutineScope) {
+class Lightbox internal constructor(
+    private val gallery: GalleryModel,
+    start: Int,
+    parent: CoroutineScope,
+    /** The medium to show once the rows first hold any ([GalleryModel.lightboxOn] before the gallery's first read). */
+    private var wanted: String? = null,
+) {
     /** A medium's details as the lightbox shows them: its rows, who added it, where that row stands ([MediaDetails.uploaderAt]). */
     class Details(val mediaId: String, val rows: List<MediaDetails.Row>, val uploader: MediaDetails.Uploader?, val uploaderAt: Int)
 
@@ -544,6 +571,9 @@ class Lightbox internal constructor(private val gallery: GalleryModel, start: In
         val row: GalleryModel.Row? get() = rows.getOrNull(index)
         val playing: Boolean get() = reader != null
     }
+
+    /** The Memory or chapter whose gallery it pages (a window of its own is titled by it and reopened by its ids). */
+    val node: NodeAt get() = gallery.node
 
     private val _state: MutableStateFlow<State>
     val state: StateFlow<State>
@@ -572,9 +602,11 @@ class Lightbox internal constructor(private val gallery: GalleryModel, start: In
     /** The gallery read anew: the current medium kept by its id, else the one now at its place. */
     private fun follow(rows: List<GalleryModel.Row>) {
         var stale: RangeReader? = null
+        val want = wanted
         _state.update { s ->
             if (s.closed || s.rows === rows) return@update s
-            val id = s.row?.mediaId
+            // the first rows of a lightbox opened on a medium before they were read: that medium's place
+            val id = s.row?.mediaId ?: want
             val kept = rows.indexOfFirst { it.mediaId == id }
             val index = when {
                 rows.isEmpty() -> -1
@@ -585,6 +617,7 @@ class Lightbox internal constructor(private val gallery: GalleryModel, start: In
             if (!same) stale = s.reader
             s.copy(rows = rows, index = index, reader = if (same) s.reader else null)
         }
+        if (rows.isNotEmpty()) wanted = null
         stale?.close()
     }
 

@@ -2,7 +2,7 @@
 """Guard that a veyq release has an identity, that the identity comes from the tree, and that every artifact
 naming a release names a shape the pipeline actually emits (ADR 0057).
 
-**What it asserts.** Fourteen things (11 retired from this pipeline with the release kind, below), in the order a
+**What it asserts.** Seventeen things (11 retired from this pipeline with the release kind, below), in the order a
 snapshot happens. **Two files, one path of bytes** (ADR 0091 decisions 2 and 5, amended 2026-11-07,
 cr-workflows-split-pipeline-callers): `checks.yml` is the pipeline — every push and pull request — and a push to `main`
 or `release/<major>.x` STAGES its images (`kind == 'stage'`); `publish.yml` runs no pipeline and builds nothing, and
@@ -11,7 +11,7 @@ signs and names what the publishable commit's wholly green Checks push run stage
 says so. What the split holds besides: no job of a pull request's run writes (`build` and `apps-stage`, the two jobs
 with `packages: write`, run on a push alone; `build-local` is `build`'s matrix and steps for a pull request); ORAS
 writes in checks.yml from `apps-stage` alone, pushes `veyq-apps:build-<sha>-<platform>` and nothing else, and that
-job checks out nothing, so its token meets no code of the commit (the desktop apps' packages, ADR 0133 decision 10); no
+job checks out nothing, so its token meets no code of the commit (the desktop apps' packages, ADR 0139 decision 10); no
 job of checks.yml asks for
 `id-token`; `snapshot`, `snapshot-tag` and `checks-run` are publish.yml's own (keyless signing names the file holding
 the signing job); publish.yml calls no workflow, builds nothing, downloads artifacts only from the run `checks-run`
@@ -100,17 +100,20 @@ manifests, the image signatures, the predicates and the tag each name it.
      (cosign 3 writes the Sigstore bundle by default, and only its `=false` spelling still writes the legacy one).
  14. **The promotion** (`.github/workflows/release.yml`, ADR 0091 decision 5): the file the release identity names
      exists; it is started by `workflow_dispatch` alone, whose one input is the boolean `unscheduled_major` (default
-     false); it runs in concurrency group `veyq-release`, never cancelled, under `permissions: {}`, and its five jobs
-     hold exactly — `check` contents write (draft listing) and packages read, `promote` packages and id-token write,
-     `publish` contents write, `channels` packages write, `refused` contents write; `promote` needs `check`, `publish`
-     both, `channels` runs only once `publish` says published, `refused` never after it. No step builds (a build-push
+     false); it runs in concurrency group `veyq-release`, never cancelled, under `permissions: {}`, and its seven jobs
+     hold exactly — `check` contents write (draft listing) and packages read, `apps` contents and packages read,
+     `msix-sign` contents read, `promote` packages and id-token write, `publish` contents write, `channels` packages
+     write, `refused` contents write; `apps` needs `check`, `msix-sign` both, `promote` all three, `publish` `check` and
+     `promote`, `channels` runs only once `publish` says published, `refused` never after it and whenever any job
+     before publication failed. No step builds (a build-push
      action, `docker build`, `buildx build`, a Gradle or pnpm run); only `publish` and `refused` write to the repository
      or a GitHub Release; `<major>` and `latest` are named in `channels` alone. `publish` publishes the draft in one
      step (`draft=false`), after it verifies the files against `veyqctl`'s own identity (`scripts/promote.py
      release-identity`), sets the git tag, moves the draft and attaches every file — after it only the snapshot's tag
      and a replaced draft are deleted. `promote` produces the files with the snapshot commit's own producer (the
      `snapshot` worktree), holds them to the plan (`scripts/promote.py assets`), and only then signs exactly `veyqctl`
-     and the manifest into the producer's reserved bundle names; it packages the chart from the snapshot's commit as
+     and the manifest into the producer's reserved bundle names, and each app file of the manifest's `apps` into its
+     own `<name>.bundle` in one loop over that list; it packages the chart from the snapshot's commit as
      `$VERSION` and signs it. Every job that runs cosign installs publish.yml's cosign first, the Helm pin is the
      pipeline's and publish.yml's (each states it: a caller's env does not reach a called workflow),
      the file states no certificate identity of its own, and no other workflow writes a GitHub Release. What
@@ -138,6 +141,17 @@ manifests, the image signatures, the predicates and the tag each name it.
      (publish.yml's) and a push or a pull request in another (checks.yml's), per ref, never cancelled in progress: two
      publishing runs then go one after the other, so the later one sees the earlier one's tag, and a push neither waits
      for a snapshot nor gets a pending scheduled run cancelled by queueing behind it.
+ 18. **The desktop apps' packages go the images' way, and the MSIX's signer reaches one job** (ADR 0139 decisions 7, 8,
+     10 and 12). `apps-stage` stages exactly `scripts/snapshot.py`'s `APP_PLATFORMS`, each under its file name; the
+     snapshot runs `snapshot.py staged` and `check-unpublished` with `--apps`, names each package
+     `<version>-SNAPSHOT-<platform>` and `sha-<commit>-<platform>` by the digest the Checks run kept and signs it by
+     that digest; the weekly retention covers `veyq-apps`. Every job that runs ORAS installs the one pin (`ORAS_VERSION`,
+     `ORAS_SHA256`, equal in checks.yml, publish.yml and release.yml) checked against its hash first; in release.yml
+     ORAS writes nothing but `oras tag`, in `promote` alone. The environment `msix-signing` is named by release.yml's
+     `msix-sign` and by no other job of any workflow; that job runs on Windows, uses no action but checkout and the
+     artifact actions, and signs in one step running `scripts/msix_sign.py sign` that receives exactly
+     `MSIX_PFX_BASE64` and `MSIX_PFX_PASSWORD` through its env; nothing else in any workflow names them, and no step
+     puts a secret on its command line. What the signing refuses is `scripts/msix_sign_selftest.py`'s.
   8. **The chart is the snapshot's third artifact** (ADR 0064). The refuse step checks `--image` for every published
      image (the build matrix) AND `--chart charts/<name>` (`Chart.yaml`'s `name`) under the workflow's own registry; the
      step that runs `helm package` sets `--version` and `--app-version` to the tree-derived version's `-SNAPSHOT`
@@ -276,6 +290,13 @@ write, the version step staging a pull request, a tag pushed by git, a Helm pin 
 (cr-desktop-app-packaging phase 5, 2026-11-13) came with no incident either; each of its holds was bitten once:
 `packages: write` on a build job, `apps-stage` on every event, a checkout in it, an ORAS push from another job, another
 package pushed, the push step ungated (red on `oras login`, which the write pattern now names), no push at all.
+Assertion 18 came with the release side of the packages (cr-desktop-app-packaging phase 6, 2026-11-13), no incident;
+each hold was bitten once, in a copy of the tree of its own: the environment dropped from `msix-sign`, a signer secret
+in another job's env, another action in `msix-sign`, a secret on a command line, `msix-sign` off Windows or widened
+to `packages: read`, `promote` not waiting for it, `refused` not reading its failure, an ORAS pin that differs, ORAS
+run unverified, an `oras tag` outside `promote` and an `oras cp` in it, the snapshot's `staged` without `--apps`, one
+snapshot name only, the retention without `veyq-apps`, a platform staged under another name, and the app files'
+bundles not signed.
 
 The publishable commit's hold was bought by a live defect (2026-11-08, Publish run 42484798393): main's HEAD
 `3ae1ae01c` and its parent changed only `site/**` and `docs/**`, which checks.yml's push filter ignores, so HEAD had no
@@ -439,7 +460,7 @@ SNAPSHOT_TAG_JOB = "snapshot-tag"
 REFUSE_STEP, TAG_STEP = "assert-snapshot-unpublished", "snapshot-tag"
 STAGED_STEP = "assert-staged"  # publish.yml's check that the bytes are the Checks run's (scripts/snapshot.py staged)
 BUILD_JOB, LOCAL_BUILD_JOB = "build", "build-local"
-# The desktop apps' packages (ADR 0133 decision 10): staged as OCI artifacts under this package by this job alone.
+# The desktop apps' packages (ADR 0139 decision 10): staged as OCI artifacts under this package by this job alone.
 APPS_STAGE_JOB, APPS_PACKAGE = "apps-stage", "veyq-apps"
 ORAS_WRITE = re.compile(r"\boras\s+(?:push|login|tag|attach|cp|copy|manifest\s+push|blob\s+push)\b")
 # Lane L1's orchestrator: assertion 10 finds the lane's job by running it, never by the job's name.
@@ -1271,13 +1292,13 @@ if workflow_doc:
         elif writes:
             fail(f"{rel_of(CHECKS)}: job `{name}` holds `{', '.join(writes)}: write` — no job of checks.yml but the "
                  f"push-only `{BUILD_JOB}` and `{APPS_STAGE_JOB}` may write; a pull request runs every other one")
-    # The desktop apps' packages (ADR 0133 decision 10): ORAS writes in checks.yml from the push-only `apps-stage`
+    # The desktop apps' packages (ADR 0139 decision 10): ORAS writes in checks.yml from the push-only `apps-stage`
     # alone, and only `veyq-apps` there; that job takes the packages the build jobs made as artifacts and checks out
     # nothing, so the token that can write meets no code of the commit (the build jobs, which run it, hold none).
     apps_stage = (checks_doc.get("jobs") or {}).get(APPS_STAGE_JOB)
     if not isinstance(apps_stage, dict):
         fail(f"{rel_of(CHECKS)} has no `{APPS_STAGE_JOB}` job — nothing stages the desktop apps' packages for the "
-             f"snapshot (ADR 0133 decision 10)")
+             f"snapshot (ADR 0139 decision 10)")
     else:
         for step in job_steps(checks_doc, APPS_STAGE_JOB):
             if str(step.get("uses") or "").startswith("actions/checkout@"):
@@ -2172,6 +2193,8 @@ RELEASE_FILE = ROOT / RELEASE_WORKFLOW
 # Each job's permissions, exactly: a job added, or a permission widened, is a decision this guard makes someone take.
 RELEASE_JOBS = {
     "check": {"contents": "write", "packages": "read"},
+    "apps": {"contents": "read", "packages": "read"},
+    "msix-sign": {"contents": "read"},
     "promote": {"contents": "read", "packages": "write", "id-token": "write"},
     "publish": {"contents": "write"},
     "channels": {"contents": "read", "packages": "write"},
@@ -2225,11 +2248,13 @@ else:
         raw = (rjobs.get(job) or {}).get("needs") or []
         return {raw} if isinstance(raw, str) else {str(n) for n in raw}
 
-    for job, needed in (("promote", {"check"}), ("publish", {"check", "promote"}), ("channels", {"check", "publish"}),
-                        ("refused", {"check", "promote", "publish"})):
+    for job, needed in (("apps", {"check"}), ("msix-sign", {"check", "apps"}), ("promote", {"check", "apps", "msix-sign"}),
+                        ("publish", {"check", "promote"}), ("channels", {"check", "publish"}),
+                        ("refused", {"check", "apps", "msix-sign", "promote", "publish"})):
         if not needed <= rneeds(job):
             fail(f"{RELEASE_WORKFLOW}: job `{job}` does not need {sorted(needed - rneeds(job))} — the order is check, "
-                 f"promote, publish, then the channels; `refused` reads all three")
+                 f"the app packages pulled and the MSIX signed, promote, publish, then the channels; `refused` reads "
+                 f"every job before publication")
     channels_if = " ".join(str((rjobs.get("channels") or {}).get("if") or "").split())
     if "needs.publish.outputs.published == 'true'" not in channels_if or "||" in channels_if:
         fail(f"{RELEASE_WORKFLOW}: `channels` runs on `{channels_if}` — `<major>` and `latest` move only once the release "
@@ -2237,6 +2262,10 @@ else:
     refused_if = " ".join(str((rjobs.get("refused") or {}).get("if") or "").split())
     if "needs.publish.outputs.published != 'true'" not in refused_if:
         fail(f"{RELEASE_WORKFLOW}: `refused` runs on `{refused_if}` — it puts a draft back, so never after publication")
+    for job in ("check", "apps", "msix-sign", "promote", "publish"):
+        if f"needs.{job}.result == 'failure'" not in refused_if:
+            fail(f"{RELEASE_WORKFLOW}: `refused` does not run when `{job}` failed (`{refused_if}`) — a promotion that "
+                 f"stops there would leave the draft without a word of why")
 
     for job in rjobs:
         for step in rsteps(job):
@@ -2290,6 +2319,15 @@ else:
     producer = [i for i, line in enumerate(lines) if "/snapshot/scripts/release_assets.py" in line]
     checked = [i for i, line in enumerate(lines) if "scripts/promote.py assets" in line]
     blobs = [(i, line) for i, line in enumerate(lines) if re.search(r"\bcosign\s+sign-blob\b", line)]
+    # The desktop apps' files (ADR 0139 decision 8): one loop over the manifest's `apps`, each file into its own
+    # `<name>.bundle` beside it — the one sign-blob that names no fixed file, read here apart from the two that do.
+    app_loop = [i for i, line in enumerate(lines) if line.startswith("for name in $(jq -r '(.apps // {}) | keys[]'")]
+    app_blobs = [(i, line) for i, line in blobs if re.search(
+        r'--bundle\s+"\$\{out\}/v\$\{VERSION\}/\$\{name\}\.bundle"\s+"\$\{out\}/v\$\{VERSION\}/\$\{name\}"$', line)]
+    if len(app_blobs) != 1 or len(app_loop) != 1 or app_loop[0] + 1 != app_blobs[0][0]:
+        fail(f"{RELEASE_WORKFLOW}: `promote` does not sign each app file of the manifest's `apps` into `<name>.bundle` "
+             f"beside it, in one loop over that list (ADR 0139 decision 8) — a person could not verify a package alone")
+    blobs = [(i, line) for i, line in blobs if (i, line) not in app_blobs]
     bundles = sorted(re.search(r"--bundle\s+\"?[^\s\"]*/([^/\s\"]+)\"?", line).group(1) for _, line in blobs
                      if re.search(r"--bundle\s", line))
     if not producer:
@@ -2648,6 +2686,118 @@ if workflow_doc and checks_doc and version_match:
     except (ValueError, KeyError) as e:
         fail(f"a caller's concurrency group cannot be evaluated here: {e}")
 
+# ---- 18. the desktop apps' packages: named and signed as the snapshot's, signed for Windows by one job alone -----------
+# ADR 0139 decisions 7, 8, 10 and 12. What `apps-stage` pushes (assertion 3) is what a snapshot names and signs and a
+# promotion releases: the platforms and file names are `snapshot.APP_PLATFORMS`, in the stage step and in the
+# producer's reading alike; the snapshot checks the staging tags (`staged --apps`) and refuses to replace its names
+# (`check-unpublished --apps`) before it tags and signs; the retention covers the package. ORAS is one pin everywhere,
+# checked by its SHA-256 before a job runs it; in release.yml it only tags (in `promote`) and pulls. The MSIX's signer
+# — a PFX and its password — is the secret of the environment `msix-signing`, which `msix-sign` alone names, on
+# Windows, with no permission beyond reading the repository and no action beyond checking out and moving artifacts;
+# its secrets reach the signing step's env, never a command line, and nothing else in any workflow names them.
+apps_summary = ""
+sys.path.insert(0, str(ROOT / "scripts"))
+import snapshot as snapshot_rules  # noqa: E402 - the platforms and file names the snapshot and promotion read
+ORAS_PIN = ("ORAS_VERSION", "ORAS_SHA256")
+SIGNING_ENVIRONMENT, SIGNING_JOB = "msix-signing", "msix-sign"
+SIGNING_SECRETS = {"MSIX_PFX_BASE64", "MSIX_PFX_PASSWORD"}
+SIGNING_ACTIONS = {"actions/checkout", "actions/download-artifact", "actions/upload-artifact"}
+release_doc = (yaml.safe_load((ROOT / RELEASE_WORKFLOW).read_text()) or {}) if (ROOT / RELEASE_WORKFLOW).is_file() else {}
+stage_run = "\n".join(str(s.get("run") or "") for s in job_steps(checks_doc, APPS_STAGE_JOB))
+for platform, pattern in snapshot_rules.APP_PLATFORMS.items():
+    if f'["{pattern.format(version="${VERSION}")}"]="{platform} ' not in stage_run:
+        fail(f"{rel_of(CHECKS)}: `{APPS_STAGE_JOB}` does not stage `{pattern}` as `{platform}` — the snapshot and the "
+             f"promotion read exactly scripts/snapshot.py's APP_PLATFORMS, so a package staged otherwise is never released")
+snapshot_runs = "\n".join(str(s.get("run") or "") for s in job_steps(publish_doc, PUBLISH_JOB)).replace("\\\n", " ")
+for command in ("scripts/snapshot.py staged", "scripts/snapshot.py check-unpublished"):
+    line = next((l for l in snapshot_runs.splitlines() if command in l), "")
+    if "--apps " not in line:
+        fail(f"{rel_of(WORKFLOW)}: `{PUBLISH_JOB}` runs `{command}` without `--apps` — the app packages would be named "
+             f"without their staging checked, or over a name another run took")
+snapshot_apps = [s for s in job_steps(publish_doc, PUBLISH_JOB) if "veyq-apps" in str(s.get("run") or "")]
+apps_run = "\n".join(str(s.get("run") or "") for s in snapshot_apps)
+if not (re.search(r'\boras\s+tag\s+"\$\{REGISTRY\}/veyq-apps@\$\{digest\}"\s+"\$\{VERSION\}-SNAPSHOT-\$\{platform\}"\s+'
+                  r'"sha-\$\{COMMIT\}-\$\{platform\}"', apps_run)
+        and re.search(r'\bcosign\s+sign\s+--yes\s+"\$\{REGISTRY\}/veyq-apps@\$\{digest\}"', apps_run)
+        and "app-digests" in apps_run):
+    fail(f"{rel_of(WORKFLOW)}: `{PUBLISH_JOB}` does not name each staged app package `<version>-SNAPSHOT-<platform>` "
+         f"and `sha-<commit>-<platform>` by the digest `apps-stage` kept, and sign it by that digest")
+if "--image veyq-apps" not in "\n".join(str(s.get("run") or "") for s in job_steps(publish_doc, RETENTION_JOB)):
+    fail(f"{rel_of(WORKFLOW)}: `{RETENTION_JOB}` does not cover `veyq-apps` — its staging packages would pile up")
+# ORAS: one pin, verified before it runs, and in release.yml a tag in `promote` and pulls only.
+pins: dict[str, tuple] = {}
+for path, doc in ((CHECKS, checks_doc), (WORKFLOW, publish_doc), (ROOT / RELEASE_WORKFLOW, release_doc)):
+    for job_name, job in (doc.get("jobs") or {}).items():
+        if not isinstance(job, dict):
+            continue
+        steps = [s for s in job.get("steps") or [] if isinstance(s, dict)]
+        runs_oras = [i for i, s in enumerate(steps) if re.search(r"\boras\s+\w", str(s.get("run") or "").replace(
+            '"${RUNNER_TEMP}/oras/oras"', "oras"))]
+        if not runs_oras:
+            continue
+        envs = [job.get("env") or {}] + [s.get("env") or {} for s in steps]
+        pin = next(((e.get(ORAS_PIN[0]), e.get(ORAS_PIN[1])) for e in envs if ORAS_PIN[0] in e), (None, None))
+        pins[f"{rel_of(path)}:{job_name}"] = pin
+        installs = [i for i, s in enumerate(steps) if "${ORAS_SHA256}" in str(s.get("run") or "")
+                    and re.search(r"sha256sum\s+(?:-c|--check)", str(s.get("run") or ""))]
+        if not installs or min(installs) > min(runs_oras):
+            fail(f"{rel_of(path)}: job `{job_name}` runs ORAS before installing the pinned tarball checked against "
+                 f"`ORAS_SHA256`")
+        if path == ROOT / RELEASE_WORKFLOW:
+            for s in steps:
+                body = str(s.get("run") or "")
+                if re.search(r"\boras\s+(?:push|attach|cp|copy|manifest\s+push|blob\s+push|manifest\s+delete)\b", body):
+                    fail(f"{RELEASE_WORKFLOW}: job `{job_name}` writes with ORAS (`{s.get('name')}`) — a release builds "
+                         f"and pushes nothing; it only names what the snapshot holds (`oras tag`, in `promote`)")
+                if re.search(r"\boras\s+tag\b", body) and job_name != "promote":
+                    fail(f"{RELEASE_WORKFLOW}: job `{job_name}` tags with ORAS — only `promote` gives release names")
+if len(set(pins.values())) != 1 or None in next(iter(pins.values()), (None,)):
+    fail(f"the ORAS pin differs, or a job that runs it states none: {pins} — one ORAS stages, names and releases the "
+         f"app packages (ADR 0139 decision 10), each copy checked against the same SHA-256")
+# The MSIX's signer: one environment, one job, its secrets in that job's signing step's env and nowhere else.
+rjobs_all = release_doc.get("jobs") or {}
+for name, job in rjobs_all.items():
+    env_name = (job or {}).get("environment")
+    env_name = env_name.get("name") if isinstance(env_name, dict) else env_name
+    if (name == SIGNING_JOB) != (env_name == SIGNING_ENVIRONMENT) or (name != SIGNING_JOB and env_name):
+        fail(f"{RELEASE_WORKFLOW}: job `{name}` names the environment `{env_name}` — `{SIGNING_ENVIRONMENT}`, whose "
+             f"secrets are the MSIX's signer, is `{SIGNING_JOB}`'s alone, and no other job names one")
+sign_job = rjobs_all.get(SIGNING_JOB) or {}
+if not str(sign_job.get("runs-on") or "").startswith("windows-"):
+    fail(f"{RELEASE_WORKFLOW}: `{SIGNING_JOB}` runs on `{sign_job.get('runs-on')}` — signtool signs on Windows")
+sign_steps = [s for s in sign_job.get("steps") or [] if isinstance(s, dict)]
+for s in sign_steps:
+    uses = str(s.get("uses") or "").split("@", 1)[0]
+    if uses and uses not in SIGNING_ACTIONS:
+        fail(f"{RELEASE_WORKFLOW}: `{SIGNING_JOB}` uses `{uses}` — the job that holds the signing key runs no action but "
+             f"{sorted(SIGNING_ACTIONS)}")
+signers = [s for s in sign_steps if "scripts/msix_sign.py sign" in str(s.get("run") or "")]
+secret_env = {k for s in signers for k, v in (s.get("env") or {}).items() if "secrets." in str(v)}
+used = {m for s in signers for v in (s.get("env") or {}).values() for m in re.findall(r"secrets\.(\w+)", str(v))}
+if len(signers) != 1 or used != SIGNING_SECRETS or len(secret_env) != len(SIGNING_SECRETS):
+    fail(f"{RELEASE_WORKFLOW}: `{SIGNING_JOB}` does not sign in one step running `scripts/msix_sign.py sign` that "
+         f"receives exactly {sorted(SIGNING_SECRETS)} through its env (it receives {sorted(used)})")
+for path in sorted(WORKFLOW.parent.glob("*.y*ml")):
+    doc = yaml.safe_load(path.read_text()) or {}
+    for name, job in (doc.get("jobs") or {}).items():
+        env_name = (job or {}).get("environment")
+        env_name = env_name.get("name") if isinstance(env_name, dict) else env_name
+        if env_name == SIGNING_ENVIRONMENT and (path != ROOT / RELEASE_WORKFLOW or name != SIGNING_JOB):
+            fail(f"{rel_of(path)}: job `{name}` names the environment `{SIGNING_ENVIRONMENT}` — its secrets are the MSIX's "
+                 f"signer, which `{RELEASE_WORKFLOW}`'s `{SIGNING_JOB}` alone receives")
+        steps = [s for s in (job or {}).get("steps") or [] if isinstance(s, dict)]
+        for s in steps:
+            if "${{ secrets." in str(s.get("run") or ""):
+                fail(f"{rel_of(path)}: job `{name}`, step `{s.get('name')}` puts a secret on its command line")
+        # the job as a whole — its env, its `with:`s, every step — but the one signing step
+        rest = {**(job or {}), "steps": [s for s in steps if not (path == ROOT / RELEASE_WORKFLOW and s in signers)]}
+        if re.search(r"MSIX_PFX", yaml.safe_dump(rest)):
+            fail(f"{rel_of(path)}: job `{name}` names the MSIX signer's secrets outside `{SIGNING_JOB}`'s signing step — "
+                 f"only that step receives them")
+apps_summary = (f"; the app packages ({', '.join(snapshot_rules.APP_PLATFORMS)}) are staged, named and signed by "
+                f"digest, one ORAS pin ({next(iter(pins.values()), ('?',))[0]}) checked by its hash, and the MSIX's "
+                f"signer reaches `{SIGNING_JOB}` alone through `{SIGNING_ENVIRONMENT}`")
+
 if not written_tags and not errors:
     # A guard that checked nothing and a guard whose subject is sound report the same green.
     fail(
@@ -2674,5 +2824,5 @@ print(
     f"the {len(recipe_assets)} recipe file(s) the derivation names ({', '.join(recipe_assets)}), {written_tags} written-down image "
     f"tag(s) name a shape the pipeline emits, and the production stack names its own project "
     f"(`name: {prod_project}`) with nothing in durable state instructing the flag it replaced{verify_summary}"
-    f"{release_summary}{pip_summary}{publish_summary}"
+    f"{release_summary}{pip_summary}{publish_summary}{apps_summary}"
 )

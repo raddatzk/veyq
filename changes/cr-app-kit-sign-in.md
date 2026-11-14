@@ -3,19 +3,19 @@ id: cr-app-kit-sign-in
 title: Sign in with the Emergency Kit on every app — the kit read in the core, its page drawn by the platform, its QR scanned on a phone
 status: planned
 satisfies: ["en.account.key-model", "uc.account.unlock"]
-adrs: ["0130", "0131", "0047", "0123", "0059"]
+adrs: ["0136", "0137", "0047", "0123", "0059"]
 invariants:
   - operator-blind E2EE — the kit is read on the device only; nothing of it (file, page, frame, token, Secret Key) reaches the server or any other host; the sign-in sends what a typed sign-in sends
   - no plaintext at rest but where the person saves it (ADR 0047, carried to the apps) — no app copies the kit file, a drawn page or a camera frame to a cache, temp or log; the bytes are read into memory, capped, and zeroed where the language lets us
-  - every rule is the core's (ADR 0130 decision 1) — the token's decode, the read order, steps 1, 2 and 4 and the QR decoder are one Kotlin implementation; a platform only picks, draws a page or a picture, and runs a camera
-  - the bridge only carries (ADR 0131; SecretFreeSchemaTest) — no Secret Key, token or kit byte travels outward; the host's drawn pixels ride inward beside a reply, never in JSON
+  - every rule is the core's (ADR 0136 decision 1) — the token's decode, the read order, steps 1, 2 and 4 and the QR decoder are one Kotlin implementation; a platform only picks, draws a page or a picture, and runs a camera
+  - the bridge only carries (ADR 0137; SecretFreeSchemaTest) — no Secret Key, token or kit byte travels outward; the host's drawn pixels ride inward beside a reply, never in JSON
   - no new dependency that is deprecated, vendor-locked or closed (root CLAUDE.md), each checked and recorded where it is added
   - the web's kit import and the Android/Apple/desktop sign-ins without a kit behave as before; `./gradlew :core:jvmTest :core:macosArm64Test :bridge:jvmTest` and both desktops' `run.py build` stay green in every phase
 ---
 
 ## Goal
 
-Inbox #842 (owner 2026-11-12: after Depot, before Memories). Today only the web reads an Emergency Kit; on the apps a
+Inbox #900 (owner 2026-11-12: after Depot, before Memories). Today only the web reads an Emergency Kit; on the apps a
 person types the server, the email and 54 characters of Secret Key. This CR lets every app — Android, iOS/iPadOS and
 macOS (the Apple app), Linux (GTK 4/Rust over the bridge) and Windows (WinUI 3/C# over the bridge) — take the kit
 instead:
@@ -36,14 +36,14 @@ are the person's notes).
 ## Context & constraints
 
 - **Substrate:** branch `claude/windows-cr-f6c73c` at `d313c1f4f` (the Depot CR harvested and deleted, tree clean).
-  Depot's PDF renderers on all four platforms and the bridge's path-based file reads (ADR 0131 decision 3) are this CR's
+  Depot's PDF renderers on all four platforms and the bridge's path-based file reads (ADR 0137 decision 3) are this CR's
   floor.
 - **Read first:**
   - `docs/features/account/enablers/en.account.key-model.md` § The Emergency Kit (the token, "the server is a hint,
     never a check", the web's fallback chain) and § The Secret Key's text form;
   - `docs/features/account/use-cases/uc.account.unlock.md` main flow step 1 and Quality notes (*One Secret-Key control*,
     *A kit from the wrong account warns*, *A kit made at another address says where*);
-  - ADR 0130 (decisions 1, 2, 4, 5), ADR 0131 (all four decisions), ADR 0047's Consequences (*The apps hold the same
+  - ADR 0136 (decisions 1, 2, 4, 5), ADR 0137 (all four decisions), ADR 0047's Consequences (*The apps hold the same
     rule*), ADR 0123 decision 9 (each platform's guideline), ADR 0059 (device linking — the other user of a QR);
   - `src/mobile/CLAUDE.md` whole: Prove your work, each platform's guidelines, the traps;
   - the web as the reference: `src/web/src/features/account/emergencyKit/emergencyKit.ts` (`importKitFromFile`,
@@ -67,7 +67,7 @@ are the person's notes).
   Its phases 4–5 have landed too (re-read at phase 7, 2026-11-13): Android's `QrCamera` (CameraX) and Apple's
   `QrCamera`/`QrCameraView` (AVFoundation) over a `QrScan`, each with its debug test camera, and the bridge's `Scan.*`
   calls with one kind, `SCHEME` — a `kit` kind was left to this CR, and joins in phase 9 with the desktops' file entry.
-  **Shared files:** both CRs extend ADR 0131 (that CR decision 1 with a call's inbound payload, this one decision 3 with a
+  **Shared files:** both CRs extend ADR 0137 (that CR decision 1 with a call's inbound payload, this one decision 3 with a
   host reply's drawn page, D6), `docs/crosscutting/native-apps.md` § Built and `src/mobile/CLAUDE.md`; each writes its own sentence or bullet, and
   the second to implement starts from the first's commit.
 - **Where what runs** (as in the Depot CR): the Kotlin on this Mac; Linux in the container (`linux/run.py run --port
@@ -152,7 +152,7 @@ multi-page PDF a few MB; a larger file is refused unread, never read whole):
 core's reader cannot follow answers "nothing here" and the order continues.
 - **Why the platform draws and the core decides:** drawing a PDF needs a full renderer (fonts, images, transforms), and
   each platform already ships one (R3); everything else — where to look, in which order, how wide, how many pages, what
-  counts — is a rule and so the core's (ADR 0130 decision 1). Rejected: a PDF renderer in the core (a second renderer
+  counts — is a rule and so the core's (ADR 0136 decision 1). Rejected: a PDF renderer in the core (a second renderer
   beside four that exist, and pdfium/MuPDF are C libraries with their own CVE stream); the platform's own metadata API for
   step 2 (`PDFDocument.documentAttributes`, poppler's `keywords()`) — Android's `PdfRenderer` and `Windows.Data.Pdf` have
   none, so step 2 would be two implementations and two missing.
@@ -200,7 +200,7 @@ core's reader cannot follow answers "nothing here" and the order continues.
 - **The other-server notice** (uc.account.unlock's *A kit made at another address says where*): where the kit's server
   replaced a server the form already held that was different, the state says so as information (R9's `kitOtherServer`
   shape: made at, typed); never a refusal.
-- **Why the model holds it:** the bridge may carry nothing secret outward (ADR 0131, `SecretFreeSchemaTest`), and the
+- **Why the model holds it:** the bridge may carry nothing secret outward (ADR 0137, `SecretFreeSchemaTest`), and the
   phones' UIs have no more reason to hold the key than the desktops' — the person never needs to see it. One rule on all
   four keeps one test.
 
@@ -216,7 +216,7 @@ core's reader cannot follow answers "nothing here" and the order continues.
   `tmp/Inbox`). `KitPictures` over `PDFDocument(data:)` and `CGImageSource`, drawn into an 8-bit grey `CGContext`.
 - On both, the `ByteArray`/`Data` is let go after the read, the Kotlin side zeroed.
 
-### D6 — The desktops hand a path; the core asks the host to draw (ADR 0131 extended inward)
+### D6 — The desktops hand a path; the core asks the host to draw (ADR 0137 extended inward)
 
 - `Call.SignInKit(path)` → the core reads the file by path under `KIT_FILE_CAP` (`FileSource`, as `Editor.AddReceipts`
   does) and runs D2 with a `KitPictures` the bridge implements as **host requests**: `HostRequest.Pdf.Pages(path)`,
@@ -228,7 +228,7 @@ core's reader cannot follow answers "nothing here" and the order continues.
   `StorageFile.GetFileFromPathAsync` → `PdfDocument.LoadFromFileAsync` / `BitmapDecoder`, rendered into an
   `InMemoryRandomAccessStream`, never a file.
 - **What crosses:** inward a path (as every picked file does) and pixels in a reply's payload; outward a path and a
-  page number. No kit byte, token or key crosses outward. This is new for ADR 0131 decision 3 ("nothing of a file's
+  page number. No kit byte, token or key crosses outward. This is new for ADR 0137 decision 3 ("nothing of a file's
   content crosses the bridge"): a drawn page's pixels do, inward, because only the host can draw — recorded there in
   phase 10.
 - **Why the core asks rather than the host looping:** the order (D2) stays one function on all four apps; the phones
@@ -283,7 +283,7 @@ From `src/mobile` unless named:
 
   **Status: done (2026-11-13).**
   **Built:** `en.account.key-model` § The Emergency Kit — two writers and **two readers** (the web; the apps, their read
-  in the core, ADR 0130 decision 1), and a bullet with the apps' order (a)–(d): step (d) only where the token has no
+  in the core, ADR 0136 decision 1), and a bullet with the apps' order (a)–(d): step (d) only where the token has no
   `srv`, fields 2 and 3 never read, the printed text never read, the scan wherever an app has a camera, the platform only
   picks, draws and runs the camera. `uc.account.unlock` step 1 names the apps' sign-in as a place the one control holds
   (file and scan, email and server filled, the key held) and *One Secret-Key control* lists it. Beside the two, from the
@@ -292,7 +292,7 @@ From `src/mobile` unless named:
   **Met:** the guard loop (`for f in scripts/validate_*.py; do /usr/bin/python3 "$f" || echo "RED $f"; done`, guard_gaps
   skipped) showed no RED before the edit (this worktree at `089980f3a`, clean) and none after;
   `git grep -n -iE "one reader|only .web. reads|reads it, at unlock|is the only reader" -- docs site src/packages` → only
-  ADR 0132's unrelated "one reader" (a picture reader).
+  ADR 0138's unrelated "one reader" (a picture reader).
 
 - [x] **2 core — the token codec.** D1: `EmergencyKit.read`, the origin check, `Conformance` reading
   `emergency_kit_token`'s cases and refused tokens on the JVM (BouncyCastle) and over libsodium.
@@ -486,7 +486,7 @@ From `src/mobile` unless named:
   `QrEncoder`-drawn pages. `PdfBoxPictures.picture` answers null (every fixture is a PDF); the picture path's real decode
   is `aPictureGoesStraightToItsQr`'s.
 
-- [ ] **6 Android + Apple — pick the kit.** D5 and D8: the button on both sign-ins (iPhone, iPad, macOS, Android phone
+- [x] **6 Android + Apple — pick the kit.** D5 and D8: the button on both sign-ins (iPhone, iPad, macOS, Android phone
   and tablet), `KitPictures` per platform, the Secret Key row's "from your Emergency Kit" state with its clear, the
   notices. Neither app has a unit-test target that draws a page today (`src/mobile/CLAUDE.md` § Prove your work names
   none), so the pass below is the platform drawing's proof; the order itself is phase 3's and 5's.
@@ -498,8 +498,8 @@ From `src/mobile` unless named:
   simulator's app container `tmp`/`Library/Caches` listed after the picks show nothing of the kit; that measurement
   bitten once by a planted file (B15).
 
-  **Status: built and passed up to the sign-in (2026-11-13); the signing in with a dev kit is pending (the dev backend
-  was down and not to be started by this phase) — the box stays open until it is green.**
+  **Status: done (2026-11-13): built, the fixtures read on all three, and the dev kit picked by hand in each platform's
+  picker signed in to the shell (the live pass at Met's end).**
   **Built:** words `signin_kit_open` ("Open Emergency Kit" / "Notfall-Kit öffnen"), `signin_kit_held` ("From your
   Emergency Kit" / "Aus deinem Notfall-Kit"), `signin_kit_clear` ("Enter it instead" / "Stattdessen eingeben", Apple
   Title Case) and `signin_kit_other_server` (the web's `kitOtherServer` turned to the app's case: the kit's server
@@ -556,6 +556,19 @@ From `src/mobile` unless named:
   and the three pickers clicked once by hand (Android's was).
   **Bites:** B15 as above (three platforms); B19 `WIDTHS` without the fallback → `aPageThatReadsNothing…`,
   `theQrIsLookedFor…`, `aForeignQrIsPassed…` and the fixture premise red, restored with `/bin/cp -f`, compared equal.
+  **Live pass (2026-11-13, the dev backend up; measured):** the dev kit written by `DevKitTest` (`VEYQ_DEV_KIT_OUT=<scratch>
+  ./gradlew :core:jvmTest --tests '*DevKitTest*'`: `dev-kit.pdf`, the principal's token in `Keywords` as
+  `LiveSignInTest` builds it, server `http://veyq.localhost:8080`; removed after), the password handed by the new
+  `devlogin.py --kit` (Android extra `veyq.devKitPassword`, Apple `VEYQ_DEV_KIT_PASSWORD`, debug builds only: it waits for
+  the kit the sign-in holds and then signs in as the button does, with an empty Secret Key). **Android** (throwaway AVD,
+  Pixel 8, API 36, deleted after): the kit `adb push`ed to Downloads, "Open Emergency Kit" tapped, picked in DocumentsUI →
+  logcat `veyq-kit: dev kit sign-in: kit held, server from TOKEN; signing in`, `gate Signed`, the shell's lists (read by
+  `uiautomator dump`); the kit removed from Downloads after. **iOS** (throwaway iPhone 18 Pro, iOS 27, deleted after): the
+  kit in Files' "On My iPhone", "Notfall-Kit öffnen" tapped, the Files sheet's Browse → `dev-kit` tapped (the iOS Simulator
+  tool) → `kit held, server from TOKEN`, `gate Signed`, the offer answered "Nicht jetzt". **macOS** (the ad hoc debug build):
+  "Notfall-Kit öffnen" → the open panel (Go to Folder for the copy under `~/Downloads/veyq-pass-kit/`, removed right after) →
+  Öffnen → `kit held`, `gate Signed`, the offer answered "Nicht jetzt". The principal is at its device-trust limit, so no
+  device was trusted (`409`, logged), as expected. Each session was signed out from Settings afterwards.
 
 - [ ] **7 the core, Android and Apple — scan the kit.** **Split (the coordinator, 2026-11-13):** this phase is the core
   and the phones' and the Mac's scan; the desktops' (Linux and Windows scanning a kit through the bridge's `Scan.*` with
@@ -639,6 +652,14 @@ From `src/mobile` unless named:
   above). (3) No tap on iOS or macOS: the sheet was opened by `VEYQ_DEV_KIT_SCAN` (the button's same call), the
   simulator tool and computer use not used; the Android entry was tapped. (4) The live sign-in is phase 4's, green since 2026-11-13;
   a scan's held key signs in as a file's (the unit case proves the hand-over).
+  **Live pass, scan → sign in (2026-11-13, the dev backend up; measured):** the dev kit's QR (`DevKitTest`'s
+  `dev-kit-qr.png`, padded to a 1280×720 RGB frame) with `devlogin.py --kit`. **Android** (the throwaway AVD above, its
+  virtual scene's wall poster set to that frame, the scene camera moved over gRPC to POSITION -0.55 0.3 3.9, ROTATION 0 180 0
+  — `-0.15 …` of the earlier pass left the code outside the frame): "Scan Emergency Kit" tapped, camera allowed →
+  `decoded 640x480 in 322.6 ms, a code read`, `Found(value=TOKEN)`, `dev kit sign-in: kit held … signing in`, `gate
+  Signed`. **iOS** (the throwaway simulator, `VEYQ_DEV_CAMERA=<frame>`, `VEYQ_DEV_KIT_SCAN=1`): `decoded 1280x720 in
+  19.1 ms`, `Found(value=TOKEN)`, `gate Signed`. **macOS** (the same variables on the binary): `Found(value=TOKEN)`, `gate
+  Signed`. Signed out after each.
   **Owner steps (pending):** a real iPhone (the sign-in's "Notfall-Kit scannen" over a printed fixture kit → the form
   filled); this Mac's camera (`VEYQ_DEV_KIT_SCAN=1 <build>/Debug/veyq.app/
   Contents/MacOS/veyq`, allow the camera, a printed kit held up → `veyq-kit: kit held`).
@@ -758,6 +779,32 @@ From `src/mobile` unless named:
   step 1), Windows on a laptop with a camera (its step 2) — the sign-in's "Scan Emergency Kit", a printed fixture held
   up, the dialog closing and the form filled; the debug test camera (`VEYQ_DEV_CAMERA`) through the sign-in's scan was
   not run either.
+  **Pending (1), Linux — met (2026-11-13).** On the Fedora 45 VM's GNOME session, the debug build of this tree run inside
+  the installed Flatpak's sandbox (`cr-desktop-app-packaging` phase 2's signed-in pass, how and why there), against the
+  dev backend: a kit PDF built from the principal's credentials as `LiveBridgeTest.aKitSignsIn*` builds it (`{v: 3,
+  email, sk, srv}` in `Keywords`, `srv` the typed `http://veyq.localhost:8080`; written mode 600, never printed) under
+  `~/veyq-spike/kit/`; the form filled by `run.py`'s `--devlogin --fill` values (so the password is never typed); "Open
+  Emergency Kit" → the **portal's** chooser → the kit → `kit picked: Ok(Done)`, the Secret Key row "From your Emergency
+  Kit — Enter it instead" (no other-server notice: the kit's server is the typed one); the kit file deleted; "Sign in" →
+  `session Signed` (the trust offer, the account at its limit, `add wrap 409`), "Not now" → **the shell** (Home of
+  "Familie Raddatz", the shot). English, light. Still open in this phase: the camera scans. The
+  kit was found afterwards in **GNOME's indexer** database (`~/.cache/tracker3`: the indexer reads `~` recursively, so a
+  kit put anywhere under it is indexed, as the fixtures in `~/Documents` were before) — the database removed, then no
+  `veyqkit:` under `~/.cache` or `~/.local`. A pass's kit belongs outside the indexed tree (`/tmp`, which the chooser
+  reaches by its path) next time.
+  **Pending (1) on Windows — met 2026-11-13** (the VM, **UAC on**, the dev backend up; `run.py run --devlogin --fill`,
+  de-DE dark): a dev kit built as `LiveBridgeTest.aKitSignsIn…` builds it (the principal's email and Secret Key and the
+  origin in a minimal PDF's `/Keywords`, made on the Mac and copied to `%TEMP%\veyq-kit` on the VM) picked in the open
+  picker → `kit picked: Done`, the form "Aus deinem Notfall-Kit" / "Stattdessen eingeben" with the Secret Key field gone
+  and the password `--fill`'s (never typed by the agent), Anmelden → `session Signed` → the shell (Familie Raddatz, Home);
+  shots `kit-1-held-de-dark.png`, `kit-2-signed-de-dark.png`. The kit and its folder removed after. Two defects found and
+  fixed on the way: (a) `Veyq.Drive type` into the open picker's file name typed nothing — the name is an Edit inside a
+  ComboBox of the same AutomationId (`1148`), and the ComboBox, found first, took the focus (two empty reads in the tree);
+  `type` now reaches the ComboBox's Edit (the path then read back in the tree). (b) After "Sign out" the sign-in still held
+  the password (and, after a non-kit sign-in, the Secret Key): the view is built once per window. `SignInView.Forget`,
+  called whenever the gate is not `SignIn` (Linux's `SignIn::forget`); bitten: the build without it showed
+  `#signin-password` filled after Settings' Sign out (de-DE dark), with it both fields read `""` (en-US light,
+  `signin-forgotten-en-light.png`). Still pending on Windows: the camera scan (a laptop with a camera, owner step 2).
   **Deviations:** (1) Windows reads the path through a `FileStream` (`AsRandomAccessStream`), not
   `StorageFile.GetFileFromPathAsync`: no broker, the same bytes, so the CR's first measurement fell away. (2) The Linux
   pass ran on the Fedora VM's GNOME (the portal's chooser, a real session) rather than in Broadway, whose GTK chooser
@@ -765,8 +812,8 @@ From `src/mobile` unless named:
   `~`, `/tmp`, `/var/tmp` on the VM, not `/` in the container.
 
 - [ ] **10 docs and harvest.** `docs/crosscutting/native-apps.md` § Built (Account and session: the kit, by file on all
-  four, by camera wherever the app has one, each measured pass with its date); ADR 0131 decision 3 (a drawn page's pixels ride inward
-  beside a host reply, and why); ADR 0130's Consequences (the kit's read order is the core's, the drawing the platform's);
+  four, by camera wherever the app has one, each measured pass with its date); ADR 0137 decision 3 (a drawn page's pixels ride inward
+  beside a host reply, and why); ADR 0136's Consequences (the kit's read order is the core's, the drawing the platform's);
   ADR 0047's apps bullet (a picked kit is read in memory and never copied); `src/mobile/CLAUDE.md` § Prove your work (the
   new tests and live cases); every code comment that names this CR repointed at the ADR or doc that states the decision;
   the retrospective; the CR deleted.
@@ -778,7 +825,7 @@ Every app's sign-in takes a kit file (all four: Android, the Apple app on iPhone
 wherever the app has a camera, a scanned kit, and fills email, server and a held Secret Key so only the password is
 typed; the read order, the token's decode and steps 1, 2 and 4 are core code held to the vectors' `emergency_kit_token`
 and the web's three fixtures on every `:core:jvmTest`; each bite B1–B18 was seen red once; no pass found a kit's copy on
-any app's disk; `en.account.key-model`, ADR 0130/0131/0047 and `native-apps.md` say what was built. No site page changes
+any app's disk; `en.account.key-model`, ADR 0136/0137/0047 and `native-apps.md` say what was built. No site page changes
 (R10, owner question 3); `docs/coverage/` has no app surface (`SURFACES` in `scripts/validate_coverage.py`), so the apps'
 proof is the tests and passes `src/mobile/CLAUDE.md` § Prove your work names — said there in phase 10.
 

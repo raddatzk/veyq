@@ -42,12 +42,12 @@ channel, stated honestly.
 4. On **save** the server validates the template against the closed variable set (an unknown `{{tag}}` ⇒
    `400 invalid_mail_template`), **seals** the password under the config-secret KEK (ADR 0050), and stores the
    row. The password is never returned or logged; a re-read shows only `passwordSet`.
-5. From then on, a new **member** invite ([uc.spaces.add-member](../../spaces/use-cases/uc.spaces.add-member.md)) is
-   rendered from the tenant's template (or veyq's default) over `{link, domain, expiry}` and sent from the tenant's
+5. From then on, a new **mailed member** invite ([uc.spaces.add-member](../../spaces/use-cases/uc.spaces.add-member.md);
+   a link invite the owner hands over sends nothing, though it needs the relay too) is rendered from the tenant's template (or veyq's default) over `{link, domain, expiry}` and sent from the tenant's
    own address; the raw link still rides the URL **fragment** ([ADR 0020](../../../decisions/0020-grant-distribution-invite-wrap.md)).
 6. A save that leaves the relay able to send **offers, once, a confirmation mail to the owner's own address**
    ([uc.account.confirm-email-address](../../account/use-cases/uc.account.confirm-email-address.md)). It is offered,
-   never sent unasked. The owner admitted by the bootstrap copy-link is the one account whose address nothing has
+   never sent unasked. The owner admitted by the bootstrap copy-link is an account whose address nothing has
    proven, and a mail to themselves is also the first proof that this relay reaches anyone
    ([ADR 0074](../../../decisions/0074-address-control-is-recorded-where-nothing-else-proves-it.md)).
 
@@ -62,8 +62,9 @@ channel, stated honestly.
   minted for a named other person must not be routed through the owner
   ([ADR 0055](../../../decisions/0055-mail-is-a-precondition-not-a-capability.md)). The bar is deliberately low —
   an auth-less LAN relay is enough.
-- **The owner-bootstrap invite** ([uc.admin.create-tenant](uc.admin.create-tenant.md)) stays copy-link, and is the
-  only one that does: a PENDING tenant has no owner yet to configure SMTP, and there is no server-level default.
+- **The owner-bootstrap invite** ([uc.admin.create-tenant](uc.admin.create-tenant.md)) stays copy-link, the only
+  invite that falls back to one: a PENDING tenant has no owner yet to configure SMTP, and there is no server-level
+  default. (A member invite as a link is a way the owner chooses, not a fallback, and is refused without mail too.)
 - **A template references an unknown `{{tag}}`** → rejected at save (`400 invalid_mail_template`), never stored, so
   a malformed template can never reach send time.
 - **Host, port or TLS changes and the password field is left empty while one is stored** → refused at save

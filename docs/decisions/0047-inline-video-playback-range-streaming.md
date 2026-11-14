@@ -196,15 +196,17 @@ video is made later, by a device that holds the key
   Rejected: on the server — it holds no plaintext (operator-blind), and a transcoder would be a heavy dependency on a
   small self-hosted instance; in the editor's browser tab — a long video is a long job there, and the worker queue
   serves the gallery as well.
-- **One fixed target, not a ladder:** H.264 (the codec every engine plays), long edge 1280, about 2 Mbit/s, the source's
-  frame rate capped at 30, the sound kept where the source has it. Rejected: adaptive streaming — the copy streams
+- **One fixed target, not a ladder:** H.264 (the codec every engine plays), long edge 1920, about 5 Mbit/s, the source's
+  frame rate capped at 30, the sound kept where the source has it. The size is the lightbox's, as an image's preview is (2048): the gallery plays the copy and fetches the original
+  only to download it ([ADR 0132](0132-a-content-job-runs-on-a-members-own-device-and-adds-its-result-to-the-object-later.md) decision 9; owner 2026-11-13: 1920, not 1280, which looks soft full-screen). Rejected: adaptive streaming — the copy streams
   through this shim as any blob does, so a ladder buys nothing but storage.
 - **Additive, never a replacement in place.** The copy goes into a slot of its own beside the original; a reader that
   does not know it plays the original. Rejected: writing the copy into the original's slot — every reader that
   predates the copy would then find other bytes than the slot promised.
 
-Still open, settled with the worker queue: whether a small tier for every gallery video is made, at upload or lazily
-(inbox #493), and whether a banner's original is dropped once its copy exists.
+Which videos get one, and when, is [ADR 0132](0132-a-content-job-runs-on-a-members-own-device-and-adds-its-result-to-the-object-later.md) decision 9: every video, made after its upload by a worker of the
+queue, stored videos too; the gallery then plays the copy and fetches the original only to download it, as for an image.
+Still open: whether a banner's original is dropped once its copy exists.
 
 ## Consequences
 
@@ -221,11 +223,11 @@ Still open, settled with the worker queue: whether a small tier for every galler
   same decrypted ranges through the platform equivalent. This ADR governs the **web** playback path (the current
   V1 priority); it does not bind native to a SW.
 - **The apps hold the same rule: no plaintext at rest but where the person saves it** (2026-11-12, Depot on every app;
-  [ADR 0130](0130-an-apps-logic-is-the-kotlin-cores-each-platform-draws-only-its-own-ui.md)'s Consequences for the core's
+  [ADR 0136](0136-an-apps-logic-is-the-kotlin-cores-each-platform-draws-only-its-own-ui.md)'s Consequences for the core's
   file page). An image, a text and a PDF are held in memory only, each capped; a medium is streamed through the core's
   `RangeReader`, only the frames a range needs decrypted, in a bounded cache per page. Android plays through a
   `MediaDataSource` over it and renders a PDF from a `memfd`; Apple plays through an `AVAssetResourceLoader` and opens a
-  PDF from `Data`; Linux plays a `gio::InputStream` and Windows a seekable stream over it ([ADR 0131](0131-the-bridge-carries-shown-bytes-beside-the-json-ranges-through-a-reader-and-files-by-path.md)
+  PDF from `Data`; Linux plays a `gio::InputStream` and Windows a seekable stream over it ([ADR 0137](0137-the-bridge-carries-shown-bytes-beside-the-json-ranges-through-a-reader-and-files-by-path.md)
   decision 2). A decrypted copy is written only where the person chose (a save dialog's path through the core's
   `FileSink`; iOS's `fileMover` from a temporary directory swept at every start) or for a phone's Send a copy, which the
   person asked for and which is swept at the next start. Earlier builds' `view-*` files are swept. Rejected: handing a
@@ -233,6 +235,11 @@ Still open, settled with the worker queue: whether a small tier for every galler
   file "deleted after", which a crash leaves. Measured: `run-as … ls cache` empty during and after every view and playback
   on an Android emulator; `find / -xdev -newer <marker>` in the Linux container and `%TEMP%` on the Windows VM showed
   nothing of a played medium (ADR 0123's Consequences).
+- **Nor does the apps' HTTP stack keep anything** (2026-11-13): the core's clients run with no response cache, no
+  cookie store and no credential store on every engine — ciphertext and metadata are not the stack's to keep either.
+  Measured on an iOS simulator: URLSession's default cache had written 67 answers to `Library/Caches` — blob frames,
+  `members`, `exif`, and `/api/login/verify` with its tokens in clear; after the session was configured to keep
+  nothing, the same pass left none. Per engine in `src/mobile/CLAUDE.md` § Nothing on disk the app did not choose.
 - **A download is whole-blob and sequential**, so it adds no access pattern beyond what a whole-blob read already
   shows. The page must stay open while it runs, since it holds the key.
 

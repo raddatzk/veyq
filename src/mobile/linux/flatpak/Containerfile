@@ -1,4 +1,4 @@
-# Where the Linux app's Flatpak is built (ADR 0133 decision 11): Fedora's own flatpak and flatpak-builder, nothing else.
+# Where the Linux app's Flatpak is built (ADR 0139 decision 11): Fedora's own flatpak and flatpak-builder, nothing else.
 # The runtime, the SDK and the Rust extension are not in the image: `run.py flatpak` installs them from Flathub into a
 # named volume at the commits `runtime.pins` names, so the image holds tools only. It runs with `--privileged`:
 # flatpak-builder runs every build step in bubblewrap, which needs the mount and user namespaces Docker's default

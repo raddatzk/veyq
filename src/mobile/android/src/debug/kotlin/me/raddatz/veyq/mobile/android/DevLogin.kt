@@ -7,7 +7,9 @@ import android.content.Intent
  * credentials arrive as launch extras (`src/mobile/android/devlogin.py` reads them from `.run/.env` and hands them to
  * `adb`), and the app signs in with them through the real sign-in — its offer to stay signed in answered with the
  * presence level with `veyq.devRemember` — or, with `veyq.devUnlockPassword` alone, unlocks the password-trusted account
- * its unlock screen shows and fills "Manage servers"' password field once. A release build has no such door (src/release).
+ * its unlock screen shows and fills "Manage servers"' password field once. With `veyq.devKitPassword` alone (`devlogin.py
+ * --kit`) the password waits for an Emergency Kit the sign-in holds (picked or scanned by the pass) and then signs in as
+ * its button does, with the form's email and server and an empty Secret Key. A release build has no such door (src/release).
  */
 object DevLogin {
     fun from(intent: Intent?): Credentials? {
@@ -22,6 +24,8 @@ object DevLogin {
     }
 
     fun unlockPassword(intent: Intent?): String? = intent?.extras?.getString("veyq.devUnlockPassword")
+
+    fun kitPassword(intent: Intent?): String? = intent?.extras?.getString("veyq.devKitPassword")
 
     class Credentials(val server: String, val email: String, val password: String, val secretKey: String, val remember: Boolean)
 }

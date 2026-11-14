@@ -34,6 +34,7 @@ import {
   type ChunkReply,
   type EndSessionAck,
   type PageToSwMessage,
+  type PlaybackRegistered,
   type RegisterDownloadMsg,
 } from './protocol'
 
@@ -265,6 +266,8 @@ export function handleMessage(registry: PlaybackRegistry, data: unknown, ports: 
     // never gets a handle — whatever the page's own gate did.
     if (ports[0] && isStreamableMediaType(msg.mediaType)) {
       registry.register(msg.handle, new PlaybackSession(msg.chunkCount, msg.byteSize, ports[0], msg.mediaType))
+      // the page waits for this before it sets the element's source: a fetch may otherwise arrive before this message did
+      ports[0].postMessage({ type: 'veyq-playback-registered' } satisfies PlaybackRegistered)
     }
   } else if (msg.type === 'veyq-register-download') {
     if (ports[0] && validDownload(msg)) {

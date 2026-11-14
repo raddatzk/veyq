@@ -1,5 +1,5 @@
 /*
- * The veyq core as a native library (libveyq.so; ADR 0130 decision 5; ADR 0123's Consequences, the bridge): its whole
+ * The veyq core as a native library (libveyq.so; ADR 0136 decision 5; ADR 0123's Consequences, the bridge): its whole
  * surface, written once by hand. BridgeHeaderTest holds it to the header Kotlin/Native writes for the library
  * (libveyq_api.h): the same six functions with the same signatures. The JSON types are generated (bridge.rs, from the
  * core's serial descriptors); never write one by hand.

@@ -5,7 +5,7 @@
 // transport controls, over a MediaSource of ReaderStream: the core's reader read in ranges; Media Foundation and the
 // Store's extensions decode it, and what they cannot is said as not shown here), or what the core says where it shows
 // none — and its facts beneath. Everything is the core's FileModel (File.Open, Watched.File): what shows is decided by the
-// bytes, and an image's and a PDF's bytes come beside the answer (File.Bytes, ADR 0131 decision 1), asked again when the
+// bytes, and an image's and a PDF's bytes come beside the answer (File.Bytes, ADR 0137 decision 1), asked again when the
 // content's revision turns; a medium is read through File.Reader (decision 2). Nothing decrypted is written to show it
 // (ADR 0047).
 //

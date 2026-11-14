@@ -102,6 +102,22 @@ enum DevLogin {
         let env = ProcessInfo.processInfo.environment
         link(model, env)
         if env["VEYQ_DEV_LINK"]?.hasPrefix("signin-") == true { return }
+        // `VEYQ_DEV_KIT_PASSWORD` (`devlogin.py --kit`): the password waits for the kit the sign-in holds — picked by the
+        // pass, read through `VEYQ_DEV_KIT` or scanned — and then signs in as the form's button does: the kit's email and
+        // server (the ones the form takes from it), an empty Secret Key (core's held one)
+        if let password = env["VEYQ_DEV_KIT_PASSWORD"] {
+            Task { @MainActor in
+                for _ in 0..<3000 {
+                    try? await Task.sleep(for: .milliseconds(100))
+                    if case .signIn(let working, _, _, let server, _, let shown) = model.screen, !working, let shown {
+                        NSLog("veyq-kit: dev kit sign-in: kit held, server from %@; signing in", "\(shown.serverFrom)")
+                        model.signIn(server: shown.server ?? server ?? "", email: shown.email, password: password, secretKey: "")
+                        return
+                    }
+                }
+                NSLog("veyq-kit: dev kit sign-in: no kit held within 300 s")
+            }
+        }
         if scansKit {
             Task { @MainActor in
                 for _ in 0..<600 {

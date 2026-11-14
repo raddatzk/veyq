@@ -46,6 +46,7 @@ import me.raddatz.veyq.mobile.session.NodeCover
 import me.raddatz.veyq.mobile.export.NodeExport
 import me.raddatz.veyq.mobile.session.NodeMove
 import me.raddatz.veyq.mobile.session.NodeReport
+import me.raddatz.veyq.mobile.blob.pathName
 import me.raddatz.veyq.mobile.words.Notices
 import me.raddatz.veyq.mobile.words.Notice
 import me.raddatz.veyq.mobile.words.Msg
@@ -78,7 +79,7 @@ internal class Composition<A : Connection, T : Any>(
     /** What this device hides, which the switcher's tenants leave out ([ShellShown.servers]). */
     val hidden: Hidden,
     /**
-     * The files the host names by their paths (ADR 0131 decision 3); a test's composition that writes none has
+     * The files the host names by their paths (ADR 0137 decision 3); a test's composition that writes none has
      * [DeviceFiles.None].
      */
     val files: DeviceFiles = DeviceFiles.None,
@@ -214,7 +215,7 @@ internal class HeldCreate(val sheet: PotCreateSheet) {
 }
 
 /**
- * A file on the device the host named by its path, as its save dialog gave it (ADR 0131 decision 3): the core opens and
+ * A file on the device the host named by its path, as its save dialog gave it (ADR 0137 decision 3): the core opens and
  * writes it, and nothing of its content crosses the bridge. Natively core's `FileSink`; a JVM test plays one.
  */
 internal interface DeviceFiles {
@@ -257,7 +258,7 @@ private class Open<A : Connection>(val models: Tenant, val account: A, val tenan
 /**
  * The dispatch (ADR 0123's Consequences, the bridge): each [Call] is one line onto a model's own function, each
  * [Watched] one model's state flow, and the registry of what is open — the tenant's models, the Pots by id, the watches
- * by id. Nothing here decides anything the person sees: a rule found here is a defect to move into the core (ADR 0130
+ * by id. Nothing here decides anything the person sees: a rule found here is a defect to move into the core (ADR 0136
  * decision 1).
  *
  * Every answer and update is delivered on a core thread ([Dispatchers.Default]); [compose] runs there too, so a host
@@ -611,16 +612,19 @@ internal class Bridge<A : Connection, T : Any>(compose: () -> Composition<A, T>)
                 ?: Answer.Refused(Answer.Why.NO_SUCH_SAVE)
             is Call.FileChooseReplace -> filePages[call.file]?.let { if (it.chooseReplace()) Answer.Done else Answer.Refused(Answer.Why.NO_REPLACE) } ?: noFile
             is Call.UploadFiles -> uploads.value?.let { u ->
-                // each path opened by the core and read at offsets: nothing of a file crosses, none is held whole
-                Answer.Queued(u.upload(call.scopeId, call.parentId, call.label, call.paths.mapNotNull { parts.files.source(it) }))
+                // each path opened by the core and read at offsets: nothing of a file crosses, none is held whole; a path that
+                // does not read is said by name, never dropped unsaid
+                val sources = call.paths.map { it to parts.files.source(it) }
+                val notRead = sources.filter { it.second == null }.map { pathName(it.first) }
+                Answer.Queued(u.upload(call.scopeId, call.parentId, call.label, sources.mapNotNull { it.second }), Notices.notRead(notRead))
             } ?: noTenant
             is Call.UploadFolder -> uploads.value?.let { u ->
-                val found = parts.files.walk(call.path) ?: return Answer.Refused(Answer.Why.NO_SUCH_PATH)
+                val found = parts.files.walk(call.path) ?: return Answer.Said(Notices.notRead(listOf(pathName(call.path))))
                 Answer.Queued(u.uploadFolder(call.scopeId, call.parentId, null, call.path, found))
             } ?: noTenant
             is Call.UploadReplace -> uploads.value?.let { u ->
                 val page = filePages[call.file] ?: return noFile
-                val source = parts.files.source(call.path) ?: return Answer.Refused(Answer.Why.NO_SUCH_PATH)
+                val source = parts.files.source(call.path) ?: return Answer.Said(Notices.notRead(listOf(pathName(call.path))))
                 if (u.replace(page, source)) Answer.Queued(1) else Answer.Refused(Answer.Why.NOT_CHOSEN)
             } ?: noTenant
             is Call.UploadCancel -> uploads.value?.cancel(call.item).done()
@@ -929,7 +933,7 @@ internal class Bridge<A : Connection, T : Any>(compose: () -> Composition<A, T>)
     }
 
     /**
-     * A code drawn by the core for a host to show (the QR CR's D2, ADR 0131 decision 1): [text] encoded (`QrEncoder`, level
+     * A code drawn by the core for a host to show (the QR CR's D2, ADR 0137 decision 1): [text] encoded (`QrEncoder`, level
      * M, its quiet zone) and written as a 1-bit greyscale PNG (`QrPng`) at the largest whole scale that keeps its side
      * within [px] (at least 1, at most `QrPng.MAX_SIDE`), handed to [payload] and answered `Bytes(image/png)`. The door of
      * every call that answers a code as a picture — a device link's `Link.Code` (its CR) the first —, so the text a code
@@ -944,7 +948,7 @@ internal class Bridge<A : Connection, T : Any>(compose: () -> Composition<A, T>)
     }
 
     /**
-     * Holds [reader] for the host until [Call.ReaderClose] or the tenant closes, answered as [Answer.Reader] (ADR 0131
+     * Holds [reader] for the host until [Call.ReaderClose] or the tenant closes, answered as [Answer.Reader] (ADR 0137
      * decision 2): the door of every call that opens a blob for reading in ranges — a Depot file's medium
      * ([Call.FileReader]), a Memory's medium ([Call.MediumReader]) — and of the test's reader. Refused while no tenant is open.
      */
@@ -955,7 +959,7 @@ internal class Bridge<A : Connection, T : Any>(compose: () -> Composition<A, T>)
         return Answer.Reader(id, reader.size, mediaType)
     }
 
-    /** Closes every reader page [file] opened: a reader's lifetime is its page's (ADR 0131's Consequences). */
+    /** Closes every reader page [file] opened: a reader's lifetime is its page's (ADR 0137's Consequences). */
     private fun closeReadersOf(file: Long) {
         pageReaders.keys().forEach { reader -> if (pageReaders[reader] == file) { pageReaders.remove(reader); readers.remove(reader) } }
     }

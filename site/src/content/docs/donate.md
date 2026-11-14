@@ -38,6 +38,6 @@ The link leads to GitHub. veyq tells GitHub nothing about you, and this page loa
 ## The banner in veyq
 
 The first time you open veyq — signed in, or through a share link — a line at the top asks whether you would like to
-support it, with a **Donate** link. Close it with **×** and it does not come back: in this browser, and once you are
+support it, with a **Donate** link (if your email address still needs confirming, it waits until you have). Close it with **×** and it does not come back: in this browser, and once you are
 signed in, on your account on every device. Signing in is never interrupted by it. The footer of every page keeps a
 **Donate** link, beside **Why is veyq secure?**

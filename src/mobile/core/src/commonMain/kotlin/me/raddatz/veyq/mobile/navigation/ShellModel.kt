@@ -35,7 +35,7 @@ import me.raddatz.veyq.mobile.words.Notice
 import me.raddatz.veyq.mobile.words.Notices
 
 /**
- * The shell over one tenant (ADR 0122, ADR 0130 decision 2): what it lists — its spaces, nodes, objects and favorites as
+ * The shell over one tenant (ADR 0122, ADR 0136 decision 2): what it lists — its spaces, nodes, objects and favorites as
  * this device shows them ([Hidden]), the drawer's short lists ([RecentUses]), the applications and Home's filters — and
  * where the person is ([Shell]), with every action on a node that changes what is listed: a favorite, the trash and its
  * undo, a rename, a move, a new folder, a copy. Each reads the lists anew and keeps the shell on what is still there: a
@@ -123,7 +123,7 @@ class ShellModel(
     /**
      * Reads the lists anew from the server (after a write, or what another device or a guest wrote); a read that fails
      * keeps what was listed. The session's tree is forgotten first: a session caches it ([TenantSession.trees]), and a
-     * refresh that read the cache showed a guest's new folder only after a sign-in (found 2026-11-12; ADR 0130's Consequences).
+     * refresh that read the cache showed a guest's new folder only after a sign-in (found 2026-11-12; ADR 0136's Consequences).
      */
     suspend fun refresh() {
         reading.withLock {
@@ -544,6 +544,13 @@ class ShellModel(
         createMemoryNode(scopeId, parentId, me.raddatz.veyq.mobile.memories.MemoryCreate.MEMORY, name)
 
     /**
+     * Memory or chapter [nodeId] of space [scopeId] as the lists hold it now — what a page opened by its ids alone opens (a
+     * Mac's lightbox window, whose restorable value carries ids, never a name) —; null where it is not listed or is no
+     * Memory or chapter.
+     */
+    fun galleryAt(scopeId: String, nodeId: String): NodeAt? = galleryAt(current?.lists?.nodes.orEmpty(), scopeId, nodeId)
+
+    /**
      * Memory or chapter [ref]'s page over this tenant ([me.raddatz.veyq.mobile.memories.GalleryModel]), opened as a member:
      * its media read anew on every revision of these lists, when a medium [uploads] sent into it is in and when its live
      * poll finds them moved; what it adds goes through [uploads]; a medium trashed and restored, a chapter made.
@@ -588,6 +595,12 @@ class ShellModel(
         })
 
     companion object {
+        /** Memory or chapter [nodeId] of space [scopeId] among [nodes]; null where it is not among them or is another kind. */
+        fun galleryAt(nodes: List<NodeRef>, scopeId: String, nodeId: String): NodeAt? =
+            nodes.firstOrNull { it.scopeId == scopeId && it.nodeId == nodeId }
+                ?.takeIf { it.kind == me.raddatz.veyq.mobile.memories.GalleryModel.MEMORY || it.kind == me.raddatz.veyq.mobile.memories.GalleryModel.CHAPTER }
+                ?.let { NodeAt(it.scopeId, it.nodeId, it.kind, it.name) }
+
         /**
          * A node of [kind]'s download into [sink]: its [own] content where the kind downloads itself
          * ([AppKinds.downloadsItself]: a file, nothing left out) — null where it did not finish —, else the [zip] of it.

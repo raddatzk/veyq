@@ -7,13 +7,13 @@ import me.raddatz.veyq.mobile.depot.FolderUpload
 import platform.posix.fclose
 
 /**
- * Files and a directory picked on a desktop by the path its dialog (or a drop) handed over (ADR 0131 decision 3 and
+ * Files and a directory picked on a desktop by the path its dialog (or a drop) handed over (ADR 0137 decision 3 and
  * its Consequences): the core opens them itself, so nothing of a file crosses the bridge and a file of any size is read at
  * offsets a frame at a time, never held whole.
  */
 object PickedPaths {
     /** The last part of [path] (either separator): a file's or a directory's own name. */
-    fun nameOf(path: String): String = path.trimEnd('/', '\\').split('/', '\\').lastOrNull { it.isNotEmpty() } ?: path
+    fun nameOf(path: String): String = pathName(path)
 
     /**
      * The regular file at [path] as an upload's source: named by its path's last part, its size and modified time the
@@ -34,7 +34,7 @@ object PickedPaths {
     }
 
     /**
-     * What a walk of the directory at [path] meets, depth first (the desktops' own walk, ADR 0131's Consequences; a phone walks through its own
+     * What a walk of the directory at [path] meets, depth first (the desktops' own walk, ADR 0137's Consequences; a phone walks through its own
      * door): every entry by its path below the directory (`/`-separated) and what it is — a file with its [source], a
      * directory, a link (reported, never followed, so nothing outside the directory is reached), or an entry that did not
      * read (a directory that does not list, a file that does not open). Hidden entries are met as any other:

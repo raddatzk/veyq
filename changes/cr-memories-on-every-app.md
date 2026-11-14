@@ -3,12 +3,12 @@ id: cr-memories-on-every-app
 title: Memories on every app — the gallery, the lightbox and the uploads moved into core screen models, then bridged and drawn on Linux and Windows
 status: in-progress
 satisfies: []
-adrs: ["0130", "0131", "0123", "0122", "0132", "0047", "0080"]
+adrs: ["0136", "0137", "0123", "0122", "0138", "0047", "0080", "0105"]
 invariants:
-  - every rule is the core's (ADR 0130 decisions 1 and 2) — what Android's and Apple's Memories still decide in their app models and views (the gallery's reads and when it reads anew, the lightbox's page, its picture and its reader, the details, the save of an original, the upload's settle, the tier spec) moves into core screen models first, both phones thinned in the same phase and unchanged on a device
+  - every rule is the core's (ADR 0136 decisions 1 and 2) — what Android's and Apple's Memories still decide in their app models and views (the gallery's reads and when it reads anew, the lightbox's page, its picture and its reader, the details, the save of an original, the upload's settle, the tier spec) moves into core screen models first, both phones thinned in the same phase and unchanged on a device
   - share view = member view (owner 2026-10-09, inbox #401) — one gallery model for a member and a link's guest, whose rights only remove functions; the rights are the web's `memoryRights`, fail-closed, ported once into the core
   - no plaintext at rest but where the person saves it (ADR 0047's Consequences, every app) — tiles and previews in memory, a video through the core's `RangeReader`, an original written only to the path a save dialog gave (or iOS's swept `fileMover` directory)
-  - the bridge only carries — one line per call onto a core model, no key, seal or token outward (`SecretFreeSchemaTest`); shown bytes beside the JSON, a medium through a reader by id, files by path (ADR 0131)
+  - the bridge only carries — one line per call onto a core model, no key, seal or token outward (`SecretFreeSchemaTest`); shown bytes beside the JSON, a medium through a reader by id, files by path (ADR 0137)
   - Memories' words — Memory, Chapter; never "Album"; "application", never "plugin" (root CLAUDE.md, ADR 0086); every word from `src/mobile/words/words.json`, each desktop to its platform's guideline (ADR 0123 decision 9)
   - no new dependency that is deprecated, vendor-locked or closed (root CLAUDE.md); none is planned (D8), and one a phase finds it needs is checked and recorded where it is added
   - Android, the Apple app, the web and Depot and Expenses on the desktops behave as before; `./gradlew :core:jvmTest :core:macosArm64Test :bridge:jvmTest` and both desktops' `run.py build` stay green in every phase
@@ -33,7 +33,7 @@ the apps still lack against the web:
   (READ, READ_WRITE, WRITE_ONLY) — the Memory's page itself built as one model for member and guest (share view = member
   view: rights only remove functions).
 
-The order is ADR 0130 decision 6's, as the Depot CR's: the moved rules into the core first with both phones thinned onto
+The order is ADR 0136 decision 6's, as the Depot CR's: the moved rules into the core first with both phones thinned onto
 them, the new functions into the core, then the bridge, Linux, Windows, the phones drawing the new functions, the docs.
 
 ## Context & constraints
@@ -42,8 +42,8 @@ them, the new functions into the core, then the bridge, Linux, Windows, the phon
   account settings' phases 3 and 4 merged; tree clean). The Depot CR's file page, reader players, `FileSave`, uploads by
   path, `DepotUploads` tray and drop handlers, and CR 3a's header, cover dialog and share sheet are this CR's floor.
 - **Read first:**
-  - ADR 0130 (decisions 1, 2, 6 and the Consequences' Depot paragraph — the pattern), ADR 0131 (all four decisions and its
-    Depot Consequences), ADR 0047's Consequences (the apps' rule), ADR 0132 decision 2 (a Memory as a share target —
+  - ADR 0136 (decisions 1, 2, 6 and the Consequences' Depot paragraph — the pattern), ADR 0137 (all four decisions and its
+    Depot Consequences), ADR 0047's Consequences (the apps' rule), ADR 0138 decision 2 (a Memory as a share target —
     left out here, D12), ADR 0080 decision 6 with [memories](../docs/apps/memories.md) § What a guest may do (the role
     matrix the rights port);
   - `src/mobile/CLAUDE.md` whole: the bridge paragraph and the traps (an answer overtaking an update, one `ContentDialog` at
@@ -109,7 +109,7 @@ passed in the container, not in the Flatpak); whether `Windows.Media.Editing.Med
 
 ### D1 — A Memory's page is a core screen model, `GalleryModel`
 
-ADR 0130 decision 2's shape (state a flow and a watch, actions plain functions, tested in `commonTest` over a gallery the
+ADR 0136 decision 2's shape (state a flow and a watch, actions plain functions, tested in `commonTest` over a gallery the
 test plays), opened by `ShellModel.galleryModel(ref)` for a MEMORY or a CHAPTER:
 - **State:** loading; the media as shown rows (id, a video or not, a tile to ask for or the icon, the name, blocked); the
   chapters (a Memory's own, each with its cover's presence — `MediaDetails.chapters`, made the model's); the count; failed;
@@ -121,7 +121,7 @@ test plays), opened by `ShellModel.galleryModel(ref)` for a MEMORY or a CHAPTER:
   `lightbox(index)` (D2).
 - **When it reads anew is the core's:** on the shell's lists' revision, on an own upload's DONE (the phones'
   `galleryRevision` goes), on the poll's moved revision; the lists themselves once a batch ends (the Memory's date range).
-- **The decoded picture's cache stays the platform's** (decoding is, ADR 0130 decision 1); the core caches no bytes: a
+- **The decoded picture's cache stays the platform's** (decoding is, ADR 0136 decision 1); the core caches no bytes: a
   tile is read when the platform asks for it, as the phones do today.
 
 ### D2 — The lightbox is the gallery's, `Lightbox`
@@ -170,9 +170,9 @@ never a view. Rejected: a member-only model now and a guest model later — the 
   and Apple's `MediaTiers` read them, and the desktops get them in the request. Decoding and encoding stay the platform's.
 - **The settle is the core's** (`GalleryModel`, D1): every Memories job on the app's one queue reads its gallery anew when
   DONE and the lists when its batch ends. The tray stays `DepotUploads`, which already mirrors the whole queue and runs its
-  acknowledge for Memories' batches too (ADR 0130's Consequences); renaming it is churn in four apps for no rule — left.
+  acknowledge for Memories' batches too (ADR 0136's Consequences); renaming it is churn in four apps for no rule — left.
 - **The desktops derive through a host request:** `HostRequest.MediaTiers(path, type, spec)` → `HostReply.Tiers(width,
-  height, previewSize)` with the payload `preview ‖ thumbnail` beside the JSON (ADR 0131 decision 3 extended inward, as
+  height, previewSize)` with the payload `preview ‖ thumbnail` beside the JSON (ADR 0137 decision 3 extended inward, as
   `HostReply.Pixels`), or `Tiers(null…)` where the platform does not decode it (the original then goes alone, today's rule).
   The bridge's `Deriver` asks it on the queue's prepare thread, never the UI thread. Linux: the picture through glycin
   (`gdk::Texture`, its orientation applied), scaled, encoded by gdk-pixbuf's `savev("jpeg")` as the cover is; a video's
@@ -180,7 +180,7 @@ never a view. Rejected: a member-only model now and a guest model later — the 
   already linked. Windows: `BitmapDecoder` with `RespectExifOrientation` and `BitmapEncoder`'s JPEG, as the cover; a
   poster by `MediaClip.CreateFromFileAsync` + `MediaComposition.GetThumbnailAsync`, else (measured first, D8) the
   `MediaPlayer` frame server. Rejected: tiers made in the core (a JPEG codec and a video decoder in Kotlin/Native — two
-  native dependencies for what each platform has, against ADR 0130 decision 1); the host deriving every tier before it calls
+  native dependencies for what each platform has, against ADR 0136 decision 1); the host deriving every tier before it calls
   (every preview of a batch held at once).
 - **Calls:** `Memory.Upload(gallery, label, paths)` → `Queued(count)` (a path not a medium by `isMedia` is skipped and said,
   never sent), the core opening each as a `FileSource` (`PickedPaths`) read at offsets. A desktop's pickers: GTK's
@@ -250,13 +250,16 @@ measurement forces is read for licence, last release and deprecation and recorde
 
 ### D11 — The screens, each to its platform's guideline
 
-- **Linux (GNOME HIG):** the gallery a `gtk::GridView` of square `gtk::Picture` tiles (a video's badge), virtualized, the
+- **Linux (GNOME HIG):** the gallery the justified grid (D14: core's `GalleryModel.layout`, its rows placed by the app — a
+  `gtk::ListView` of row widgets, each a `gtk::Fixed` of `gtk::Picture` tiles at their frames, a video's badge —, only the
+  rows near the viewport built; superseding the square `gtk::GridView` first planned here), the
   chapters an `AdwPreferencesGroup` of rows with their covers above it, the count in the subtitle; New's New Memory / New
   chapter an `AdwAlertDialog` with an entry; "Add photos and videos" the page's header button; the lightbox an
   `AdwNavigationPage` over black with a `gtk::Picture` in a zoomable `gtk::ScrolledWindow` (Ctrl+wheel, pinch, `+`/`-`/`0`),
   ←/→ and swipe, a header bar with Slideshow, Details (an `AdwDialog` with an `AdwPreferencesGroup`), Save, Trash; Undo in an
   `AdwToast`.
-- **Windows (Fluent):** the gallery an `ItemsRepeater` with a `UniformGridLayout` of tiles (virtualized), the chapters a
+- **Windows (Fluent):** the gallery the justified grid (D14: an `ItemsRepeater` over `GalleryModel.layout`'s rows, each a
+  `Canvas` of tiles at their frames — virtualized by the repeater; superseding the `UniformGridLayout` first planned), the chapters a
   `ListView` above it; New Memory / New chapter a `ContentDialog` (one at a time); the lightbox a page over black with a
   `ScrollViewer` (zoom), `FlipView` paging, a `CommandBar` with Slideshow, Details (a `TeachingTip` or pane), Save, Trash;
   Undo an `InfoBar` action.
@@ -269,7 +272,7 @@ measurement forces is read for licence, last release and deprecation and recorde
 Date, place with the map and its consent, participants and a medium's capture time (one curation CR: they share the
 node's sealed meta and its 409 merge, `uc.memory.concurrent-curation`); the banner (ADR 0102); item marks, buckets and the
 gallery's filter; export, import and copy of a Memory; its re-key (`NodeRekey` leaves it to a web device); a Memory as a
-share target (ADR 0132 decision 2) and a drop onto a phone's gallery. Each is an inbox row (#890–#893), D3 already holding
+share target (ADR 0138 decision 2) and a drop onto a phone's gallery. Each is an inbox row (#890–#893), D3 already holding
 their rights. Rejected: one CR for all of it — four independent slices whose proofs share nothing, which the CR rule calls
 separate CRs.
 
@@ -278,6 +281,36 @@ separate CRs.
 The Memories use cases are satisfied by the web; this CR brings platform parity, whose record is native-apps' table and §
 Built, by area. Where a phone's or a desktop's pass proves a step the use case names, native-apps cites it; no coverage YAML
 changes.
+
+### D14 — The web's justified grid on every app, phones included
+
+The web lays a gallery out as a justified grid (`MediaGrid.vue` over `mediaGridLayout.ts`, ADR 0105: aspects kept, each row
+filled to the width, the last row at the target height, only the rows near the viewport mounted); the apps drew square
+tiles. **Every app draws the justified grid** — the phones too, with the smaller target row height the web already gives a
+narrow grid (150 up to a width of 720, else 200, in the platform's own unit: two to four tiles a phone's row, as Google
+Photos and Flickr show), one look across web and apps. Per ADR 0136 the layout is logic: `memories/MediaGridLayout.kt`
+ports `mediaGridLayout.ts` once (bounded aspect 3:4 … 4:3, the 4:3 fallback, the 8 gap, `MediaGrid.vue`'s target and its
+`windowRows` as `Layout.window`), held to the web's own cases in `commonTest`; `GalleryModel.Row.aspect` is the medium's
+sealed dimensions (`MemoryMedia.Meta.width`/`height`, already read) bounded; `GalleryModel.layout(rows, width)` hands a
+platform each row with its tiles' frames. The platform draws the rows through its lazy list (Compose's `LazyColumn`,
+SwiftUI's `LazyVStack`), which builds only the rows near the viewport — ADR 0105's windowing for free; a desktop placing
+tiles itself asks `Layout.window`. Rejected: a square grid on phones beside the justified one elsewhere (two looks for one
+gallery; the coordinator under the owner's mandate, 2026-11-13); a per-platform layout (four copies of a rule).
+
+### D15 — A Mac's lightbox opens in the window, a window of its own only when asked
+
+Owner (2026-11-13): on a Mac the lightbox came up as a sheet, which reads as a detached second window — "auf mac wird die
+Preview einer Galerie aus der App als zweites Fenster herausgelöst, das würde ich lieber optional über einen Klick machen".
+**On a Mac the lightbox opens in the main window's content, where the gallery was** (a navigation destination: the toolbar's
+back and Escape return to the gallery — the HIG's in-window navigation), and **in a window of its own only when asked**:
+"Open in New Window" in the lightbox's own bar (beside Close, Details and Save — a Mac draws its actions there, `07e492ebe`) and in the File menu (the focused scene's), in a tile's context menu, and on
+a ⌘-click of a tile (the HIG's modifier for a new window). The window is a value-based `WindowGroup` whose value carries
+the opaque ids alone (space, node, medium — never a name, a key or bytes) and which the system does not restore at the next
+start; it opens **its own** `GalleryModel` over the shell (`ShellModel.galleryAt` resolves the ids against the lists) and
+its own core `Lightbox` on the medium (`GalleryModel.lightboxOn`, which waits for the gallery's first read), so the main
+window's page and the window go independently. The reader-lifetime rules of phase 1 hold for both: a window's lightbox
+closes its reader when it pages away or stops, the window's close closes its lightbox and gallery, and the tenant's close
+closes every window's gallery (and the window with it). iOS is unchanged (full screen).
 
 ## Owner steps
 
@@ -422,6 +455,33 @@ order, the lightbox paged, the video played and sought near its end, the details
 original saved (its SHA-256 the upload's; on macOS through the save panel), a Photos pick uploaded and its
 `tmp/picked/<uuid>/` gone once it is in (`xcrun simctl get_app_container booted me.raddatz.veyq data` + `ls tmp`), and
 `run-as me.raddatz.veyq ls cache` / the container's `tmp` with nothing decrypted during and after.
+**Device passes (2026-11-13, the dev backend up; measured).** The Memory was made and filled by `DevMemoryTest`
+(`VEYQ_LIVE=… VEYQ_DEV_MEMORY_FILL=<dir> ./gradlew :core:jvmTest --tests '*DevMemoryTest*' --rerun`: "App memory 84367" by
+`ShellModel.createMemory`, then `a-exif.jpg` (the web's EXIF fixture), two ffmpeg photos and `d-big.mp4` — 241 108 268 B,
+1280×720, 50 s, made with `/opt/homebrew/bin/ffmpeg` — uploaded by `MediaUpload.upload`, the tiers ffmpeg sidecars), and
+purged after by `VEYQ_DEV_MEMORY_PURGE`. **Android** (throwaway AVD, `devlogin.py`): the grid "4 items" newest first; the
+lightbox paged ("1 of 4" … "4 of 4"); the video played through the core's reader, sought to 0:42 and playing on (0:44 — the
+emulator under a load of 100+); the details of `a-exif.jpg`: camera Canon EOS R, lens, exposure, place "48.136944,
+11.575000", "Added by Kevin Raddatz"; both originals saved through the system's dialog — `a-exif.jpg` and `d-big.mp4` at the
+uploads' SHA-256 (`c7b895d6…`, `9ea762fd…`, `sha256sum` on the device); "Add photos" → the photo picker → one photo →
+"5 items" with its name kept; `run-as me.raddatz.veyq ls -laR cache files` before and after: only `profileInstalled` (and
+the pass's own marker). **iOS** (throwaway iPhone 18 Pro, German): the grid, the lightbox paged ("2 von 5" → "1 von 5"),
+the video played; the details with camera, place and "Hinzugefügt von"; `a-exif.jpg` saved through the save sheet into "On
+My iPhone" at the upload's SHA-256; a Photos pick ("+" → Fotomediathek → one photo → ✓) uploaded ("6 Objekte"), the
+container's `tmp/picked/` and `tmp/downloads/` empty after. **macOS** (the ad hoc build, German): the grid; the lightbox;
+the video played; the details; both originals saved through the save panel at the uploads' SHA-256 (the copies removed).
+**Fixed on the way (macOS, `MemoryScreen.swift`):** a Mac's sheet drew the lightbox's toolbar as a light bottom bar with
+one primary button — Save was missing and Close and Details were white on white — and the details sheet collapsed to one
+row's height with its Done white on white too. The lightbox now has a bar of its own on the Mac (Close, Details, Save)
+and the details sheet a minimum size and its own Done. Seen red on the device before the change (the unchanged build),
+green after. **Not done:** seeking near the end on iOS and macOS (the simulator tool's screenshots lag the player's
+controls; AVKit's controls on the Mac expose nothing to accessibility) — the seek across frames is Android's above.
+**Found, not fixed:** the Apple app's `URLSession` (Ktor's Darwin engine) keeps a `URLCache` on disk —
+`Library/Caches/me.raddatz.veyq/Cache.db` and `fsCachedData/` held the `blob-downloads-batch`, `exif` and `members`
+responses and two blobs' ciphertext from the object store after the pass. Nothing decrypted, but metadata the session
+read sits on disk; a decision for the core's HTTP client (no cache, or an in-memory one), named here.
+The box stays open for the Apple seek.
+
 **Retrospective:** "the settle is `GalleryModel`'s" did not survive its first test: an upload outlives the page it was
 started from, so the settle needed an owner per tenant (`MediaUploads`), and the gallery only listens. Following the
 queue's *state* rather than its settle callbacks made the picked files' lifetime survive a tenant opened again over the same
@@ -648,6 +708,10 @@ the share sheet's Memory roles, Memories' list with covers.
 **Done when:**
 - D8's Linux measurements recorded in the phase's retrospective; `cargo test` holds the tiers' host (an image turned by its
   EXIF, a video's poster at `POSTER_AT`, an undecodable file answering no tiers) and the drop's sort, each bitten.
+- The gallery is the justified grid (D14): `GalleryModel.layout`'s rows drawn as they come, at the window's width, only the
+  rows near the viewport built (`Layout.window` or the list's own recycling); a resize lays it out anew; no layout
+  arithmetic in Rust beyond placing a frame (the bridge carries a row's aspect or the layout itself — phase 4 picks which,
+  bridge-side, and `WireTest` samples it).
 - `linux/run.py build` (clippy `-D warnings`, `cargo test`) green; `scripts/validate_mobile_words.py` and
   `validate_mobile_platform_guidelines.py` green. A MEMORY no longer opens "not built".
 - Container (Broadway on 8097), en/light and de/dark, in `Linux memory` made from New: a chapter made; photos (one turned
@@ -664,6 +728,8 @@ D8 (Windows) first, then the same screens as phase 4 in Fluent.
 
 **Done when:**
 - D8's Windows measurements recorded; Veyq.Tests holds the tiers' host and the drop's sort, each bitten.
+- The gallery is the justified grid (D14), as phase 4's: the core's layout drawn, virtualized, laid out anew on a resize,
+  no layout arithmetic in C# beyond placing a frame.
 - `windows/run.py build` (Veyq.Tests, the NuGet deprecation gate) green; both guards green. A MEMORY no longer opens
   "not built".
 - The VM, en/light and de/dark, in `Windows memory`: phase 4's pass through `Veyq.Drive` (its pickers driven as the Depot
@@ -671,6 +737,53 @@ D8 (Windows) first, then the same screens as phase 4 in Fluent.
   before and after showing nothing decrypted; the drop held by its Veyq.Tests case (native-apps' UAC owner step stands).
 
 ### Phase 6 — The phones draw the new functions
+
+**Landed ahead of the rest (2026-11-13): D14 on both phones and D15 on the Mac** — the justified grid drawn on Android
+and Apple from core's `GalleryModel.layout`, and the Mac's lightbox inline with "Open in New Window". Built and proven
+below; the rest of the phase is as it stands.
+
+**Built (D14, D15):**
+- **core** `memories/MediaGridLayout.kt` (the web's layout, `targetHeight`, `Layout.rows`/`window`/`nearestFirst`);
+  `GalleryModel.Row.aspect`, `GalleryModel.layout(rows, width)`; `GalleryModel.lightboxOn(mediaId)` (a lightbox on a
+  medium, before the first read too); `Lightbox.node`; `ShellModel.galleryAt(scopeId, nodeId)` (a listed Memory or chapter
+  by its ids, nothing else).
+- **Android** — `MemoryScreen` draws the layout's rows as items of a `LazyColumn` (`CreateAction`, whose list state
+  collapses the button; `CreateGridAction` had no caller left and went), each row a `Box` of tiles at their frames, 8 dp
+  margins (the grid's gap); `DevMemory` plays a portrait and a square photo besides the landscape ones.
+- **Apple** — `MemoryScreen` draws the rows in a `LazyVStack` at the width `onGeometryChange` measures. **macOS:** a tile
+  opens the lightbox as the page's `navigationDestination` (back and Escape return), its own bar's (after the merge of `07e492ebe`: Close, Details, Save in a bar of the lightbox's own on a Mac) and the File menu's
+  "Open in New Window" (`LightboxCommands`, a focused-scene value), a tile's context menu and a ⌘-click open
+  `LightboxWindow` through `openWindow(value: LightboxWindowValue)` (ids only; `WindowGroup(id: "lightbox", for:)` with
+  `.restorationBehavior(.disabled)`); `AppModel.windowLightbox` opens the window's own gallery and lightbox,
+  `closeWindowGallery` closes them with the window, and the tenant's close closes every window's gallery (the window then
+  dismisses itself). The word `memory_open_in_window` (English, German). iOS unchanged (full screen).
+
+**Met (2026-11-13):** `MediaGridLayoutTest` (9, commonTest; jvm and macosArm64) holds the web's cases: the bounded aspects,
+portrait and landscape shapes, a full row justified to the width, the widow at the target height, no width no tiles, the
+2,000-square geometry (400 rows of 193.6, the whole height, about three views of rows mounted at the top and at 40 000,
+nearest the centre first, nothing past the end), a phone's 2/3/4 tiles a row, the gallery's rows by their sealed
+dimensions, `lightboxOn` before and after the first read, `galleryAt`. **Bitten**, by a script (mutation →
+`./gradlew :core:jvmTest --tests '*MediaGridLayoutTest'` red → restored with `/bin/cp -f`), 10 of 10 red: the aspect
+unbounded, a full row not justified, the widow stretched, the phone threshold off by one, no gap between rows, the window
+mounting every row, nearest not first, a row's aspect unbounded, `lightboxOn` ignoring the medium, `galleryAt` taking any
+kind. `ANDROID_HOME=$HOME/Library/Android/sdk ./gradlew --continue :core:jvmTest :core:macosArm64Test :bridge:jvmTest
+:android:assembleDebug` from `src/mobile`: macosArm64 468 passed, bridge 78 (2 skipped), Android assembled; core jvm 657
+with one failure, `DeviceLinkTest.a_double_tap_or_a_race_of_confirmations_delegates_once`, red alone as well and in a part
+this change does not touch (`session/DeviceLink`, the branch's tip `cb9c63d8f`) — left to its owner. The Apple app built
+for macOS and the iPhone 18 Pro simulator (the commands of phase 1). Guards (`/usr/bin/python3 scripts/validate_*.py` but
+guard_gaps) green. No bridge shape changed, so the desktops' builds were not rerun. **Android** (throwaway AVD
+`veyq_justified_tmp`, Pixel 8, API 36, deleted after) over `DevMemory`, read by `uiautomator dump`: at 411 dp, row one
+beach and dunes (4:3 each, 381 px high, 508 px wide, 21 px = 8 dp gaps and margins), row two pier (3:4), shell (1:1) and the
+blocked one, justified to 1 058 px; pier's tile opened "3 of 5". **macOS** (the ad-hoc build signed in through
+`DevLogin`'s `VEYQ_DEV_*`, driven through the accessibility tree): an `App memory 94531` with nine photos of four shapes
+(made, filled and purged by a scratch live case over `LiveRun`) drawn in justified rows (four tiles 130 pt high in a
+596 pt grid); a tile opened the lightbox in the window's content ("3 von 9", the window's title), "In neuem Fenster
+öffnen" in its toolbar (before that merge) returned the main window to the gallery and opened a second window on "Shape 3.jpg" ("3 von 9 –
+App memory 94531") that read its picture; closing that window left the main one; the toolbar's back returned from an
+inline lightbox to the gallery. **Not driven here** (the background control cannot send them; owner's step on a Mac in
+front): Escape in the inline lightbox, the File menu's item (disabled while the app is not the focused one, as designed),
+a tile's context menu and a ⌘-click. The macOS app's sign-in added a device to the dev account, which the pass did not
+remove.
 
 Phase 2's functions on Android and Apple (D11's phone line): New Memory and New chapter, chapters with covers, the live poll,
 zoom and the slideshow, trash with Undo, a Memory's links in the share sheet.
@@ -684,12 +797,12 @@ zoom and the slideshow, trash with Undo, a Memory's links in the share sheet.
 
 ### Phase 7 — The docs
 
-- ADR 0130's Consequences: Memories' screen models (`GalleryModel`, `Lightbox`, `MemoryRights`, the create, the trash), one
+- ADR 0136's Consequences: Memories' screen models (`GalleryModel`, `Lightbox`, `MemoryRights`, the create, the trash), one
   paragraph as Depot's.
-- ADR 0131's Consequences: the second reader caller, `HostRequest.MediaTiers`'s payload inward, `Memory.Upload`.
+- ADR 0137's Consequences: the second reader caller, `HostRequest.MediaTiers`'s payload inward, `Memory.Upload`.
 - ADR 0047's Consequences: Memories under the apps' rule; Apple's `tmp/picked/` (D5).
 - ADR 0123's Consequences: Memories on the desktops, D8's measurements.
-- ADR 0132's Consequences: decision 2's Memory still not built (#893).
+- ADR 0138's Consequences: decision 2's Memory still not built (#893).
 - `src/mobile/CLAUDE.md`: the models, the calls, the traps met.
 - native-apps: the Linux and Windows rows, § Built, by area (Memories, Sharing, Uploads), § Open (the "other screens"
   lines narrowed; the bridge's "A Memory's medium through a reader" removed; the Memories line narrowed to D12's rows;
@@ -724,6 +837,17 @@ D2's slideshow rule (the web's), D2b's one uploader read per gallery (Android's)
 
 
 **Decided** (the coordinator, 2026-11-13, under the owner's standing mandate; the owner may overturn any):
+- The owner (2026-11-13, in chat): a Mac's lightbox opens in the main window, a window of its own only on a click (D15);
+  iOS unchanged.
+- The coordinator (2026-11-13, under that mandate): the web's justified grid on every app, phones included, the phones at
+  the web's narrow target height (D14); the desktops draw it in phases 4 and 5.
+- The coordinator (2026-11-14, after `main` moved): `main` made a GPX track (ADR 0130) and a music track (ADR 0135) media of a
+  Memory or Chapter, recognised by their sealed `blob-meta` type (`application/gpx+xml`, `audio/*`) and kept out of every
+  photo view — the gallery, the lightbox, the cover choice, the space's media list (ADR 0135 decision 2; an unclaimed type
+  stays a tile). The apps do the same, in the core (`GalleryModel`/`Lightbox`, held to the web's rule by a case per type),
+  from the phase that touches the gallery next (phase 4) for every app; the apps' media picker refuses audio as the web's
+  gallery picker does. The Music tab and core's player (#906) and the tracks and their map (#907) on the apps are not this
+  CR; the journal on the apps is `main`'s #855.
 - 1: as recommended — the hero shows only once a cover exists, on the desktops too.
 - 2: as recommended — the D12 cut holds; curation is the next CR (#890).
 - 3: as recommended — a folder dropped on a gallery is said not to be taken; no folder upload into a Memory in this CR.

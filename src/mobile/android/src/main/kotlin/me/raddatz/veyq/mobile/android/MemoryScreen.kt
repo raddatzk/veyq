@@ -7,19 +7,18 @@ import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
-import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.lazy.grid.GridCells
-import androidx.compose.foundation.lazy.grid.GridItemSpan
-import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
-import androidx.compose.foundation.lazy.grid.items
+import androidx.compose.foundation.layout.BoxWithConstraints
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.offset
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
@@ -71,6 +70,7 @@ import kotlinx.coroutines.flow.first
 import me.raddatz.veyq.mobile.blob.RangeReader
 import me.raddatz.veyq.mobile.memories.MediaDetails
 import me.raddatz.veyq.mobile.memories.GalleryModel
+import me.raddatz.veyq.mobile.memories.MediaGridLayout
 
 import me.raddatz.veyq.mobile.navigation.ObjectRef
 
@@ -87,8 +87,9 @@ private fun mediaAccessPermissions(): Array<String> =
 
 /**
  * A Memory's or a chapter's page (Memories' `MemoryDetail.vue`, its gallery), drawn from core's `GalleryModel`: the chapters
- * a Memory holds, then every medium as a square tile of its thumbnail in the grid's order (newest first by capture time), a
- * video marked as one; a tile opens the lightbox ([Lightbox]). When it reads anew is the core's.
+ * a Memory holds, then every medium as a tile of its thumbnail in the justified grid (core's `GalleryModel.layout`: its
+ * aspect kept, each row filled to the width), in the grid's order (newest first by capture time), a video marked as one; a
+ * tile opens the lightbox ([Lightbox]). When it reads anew is the core's.
  */
 @Composable
 internal fun MemoryScreen(ref: ObjectRef, model: AppModel) {
@@ -116,19 +117,22 @@ internal fun MemoryGallery(gallery: GalleryModel, model: AppModel) {
     // the picker hands a photo over with its location zeroed and under a number: full media access keeps both, so it is
     // asked for once, before the first pick; whatever the answer, the picker opens
     val askAccess = rememberLauncherForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { pickMedia() }
-    CreateGridAction(stringResource(R.string.memory_add), shown = true, onClick = {
+    CreateAction(stringResource(R.string.memory_add), shown = true, onClick = {
         if (model.mediaAccessAsked()) pickMedia() else askAccess.launch(mediaAccessPermissions())
-    }) { grid, bottom ->
-    LazyVerticalGrid(
-        GridCells.Adaptive(112.dp), Modifier.fillMaxSize(), state = grid, contentPadding = PaddingValues(bottom = bottom),
-        horizontalArrangement = Arrangement.spacedBy(2.dp), verticalArrangement = Arrangement.spacedBy(2.dp),
-    ) {
-        item(key = "hero", span = { GridItemSpan(maxLineSpan) }) { hero(16.dp) }
+    }) { list, bottom ->
+    BoxWithConstraints(Modifier.fillMaxSize()) {
+    // the justified grid (core's `GalleryModel.layout`, the web's `MediaGrid.vue`): laid out for the width between the
+    // page's margins, each row an item of the lazy list, so only the rows near the viewport are composed (ADR 0105)
+    val gridWidth = (maxWidth - GRID_MARGIN * 2).value.toDouble()
+    val layout = remember(rows, gridWidth) { rows?.let { GalleryModel.layout(it, gridWidth) } }
+    val byId = remember(rows) { rows.orEmpty().withIndex().associateBy({ it.value.mediaId }, { it }) }
+    LazyColumn(Modifier.fillMaxSize(), state = list, contentPadding = PaddingValues(bottom = bottom)) {
+        item(key = "hero") { hero(16.dp) }
         if (state.chapters.isNotEmpty()) {
-            item(key = "chapters", span = { GridItemSpan(maxLineSpan) }) {
+            item(key = "chapters") {
                 Text(stringResource(R.string.memory_chapters), style = MaterialTheme.typography.titleSmall, modifier = Modifier.padding(start = 16.dp, top = 8.dp))
             }
-            items(state.chapters, key = { "chapter:" + it.nodeId }, span = { GridItemSpan(maxLineSpan) }) { c ->
+            items(state.chapters, key = { "chapter:" + it.nodeId }) { c ->
                 ListItem(
                     headlineContent = { Text(c.name) },
                     leadingContent = { Icon(kindIcon(c.kind), null, tint = role(palette.accent)) },
@@ -138,27 +142,40 @@ internal fun MemoryGallery(gallery: GalleryModel, model: AppModel) {
             }
         }
         when {
-            state.failed -> item(key = "failed", span = { GridItemSpan(maxLineSpan) }) {
+            state.failed -> item(key = "failed") {
                 Text(stringResource(R.string.memory_gallery_failed), color = role(palette.danger), modifier = Modifier.padding(16.dp))
             }
-            rows == null -> item(key = "loading", span = { GridItemSpan(maxLineSpan) }) {
+            rows == null || layout == null -> item(key = "loading") {
                 Box(Modifier.fillMaxWidth().padding(24.dp), contentAlignment = Alignment.Center) { CircularProgressIndicator() }
             }
-            rows.isEmpty() -> item(key = "empty", span = { GridItemSpan(maxLineSpan) }) {
+            rows.isEmpty() -> item(key = "empty") {
                 Text(stringResource(R.string.memory_gallery_empty), color = role(palette.muted), modifier = Modifier.padding(16.dp))
             }
             else -> {
-                item(key = "count", span = { GridItemSpan(maxLineSpan) }) {
+                item(key = "count") {
                     Text(
                         pluralStringResource(R.plurals.memory_items, rows.size, rows.size), style = MaterialTheme.typography.bodySmall,
                         color = role(palette.muted), modifier = Modifier.padding(start = 16.dp, top = 8.dp, bottom = 4.dp),
                     )
                 }
-                items(rows, key = { it.mediaId }) { row ->
-                    MediaTile(row, gallery, model) { open = gallery.lightbox(rows.indexOf(row)) }
+                val last = layout.rows.lastIndex
+                items(layout.rows, key = { "row:" + it.key }) { r ->
+                    // a row's height is its tiles'; the gap below it is the layout's, but after the last row
+                    Box(
+                        Modifier.padding(horizontal = GRID_MARGIN).padding(bottom = if (r.index < last) MediaGridLayout.GAP.dp else 0.dp)
+                            .fillMaxWidth().height(r.height.dp),
+                    ) {
+                        for (t in r.tiles) {
+                            val at = byId[t.id] ?: continue
+                            MediaTile(at.value, gallery, model, Modifier.offset(x = t.left.dp).size(t.width.dp, t.height.dp)) {
+                                open = gallery.lightbox(at.index)
+                            }
+                        }
+                    }
                 }
             }
         }
+    }
     }
     }
     val box = open
@@ -170,14 +187,20 @@ internal fun MemoryGallery(gallery: GalleryModel, model: AppModel) {
     }
 }
 
-/** One square tile: the medium's grid tier cropped to fill, a video marked; an icon where it has no tile to show. */
+/** The room between the justified grid and the screen's edges: the grid's own gap, so every side of a tile breathes alike. */
+private val GRID_MARGIN = MediaGridLayout.GAP.dp
+
+/**
+ * One tile at the frame the justified grid gave it ([modifier]): the medium's grid tier cropped to fill (its aspect is the
+ * tile's, bounded), a video marked; an icon where it has no tile to show.
+ */
 @Composable
-private fun MediaTile(row: GalleryModel.Row, gallery: GalleryModel, model: AppModel, onOpen: () -> Unit) {
+private fun MediaTile(row: GalleryModel.Row, gallery: GalleryModel, model: AppModel, modifier: Modifier, onOpen: () -> Unit) {
     val palette = LocalPalette.current
     val picture by produceState<ImageBitmap?>(null, row.mediaId) {
         value = row.tile?.let { blob -> model.mediaPicture(blob) { gallery.tile(row.mediaId) } }
     }
-    Box(Modifier.aspectRatio(1f).background(role(palette.line)).clickable(onClick = onOpen), contentAlignment = Alignment.Center) {
+    Box(modifier.background(role(palette.line)).clickable(onClick = onOpen), contentAlignment = Alignment.Center) {
         val p = picture
         if (p != null) Image(p, row.name, Modifier.fillMaxSize(), contentScale = ContentScale.Crop)
         else Icon(Icons.Outlined.Image, row.name, tint = role(palette.muted))

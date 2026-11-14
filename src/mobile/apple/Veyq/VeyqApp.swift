@@ -19,10 +19,20 @@ struct VeyqApp: App {
             #endif
         }
         #if os(macOS)
+        .commands { LightboxCommands() }
+        #endif
+        #if os(macOS)
         // the account's Settings as a Mac app keeps them: its Settings window, on ⌘, and from the sidebar's Settings
         Settings {
             SettingsPage(model: model)
         }
+        // a Memory's lightbox in a window of its own, only when asked ("Open in New Window"): its value carries ids alone,
+        // and it is not restored at the next start (its models are the open tenant's, opened anew each time)
+        WindowGroup(id: "lightbox", for: LightboxWindowValue.self) { $value in
+            if let value { LightboxWindow(model: model, value: value) }
+        }
+        .restorationBehavior(.disabled)
+        .defaultSize(width: 960, height: 720)
         #endif
     }
 

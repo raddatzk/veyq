@@ -1,4 +1,5 @@
 // @vitest-environment happy-dom
+import { audioPlayer } from '../../../core/audio/player'
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { createRouter, createMemoryHistory } from 'vue-router'
 
@@ -1564,6 +1565,32 @@ describe('MediaLightbox — slideshow (cr-lightbox-zoom-slideshow)', () => {
     await advance(15000)
     expect(position(w)).toBe(at(3))
     w.unmount()
+  })
+
+  // The music plays on beside the slideshow (en.platform.audio-player): core's compact controls sit in the top bar while a
+  // queue is loaded, and a press on them is no interaction with the slideshow.
+  it('shows the music controls while music plays, and a press on them does not pause the slideshow', async () => {
+    const memoryKey = v1.randomBytes(32)
+    const { items } = await seed(memoryKey, ['image/png', 'image/jpeg', 'image/png'])
+    const player = audioPlayer()
+    const w = mountLightbox(memoryKey, items, 0)
+    await flushPromises()
+    expect(w.find('.media-lightbox-topbar [data-audio-controls]').exists(), 'no queue: no controls').toBe(false)
+    player.nowPlaying.value = { key: 'k', trackId: 'a', title: 'Summer Song', playing: true, positionMs: 0, durationMs: 1000 }
+    try {
+      await flushPromises()
+      expect(w.find('.media-lightbox-topbar [data-testid="audio-mini-title"]').text()).toBe('Summer Song')
+      await press(w)
+      expect(status(w)).toBe(t('media.slideshowPlaying'))
+      w.find('[data-testid="audio-mini-toggle"]').element.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, pointerId: 1, button: 0 }))
+      await flushPromises()
+      expect(status(w), 'the music control is no interaction with the slideshow').toBe(t('media.slideshowPlaying'))
+      await advance(5000)
+      expect(position(w)).toBe(at(2))
+    } finally {
+      player.nowPlaying.value = null
+      w.unmount()
+    }
   })
 
   it('a video shows its poster for one interval and is never played', async () => {

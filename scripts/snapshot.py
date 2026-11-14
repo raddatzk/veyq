@@ -10,9 +10,10 @@ run it; the writes themselves — `imagetools create`, `cosign`, `helm push`, th
     python3 scripts/snapshot.py predicates --lane L1 --arch amd64 --arch arm64 --shard account … \\
         --commit <sha> --run <url> --results <dir> --out <dir>
     python3 scripts/snapshot.py check-unpublished --registry ghcr.io/<owner> --version <v> --commit <sha> \\
-        --digests <dir> --image veyq --image veyq-admin --image veyq-tools --chart charts/veyq
+        --digests <dir> --image veyq --image veyq-admin --image veyq-tools --chart charts/veyq --apps <dir>
     python3 scripts/snapshot.py checks-run --repository <owner>/<repo> --commit <HEAD sha> --branch <branch>
-    python3 scripts/snapshot.py staged --registry ghcr.io/<owner> --commit <sha> --digests <dir> --results <dir>
+    python3 scripts/snapshot.py staged --registry ghcr.io/<owner> --commit <sha> --digests <dir> --results <dir> \\
+        --apps <dir>
 
 **checks-run** — which run a snapshot is made from (ADR 0091 decision 5, amended 2026-11-07: Publish runs no pipeline,
 it signs a Checks run's staging). The branch must be `main` or `release/<major>.x` of the tree's major. It resolves the
@@ -30,7 +31,10 @@ itself (owner 2026-11-07). Writes `kind`, `commit` (C — every later name of th
 
 **staged** — that the bytes to be named are the ones that run tested: every image and architecture of the build has a
 digest artifact from that run, every lane record names exactly those digests for its architecture, and every
-`build-<commit>-<arch>` staging tag still resolves to its digest (a re-staged or moved tag is refused).
+`build-<commit>-<arch>` staging tag still resolves to its digest (a re-staged or moved tag is refused). With `--apps`
+(the run's `app-digests` artifact, one file per platform holding the digest `apps-stage` pushed), the same of the desktop
+apps' packages (ADR 0139 decision 10): a digest for every platform of `APP_PLATFORMS` and none else, each
+`veyq-apps:build-<commit>-<platform>` still on it.
 
 **lane-result** — one leg's record, written only after the leg is green: the lane, its architecture and shard (the
 domain of the suite), the commit, the asset set it installed (`release_assets.py --asset-set`) and the per-arch image
@@ -48,7 +52,9 @@ whether the result still holds at a promotion: `assetSet`, and `predecessor` and
 continues); anything else is refused. A read that fails for any reason but "not found" is refused too: a transient
 error read as "nothing published yet" is the silent republish ADR 0057 § Context describes. The chart is reported
 `present` or `absent`, and refused when present while no image tag of this commit is — a chart without its images is
-another run's. Writes `chart=<state>` and `chart_digest=<digest>` to `$GITHUB_OUTPUT` when it is set.
+another run's. With `--apps`, each app package's `<version>-SNAPSHOT-<platform>` and `sha-<commit>-<platform>` are
+held the same way to the one manifest `apps-stage` pushed. Writes `chart=<state>` and `chart_digest=<digest>` to
+`$GITHUB_OUTPUT` when it is set.
 
 Its limits: what "not found" looks like is Docker Buildx's message, matched loosely (`NOT_FOUND`, a lower-case
 `not found`, `MANIFEST_UNKNOWN`, `404`); a registry that words it otherwise is refused, never overwritten. The walk of
@@ -186,8 +192,17 @@ def inspect(ref: str) -> str | None:
 
 
 def check_unpublished(registry: str, version: str, commit: str, digests: pathlib.Path, images: list[str],
-                      chart: str) -> tuple[str, str]:
+                      chart: str, apps: pathlib.Path | None = None) -> tuple[str, str]:
     held_any = False
+    for platform, digest in (read_app_digests(apps) if apps is not None else {}).items():
+        if inspect(f"{registry}/{APP_PACKAGE}@{digest}") is None:
+            raise Refused(f"{registry}/{APP_PACKAGE}@{digest}, which apps-stage pushed, is not in the registry")
+        tags = {t: inspect(f"{registry}/{APP_PACKAGE}:{t}")
+                for t in (f"{version}-SNAPSHOT-{platform}", f"sha-{commit}-{platform}")}
+        held = decide(f"{registry}/{APP_PACKAGE} ({platform})", tags, {digest})
+        held_any = held_any or held
+        print(f"{registry}/{APP_PACKAGE} ({platform}): "
+              f"{'this run already holds its snapshot names' if held else 'its snapshot names are free'}")
     for image in images:
         built: set[str] = set()
         files = sorted(digests.glob(f"digest-{image}-*/{image}"))
@@ -222,6 +237,38 @@ GATE_JOB_NAME = "Pipeline green"  # checks.yml's `green` job; validate_release_i
 LANE_JOB_NAME = "Stack lane L1 ({arch}, {domain})"  # checks.yml's `stack` job's name, per leg
 BUILD_IMAGES = ("veyq", "veyq-admin", "veyq-tools")  # checks.yml's build matrix; validate_release_identity.py holds it
 LANE_IMAGES = ("veyq", "veyq-admin")  # what lane L1 installs, and so what each lane record names
+# The desktop apps' packages (ADR 0139 decision 10): one OCI artifact per platform in this package, pushed by checks.yml's
+# `apps-stage` as `build-<commit>-<platform>`, each carrying one file — its name here, `{version}` the tree's release.
+# A snapshot names each `<version>-SNAPSHOT-<platform>` and `sha-<commit>-<platform>`, a release `<version>-<platform>`.
+# validate_release_identity.py holds the stage step's platforms and file names to these.
+APP_PACKAGE = "veyq-apps"
+APP_ARTIFACT_TYPE = "application/vnd.veyq.app-package.v1"
+APP_PLATFORMS = {
+    "flatpak-x86_64": "veyq-{version}-x86_64.flatpak",
+    "flatpak-aarch64": "veyq-{version}-aarch64.flatpak",
+    "msix-x64": "veyq-{version}-x64.msix",
+}
+
+
+def read_app_digests(directory: pathlib.Path) -> dict[str, str]:
+    """`apps-stage`'s `app-digests` artifact: one file per platform, named by it, holding the digest pushed."""
+    found = {p.name: p.read_text().strip() for p in sorted(directory.iterdir()) if p.is_file()} if directory.is_dir() else {}
+    if set(found) != set(APP_PLATFORMS):
+        raise Refused(f"the Checks run's app digests name {sorted(found) or 'nothing'}, not exactly the platforms "
+                      f"{sorted(APP_PLATFORMS)} — its `apps-stage` did not stage every package")
+    for platform, digest in found.items():
+        if not DIGEST.match(digest):
+            raise Refused(f"the Checks run's app digest of {platform} is `{digest}`, not `sha256:<64 hex>`")
+    return found
+
+
+def staged_apps_verdict(digests: dict[str, str], staged: dict[str, str | None]) -> None:
+    """Refused unless every app package's staging tag still resolves to the digest the Checks run pushed."""
+    for platform in APP_PLATFORMS:
+        if staged.get(platform) != digests.get(platform):
+            raise Refused(f"the staging tag of {APP_PACKAGE} ({platform}) resolves to {staged.get(platform)}, not the "
+                          f"{digests.get(platform)} the Checks run staged — a staged package was replaced; publish "
+                          f"nothing from it")
 
 
 def push_runs(runs: list[dict], commit: str, branch: str) -> list[dict]:
@@ -456,7 +503,7 @@ def checks_run(repository: str, head: str, branch: str, root: pathlib.Path, boun
 
 
 def staged(registry: str, commit: str, digests_dir: pathlib.Path, results_dir: pathlib.Path,
-           archs: list[str]) -> None:
+           archs: list[str], apps_dir: pathlib.Path | None = None) -> None:
     digests = {}
     for path in digests_dir.glob("digest-*-*/*"):
         image = path.name
@@ -470,6 +517,15 @@ def staged(registry: str, commit: str, digests_dir: pathlib.Path, results_dir: p
             tags[(image, arch)] = None if raw is None else "sha256:" + hashlib.sha256(raw.encode()).hexdigest()
     staged_verdict(digests, records, tags, archs)
     print(f"the {len(digests)} staged image(s) and {len(records)} lane record(s) are the Checks run's bytes")
+    if apps_dir is None:
+        return
+    app_digests = read_app_digests(apps_dir)
+    app_tags = {}
+    for platform in APP_PLATFORMS:
+        raw = inspect(f"{registry}/{APP_PACKAGE}:build-{commit}-{platform}")
+        app_tags[platform] = None if raw is None else "sha256:" + hashlib.sha256(raw.encode()).hexdigest()
+    staged_apps_verdict(app_digests, app_tags)
+    print(f"the {len(app_digests)} staged app package(s) are the Checks run's bytes")
 
 
 # ---- command line -----------------------------------------------------------------------------------------------
@@ -500,6 +556,7 @@ def main() -> int:
     c.add_argument("--digests", required=True, type=pathlib.Path)
     c.add_argument("--image", action="append", default=[])
     c.add_argument("--chart", required=True)
+    c.add_argument("--apps", type=pathlib.Path, default=None)
     k = sub.add_parser("checks-run")
     k.add_argument("--repository", required=True)
     k.add_argument("--commit", required=True)
@@ -509,6 +566,7 @@ def main() -> int:
     s.add_argument("--commit", required=True)
     s.add_argument("--digests", required=True, type=pathlib.Path)
     s.add_argument("--results", required=True, type=pathlib.Path)
+    s.add_argument("--apps", type=pathlib.Path, default=None)
     args = parser.parse_args()
     try:
         if args.command == "lane-result":
@@ -535,12 +593,12 @@ def main() -> int:
         elif args.command == "staged":
             root = pathlib.Path(__file__).resolve().parent.parent
             archs, _ = stack_matrix(root)
-            staged(args.registry, args.commit, args.digests, args.results, archs)
+            staged(args.registry, args.commit, args.digests, args.results, archs, args.apps)
         else:
             if not COMMIT.match(args.commit) or not re.fullmatch(r"[0-9]+\.[0-9]+", args.version):
                 raise Refused(f"`{args.version}` / `{args.commit}` is not a version and a full commit hash")
             state, digest = check_unpublished(args.registry, args.version, args.commit, args.digests, args.image,
-                                              args.chart)
+                                              args.chart, args.apps)
             if os.environ.get("GITHUB_OUTPUT"):
                 with open(os.environ["GITHUB_OUTPUT"], "a") as handle:
                     handle.write(f"chart={state}\nchart_digest={digest}\n")

@@ -23,7 +23,7 @@ acceptanceCriteria:
     # the self-hostability cost explicitly (a mailer becomes a precondition for admitting members; an auth-less
     # relay suffices). The surviving copy-link is the Server-Owner's bootstrap invite, covered by
     # uc.admin.create-tenant.
-    text: The invite is delivered to the invited address by email and by no other channel — the mint response carries no secret at all (ADR 0055 §2), and the secret that arrives in the mail is the real one (it accepts). A tenant with no sendable mail settings is refused with 503 `mail_unavailable` before anything is minted, so an undeliverable invitation never exists.
+    text: A mailed invite is delivered to the invited address by email and by no other channel — the mailed mint's response carries no secret at all (ADR 0055 §2), and the secret that arrives in the mail is the real one (it accepts). A tenant with no sendable mail settings is refused with 503 `mail_unavailable` before anything is minted, so an undeliverable invitation never exists.
     coverage:
       backend:
         integration: [MemberAddSliceTest.theMailedSecretIsTheOnlyChannelAndItWorks, MemberAddSliceTest.aTenantThatCannotSendMailIsRefusedAndMintsNothing]
@@ -68,13 +68,57 @@ acceptanceCriteria:
     # guards and before the mint, so a limited request creates no orphan invite. Over-limit → 429 + Retry-After.
     # Built on the pure, mutation-verified TokenBucket core (not the per-IP IpRateLimitFilter, which cannot key on
     # a recipient); its gradual refill turns 3/hour from a burst of 3 into one per 20 minutes (ADR 0052). Defaults (3/recipient, 20/tenant, per hour) are deliberately set, not calibrated — revidierbar.
-    text: Member-invite sends are rate-limited per-(tenant,recipient) and per-tenant to bound email-bombing of one address (the reissue-loop vector); over the limit the request is refused with 429 + Retry-After before any invite is minted, and the web surfaces a "try again later" message.
+    text: Member-invite sends are rate-limited per-(tenant,recipient) and per-tenant to bound email-bombing of one address (the reissue-loop vector); a link invite, which has no recipient, spends the per-tenant bucket alone, shared with the mailed mints. Over the limit the request is refused with 429 + Retry-After before any invite is minted, and the web surfaces a "try again later" message.
     coverage:
       backend:
-        integration: [MemberAddSliceTest.invitingOneRecipientPastTheLimitIs429WithRetryAfter]
-        unit: [InviteMailRateLimiterTest.theFourthInviteToOneRecipientIsRateLimited, InviteMailRateLimiterTest.aDifferentRecipientHasItsOwnBudget, InviteMailRateLimiterTest.theRecipientKeyIsCaseInsensitiveSoAliasCasingCannotEvadeIt, InviteMailRateLimiterTest.theTenantVolumeCapTripsAcrossDistinctRecipients, InviteMailRateLimiterTest.adifferentTenantIsIsolated]
+        integration: [MemberAddSliceTest.invitingOneRecipientPastTheLimitIs429WithRetryAfter, MemberInviteLinkSliceTest.linkMintsSpendTheTenantsBudgetOnly]
+        unit: [InviteMailRateLimiterTest.aLinkInviteSpendsTheTenantBudgetAndNoRecipients, InviteMailRateLimiterTest.theFourthInviteToOneRecipientIsRateLimited, InviteMailRateLimiterTest.aDifferentRecipientHasItsOwnBudget, InviteMailRateLimiterTest.theRecipientKeyIsCaseInsensitiveSoAliasCasingCannotEvadeIt, InviteMailRateLimiterTest.theTenantVolumeCapTripsAcrossDistinctRecipients, InviteMailRateLimiterTest.adifferentTenantIsIsolated]
       web:
         unit: [src/features/spaces/InviteMemberDialog.test.ts, src/features/spaces/TenantMembersPanel.test.ts]
+  - id: invite-as-a-link
+    # ADR 0129 decisions 1-3: the second way, the dialog's first. The server mints as for a mailed invite but takes no
+    # address and no sealed part, sends nothing and answers the token to the owner who minted it; the owner's client
+    # writes the link with the code in it. Mail stays a precondition, so a tenant that cannot send refuses this way too.
+    text: >-
+      The owner may instead mint a member invite as a link, the invite dialog's first way. The client builds the invite
+      as for a mailed one under a generated code and posts it without address or sealed part; the server runs the same
+      checks, refuses a tenant that cannot send with 503 `mail_unavailable` and a non-owner with 403 `not_tenant_owner`,
+      each with nothing minted, sends nothing, and answers the single-use token to the owner only. The client writes
+      `…/tenant/accept#<token>.<sealed>.<code>` on its own origin and shows it once inside an editable message (the
+      space, the link, its expiry) to copy, hand to the share sheet where the browser has one, or open in the owner's
+      mail program. Several link invites may be open at once, and a mailed mint supersedes none of them.
+    coverage:
+      backend:
+        integration: [MemberInviteLinkSliceTest.aLinkMintAnswersItsTokenOnceAndSendsNothing, MemberInviteLinkSliceTest.aTenantThatCannotSendMintsNoLink, MemberInviteLinkSliceTest.linkInvitesCoexistAndAMailedMintSupersedesNoneOfThem, TenantOwnerGateTest.ordinaryMemberWhoOwnsScopesIsRefusedAtEveryOwnerGatedEndpoint, TenantOwnerGateTest.realRootScopeOwnerStillPasses, GrantWriterSnapshotSliceTest.aMemberInviteRecordsItsSignersKey]
+      web:
+        unit: [src/features/spaces/memberInvite.test.ts, src/features/spaces/InviteMemberDialog.test.ts, src/features/spaces/InviteMemberDialog.real.test.ts]
+  - id: a-link-joins-whoever-opens-it
+    # ADR 0129 decisions 2 and 4: a link invite is bound to nobody, and its redemption proves no address.
+    text: >-
+      A link that carries its code opens without asking for one, and the page strips its fragment; a code that does not
+      open it falls back to the code step. Whoever opens a link invite registers with an address they type — the
+      account starts unconfirmed, and the client then signs in and asks for its confirmation mail once, a failure there
+      not being the join's — or signs in with any account of the instance, whose address confirmation is left as it
+      was. An account already a member is refused 409 `already_member` before the invite is spent, so the link stays
+      good for the one it was meant for. A register sending an address for a mailed invite, or none for a link one, is
+      422 `invite_kind_email_mismatch`; a mailed invite's redemption still confirms its address.
+    coverage:
+      backend:
+        integration: [MemberInviteLinkSliceTest.anyAccountAcceptsALinkAndItsAddressConfirmationIsLeftAsItWas, MemberInviteLinkSliceTest.aMemberIsRefusedALinkAndTheLinkStaysGoodForTheOneItWasMeantFor, MemberInviteLinkSliceTest.aLinkRegistrationTakesTheTypedAddressUnconfirmedAndAMailedOneStillConfirms]
+      web:
+        unit: [src/views/TenantJoinView.link.test.ts]
+  - id: a-redeemed-link-says-so
+    # ADR 0129 decision 6: detection, not prevention - a link someone else took first is noticed by the real invitee.
+    text: >-
+      The preview answers a consumed invite 410 `invite_redeemed`, a revoked or expired one 410
+      `invite_no_longer_valid`, and every invite of a suspended tenant `invite_no_longer_valid`; the join page says a
+      used link was already used and to tell whoever invited them, apart from an expired one, and says the same when an
+      accept loses the link to another.
+    coverage:
+      backend:
+        integration: [MemberInviteLinkSliceTest.aConsumedInvitesPreviewIsRedeemedAndARevokedOrExpiredOneIsNoLongerValid]
+      web:
+        unit: [src/views/TenantJoinView.link.test.ts]
   - id: scope-member-directory
     text: A member lists a scope's memberships with each member's role and identity public key — no grant flag, since every membership holds one — and, on the tenant's listing, each member's sealed join record (null for the first owner) and the endorsement of it by the owner who rooted it (null until that owner secures their account). The operator-blind server returns only already-stored operational metadata and ciphertext — never a scope key — and the directory is scoped to that scope's members (a non-member gets 404), not a global user search.
     coverage:
@@ -105,7 +149,7 @@ acceptanceCriteria:
   - id: invite-sealed-under-a-code
     # ADR 0111 decision 1, made mandatory: the server mails the link, so an unsealed link would hand the operator
     # the invite. The code is 10 Crockford base32 characters (50 bits) behind Argon2id at the production profile.
-    text: The link's secret part — the seed, the owner's key-chain head and account (`invite-link` v2) — is always sealed under Argon2id of a generated 10-character code shown once to the owner (or a password the owner chose, at least the account password's length floor), bound to its tenant and invite; it opens with that code only and only as that invite. The server appends it to the mailed link and keeps no copy.
+    text: The link's secret part — the seed, the owner's key-chain head and account (`invite-link` v2) — is always sealed under Argon2id of a generated 10-character code shown once to the owner (or, mailed, a password the owner chose, at least the account password's length floor), bound to its tenant and invite; it opens with that code only and only as that invite. The server appends a mailed invite's to the mailed link and keeps no copy; a link invite's never reaches it.
     coverage:
       backend:
         integration: [InvitePlaceholderSliceTest.aMemberInviteStoresTheInviteKeyItsSignatureAndAGrant]
@@ -161,7 +205,7 @@ acceptanceCriteria:
     coverage:
       backend:
         unit: [RotationPolicyTest.refusesARotationThatLeavesAnOpenInviteBehind, RotationPolicyTest.commitsWhenEveryOpenInviteIsReGranted, RotationPolicyTest.aDeclaredPendingInviteCountsAsCarried, RotationPolicyTest.everyOpenInviteMayBeDeclaredPending, RotationPolicyTest.ignoresReGrantsOfInvitesTheScopeDoesNotHold, RotationPolicyTest.anUnknownIdDoesNotStandInForAMissingOne, RotationPolicyTest.aRemovalStillCarriesEveryOpenInvite]
-        integration: [InvitePlaceholderSliceTest.aRotationOfTheTenantMustCarryEveryOpenInvite, InvitePlaceholderSliceTest.listOpenInvitesServesEveryMemberAndNoEmail, GrantWriterSnapshotSliceTest.aTenantRotationRecordsTheRotatorsKeyOnEveryInviteItReGrants, MemberInviteManagementSliceTest.aRotationDoesNotBringARevokedInviteBack, MemberInviteManagementSliceTest.anInviteMintedAtAnEpochARotationIsLeavingIsStale, InviteAnchorSliceTest.theAnchorMovesOnlyWithARotationItsSignerCommits, InviteAnchorSliceTest.aSignerRotatingUnderAnotherKeyThanTheInvitesLeavesTheAnchor]
+        integration: [InvitePlaceholderSliceTest.aRotationOfTheTenantMustCarryEveryOpenInvite, InvitePlaceholderSliceTest.aRotationCarriesAnOpenLinkInviteLikeAMailedOne, InvitePlaceholderSliceTest.listOpenInvitesServesEveryMemberAndNoEmail, GrantWriterSnapshotSliceTest.aTenantRotationRecordsTheRotatorsKeyOnEveryInviteItReGrants, MemberInviteManagementSliceTest.aRotationDoesNotBringARevokedInviteBack, MemberInviteManagementSliceTest.anInviteMintedAtAnEpochARotationIsLeavingIsStale, InviteAnchorSliceTest.theAnchorMovesOnlyWithARotationItsSignerCommits, InviteAnchorSliceTest.aSignerRotatingUnderAnotherKeyThanTheInvitesLeavesTheAnchor]
       web:
         unit: [src/features/spaces/scopes.test.ts]
   - id: a-pending-invite-joins-behind
@@ -185,5 +229,7 @@ gaps:
     Lane L1's browser suite (`tests/e2e/tests/features/expenses/expenses-pot.spec.ts`) drives `member-invite-and-onboard` on
     its way to the Expenses pass: a tenant owner sets the space's mail, invites a fresh address, and the invitee
     joins from the mailed link. tests/e2e/tests/features/account/join-profile-picture.spec.ts walks the same
-    invitation. Green only in local runs of the lane (the V1 heavy stage), and ADR 0040 admits `stack` refs only once
+    invitation. tests/e2e/tests/features/account/member-invite-link.spec.ts drives `invite-as-a-link`,
+    `a-link-joins-whoever-opens-it` and `a-redeemed-link-says-so`: an owner creates a link, a second browser registers
+    from it with a typed address, a third is told it was already used. Green only in local runs of the lane (the V1 heavy stage), and ADR 0040 admits `stack` refs only once
     a CI run's log shows the suite executed.

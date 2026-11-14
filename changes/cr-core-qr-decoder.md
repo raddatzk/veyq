@@ -3,11 +3,11 @@ id: cr-core-qr-decoder
 title: QR codes in the Kotlin core — one decoder and one encoder in common Kotlin, one scan model, a camera per app
 status: in-progress
 satisfies: []
-adrs: ["0130", "0131", "0123", "0059"]
+adrs: ["0136", "0137", "0123", "0059"]
 invariants:
-  - "one QR decoder and one QR encoder for every app, in the core's commonMain (ADR 0130 decision 1): no platform decodes or encodes a QR itself, no platform library (ML Kit, Vision, AVCaptureMetadataOutput, Windows' point-of-service scanner, zbar) is reached for a code's text"
+  - "one QR decoder and one QR encoder for every app, in the core's commonMain (ADR 0136 decision 1): no platform decodes or encodes a QR itself, no platform library (ML Kit, Vision, AVCaptureMetadataOutput, Windows' point-of-service scanner, zbar) is reached for a code's text"
   - "the decoder is memory-safe code: pure Kotlin, no C or C++ parser of camera frames in the process that holds the Master Key"
-  - "what a code says never crosses the bridge: frames go in (ADR 0131 inbound payload), a drawn code comes out as shown bytes, the core keeps the text and answers only what the scan was accepted as"
+  - "what a code says never crosses the bridge: frames go in (ADR 0137 inbound payload), a drawn code comes out as shown bytes, the core keeps the text and answers only what the scan was accepted as"
   - "no new dependency that is deprecated, vendor-locked or closed (root CLAUDE.md); each added one checked and recorded where it is added"
   - "Android, the Apple app, Linux, Windows and the web behave as before outside the scanner; `./gradlew :core:jvmTest :core:macosArm64Test :bridge:jvmTest` and both desktops' `run.py build` stay green in every phase"
 ---
@@ -15,7 +15,7 @@ invariants:
 ## Goal
 
 The apps need to **read** a QR code twice before Memories — a printed or saved Emergency Kit
-(`changes/cr-app-kit-sign-in.md`, written in parallel, inbox #842) and device linking in both directions
+(`changes/cr-app-kit-sign-in.md`, written in parallel, inbox #900) and device linking in both directions
 (`changes/cr-app-device-linking.md`, ADR 0059) — and to **draw** one for linking. No app reads or draws a QR today.
 This CR builds the shared floor both stand on: a QR decoder and encoder in the core, a core scan model that takes
 camera frames and hands back the first code a caller accepts, and on every app a camera view that feeds it, with the
@@ -27,7 +27,7 @@ printed kit; `cr-app-device-linking` needs all of them.
 
 ## Context & constraints
 
-- **Read first:** ADR 0130 (decisions 1, 2, 5), ADR 0131 (decision 1, and decision 3 for a file by path), ADR 0123
+- **Read first:** ADR 0136 (decisions 1, 2, 5), ADR 0137 (decision 1, and decision 3 for a file by path), ADR 0123
   decision 9 (each platform's guideline), ADR 0059 §1 (whichever device has a camera scans) and §4 (a code never
   names a server), `src/mobile/CLAUDE.md` whole (the bridge's traps, each platform's run and drive verbs).
 - **The web's reference:** `src/web/src/features/account/emergencyKit/KitScanner.vue` (getUserMedia, a frame loop,
@@ -50,7 +50,7 @@ Commands from `src/mobile` unless named.
 | R3 | **zxing-cpp is maintained** (v3.1.1 of 2026-07-29, a commit on 2026-11-12, Apache-2.0) **but reaches the core's targets badly:** its Kotlin/Native wrapper builds android-native, Apple and Linux targets, **`mingwX64` commented out**, no JVM target; on `linuxX64`/`linuxArm64` it ships only as a shared library the host must install (its `wrappers/kn/README.md`, zxing-cpp#939); its Android AAR reads a CameraX `ImageProxy` or a `Bitmap` only (`readYBuffer` private); its writer API is `@ExperimentalWriterApi`. It is C++20. | `gh api repos/zxing-cpp/zxing-cpp/releases --jq '.[0]'`; `gh api repos/zxing-cpp/zxing-cpp/contents/wrappers/kn/build.gradle.kts`; `.../wrappers/android/zxingcpp/src/main/java/zxingcpp/BarcodeReader.kt` |
 | R4 | **No maintained Kotlin Multiplatform QR library covers the core's targets:** `g0dkar/qrcode-kotlin` (encoder only, MIT) builds jvm, android, iOS and wasmJs — no macOS, Linux or mingw; last release v4.3.0, 2025-02-26. | `gh api repos/g0dkar/qrcode-kotlin/contents/build.gradle.kts` |
 | R5 | **ZXing's QR reader is small and its corpus is public:** `core/src/main/java/com/google/zxing/qrcode/{decoder,detector,encoder}` plus `common/` (binarizer, `BitMatrix`, `PerspectiveTransform`, `GridSampler`, Reed–Solomon); its blackbox corpus `core/src/test/resources/blackbox/qrcode-1..6` is 179 images, ≈ 12.3 MiB, each set with pass thresholds per rotation in `QRCodeBlackBox{1..6}TestCase` (set 1: 17/14/17/14 of 20 at 0°/90°/180°/270°). | `gh api repos/zxing/zxing/contents/core/src/test/resources/blackbox/qrcode-1` (and 2–6); the TestCase files |
-| R6 | **The bridge already has an inbound payload nothing uses:** `veyq_call` carries bytes beside the JSON (ADR 0131 § Context); ADR 0131 decision 1 decides only the outbound half. | `sed -n 14,30p docs/decisions/0131-*.md`; `grep -n CName bridge/src/bridgedMain/kotlin/me/raddatz/veyq/mobile/bridge/Exports.kt` |
+| R6 | **The bridge already has an inbound payload nothing uses:** `veyq_call` carries bytes beside the JSON (ADR 0137 § Context); ADR 0137 decision 1 decides only the outbound half. | `sed -n 14,30p docs/decisions/0137-*.md`; `grep -n CName bridge/src/bridgedMain/kotlin/me/raddatz/veyq/mobile/bridge/Exports.kt` |
 | R7 | **The core builds its native C dependencies from pinned tarballs** (`core/sodium/build_libsodium.py`, utf8proc) per slice — no C++ dependency yet. | `grep -n 'cinterops.create' core/build.gradle.kts` |
 
 Remembered, not measured (each a phase's first measurement where it matters): ML Kit's barcode scanner is closed and
@@ -85,7 +85,7 @@ Why, against the alternatives (R2–R4):
 text into a module matrix at error-correction level **M** with a 4-module quiet zone; a phone draws the matrix itself
 (Compose `Canvas`, SwiftUI `Canvas`), crisp, black on a white plate in both themes (the web's plate). For the desktops
 the core writes the matrix as a **1-bit greyscale PNG** at an integer scale the host asks for (`qr/QrPng`: stored
-deflate blocks, CRC-32, Adler-32 — no compressor needed), answered as shown bytes (ADR 0131 decision 1), so the text
+deflate blocks, CRC-32, Adler-32 — no compressor needed), answered as shown bytes (ADR 0137 decision 1), so the text
 never crosses the bridge.
 
 ### D3 — A scan is a core screen model, `QrScan`
@@ -119,7 +119,7 @@ a poster; Apple, Windows and Linux a `VEYQ_DEV_CAMERA=<image>` the debug build r
 `veyq_call`'s inbound payload (R6), answered at once (the frame dropped or taken); `Scan.Camera(scan, state)` for
 `NoCamera`/`Denied`; `Scan.Close(scan)`; `Watched.Scan(scan)` → `Update.Scan(state)`, whose `Found` names what the
 caller's model moved to (e.g. a kit read, a pairing answered), never the text. A host sends the next frame only after
-the previous call answered — the backpressure is the call itself. The inbound payload is **ADR 0131 decision 1's other
+the previous call answered — the backpressure is the call itself. The inbound payload is **ADR 0137 decision 1's other
 half**, written into that ADR in phase 6. `SecretFreeSchemaTest` stays as it is: no field carries the text.
 
 ## Phases
@@ -483,7 +483,7 @@ half**, written into that ADR in phase 6. `SecretFreeSchemaTest` stays as it is:
   2. A Windows laptop's camera: `VEYQ_DEV_SCAN=1 windows/run.py run` against it (`VEYQ_WINDOWS_SSH`), a veyq code held
      up: `veyq-scan: state Found(…)` in the log; and Settings › Privacy › Camera off: `state Denied`.
 - [ ] **6 docs and harvest** — a new ADR (numbered when written): *QR codes are read and drawn by the core* (D1–D3,
-  the rejected alternatives with R2–R4); ADR 0131 decision 1 gains the inbound payload (D5); `native-apps.md` (what is
+  the rejected alternatives with R2–R4); ADR 0137 decision 1 gains the inbound payload (D5); `native-apps.md` (what is
   built); `src/mobile/CLAUDE.md` gains each platform's camera trap met on the way. · Done when: the trust-chain guards
   (`for f in scripts/validate_*.py; do /usr/bin/python3 "$f"; done`) green; this CR deleted.
 

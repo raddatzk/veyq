@@ -83,6 +83,14 @@ files names an existing `Secret` in `secrets.existingSecret` instead. Turning it
 store is the bundled one is not refused: the app then names the cause, and Garage's claims stay behind, so `true`
 again restores it. **Deleting those claims deletes the objects.**
 
+Garage's three claims, `meta`, `data` and `snapshots`, take the class `garage.persistence.storageClass` names (empty:
+the cluster's default), and each can name its own instead (`garage.persistence.meta.storageClass` and so on). That is
+how the object blocks go onto a network share, an NFS or SMB CSI class, while `meta` stays on a local block class:
+it holds Garage's LMDB database, which must not sit on a remote filesystem
+([Storage and email](/run/storage-and-email/#the-object-store)). Set the classes before the first install: they are the
+StatefulSet's `volumeClaimTemplates`, which the API server refuses to change on an existing StatefulSet, and a bound
+claim keeps its class whatever the template says.
+
 **The admin listener has a `Service` of its own, `veyq-app-admin`, and a `NetworkPolicy` keeps every other pod off
 it.** It is deliberately not a second port on `veyq-app`: that Service is what the chart's `HTTPRoute`, every
 projected tenant route and any route of yours aim at, so a port on it would sit behind all of them. The
