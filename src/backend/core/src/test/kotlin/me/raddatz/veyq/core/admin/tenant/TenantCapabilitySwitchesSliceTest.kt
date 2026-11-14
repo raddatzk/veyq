@@ -5,7 +5,6 @@ import me.raddatz.veyq.core.membership.TenantRoots
 import me.raddatz.veyq.core.membership.TestGrants
 import me.raddatz.veyq.core.node.NodeEntity
 import me.raddatz.veyq.core.platform.capabilities.CapabilityIds
-import me.raddatz.veyq.core.platform.capabilities.UNCONFIGURED_IN_TEST
 import me.raddatz.veyq.core.platform.capabilities.CapabilityIds.GROUP_SPACE
 import me.raddatz.veyq.core.platform.capabilities.CapabilityIds.PUBLIC_SHARES
 import me.raddatz.veyq.core.platform.capabilities.CapabilityIds.PUBLIC_SHARES_CONTRIBUTE
@@ -106,7 +105,7 @@ class TenantCapabilitySwitchesSliceTest {
     fun theOwnerSwitchesAnEntryOffAndEveryMemberReadsTheNarrowedSet() {
         val t = ownedTenant()
         given().header("Authorization", bearer(t.member)).`when`().get("/api/tenants/${t.id}/capabilities")
-            .then().statusCode(200).body("capabilities.id", equalTo(CapabilityIds.ADVERTISED - UNCONFIGURED_IN_TEST))
+            .then().statusCode(200).body("capabilities.id", equalTo(CapabilityIds.ADVERTISED))
 
         setSwitch(t.owner, t.id, PUBLIC_SHARES, true).then().statusCode(200)
             .body("id", equalTo(PUBLIC_SHARES)).body("off", equalTo(true))
@@ -127,8 +126,7 @@ class TenantCapabilitySwitchesSliceTest {
         val ids = register.getList<String>("id")
         // Only the switched entry is off; it and its two children are not effective, every other entry is.
         assertEquals(ids.map { it == PUBLIC_SHARES }, register.getList<Boolean>("off"))
-        // The music frame's entries are not effective either: this profile's deployment leaves them unconfigured (ADR 0131).
-        assertEquals(ids.map { !it.startsWith(PUBLIC_SHARES) && it !in UNCONFIGURED_IN_TEST }, register.getList<Boolean>("effective"))
+        assertEquals(ids.map { !it.startsWith(PUBLIC_SHARES) }, register.getList<Boolean>("effective"))
 
         setSwitch(t.owner, t.id, PUBLIC_SHARES, false).then().statusCode(200).body("effective", equalTo(true))
         setSwitch(t.owner, t.id, PUBLIC_SHARES, false).then().statusCode(200) // the state it has: no change, same answer

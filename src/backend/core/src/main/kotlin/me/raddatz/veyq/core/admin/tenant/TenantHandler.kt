@@ -1,7 +1,6 @@
 package me.raddatz.veyq.core.admin.tenant
 
 import me.raddatz.veyq.core.platform.capabilities.ShareEmbeddingHosts
-import me.raddatz.veyq.core.platform.capabilities.MusicFrameHosts
 import me.raddatz.veyq.core.quota.StorageUsage
 import me.raddatz.veyq.core.sharing.SharingStore
 import me.raddatz.veyq.core.spaces.scope.MembershipPolicy
@@ -299,7 +298,6 @@ class TenantHandler(
     private val moderationSteps: SignInBlocks,
     private val deletionMail: TenantDeletionMail,
     private val embeddingHosts: ShareEmbeddingHosts,
-    private val musicHosts: MusicFrameHosts,
     config: VeyqConfig,
 ) {
     private val inviteTtl: Duration = config.tenant().invite().ttl()
@@ -920,7 +918,6 @@ class TenantHandler(
     private fun reproject() {
         ingress.regenerate()
         embeddingHosts.refresh()
-        musicHosts.refresh() // the hosts that may frame the music (ADR 0131)
     }
 
     /** Supersede + mint a bootstrap invite (resend/reassign), returning the payload to send **after** commit. */

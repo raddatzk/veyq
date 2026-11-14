@@ -55,13 +55,11 @@ sealed interface AppShell {
          * [policy] with [connect] appended to its `connect-src` and [img] to its `img-src`: the store's origin and the
          * origins of the outside services in use (ADR 0088 decision 7, [ExternalOrigins]). A directive the policy lacks
          * is refused, never written from scratch, for the reason [withStoreOrigin] gives; an origin already listed is not
-         * listed twice. [frame] goes to `frame-src` (the music frame, ADR 0131), where it replaces a `'none'`, which
-         * would otherwise win over every source beside it.
+         * listed twice.
          */
-        fun withOrigins(policy: String, connect: List<String>, img: List<String>, frame: List<String> = emptyList()): String {
+        fun withOrigins(policy: String, connect: List<String>, img: List<String>): String {
             val directives = policy.split(';').map { it.trim() }.filter { it.isNotEmpty() }
-                .map { if (frame.isNotEmpty() && it == "$FRAME_SRC $NONE") FRAME_SRC else it }
-            val additions = mapOf(CONNECT_SRC to connect, IMG_SRC to img, FRAME_SRC to frame).filterValues { it.isNotEmpty() }
+            val additions = mapOf(CONNECT_SRC to connect, IMG_SRC to img).filterValues { it.isNotEmpty() }
             additions.forEach { (name, origins) ->
                 check(directives.any { it.split(' ').first() == name }) {
                     "the emitted policy has no $name, so ${origins.joinToString()} cannot be appended to it"
@@ -76,8 +74,6 @@ sealed interface AppShell {
 
         private const val CONNECT_SRC = "connect-src"
         private const val IMG_SRC = "img-src"
-        private const val FRAME_SRC = "frame-src"
-        private const val NONE = "'none'"
 
         /** The same shape `src/web/scripts/assert-csp-policy-in-dist.mjs` refuses. */
         private val CSP_META = Regex("""<meta[^>]*http-equiv\s*=\s*["']?content-security-policy""", RegexOption.IGNORE_CASE)
