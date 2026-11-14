@@ -543,6 +543,9 @@ class ShellModel(
     suspend fun createMemory(scopeId: String, parentId: String?, name: String): me.raddatz.veyq.mobile.memories.MemoryCreate.Made =
         createMemoryNode(scopeId, parentId, me.raddatz.veyq.mobile.memories.MemoryCreate.MEMORY, name)
 
+    /** Node [nodeId]'s cover as a list row draws it, the host holding the frame [held] (`NodeCover.row`); null: none. */
+    suspend fun rowCover(nodeId: String, held: String?): NodeCover.Row? = runCatching { NodeCover.row(tenant, nodeId, held) }.getOrNull()
+
     /**
      * Memory or chapter [nodeId] of space [scopeId] as the lists hold it now — what a page opened by its ids alone opens (a
      * Mac's lightbox window, whose restorable value carries ids, never a name) —; null where it is not listed or is no

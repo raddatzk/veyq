@@ -170,6 +170,9 @@ internal class Tenant(
     /** A Memory made where New makes it (`ShellModel.createMemory`): the node made, or why not. */
     val createMemory: (suspend (scopeId: String, parentId: String?, name: String) -> me.raddatz.veyq.mobile.memories.MemoryCreate.Made)? =
         shell?.let { s -> { scopeId, parentId, name -> s.createMemory(scopeId, parentId, name) } },
+    /** A list row's cover (`ShellModel.rowCover`): its frame and crop, its picture only where the host holds another frame. */
+    val rowCover: (suspend (nodeId: String, held: String?) -> me.raddatz.veyq.mobile.session.NodeCover.Row?)? =
+        shell?.let { s -> { nodeId, held -> s.rowCover(nodeId, held) } },
 )
 
 /** A lightbox the host opened ([Call.LightboxOpen]) over gallery [gallery], its [page]. */
@@ -350,7 +353,12 @@ internal class Bridge<A : Connection, T : Any>(compose: () -> Composition<A, T>)
             } catch (e: Exception) {
                 Answer.Failed(e::class.simpleName ?: "Exception")
             }
-            answer(wire.encodeToString(Answer.serializer(), a), if (a is Answer.Bytes) payload ?: ByteArray(0) else null)
+            // the bytes ride only beside the two answers that say so: Bytes (always, empty for none) and a RowCover that sent its picture
+            answer(wire.encodeToString(Answer.serializer(), a), when {
+                a is Answer.Bytes -> payload ?: ByteArray(0)
+                a is Answer.RowCover && a.sent -> payload
+                else -> null
+            })
         }
     }
 
@@ -361,7 +369,8 @@ internal class Bridge<A : Connection, T : Any>(compose: () -> Composition<A, T>)
     private fun named(c: Call.PotCreateName): Answer = creates[c.create]?.name?.let { it.value = c.name }.done(Answer.Why.NO_SUCH_CREATE)
 
     /**
-     * One line per call; a call whose answer is [Answer.Bytes] hands its bytes to [payload] first, and a call that carries
+     * One line per call; a call whose answer is [Answer.Bytes] (or a [Answer.RowCover] that sent its picture) hands its bytes
+     * to [payload] first, and a call that carries
      * bytes in reads them from [inbound].
      */
     private suspend fun dispatch(call: Call, inbound: ByteArray?, payload: (ByteArray) -> Unit): Answer {
@@ -804,6 +813,11 @@ internal class Bridge<A : Connection, T : Any>(compose: () -> Composition<A, T>)
             is Call.ScanClose -> scans.remove(call.scan)?.close().done(Answer.Why.NO_SUCH_SCAN)
             is Call.ShellCreateMemory -> tenant.value?.models?.createMemory?.let { make ->
                 make(call.scopeId, call.parentId, call.name).let { Answer.Created(it.node, it.notice) }
+            } ?: noTenant
+            is Call.ShellRowCover -> tenant.value?.models?.rowCover?.let { read ->
+                val row = read(call.nodeId, call.held) ?: return Answer.Refused(Answer.Why.NO_COVER)
+                row.bytes?.let { b -> payload(b) }
+                Answer.RowCover(row.frame, row.crop, row.bytes != null, row.bytes?.let { Sniff.image(it)?.mime })
             } ?: noTenant
             is Call.GalleryOpen -> tenant.value?.models?.let { t ->
                 val make = t.gallery ?: return noTenant

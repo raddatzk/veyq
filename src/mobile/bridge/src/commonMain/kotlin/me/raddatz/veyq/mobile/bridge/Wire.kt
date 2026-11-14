@@ -692,6 +692,14 @@ internal sealed class Call {
     @Serializable @SerialName("Shell.CreateMemory") data class ShellCreateMemory(val scopeId: String, val parentId: String?, val name: String) : Call()
 
     /**
+     * Node [nodeId]'s cover as a list row draws it (`ShellModel.rowCover`, the phones' `NodeCover.openFramed`): [Answer.RowCover]
+     * with the stored picture beside the JSON, or no bytes where the host already holds that frame ([held], the answer's
+     * `frame` it last took; null: none) — a row redrawn on every state opens a cover only once it changed. Refused
+     * `NO_COVER` where the node names none.
+     */
+    @Serializable @SerialName("Shell.RowCover") data class ShellRowCover(val nodeId: String, val held: String?) : Call()
+
+    /**
      * Memory or chapter [node]'s page (`ShellModel.galleryModel`, core's `GalleryModel`, opened as a member over the tenant's
      * Memories uploads), answered with its id ([Answer.GalleryOpened]) for [Watched.Gallery] and the calls below; refused
      * `NOT_OFFERED` for another kind. It reads anew on each revision of the shell's lists, when a medium this device sent
@@ -948,6 +956,13 @@ internal sealed class Answer {
      * (the scroll's extent) and how many rows it has in all ([count]), in the unit the host asked in.
      */
     @Serializable @SerialName("GridLayout") data class GridLayout(val rows: List<GridRow>, val height: Double, val count: Int) : Answer()
+
+    /**
+     * A list row's cover ([Call.ShellRowCover]): its [frame] (the key the host keeps the picture by and hands back as
+     * `held`), where its [crop] sits on the picture ([Call.CoverCut] cuts it), and whether the picture rides beside the JSON
+     * ([sent], its sniffed [mediaType]) — false where the host holds this frame already.
+     */
+    @Serializable @SerialName("RowCover") data class RowCover(val frame: String, val crop: NodeCover.Crop, val sent: Boolean, val mediaType: String?) : Answer()
 
     /** A Memory or a chapter made ([Call.ShellCreateMemory], [Call.GalleryCreateChapter]): the node to open, or why not. */
     @Serializable @SerialName("Created") data class Created(val node: NodeAt?, val notice: Notice?) : Answer()

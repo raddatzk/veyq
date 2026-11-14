@@ -124,8 +124,37 @@ object NodeCover {
     suspend fun framed(tenant: TenantSession): Map<String, String> =
         tenant.trees().values.flatten().mapNotNull { n ->
             runCatching { read(NodeMetaWrite.openForWrite(tenant.account.suite, n.scopeId, n.id, n.key, n.wrappedMeta)) }.getOrNull()
-                ?.let { n.id to "${it.blobId}@${it.crop.x},${it.crop.y},${it.crop.width},${it.crop.height}" }
+                ?.let { n.id to frameOf(it) }
         }.toMap()
+
+    /** A cover's key in [framed] and [Row.frame]: its blob AND its crop — the same picture only while both hold. */
+    fun frameOf(cover: Read): String = "${cover.blobId}@${cover.crop.x},${cover.crop.y},${cover.crop.width},${cover.crop.height}"
+
+    /**
+     * A list row's cover for a host that keeps each row's picture itself (the desktops, through the bridge): its [frame]
+     * (the key [frameOf] makes), where its [crop] sits, and the stored picture's [bytes] — null where the host already
+     * holds that frame, so a row redrawn on every state opens a cover's blob only when the cover or its crop changed.
+     */
+    class Row(val frame: String, val crop: Crop, val bytes: ByteArray?)
+
+    /**
+     * The row of a node whose meta names [cover], the host holding [held] (a frame, or null for none): the bytes only when
+     * [held] is not this frame, opened by [open]; null where the node names no cover or its picture does not open.
+     */
+    suspend fun row(cover: Read?, held: String?, open: suspend () -> ByteArray?): Row? {
+        cover ?: return null
+        val frame = frameOf(cover)
+        if (frame == held) return Row(frame, cover.crop, null)
+        return open()?.let { Row(frame, cover.crop, it) }
+    }
+
+    /** [row] of node [nodeId] wherever the tenant's trees hold it: its meta read here, its blob opened only when not [held]. */
+    @Throws(Exception::class)
+    suspend fun row(tenant: TenantSession, nodeId: String, held: String?): Row? {
+        val node = tenant.trees().values.flatten().firstOrNull { it.id == nodeId } ?: return null
+        val meta = runCatching { NodeMetaWrite.openForWrite(tenant.account.suite, node.scopeId, node.id, node.key, node.wrappedMeta) }.getOrNull() ?: return null
+        return row(read(meta), held) { open(tenant, node) }
+    }
 
     /** What a list's covers do after a read: [keep] the pictures held whose key still holds, [open] the nodes to open anew. */
     class Changes(val keep: Set<String>, val open: Map<String, String>)

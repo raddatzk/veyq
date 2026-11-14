@@ -92,7 +92,8 @@ public static unsafe class Core
 
     /// <summary>
     /// One action of the core, answered once, with the payload beside the answer: the bytes of an <c>Answer.Bytes</c> (a
-    /// member's picture, a blob's range), copied out of the callback; null for every other answer. Before the core started
+    /// member's picture, a blob's range) or of an <c>Answer.RowCover</c> that sent its picture, copied out of the callback;
+    /// null for every other answer. Before the core started
     /// it is never answered.
     /// </summary>
     public static Task<(Answer Answer, byte[]? Payload)> CallAsync(Call call) => CallAsync(call, null);
