@@ -21,12 +21,14 @@ Build [ADR 0135](../docs/decisions/0135-background-music-is-a-nodes-own-audio-me
   that plays a queue shuffled, endlessly and crossfading, in a bar below the shell's footer that stays across pages.
 - **Reports.** A reported track can be heard by the moderator.
 
-**Runs after `cr-remove-streaming-music`.** It needs the streaming code, `app.footerBar` and `onSessionEnding` gone.
-Both CRs edit `MemoryDetail.vue`, `register.ts`, `exportImport.ts`, `AppShell.vue` and `ShareView.vue`.
+**Builds on the streaming removal**, landed on this branch in `8a6b15652`..`09dcfe5a1` (ADR 0135 decision 1): the
+streaming code, `app.footerBar` and `onSessionEnding` are gone, and the three `memories.music` capability ids are
+retired (ADR 0088 decision 10) — this CR adds no capability entry.
 
 ## Context & constraints
 
-Measured on `main` at `8574dda3b` (2026-11-14) by a delegated read. **Spot-check the first two before phase 2.**
+Measured on `main` at `8574dda3b` (2026-11-14) by a delegated read, before the removal; the files it names were not
+its subject. **Spot-check the first two before phase 2.**
 
 - **Memories drops audio when files are picked.** `uploadQueue.ts` `isSupportedMediaFile` / `SUPPORTED_EXT`
   accept image and video only; `collectPickedFiles` drops the rest silently. `resolveMediaType` (`media.ts`) falls
@@ -59,9 +61,9 @@ Measured on `main` at `8574dda3b` (2026-11-14) by a delegated read. **Spot-check
 - **Export.** `exportImport.ts` writes each medium's original with its `blob-meta` type. `$defs.medium` in
   `contracts/export/memories/content.schema.json` has `additionalProperties: false`, and `track` is the additive
   precedent.
-- **The shell after the previous CR.** `AppShell.vue` mounts nothing below its footer. The condition its footer bar
+- **The shell after the removal.** `AppShell.vue` mounts nothing below its footer. The condition its footer bar
   used (signed in and the vault unlocked) is the player's.
-- **Not measured at refine:** the exit codes of `pnpm run check` and `./gradlew check` on the tree the previous CR
+- **Not measured at refine:** the exit codes of `pnpm run check` and `./gradlew check` on the tree the removal
   leaves. Phase 2 records them before its first edit.
 
 ## Decisions (technical, settled here)
