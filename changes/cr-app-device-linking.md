@@ -381,8 +381,68 @@ text goes straight into `DeviceLink` inside the core.
     --stop` elsewhere); the link's own refusal was right, the cause was outside. Check `/api/setup` before chasing one.
   - **Without `?devlogin` the web joins through the app.** The coordinator's Vite reads no `.run/.env`, so the web was
     signed in only by being linked from the app first — which also proves app → web before every web-trusted run.
-- [ ] **5 the bridge** — D6 with `WireTest` samples, `DispatchTest` (open each role, a code picture, confirm, a tenant
+- [x] **5 the bridge** — D6 with `WireTest` samples, `DispatchTest` (open each role, a code picture, confirm, a tenant
   switch closing it) and `SecretFreeSchemaTest` unchanged. · Done when: `./gradlew :bridge:jvmTest` green.
+
+  **Status: done (2026-11-14).**
+
+  **Built:**
+  - Wire (`Wire.kt`): `Link.ShowForNewDevice(connection)`, `Link.ScanSignInCode(connection)` (the trusted device's; a
+    tenant open, refused `NO_TENANT_OPEN`/`NO_SUCH_CONNECTION`), `Link.ScanFromTrusted(server)`, `Link.ShowForSignIn(server)`
+    (the new device's, through `SessionModel.scanFromTrusted`/`showForSignIn`; refused `NO_SIGN_IN` outside the sign-in)
+    → `Answer.LinkOpened(link)`; `Link.Code(link, px)` → `Answer.Bytes(image/png)` beside the JSON (`drawnCode`, now
+    also over a matrix the core encoded, so the link's text never leaves it; `NO_BYTES` while none shows);
+    `Link.Confirm(link, label)` and `Link.EnterCode(link, code)` → `Done` or `NOT_TAKEN` (the core's atomic moves: one
+    confirmation, one code); `Link.Close(link)`; `Watched.Link` → `Update.Link(link, LinkShown?)`, `LinkShown` the core's
+    `Shown` field for field under wire enums of their own names (`LinkRole`, `LinkStep`, `LinkRefusal`, `LinkHint`).
+    A scanning role's camera: `Scan.Open(kind = LINK, link)` registers the link's own `QrScan` (found as its direction's
+    scheme, from `PairingMarker`; `NOT_OFFERED` on a showing link); `Scan.Close` of it only drops the id — the link closes
+    its scan.
+  - Dispatch (`Bridge.kt`): `Composition.trustedLink` (the library's `DeviceLink.showForNewDevice`/`scanSignInCode(account,
+    decode)`; a test plays a granter); trusted links close with the tenant (a switch, a sign-out), a new device's stay to
+    `Link.Close`/`shutdown`. A new device's link at DONE makes the account it signed in the open tenant (`opened(signedTo)`,
+    as a sign-in call's). `Link.Close` in FINISHING drops the id and the watch but leaves the core's link to finish: the
+    core's close there ends the state ENDED while its tail still signs in, so the bridge would never open that tenant.
+  - Core: `DeviceLink.scanSignInCode(account, decode)` (the bridge's decoder); `DeviceLink.png` scaled by the drawn grid's
+    side (it divided by the code's size without the quiet zone: a large `px` overran `QrPng.MAX_SIDE` and threw).
+    `PlayedPairing.kt` moved from `commonTest` to `testDevice`, so `:bridge`'s tests play the same relay.
+  - Hosts: the only changes the generated types forced — the Rust `Call::ScanOpen` literal gains `link: None`, the C#
+    initializer `link = null` (a generated record's nullable field is `required`).
+  - Tests: `LinkDispatchTest` (7), `SecretFreeSchemaTest.aDeviceLinkCrossesAsItsStateAlone`, `WireTest` samples of every
+    new call, answer, update and enum value, `LiveLinkBridgeTest` (2).
+
+  **Met:**
+  - `LinkDispatchTest` 7/7 over two bridges and a played relay: both directions end to end through the calls, the code
+    read back from `Link.Code`'s PNG through the core's decoder and fed to the other bridge's link scan as a camera's plane;
+    numbers equal; a blank and a second confirmation `NOT_TAKEN`; 32 racing confirmations → one `Done`, one delegation,
+    one seal; a short and a second six-digit code `NOT_TAKEN`; the new bridge's gate Signed with `offer.linked`, its
+    tenant open; a close in FINISHING still opens it; a tenant switch closes the trusted link (watch null, id refused, its
+    relay closed); every refusal by name; nothing sent outward on any watch carries the code's secret, a handle or a token.
+  - `SecretFreeSchemaTest`: no field of any root named like a pairing secret (handle, payload, grant, envelope, channel,
+    transport, marker; the check refuses a played shape with five such fields), and the link's outward shapes pinned to
+    their fields.
+  - Live (`VEYQ_LIVE=http://veyq.localhost:8080`, `VEYQ_ENV_FILE`): `LiveLinkBridgeTest` 2/2, not skipped — two
+    `Bridge.live` instances, both directions, the trusted bridge's Settings listing the linked family under the name
+    given, every device (both trusted logins, both linked devices) taken off by `LiveRun.removeAll`. Without `VEYQ_LIVE`:
+    2 skipped.
+  - Bites (scratchpad script, one mutation each, `/bin/cp -f` restore compared equal; each red by its named test's own
+    failure, never a compile error): a `payload` field on `LinkShown` → `aDeviceLinkCrossesAsItsStateAlone`; the new
+    device's tenant not opened at DONE → the end-to-end case; `Link.Close` in FINISHING not held off → the close case; trusted
+    links outliving the tenant → the switch case; a refused confirmation answered `Done` → the race case; a link scan's found
+    scheme wrong → both end-to-end cases; a trusted link without a tenant → the refusals case.
+  - After merging `claude/windows-cr-f6c73c` (at be14a6da8): `./gradlew :core:jvmTest :bridge:jvmTest` green (core 662,
+    bridge's classes all green, the live ones skipped); `linux/run.py build` green (clippy, cargo tests, build);
+    `windows/run.py build` green (`Veyq.Bridge.Tests` here and there, `Veyq.Tests`, the app and `Veyq.Drive` built); guards
+    (`scripts/validate_*.py` but guard_gaps) green. The bites ran at load 160–220 (another agent's runaway): slow, none
+    red by a timeout.
+
+  **Retrospective:**
+  - **A close and a sign-in are two lifetimes.** The core's rule (a close in FINISHING ends the screen, not the sign-in)
+    left its state ENDED while the account signed in, so a host keyed to DONE would never open that account. The bridge
+    keeps the two apart (the host's watch ends, the link runs on). The phones' `AppModel` keys on DONE too and cancels its
+    watch on close — whether a close within the tail leaves their shell unopened is not measured (inbox-worthy for phase 6).
+  - **Shared test fakes belong where both builds compile them.** The played relay sat in core's `commonTest`, which
+    `:bridge` does not see; moved to `testDevice` rather than copied.
 - [ ] **6 Linux and Windows** — the same screens as phase 4 on the desktops. · Done when: both `run.py build`/`test`
   green; each desktop's pass links with the web in both directions (the desktop showing; and scanning through its test
   camera); `NoCamera` offers only the showing halves on the Windows VM.

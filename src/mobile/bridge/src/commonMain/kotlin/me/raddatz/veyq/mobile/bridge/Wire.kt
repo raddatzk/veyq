@@ -664,9 +664,11 @@ internal sealed class Call {
      * ([Answer.ScanOpened]) for [Watched.Scan] and the calls below. It starts `STARTING`: the host opens its camera and
      * says what it did ([ScanCamera]). It stays until [ScanClose]; a scan is no tenant's (a sign-in scans before one opens).
      * [server] is the sign-in form's server as typed for a [ScanKind.KIT] scan (the other-server notice's), null for
-     * every other kind.
+     * every other kind. A [ScanKind.LINK] scan is device link [link]'s own (`DeviceLink.scan`): what it reads goes
+     * straight into the link, never back; refused `NO_SUCH_LINK` for no such link, `NOT_OFFERED` for one that shows its
+     * code (it scans none).
      */
-    @Serializable @SerialName("Scan.Open") data class ScanOpen(val kind: ScanKind, val server: String? = null) : Call()
+    @Serializable @SerialName("Scan.Open") data class ScanOpen(val kind: ScanKind, val server: String? = null, val link: Long? = null) : Call()
 
     /** What the host's camera did: `RUNNING` (frames follow), `NONE` (the device has none), `DENIED` (the app may not). */
     @Serializable @SerialName("Scan.Camera") data class ScanCamera(val scan: Long, val camera: me.raddatz.veyq.mobile.qr.QrScan.Camera) : Call()
@@ -683,6 +685,45 @@ internal sealed class Call {
 
     /** Ends scan [scan] (`QrScan.close`): a decode in flight finds nothing after it. */
     @Serializable @SerialName("Scan.Close") data class ScanClose(val scan: Long) : Call()
+
+    /**
+     * A device link (ADR 0059; core's `DeviceLink`, `cr-app-device-linking` D6), answered with its id ([Answer.LinkOpened])
+     * for [Watched.Link] and the `Link.*` calls. The trusted device's two, from Settings' "Add a device" over the
+     * connection whose key is [connection] — *add a new device* shows a code, *sign in with a QR code* scans one —, need
+     * a tenant open and close with it (refused `NO_TENANT_OPEN`, `NO_SUCH_CONNECTION`).
+     */
+    @Serializable @SerialName("Link.ShowForNewDevice") data class LinkShowForNewDevice(val connection: String) : Call()
+    @Serializable @SerialName("Link.ScanSignInCode") data class LinkScanSignInCode(val connection: String) : Call()
+
+    /**
+     * The new device's two, from the sign-in form over its [server] as typed (`SessionModel.scanFromTrusted`,
+     * `showForSignIn`; nothing a scan reads changes it): refused `NO_SIGN_IN` while no sign-in is shown. Once the link is
+     * done the account it signed in is open — the session's watch says so, with the linked offer (`Offer.linked`).
+     */
+    @Serializable @SerialName("Link.ScanFromTrusted") data class LinkScanFromTrusted(val server: String) : Call()
+    @Serializable @SerialName("Link.ShowForSignIn") data class LinkShowForSignIn(val server: String) : Call()
+
+    /**
+     * Link [link]'s code as a picture ([Answer.Bytes], `image/png`, beside the JSON; the bridge's `drawnCode`) at most
+     * [px] pixels a side: the code's text never crosses. Refused `NO_BYTES` while the link shows none (it scans, or its
+     * code is not drawn yet, or it ended).
+     */
+    @Serializable @SerialName("Link.Code") data class LinkCode(val link: Long, val px: Int) : Call()
+
+    /**
+     * The slide's end (`DeviceLink.confirm`, the trusted device's): the new device named [label] is granted the account.
+     * Once: a second confirmation, one racing it, a blank name or one at another step is refused `NOT_TAKEN`.
+     */
+    @Serializable @SerialName("Link.Confirm") data class LinkConfirm(val link: Long, val label: String) : Call()
+
+    /** The six digits the trusted device shows, typed on the new device (`DeviceLink.enterCode`): sent once; refused `NOT_TAKEN` else. */
+    @Serializable @SerialName("Link.EnterCode") data class LinkEnterCode(val link: Long, val code: String) : Call()
+
+    /**
+     * Ends link [link] (`DeviceLink.close`): its polls stop, its scan closes, nothing more is sent. A new device's link
+     * whose grant is already being spent finishes its sign-in all the same (the core's rule): the screen ends, not that.
+     */
+    @Serializable @SerialName("Link.Close") data class LinkClose(val link: Long) : Call()
 
     /**
      * A Memory [name] made where New makes it (`ShellModel.createMemory`: in [scopeId] under [parentId], null the space's
@@ -815,6 +856,13 @@ internal enum class ScanKind {
      * (`takeKit`: email and server filled, the Secret Key held by the core), never across the bridge.
      */
     KIT,
+
+    /**
+     * A device link's own scan ([Call.ScanOpen]'s `link`): the code of its direction goes into the link (the other
+     * direction's is skipped with the link's hint, anything else silently), found as its scheme (`veyqpair`,
+     * `veyqsignin`) — the code's text never crosses.
+     */
+    LINK,
 }
 
 /** A call's one answer; what the call changed arrives as the watched states' updates. */
@@ -928,6 +976,9 @@ internal sealed class Answer {
      */
     @Serializable @SerialName("Stored") data class Stored(val stored: Boolean, val notice: Notice?) : Answer()
 
+    /** A device link opened (`Link.*` of a role): its id, for [Watched.Link] and the link's calls. */
+    @Serializable @SerialName("LinkOpened") data class LinkOpened(val link: Long) : Answer()
+
     /** A scan opened ([Call.ScanOpen]): its id, for [Watched.Scan] and the scan's calls. */
     @Serializable @SerialName("ScanOpened") data class ScanOpened(val scan: Long) : Answer()
 
@@ -984,6 +1035,10 @@ internal sealed class Answer {
         /** A change of trust (`TrustChange`): no offer to answer; the person cancelled the prompt; not enrolled; the
          *  password was not the account's. */
         NO_OFFER, TRUST_CANCELLED, TRUST_FAILED, WRONG_PASSWORD,
+
+        /** A device link: none by that id (closed, or its tenant closed); no sign-in shown for a new device's; a
+         *  confirmation or a code the link did not take. */
+        NO_SUCH_LINK, NO_SIGN_IN, NOT_TAKEN,
     }
 }
 
@@ -1044,6 +1099,9 @@ internal sealed class Watched {
 
     /** A QR scan opened by [Call.ScanOpen]. */
     @Serializable @SerialName("Scan") data class Scan(val scan: Long) : Watched()
+
+    /** A device link opened by a `Link.*` call of a role. */
+    @Serializable @SerialName("Link") data class Link(val link: Long) : Watched()
 
     /** An account's Settings opened by [Call.SettingsOpen]. */
     @Serializable @SerialName("Settings") data class Settings(val settings: Long) : Watched()
@@ -1122,6 +1180,9 @@ internal sealed class Update {
 
     /** A QR scan; null for an id the bridge does not hold (it was closed). */
     @Serializable @SerialName("Scan") data class Scan(val scan: Long, val shown: ScanShown?) : Update()
+
+    /** A device link; null once it was closed (or its tenant was, or an id the bridge does not hold). */
+    @Serializable @SerialName("Link") data class Link(val link: Long, val shown: LinkShown?) : Update()
 
     /** An account's Settings; null once it was closed (or an id the bridge does not hold). */
     @Serializable @SerialName("Settings") data class Settings(val settings: Long, val shown: SettingsShown?) : Update()
@@ -1292,6 +1353,42 @@ internal class ScanShown(val state: ScanState, val found: String?)
 /** A scan's state as [ScanShown] names it (its own name: the generated hosts take a type's last name part). */
 @Serializable
 internal enum class ScanState { STARTING, NO_CAMERA, DENIED, SCANNING, FOUND, CLOSED }
+
+/**
+ * A device link as the host draws it (core's `DeviceLink.Shown`, field for field): never the code's text, the channel
+ * key, the grant or a token. The code itself is a picture ([Call.LinkCode]) while [step] is `SHOWING`. [number] is the
+ * five digits both screens compare (*add a new device*), [code] the six digits the trusted device shows for the new one
+ * to type (*sign in with a QR code*) — both on screen by design, never derived from the secret —; [label] the name the
+ * new device was given, once linked. Each enum is the core's under a name of its own (the generated hosts take a type's
+ * last name part).
+ */
+@Serializable
+@SerialName("LinkShown")
+internal class LinkShown(
+    val role: LinkRole,
+    val step: LinkStep,
+    val number: String?,
+    val code: String?,
+    val label: String?,
+    val refusal: LinkRefusal?,
+    val hint: LinkHint?,
+)
+
+/** `DeviceLink.Role`: trusted or new, showing or scanning. */
+@Serializable
+internal enum class LinkRole { SHOW_FOR_NEW_DEVICE, SCAN_SIGN_IN_CODE, SCAN_FROM_TRUSTED, SHOW_FOR_SIGN_IN }
+
+/** `DeviceLink.Step`. */
+@Serializable
+internal enum class LinkStep { OPENING, SHOWING, SCANNING, CODE, WAITING, CONFIRMING, SEALING, FINISHING, DONE, ENDED }
+
+/** `DeviceLink.Refusal`: why a link ended. */
+@Serializable
+internal enum class LinkRefusal { OFF, GONE, REFUSED, FAILED }
+
+/** `DeviceLink.Hint`: what the words add. */
+@Serializable
+internal enum class LinkHint { OTHER_DIRECTION, SAME_SERVER }
 
 /**
  * The uploads as the host draws them (core's `DepotUploads` over the app's one upload queue, the web's `UploadStatusMenu`),

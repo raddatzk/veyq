@@ -104,7 +104,7 @@ internal sealed class QrCamera : IDisposable
     {
         try
         {
-            var (answer, _) = await Core.CallAsync(new Call.ScanOpen { kind = kind, server = server });
+            var (answer, _) = await Core.CallAsync(new Call.ScanOpen { kind = kind, server = server, link = null });
             if (answer is not Answer.ScanOpened opened)
             {
                 Log.Write($"Scan.Open answered {answer.GetType().Name}");
