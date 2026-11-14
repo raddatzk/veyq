@@ -46,6 +46,7 @@ import me.raddatz.veyq.mobile.session.NodeCover
 import me.raddatz.veyq.mobile.export.NodeExport
 import me.raddatz.veyq.mobile.session.NodeMove
 import me.raddatz.veyq.mobile.session.NodeReport
+import me.raddatz.veyq.mobile.blob.pathName
 import me.raddatz.veyq.mobile.words.Notices
 import me.raddatz.veyq.mobile.words.Notice
 import me.raddatz.veyq.mobile.words.Msg
@@ -611,16 +612,19 @@ internal class Bridge<A : Connection, T : Any>(compose: () -> Composition<A, T>)
                 ?: Answer.Refused(Answer.Why.NO_SUCH_SAVE)
             is Call.FileChooseReplace -> filePages[call.file]?.let { if (it.chooseReplace()) Answer.Done else Answer.Refused(Answer.Why.NO_REPLACE) } ?: noFile
             is Call.UploadFiles -> uploads.value?.let { u ->
-                // each path opened by the core and read at offsets: nothing of a file crosses, none is held whole
-                Answer.Queued(u.upload(call.scopeId, call.parentId, call.label, call.paths.mapNotNull { parts.files.source(it) }))
+                // each path opened by the core and read at offsets: nothing of a file crosses, none is held whole; a path that
+                // does not read is said by name, never dropped unsaid
+                val sources = call.paths.map { it to parts.files.source(it) }
+                val notRead = sources.filter { it.second == null }.map { pathName(it.first) }
+                Answer.Queued(u.upload(call.scopeId, call.parentId, call.label, sources.mapNotNull { it.second }), Notices.notRead(notRead))
             } ?: noTenant
             is Call.UploadFolder -> uploads.value?.let { u ->
-                val found = parts.files.walk(call.path) ?: return Answer.Refused(Answer.Why.NO_SUCH_PATH)
+                val found = parts.files.walk(call.path) ?: return Answer.Said(Notices.notRead(listOf(pathName(call.path))))
                 Answer.Queued(u.uploadFolder(call.scopeId, call.parentId, null, call.path, found))
             } ?: noTenant
             is Call.UploadReplace -> uploads.value?.let { u ->
                 val page = filePages[call.file] ?: return noFile
-                val source = parts.files.source(call.path) ?: return Answer.Refused(Answer.Why.NO_SUCH_PATH)
+                val source = parts.files.source(call.path) ?: return Answer.Said(Notices.notRead(listOf(pathName(call.path))))
                 if (u.replace(page, source)) Answer.Queued(1) else Answer.Refused(Answer.Why.NOT_CHOSEN)
             } ?: noTenant
             is Call.UploadCancel -> uploads.value?.cancel(call.item).done()

@@ -1112,6 +1112,26 @@ implementation exists but what holds it to the first.
     Save a copy, a medium played, the drop (the unpackaged app takes it with UAC on, the Depot whole above), an update
     keeping the device trust (the principal has no trust slot left, `409 too_many_devices`), Hello's enrolment (the
     owner's PIN), the camera's prompt (a PC with a camera).
+    **The owner's drop into the signed-in 1.709** (2026-11-13, UAC on): four drops from Explorer reached the app (`a drag
+    entered … files True`, `dropped onto …: 1 files`), and the core queued nothing (`Upload.Files: 0 queued`) — with nothing
+    said. Not the package: the app runs at medium integrity as Explorer does, with full trust, and a picked path opens in
+    the core (above). What the VM showed: Explorer had just been opened on its Home (its known folders' `desktop.ini`
+    read at 13:22:19, nothing else of the profile read before the drops), whose *Recent* list was every entry of
+    `%APPDATA%\Microsoft\Windows\Recent` — each pointing at a file earlier passes had made and deleted (`kits\kit-photo.pdf`,
+    `up\slow.bin`, …). A drop of such an entry hands the app the dead target's path; `PickedPaths.source` reads no file
+    there and `Upload.Files` queued the rest unsaid (the reading, not measured: the VM crashed, `0x7E`, before the drop of
+    a living file was driven, came back to its logon screen and then stopped answering). **Fixed where it was wrong, the silence:** `Upload.Files`
+    answers what did not read (`Notices.notRead`: one by name, `depot_folder_unreadable`, several by count,
+    `depot_files_unreadable`), `Upload.Folder` and `Upload.Replace` say a path that does not read instead of refusing
+    unsaid, and the Windows (`Uploads.Queued`) and Linux (`uploads::queued`) apps draw the notice; the open picker's item
+    without a path is said by name as a drop's is; the drop logs each path's root kind and attributes, never its name
+    (`DropSort.Facts`). Measured: `:core:jvmTest :bridge:jvmTest` green, `DispatchTest` red with the notice left out
+    (`notice=null`). **Owed, once the VM is back and logged on:** `run.py build` (the C# and `DropSortTest` were not
+    built: no Windows host), Linux's `run.py build` (the Rust not built), then `run.py package --sign`, installed over
+    1.709 in the session (`Add-AppxPackage`, as `smoke_package` installs), a living file (`Windows drop …`) dragged with
+    `Veyq.Drive explorer`/`drag` onto a level: the log `a dropped path: Fixed C:, Archive`, `Upload.Files: 1 queued` and
+    the upload `Done`, read back to the SHA-256; a Recent entry whose file is gone dragged: `said depot_folder_unreadable`
+    and the InfoBar showing it.
     **The trust step under a self-signed `CN=veyq` certificate** (the release's signer, ADR 0133 decision 12; walked
     2026-11-13 on the same VM, **UAC on**, with a throwaway certificate made there by `New-SelfSignedCertificate`, its
     key removed from the store after exporting a PFX and `veyq.cer`, the package signed by `run.py package --sign

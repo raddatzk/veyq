@@ -795,6 +795,11 @@ first in each of its scrolls — `LocalNodeHero.current(inset)` (Android) / `Nod
   an assembly the MSIX task could not load (`System.Security.Permissions`): `run.py` parses the filled manifest first.
   A packaged build names its .pri `resources.pri`. With UAC off the packaged app starts, elevated like the rest;
   with UAC on at medium integrity (`0x2000`); only with UAC on did the (unpackaged) app take a drop from Explorer (2026-11-13).
+- Explorer's Home lists *Recent* entries whose files are gone (every pass deletes its own), and a drop of one hands the
+  app a dead path: `dropped onto …: 1 files` then `0 queued`, read as "the packaged app does not upload" (2026-11-13).
+  The core says each path it cannot read (`Notices.notRead`), and the drop logs each path's root and attributes
+  (`a dropped path: Fixed C:, FileNotFoundException`): read that line before suspecting the package. Purge a pass's
+  Recent entries with its files (`%APPDATA%\Microsoft\Windows\Recent\<name>.lnk`).
 - `run.py` sends every PowerShell script as `-EncodedCommand` (UTF-16LE, base64), so nothing is quoted through cmd.exe,
   and reads what PowerShell prints as the console's code page, CP850 on the German VM. `dotnet` writes UTF-8 there, so
   `run.py` sets its words English (`DOTNET_CLI_UI_LANGUAGE`).

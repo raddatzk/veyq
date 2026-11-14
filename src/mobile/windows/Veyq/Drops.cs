@@ -68,6 +68,9 @@ internal sealed record Drops(UploadLevel Level, Action<bool, string> Say)
                     deferral.Complete();
                 }
                 Log.Write($"dropped onto {level.Label}: {sorted.Files.Count} files, {sorted.Folders.Count} folders, {sorted.Refused.Count} refused");
+                // where each dropped path lies and what the file system says of it, never the path itself: a drop the
+                // core cannot read says why in the log (the packaged app's drop, 2026-11-13)
+                foreach (var path in sorted.Files.Concat(sorted.Folders)) Log.Write($"a dropped path: {DropSort.Facts(path)}");
                 foreach (var name in sorted.Refused) Say(false, Words.DepotDropNotLocal(name));
                 foreach (var call in DropSort.Calls(level, sorted))
                 {

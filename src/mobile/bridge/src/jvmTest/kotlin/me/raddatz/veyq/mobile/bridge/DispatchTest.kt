@@ -27,6 +27,7 @@ import me.raddatz.veyq.mobile.session.StaySignedIn
 import me.raddatz.veyq.mobile.session.TrustChange
 import me.raddatz.veyq.mobile.session.TrustedDevice
 import me.raddatz.veyq.mobile.words.Msg
+import me.raddatz.veyq.mobile.words.Notice
 import kotlin.concurrent.thread
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -1608,7 +1609,17 @@ class DispatchTest {
 
         // two files by path (a third is no file): answered once queued, each read at offsets a frame at a time, never whole
         JvmFiles.reads.clear()
-        assertEquals(Answer.Queued(2), b.ask(Call.UploadFiles("s", null, "Home", listOf(a.path, bBin.path, java.io.File(dir, "gone.txt").path))), "an upload answered before it was queued")
+        // the path that did not read is said by name (a drop the core queues nothing for is never silent)
+        assertEquals(
+            Answer.Queued(2, Notice(Msg.DEPOT_FOLDER_UNREADABLE, "gone.txt")),
+            b.ask(Call.UploadFiles("s", null, "Home", listOf(a.path, bBin.path, java.io.File(dir, "gone.txt").path))),
+            "an upload answered before it was queued, or the path that did not read unsaid",
+        )
+        assertEquals(
+            Answer.Queued(0, Notice(Msg.DEPOT_FILES_UNREADABLE, 2)),
+            b.ask(Call.UploadFiles("s", null, "Home", listOf(java.io.File(dir, "gone.txt").path, java.io.File(dir, "gone2.txt").path))),
+            "a drop that queued nothing was silent",
+        )
         uploads.until { u -> (u as Update.Uploads).shown?.takeIf { s -> s.items().count { it.status == me.raddatz.veyq.mobile.blob.UploadQueue.Status.DONE } == 2 } }
         assertEquals(setOf("upload:top/a.txt", "upload:top/b.bin"), level.sent.toSet())
         val aReads = JvmFiles.reads.filter { it.startsWith("a.txt@") }
@@ -1625,7 +1636,7 @@ class DispatchTest {
         uploads.until { u -> (u as Update.Uploads).shown?.takeIf { it.said == null && level.sent.contains("replace:n-a.txt over b-a.txt") } }
 
         // a folder by path: walked by the core (the hidden file kept, the link said and never followed), queued under its name
-        assertEquals(Answer.Refused(Answer.Why.NO_SUCH_PATH), b.ask(Call.UploadFolder("s", null, a.path)))
+        assertEquals(Answer.Said(Notice(Msg.DEPOT_FOLDER_UNREADABLE, "a.txt")), b.ask(Call.UploadFolder("s", null, a.path)))
         assertEquals(Answer.Queued(3), b.ask(Call.UploadFolder("s", null, trip.path)))
         val leftOut = uploads.until { u -> (u as Update.Uploads).shown?.said }
         assertEquals(listOf(me.raddatz.veyq.mobile.words.Notice(Msg.DEPOT_FOLDER_LINK_SKIPPED, "link")), leftOut.notices)
@@ -1644,7 +1655,7 @@ class DispatchTest {
         assertEquals(Answer.Refused(Answer.Why.NOT_CHOSEN), b.ask(Call.UploadReplace(page, a.path)), "a replace not chosen first")
         assertEquals(Answer.Done, b.ask(Call.FileChooseReplace(page)))
         level.blobs["n-b.bin"] = "peer" // someone else replaced it while the dialog was open
-        assertEquals(Answer.Refused(Answer.Why.NO_SUCH_PATH), b.ask(Call.UploadReplace(page, java.io.File(dir, "gone.txt").path)))
+        assertEquals(Answer.Said(Notice(Msg.DEPOT_FOLDER_UNREADABLE, "gone.txt")), b.ask(Call.UploadReplace(page, java.io.File(dir, "gone.txt").path)))
         assertEquals(Answer.Done, b.ask(Call.FileChooseReplace(page)))
         level.blobs["n-b.bin"] = "peer2"
         assertEquals(Answer.Queued(1), b.ask(Call.UploadReplace(page, a.path)))

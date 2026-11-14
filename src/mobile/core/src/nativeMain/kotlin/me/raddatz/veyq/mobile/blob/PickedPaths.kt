@@ -13,7 +13,7 @@ import platform.posix.fclose
  */
 object PickedPaths {
     /** The last part of [path] (either separator): a file's or a directory's own name. */
-    fun nameOf(path: String): String = path.trimEnd('/', '\\').split('/', '\\').lastOrNull { it.isNotEmpty() } ?: path
+    fun nameOf(path: String): String = pathName(path)
 
     /**
      * The regular file at [path] as an upload's source: named by its path's last part, its size and modified time the
