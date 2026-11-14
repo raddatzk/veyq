@@ -1,6 +1,6 @@
 import { describe, it, expect, vi } from 'vitest'
 import { checkAudioFile, formatTrackLength, isAudioMeta, musicTitle, MUSIC_MAX_BYTES } from './audio'
-import { AudioUndecodable } from './audioFacts'
+import { AudioUnplayable } from './audioFacts'
 
 const ascii = (s: string) => Uint8Array.from(s, (c) => c.charCodeAt(0))
 const FACTS = { durationMs: 3000, trimStartMs: 0, trimEndMs: 3000 }
@@ -67,8 +67,15 @@ describe('checkAudioFile: a picked file is typed by its bytes and measured befor
     expect(measure).not.toHaveBeenCalled()
   })
 
-  it('refuses a file this browser cannot decode', async () => {
-    await expect(checkAudioFile(file(id3Mp3(), 'b.mp3'), async () => { throw new AudioUndecodable() })).resolves.toEqual({ problem: 'undecodable' })
+  it('refuses a file whose length this browser cannot read: it could not play it (ADR 0135 decision 3)', async () => {
+    await expect(checkAudioFile(file(id3Mp3(), 'b.mp3'), async () => { throw new AudioUnplayable() })).resolves.toEqual({ problem: 'unplayable' })
+  })
+
+  it('hands the measuring the file and the container its bytes name', async () => {
+    const measure = vi.fn(async () => FACTS)
+    const f = file(m4a(), 'a.m4a')
+    await checkAudioFile(f, measure)
+    expect(measure).toHaveBeenCalledWith(f, { element: 'audio', type: 'audio/mp4' })
   })
 })
 

@@ -207,7 +207,7 @@ const en = {
       problem: {
         tooLarge: '{name} is larger than 200 MB.',
         notAudio: '{name} is no audio file.',
-        undecodable: '{name} cannot be read in this browser.',
+        unplayable: '{name} cannot be played in this browser.',
       },
     },
     // The banner above a Memory (uc.memory.banner): an image or a video, independent of the cover.
@@ -587,7 +587,7 @@ const de: typeof en = {
       problem: {
         tooLarge: '{name} ist größer als 200 MB.',
         notAudio: '{name} ist keine Audiodatei.',
-        undecodable: '{name} kann in diesem Browser nicht gelesen werden.',
+        unplayable: '{name} kann in diesem Browser nicht abgespielt werden.',
       },
     },
     banner: {

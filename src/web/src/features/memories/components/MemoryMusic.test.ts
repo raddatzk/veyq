@@ -88,13 +88,13 @@ describe('the Music tab', () => {
   it('checks each picked file on the device: a refused one is named with its reason, the good ones go on with their type and facts', async () => {
     const facts = { durationMs: 4000, trimStartMs: 100, trimEndMs: 3900 }
     checkAudioFile.mockImplementation(async (file: File) =>
-      file.name === 'big.wav' ? { problem: 'tooLarge' } : file.name === 'photo.jpg' ? { problem: 'notAudio' } : file.name === 'odd.ogg' ? { problem: 'undecodable' }
+      file.name === 'big.wav' ? { problem: 'tooLarge' } : file.name === 'photo.jpg' ? { problem: 'notAudio' } : file.name === 'odd.ogg' ? { problem: 'unplayable' }
         : { file, mediaType: 'audio/mpeg', facts })
     const w = mountTab()
     const good = new File(['x'], 'good.mp3')
     await pickFiles(w, [new File(['x'], 'big.wav'), good, new File(['x'], 'photo.jpg'), new File(['x'], 'odd.ogg')])
     expect(toastError.mock.calls.map(([line]) => line)).toEqual([
-      'big.wav is larger than 200 MB.', 'photo.jpg is no audio file.', 'odd.ogg cannot be read in this browser.',
+      'big.wav is larger than 200 MB.', 'photo.jpg is no audio file.', 'odd.ogg cannot be played in this browser.',
     ])
     expect(w.emitted('add')).toEqual([[[{ file: good, mediaType: 'audio/mpeg', facts }]]])
     // the picker asks for audio only; the gallery's keeps refusing it

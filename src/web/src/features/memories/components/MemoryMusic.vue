@@ -6,7 +6,8 @@
 // `canDownload`, `canReport`) - nothing here checks a role.
 //
 // Adding checks each picked file on the device, one after the other (`checkAudioFile`: its size, an audio container by its
-// bytes, a decode for its facts - one decode at a time, for the memory a long file costs), names a refused one in a toast
+// bytes, its length as this browser plays it and its trim where that is cheap - one file at a time, for the memory a
+// decode costs), names a refused one in a toast
 // (E1), and hands the accepted ones with their type and facts to the detail, which sends them through the one upload queue
 // and seals the facts at birth (`add`). Pressing a track starts the node's music with it (`play`, A1).
 import { computed, ref } from 'vue'

@@ -2,11 +2,12 @@
 // is the audio file as it was picked: the server stores a sealed blob of a size, as for any medium, and never learns that
 // it is music. What counts as one is its sealed `blob-meta` type (`audio/*`, [isAudioMeta]); what a picked file must be to
 // become one is checked on the device before anything is uploaded ([checkAudioFile]): no larger than 200 MiB, typed as
-// audio by its bytes (core's `sniffStream`, never the browser's guess), and decodable here, since its facts
-// (`audioFacts.ts`) are measured from the decode. No key, no request.
+// audio by its bytes (core's `sniffStream`, never the browser's guess), and playable here - its length is read from this
+// browser's `<audio>` element (`audioFacts.ts`). Its trim is found only where that is cheap and is never a refusal. No
+// key, no request.
 import type { OpenedBlobMeta } from '../../../core/blob/meta'
-import { sniffStream } from '../../../core/blob/sniff'
-import { measureAudio, type AudioFacts } from './audioFacts'
+import { sniffStream, type StreamKind } from '../../../core/blob/sniff'
+import { measureAudioFile, type AudioFacts } from './audioFacts'
 
 /** The largest audio file a track is made from (ADR 0135 decision 2): refused on the device before anything is uploaded. */
 export const MUSIC_MAX_BYTES = 200 * 1024 * 1024
@@ -43,27 +44,35 @@ export function formatTrackLength(ms: number): string {
 }
 
 /** Why a picked file is refused (E1), each with its own message. */
-export type AudioProblem = 'tooLarge' | 'notAudio' | 'undecodable'
+export type AudioProblem = 'tooLarge' | 'notAudio' | 'unplayable'
 
 /** A picked file as a track: the file, the type its bytes name, and its facts - or why it is refused. */
 export type AudioCheck = { file: File; mediaType: string; facts: AudioFacts } | { problem: AudioProblem }
 
+/** The audio container `blob`'s head names, by core's `sniffStream`; null for anything else (a video, a photo, nothing). */
+export async function audioKindOf(blob: Blob): Promise<StreamKind | null> {
+  try {
+    const kind = sniffStream(new Uint8Array(await blob.slice(0, HEAD_BYTES).arrayBuffer()))
+    return kind?.element === 'audio' ? kind : null
+  } catch {
+    return null
+  }
+}
+
 /**
  * Check one picked file on the device (E1): its size first (nothing is read of a file too large), then its head (an audio
- * container core knows), then a decode for its facts. `measure` is the decode-and-scan, a seam for the tests.
+ * container core knows), then its facts - the length the element reads, refused where it cannot ([AudioUnplayable]), and the
+ * trim where it is cheap. `measure` is the measuring, a seam for the tests.
  */
-export async function checkAudioFile(file: File, measure: (bytes: ArrayBuffer) => Promise<AudioFacts> = measureAudio): Promise<AudioCheck> {
+export async function checkAudioFile(
+  file: File, measure: (file: Blob, kind: StreamKind) => Promise<AudioFacts> = measureAudioFile,
+): Promise<AudioCheck> {
   if (file.size > MUSIC_MAX_BYTES) return { problem: 'tooLarge' }
-  let kind
+  const kind = await audioKindOf(file)
+  if (!kind) return { problem: 'notAudio' }
   try {
-    kind = sniffStream(new Uint8Array(await file.slice(0, HEAD_BYTES).arrayBuffer()))
+    return { file, mediaType: kind.type, facts: await measure(file, kind) }
   } catch {
-    return { problem: 'notAudio' }
-  }
-  if (kind?.element !== 'audio') return { problem: 'notAudio' }
-  try {
-    return { file, mediaType: kind.type, facts: await measure(await file.arrayBuffer()) }
-  } catch {
-    return { problem: 'undecodable' }
+    return { problem: 'unplayable' }
   }
 }

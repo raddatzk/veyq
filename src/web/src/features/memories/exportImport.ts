@@ -67,8 +67,8 @@ import { normalizeLocation } from './memoryLocation'
 import { unsealMemoryParticipants } from './memoryParticipants'
 import { CHAPTER_KIND } from './kinds'
 import { trackActivityOf, trackLabelOf, type TrackActivity } from './track/trackLabel'
-import { isAudioMeta } from './music/audio'
-import { audioFactsFrom, measureAudio, type AudioFacts } from './music/audioFacts'
+import { audioKindOf, isAudioMeta } from './music/audio'
+import { audioFactsFrom, measureAudioFile, type AudioFacts } from './music/audioFacts'
 import { normalizeMemoryCover } from './memoryCover'
 import { MIME_TO_EXT } from '../../core/blob/meta'
 import { CENTRE, normalizeBanner, normalizeFocal, sealedBanner, type Banner, type BannerMedium } from './banner/bannerModel'
@@ -484,15 +484,18 @@ async function readyOriginal(ctx: ImportNodeContext, medium: ExportedMedium, der
   return { source, prepared, audio: await audioFactsOfImport(medium, file) }
 }
 
-/** A music track's facts for its import (ADR 0135 decision 9): the archive's, else measured from the file here - the
- *  stage's own decode is a photo's or a video's, so this one never overlaps another. A file this browser cannot decode
- *  is imported without them (it plays whole); any other medium has none. */
+/** A music track's facts for its import (ADR 0135 decision 9): the archive's, else measured from the file here as an upload
+ *  measures them (`audioFacts.ts`; the stage's own decode is a photo's or a video's, so this never overlaps another). A
+ *  file whose length this browser cannot read, or whose bytes are no audio container, is imported without them (it plays
+ *  whole); any other medium has none. */
 async function audioFactsOfImport(medium: ExportedMedium, file: Blob): Promise<AudioFacts | null> {
   if (!isAudioMeta({ type: medium.file.mediaType })) return null
   const carried = audioFactsFrom(isObj(medium.audio) ? medium.audio : null)
   if (carried) return carried
+  const kind = await audioKindOf(file)
+  if (!kind) return null
   try {
-    return await measureAudio(await file.arrayBuffer())
+    return await measureAudioFile(file, kind)
   } catch {
     return null
   }

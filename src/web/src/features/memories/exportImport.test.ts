@@ -12,7 +12,7 @@ vi.mock('../../core/node/tree', async (orig) => ({ ...(await orig<typeof import(
 vi.mock('../../core/node/cover/coverWrite', async (orig) => ({ ...(await orig<object>()), uploadCoverBlob: vi.fn(), uploadCoverImage: vi.fn(), writeNodeCover: vi.fn() }))
 vi.mock('./banner/bannerWrite', async (orig) => ({ ...(await orig<object>()), uploadBanner: vi.fn(), writeMemoryBanner: vi.fn() }))
 vi.mock('../../core/blob/transport', async (orig) => ({ ...(await orig<object>()), makeChunkProvider: vi.fn() }))
-vi.mock('./music/audioFacts', async (orig) => ({ ...(await orig<object>()), measureAudio: vi.fn() }))
+vi.mock('./music/audioFacts', async (orig) => ({ ...(await orig<object>()), measureAudioFile: vi.fn() }))
 
 import { contentDigest, rememberDigest } from '../../core/blob/sharedBlob'
 import * as v1 from '@veyq/crypto/v1'
@@ -38,7 +38,7 @@ import { readFileSync } from 'node:fs'
 import { CHAPTER_KIND, MEMORY_KIND } from './kinds'
 import { uploadBanner, writeMemoryBanner } from './banner/bannerWrite'
 import { makeChunkProvider } from '../../core/blob/transport'
-import { AudioUndecodable, measureAudio } from './music/audioFacts'
+import { AudioUnplayable, measureAudioFile } from './music/audioFacts'
 
 const SCOPE = '11111111-1111-4111-8111-111111111111'
 const NODE = '22222222-2222-4222-8222-222222222222'
@@ -409,17 +409,22 @@ describe('importMemoryContent', () => {
     const song = { file: { path: 'data/n3/s.mp3', size: 1, mediaType: 'audio/mpeg' }, name: 's.mp3', audio: { durationMs: 183_204, trimStartMs: 420, trimEndMs: 181_000 } }
     await importMemoryContent(MEMORY_KIND)(ctx(node({ media: [song] })))
     expect(vi.mocked(addMedia).mock.calls.map((c) => c[5]?.restored)).toEqual([{ durationMs: 183_204, trimStartMs: 420, trimEndMs: 181_000 }])
-    expect(measureAudio, 'the archive\'s facts are not measured again').not.toHaveBeenCalled()
+    expect(measureAudioFile, 'the archive\'s facts are not measured again').not.toHaveBeenCalled()
   })
 
-  it('measures a music track\'s facts from its file where the archive has none; one that does not decode imports without', async () => {
-    vi.mocked(measureAudio).mockResolvedValueOnce({ durationMs: 5_000, trimStartMs: 100, trimEndMs: 4_900 }).mockRejectedValueOnce(new AudioUndecodable())
-    const a = { file: { path: 'data/n3/a.m4a', size: 1, mediaType: 'audio/mp4' }, name: 'a.m4a' }
+  it('measures a music track\'s facts from its file where the archive has none; one it cannot measure imports without', async () => {
+    vi.mocked(measureAudioFile).mockResolvedValueOnce({ durationMs: 5_000, trimStartMs: 100, trimEndMs: 4_900 }).mockRejectedValueOnce(new AudioUnplayable())
+    const a = { file: { path: 'data/n3/a.mp3', size: 1, mediaType: 'audio/mpeg' }, name: 'a.mp3' }
     const b = { file: { path: 'data/n3/b.ogg', size: 1, mediaType: 'audio/ogg' }, name: 'b.ogg' }
+    const notAudio = { file: { path: 'data/n3/x.mp3', size: 1, mediaType: 'audio/mpeg' }, name: 'x.mp3' }
     const photo = { file: { path: 'data/n3/c.jpg', size: 1, mediaType: 'image/jpeg' }, name: 'c.jpg' }
-    await importMemoryContent(MEMORY_KIND)(ctx(node({ media: [a, b, photo] })))
-    expect(vi.mocked(addMedia).mock.calls.map((c) => c[5]?.restored)).toEqual([{ durationMs: 5_000, trimStartMs: 100, trimEndMs: 4_900 }, {}, {}])
-    expect(measureAudio, 'a photo is never decoded as audio').toHaveBeenCalledTimes(2)
+    const c = ctx(node({ media: [a, b, notAudio, photo] }))
+    const heads: Record<string, string> = { 'data/n3/a.mp3': 'ID3\u0004', 'data/n3/b.ogg': 'OggS', 'data/n3/x.mp3': 'nope', 'data/n3/c.jpg': 'x' }
+    vi.mocked(c.payload).mockImplementation(async (ref, name) => new File([heads[ref.path]], name))
+    await importMemoryContent(MEMORY_KIND)(c)
+    expect(vi.mocked(addMedia).mock.calls.map((call) => call[5]?.restored)).toEqual([{ durationMs: 5_000, trimStartMs: 100, trimEndMs: 4_900 }, {}, {}, {}])
+    // measured with the container the bytes name; a sealed audio type over other bytes, and a photo, are never measured
+    expect(vi.mocked(measureAudioFile).mock.calls.map((call) => call[1].type)).toEqual(['audio/mpeg', 'audio/ogg'])
   })
 
   it('creates a chapter under its Memory with the chapter kind', async () => {

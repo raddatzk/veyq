@@ -72,14 +72,17 @@ What exists to build on, read on `main` at `8574dda3b`:
    browser cannot play is skipped.
 4. **Its facts are sealed into the listed tier at birth.** They are the duration and the trimmed span (`trimStartMs`,
    `trimEndMs`), beside the file's name in `blob-meta`.
-   - **The duration** comes from an `<audio>` element's metadata for the local file. Nothing is decoded for it.
+   - **The duration** comes from an `<audio>` element's metadata for the local file. Nothing is decoded for it. A raw
+     ADTS file has no index, and the element only estimates its length (a 10-minute file read as 18 minutes in Safari
+     and 8 hours in Chrome, measured at implement), so its frames are counted instead once the element has loaded it.
    - **How the span is found:** the client scans 20 ms windows from both ends, at most 30 s from each. Silence is any
      window whose peak stays below **−60 dBFS**. A trim that would leave less than one second keeps the whole file.
      The samples are read only where that is cheap, because decoding a whole file costs far more memory than its
      decoded buffer keeps: a 10-minute MP3 grew Chrome by about 540 MiB, and a 200 MiB WAV grew Chrome and Safari by
      about 1.4–1.5 GiB (measured at implement, 2026-11-14). So:
      - **WAV:** the PCM samples at both ends are read straight from the file, whatever its size.
-     - **MP3 and ADTS AAC:** a slice from each end is decoded. Their frames decode without the rest of the file.
+     - **MP3 and ADTS AAC:** a slice from each end is decoded. Their frames decode without the rest of the file, once the
+       tail slice starts at a frame header (cut anywhere, it decoded in neither Safari nor, for ADTS, Chrome).
      - **Other containers (M4A, FLAC, Ogg),** and a slice that does not decode: the whole file is decoded only up to
        7 minutes long.
      - **Otherwise** the track has no trim and plays whole. A failed scan never refuses a file the browser can play.

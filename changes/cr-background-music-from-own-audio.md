@@ -127,6 +127,17 @@ its subject. **Spot-check the first two before phase 2.**
        an MP3 and of an ADTS file decode (if one does not in a browser, that format falls under the 7-minute rule
        there), and the peak RSS for a 7-minute M4A in both browsers.
      - **The cap stays 200 MiB.** The WAV path no longer decodes, so the 200 MiB WAV no longer costs 1.4 GiB.
+     - **Measured after the settlement (2026-11-14; generated 10-minute MP3 and ADTS and a 7-minute M4A, each with 2 s
+       of silence before and 3 s after a tone; Chrome 157 headless, the real Safari 27.2):**
+       - **Head slices** decode in both browsers (MP3 lead 2000 ms, ADTS 1960–2020 ms).
+       - **A tail slice cut anywhere** does not decode in Safari (MP3, ADTS) nor in Chrome (ADTS). **Started at the
+         first frame header that begins a chain of three** it decodes in both (trail 3000 ms), so the implementation
+         aligns the tail slice that way (`music/frames.ts`). MP3 head + tail: Chrome +103–121 MiB, Safari 0.9–1 s each.
+       - **A raw ADTS file's element duration is an estimate:** the 10-minute file read as 1 080 610 ms in Safari and
+         28 762 637 ms in Chrome. The implementation counts an ADTS file's length from its frame headers (600 027 ms for
+         that file), once the element has loaded its metadata (the playability check stays the element's).
+       - **The 7-minute M4A decoded whole:** Chrome +800–805 MiB, 371–389 ms; Safari +82 MiB, 0.8–1 s (a fresh tab).
+         Durations from the element: M4A 419 975 ms (Safari) / 420 000 ms (Chrome), MP3 600 033 / 600 000 ms.
 4. **The Music tab** is `MemoryMusic.vue`, a panel `music` beside `map`.
    - **The list:** the node's audio media from `useMediaGalleryLive` (a `music` computed beside `tracks`), each with
      its title (the `blob-meta` name without its extension) and its length.
