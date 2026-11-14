@@ -129,26 +129,6 @@ spec:
                 secretKeyRef:
                   name: {{ include "veyq.secretName" . }}
                   key: mariadbPassword
-            {{- with .Values.music }}
-            {{- if .released }}
-            # Background music (ADR 0131), only while the TEMPORARY release flag music.released is on (decision 8) and
-            # each only when set — see music in values.yaml. Compose passes the same four.
-            - name: VEYQ_MUSIC_RELEASED
-              value: "true"
-            {{- with .domain }}
-            - name: VEYQ_MUSIC_DOMAIN
-              value: {{ . | quote }}
-            {{- end }}
-            {{- with .spotifyClientId }}
-            - name: VEYQ_MUSIC_SPOTIFY_CLIENT_ID
-              value: {{ . | quote }}
-            {{- end }}
-            {{- with .appleDeveloperToken }}
-            - name: VEYQ_MUSIC_APPLE_DEVELOPER_TOKEN
-              value: {{ . | quote }}
-            {{- end }}
-            {{- end }}
-            {{- end }}
             {{- with .Values.app.trustedProxies }}
             # The hops in front of the Gateway (ADR 0094), only when set — see app.trustedProxies in values.yaml.
             - name: VEYQ_HTTP_TRUSTED_PROXIES
