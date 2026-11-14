@@ -1,10 +1,12 @@
 package me.raddatz.veyq.mobile.session
 
-import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.DelicateCoroutinesApi
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.newFixedThreadPoolContext
+import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.test.TestScope
-import kotlinx.coroutines.withContext
 import me.raddatz.veyq.mobile.crypto.b64
 import me.raddatz.veyq.mobile.crypto.concat
 import me.raddatz.veyq.mobile.crypto.lp
@@ -30,6 +32,10 @@ import kotlin.test.assertFalse
 import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
+import kotlin.time.Duration.Companion.minutes
+import kotlin.concurrent.atomics.AtomicInt
+import kotlin.concurrent.atomics.ExperimentalAtomicApi
+import kotlin.concurrent.atomics.incrementAndFetch
 
 /**
  * `DeviceLink`'s four roles over a played relay ([PlayedServer]), both sides real: the pairing crypto, the QR drawn by one
@@ -38,6 +44,12 @@ import kotlin.test.assertTrue
 class DeviceLinkTest {
     private val p = testPrimitives
     private val pairing = Pairing(p)
+
+    private companion object {
+        /** Confirmations racing on one link, and links raced: rounds make an overlap of the racers near certain. */
+        const val RACERS = 32
+        const val RACE_ROUNDS = 20
+    }
 
     /** The links' work for a few poll rounds (the channel's own timer is far away). */
     private fun TestScope.settle(rounds: Int = 3) {
@@ -397,7 +409,8 @@ class DeviceLinkTest {
     }
 
     @Test
-    fun a_double_tap_or_a_race_of_confirmations_delegates_once() = runTest {
+    // the rounds' pairings take a while on a loaded host: the wall-clock guard has room (virtual time never moves here)
+    fun a_double_tap_or_a_race_of_confirmations_delegates_once() = runTest(timeout = 5.minutes) {
         val server = PlayedServer()
         val (trusted, joining) = confirming(server.Account(), server.Side("new"), Tail())
         assertTrue(trusted.confirm("Phone"))
@@ -407,13 +420,40 @@ class DeviceLinkTest {
         assertEquals(Step.DONE, trusted.current.step)
         assertEquals(Step.DONE, joining.current.step)
 
-        val raced = PlayedServer()
-        val (other, _) = confirming(raced.Account(), raced.Side("new"), Tail())
-        val taken = withContext(Dispatchers.Default) { (1..32).map { async { other.confirm("Phone") } }.awaitAll() }
-        assertEquals(1, taken.count { it }, "racing confirmations moved the link more than once")
-        settle()
-        assertEquals(1, raced.delegations.size)
-        assertEquals(Step.DONE, other.current.step)
+        repeat(RACE_ROUNDS) { round ->
+            val raced = PlayedServer()
+            val (other, _) = confirming(raced.Account(), raced.Side("new"), Tail())
+            val taken = race(RACERS) { other.confirm("Phone") }
+            assertEquals(1, taken.count { it }, "round $round: racing confirmations moved the link ${taken.count { it }} times")
+            settle()
+            assertEquals(1, raced.delegations.size, "round $round: racing confirmations delegated ${raced.delegations.size} times")
+            assertEquals(Step.DONE, other.current.step)
+        }
+    }
+
+    /**
+     * [act] on [n] threads of their own at once: each waits on one gate until all [n] are up (parked, not spinning, so a
+     * loaded host does not starve the last one), so the calls overlap as closely as the host lets them. The test thread
+     * **blocks** meanwhile instead of suspending — a `runTest` body suspended on another dispatcher lets the scheduler
+     * run the links' delayed work and jump virtual time (to the channel's end, when the racers are slow to get a
+     * thread), which made this race flaky (2026-11-13: `expected 1 but was 0` with `Dispatchers.Default` busy). Blocked,
+     * no virtual time passes; what the confirmations launch waits on the test dispatcher for the [settle] after.
+     */
+    @OptIn(ExperimentalAtomicApi::class, DelicateCoroutinesApi::class)
+    private fun <T> race(n: Int, act: () -> T): List<T> {
+        val up = AtomicInt(0)
+        val gate = CompletableDeferred<Unit>()
+        return newFixedThreadPoolContext(n, "race").use { threads ->
+            runBlocking(threads) {
+                (1..n).map {
+                    async {
+                        if (up.incrementAndFetch() == n) gate.complete(Unit)
+                        gate.await()
+                        act()
+                    }
+                }.awaitAll()
+            }
+        }
     }
 
     @Test
