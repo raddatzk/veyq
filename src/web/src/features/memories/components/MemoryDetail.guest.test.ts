@@ -158,7 +158,7 @@ const tiles = (w: Page) => w.findAll('[data-media-id]').map((e) => e.attributes(
 const byLabel = (w: Page, label: string) => w.find(`[aria-label="${label}"]`)
 
 /** Nothing a member alone may do is on the page, nothing reached the member's world or an authenticated client. */
-function expectGuestOnly(w: Page) {
+function expectGuestOnly(w: Page, role: ShareRole = 'READ') {
   for (const label of [
     t('share.share'), t('node.favorite'), t('node.unfavorite'), t('node.rename'), t('node.delete'),
     t('media.marks.mark'), t('media.marks.unmark'), t('memory.addChapter'), t('memory.banner.add'), t('memory.banner.change'),
@@ -166,7 +166,10 @@ function expectGuestOnly(w: Page) {
     expect(byLabel(w, label).exists(), label).toBe(false)
     expect(w.findAll('button').some((b) => b.text() === label), label).toBe(false)
   }
-  expect(tabs(w)).toEqual([t('memory.gallery'), t('memory.chapters'), t('memory.tracks.tab')]) // the map as a member's; no contributions organizer, no media trash
+  // the map as a member's, and the Music tab where the link may upload (ADR 0135 decision 9: share view = member view); no
+  // contributions organizer, no media trash
+  const music = role === 'READ_WRITE' ? [t('memory.music.tab')] : []
+  expect(tabs(w)).toEqual([t('memory.gallery'), t('memory.chapters'), t('memory.tracks.tab'), ...music])
   expect(w.find('.gallery-mark-filter').exists(), 'the mark filter').toBe(false)
   // uc.memory.gallery step 8: a guest has no search, so no filter by facts either (`MemoryDetail.filter.test.ts` mounts the
   // member's field); the toolbar it would sit in is drawn.
@@ -252,7 +255,7 @@ describe("the member's Memory detail for a share guest (inbox #401 S4/S5)", () =
       const w = await mountPage(role)
       expect(w.find('.veyq-node-header-title').text()).toBe('Rom 2026')
       expect(tiles(w)).toEqual(['m-1', 'm-own'])
-      expectGuestOnly(w)
+      expectGuestOnly(w, role)
       expect(byLabel(w, t('media.upload')).exists(), 'upload').toBe(role === ShareRole.ReadWrite)
       w.unmount()
     })
@@ -265,7 +268,7 @@ describe("the member's Memory detail for a share guest (inbox #401 S4/S5)", () =
       expect(box.exists()).toBe(true)
       expect(box.find(`[aria-label="${t('media.download')}"]`).exists(), 'download').toBe(true)
       expect(box.find(`[aria-label="${t('media.delete')}"]`).exists(), 'the trash').toBe(false)
-      expectGuestOnly(w)
+      expectGuestOnly(w, role)
       w.unmount()
     })
 
@@ -281,7 +284,7 @@ describe("the member's Memory detail for a share guest (inbox #401 S4/S5)", () =
       expect(router.currentRoute.value.hash, 'the share key stays in the URL').toBe(HASH)
       await vi.waitFor(() => expect(w.find('.veyq-node-header-title').text()).toBe('Tag 1'))
       await vi.waitFor(() => expect(tiles(w)).toEqual(['c-1']))
-      expectGuestOnly(w)
+      expectGuestOnly(w, role)
       w.unmount()
     })
   }
@@ -342,7 +345,7 @@ describe("the member's Memory detail for a share guest (inbox #401 S4/S5)", () =
     await flushPromises()
     expect(publicShareMediaApi('').deleteShareMedia).toHaveBeenCalledWith({ shareId: SHARE, mediaId: 'm-own', xContributorToken: GUEST.contributorToken, xSharePassword: PW })
     await vi.waitFor(() => expect(tiles(w)).toEqual(['m-1']))
-    expectGuestOnly(w)
+    expectGuestOnly(w, 'READ_WRITE')
     w.unmount()
   })
 
@@ -370,7 +373,7 @@ describe("the member's Memory detail for a share guest (inbox #401 S4/S5)", () =
     await flushPromises()
     expect(publicShareMediaApi('').deleteShareMedia).toHaveBeenCalledWith({ shareId: SHARE, mediaId: 'm-own', xContributorToken: GUEST.contributorToken, xSharePassword: PW })
     await vi.waitFor(() => expect(tiles(w)).toEqual(['m-1']))
-    expectGuestOnly(w)
+    expectGuestOnly(w, 'READ_WRITE')
     w.unmount()
   })
 
@@ -391,7 +394,7 @@ describe("the member's Memory detail for a share guest (inbox #401 S4/S5)", () =
     expect(tile.text()).not.toContain(t('media.uploadTileFailed'))
     expect(tile.find('.upload-tile-retry').exists(), 'a retry').toBe(false)
     expect(addSharePhoto).toHaveBeenCalledTimes(1) // and the queue made none either
-    expectGuestOnly(w)
+    expectGuestOnly(w, 'READ_WRITE')
     w.unmount()
   })
 
@@ -409,7 +412,7 @@ describe("the member's Memory detail for a share guest (inbox #401 S4/S5)", () =
     expect(session).toMatchObject({ ...GUEST, shareId: SHARE, scopeId: SCOPE, pwToken: PW, nodeId: CHAPTER })
     expect(Array.from(session.sealKey), "sealed under the chapter's key").toEqual(Array.from(keys.chapter))
     expect(source.blob).toBe(file)
-    expectGuestOnly(w)
+    expectGuestOnly(w, 'READ_WRITE')
     w.unmount()
   })
 })

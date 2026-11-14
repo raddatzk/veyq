@@ -99,6 +99,18 @@ describe('the open Memory\'s media as documents', () => {
     expect(open).toHaveBeenCalledWith('v1')
   })
 
+  // cr-background-music-from-own-audio decision 1: the search asks the gallery's predicate - an image or a video is a
+  // document, music, a GPX track and an unknown type are none (it used to count everything that was no video as a photo).
+  it('makes documents of images and videos only: no music, no GPX track, no type nobody decided on', () => {
+    const types: Record<string, string> = { p1: 'image/jpeg', v1: 'video/mp4', s1: 'audio/mpeg', t1: 'application/gpx+xml', u1: 'application/x-unknown' }
+    vi.mocked(originalBlobMeta).mockImplementation((_s, _k, m) => ({ v: 1, type: types[m.mediaId], name: m.mediaId }))
+    const docs = mediaDocuments({
+      scopeId: SCOPE, key: KEY, open: () => {}, unnamed: () => 'Photo',
+      items: Object.keys(types).map((mediaId) => mediaItem({ mediaId, wrappedMeta: `s-${mediaId}` })),
+    })
+    expect(docs.map((d) => [d.id, d.kind])).toEqual([['p1', PHOTO_DOCUMENT], ['v1', VIDEO_DOCUMENT]])
+  })
+
   it('reads each seal once, as the gallery does (the listing\'s memo)', () => {
     const items = [mediaItem({ mediaId: 'p1', wrappedMeta: 's1' })]
     const input = { scopeId: SCOPE, key: KEY, open: () => {}, unnamed: () => 'Photo', items }

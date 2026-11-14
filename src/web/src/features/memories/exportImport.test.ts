@@ -12,6 +12,7 @@ vi.mock('../../core/node/tree', async (orig) => ({ ...(await orig<typeof import(
 vi.mock('../../core/node/cover/coverWrite', async (orig) => ({ ...(await orig<object>()), uploadCoverBlob: vi.fn(), uploadCoverImage: vi.fn(), writeNodeCover: vi.fn() }))
 vi.mock('./banner/bannerWrite', async (orig) => ({ ...(await orig<object>()), uploadBanner: vi.fn(), writeMemoryBanner: vi.fn() }))
 vi.mock('../../core/blob/transport', async (orig) => ({ ...(await orig<object>()), makeChunkProvider: vi.fn() }))
+vi.mock('./music/audioFacts', async (orig) => ({ ...(await orig<object>()), measureAudio: vi.fn() }))
 
 import { contentDigest, rememberDigest } from '../../core/blob/sharedBlob'
 import * as v1 from '@veyq/crypto/v1'
@@ -37,6 +38,7 @@ import { readFileSync } from 'node:fs'
 import { CHAPTER_KIND, MEMORY_KIND } from './kinds'
 import { uploadBanner, writeMemoryBanner } from './banner/bannerWrite'
 import { makeChunkProvider } from '../../core/blob/transport'
+import { AudioUndecodable, measureAudio } from './music/audioFacts'
 
 const SCOPE = '11111111-1111-4111-8111-111111111111'
 const NODE = '22222222-2222-4222-8222-222222222222'
@@ -120,16 +122,24 @@ describe('exportMemoryContent', () => {
     expect(validateMemoryContent(c)).toBeNull()
   })
 
-  // ADR 0135 decision 4: a music track's measured facts travel as its `audio`, and an import seals them again at birth.
-  // `it.fails` until the client writes and reads the field (cr-background-music-from-own-audio phase 2 turns it into `it`).
-  it.fails('exports a music track\'s length and trimmed span as its `audio`', async () => {
+  // ADR 0135 decision 4: a music track's measured facts travel as its `audio`. Lever: drop the `medium.audio` assignment.
+  it('exports a music track\'s length and trimmed span as its `audio`', async () => {
     vi.mocked(listMediaPages).mockResolvedValue({ notModified: false, items: [item('m1')], mediaRevision: 1, deleteRevision: 0, mediaIds: null, cursor: null })
     vi.mocked(originalBlobMeta).mockImplementation(() => ({ v: 1, type: 'audio/mpeg', name: 'Song.mp3', modifiedAt: 5 }))
-    vi.mocked(unsealMeta).mockImplementation(() => ({ v: 1, capturedAt: 1_000, durationMs: 183_204, trimStartMs: 420, trimEndMs: 181_000 }) as never)
+    vi.mocked(unsealMeta).mockImplementation(() => ({ v: 1, capturedAt: 1_000, durationMs: 183_204, trimStartMs: 420, trimEndMs: 181_000 }))
     const c = (await exportMemoryContent(exportCtx({}).ctx))!
     const [song] = c.media as { audio?: unknown }[]
     expect(song.audio).toEqual({ durationMs: 183_204, trimStartMs: 420, trimEndMs: 181_000 })
     expect(validateMemoryContent(c)).toBeNull()
+  })
+
+  it('exports no `audio` for a music track without facts, nor for a medium that is no audio', async () => {
+    vi.mocked(listMediaPages).mockResolvedValue({ notModified: false, items: [item('s1'), item('p1')], mediaRevision: 1, deleteRevision: 0, mediaIds: null, cursor: null })
+    vi.mocked(originalBlobMeta).mockImplementation((_s, _k, it) => ({ v: 1, type: it.mediaId === 's1' ? 'audio/mpeg' : 'image/jpeg', name: `${it.mediaId}`, modifiedAt: 5 }))
+    vi.mocked(unsealMeta).mockImplementation((_s, _k, it) =>
+      (it.mediaId === 's1' ? { v: 1, capturedAt: 1_000, durationMs: 9_000 } : { v: 1, capturedAt: 1_000, durationMs: 9_000, trimStartMs: 0, trimEndMs: 9_000 }))
+    const c = (await exportMemoryContent(exportCtx({}).ctx))!
+    expect((c.media as { audio?: unknown }[]).map((m) => m.audio)).toEqual([undefined, undefined])
   })
 
   it('an uploaded cover travels as a payload of its own, read through the session\'s source', async () => {
@@ -393,12 +403,23 @@ describe('importMemoryContent', () => {
     expect(vi.mocked(addMedia).mock.calls.map((c) => c[5]?.restored)).toEqual([{ trackName: 'Gipfeltour', trackActivity: 'cycling' }, {}])
   })
 
-  // ADR 0135 decision 4: the import seals a track's `audio` into its listed tier at birth. `it.fails` until phase 2 of
-  // cr-background-music-from-own-audio reads the field.
-  it.fails('restores a music track\'s length and trimmed span at birth, beside the rest of its facts', async () => {
+  // ADR 0135 decisions 4 and 9: the import seals a track's `audio` into its listed tier at birth, and measures it from the
+  // file where the archive has none. Levers: drop `...(audio ?? {})` in `restoredFacts`; skip the measure.
+  it('restores a music track\'s length and trimmed span at birth, beside the rest of its facts', async () => {
     const song = { file: { path: 'data/n3/s.mp3', size: 1, mediaType: 'audio/mpeg' }, name: 's.mp3', audio: { durationMs: 183_204, trimStartMs: 420, trimEndMs: 181_000 } }
     await importMemoryContent(MEMORY_KIND)(ctx(node({ media: [song] })))
     expect(vi.mocked(addMedia).mock.calls.map((c) => c[5]?.restored)).toEqual([{ durationMs: 183_204, trimStartMs: 420, trimEndMs: 181_000 }])
+    expect(measureAudio, 'the archive\'s facts are not measured again').not.toHaveBeenCalled()
+  })
+
+  it('measures a music track\'s facts from its file where the archive has none; one that does not decode imports without', async () => {
+    vi.mocked(measureAudio).mockResolvedValueOnce({ durationMs: 5_000, trimStartMs: 100, trimEndMs: 4_900 }).mockRejectedValueOnce(new AudioUndecodable())
+    const a = { file: { path: 'data/n3/a.m4a', size: 1, mediaType: 'audio/mp4' }, name: 'a.m4a' }
+    const b = { file: { path: 'data/n3/b.ogg', size: 1, mediaType: 'audio/ogg' }, name: 'b.ogg' }
+    const photo = { file: { path: 'data/n3/c.jpg', size: 1, mediaType: 'image/jpeg' }, name: 'c.jpg' }
+    await importMemoryContent(MEMORY_KIND)(ctx(node({ media: [a, b, photo] })))
+    expect(vi.mocked(addMedia).mock.calls.map((c) => c[5]?.restored)).toEqual([{ durationMs: 5_000, trimStartMs: 100, trimEndMs: 4_900 }, {}, {}])
+    expect(measureAudio, 'a photo is never decoded as audio').toHaveBeenCalledTimes(2)
   })
 
   it('creates a chapter under its Memory with the chapter kind', async () => {
@@ -504,6 +525,9 @@ describe('validateMemoryContent: a download\'s Memory checked against its contra
     ['a track label that is no object', { ...sound, media: [{ ...medium, track: 'Ridge' }] }, 'invalid_manifest'],
     ['a track activity the format does not name', { ...sound, media: [{ ...medium, track: { activity: 'paragliding' } }] }, 'invalid_manifest'],
     ['a track name over its length', { ...sound, media: [{ ...medium, track: { name: 'x'.repeat(MEMORIES_LIMITS.trackName + 1) } }] }, 'too_large'],
+    ['audio facts that are no object', { ...sound, media: [{ ...medium, audio: 1000 }] }, 'invalid_manifest'],
+    ['audio facts that are no integers', { ...sound, media: [{ ...medium, audio: { durationMs: 1.5, trimStartMs: 0, trimEndMs: 1 } }] }, 'invalid_manifest'],
+    ['audio facts missing one', { ...sound, media: [{ ...medium, audio: { durationMs: 1000, trimStartMs: 0 } }] }, 'invalid_manifest'],
     ['a banner with no file', { ...sound, banner: { medium: 'image' } }, 'invalid_manifest'],
     ['a banner of another medium', { ...sound, banner: { medium: 'audio', file: { path: 'b', size: 1 } } }, 'invalid_manifest'],
     ['a banner focal point off the medium', { ...sound, banner: { medium: 'image', file: { path: 'b', size: 1 }, focal: { x: 2, y: 0 } } }, 'invalid_manifest'],
@@ -524,6 +548,10 @@ describe('validateMemoryContent: a download\'s Memory checked against its contra
       trackName: d.medium.properties.track.properties.name.maxLength,
     }).toEqual(MEMORIES_LIMITS)
     expect(d.medium.properties.track.properties.activity.enum, 'the activities are the client\'s').toEqual([...TRACK_ACTIVITIES])
+    // a music track's facts: the three integers the client seals and the check requires (ADR 0135 decision 4)
+    const audio = d.medium.properties.audio
+    expect([audio.required, audio.additionalProperties, Object.values(audio.properties).map((p) => (p as { type: string }).type)])
+      .toEqual([['durationMs', 'trimStartMs', 'trimEndMs'], false, ['integer', 'integer', 'integer']])
     // Background music left the format (ADR 0135 decision 1), and neither node object closes its properties, so an
     // archive written before still validates against the schema.
     expect(d.music).toBeUndefined()

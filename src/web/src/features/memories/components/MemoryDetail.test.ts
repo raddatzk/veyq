@@ -323,12 +323,16 @@ describe('MemoryDetail (gallery grid + header)', () => {
     expect(wrapper.findAll('.media-tile')).toHaveLength(0)
   })
 
-  it('renders a non-image/video item (E1) as an icon tile, fetching no thumbnail for it', async () => {
+  // E1: a photo or a video with no derivable frame (an image this browser could not decode at upload) is an icon tile. A
+  // type that is neither (here a PDF an archive brought) is no photo view's at all (`isGalleryMedium`, ADR 0135 decision 2).
+  it('renders an underivable image (E1) as an icon tile, fetching no thumbnail for it; a type that is no photo is no tile', async () => {
     const store = galleryFakeStore()
     fakeApi(mediaApi, store.api)
     fakeApi(blobApi, store.blob)
     vi.stubGlobal('fetch', store.fetchStub)
     const memoryKey = v1.randomBytes(32)
+    const undecodable = { ...stubDeriver(), deriveImage: vi.fn(async () => { throw new Error('undecodable') }) }
+    await addMedia(SCOPE_ID, NODE_ID, memoryKey, { blob: new Blob([new Uint8Array([1, 2, 3]) as BlobPart]), mediaType: 'image/heic' }, undecodable)
     await addMedia(SCOPE_ID, NODE_ID, memoryKey, { blob: new Blob([new Uint8Array([1, 2, 3]) as BlobPart]), mediaType: 'application/pdf' }, stubDeriver())
 
     const wrapper = mountDetail(memoryKey)

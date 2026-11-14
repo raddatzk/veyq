@@ -1,7 +1,7 @@
 ---
 id: cr-background-music-from-own-audio
 title: Background music from a node's own audio files — a Music tab in Memories, and core's shuffled, crossfading player that plays on across pages
-status: planned
+status: in-progress
 satisfies: ["uc.memory.background-music", "en.platform.audio-player"]
 adrs: ["0135", "0130", "0047", "0093", "0082", "0109", "0079", "0033", "0026"]
 invariants:
@@ -93,6 +93,23 @@ its subject. **Spot-check the first two before phase 2.**
    - **What phase 2 measures** in Chrome and in Safari (macOS, and an iPhone if one can be reached): memory and time
      for a 10-minute 320 kbit/s MP3 and a 200 MiB WAV, recorded in the commit. If the WAV fails on a phone, the cap
      comes down to what passed, and ADR 0135 decision 2 is edited with it.
+   - **Measured at implement (phase 2, 2026-11-14) — contradicts the memory premise; open, handed back.** Peak growth
+     of the decoding process's RSS over its idle baseline, sampled every 50 ms (`ps`), and the decode time the page
+     reported, for `OfflineAudioContext(1, 1, rate).decodeAudioData` on generated fixtures (a 10-minute 320 kbit/s MP3,
+     24.0 MB; a 19.8-minute 44.1 kHz stereo 16-bit WAV, 209.6 MB, just under 200 MiB). Chrome 157 headless (system
+     Chrome through Playwright) and the real Safari 27.2 on macOS (the page opened in the owner's Safari, results posted
+     back); no iPhone reachable; Playwright's WebKit build was not installed for this Playwright version.
+
+     | Browser | File | 8 kHz context | 44.1 kHz context (control) |
+     |---|---|---|---|
+     | Chrome 157 | MP3 10 min | +539 MiB, 532 ms | +578 MiB, 438 ms |
+     | Chrome 157 | WAV 200 MiB | +1404 MiB, 433 ms | +1297 MiB, 268 ms |
+     | Safari 27.2 | MP3 10 min | +136 MiB, 3.9 s | +453 MiB, 3.2 s |
+     | Safari 27.2 | WAV 200 MiB | +1528 MiB, 1.6 s | +1858 MiB, 1.2 s |
+
+     The low rate does not bound the peak in Chrome (it decodes at the file's rate, then resamples), and bounds it in
+     Safari for the MP3 only; the 200 MiB WAV peaks at 1.4–1.5 GB in both. "A few hundred KB per minute" holds for the
+     decoded buffer that is kept, not for the decode. The scan itself costs 0–2 ms.
 4. **The Music tab** is `MemoryMusic.vue`, a panel `music` beside `map`.
    - **The list:** the node's audio media from `useMediaGalleryLive` (a `music` computed beside `tracks`), each with
      its title (the `blob-meta` name without its extension) and its length.

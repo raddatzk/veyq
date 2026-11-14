@@ -28,7 +28,7 @@ import { normalizeParticipants } from './memoryParticipants'
 import { effectiveCapturedAt, isVideoMediaType, mediaTypeOf, type MediaItem } from './media'
 import { uploaderOriginOf } from './mediaKey'
 import { closeListing, openedBlobMeta, openedMeta, openListing } from './openedListing'
-import { isTrackMeta } from './track/gpx'
+import { isGalleryMedium } from './galleryMedium'
 
 /** The kind token of a photo's and a video's document. */
 export const PHOTO_DOCUMENT = 'memories.photo'
@@ -113,13 +113,14 @@ export interface MediaDocumentsInput {
   open: (mediaId: string) => void
 }
 
-/** Whether a medium is a GPX track (ADR 0130 decision 7): no photo, so no photo document - it is on its Memory's Map tab. */
-const isTrack = (scopeId: string, key: Uint8Array, item: MediaItem) => isTrackMeta(openedBlobMeta(scopeId, key, item))
+/** Whether a medium is a photo or a video (`galleryMedium.ts`): a GPX track (ADR 0130 decision 7), a music track (ADR 0135
+ *  decision 2) and a type nobody decided on are no photo, so no photo document - each is on its own tab, if any. */
+const isPhotoOrVideo = (scopeId: string, key: Uint8Array, item: MediaItem) => isGalleryMedium(openedBlobMeta(scopeId, key, item))
 
-/** One document per medium of the open Memory but a blocked one or a track (see the header). */
+/** One document per photo and video of the open Memory but a blocked one (see the header). */
 export function mediaDocuments(input: MediaDocumentsInput): ContributedDocument[] {
   return input.items
-    .filter((item) => !item.blocked && !isTrack(input.scopeId, input.key, item))
+    .filter((item) => !item.blocked && isPhotoOrVideo(input.scopeId, input.key, item))
     .map((item) => {
       const { nodeId: _node, ...doc } = mediumDocument(input.scopeId, input.key, item, '', input.unnamed)
       return { ...doc, open: () => input.open(item.mediaId) }
@@ -210,7 +211,7 @@ function* pageDocuments(
     const before = ctx.previous.get(item.mediaId)
     const key = keys.get(row.nodeId)
     if (before && before.revision === revisionOf(item) && before.nodeId === row.nodeId) out.push(before)
-    else if (key && !isTrack(ctx.scopeId, key, item)) out.push(mediumDocument(ctx.scopeId, key, item, row.nodeId, unnamedWord))
+    else if (key && isPhotoOrVideo(ctx.scopeId, key, item)) out.push(mediumDocument(ctx.scopeId, key, item, row.nodeId, unnamedWord))
     yield
   }
   return out

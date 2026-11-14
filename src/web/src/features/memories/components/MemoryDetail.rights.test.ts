@@ -111,7 +111,8 @@ describe('MemoryDetail follows rights', () => {
     expect(await header(w)).toEqual([...HEADER])
     const offered = await headerActionLabels(w)
     for (const key of EDITED_IN_PLACE) expect(offered, key).not.toContain(t(key))
-    expect(tabs(w)).toEqual([t('memory.gallery'), t('memory.chapters'), t('memory.tracks.tab'), t('memory.buckets.title'), t('memory.trash.title')])
+    // the Music tab where the viewer may add music (ADR 0135 decision 9), even before there is any
+    expect(tabs(w)).toEqual([t('memory.gallery'), t('memory.chapters'), t('memory.tracks.tab'), t('memory.music.tab'), t('memory.buckets.title'), t('memory.trash.title')])
     expect(w.find('input[type="file"]').exists()).toBe(true)
     expect(w.find('[data-testid="node-header-cover"]').exists(), 'core\'s cover button, where its right says so').toBe(true)
     expect(disabled(w, '.veyq-node-header-chip[data-fact="date"]')).toBe(false)
@@ -125,7 +126,8 @@ describe('MemoryDetail follows rights', () => {
   it('no rights: none of them — the gallery and the map alone, nothing editable, no marks read', async () => {
     const w = await mountDetail(NO_MEMORY_RIGHTS)
     expect(await header(w)).toEqual([])
-    expect(tabs(w)).toEqual([t('memory.gallery'), t('memory.tracks.tab')]) // reading, as the gallery: the map and its tracks (uc.memory.tracks)
+    // reading, as the gallery: the map and its tracks (uc.memory.tracks); no Music tab where there is no music and none may be added
+    expect(tabs(w)).toEqual([t('memory.gallery'), t('memory.tracks.tab')])
     expect(w.find('input[type="file"]').exists()).toBe(false)
     expect(w.find('[data-testid="node-header-cover"]').exists(), 'no cover button').toBe(false)
     expect(disabled(w, '.veyq-node-header-chip[data-fact="date"]')).toBe(true)

@@ -35,6 +35,9 @@ describe('sniffMediaType (full MIME — an untyped upload\'s blob meta type, the
     expect(sniffMediaType(bmff('qt  '))).toBe('video/quicktime')
     expect(sniffMediaType(bmff('isom'))).toBe('video/mp4')
     expect(sniffMediaType(bmff('mp42'))).toBe('video/mp4')
+    // An M4A is audio, never a video (ADR 0135 decision 3). Lever: drop the M4A branch - all three read video/mp4.
+    expect(['M4A ', 'M4B ', 'M4P '].map((b) => sniffMediaType(bmff(b)))).toEqual(['audio/mp4', 'audio/mp4', 'audio/mp4'])
+    expect(extensionOf(sniffMediaType(bmff('M4A ')))).toBe('m4a')
   })
 
   it('handles EBML video — WebM vs Matroska via the DocType (no ftyp box, the ftyp-only trap)', () => {

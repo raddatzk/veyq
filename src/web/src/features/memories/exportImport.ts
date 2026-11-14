@@ -21,7 +21,9 @@
 //    CORRECTED is restored as an override, and the place name too, both sealed into the listed tier by the upload that adds
 //    the medium (`RestoredMediaFacts`) - never a second write after it, which a rotation landing in between would refuse
 //    (inbox #700). A GPX track's own name and activity (ADR 0130 decision 9) travel as the medium's `track` and are
-//    restored the same way.
+//    restored the same way, and so do a music track's measured facts (ADR 0135 decision 4) as its `audio` - an audio
+//    medium that comes without them (another tool's archive) has them measured from its file on this device, and one this
+//    browser cannot decode is imported without them (it then plays whole).
 //  - the importer is the uploader of every medium; the exported contributor stays text. Participants are not restored:
 //    their ids mean nothing in the target (ADR 0083).
 //
@@ -65,6 +67,8 @@ import { normalizeLocation } from './memoryLocation'
 import { unsealMemoryParticipants } from './memoryParticipants'
 import { CHAPTER_KIND } from './kinds'
 import { trackActivityOf, trackLabelOf, type TrackActivity } from './track/trackLabel'
+import { isAudioMeta } from './music/audio'
+import { audioFactsFrom, measureAudio, type AudioFacts } from './music/audioFacts'
 import { normalizeMemoryCover } from './memoryCover'
 import { MIME_TO_EXT } from '../../core/blob/meta'
 import { CENTRE, normalizeBanner, normalizeFocal, sealedBanner, type Banner, type BannerMedium } from './banner/bannerModel'
@@ -87,6 +91,8 @@ export type ExportedMedium = {
   contributor?: string
   /** A GPX track's own name and activity (ADR 0130 decision 9); absent where it has neither. */
   track?: { name?: string; activity?: TrackActivity }
+  /** A music track's length and trimmed span (ADR 0135 decision 4); absent where it has none. */
+  audio?: AudioFacts
   /** A copy's only (see the header); never in an archive. */
   copy?: CopiedMedium
 }
@@ -171,6 +177,8 @@ export const exportMemoryContent: ExportContentHook = async (ctx) => {
     if (label.name !== null || label.activity !== null) {
       medium.track = { ...(label.name !== null ? { name: label.name } : {}), ...(label.activity !== null ? { activity: label.activity } : {}) }
     }
+    const audio = isAudioMeta(blobMeta) ? audioFactsFrom(meta) : null
+    if (audio) medium.audio = audio
     if (exif) medium.exif = { ...exif }
     const contributor = contributorOf(item, people)
     if (contributor) medium.contributor = contributor
@@ -328,6 +336,11 @@ export function validateMemoryContent(content: ManifestContent): ContentProblem 
       const n = long(`medium ${i} track name`, tr.name, MEMORIES_LIMITS.trackName)
       if (n) return n
     }
+    if (m.audio !== undefined) {
+      const a = m.audio
+      const int = (v: unknown) => typeof v === 'number' && Number.isInteger(v) && v >= 0
+      if (!isObj(a) || !int(a.durationMs) || !int(a.trimStartMs) || !int(a.trimEndMs)) return shape(`medium ${i} audio`)
+    }
   }
   const d = content.date
   if (d !== undefined && (!isObj(d) || !['auto', 'single', 'range', 'ongoing'].includes(d.mode as string)
@@ -447,7 +460,7 @@ export function importMemoryContent(kind: NodeKind): ImportContentHook {
 /** A download's original, asked for and through its on-device stage ([prepareMedia]): its tiers derived from one decode,
  *  its metadata read, its digest the one core's check computed. Key-free and sending nothing, like the upload queue's
  *  `prepare` (inbox #220). */
-type ReadyOriginal = { source: AddMediaSource; prepared: PreparedMedia }
+type ReadyOriginal = { source: AddMediaSource; prepared: PreparedMedia; audio: AudioFacts | null }
 
 /**
  * Ask for a download's original and run its on-device stage. The import runs it for the NEXT original once the current one
@@ -467,7 +480,22 @@ type ReadyOriginal = { source: AddMediaSource; prepared: PreparedMedia }
 async function readyOriginal(ctx: ImportNodeContext, medium: ExportedMedium, deriver: MediaDeriver): Promise<ReadyOriginal> {
   const file = wholePayload(await ctx.payload(medium.file, medium.name ?? 'file'))
   const source: AddMediaSource = { blob: file, mediaType: medium.file.mediaType, lastModified: file.lastModified, name: file.name }
-  return { source, prepared: await prepareMedia(source, deriver, ctx.signal) }
+  const prepared = await prepareMedia(source, deriver, ctx.signal)
+  return { source, prepared, audio: await audioFactsOfImport(medium, file) }
+}
+
+/** A music track's facts for its import (ADR 0135 decision 9): the archive's, else measured from the file here - the
+ *  stage's own decode is a photo's or a video's, so this one never overlaps another. A file this browser cannot decode
+ *  is imported without them (it plays whole); any other medium has none. */
+async function audioFactsOfImport(medium: ExportedMedium, file: Blob): Promise<AudioFacts | null> {
+  if (!isAudioMeta({ type: medium.file.mediaType })) return null
+  const carried = audioFactsFrom(isObj(medium.audio) ? medium.audio : null)
+  if (carried) return carried
+  try {
+    return await measureAudio(await file.arrayBuffer())
+  } catch {
+    return null
+  }
 }
 
 /** A promise whose failure is the loop's, met where it awaits it; held here so that a medium the loop never reaches (an
@@ -483,13 +511,13 @@ async function addOriginal(
   ctx: ImportNodeContext, nodeId: string, nodeKey: Uint8Array, medium: ExportedMedium, ready: ReadyOriginal,
   opts: { signal?: AbortSignal; nodeEpoch: number; onProgress: (f: number) => void },
 ): Promise<{ mediaId: string }> {
-  return addMedia(ctx.scopeId, nodeId, nodeKey, ready.source, undefined, { ...opts, prepared: ready.prepared, restored: restoredFacts(medium) })
+  return addMedia(ctx.scopeId, nodeId, nodeKey, ready.source, undefined, { ...opts, prepared: ready.prepared, restored: restoredFacts(medium, ready.audio) })
 }
 
 /** What a download's medium restores beside its bytes, sealed at birth (`RestoredMediaFacts`, inbox #700): its corrected
- *  capture time as an override, its place name, and a track's own name and activity. A time that was not corrected is the
- *  bytes' own, read again. */
-function restoredFacts(medium: ExportedMedium): RestoredMediaFacts {
+ *  capture time as an override, its place name, a track's own name and activity, and a music track's facts (`audio`, as
+ *  [audioFactsOfImport] found them). A time that was not corrected is the bytes' own, read again. */
+function restoredFacts(medium: ExportedMedium, audio: AudioFacts | null): RestoredMediaFacts {
   const at = medium.capturedAtCorrected ? isoToMs(medium.capturedAt) : undefined
   const place = typeof medium.location?.place === 'string' ? medium.location.place : undefined
   const track = isObj(medium.track) ? medium.track : undefined
@@ -498,6 +526,7 @@ function restoredFacts(medium: ExportedMedium): RestoredMediaFacts {
     ...(place ? { placeName: place } : {}),
     ...(typeof track?.name === 'string' && track.name.trim() ? { trackName: track.name } : {}),
     ...(trackActivityOf(track?.activity) ? { trackActivity: track!.activity } : {}),
+    ...(audio ?? {}),
   }
 }
 
