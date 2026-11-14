@@ -213,7 +213,7 @@ const headerActions = computed<NodeHeaderAction[]>(() => [
   // The node's music (uc.memory.background-music, ADR 0135 decision 9): one button where it has music, for every viewer,
   // toggling core's player - it stops this node's music while it plays, else starts it.
   {
-    id: 'music', label: musicPlaysHere.value ? t('memory.music.stop') : t('memory.music.play'), icon: 'music',
+    id: 'music', label: musicPlaysHere.value ? t('memory.music.stop') : t('memory.music.play'), icon: musicPlaysHere.value ? 'stop' : 'play',
     shown: music.value.length > 0, disabled: !props.memoryKey, pressed: musicPlaysHere.value, onClick: () => toggleMusic(),
   },
 ])
@@ -712,7 +712,7 @@ function playMusic(startId?: string) {
   const key = props.memoryKey
   if (!key || music.value.length === 0) return
   player.play(musicQueue({
-    scopeId: props.scopeId, nodeId: props.node.id, nodeName: props.node.name, key, music: music.value, loaders: props.source.loaders,
+    scopeId: props.scopeId, nodeId: props.node.id, nodeName: props.node.name, href: window.location.href, key, music: music.value, loaders: props.source.loaders,
     untitled: (n) => t('memory.music.untitled', { n }), ...(startId ? { startId } : {}),
   }))
 }

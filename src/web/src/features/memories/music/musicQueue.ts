@@ -19,6 +19,8 @@ export type MusicQueueInput = {
   scopeId: string
   nodeId: string
   nodeName: string
+  /** The page the music is started from (the node's), which the bar's album links back to. */
+  href?: string
   key: Uint8Array
   music: readonly MediaItem[]
   loaders: MediaLoaders
@@ -57,6 +59,7 @@ export function musicQueue(input: MusicQueueInput): PlayerQueue {
   return {
     key: musicQueueKey(input.scopeId, input.nodeId),
     album: input.nodeName,
+    ...(input.href ? { href: input.href } : {}),
     tracks,
     ...(input.startId ? { startId: input.startId } : {}),
   }

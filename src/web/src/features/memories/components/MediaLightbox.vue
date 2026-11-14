@@ -61,6 +61,7 @@ import { createPreviewCache, previewKeyOf } from '../previewCache'
 import { exceedsPreview, originalZoomable, previewDownscaled } from '../lightboxZoom'
 import VeyqDateField from '../../../shared/ui/VeyqDateField.vue'
 import VeyqIcon from '../../../shared/ui/VeyqIcon.vue'
+import AudioMiniControls from '../../../core/audio/AudioMiniControls.vue'
 
 const props = defineProps<{
   memoryKey: Uint8Array
@@ -205,7 +206,9 @@ function stopSlideshow(state: 'paused' | 'ended') {
   if (detailsDeferred && detailsDeferred === item.value?.mediaId) void loadDetails()
 }
 const toggleSlideshow = () => (playing.value ? stopSlideshow('paused') : startSlideshow())
-const isSlideshowToggle = (target: EventTarget | null) => target instanceof Element && !!target.closest('[data-slideshow-toggle]')
+// The music's controls in the top bar (core's `AudioMiniControls`) are no interaction with the slideshow either: music and
+// slideshow run together.
+const isSlideshowToggle = (target: EventTarget | null) => target instanceof Element && !!target.closest('[data-slideshow-toggle], [data-audio-controls]')
 /** Any pointer or wheel in the lightbox pauses — the zoom's gestures and the details panel included; the toggle is its own. */
 function pauseOnInteraction(event: Event) {
   if (playing.value && !isSlideshowToggle(event.target)) stopSlideshow('paused')
@@ -724,6 +727,7 @@ onBeforeUnmount(() => {
         <small>{{ t('media.itemPosition', { index: current + 1, count: items.length }) }}</small>
         <span class="visually-hidden" role="status" aria-live="polite" data-testid="slideshow-status">{{ slideshowAnnouncement }}</span>
       </div>
+      <AudioMiniControls class="media-lightbox-audio" button-class="lightbox-icon-button" />
       <div class="media-lightbox-actions">
         <button
           v-if="items.length > 1"

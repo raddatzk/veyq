@@ -31,13 +31,15 @@
 
 ## Main flow — listen
 
-1. A node with music shows a **Play music** button in its header, for every viewer.
-2. Pressing it starts the node's tracks in core's player. The bar appears below the page's footer and the first,
-   shuffled track fades in from where its silence ends.
+1. A node with music shows a **Play music** button (a play icon; a stop icon while its music plays) in its header, for
+   every viewer.
+2. Pressing it starts the node's tracks in core's player. The bar appears below the page's footer, naming the track and
+   the node, which links back to the node's page, and the first, shuffled track fades in from where its silence ends.
 3. Each track crossfades into the next over 5 s at their trimmed edges. After the last track of a round a newly
    shuffled round starts, and it never repeats the track just played.
 4. In the bar the listener pauses and resumes, goes to the next or previous track, and drags the progress bar. The lock
-   screen and the media keys offer the same.
+   screen and the media keys offer the same, and so does the lightbox's top bar while it covers the page; a slideshow
+   there runs on beside the music.
 5. The listener moves on — another Memory, Settings, another space — and the music plays on. Pressing the header
    button again, or **Close** in the bar, ends it.
 

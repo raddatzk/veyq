@@ -25,8 +25,9 @@ export type PlayerTrack = {
   /** A playable source for the track - the application's, which holds the keys - and how to let it go. */
   open: () => Promise<{ url: string; release: () => void }>
 }
-/** A queue: `key` names whose it is (Memories: the node), `album` what the lock screen shows under the title. */
-export type PlayerQueue = { key: string; album?: string; tracks: readonly PlayerTrack[]; startId?: string }
+/** A queue: `key` names whose it is (Memories: the node), `album` what the lock screen shows under the title, `href`
+ *  the page the queue was started from, which the bar's album links back to. */
+export type PlayerQueue = { key: string; album?: string; href?: string; tracks: readonly PlayerTrack[]; startId?: string }
 
 /** What plays now, for the bar and the header. Positions are within the span, in ms. */
 export type NowPlaying = {
@@ -34,6 +35,7 @@ export type NowPlaying = {
   trackId: string
   title: string
   album?: string
+  href?: string
   playing: boolean
   positionMs: number
   durationMs: number
@@ -315,7 +317,7 @@ export function createAudioPlayer(env: PlayerEnv): AudioPlayer {
     const span = deck.track === track ? deck.span : { startMs: track.startMs ?? 0, endMs: track.endMs ?? Infinity }
     nowPlaying.value = {
       key: queue!.key, trackId: track.id, title: track.title, ...(queue!.album ? { album: queue!.album } : {}),
-      playing, positionMs: 0, durationMs: Number.isFinite(span.endMs) ? span.endMs - span.startMs : 0,
+      ...(queue!.href ? { href: queue!.href } : {}), playing, positionMs: 0, durationMs: Number.isFinite(span.endMs) ? span.endMs - span.startMs : 0,
     }
     const session = env.mediaSession
     if (session) {

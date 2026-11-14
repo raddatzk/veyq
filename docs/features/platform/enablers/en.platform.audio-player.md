@@ -17,7 +17,9 @@
 
 ## What an application hands over
 
-A queue: an ordered list of tracks and, optionally, the one to start with. Each track has:
+A queue: an ordered list of tracks, optionally the one to start with, and optionally an `album` (the name shown after the
+title and on the lock screen) with an `href` (the page the queue was started from, which the bar's album links back to).
+Each track has:
 
 | Field | Meaning |
 |---|---|
@@ -47,8 +49,13 @@ holds the keys, exactly as the lightbox does, and core plays the URL it gets. `r
   silent `blob:` before anything is awaited, so iOS lets the later `play()` of a source that opened after an `await`
   sound. Measured in Chrome: an `AnalyserNode` after an element's gain reads non-zero samples on a `/__media/` stream
   and on a `blob:`, so neither is tainted (Safari is not measured).
-- **The bar:** shows the title, previous, play/pause, next, a progress bar over the trimmed span that the listener can
-  drag, and close. It is drawn below the shell's footer and only while a queue is loaded. Close ends the queue.
+- **The bar:** shows the title and the album (a link to its `href`), previous, play/pause, next, a progress bar over the
+  trimmed span that the listener can drag, and close. It is drawn below the shell's footer and only while a queue is
+  loaded. Close ends the queue.
+- **The compact controls** (`AudioMiniControls`): the title, previous, play/pause and next, for a surface that covers the
+  bar - Memories' lightbox draws them in its top bar. They drive the same player, draw nothing while no queue is loaded,
+  and their unmount stops nothing. They carry `data-audio-controls`, so a surface that pauses on any press (the
+  lightbox's slideshow) leaves them out.
 - **MediaSession:** the title, and play, pause, next, previous and seek, so the lock screen and the media keys work.
 - **One queue at a time:** a new queue replaces the one playing, crossfading into it.
 

@@ -27,6 +27,7 @@ describe('AudioBar', () => {
     const player = fakePlayer(NOW)
     const w = mountBar(player)
     expect(w.find('[data-testid="audio-title"]').text()).toBe('Summer Song · Lisbon')
+    expect(w.find('[data-testid="audio-album-link"]').exists(), 'no href: the album is plain text').toBe(false)
     expect(w.text()).toContain('1:01')
     expect(w.text()).toContain('3:05')
     await w.find('[data-testid="audio-previous"]').trigger('click')
@@ -39,6 +40,13 @@ describe('AudioBar', () => {
     expect(w.find('[data-testid="audio-toggle"]').attributes('aria-label')).toBe('Play')
     await w.find('[data-testid="audio-toggle"]').trigger('click')
     expect(player.resume).toHaveBeenCalledTimes(1)
+  })
+
+  it('links the album back to the page the queue was started from', () => {
+    const w = mountBar(fakePlayer({ ...NOW, href: 'http://veyq.localhost/#memories/lisbon' }))
+    const link = w.find('[data-testid="audio-album-link"]')
+    expect([link.text(), link.attributes('href')]).toEqual(['Lisbon', 'http://veyq.localhost/#memories/lisbon'])
+    expect(w.find('[data-testid="audio-title"]').text()).toBe('Summer Song · Lisbon')
   })
 
   it('a drag of the progress bar shows where it goes and seeks where it is let go', async () => {

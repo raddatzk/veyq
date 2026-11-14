@@ -68,7 +68,7 @@ onBeforeUnmount(() => {
         </button>
       </div>
       <div class="veyq-audio-bar__track">
-        <p class="veyq-audio-bar__title" data-testid="audio-title">{{ now.title }}<span v-if="now.album" class="veyq-audio-bar__album"> · {{ now.album }}</span></p>
+        <p class="veyq-audio-bar__title" data-testid="audio-title">{{ now.title }}<span v-if="now.album" class="veyq-audio-bar__album"> · <a v-if="now.href" :href="now.href" class="veyq-audio-bar__album-link" data-testid="audio-album-link">{{ now.album }}</a><template v-else>{{ now.album }}</template></span></p>
         <div class="veyq-audio-bar__progress">
           <span class="veyq-audio-bar__time">{{ clock(position) }}</span>
           <input
@@ -136,6 +136,15 @@ onBeforeUnmount(() => {
 .veyq-audio-bar__album {
   color: var(--app-muted);
   font-weight: 400;
+}
+.veyq-audio-bar__album-link {
+  color: inherit;
+  text-decoration: none;
+}
+.veyq-audio-bar__album-link:hover,
+.veyq-audio-bar__album-link:focus-visible {
+  color: var(--app-text);
+  text-decoration: underline;
 }
 .veyq-audio-bar__progress {
   display: grid;

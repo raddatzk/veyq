@@ -87,6 +87,7 @@ export const VEYQ_ICON_NAMES = [
   'sort-amount-up-alt',
   'step-backward',
   'step-forward',
+  'stop',
   'spinner',
   'sync',
   'tag',

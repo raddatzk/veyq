@@ -31,6 +31,8 @@ describe('musicQueue', () => {
     const q = musicQueue(input([mediaItem({ mediaId: 'a' }), mediaItem({ mediaId: 'n' }), mediaItem({ mediaId: 'w' }), mediaItem({ mediaId: 'x', blocked: true })]))
     expect(q.key).toBe(musicQueueKey('s1', 'n1'))
     expect([q.album, q.startId]).toEqual(['Lisbon', 'w'])
+    expect(q.href, 'no href given: the album links nowhere').toBeUndefined()
+    expect(musicQueue({ ...input([mediaItem({ mediaId: 'a' })]), href: '/#memories/lisbon' }).href).toBe('/#memories/lisbon')
     expect(q.tracks.map(({ id, title, startMs, endMs }) => ({ id, title, startMs, endMs }))).toEqual([
       { id: 'a', title: 'a Song', startMs: 300, endMs: 8000 },
       { id: 'n', title: 'Track 2', startMs: undefined, endMs: undefined },

@@ -122,12 +122,12 @@ describe('the player', () => {
   it('plays the first track from its trimmed start, fading in over 1 s, and says what plays', async () => {
     const h = harness({ durations: { 'blob:a': 62 } })
     const a = track('a')
-    h.player.play({ key: 'n1', album: 'Lisbon', tracks: [a.t] })
+    h.player.play({ key: 'n1', album: 'Lisbon', href: '/#memories/lisbon', tracks: [a.t] })
     await flushPromises()
     const el = playing(h)!
     expect([el.src, el.currentTime]).toEqual(['blob:a', 1])
     expect(h.ramps).toContainEqual({ deck: expect.any(Number), from: 0, to: 1, ms: 1000 })
-    expect(h.player.nowPlaying.value).toMatchObject({ key: 'n1', trackId: 'a', title: 'Song a', album: 'Lisbon', playing: true, durationMs: 60_000 })
+    expect(h.player.nowPlaying.value).toMatchObject({ key: 'n1', trackId: 'a', title: 'Song a', album: 'Lisbon', href: '/#memories/lisbon', playing: true, durationMs: 60_000 })
     expect(h.session.metadata).toEqual({ title: 'Song a', album: 'Lisbon' })
     expect([...h.handlers.keys()].sort()).toEqual(['nexttrack', 'pause', 'play', 'previoustrack', 'seekto'])
   })
