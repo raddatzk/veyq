@@ -1126,12 +1126,19 @@ implementation exists but what holds it to the first.
     unsaid, and the Windows (`Uploads.Queued`) and Linux (`uploads::queued`) apps draw the notice; the open picker's item
     without a path is said by name as a drop's is; the drop logs each path's root kind and attributes, never its name
     (`DropSort.Facts`). Measured: `:core:jvmTest :bridge:jvmTest` green, `DispatchTest` red with the notice left out
-    (`notice=null`). **Owed, once the VM is back and logged on:** `run.py build` (the C# and `DropSortTest` were not
-    built: no Windows host), Linux's `run.py build` (the Rust not built), then `run.py package --sign`, installed over
-    1.709 in the session (`Add-AppxPackage`, as `smoke_package` installs), a living file (`Windows drop …`) dragged with
-    `Veyq.Drive explorer`/`drag` onto a level: the log `a dropped path: Fixed C:, Archive`, `Upload.Files: 1 queued` and
-    the upload `Done`, read back to the SHA-256; a Recent entry whose file is gone dragged: `said depot_folder_unreadable`
-    and the InfoBar showing it.
+    (`notice=null`). **Measured 2026-11-14 on the VM** (UAC on, the owner's console session): the two
+    crashes' minidumps both fault in `viogpudo.sys` (the VirtIO GPU display driver; the second 29 s after a boot, before
+    any drive) — not the app nor `Veyq.Drive`'s input. `run.py build` green (`DropSortTest` among `Veyq.Tests`); Linux's
+    `run.py build` green (clippy `-D warnings`, `cargo test` 43);
+    `run.py package --sign` exit 0 at 1.804 (block map byte-identical), installed over 1.709 in the session
+    (`Add-AppxPackage -ForceApplicationShutdown`), starting to its unlock — the owner's step (no dev unlock in a Release
+    build), so the drop itself was driven in the debug build over the same `%LOCALAPPDATA%\veyq` (`run.py run --devlogin
+    --unlock`, the principal's own device trust): `Windows drop 1.bin` (300000 B) dragged from Explorer onto Home's level
+    logged `a dropped path: Fixed C:, Archive`, `Upload.Files: 1 queued`, `Done`, and its Save a copy read back to the
+    same SHA-256 (`6A3B1A19…D61C`); a file the user may not read (`icacls /deny Kevin:(RD)`) dragged logged `Upload.Files:
+    0 queued, said depot_folder_unreadable`, the InfoBar saying `„Windows drop gone.bin“ ließ sich nicht lesen und wurde
+    ausgelassen.` The upload trashed and purged, the files and their Recent entries removed; 1.804 left installed at its
+    unlock. **Owed (the owner's):** the same drop in the signed-in packaged app.
     **The trust step under a self-signed `CN=veyq` certificate** (the release's signer, ADR 0139 decision 12; walked
     2026-11-13 on the same VM, **UAC on**, with a throwaway certificate made there by `New-SelfSignedCertificate`, its
     key removed from the store after exporting a PFX and `veyq.cer`, the package signed by `run.py package --sign

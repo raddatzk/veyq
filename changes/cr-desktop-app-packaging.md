@@ -421,6 +421,12 @@ and never rebuilds (D10). The Mac builds only aarch64 locally; x86_64 is CI's.
   behind a signed-in packaged app (a Release build has no dev sign-in; the owner signs in): the members' pictures, Save a
   copy, a medium played, the drop into the package, an update keeping the device trust (needs a free trust slot: the
   principal is at `409 too_many_devices`), Hello's enrolment (the owner's PIN), the camera's prompt (a PC with a camera).
+  **The owner's drop into 1.709, 2026-11-13/14:** it queued nothing and said nothing (`Upload.Files: 0 queued`) — read as
+  a dead Recent entry's path, not the package; the core now says each path it cannot read and the desktops draw it
+  (ADR 0123's Consequences, the MSIX). **Met 2026-11-14:** `run.py build` green, `package --sign` 1.804 installed over
+  1.709 in the session; in the debug build (the packaged one waits at the owner's unlock) a living file dropped from
+  Explorer `1 queued`, `Done`, read back to the SHA-256, an unreadable one said in the InfoBar. **Owed (owner):** the
+  same drop in the signed-in package.
   **Retrospective:** the session, not UAC, was the obstacle: deployment refuses session 0 (`0x80070005`), which the
   install's own message does not say — the AppX log does (`Get-AppxLog -ActivityID`). Two failures hid their cause:
   cmd.exe's line limit on a longer encoded script, and an XML comment's `--` behind the MSIX task's missing assembly;
