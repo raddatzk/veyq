@@ -1154,6 +1154,19 @@ implementation exists but what holds it to the first.
     **Not walked:** the UAC prompt itself and the certificate wizard's clicks (double-click the `.cer` → Install
     Certificate → Local Machine → Trusted People) — both need a person at the console; the install page names them as
     Windows' usual way.
+    **The data folder** (2026-11-14, the owner: the installed app kept showing its unlock): the packaged app shared
+    `%LOCALAPPDATA%\veyq` with the debug build (the in-place write above), so every agent pass's sign-out and Stop
+    trusting reached the installed app's device state. Fixed: the app resolves its data folder by package identity
+    (`AppData`, `GetCurrentPackageFullName`; the rule in `Veyq.Bridge`'s `DataFolder`) — packaged
+    `ApplicationData.Current.LocalFolder` (`Packages\<family>\LocalState`, which an uninstall takes along), unpackaged
+    `%LOCALAPPDATA%\veyq`; the device store and the log follow. `DataFolderTest` red with the old rule put back.
+    Measured 2026-11-15 on the VM: `run.py build` green (Bridge 5, `Veyq.Tests` 37), `run.py package --sign` exit 0 at
+    1.815, installed over 1.804 in the session (`-ForceApplicationShutdown`); started by its AUMID its log lands in
+    `LocalState\log.txt` (`data in the package's own folder`, `session SignIn`), the development folder's
+    `device-store.json` untouched (1.804's shutdown was the last line its log got); then `run.py run --devlogin`
+    (`data in %LOCALAPPDATA%\veyq (unpackaged)`, `session Unlock` from the development store) and its stop left the
+    package's `LocalState` and `Settings` byte- and time-identical. `run.py run` stops every `Veyq.App` by name, the
+    packaged one too: start it again after a debug pass. 1.815 left installed at its sign-in.
 - **The device trust on every app** (decision 8 as changed 2026-11-11; [ADR 0136](0136-an-apps-logic-is-the-kotlin-cores-each-platform-draws-only-its-own-ui.md)'s
   Consequences for the desktops' stores). The flows are the core's alone — `session/Account.kt` and `SessionModel.kt`
   enrol, offer, resume, unlock, change the level, sign out and stop trusting through the `DeviceKeys` interface
