@@ -189,15 +189,17 @@ test(
     await page.getByRole('button', { name: 'Save', exact: true }).click()
     await expect(checkSource(page)).toHaveValue(releases.source)
 
-    // The next check (every 5 s in the run) reads the mirror; the console, read again, shows what it found.
+    // The next check (every 5 s in the run) reads the mirror; the console, read again, shows what it found. The check
+    // records its notices one transaction each (`ReleaseNoticeStore.recordFound`), so a read between two of them shows
+    // only the first: wait for all three in one read, never for the first alone (the lane failed once on exactly that).
+    // The unscheduled major is not one row among the others: it stands apart, as an alert marked urgent.
+    const urgent = page.getByRole('alert').filter({ hasText: lines.unscheduled })
     await expect(async () => {
       await rereadRelease(page)
       await expect(page.getByRole('listitem').filter({ hasText: lines.newer })).toBeVisible({ timeout: 1_000 })
+      await expect(page.getByRole('listitem').filter({ hasText: lines.planned })).toBeVisible({ timeout: 1_000 })
+      await expect(urgent).toBeVisible({ timeout: 1_000 })
     }).toPass({ timeout: 60_000, intervals: [2_000] })
-    await expect(page.getByRole('listitem').filter({ hasText: lines.planned })).toBeVisible()
-    // The unscheduled major is not one row among the others: it stands apart, as an alert marked urgent.
-    const urgent = page.getByRole('alert').filter({ hasText: lines.unscheduled })
-    await expect(urgent).toBeVisible()
     await expect(urgent).toContainText('Urgent:')
     await expect(page.getByRole('listitem').filter({ hasText: lines.unscheduled })).toHaveCount(0)
     // The running release and older ones are no notice.
