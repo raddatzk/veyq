@@ -230,6 +230,70 @@ class AppModel(app: Application) : AndroidViewModel(app) {
     fun scanKit(typedServer: String): me.raddatz.veyq.mobile.qr.QrScan<*> =
         session.scanKit(typedServer, me.raddatz.veyq.mobile.qr.QrFrames.timedDecode(::qrDecodeTiming))
 
+    // ---- device linking (ADR 0059; cr-app-device-linking) ----
+
+    private val _link = MutableStateFlow<me.raddatz.veyq.mobile.session.DeviceLink?>(null)
+
+    /** The ceremony on screen ([DeviceLinkScreen]), or null. */
+    val link: StateFlow<me.raddatz.veyq.mobile.session.DeviceLink?> = _link.asStateFlow()
+    private var linkWatch: kotlinx.coroutines.Job? = null
+
+    /** How the link on screen was opened, for "Start over": the same role, the same server. */
+    private var linkAgain: (() -> me.raddatz.veyq.mobile.session.DeviceLink?)? = null
+
+    /** Settings' "Show a code" (*add a new device*, the trusted side): this account's code for the new device to scan. */
+    fun showForNewDevice() {
+        val account = session.signedTo?.account ?: return
+        openLink { me.raddatz.veyq.mobile.session.DeviceLink.showForNewDevice(account) }
+    }
+
+    /** Settings' "Scan a code" (*sign in with a QR code*, the trusted side): the new device's code, scanned here. */
+    fun scanSignInCode() {
+        val account = session.signedTo?.account ?: return
+        openLink { me.raddatz.veyq.mobile.session.DeviceLink.scanSignInCode(account) }
+    }
+
+    /** The sign-in's "Scan a code from another device", over the form's [server] as typed now (nothing in a scan changes it). */
+    fun scanFromTrusted(server: String) =
+        openLink { session.scanFromTrusted(server, me.raddatz.veyq.mobile.qr.QrFrames.timedDecode(::qrDecodeTiming)) }
+
+    /** The sign-in's "Sign in with a QR code", over the form's [server] as typed now. */
+    fun showForSignIn(server: String) = openLink { session.showForSignIn(server) }
+
+    /** "Start over": a new ceremony of the same role — a new secret, never the old one retried (ADR 0059 §6). */
+    fun linkAgain() {
+        val again = linkAgain ?: return
+        openLink(again)
+    }
+
+    /** The ceremony's screen went: the link ends (its polls stop, its scan closes, nothing more is sent). */
+    fun closeLink() {
+        linkWatch?.cancel()
+        linkWatch = null
+        _link.value?.close()
+        _link.value = null
+    }
+
+    private fun openLink(make: () -> me.raddatz.veyq.mobile.session.DeviceLink?) {
+        closeLink()
+        val link = make() ?: return
+        linkAgain = make
+        _link.value = link
+        // its steps to logcat (`veyq-link`): the step, the refusal and the hint — never a code, a number or a name
+        linkWatch = viewModelScope.launch {
+            link.state.collect { s ->
+                android.util.Log.i("veyq-link", "${link.role}: ${s.step}" + (s.refusal?.let { ", $it" } ?: "") + (s.hint?.let { ", hint $it" } ?: ""))
+                val newDevice = link.role == me.raddatz.veyq.mobile.session.DeviceLink.Role.SCAN_FROM_TRUSTED ||
+                    link.role == me.raddatz.veyq.mobile.session.DeviceLink.Role.SHOW_FOR_SIGN_IN
+                // the new device is signed in: the shell opens over the account the grant made, its offer over it
+                if (newDevice && s.step == me.raddatz.veyq.mobile.session.DeviceLink.Step.DONE) {
+                    viewModelScope.launch { session.signedTo?.let { show(it) } }
+                    closeLink() // cancels this watch: last
+                }
+            }
+        }
+    }
+
     // ---- staying signed in (ADR 0123 decision 8) ----
 
     private val _trustWorking = MutableStateFlow(false)
@@ -446,6 +510,8 @@ class AppModel(app: Application) : AndroidViewModel(app) {
             null
         }
         override fun signOutHere() = onSettings { it.signOutHere() }
+        override fun linkShow() = showForNewDevice()
+        override fun linkScan() = scanSignInCode()
     }
 
     private fun refreshManaged() = _screen.update { s ->

@@ -35,6 +35,7 @@ import androidx.compose.material.icons.outlined.MoreVert
 import androidx.compose.material.icons.outlined.NoEncryption
 import androidx.compose.material.icons.outlined.PhoneAndroid
 import androidx.compose.material.icons.outlined.QrCode2
+import androidx.compose.material.icons.outlined.QrCodeScanner
 import androidx.compose.material.icons.outlined.Fingerprint
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ButtonDefaults
@@ -64,7 +65,6 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
@@ -97,6 +97,12 @@ interface SettingsActions {
     fun backToPassword(password: String, done: (TrustChange) -> Unit)
     fun stopTrusting()
     fun signOutHere()
+
+    /** "Add a device"'s "Show a code": this device shows its code, the new device scans (ADR 0059 §1). */
+    fun linkShow() {}
+
+    /** "Add a device"'s "Scan a code": the new device shows its sign-in code, this device scans. */
+    fun linkScan() {}
 }
 
 /** A step the page asks to be confirmed first, as the web's `SessionsPanel` does: what it says and what it does. */
@@ -171,7 +177,10 @@ fun SettingsScreen(state: AccountSettings.State, actions: SettingsActions) {
             }
             sessions(state, context, ask = { confirm = it }, actions)
             savedKeys(state, context, ask = { confirm = it }, actions)
-            if (state.addDevice) addDevice()
+            if (state.addDevice) {
+                val camera = context.packageManager.hasSystemFeature(android.content.pm.PackageManager.FEATURE_CAMERA_ANY)
+                addDevice(camera, !state.working, actions)
+            }
             appearance(context)
             item(key = "sign-out") {
                 Column(Modifier.padding(16.dp)) {
@@ -432,19 +441,32 @@ private fun LazyListScope.savedKeys(state: AccountSettings.State, context: Conte
 }
 
 /**
- * "Add a device" (ADR 0059 §1): offered while the instance links devices. The linking itself is `cr-app-device-linking`'s,
- * not built yet, so the row is shown and not yet enabled — the place it fills, never a control that answers "not yet".
+ * "Add a device" (ADR 0059 §1), offered while the instance links devices: its two halves, so whichever device has a
+ * camera scans — "Show a code", the new device scanning; and, where this device has a camera, "Scan a code", the new
+ * device showing its sign-in code. Each opens the ceremony's own screen (`DeviceLinkScreen`).
  */
-private fun LazyListScope.addDevice() {
+private fun LazyListScope.addDevice(camera: Boolean, enabled: Boolean, actions: SettingsActions) {
+    item(key = "add-device-divider") { HorizontalDivider(Modifier.padding(top = 16.dp)) }
+    header("add-device-header", { stringResource(R.string.account_settings_add_device) }, { stringResource(R.string.account_settings_add_device_sub) })
     item(key = "add-device") {
-        HorizontalDivider(Modifier.padding(top = 16.dp))
         ListItem(
-            headlineContent = { Text(stringResource(R.string.account_settings_add_device)) },
-            supportingContent = { Text(stringResource(R.string.account_settings_add_device_sub)) },
+            headlineContent = { Text(stringResource(R.string.link_show)) },
+            supportingContent = { Text(stringResource(R.string.link_intro)) },
             leadingContent = { Icon(Icons.Outlined.QrCode2, null) },
             colors = listColors(),
-            modifier = Modifier.alpha(0.38f).testTag("settings-add-device"),
+            modifier = Modifier.clickable(enabled = enabled) { actions.linkShow() }.testTag("settings-add-device"),
         )
+    }
+    if (camera) {
+        item(key = "add-device-scan") {
+            ListItem(
+                headlineContent = { Text(stringResource(R.string.link_scan)) },
+                supportingContent = { Text(stringResource(R.string.link_scan_intro)) },
+                leadingContent = { Icon(Icons.Outlined.QrCodeScanner, null) },
+                colors = listColors(),
+                modifier = Modifier.clickable(enabled = enabled) { actions.linkScan() }.testTag("settings-add-device-scan"),
+            )
+        }
     }
 }
 

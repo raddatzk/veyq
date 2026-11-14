@@ -18,6 +18,15 @@ protocol SettingsActions: AnyObject {
     func settingsBackToPassword(_ password: String) async -> TrustChange
     func stopTrusting()
     func signOutHere()
+    /// "Add a Device"'s "Show a Code": this device shows its code, the new device scans (ADR 0059 §1).
+    func linkShow()
+    /// "Add a Device"'s "Scan a Code": the new device shows its sign-in code, this device scans.
+    func linkScan()
+}
+
+extension SettingsActions {
+    func linkShow() {}
+    func linkScan() {}
 }
 
 /// A step the page asks to be confirmed first, as the web's `SessionsPanel` does: what it says and what it does.
@@ -58,12 +67,19 @@ struct SettingsView: View {
             sessions
             savedKeys
             if state.addDevice {
-                // ADR 0059 §1: offered while the instance links devices; the linking is `cr-app-device-linking`'s, so
-                // the row holds its place, not yet enabled — never a control that answers "not yet"
+                // ADR 0059 §1, offered while the instance links devices: both halves, so whichever device has a camera
+                // scans — "Show a Code" (the new device scans) and, where this one has a camera, "Scan a Code"
                 Section {
-                    Label(say(.accountSettingsAddDevice), systemImage: "qrcode").disabled(true).foregroundStyle(Role.muted)
+                    Button { actions.linkShow() } label: { Label(say(.linkShow), systemImage: "qrcode") }
+                        .disabled(state.working)
+                    if QrCamera.available {
+                        Button { actions.linkScan() } label: { Label(say(.linkScan), systemImage: "qrcode.viewfinder") }
+                            .disabled(state.working)
+                    }
+                } header: {
+                    Text(say(.accountSettingsAddDevice))
                 } footer: {
-                    Text(say(.accountSettingsAddDeviceSub))
+                    Text(say(.accountSettingsAddDeviceSub) + " " + say(.linkIntro))
                 }
             }
             #if os(iOS)
@@ -362,6 +378,8 @@ struct SettingsPage: View {
                 ContentUnavailableView(say(.drawerSettings), systemImage: "gearshape")
             }
         }
+        // "Add a Device"'s ceremony, over the page (ADR 0059)
+        .deviceLinkSheet(model)
         .tint(Role.accent)
         #if os(macOS)
         .frame(minWidth: 480, idealWidth: 560, minHeight: 520)
