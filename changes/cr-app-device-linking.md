@@ -10,7 +10,7 @@ invariants:
   - "the relay sees only the handle (ADR 0059 §11): the trusted device seals only to an answer whose MAC verifies under the channel key, the new device opens only an envelope whose MAC verifies"
   - "a linked device enrols at most a DEVICE_KEY wrap, never a DEVICE one (ADR 0059 §10)"
   - "the confirmation is a slide that names the device and says signing it out will not take the key back (ADR 0059 §7)"
-  - "no secret crosses the bridge: the QR's text, the channel key, the grant and the refresh token stay in the core; the desktops get the code as a picture and send frames in (cr-core-qr-decoder D2, D5)"
+  - "no secret crosses the bridge: the QR's text, the channel key, the grant and the refresh token stay in the core; the desktops get the code as a picture and send frames in (ADR 0141 decisions 2, 5)"
   - "the core's pairing crypto answers to contracts/crypto/vectors/v1.json, the same vectors @veyq/crypto answers to"
   - "the web's linking behaves as before; an app and the web link with each other in both directions and both roles"
 ---
@@ -27,10 +27,10 @@ directions and both roles**, interoperable with the web:
 | **new** (at the sign-in form) | **scans** the trusted device's code, shows the number | **shows** a `veyqsignin:` code, takes the six-digit code typed |
 
 Whichever device has a camera scans (ADR 0059 §1); a device without one offers only its showing half and says the
-other device scans (`cr-core-qr-decoder` D4).
+other device scans (ADR 0141 decision 4).
 
-**Depends on** `cr-core-qr-decoder` (all phases) and `cr-app-account-settings` (the Settings page whose "Add a device"
-entry this CR fills). The sign-in form is shared with `cr-app-kit-sign-in` (written in parallel): that CR adds the kit
+**Depends on** the core's QR codes (ADR 0141, built) and the apps' Settings page (`uc.account.sessions`, built; its "Add a device"
+entry this CR fills). The sign-in form is shared with the kit sign-in (`en.account.key-model` § The Emergency Kit, built): that work added the kit
 to the form, this one the two linking entries; both edit `SessionModel`'s `SignIn` gate, so whichever lands second
 rebases onto the other's fields and both CRs' phases on that gate run one after the other, never side by side.
 
@@ -45,7 +45,7 @@ rebases onto the other's fields and both CRs' phases on that gate run one after 
   six-digit draw), `pairingChannel.ts`, `pairingAnswerPolling.ts`, `grantEnvelopePolling.ts`, `onboardTail.ts`,
   `AddDevicePanel.vue`, `JoinDeviceCard.vue`, `SignInWithCodeCard.vue`, `GrantReceiverOutcome.vue`;
   `src/packages/crypto/src/v1.ts` (`pairingHandle`, `pairingChannelKey`, `pairingMac`), `seal.ts` (`pairing-grant`).
-- **Where what runs:** as in `cr-core-qr-decoder` § Context. A live test links **the principal's own account to a
+- **Where what runs:** the Kotlin on the developer's Mac, Linux in its container, Windows on the ARM64 VM, Android on a throwaway AVD (never `veyq_pixel`), Apple on a throwaway simulator and the macOS build; the dev backend is never started twice or stopped. A live test links **the principal's own account to a
   fresh core session** (the trusted side is a core login of the principal; the new side a second core client with no
   session) and signs the linked family out at the end; it never touches the owner's browser sessions. The instance has
   `core.device-linking` on (the dev stack's default — the phase's first read checks it).
@@ -111,7 +111,7 @@ direction's statement, a parser that accepts a trailing path).
 `session/DeviceLink.kt` (ADR 0136 decision 2's shape): `showForNewDevice()` (trusted, Add a new device),
 `scanSignInCode()` (trusted, Sign in with a QR code), `scanFromTrusted(server)` and `showForSignIn(server)` (new, from
 the sign-in form). Each role's states mirror the web's cards: the code shown (the QR as a matrix for the phones, a PNG
-for the desktops — `cr-core-qr-decoder` D2), waiting, the number to compare / the code to show / the code to type,
+for the desktops — ADR 0141 decision 2), waiting, the number to compare / the code to show / the code to type,
 the slide, sealing or collecting, done, and the refusals (no answer before the channel's expiry; a MAC that does not
 verify — said as "this code was not answered by your device", never retried in place, ADR 0059 §6 and
 uc.account.onboard-device E2; the capability off; the scan refused because it is the other direction's code, said
@@ -143,7 +143,7 @@ the web's words (`words/words.json` takes the web's English and German).
 code as a picture); `Link.Confirm(link, label)` (the slide's end), `Link.EnterCode(link, code)`, `Link.Close(link)`;
 `Watched.Link(link)` → `Update.Link(shown)` carrying the state, the number or six-digit code to show, the suggested
 label and the refusal — never the secret, the channel key, the grant or a token. Scanning goes through
-`cr-core-qr-decoder`'s `Scan.*` with the link's scan opened by the link (`Scan.Open` of kind `link`), so the scanned
+ADR 0141's `Scan.*` with the link's scan opened by the link (`Scan.Open` of kind `link`), so the scanned
 text goes straight into `DeviceLink` inside the core.
 
 ## Phases
@@ -452,7 +452,7 @@ text goes straight into `DeviceLink` inside the core.
 - [ ] **7 docs and harvest** — ADR 0059 §2 and ADR 0004 § Transport: D1's sentence; `uc.account.onboard-device`
   notes the apps (no coverage change); `native-apps.md` § Account: the adoption blocker removed, what is built added;
   `site/src/content/docs/account/adding-another-device.mdx` and `getting-started/sign-in.mdx` (with their `de/` twins)
-  say the apps do both directions — the sign-in page is shared with `cr-app-kit-sign-in`, which owns its § kit, this
+  say the apps do both directions — the sign-in page is shared with the kit sign-in, whose § kit stays as it is, this
   CR its § QR code. · Done when: the trust-chain guards and the site's `pnpm run check` green; this CR deleted.
 
 ## Definition of done

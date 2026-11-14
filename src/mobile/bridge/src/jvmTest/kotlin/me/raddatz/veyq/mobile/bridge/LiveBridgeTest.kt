@@ -2280,7 +2280,7 @@ class LiveBridgeTest {
     }
 
     /**
-     * The account's Settings through the bridge over the real core (`cr-app-account-settings` phase 3): a fresh login of
+     * The account's Settings through the bridge over the real core (`uc.account.sessions`): a fresh login of
      * the seeded principal opens its page, reads its address and its own family first and marked, renames this device
      * through the register (the name read back on the page and on its own family's row), and signs out from the page —
      * the page closes and the sign-in shows. Only the session this test signs in is touched. Without `VEYQ_LIVE` it is

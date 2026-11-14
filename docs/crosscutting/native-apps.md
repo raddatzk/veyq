@@ -75,7 +75,7 @@ The desktop apps' packages, a preview, are described to a person on the docs sit
 "Measured" means ADR 0123 records it run against a dev instance (and, where it says so, read back by the web); "built"
 means the code is there and compiles, nothing recorded beyond. Both apps hold everything listed unless a row says
 otherwise; the Linux and Windows apps hold only their first slice, the members' pictures, a Pot's download, the
-device trust with "Manage servers" (their rows above), a folder's and a Pot's header with every action on it: pin,
+device trust with "Manage servers" (their rows above), the kit at sign-in and the account's Settings, a folder's and a Pot's header with every action on it: pin,
 trash with undo and the space's trash, rename, New folder, move and copy with the storage check, a folder's download,
 share links, a report and a cover with its crop, Expenses whole as its paragraph's but the share sheet's files, and
 Depot whole as its paragraph's but Send a copy (measured 2026-11-12, ADR 0123's Consequences, the Linux app and the
@@ -83,10 +83,24 @@ Windows app).
 
 **Account and session.** Sign-in with password and Secret Key behind the `/api/setup` major gate, each grant judged as
 the web judges it (measured, `LiveSignInTest`, `GrantTrustTest`); several servers and tenants with their switcher,
-hiding tenants and spaces. The account's Settings page from the drawer, measured
-2026-11-13 against the dev backend: Android (a throwaway AVD) and iOS (a throwaway iPhone 18 Pro simulator) — this
-device renamed, a second session of the account signed out from the list, "Sign out" taken; macOS — renamed and
-renamed back, "Sign out" taken (a session's menu not driven there).
+hiding tenants and spaces. **The Emergency Kit at sign-in, on all four apps** (`en.account.key-model` § The
+Emergency Kit; [ADR 0136](../decisions/0136-an-apps-logic-is-the-kotlin-cores-each-platform-draws-only-its-own-ui.md)'s
+Consequences): "Open Emergency Kit" takes the kit's PDF (saved, printed, photographed) or a picture of its QR from the
+system's picker, "Scan Emergency Kit" its QR wherever the app has a camera (first on a phone or tablet, after Open on a
+computer; hidden where the scan says `NoCamera`); email and server are filled, the Secret Key held by the core's
+sign-in model, so only the password is typed — the web's three fixture kits read and a dev kit signed in to the shell,
+measured 2026-11-13 on Android (a throwaway AVD), iOS (a throwaway simulator), macOS, Linux (the Fedora VM's GNOME, the
+portal's chooser, inside the installed Flatpak's sandbox) and Windows (the VM, the open picker; the packaged app too);
+the scan to the shell on Android (the emulator's virtual scene), iOS and macOS (their test cameras). No copy of a kit
+or a frame on any app's disk ([ADR 0047](../decisions/0047-inline-video-playback-range-streaming.md)'s Consequences).
+**The account's Settings page** from the drawer, on all four apps (`uc.account.sessions`): the address, this device (its
+name, the trust level as Manage servers' — one core state —, Stop trusting), devices and sessions named from the
+device register (sign one out, "Sign out and remove saved key", every other), the devices with a saved key, Sign out;
+"Appearance and language" on the phones opens the system's per-app page (the apps follow the system's theme and
+language; the desktops have no row); "Add a device" where the instance has `core.device-linking`. Measured
+2026-11-13 against the dev backend on Android, iOS, macOS, Linux (the Fedora VM, inside the Flatpak's sandbox) and
+Windows (the VM), the desktops in English/light and German/dark: this device renamed, a second session of the account signed out from
+the list, "Sign out" taken — on macOS a session's own menu not driven (§ Open).
 
 **Device trust, on all four apps** (ADR 0123 decision 8 as changed 2026-11-11; measured 2026-11-11, `DeviceTrustLiveTest`,
 `LiveBridgeTest` and a pass per app, ADR 0123's Consequences, the device trust; the two live tests again 2026-11-14,
@@ -147,11 +161,19 @@ button with its popover and Windows' `AppBarButton` with its flyout, each with C
 
 **Out and in.** The ZIP of a Pot, a folder, a file or a drop box, as the web writes it — measured 2026-11-09.
 
+**QR codes** ([ADR 0141](../decisions/0141-qr-codes-are-read-and-drawn-by-the-core.md)). One decoder and one encoder in
+the core, a scan model (`qr/QrScan`) and a camera on all four apps — CameraX, AVFoundation, the Camera portal over
+PipeWire, `MediaCapture` — the desktops' through the bridge's `Scan.*` with frames as the call's payload, and a code
+drawn for the desktops as the core's PNG. Measured 2026-11-13 through each app's debug test camera to `Found` (Android a
+throwaway AVD's virtual scene, the iOS Simulator, the macOS build, Linux in the container and the Fedora VM, Windows on
+the ARM VM); `NoCamera` on each machine without one, `Denied` on Android, and on Linux by a virtual camera and GNOME's
+dialog. Callers: the kit's scan at sign-in, device linking.
+
 ## Open
 
 **Platforms and form factors**
 - Windows beyond its first slice (the next slice is Linux's and Windows' together, owner 2026-11-10):
-  - **Packaging — decided, being built** ([ADR 0139](../decisions/0139-the-desktop-apps-ship-as-a-flatpak-bundle-and-an-msix-built-in-checks-and-promoted-with-the-release.md)): an MSIX, x64, self-contained, built `-c Release` through the
+  - **Packaging — built** ([ADR 0139](../decisions/0139-the-desktop-apps-ship-as-a-flatpak-bundle-and-an-msix-built-in-checks-and-promoted-with-the-release.md)): an MSIX, x64, self-contained, built `-c Release` through the
     Windows App SDK's own MSBuild tooling, unsigned in Checks and signed at promotion with its block map unchanged; no
     package dependency on the WebP or media extensions (a sideloaded MSIX can depend only on framework packages, and
     Windows 11 provisions them), so where a person removed one the members' pictures fall back to initials (measured
@@ -166,22 +188,25 @@ button with its popover and Windows' `AppBarButton` with its flyout, each with C
     signed-in packaged app — a Release build has no dev sign-in, so **the owner signs it in** (the password is never typed
     by an agent): the members' pictures, Save a copy, a medium played, a drop (the unpackaged app takes one with UAC on),
     an update keeping the device trust (which needs a trust slot: the principal is at the server's limit, `409
-    too_many_devices`) and Hello's enrolment (the owner's PIN); the camera's consent prompt on a PC with a camera. **The released MSIX is
+    too_many_devices`) and Hello's enrolment (the owner's PIN); the camera's consent prompt on a PC with a camera (inbox
+    #915, with the MSIX opened by double-click through App Installer and removed through Settings → Apps, which the
+    site's *Install the app* names and no pass walked yet). **The released MSIX is
     signed by the project's own self-signed certificate, `CN=veyq`** (the owner, 2026-11-13; ADR 0139 decisions 7 and
     12): each person trusts its `veyq.cer` once, elevated, in LocalMachine\TrustedPeople before the first install —
     without it the install is refused `0x800B0109`, unelevated the import is refused, and the install itself needs no
     elevation (measured with UAC on, ADR 0123's Consequences, the MSIX). Their Windows then trusts every package that
     certificate's key signs under `CN=veyq`, not only the one they checked, and nothing revokes it (remembered from the
     MSIX trust model, not measured). The release attaching `veyq.cer` under `apps` with a cosign bundle, and signing the
-    MSIX with that certificate only, is written and has not run (ADR 0139 decision 7; the certificate is the owner's to
-    make).
+    MSIX with that certificate only, is written and has not run (ADR 0139 decision 7): the certificate, the signing
+    environment and the first Publish dispatch are the owner's, and so is the decision whether the signature stays
+    without a timestamp (inbox #913).
   - **Idle memory** is 359–459 MiB (WinUI, x64 under Prism emulation on the ARM VM, measured 2026-11-12 by
     `PeakWorkingSet64`); playing a medium and a 2 GiB upload add an amount that does not scale with the file. What it is on
     an x64 PC, and whether de's +243 MiB over a 2 GiB upload (en's +86) is the GC's slack, is unmeasured.
   - **The level's New shows on a file's and a drop box's page** (as on every non-Pot page); one switch-off of a link took
     30 s once (de/dark; 4 s in en/light), not seen again.
   - **The other screens.** Memories' screens and uploads are not built. New offers a folder, a Pot, Upload files and
-    Upload folder; Settings offers nothing yet.
+    Upload folder.
   - **Windows' share sheet left a ghost** once: after it was used, screenshots taken while a later `ContentDialog`
     opened showed its window again (stale, the first link), while UI Automation drove the dialog beneath; gone after a
     restart. Whether a person sees it on a real display is checked in the next Windows pass.
@@ -209,11 +234,10 @@ button with its popover and Windows' `AppBarButton` with its flyout, each with C
     store`/`lookup`/`clear` over ssh into the session bus) — `pam_oo7` unlocks the `login` collection at sign-in; the
     session is Wayland; Flathub offers `org.gnome.Platform`/`Sdk` 49, 50 and 51 for aarch64 (`flatpak remote-ls
     --runtime --arch=aarch64 flathub`); and Fedora 45 lacks `libcrypt.so.1` as Fedora 44 does (`ldd` of the app).
-  - **The Flatpak — built, its signed-in pass owed** ([ADR 0139](../decisions/0139-the-desktop-apps-ship-as-a-flatpak-bundle-and-an-msix-built-in-checks-and-promoted-with-the-release.md);
-    what was measured: ADR 0123's Consequences, the Flatpak). Still open: the pass with a signed-in server — staying
-    signed in over the Secret portal through a restart, the members' pictures, a receipt's PDF, a medium played and
-    heard, a file through the app's own dialogs at a document-portal path opening in the core (ADR 0137), a drop from
-    Files, the exchange rates over the app's own libcurl; the x86_64 bundle (CI's, ADR 0139 decision 10). **The
+  - **The Flatpak — built** ([ADR 0139](../decisions/0139-the-desktop-apps-ship-as-a-flatpak-bundle-and-an-msix-built-in-checks-and-promoted-with-the-release.md);
+    what was measured: ADR 0123's Consequences, the Flatpak; signed in inside its sandbox, § Platforms). Still open:
+    staying signed in through a restart (the account needs a free trust slot; inbox #915) and the x86_64 bundle (CI's
+    first run, inbox #914). **The
     `org.freedesktop.secrets` name** the manifest grants exists only for the core's first question
     (`secret_service_get_sync` in `LinuxDeviceKeys.secretServiceAvailable`): asking libsecret's backend instead
     (`secret_backend_get_sync`, which a sandbox answers with the portal's keyring) would let the manifest drop the name —
@@ -229,14 +253,17 @@ button with its popover and Windows' `AppBarButton` with its flyout, each with C
   - **A fingerprint reader** (fprintd, polkit) has no standard way to a key, so the presence level is not planned on
     Linux.
   - **The other screens.** Memories' screens and uploads are not built. New offers a folder, a Pot, Upload files and
-    Upload folder; Settings offers nothing yet.
+    Upload folder.
   - **What the uploads say waits for a save** (2026-11-12): an `AdwToastOverlay` shows one toast at a time and a save's
     progress toast never times out, so an upload's offer or outcome shows only after the save ends. Unexplained, seen
     once each: the first 2 GiB upload failed at 30 % and its automatic retry failed at once (no code was logged; three
     later ones went through), and a Retry of a 5-byte file stood at 0 % for 10 s until Cancel all took it.
   - **A foreign currency's spelling.** A currency other than the locale's own is written by its code (`EUR 1,234.56`
     under en_US) where Android and Apple write `€1,234.56`. glibc's locale data has only the locale's own symbol.
-  - **x86-64.** The app has not been built and run on x86-64; only arm64 was.
+  - **A release build warns** of `dev_login.rs`' `AtomicBool`/`Ordering` imports, used only under `debug_assertions`
+    (cosmetic, seen in the Flatpak's build 2026-11-13).
+  - **x86-64.** The app has not been built and run on x86-64; only arm64 was. CI's `flatpak` job on an x86-64 runner is
+    its first build and start (inbox #914).
 - **A CPU libsodium's AES-256-GCM cannot run on is refused at start** (owner 2026-11-10, accepted): it needs AES
   instructions, and on x86-64 also PCLMUL and AVX. Refused: a Raspberry Pi 4 (no AES instructions), an x64 PC or
   x86-64 Linux PC without AVX, and a Windows-on-ARM PC whose x64 emulation hides AVX (it shows it by default). A
@@ -259,7 +286,23 @@ button with its popover and Windows' `AppBarButton` with its flyout, each with C
   types no text, so a new entry saved, an item split, a person or category added or renamed, New pot created and a
   share from Photos were driven on Android and the desktops and held by `commonTest`, not on an iPhone; on Apple they
   were seen opened, refused, recorded, restored and deleted only.
-- A CI job for the apps (Windows needs a Windows runner).
+- **The apps' CI jobs** (Checks' `app-inputs`, `flatpak`, `msix`, `apps-stage`; ADR 0139 decision 10) are written and have
+  never run on GitHub: the first push to `main` proves them (inbox #914). Android's and Apple's apps have none.
+
+**Cameras** ([ADR 0141](../decisions/0141-qr-codes-are-read-and-drawn-by-the-core.md); inbox #912)
+- **No real camera has scanned yet** — every `Found` came through a debug test camera. Owed, each the owner's (a
+  camera's first use asks the person, and no test machine but the developer's Mac has one): the macOS build's camera
+  (`VEYQ_DEV_SCAN=1 <build>/Debug/veyq.app/Contents/MacOS/veyq`, a veyq code held up on another screen →
+  `veyq-scan: state Found(…)`; then the sign-in's kit scan with `VEYQ_DEV_KIT_SCAN=1` and a printed kit → `veyq-kit:
+  kit held`), Apple's `Denied` (the camera refused, or switched off in System Settings › Privacy & Security › Camera →
+  `state Denied`), a real iPhone (`VEYQ_DEV_SCAN=1` in the scheme, and "Notfall-Kit scannen" over a printed kit), a
+  Linux desktop's camera through the portal (on the Fedora VM the virtual camera of `src/mobile/CLAUDE.md` § Traps and
+  **Allow** in GNOME's dialog → `state Found(…)`), and a Windows laptop's (`VEYQ_DEV_SCAN=1 windows/run.py run`, a
+  code held up; Settings › Privacy › Camera off → `state Denied`), plus the sign-in's kit scan on each of the desktops.
+- **The desktops' kit scan through a test camera** was not run (machine-doable): the sign-in's "Scan Emergency Kit" with
+  `VEYQ_DEV_CAMERA=<a frame of a kit's code>` on Linux (container or VM) and Windows (the VM), a non-veyq code skipped,
+  the dialog closing with the form filled — the bridge's `KIT` scan is held by `KitDispatchTest` only.
+- The Android camera's frames on the emulator are 640×480 at most; 720p is measured on Apple's test camera only.
 
 **The bridge** ([ADR 0137](../decisions/0137-the-bridge-carries-shown-bytes-beside-the-json-ranges-through-a-reader-and-files-by-path.md))
 - **A picture replaced under the same user id sends no signal.** The id set stays the same, so no update tells Linux
@@ -273,8 +316,13 @@ button with its popover and Windows' `AppBarButton` with its flyout, each with C
   cookies no adoption (`POST /api/token/adopt` answers only with a cookie).
 - The device register's own screen (the devices an account trusts, ADR 0058): every app writes it at each unlock and
   enrolment, only the web shows it.
-- Invites and members; settings (the drawer's row does nothing yet): password, recovery, erasure, sessions, terms,
-  profile, appearance and language.
+- Invites and members; the rest of the web's settings — password, email, replacing the keys, recovery, erasure, terms,
+  profile (inbox #863), and an in-app choice of appearance and language (the apps follow the system's; the desktops have
+  no per-app language of their own).
+- **On macOS a session's menu in Settings was never driven** ("Weitere" → "Dieses Gerät abmelden" on another session:
+  the background tools open no menu) — the owner's click (inbox #916); **and its rename alert shows the current name
+  only the first time** — later openings are empty (the binding set before presenting; AppKit's alert keeps its field),
+  not fixed (inbox #917).
 - Several instances gated on their major (inbox #436): the apps speak only their own major today.
 
 **Navigation and sharing**

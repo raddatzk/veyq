@@ -40,6 +40,10 @@ handed over (`AppleDepot`, `fopen`). Some 60 calls are still to come, so the dis
      Option<Vec<u8>>` and C#'s `Native.Payload(byte*, nuint) -> byte[]?`, both copying before the callback returns
      (bridge.h's memory rule). `bridge::call` answers `(Answer, Option<Vec<u8>>)`, `Core.CallAsync` `(Answer, byte[]?)`:
      no screen touches a raw pointer.
+   - **Bytes ride inward the same way, beside a call's JSON.** A camera's frame is `Scan.Frame`'s payload on
+     `veyq_call` ([ADR 0141](0141-qr-codes-are-read-and-drawn-by-the-core.md) decision 5), never in its JSON; `Exports.kt`
+     copies it before `veyq_call` returns (NULL none, length 0 empty, over 64 MiB not read), and `Bridge.call` takes it
+     as `inbound`. Only luminance goes in this way, so nothing a code says comes back out.
    - `SecretFreeSchemaTest` refuses a byte array anywhere on the wire — a field, a list's element, a map's value.
 2. **A blob read in ranges goes through a reader the bridge holds by id.** A call that opens one answers
    `Answer.Reader(reader, size, mediaType)`; `Reader.Read(reader, position, length)` answers `Answer.Bytes` with that
@@ -60,6 +64,14 @@ handed over (`AppleDepot`, `fopen`). Some 60 calls are still to come, so the dis
      `remove`, `fseeko` for Apple and Linux (`posixMain`), `_wfopen`, `_wremove`, `_fseeki64` for Windows (`mingwMain`).
      **A path is UTF-8 on the wire and UTF-16 to Windows:** mingw's `fopen` reads its argument in the ANSI code page,
      so a name outside it is written under mojibake (measured 2026-11-11, below).
+   - **Where only the host can draw a file, the core asks it, and the drawn pixels ride inward beside the reply.** An
+     Emergency Kit picked on a desktop is read by the core by path (`Session.SignInKit`, under the kit's file cap), and
+     its read order — the core's — needs a PDF page or a picture as luminance, which only the platform's renderer draws
+     (poppler, `Windows.Data.Pdf`). So the core sends host requests naming the path (`HostRequest.PdfPages`, `PdfPage(path,
+     page, width)`, `PictureLuma(path, longSide)`), and the host answers `HostReply.Pixels(width, height)` with the
+     luminance as `veyq_reply`'s payload, drawn into memory, never a file. Outward cross a path and a page number only;
+     no kit byte, token or key. The one rule stays one function on all four apps: the phones draw in process through the
+     same `KitPictures` interface the bridge implements over these requests.
    - **A write that can be long is cancellable; the rest run to their end.** A file's Save a copy is
      `File.Save(file, path)` → `Saving(save)`, followed by `Watched.Save` and stopped by `Save.Cancel`, which answers once
      the partial file is gone; a node's ZIP, a receipt and a picture run to their end or fail, and the partial file is
@@ -170,5 +182,7 @@ handed over (`AppleDepot`, `fopen`). Some 60 calls are still to come, so the dis
 - **Base64 in the JSON**, **whole blobs only**, **streaming a file across**, **a generated dispatch**: each rejected in
   the Consequences above.
 - **The host opens the file and hands the core a descriptor.** Closer to a sandbox's grant (a portal's descriptor, a
-  `StorageFile` stream), but a third shape beside path and bytes, and nothing measured needs it: the apps run
-  unpackaged, and a document portal hands a path a plain open reaches (remembered, not measured here).
+  `StorageFile` stream), but a third shape beside path and bytes, and nothing measured needs it: a sandboxed app's
+  picked file still arrives as a path a plain open reaches — measured 2026-11-13 in the installed Flatpak (the document
+  portal's `/run/user/<uid>/doc/<id>/…` path read and written by the core: a receipt, a saved copy, an upload, a drop)
+  and in the installed MSIX (a kit picked by path), ADR 0123's Consequences.

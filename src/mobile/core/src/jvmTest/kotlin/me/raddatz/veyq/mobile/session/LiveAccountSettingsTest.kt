@@ -17,7 +17,7 @@ import kotlin.test.assertTrue
 import kotlin.time.Duration.Companion.minutes
 
 /**
- * The account's Settings page (`cr-app-account-settings` phase 1) against a running dev instance (`VEYQ_LIVE`).
+ * The account's Settings page (`uc.account.sessions`) against a running dev instance (`VEYQ_LIVE`).
  *
  * As the seeded principal: a second login of it, on a second device, is listed with the server's `current` mark, names
  * itself through the register, is signed out from the first and drops out of its list; the first's own family still

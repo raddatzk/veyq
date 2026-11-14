@@ -1,7 +1,7 @@
 import SwiftUI
 import VeyqCore
 
-/// What the account's Settings page asks of whoever holds its model (`cr-app-account-settings` D1): each a call of core's
+/// What the account's Settings page asks of whoever holds its model (`uc.account.sessions`; ADR 0136 decision 2): each a call of core's
 /// `AccountSettings`, so the page decides nothing. `AppModel` holds the real one; a debug build's `DevSettings` plays one.
 @MainActor
 protocol SettingsActions: AnyObject {
@@ -38,7 +38,7 @@ private struct Confirm: Identifiable {
     let run: @MainActor () -> Void
 }
 
-/// The account's Settings (`cr-app-account-settings`): the address it signs in with, this device — its name, how it
+/// The account's Settings (`uc.account.sessions`): the address it signs in with, this device — its name, how it
 /// stays signed in, "Stop Trusting This Device" —, every session of the account and the devices with a saved key, the
 /// entry to "Add a Device" while the instance links devices, on iOS the system's page for the app's language, and
 /// signing out. A grouped form, as the system's own settings; every row is core's state, every action a call of

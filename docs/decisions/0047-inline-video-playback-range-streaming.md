@@ -235,6 +235,13 @@ Still open: whether a banner's original is dropped once its copy exists.
   file "deleted after", which a crash leaves. Measured: `run-as … ls cache` empty during and after every view and playback
   on an Android emulator; `find / -xdev -newer <marker>` in the Linux container and `%TEMP%` on the Windows VM showed
   nothing of a played medium (ADR 0123's Consequences).
+  **A picked Emergency Kit is read in memory and never copied** (2026-11-13, the kit at sign-in): Android reads the
+  document's URI into one capped array and draws it from a `memfd`; Apple reads the `.fileImporter` URL in place (never
+  `asCopy`, which copies into the app's `tmp/Inbox`) under an `NSFileCoordinator` read into one buffer; the desktops hand
+  the core a path and draw into memory; each buffer and drawn page is zeroed after the read. A camera frame is never
+  written either, and the system's own snapshot of a scanner showing a kit's code is suppressed (`src/mobile/CLAUDE.md`
+  § Secrets on screen). Measured on each app after picking the web's three fixture kits and a scan: the app's container,
+  temp and cache folders listed for anything newer than a marker — nothing of a kit (each listing bitten by a planted copy).
 - **Nor does the apps' HTTP stack keep anything** (2026-11-13): the core's clients run with no response cache, no
   cookie store and no credential store on every engine — ciphertext and metadata are not the stack's to keep either.
   Measured on an iOS simulator: URLSession's default cache had written 67 answers to `Library/Caches` — blob frames,

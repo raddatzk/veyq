@@ -23,7 +23,7 @@ import me.raddatz.veyq.mobile.words.Msg
 import me.raddatz.veyq.mobile.words.MsgKey
 
 /**
- * One signed-in, unlocked account's Settings page (ADR 0136 decision 2; `cr-app-account-settings` D1): the address it
+ * One signed-in, unlocked account's Settings page (ADR 0136 decision 2; `uc.account.sessions`): the address it
  * signs in with, this device (its name in the account's device register, how it stays signed in), every active session
  * family of the account named from the register, the devices with a saved key and no session, and the entry to "Add a
  * device" while the instance links devices (`core.device-linking`). The web's `SessionsPanel` is the reference, call for

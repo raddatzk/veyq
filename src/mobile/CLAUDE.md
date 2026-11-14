@@ -193,6 +193,14 @@ A Gradle build of its own, run through its own wrapper.
   settling, `close` winning over a decode that does not stop, an oversized frame refused, `ready`), and what a camera
   hands it by `QrFramesTest` (a plane fitted to the 1280 px edge at its stride, the timed decode never saying the text)
   and Apple's `AppleQrTest` (a plane through `NSData`).
+  The Emergency Kit's read (`en.account.key-model` § The Emergency Kit) changes only with the case that pins it: the token
+  by `EmergencyKitTest` and the conformance runner's reader half of `emergency_kit_token` (each case read back, each refused
+  token refused; the writer half is the web's, the apps write no kit); the read order and the tolerant PDF reader by
+  `KitImportTest` (synthetic PDFs, pages drawn with real codes by `QrEncoder`) and `InflateTest`; the web's three kit PDFs
+  by `KitFixtureTest` (JVM, the pages drawn by Apache PDFBox, test-only) and `KitFixtureNativeTest` (Apple, steps 1, 2 and 4);
+  the held key's lifetime (one rule: the key lives exactly as long as the gate shows a kit) and the scan's `accepts` by
+  `SessionModelTest`. The account's Settings page by `AccountSettingsTest` (the web's `SessionsPanel` orderings,
+  `uc.account.sessions` E1–E5, over a played door).
 - `./gradlew :bridge:jvmTest` — the bridge (ADR 0123's Consequences, the bridge):
   - `DispatchTest` covers the way in, over a door the test plays: the host reached by a reply that arrives before the
     start returned (`Started`, `veyq_init`'s order) and a silent host's ask failed (`Host.Silent`, a call answered
@@ -221,6 +229,11 @@ A Gradle build of its own, run through its own wrapper.
     closing the trusted link and stopping its polls; nothing sent outward carrying the code's text, a handle or a token.
     With `VEYQ_LIVE`, `LiveLinkBridgeTest` links two bridges over the real core both ways (the trusted Settings listing the
     linked family by its name), every device taken off after (`LiveRun`); without it both report skipped.
+  - `KitDispatchTest` reads a kit by path over a played host through a real `Host` and the web's fixtures: a token in the
+    bytes with no host request, the printed kit drawn page by page by the host (`Pdf.*`, `Picture.Luma`, the pixels as
+    the reply's payload), a path that does not open or a file past the cap with nothing asked, a `KIT` scan skipping
+    foreign codes, no update carrying `veyqkit:` or the key. `DispatchTest`'s `anAccountsSettings…` and
+    `signOutOnASettingsPage…` drive the Settings page's calls.
   - `WireTest` writes and reads back a sample of every variant of every sealed type the wire reaches. The samples go
     to `build/generated/bridge/samples`, which the Rust test reads.
   - `SecretFreeSchemaTest` checks that nothing the core sends has a field named like a key, seal, token, secret or
@@ -368,6 +381,18 @@ A Gradle build of its own, run through its own wrapper.
   sign-out; it removes what it enrolled. The core's JVM tests read the principal from `VEYQ_ENV_FILE` (a worktree:
   `<main checkout>/.run/.env`); with a missing file they are red, which tells a live run from a skipped one. A
   store change runs it with `:bridge:jvmTest --tests '*LiveBridgeTest*'` (the same walk through the bridge's calls).
+  `LiveSignInTest.aKitPdfSignsThePrincipalInWithAnEmptySecretKey` and `LiveBridgeTest.aKitSignsInByPathWithAnEmptySecretKey`
+  sign in through a kit PDF built in memory (or under `build/`, removed in a `finally`) from the principal's values, never
+  printed; `LiveAccountSettingsTest` and `LiveBridgeTest.anAccountsSettings…` read, rename and sign out a fresh login of
+  the principal — "Sign out every other" only with `VEYQ_LIVE_OTHERS_ENV=<env file>` of a throwaway account, never the
+  principal. **A live case skips by a JUnit `Assume` before `runTest`, never an early `return@runTest`**, which reported
+  two live files as passed on every plain run: the test XML then says `skipped`.
+  Dev helpers for a device pass (not checks): `VEYQ_DEV_KIT_OUT=<dir> --tests '*DevKitTest*'` writes `dev-kit.pdf` (the
+  principal's token in its `Keywords`) and `dev-kit-qr.png`, for a pass to pick or show a camera — kept outside an
+  indexed folder (GNOME's Tracker indexes all of `~`; `/tmp` is reached by the chooser's path) and removed after;
+  `VEYQ_DEV_SECOND_SESSION=<label> --tests '*DevSecondSessionTest*'` signs in a second session of the principal named
+  `<label>` and waits until another device signs it out (a Settings pass's "sign this device out"); with
+  `VEYQ_DEV_SIGN_OUT_LABEL`/`VEYQ_DEV_SIGN_OUT_SINCE` it signs out exactly one left-over family of that name.
   `--tests '*PotLiveTest*'` opens every seeded Pot and checks its revisions open, its ledger check passes, its balances
   sum to zero and its space's members read by name; with `VEYQ_LIVE_POT_WRITE=<pot name>` it adds one expense there
   ("App check"), which the web's Pot page then shows — the check that both clients read and write one format. It leaves
@@ -473,6 +498,14 @@ A Gradle build of its own, run through its own wrapper.
   resumes only an account the app left staying signed in (`devlogin.py <device> --remember`; answer its Face ID) or
   password-trusted, else it says to open veyq first. `adb shell am start -a android.intent.action.SEND --grant-read-uri-permission` with a MediaStore URI reaches
   the app but grants nothing (the shell may not), so the stream does not read (`veyq-share` in logcat).
+  `devlogin.py --kit` hands only the password, for a sign-in that holds a kit the pass picks or scans, and signs in as
+  the button does with an empty Secret Key. Debug-only harnesses (a release build has none): the camera alone over a
+  scan that takes any veyq code by its scheme — Android's extra `veyq.devScan=1`, `VEYQ_DEV_SCAN=1` on Apple and both
+  desktops (`run.py run` passes it), the states and times to the log as `veyq-scan` —; a test camera
+  `VEYQ_DEV_CAMERA=<image>` (Apple, Linux, Windows; the image offered ten times a second) and on Android the emulator's
+  virtual scene (§ Traps); `VEYQ_DEV_KIT=<path>` (Apple: a kit read through the sign-in's own `readKit`) and
+  `VEYQ_DEV_KIT_SCAN=1` (Apple: the kit scanner opened once the sign-in shows); the Settings page over a played state,
+  no server — `veyq.devSettings=1|refused` (Android), `VEYQ_DEV_SETTINGS=1|refused` (Apple, Linux, Windows).
 - `xcodebuild -project apple/Veyq.xcodeproj -target Veyq -sdk macosx build CODE_SIGNING_ALLOWED=NO` (or
   `-sdk iphonesimulator`) — the Apple app compiles. On a fresh checkout run `./gradlew :core:assembleVeyqCoreDebugXCFramework`
   once first: Xcode looks for the framework before the project's own pre-build step can make it.
@@ -481,8 +514,8 @@ A Gradle build of its own, run through its own wrapper.
 
 A screen that shows a secret of the person's own account **in clear** — the Secret Key, the password, the kit
 scanner's camera (the kit's code is the Secret Key), the pairing code a trusted device shows (`cr-app-device-linking`)
-— stays out of what the system captures of the app **on its own and keeps on disk** (inbox #886, found by
-`cr-app-kit-sign-in` phase 7). A masked field shows dots and needs nothing — unless the platform reveals it on a
+— stays out of what the system captures of the app **on its own and keeps on disk** (inbox #886, found 2026-11-13 by
+the kit scanner's no-copy pass). A masked field shows dots and needs nothing — unless the platform reveals it on a
 control (Windows' `PasswordBox` peek). Not covered, on purpose: a share link and its password, made to be handed on
 through another app, whose copy leaves the device anyway. A screenshot or recording the person takes is theirs. One
 mechanism per platform, never a per-screen copy:
@@ -1096,3 +1129,29 @@ first in each of its scrolls — `LocalNodeHero.current(inset)` (Android) / `Nod
   which an agent never types — and every recipe needs that logged-on session. Without a reboot, `runas /trustlevel:0x20000` left
   the app at `0x3000`, and a restricted, medium-labelled copy of the drive's token still read elevated (`TokenElevation` 1) and its
   sign-in could not reach the server (measured 2026-11-12).
+- A camera pass on the Android emulator (2026-11-13): the virtual scene's wall poster is the test camera
+  (`-virtualscene-poster wall=<png>`, an 8-bit RGB PNG — a 1-bit one silently does not load), but it hangs behind the
+  scene camera's start, so the camera is moved to it over the emulator's gRPC: start with `-grpc <port> -grpc-use-token`
+  (bound to 127.0.0.1, the token in the emulator's discovery file `grpc.token`; without `-grpc-use-token` the endpoint
+  binds every interface with no auth) and send `setPhysicalModel` POSITION (about `-0.55 0.3 3.9`) and ROTATION
+  `0 180 0` with `curl --http2-prior-knowledge`. Its frames are 640×480 at most, so the poster is the crop around the
+  code a camera would be aimed at — a whole kit page as one frame reads nothing. A `FLAG_SECURE` scanner is shot through
+  `adb emu screenrecord screenshot` (§ Secrets on screen). "No camera" is reached by a device without one
+  (`-camera-back none -camera-front none`), never assumed from a feature flag: the image still claims `camera.any`.
+- A camera on the Fedora VM's GNOME session: a PipeWire node of `media.class=Video/Source`, `media.role=Camera` is a
+  virtual camera the Camera portal counts, no kernel module or root — `gst-launch-1.0 filesrc location=<png> ! pngdec !
+  imagefreeze ! videoconvert ! pipewiresink mode=provide stream-properties="props,media.class=Video/Source,media.role=Camera"`.
+  The portal then asks "Allow Apps to Use the Camera?", a person's answer an agent never gives; a Deny is kept in the
+  permission store (`devices`/`camera`, app id `""` for an app that is not sandboxed) and must be deleted after the pass.
+  The Fedora container runs no desktop and no portal, so there every scan is `NoCamera` and only the test camera reads.
+- Compare the frame the decoder got as raw bytes, never a picture read back: Java's `BufferedImage.getRGB` gamma-converts
+  grey, so a frame that failed in the app decoded on the JVM (2026-11-13, the kit's PDFKit width).
+- A bound on a wait inside a coroutine is `withTimeoutOrNull` plus a thrown failure, never `withTimeout`: its
+  `TimeoutCancellationException` is a `CancellationException`, so the call ends cancelled and unanswered (the kit test's
+  hang, 2026-11-13; `Host.ask`). A path that waits on a host is tested with the host silent, expecting an answer.
+- A device pass of a platform's drawing runs every fixture, not the easiest: PDFKit read the photographed kit at every
+  width from 1600 to 3600 but the web's 2400, and only the macOS pass showed it. A camera pass includes a caller that
+  draws nothing for a state and a first permission grant in the same process: both camera bugs of 2026-11-13 (Android's
+  preview never binding after "Allow", Apple's camera restarting when its caller drew nothing) hid behind the debug
+  harnesses. A visual pass on Apple needs the owner's grant for the Simulator panel or the Mac app's window — asked at
+  the start, not after the build.

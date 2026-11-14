@@ -1,4 +1,4 @@
-// The account's Settings (cr-app-account-settings; the web's Settings hub, its SessionsPanel the reference), Fluent's way,
+// The account's Settings (uc.account.sessions; the web's Settings hub, its SessionsPanel the reference), Fluent's way,
 // as Windows' own Settings draws a page: the pane's Settings item opens it in the shell's NavigationView content (WinUI's
 // guideline for the settings item), a column of cards under the web's section titles —
 //
