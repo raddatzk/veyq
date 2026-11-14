@@ -5,6 +5,8 @@
 // was read and written; the number, the chain code and the QR codec are REAL (the vector-pinned `safetyNumber`,
 // `chainCodeDigits`, `safetyCode`), so a scanned code is compared the way the app compares it. The anchor, the counting of
 // verifications and their write are tenantTrust.test.ts'.
+// The page carries only the state; the digits, the code and the compare open in a dialog (owner 2026-11-14), stubbed here
+// as its slot drawn in place while it is open, so a test opens it with the page's own button first.
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { mount, flushPromises } from '@vue/test-utils'
 import { defineComponent, h } from 'vue'
@@ -71,6 +73,7 @@ const stubs = {
   VeyqButton: { props: ['label', 'loading', 'disabled'], emits: ['click'], template: '<button :disabled="disabled" @click="$emit(\'click\')">{{ label }}</button>' },
   VeyqMessage: { props: ['tone'], template: '<div class="msg" :data-tone="tone"><slot /></div>' },
   TrustResetLink: true,
+  VeyqDialog: { props: ['visible', 'header'], template: '<div v-if="visible" class="dialog-stub" :data-header="header"><slot /></div>' },
 }
 
 async function mountTheirs() {
@@ -84,8 +87,14 @@ const digits = (w: W) => allDigits(w)[0]
 const chainDigits = (w: W) => w.get('[data-testid="person-chain-code"]').get('[data-testid="safety-digits"]').text()
 const state = (w: W) => w.get('[data-testid="person-safety-state"]').text()
 const outcome = (w: W) => w.get('[data-testid="person-safety-outcome"]').text()
+async function openDialog(w: W) {
+  await w.get('[data-testid="person-safety-open"]').trigger('click')
+}
 async function scan(w: W, text: string) {
+  await openDialog(w)
   await w.get('[data-testid="person-safety-scan"]').trigger('click')
+  // mounted inside the dialog, so the dialog's focus trap and pointer layer take it in
+  expect(w.get('.dialog-stub').find('.scanner-stub').exists()).toBe(true)
   w.getComponent(Scanner).vm.$emit('found', text)
   await flushPromises()
 }
@@ -108,11 +117,19 @@ describe('my own safety number and chain code (main flow 0)', () => {
     vi.mocked(myChainHead).mockResolvedValue({ userId: ME, head })
     const w = mount(MySafetyNumber, { global: { plugins: [realI18n()], stubs } })
     await flushPromises()
+    // the page holds the button alone; nothing is read before the dialog opens
+    expect(allDigits(w)).toEqual([])
+    expect(w.find('.plate-stub').exists()).toBe(false)
+    expect(myChainHead).not.toHaveBeenCalled()
+    await w.get('[data-testid="my-safety-open"]').trigger('click')
+    await flushPromises()
+    expect(w.get('.dialog-stub').attributes('data-header')).toBe(t('safety.mineTitle'))
     expect(allDigits(w)).toEqual([safetyNumber(mine), chainCode(head)])
     expect(w.get('.plate-stub').text()).toBe(safetyCodePayload(mine, head))
     expect(w.get('.plate-stub').text()).toMatch(/^veyqid:2:/)
     expect(w.text()).toContain(t('safety.mineIntro'))
-    expect(w.find('button').exists()).toBe(false)
+    expect(w.text()).toContain(t('safety.mineChainCodeHint'))
+    expect(w.findAll('button').map((b) => b.text())).toEqual([t('safety.show')]) // the opener; nothing to edit
   })
 
   it('a vault it cannot read is said, not an empty section', async () => {
@@ -120,6 +137,7 @@ describe('my own safety number and chain code (main flow 0)', () => {
       throw new Error('locked')
     })
     const w = mount(MySafetyNumber, { global: { plugins: [realI18n()], stubs } })
+    await w.get('[data-testid="my-safety-open"]').trigger('click')
     await flushPromises()
     expect(w.text()).toContain(t('safety.mineUnavailable'))
     expect(w.find('.plate-stub').exists()).toBe(false)
@@ -129,6 +147,7 @@ describe('my own safety number and chain code (main flow 0)', () => {
     vi.mocked(myIdentityPublicKeyB64).mockReturnValue(bundle())
     vi.mocked(myChainHead).mockRejectedValue(new Error('the served key chain does not end at this account’s identity'))
     const w = mount(MySafetyNumber, { global: { plugins: [realI18n()], stubs } })
+    await w.get('[data-testid="my-safety-open"]').trigger('click')
     await flushPromises()
     expect(w.text()).toContain(t('safety.mineUnavailable'))
     expect(w.find('.plate-stub').exists()).toBe(false)
@@ -140,6 +159,10 @@ describe('another member’s safety number in the active tenant (main flow 1-3, 
   it('anchored and nobody verified them: the anchored key’s number and chain code, "Not verified"', async () => {
     const w = await mountTheirs()
     expect(personInTenant).toHaveBeenCalledWith(TENANT, ANNA)
+    expect(allDigits(w)).toEqual([]) // the page carries the state; the digits wait behind the opener
+    expect(w.get('[data-testid="person-safety-open"]').text()).toBe(t('safety.open'))
+    await openDialog(w)
+    expect(w.get('.dialog-stub').attributes('data-header')).toBe(t('safety.theirsDialogTitle', { name: 'Anna Meyer' }))
     expect(digits(w)).toBe(safetyNumber(DIR))
     expect(chainDigits(w)).toBe(chainCode(HEAD))
     expect(state(w)).toBe(t('safety.stateUnverified'))
@@ -167,8 +190,9 @@ describe('another member’s safety number in the active tenant (main flow 1-3, 
     const w = await mountTheirs()
     expect(state(w)).toBe(t('trust.anomaly'))
     expect(w.get('[data-testid="person-safety-anomaly"]').text()).toBe(t('trust.anomalyNote'))
+    await openDialog(w)
     expect(digits(w)).toBe(safetyNumber(DIR))
-    expect(w.findAll('button')).toHaveLength(0)
+    expect(w.findAll('button').map((b) => b.text())).toEqual([t('safety.show')]) // the opener alone: no scan, no compare
     expect(w.find('[data-testid="person-safety-new"]').exists()).toBe(false)
   })
 
@@ -230,6 +254,7 @@ describe('another member’s safety number in the active tenant (main flow 1-3, 
 
   it('compare digits: both shown large; "They match" verifies, "They don’t match" writes nothing (A1)', async () => {
     const w = await mountTheirs()
+    await openDialog(w)
     await w.get('[data-testid="person-safety-compare-start"]').trigger('click')
     expect(w.get('[data-testid="person-safety-compare"]').findAll('[data-testid="safety-digits"]').map((d) => d.text()))
       .toEqual([safetyNumber(DIR), chainCode(HEAD)])
@@ -267,7 +292,17 @@ describe('another member’s safety number in the active tenant (main flow 1-3, 
     vi.mocked(personInTenant).mockRejectedValue(new TrustStateRefused('trust_state_rolled_back', 'pins'))
     const w = await mountTheirs()
     expect(w.text()).toContain(t('verify.trustRolledBack'))
-    expect(w.find('[data-testid="person-safety-scan"]').exists()).toBe(false)
+    expect(w.find('[data-testid="person-safety-state"]').exists()).toBe(false) // no state is claimed
+    expect(w.find('[data-testid="person-safety-open"]').exists()).toBe(false)
+  })
+
+  it('reopening the dialog starts a new compare: the last outcome is gone', async () => {
+    const w = await mountTheirs()
+    await scan(w, safetyCodePayload(OTHER, HEAD))
+    expect(outcome(w)).toBe(t('safety.mismatch', { name: 'Anna Meyer' }))
+    await openDialog(w)
+    expect(w.find('[data-testid="person-safety-outcome"]').exists()).toBe(false)
+    expect(w.find('[data-testid="person-safety-scan"]').exists()).toBe(true) // positive control: the dialog is open
   })
 
   it('a former member (no directory key) shows no safety section content at all', async () => {

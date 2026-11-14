@@ -31,19 +31,21 @@
 
 ## Main flow
 
-0. **Show mine.** On their own profile page (`#people/<own id>`) every member sees **their own** safety number
+0. **Show mine.** On their own profile page (`#people/<own id>`), behind **Show** beside *Your safety number* (a dialog, so
+   the applications' sections stay at the top of the page), every member sees **their own** safety number
    (6×5 digits, the vector-pinned `fingerprint`), their **chain code** (10 digits, two groups of 5, of their key-chain
    head, `v1.chainCodeDigits`) and a QR of both: `veyqid:2:` plus the base64 of the 32-byte fingerprint digest and of
    the 32-byte head — never the identity bundle, which would void the `jsqr` exception in `src/web/CLAUDE.md`. The
    number comes from the caller's own vault, and the chain code only from a served chain that ends at that vault's
    identity (`myChainHead`); a chain that does not is said, with no number and no code, so a step withheld from both
    sides cannot match.
-1. **Open their profile.** The caller opens a member's profile → the app shows the safety number and chain code of the
-   key and head this device **anchors** in the tenant, the state (*Not verified*, or *Verified* with *Verified by
-   {names}.*, the caller named as "you"; *New* beside it while this account first saw them under 14 days ago) and two
-   ways to compare: **Scan their code** and **Compare digits**. A contact who secured their account also reads "New
-   identity, signed by their previous key, on {date}", and one whose earlier pin the join record replaced reads "The
-   key you saw before wasn't theirs. Their invitation confirms this one."
+1. **Open their profile.** The caller opens a member's profile → the page shows the state (*Not verified*, or
+   *Verified* with *Verified by {names}.*, the caller named as "you"; *New* beside it while this account first saw them
+   under 14 days ago). A contact who secured their account also reads "New identity, signed by their previous key, on
+   {date}", and one whose earlier pin the join record replaced reads "The key you saw before wasn't theirs. Their
+   invitation confirms this one." **Compare** beside the state opens a dialog with the safety number and chain code of
+   the key and head this device **anchors** in the tenant and two ways to compare: **Scan their code** and **Compare
+   digits**; the compare's outcome is said there.
 2. **Compare out-of-band.** **Scan:** the caller scans the QR on the other member's own profile; the app compares the
    scanned digest and head with the key and head it shows. **Compare digits** (A1): number and chain code are shown
    large and the two read them aloud, then the caller answers "They match" or "They don't match".

@@ -18,11 +18,17 @@
 // *new identity, signed by the previous key* (a rotation the chain reached), and the note when a join record replaced a
 // pin that was not theirs. Display only: nothing here blocks anybody.
 //
+// That state is all the page carries; the digits, the chain code, the compare and its outcome open in a dialog (owner
+// 2026-11-14): a member compares once per person, and the applications' sections below are what a profile is opened
+// for. The scanner overlay is mounted inside the dialog, so the dialog's focus trap and pointer layer take it in. A
+// re-read after a compare keeps what is on screen until the new answer is in, so the open dialog does not blink away.
+//
 // Operator-blind: the server calls are the tenant's directory and key chain, the pin store's sealed write and the sealed
 // verification rows; the statements are sealed under the tenant key.
 import { computed, onMounted, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import VeyqButton from '../../shared/ui/VeyqButton.vue'
+import VeyqDialog from '../../shared/ui/VeyqDialog.vue'
 import VeyqIcon from '../../shared/ui/VeyqIcon.vue'
 import VeyqMessage from '../../shared/ui/VeyqMessage.vue'
 import { IdentityMovedError, IdentityUnanchoredError, safetyNumber, safetyNumberOfFingerprint } from '../../features/account/identityPins'
@@ -78,9 +84,10 @@ function orNull<T>(f: () => T): T | null {
   }
 }
 
-async function load() {
+/** Reads the person as this tenant anchors them. A `refresh` (after a compare) keeps the shown answer until the new one is in. */
+async function load(refresh = false) {
   const mine = ++token
-  view.value = { kind: 'loading' }
+  if (!refresh || view.value.kind !== 'ready') view.value = { kind: 'loading' }
   try {
     const tenantId = activeSpace.tenantId
     if (!tenantId) throw new Error('no active tenant')
@@ -124,6 +131,7 @@ const outcome = ref<Outcome>('')
 const outcomeRefusal = ref('')
 const comparing = ref(false)
 const scanOpen = ref(false)
+const open = ref(false)
 
 const ready = computed(() => (view.value.kind === 'ready' ? view.value : null))
 
@@ -133,7 +141,7 @@ const { run: runVerify, pending: verifying } = useAsyncAction(
     if (!v?.compared) return
     await verifyPerson(v.tenantId, props.userId, v.compared)
     outcome.value = 'verified'
-    await load()
+    await load(true)
   },
   {
     onError: async (e) => {
@@ -144,7 +152,7 @@ const { run: runVerify, pending: verifying } = useAsyncAction(
       }
       if (e instanceof IdentityMovedError || e instanceof IdentityUnanchoredError) {
         outcome.value = e instanceof IdentityMovedError ? 'moved' : 'unanchored'
-        await load() // show what the tenant anchors now; the compare starts over
+        await load(true) // show what the tenant anchors now; the compare starts over
         return
       }
       outcome.value = 'failed'
@@ -152,6 +160,12 @@ const { run: runVerify, pending: verifying } = useAsyncAction(
   },
 )
 
+function show() {
+  outcome.value = ''
+  comparing.value = false
+  scanOpen.value = false
+  open.value = true
+}
 function startCompare() {
   outcome.value = ''
   comparing.value = true
@@ -187,6 +201,7 @@ const canCompare = computed(() => !!ready.value?.compared && ready.value.number 
 
 onMounted(load)
 watch(() => props.userId, () => {
+  open.value = false
   outcome.value = ''
   comparing.value = false
   scanOpen.value = false
@@ -208,6 +223,17 @@ watch(() => props.userId, () => {
           </span>
           <span v-else class="veyq-badge muted" data-testid="person-safety-state">{{ t('safety.stateUnverified') }}</span>
           <span v-if="ready.isNew" class="veyq-badge" data-testid="person-safety-new">{{ t('safety.stateNew') }}</span>
+          <VeyqButton
+            v-if="ready.number !== null"
+            class="safety-open"
+            :label="canCompare ? t('safety.open') : t('safety.show')"
+            :icon="canCompare ? 'qrcode' : 'eye'"
+            variant="secondary"
+            appearance="outlined"
+            size="small"
+            data-testid="person-safety-open"
+            @click="show"
+          />
         </template>
       </div>
 
@@ -218,51 +244,53 @@ watch(() => props.userId, () => {
       </VeyqMessage>
       <div v-else-if="view.kind === 'error'" role="alert">
         <p class="veyq-form-copy">{{ t('safety.loadError') }}</p>
-        <VeyqButton :label="t('people.retry')" variant="secondary" appearance="text" size="small" @click="load" />
+        <VeyqButton :label="t('people.retry')" variant="secondary" appearance="text" size="small" @click="load()" />
       </div>
 
       <template v-else-if="ready">
-        <p class="veyq-form-copy">{{ t('safety.theirsIntro', { name }) }}</p>
         <VeyqMessage v-if="ready.number === null" tone="error">{{ t('safety.unreadable') }}</VeyqMessage>
+        <VeyqMessage v-if="ready.anomaly" tone="warn" data-testid="person-safety-anomaly">
+          {{ t('trust.anomalyNote') }}
+        </VeyqMessage>
         <template v-else>
-          <template v-if="!comparing">
-            <SafetyDigits :number="ready.number" />
-            <div v-if="ready.chain" class="person-safety-chain" data-testid="person-chain-code">
-              <div class="veyq-section-header"><h3>{{ t('safety.chainCode') }}</h3></div>
-              <SafetyDigits :number="ready.chain" />
-              <p class="veyq-form-copy">{{ t('safety.chainCodeHint', { name }) }}</p>
-            </div>
-          </template>
+          <p v-if="ready.verifiedBy.length" class="veyq-form-copy" data-testid="person-safety-verified-by">
+            {{ t('safety.verifiedBy', { names: ready.verifiedBy.join(', ') }) }}
+          </p>
+          <p v-if="rotatedOn" class="veyq-form-copy" data-testid="person-safety-rotated">
+            {{ t('trust.rotated', { date: rotatedOn }) }}
+          </p>
+          <p v-if="ready.replaced" class="veyq-form-copy" data-testid="person-safety-replaced">{{ t('safety.replaced') }}</p>
+        </template>
+      </template>
+    </template>
 
-          <VeyqMessage v-if="ready.anomaly" tone="warn" data-testid="person-safety-anomaly">
-            {{ t('trust.anomalyNote') }}
-          </VeyqMessage>
-          <template v-else>
-            <p v-if="ready.verifiedBy.length" class="veyq-form-copy" data-testid="person-safety-verified-by">
-              {{ t('safety.verifiedBy', { names: ready.verifiedBy.join(', ') }) }}
-            </p>
-            <p v-if="rotatedOn" class="veyq-form-copy" data-testid="person-safety-rotated">
-              {{ t('trust.rotated', { date: rotatedOn }) }}
-            </p>
-            <p v-if="ready.replaced" class="veyq-form-copy" data-testid="person-safety-replaced">{{ t('safety.replaced') }}</p>
-          </template>
+    <VeyqDialog v-model:visible="open" :header="t('safety.theirsDialogTitle', { name })" data-testid="person-safety-dialog">
+      <div v-if="ready && ready.number !== null" class="person-safety-body">
+        <p class="veyq-form-copy">{{ t('safety.theirsIntro', { name }) }}</p>
+        <template v-if="!comparing">
+          <SafetyDigits :number="ready.number" />
+          <div v-if="ready.chain" class="person-safety-chain" data-testid="person-chain-code">
+            <div class="veyq-section-header"><h3>{{ t('safety.chainCode') }}</h3></div>
+            <SafetyDigits :number="ready.chain" />
+            <p class="veyq-form-copy">{{ t('safety.chainCodeHint', { name }) }}</p>
+          </div>
+        </template>
 
-          <template v-if="canCompare">
-            <div v-if="comparing" class="person-safety-compare" data-testid="person-safety-compare">
-              <p class="veyq-form-copy">{{ t('safety.compareHint', { name }) }}</p>
-              <SafetyDigits :number="ready.number" large />
-              <div class="veyq-section-header"><h3>{{ t('safety.chainCode') }}</h3></div>
-              <SafetyDigits :number="ready.chain!" large />
-              <div class="veyq-dialog-action-row">
-                <VeyqButton :label="t('safety.theyDiffer')" icon="times" variant="secondary" appearance="outlined" data-testid="person-safety-differ" @click="theyDiffer" />
-                <VeyqButton :label="t('safety.theyMatch')" icon="check" :loading="verifying" data-testid="person-safety-match" @click="theyMatch" />
-              </div>
+        <template v-if="canCompare">
+          <div v-if="comparing" class="person-safety-compare" data-testid="person-safety-compare">
+            <p class="veyq-form-copy">{{ t('safety.compareHint', { name }) }}</p>
+            <SafetyDigits :number="ready.number" large />
+            <div class="veyq-section-header"><h3>{{ t('safety.chainCode') }}</h3></div>
+            <SafetyDigits :number="ready.chain!" large />
+            <div class="veyq-dialog-action-row">
+              <VeyqButton :label="t('safety.theyDiffer')" icon="times" variant="secondary" appearance="outlined" data-testid="person-safety-differ" @click="theyDiffer" />
+              <VeyqButton :label="t('safety.theyMatch')" icon="check" :loading="verifying" data-testid="person-safety-match" @click="theyMatch" />
             </div>
-            <div v-else class="person-safety-actions">
-              <VeyqButton :label="t('safety.scan')" icon="camera" variant="secondary" appearance="outlined" size="small" :disabled="verifying" data-testid="person-safety-scan" @click="startScan" />
-              <VeyqButton :label="t('safety.compare')" icon="list" variant="secondary" appearance="outlined" size="small" :disabled="verifying" data-testid="person-safety-compare-start" @click="startCompare" />
-            </div>
-          </template>
+          </div>
+          <div v-else class="person-safety-actions">
+            <VeyqButton :label="t('safety.scan')" icon="camera" variant="secondary" appearance="outlined" size="small" :disabled="verifying" data-testid="person-safety-scan" @click="startScan" />
+            <VeyqButton :label="t('safety.compare')" icon="list" variant="secondary" appearance="outlined" size="small" :disabled="verifying" data-testid="person-safety-compare-start" @click="startCompare" />
+          </div>
         </template>
 
         <VeyqMessage v-if="outcome === 'verified'" tone="success" data-testid="person-safety-outcome">{{ t('safety.verified', { name }) }}</VeyqMessage>
@@ -276,16 +304,23 @@ watch(() => props.userId, () => {
           <TrustResetLink />
         </VeyqMessage>
         <VeyqMessage v-else-if="outcome === 'failed'" tone="error" data-testid="person-safety-outcome">{{ t('safety.failed') }}</VeyqMessage>
-      </template>
-    </template>
+      </div>
 
-    <KitScanner v-if="scanOpen" :hint="t('safety.scanHint', { name })" :error-text="t('safety.scanError')" @found="onScanned" @close="scanOpen = false" />
+      <KitScanner v-if="scanOpen" :hint="t('safety.scanHint', { name })" :error-text="t('safety.scanError')" @found="onScanned" @close="scanOpen = false" />
+    </VeyqDialog>
   </section>
 </template>
 
 <style scoped>
 .person-safety {
   max-width: 32rem;
+}
+.safety-open {
+  margin-inline-start: auto;
+}
+.person-safety-body {
+  display: grid;
+  gap: 0.75rem;
 }
 .person-safety-actions {
   display: flex;
