@@ -94,8 +94,13 @@ A Gradle build of its own, run through its own wrapper.
   `pot_settings` (a Pot's Settings place, editable in place) and `pot_create` (New pot),
   `entry_editor` (an entry's editor; `typed`: when a text field is set from the state), `receipt_viewer` (a receipt
   shown from memory: a picture through GTK, a PDF through poppler-rs) and `entry_history`, `file_page` (a Depot file's page
-  and its Save a copy with its toast; a medium played by `gtk::Video` over a `gtk::MediaFile` reading `reader_stream`, a
-  seekable `gio::InputStream` whose reads are `Reader.Read` ranges, `bridge::call_blocking` on GStreamer's thread), `uploads`
+  and its Save a copy with its toast; a medium played by `player` — `gtk::Video` over a `gtk::MediaFile` reading `reader_stream`, a
+  seekable `gio::InputStream` whose reads are `Reader.Read` ranges, `bridge::call_blocking` on GStreamer's thread),
+  `memory_page` (a Memory's or a chapter's page: its chapters with their covers, the justified grid the core lays out and
+  windows — `Gallery.Layout`, only the rows near the view mounted —, a drop of photos and videos, the trash's Undo) with
+  `lightbox` (an `AdwNavigationPage` pushed over the content: zoom, the slideshow, a video through `player`, the details,
+  Save) and `media_tiers` (the host's answer to `Media.Tiers`/`Media.Duration`: gdk-pixbuf over glycin for a photo, turned by
+  its EXIF; a GStreamer `playbin` frame for a video's poster; both JPEGs encoded in memory), `uploads`
   (New's Upload files and Upload folder through GTK's `FileDialog`, a file's Replace, the queue's header bar button and
   popover, what it says as a toast), `drop_box` (a drop box's page: each guest's folder with its menu and files, the delete
   asked), `manage`
@@ -352,7 +357,7 @@ A Gradle build of its own, run through its own wrapper.
   `removeAll` in `@AfterTest`, which signs in once more as each device and runs `VeyqAccount.removeThisDevice` (its
   wraps, its families, its register entry); a native case calls `removeThisDevice` in a `finally`. A new live case does
   the same — a run that skipped it filled the principal's wraps to the server's limit and its register with test names.
-  `--tests '*LiveRunTest*'` holds it (the families, register entries and wraps counted before and after; run alone). With `VEYQ_LIVE_MEMBER=1` as well,
+  `--tests '*LiveRunTest*'` holds it (the families and wraps counted before, during and after, the register compared by its entries — at its cap the meter's and the case's sign-ins each evict the least recently seen one, as every sign-in there does; run alone). With `VEYQ_LIVE_MEMBER=1` as well,
   `--tests '*MemberLiveSignInTest*'` signs in as the seeded second member (`VEYQ_USER2_*`), whose TENANT grant the
   owner signed, so it opens only through the key check; the owner starts that run, since that password may be one a
   person chose. `--tests '*DeviceTrustLiveTest*'` walks the device trust (ADR 0123 decision 8) as the seeded principal:
@@ -525,10 +530,16 @@ own — ciphertext and metadata included, since the app never chose to keep them
   `blob-downloads-batch`, 39 `files` and 9 blob frames (4.9 MB). `keepNothingOnDisk()` sets no `URLCache`,
   `reloadIgnoringLocalCacheData`, no `HTTPCookieStorage` (cookies never set nor accepted) and no
   `URLCredentialStorage`; the same pass after it left no `Cache.db` and no `fsCachedData` (`NoDiskSessionTest` pins the
-  configuration). Left, before and after alike: CFNetwork's `Library/HTTPStorages/me.raddatz.veyq/httpstorages.sqlite`,
-  whose only table (`alt_services`, HTTP/3 hints) held no row — no cookie table was ever made. The dev backend sends no
-  `Alt-Svc`; one that does would leave its host there, a residual only an ephemeral session (Ktor's
-  `usePreconfiguredSession`) removes.
+  configuration). That still left CFNetwork's per-app storage session on disk,
+  `Library/HTTPStorages/me.raddatz.veyq/httpstorages.sqlite`, whose `alt_services` table (HTTP/3 hints) would record
+  every host answering with `Alt-Svc` (the dev backend sends none, so it held no row). So the core's sessions run on
+  **`ephemeralSessionConfiguration`** (`ephemeralNoDiskConfiguration()`, with `keepNothingOnDisk()` on top), whose
+  storage session — `Alt-Svc`, HSTS — lives in memory only. Ktor builds its own session from the default configuration
+  and only lets that be mutated, so `appleHttpClient` makes the session and hands it over by `usePreconfiguredSession`
+  with Ktor's own `KtorNSURLSessionDelegate` (which carries the engine's responses; closing the client invalidates the
+  session, as it does Ktor's own). Measured 2026-11-13 on a throwaway iOS 27 simulator after a sign-in, a Memory's
+  gallery and a medium's details: the container held no `Cache.db`, no `fsCachedData` and no `HTTPStorages` (before:
+  `HTTPStorages` present); `NoDiskSessionTest` pins the configuration's ephemeral disposition, red on the default one.
 - **OkHttp (Android, `Network.kt`):** no cache and `CookieJar.NO_COOKIES` are OkHttp's defaults, pinned explicitly.
   Measured 2026-11-13 on a throwaway API 36 emulator after the same pass: `run-as me.raddatz.veyq find . -type f`
   listed only `shared_prefs/veyq.trust.xml`, `shared_prefs/veyq-recent.xml` and `files/profileInstalled` — no `cache/`.
@@ -1020,6 +1031,13 @@ first in each of its scrolls — `LocalNodeHero.current(inset)` (Android) / `Nod
   junction moved across volumes (`Move-Item F:\ C:\`) arrives as a plain directory with its target's files copied in: make it
   anew with `mklink /J` where it is used.
 
+- A photo's EXIF orientation on Linux: GTK's own loader (`gdk::Texture`) keeps a JPEG as stored; gdk-pixbuf reads it through
+  glycin and turns it (`apply_embedded_orientation`) — measured 2026-11-13 in the Fedora 44 container (an 80×40 JPEG with
+  orientation 6: Texture 80×40, Pixbuf 40×80). In the GNOME 51 SDK's build sandbox glycin has no portal, so gdk-pixbuf
+  neither decodes nor encodes there — its JPEG saver goes through glycin too ("Loader process exited early" for a save from
+  raw pixels) — while GTK's own loader still decodes a JPEG: what needs gdk-pixbuf is in `run.py`'s `SANDBOX_SKIPS`, which
+  `build` then runs in the Fedora container. HEIC does not decode in the Fedora container (glycin-heif without libde265:
+  "No decoding plugin installed for this compression format: HEVC"); a HEIC then goes up alone with its icon.
 - GTK 4.22's media backend is GStreamer, built into libgtk (no `media/` module), and plays a `GInputStream` through
   `giostreamsrc`, seeks included (measured 2026-11-12 in the container: a WebM and an MP4 from a memory stream; GNOME/gtk
   #4062's assert is gone). Its reads arrive on GStreamer's streaming thread, where `reader_stream` waits on the core through

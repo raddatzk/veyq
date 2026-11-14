@@ -248,7 +248,8 @@ class GalleryModel(
         _state.update { s ->
             val withChapters = if (chapters != null) s.copy(chapters = chapters) else s
             if (read == null) withChapters.copy(failed = true)
-            else withChapters.copy(rows = read.items.filter { it.mediaId !in pending }.map(::Row), failed = false)
+            // a photo view's media only: a track and a music track are another view's (GalleryMedium, ADR 0135 decision 2)
+            else withChapters.copy(rows = read.items.filter { it.mediaId !in pending && GalleryMedium.shows(it.type, it.name) }.map(::Row), failed = false)
         }
     }
 

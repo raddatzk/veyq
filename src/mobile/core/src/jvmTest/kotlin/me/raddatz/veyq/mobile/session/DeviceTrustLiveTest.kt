@@ -66,7 +66,7 @@ class DeviceTrustLiveTest {
         val second = VeyqAccount.unlockOnDevice(p, trusted, password, device, client)
         assertTrue(first.tenants.map { it.tenantId } == second.tenants.map { it.tenantId })
         val register = second.readRegister()
-        assertEquals("test device", register.devices[device.id]?.label, "the device did not name itself in the register")
+        assertEquals(device.label, register.devices[device.id]?.label, "the device did not name itself in the register")
         assertEquals(device.id, register.wraps[trusted.wrapId], "the register does not join the wrap to the device")
         assertTrue(device.id in register.families.values, "no unlock joined its session family to the device (write moment 1)")
 
