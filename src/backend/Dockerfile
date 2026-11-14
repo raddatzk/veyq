@@ -115,7 +115,7 @@ RUN ./gradlew --no-daemon quarkusBuild -x test
 # coreutils, no curl, no tar. `nonroot` is the variant whose default user is not root; the stage below sets its own
 # anyway. Pinned by the multi-arch index digest (amd64 + arm64, validate_image_pins.py's limits say how it was
 # checked); Dependabot's `docker` ecosystem bumps the digest of the `nonroot` tag.
-FROM gcr.io/distroless/java25-debian13:nonroot@sha256:8ac5525549d14b8ddd34562f9fc8e6ba4840c995363a1507b17cadf8bb7ab57e AS distroless-java
+FROM gcr.io/distroless/java25-debian13:nonroot@sha256:1c4ced761d17961c900cba60c33c8c3c46edbdadaa9d5ef9806eb5a6824fd406 AS distroless-java
 
 # Everything the runtime needs a shell for happens here, on the build JDK, and travels into the runtime as files: a
 # distroless stage can run nothing but `java`, so it has no `RUN`.
