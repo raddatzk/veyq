@@ -9,7 +9,8 @@ sources:
 import Screenshot from '../../../../components/Screenshot.astro';
 
 Jedes Mitglied hat eine **Sicherheitsnummer**, die aus seinem Schlüssel entsteht, und daneben einen kürzeren
-**Kettencode**, der sich jedes Mal ändert, wenn die Person ihr Konto absichert. Zeigen deine App und die der anderen
+**Kettencode**, der für die ganze Geschichte ihres Schlüssels steht und sich jedes Mal ändert, wenn die Person ihr Konto
+absichert. Zeigen deine App und die der anderen
 Person für diese Person dieselbe Nummer und denselben Kettencode, weißt du, dass der Server dir ihren echten Schlüssel
 gegeben hat und nicht den von jemand anderem. Zu vergleichen ist freiwillig; am wichtigsten ist es, wenn sich ein
 Schlüssel nicht bestätigen lässt.
@@ -21,18 +22,18 @@ Macht das zusammen, nebeneinander oder am Telefon.
 1. Öffne das Profil der anderen Person: Wähle ihren Namen dort, wo veyq ihn zeigt, zum Beispiel bei denen, die bei
    einer Erinnerung dabei waren, oder bei wer eine Datei oder ein Foto hinzugefügt hat, oder wähle neben ihr unter
    [Wer ist wer](#sehen-wer-wer-ist) **Sicherheitsnummern vergleichen**.
-2. Wähle unter **Sicherheitsnummer** eines davon:
+2. Wähle neben **Sicherheitsnummer** **Vergleichen** und dann eines davon:
    - **Code scannen**, und richte deine Kamera auf den Code im eigenen Profil der Person.
    - **Ziffern vergleichen**, lest die Ziffern und den **Kettencode** gemeinsam vor, und wähle **Sie stimmen überein**
      oder **Sie stimmen nicht überein**.
 3. Stimmen sie überein, sagt die Seite, dass die Person *verifiziert* ist und *alle in diesem Bereich sehen, dass du
    diese Person verifiziert hast*, und zeigt **Verifiziert**.
 
-Die andere Person findet ihre eigene Nummer und ihren Kettencode auf ihrer eigenen Profilseite unter **Deine
-Sicherheitsnummer**. Sie öffnet sie genauso, über ihren eigenen Namen, zum Beispiel an einer Datei oder einem Foto, das
-sie hinzugefügt hat.
+Die andere Person findet ihre eigene Nummer, ihren Kettencode und den Code zum Scannen auf ihrer eigenen Profilseite:
+**Anzeigen** neben **Deine Sicherheitsnummer**. Diese Seite öffnet sie genauso, über ihren eigenen Namen, zum Beispiel an
+einer Datei oder einem Foto, das sie hinzugefügt hat.
 
-<Screenshot id="account-safety-number" shows="Das Profil eines anderen Mitglieds mit dem Block Sicherheitsnummer: das Abzeichen Nicht verifiziert, die Ziffern, der Kettencode und die Schaltflächen Code scannen und Ziffern vergleichen" />
+<Screenshot id="account-safety-number" shows="Die Sicherheitsnummer eines anderen Mitglieds, aus seinem Profil geöffnet: die Ziffern, der Kettencode und die Schaltflächen Code scannen und Ziffern vergleichen" />
 
 Stimmen die Nummern nicht überein, markiere die Person nicht als verifiziert: Der Schlüssel, den du hast, gehört
 womöglich nicht zu ihr. Bitte sie, im eigenen Profil nachzusehen, und vergleicht erneut. Unterscheidet sich nur der

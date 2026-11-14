@@ -2,12 +2,17 @@
 // My own safety number on my own profile page (uc.spaces.enforce-verified-identities main flow 0, ADR 0028 Decision 3,
 // ADR 0111 decision 14): the 6x5 digits, my chain code (two groups, from the head of my key chain) and a QR of both, for
 // another member to read aloud or scan on their device. Nothing to edit.
+// The page carries only a row with the button that opens them in a dialog (owner 2026-11-14): a member compares once per
+// person, and the applications' sections below ("Memories with this person") are what a profile is opened for.
 // The key is MY vault's (`myIdentityPublicKeyB64`), never a directory round-trip: the number I show is the one my own
 // device holds, which is exactly what the other side needs to compare against what the server served them. The head is
 // my chain as served, walked and required to end at that same key (`myChainHead`) - a served chain that withholds my
 // newest step is refused here rather than shown, so a compare cannot match a peer who was served the same short chain.
-import { onMounted, ref } from 'vue'
+// Both are read each time the dialog opens, so a dialog opened after securing the account shows the new ones.
+import { ref } from 'vue'
 import { useI18n } from 'vue-i18n'
+import VeyqButton from '../../shared/ui/VeyqButton.vue'
+import VeyqDialog from '../../shared/ui/VeyqDialog.vue'
 import VeyqMessage from '../../shared/ui/VeyqMessage.vue'
 import { myIdentityPublicKeyB64, safetyNumber } from '../../features/account/identityPins'
 import { myChainHead } from '../../features/account/tenantTrust'
@@ -19,42 +24,72 @@ const { t } = useI18n()
 
 type Mine = { kind: 'loading' } | { kind: 'unavailable' } | { kind: 'ready'; number: string; chain: string; payload: string }
 const mine = ref<Mine>({ kind: 'loading' })
+const open = ref(false)
+let token = 0
 
-onMounted(async () => {
+async function load() {
+  const current = ++token
+  mine.value = { kind: 'loading' }
   try {
     const key = myIdentityPublicKeyB64()
     const { head } = await myChainHead()
-    mine.value = { kind: 'ready', number: safetyNumber(key), chain: chainCode(head), payload: safetyCodePayload(key, head) }
+    if (current === token) mine.value = { kind: 'ready', number: safetyNumber(key), chain: chainCode(head), payload: safetyCodePayload(key, head) }
   } catch {
     // a locked vault, or a served chain that does not end at my key: said as such, nothing half-shown
-    mine.value = { kind: 'unavailable' }
+    if (current === token) mine.value = { kind: 'unavailable' }
   }
-})
+}
+
+function show() {
+  open.value = true
+  void load()
+}
 </script>
 
 <template>
   <section class="veyq-section my-safety" aria-labelledby="my-safety-title" data-testid="my-safety-number">
     <div class="veyq-section-header">
       <h2 id="my-safety-title">{{ t('safety.mineTitle') }}</h2>
+      <VeyqButton
+        class="safety-open"
+        :label="t('safety.show')"
+        icon="qrcode"
+        variant="secondary"
+        appearance="outlined"
+        size="small"
+        data-testid="my-safety-open"
+        @click="show"
+      />
     </div>
-    <p class="veyq-form-copy">{{ t('safety.mineIntro') }}</p>
-    <p v-if="mine.kind === 'loading'" class="veyq-form-copy" role="status">{{ t('people.loading') }}</p>
-    <template v-else-if="mine.kind === 'ready'">
-      <SafetyDigits :number="mine.number" />
-      <div class="my-safety-chain" data-testid="my-chain-code">
-        <div class="veyq-section-header"><h3>{{ t('safety.chainCode') }}</h3></div>
-        <SafetyDigits :number="mine.chain" />
-        <p class="veyq-form-copy">{{ t('safety.mineChainCodeHint') }}</p>
+    <VeyqDialog v-model:visible="open" :header="t('safety.mineTitle')" class="safety-dialog" data-testid="my-safety-dialog">
+      <div class="safety-dialog-body">
+        <p class="veyq-form-copy">{{ t('safety.mineIntro') }}</p>
+        <p v-if="mine.kind === 'loading'" class="veyq-form-copy" role="status">{{ t('people.loading') }}</p>
+        <template v-else-if="mine.kind === 'ready'">
+          <SafetyDigits :number="mine.number" />
+          <div class="my-safety-chain" data-testid="my-chain-code">
+            <div class="veyq-section-header"><h3>{{ t('safety.chainCode') }}</h3></div>
+            <SafetyDigits :number="mine.chain" />
+            <p class="veyq-form-copy">{{ t('safety.mineChainCodeHint') }}</p>
+          </div>
+          <PairingCode class="my-safety-code" :payload="mine.payload" :alt="t('safety.qrAlt')" :failed-text="t('safety.qrFailed')" />
+        </template>
+        <VeyqMessage v-else tone="error">{{ t('safety.mineUnavailable') }}</VeyqMessage>
       </div>
-      <PairingCode class="my-safety-code" :payload="mine.payload" :alt="t('safety.qrAlt')" :failed-text="t('safety.qrFailed')" />
-    </template>
-    <VeyqMessage v-else tone="error">{{ t('safety.mineUnavailable') }}</VeyqMessage>
+    </VeyqDialog>
   </section>
 </template>
 
 <style scoped>
 .my-safety {
   max-width: 32rem;
+}
+.safety-open {
+  margin-inline-start: auto;
+}
+.safety-dialog-body {
+  display: grid;
+  gap: 0.75rem;
 }
 .my-safety-code {
   justify-self: start;

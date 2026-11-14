@@ -1733,17 +1733,22 @@ const en = {
   // another member's with the scan / digit compare that marks them verified.
   safety: {
     mineTitle: 'Your safety number',
+    show: 'Show',
+    open: 'Compare',
     mineIntro:
       'Another member compares this number and your chain code with the ones their app shows for you - by scanning the code or reading the digits aloud - to be sure the server gave them your real key.',
     mineUnavailable: 'Your safety number could not be shown. Unlock again and reopen this page.',
     qrAlt: 'Your safety number as a code for another member to scan',
     qrFailed: 'The code could not be shown. The digits above say the same.',
     theirsTitle: 'Safety number',
+    theirsDialogTitle: '{name}’s safety number',
     theirsIntro:
       'Compare this number and the chain code with the ones {name} sees on their own profile - scan their code, or read the digits aloud. If both match, you know the server gave you their real key, and everyone in this space sees that you verified {name}.',
     chainCode: 'Chain code',
-    chainCodeHint: 'It changes each time {name} secures their account. If only the chain code differs, one of you is missing a step.',
-    mineChainCodeHint: 'It changes each time you secure your account.',
+    chainCodeHint:
+      'It stands for the whole history of {name}’s key and changes each time {name} secures their account. If only the chain code differs, one of you is missing a step.',
+    mineChainCodeHint:
+      'It stands for the whole history of your key and changes each time you secure your account. If the safety number matches but the chain code doesn’t, one of you is missing a step.',
     stateVerified: 'Verified',
     stateUnverified: 'Not verified',
     stateNew: 'New',
@@ -3949,17 +3954,22 @@ const de: typeof en = {
   },
   safety: {
     mineTitle: 'Deine Sicherheitsnummer',
+    show: 'Anzeigen',
+    open: 'Vergleichen',
     mineIntro:
       'Ein anderes Mitglied vergleicht diese Nummer und deinen Kettencode mit denen, die seine App für dich zeigt - per Code-Scan oder indem ihr die Ziffern vorlest -, um sicher zu sein, dass der Server ihm deinen echten Schlüssel gegeben hat.',
     mineUnavailable: 'Deine Sicherheitsnummer konnte nicht angezeigt werden. Entsperre erneut und öffne diese Seite noch einmal.',
     qrAlt: 'Deine Sicherheitsnummer als Code, den ein anderes Mitglied scannen kann',
     qrFailed: 'Der Code konnte nicht angezeigt werden. Die Ziffern oben sagen dasselbe.',
     theirsTitle: 'Sicherheitsnummer',
+    theirsDialogTitle: 'Sicherheitsnummer von {name}',
     theirsIntro:
       'Vergleiche diese Nummer und den Kettencode mit denen, die {name} im eigenen Profil sieht - scanne den Code oder lest die Ziffern vor. Stimmen beide überein, weißt du, dass der Server dir den echten Schlüssel gegeben hat, und alle in diesem Bereich sehen, dass du {name} verifiziert hast.',
     chainCode: 'Kettencode',
-    chainCodeHint: 'Er ändert sich jedes Mal, wenn {name} das Konto absichert. Unterscheidet sich nur der Kettencode, fehlt einem von euch ein Schritt.',
-    mineChainCodeHint: 'Er ändert sich jedes Mal, wenn du dein Konto absicherst.',
+    chainCodeHint:
+      'Er steht für die ganze Geschichte des Schlüssels von {name} und ändert sich jedes Mal, wenn {name} das Konto absichert. Unterscheidet sich nur der Kettencode, fehlt einem von euch ein Schritt.',
+    mineChainCodeHint:
+      'Er steht für die ganze Geschichte deines Schlüssels und ändert sich jedes Mal, wenn du dein Konto absicherst. Stimmt die Sicherheitsnummer überein, der Kettencode aber nicht, fehlt einem von euch ein Schritt.',
     stateVerified: 'Verifiziert',
     stateUnverified: 'Nicht verifiziert',
     stateNew: 'Neu',

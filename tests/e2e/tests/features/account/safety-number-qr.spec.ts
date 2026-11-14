@@ -131,14 +131,17 @@ async function openProfileFromWhoIsWho(device: Device, account: Account, handle:
   return decodeURIComponent(new URL(page.url()).hash.replace(/^#people\//, ''))
 }
 
-/** One's own profile page (`#people/<own token>`, ADR 0083): the shell links to it from nowhere, so the address is typed. */
+/**
+ * One's own profile page (`#people/<own token>`, ADR 0083): the shell links to it from nowhere, so the address is typed.
+ * The number, the chain code and the QR open in a dialog from the page's "Show" (owner 2026-11-14); returns the dialog's QR.
+ */
 async function openOwnProfile(device: Device, account: Account, token: string): Promise<Locator> {
   const { page } = device
   await reachHome(device, account)
   await page.goto(`${safetyOrigin()}/#people/${encodeURIComponent(token)}`)
-  const mine = page.getByTestId('my-safety-number')
-  await expect(mine).toBeVisible({ timeout: 60_000 })
-  const qr = mine.getByRole('img', { name: 'Your safety number as a code for another member to scan' })
+  await expect(page.getByTestId('my-safety-number')).toBeVisible({ timeout: 60_000 })
+  await page.getByTestId('my-safety-open').click()
+  const qr = page.getByTestId('my-safety-dialog').getByRole('img', { name: 'Your safety number as a code for another member to scan' })
   await expect(qr).toHaveAttribute('src', /^data:image\/png;base64,/, { timeout: 60_000 })
   await expect.poll(() => qr.evaluate((img: HTMLImageElement) => img.complete && img.naturalWidth),
     { message: 'the QR decoded' }).toBeGreaterThan(0)
@@ -204,9 +207,16 @@ async function scanningDevice(
   }
 }
 
-/** On the owner's profile: the safety section's state badge, and the outcome the last compare came to. */
+/**
+ * On the owner's profile: the safety section's state badge, the scan behind its "Compare" dialog (owner 2026-11-14), and
+ * the outcome the last compare came to, said in that dialog.
+ */
 const safetyState = (page: Page) => page.getByTestId('person-safety').getByTestId('person-safety-state')
-const safetyOutcome = (page: Page) => page.getByTestId('person-safety').getByTestId('person-safety-outcome')
+const safetyOutcome = (page: Page) => page.getByTestId('person-safety-dialog').getByTestId('person-safety-outcome')
+async function startScan(page: Page): Promise<void> {
+  await page.getByTestId('person-safety-open').click()
+  await page.getByTestId('person-safety-dialog').getByTestId('person-safety-scan').click()
+}
 
 test.beforeAll(async ({ browser }) => {
   admin = await newDevice(browser)
@@ -313,12 +323,12 @@ test(
     ownerId = await openProfileFromWhoIsWho(member, accountMember, handles.owner)
     expect(ownerId).not.toBe(memberId)
     await expect(safetyState(member.page)).toHaveText('Not verified')
-    await expect(member.page.getByTestId('person-safety-scan')).toBeVisible()
+    await member.page.getByTestId('person-safety-open').click()
+    await expect(member.page.getByTestId('person-safety-dialog').getByTestId('person-safety-scan')).toBeVisible()
 
     // The owner's own profile: their safety number, their chain code, and the QR of both the member will scan.
     await openOwnProfile(owner, accountOwner, ownerId)
-    const mine = owner.page.getByTestId('my-safety-number')
-    await expect(mine.getByTestId('my-chain-code')).toBeVisible()
+    await expect(owner.page.getByTestId('my-safety-dialog').getByTestId('my-chain-code')).toBeVisible()
     await expect(owner.page.getByTestId('person-safety')).toHaveCount(0)
   },
 )
@@ -337,7 +347,7 @@ test(
       const { page } = scanner.device
       await openProfileFromWhoIsWho(scanner.device, accountMember, handles.owner)
       await expect(safetyState(page)).toHaveText('Not verified')
-      await page.getByTestId('person-safety-scan').click()
+      await startScan(page)
       // The outcome needs a decode: the scanner closes and speaks only once jsQR read a code off the camera.
       await expect(safetyOutcome(page)).toHaveText(/^These are different keys\. Do not mark /, { timeout: 30_000 })
       await expect(safetyState(page)).toHaveText('Not verified')
@@ -372,7 +382,7 @@ test(
       const { page } = scanner.device
       await openProfileFromWhoIsWho(scanner.device, accountMember, handles.owner)
       await expect(safetyState(page)).toHaveText('Not verified')
-      await page.getByTestId('person-safety-scan').click()
+      await startScan(page)
       await expect(safetyOutcome(page)).toHaveText(/ is verified\. Everyone in this space sees that you verified them\.$/,
         { timeout: 30_000 })
       await expect(safetyState(page)).toHaveText('Verified')

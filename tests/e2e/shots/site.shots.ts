@@ -350,10 +350,12 @@ shot('account-safety-number', async (w) => {
   const { page } = w.owner
   await openSettings(w, page, w.t('Who’s who', 'Wer ist wer'))
   await page.getByTestId('who-is-who').locator('.member-row').filter({ hasText: `@${w.cast.member.username}` }).locator('a.who-name').click()
-  const safety = page.getByTestId('person-safety')
-  // The digits are derived in the page after the block appears: wait for its buttons, which come with them.
+  // The profile carries the state and "Compare"; the digits, the chain code and the two ways to compare open in a dialog.
+  await page.getByTestId('person-safety').getByRole('button', { name: w.t('Compare', 'Vergleichen'), exact: true }).click({ timeout: 60_000 })
+  const safety = page.getByTestId('person-safety-dialog')
   await expect(safety.getByRole('button', { name: w.t('Compare digits', 'Ziffern vergleichen') })).toBeVisible({ timeout: 60_000 })
   await capture(w, 'account-safety-number', safety)
+  await closeDialogs(page)
 })
 
 // --------------------------------------------------------------------------------------------------------- owners
