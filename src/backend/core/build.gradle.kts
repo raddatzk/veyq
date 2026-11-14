@@ -36,7 +36,7 @@ tasks.processResources {
     from(fixedTexts) { into("veyq/terms") }
 }
 
-// The settings of the retired streaming music (ADR 0131, superseded by ADR 0135), left over as an instance that ran it
+// The settings of the retired streaming music (removed by ADR 0135), left over as an instance that ran it
 // would leave them: every test JVM of this module carries every former `VEYQ_MUSIC_*` variable, so every test runs on such
 // an instance and `FormerMusicSettingsSliceTest` asserts that nothing reads them (the policies, the hosts, the register).
 // In the environment, where an operator sets them: the same keys in a properties file refuse the boot (SRCFG00050, a key

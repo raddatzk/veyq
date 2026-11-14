@@ -15,7 +15,7 @@ import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
 
 /**
- * An instance that ran the retired streaming music (ADR 0131, superseded by ADR 0135 decision 1) and still carries its
+ * An instance that ran the retired streaming music (removed by ADR 0135 decision 1) and still carries its
  * settings: `:core`'s test task sets every former `VEYQ_MUSIC_*` variable in the test JVM's environment (`build.gradle.kts`)
  * — the release flag on, a music host, a Spotify client ID and an Apple token that has not expired — so no boot of its own,
  * and every boot of the suite proves that a leftover variable refuses no start. What
