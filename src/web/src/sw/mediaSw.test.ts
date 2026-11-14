@@ -229,11 +229,13 @@ describe('handleMessage — handshake / register / revoke / end-session', () => 
     expect(reply.postMessage).toHaveBeenCalledWith({ type: 'veyq-handshake-ack', version: PROTOCOL_VERSION })
   })
 
-  it('registers a playback from a port, then revokes it', () => {
+  it('registers a playback from a port, confirms it there (protocol 6), then revokes it', () => {
     const reg = makeRegistry()
     const { a } = portPair()
+    const confirm = vi.spyOn(a, 'postMessage')
     handleMessage(reg, { type: 'veyq-register-playback', handle: 'h', chunkCount: 1, byteSize: 28, mediaType: 'video/mp4' }, [a])
     expect(reg.get('h')).toBeDefined()
+    expect(confirm).toHaveBeenCalledWith({ type: 'veyq-playback-registered' })
     handleMessage(reg, { type: 'veyq-revoke-playback', handle: 'h' }, [])
     expect(reg.get('h')).toBeUndefined()
   })

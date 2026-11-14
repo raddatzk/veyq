@@ -11,6 +11,8 @@ vi.mock('../../../api/client', () => ({ blobApi: vi.fn(), contentApi: vi.fn(), l
 vi.mock('../api', () => ({ mediaApi: vi.fn(), itemFavoritesApi: vi.fn(), ownItemFavoritesApi: vi.fn() }))
 vi.mock('../uploadQueue', async (orig) => ({ ...(await orig<typeof import('../uploadQueue')>()), enqueueUploads: vi.fn() }))
 vi.mock('../music/audio', async (orig) => ({ ...(await orig<object>()), checkAudioFile: vi.fn() }))
+const { fakePlayer } = vi.hoisted(() => ({ fakePlayer: { current: null as null | Record<string, unknown> } }))
+vi.mock('../../../core/audio/player', async (orig) => ({ ...(await orig<object>()), audioPlayer: () => fakePlayer.current }))
 
 import { flushPromises } from '@vue/test-utils'
 import * as v1 from '@veyq/crypto/v1'
@@ -31,6 +33,10 @@ import { mountWithHeader } from '../../../test/nodeHeader'
 import { coreActionsStandIn, coverStandIn } from '../../../test/nodePage'
 import type { MemoryRights } from '../rights'
 import { checkAudioFile } from '../music/audio'
+import { shallowRef, nextTick } from 'vue'
+import type { NowPlaying, PlayerQueue } from '../../../core/audio/player'
+import { headerButtonIds } from '../../../test/nodeHeader'
+import { musicQueueKey } from '../music/musicQueue'
 
 const SCOPE_ID = '11111111-1111-1111-1111-111111111111'
 const NODE_ID = '22222222-2222-2222-2222-222222222222'
@@ -41,8 +47,15 @@ const deriver: MediaDeriver = {
 }
 
 let deleteMedia: Mock<MediaApi['deleteMedia']>
+const player = {
+  nowPlaying: shallowRef<NowPlaying | null>(null), notice: shallowRef(null),
+  play: vi.fn(), stop: vi.fn(), pause: vi.fn(), resume: vi.fn(), next: vi.fn(), previous: vi.fn(), seek: vi.fn(),
+}
+fakePlayer.current = player
+
 beforeEach(() => {
   vi.clearAllMocks()
+  player.nowPlaying.value = null
   fakeApi(contentApi, { updateNode: vi.fn(async () => ({ metaRevision: 1 })) as unknown as Mock<ContentApi['updateNode']> })
   stubApi(itemFavoritesApi, { getItemFavorites: [] })
   const store = galleryFakeStore()
@@ -140,6 +153,45 @@ describe('MemoryDetail — music (uc.memory.background-music)', () => {
     expect(target.nodeId).toBe(NODE_ID)
     expect(target.key).toBe(`${NODE_ID}#music`)
     expect(selections.map((s) => [s.file.name, s.mediaType, s.facts])).toEqual([['a.mp3', 'audio/mpeg', FACTS], ['b.m4a', 'audio/mp4', FACTS]])
+    w.unmount()
+  })
+
+  // ADR 0135 decisions 5, 9: one header button where the node has music, for every viewer, toggling core's player; a press on
+  // a track starts the music with it. Levers: `shown: true` (the button without music), or never stopping.
+  it('offers the header\'s music button only where the node has music, and toggles this node\'s music with it', async () => {
+    const none = await mountWithOneSongAndOnePhoto(memberMemoryRights(), false)
+    expect(headerButtonIds(none)).not.toContain('music')
+    expect(headerButtonIds(none), 'control: the header is drawn').toContain('upload')
+    none.unmount()
+
+    const w = await mountWithOneSongAndOnePhoto(memberMemoryRights({ readonly: true }))
+    const button = () => w.find('.veyq-node-header-action[data-action="music"]')
+    expect(button().attributes('aria-label')).toBe(t('memory.music.play'))
+    await button().trigger('click')
+    expect(player.play).toHaveBeenCalledTimes(1)
+    const queue = player.play.mock.calls[0][0] as PlayerQueue
+    expect([queue.key, queue.album, queue.tracks.map((tr) => [tr.title, tr.startMs, tr.endMs])]).toEqual([
+      musicQueueKey(SCOPE_ID, NODE_ID), 'Alps', [['Summer Song', 400, 184_000]],
+    ])
+    player.nowPlaying.value = { key: queue.key, trackId: queue.tracks[0].id, title: 'Summer Song', playing: true, positionMs: 0, durationMs: 183_600 }
+    await nextTick()
+    await nextTick()
+    expect(button().attributes('aria-label')).toBe(t('memory.music.stop'))
+    await button().trigger('click')
+    expect([player.stop.mock.calls.length, player.play.mock.calls.length]).toEqual([1, 1])
+    w.unmount()
+  })
+
+  it('a press on a track in the Music tab starts the music with that track, and marks it while it plays', async () => {
+    const w = await mountWithOneSongAndOnePhoto()
+    await musicTab(w).trigger('mousedown')
+    await flushPromises()
+    await w.find('[data-testid="music-play"]').trigger('click')
+    const queue = player.play.mock.calls[0][0] as PlayerQueue
+    expect(queue.startId).toBe(queue.tracks[0].id)
+    player.nowPlaying.value = { key: queue.key, trackId: queue.tracks[0].id, title: 'Summer Song', playing: true, positionMs: 0, durationMs: 1 }
+    await nextTick()
+    expect(w.find('[data-testid="music-row"]').classes()).toContain('is-playing')
     w.unmount()
   })
 })

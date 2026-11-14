@@ -52,6 +52,8 @@ import MediaTile from './MediaTile.vue'
 import MemoryBuckets from './MemoryBuckets.vue'
 import MemoryTracks from './MemoryTracks.vue'
 import MemoryMusic from './MemoryMusic.vue'
+import { musicQueue, musicQueueKey } from '../music/musicQueue'
+import { audioPlayer } from '../../../core/audio/player'
 import { GPX_MEDIA_TYPE } from '../track/gpx'
 import { trackLabelFacts, type TrackLabel } from '../track/trackLabel'
 import { MetaConflictError } from '../../../core/node/sealedMetaWrite'
@@ -208,6 +210,12 @@ const headerActions = computed<NodeHeaderAction[]>(() => [
   // core's dialog (inbox #358): a Memory to the root or a folder, a chapter into another Memory. The rename is the name's own,
   // in place (`headerRename`).
   ...standardNodeActions(t, { move: can.value.move, delete: can.value.delete }, { move: () => emit('move'), remove: () => emit('delete') }),
+  // The node's music (uc.memory.background-music, ADR 0135 decision 9): one button where it has music, for every viewer,
+  // toggling core's player - it stops this node's music while it plays, else starts it.
+  {
+    id: 'music', label: musicPlaysHere.value ? t('memory.music.stop') : t('memory.music.play'), icon: 'music',
+    shown: music.value.length > 0, disabled: !props.memoryKey, pressed: musicPlaysHere.value, onClick: () => toggleMusic(),
+  },
 ])
 /** The Memory's name, renamed in place in the header (the page's door), where `can` grants the rename. */
 const headerRename = computed(() => standardNodeRename({ rename: can.value.rename }, props.renameTo ? { renameTo: props.renameTo } : {}))
@@ -694,6 +702,24 @@ function enqueueMusic(selections: { file: File; mediaType: string; facts: Restor
     onComplete: () => { if (props.node.id === targetNodeId) void load() },
   })
 }
+/** Core's one player; whether it plays THIS node's music, and which track. */
+const player = audioPlayer()
+const musicPlaysHere = computed(() => player.nowPlaying.value?.key === musicQueueKey(props.scopeId, props.node.id))
+const playingMusicId = computed(() => (musicPlaysHere.value ? player.nowPlaying.value?.trackId ?? null : null))
+/** Start the node's music - from `startId` first (A1) - as a snapshot of its tracks now. Synchronous in the press: the
+ *  player wakes its audio there (iOS). */
+function playMusic(startId?: string) {
+  const key = props.memoryKey
+  if (!key || music.value.length === 0) return
+  player.play(musicQueue({
+    scopeId: props.scopeId, nodeId: props.node.id, nodeName: props.node.name, key, music: music.value, loaders: props.source.loaders,
+    untitled: (n) => t('memory.music.untitled', { n }), ...(startId ? { startId } : {}),
+  }))
+}
+function toggleMusic() {
+  if (musicPlaysHere.value) player.stop()
+  else playMusic()
+}
 const onRemoveMusic = (item: MediaItem) => removeTrack(item, () => ({
   header: t('memory.music.removeOwnTitle'), message: t('memory.music.removeOwnMessage'),
   accept: t('memory.music.remove'), failed: t('memory.music.removeFailed'),
@@ -1065,6 +1091,8 @@ watch(
             :can-download="can.download"
             :can-report="!!canReport"
             :pick-ready="trackPickReady"
+            :playing-id="playingMusicId"
+            @play="playMusic"
             @add="enqueueMusic"
             @remove="onRemoveMusic"
             @report="emit('reportMedium', $event)"

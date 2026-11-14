@@ -204,6 +204,8 @@ const en = {
       removeOwnTitle: 'Remove the track?',
       removeOwnMessage: 'The track is deleted for good. This cannot be undone.',
       removeFailed: 'The track could not be removed.',
+      play: 'Play music',
+      stop: 'Stop music',
       problem: {
         tooLarge: '{name} is larger than 200 MB.',
         notAudio: '{name} is no audio file.',
@@ -584,6 +586,8 @@ const de: typeof en = {
       removeOwnTitle: 'Titel entfernen?',
       removeOwnMessage: 'Der Titel wird endgültig gelöscht. Das lässt sich nicht rückgängig machen.',
       removeFailed: 'Der Titel konnte nicht entfernt werden.',
+      play: 'Musik abspielen',
+      stop: 'Musik beenden',
       problem: {
         tooLarge: '{name} ist größer als 200 MB.',
         notAudio: '{name} ist keine Audiodatei.',
