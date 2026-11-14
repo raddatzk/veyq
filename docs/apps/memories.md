@@ -45,8 +45,9 @@ Gradle module of its own; the web half is separated by import direction only (se
   audio file, its `blob-meta` typed `audio/*` from its bytes, its length and trimmed span sealed into its listed tier at
   birth (`music/audioFacts.ts`); it is listed on the node's Music tab (`components/MemoryMusic.vue`) and played by core's
   audio player through Memories' queue (`music/musicQueue.ts`), which hands core URLs, never a key. Every view of photos
-  asks one positive predicate, an image or a video (`galleryMedium.ts` `isGalleryMedium`: `useMediaGalleryLive`'s `items`,
-  `search.ts`'s documents), so a track of either kind - and a type nobody decided on - is in none of them.
+  asks one predicate, every medium but a GPX or a music track (`galleryMedium.ts` `isGalleryMedium`:
+  `useMediaGalleryLive`'s `items`, `search.ts`'s documents), so a track of either kind is in none of them, and a type no
+  view claims stays a gallery item.
 - **Screens and behaviour:** gallery and lightbox, upload with client-generated derivatives, covers, banners, date and
   place curation, the map, a Memory's GPX tracks on its Map tab, live updates. Their state is the use-cases and enablers under
   [`docs/features/memory/`](../features/memory/_index.md); this page points at them and does not restate them.

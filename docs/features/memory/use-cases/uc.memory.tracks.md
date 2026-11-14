@@ -74,7 +74,7 @@
   added or re-sealed under the medium's key by an Edit; the server sees a blob of about the same size and learns neither
   (ADR 0130 decision 9).
 - **Not a photo.** A track is in no view of photos: gallery, item count, lightbox, contributions, search, the date and
-  place reconcile (ADR 0130 decision 7). Those views ask one positive predicate, an image or a video
+  place reconcile (ADR 0130 decision 7). Those views ask one predicate, every medium but a GPX or a music track
   (`isGalleryMedium`, [en.memory.media](../enablers/en.memory.media.md#which-media-a-photo-view-shows)), shared with the
   music tracks of [uc.memory.background-music](uc.memory.background-music.md); the Map tab's own list asks `isTrackMeta`.
 

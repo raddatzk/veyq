@@ -300,21 +300,21 @@ describe('useMediaGalleryLive — a lightbox Undo whose restore is refused (inbo
     expect(vm.items.map((i) => i.mediaId)).toEqual(['pic', 'bare'])
   })
 
-  // en.memory.media § Which media a photo view shows (ADR 0135 decision 2): ONE positive predicate, `isGalleryMedium`, decides
-  // what a photo view shows - an image or a video. A music track goes to `music`, a GPX track to `tracks`, and a type nobody
-  // decided on to neither list and no photo view; a medium without any meta (older than `blob-meta`) stays a photo. Lever:
-  // `items` filtering out tracks and music by name again (the unknown type then shows as a tile).
-  it('shows only images and videos in the photo views; music and tracks go to their own lists, an unknown type to none', async () => {
+  // en.memory.media § Which media a photo view shows (ADR 0135 decision 2): ONE predicate, `isGalleryMedium`, decides what a
+  // photo view shows - every medium but the kinds another view claims. A music track goes to `music`, a GPX track to
+  // `tracks`; a type no view claims stays a photo view's (an icon tile, uc.memory.gallery E1), as does a medium without any
+  // meta (older than `blob-meta`). Lever: `items` filtering on image/video only (the unknown type then vanishes).
+  it('shows every medium but music and tracks in the photo views; those go to their own lists, an unknown type stays', async () => {
     const types: Record<string, string> = { pic: 'image/jpeg', vid: 'video/mp4', song: 'audio/mpeg', trk: 'application/gpx+xml', odd: 'application/x-unknown' }
     vi.mocked(originalBlobMeta).mockImplementation((_s, _k, m) => (types[m.mediaId] ? { v: 1, type: types[m.mediaId], name: m.mediaId } : null))
     vi.mocked(listMediaPages).mockResolvedValue(page(['pic', 'vid', 'song', 'trk', 'odd', 'bare'].map((id) => item(id))))
     const { vm } = setup()
     await flushPromises()
-    expect(vm.items.map((i) => i.mediaId)).toEqual(['pic', 'vid', 'bare'])
-    expect(vm.layoutItems.map((t) => t.id).sort()).toEqual(['bare', 'pic', 'vid'])
+    expect(vm.items.map((i) => i.mediaId)).toEqual(['pic', 'vid', 'odd', 'bare'])
+    expect(vm.layoutItems.map((t) => t.id).sort()).toEqual(['bare', 'odd', 'pic', 'vid'])
     expect(vm.music.map((i) => i.mediaId)).toEqual(['song'])
     expect(vm.tracks.map((i) => i.mediaId)).toEqual(['trk'])
-    expect(['song', 'trk', 'odd'].map((id) => vm.openLightboxOn(id)), 'no lightbox opens on what is no photo').toEqual([false, false, false])
+    expect(['song', 'trk'].map((id) => vm.openLightboxOn(id)), 'no lightbox opens on music or a track').toEqual([false, false])
     vm.removeMedia('song')
     expect(vm.music).toEqual([])
   })

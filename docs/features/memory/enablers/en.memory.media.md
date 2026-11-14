@@ -132,16 +132,18 @@ sequenceDiagram
 A medium's kind is what its original's sealed `blob-meta` type says, read on the device; the server stores and lists a
 medium of a size and never learns it. Three kinds share the one media layer:
 
-- **Photos and videos** (`image/*`, `video/*`): the gallery, the lightbox, the item count, the organizer, the date and
-  place reconcile and the search's documents. One positive predicate decides it, `isGalleryMedium`
-  (`src/web/src/features/memories/galleryMedium.ts`), which every photo view asks. A medium whose original carries no
-  `blob-meta` at all is shown too: it predates every typed medium that is no photo.
+- **Photos, videos and every other medium** (`image/*`, `video/*`, and any type no view below claims): the gallery,
+  the lightbox, the item count, the organizer, the date and place reconcile and the search's documents. One predicate
+  decides it, `isGalleryMedium` (`src/web/src/features/memories/galleryMedium.ts`), which every photo view asks: every
+  medium but a GPX track or a music track. A type nothing else claims (a PDF an archive brought) is an icon tile
+  ([uc.memory.gallery](../use-cases/uc.memory.gallery.md) E1).
 - **GPX tracks** (`application/gpx+xml`, [uc.memory.tracks](../use-cases/uc.memory.tracks.md)): the Map tab.
 - **Music tracks** (`audio/*`, [uc.memory.background-music](../use-cases/uc.memory.background-music.md)): the Music tab
   and core's audio player. Their facts - the length and the trimmed span - ride the listed tier, sealed at birth.
 
-A type nobody decided on is in no photo view: a new kind of medium gets its own list, and the photo views never need
-to learn to leave it out.
+A new kind of medium with a view of its own is added to that predicate's exclusions. A type no view claims stays in
+the gallery, because hidden there it would be a medium nobody can see, download or delete, still counted against the
+quota.
 
 ## Reading back: playback and download
 

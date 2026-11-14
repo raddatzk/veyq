@@ -145,9 +145,9 @@ describe("Memories' photos of every space", () => {
     expect((await scopeMediaDocuments(ctx))?.documents.map((d) => d.name)).toEqual(['strand.jpg'])
   })
 
-  // ADR 0130 decision 7 and ADR 0135 decision 2: a GPX track and a music track are media of their Memory and no photo, and
-  // neither is a type nobody decided on - the space's search makes no document of any of them (`isGalleryMedium`).
-  it('makes no document of a GPX track, a music track or an unknown type', async () => {
+  // ADR 0130 decision 7 and ADR 0135 decision 2: a GPX track and a music track are media of their Memory and no photo - the
+  // space's search makes no document of either (`isGalleryMedium`); a type no view claims stays a document, as in the gallery.
+  it('makes no document of a GPX track or a music track; an unknown type stays one', async () => {
     const { rows, keys } = await space()
     const store = galleryFakeStore()
     fakeApi(mediaApi, store.api)
@@ -164,6 +164,6 @@ describe("Memories' photos of every space", () => {
       wrappedBlobMeta: m.wrappedBlobMeta, wrappedMeta: m.wrappedMeta, metaRevision: 0, ownerKey: 'user:u1', blockedByOperator: false,
     }))]])
     const { ctx } = context(keys)
-    expect((await scopeMediaDocuments(ctx))?.documents.map((d) => d.name)).toEqual(['strand.jpg', 'IMG_0002.jpg'])
+    expect((await scopeMediaDocuments(ctx))?.documents.map((d) => d.name).sort()).toEqual(['IMG_0002.jpg', 'odd.bin', 'strand.jpg'])
   })
 })

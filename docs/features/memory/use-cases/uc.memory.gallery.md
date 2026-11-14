@@ -132,11 +132,11 @@
 ## Alternate / exception flows
 
 - **E1 — an item has no derivable frame** (an image or a video this browser could not decode at upload, e.g. HEIC off
-  Safari): the grid shows an **icon + name**. (There is **no backfill** — on a fresh instance every image/video media
-  carries its derivatives from upload, [en.memory.derivatives](../enablers/en.memory.derivatives.md).) A medium of
-  another type is no gallery item at all: the gallery shows images and videos only
-  ([en.memory.media](../enablers/en.memory.media.md#which-media-a-photo-view-shows)) - a GPX track is the Map tab's, a
-  music track the Music tab's, and a type nobody decided on is listed nowhere.
+  Safari, or a type that is neither): the grid shows an **icon + name**. (There is **no backfill** — on a fresh instance every image/video media
+  carries its derivatives from upload, [en.memory.derivatives](../enablers/en.memory.derivatives.md).) A medium of a
+  type no other view claims (a PDF an archive brought) is such a tile too. A GPX track is the Map tab's and a music
+  track the Music tab's, so neither is a gallery item
+  ([en.memory.media](../enablers/en.memory.media.md#which-media-a-photo-view-shows)).
 - **E2 — vault locked / Memory not open:** without `K_node` the media can't be read → the gallery is unavailable
   until unlock + the Memory is opened.
 - **E3 — empty Memory:** the grid shows an empty state.

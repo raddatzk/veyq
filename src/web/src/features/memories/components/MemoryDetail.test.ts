@@ -323,9 +323,9 @@ describe('MemoryDetail (gallery grid + header)', () => {
     expect(wrapper.findAll('.media-tile')).toHaveLength(0)
   })
 
-  // E1: a photo or a video with no derivable frame (an image this browser could not decode at upload) is an icon tile. A
-  // type that is neither (here a PDF an archive brought) is no photo view's at all (`isGalleryMedium`, ADR 0135 decision 2).
-  it('renders an underivable image (E1) as an icon tile, fetching no thumbnail for it; a type that is no photo is no tile', async () => {
+  // E1: an item with no derivable frame - an image this browser could not decode at upload, or a type no view claims (here
+  // a PDF an archive brought; `isGalleryMedium`, ADR 0135 decision 2) - is an icon tile.
+  it('renders an underivable image and an unclaimed type (E1) as icon tiles, fetching no thumbnail for either', async () => {
     const store = galleryFakeStore()
     fakeApi(mediaApi, store.api)
     fakeApi(blobApi, store.blob)
@@ -339,9 +339,9 @@ describe('MemoryDetail (gallery grid + header)', () => {
     await flushPromises()
     await flushPromises()
 
-    expect(wrapper.findAll('.media-tile')).toHaveLength(1)
+    expect(wrapper.findAll('.media-tile')).toHaveLength(2)
     expect(wrapper.find('.media-tile img').exists()).toBe(false)
-    expect(wrapper.find('.media-tile .media-grid-icon').exists()).toBe(true)
+    expect(wrapper.findAll('.media-tile .media-grid-icon')).toHaveLength(2)
     // a non-derivable item is never fetched (no preview/thumbnail tier exists)
     expect(store.blob.presignBlobDownloads).not.toHaveBeenCalled()
   })

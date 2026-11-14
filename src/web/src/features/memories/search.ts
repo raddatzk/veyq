@@ -113,8 +113,8 @@ export interface MediaDocumentsInput {
   open: (mediaId: string) => void
 }
 
-/** Whether a medium is a photo or a video (`galleryMedium.ts`): a GPX track (ADR 0130 decision 7), a music track (ADR 0135
- *  decision 2) and a type nobody decided on are no photo, so no photo document - each is on its own tab, if any. */
+/** Whether a medium is a gallery item (`galleryMedium.ts`): a GPX track (ADR 0130 decision 7) and a music track (ADR 0135
+ *  decision 2) are no photo, so no photo document - each is on its own tab; every other medium is one. */
 const isPhotoOrVideo = (scopeId: string, key: Uint8Array, item: MediaItem) => isGalleryMedium(openedBlobMeta(scopeId, key, item))
 
 /** One document per photo and video of the open Memory but a blocked one (see the header). */
