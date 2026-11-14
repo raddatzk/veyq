@@ -104,8 +104,10 @@ A Gradle build of its own, run through its own wrapper.
   environment. `run.py` is its one entry point (§ Prove your work); `run.py lock` is the one writer of `Cargo.lock`.
   Crates are held to the no-deprecated rule by reading each one's repository: cargo has no deprecation gate.
 - `windows/` — the Windows app (ADR 0136 decision 5; ADR 0123's Consequences, the Windows app): .NET 10 projects in C#.
-  `Veyq.Bridge` (net10.0, no Windows API) is the safe wrapper over the six functions, the host's device store under
-  `%LOCALAPPDATA%\veyq\`, and the hand-off to the UI thread; `Veyq.Bridge.Tests` its round trip and the real DLL.
+  `Veyq.Bridge` (net10.0, no Windows API) is the safe wrapper over the six functions, the host's device store in the
+  app's data folder (`DataFolder`: the package's own `LocalState` when packaged, `%LOCALAPPDATA%\veyq\` unpackaged; the
+  app's `AppData` asks for package identity), and the hand-off to the UI thread; `Veyq.Bridge.Tests` its round trip,
+  `DataFolderTest` and the real DLL.
   `Veyq` is the app (WinUI 3, unpackaged, self-contained, `win-x64`; its assembly `Veyq.App`): `App.xaml.cs`,
   `MainWindow`, one class per screen (`SignInView`, `ShellView` with Search, `HomeView`, `PotPage` with its download;
   a node's header `NodeHeader` with `HeaderPlan`, and its sheets `TrashDialog`, `MoveDialog`, `ShareDialog` with
@@ -121,7 +123,7 @@ A Gradle build of its own, run through its own wrapper.
   scrolled to; `ListScrollsTest`), `EntryEditorPage` (an entry's editor, a page in place of the Pot's places) with
   `ReceiptViewerDialog` and `PdfPages` (a receipt's PDF through `Windows.Data.Pdf`, from memory; `PdfPagesTest`), `TypedText`
   (when a text box is set from the state; `TypedTextTest`), `Words`/`MrtWords` and `SaidNotice` (the words), `Said` (money, days and sizes the system's
-  way), `CreateAction`, `Log` (`%LOCALAPPDATA%\veyq\log.txt`), and in a debug build `DevLogin` and `DebugEnv`
+  way), `CreateAction`, `Log` (`log.txt` in the data folder), and in a debug build `DevLogin` and `DebugEnv`
   (`VEYQ_THEME`, `VEYQ_LANGUAGE`). `Veyq.Tests` holds the words and formats against the app's `.pri`. `Veyq.Drive` is the
   pass's driver on the Windows host (UI Automation; its steps in `Program.cs`). Packages are central and exact
   (`Directory.Packages.props`), each project's `packages.lock.json` committed and every restore `--locked-mode`,
@@ -803,9 +805,11 @@ first in each of its scrolls — `LocalNodeHero.current(inset)` (Android) / `Nod
 - The MSIX (2026-11-13, `run.py package`): `Add-AppxPackage` from ssh's session 0 fails `0x80070005` (the AppX log:
   the PLM does not initialize), so install and uninstall run in the logged-on session (`in_session`). An encoded
   command is held to cmd.exe's 8191 characters (`Die Befehlszeile ist zu lang`, about 3000 of script): `powershell()`
-  refuses a longer one; split it. The packaged app writes `%LOCALAPPDATA%\veyq` in place where an unpackaged build
-  made it before, and to `Packages\<family>\LocalCache\Local\veyq` where not — a pass that measures what an uninstall
-  leaves moves the development data aside first. A `--` in the manifest's XML comment failed the package build behind
+  refuses a longer one; split it. Left to plain `%LOCALAPPDATA%`, the packaged app wrote `%LOCALAPPDATA%\veyq` in place
+  where an unpackaged build had made it, so every debug pass's sign-out and Stop trusting hit the installed app's device
+  state ("it keeps locking", 2026-11-14): the app resolves its data folder by package identity (`AppData`,
+  `DataFolder`) — packaged `%LOCALAPPDATA%\Packages\<family>\LocalState` (its log there, `run.py`'s `PACKAGE_LOG`),
+  unpackaged `%LOCALAPPDATA%\veyq` — and nothing but `AppData` reads `LocalApplicationData`. A `--` in the manifest's XML comment failed the package build behind
   an assembly the MSIX task could not load (`System.Security.Permissions`): `run.py` parses the filled manifest first.
   A packaged build names its .pri `resources.pri`. With UAC off the packaged app starts, elevated like the rest;
   with UAC on at medium integrity (`0x2000`); only with UAC on did the (unpackaged) app take a drop from Explorer (2026-11-13).

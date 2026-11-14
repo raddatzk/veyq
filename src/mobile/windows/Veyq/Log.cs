@@ -1,6 +1,7 @@
 // The app's log (ADR 0123's Consequences, the Windows app): what the core said it could not do, the session's gates by
-// kind (never their fields) and every unhandled exception, in %LOCALAPPDATA%\veyq\log.txt, begun anew at each start.
-// windows/run.py fetches it before anything on screen is believed.
+// kind (never their fields) and every unhandled exception, in log.txt in the app's data folder (AppData: the package's
+// LocalState when packaged, %LOCALAPPDATA%\veyq unpackaged), begun anew at each start. windows/run.py fetches it before
+// anything on screen is believed.
 using System;
 using System.Globalization;
 using System.IO;
@@ -12,9 +13,8 @@ internal static class Log
     private static readonly object Lock = new();
     private static string? _file;
 
-    public static void Start()
+    public static void Start(string dir)
     {
-        var dir = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "veyq");
         Directory.CreateDirectory(dir);
         _file = Path.Combine(dir, "log.txt");
         File.WriteAllText(_file, "");

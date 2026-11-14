@@ -171,7 +171,9 @@ APP_NAME = "Veyq.App"  # the app's assembly, exe and .pri name (Veyq.csproj): ne
 REMOTE_APP = REMOTE_DIR / "app"  # the app run.py starts, copied out of the build so a running one blocks no build
 REMOTE_DRIVE = REMOTE_DIR / "drive"  # Veyq.Drive, which the scheduled tasks run
 REMOTE_RUN = REMOTE_DIR / "run"  # the launch's and the drive's files
-REMOTE_LOG = "AppData/Local/veyq/log.txt"  # the app's log (Log.cs, %LOCALAPPDATA%), from the ssh user's home
+REMOTE_LOG = "AppData/Local/veyq/log.txt"  # the unpackaged app's log (Log.cs, AppData.cs), from the ssh user's home
+# the packaged app's log under %LOCALAPPDATA%: its package's own LocalState (AppData.cs), never REMOTE_LOG's
+PACKAGE_LOG = "Packages/{family}/LocalState/log.txt"
 # `local`: this host is the Windows host (CI's msix job). Its directory must be one of its own, never this tree: a verb
 # deletes and unpacks `src` and `bin` there.
 LOCAL = SSH_TARGET == "local"
@@ -849,15 +851,14 @@ def smoke_package(signed: PureWindowsPath) -> int:
     code = run_task("veyq-app", started, 60)
     if code == 0:
         code = powershell("\n".join([
-            # The app's %LOCALAPPDATA% writes land in the package's own LocalCache — unless %LOCALAPPDATA%\veyq was
-            # there before (an unpackaged build's), which the packaged app then writes in place (measured 2026-11-13):
-            # either log, written since the activation (its .started, less a margin for the log begun before it).
+            # The packaged app keeps its data, its log too, in its package's own LocalState (AppData.cs, DataFolder),
+            # never in the unpackaged build's %LOCALAPPDATA%\veyq: the log written since the activation (its .started,
+            # less a margin for the log begun before it).
             f"$since = (Get-Item {ps_quote(str(started))}).LastWriteTime.AddSeconds(-10)",
-            f"$logs = @((Join-Path $env:LOCALAPPDATA {ps_quote('Packages/' + pfn + '/LocalCache/Local/veyq/log.txt')}), "
-            "(Join-Path $env:LOCALAPPDATA 'veyq/log.txt'))",
+            f"$path = Join-Path $env:LOCALAPPDATA {ps_quote(PACKAGE_LOG.format(family=pfn))}",
             "$deadline = (Get-Date).AddSeconds(60)",
             "while ($true) {",
-            "  $log = $logs | Where-Object { (Test-Path $_) -and (Get-Item $_).LastWriteTime -gt $since } | Select-Object -First 1",
+            "  $log = if ((Test-Path $path) -and (Get-Item $path).LastWriteTime -gt $since) { $path } else { $null }",
             f"  if ($log -and (Select-String -Quiet -SimpleMatch {ps_quote(SMOKE_SIGN_IN)} -Path $log)) {{ break }}",
             "  if ((Get-Date) -gt $deadline) { Write-Output 'veyq: the packaged app did not reach its sign-in in 60 s'; "
             "if ($log) { Get-Content $log }; exit 1 }",
