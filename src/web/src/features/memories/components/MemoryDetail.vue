@@ -749,6 +749,14 @@ const editTrackLabel = computed(() => {
   }
 })
 
+/** A music track's own name (uc.memory.background-music A7): the listed tier's `trackName`, a GPX track's name's field, so
+ *  written by the same door and offered where it is - `editMeta` and the source's `mediaMeta`, never a guest. */
+const renameMusic = computed(() => {
+  const edit = editTrackLabel.value
+  if (!edit) return undefined
+  return (item: MediaItem, name: string | null) => edit(item, { name, activity: null })
+})
+
 // --- a guest's delete of its own media (inbox #361): irreversible — the server purges it and keeps no copy — so asked
 // first, then gone from the grid at once. A member's delete is the lightbox's trash with undo (`useMediaGalleryLive`).
 const deletingOwn = ref<Set<string>>(new Set())
@@ -1092,6 +1100,7 @@ watch(
             :can-report="!!canReport"
             :pick-ready="trackPickReady"
             :playing-id="playingMusicId"
+            :rename="renameMusic"
             @play="playMusic"
             @add="enqueueMusic"
             @remove="onRemoveMusic"

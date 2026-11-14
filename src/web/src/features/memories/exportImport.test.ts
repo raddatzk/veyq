@@ -403,6 +403,21 @@ describe('importMemoryContent', () => {
     expect(vi.mocked(addMedia).mock.calls.map((c) => c[5]?.restored)).toEqual([{ trackName: 'Gipfeltour', trackActivity: 'cycling' }, {}])
   })
 
+  // A GPX or a music track has no place: an archive's place name for one is left out (it would also crowd the track's own
+  // name out of its 512-base64 tier), a photo's is kept beside it as the positive control. Lever: drop `!isTrack &&`.
+  it("leaves an archive's place name out for a track and a song, and keeps a photo's", async () => {
+    const at = { lat: 1, lon: 2, place: 'Lisbon' }
+    const photo = { file: { path: 'data/n3/p.jpg', size: 1, mediaType: 'image/jpeg' }, name: 'p.jpg', location: at }
+    const track = { file: { path: 'data/n3/t.gpx', size: 1, mediaType: 'application/gpx+xml' }, name: 't.gpx', location: at, track: { name: 'Ridge' } }
+    const song = { file: { path: 'data/n3/s.mp3', size: 1, mediaType: 'audio/mpeg' }, name: 's.mp3', location: at, track: { name: 'Sunrise' }, audio: { durationMs: 5_000, trimStartMs: 0, trimEndMs: 5_000 } }
+    await importMemoryContent(MEMORY_KIND)(ctx(node({ media: [photo, track, song] })))
+    expect(vi.mocked(addMedia).mock.calls.map((c) => c[5]?.restored)).toEqual([
+      { placeName: 'Lisbon' },
+      { trackName: 'Ridge' },
+      { trackName: 'Sunrise', durationMs: 5_000, trimStartMs: 0, trimEndMs: 5_000 },
+    ])
+  })
+
   // ADR 0135 decisions 4 and 9: the import seals a track's `audio` into its listed tier at birth, and measures it from the
   // file where the archive has none. Levers: drop `...(audio ?? {})` in `restoredFacts`; skip the measure.
   it('restores a music track\'s length and trimmed span at birth, beside the rest of its facts', async () => {
