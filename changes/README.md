@@ -1822,6 +1822,25 @@ source at v1.20.4 and v1.21.2) showed it. The same pass found the docs' example 
 precondition list is one claim per feature, and "version X supports the design" is the conjunction of them,
 re-measured at implement against the newest release of every project it names.
 
+**A browser API's cost and behaviour are a premise too, measured at refine in both engines with a page of ten lines.**
+cr-background-music-from-own-audio decided that `decodeAudioData` in an 8 kHz `OfflineAudioContext` "stays a few hundred
+KB per minute"; at implement a 10-minute MP3 grew Chrome by ~540 MiB and a 200 MiB WAV both engines by 1.4-1.5 GiB, at
+8 kHz as at 44.1 kHz (the decode runs at the file's rate; only the kept buffer is small), and the facts path was settled
+again mid-CR. The settlement's own premises then failed the same way: a tail slice of an MP3 does not decode in Safari
+unless it starts at a frame header, and the `<audio>` element's duration of a raw ADTS file is an estimate (18 minutes in
+Safari, 8 hours in Chrome for a 10-minute file). Each was one page served from the scratch directory, opened in headless
+Chrome and the real Safari, its numbers posted back - minutes at refine against a stop and a second settlement at
+implement. So a CR whose design rests on what a browser API does with a given input names the input and measures it
+before the decision is written, in every engine the CR's done-when names.
+
+**A protocol the page and a worker share is measured under the playlist's rhythm, not one call at a time.** The media
+service worker had handed out a `/__media/` URL as soon as its registration message was posted; the registration and the
+element's fetch reach the worker on separate queues, so a fetch that came first was a `404`. A lightbox opens one stream
+per press and never met it; a playlist opens one every few seconds and ended at its third track in two runs of three. An
+isolated probe of five back-to-back registrations reproduced it, and the fix (the worker confirms on the port, protocol 6)
+was measured the same way. A feature that drives an existing protocol harder than its first users runs such a probe in its
+first browser pass.
+
 ### A phase's entry condition is phrased against what the phase would CHANGE, not against the problem
 
 **"Measure first, and stop if it is no longer the felt cost" sounds rigorous and can still answer neither

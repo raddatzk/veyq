@@ -127,6 +127,22 @@ sequenceDiagram
   Note right of S: stores ciphertext chunks + manifest + K_blob wrap only —<br>no plaintext byte, no content key
 ```
 
+## Which media a photo view shows
+
+A medium's kind is what its original's sealed `blob-meta` type says, read on the device; the server stores and lists a
+medium of a size and never learns it. Three kinds share the one media layer:
+
+- **Photos and videos** (`image/*`, `video/*`): the gallery, the lightbox, the item count, the organizer, the date and
+  place reconcile and the search's documents. One positive predicate decides it, `isGalleryMedium`
+  (`src/web/src/features/memories/galleryMedium.ts`), which every photo view asks. A medium whose original carries no
+  `blob-meta` at all is shown too: it predates every typed medium that is no photo.
+- **GPX tracks** (`application/gpx+xml`, [uc.memory.tracks](../use-cases/uc.memory.tracks.md)): the Map tab.
+- **Music tracks** (`audio/*`, [uc.memory.background-music](../use-cases/uc.memory.background-music.md)): the Music tab
+  and core's audio player. Their facts - the length and the trimmed span - ride the listed tier, sealed at birth.
+
+A type nobody decided on is in no photo view: a new kind of medium gets its own list, and the photo views never need
+to learn to leave it out.
+
 ## Reading back: playback and download
 
 Why each piece is shaped this way is [ADR 0047](../../../decisions/0047-inline-video-playback-range-streaming.md); what
@@ -136,8 +152,9 @@ is built:
   range shim: the page registers an opaque per-playback handle with the blob's `{chunkCount, byteSize}` and a
   `MessagePort`, sets `<video src="/__media/<handle>">`, and answers the worker's chunk requests with plaintext it
   presigned, fetched and opened itself (the page-side chunk provider, `core/blob/transport.ts`). Every caller registers
-  the same way: the lightbox, a Memory's banner, Depot's file page (which registers the sniffed container, never the
-  claimed type). Without a worker the medium is decrypted whole first.
+  the same way: the lightbox, a Memory's banner, a Memory's music (core's audio player, through Memories' queue,
+  `features/memories/music/musicQueue.ts`), Depot's file page (which registers the sniffed container, never the claimed
+  type). Without a worker the medium is decrypted whole first.
 - **What the shim serves is inert:** a handle is given only to one well-formed `video/<subtype>` or `audio/<subtype>`
   essence (`isStreamableMediaType`, `src/web/src/sw/protocol.ts`); a navigation to `/__media/<handle>` is `404`; every
   answer carries `X-Content-Type-Options: nosniff` and `Content-Security-Policy: sandbox; default-src 'none'`.
@@ -153,8 +170,11 @@ is built:
 - **The file name** is core's one rule (`core/blob/meta.ts` `downloadName`): the name sealed in the original's blob meta,
   else one derived on device (a Memory's medium: the Memory's name and its gallery position), the extension from the
   blob meta's type, else `.bin`.
-- **The page and the worker** speak a versioned protocol (`PROTOCOL_VERSION`, 5); a worker of another version fails the
-  handshake and the page falls back as without one.
+- **The page and the worker** speak a versioned protocol (`PROTOCOL_VERSION`, 6); a worker of another version fails the
+  handshake and the page falls back as without one. The worker confirms a playback's registration on its port
+  (`veyq-playback-registered`), and `registerPlayback` hands out the `/__media/` URL only then: the registration and the
+  element's fetch reach the worker on separate queues, and a fetch that came first was a `404` (about one in three in
+  headless Chrome, measured by cr-background-music-from-own-audio). Without a confirmation in 3 s the page falls back.
 
 ## Alternate / exception flows
 

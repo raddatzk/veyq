@@ -1,7 +1,7 @@
 # ADR 0135 — Background music is a node's own audio media, played by core's player
 
 - Status: Accepted
-- Built: no
+- Built: yes
 - Date: 2026-11-14
 - Model: [uc.memory.background-music](../features/memory/use-cases/uc.memory.background-music.md) (the player:
   [en.platform.audio-player](../features/platform/enablers/en.platform.audio-player.md))
@@ -151,3 +151,6 @@ What exists to build on, read on `main` at `8574dda3b`:
     `memories.music…` switch row, the browser's `veyq:music-consent` key. The switch rows are filtered out by
     `CapabilityIds.ADVERTISED`.
 - **Not built:** a Chapter inheriting its Memory's music (inbox #847), and reading the title from tags.
+
+Explained for users on the docs site: [Add background music](../../site/src/content/docs/memories/add-background-music.mdx); for security
+researchers: [What the server sees](../../site/src/content/docs/security/what-the-server-sees.md).

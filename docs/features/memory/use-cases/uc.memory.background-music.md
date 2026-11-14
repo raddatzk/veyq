@@ -1,9 +1,10 @@
 # UC: Background music — a Memory's or Chapter's own audio files, shuffled, looped and crossfaded
 
 - **ID:** uc.memory.background-music
-- **Status:** **planned** ([ADR 0135](../../../decisions/0135-background-music-is-a-nodes-own-audio-media-played-by-cores-player.md),
-  the player [en.platform.audio-player](../../platform/enablers/en.platform.audio-player.md)). Nothing is built. It
-  replaces the Spotify and Apple Music playlists, which ADR 0135 removed.
+- **Status:** **built** ([ADR 0135](../../../decisions/0135-background-music-is-a-nodes-own-audio-media-played-by-cores-player.md),
+  the player [en.platform.audio-player](../../platform/enablers/en.platform.audio-player.md)): Memories'
+  `features/memories/music/` and `MemoryMusic.vue`. It replaces the Spotify and Apple Music playlists, which ADR 0135
+  removed.
 - **Primary actor:** Anyone who may upload into the Memory or Chapter on screen (`memoryRights.upload`): a member who
   may write its scope, or a guest of a link that may upload. **Secondary:** anyone who opens it — a member, or a guest
   of any link onto it — listens.
@@ -82,3 +83,4 @@ no account at any service and nothing leaving the instance.
 - Enablers: [en.platform.audio-player](../../platform/enablers/en.platform.audio-player.md),
   [en.memory.media](../enablers/en.memory.media.md)
 - Use-cases: [uc.memory.tracks](uc.memory.tracks.md) (the same "a medium that is no photo" pattern)
+- End-user view (docs site): [Add background music](../../../../site/src/content/docs/memories/add-background-music.mdx)

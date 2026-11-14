@@ -8,8 +8,8 @@
   narrow the grid to *everyone's favorites* or *only mine*.
 - **Preconditions:** The user has unlocked the vault and is browsing the tree
   ([uc.memory.browse](uc.memory.browse.md)); the Memory exists and its **`K_node`** can be unwrapped; its media
-  carry **derivatives** ([en.memory.derivatives](../enablers/en.memory.derivatives.md); a non-derivable item
-  shows an icon tile).
+  carry **derivatives** ([en.memory.derivatives](../enablers/en.memory.derivatives.md); an image or video without
+  them shows an icon tile).
 - **Postconditions (success):** The user sees the Memory's media as a grid, opens any item in a lightbox and
   pages through, **plays a video** in place, can pin the Memory, can **mark individual items** and filter the
   grid by those marks, and can download an item's original. The server saw only **ciphertext fetches** — no
@@ -131,9 +131,12 @@
 
 ## Alternate / exception flows
 
-- **E1 — an item has no derivable frame** (a type that is neither image nor video): the grid shows an **icon +
-  name**. (There is **no backfill** — on a fresh instance every image/video media carries its derivatives from
-  upload, [en.memory.derivatives](../enablers/en.memory.derivatives.md).)
+- **E1 — an item has no derivable frame** (an image or a video this browser could not decode at upload, e.g. HEIC off
+  Safari): the grid shows an **icon + name**. (There is **no backfill** — on a fresh instance every image/video media
+  carries its derivatives from upload, [en.memory.derivatives](../enablers/en.memory.derivatives.md).) A medium of
+  another type is no gallery item at all: the gallery shows images and videos only
+  ([en.memory.media](../enablers/en.memory.media.md#which-media-a-photo-view-shows)) - a GPX track is the Map tab's, a
+  music track the Music tab's, and a type nobody decided on is listed nowhere.
 - **E2 — vault locked / Memory not open:** without `K_node` the media can't be read → the gallery is unavailable
   until unlock + the Memory is opened.
 - **E3 — empty Memory:** the grid shows an empty state.

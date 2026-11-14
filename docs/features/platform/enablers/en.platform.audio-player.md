@@ -3,8 +3,9 @@
 - **ID:** en.platform.audio-player
 - **Type:** **Enabler** — structural foundation, no standalone end-user goal
   ([features/README → use-case vs enabler vs ADR vs change-request](../../README.md#use-case-vs-enabler-vs-adr-vs-change-request)).
-- **Status:** **planned** — decided in [ADR 0135](../../../decisions/0135-background-music-is-a-nodes-own-audio-media-played-by-cores-player.md)
-  decisions 6–8. Nothing is built.
+- **Status:** **built** — decided in [ADR 0135](../../../decisions/0135-background-music-is-a-nodes-own-audio-media-played-by-cores-player.md)
+  decisions 6–8: `src/web/src/core/audio/` (`order.ts`, `fades.ts`, `player.ts`, `AudioBar.vue`), mounted by
+  `AppShell.vue` and `ShareView.vue`.
 - **Provides:** to every application, one player in the web shell. The application hands it a queue of tracks, and
   core plays it: in shuffled order, endlessly, crossfading, with a bar below the shell's footer that stays while the
   viewer moves between pages and spaces.
@@ -37,8 +38,15 @@ holds the keys, exactly as the lightbox does, and core plays the URL it gets. `r
   after a seek into the fade window (decision 7). Two media elements alternate. Each element runs through its own
   `MediaElementAudioSourceNode` and `GainNode` in one `AudioContext`, which the listener's first press resumes. Without
   Web Audio, tracks change without a fade.
-- **Opening tracks:** a track is opened shortly before its fade starts and released after it has faded out, so at most
-  two sources are open. A track that fails to open or to play is skipped. If no track plays, the queue ends.
+- **Opening tracks:** a track is opened and loaded 15 s before its fade starts and released after it has faded out, so
+  at most two sources are open. A track that fails to open or to play is skipped. If no track plays, the queue ends and
+  the bar says so for a few seconds. A source the service worker streams is handed to the element only once the worker
+  confirmed its registration (protocol 6, [en.memory.media](../../memory/enablers/en.memory.media.md)): a fetch that
+  reached the worker first was a `404`, which ended a playlist at its third track.
+- **In the press's own stack:** `play` and `resume` create or resume the `AudioContext` and start each element on a
+  silent `blob:` before anything is awaited, so iOS lets the later `play()` of a source that opened after an `await`
+  sound. Measured in Chrome: an `AnalyserNode` after an element's gain reads non-zero samples on a `/__media/` stream
+  and on a `blob:`, so neither is tainted (Safari is not measured).
 - **The bar:** shows the title, previous, play/pause, next, a progress bar over the trimmed span that the listener can
   drag, and close. It is drawn below the shell's footer and only while a queue is loaded. Close ends the queue.
 - **MediaSession:** the title, and play, pause, next, previous and seek, so the lock screen and the media keys work.
@@ -65,3 +73,4 @@ Every source is released when the player unmounts. A sign-out also ends every pl
 - Decision: [ADR 0135](../../../decisions/0135-background-music-is-a-nodes-own-audio-media-played-by-cores-player.md)
 - Use-case: [uc.memory.background-music](../../memory/use-cases/uc.memory.background-music.md)
 - Feature: [Platform](../_index.md)
+- End-user view (docs site): [Add background music](../../../../site/src/content/docs/memories/add-background-music.mdx)

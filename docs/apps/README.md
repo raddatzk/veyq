@@ -278,6 +278,15 @@ point 8).
   refuses at runtime what would be ambiguous; there are no free register functions. A kind may be registered
   `listed: false`: core's level draws no row for its nodes, not even the unsupported one (the seam for a kind reached
   another way, Inventory's pool, see [Decided, not built](#decided-not-built)).
+- **Core's audio player** ([en.platform.audio-player](../features/platform/enablers/en.platform.audio-player.md),
+  [ADR 0135](../decisions/0135-background-music-is-a-nodes-own-audio-media-played-by-cores-player.md) decision 8). One
+  player per page (`core/audio/player.ts` `audioPlayer()`): an application hands it a queue - a key naming whose it is,
+  an album line, and tracks with an id, a title, an optional trimmed span and an `open()` that resolves to a playable URL
+  and a `release()` - and core plays it shuffled, endlessly and crossfading, with the MediaSession and a bar below the
+  footer (`core/audio/AudioBar.vue`, mounted by the signed-in shell and the share page). `open()` is the application's:
+  it holds the keys and registers the stream (`sw/register.ts` `registerPlayback`) or decrypts a `blob:`; core is
+  handed URLs, never a key. A new queue replaces the playing one; `nowPlaying.key` tells a page whether its queue plays.
+  Memories' music is the first user (`features/memories/music/musicQueue.ts`).
 - **One host contract.** Whatever draws a node - a kind's page, a row factory, core's level - asks the page around it
   through ONE set of doors (`core/node/nodeHost.ts`, `NodeHost`: open, rename, move, delete, share, create a child,
   download, copy, import, the trash), injected by a kind's page and handed to a row factory as its `LevelRowsHost`. Every

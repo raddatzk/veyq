@@ -1,28 +1,104 @@
 useCase: uc.memory.background-music
 feature: memory
 title: Background music — a Memory's or Chapter's own audio files, shuffled, looped and crossfaded
-status: planned
-# Refined 2026-11-14 (ADR 0135); nothing is built. cr-background-music-from-own-audio turns these gaps into refs.
+# Built by cr-background-music-from-own-audio (ADR 0135): a music track is a medium whose original is its audio file, so the
+# backend adds nothing - its criteria cite the media tests that already pin what the server stores and does. The web adds
+# the Music tab, the measuring of a track's facts on the device, core's audio player and its bar, and the one gallery
+# predicate that keeps every medium that is no photo out of the views of photos.
 acceptanceCriteria:
   - id: a-track-is-a-medium
     text: An added audio file is a medium of its Memory or Chapter, its original the file, its `blob-meta` typed from its bytes by core's `sniffStream` (an M4A is `audio/mp4`, never `video/mp4`); no contract, table, column or route marks it; it is listed in the node's Music tab and filtered from every photo reader (gallery, lightbox, search, cover choice, the space's media list); the gallery's picker keeps refusing audio.
+    coverage:
+      backend:
+        integration:
+          - MediaSliceTest.mediaWithoutDerivativesListsEmptyTiers
+      web:
+        unit:
+          - src/features/memories/music/audio.test.ts
+          - src/features/memories/download.test.ts
+          - src/features/memories/useMediaGalleryLive.test.ts
+          - src/features/memories/search.test.ts
+          - src/features/memories/search.scope.test.ts
+          - src/features/memories/uploadQueue.test.ts
+          - src/features/memories/components/MemoryDetail.music.test.ts
+          - src/features/memories/components/MemoryDetail.test.ts
   - id: refused-before-upload
     text: A file over 200 MiB, of no audio container core knows, or whose metadata the uploading browser's `<audio>` element cannot load is refused with its own reason before anything is written; a file whose silence cannot be found cheaply is not refused.
+    coverage:
+      web:
+        unit:
+          - src/features/memories/music/audio.test.ts
+          - src/features/memories/music/elementDuration.test.ts
+          - src/features/memories/components/MemoryMusic.test.ts
   - id: facts-sealed-at-birth
     text: Each track's duration (from the element's metadata; a raw ADTS file's counted from its frames) and trimmed span (`trimStartMs`, `trimEndMs`; leading and trailing 20 ms windows below −60 dBFS within 30 s of each end, never trimmed below one second of content; WAV read from its PCM, MP3 and ADTS from a decoded slice per end (the tail slice from a frame header), other containers decoded whole only up to 7 minutes, else untrimmed) are measured on the device at upload and sealed into its listed tier by the same upload, within the tier's cap; a re-key carries them unchanged; its title is its file name without the extension.
+    coverage:
+      web:
+        unit:
+          - src/features/memories/music/audioFacts.test.ts
+          - src/features/memories/music/wav.test.ts
+          - src/features/memories/music/frames.test.ts
+          - src/features/memories/media.test.ts
+          - src/features/memories/rekey.test.ts
+          - src/features/memories/components/MemoryMusic.test.ts
+          - src/features/memories/components/MemoryDetail.music.test.ts
   - id: who-adds-who-listens
     text: Adding is offered where `memoryRights.upload` grants it (a member, a guest of a link that may upload); every viewer of the node — a member and any link's guest alike — gets the header's Play music button where the node has tracks and the Music tab where it has tracks or the viewer may add; a Chapter plays only its own tracks.
+    coverage:
+      web:
+        unit:
+          - src/features/memories/components/MemoryDetail.music.test.ts
+          - src/features/memories/components/MemoryDetail.rights.test.ts
+          - src/features/memories/components/MemoryDetail.guest.test.ts
+          - src/features/memories/components/MemoryMusic.test.ts
+          - src/features/memories/music/musicQueue.test.ts
   - id: shuffled-endless-order
     text: The playlist is a snapshot of the node's tracks when started; each round is a fresh permutation from `crypto.getRandomValues` whose first track is never the last one played (two tracks or more); next goes forward, previous restarts a track more than 3 s in and otherwise goes back through the tracks played; a track pressed in the Music tab plays first.
+    coverage:
+      web:
+        unit:
+          - src/core/audio/order.test.ts
+          - src/features/memories/music/musicQueue.test.ts
+          - src/features/memories/components/MemoryDetail.music.test.ts
   - id: crossfade-at-trimmed-edges
     text: Tracks play only their trimmed span and crossfade over 5 s through Web Audio gain nodes (1 s on a pressed next or previous, a third of a short track's span, what is left after a seek into the fade window); without Web Audio they follow each other without a fade; a track that does not open or play is skipped.
+    coverage:
+      web:
+        unit:
+          - src/core/audio/fades.test.ts
+          - src/core/audio/player.test.ts
   - id: player-in-core-plays-across-pages
     text: Core's player draws its bar below the signed-in shell's footer and the share page's while a queue is loaded — title, previous, play/pause, next, a draggable progress bar over the trimmed span, close — and keeps playing across pages and spaces; a new queue replaces the playing one; the MediaSession carries the title and the actions; core is handed URLs, never a key, and at most two sources are open; a lock unmounts the bar and releases every source; `app.footerBar` and `onSessionEnding` no longer exist.
+    coverage:
+      web:
+        unit:
+          - src/core/audio/player.test.ts
+          - src/core/audio/AudioBar.test.ts
+          - src/features/memories/music/musicQueue.test.ts
+          - src/sw/register.playback.test.ts
+          - src/sw/mediaSw.test.ts
+          - src/core/applications/registry.test.ts
   - id: report-and-review
     text: A track's menu offers download, delete (to the trash) and report as an `ITEM`; the moderator's review of a reported audio medium plays it from the report's blob keys.
+    coverage:
+      backend:
+        integration:
+          - MediaTrashSliceTest.trashHidesFromListBumpsBothCountersAndDropsFromIdSet
+      web:
+        unit:
+          - src/features/memories/components/MemoryMusic.test.ts
+          - src/features/memories/components/MemoryDetail.music.test.ts
+          - src/features/memories/components/MediumReview.test.ts
   - id: export-import
     text: An export carries each track's file and its facts as the medium's optional `audio` field; an import restores them, and measures them on the importing device where the field is absent.
+    coverage:
+      web:
+        unit:
+          - src/features/memories/exportImport.test.ts
 gaps:
-  backend: "Nothing of its own (ADR 0135 decision 2): a track is a medium, stored, listed, trashed, re-keyed, reported and erased as every medium is; the media slice tests that already pin those are cited when the web phase lands."
-  web: "Planned, nothing built: no Music tab, audio upload path, silence detection, core player or bar exist (cr-background-music-from-own-audio)."
-  stack: "Planned: a lane L1 spec that adds two tracks and hears the bar move to the second comes with cr-background-music-from-own-audio's web phase."
+  stack: >-
+    Lane L1's browser pass (`tests/e2e/tests/features/memories/memory-background-music.spec.ts`: two generated tones added
+    on the Music tab are listed with their titles and lengths and are no gallery item, the header's Play music shows a
+    track's title in the bar and hands over to the other one at its end, close ends the music) is written and was run once
+    locally (cr-background-music-from-own-audio); ADR 0040 admits `stack` refs only once a CI run's log shows the suite
+    executed.

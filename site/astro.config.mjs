@@ -99,6 +99,7 @@ export default defineConfig({
                     'memories/set-a-cover',
                     'memories/add-a-banner',
                     'memories/add-gpx-tracks',
+                    'memories/add-background-music',
                     'memories/marked-photos',
                     'memories/contributions',
                     'memories/photo-trash',
