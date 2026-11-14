@@ -335,7 +335,7 @@ A Gradle build of its own, run through its own wrapper.
   `removeAll` in `@AfterTest`, which signs in once more as each device and runs `VeyqAccount.removeThisDevice` (its
   wraps, its families, its register entry); a native case calls `removeThisDevice` in a `finally`. A new live case does
   the same — a run that skipped it filled the principal's wraps to the server's limit and its register with test names.
-  `--tests '*LiveRunTest*'` holds it (the families, register entries and wraps counted before and after; run alone). With `VEYQ_LIVE_MEMBER=1` as well,
+  `--tests '*LiveRunTest*'` holds it (the families and wraps counted before, during and after, the register compared by its entries — at its cap the meter's and the case's sign-ins each evict the least recently seen one, as every sign-in there does; run alone). With `VEYQ_LIVE_MEMBER=1` as well,
   `--tests '*MemberLiveSignInTest*'` signs in as the seeded second member (`VEYQ_USER2_*`), whose TENANT grant the
   owner signed, so it opens only through the key check; the owner starts that run, since that password may be one a
   person chose. `--tests '*DeviceTrustLiveTest*'` walks the device trust (ADR 0123 decision 8) as the seeded principal:
