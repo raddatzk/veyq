@@ -27,7 +27,7 @@ struct ShellView: View {
         .environment(\.covers, model.covers.mapValues(\.image))
         .environment(\.avatars, model.avatars)
         .environment(\.picking, model.incoming != nil)
-        // An image or a PDF dragged onto the app — a screenshot's thumbnail, a photo from another app (ADR 0132 decision 9).
+        // An image or a PDF dragged onto the app — a screenshot's thumbnail, a photo from another app (ADR 0138 decision 9).
         .onDrop(of: IncomingFiles.accepted, isTargeted: nil) { providers in
             Task { model.receiveDrop(await IncomingFiles.read(providers)) }
             return true
@@ -40,6 +40,9 @@ struct ShellView: View {
         .sheet(isPresented: Binding(get: { model.settings != nil }, set: { if !$0 { model.closeSettings() } })) {
             SettingsPage(model: model)
         }
+        #else
+        // a ceremony opened while the Settings window is closed sits over the main window (ADR 0059)
+        .deviceLinkSheet(model, here: model.settings == nil)
         #endif
     }
 
@@ -377,7 +380,7 @@ struct Bar: View {
         .sheet(item: $trashOf) { SpaceTrashSheet(model: model, scopeId: $0.scopeId) }
         .sheet(item: $uploadShareOf) { TopLevelUploadSheet(model: model, scopeId: $0.scopeId) }
         // what the model says once (an upload's refusal, its "Replace anyway")
-        // its dismissal may run before its button's action (ADR 0130's trap): the action is the presented notice's own
+        // its dismissal may run before its button's action (ADR 0136's trap): the action is the presented notice's own
         .alert(model.notice?.text ?? "", isPresented: Binding(get: { model.notice != nil }, set: { if !$0 { model.notice = nil } }), presenting: model.notice) { n in
             if let action = n.action, let run = n.run {
                 Button(action, role: .destructive) { Task { await run() } }
@@ -664,7 +667,7 @@ struct ObjectRow: View {
     @Environment(\.picking) private var picking
     @Environment(\.covers) private var covers
 
-    /// Picking a place for what was shared: only a kind that takes it can be chosen (ADR 0132 decision 1).
+    /// Picking a place for what was shared: only a kind that takes it can be chosen (ADR 0138 decision 1).
     private var takes: Bool { !picking || AppKinds.shared.takesShared(kind: ref.kind) }
 
     var body: some View {
@@ -694,7 +697,7 @@ struct ObjectRow: View {
 }
 
 extension EnvironmentValues {
-    /// Whether the shell is picking a place for what another app shared (ADR 0132).
+    /// Whether the shell is picking a place for what another app shared (ADR 0138).
     @Entry var picking = false
 }
 
@@ -704,7 +707,7 @@ struct TrashOf: Identifiable {
     var id: String { scopeId }
 }
 
-/// Picking a place for what another app shared (ADR 0132): its banner below a page's navigation bar, which an inset on
+/// Picking a place for what another app shared (ADR 0138): its banner below a page's navigation bar, which an inset on
 /// the shell would slide under.
 struct Picking: ViewModifier {
     let model: AppModel

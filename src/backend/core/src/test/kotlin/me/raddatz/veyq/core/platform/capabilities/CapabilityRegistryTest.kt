@@ -166,6 +166,22 @@ class CapabilityRegistryTest {
     }
 
     @Test
+    fun aSwitchRowForAnIdTheCatalogNoLongerHoldsNamesNothingAndNarrowsNothing() {
+        // ADR 0135 decision 1: the memories.music entries left the catalog, and an instance that switched one off keeps its
+        // row (no migration). Every listing is the catalog's, so the row is read by nothing, at either level.
+        val retired = arrayOf("memories.music", "memories.music.spotify", "memories.music.apple-music")
+        val registry = tenantRegistry(retired.toSet(), *retired)
+        assertEquals(CapabilityIds.ADVERTISED, registry.active(null), "the instance's set: every entry, none of the rows")
+        assertEquals(CapabilityIds.ADVERTISED, registry.active("t1"), "the tenant's set")
+        assertEquals(CapabilityIds.ADVERTISED, registry.register().map { it.id })
+        assertTrue(registry.register().all { !it.off && it.effective }, "the rows switch no entry off")
+        assertTrue(registry.tenantRegister("t1").none { it.id.startsWith("memories.music") || it.off })
+        assertTrue(CapabilityIds.MEMORIES in registry.active("t1"), "control: the application whose ids they were is on")
+        // Control: a row for an id the catalog holds does narrow.
+        assertFalse(tenantRegistry(setOf(CapabilityIds.MEMORIES_MAP)).isActive(CapabilityIds.MEMORIES_MAP, null))
+    }
+
+    @Test
     fun theTenantRegisterListsTheTenantSwitchableEntriesInCatalogOrder() {
         val tenantLevel = catalogIds.filter { id -> catalog.path(id).path("levels").any { it.asText() == "tenant" } }
         assertTrue(tenantLevel.isNotEmpty(), "the catalog names tenant-switchable entries")

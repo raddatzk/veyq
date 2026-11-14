@@ -331,14 +331,20 @@ check is logged and retried with a back-off, and blocks nothing.
   Copier from a verified release, which `init` offers in an empty repository. Built: the template and its checks in
   `github.com/raddatzk/veyq-server` (cr-veyq-server-template), and `init`'s server path, self-tested against
   stand-ins (cr-veyqctl-server-path phase 3). Not yet: veyq-server's first release, and a run on a real server.
-- **The desktop apps' packages** ([ADR 0133](../decisions/0133-the-desktop-apps-ship-as-a-flatpak-bundle-and-an-msix-built-in-checks-and-promoted-with-the-release.md)):
+- **The desktop apps' packages** ([ADR 0139](../decisions/0139-the-desktop-apps-ship-as-a-flatpak-bundle-and-an-msix-built-in-checks-and-promoted-with-the-release.md)):
   a Flatpak bundle per Linux architecture and an x64 MSIX, built and smoke-run in every Checks run, staged by ORAS as
   `veyq-apps:build-<sha>-<platform>`, named and signed at snapshot with the images, and at promotion re-signed, the MSIX
   Windows-signed with an unchanged block map, each listed by sha256 under the manifest's `apps` (never `assets`, which
   `veyqctl` installs and the lanes attest) and attached with a `cosign sign-blob` bundle — as is `veyq.cer`, the public
-  half of the project's self-signed `CN=veyq` certificate that signs the MSIX, which a person trusts once (decision 12). Checks' part is written
-  (`checks.yml`'s `app-inputs`, `flatpak`, `msix` and the push-only `apps-stage`, the one writer of `veyq-apps`), its
-  first GitHub run owed; the snapshot's, the retention's and the promotion's part is not built. The first release to
-  carry them is the first after the promotion learns them, marked preview.
+  half of the project's self-signed `CN=veyq` certificate that signs the MSIX, which a person trusts once (decision 12). Written,
+  none of it run yet: Checks' part (`checks.yml`'s `app-inputs`, `flatpak`, `msix` and the push-only `apps-stage`, the
+  one writer of `veyq-apps`); the snapshot's (`publish.yml`'s `snapshot` holds the staging tags to the run's
+  `app-digests`, names each package `<version>-SNAPSHOT-<platform>` and `sha-<commit>-<platform>` and signs it by
+  digest) and the retention's; the promotion's (`release.yml`: `check` verifies the packages as the snapshot's and
+  refuses while the signer's certificate is not committed; `apps` pulls them; `msix-sign`, on Windows in the
+  environment `msix-signing`, signs the MSIX and holds payload, block map and signer, `scripts/msix_sign.py`;
+  `promote` names them `<version>-<platform>`, signs them and lists them under `apps`). Owed besides: the certificate
+  and the environment's secrets (the owner's, `infra/README.md` § Cutting a release). The first release to carry them is
+  the first after both, marked preview.
 - **L3's archive holding the major entry** (ADR 0085 decision 10, inbox #461): the major entry's backup in the
   archive lane L3 restores.

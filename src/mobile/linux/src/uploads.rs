@@ -1,6 +1,6 @@
 //! The uploads (ADR 0123's Consequences, the Linux app's Depot whole), GNOME's way: files and a folder picked through GTK's own dialog (the portal's
 //! on a desktop) and handed to the core by their paths — the core opens and reads each at offsets a frame at a time
-//! (`Upload.Files`, `Upload.Folder`, ADR 0131 decision 3), so nothing of a file crosses and none is held whole —, a file's
+//! (`Upload.Files`, `Upload.Folder`, ADR 0137 decision 3), so nothing of a file crosses and none is held whole —, a file's
 //! Replace chosen before its dialog opens (`File.ChooseReplace`, `Upload.Replace`), and the queue as a header bar
 //! `gtk::MenuButton` shown while it lists anything: its icon's tooltip the core's one line, its popover each batch with its
 //! items, their progress, Cancel and Retry, Cancel all and a finished batch's Close. What the uploads say once — a folder's
@@ -430,7 +430,14 @@ fn paths_of(picked: &gio::ListModel) -> Vec<String> {
 /// An upload call's answer: how many were queued on stderr, anything else said as the header says it.
 pub fn queued(toasts: &adw::ToastOverlay, answer: Result<Answer, bridge::Unreadable>, what: &str) {
     match answer {
-        Ok(Answer::Queued { count, .. }) => eprintln!("veyq: {what}: {count} queued"),
+        Ok(Answer::Queued { count, notice }) => {
+            eprintln!("veyq: {what}: {count} queued");
+            // what did not read is the core's to say (Notices.notRead), never dropped unsaid
+            if let Some(n) = notice {
+                eprintln!("veyq: {what}: {}", n.msg);
+                toasts.add_toast(adw::Toast::new(&said::notice(&n)));
+            }
+        }
         other => header::say(toasts, other, what),
     }
 }

@@ -18,6 +18,7 @@ import {
   type ChunkProvider,
   type DownloadKeepaliveMsg,
   type PageToSwDownloadMessage,
+  type PlaybackRegistered,
   type RegisterDownloadMsg,
   type SwToPageDownloadMessage,
 } from './protocol'
@@ -93,13 +94,19 @@ function newHandle(): string {
  * or null if no SW is usable (caller falls back to Slice 1). The page end of the port answers each chunk request
  * by running `provider.getPlaintextChunk` and transferring the plaintext back — the SW never sees a key.
  */
-export async function registerPlayback(meta: PlaybackMeta, provider: ChunkProvider): Promise<string | null> {
+export async function registerPlayback(meta: PlaybackMeta, provider: ChunkProvider, ackTimeoutMs = REGISTER_ACK_TIMEOUT_MS): Promise<string | null> {
   const sw = await controllingSw()
   if (!sw || !(await handshake(sw))) return null
 
   const handle = newHandle()
   const channel = new MessageChannel()
+  let registered: () => void = () => undefined
+  const held = new Promise<boolean>((resolve) => {
+    const timer = setTimeout(() => resolve(false), ackTimeoutMs)
+    registered = () => { clearTimeout(timer); resolve(true) }
+  })
   channel.port1.onmessage = async (e: MessageEvent) => {
+    if ((e.data as PlaybackRegistered | undefined)?.type === 'veyq-playback-registered') return registered()
     const req = e.data as ChunkRequest
     if (req?.type !== 'veyq-chunk-req') return
     try {
@@ -125,8 +132,17 @@ export async function registerPlayback(meta: PlaybackMeta, provider: ChunkProvid
     [channel.port2],
   )
   active.set(handle, { channel, sw })
+  // The URL is handed out only once the SW holds the registration (protocol 6): its message and the element's fetch reach
+  // the SW on separate queues, and a fetch first was a 404. No answer in time is no usable SW: the caller falls back.
+  if (!(await held)) {
+    revokePlayback(handle)
+    return null
+  }
   return MEDIA_PATH_PREFIX + handle
 }
+
+/** How long a playback's registration may take to be confirmed before the page gives the stream up. */
+const REGISTER_ACK_TIMEOUT_MS = 3000
 
 /** Tear down a playback: tell the SW to drop its session (+ its plaintext cache) and close the page's port. */
 export function revokePlayback(handle: string): void {

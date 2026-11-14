@@ -28,7 +28,7 @@ import kotlin.test.assertSame
 import kotlin.test.assertTrue
 
 /**
- * Depot's uploads both phones drew (ADR 0130 decision 2 and its Consequences, Depot's screens) — over a level of files the test plays:
+ * Depot's uploads both phones drew (ADR 0136 decision 2 and its Consequences, Depot's screens) — over a level of files the test plays:
  * the settle's replace offer and its action, a replace expected over the content shown when it was chosen, a folder's
  * preparing and outcome in Depot's words, and the tray's acknowledge on virtual time. Also `DepotFiles.offerFor` and
  * `collision` (R2).

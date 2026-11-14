@@ -3,7 +3,7 @@ id: cr-app-device-linking
 title: Device linking on every app, both directions — "Add a new device" and "Sign in with a QR code" (ADR 0059)
 status: in-progress
 satisfies: []
-adrs: ["0059", "0004", "0005", "0026", "0028", "0058", "0130", "0131"]
+adrs: ["0059", "0004", "0005", "0026", "0028", "0058", "0136", "0137"]
 invariants:
   - "the QR never carries a server, and no app follows one out of a scan (ADR 0059 §4): each side talks only to the instance it is already signed in to or typed into its sign-in form; the payload parser is anchored at both ends and refuses the other direction's marker"
   - "each direction keeps its own binding step (ADR 0059 §5): Add a new device compares the five-digit number on both screens; Sign in with a QR code transcribes the six-digit code into the new device, one attempt (§6)"
@@ -108,7 +108,7 @@ direction's statement, a parser that accepts a trailing path).
 
 ### D4 — The flows are one core model, `DeviceLink`, with four roles
 
-`session/DeviceLink.kt` (ADR 0130 decision 2's shape): `showForNewDevice()` (trusted, Add a new device),
+`session/DeviceLink.kt` (ADR 0136 decision 2's shape): `showForNewDevice()` (trusted, Add a new device),
 `scanSignInCode()` (trusted, Sign in with a QR code), `scanFromTrusted(server)` and `showForSignIn(server)` (new, from
 the sign-in form). Each role's states mirror the web's cards: the code shown (the QR as a matrix for the phones, a PNG
 for the desktops — `cr-core-qr-decoder` D2), waiting, the number to compare / the code to show / the code to type,
@@ -225,7 +225,7 @@ text goes straight into `DeviceLink` inside the core.
   - `session/DeviceLink.kt`: one ceremony in one of four `Role`s (`SHOW_FOR_NEW_DEVICE`, `SCAN_SIGN_IN_CODE`,
     `SCAN_FROM_TRUSTED`, `SHOW_FOR_SIGN_IN`), the web's cards' steps as `Step` (OPENING, SHOWING, SCANNING, CODE,
     WAITING, CONFIRMING, SEALING, FINISHING, DONE, ENDED), `Refusal` (OFF, GONE, REFUSED, FAILED) and `Hint`
-    (OTHER_DIRECTION, SAME_SERVER); state as `StateFlow<Shown>` + `watch` (ADR 0130 decision 2). The code reaches a UI
+    (OTHER_DIRECTION, SAME_SERVER); state as `StateFlow<Shown>` + `watch` (ADR 0136 decision 2). The code reaches a UI
     only as `matrix()`/`png(px)`; scanning roles own their `QrScan<Unit>`, whose parser takes this direction's marker,
     skips the other's with `OTHER_DIRECTION` (the scan goes on, nothing is answered) and anything else silently.
     `confirm(label)` (the slide's end: delegate, then seal; a blank name refused), `enterCode` (one atomic move out of
@@ -283,6 +283,104 @@ text goes straight into `DeviceLink` inside the core.
   them is `FLAG_SECURE` and Apple's is covered while the scene is not active (`.secretOnScreen()`); each bitten as the
   sweep was — the task snapshot (`/data/system_ce/0/snapshots`) and the SplashBoard snapshot pulled and looked at,
   without the protection the code visible in it, with it covered.
+
+  **Status: built, partly met (2026-11-14).** Android met whole (four runs against the web, the snapshot bitten);
+  macOS three of four runs; the iOS Simulator's runs, Apple's snapshot bite and phone↔phone are open (below, § Open).
+
+  **Built:**
+  - Words (`words.json`, EN + DE): 56 `link_*` / `signin_link_*` keys and `offer_not_now_linked_hint`, the web's
+    `pairing.*` words where it has them (the slide's sentence and the consequence among them), new ones marked by a
+    `note` (the camera hints for each side, the other direction's code said with the other entry's name, OFF, the
+    sealing step, the keyboard line under the slide, the new device's refused envelope); the "same server?" hint as
+    Decided 2 wrote it: "No answer yet? Both devices must use the same server."
+  - **Android:** `DeviceLinkScreen` — one full-screen Material dialog for all four roles, `SecureFlagPolicy.SecureOn`,
+    not dismissed by a tap outside (only its close and Back end it); it draws `DeviceLink.Shown` and hands back the camera
+    (`QrCamera` over the link's own scan), the six digits (`enterCode`, number pad, Done sends) and the slide.
+    `AppModel` holds the open link (`showForNewDevice`, `scanSignInCode`, `scanFromTrusted(server)`,
+    `showForSignIn(server)`, `linkAgain` = a new ceremony of the same role, `closeLink`), logs steps to `veyq-link`
+    (step, refusal, hint — never a code, number or name) and, when a new device's link is DONE, shows the account the
+    grant opened. Settings: "Add a device" is a section with "Show a code" and, where the device has a camera, "Scan a
+    code" (was a disabled row). Sign-in: "Scan a code from another device" (where a camera can be) and "Sign in with a QR
+    code", both over the form's server. The offer after a link says the linked "Not now" hint.
+  - **The slide (D5, ADR 0059 §7):** Material's `Slider` confirming only when a drag that began at the start (≤ 15 %)
+    ends at the end (≥ 98 %); otherwise it springs back, and a new gesture or key stops the spring. A tap on the track's
+    end jumps there in one move and does not confirm. Keyboard: the arrow keys move it in ten steps (the web's), Return
+    at the end confirms; Home/End/Page keys are taken and move nothing. A screen reader hears the sentence and confirms
+    through the custom action of that name. Disabled while the name is blank.
+  - **Apple:** `DeviceLinkView` — a sheet with its own navigation bar, `.secretOnScreen()` on its whole content, the same
+    steps; the code drawn from `AppleLink.png` (one `NSData`), `LinkSlide` over SwiftUI's `Slider` with the same rules
+    (`onEditingChanged` at the end confirms, else springs back; arrows in ten steps via `onKeyPress`, Return at the end,
+    Home/End/Page taken; VoiceOver's named action). `AppModel` as Android's; the sheet sits over the sign-in and over
+    Settings (on a Mac also over the main window while the Settings window is closed). Settings' section and the
+    sign-in's two entries as on Android, Title Case (`apple_en`). `AppleLink` (appleMain) opens the four roles for
+    Swift (no default arguments, no suspending decoder) and hands the scan as `QrScan<Any>`. Debug only:
+    `VEYQ_DEV_LINK` / `VEYQ_DEV_LINK_DIR` (`DevLogin`) open a role and answer in the person's place where no tap is
+    granted.
+
+  **Met:**
+  - Builds (after merging `claude/windows-cr-f6c73c` at f29a5c351): `:core:jvmTest :bridge:jvmTest :android:assembleDebug`
+    green, `:core:macosArm64Test` green on its re-run (`MoveSheetTest`'s undo window red once, nothing of this phase on
+    its path); the macOS build (ad hoc) and the iOS-simulator build (`generic/platform=iOS Simulator`,
+    `CODE_SIGNING_ALLOWED=NO`) `BUILD SUCCEEDED`; guards (`scripts/validate_*.py` but guard_gaps) green. Before the merge,
+    at load 250–290: `DeviceLinkTest`'s race case (phase 3's) red once by the channel's virtual-time expiry firing while
+    the test waited on `Dispatchers.Default`, green on its re-run; `:bridge:jvmTest`'s `DispatchTest` red by timeouts only.
+  - **Android ↔ web, all four runs** (throwaway AVD `veyq_link4`, Pixel 8, API 36, virtual-scene camera, deleted after;
+    the web headless system Chrome, `channel: 'chrome'`, one persistent profile, its camera a `.y4m` of the app's code;
+    the app driven by `uiautomator` taps and `input swipe`, its code shot from the framebuffer):
+    A1 the app shows → the web scans: numbers equal on both screens (79943, 99883, 39106 across tries), the web signed in
+    linked, signed out after. A2 the web shows its sign-in code → the app scans it (`adb emu virtualscene-image wall`
+    with the web's code, the scene camera turned over gRPC): six digits typed into the web, the app `CONFIRMING` →
+    slid **by keyboard** → `DONE`, the web signed in, signed out after. A3 the app is the new device scanning the web's
+    code: the web (itself linked by the app first — no password is typed anywhere) showed, the app's scene camera read
+    it, `SCAN_FROM_TRUSTED: WAITING → FINISHING → DONE`, the linked offer shown. A4 the app is the new device showing:
+    the web scanned it, the six digits typed into the app (number pad), `SHOW_FOR_SIGN_IN: DONE`, the offer with
+    "This device got no password: …" (no screen lock on the AVD, so no levels).
+  - **The slide on the device:** with a blank name a full drag did nothing; a tap at the track's end did nothing; a drag
+    to the middle sprang back; a drag from the start to the end sealed. Keyboard: End then Return nothing; nine arrows
+    then Return nothing; the tenth arrow then Return sealed (logcat `veyq-link`).
+  - **Snapshot, bitten:** Android's task snapshot (`/data/system_ce/0/snapshots/<task>.jpg`, `adb root`, HOME pressed
+    with "Show a code" open) is blank with `SecureOn`; the same build with `SecureOff` wrote the screen with the QR and
+    "Waiting for your other device…" into it (pulled, looked at); restored with `/bin/cp -f`, compared equal.
+  - **macOS ↔ web, three of four** (`VEYQ_DEV_LINK`, ad hoc build, no trust enrolled): the Mac shows → the web scans
+    (numbers 17893 equal, sealed, the web signed in); the web shows → the Mac's test camera scans (`CODE → CONFIRMING →
+    DONE`); the Mac new device scans the web's code (numbers 25259 equal, `SCAN_FROM_TRUSTED: DONE`, offer
+    `[PRESENCE, LOGIN]`). The fourth (the Mac new device showing, the web scanning) did not finish: its first try's web
+    camera opened while the feed was rewritten ("Camera unavailable"), the retry met the dev backend restarting.
+  - Cleanup: every web session signed out by the web's own sign-out, every app session by Settings' "Sign out" /
+    "Sign this device out" (Android) or the debug sign-out (Mac); the one password trust a sign-in enrolled on the AVD
+    removed by "Stop trusting this device" and "Remove this saved key"; the AVD's Settings listed only its own session
+    after. Left: the device-register entries of the AVD, the Mac and the web profile (one each — no screen removes one,
+    inbox #894's area).
+
+  **Deviations:**
+  - The sign-in's two entries are offered without asking the typed server for `core.device-linking` first (D4 asked
+    for that): the server is whatever is typed, so the link asks it as its first step and says OFF ("This server does
+    not link devices.") — the Settings entry keeps the capability gate.
+  - A screen reader confirms through a named custom action (Android `CustomAccessibilityAction`, Apple
+    `accessibilityAction(named:)`) rather than by adjusting the slider to its end: an adjustment is one move, which the
+    slide refuses for a pointer too; the action is a deliberate choice of its own name, the sentence.
+  - Keyboard: Return at the end, as D5 says — the web's slide confirms on reaching the end; both refuse a jump key.
+  - Apple's runs are driven by debug hooks (`VEYQ_DEV_LINK`, `VEYQ_DEV_LINK_DIR`: the app writes the code it shows and
+    the digits on screen, the pass writes the typed digits and the name), so the Apple slide gesture itself is not
+    proven by a pass — no simulator panel or Mac window click was granted.
+
+  **Open (the owner's or the next session's):** the iOS Simulator's four runs and Apple's snapshot bite (`.secretOnScreen()`
+  removed → the SplashBoard snapshot shows the code): CoreSimulator wedged under the load (simctl and `actool` hung for
+  20+ minutes) and the Mac crashed twice from memory, so no simulator ran; the Mac's fourth run; phone↔phone (Android ↔
+  the Mac by the same posters and test camera); the Apple slide by a person (drag, arrows + Return, VoiceOver's action).
+
+  **Retrospective:**
+  - **An edge swipe is the system's back.** The first slides "did not confirm": `input swipe` from x=70 started in
+    Android's gesture inset and closed the dialog (its `onDismissRequest`). Swipes start ≥100 px in; and a tap outside
+    no longer closes the ceremony (`dismissOnClickOutside = false`).
+  - **A spring-back animation fights the next drag.** A second drag within the spring-back was pulled back to 0.17; the
+    next gesture or key now cancels it.
+  - **A tap is a jump.** M3's Slider jumps to a tapped value and ends the gesture there, so "ends at the end" alone let a
+    tap on the track's end confirm; the slide now also asks where the gesture began.
+  - **A dead dev backend reads as FAILED.** Two A3 seals ended FAILED while the shared backend had been killed (`gradlew
+    --stop` elsewhere); the link's own refusal was right, the cause was outside. Check `/api/setup` before chasing one.
+  - **Without `?devlogin` the web joins through the app.** The coordinator's Vite reads no `.run/.env`, so the web was
+    signed in only by being linked from the app first — which also proves app → web before every web-trusted run.
 - [ ] **5 the bridge** — D6 with `WireTest` samples, `DispatchTest` (open each role, a code picture, confirm, a tenant
   switch closing it) and `SecretFreeSchemaTest` unchanged. · Done when: `./gradlew :bridge:jvmTest` green.
 - [ ] **6 Linux and Windows** — the same screens as phase 4 on the desktops. · Done when: both `run.py build`/`test`

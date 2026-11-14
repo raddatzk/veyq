@@ -60,7 +60,7 @@ final class AppModel {
         case signIn(working: Bool, error: Msg?, adding: Bool, server: String?, email: String?, kit: SessionModelKitShown?)
         /// An account this device trusts: the password alone, or the person's authentication.
         case unlock(record: TrustedDevice, working: Bool, error: Msg?)
-        /// In the share extension with no account this device trusts: the app signs in, not the extension (ADR 0132).
+        /// In the share extension with no account this device trusts: the app signs in, not the extension (ADR 0138).
         case needsApp
         case signed
     }
@@ -83,7 +83,7 @@ final class AppModel {
     var drawerOpen = false
 
     private let device: ThisDevice
-    /// The share extension's model (ADR 0132): it signs in only from what the app left and moves nothing of the app's.
+    /// The share extension's model (ADR 0138): it signs in only from what the app left and moves nothing of the app's.
     let inExtension: Bool
 
     private static func makeDevice(inExtension: Bool) -> ThisDevice {
@@ -94,7 +94,7 @@ final class AppModel {
         #endif
         let keychain = KeychainStore(movesLegacy: !inExtension)
         if !inExtension {
-            // What the share extension reads too lives in the app group (ADR 0132); an earlier installation's move there.
+            // What the share extension reads too lives in the app group (ADR 0138); an earlier installation's move there.
             Shared.moveIntoGroup()
             // A first start after an installation: the Keychain may still hold an earlier installation's items.
             if !Shared.defaults.bool(forKey: "veyq.installed") {
@@ -220,6 +220,87 @@ final class AppModel {
     func scanKit(typedServer: String) -> QrScan<AnyObject> {
         AppleKit.shared.scan(session: session, typedServer: typedServer, timing: QrCamera.timing)
     }
+
+    // MARK: Device linking (ADR 0059; cr-app-device-linking)
+
+    /// The ceremony on screen (`DeviceLinkView`), and its state as core last said it; nil while none is open.
+    private(set) var link: DeviceLink?
+    private(set) var linkShown: DeviceLink.Shown?
+    @ObservationIgnored private var linkWatch: DeviceLink.Watch?
+    /// How the link on screen was opened, for "Start Over": the same role, the same server.
+    @ObservationIgnored private var linkMake: (@MainActor () -> DeviceLink?)?
+
+    /// Settings' "Show a Code" (*add a new device*, the trusted side): this account's code for the new device to scan.
+    func linkShow() {
+        guard let account = session.signedTo?.account else { return }
+        openLink { AppleLink.shared.showForNewDevice(account: account) }
+    }
+
+    /// Settings' "Scan a Code" (*sign in with a QR code*, the trusted side): the new device's code, scanned here.
+    func linkScan() {
+        guard let account = session.signedTo?.account else { return }
+        openLink { AppleLink.shared.scanSignInCode(account: account, timing: QrCamera.timing) }
+    }
+
+    /// The sign-in's "Scan a Code from Another Device", over the form's server as typed now (nothing in a scan changes it).
+    func scanFromTrusted(server: String) {
+        let session = session
+        openLink { AppleLink.shared.scanFromTrusted(session: session, server: server, timing: QrCamera.timing) }
+    }
+
+    /// The sign-in's "Sign In with a QR Code", over the form's server as typed now.
+    func showForSignIn(server: String) {
+        let session = session
+        openLink { AppleLink.shared.showForSignIn(session: session, server: server) }
+    }
+
+    /// "Start Over": a new ceremony of the same role — a new secret, never the old one retried (ADR 0059 §6).
+    func linkAgain() {
+        guard let make = linkMake else { return }
+        openLink(make)
+    }
+
+    /// The ceremony's sheet went: the link ends (its polls stop, its scan closes, nothing more is sent).
+    func closeLink() {
+        linkWatch?.stop()
+        linkWatch = nil
+        link?.close()
+        link = nil
+        linkShown = nil
+    }
+
+    private func openLink(_ make: @escaping @MainActor () -> DeviceLink?) {
+        closeLink()
+        guard let made = make() else { return }
+        linkMake = make
+        link = made
+        linkShown = made.current
+        // core calls the watch on its own threads: @Sendable, back on the main actor (src/mobile/CLAUDE.md § Traps)
+        nonisolated(unsafe) let watched = made
+        linkWatch = made.watch { @Sendable shown in
+            nonisolated(unsafe) let shown = shown
+            Task { @MainActor [weak self] in self?.linkChanged(watched, shown) }
+        }
+    }
+
+    /// Its steps go to the unified log (`veyq-link:`): the step, the refusal and the hint — never a code, a number or a name.
+    private func linkChanged(_ made: DeviceLink, _ shown: DeviceLink.Shown) {
+        guard made === link else { return }
+        linkShown = shown
+        NSLog("veyq-link: %@: %@%@%@", "\(made.role)", "\(shown.step)", shown.refusal.map { ", \($0)" } ?? "", shown.hint.map { ", hint \($0)" } ?? "")
+        // the new device is signed in: the shell opens over the account the grant made, its offer over it
+        if (made.role == .scanFromTrusted || made.role == .showForSignIn) && shown.step == .done {
+            closeLink()
+            Task { if let opened = session.signedTo { try? await show(opened) } }
+        }
+    }
+
+    #if DEBUG
+    /// A pass's sign-out of the current server (`DevLogin`'s `VEYQ_DEV_LINK_DIR/signout`), as Settings' "Sign Out".
+    func devSignOut() {
+        if let account = session.signedTo?.account { signOut(account) }
+    }
+    #endif
 
     // MARK: Staying signed in (ADR 0123 decision 8)
 
@@ -513,7 +594,7 @@ final class AppModel {
         applyShell(start: false)
     }
 
-    // MARK: What another app shared (ADR 0132)
+    // MARK: What another app shared (ADR 0138)
 
     /// Files shared to veyq, waiting for the Pot they go to, and how many were left out (core's `ShareInbox`).
     typealias Incoming = ShareInbox.Incoming
@@ -528,14 +609,14 @@ final class AppModel {
     private func syncInbox() { incoming = inbox.waiting.value as? Incoming }
 
     /// Files arrive: the pick mode starts at the space's Home, never in the object last open, so the person chooses where
-    /// they go (ADR 0132 decision 1) — the start does the same while the session is still opening.
+    /// they go (ADR 0138 decision 1) — the start does the same while the session is still opening.
     func receiveShare(_ incoming: Incoming) {
         moveShell { Shell.companion.start(lastUsed: nil, space: $0.space) }
         inbox.receive(incoming: incoming)
         syncInbox()
     }
 
-    /// Files dropped onto the app (ADR 0132 decision 9): an open Pot that takes them opens its new expense with them at once;
+    /// Files dropped onto the app (ADR 0138 decision 9): an open Pot that takes them opens its new expense with them at once;
     /// anywhere else they wait in the pick mode, as a share's do.
     func receiveDrop(_ incoming: Incoming) {
         if let ref = shell.openObject, ref.kind == PotSession.companion.KIND, pot?.ref == ref, inbox.takesDropOn(view: pot?.view, incoming: incoming) {

@@ -23,7 +23,7 @@ buildscript {
 // The base every veyq app shares (ADR 0123): the v1 crypto suite, the API client, the session and the navigation
 // model. Its targets are the JVM (which the Android app consumes, and where the conformance suite runs fastest), the
 // Apple platforms the Apple app runs on, each packed into one XCFramework, `VeyqCore`, and Linux on arm64 and x86-64
-// (ADR 0130 decision 4) and Windows on x86-64 (decision 5), cross-compiled from this build's host by Kotlin/Native's own
+// (ADR 0136 decision 4) and Windows on x86-64 (decision 5), cross-compiled from this build's host by Kotlin/Native's own
 // toolchain.
 plugins {
     alias(libs.plugins.kotlin.multiplatform)
@@ -110,7 +110,7 @@ val generateTheme = tasks.register<Exec>("generateTheme") {
     commandLine("python3", rootDir.resolve("theme/generate_theme.py").absolutePath, "--kotlin", generatedTheme.get().asFile.absolutePath)
 }
 
-// Every word the apps show, from the one catalog (ADR 0130 decision 3): the core's `Msg` keys.
+// Every word the apps show, from the one catalog (ADR 0136 decision 3): the core's `Msg` keys.
 val generatedWords = layout.buildDirectory.dir("generated/words")
 val generateWords = tasks.register<Exec>("generateWords") {
     group = "veyq"
@@ -158,7 +158,7 @@ kotlin {
     jvmToolchain(21)
     jvm()
 
-    // The targets reached through the bridge (ADR 0130 decision 5), Linux and Windows, share `bridgedMain`/`bridgedTest`
+    // The targets reached through the bridge (ADR 0136 decision 5), Linux and Windows, share `bridgedMain`/`bridgedTest`
     // between `nativeMain` and their own sets: `nfc`/`nfkd` over utf8proc and the wall clock over kotlinx-datetime. The
     // default template is extended, not replaced; only the HTTP engine differs (`linuxMain` Curl, `mingwMain` WinHttp).
     // Apple and Linux share `posixMain` beside it: a file opened by its path as the bytes it is (`blob/Files.posix.kt`),
@@ -195,7 +195,7 @@ kotlin {
         }
     }
 
-    // Linux (ADR 0130 decision 4) and Windows (decision 5): libsodium as on Apple — the `sodium` interop commonizes into
+    // Linux (ADR 0136 decision 4) and Windows (decision 5): libsodium as on Apple — the `sodium` interop commonizes into
     // `nativeMain` — and utf8proc for the normalization forms, which neither libc has; it commonizes into `bridgedMain`.
     val bridgedSlices = mapOf("linuxArm64" to "linux_arm64", "linuxX64" to "linux_x64", "mingwX64" to "mingw_x64")
     listOf(linuxArm64(), linuxX64(), mingwX64()).forEach { target ->
@@ -291,7 +291,7 @@ kotlin {
 }
 
 // ZXing's QR black-box corpus (qr/zxing-corpus.sha256: the upstream commit and each file's SHA-256), fetched into build/
-// and never committed; `QrCorpusTest` holds the core's decoder to upstream's thresholds over it (ADR 0130 decision 1).
+// and never committed; `QrCorpusTest` holds the core's decoder to upstream's thresholds over it (ADR 0136 decision 1).
 // A file already there at its hash is not fetched again; one whose bytes differ fails the build.
 val qrCorpusManifest = file("qr/zxing-corpus.sha256")
 val qrCorpus = layout.buildDirectory.dir("qr-corpus")

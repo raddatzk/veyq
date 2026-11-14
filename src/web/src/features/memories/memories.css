@@ -580,6 +580,10 @@
   font-size: 0.82rem;
 }
 
+.media-lightbox-audio {
+  margin-left: auto;
+}
+
 .media-lightbox-actions {
   display: flex;
   flex: 0 0 auto;

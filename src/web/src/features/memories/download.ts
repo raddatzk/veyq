@@ -36,6 +36,9 @@ export function sniffMediaType(bytes: Uint8Array): string | undefined {
     const brand = asciiAt(b, 8, 4)
     if (brand === 'heic' || brand === 'heif' || brand === 'mif1' || brand === 'msf1') return 'image/heic'
     if (brand === 'qt  ') return 'video/quicktime' // .mov — a distinct browser MIME, worth keeping honest
+    // An M4A (and its audiobook and protected kin) is audio, as core's `sniffStream` says: a music track (ADR 0135 decision
+    // 3) sealed as `video/mp4` would be a gallery tile with a play badge.
+    if (brand === 'M4A ' || brand === 'M4B ' || brand === 'M4P ') return 'audio/mp4'
     return 'video/mp4' // isom / mp4* and friends
   }
   // EBML (WebM / Matroska) — no `ftyp`; read the DocType to tell the browser-playable WebM from a generic MKV.

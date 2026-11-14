@@ -21,7 +21,7 @@ import kotlin.test.assertIs
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
-/** A file's page both phones drew (ADR 0130 decision 2 and its Consequences, Depot's screens) — over a file the test plays. */
+/** A file's page both phones drew (ADR 0136 decision 2 and its Consequences, Depot's screens) — over a file the test plays. */
 class FileModelTest {
     private val node = NodeAt("s", "f", "FILE", "notes.txt")
 

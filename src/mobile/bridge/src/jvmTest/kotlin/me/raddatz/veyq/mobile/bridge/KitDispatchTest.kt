@@ -26,7 +26,7 @@ import kotlin.test.assertTrue
 import kotlin.time.Duration.Companion.milliseconds
 
 /**
- * An Emergency Kit at the desktops' sign-in through the bridge (ADR 0131 decision 3, extended inward): the kit file by its
+ * An Emergency Kit at the desktops' sign-in through the bridge (ADR 0137 decision 3, extended inward): the kit file by its
  * path ([Call.SessionSignInKit]), read by the core, its pages drawn by the host the test plays through real [Host]
  * requests and replies (the pixels as the reply's payload, [HostPictures]); and the kit's code scanned
  * ([ScanKind.KIT]). Over the web's three fixtures (a fake account: `alex.beispiel@example.org`, the Secret Key of the bytes

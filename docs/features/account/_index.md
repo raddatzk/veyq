@@ -55,8 +55,10 @@ holds only **public** keys and ciphertext, never the password and never a conten
 - [uc.account.confirm-email-address](use-cases/uc.account.confirm-email-address.md) — **built (web)**
   (cr-email-address-confirmation). Confirm the address a reset is sent to. The record is set by a mailed member
   invite, a completed reset, or a confirmation link opened while signed in. It is shown to the holder in the
-  Security settings and gates nothing. It exists for the tenant's first owner, the one account whose address
-  nothing proves ([ADR 0074](../../decisions/0074-address-control-is-recorded-where-nothing-else-proves-it.md)).
+  Security settings and, while unset, in a banner on every page of the signed-in app, and gates nothing. It exists for
+  the accounts whose address nothing proves: a tenant's first owner, and an account a member invite link created
+  ([ADR 0074](../../decisions/0074-address-control-is-recorded-where-nothing-else-proves-it.md),
+  [ADR 0129](../../decisions/0129-a-member-invite-is-mailed-or-handed-over-as-a-link.md)).
 - [Erase an account](use-cases/uc.account.erase-account.md) — **built** (cr-account-erasure;
   [ADR 0101](../../decisions/0101-an-account-is-erased-on-request-and-only-what-the-law-keeps-stays.md), GDPR Art. 17):
   self-service and on the Server Owner's door, pending for a window of its own (14 days,

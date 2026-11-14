@@ -12,6 +12,7 @@ sources:
   - docs/crosscutting/security-model.md
   - docs/decisions/0044-field-visibility-declared-at-the-field.md
   - docs/decisions/0047-inline-video-playback-range-streaming.md
+  - docs/decisions/0135-background-music-is-a-nodes-own-audio-media-played-by-cores-player.md
   - docs/decisions/0079-veyq-is-a-platform-memories-is-its-first-application.md
   - docs/decisions/0102-a-memorys-banner-is-its-own-attachment-framed-by-a-focal-point.md
   - docs/decisions/0014-group-scopes-and-governance.md
@@ -63,7 +64,8 @@ Sealed client-side, never readable by the server:
   server stores and enforces uniqueness on without being able to reverse it;
 - a blob's **type, upload name and modification time**, in a seal under the blob's own key, padded to a 256-byte
   bucket so its length shows one of four sizes, never how long a name is. A Memories original's file name and media
-  type (photo, video or PDF) live there, so the operator learns neither;
+  type (photo, video, PDF, a GPX track or a music track) live there, so the operator learns neither - nor that a
+  Memory holds music, nor a track's title, length or silence, which ride the medium's sealed metadata;
 - bucket and uploader names, a share's note and private name, and every identity pin: whom it pins, the key's
   fingerprint and key-chain head, when it was first seen and whether a join record replaced it, each in an entry
   sealed under the Master Key;
@@ -82,11 +84,11 @@ salt that key was derived with, one per write and 16 bytes of length more, and l
 ### Identity and membership
 
 - **Scope and membership:** who belongs to which tenant and group, and in which role.
-- **Per open member invite:** the invited address, its expiry, the invite's public key, the inviting owner's
+- **Per open member invite:** the invited address (none for an invite the owner shares as a link), its expiry, the invite's public key, the inviting owner's
   signature over it and that owner's identity key, the tenant key wrapped to the invite key, and the owner's own such
   grant kept beside it as the invite's anchor; the key, the signature, the grant and the anchor are cleared once the
-  invite is accepted, revoked, re-sent or expires. The code that opens the invite link never reaches the server; the
-  link's sealed part passes through it only while it is mailed.
+  invite is accepted, revoked, re-sent or expires. The code that opens the invite link never reaches the server; a
+  mailed link's sealed part passes through it only while it is mailed, and a shared link's never does.
 - **Who invited whom:** per member, the owner whose invite they joined through, recorded at the accept, and that
   owner's signed endorsement of the member's sealed join record, written when the owner secures their account
   ([ADR 0111](https://github.com/raddatzk/veyq/blob/main/docs/decisions/0111-an-invitee-grants-itself-a-rotator-re-keys-its-own-scopes-and-a-key-chain-anchors-trust.md)
@@ -172,7 +174,9 @@ time the server observes live is not kept for them. What it does hold, each with
 
 - Sizes: a blob's plaintext size is on its row; the blob-meta seal shows one of four padded sizes.
 - Access: every read except range-streamed playback fetches a blob **whole**, so the operator learns only *that*
-  a blob was accessed. Playback is concession 1.
+  a blob was accessed. Playback is concession 1. A Memory's background music is playback too: a playing track shows up
+  as reads of one of the Memory's blobs, one after another while the music runs, as watching its videos does - never
+  which file it is, its title or the order.
 
 ### Sharing
 
@@ -186,7 +190,7 @@ time the server observes live is not kept for them. What it does hold, each with
 ### Mail and SMTP
 
 - A tenant's **SMTP configuration** (host, port, from, username, TLS) and the owner-authored invite template text.
-- The **send fact** of every mail veyq sends — a member invite, a password-recovery link, an address confirmation:
+- The **send fact** of every mail veyq sends — a mailed member invite, a password-recovery link, an address confirmation:
   recipient and send time.
 - The SMTP **password** is a server-held secret sealed at rest under a key file the server manages, never stored in
   the database in the clear

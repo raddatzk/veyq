@@ -714,7 +714,7 @@ private val LocalCovers = androidx.compose.runtime.staticCompositionLocalOf<Map<
 @Composable
 private fun ObjectRow(ref: ObjectRef, onOpen: (ObjectRef) -> Unit) {
     val details = LocalRowDetails.current[ref.nodeId].orEmpty()
-    // Picking a place for what was shared: only a kind that takes it can be chosen (ADR 0132 decision 1).
+    // Picking a place for what was shared: only a kind that takes it can be chosen (ADR 0138 decision 1).
     val takes = !LocalPicking.current || me.raddatz.veyq.mobile.AppKinds.takesShared(ref.kind)
     ListItem(
         headlineContent = { Text(ref.name, fontWeight = androidx.compose.ui.text.font.FontWeight.Bold) },
@@ -820,7 +820,7 @@ internal class ShellNotices(val snackbar: androidx.compose.material3.SnackbarHos
 
 internal val LocalShellNotices = androidx.compose.runtime.staticCompositionLocalOf<ShellNotices?> { null }
 
-/** Whether the shell is picking a place for what another app shared (ADR 0132). */
+/** Whether the shell is picking a place for what another app shared (ADR 0138). */
 internal val LocalPicking = androidx.compose.runtime.compositionLocalOf { false }
 
 /** The pick mode's banner: what waits and where it can go, with its cancel. */

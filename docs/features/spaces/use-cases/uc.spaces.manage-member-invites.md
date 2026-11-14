@@ -8,11 +8,13 @@
 - **Preconditions:** The owner holds the tenant's OWNER membership; the tenant is ACTIVE; at least one MEMBER
   invite has been minted ([uc.spaces.add-member](uc.spaces.add-member.md)).
 - **Postconditions (success):** The owner sees the current pending member invites; a re-issue replaces the invite
-  with a **new** one — new invite key, new grant, new link **mailed** to the invited address, new code shown once to
-  the owner — and the prior one is superseded; a revoke marks the invite terminal so a replay of its secret is
+  with a **new** one — new invite key, new grant, new code, and for a mailed invite a new link **mailed** to the
+  invited address with the code shown once to the owner, for a link invite a new link shown once to the owner — and the
+  prior one is superseded; a revoke marks the invite terminal so a replay of its secret is
   rejected. An invite that ends holds no key and no grant on the server. Already-**joined** members are never
-  affected — this manages *invites*, not *memberships*. The server saw only invite metadata (email, status,
-  expiry) and the invite's public material, never a plaintext secret, the invite's private key or the code.
+  affected — this manages *invites*, not *memberships*. The server saw only invite metadata (email — none for a link
+  invite —, status, expiry) and the invite's public material, never the invite's private key or the code, nor a
+  plaintext secret beyond the link invite's token it answers its owner.
 
 This is the management companion to [uc.spaces.add-member](uc.spaces.add-member.md): add-member is deliberately
 **additive** ([ADR 0020](../../../decisions/0020-grant-distribution-invite-wrap.md)), so tracking/re-issuing/
@@ -23,8 +25,8 @@ has for tenant-owner invites ([uc.admin.create-tenant](../../admin/use-cases/uc.
 ## Main flow
 
 1. The owner opens **"members"** and sees, beside the joined members
-   ([uc.spaces.add-member](uc.spaces.add-member.md) directory), a list of **pending invites** — each an email +
-   invite status + expiry. Owner-gated; a non-owner sees the directory but not the pending list nor the
+   ([uc.spaces.add-member](uc.spaces.add-member.md) directory), a list of **pending invites** — a mailed one by its
+   email, a link invite as **Link invitation** with its expiry ([ADR 0129](../../../decisions/0129-a-member-invite-is-mailed-or-handed-over-as-a-link.md) decision 2). Owner-gated; a non-owner sees the directory but not the pending list nor the
    management actions. (Every member reads the open invites' public keys, without email, through
    `listOpenInvites` — what a rotation needs to carry them, [uc.spaces.add-member](uc.spaces.add-member.md) A2.)
 2. **Re-issue.** For a pending invite whose link the invitee lost or ignored, the owner re-issues it: their client
@@ -34,10 +36,14 @@ has for tenant-owner invites ([uc.admin.create-tenant](../../admin/use-cases/uc.
    address**. The owner never sees the token ([ADR 0055](../../../decisions/0055-mail-is-a-precondition-not-a-capability.md)).
    Because the supersede happens as the fresh one is minted, a tenant that cannot send is refused **first**,
    leaving the outstanding invite alive rather than destroying it on a tenant that could never have delivered the
-   replacement.
+   replacement. A **link invite's** re-issue (**New link**, `reissueMemberInviteLink`) ends the old invite and mints a
+   new one in one transaction, its own refusals first, so a refused re-issue leaves the old link standing; it answers
+   the new token and opens the same link result as the first mint — a new link with a new token, key and code, the
+   old one dead. Each way re-issues only its own kind: a mailed invite's id at the link re-issue is
+   `404 invite_not_found`, a link invite's at the mailed one `422 invite_email_mismatch`.
 3. **Revoke.** The owner revokes a pending invite: it is soft-transitioned to a terminal state in the statement
    that nulls its key, grant and anchor, so a later replay of that secret at `accept` is rejected as no-longer-valid. The
-   reserved email is freed to re-invite. The tenant does not rotate ([ADR 0025](../../../decisions/0025-forward-secrecy-policy-per-scope.md)):
+   reserved email, if any, is freed to re-invite. A link invite is revoked the same way. The tenant does not rotate ([ADR 0025](../../../decisions/0025-forward-secrecy-policy-per-scope.md)):
    a link and code taken before the revoke still open the epochs up to it, useful only with a dump of the
    ciphertext ([ADR 0111](../../../decisions/0111-an-invitee-grants-itself-a-rotator-re-keys-its-own-scopes-and-a-key-chain-anchors-trust.md)
    § Consequences).
@@ -51,13 +57,14 @@ has for tenant-owner invites ([uc.admin.create-tenant](../../admin/use-cases/uc.
 ## Quality notes
 
 - **Operator-blind.** Listing returns only invite **metadata** (email, status, expiry) the server already
-  stores; the secret is never stored plaintext (only its hash), and a re-issue returns **no secret at all** — not
-  even to the owner who asked for it ([ADR 0055](../../../decisions/0055-mail-is-a-precondition-not-a-capability.md)
+  stores; the secret is never stored plaintext (only its hash), and a mailed invite's re-issue returns **no secret at
+  all** — not even to the owner who asked for it ([ADR 0055](../../../decisions/0055-mail-is-a-precondition-not-a-capability.md)
   §2). Handing a named person's invite token back to a third party is exactly the routing this flow exists to
-  avoid, so the response carries only the invite's state.
+  avoid, so the response carries only the invite's state. A link invite is the owner's own to hand over, so its
+  re-issue answers its token to the owner, as its first mint does.
 - **The invite secret is never logged.** The delivery mailer emits only non-secret metadata (email + expiry); the
-  redeemable bootstrap token reaches the invitee **by mail and by nothing else** — not through the API response,
-  not through the logging fallback (a member invite is refused before minting when the tenant cannot send, so it
+  redeemable token of a mailed invite reaches the invitee **by mail and by nothing else** — not through the API
+  response, not through the logging fallback (a member invite is refused before minting when the tenant cannot send, so it
   never reaches it), and never a server log, in any launch mode. A production runtime
   logs a secret-free "not delivered" warning.
 - **Inviting stays owner-only.** Every action here is gated on the tenant OWNER membership — the same gate that
@@ -73,14 +80,14 @@ has for tenant-owner invites ([uc.admin.create-tenant](../../admin/use-cases/uc.
   (`503 mail_unavailable`) and a send that errors is refused after it (`503 mail_send_failed`), so the two
   fallback states the shared enum still carries belong to the ServerOwner bootstrap invite alone
   ([ADR 0055](../../../decisions/0055-mail-is-a-precondition-not-a-capability.md) §7). It is **rate-limited**
-  per-(tenant, recipient) + per-tenant
+  per-(tenant, recipient) + per-tenant (a link re-issue, with no recipient, per-tenant only)
   (429 + `Retry-After`, no fresh mint). Re-issue is the **sharpest email-bombing vector** — repeated fresh links
   to one address — so it is the primary thing the limiter bounds.
 
 ## User impact
 
-You see who has not joined your space yet, can send their invitation again or cancel one sent by mistake, without
-touching anyone already in it.
+You see who has not joined your space yet, can send their invitation again, make a new link, or cancel one sent by
+mistake, without touching anyone already in it.
 
 ## Related
 
@@ -90,4 +97,5 @@ touching anyone already in it.
   mirrors (resend / reassign / revoke).
 - [ADR 0111](../../../decisions/0111-an-invitee-grants-itself-a-rotator-re-keys-its-own-scopes-and-a-key-chain-anchors-trust.md)
   — the invite as a placeholder member: what a re-issue replaces and a revoke drops.
+- [ADR 0129](../../../decisions/0129-a-member-invite-is-mailed-or-handed-over-as-a-link.md) — the link invite and its re-issue.
 - End-user view (docs site): [Who gets into your space](../../../../site/src/content/docs/space-owners/who-gets-into-your-space.mdx)

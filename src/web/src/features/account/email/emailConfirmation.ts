@@ -1,5 +1,6 @@
 // uc.account.confirm-email-address (web, ADR 0074): the caller's address as the server holds it, whether it is
-// confirmed, and the confirmation mail. A fact the screen shows, never a gate — nothing in the app branches on it.
+// confirmed, and the confirmation mail. A fact the screen shows, never a gate — nothing an account may do branches on it;
+// only the order of the shell's notices does (`unconfirmedAddress.ts`).
 import { accountEmailApi } from '../../../api/client'
 import { withRefresh } from '../../../app/sessionRefresh'
 import { HttpStatus, httpStatus } from '../../../shared/httpError'

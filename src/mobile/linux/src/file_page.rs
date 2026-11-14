@@ -5,8 +5,8 @@
 //! through [crate::reader_stream], the system's GStreamer decoding it; what it cannot decode is said as not shown here), or
 //! what the core says where it shows none (`AdwStatusPage`) — and its facts beneath, one row with the uploader.
 //! Everything is the core's `FileModel` (`File.Open`, `Watched.File`): what shows is decided by the bytes, and an image's
-//! and a PDF's bytes come beside the answer (`File.Bytes`, ADR 0131 decision 1), asked again when the content's revision
-//! turns; a medium is read in ranges (`File.Reader`, ADR 0131 decision 2). Nothing decrypted is written to show it (ADR 0047).
+//! and a PDF's bytes come beside the answer (`File.Bytes`, ADR 0137 decision 1), asked again when the content's revision
+//! turns; a medium is read in ranges (`File.Reader`, ADR 0137 decision 2). Nothing decrypted is written to show it (ADR 0047).
 //!
 //! "Save a copy" is the header's download of a file (`win.file-save`): GTK's save dialog names the file, the core writes it
 //! there frame by frame (`File.Save`), and a toast says how far it is with Cancel (`Watched.Save`, `Save.Cancel`); the save

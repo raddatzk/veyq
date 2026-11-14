@@ -12,7 +12,10 @@
 //    no key, so there is nothing to render the member's way (Memories' photo drop, Depot's drop box).
 // Anything else — a root kind nobody can render, or none named — is the explicit unavailable state, never a blank page.
 // Above the gates, the donation banner as a guest's (uc.platform.support-the-project: its dismissal stays in this browser);
-// the footer is the instance's, with veyq's own "Why is veyq secure?" and "Donate" in it (`OperatorIdentification`).
+// the footer is the instance's, with veyq's own "Why is veyq secure?" and "Donate" in it (`OperatorIdentification`), and
+// below it core's audio bar (`core/audio/AudioBar.vue`, ADR 0135 decision 8), a guest's as a member's (share view = member
+// view), mounted once for the page's life so a Memory's music plays on while the guest moves through the link's nodes, and
+// stopped when the guest leaves the page. A moderator's review has none.
 //
 // The gates and what lies behind them are core's (`core/sharing/shareGates.ts`, drawn by `core/sharing/ShareGates.vue`),
 // which a bookmark's page runs too for a link it shows in place (ADR 0121); this page is their host for this origin's link,
@@ -53,6 +56,7 @@ import { reportNodes } from '../core/report/reportActions'
 import { ShareRole } from '../api/generated/sharing'
 import { setPreferenceAudience } from '../shared/state/scopedPreference'
 import OperatorIdentification from '../core/operator/OperatorIdentification.vue'
+import AudioBar from '../core/audio/AudioBar.vue'
 import DonationBanner from '../core/project/DonationBanner.vue'
 import { closeGuestPage, openGuestPage } from '../core/sharing/guestNotice'
 import { openReport, useReportOffered } from '../core/report/report'
@@ -142,6 +146,7 @@ watch(
       <button v-if="reportsLink" type="button" class="share-view-report" @click="reportLink">{{ t('report.reportLink') }}</button>
       <OperatorIdentification />
     </footer>
+    <AudioBar />
   </div>
 </template>
 

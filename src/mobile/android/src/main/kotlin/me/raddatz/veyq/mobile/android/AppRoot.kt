@@ -20,6 +20,7 @@ import androidx.compose.material.icons.outlined.FileOpen
 import androidx.compose.material.icons.outlined.Fingerprint
 import androidx.compose.material.icons.outlined.LockOpen
 import androidx.compose.material.icons.outlined.Password
+import androidx.compose.material.icons.outlined.QrCode2
 import androidx.compose.material.icons.outlined.QrCodeScanner
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
@@ -35,6 +36,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
@@ -47,18 +49,22 @@ fun AppRoot(model: AppModel) {
     val offer by model.offer.collectAsStateWithLifecycle()
     val trustWorking by model.trustWorking.collectAsStateWithLifecycle()
     val settings by model.settings.collectAsStateWithLifecycle()
+    val link by model.link.collectAsStateWithLifecycle()
     Surface(modifier = Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
         when (val s = screen) {
             Screen.Starting -> StartingScreen()
             is Screen.SignIn -> SignInScreen(
                 s, { server, email, password, secretKey -> model.signIn(server, email, password, secretKey) }, model::cancelAdd,
                 onKit = model::readKit, onClearKit = model::clearKit, onScanKit = model::scanKit,
+                onScanFromTrusted = model::scanFromTrusted, onShowForSignIn = model::showForSignIn,
             )
             is Screen.Unlock -> UnlockScreen(s, model::unlock, model::otherAccount)
             is Screen.Signed -> offer?.let { OfferScreen(it, trustWorking, model::answerOffer) }
                 ?: settings?.let { SettingsScreen(it, model.settingsActions) }
                 ?: s.managing?.let { ManageScreen(it, model) } ?: ShellScreen(s, model)
         }
+        // a device-linking ceremony, over the sign-in or Settings (ADR 0059): a secure dialog of its own
+        link?.let { DeviceLinkScreen(it, onAgain = model::linkAgain, onClose = model::closeLink) }
     }
 }
 
@@ -70,6 +76,8 @@ fun SignInScreen(
     onKit: (android.net.Uri, String) -> Unit = { _, _ -> },
     onClearKit: () -> Unit = {},
     onScanKit: ((String) -> me.raddatz.veyq.mobile.qr.QrScan<*>)? = null,
+    onScanFromTrusted: ((String) -> Unit)? = null,
+    onShowForSignIn: ((String) -> Unit)? = null,
 ) {
     var server by rememberSaveable { mutableStateOf(state.server ?: BuildDefaults.SERVER) }
     var email by rememberSaveable { mutableStateOf(state.email.orEmpty()) }
@@ -151,6 +159,28 @@ fun SignInScreen(
                 stringResource(R.string.signin_kit_other_server, kit.server.orEmpty(), before),
                 style = MaterialTheme.typography.bodySmall, color = role(LocalPalette.current.muted),
             )
+        }
+        // ADR 0059 §1: another device lets this one in, over the server above (nothing in a scan changes it) — scanning
+        // its code where a camera can be, showing this one's code on every device
+        if (onScanFromTrusted != null && !noCamera) {
+            androidx.compose.material3.OutlinedButton(
+                onClick = { onScanFromTrusted(server) },
+                enabled = !state.working,
+                modifier = Modifier.fillMaxWidth().testTag("signin-link-scan"),
+            ) {
+                androidx.compose.material3.Icon(androidx.compose.material.icons.Icons.Outlined.QrCodeScanner, null, Modifier.padding(end = 8.dp))
+                Text(stringResource(R.string.signin_link_scan))
+            }
+        }
+        if (onShowForSignIn != null) {
+            androidx.compose.material3.OutlinedButton(
+                onClick = { onShowForSignIn(server) },
+                enabled = !state.working,
+                modifier = Modifier.fillMaxWidth().testTag("signin-link-show"),
+            ) {
+                androidx.compose.material3.Icon(androidx.compose.material.icons.Icons.Outlined.QrCode2, null, Modifier.padding(end = 8.dp))
+                Text(stringResource(R.string.signin_link_show))
+            }
         }
         state.error?.let { Text(say(it), color = MaterialTheme.colorScheme.error) }
         // Confirming is the web's green role (`--app-primary`), not the accent.
@@ -266,7 +296,7 @@ fun OfferScreen(offer: me.raddatz.veyq.mobile.session.SessionModel.Offer, workin
                 }
                 OfferChoice(stringResource(title), stringResource(hint), icon, enabled = !working) { onAnswer(level) }
             }
-            OfferChoice(stringResource(R.string.offer_not_now), stringResource(R.string.offer_not_now_hint), androidx.compose.material.icons.Icons.Outlined.Password, enabled = !working) { onAnswer(null) }
+            OfferChoice(stringResource(R.string.offer_not_now), stringResource(if (offer.linked) R.string.offer_not_now_linked_hint else R.string.offer_not_now_hint), androidx.compose.material.icons.Icons.Outlined.Password, enabled = !working) { onAnswer(null) }
         }
         if (working) androidx.compose.material3.LinearProgressIndicator(Modifier.fillMaxWidth())
         Text(

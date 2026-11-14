@@ -1,7 +1,7 @@
 package me.raddatz.veyq.mobile.qr
 
 /**
- * A [QrMatrix] as a PNG for the desktops (D2 of the QR CR), answered as shown bytes (ADR 0131 decision 1) so the text
+ * A [QrMatrix] as a PNG for the desktops (D2 of the QR CR), answered as shown bytes (ADR 0137 decision 1) so the text
  * a code holds never crosses the bridge: a 1-bit greyscale image, each module [scale] × [scale] pixels, dark modules
  * black on white, the quiet zone included. Its pixels are stored, not compressed (deflate's stored blocks), so no
  * compressor is needed; a code of version 40 at scale 8 (1480 px) is about 275 KB.

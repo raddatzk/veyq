@@ -44,12 +44,12 @@ internal expect fun platformHttpClient(block: HttpClientConfig<*>.() -> Unit): H
 
 /**
  * The platform's device keys over the host's device [store], reached by the core itself so no key, seal or token crosses
- * the bridge (ADR 0130's Consequences): the Secret Service (`linuxMain`), DPAPI and Windows Hello owned by
+ * the bridge (ADR 0136's Consequences): the Secret Service (`linuxMain`), DPAPI and Windows Hello owned by
  * [Config.window] (`mingwMain`).
  */
 internal expect fun platformDeviceKeys(config: Config, store: DeviceStore): DeviceKeys
 
-/** The files the host names by path, written by core's [FileSink]: one not finished is removed (ADR 0131). */
+/** The files the host names by path, written by core's [FileSink]: one not finished is removed (ADR 0137). */
 private object Files : DeviceFiles {
     override suspend fun write(path: String, produce: suspend (sink: (ByteArray) -> Unit) -> Boolean): Boolean =
         FileSink.write(path, kept = { it }, produce)

@@ -15,6 +15,7 @@ vi.mock('./emailConfirmation', async (orig) => ({
 import UnconfirmedEmailBanner from './UnconfirmedEmailBanner.vue'
 import { getAccountEmail, requestEmailConfirmation } from './emailConfirmation'
 import { account } from '../../../app/account'
+import { unconfirmedAddress } from './unconfirmedAddress'
 import { realI18n, t } from '../../../test/i18n'
 import { httpError } from '../../../test/httpError'
 
@@ -95,5 +96,28 @@ describe('UnconfirmedEmailBanner', () => {
     account.userId = 'u-2'
     await flushPromises()
     expect(w.get(BANNER).text()).toContain('cid@example.org')
+  })
+
+  it('its answer is the shell\'s one copy, and an unmounted banner leaves it unknown', async () => {
+    const w = await mountBanner()
+    expect(unconfirmedAddress.value).toBe('bea@example.org')
+    w.unmount()
+    mounted.splice(0)
+    expect(unconfirmedAddress.value).toBeUndefined()
+    vi.mocked(getAccountEmail).mockResolvedValue({ email: 'bea@example.org', confirmed: true })
+    await mountBanner()
+    expect(unconfirmedAddress.value).toBeNull() // control: a confirmed answer is null, not unknown
+  })
+
+  it('another account signed in is unknown until its own read answers', async () => {
+    const w = await mountBanner()
+    let answer!: (v: { email: string; confirmed: boolean }) => void
+    vi.mocked(getAccountEmail).mockReturnValue(new Promise((r) => { answer = r }))
+    account.userId = 'u-2'
+    await w.vm.$nextTick()
+    expect(unconfirmedAddress.value).toBeUndefined()
+    answer({ email: 'cid@example.org', confirmed: true })
+    await flushPromises()
+    expect(unconfirmedAddress.value).toBeNull()
   })
 })

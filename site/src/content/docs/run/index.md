@@ -85,10 +85,11 @@ So the things you own are:
 - **Availability.** Whether the service is up, whether backups exist, whether an upgrade breaks. All of this is
   yours, and none of it is veyq's to promise.
 - **The instance's own mail, and the key that keeps every relay working — not a space's mail.** Each space's
-  owner sets up that space's own relay in the app (Settings → Email), and two of the things veyq mails have no
-  substitute at all — an invitation to join that space, and a password-reset link. Both are addressed to the
-  person concerned, so there is no link for you to hand over instead; a space with no email set up refuses those
-  actions and says so out loud. Yours is the instance's own relay, which is optional (**Server → Mail**,
+  owner sets up that space's own relay in the app (Settings → Email), and a space with no email set up refuses to
+  invite anyone into it, or to send a password-reset link, and says so out loud. A reset link and an invitation by
+  email are addressed to the person concerned, so there is no link for you to hand over instead; an invitation the
+  space's owner shares as a link is the owner's to hand over, and still needs the space's mail, because the account it
+  creates is sent its address confirmation at once. Yours is the instance's own relay, which is optional (**Server → Mail**,
   [Storage and email](/run/storage-and-email/#the-instances-own-mail-to-you)): it mails you of new releases,
   the moderators of moderation's notices, a reporter and the people a decision concerns of its receipt and
   statement, and the people the host has to tell — an account being erased, the members of a
