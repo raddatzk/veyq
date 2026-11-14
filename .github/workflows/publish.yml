@@ -145,7 +145,7 @@ jobs:
           pattern: lane-result-*
           path: ${{ runner.temp }}/lane-results
 
-      # The desktop apps' packages that run's `apps-stage` pushed (ADR 0133 decision 10): one file per platform holding
+      # The desktop apps' packages that run's `apps-stage` pushed (ADR 0139 decision 10): one file per platform holding
       # its digest, from THAT run like the images' — never the staging tags, which a later push of the commit could move.
       - name: Fetch the app packages' digests the Checks run staged
         uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
@@ -307,7 +307,7 @@ jobs:
           echo "Signing ${CHART}@${DIGEST}"
           cosign sign --yes "${CHART}@${DIGEST}"
 
-      # ORAS, the OCI project's own client (ADR 0133 decision 10), at checks.yml's `apps-stage` pin — validate_release_identity.py
+      # ORAS, the OCI project's own client (ADR 0139 decision 10), at checks.yml's `apps-stage` pin — validate_release_identity.py
       # holds every copy equal — checked against its SHA-256 before it runs.
       - name: Install ORAS
         env:
@@ -426,7 +426,7 @@ jobs:
           echo "refs/tags/${tag} now names ${COMMIT}"
 
   # The staging images Checks pushes (`build-<sha>-<arch>`, one per push, image and architecture; and each desktop app's
-  # package as `veyq-apps:build-<sha>-<platform>`, ADR 0133 decision 10, one artifact with no children) are deleted 30 days
+  # package as `veyq-apps:build-<sha>-<platform>`, ADR 0139 decision 10, one artifact with no children) are deleted 30 days
   # after their push, unless the commit is a branch tip — far beyond the week between two scheduled snapshots, and the
   # retention of the Checks run's artifacts that a Publish reads (30 days too). A staging index whose commit has a
   # snapshot goes alone: the snapshot's own index names its children. One whose commit has none goes with its two

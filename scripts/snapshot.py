@@ -33,7 +33,7 @@ itself (owner 2026-11-07). Writes `kind`, `commit` (C — every later name of th
 digest artifact from that run, every lane record names exactly those digests for its architecture, and every
 `build-<commit>-<arch>` staging tag still resolves to its digest (a re-staged or moved tag is refused). With `--apps`
 (the run's `app-digests` artifact, one file per platform holding the digest `apps-stage` pushed), the same of the desktop
-apps' packages (ADR 0133 decision 10): a digest for every platform of `APP_PLATFORMS` and none else, each
+apps' packages (ADR 0139 decision 10): a digest for every platform of `APP_PLATFORMS` and none else, each
 `veyq-apps:build-<commit>-<platform>` still on it.
 
 **lane-result** — one leg's record, written only after the leg is green: the lane, its architecture and shard (the
@@ -237,7 +237,7 @@ GATE_JOB_NAME = "Pipeline green"  # checks.yml's `green` job; validate_release_i
 LANE_JOB_NAME = "Stack lane L1 ({arch}, {domain})"  # checks.yml's `stack` job's name, per leg
 BUILD_IMAGES = ("veyq", "veyq-admin", "veyq-tools")  # checks.yml's build matrix; validate_release_identity.py holds it
 LANE_IMAGES = ("veyq", "veyq-admin")  # what lane L1 installs, and so what each lane record names
-# The desktop apps' packages (ADR 0133 decision 10): one OCI artifact per platform in this package, pushed by checks.yml's
+# The desktop apps' packages (ADR 0139 decision 10): one OCI artifact per platform in this package, pushed by checks.yml's
 # `apps-stage` as `build-<commit>-<platform>`, each carrying one file — its name here, `{version}` the tree's release.
 # A snapshot names each `<version>-SNAPSHOT-<platform>` and `sha-<commit>-<platform>`, a release `<version>-<platform>`.
 # validate_release_identity.py holds the stage step's platforms and file names to these.

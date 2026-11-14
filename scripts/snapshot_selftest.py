@@ -344,7 +344,7 @@ check(refused(snapshot.staged_verdict, staged_digests, foreign, dict(staged_dige
       "a lane record of other bytes is published")
 check(refused(snapshot.staged_verdict, staged_digests, [], dict(staged_digests), ARCHS), "no lane record is published")
 
-# ---- the desktop apps' packages (ADR 0133 decision 10) ------------------------------------------------------------
+# ---- the desktop apps' packages (ADR 0139 decision 10) ------------------------------------------------------------
 app_digests = {p: "sha256:" + c * 64 for p, c in zip(snapshot.APP_PLATFORMS, "abc")}
 with tempfile.TemporaryDirectory(prefix="snapshot_selftest_apps_") as tmp:
     apps_dir = pathlib.Path(tmp)

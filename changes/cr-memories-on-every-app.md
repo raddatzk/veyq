@@ -3,12 +3,12 @@ id: cr-memories-on-every-app
 title: Memories on every app — the gallery, the lightbox and the uploads moved into core screen models, then bridged and drawn on Linux and Windows
 status: in-progress
 satisfies: []
-adrs: ["0130", "0131", "0123", "0122", "0132", "0047", "0080", "0105"]
+adrs: ["0136", "0137", "0123", "0122", "0138", "0047", "0080", "0105"]
 invariants:
-  - every rule is the core's (ADR 0130 decisions 1 and 2) — what Android's and Apple's Memories still decide in their app models and views (the gallery's reads and when it reads anew, the lightbox's page, its picture and its reader, the details, the save of an original, the upload's settle, the tier spec) moves into core screen models first, both phones thinned in the same phase and unchanged on a device
+  - every rule is the core's (ADR 0136 decisions 1 and 2) — what Android's and Apple's Memories still decide in their app models and views (the gallery's reads and when it reads anew, the lightbox's page, its picture and its reader, the details, the save of an original, the upload's settle, the tier spec) moves into core screen models first, both phones thinned in the same phase and unchanged on a device
   - share view = member view (owner 2026-10-09, inbox #401) — one gallery model for a member and a link's guest, whose rights only remove functions; the rights are the web's `memoryRights`, fail-closed, ported once into the core
   - no plaintext at rest but where the person saves it (ADR 0047's Consequences, every app) — tiles and previews in memory, a video through the core's `RangeReader`, an original written only to the path a save dialog gave (or iOS's swept `fileMover` directory)
-  - the bridge only carries — one line per call onto a core model, no key, seal or token outward (`SecretFreeSchemaTest`); shown bytes beside the JSON, a medium through a reader by id, files by path (ADR 0131)
+  - the bridge only carries — one line per call onto a core model, no key, seal or token outward (`SecretFreeSchemaTest`); shown bytes beside the JSON, a medium through a reader by id, files by path (ADR 0137)
   - Memories' words — Memory, Chapter; never "Album"; "application", never "plugin" (root CLAUDE.md, ADR 0086); every word from `src/mobile/words/words.json`, each desktop to its platform's guideline (ADR 0123 decision 9)
   - no new dependency that is deprecated, vendor-locked or closed (root CLAUDE.md); none is planned (D8), and one a phase finds it needs is checked and recorded where it is added
   - Android, the Apple app, the web and Depot and Expenses on the desktops behave as before; `./gradlew :core:jvmTest :core:macosArm64Test :bridge:jvmTest` and both desktops' `run.py build` stay green in every phase
@@ -33,7 +33,7 @@ the apps still lack against the web:
   (READ, READ_WRITE, WRITE_ONLY) — the Memory's page itself built as one model for member and guest (share view = member
   view: rights only remove functions).
 
-The order is ADR 0130 decision 6's, as the Depot CR's: the moved rules into the core first with both phones thinned onto
+The order is ADR 0136 decision 6's, as the Depot CR's: the moved rules into the core first with both phones thinned onto
 them, the new functions into the core, then the bridge, Linux, Windows, the phones drawing the new functions, the docs.
 
 ## Context & constraints
@@ -42,8 +42,8 @@ them, the new functions into the core, then the bridge, Linux, Windows, the phon
   account settings' phases 3 and 4 merged; tree clean). The Depot CR's file page, reader players, `FileSave`, uploads by
   path, `DepotUploads` tray and drop handlers, and CR 3a's header, cover dialog and share sheet are this CR's floor.
 - **Read first:**
-  - ADR 0130 (decisions 1, 2, 6 and the Consequences' Depot paragraph — the pattern), ADR 0131 (all four decisions and its
-    Depot Consequences), ADR 0047's Consequences (the apps' rule), ADR 0132 decision 2 (a Memory as a share target —
+  - ADR 0136 (decisions 1, 2, 6 and the Consequences' Depot paragraph — the pattern), ADR 0137 (all four decisions and its
+    Depot Consequences), ADR 0047's Consequences (the apps' rule), ADR 0138 decision 2 (a Memory as a share target —
     left out here, D12), ADR 0080 decision 6 with [memories](../docs/apps/memories.md) § What a guest may do (the role
     matrix the rights port);
   - `src/mobile/CLAUDE.md` whole: the bridge paragraph and the traps (an answer overtaking an update, one `ContentDialog` at
@@ -109,7 +109,7 @@ passed in the container, not in the Flatpak); whether `Windows.Media.Editing.Med
 
 ### D1 — A Memory's page is a core screen model, `GalleryModel`
 
-ADR 0130 decision 2's shape (state a flow and a watch, actions plain functions, tested in `commonTest` over a gallery the
+ADR 0136 decision 2's shape (state a flow and a watch, actions plain functions, tested in `commonTest` over a gallery the
 test plays), opened by `ShellModel.galleryModel(ref)` for a MEMORY or a CHAPTER:
 - **State:** loading; the media as shown rows (id, a video or not, a tile to ask for or the icon, the name, blocked); the
   chapters (a Memory's own, each with its cover's presence — `MediaDetails.chapters`, made the model's); the count; failed;
@@ -121,7 +121,7 @@ test plays), opened by `ShellModel.galleryModel(ref)` for a MEMORY or a CHAPTER:
   `lightbox(index)` (D2).
 - **When it reads anew is the core's:** on the shell's lists' revision, on an own upload's DONE (the phones'
   `galleryRevision` goes), on the poll's moved revision; the lists themselves once a batch ends (the Memory's date range).
-- **The decoded picture's cache stays the platform's** (decoding is, ADR 0130 decision 1); the core caches no bytes: a
+- **The decoded picture's cache stays the platform's** (decoding is, ADR 0136 decision 1); the core caches no bytes: a
   tile is read when the platform asks for it, as the phones do today.
 
 ### D2 — The lightbox is the gallery's, `Lightbox`
@@ -170,9 +170,9 @@ never a view. Rejected: a member-only model now and a guest model later — the 
   and Apple's `MediaTiers` read them, and the desktops get them in the request. Decoding and encoding stay the platform's.
 - **The settle is the core's** (`GalleryModel`, D1): every Memories job on the app's one queue reads its gallery anew when
   DONE and the lists when its batch ends. The tray stays `DepotUploads`, which already mirrors the whole queue and runs its
-  acknowledge for Memories' batches too (ADR 0130's Consequences); renaming it is churn in four apps for no rule — left.
+  acknowledge for Memories' batches too (ADR 0136's Consequences); renaming it is churn in four apps for no rule — left.
 - **The desktops derive through a host request:** `HostRequest.MediaTiers(path, type, spec)` → `HostReply.Tiers(width,
-  height, previewSize)` with the payload `preview ‖ thumbnail` beside the JSON (ADR 0131 decision 3 extended inward, as
+  height, previewSize)` with the payload `preview ‖ thumbnail` beside the JSON (ADR 0137 decision 3 extended inward, as
   `HostReply.Pixels`), or `Tiers(null…)` where the platform does not decode it (the original then goes alone, today's rule).
   The bridge's `Deriver` asks it on the queue's prepare thread, never the UI thread. Linux: the picture through glycin
   (`gdk::Texture`, its orientation applied), scaled, encoded by gdk-pixbuf's `savev("jpeg")` as the cover is; a video's
@@ -180,7 +180,7 @@ never a view. Rejected: a member-only model now and a guest model later — the 
   already linked. Windows: `BitmapDecoder` with `RespectExifOrientation` and `BitmapEncoder`'s JPEG, as the cover; a
   poster by `MediaClip.CreateFromFileAsync` + `MediaComposition.GetThumbnailAsync`, else (measured first, D8) the
   `MediaPlayer` frame server. Rejected: tiers made in the core (a JPEG codec and a video decoder in Kotlin/Native — two
-  native dependencies for what each platform has, against ADR 0130 decision 1); the host deriving every tier before it calls
+  native dependencies for what each platform has, against ADR 0136 decision 1); the host deriving every tier before it calls
   (every preview of a batch held at once).
 - **Calls:** `Memory.Upload(gallery, label, paths)` → `Queued(count)` (a path not a medium by `isMedia` is skipped and said,
   never sent), the core opening each as a `FileSource` (`PickedPaths`) read at offsets. A desktop's pickers: GTK's
@@ -272,7 +272,7 @@ measurement forces is read for licence, last release and deprecation and recorde
 Date, place with the map and its consent, participants and a medium's capture time (one curation CR: they share the
 node's sealed meta and its 409 merge, `uc.memory.concurrent-curation`); the banner (ADR 0102); item marks, buckets and the
 gallery's filter; export, import and copy of a Memory; its re-key (`NodeRekey` leaves it to a web device); a Memory as a
-share target (ADR 0132 decision 2) and a drop onto a phone's gallery. Each is an inbox row (#890–#893), D3 already holding
+share target (ADR 0138 decision 2) and a drop onto a phone's gallery. Each is an inbox row (#890–#893), D3 already holding
 their rights. Rejected: one CR for all of it — four independent slices whose proofs share nothing, which the CR rule calls
 separate CRs.
 
@@ -288,7 +288,7 @@ The web lays a gallery out as a justified grid (`MediaGrid.vue` over `mediaGridL
 filled to the width, the last row at the target height, only the rows near the viewport mounted); the apps drew square
 tiles. **Every app draws the justified grid** — the phones too, with the smaller target row height the web already gives a
 narrow grid (150 up to a width of 720, else 200, in the platform's own unit: two to four tiles a phone's row, as Google
-Photos and Flickr show), one look across web and apps. Per ADR 0130 the layout is logic: `memories/MediaGridLayout.kt`
+Photos and Flickr show), one look across web and apps. Per ADR 0136 the layout is logic: `memories/MediaGridLayout.kt`
 ports `mediaGridLayout.ts` once (bounded aspect 3:4 … 4:3, the 4:3 fallback, the 8 gap, `MediaGrid.vue`'s target and its
 `windowRows` as `Layout.window`), held to the web's own cases in `commonTest`; `GalleryModel.Row.aspect` is the medium's
 sealed dimensions (`MemoryMedia.Meta.width`/`height`, already read) bounded; `GalleryModel.layout(rows, width)` hands a
@@ -797,12 +797,12 @@ zoom and the slideshow, trash with Undo, a Memory's links in the share sheet.
 
 ### Phase 7 — The docs
 
-- ADR 0130's Consequences: Memories' screen models (`GalleryModel`, `Lightbox`, `MemoryRights`, the create, the trash), one
+- ADR 0136's Consequences: Memories' screen models (`GalleryModel`, `Lightbox`, `MemoryRights`, the create, the trash), one
   paragraph as Depot's.
-- ADR 0131's Consequences: the second reader caller, `HostRequest.MediaTiers`'s payload inward, `Memory.Upload`.
+- ADR 0137's Consequences: the second reader caller, `HostRequest.MediaTiers`'s payload inward, `Memory.Upload`.
 - ADR 0047's Consequences: Memories under the apps' rule; Apple's `tmp/picked/` (D5).
 - ADR 0123's Consequences: Memories on the desktops, D8's measurements.
-- ADR 0132's Consequences: decision 2's Memory still not built (#893).
+- ADR 0138's Consequences: decision 2's Memory still not built (#893).
 - `src/mobile/CLAUDE.md`: the models, the calls, the traps met.
 - native-apps: the Linux and Windows rows, § Built, by area (Memories, Sharing, Uploads), § Open (the "other screens"
   lines narrowed; the bridge's "A Memory's medium through a reader" removed; the Memories line narrowed to D12's rows;

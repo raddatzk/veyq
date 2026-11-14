@@ -9,7 +9,7 @@ them in the snapshot's own index), never from the staging index. So a staging ve
 it unless a version that stays names them — which is how a commit with a snapshot keeps them: the snapshot's own index
 (`sha-<commit>`, `<version>-SNAPSHOT`) names both.
 
-**The desktop apps' packages** (`--image veyq-apps`, ADR 0133 decision 10) are staged the same way, as
+**The desktop apps' packages** (`--image veyq-apps`, ADR 0139 decision 10) are staged the same way, as
 `build-<commit>-<platform>`, but each is one OCI artifact manifest with no children, and a snapshot names that very
 manifest (`<version>-SNAPSHOT-<platform>`, `sha-<commit>-<platform>`): so an unpublished one goes alone, and a published
 one carries a snapshot's tag beside its staging tag and is never touched.
@@ -40,7 +40,7 @@ import subprocess
 import sys
 from typing import Callable, NamedTuple
 
-# `<arch>` for an image, `<platform>` for a desktop app's package (`flatpak-x86_64`, `msix-x64`; ADR 0133 decision 10).
+# `<arch>` for an image, `<platform>` for a desktop app's package (`flatpak-x86_64`, `msix-x64`; ADR 0139 decision 10).
 STAGING_TAG = re.compile(r"^build-([0-9a-f]{40})-([a-z0-9][a-z0-9_-]*)$")
 SNAPSHOT_SHA_TAG = re.compile(r"^sha-([0-9a-f]{40})(?:-[a-z0-9][a-z0-9_-]*)?$")
 

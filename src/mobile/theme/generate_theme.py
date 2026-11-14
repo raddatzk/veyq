@@ -26,7 +26,7 @@ Outputs (each optional, each a directory this script owns and rewrites whole):
                         and each of its light and dark steps (`WINUI_ACCENT_KEYS`) — under `ThemeDictionaries`, light and
                         dark; everything else is Fluent's own; and the app icon `veyq.ico` (`WINDOWS_ICON_PX`, a PNG frame
                         each, rendered by Quick Look as Apple's are), the exe's and the window's; and the MSIX's PNG
-                        assets under `msix/` (`MSIX_ASSETS`, the same plate each at its own size: ADR 0133 decision 6),
+                        assets under `msix/` (`MSIX_ASSETS`, the same plate each at its own size: ADR 0139 decision 6),
                         which the package build links in as `Assets\\`.
 
 A role the apps paint with that base.css no longer sets is red (exit 1), never a fallback.
@@ -335,7 +335,7 @@ def write_apple_icon(out: Path, pal: dict[str, dict[str, tuple]]) -> None:
 
 # ---- Linux (libadwaita) ----
 
-# The Linux app's id, which names its icon and its desktop entry: defined once, in desktop-identity.json (ADR 0133
+# The Linux app's id, which names its icon and its desktop entry: defined once, in desktop-identity.json (ADR 0139
 # decision 12), never spelled here.
 APP_ID = json.loads((repo_layout.MOBILE / "desktop-identity.json").read_text())["appId"]
 
@@ -430,7 +430,7 @@ def ico(frames: dict[int, bytes]) -> bytes:
     return head + entries + data
 
 
-# The MSIX's images (ADR 0133 decision 6), each a file name the package's manifest names (Package.appxmanifest) with
+# The MSIX's images (ADR 0139 decision 6), each a file name the package's manifest names (Package.appxmanifest) with
 # its MRT qualifier, and its pixels: the Start and taskbar icon (Square44x44Logo) at the shell's scales and at the target
 # sizes the taskbar and Explorer take unscaled (the `altform-unplated` ones are drawn without the shell's plate, which
 # the icon carries itself), the medium tile (Square150x150Logo) and the package's logo (StoreLogo), 100 to 400 %. No

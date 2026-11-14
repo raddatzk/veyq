@@ -21,7 +21,7 @@ name: Release
 # Jobs, each with only what it writes:
 #   check     contents: write (listing a draft needs push access; it writes nothing), packages: read
 #             — scripts/promote.py decides; every refusal is named in the run and, by `refused`, in the draft's notes.
-#   apps      packages: read — the desktop apps' packages the plan names, pulled by digest (ADR 0133 decision 10).
+#   apps      packages: read — the desktop apps' packages the plan names, pulled by digest (ADR 0139 decision 10).
 #   msix-sign contents: read, and the GitHub environment `msix-signing`, whose secrets are the release's MSIX signer
 #             (the project's own `CN=veyq` certificate, decisions 7 and 12) — the one job that receives it: it signs the
 #             staged MSIX on Windows and refuses unless the payload and the block map are the tested ones and the
@@ -30,7 +30,7 @@ name: Release
 #   promote   packages: write, id-token: write — the snapshot's indexes and app packages get `<version>`, the release
 #             signature, the chart packaged as `<version>` from the snapshot's commit, and the release files, produced
 #             from that commit with the app files beside them, checked against the plan and signed.
-# A snapshot whose commit stages no app package (from before ADR 0133) is released without any: `apps` and `msix-sign`
+# A snapshot whose commit stages no app package (from before ADR 0139) is released without any: `apps` and `msix-sign`
 # then run and skip every step (a job-level `if` would skip `promote` behind them, validate_release_identity.py
 # assertion 16).
 #   publish   contents: write — the git tag `v<version>`, the draft moved onto it with every file, the draft
@@ -140,7 +140,7 @@ jobs:
           if-no-files-found: warn
           retention-days: 30
 
-  # The desktop apps' packages the plan names, pulled by the digests `check` verified as the snapshot's (ADR 0133
+  # The desktop apps' packages the plan names, pulled by the digests `check` verified as the snapshot's (ADR 0139
   # decision 10): ORAS checks each file against its manifest, and the job refuses anything but exactly the three files
   # of the version. Read only; the MSIX goes to `msix-sign`, every file to `promote`.
   apps:
@@ -208,7 +208,7 @@ jobs:
           if-no-files-found: error
           retention-days: 30
 
-  # The release's Windows signature (ADR 0133 decision 7): the staged, unsigned MSIX signed with the project's own
+  # The release's Windows signature (ADR 0139 decision 7): the staged, unsigned MSIX signed with the project's own
   # certificate, whose PFX and password are the secrets of the environment `msix-signing` and reach this job alone
   # (decision 12; making them and the environment's protection rules are the owner's, infra/README.md § Cutting a
   # release). scripts/msix_sign.py takes signtool from the build's pinned NuGet package, writes the PFX for the one
@@ -351,7 +351,7 @@ jobs:
             cosign sign --yes "${REGISTRY}/${image}@${digest}"
           done
 
-      # The desktop apps' packages get their release names the same way (ADR 0133 decision 10): `<version>-<platform>`
+      # The desktop apps' packages get their release names the same way (ADR 0139 decision 10): `<version>-<platform>`
       # on exactly the artifact `check` verified as the snapshot's, read back, then signed under the release identity.
       # No channel: a person takes a package from its release, never by `<major>` or `latest`.
       - name: Install ORAS
@@ -441,7 +441,7 @@ jobs:
           cosign sign --yes "${CHART}@${DIGEST}"
 
       # The release as files (ADR 0096 decision 3), produced by the snapshot commit's own producer with the three images
-      # by `<version>@<digest>` and the app files beside them, listed under `apps` (ADR 0133 decision 8); scripts/promote.py
+      # by `<version>@<digest>` and the app files beside them, listed under `apps` (ADR 0139 decision 8); scripts/promote.py
       # holds them to the plan — the asset set the lanes installed, the digests, the major entry the tools image bakes,
       # the app files the snapshot staged — and only then are `veyqctl` and the manifest signed, into the bundle names
       # the producer reserves, and each app file into its own `<name>.bundle`. Nothing touches the manifest after its
@@ -538,7 +538,7 @@ jobs:
           files="${RUNNER_TEMP}/files"
           cosign verify-blob --bundle "${files}/manifest.json.bundle" --certificate-oidc-issuer "$issuer" \
             --certificate-identity-regexp "$identity" "${files}/manifest.json"
-          # every app file (ADR 0133 decision 8) as a person will check it: its own bundle, and its sha256 under `apps`
+          # every app file (ADR 0139 decision 8) as a person will check it: its own bundle, and its sha256 under `apps`
           for blob in veyqctl $(jq -r '(.apps // {}) | keys[]' "${files}/manifest.json"); do
             cosign verify-blob --bundle "${files}/${blob}.bundle" --certificate-oidc-issuer "$issuer" \
               --certificate-identity-regexp "$identity" "${files}/${blob}"

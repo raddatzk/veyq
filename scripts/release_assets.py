@@ -12,7 +12,7 @@ writes, for the release the tree names (`v<major>.<minor>`, counted the way the 
     <out>/<tag>/manifest.json     release, date, the images, unscheduled, majorEntry, every asset with its sha256,
                                   and — when a release carries them — every app file with its sha256 under `apps`
     <out>/<tag>/<asset>           the recipe set, and the tools that operate it
-    <out>/<tag>/<app file>        the desktop apps' packages and the MSIX's certificate (`--app-file`, ADR 0133)
+    <out>/<tag>/<app file>        the desktop apps' packages and the MSIX's certificate (`--app-file`, ADR 0139)
 
 The same three questions — which releases exist, what does one's manifest say, give me one asset — are answered
 by a local directory, an HTTP mirror and the GitHub Releases adapter alike, so the stack lane and the self-test run
@@ -40,7 +40,7 @@ the manifest names (from GitHub, a mirror or a directory alike), and `veyqctl.bu
 where no manifest has been checked yet: the operator's first fetch by hand. A release produced here and never
 published carries neither, and `veyqctl` installs it only `--unsigned-local`.
 
-**The desktop apps' files are not assets** (ADR 0133 decisions 8 and 12). `--app-file` copies a file beside the assets
+**The desktop apps' files are not assets** (ADR 0139 decisions 8 and 12). `--app-file` copies a file beside the assets
 and lists it by sha256 under the manifest's `apps`, never under `assets`: `veyqctl` downloads every asset into an
 instance and the lanes attest the asset set, and an app package is neither the recipe nor installed by a lane, so it
 changes neither (`asset_set_digest` reads `assets` alone). The publish gives each app file a `<name>.bundle` of its own
@@ -413,7 +413,7 @@ def produce(out: pathlib.Path, app: str, admin: str, unscheduled: bool, tools: s
         manifest = {"release": release, "date": date, "images": images, "unscheduled": unscheduled,
                     "majorEntry": major_entry(release), "assets": assets}
         if apps:
-            # what a person checks a downloaded app file against once the manifest verified (ADR 0133 decision 8)
+            # what a person checks a downloaded app file against once the manifest verified (ADR 0139 decision 8)
             manifest["apps"] = {name: hashlib.sha256((dest / name).read_bytes()).hexdigest() for name in sorted(apps)}
         (dest / MANIFEST).write_text(json.dumps(manifest, indent=2) + "\n")
     except BaseException:
@@ -462,7 +462,7 @@ def main() -> int:
     parser.add_argument("--unscheduled", action="store_true", help="mark an unscheduled major release")
     parser.add_argument("--app-file", action="append", default=[], type=pathlib.Path, metavar="FILE",
                         help="a desktop app's package or the MSIX's certificate, listed under the manifest's `apps` "
-                             "(ADR 0133); repeatable")
+                             "(ADR 0139); repeatable")
     parser.add_argument("--major-entry", metavar="RELEASE", default=None,
                         help="print the release the tools image of RELEASE bakes as its major entry (empty: none), "
                              "and write nothing")

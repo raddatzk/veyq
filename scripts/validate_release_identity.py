@@ -11,7 +11,7 @@ signs and names what the publishable commit's wholly green Checks push run stage
 says so. What the split holds besides: no job of a pull request's run writes (`build` and `apps-stage`, the two jobs
 with `packages: write`, run on a push alone; `build-local` is `build`'s matrix and steps for a pull request); ORAS
 writes in checks.yml from `apps-stage` alone, pushes `veyq-apps:build-<sha>-<platform>` and nothing else, and that
-job checks out nothing, so its token meets no code of the commit (the desktop apps' packages, ADR 0133 decision 10); no
+job checks out nothing, so its token meets no code of the commit (the desktop apps' packages, ADR 0139 decision 10); no
 job of checks.yml asks for
 `id-token`; `snapshot`, `snapshot-tag` and `checks-run` are publish.yml's own (keyless signing names the file holding
 the signing job); publish.yml calls no workflow, builds nothing, downloads artifacts only from the run `checks-run`
@@ -141,7 +141,7 @@ manifests, the image signatures, the predicates and the tag each name it.
      (publish.yml's) and a push or a pull request in another (checks.yml's), per ref, never cancelled in progress: two
      publishing runs then go one after the other, so the later one sees the earlier one's tag, and a push neither waits
      for a snapshot nor gets a pending scheduled run cancelled by queueing behind it.
- 18. **The desktop apps' packages go the images' way, and the MSIX's signer reaches one job** (ADR 0133 decisions 7, 8,
+ 18. **The desktop apps' packages go the images' way, and the MSIX's signer reaches one job** (ADR 0139 decisions 7, 8,
      10 and 12). `apps-stage` stages exactly `scripts/snapshot.py`'s `APP_PLATFORMS`, each under its file name; the
      snapshot runs `snapshot.py staged` and `check-unpublished` with `--apps`, names each package
      `<version>-SNAPSHOT-<platform>` and `sha-<commit>-<platform>` by the digest the Checks run kept and signs it by
@@ -460,7 +460,7 @@ SNAPSHOT_TAG_JOB = "snapshot-tag"
 REFUSE_STEP, TAG_STEP = "assert-snapshot-unpublished", "snapshot-tag"
 STAGED_STEP = "assert-staged"  # publish.yml's check that the bytes are the Checks run's (scripts/snapshot.py staged)
 BUILD_JOB, LOCAL_BUILD_JOB = "build", "build-local"
-# The desktop apps' packages (ADR 0133 decision 10): staged as OCI artifacts under this package by this job alone.
+# The desktop apps' packages (ADR 0139 decision 10): staged as OCI artifacts under this package by this job alone.
 APPS_STAGE_JOB, APPS_PACKAGE = "apps-stage", "veyq-apps"
 ORAS_WRITE = re.compile(r"\boras\s+(?:push|login|tag|attach|cp|copy|manifest\s+push|blob\s+push)\b")
 # Lane L1's orchestrator: assertion 10 finds the lane's job by running it, never by the job's name.
@@ -1292,13 +1292,13 @@ if workflow_doc:
         elif writes:
             fail(f"{rel_of(CHECKS)}: job `{name}` holds `{', '.join(writes)}: write` — no job of checks.yml but the "
                  f"push-only `{BUILD_JOB}` and `{APPS_STAGE_JOB}` may write; a pull request runs every other one")
-    # The desktop apps' packages (ADR 0133 decision 10): ORAS writes in checks.yml from the push-only `apps-stage`
+    # The desktop apps' packages (ADR 0139 decision 10): ORAS writes in checks.yml from the push-only `apps-stage`
     # alone, and only `veyq-apps` there; that job takes the packages the build jobs made as artifacts and checks out
     # nothing, so the token that can write meets no code of the commit (the build jobs, which run it, hold none).
     apps_stage = (checks_doc.get("jobs") or {}).get(APPS_STAGE_JOB)
     if not isinstance(apps_stage, dict):
         fail(f"{rel_of(CHECKS)} has no `{APPS_STAGE_JOB}` job — nothing stages the desktop apps' packages for the "
-             f"snapshot (ADR 0133 decision 10)")
+             f"snapshot (ADR 0139 decision 10)")
     else:
         for step in job_steps(checks_doc, APPS_STAGE_JOB):
             if str(step.get("uses") or "").startswith("actions/checkout@"):
@@ -2319,14 +2319,14 @@ else:
     producer = [i for i, line in enumerate(lines) if "/snapshot/scripts/release_assets.py" in line]
     checked = [i for i, line in enumerate(lines) if "scripts/promote.py assets" in line]
     blobs = [(i, line) for i, line in enumerate(lines) if re.search(r"\bcosign\s+sign-blob\b", line)]
-    # The desktop apps' files (ADR 0133 decision 8): one loop over the manifest's `apps`, each file into its own
+    # The desktop apps' files (ADR 0139 decision 8): one loop over the manifest's `apps`, each file into its own
     # `<name>.bundle` beside it — the one sign-blob that names no fixed file, read here apart from the two that do.
     app_loop = [i for i, line in enumerate(lines) if line.startswith("for name in $(jq -r '(.apps // {}) | keys[]'")]
     app_blobs = [(i, line) for i, line in blobs if re.search(
         r'--bundle\s+"\$\{out\}/v\$\{VERSION\}/\$\{name\}\.bundle"\s+"\$\{out\}/v\$\{VERSION\}/\$\{name\}"$', line)]
     if len(app_blobs) != 1 or len(app_loop) != 1 or app_loop[0] + 1 != app_blobs[0][0]:
         fail(f"{RELEASE_WORKFLOW}: `promote` does not sign each app file of the manifest's `apps` into `<name>.bundle` "
-             f"beside it, in one loop over that list (ADR 0133 decision 8) — a person could not verify a package alone")
+             f"beside it, in one loop over that list (ADR 0139 decision 8) — a person could not verify a package alone")
     blobs = [(i, line) for i, line in blobs if (i, line) not in app_blobs]
     bundles = sorted(re.search(r"--bundle\s+\"?[^\s\"]*/([^/\s\"]+)\"?", line).group(1) for _, line in blobs
                      if re.search(r"--bundle\s", line))
@@ -2687,7 +2687,7 @@ if workflow_doc and checks_doc and version_match:
         fail(f"a caller's concurrency group cannot be evaluated here: {e}")
 
 # ---- 18. the desktop apps' packages: named and signed as the snapshot's, signed for Windows by one job alone -----------
-# ADR 0133 decisions 7, 8, 10 and 12. What `apps-stage` pushes (assertion 3) is what a snapshot names and signs and a
+# ADR 0139 decisions 7, 8, 10 and 12. What `apps-stage` pushes (assertion 3) is what a snapshot names and signs and a
 # promotion releases: the platforms and file names are `snapshot.APP_PLATFORMS`, in the stage step and in the
 # producer's reading alike; the snapshot checks the staging tags (`staged --apps`) and refuses to replace its names
 # (`check-unpublished --apps`) before it tags and signs; the retention covers the package. ORAS is one pin everywhere,
@@ -2753,7 +2753,7 @@ for path, doc in ((CHECKS, checks_doc), (WORKFLOW, publish_doc), (ROOT / RELEASE
                     fail(f"{RELEASE_WORKFLOW}: job `{job_name}` tags with ORAS — only `promote` gives release names")
 if len(set(pins.values())) != 1 or None in next(iter(pins.values()), (None,)):
     fail(f"the ORAS pin differs, or a job that runs it states none: {pins} — one ORAS stages, names and releases the "
-         f"app packages (ADR 0133 decision 10), each copy checked against the same SHA-256")
+         f"app packages (ADR 0139 decision 10), each copy checked against the same SHA-256")
 # The MSIX's signer: one environment, one job, its secrets in that job's signing step's env and nowhere else.
 rjobs_all = release_doc.get("jobs") or {}
 for name, job in rjobs_all.items():

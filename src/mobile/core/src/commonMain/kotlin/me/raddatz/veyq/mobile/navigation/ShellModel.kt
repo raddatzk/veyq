@@ -35,7 +35,7 @@ import me.raddatz.veyq.mobile.words.Notice
 import me.raddatz.veyq.mobile.words.Notices
 
 /**
- * The shell over one tenant (ADR 0122, ADR 0130 decision 2): what it lists — its spaces, nodes, objects and favorites as
+ * The shell over one tenant (ADR 0122, ADR 0136 decision 2): what it lists — its spaces, nodes, objects and favorites as
  * this device shows them ([Hidden]), the drawer's short lists ([RecentUses]), the applications and Home's filters — and
  * where the person is ([Shell]), with every action on a node that changes what is listed: a favorite, the trash and its
  * undo, a rename, a move, a new folder, a copy. Each reads the lists anew and keeps the shell on what is still there: a
@@ -123,7 +123,7 @@ class ShellModel(
     /**
      * Reads the lists anew from the server (after a write, or what another device or a guest wrote); a read that fails
      * keeps what was listed. The session's tree is forgotten first: a session caches it ([TenantSession.trees]), and a
-     * refresh that read the cache showed a guest's new folder only after a sign-in (found 2026-11-12; ADR 0130's Consequences).
+     * refresh that read the cache showed a guest's new folder only after a sign-in (found 2026-11-12; ADR 0136's Consequences).
      */
     suspend fun refresh() {
         reading.withLock {

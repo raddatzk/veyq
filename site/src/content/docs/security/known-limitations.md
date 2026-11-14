@@ -13,7 +13,7 @@ sources:
   - docs/decisions/0109-a-scope-rotation-re-keys-every-node-below-it.md
   - docs/decisions/0121-a-received-share-is-browsed-in-place-through-its-own-api.md
   - docs/crosscutting/cc.security.csp.md
-  - docs/decisions/0133-the-desktop-apps-ship-as-a-flatpak-bundle-and-an-msix-built-in-checks-and-promoted-with-the-release.md
+  - docs/decisions/0139-the-desktop-apps-ship-as-a-flatpak-bundle-and-an-msix-built-in-checks-and-promoted-with-the-release.md
 ---
 
 This page collects what veyq does **not** protect against today, in one place. Each entry says why it remains, where
@@ -48,7 +48,7 @@ operator is you, and the active-operator entries do not apply.
 | [Per-instance rate limiting](#rate-limiting-is-per-instance) | online attacker | cc.security.rate-limit | deferred hardening |
 | [One seal implementation, no external audit](#assurance-one-implementation-no-external-audit) | — | ADR 0017 | a second independent implementation |
 | [Losing every way back is final](#losing-every-way-back-is-final) | — | security-model § Recovery | by design (no escrow) |
-| [The desktop app: Flathub's runtime, Windows' trust, no auto-update](#the-desktop-app-flathubs-runtime-windows-trust-no-auto-update) | whoever controls what Flathub serves you; whoever holds the MSIX's signing key | ADR 0133 | nothing recorded; a store listing would bring updates |
+| [The desktop app: Flathub's runtime, Windows' trust, no auto-update](#the-desktop-app-flathubs-runtime-windows-trust-no-auto-update) | whoever controls what Flathub serves you; whoever holds the MSIX's signing key | ADR 0139 | nothing recorded; a store listing would bring updates |
 
 ## The operator-served web client is passive-operator only
 
@@ -546,7 +546,7 @@ account keys after a compromise.
 ## The desktop app: Flathub's runtime, Windows' trust, no auto-update
 
 The Linux and Windows apps are packaged for a release, which no release carries yet; these hold from the first one that
-does ([ADR 0133](https://github.com/raddatzk/veyq/blob/main/docs/decisions/0133-the-desktop-apps-ship-as-a-flatpak-bundle-and-an-msix-built-in-checks-and-promoted-with-the-release.md)).
+does ([ADR 0139](https://github.com/raddatzk/veyq/blob/main/docs/decisions/0139-the-desktop-apps-ship-as-a-flatpak-bundle-and-an-msix-built-in-checks-and-promoted-with-the-release.md)).
 
 - **The Linux app runs on a runtime veyq does not ship.** The Flatpak bundle carries the app; the GNOME runtime under
   it — GTK, libadwaita, GStreamer, the CA bundle and the rest it loads — comes from Flathub, the one central dependency
@@ -577,7 +577,7 @@ does ([ADR 0133](https://github.com/raddatzk/veyq/blob/main/docs/decisions/0133-
   release and installs its file, and until then runs the older app. A store listing would bring updates and is not
   built.
 
-**Decided in:** [ADR 0133](https://github.com/raddatzk/veyq/blob/main/docs/decisions/0133-the-desktop-apps-ship-as-a-flatpak-bundle-and-an-msix-built-in-checks-and-promoted-with-the-release.md)
+**Decided in:** [ADR 0139](https://github.com/raddatzk/veyq/blob/main/docs/decisions/0139-the-desktop-apps-ship-as-a-flatpak-bundle-and-an-msix-built-in-checks-and-promoted-with-the-release.md)
   decisions 2, 7, 9 and 12.
 
 **Closed by:** nothing recorded for the runtime; the certificate step and updates by a Microsoft Store listing (the

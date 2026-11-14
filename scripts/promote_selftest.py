@@ -391,7 +391,7 @@ with tempfile.TemporaryDirectory(prefix="promote_selftest_") as tmp:
     good = {"version": "0.12", "digests": digests, "asset_set": release_assets.asset_set_digest(dest),
             "major_entry": json.loads((dest / "manifest.json").read_text())["majorEntry"], "unscheduled": False,
             "apps": {}, "app_layers": {}}
-    # the same release with the app files beside it (ADR 0133 decision 8): the assets and their hash unchanged
+    # the same release with the app files beside it (ADR 0139 decision 8): the assets and their hash unchanged
     files = pathlib.Path(tmp) / "app-files"
     files.mkdir()
     layers = {}

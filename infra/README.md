@@ -271,7 +271,7 @@ gh workflow run publish.yml --ref main               # the tip's snapshot now, a
   first Checks push that stages them) need not be public: a person takes a package from its release, and only the
   repository's own workflows read it, which a package their token created grants (remembered from GHCR's defaults,
   not measured — the first publish shows it).
-- **The desktop app's Windows signer** (built, never run: [ADR 0133](../docs/decisions/0133-the-desktop-apps-ship-as-a-flatpak-bundle-and-an-msix-built-in-checks-and-promoted-with-the-release.md)
+- **The desktop app's Windows signer** (built, never run: [ADR 0139](../docs/decisions/0139-the-desktop-apps-ship-as-a-flatpak-bundle-and-an-msix-built-in-checks-and-promoted-with-the-release.md)
   decisions 7 and 12). `release.yml`'s `msix-sign` job signs the staged MSIX on Windows with **the project's own
   self-signed certificate, subject `CN=veyq`** (the owner, 2026-11-13), and refuses unless the payload and the block
   map are unchanged and the signer is the certificate committed as `src/mobile/windows/veyq.cer`

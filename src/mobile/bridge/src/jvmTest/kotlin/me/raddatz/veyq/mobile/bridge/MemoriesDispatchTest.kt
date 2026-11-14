@@ -52,7 +52,7 @@ import kotlin.time.Duration.Companion.milliseconds
 import kotlin.time.Duration.Companion.seconds
 
 /**
- * Memories through the bridge (the CR "Memories on every app", phase 3; ADR 0131): a Memory's page and its lightbox, the
+ * Memories through the bridge (the CR "Memories on every app", phase 3; ADR 0137): a Memory's page and its lightbox, the
  * media added by path with the tiers a host the test plays makes through real [Host] requests and replies (the JPEGs as the
  * reply's payload, [HostTiers]), a video read through its reader, an original saved, a medium trashed and undone, a chapter
  * made — every call and watch as JSON, over a Memory the test plays as the server ([PlayedMemory]) and core's own

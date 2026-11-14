@@ -3,7 +3,7 @@
 - Status: Accepted
 - Built: partly — what stands and what is open is [native-apps](../crosscutting/native-apps.md)
 - Date: 2026-11-08
-- Extended by: [ADR 0130](0130-an-apps-logic-is-the-kotlin-cores-each-platform-draws-only-its-own-ui.md) (all of an app's logic in the core; Windows and Linux)
+- Extended by: [ADR 0136](0136-an-apps-logic-is-the-kotlin-cores-each-platform-draws-only-its-own-ui.md) (all of an app's logic in the core; Windows and Linux)
 
 ## Context
 
@@ -499,14 +499,14 @@ implementation exists but what holds it to the first.
   (`NodeHeaderActions`). A kind's page only contributes (`KindPage`, the web's `KindRegistration`: it brings a share sheet,
   it takes a cover, a subtitle, its rights narrowing, its copy and download doors, actions of its own) and draws its body
   (`NodeHeaderTest`, each rule a case; the heart moved after the application's actions turns three red). Its state and
-  sheets became core models on 2026-11-11/12 (ADR 0130's Consequences), and both apps were run unchanged on throwaway
+  sheets became core models on 2026-11-11/12 (ADR 0136's Consequences), and both apps were run unchanged on throwaway
   devices, read as text first (`uiautomator dump`, the unified log): Android the header, pin, trash with Undo, the
   space's trash, rename, New folder, move and copy with Undo, a folder's download, and the share sheet whole; Apple the
   header, pin, trash (from a Pot opened at the top too), the space's trash with the purge of the confirmed row, rename,
   New folder, a copy and the share sheet whole (2026-11-11, iOS 27; not the move or a download). Not met on Apple: tapping
   Undo — the simulator tool's screenshots lag 2–3 s behind the 6 s window, so the tap landed after the toast was gone
   (the core's test and Android hold it); its report and cover after the move are compiled and the core's tests only.
-- **The core on Linux** ([ADR 0130](0130-an-apps-logic-is-the-kotlin-cores-each-platform-draws-only-its-own-ui.md)
+- **The core on Linux** ([ADR 0136](0136-an-apps-logic-is-the-kotlin-cores-each-platform-draws-only-its-own-ui.md)
   decision 4, 2026-11-10). `core` gains `linuxArm64` and `linuxX64`, cross-compiled from the developer's arm64 Mac; no
   Linux host builds it. Decision 3's libsodium (`LibsodiumPrimitives`, the `sodium` cinterop) moved from `appleMain` to
   `nativeMain`, which Apple and Linux share, and its interop is commonized: `kotlin.mpp.enableCInteropCommonization=true`
@@ -545,7 +545,7 @@ implementation exists but what holds it to the first.
   - `./gradlew :core:jvmTest :core:macosArm64Test` stays green, unchanged.
   - The verification metadata for the new targets was written from an empty Gradle home. That write added 90 lines of
     parent POMs and BOMs that a warm cache never fetches.
-- **The core on Windows** (ADR 0130 decision 5, 2026-11-10). `core` and `:bridge` gain `mingwX64`, cross-compiled from
+- **The core on Windows** (ADR 0136 decision 5, 2026-11-10). `core` and `:bridge` gain `mingwX64`, cross-compiled from
   the developer's Mac like Linux's targets; no Windows host builds Kotlin. What Linux and Windows share moved from
   `linuxMain` to the intermediate source set `bridgedMain` (`bridgedTest` beside it): `nfc`/`nfkd` over utf8proc,
   `localWallClock` over kotlinx-datetime, their tests and the live sign-in (`BridgedLiveSignInTest`, its engine a test
@@ -567,7 +567,7 @@ implementation exists but what holds it to the first.
     with `build_libsodium.py`'s flags).
   - **HTTP is Ktor's WinHttp engine.** TLS is Schannel's and the CA store the system's, so the DLL carries no OpenSSL.
     WinHTTP takes its proxy from `netsh winhttp`, not from the user's browser settings (remembered).
-  - **A CPU without AVX is refused at start** (owner 2026-11-10; ADR 0130's Consequences): an x64 CPU without it, and a
+  - **A CPU without AVX is refused at start** (owner 2026-11-10; ADR 0136's Consequences): an x64 CPU without it, and a
     Windows-on-ARM PC whose x64 emulation (Prism) hides it. Prism shows AVX to an x64 app by default — measured on the
     VM: CPUID leaf 1 AVX and OSXSAVE, `xgetbv(0)` = 7, `IsProcessorFeaturePresent(PF_AVX)` 1. That this default came
     with Prism's October 2025 update, and that a user can hide it per app, is remembered.
@@ -585,10 +585,10 @@ implementation exists but what holds it to the first.
     `:bridge:compileBridgedMainKotlinMetadata` are green; `./gradlew :core:jvmTest :core:macosArm64Test` and
     `python3 src/mobile/linux/run.py test` stay green, Linux's source sets moved.
   - The verification metadata for the new target was written from an empty Gradle home and added 288 lines.
-- **The bridge** (ADR 0130 decision 5; `src/mobile/bridge/`). The core reaches a platform outside the JVM
+- **The bridge** (ADR 0136 decision 5; `src/mobile/bridge/`). The core reaches a platform outside the JVM
   and Apple as one shared library, `libveyq.so` on Linux and `veyq.dll` on Windows. Its whole surface is the six C functions of the hand-written
   `bridge.h`: `veyq_init`, `veyq_call`, `veyq_watch`, `veyq_unwatch`, `veyq_reply` and `veyq_shutdown`. Kotlin/Native's
-  export of the whole core (35.6 MB, a 27,971-line header of handles and function tables) is what ADR 0130 rejects.
+  export of the whole core (35.6 MB, a 27,971-line header of handles and function tables) is what ADR 0136 rejects.
   `:bridge` depends on `:core` as an implementation dependency, so it exports only its own `@CName` functions.
   - **The calls.** A `Call` (a sealed class) is dispatched one line onto a core model; a rule found in the dispatch is
     a defect to move into the core. A `Watched` model sends its state flow, one serialized state per change.
@@ -610,7 +610,7 @@ implementation exists but what holds it to the first.
   - **The Rust types are generated.** `:bridge:generateBindings` walks the serial descriptors of the roots `:bridge`
     registers into `bridge.rs` (serde types, `#[serde(tag = "type")]` for a sealed class). It writes the `extern "C"`
     lines from `bridge.h` and a `reserialize` door per type. The output is never committed.
-  - **Three channels beside the JSON** ([ADR 0131](0131-the-bridge-carries-shown-bytes-beside-the-json-ranges-through-a-reader-and-files-by-path.md), built 2026-11-11):
+  - **Three channels beside the JSON** ([ADR 0137](0137-the-bridge-carries-shown-bytes-beside-the-json-ranges-through-a-reader-and-files-by-path.md), built 2026-11-11):
     - **Shown bytes:** `Answer.Bytes(mediaType)` with the bytes as the callback's payload. NULL is no payload, a
       non-NULL pointer with length 0 an empty one; only `Answer.Bytes` carries one, never an update.
       `Avatar.Picture(userId)` answers a member's picture; `ShellShown.me` and `ShellShown.pictures` (and
@@ -622,7 +622,7 @@ implementation exists but what holds it to the first.
       `NO_PICTURE` and `NOTHING_TO_DOWNLOAD`.
     - The generated layer copies the payload once: Rust's `payload(bytes, len) -> Option<Vec<u8>>`, C#'s
       `Native.Payload(byte*, nuint) -> byte[]?`; `bridge::call` and `Core.CallAsync` answer the answer and its payload.
-  - **A node's header and its sheets** (2026-11-11/12, ADR 0130's Consequences for the models): `Header.*`, `Trash.*`,
+  - **A node's header and its sheets** (2026-11-11/12, ADR 0136's Consequences for the models): `Header.*`, `Trash.*`,
     `Move.*`, `Share.*`, `Report.*` and `Cover.*` calls, each model watched by an id the bridge holds
     (`Watched.Header/Trash/Move/Share/Report`), as Pots are, never by ref: a rename changes the ref, and a header outlives
     its page while its Undo stands. An answer may arrive before the watch's update it caused, so a write's answer says
@@ -635,7 +635,7 @@ implementation exists but what holds it to the first.
     `ShownLink.address` alone (`linkAddresses`), the privacy passage's in `ReportShown.privacyUrl` (`publicAddresses`),
     each by name and bitten; any other outward `url`/`address` is refused. A link's password and a report's typed
     reason and contact cross inward only.
-  - **Expenses whole** (2026-11-12, ADR 0130's Consequences for the models, ADR 0131's for the receipts): a Pot's
+  - **Expenses whole** (2026-11-12, ADR 0136's Consequences for the models, ADR 0137's for the receipts): a Pot's
     writes and screens, each model held by an id as Pots are — `Pot.Record`, `Pot.Restore` (answered `Said`),
     `Pot.History` → `EntryHistory`; `Editor.Open/Change/Save/AskDelete/Delete/CancelAsk/Close` and `Watched.Editor`
     (`EditorShown`, every field one core function's answer; `Editor.Save`/`Delete` → `EditorSaved` once the write
@@ -650,7 +650,7 @@ implementation exists but what holds it to the first.
     (another device's entry seen through the poll after 20.3 s), `anEntryIsWrittenEditedAndDeleted…` (CHF's rate filled
     from the tenant's service, a stale save, every kind), `aReceiptIsAttachedShownAndSaved…` and
     `aPotIsCreatedSetUpAndCopied…`, each on an `App pot <n>` copy purged after.
-  - **Depot whole** (2026-11-12, ADR 0130's Consequences for the models, ADR 0131's for the reader, the save and the
+  - **Depot whole** (2026-11-12, ADR 0136's Consequences for the models, ADR 0137's for the reader, the save and the
     paths): a file's page `File.Open` → `FileOpened` and `Watched.File` (`FileShown`, every field the model's answer),
     `File.Bytes`, `File.Pages` (answered as `ReceiptPages`), `File.Reader`, `File.Save`/`Watched.Save`/`Save.Cancel`,
     `File.ChooseReplace`, `File.Close`; the uploads `Upload.*` and `Watched.Uploads` (`UploadsShown`); a drop box's page
@@ -667,14 +667,14 @@ implementation exists but what holds it to the first.
     Measured: `DispatchTest`'s file, medium, upload and drop box cases (`aDropBoxsPageIsReadAnewOnEachRevision…`; 6
     mutations, each red, among them a refresh reading the cached tree, red only in the live case), `WireTest` with every
     new shape, `SecretFreeSchemaTest` unchanged; with `VEYQ_LIVE`, `LiveBridgeTest`'s `aFileIs…`, `aMediumIs…`,
-    `filesAndAFolder…` (ADR 0131's Consequences) and `aDropBoxIsMadeFilledAndEmptied…` (`VEYQ_LIVE_DROPBOX_GUESTS=<file>`,
+    `filesAndAFolder…` (ADR 0137's Consequences) and `aDropBoxIsMadeFilledAndEmptied…` (`VEYQ_LIVE_DROPBOX_GUESTS=<file>`,
     two guests dropping through the web's guest page by a script reading that file: the drop box made at a top level, both
     guests' folders seen after `Shell.Refresh`, one moved out, the other's delete refused unasked and then trashed, a link
     minted on a guest's file), each in an `App depot <n>` / `App drop <n>` purged after. `VEYQ_LIVE_DEPOT_PASS=<name>`
     fills a desktop pass's folder (`VEYQ_LIVE_DEPOT_PASS_MEDIA` adds media), `VEYQ_LIVE_DEPOT_PASS_PURGE=1` purges it in any
     space.
 
-  Measured 2026-11-10 (the channels 2026-11-11, ADR 0131's Consequences):
+  Measured 2026-11-10 (the channels 2026-11-11, ADR 0137's Consequences):
   - `./gradlew :bridge:jvmTest` runs four checks:
     - `DispatchTest` covers the way in, over a door the test plays.
     - `WireTest` writes a sample of every variant of every sealed type the roots reach, reads each back and holds it
@@ -713,7 +713,7 @@ implementation exists but what holds it to the first.
     `VEYQ_LIVE` signs in over WinHTTP.
   - The C# half: `run.py build`'s `Veyq.Bridge.Tests` reads every sample back on the Mac and, x64, on the Windows host
     (a writer dropping one field is red), and its `CoreTest` drives the real DLL there as the smoke does.
-- **The Linux app** (ADR 0130 decision 4; `src/mobile/linux/`). A Cargo package, a library and the app, built and run
+- **The Linux app** (ADR 0136 decision 4; `src/mobile/linux/`). A Cargo package, a library and the app, built and run
   in the pinned Fedora 44 `Containerfile` by `run.py`.
   - **Crates and libraries.** gtk4-rs 0.11 and libadwaita-rs 0.9 with feature `v1_9`, since Fedora 44 carries GTK
     4.22 and libadwaita 1.9. Each direct crate was read against the no-deprecated rule on 2026-11-10: gtk4 0.11.5,
@@ -722,7 +722,7 @@ implementation exists but what holds it to the first.
     deprecation gate.
   - **Threads.** The bridge's answers arrive on core threads; `src/bridge/mod.rs` hands them to GTK's main loop
     through an `async_channel` and touches no widget off it.
-  - **Words.** They come as gettext catalogs that `generate_words.py --gettext` writes from `words.json` (ADR 0130
+  - **Words.** They come as gettext catalogs that `generate_words.py --gettext` writes from `words.json` (ADR 0136
     decision 3), with `words.rs` as one function per key, and `msgfmt --check` compiles them at build time. The
     generator refuses a language whose CLDR plural categories it cannot map.
   - **Theme.** `generate_theme.py --gtk` writes one `style.css` that sets libadwaita's named colours from the web's
@@ -738,14 +738,14 @@ implementation exists but what holds it to the first.
   - **Guards** (decision 9). The words guard holds linux-literal (no Rust literal as a widget's shown text) and
     linux-po; the guidelines guard holds linux-block (the creating action only in `create_action.rs`) and
     linux-floating-button. Each rule was bitten red and green on the restore.
-  - **Pictures and a Pot's download** (built 2026-11-11, ADR 0131). `src/avatars.rs`'s `Held` (no widget, tested) keeps
+  - **Pictures and a Pot's download** (built 2026-11-11, ADR 0137). `src/avatars.rs`'s `Held` (no widget, tested) keeps
     the open tenant's pictures, fed by the shell's `ShellShown.pictures` alone: another tenant drops everything, a set
     that differs is asked for whole, the same set asks nothing, a late answer or one for an id no longer listed is
     dropped. A person is an `adw::Avatar`, its image `gdk::Texture::from_bytes`, on the Pot's Settings people and
     Overview balances, and the signed-in member's beside the tenant in the switcher. The content header's menu
     (`view-more-symbolic`) holds Download: `Pot.ArchiveName`, `gtk::FileDialog` (the portal where one runs) in Downloads,
     `Pot.Download`, an `AdwToast` saying it is done or failed; a dismissed dialog says nothing.
-  - **A node's header and its actions** (built 2026-11-11/12; a folder's and a Pot's, the models ADR 0130's
+  - **A node's header and its actions** (built 2026-11-11/12; a folder's and a Pot's, the models ADR 0136's
     Consequences). `header.rs` draws core's plan in the content's header bar, the rest in its More menu; only the ids in
     `header::DRAWN` are drawn, so an action no screen answers is never a dead control. Rename, delete and New folder are
     `AdwAlertDialog`s (asked again with the core's problem); a trash's and a move's Undo an `AdwToast` held until the
@@ -784,7 +784,7 @@ implementation exists but what holds it to the first.
     opening the minted one and after the renew only the new; a cover picked (4000×2250, encoded at 2048×1152, quality
     85), zoomed and dragged, read back by `CoverCropLiveTest` to the crop, framed anew (the same blob) and removed; a
     report sent once. The privacy row's `UriLauncher` answered "Operation not supported": the container has no browser.
-  - **Expenses whole** (built 2026-11-12; the models ADR 0130's Consequences). `pot.rs`: Add entry (the header bar's
+  - **Expenses whole** (built 2026-11-12; the models ADR 0136's Consequences). `pot.rs`: Add entry (the header bar's
     `create_action`), Refresh (F5 / Ctrl+R), the live poll watched while the page is mapped and the window active,
     settle-up's Record and Record all asked by an `AdwAlertDialog`, the deleted entries, the head (`Header::hero`: a 16:9
     `DrawingArea` cut from `Cover.Cut` by cairo), one scroll kept across redraws. `entry_editor.rs`: an `AdwDialog`
@@ -809,7 +809,7 @@ implementation exists but what holds it to the first.
   with the cursor kept; a JPEG and a 25-page PDF picked together, the PDF's 20 pages and the cap's words, saved and read
   back at the file's SHA-256 (a read-only folder: "The copy could not be saved."); 101 picked, 100 held; the skipped
   notice under a held one-byte quota; New pot from a folder and from a space's root, its settings and people, the copy.
-  - **Depot whole** (built 2026-11-12; the models ADR 0130's Consequences, the calls the bridge's above).
+  - **Depot whole** (built 2026-11-12; the models ADR 0136's Consequences, the calls the bridge's above).
     - `file_page.rs`: a file's content in place — a `gtk::Picture` held at the core's edge (scaled down through cairo past
       it), a monospace `gtk::TextView` under an `AdwBanner` saying the cut, a PDF's pages as frames rendered by
       `receipt_viewer`'s poppler code when within a screen of the view and let go past three (a 1,000-page PDF holds a few
@@ -863,7 +863,7 @@ implementation exists but what holds it to the first.
   files, Upload folder… and Save a copy (saved at the originals' SHA-256); **audio heard on the default sink's monitor**
   (`parec`): a 440 Hz WebM (Opus) and a 550 Hz MP4 (AAC) at RMS −21.1 dBFS while playing, silence paused. Not produced: a
   drop without a local path in the session (Files offers no copy out of its trash; `cargo test` holds the refusal).
-  - **The Flatpak** (built 2026-11-13, [ADR 0133](0133-the-desktop-apps-ship-as-a-flatpak-bundle-and-an-msix-built-in-checks-and-promoted-with-the-release.md);
+  - **The Flatpak** (built 2026-11-13, [ADR 0139](0139-the-desktop-apps-ship-as-a-flatpak-bundle-and-an-msix-built-in-checks-and-promoted-with-the-release.md);
     `src/mobile/linux/flatpak/`, `run.py flatpak`). The app id is `src/mobile/desktop-identity.json`'s (`app.veyq.Veyq`
     until the owner decides it), and with it the GApplication id, the resource path and the icon's and desktop entry's
     names: a sandbox lets an app own only D-Bus names under its own id. flatpak-builder runs privileged in the pinned
@@ -892,7 +892,7 @@ implementation exists but what holds it to the first.
     through PyGObject in the app's sandbox): under the Secret portal alone, store, lookup and clear answer in the app's
     own keyring, which persists across processes, but `secret_service_get_sync` fails (`ServiceUnknown`); with
     `--talk-name=org.freedesktop.secrets` all five answer, the items still in the app's keyring (none in the host's
-    collection), `SECRET_BACKEND=service` changing nothing — so the manifest grants the name (ADR 0133 decision 3).
+    collection), `SECRET_BACKEND=service` changing nothing — so the manifest grants the name (ADR 0139 decision 3).
     **Update:** `flatpak install --user veyq-1.546-aarch64.flatpak` over 1.545 upgraded in place, keeping
     `~/.var/app/<id>` (a marker file and the keyring); the same file again is refused (`already installed`).
     `flatpak uninstall --user --delete-data app.veyq.Veyq` left nothing under `~/.var/app/`. The VM's GPU is not one the
@@ -908,7 +908,7 @@ implementation exists but what holds it to the first.
     signed in through a restart — the dev principal is at the server's trust limit (`409 too_many_devices`), so no trust
     could be written; after "Not now" the shipped binary restarted to an empty sign-in, as a device without one must.
     It needs an account under the limit.
-- **The Windows app** (ADR 0130 decision 5; `src/mobile/windows/`). WinUI 3 in C# on .NET 10, `win-x64`, unpackaged
+- **The Windows app** (ADR 0136 decision 5; `src/mobile/windows/`). WinUI 3 in C# on .NET 10, `win-x64`, unpackaged
   and self-contained, the Windows App SDK included, so its build output runs where it is copied. Built 2026-11-10/11.
   - **Packages.** `Microsoft.WindowsAppSDK.WinUI` and `.Foundation` 2.6.5 and `Microsoft.Windows.SDK.BuildTools`, not the
     metapackage (which pulls AI, ML, Search and Widgets); MSTest's `TestFramework` and `TestAdapter` 4.5.2 under
@@ -942,7 +942,7 @@ implementation exists but what holds it to the first.
     and takes a screenshot only as proof.
   - **Guards** (decision 9): the words guard holds windows-literal and windows-resw, the guidelines guard windows-block
     (the creating action only in `CreateAction.cs`) and windows-floating-button; each rule bitten red and green.
-  - **Pictures and a Pot's download** (built 2026-11-11, ADR 0131). `Veyq/AvatarsHeld.cs`'s `Held<T>` (no control) is
+  - **Pictures and a Pot's download** (built 2026-11-11, ADR 0137). `Veyq/AvatarsHeld.cs`'s `Held<T>` (no control) is
     Linux's `Held` rule for rule; `Veyq/Avatars.cs` feeds it from `ShellShown.pictures`, decodes each payload through
     `BitmapImage.SetSourceAsync` over an `InMemoryRandomAccessStream`, and sets `ProfilePicture` on every
     `PersonPicture` bound to that id (initials of its `DisplayName` otherwise): the Pot's Settings people and Overview
@@ -951,7 +951,7 @@ implementation exists but what holds it to the first.
     HWND through `InitializeWithWindow`, an unpackaged app's need; Downloads; one type, `download_type_zip`),
     `Pot.Download`, an `InfoBar` saying it is done or failed. `Veyq.Drive` gained `type <id> <text>` and `press <id>
     [keys]`, which focus an element and send real keys (`SendInput`), for the system's dialog.
-  - **A node's header and its actions** (built 2026-11-11/12, Linux's set; the models ADR 0130's Consequences).
+  - **A node's header and its actions** (built 2026-11-11/12, Linux's set; the models ADR 0136's Consequences).
     `NodeHeader.cs` draws core's plan as the content `CommandBar`'s primary commands and the rest as its secondary ones,
     grouped as the plan groups them (`HeaderPlan.Primary`/`Secondary`), only the ids in `HeaderPlan.Drawn`. Every sheet is
     a `ContentDialog` through `Dialogs.Show`, one at a time, so a question inside one is asked in place: rename, delete,
@@ -991,7 +991,7 @@ implementation exists but what holds it to the first.
     and on and deleted, the web's guest page checked after each; a cover picked through the open picker, zoomed, read
     back by `CoverCropLiveTest`, framed anew and removed; a report sent once, its privacy link opened in Edge. Not
     driven: the cover's pan (`Veyq.Drive` has no drag; zoom framed it) and a move's Undo left to its window.
-  - **Expenses whole** (built 2026-11-12; Linux's set, the models ADR 0130's Consequences). `PotPage`: Add entry (the
+  - **Expenses whole** (built 2026-11-12; Linux's set, the models ADR 0136's Consequences). `PotPage`: Add entry (the
     content's `CreateAction.Button`, alone — New is the level's), Refresh (F5 / Ctrl+R), the live poll watched while
     loaded and `Window.Activated` not `Deactivated`, settle-up asked by `Dialogs.Ask` (the action the default), the
     deleted entries, `EntryHistoryDialog` (Restore its primary button), the head (`NodeHeader.Hero`, WIC's
@@ -1019,7 +1019,7 @@ implementation exists but what holds it to the first.
   arrived — was read from WER dumps: a `PersonPicture` reached through a `WeakReference` after its managed wrapper was
   collected (`src/mobile/CLAUDE.md` § Traps); held strongly while loaded, the repro crashed 2 of 4 times before and 0
   of 6 after.
-  - **Depot whole** (built 2026-11-12; Linux's set, the models ADR 0130's Consequences).
+  - **Depot whole** (built 2026-11-12; Linux's set, the models ADR 0136's Consequences).
     - `FilePage.cs`: the content in the content frame — an `Image` decoded at the core's edge (`BitmapDecoder`'s size
       first, `DecodePixelWidth`), a long text a virtualized `ListView` a line a row under an `InfoBar` (one `TextBox` of a
       megabyte drew only its first line), the PDF's pages lazily through `PdfPages`, the core's words; Save a copy the
@@ -1069,7 +1069,7 @@ implementation exists but what holds it to the first.
   measured on this VM, not as the SDK's documented rule. `droptargets` is no evidence either way: it listed no window
   holding `OleDropTargetInterface` while the drops landed (WinUI's drop target is not that window property).
   `DropSortTest` holds the rule.
-  - **The MSIX** (built 2026-11-13, [ADR 0133](0133-the-desktop-apps-ship-as-a-flatpak-bundle-and-an-msix-built-in-checks-and-promoted-with-the-release.md)
+  - **The MSIX** (built 2026-11-13, [ADR 0139](0139-the-desktop-apps-ship-as-a-flatpak-bundle-and-an-msix-built-in-checks-and-promoted-with-the-release.md)
     decisions 6 and 7; `windows/run.py package [--sign [PFX]] [--smoke]`). The Windows App SDK's single-project MSIX
     tooling (`Microsoft.Windows.SDK.BuildTools.MSIX` 1.7.251221100, already in the lock) builds it under the .NET SDK's
     `dotnet build -c Release -p:VeyqPackage=true` — the first Release build of the app; `Veyq.Bridge.Tests` and
@@ -1106,7 +1106,7 @@ implementation exists but what holds it to the first.
     installed again for the pass): the packaged app runs at medium integrity (`0x2000`, read from its token, as Explorer's),
     German; no scan entry (`the sign-in's kit scan not offered: no camera`, the `NoCamera` path); a kit picked through the
     open picker by path opens in the core (`kit picked: Done`, the form filled from it) — so a packaged app's picked path
-    reaches the core as the unpackaged one's (ADR 0131). Uninstalled, the development certificate dropped from both stores
+    reaches the core as the unpackaged one's (ADR 0137). Uninstalled, the development certificate dropped from both stores
     (`drop-dev-cert`), `F:\veyq\package` removed. **Still owed**, each behind a signed-in packaged app, which a Release
     build reaches only through a person's sign-in (no dev sign-in; the agent types no password): the members' pictures,
     Save a copy, a medium played, the drop (the unpackaged app takes it with UAC on, the Depot whole above), an update
@@ -1132,7 +1132,7 @@ implementation exists but what holds it to the first.
     `Veyq.Drive explorer`/`drag` onto a level: the log `a dropped path: Fixed C:, Archive`, `Upload.Files: 1 queued` and
     the upload `Done`, read back to the SHA-256; a Recent entry whose file is gone dragged: `said depot_folder_unreadable`
     and the InfoBar showing it.
-    **The trust step under a self-signed `CN=veyq` certificate** (the release's signer, ADR 0133 decision 12; walked
+    **The trust step under a self-signed `CN=veyq` certificate** (the release's signer, ADR 0139 decision 12; walked
     2026-11-13 on the same VM, **UAC on**, with a throwaway certificate made there by `New-SelfSignedCertificate`, its
     key removed from the store after exporting a PFX and `veyq.cer`, the package signed by `run.py package --sign
     <pfx>`; certificate, package and temporary files removed afterwards, none left in any store): before the step,
@@ -1147,7 +1147,7 @@ implementation exists but what holds it to the first.
     **Not walked:** the UAC prompt itself and the certificate wizard's clicks (double-click the `.cer` → Install
     Certificate → Local Machine → Trusted People) — both need a person at the console; the install page names them as
     Windows' usual way.
-- **The device trust on every app** (decision 8 as changed 2026-11-11; [ADR 0130](0130-an-apps-logic-is-the-kotlin-cores-each-platform-draws-only-its-own-ui.md)'s
+- **The device trust on every app** (decision 8 as changed 2026-11-11; [ADR 0136](0136-an-apps-logic-is-the-kotlin-cores-each-platform-draws-only-its-own-ui.md)'s
   Consequences for the desktops' stores). The flows are the core's alone — `session/Account.kt` and `SessionModel.kt`
   enrol, offer, resume, unlock, change the level, sign out and stop trusting through the `DeviceKeys` interface
   (`session/DeviceTrust.kt`), and a platform adds a store and screens, no rule:

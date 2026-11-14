@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """Sign a release's MSIX with the project's certificate, and refuse anything but the tested payload under that signer
-(ADR 0133 decisions 7 and 12). `release.yml`'s `msix-sign` job runs `sign` on a Windows runner; `promote.py check`
+(ADR 0139 decisions 7 and 12). `release.yml`'s `msix-sign` job runs `sign` on a Windows runner; `promote.py check`
 reads the certificate before a promotion writes anything.
 
     python3 scripts/msix_sign.py certificate                                    # the committed signer, held to msixPublisher
@@ -27,7 +27,7 @@ certificate is refused here, after signtool and before anything is published.
 opened — a bump of the pin refuses here until the hash is measured again; no Windows SDK of the runner's); the PFX
 written from the environment into a directory of its own, used once and deleted; a copy of the package signed without
 a timestamp (no timestamp authority in the release's path: a released package installs while the certificate is valid,
-ADR 0133 decision 7); then **compare** with the certificate. It writes `<out>/<the package's name>` and `<out>/veyq.cer`
+ADR 0139 decision 7); then **compare** with the certificate. It writes `<out>/<the package's name>` and `<out>/veyq.cer`
 (the certificate's DER), the two files the release attaches.
 
 Its limits: the subject is read by a small DER reader of its own (the attribute types a certificate subject commonly

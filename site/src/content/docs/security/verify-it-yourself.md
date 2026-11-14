@@ -9,7 +9,7 @@ sources:
   - docs/decisions/0045-mutation-testing-trust-chain-unit-layer.md
   - docs/decisions/0040-coverage-gaps-and-http-not-a-surface.md
   - docs/decisions/0057-release-identity-and-deployment-recipe.md
-  - docs/decisions/0133-the-desktop-apps-ship-as-a-flatpak-bundle-and-an-msix-built-in-checks-and-promoted-with-the-release.md
+  - docs/decisions/0139-the-desktop-apps-ship-as-a-flatpak-bundle-and-an-msix-built-in-checks-and-promoted-with-the-release.md
 ---
 
 Every check below lives in the repository and can be run from a checkout. This page says what each one pins,
@@ -319,7 +319,7 @@ does (ADR 0057 § Consequences).
 
 **Built, not yet run:** the workflows that stage, sign and attach the packages are written, and no release carries
 an app package yet
-([ADR 0133](https://github.com/raddatzk/veyq/blob/main/docs/decisions/0133-the-desktop-apps-ship-as-a-flatpak-bundle-and-an-msix-built-in-checks-and-promoted-with-the-release.md)
+([ADR 0139](https://github.com/raddatzk/veyq/blob/main/docs/decisions/0139-the-desktop-apps-ship-as-a-flatpak-bundle-and-an-msix-built-in-checks-and-promoted-with-the-release.md)
 decisions 7, 8 and 10; what a person is told is [Install the app](/getting-started/install-the-app/)). From the first
 release that does, its packages — `veyq-<major>.<minor>-x86_64.flatpak`, `…-aarch64.flatpak` and `…-x64.msix` — are
 the bytes a Checks push run built, smoke-ran and staged, never built again, and each is verified two ways:
@@ -346,7 +346,7 @@ Consequences, the MSIX); the release's signing job has not run yet. The Flatpak 
 no repository to be verified against, so the cosign bundle and the manifest are its provenance.
 
 **The certificate Windows is asked to trust.** The release's signer is a self-signed certificate of the project's own,
-subject `CN=veyq` (ADR 0133 decisions 7 and 12), which a person adds to their computer's *Trusted People* before the
+subject `CN=veyq` (ADR 0139 decisions 7 and 12), which a person adds to their computer's *Trusted People* before the
 first install ([Install the app](/getting-started/install-the-app/#windows)). Its public half comes with the release as
 `veyq.cer`, verified like a package: its own cosign bundle under the release identity, and its sha256 under `apps`;
 it is the same file as the repository's `src/mobile/windows/veyq.cer`. Check it that way before trusting it — the

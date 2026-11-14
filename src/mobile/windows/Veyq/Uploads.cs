@@ -1,6 +1,6 @@
 // The uploads (ADR 0123's Consequences, the Windows app's Depot whole), Fluent's way: files and a folder picked through Windows' own pickers
 // (FileOpenPicker, FolderPicker, owned by the window as the save picker is) and handed to the core by their paths — the
-// core opens and reads each at offsets a frame at a time (Upload.Files, Upload.Folder; ADR 0131 decision 3), so nothing of
+// core opens and reads each at offsets a frame at a time (Upload.Files, Upload.Folder; ADR 0137 decision 3), so nothing of
 // a file crosses and none is held whole —, a file's Replace chosen before its picker opens (File.ChooseReplace,
 // Upload.Replace), and the queue as an AppBarButton in the content's CommandBar while it lists anything: its label the
 // core's one line, its Flyout each batch with its items, their progress, Cancel and Retry, Cancel all and a finished

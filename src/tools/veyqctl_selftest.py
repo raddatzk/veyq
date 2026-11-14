@@ -716,7 +716,7 @@ def test_install(tmp: pathlib.Path) -> None:
 
 
 def test_apps_ignored(tmp: pathlib.Path) -> None:
-    """A release that carries the desktop apps' files (ADR 0133 decision 8) lists them under `apps`, beside its
+    """A release that carries the desktop apps' files (ADR 0139 decision 8) lists them under `apps`, beside its
     `assets`: veyqctl reads named keys only, so the manifest still parses, and an install takes the assets alone."""
     apps = {"veyq-1.4-x86_64.flatpak": "flatpak bundle", "veyq-1.4-x64.msix": "msix", "veyq.cer": "certificate"}
     m = vc.parse_manifest(manifest_bytes(apps={n: sha(b.encode()) for n, b in apps.items()}), "v1.12")

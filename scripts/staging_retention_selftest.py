@@ -53,7 +53,7 @@ def children_of(digest: str) -> set[str]:
     return CHILDREN.get(digest, set())
 
 
-# The desktop apps' packages (ADR 0133 decision 10): one artifact manifest per platform, no children. Commit A's goes
+# The desktop apps' packages (ADR 0139 decision 10): one artifact manifest per platform, no children. Commit A's goes
 # alone; commit B's carries its snapshot's tags beside the staging one and stays; a recent one stays.
 APPS = [v(31, dg(31), OLD, f"build-{A}-msix-x64"),
         v(32, dg(32), OLD, f"build-{B}-flatpak-x86_64", f"sha-{B}-flatpak-x86_64", "0.12-SNAPSHOT-flatpak-x86_64"),

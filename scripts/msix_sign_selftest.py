@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Offline self-test of `scripts/msix_sign.py` (ADR 0133 decisions 7 and 12): the committed signer's subject and the
+"""Offline self-test of `scripts/msix_sign.py` (ADR 0139 decisions 7 and 12): the committed signer's subject and the
 signed package's comparison, on certificates and packages written here — a DER encoder of its own, no OpenSSL, no
 Windows. One package pair in which signing holds, and one forgery per refusal, each of which must name what it saw.
 `checks.yml`'s `guards` job runs it.

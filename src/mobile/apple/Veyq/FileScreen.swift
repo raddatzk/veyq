@@ -104,7 +104,7 @@ private struct FilePdf: View {
 }
 
 /// An audio or video file played through core's range reader (`ReaderLoader`), with the system's controls; a format the
-/// system does not play (a WebM on iOS) says so and offers the download, as a file nothing shows (ADR 0130's Consequences, Depot's screens).
+/// system does not play (a WebM on iOS) says so and offers the download, as a file nothing shows (ADR 0136's Consequences, Depot's screens).
 private struct FileMedia: View {
     let shown: FileModel.ShownMedia
     @State private var playback: Playback?

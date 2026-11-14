@@ -174,7 +174,7 @@ internal class HostStore(private val host: Host) : DeviceStore {
 }
 
 /**
- * An Emergency Kit file's drawings (core's `KitPictures`; ADR 0130 decision 1: the platform draws, the core decides) asked
+ * An Emergency Kit file's drawings (core's `KitPictures`; ADR 0136 decision 1: the platform draws, the core decides) asked
  * of the host for the file at [path], which the host itself picked: a page count, a page or a picture drawn into the
  * reply's payload ([HostReply.Pixels]). The core's `KitImport` decides whether and what to ask, so a kit found in the
  * file's bytes asks nothing. A reply that is no drawing of its size answers null, as a platform that cannot draw does.
@@ -211,7 +211,7 @@ internal class PathSource(val path: String, private val inner: UploadSource) :
 }
 
 /**
- * A Memories upload's tiers asked of the host ([HostRequest.MediaTiers]; ADR 0130 decision 1: the platform decodes and
+ * A Memories upload's tiers asked of the host ([HostRequest.MediaTiers]; ADR 0136 decision 1: the platform decodes and
  * encodes, the core holds the spec and decides): the JPEGs ride in beside the reply ([HostReply.Tiers]). [derive] returns at
  * once — the asks run on [scope], so the queue's thread that called never waits on the host there, and the thread that
  * sent the call never does at all; a video's poster time is the core's from the length the host tells

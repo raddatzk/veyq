@@ -30,7 +30,7 @@ the code*, changes/README.md):
      `vX.Y.Z` libwebp tag, its 40-hex commit, and an `image` that is exactly the `FROM` of the `Dockerfile` beside it;
      each of its `sha256` lines hashes the committed file it names; and every tracked file under its `wasm/` but the
      hand-written `.d.mts` has a line — an output nothing pins is an output nothing rebuilt.
-  7. **The Flatpak's inputs are pinned** (ADR 0133 decisions 2 and 11). Every tracked Flatpak manifest (a YAML file
+  7. **The Flatpak's inputs are pinned** (ADR 0139 decisions 2 and 11). Every tracked Flatpak manifest (a YAML file
      with top-level `runtime`, `sdk` and `modules`) has a `runtime.pins` beside it, each of whose lines is
      `<id>/<arch>/<branch> <64-hex commit>`; for each architecture it names (both of `aarch64` and `x86_64`, decision
      1) it pins the manifest's `runtime` and `sdk` at the manifest's `runtime-version` and every `sdk-extensions`
@@ -360,7 +360,7 @@ def check_flatpak(files: list[str]) -> None:
     manifests = flatpak_manifests(files)
     if not any(m.startswith(f"{repo_layout.rel(repo_layout.MOBILE_LINUX)}/") for m in manifests):
         fail(f"no tracked Flatpak manifest under {repo_layout.rel(repo_layout.MOBILE_LINUX)}/ — the Linux app's "
-             f"(ADR 0133) moved or stopped being one; re-anchor check 7")
+             f"(ADR 0139) moved or stopped being one; re-anchor check 7")
     for rel in manifests:
         doc = yaml.safe_load((ROOT / rel).read_text())
         here = pathlib.PurePosixPath(rel).parent

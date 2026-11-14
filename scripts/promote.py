@@ -38,7 +38,7 @@ signatures, the chart, the git tag, the GitHub Release — stay in the workflow'
      snapshot's commit (`release_assets.py`, with `--unscheduled` when asked, so that refusal comes here too); no
      input this promotion cannot compare (a predecessor, a backup list — lanes L2 and L3, whose rerun is #453's and
      #461's to build); and the tools image is stamped `<major>.<minor>` with the major entry the tree derives now.
-  9. **The desktop apps' packages are the snapshot's, and their signer is set up** (ADR 0133 decision 10; checked
+  9. **The desktop apps' packages are the snapshot's, and their signer is set up** (ADR 0139 decision 10; checked
      after 6) — where the snapshot's commit stages them (its checks.yml has `apps-stage`; a commit from before has none, and its release
      carries no app file): per platform of `snapshot.APP_PLATFORMS`, `sha-<commit>-<platform>` and
      `<version>-SNAPSHOT-<platform>` of `veyq-apps` name one artifact of `snapshot.APP_ARTIFACT_TYPE` carrying exactly
@@ -93,7 +93,7 @@ RELEASE_BRANCH = re.compile(r"^release/(0|[1-9][0-9]*)\.x$")
 LANE_ORCHESTRATOR = "scripts/run_stack_e2e.py"
 # The pipeline whose `stack` job is lane L1, read at the snapshot's commit for its matrix.
 PIPELINE_WORKFLOW = ".github/workflows/checks.yml"
-# The job of that file that stages the desktop apps' packages (ADR 0133 decision 10): a snapshot's commit that has it
+# The job of that file that stages the desktop apps' packages (ADR 0139 decision 10): a snapshot's commit that has it
 # staged them, and its release carries them.
 APPS_STAGE_JOB = "apps-stage"
 # The MSIX's certificate as the release attaches it (scripts/msix_sign.py writes it beside the signed package).

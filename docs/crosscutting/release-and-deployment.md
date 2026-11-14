@@ -331,7 +331,7 @@ check is logged and retried with a back-off, and blocks nothing.
   Copier from a verified release, which `init` offers in an empty repository. Built: the template and its checks in
   `github.com/raddatzk/veyq-server` (cr-veyq-server-template), and `init`'s server path, self-tested against
   stand-ins (cr-veyqctl-server-path phase 3). Not yet: veyq-server's first release, and a run on a real server.
-- **The desktop apps' packages** ([ADR 0133](../decisions/0133-the-desktop-apps-ship-as-a-flatpak-bundle-and-an-msix-built-in-checks-and-promoted-with-the-release.md)):
+- **The desktop apps' packages** ([ADR 0139](../decisions/0139-the-desktop-apps-ship-as-a-flatpak-bundle-and-an-msix-built-in-checks-and-promoted-with-the-release.md)):
   a Flatpak bundle per Linux architecture and an x64 MSIX, built and smoke-run in every Checks run, staged by ORAS as
   `veyq-apps:build-<sha>-<platform>`, named and signed at snapshot with the images, and at promotion re-signed, the MSIX
   Windows-signed with an unchanged block map, each listed by sha256 under the manifest's `apps` (never `assets`, which
