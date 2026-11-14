@@ -492,6 +492,15 @@ members** — the one being removed, the ones being kept, and the surfaces expli
 locators are variations of one another) and self-checking: if two classes' commands overlap, the classification
 itself is wrong, which is worth finding at refine rather than in the retrospective.
 
+### A CR that removes a feature reverse-applies the commits that built it, and spares the tests its decisions demand
+
+The locators find what still says the feature's name; the commits that built it find what changed beside it.
+`cr-remove-streaming-music` reverse-applied the commits that built the streaming music (`git apply -R --reject` per
+surface, the rejects merged by hand), and the reversed diff reached sites none of its six locators named: a test
+fixture's policy line, a CSS comment on "the footer bars", and a whole seam built in a commit of its own. And a removal's "the word is gone" locator cannot
+list only the survivors it names when a decision asks for a test about the removed thing: its importer test had to
+carry the removed key, its positive control the removed variables. Name those tests in the spare list at refine.
+
 ### A rule the refine states over every text gets a locator over the texts
 
 A refine that writes a rule for a class ("an empty value renders as the gap wherever a text names it") inventories

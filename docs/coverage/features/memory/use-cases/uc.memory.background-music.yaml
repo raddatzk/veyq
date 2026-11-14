@@ -2,8 +2,7 @@ useCase: uc.memory.background-music
 feature: memory
 title: Background music — a Memory's or Chapter's own audio files, shuffled, looped and crossfaded
 status: planned
-# Refined 2026-11-14 (ADR 0135); nothing is built. cr-background-music-from-own-audio turns these gaps into refs,
-# after cr-remove-streaming-music has removed the playlists of uc.memory.music.
+# Refined 2026-11-14 (ADR 0135); nothing is built. cr-background-music-from-own-audio turns these gaps into refs.
 acceptanceCriteria:
   - id: a-track-is-a-medium
     text: An added audio file is a medium of its Memory or Chapter, its original the file, its `blob-meta` typed from its bytes by core's `sniffStream` (an M4A is `audio/mp4`, never `video/mp4`); no contract, table, column or route marks it; it is listed in the node's Music tab and filtered from every photo reader (gallery, lightbox, search, cover choice, the space's media list); the gallery's picker keeps refusing audio.
