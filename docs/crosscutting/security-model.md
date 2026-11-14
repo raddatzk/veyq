@@ -139,52 +139,9 @@ and `PotSliceTest.aGuestsReadNamesTheRateTableExactlyWhileItsTenantHasTheRatesOn
 member and a guest. Lane L1 drives it in a browser against a fixed ECB table, never the real provider
 (`tests/e2e/src/egress.ts`).
 
-**Background music is the fourth instance, and the one that runs a third party's code** ([ADR 0131](../decisions/0131-a-memorys-background-music-plays-through-the-vendors-sdk-in-a-frame-of-its-own-origin.md),
-[uc.memory.music](../features/memory/use-cases/uc.memory.music.md)). A Memory's Spotify or Apple Music playlist plays
-through the vendor's own SDK (Spotify's Web Playback SDK, Apple's MusicKit JS), which the vendor serves and can change at
-any time. It is **released dark** (ADR 0131 decision 8): until the TEMPORARY flag `VEYQ_MUSIC_RELEASED=true` none of
-the below exists - no entry, no frame, no music host served, the app's policies as before (`MusicDarkSliceTest`). The
-fences, once it is on:
-
-- **Never in the app origin.** The app origin holds the viewer's unlocked keys in memory; a script there reads every key
-  and every plaintext the viewer can open. The SDK runs only in the **music frame**, a page the backend serves on the
-  instance's own **music host** — another origin, which holds no key, no session and no content — embedded as an iframe
-  and spoken to by `postMessage` alone: the app hands it one playlist reference, the service's public credential
-  (the Server Owner's Spotify client ID, the MusicKit developer token) and its theme (exactly `light` or `dark`), nothing
-  else, and takes from it only a state
-  word, each message parsed against `src/web/src/music-frame/protocol.ts`. An opaque (sandboxed) origin was measured
-  and cannot hold either SDK (ADR 0131 § Context). Sessions are bearer tokens, not cookies, so a same-site music host
-  carries no credential to the API, and the music host answers no API.
-- **Opt-in per viewer, per browser and per service, and withdrawable** at the music bar, as the map's consent is:
-  nothing of the vendor's or the music host's loads before **Play here**, and **Turn music off** tells the frame to
-  forget the vendor's sign-in and removes it once it did. A share guest gets the same choice.
-- **The frame belongs to the shell, not to a page** (the bar below the footer plays on across pages, ADR 0131
-  decision 5): what outlives the Memory's page is the one playlist reference already handed to the frame - never a key
-  or a node -, and it goes with the session: a sign-out or a lock unmounts the bar.
-- **The playlist is sealed content** in the node's meta; the server never learns it, nor whether anyone played it.
-- **Vendor tokens never reach the veyq server.** Spotify's sign-in is the PKCE flow inside the frame (the code passes
-  the music host's callback URL once and is worthless without the verifier only the frame holds); Apple's is MusicKit's
-  own. **What crosses to the vendor, stated:** the viewer's address, their account with the vendor once they sign in,
-  the playlist, and what they do in the player.
-
-**What holds on a client that opted in, and what does not.** Holds: no vendor code in the app origin, so no key or
-plaintext is readable by it; the server sees no playlist and no token. Does not: the music origin is shared by both
-vendors' scripts, so a viewer signed in to both in one browser has each vendor able to read the sign-in the other keeps
-there (MusicKit keeps its own in that origin's storage); same-site origins may share a renderer process, so the
-separation against a side channel (Spectre) is the browser's process model, not an origin boundary alone; the app's COOP
-is `same-origin-allow-popups` while the frame is served, because MusicKit's sign-in popup answers its opener — a page
-that opens veyq still gets no handle on it; and a script on the music host can make the browser send veyq's refresh
-cookie (`SameSite=Strict`, but same-site) with a request to the refresh endpoint, whose answer it cannot read — a
-forced sign-out at worst (inbox #849).
-
-**Verification:** `MusicFrameSliceTest` (the entries, the policies while on and off, the music host's whole surface and
-its own policy), `MusicSettingsTest`, `TraefikFileMusicRouteTest`; on the client `protocol.test.ts`, `main.test.ts`,
-`spotifyAuth.test.ts`, `player.test.ts` (`src/web/src/music-frame/`), `MusicBar.test.ts`, `musicHeader.test.ts`,
-`useMusicConsent.test.ts` (`src/web/src/features/memories/music/`) and `AppShell.footerBar.test.ts`. A sign-in and playback with real vendor accounts is owed (inbox #846).
-
 So the veyq operator stays blind by construction; what crosses goes straight to the provider, never through veyq: a
-consented, identity-free request the **user** turned on, the breached-password check's 5-hex prefix, the exchange
-rates' date, or — after the viewer's own opt-in — what a vendor's player learns in a frame of its own origin.
+consented, identity-free request the **user** turned on, the breached-password check's 5-hex prefix, or the exchange
+rates' date.
 
 ## What is encrypted vs. server-visible
 

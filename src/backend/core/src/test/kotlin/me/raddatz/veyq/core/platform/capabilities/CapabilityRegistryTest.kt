@@ -27,11 +27,11 @@ class CapabilityRegistryTest {
 
     private val catalogIds: List<String> = catalog.fieldNames().asSequence().toList()
 
-    private fun registry(vararg off: String) = CapabilityRegistry({ off.toSet() }, { emptySet() }, CapabilityRequirementValues.NONE, ExternalServiceAddresses.ALL, DeploymentCapabilities.ALL)
+    private fun registry(vararg off: String) = CapabilityRegistry({ off.toSet() }, { emptySet() }, CapabilityRequirementValues.NONE, ExternalServiceAddresses.ALL)
 
     /** A registry with nothing off at the instance level and [tenantOff] off in tenant `t1` only. */
     private fun tenantRegistry(instanceOff: Set<String>, vararg tenantOff: String) =
-        CapabilityRegistry({ instanceOff }, { tenant -> if (tenant == "t1") tenantOff.toSet() else emptySet() }, CapabilityRequirementValues.NONE, ExternalServiceAddresses.ALL, DeploymentCapabilities.ALL)
+        CapabilityRegistry({ instanceOff }, { tenant -> if (tenant == "t1") tenantOff.toSet() else emptySet() }, CapabilityRequirementValues.NONE, ExternalServiceAddresses.ALL)
 
     @Test
     fun theRegisterIsEveryCatalogEntryInCatalogOrderWithItsWords() {
@@ -129,7 +129,7 @@ class CapabilityRegistryTest {
     @Test
     fun theSwitchesAreAskedOnEveryCall() {
         var off = emptySet<String>()
-        val registry = CapabilityRegistry({ off }, { emptySet() }, CapabilityRequirementValues.NONE, ExternalServiceAddresses.ALL, DeploymentCapabilities.ALL)
+        val registry = CapabilityRegistry({ off }, { emptySet() }, CapabilityRequirementValues.NONE, ExternalServiceAddresses.ALL)
         assertTrue(registry.isActive(DEVICE_LINKING, null))
         off = setOf(DEVICE_LINKING)
         assertFalse(registry.isActive(DEVICE_LINKING, null), "a switch acts without a new registry, so without a restart")
@@ -166,6 +166,22 @@ class CapabilityRegistryTest {
     }
 
     @Test
+    fun aSwitchRowForAnIdTheCatalogNoLongerHoldsNamesNothingAndNarrowsNothing() {
+        // ADR 0135 decision 1: the memories.music entries left the catalog, and an instance that switched one off keeps its
+        // row (no migration). Every listing is the catalog's, so the row is read by nothing, at either level.
+        val retired = arrayOf("memories.music", "memories.music.spotify", "memories.music.apple-music")
+        val registry = tenantRegistry(retired.toSet(), *retired)
+        assertEquals(CapabilityIds.ADVERTISED, registry.active(null), "the instance's set: every entry, none of the rows")
+        assertEquals(CapabilityIds.ADVERTISED, registry.active("t1"), "the tenant's set")
+        assertEquals(CapabilityIds.ADVERTISED, registry.register().map { it.id })
+        assertTrue(registry.register().all { !it.off && it.effective }, "the rows switch no entry off")
+        assertTrue(registry.tenantRegister("t1").none { it.id.startsWith("memories.music") || it.off })
+        assertTrue(CapabilityIds.MEMORIES in registry.active("t1"), "control: the application whose ids they were is on")
+        // Control: a row for an id the catalog holds does narrow.
+        assertFalse(tenantRegistry(setOf(CapabilityIds.MEMORIES_MAP)).isActive(CapabilityIds.MEMORIES_MAP, null))
+    }
+
+    @Test
     fun theTenantRegisterListsTheTenantSwitchableEntriesInCatalogOrder() {
         val tenantLevel = catalogIds.filter { id -> catalog.path(id).path("levels").any { it.asText() == "tenant" } }
         assertTrue(tenantLevel.isNotEmpty(), "the catalog names tenant-switchable entries")
@@ -183,7 +199,6 @@ class CapabilityRegistryTest {
             override fun tenant(tenantId: String) = if (tenantId == "t1") t1 else emptyMap()
         },
         ExternalServiceAddresses.ALL,
-        DeploymentCapabilities.ALL,
     )
 
     @Test
@@ -222,26 +237,11 @@ class CapabilityRegistryTest {
         val noMap = ExternalServiceAddresses {
             (CapabilityIds.EXTERNAL_SERVICES - CapabilityIds.MEMORIES_MAP).associateWith { ServiceAddress("https://x.example/", null) }
         }
-        val registry = CapabilityRegistry({ emptySet() }, { emptySet() }, CapabilityRequirementValues.NONE, noMap, DeploymentCapabilities.ALL)
+        val registry = CapabilityRegistry({ emptySet() }, { emptySet() }, CapabilityRequirementValues.NONE, noMap)
         assertFalse(registry.isActive(CapabilityIds.MEMORIES_MAP, null))
         assertTrue(registry.isActive(CapabilityIds.MEMORIES_PLACES, null), "control: a configured service is active")
         assertEquals(CapabilityState(CapabilityIds.MEMORIES_MAP, off = false, effective = false), registry.register().single { it.id == CapabilityIds.MEMORIES_MAP })
         assertTrue(registry.tenantRegister("t1").single { it.id == CapabilityIds.MEMORIES_MAP }.serverOff, "the server has it off for every tenant")
-    }
-
-    @Test
-    fun aDeploymentEntryTheEnvironmentLeavesUnconfiguredIsNotActiveAndItsSwitchCannotBringItBack() {
-        // ADR 0131 decision 4: the deployment configures Spotify only - Apple Music is off however the switches stand.
-        val spotifyOnly = DeploymentCapabilities { setOf(CapabilityIds.MEMORIES_MUSIC_APPLE_MUSIC) }
-        val registry = CapabilityRegistry({ emptySet() }, { emptySet() }, CapabilityRequirementValues.NONE, ExternalServiceAddresses.ALL, spotifyOnly)
-        assertFalse(registry.isActive(CapabilityIds.MEMORIES_MUSIC_APPLE_MUSIC, null))
-        assertTrue(registry.isActive(CapabilityIds.MEMORIES_MUSIC_SPOTIFY, null), "control: a configured sibling is active")
-        assertTrue(registry.tenantRegister("t1").single { it.id == CapabilityIds.MEMORIES_MUSIC_APPLE_MUSIC }.serverOff)
-        // The parent off (no music host) takes both children with it.
-        val noHost = CapabilityRegistry({ emptySet() }, { emptySet() }, CapabilityRequirementValues.NONE, ExternalServiceAddresses.ALL) {
-            setOf(CapabilityIds.MEMORIES_MUSIC)
-        }
-        assertFalse(noHost.isActive(CapabilityIds.MEMORIES_MUSIC_SPOTIFY, null))
     }
 
     @Test

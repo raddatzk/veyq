@@ -6,11 +6,14 @@
 
 /**
  * Protocol version. Bump on ANY breaking change to the messages below (4: a playback may be `audio/*` too, inbox #412; 5: a
- * download's SW-side failure and its clean end reach the page, `veyq-dl-failed` / `veyq-dl-done`, F11). register.ts sends it in the handshake; a
+ * download's SW-side failure and its clean end reach the page, `veyq-dl-failed` / `veyq-dl-done`, F11; 6: the SW confirms a
+ * playback's registration on its port, `veyq-playback-registered`, and the page sets no source before it - a `/__media/`
+ * fetch could reach the SW before the registration did and get a 404, measured at about one in three in headless Chrome,
+ * cr-background-music-from-own-audio). register.ts sends it in the handshake; a
  * controlling SW built at a different version answers a mismatch (or nothing), and the page falls back to the
  * full-blob path. This is what lets a freshly-deployed page detect a stale still-controlling SW.
  */
-export const PROTOCOL_VERSION = 5
+export const PROTOCOL_VERSION = 6
 
 /** The synthetic in-origin path the SW intercepts. `<handle>` is opaque + per-playback — never a blobId (ADR 0047). */
 export const MEDIA_PATH_PREFIX = '/__media/'
@@ -95,6 +98,8 @@ export type PageToSwMessage = HandshakeMsg | RegisterMsg | RevokeMsg | EndSessio
 
 // --- SW ↔ page (over the per-playback MessagePort) ---------------------------
 
+/** SW → page: the playback is registered; the page may hand its URL to the element now (protocol 6). */
+export type PlaybackRegistered = { type: 'veyq-playback-registered' }
 /** SW → page: give me the decrypted plaintext of chunk `index`; `id` correlates the reply. */
 export type ChunkRequest = { type: 'veyq-chunk-req'; id: number; index: number }
 /** page → SW: the plaintext of the requested chunk (transferred as an ArrayBuffer), or an error. */

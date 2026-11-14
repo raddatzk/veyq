@@ -299,4 +299,23 @@ describe('useMediaGalleryLive — a lightbox Undo whose restore is refused (inbo
     expect(vm.tracks).toEqual([])
     expect(vm.items.map((i) => i.mediaId)).toEqual(['pic', 'bare'])
   })
+
+  // en.memory.media § Which media a photo view shows (ADR 0135 decision 2): ONE predicate, `isGalleryMedium`, decides what a
+  // photo view shows - every medium but the kinds another view claims. A music track goes to `music`, a GPX track to
+  // `tracks`; a type no view claims stays a photo view's (an icon tile, uc.memory.gallery E1), as does a medium without any
+  // meta (older than `blob-meta`). Lever: `items` filtering on image/video only (the unknown type then vanishes).
+  it('shows every medium but music and tracks in the photo views; those go to their own lists, an unknown type stays', async () => {
+    const types: Record<string, string> = { pic: 'image/jpeg', vid: 'video/mp4', song: 'audio/mpeg', trk: 'application/gpx+xml', odd: 'application/x-unknown' }
+    vi.mocked(originalBlobMeta).mockImplementation((_s, _k, m) => (types[m.mediaId] ? { v: 1, type: types[m.mediaId], name: m.mediaId } : null))
+    vi.mocked(listMediaPages).mockResolvedValue(page(['pic', 'vid', 'song', 'trk', 'odd', 'bare'].map((id) => item(id))))
+    const { vm } = setup()
+    await flushPromises()
+    expect(vm.items.map((i) => i.mediaId)).toEqual(['pic', 'vid', 'odd', 'bare'])
+    expect(vm.layoutItems.map((t) => t.id).sort()).toEqual(['bare', 'odd', 'pic', 'vid'])
+    expect(vm.music.map((i) => i.mediaId)).toEqual(['song'])
+    expect(vm.tracks.map((i) => i.mediaId)).toEqual(['trk'])
+    expect(['song', 'trk'].map((id) => vm.openLightboxOn(id)), 'no lightbox opens on music or a track').toEqual([false, false])
+    vm.removeMedia('song')
+    expect(vm.music).toEqual([])
+  })
 })

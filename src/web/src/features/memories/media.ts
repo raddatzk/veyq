@@ -35,6 +35,7 @@ import type { BlobDeclare, BlobRef, BlobSource, ReservedUpload, WindowFn } from 
 import type { BlobMeta, OpenedBlobMeta } from '../../core/blob/meta'
 import { contentDigest, sealedByteSize, shareBlob, type SharedBlobRequest, type StoredBlob } from '../../core/blob/sharedBlob'
 import { sniffMediaType } from './download'
+import { audioFactsFrom } from './music/audioFacts'
 import { readItemPages, type ItemsOnePage } from '../../core/items/itemsLive'
 import { mediaKey, uploaderOriginOf, type UploaderOrigin } from './mediaKey'
 import { cleanStr, finiteNum, mediaMetaContext, normalizeMediaMeta, openMediaMeta, type RawMediaMeta } from './mediaOpen'
@@ -126,6 +127,14 @@ export type MediaMeta = {
    */
   trackName?: string
   trackActivity?: string
+  /**
+   * A music track's facts, measured once at its upload (uc.memory.background-music, ADR 0135 decision 4): the file's length
+   * and the span between its leading and trailing silence, integer milliseconds. A track has no geometry, GPS or place name
+   * either, so the three ride that room in the 512-base64 tier (the worst case is pinned by a test).
+   */
+  durationMs?: number
+  trimStartMs?: number
+  trimEndMs?: number
 }
 
 /**
@@ -500,6 +509,7 @@ function sealMetadata(
     gpsLng: meta.gpsLng,
     placeName: placeName === undefined ? undefined : clampPlaceName(placeName),
     ...trackLabelFields(restored.trackName ?? null, restored.trackActivity ?? null),
+    ...audioFactFields(restored),
   }
   const hasMeta = metaHasContent(metaTier)
   const wrappedMeta = hasMeta ? sealJson(memoryKey, prune(metaTier), mediaMetaContext(media.scopeId, media.mediaId)) : null
@@ -646,7 +656,16 @@ export async function prepareMedia(source: AddMediaSource, deriver: MediaDeriver
  * - and sealed the same way when a member or guest names a track as they add it (`enqueueUploads`' `facts`), so a track's
  * label never needs a second write after its upload.
  */
-export type RestoredMediaFacts = { capturedAtOverride?: number; placeName?: string; trackName?: string; trackActivity?: string }
+export type RestoredMediaFacts = {
+  capturedAtOverride?: number; placeName?: string; trackName?: string; trackActivity?: string
+  /** A music track's measured facts (ADR 0135 decision 4): sealed at birth by its upload or its import, never written after. */
+  durationMs?: number; trimStartMs?: number; trimEndMs?: number
+}
+
+/** A music track's three facts as the listed tier holds them: all three, a sound span, or none (`audioFactsFrom`). */
+function audioFactFields(restored: RestoredMediaFacts): Pick<MediaMeta, 'durationMs' | 'trimStartMs' | 'trimEndMs'> {
+  return audioFactsFrom(restored) ?? {}
+}
 
 /** One logical media to complete: the original session + its role-tagged derivative sessions + the sealed metadata. */
 export type CompleteDecl = {

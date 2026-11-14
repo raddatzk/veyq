@@ -58,33 +58,6 @@ interface VeyqConfig {
     fun security(): Security
     fun http(): Http
     fun adminChannel(): AdminChannel
-    fun music(): Music
-
-    /**
-     * `veyq.music.*` — the music frame (ADR 0131 decisions 2 and 4): the host it is served on and the two services'
-     * public credentials, each optional. Core serves the frame and computes the register entries `memories.music.*`
-     * from these, as it names `memories.map` for the policy; nothing here is an application's own setting. Read by
-     * `MusicDeployment`, which refuses to boot on a malformed value rather than serve a frame that cannot work.
-     */
-    interface Music {
-        /**
-         * TEMPORARY release flag `veyq.music.released` (`VEYQ_MUSIC_RELEASED`, ADR 0131 decision 8, owner 2026-11-13),
-         * false by default: background music ships dark. Read once, by `MusicDeployment.released`, and by nothing else.
-         * Removal at release: `git grep -iE 'music[._-]?released'` lists every site (inbox, ADR 0131 decision 8).
-         */
-        @WithDefault("false")
-        fun released(): Boolean
-
-        /** The music host (`VEYQ_MUSIC_DOMAIN`), a host name of its own; absent ⇒ no music frame and the three entries off. */
-        fun domain(): Optional<String>
-
-        /** The Server Owner's Spotify app's client ID (`VEYQ_MUSIC_SPOTIFY_CLIENT_ID`); absent ⇒ `memories.music.spotify` off. */
-        fun spotifyClientId(): Optional<String>
-
-        /** A MusicKit developer token (`VEYQ_MUSIC_APPLE_DEVELOPER_TOKEN`), an ES256 JWT; absent or past its `exp` ⇒
-         *  `memories.music.apple-music` off. */
-        fun appleDeveloperToken(): Optional<String>
-    }
 
     /**
      * `veyq.admin-channel.*` — the backend's second, internal listener: the only door the Server-Owner operations

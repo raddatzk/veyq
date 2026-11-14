@@ -492,6 +492,15 @@ members** — the one being removed, the ones being kept, and the surfaces expli
 locators are variations of one another) and self-checking: if two classes' commands overlap, the classification
 itself is wrong, which is worth finding at refine rather than in the retrospective.
 
+### A CR that removes a feature reverse-applies the commits that built it, and spares the tests its decisions demand
+
+The locators find what still says the feature's name; the commits that built it find what changed beside it.
+`cr-remove-streaming-music` reverse-applied the commits that built the streaming music (`git apply -R --reject` per
+surface, the rejects merged by hand), and the reversed diff reached sites none of its six locators named: a test
+fixture's policy line, a CSS comment on "the footer bars", and a whole seam built in a commit of its own. And a removal's "the word is gone" locator cannot
+list only the survivors it names when a decision asks for a test about the removed thing: its importer test had to
+carry the removed key, its positive control the removed variables. Name those tests in the spare list at refine.
+
 ### A rule the refine states over every text gets a locator over the texts
 
 A refine that writes a rule for a class ("an empty value renders as the gap wherever a text names it") inventories
@@ -1812,6 +1821,25 @@ source at v1.20.4 and v1.21.2) showed it. The same pass found the docs' example 
 `ListenerSet` in its latest release, and the redirect's `scheme` field to be *Extended*, not Core — so a
 precondition list is one claim per feature, and "version X supports the design" is the conjunction of them,
 re-measured at implement against the newest release of every project it names.
+
+**A browser API's cost and behaviour are a premise too, measured at refine in both engines with a page of ten lines.**
+cr-background-music-from-own-audio decided that `decodeAudioData` in an 8 kHz `OfflineAudioContext` "stays a few hundred
+KB per minute"; at implement a 10-minute MP3 grew Chrome by ~540 MiB and a 200 MiB WAV both engines by 1.4-1.5 GiB, at
+8 kHz as at 44.1 kHz (the decode runs at the file's rate; only the kept buffer is small), and the facts path was settled
+again mid-CR. The settlement's own premises then failed the same way: a tail slice of an MP3 does not decode in Safari
+unless it starts at a frame header, and the `<audio>` element's duration of a raw ADTS file is an estimate (18 minutes in
+Safari, 8 hours in Chrome for a 10-minute file). Each was one page served from the scratch directory, opened in headless
+Chrome and the real Safari, its numbers posted back - minutes at refine against a stop and a second settlement at
+implement. So a CR whose design rests on what a browser API does with a given input names the input and measures it
+before the decision is written, in every engine the CR's done-when names.
+
+**A protocol the page and a worker share is measured under the playlist's rhythm, not one call at a time.** The media
+service worker had handed out a `/__media/` URL as soon as its registration message was posted; the registration and the
+element's fetch reach the worker on separate queues, so a fetch that came first was a `404`. A lightbox opens one stream
+per press and never met it; a playlist opens one every few seconds and ended at its third track in two runs of three. An
+isolated probe of five back-to-back registrations reproduced it, and the fix (the worker confirms on the port, protocol 6)
+was measured the same way. A feature that drives an existing protocol harder than its first users runs such a probe in its
+first browser pass.
 
 ### A phase's entry condition is phrased against what the phase would CHANGE, not against the problem
 

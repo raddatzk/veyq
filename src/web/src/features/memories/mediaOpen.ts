@@ -51,6 +51,9 @@ export function normalizeMediaMeta(m: RawMediaMeta): MediaMeta {
     placeLevel: cleanStr(m.placeLevel),
     trackName: cleanStr(m.trackName),
     trackActivity: cleanStr(m.trackActivity),
+    durationMs: finiteNum(m.durationMs),
+    trimStartMs: finiteNum(m.trimStartMs),
+    trimEndMs: finiteNum(m.trimEndMs),
   }
 }
 

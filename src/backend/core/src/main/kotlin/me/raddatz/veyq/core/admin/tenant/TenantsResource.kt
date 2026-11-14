@@ -461,7 +461,7 @@ class TenantsResource(
         when (val o = capabilitiesHandler.effective(identity.principal.name, tenantId.toString())) {
             is TenantCapabilitiesOutcome.Ok -> Response.ok(
                 TenantCapabilities(
-                    capabilities = o.ids.map { capabilityWire(it, o.requirements, o.services, o.deployed) },
+                    capabilities = o.ids.map { capabilityWire(it, o.requirements, o.services) },
                     applicationErasures = o.erasures.map { ApplicationErasure(id = it.application, dueAt = it.dueAt.utc()) },
                 ),
             ).build()

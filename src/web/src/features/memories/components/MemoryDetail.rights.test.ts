@@ -28,8 +28,6 @@ import { treeNode, memberMemoryRights, guestAccessOf } from '../../../test/model
 import { chooseHeaderEntry, headerActionLabels, headerButtonIds, headerMenuIds, mountWithHeader } from '../../../test/nodeHeader'
 import type { CoreHeaderAction } from '../../../core/node/nodeHeader'
 import { coreActionsStandIn, coverStandIn } from '../../../test/nodePage'
-import { sealNodeMeta } from '../../../core/node/nodeMeta'
-import { capabilityState } from '../../../shared/state/capabilities'
 
 const SCOPE_ID = '11111111-1111-1111-1111-111111111111'
 const NODE_ID = '22222222-2222-2222-2222-222222222222'
@@ -105,7 +103,7 @@ describe('MemoryDetail follows rights', () => {
     })
     expect(headerButtonIds(w)).toEqual(['favorite', 'upload', 'share', 'download'])
     // The banner only while none is drawn, the move and copy: ⋯ entries, before report and delete.
-    expect(await headerMenuIds(w)).toEqual(['banner', 'music', 'move', 'copy', 'report', 'delete'])
+    expect(await headerMenuIds(w)).toEqual(['banner', 'move', 'copy', 'report', 'delete'])
   })
 
   it("a member's rights: every header action, every tab, the chapter card, the editable cover/date/place, the marks", async () => {
@@ -113,7 +111,8 @@ describe('MemoryDetail follows rights', () => {
     expect(await header(w)).toEqual([...HEADER])
     const offered = await headerActionLabels(w)
     for (const key of EDITED_IN_PLACE) expect(offered, key).not.toContain(t(key))
-    expect(tabs(w)).toEqual([t('memory.gallery'), t('memory.chapters'), t('memory.tracks.tab'), t('memory.buckets.title'), t('memory.trash.title')])
+    // the Music tab where the viewer may add music (ADR 0135 decision 9), even before there is any
+    expect(tabs(w)).toEqual([t('memory.gallery'), t('memory.chapters'), t('memory.tracks.tab'), t('memory.music.tab'), t('memory.buckets.title'), t('memory.trash.title')])
     expect(w.find('input[type="file"]').exists()).toBe(true)
     expect(w.find('[data-testid="node-header-cover"]').exists(), 'core\'s cover button, where its right says so').toBe(true)
     expect(disabled(w, '.veyq-node-header-chip[data-fact="date"]')).toBe(false)
@@ -127,7 +126,8 @@ describe('MemoryDetail follows rights', () => {
   it('no rights: none of them — the gallery and the map alone, nothing editable, no marks read', async () => {
     const w = await mountDetail(NO_MEMORY_RIGHTS)
     expect(await header(w)).toEqual([])
-    expect(tabs(w)).toEqual([t('memory.gallery'), t('memory.tracks.tab')]) // reading, as the gallery: the map and its tracks (uc.memory.tracks)
+    // reading, as the gallery: the map and its tracks (uc.memory.tracks); no Music tab where there is no music and none may be added
+    expect(tabs(w)).toEqual([t('memory.gallery'), t('memory.tracks.tab')])
     expect(w.find('input[type="file"]').exists()).toBe(false)
     expect(w.find('[data-testid="node-header-cover"]').exists(), 'no cover button').toBe(false)
     expect(disabled(w, '.veyq-node-header-chip[data-fact="date"]')).toBe(true)
@@ -201,71 +201,6 @@ describe('MemoryDetail follows rights', () => {
       }
       w.unmount()
       document.body.innerHTML = ''
-    }
-  })
-
-  // uc.memory.music (ADR 0131): whoever writes the node's meta sets its playlists, from the ⋯ menu; nobody else is offered it
-  // (a guest's rights never grant editMeta). The header's play buttons are every viewer's (below; the bar: MusicBar.test.ts).
-  it('TEMPORARY musicReleased off (released dark, ADR 0131 decision 8): no music entry and no music button, even with editMeta and playlists', async () => {
-    const memoryKey = v1.randomBytes(32)
-    const music = [{ service: 'spotify', id: '37i9dQZF1DXcBWIGoYBM5M' }, { service: 'apple-music', id: 'pl.u-AbC123', storefront: 'de' }]
-    const withMusic = { ...node(), wrappedMeta: sealNodeMeta(memoryKey, { scopeId: SCOPE_ID, nodeId: NODE_ID }, { v: 1, music }) }
-    for (const released of [false, true]) {
-      capabilityState.musicReleased = released
-      const w = mountWithHeader(MemoryDetail, {
-        props: { source: memberMemorySource({ scopeId: () => SCOPE_ID }), node: withMusic, scopeId: SCOPE_ID, memoryKey, rights: memberMemoryRights() },
-        global: { plugins: [realI18n()] },
-      })
-      await flushPromises()
-      await flushPromises()
-      const ids = [...headerButtonIds(w), ...(await headerMenuIds(w))]
-      expect(ids.includes('share'), 'control: the header is drawn').toBe(true)
-      const expected = released ? ['music-spotify', 'music-apple-music', 'music'] : []
-      expect(ids.filter((id) => id.startsWith('music')).sort(), `released ${released}`).toEqual(expected.sort())
-      w.unmount()
-    }
-  })
-
-  it('the background music dialog opens from the header only with editMeta', async () => {
-    const memoryKey = v1.randomBytes(32)
-    await seedDated(memoryKey)
-    for (const editMeta of [false, true]) {
-      const w = mountWithHeader(MemoryDetail, {
-        props: { source: memberMemorySource({ scopeId: () => SCOPE_ID }), node: node(), scopeId: SCOPE_ID, memoryKey, rights: { ...memberMemoryRights(), editMeta } },
-        global: { plugins: [realI18n()] },
-        attachTo: document.body,
-      })
-      await vi.waitFor(() => expect(w.find('[data-media-id] button').exists()).toBe(true))
-      expect((await headerMenuIds(w)).includes('music'), `the header's entry, editMeta ${editMeta}`).toBe(editMeta)
-      if (editMeta) {
-        await chooseHeaderEntry(w, 'music')
-        await vi.waitFor(() => expect(!!document.body.querySelector('.memory-music-dialog'), 'the dialog').toBe(true))
-      }
-      w.unmount()
-      document.body.innerHTML = ''
-    }
-  })
-
-  // uc.memory.music (ADR 0131 decision 5): a node's playlists put one button per service in its header, a member's and a
-  // READ guest's alike (share view = member view) - a toggle that starts it in the shell's music bar, or the link into the
-  // service where this server plays none (the test's instance serves no music host).
-  it('a playlist puts its button in the header for a member and a READ guest; none without one', async () => {
-    const memoryKey = v1.randomBytes(32)
-    const music = [{ service: 'spotify', id: '37i9dQZF1DXcBWIGoYBM5M' }, { service: 'apple-music', id: 'pl.u-AbC123', storefront: 'de' }]
-    const withMusic = { ...node(), wrappedMeta: sealNodeMeta(memoryKey, { scopeId: SCOPE_ID, nodeId: NODE_ID }, { v: 1, music }) }
-    for (const [who, rights] of [['member', memberMemoryRights()], ['READ guest', memoryRights(guestAccessOf(ShareRole.Read), { kind: MEMORY_KIND, inIdentityFolder: false, shareable: false })]] as const) {
-      for (const n of [node(), withMusic]) {
-        const w = mountWithHeader(MemoryDetail, {
-          props: { source: memberMemorySource({ scopeId: () => SCOPE_ID }), node: n, scopeId: SCOPE_ID, memoryKey, rights },
-          global: { plugins: [realI18n()] },
-        })
-        await flushPromises()
-        await flushPromises()
-        const ids = [...headerButtonIds(w), ...(await headerMenuIds(w))]
-        const expected = n === withMusic ? ['music-spotify', 'music-apple-music'] : []
-        expect(ids.filter((id) => id.startsWith('music-')), `${who}, ${n === withMusic ? 'two playlists' : 'none'}`).toEqual(expected)
-        w.unmount()
-      }
     }
   })
 

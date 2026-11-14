@@ -7,8 +7,9 @@
 // Ported presentation from the design source (legacy/frontend-noe2ee); only the data layer is ours. Decrypted
 // thumbnails become object URLs that are **revoked** on reload / unmount (no lingering plaintext blob URLs).
 // Tabs: the Gallery, the Chapters (each opens to the same detail under its own `K_node`), the Map (the photos' GPS and the
-// node's GPX tracks, uc.memory.tracks, ADR 0130), the Contributions organizer (buckets) and the media Trash — the last two a
-// member's only. Journal and playlists are not built.
+// node's GPX tracks, uc.memory.tracks, ADR 0130), the Music (the node's own audio files, uc.memory.background-music, ADR
+// 0135: where it has music or the viewer may add some), the Contributions organizer (buckets) and the media Trash — the last
+// two a member's only. The journal is not built.
 //
 // **The header is core's** (owner 2026-11-03, ADR 0110 decision 10): core's page draws it above this body, the cover
 // included, and this view contributes data to it (`contributeNodeHeader`): the item count as the subtitle, its actions
@@ -41,7 +42,7 @@ import VeyqTagsInput, { type VeyqTag, type VeyqTagOption } from '../../../shared
 import type { VeyqIconName } from '../../../shared/ui/icons'
 import type { TreeNode } from '../../../core/node/tree'
 import { shareOfferOf, sharesAny, type NodeShareOffer } from '../../../core/node/nodeHost'
-import { hasDerivatives, mediaTypeOf, isVideoMediaType, type MediaItem } from '../media'
+import { hasDerivatives, mediaTypeOf, isVideoMediaType, type MediaItem, type RestoredMediaFacts } from '../media'
 import { openedBlobMeta } from '../openedListing'
 import { useMemoryDate } from '../useMemoryDate'
 import { useMemoryLocation } from '../useMemoryLocation'
@@ -50,6 +51,9 @@ import MediaGrid from './MediaGrid.vue'
 import MediaTile from './MediaTile.vue'
 import MemoryBuckets from './MemoryBuckets.vue'
 import MemoryTracks from './MemoryTracks.vue'
+import MemoryMusic from './MemoryMusic.vue'
+import { musicQueue, musicQueueKey } from '../music/musicQueue'
+import { audioPlayer } from '../../../core/audio/player'
 import { GPX_MEDIA_TYPE } from '../track/gpx'
 import { trackLabelFacts, type TrackLabel } from '../track/trackLabel'
 import { MetaConflictError } from '../../../core/node/sealedMetaWrite'
@@ -84,12 +88,6 @@ import type { MemoryRights } from '../rights'
 import { provideMemoryView, sourceRights, type MemorySource } from '../source'
 import { useConfirm } from '../../../shared/state/useConfirm'
 import { useToast } from '../../../shared/state/useToast'
-import { musicHeaderActions } from '../music/musicHeader'
-import { musicReleased } from '../music/musicRelease'
-import MusicDialog from '../music/MusicDialog.vue'
-import { musicField, unsealMemoryMusic, type Playlist } from '../music/musicModel'
-import { editField, nodeMetaState } from '../../../core/node/nodeMeta'
-import { useMetaWriteFeedback } from '../useMetaWriteFeedback'
 import MemoryBanner from '../banner/MemoryBanner.vue'
 import BannerDialog from '../banner/BannerDialog.vue'
 import { useMemoryBanner } from '../banner/useMemoryBanner'
@@ -208,39 +206,17 @@ const headerActions = computed<NodeHeaderAction[]>(() => [
     id: 'banner', label: memoryBanner.banner.value ? t('memory.banner.change') : t('memory.banner.add'), icon: 'objects-column', menuOnly: true,
     shown: can.value.setBanner && !bannerDrawn.value, disabled: !props.memoryKey, onClick: () => openBannerDialog(),
   },
-  // Background music (uc.memory.music, ADR 0131): every viewer starts a playlist in the shell's music bar (or opens it in
-  // the service where this server plays none); whoever writes the node's meta sets the playlists, in the ⋯ menu.
-  ...musicHeaderActions(music.value, t),
-  {
-    id: 'music', label: t('memory.music.action'), icon: 'music', menuOnly: true,
-    // TEMPORARY: released dark (musicReleased, ADR 0131 decision 8) - no entry while the deployment has not released it.
-    shown: can.value.editMeta && musicReleased(), disabled: !props.memoryKey, onClick: () => (musicDialog.value = true),
-  },
   // Move and delete are core's standard actions (`standardNodeActions`, both in the ⋯ menu), granted by `can`; the move is
   // core's dialog (inbox #358): a Memory to the root or a folder, a chapter into another Memory. The rename is the name's own,
   // in place (`headerRename`).
   ...standardNodeActions(t, { move: can.value.move, delete: can.value.delete }, { move: () => emit('move'), remove: () => emit('delete') }),
+  // The node's music (uc.memory.background-music, ADR 0135 decision 9): one button where it has music, for every viewer,
+  // toggling core's player - it stops this node's music while it plays, else starts it.
+  {
+    id: 'music', label: musicPlaysHere.value ? t('memory.music.stop') : t('memory.music.play'), icon: musicPlaysHere.value ? 'stop' : 'play',
+    shown: music.value.length > 0, disabled: !props.memoryKey, pressed: musicPlaysHere.value, onClick: () => toggleMusic(),
+  },
 ])
-// --- background music (uc.memory.music, ADR 0131): the node's playlists from its sealed meta, the header's buttons that
-// start one in the shell's music bar for every viewer, and the dialog behind the menu entry where `editMeta` grants it. The save is one read-modify-write of the
-// `music` field; a peer's change of it meanwhile re-opens the dialog on it (E2, ADR 0077).
-const music = computed<Playlist[]>(() => (props.memoryKey ? unsealMemoryMusic(props.scopeId, props.memoryKey, props.node) : []))
-const musicDialog = ref(false)
-const { editorFailed: musicFailed } = useMetaWriteFeedback((payload) => emit('metaUpdated', payload))
-async function onMusicSave(list: Playlist[]) {
-  const key = props.memoryKey
-  const write = can.value.editMeta ? props.source.nodeMeta : undefined
-  if (!key || !write) return
-  const nodeId = props.node.id
-  const openedWith = music.value.length > 0 ? music.value : undefined
-  try {
-    const { state } = await write.write(nodeId, key, nodeMetaState(props.node), editField('music', musicField(list), openedWith))
-    emit('metaUpdated', { nodeId, ...state })
-  } catch (e) {
-    await musicFailed(nodeId, e, () => (musicDialog.value = true))
-  }
-}
-
 /** The Memory's name, renamed in place in the header (the page's door), where `can` grants the rename. */
 const headerRename = computed(() => standardNodeRename({ rename: can.value.rename }, props.renameTo ? { renameTo: props.renameTo } : {}))
 
@@ -297,6 +273,7 @@ watch(
 const {
   items,
   tracks,
+  music,
   thumbs,
   thumbFailed,
   layoutItems,
@@ -417,7 +394,7 @@ function videoIdSet(list: readonly MediaItem[]): Set<string> {
 const galleryVideoIds = computed(() => videoIdSet(items.value))
 const trashVideoIds = computed(() => videoIdSet(trashedItems.value))
 
-const activeTab = ref<'gallery' | 'chapters' | 'map' | 'beitraege' | 'trash'>('gallery') // local (the #fragment carries the tree path, cr-0031)
+const activeTab = ref<'gallery' | 'chapters' | 'map' | 'music' | 'beitraege' | 'trash'>('gallery') // local (the #fragment carries the tree path, cr-0031)
 // A member's tab switch keeps the page where it stands (`tabScroll.ts`): the row stays stuck, the tab opens where it was left.
 const tabScroll = useTabScroll(activeTab, {
   root: () => detailEl.value?.querySelector<HTMLElement>('.memory-tabs') ?? null,
@@ -691,18 +668,64 @@ function enqueueTracks(tracks: { file: File; label: TrackLabel }[]) {
     },
   )
 }
-/** A track's removal: what deletes a photo deletes it - a member's trash with Undo, a guest's purge of its own, asked first. */
+/** A track's removal - a GPX track's or a music track's: what deletes a photo deletes it - a member's trash with Undo, a
+ *  guest's purge of its own, asked first in the words of its tab (`memory.tracks` / `memory.music`). */
 function canRemoveTrack(mediaId: string): boolean {
   return can.value.deleteMedia === 'any' || isOwnMedia(mediaId)
 }
-function onRemoveTrack(item: MediaItem) {
-  if (can.value.deleteMedia === 'own') {
-    void onDeleteOwn(item.mediaId, {
-      header: t('memory.tracks.removeOwnTitle'), message: t('memory.tracks.removeOwnMessage'),
-      accept: t('memory.tracks.remove'), failed: t('memory.tracks.removeFailed'),
-    })
-  } else if (can.value.deleteMedia === 'any') void onDeleteFromLightbox({ mediaId: item.mediaId })
+function removeTrack(item: MediaItem, words: () => { header: string; message: string; accept: string; failed: string }) {
+  if (can.value.deleteMedia === 'own') void onDeleteOwn(item.mediaId, words())
+  else if (can.value.deleteMedia === 'any') void onDeleteFromLightbox({ mediaId: item.mediaId })
 }
+const onRemoveTrack = (item: MediaItem) => removeTrack(item, () => ({
+  header: t('memory.tracks.removeOwnTitle'), message: t('memory.tracks.removeOwnMessage'),
+  accept: t('memory.tracks.remove'), failed: t('memory.tracks.removeFailed'),
+}))
+
+// --- music (uc.memory.background-music, ADR 0135): a music track is a medium whose original is its audio file, so it rides
+// the one upload queue as a GPX track does, grouped apart from the gallery's (`#music`) so no photo tile stands in for it;
+// the Music tab checked each file on the device and measured its facts first, which its upload seals at birth. Once it is
+// listed the gallery's listing hands it to the Music tab (`music`). The tab shows where the node has music or the viewer
+// may add some (decision 9).
+const MUSIC_BATCH = '#music'
+const showMusic = computed(() => music.value.length > 0 || can.value.upload)
+function enqueueMusic(selections: { file: File; mediaType: string; facts: RestoredMediaFacts }[]) {
+  const key = props.memoryKey
+  const upload = props.source.upload
+  if (!key || !can.value.upload || !upload) return
+  const targetNodeId = props.node.id
+  const target = upload.target(targetNodeId, key, props.node.epoch)
+  if (!target) return
+  enqueueUploads({ ...target, key: `${props.source.batchKey(targetNodeId)}${MUSIC_BATCH}` }, selections, {
+    label: props.node.name,
+    onFileDone: () => { if (props.node.id === targetNodeId) void pollMedia() },
+    onComplete: () => { if (props.node.id === targetNodeId) void load() },
+  })
+}
+/** Core's one player; whether it plays THIS node's music, and which track. */
+const player = audioPlayer()
+const musicPlaysHere = computed(() => player.nowPlaying.value?.key === musicQueueKey(props.scopeId, props.node.id))
+const playingMusicId = computed(() => (musicPlaysHere.value ? player.nowPlaying.value?.trackId ?? null : null))
+/** Start the node's music - from `startId` first (A1) - as a snapshot of its tracks now. Synchronous in the press: the
+ *  player wakes its audio there (iOS). */
+function playMusic(startId?: string) {
+  const key = props.memoryKey
+  if (!key || music.value.length === 0) return
+  player.play(musicQueue({
+    scopeId: props.scopeId, nodeId: props.node.id, nodeName: props.node.name, href: window.location.href, key, music: music.value, loaders: props.source.loaders,
+    untitled: (n) => t('memory.music.untitled', { n }), ...(startId ? { startId } : {}),
+  }))
+}
+function toggleMusic() {
+  if (musicPlaysHere.value) player.stop()
+  else playMusic()
+}
+const onRemoveMusic = (item: MediaItem) => removeTrack(item, () => ({
+  header: t('memory.music.removeOwnTitle'), message: t('memory.music.removeOwnMessage'),
+  accept: t('memory.music.remove'), failed: t('memory.music.removeFailed'),
+}))
+// A tab that is no longer shown (its last track gone, the right to add lost) leaves for the gallery.
+watch(showMusic, (shown) => { if (!shown && activeTab.value === 'music') activeTab.value = 'gallery' })
 
 /**
  * A track's own name and activity (ADR 0130 decision 9): a medium's meta write, so offered where a medium's meta may be
@@ -870,6 +893,9 @@ watch(
         </VeyqTab>
         <VeyqTab value="map" data-testid="memory-tab-map">
           {{ t('memory.tracks.tab') }}<span v-if="tracks.length" class="tab-count">{{ tracks.length }}</span>
+        </VeyqTab>
+        <VeyqTab v-if="showMusic" value="music" data-testid="memory-tab-music">
+          {{ t('memory.music.tab') }}<span v-if="music.length" class="tab-count">{{ music.length }}</span>
         </VeyqTab>
         <VeyqTab v-if="showBeitraege" value="beitraege">{{ t('memory.buckets.title') }}</VeyqTab>
         <VeyqTab v-if="can.mediaTrash" value="trash">{{ t('memory.trash.title') }}</VeyqTab>
@@ -1053,6 +1079,26 @@ watch(
           />
         </VeyqTabPanel>
 
+        <!-- Music tab (uc.memory.background-music, ADR 0135): the node's own audio files with their titles and lengths. -->
+        <VeyqTabPanel v-if="showMusic" value="music">
+          <MemoryMusic
+            :memory-name="node.name"
+            :memory-key="memoryKey"
+            :music="music"
+            :loaders="source.loaders"
+            :can-add="can.upload"
+            :can-remove="canRemoveTrack"
+            :can-download="can.download"
+            :can-report="!!canReport"
+            :pick-ready="trackPickReady"
+            :playing-id="playingMusicId"
+            @play="playMusic"
+            @add="enqueueMusic"
+            @remove="onRemoveMusic"
+            @report="emit('reportMedium', $event)"
+          />
+        </VeyqTabPanel>
+
         <!-- Beiträge tab (uc.memory.buckets, cr-0113): the media ORGANIZER — a hierarchy picker (your primary +
              sub-buckets), create/rename/delete sub-buckets, move media in, upload into a bucket. Ported from the
              legacy MemoryAssetBuckets UX. Always present; the primary is virtual until a sub-bucket/upload materializes it. -->
@@ -1170,13 +1216,6 @@ watch(
       :current-src="memoryBanner.pictureUrl.value"
       :save="bannerEditor.save"
       @close="bannerDialog = false"
-    />
-
-    <MusicDialog
-      v-if="musicDialog && memoryKey && can.editMeta"
-      :music="music"
-      @save="onMusicSave"
-      @close="musicDialog = false"
     />
 
     <MemoryDateEditor

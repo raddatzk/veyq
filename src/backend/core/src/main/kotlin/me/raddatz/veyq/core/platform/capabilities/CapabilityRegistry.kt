@@ -33,7 +33,6 @@ class CapabilityRegistry(
     private val tenantSwitches: TenantCapabilitySwitches,
     private val requirementValues: CapabilityRequirementValues,
     private val services: ExternalServiceAddresses,
-    private val deployment: DeploymentCapabilities,
 ) {
     /** The instance's active capability ids, in [CapabilityIds.ADVERTISED] order — the pre-auth manifest. */
     val active: List<String>
@@ -134,11 +133,10 @@ class CapabilityRegistry(
     }
 
     /** The switched-off sets of both levels; an external service with no configured address counts as switched off at
-     *  the instance level (ADR 0088 decision 7), and so does an entry the deployment leaves unconfigured (ADR 0131
-     *  decision 4): it is not served, and nothing a switch does brings it back. */
+     *  the instance level (ADR 0088 decision 7): it is not served, and nothing a switch does brings it back. */
     private fun offSets(tenantId: String?): Pair<Set<String>, Set<String>> {
         val configured = services.configured().keys
-        val unconfigured = CapabilityIds.EXTERNAL_SERVICES - configured + deployment.unconfigured()
+        val unconfigured = CapabilityIds.EXTERNAL_SERVICES - configured
         return (switches.switchedOff() + unconfigured) to (tenantId?.let { tenantSwitches.switchedOff(it) } ?: emptySet())
     }
 

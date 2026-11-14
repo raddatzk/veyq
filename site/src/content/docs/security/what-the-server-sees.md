@@ -12,6 +12,7 @@ sources:
   - docs/crosscutting/security-model.md
   - docs/decisions/0044-field-visibility-declared-at-the-field.md
   - docs/decisions/0047-inline-video-playback-range-streaming.md
+  - docs/decisions/0135-background-music-is-a-nodes-own-audio-media-played-by-cores-player.md
   - docs/decisions/0079-veyq-is-a-platform-memories-is-its-first-application.md
   - docs/decisions/0102-a-memorys-banner-is-its-own-attachment-framed-by-a-focal-point.md
   - docs/decisions/0014-group-scopes-and-governance.md
@@ -63,7 +64,8 @@ Sealed client-side, never readable by the server:
   server stores and enforces uniqueness on without being able to reverse it;
 - a blob's **type, upload name and modification time**, in a seal under the blob's own key, padded to a 256-byte
   bucket so its length shows one of four sizes, never how long a name is. A Memories original's file name and media
-  type (photo, video or PDF) live there, so the operator learns neither;
+  type (photo, video, PDF, a GPX track or a music track) live there, so the operator learns neither - nor that a
+  Memory holds music, nor a track's title, length or silence, which ride the medium's sealed metadata;
 - bucket and uploader names, a share's note and private name, and every identity pin: whom it pins, the key's
   fingerprint and key-chain head, when it was first seen and whether a join record replaced it, each in an entry
   sealed under the Master Key;
@@ -172,7 +174,9 @@ time the server observes live is not kept for them. What it does hold, each with
 
 - Sizes: a blob's plaintext size is on its row; the blob-meta seal shows one of four padded sizes.
 - Access: every read except range-streamed playback fetches a blob **whole**, so the operator learns only *that*
-  a blob was accessed. Playback is concession 1.
+  a blob was accessed. Playback is concession 1. A Memory's background music is playback too: a playing track shows up
+  as reads of one of the Memory's blobs, one after another while the music runs, as watching its videos does - never
+  which file it is, its title or the order.
 
 ### Sharing
 

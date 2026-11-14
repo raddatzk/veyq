@@ -1,0 +1,54 @@
+---
+title: "Add background music"
+sources:
+  - docs/features/memory/use-cases/uc.memory.background-music.md
+  - docs/features/platform/enablers/en.platform.audio-player.md
+---
+
+A Memory can sound the way it was: add the songs you listened to as **audio files**, and everyone who opens the Memory
+can play them in the background while they look through it. A Memory and each of its chapters can hold their own music.
+veyq uses no streaming service: the music is your own files, stored encrypted like your photos.
+
+## Add music
+
+1. Open the Memory (or the chapter) and choose the **Music** tab.
+2. Choose **Add music** and pick one or more audio files - MP3, M4A, AAC, WAV, FLAC or Ogg.
+3. Each file is listed by its name without the extension, with its length.
+
+veyq checks each file on your device before it uploads it, and tells you which one it did not add and why: a file larger
+than 200 MB, a file that is no audio file, or one this browser cannot play. On your device it also finds the silence at
+the start and the end of each song, so the music runs on without gaps; where that would take too long for a large file,
+the song simply plays whole.
+
+## Play the music
+
+Choose **Play music** at the top of the Memory. The music plays in a bar at the bottom of the page: the songs in a shuffled
+order that starts over, shuffled again, when every song has played, each one fading into the next. Choosing a song in the
+**Music** tab starts the music with that song.
+
+In the bar you can pause and play, go to the **Next** or the **Previous** song, and drag the progress bar to jump within a
+song. **Previous** starts the song over when it has played for more than a few seconds. The keys and the lock screen of
+your phone or computer work too.
+
+The music goes on while you move on - to another Memory, to your settings, to another space. **Stop music** at the top of
+the Memory, or **Close** in the bar, ends it; starting another Memory's music replaces it. Signing out ends it too.
+
+A chapter plays only its own songs. Music you started on its Memory goes on while you look at the chapter.
+
+## Download, remove or report a song
+
+The **⋯** beside a song offers **Download**, which saves the file as it was added, **Remove** and **Report**. A removed song
+goes to the Memory's **Trash** tab with the photos you removed, and you can bring it back from there
+([Remove photos and bring them back](/memories/photo-trash/)).
+
+Songs are not photos: they are not in the gallery and not in its count, and the search does not find them, but a download
+or a copy of the Memory carries their files.
+
+## Who can do what
+
+Everyone who may add photos to the Memory can add music, and everyone who may remove photos can remove a song. People you
+share a link with hear the music and see the songs as you do; with a link that lets them add photos, they can add music
+and remove their own.
+
+The server stores each song encrypted, like a photo, and cannot even tell that it is music: it never learns a title, a
+length or which songs play.

@@ -36,6 +36,21 @@ tasks.processResources {
     from(fixedTexts) { into("veyq/terms") }
 }
 
+// The settings of the retired streaming music (removed by ADR 0135), left over as an instance that ran it
+// would leave them: every test JVM of this module carries every former `VEYQ_MUSIC_*` variable, so every test runs on such
+// an instance and `FormerMusicSettingsSliceTest` asserts that nothing reads them (the policies, the hosts, the register).
+// In the environment, where an operator sets them: the same keys in a properties file refuse the boot (SRCFG00050, a key
+// under `veyq.` that maps to nothing), which a leftover variable must not and does not.
+tasks.test {
+    environment("VEYQ_MUSIC_RELEASED", "true")
+    environment("VEYQ_MUSIC_DOMAIN", "music.veyq.test")
+    environment("VEYQ_MUSIC_SPOTIFY_CLIENT_ID", "0123456789abcdef0123456789abcdef")
+    environment(
+        "VEYQ_MUSIC_APPLE_DEVELOPER_TOKEN",
+        "eyJhbGciOiJFUzI1NiIsImtpZCI6IktFWTEyMyJ9.eyJpc3MiOiJURUFNMTIzIiwiaWF0IjoxNzAwMDAwMDAwLCJleHAiOjQxMDI0NDQ4MDB9.c2ln",
+    )
+}
+
 dependencies {
     // `api`: the root and every application build on these extensions through core.
     api("io.quarkus:quarkus-arc")

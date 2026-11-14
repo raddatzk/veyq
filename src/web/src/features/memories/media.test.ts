@@ -1049,6 +1049,35 @@ describe('addMedia — E2EE-sealed layout + EXIF tiers (cr-0059/cr-0064)', () =>
     expect(meta).toMatchObject({ capturedAt: FILE_MTIME, trackName: '山'.repeat(TRACK_NAME_MAX_BYTES / 3), trackActivity: 'mountain-biking' })
   })
 
+  // ADR 0135 decision 4: a music track's facts ride its listed tier, sealed by the one completion. The cap is the tier's 512
+  // base64: worst case, an import restoring every fact an audio medium can carry - a corrected time, the longest place
+  // name (an archive may give one to any medium) and the three facts at the largest integer a number holds; an audio file
+  // gives no geometry, GPS or EXIF. Lever: drop the `audioFactFields(...)` spread in `sealMetadata`.
+  it('a music track\'s facts are sealed into its listed tier at birth, inside the 512 cap at their worst case', async () => {
+    const store = fakeStore()
+    fakeApi(mediaApi, store.api)
+    fakeApi(blobApi, store.blob)
+    vi.stubGlobal('fetch', store.fetchStub)
+    const memoryKey = v1.randomBytes(32)
+    const MAX = Number.MAX_SAFE_INTEGER
+    const song = new Blob([new Uint8Array([0x49, 0x44, 0x33, 4]) as BlobPart])
+    await addMedia(SCOPE_ID, NODE_ID, memoryKey, { blob: song, mediaType: 'audio/mpeg', lastModified: Date.UTC(2026, 5, 1), name: 'song.mp3' }, stubDeriver(), {
+      restored: { capturedAtOverride: Date.UTC(2099, 11, 31), placeName: 'Ä'.repeat(PLACE_NAME_MAX_BYTES), durationMs: MAX, trimStartMs: MAX - 2, trimEndMs: MAX - 1 },
+    })
+
+    expect(store.captured.updatedMeta).toBeUndefined()
+    const sealed = store.captured.completeItem.wrappedMeta!
+    expect(sealed.length).toBeLessThanOrEqual(512)
+    expect(openJson(metaCtx(store.captured.completeItem.mediaId), memoryKey, sealed)).toMatchObject({ durationMs: MAX, trimStartMs: MAX - 2, trimEndMs: MAX - 1 })
+    const [item] = await listMedia(SCOPE_ID, NODE_ID)
+    expect(unsealMeta(SCOPE_ID, memoryKey, item), 'the opened tier carries them').toMatchObject({ durationMs: MAX, trimStartMs: MAX - 2, trimEndMs: MAX - 1 })
+
+    // facts that make no span are sealed as none: the track then plays whole
+    await addMedia(SCOPE_ID, NODE_ID, memoryKey, { blob: song, mediaType: 'audio/mpeg', lastModified: 1 }, stubDeriver(), { restored: { durationMs: 10, trimStartMs: 9, trimEndMs: 5 } })
+    const broken = openJson(metaCtx(store.captured.completeItem.mediaId), memoryKey, store.captured.completeItem.wrappedMeta!)
+    expect([broken.durationMs, broken.trimStartMs, broken.trimEndMs]).toEqual([undefined, undefined, undefined])
+  })
+
   // The capture-time key has TWO consumers: the metadata tier sealed at upload, and the in-flight upload tile
   // that must know its grid place BEFORE a byte is uploaded (useOptimisticTiles). They agree because they
   // consume one rule — `captureTimeOf` — and this is the bite that says so rather than assuming it. Lever:

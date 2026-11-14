@@ -282,6 +282,13 @@ describe('uploadQueue — Safari file-selection helpers', () => {
     expect(isSupportedMediaFile(new File([], 'notes.txt', { type: '' }))).toBe(false)
   })
 
+  // ADR 0135 decision 2: music is added from the Music tab only; the gallery's pickers and drop keep refusing audio.
+  it('refuses audio, by its type and by its extension', () => {
+    for (const [name, type] of [['song.mp3', 'audio/mpeg'], ['song.m4a', 'audio/mp4'], ['song.wav', ''], ['song.mp3', ''], ['song.flac', '']]) {
+      expect(isSupportedMediaFile(new File([], name, { type })), `${name} ${type}`).toBe(false)
+    }
+  })
+
   it('infers a media type from the extension when the MIME is empty', () => {
     expect(inferMediaType(new File([], 'IMG.HEIC', { type: '' }))).toBe('image/heic')
     expect(inferMediaType(new File([], 'clip.mov', { type: '' }))).toBe('video/quicktime')

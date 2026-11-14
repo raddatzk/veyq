@@ -168,22 +168,6 @@ admin:
       cpu: 50m
       memory: 32Mi
 
-# Background music in Memories (ADR 0131): not released yet, so off unless the TEMPORARY release flag `released` is
-# true (music.released, decision 8; removed at release) — whatever else is set: no route, no listener, nothing passed to
-# the app. Then all optional, and off while `domain` is empty — the instance works fully
-# without it. `domain` is the music host, a host name of its own beside `domain` above (a sibling: music.example.org
-# next to veyq.example.org): the app serves the music frame there, and the chart gives it an HTTPRoute and, under
-# per-domain, a listener and certificate of its own, as for admin.domain. Then one or both services, each public by
-# nature (every viewer's browser receives it): your Spotify app's client ID (its redirect URI is
-# https://<music.domain>/music-frame/spotify-callback) and a MusicKit developer token (a JWT, valid at most six
-# months; past its expiry Apple Music switches itself off). The Run page "Background music" says how to register both
-# and what each costs.
-music:
-  released: false
-  domain: ""
-  spotifyClientId: ""
-  appleDeveloperToken: ""
-
 backup:
   # The backup gate (ADR 0098): an init container, `backup-gate`, in the app pod, before the container that migrates.
   # When the pod is about to start a different release than the database holds — or a new `request` — it captures the

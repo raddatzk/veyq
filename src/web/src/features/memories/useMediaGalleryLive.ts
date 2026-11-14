@@ -10,6 +10,8 @@ import type { TreeNode } from '../../core/node/tree'
 import { hasDerivatives, effectiveCapturedAt, type MediaItem } from './media'
 import { closeListing, openListing, openedBlobMeta, openedMeta } from './openedListing'
 import { isTrackMeta } from './track/gpx'
+import { isAudioMeta } from './music/audio'
+import { isGalleryMedium } from './galleryMedium'
 import type { MemorySource } from './source'
 import { mediaRefusalOf, sealedMediaName } from './mediaRefusal'
 import { startMediaRevisionPolling, stopMediaRevisionPolling } from './mediaRevisionPolling'
@@ -48,17 +50,20 @@ export type MemoryTileItem =
 export function useMediaGalleryLive(ctx: MediaGalleryLiveCtx) {
   const { t } = useI18n()
   const toast = useToast()
-  // Every listed medium of the node, and what this gallery shows of them: a GPX track is a medium too (ADR 0130 decision
-  // 1), known by its opened `blob-meta`, and no photo - it is left out of `items`, the one list every view of photos
-  // derives from (the grid, the lightbox, the count, the organizer, the search, the date and place reconcile), and is
-  // handed to the Map tab as `tracks` (decision 7). The listing is opened before it is merged, so the meta is there.
+  // Every listed medium of the node, and what this gallery shows of them: only a photo or a video (`isGalleryMedium`, one
+  // predicate for every photo view), known by its opened `blob-meta` - `items`, the one list every view of photos derives
+  // from (the grid, the lightbox, the count, the organizer, the search, the date and place reconcile). A GPX track (ADR
+  // 0130 decision 1) and a music track (ADR 0135 decision 2) are media too and no photo: each is handed to its own tab, as
+  // `tracks` (the Map tab) and `music` (the Music tab). The listing is opened before it is merged, so the meta is there;
+  // without the node's key nothing can be told apart, and every medium is the gallery's.
   const listed = ref<MediaItem[]>([])
-  function isTrack(item: MediaItem): boolean {
+  function blobMetaOf(item: MediaItem) {
     const key = ctx.memoryKey()
-    return !!key && isTrackMeta(openedBlobMeta(ctx.scopeId(), key, item))
+    return key ? openedBlobMeta(ctx.scopeId(), key, item) : undefined
   }
-  const items = computed(() => listed.value.filter((it) => !isTrack(it)))
-  const tracks = computed(() => listed.value.filter(isTrack))
+  const items = computed(() => listed.value.filter((it) => { const meta = blobMetaOf(it); return meta === undefined || isGalleryMedium(meta) }))
+  const tracks = computed(() => listed.value.filter((it) => { const meta = blobMetaOf(it); return meta !== undefined && isTrackMeta(meta) }))
+  const music = computed(() => listed.value.filter((it) => { const meta = blobMetaOf(it); return meta !== undefined && isAudioMeta(meta) }))
   // Optimistic in-grid upload tiles (uc.memory.upload, cr-0074): the shared queue's still-in-flight files for THIS
   // node (grouping key = the node id) as instant preview tiles, reconciled into the real thumbnail by mediaId.
   // `donorPreviewFor` feeds the thumbnail pipeline the preview to hand off.
@@ -424,6 +429,8 @@ export function useMediaGalleryLive(ctx: MediaGalleryLiveCtx) {
     items,
     /** The node's GPX tracks (ADR 0130): media, listed and live as every medium, shown on the Map tab only. */
     tracks,
+    /** The node's music tracks (ADR 0135): media, listed and live as every medium, shown on the Music tab and played. */
+    music,
     thumbs,
     thumbFailed,
     layoutItems,

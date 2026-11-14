@@ -45,10 +45,6 @@
                  nameAnchor?:  { lat, lng, level } } }  // coord + granularity level (road…country) a geocoded name resolved at
   ```
 
-  Beside these: `cover`, `participants`, `banner` (their sections below) and `music`, at most one playlist per service
-  (`[{ service: 'spotify', id }, { service: 'apple-music', id, storefront }]`, [uc.memory.music](../use-cases/uc.memory.music.md),
-  [ADR 0131](../../../decisions/0131-a-memorys-background-music-plays-through-the-vendors-sdk-in-a-frame-of-its-own-origin.md)).
-
   - **`date`** ([uc.memory.date](../use-cases/uc.memory.date.md)) — the effective day range, materialized for
     every mode; `auto` = min→max over the Memory's *trustworthy* `capturedAt`.
   - **`location`** ([uc.memory.place](../use-cases/uc.memory.place.md)) — one named place, set **intent-first**

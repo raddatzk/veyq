@@ -45,9 +45,6 @@
         },
         "banner": {
           "$ref": "#/$defs/banner"
-        },
-        "music": {
-          "$ref": "#/$defs/music"
         }
       },
       "required": [
@@ -56,7 +53,7 @@
       ]
     },
     "chapter": {
-      "description": "Memories: the content of a CHAPTER node - the same fields as a Memory's (media, date, place, cover, participants, banner, music).",
+      "description": "Memories: the content of a CHAPTER node - the same fields as a Memory's (media, date, place, cover, participants, banner).",
       "type": "object",
       "properties": {
         "type": {
@@ -87,9 +84,6 @@
         },
         "banner": {
           "$ref": "#/$defs/banner"
-        },
-        "music": {
-          "$ref": "#/$defs/music"
         }
       },
       "required": [
@@ -175,6 +169,29 @@
                 "other"
               ],
               "description": "The activity, drawn as the line's dash."
+            }
+          }
+        },
+        "audio": {
+          "description": "A music track's facts as its upload measured them (uc.memory.background-music, ADR 0135 decision 4): its length and the span between its leading and trailing silence, in milliseconds of the file. Present on every audio medium that has them; an import seals them into the track's listed tier again, and measures them from the file where they are absent.",
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["durationMs", "trimStartMs", "trimEndMs"],
+          "properties": {
+            "durationMs": {
+              "type": "integer",
+              "minimum": 0,
+              "description": "The file's length."
+            },
+            "trimStartMs": {
+              "type": "integer",
+              "minimum": 0,
+              "description": "Where the silence at its start ends: where it starts playing."
+            },
+            "trimEndMs": {
+              "type": "integer",
+              "minimum": 0,
+              "description": "Where the silence at its end begins: where it stops playing."
             }
           }
         }
@@ -294,35 +311,6 @@
               "minimum": 0,
               "maximum": 1
             }
-          }
-        }
-      }
-    },
-    "music": {
-      "description": "The background music (uc.memory.music, ADR 0131): at most one playlist per service, as the service names it. An import seals it into the node's meta again.",
-      "type": "array",
-      "maxItems": 2,
-      "items": {
-        "type": "object",
-        "required": [
-          "service",
-          "id"
-        ],
-        "additionalProperties": false,
-        "properties": {
-          "service": {
-            "enum": [
-              "spotify",
-              "apple-music"
-            ]
-          },
-          "id": {
-            "type": "string",
-            "pattern": "^(?:[0-9A-Za-z]{16,24}|pl\\.[0-9A-Za-z-]{1,48})$"
-          },
-          "storefront": {
-            "type": "string",
-            "pattern": "^[a-z]{2}$"
           }
         }
       }

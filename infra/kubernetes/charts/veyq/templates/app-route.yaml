@@ -21,27 +21,3 @@ spec:
       backendRefs:
         - name: veyq-app
           port: 8080
-{{- with (include "veyq.musicDomain" .) }}
----
-# The music host (ADR 0131): the app serves the music frame there and answers nothing else, so the whole host goes to
-# the app, as the bootstrap domain does. Chart-owned like the admin's route; a listener of its own under per-domain.
-apiVersion: gateway.networking.k8s.io/v1
-kind: HTTPRoute
-metadata:
-  name: veyq-music
-  labels:
-    {{- include "veyq.labels" $ | nindent 4 }}
-    app.kubernetes.io/component: app
-spec:
-  {{- include "veyq.routeParent" (dict "root" $ "listener" "https-music") | nindent 2 }}
-  hostnames:
-    - {{ . | quote }}
-  rules:
-    - matches:
-        - path:
-            type: PathPrefix
-            value: /
-      backendRefs:
-        - name: veyq-app
-          port: 8080
-{{- end }}

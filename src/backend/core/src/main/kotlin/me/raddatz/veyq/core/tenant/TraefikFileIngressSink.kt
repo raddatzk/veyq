@@ -44,11 +44,6 @@ class TraefikFileIngressSink(
      * routing file does not make Traefik overwrite, because both follow the one setting of this process.
      */
     private val clientPortHeader: String? = null,
-    /**
-     * The music host (ADR 0131 decision 2), routed to the app like the bootstrap domain, which serves the music frame
-     * there and answers nothing else; null renders no router for it.
-     */
-    private val musicDomain: String? = null,
 ) : TenantIngressSink {
 
     constructor(target: Path, bootstrapDomain: String?, adminDomain: String?, upstreams: Upstreams, bucket: String?) :
@@ -99,7 +94,7 @@ class TraefikFileIngressSink(
         // Once per render, so every router of one file agrees on whether — and which — bucket is routed.
         val blobsPrefix = bucket()?.let { blobsPrefix(it) }
         val routed = listOfNotNull(bootstrapDomain) + domains
-        if (routed.isNotEmpty() || adminDomain != null || musicDomain != null) {
+        if (routed.isNotEmpty() || adminDomain != null) {
             // Only when there is a router to put in it. Traefik rejects a section that is present but empty —
             // `routers: {}` fails with "routers cannot be a standalone element" (measured on the pinned v3.6, see
             // TenantIngressEmptyProjectionTest) — and with no bootstrap domain and no tenant this one would be.
@@ -116,8 +111,6 @@ class TraefikFileIngressSink(
                 }
             }
             adminDomain?.let { router(ADMIN, "Host(`$it`)", priority = null, service = ADMIN) }
-            // No client-address middleware: the music frame's host writes nothing a guest's address would be kept for.
-            musicDomain?.let { router(MUSIC, "Host(`$it`)", priority = 1, service = APP) }
         }
         append("  services:\n")
         service(APP, upstreams.app, passHostHeader = false)
@@ -205,7 +198,6 @@ class TraefikFileIngressSink(
         const val APP = "veyq-app"
         const val BLOBS = "veyq-blobs"
         const val ADMIN = "veyq-admin"
-        const val MUSIC = "veyq-music"
         const val INERT = "veyq-blobs-inert"
         const val CLIENT_ADDR = "veyq-client-addr"
 

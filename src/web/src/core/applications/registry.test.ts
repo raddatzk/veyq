@@ -7,6 +7,7 @@ import { MEMORY_KIND, CHAPTER_KIND } from '../../features/memories/kinds'
 import { fileNameSlug, slugify } from '../../shared/naming'
 import { nothingOfItsOwnToRekey } from '../node/rekey/hooks'
 import { testApp, testKind } from '../../test/testApplication'
+import { memoriesLifecycle } from '../../features/memories/lifecycle'
 
 const Stub = defineComponent({ template: '<div />' })
 const Other = defineComponent({ template: '<span />' })
@@ -328,6 +329,16 @@ describe('registry: lifecycle hooks', () => {
     expect(r.registerLifecycle).toBeUndefined()
   })
 
+  // ADR 0135 decision 8: the shell's footer bar and the session ending's hook had one user, which is gone, and went with
+  // it. Core's own player bar comes as core's, not as a door for applications.
+  it('has no footer bar and no session-ending hook: neither door is on the registrar, the registry or a hook set', () => {
+    const r = named('memories')
+    expect((r.apps.memories as unknown as Record<string, unknown>).footerBar, 'app.footerBar').toBeUndefined()
+    expect((r as unknown as Record<string, unknown>).footerBars, 'registry.footerBars').toBeUndefined()
+    expect(Object.keys(memoriesLifecycle), 'Memories registers no ending step').not.toContain('onSessionEnding')
+    expect(Object.keys(memoriesLifecycle), 'control: the hook set is the one Memories registers').toContain('onMasterKeyRotated')
+  })
+
   it('refuses a hook set without onMasterKeyRotated (it is required, not optional)', () => {
     const r = named('x')
     expect(() => r.apps.x.lifecycle({} as LifecycleHooks)).toThrow(/onMasterKeyRotated/)
@@ -354,16 +365,6 @@ describe('registry: lifecycle hooks', () => {
     await r.masterKeyRotated(o, n, ['s1'])
     expect(a).toHaveBeenCalledWith(o, n, ['s1'])
     expect(b).toHaveBeenCalledWith(o, n, ['s1'])
-  })
-
-  it('hands an application\'s onSessionEnding to the session ending, which runs it with who started it', async () => {
-    // ADR 0131 decision 5: Memories' music frame forgets the vendor's sign-in before the sign-in page loads.
-    const { runSessionEndingSteps } = await import('../../app/sessionEndingSteps')
-    const r = named('a')
-    const ending = vi.fn(async () => {})
-    r.apps.a.lifecycle(hooks({ onSessionEnding: ending }))
-    await runSessionEndingSteps({ startedHere: true })
-    expect(ending).toHaveBeenCalledWith({ startedHere: true })
   })
 
   it('a failing hook does not stop the next application, and its error is rethrown afterwards', async () => {
@@ -689,25 +690,6 @@ describe('registry: keyboard shortcuts (uc.platform.keyboard-shortcuts)', () => 
     expect(() => testApp(r).shortcuts([{ title: 'a', entries: [{ keys: [], label: 'x' }] }])).toThrow(/names no key/)
     expect(() => testApp(r).shortcuts([{ title: 'a', entries: [{ keys: [[]], label: 'x' }] }])).toThrow(/names no key/)
     expect(r.shortcuts(), 'a refused set registers nothing').toEqual([])
-  })
-})
-
-describe('registry: the footer bar (ADR 0131)', () => {
-  it('lists each application\'s bar with its id, in registration order, and refuses a second one or the same component twice', () => {
-    const r = createRegistry()
-    const A = { name: 'A' }
-    const B = { name: 'B' }
-    expect(r.footerBars()).toEqual([])
-    testApp(r).footerBar(A)
-    testApp(r, 'other').footerBar(B)
-    expect(r.footerBars()).toEqual([{ application: 'test', component: A }, { application: 'other', component: B }])
-    expect(() => testApp(r).footerBar({ name: 'C' }), 'one per application').toThrow(/already registered/)
-    expect(() => testApp(r, 'third').footerBar(A), 'nor the same component by another').toThrow(/already registered/)
-    expect(r.footerBars(), 'a refused bar registers nothing').toHaveLength(2)
-    const C = { name: 'C' }
-    const shown = () => false
-    testApp(r, 'third').footerBar(C, shown)
-    expect(r.footerBars()[2], 'a bar registered with a condition carries it').toEqual({ application: 'third', component: C, shown })
   })
 })
 

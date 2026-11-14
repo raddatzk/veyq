@@ -50,9 +50,8 @@ const XML_TYPES = new Set(['application/xml', 'text/xml', 'application/octet-str
  * Whether a medium is a track: its original's sealed type is the GPX type — or, for a file whose type was declared as
  * generic XML or bytes, its sealed name ends in `.gpx`. A medium whose original carries no meta is no track.
  *
- * Every reader of a Memory's media that shows photos asks this: the gallery's list does once for its views
- * (`useMediaGalleryLive`), and a reader that lists media without it asks itself - the space's search (`search.ts`) lists
- * every medium of a space and made a track a photo document until it did. A new such reader is the next place to ask.
+ * The Map tab's list asks this (`useMediaGalleryLive`'s `tracks`), and so does the one predicate every photo view asks,
+ * `isGalleryMedium` (`galleryMedium.ts`), which leaves out exactly the kinds another view claims (ADR 0135 decision 2).
  */
 export function isTrackMeta(meta: Pick<OpenedBlobMeta, 'type' | 'name'> | { readonly type?: unknown; readonly name?: unknown } | null | undefined): boolean {
   if (!meta) return false

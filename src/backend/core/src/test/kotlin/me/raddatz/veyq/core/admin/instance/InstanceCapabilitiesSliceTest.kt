@@ -3,7 +3,6 @@ package me.raddatz.veyq.core.admin.instance
 import me.raddatz.veyq.core.adminchannel.givenAdminChannel
 import me.raddatz.veyq.core.identity.MasterKeyWrapEntity
 import me.raddatz.veyq.core.platform.capabilities.CapabilityIds
-import me.raddatz.veyq.core.platform.capabilities.UNCONFIGURED_IN_TEST
 import me.raddatz.veyq.core.platform.capabilities.CapabilityIds.DEVICE_LINKING
 import me.raddatz.veyq.core.platform.capabilities.CapabilityIds.PUBLIC_SHARES
 import me.raddatz.veyq.core.platform.capabilities.CapabilityIds.PUBLIC_SHARES_CONTRIBUTE
@@ -59,8 +58,7 @@ class InstanceCapabilitiesSliceTest {
     fun theRegisterIsListedInCatalogOrderWithItsWordsAndEveryEntryOn() {
         val listed = owner().`when`().get(PATH).then().statusCode(200)
             .body("off", equalTo(CapabilityIds.ADVERTISED.map { false }))
-            // every entry on but the music frame's, which this profile's deployment leaves unconfigured (ADR 0131)
-            .body("effective", equalTo(CapabilityIds.ADVERTISED.map { it !in UNCONFIGURED_IN_TEST }))
+            .body("effective", equalTo(CapabilityIds.ADVERTISED.map { true }))
             .extract().jsonPath()
         assertEquals(CapabilityIds.ADVERTISED, listed.getList<String>("id"))
         CapabilityIds.ADVERTISED.forEachIndexed { i, id ->

@@ -7,9 +7,7 @@
 // (P4c): `MemoryNodeDialog` creates a Memory or a chapter (the kind picks which), `ShareDialog` manages a Memory's or a
 // chapter's links (every role's, one dialog); a rename of either is core's - its header's name edited in place, a row's
 // `FolderNameDialog`, one write (`core/node/nodeName.ts`). The same detail
-// serves a member and a share guest (inbox #401): the host picks the data source by `access.mode`. Memories adds one thing to
-// the shell: its music bar, the footer bar below the shell's footer (`app.footerBar`, ADR 0131), which a Memory's header
-// starts and which plays on across pages. Nothing else: the sidebar's
+// serves a member and a share guest (inbox #401): the host picks the data source by `access.mode`. Memories adds nothing to the shell: the sidebar's
 // Favorites section is core's (`core/favorites/PinnedNodes.vue`, inbox #409), and so is the top bar's upload status
 // (`core/blob/UploadStatusMenu.vue`, cr-files-application B3), which lists Memories' batches with every other application's.
 import { rekeyMemoryContent } from './rekey'
@@ -27,8 +25,6 @@ import MemoryShareBody from './components/MemoryShareBody.vue'
 import PersonMemories from './components/PersonMemories.vue'
 import MediumReview from './components/MediumReview.vue'
 import { memoriesLifecycle } from './lifecycle'
-import MusicBar from './music/MusicBar.vue'
-import { musicReleased } from './music/musicRelease'
 import { memoriesSearch, memorySearch } from './search'
 import { MEMORIES_SHORTCUTS } from './shortcuts'
 import { stageItemMarksRekey } from './itemFavorites'
@@ -64,8 +60,7 @@ export function registerMemories(registry: Registry): void {
     detail: MemoryDetailHost, icon: 'images' as const, list, createDialog: MemoryNodeDialog, shareDialog: ShareDialog,
     // The header's priority (owner, 2026-10-23, ADR 0110): what is first a button. Delete and report are always the ⋯ menu's
     // last entries. Core draws the header; `MemoryDetail` contributes its actions, facts and banner.
-    // The background music's buttons (one per service a playlist is set for, `music/musicHeader.ts`) follow the share.
-    header: { order: ['favorite', 'upload', 'share', 'music-spotify', 'music-apple-music', 'download', 'banner', 'music', 'move', 'copy'] },
+    header: { order: ['favorite', 'upload', 'share', 'music', 'download', 'banner', 'move', 'copy'] },
     // Both carry a cover (inbox #411: core's action, dialog, upload and display), set only by an upload in core's dialog. A
     // picked image equal to a gallery medium's original shares that medium's PREVIEW instead of being stored again.
     cover: { findStored: findStoredCover },
@@ -114,11 +109,6 @@ export function registerMemories(registry: Registry): void {
   app.search(memoriesSearch)
   // Core's keyboard shortcut overview (uc.platform.keyboard-shortcuts): the gallery's keys and the large view's.
   app.shortcuts(MEMORIES_SHORTCUTS)
-  // The music bar below the shell's footer (uc.memory.music, ADR 0131): mounted once per shell, so the music a Memory's
-  // header started plays on while the viewer moves through veyq (and a share guest through the link).
-  // TEMPORARY: mounted only once the deployment released the music (musicReleased, ADR 0131 decision 8); dark, core
-  // mounts no footer bar at all. Removal: `app.footerBar(MusicBar)`.
-  app.footerBar(MusicBar, musicReleased)
   app.lifecycle(memoriesLifecycle)
   // the item marks' value keys are wrapped under the scope key: a rotation re-wraps them through this, never
   // rewriting a set (ADR 0115 decision 2)

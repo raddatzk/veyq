@@ -11,8 +11,8 @@ guarantee validate_feature_wiring gives the feature graph:
               use-case(s) are built, ADR 0032 §6).
 
 It also checks the catalog is well-formed: a lowercase-dotted id, a non-empty `serves`, and a known `source`
-(`operator-policy`, `infra-preflight`, `external-service`: an outside service the browser calls, active only while
-its address is configured, or `deployment`: active only while the deployment's environment configures it, ADR 0131).
+(`operator-policy`, `infra-preflight`, or `external-service`: an outside service the browser calls, active only while
+its address is configured).
 
 And it checks the catalog is a TREE (ADR 0088 decisions 1 and 2):
     - root  — every id's first segment is in `ROOTS`: `core`, and every application the backend composes, derived
@@ -87,7 +87,13 @@ COVERAGE = ROOT / "docs" / "coverage" / "features"
 
 ID_RE = re.compile(r"^[a-z0-9]+(\.[a-z0-9-]+)*$")
 UC_RE = re.compile(r"^uc\.([a-z0-9-]+)\.[a-z0-9-]+$")
-KNOWN_SOURCES = {"operator-policy", "infra-preflight", "external-service", "deployment"}
+KNOWN_SOURCES = {"operator-policy", "infra-preflight", "external-service"}
+# Ids removed from the catalog (ADR 0088 decision 10): retired, never added again with another meaning.
+RETIRED_IDS = {
+    "memories.music",  # ADR 0135 decision 1: the streaming services went
+    "memories.music.spotify",
+    "memories.music.apple-music",
+}
 # Who may switch an entry off (ADR 0088 decisions 2 and 12): the Server Owner always, a tenant owner where listed.
 LEVELS = ("instance", "tenant")
 # A requirement's kind (ADR 0088 decision 8) and the type its property has on the wire's `Capability`.
@@ -122,6 +128,9 @@ if not caps:
 for app in sorted(ROOTS - {"core"} - set(caps)):
     errors.append(f"application '{app}' has no entry of its own, so it cannot be switched off (ADR 0079 decision 8, "
                   f"uc.platform.switch-application-off)")
+
+for cid in sorted(RETIRED_IDS & set(caps)):
+    errors.append(f"{cid}: a retired id is never added again (ADR 0088 decision 10)")
 
 for cid, entry in caps.items():
     if not ID_RE.match(cid):

@@ -1,7 +1,6 @@
 // The session ending (uc.account.sign-out § The ending, ADR 0070): the one ending all three triggers run — this
 // tab signing out, a refresh the server rejected, and another tab's announcement. It drops the local convenience
-// tiers, tells the media service worker to drop every playback, waits (bounded) for the applications' ending steps
-// (`sessionEndingSteps.ts`: Memories' music frame forgets the vendor's sign-in), announces the end to the other tabs, and loads
+// tiers, tells the media service worker to drop every playback, announces the end to the other tabs, and loads
 // the sign-in page as a NEW DOCUMENT. The new document is the wipe: it discards the page's whole heap, so every
 // decrypted store goes, including one nobody has written yet. There is no list of stores to reset, on purpose.
 //
@@ -13,7 +12,6 @@ import { clearVault, vaultState } from './vault'
 import { dropConvenienceTiers } from './convenienceTiers'
 import { endAllPlaybacks } from '../sw/register'
 import { leaveEndingNotice, type EndingNotice } from './endingNotice'
-import { runSessionEndingSteps } from './sessionEndingSteps'
 
 /** The same-origin channel the other tabs of this instance listen on. Its one message carries nothing but its
  *  type: no account, no id (uc.account.sign-out § Quality notes). */
@@ -69,16 +67,11 @@ export function listenForSessionEnd(): () => void {
 }
 
 async function runEnding(announce: boolean): Promise<void> {
-  // 0. The applications' steps run beside the first two (bounded, never rejecting): what lives outside this page and
-  //    outside the service worker - the music frame's vendor sign-in, ADR 0131 decision 5 - and must go before the
-  //    document load tears the frame down. A tab told by another runs them too, but knows it did not start the ending.
-  const steps = runSessionEndingSteps({ startedHere: announce })
   // 1. The local convenience tiers. After a sign-out this is a no-op; on the other two triggers the session is
   //    already dead, so their server halves are out of reach and only the local halves can go.
   await dropConvenienceTiers()
   // 2. The media service worker lives outside the page, so the new document does not take its plaintext along.
   await endAllPlaybacks()
-  await steps
   // 3. Only the tab that ended the session announces it.
   if (announce && typeof BroadcastChannel !== 'undefined') {
     const channel = new BroadcastChannel(SESSION_CHANNEL)

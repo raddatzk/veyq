@@ -12,8 +12,6 @@ import me.raddatz.veyq.core.platform.capabilities.CapabilityEntryTexts
 import me.raddatz.veyq.core.platform.capabilities.CapabilityRequirementStore
 import me.raddatz.veyq.core.platform.capabilities.ExternalServiceAddresses
 import me.raddatz.veyq.core.platform.capabilities.ServiceAddress
-import me.raddatz.veyq.core.platform.capabilities.DeployedValues
-import me.raddatz.veyq.core.platform.capabilities.MusicDeployment
 import me.raddatz.veyq.core.platform.capabilities.CapabilityRequirements
 import me.raddatz.veyq.core.platform.capabilities.StoredCapabilityRequirementValues
 import me.raddatz.veyq.core.platform.capabilities.TenantRequirementState
@@ -41,7 +39,6 @@ data class TenantCapabilityView(
 sealed interface TenantCapabilitiesOutcome {
     data class Ok(
         val ids: List<String>, val requirements: Map<String, Int>, val services: Map<String, ServiceAddress>,
-        val deployed: Map<String, DeployedValues>,
         /** The named erasure days of the tenant's switched-off applications (uc.platform.erase-switched-off-application). */
         val erasures: List<ApplicationErasureDay>,
     ) : TenantCapabilitiesOutcome
@@ -88,7 +85,6 @@ class TenantCapabilitySwitchHandler(
     private val requirementStore: CapabilityRequirementStore,
     private val requirementValues: StoredCapabilityRequirementValues,
     private val services: ExternalServiceAddresses,
-    private val music: MusicDeployment,
     private val erasures: ApplicationErasureStore,
 ) {
     /** The tenant's effective set, for every member (decision 3). */
@@ -97,7 +93,7 @@ class TenantCapabilitySwitchHandler(
             .refusal(TenantCapabilitiesOutcome.NotFound, TenantCapabilitiesOutcome.Suspended)?.let { return it }
         if (store.findTenant(tenantId) == null) return TenantCapabilitiesOutcome.NotFound
         return TenantCapabilitiesOutcome.Ok(
-            registry.active(tenantId), registry.requirements(tenantId), services.configured(), music.settings.values(), days(tenantId),
+            registry.active(tenantId), registry.requirements(tenantId), services.configured(), days(tenantId),
         )
     }
 

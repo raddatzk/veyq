@@ -145,8 +145,9 @@ describe("Memories' photos of every space", () => {
     expect((await scopeMediaDocuments(ctx))?.documents.map((d) => d.name)).toEqual(['strand.jpg'])
   })
 
-  // ADR 0130 decision 7: a GPX track is a medium of its Memory and no photo - the search makes no photo document of it.
-  it('makes no document of a GPX track', async () => {
+  // ADR 0130 decision 7 and ADR 0135 decision 2: a GPX track and a music track are media of their Memory and no photo - the
+  // space's search makes no document of either (`isGalleryMedium`); a type no view claims stays a document, as in the gallery.
+  it('makes no document of a GPX track or a music track; an unknown type stays one', async () => {
     const { rows, keys } = await space()
     const store = galleryFakeStore()
     fakeApi(mediaApi, store.api)
@@ -154,12 +155,15 @@ describe("Memories' photos of every space", () => {
     vi.stubGlobal('fetch', store.fetchStub)
     const gpx = '<gpx><trk><trkseg><trkpt lat="1" lon="1"/><trkpt lat="2" lon="2"/></trkseg></trk></gpx>'
     await addMedia(SCOPE_ID, ROM, keys.get(ROM)!, { blob: new Blob([gpx]), mediaType: 'application/gpx+xml', name: 'tour.gpx' }, deriver())
-    const track = (await store.api.listNodeMedia({ scopeId: SCOPE_ID, nodeId: ROM })).media[0]
-    listing([[...rows, {
-      nodeId: ROM, mediaId: track.mediaId, blobId: track.blobId, chunkCount: track.chunkCount, byteSize: track.byteSize, wrappedBlobKey: track.wrappedBlobKey,
-      wrappedBlobMeta: track.wrappedBlobMeta, wrappedMeta: track.wrappedMeta, metaRevision: 0, ownerKey: 'user:u1', blockedByOperator: false,
-    }]])
+    await addMedia(SCOPE_ID, ROM, keys.get(ROM)!, { blob: new Blob(['ID3']), mediaType: 'audio/mpeg', name: 'song.mp3' }, deriver())
+    await addMedia(SCOPE_ID, ROM, keys.get(ROM)!, { blob: new Blob(['?']), mediaType: 'application/x-unknown', name: 'odd.bin' }, deriver())
+    const others = (await store.api.listNodeMedia({ scopeId: SCOPE_ID, nodeId: ROM })).media
+    expect(others).toHaveLength(3)
+    listing([[...rows, ...others.map((m) => ({
+      nodeId: ROM, mediaId: m.mediaId, blobId: m.blobId, chunkCount: m.chunkCount, byteSize: m.byteSize, wrappedBlobKey: m.wrappedBlobKey,
+      wrappedBlobMeta: m.wrappedBlobMeta, wrappedMeta: m.wrappedMeta, metaRevision: 0, ownerKey: 'user:u1', blockedByOperator: false,
+    }))]])
     const { ctx } = context(keys)
-    expect((await scopeMediaDocuments(ctx))?.documents.map((d) => d.name)).toEqual(['strand.jpg', 'IMG_0002.jpg'])
+    expect((await scopeMediaDocuments(ctx))?.documents.map((d) => d.name).sort()).toEqual(['IMG_0002.jpg', 'odd.bin', 'strand.jpg'])
   })
 })

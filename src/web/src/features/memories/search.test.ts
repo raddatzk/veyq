@@ -99,6 +99,18 @@ describe('the open Memory\'s media as documents', () => {
     expect(open).toHaveBeenCalledWith('v1')
   })
 
+  // en.memory.media § Which media a photo view shows: the search asks the gallery's predicate - music and a GPX track are no
+  // document; an image, a video and a type no view claims are, as they are gallery items.
+  it('makes documents of every gallery item: no music, no GPX track, an unknown type kept', () => {
+    const types: Record<string, string> = { p1: 'image/jpeg', v1: 'video/mp4', s1: 'audio/mpeg', t1: 'application/gpx+xml', u1: 'application/x-unknown' }
+    vi.mocked(originalBlobMeta).mockImplementation((_s, _k, m) => ({ v: 1, type: types[m.mediaId], name: m.mediaId }))
+    const docs = mediaDocuments({
+      scopeId: SCOPE, key: KEY, open: () => {}, unnamed: () => 'Photo',
+      items: Object.keys(types).map((mediaId) => mediaItem({ mediaId, wrappedMeta: `s-${mediaId}` })),
+    })
+    expect(docs.map((d) => [d.id, d.kind])).toEqual([['p1', PHOTO_DOCUMENT], ['v1', VIDEO_DOCUMENT], ['u1', PHOTO_DOCUMENT]])
+  })
+
   it('reads each seal once, as the gallery does (the listing\'s memo)', () => {
     const items = [mediaItem({ mediaId: 'p1', wrappedMeta: 's1' })]
     const input = { scopeId: SCOPE, key: KEY, open: () => {}, unnamed: () => 'Photo', items }

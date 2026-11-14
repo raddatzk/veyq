@@ -39,8 +39,15 @@ Gradle module of its own; the web half is separated by import direction only (se
   A **GPX track** is a medium ([uc.memory.tracks](../features/memory/use-cases/uc.memory.tracks.md),
   [ADR 0130](../decisions/0130-a-gpx-track-is-a-medium-of-its-memory-drawn-on-its-map.md)): its original is the GPX file,
   its `blob-meta` typed `application/gpx+xml`; the server stores it as any medium and cannot tell it from one. The client
-  knows it by that meta (`track/gpx.ts`), keeps it out of every view of photos (`useMediaGalleryLive`'s `items` and
-  `tracks`, `search.ts`'s documents) and reads and draws it on the Memory's Map tab only; it adds no contract, table or role.
+  knows it by that meta (`track/gpx.ts`) and reads and draws it on the Memory's Map tab only; it adds no contract, table or role.
+  A **music track** is a medium the same way ([uc.memory.background-music](../features/memory/use-cases/uc.memory.background-music.md),
+  [ADR 0135](../decisions/0135-background-music-is-a-nodes-own-audio-media-played-by-cores-player.md)): its original is the
+  audio file, its `blob-meta` typed `audio/*` from its bytes, its length and trimmed span sealed into its listed tier at
+  birth (`music/audioFacts.ts`); it is listed on the node's Music tab (`components/MemoryMusic.vue`) and played by core's
+  audio player through Memories' queue (`music/musicQueue.ts`), which hands core URLs, never a key. Every view of photos
+  asks one predicate, every medium but a GPX or a music track (`galleryMedium.ts` `isGalleryMedium`:
+  `useMediaGalleryLive`'s `items`, `search.ts`'s documents), so a track of either kind is in none of them, and a type no
+  view claims stays a gallery item.
 - **Screens and behaviour:** gallery and lightbox, upload with client-generated derivatives, covers, banners, date and
   place curation, the map, a Memory's GPX tracks on its Map tab, live updates. Their state is the use-cases and enablers under
   [`docs/features/memory/`](../features/memory/_index.md); this page points at them and does not restate them.
@@ -202,7 +209,7 @@ guest moves a Memory, never a chapter); the cover is core's action with core's r
 | date, place, cover, banner (the node's sealed meta; the automatic reconcile too) | ✓ | ✗ | ✗ | ✗ | ✗ |
 | see the banner (read from the node's own attachment) | ✓ | ✓ | ✓ | ✓ | ✗ |
 | the Map tab and its GPX tracks ([uc.memory.tracks](../features/memory/use-cases/uc.memory.tracks.md)): see and download them; add one (the upload right), naming it and giving it an activity as it is added, and remove one (the delete-media right) | ✓ see, add, remove (trash) | ✓ see | ✓ see | ✓ see, add, remove its own (purge) | ✗ |
-| background music: set the playlists (the node's sealed meta, [uc.memory.music](../features/memory/use-cases/uc.memory.music.md)) / the header's play buttons and the music bar below the shell's footer, playing after one's own opt-in | ✓ / ✓ | ✗ / ✓ | ✗ / ✓ | ✗ / ✓ | ✗ / ✗ |
+| the Music tab and the header's Play music ([uc.memory.background-music](../features/memory/use-cases/uc.memory.background-music.md)): hear the node's music, see, download and report its tracks; add one (the upload right; the tab shows where the node has music or the viewer may add) and remove one (the delete-media right) | ✓ hear, see, add, remove (trash) | ✓ hear, see | ✓ hear, see | ✓ hear, see, add, remove its own (purge) | ✗ |
 | rename, delete the node | ✓ | ✗ | ✗ | ✗ | ✗ |
 | narrow the gallery by facts (day, year, place, kind, the original's name; uc.memory.gallery step 8) | ✓ | ✓ | ✗ | ✗ | ✗ |
 | participants (opaque user ids in the node's sealed meta, [ADR 0083](../decisions/0083-memory-participants-are-a-sealed-list-in-the-memorys-metadata.md); a Memory in a tenant or group scope) | ✓ shown and edited; the profile at `#/people/<id>` (its Memories as tiles, rows or the level's map) | ✓ shown, not edited | ✗ not shown | ✗ not shown | ✗ not shown |

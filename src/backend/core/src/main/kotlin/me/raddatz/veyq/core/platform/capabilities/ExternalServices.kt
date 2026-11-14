@@ -107,7 +107,6 @@ class StoredExternalServiceAddresses(
 class ExternalServiceOrigins(
     private val registry: CapabilityRegistry,
     private val addresses: ExternalServiceAddresses,
-    private val music: MusicDeployment,
 ) : ExternalOrigins {
     @Volatile
     private var snapshot: ExternalOriginSet = ExternalOriginSet.NONE
@@ -126,12 +125,6 @@ class ExternalServiceOrigins(
             ExternalOriginSet(
                 connect = CONNECT.mapNotNull(::originOf).distinct(),
                 img = listOfNotNull(originOf(CapabilityIds.MEMORIES_MAP)).distinct(),
-                // The music frame (ADR 0131): its host while the parent entry is active — configured and on. A token that
-                // expires after this snapshot leaves the frame allowed until the next refresh: the frame is ours, and the
-                // client stops embedding it at once (the entry leaves its set).
-                frame = listOfNotNull(
-                    music.settings.frameUrl?.takeIf { registry.isActive(CapabilityIds.MEMORIES_MUSIC, null) }?.let(::origin),
-                ),
             )
         }
     }
