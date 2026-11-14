@@ -49,7 +49,10 @@ Memories of the scopes read in that visit only (no cover cache across scope swit
 ## Main flow — open a person
 
 1. A member clicks a participant in the popover (or an uploader's name on a photo that a member uploaded). The location becomes
-   `#people/<userId>` (the reader also takes the spelling `#/people/<userId>`; `location.ts` builds the first). The fragment is token-less:
+   `#people/<username>` - the member's username in the tenant, or their user id for a former member or a username shaped like an id
+   (ADR 0083 decision 5a; the reader also takes the spelling `#/people/<token>`; `location.ts` builds the first). A token shaped like a
+   user id is read as that id, any other as a username of the tenant roster; an id link to a current member is replaced by the username
+   link, and a username no member holds opens a page that says so, with no section. The fragment is token-less:
    it opens the tenant scope's shell, whichever scope the Memory was in.
 2. The profile shows the **display name**, an **avatar** (the profile picture, else the letter), and a list of **Memories** in which this person is a
    participant and the viewer has access. The list is drawn with core's level items (a larger cover, the name, the kind, the Memory's date and place
@@ -76,7 +79,7 @@ Memories of the scopes read in that visit only (no cover cache across scope swit
 - **A3 — the meta does not open:** the participants are not shown and the blob is never rebuilt from empty.
 - **A4 — an id the directory does not know:** treated as a former member.
 - **E1 — a guest:** the interface shows a guest **no participants**: the right is false for every share role, so
-  there is no section, no control and no profile link, and a guest never reaches `#/people/<userId>`. This is an
+  there is no section, no control and no profile link, and a guest never reaches `#/people/<token>`. This is an
   interface boundary, **not a cryptographic one**: a share serves the node's `wrappedMeta` unchanged and the guest holds
   `K_node`, so a link holder with developer tools could read the **count and the opaque ids** — but no names (the list
   holds ids only, no snapshot is stored, a guest has no member directory, [inbox #190](../../../inbox.md)). Accepted
