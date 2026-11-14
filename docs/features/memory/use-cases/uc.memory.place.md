@@ -63,7 +63,7 @@ is [ADR 0016](../../../decisions/0016-geocoding-provider-neutrality.md). This us
   it on or off. The consent names the hosts it was given for and holds only for them: when the Server Owner configures a
   new tile host, or a new or changed geocoder host, the next map shows the prompt again, naming the new host, and nothing
   is requested from it until the member agrees — a removed geocoder asks nothing, a consent stored before hosts were
-  recorded is asked once more, and the settings name the hosts an earlier consent covered. On every map — a level's, a person's, the place editor's, the photo panel's — *Turn map services off* beside the
+  recorded is asked once more, and the settings name the hosts an earlier consent covered. On every map — a level's, a person's, the place editor's, the photo panel's, a Memory's Map tab ([uc.memory.tracks](uc.memory.tracks.md)) — *Turn map services off* beside the
   attribution withdraws it too, the same control for a member and a share guest (who has no settings). A withdrawal
   acts at once: the stored flag is removed, every open map unmounts with its tile layer (another tab of the browser
   follows), no further tile or geocoding request leaves, and the consent prompt stands where the map was; in the open

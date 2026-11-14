@@ -1,6 +1,6 @@
 # Application: Memories
 
-The first application, one among several: photos and media, a journal, places, in **Memories**
+The first application, one among several: photos and media, a journal ([concept](journal.md)), places, in **Memories**
 nested into **Chapters**. Product language **Memory / Chapter** is unchanged; folders organize — they hold no content,
 though each carries a key and can be shared ([CLAUDE.md](../../CLAUDE.md),
 [ADR 0080](../decisions/0080-every-node-carries-a-key-a-folders-key-behaves-like-a-memorys.md)). The backend half is a
@@ -36,8 +36,20 @@ Gradle module of its own; the web half is separated by import direction only (se
   `MemoryBlobRoles`), written by Memories' `setMemoryBanner` / `removeMemoryBanner` together with the sealed meta that
   names them (`MemoryBannerStore`, built from core's `AttachmentStore` and `NodesStore`); it adds no table, so every path
   core runs for an attachment carries it.
+  A **GPX track** is a medium ([uc.memory.tracks](../features/memory/use-cases/uc.memory.tracks.md),
+  [ADR 0130](../decisions/0130-a-gpx-track-is-a-medium-of-its-memory-drawn-on-its-map.md)): its original is the GPX file,
+  its `blob-meta` typed `application/gpx+xml`; the server stores it as any medium and cannot tell it from one. The client
+  knows it by that meta (`track/gpx.ts`) and reads and draws it on the Memory's Map tab only; it adds no contract, table or role.
+  A **music track** is a medium the same way ([uc.memory.background-music](../features/memory/use-cases/uc.memory.background-music.md),
+  [ADR 0135](../decisions/0135-background-music-is-a-nodes-own-audio-media-played-by-cores-player.md)): its original is the
+  audio file, its `blob-meta` typed `audio/*` from its bytes, its length and trimmed span sealed into its listed tier at
+  birth (`music/audioFacts.ts`); it is listed on the node's Music tab (`components/MemoryMusic.vue`) and played by core's
+  audio player through Memories' queue (`music/musicQueue.ts`), which hands core URLs, never a key. Every view of photos
+  asks one predicate, every medium but a GPX or a music track (`galleryMedium.ts` `isGalleryMedium`:
+  `useMediaGalleryLive`'s `items`, `search.ts`'s documents), so a track of either kind is in none of them, and a type no
+  view claims stays a gallery item.
 - **Screens and behaviour:** gallery and lightbox, upload with client-generated derivatives, covers, banners, date and
-  place curation, the map, live updates. Their state is the use-cases and enablers under
+  place curation, the map, a Memory's GPX tracks on its Map tab, live updates. Their state is the use-cases and enablers under
   [`docs/features/memory/`](../features/memory/_index.md); this page points at them and does not restate them.
 
 ## Places and the map
@@ -49,7 +61,8 @@ instance, so the veyq operator sees neither the viewport nor a coordinate
 [security-model](../crosscutting/security-model.md) lists the boundary):
 
 - **Map tiles** (`memories.map`): raster tiles from a tile-URL template, with its attribution, drawn by Leaflet — the
-  place editor's map, a level's map and a person's profile map. A tile request carries the viewport `{z,x,y}` and the
+  place editor's map, a level's map, a person's profile map and a Memory's Map tab, which draws its GPX tracks beside its
+  photos ([uc.memory.tracks](../features/memory/use-cases/uc.memory.tracks.md)). A tile request carries the viewport `{z,x,y}` and the
   client address, no veyq identity and no Memory context.
 - **The reverse geocoder** (`memories.places`): a bare coordinate in, the address hierarchy out (road … country) in the
   reader's locale; the member picks the level or types a name. There is no forward search.
@@ -69,7 +82,7 @@ device's IP address. The consent names those hosts and holds only for them: a ne
 geocoder host, shows the prompt again, naming the new host, and nothing reaches it until the member agrees (a geocoder
 the Server Owner removed asks nothing; a consent stored before hosts were recorded is asked once more, and the settings
 show which hosts an earlier consent named). It is withdrawn there, with the same switch, or by *Turn map services off* on any
-map (a level's, a person's, the place editor's and the photo panel's), beside the attribution — the one control a share guest, who has no
+map (a level's, a person's, the place editor's, the photo panel's and a Memory's Map tab), beside the attribution — the one control a share guest, who has no
 settings, withdraws with. A withdrawal acts at once: the flag is removed, every open map unmounts with its tile layer
 (another tab of the browser follows), no geocoding request leaves, and the consent prompt stands where the map was.
 Nothing stored is touched: resolved names stay in the Memories. A member without the consent sees resolved names as
@@ -195,6 +208,8 @@ guest moves a Memory, never a chapter); the cover is core's action with core's r
 | create a chapter | ✓ on a `MEMORY` only | ✗ | ✗ | ✗ | ✗ |
 | date, place, cover, banner (the node's sealed meta; the automatic reconcile too) | ✓ | ✗ | ✗ | ✗ | ✗ |
 | see the banner (read from the node's own attachment) | ✓ | ✓ | ✓ | ✓ | ✗ |
+| the Map tab and its GPX tracks ([uc.memory.tracks](../features/memory/use-cases/uc.memory.tracks.md)): see and download them; add one (the upload right), naming it and giving it an activity as it is added, and remove one (the delete-media right) | ✓ see, add, remove (trash) | ✓ see | ✓ see | ✓ see, add, remove its own (purge) | ✗ |
+| the Music tab and the header's Play music ([uc.memory.background-music](../features/memory/use-cases/uc.memory.background-music.md)): hear the node's music, see, download and report its tracks; add one (the upload right; the tab shows where the node has music or the viewer may add) and remove one (the delete-media right) | ✓ hear, see, add, remove (trash) | ✓ hear, see | ✓ hear, see | ✓ hear, see, add, remove its own (purge) | ✗ |
 | rename, delete the node | ✓ | ✗ | ✗ | ✗ | ✗ |
 | narrow the gallery by facts (day, year, place, kind, the original's name; uc.memory.gallery step 8) | ✓ | ✓ | ✗ | ✗ | ✗ |
 | participants (opaque user ids in the node's sealed meta, [ADR 0083](../decisions/0083-memory-participants-are-a-sealed-list-in-the-memorys-metadata.md); a Memory in a tenant or group scope) | ✓ shown and edited; the profile at `#/people/<id>` (its Memories as tiles, rows or the level's map) | ✓ shown, not edited | ✗ not shown | ✗ not shown | ✗ not shown |

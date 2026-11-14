@@ -221,7 +221,7 @@ rates' date.
   (plaintext — the login identifier and the source of the deterministic auth salt,
   [ADR 0003](../decisions/0003-operator-blind-password-auth.md); named here to close a prior inventory gap); a
   tenant's **per-tenant SMTP config** (host/port/from/username/TLS + the owner-authored invite **template text** —
-  operator-visible operational config) and the **send-fact** of every mail veyq sends — a member invite, a
+  operator-visible operational config) and the **send-fact** of every mail veyq sends — a mailed member invite, a
   password-recovery link and an address confirmation (recipient + send time, once a tenant has configured
   SMTP), plus the account's **`email_confirmed_at`** (when its holder last showed they read that address —
   operational metadata of the address's own class, gating nothing,
@@ -609,8 +609,11 @@ is what that defense buys against the operator, and what it leaves.
   with that owner's endorsement by their current key, which their securing writes for every record it rooted
   ([ADR 0111](../decisions/0111-an-invitee-grants-itself-a-rotator-re-keys-its-own-scopes-and-a-key-chain-anchors-trust.md)
   decision 21), so a thief holding the retired key mints nothing that anchors after the rotation. An honest server verifies a member invite's owner signature under the caller's identity key
-  before it mints, so an owner's **session** without the vault mints no invite; and the operator, who mails the
-  invite link, holds no code to open it.
+  before it mints, so an owner's **session** without the vault mints no invite; and the operator, who mails a mailed
+  invite's link, holds no code to open it. A member invite **as a link** never hands the server its sealed part or
+  code ([ADR 0129](../decisions/0129-a-member-invite-is-mailed-or-handed-over-as-a-link.md)); it is a bearer credential instead, so whoever the owner's channel shows it to can join first.
+  The real invitee then meets `invite_redeemed`, which is detection, not prevention; a taker who names themselves like
+  the invitee is caught only so, or by the safety number.
 - **The pin store and the who-trusts-whom graph stay the client's.** The pin store is sealed under the Master Key at
   opaque keyed ids; the server sees how many pins an account holds, which the grant rows already let it count
   ([ADR 0104](../decisions/0104-the-identity-pin-store-is-one-sealed-entry-per-pin-under-a-sealed-head.md)). A
@@ -715,8 +718,9 @@ operator lacks can.
   endorsement, so every co-member reads it as an anomaly (ADR 0111 § What stays open);
 - who verified whom in a tenant, and when: a verification's content is sealed, its address is not — decided, since
   the server authenticates the writer anyway (ADR 0111 § Consequences);
-- a genuine tenant invite redeemed with the operator's key, which needs the code the operator guesses offline against
-  50 bits behind Argon2id, or a password the owner chose ([ADR 0111](../decisions/0111-an-invitee-grants-itself-a-rotator-re-keys-its-own-scopes-and-a-key-chain-anchors-trust.md) decision 1);
+- a genuine mailed tenant invite redeemed with the operator's key, which needs the code the operator guesses offline
+  against 50 bits behind Argon2id, or a password the owner chose ([ADR 0111](../decisions/0111-an-invitee-grants-itself-a-rotator-re-keys-its-own-scopes-and-a-key-chain-anchors-trust.md) decision 1);
+  a link invite leaves it nothing to guess, since its sealed part never reaches the server ([ADR 0129](../decisions/0129-a-member-invite-is-mailed-or-handed-over-as-a-link.md) decision 1);
 - a revoked or expired tenant invite: its link and code still open the epoch it was granted, useful with a dump from
   before the revoke, and with it what a dump taken before the tenant's next rotation holds, since the tenant does not
   rotate on a revoke (ADR 0111 § Consequences);

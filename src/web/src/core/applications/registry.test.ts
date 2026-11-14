@@ -7,6 +7,7 @@ import { MEMORY_KIND, CHAPTER_KIND } from '../../features/memories/kinds'
 import { fileNameSlug, slugify } from '../../shared/naming'
 import { nothingOfItsOwnToRekey } from '../node/rekey/hooks'
 import { testApp, testKind } from '../../test/testApplication'
+import { memoriesLifecycle } from '../../features/memories/lifecycle'
 
 const Stub = defineComponent({ template: '<div />' })
 const Other = defineComponent({ template: '<span />' })
@@ -326,6 +327,16 @@ describe('registry: lifecycle hooks', () => {
     const r = named('memories')
     // @ts-expect-error the free `registerLifecycle(id, hooks)` is gone (owner 2026-11-01): `app.lifecycle(hooks)`
     expect(r.registerLifecycle).toBeUndefined()
+  })
+
+  // ADR 0135 decision 8: the shell's footer bar and the session ending's hook had one user, which is gone, and went with
+  // it. Core's own player bar comes as core's, not as a door for applications.
+  it('has no footer bar and no session-ending hook: neither door is on the registrar, the registry or a hook set', () => {
+    const r = named('memories')
+    expect((r.apps.memories as unknown as Record<string, unknown>).footerBar, 'app.footerBar').toBeUndefined()
+    expect((r as unknown as Record<string, unknown>).footerBars, 'registry.footerBars').toBeUndefined()
+    expect(Object.keys(memoriesLifecycle), 'Memories registers no ending step').not.toContain('onSessionEnding')
+    expect(Object.keys(memoriesLifecycle), 'control: the hook set is the one Memories registers').toContain('onMasterKeyRotated')
   })
 
   it('refuses a hook set without onMasterKeyRotated (it is required, not optional)', () => {

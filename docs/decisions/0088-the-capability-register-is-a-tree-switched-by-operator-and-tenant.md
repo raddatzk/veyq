@@ -80,7 +80,12 @@ instance and tenant layers.
 9. **Presence ids retire.** Once every major in the client window serves an id, the client stops checking it, and
    the server may stop advertising it at the next train. That is a removal under ADR 0085.
 10. **The catalog is cut once more before V1, then frozen.** Its append-only rule protects released clients, and
-    there are none yet. From V1 on it holds strictly.
+    there are none yet. From V1 on it holds strictly: an id is never renamed or repurposed. It is removed only while no
+    released client can still read it. The web client ships with the server that serves the catalog, so until a
+    native app is released that holds for every id; the three `memories.music` ids went this way with the streaming
+    services ([ADR 0135](0135-background-music-is-a-nodes-own-audio-media-played-by-cores-player.md) decision 1). A
+    removed id is **retired**: `scripts/validate_capabilities.py` lists it and refuses it, so it never returns with
+    another meaning.
 11. **Device linking and remembering a device are two independent switches.** Linking answers
     *how a key reaches a device*: from another unlocked device instead of password and Secret Key. Remembering
     answers *whether the key may stay there*. Every combination is coherent:

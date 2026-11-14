@@ -34,7 +34,7 @@ took part in.
   Memory, the list of people, the members list and your profile. Remove it any time and the letter comes back. On
   other people's profiles there is nothing to edit — only they can change their own picture. You can pick a picture
   right when you accept the invitation. If you skipped both name and picture then, a small notice offers to finish them
-  after you first unlock; "Not now" hides it for good.
+  after you first unlock (once your email address is confirmed, if it still needs confirming); "Not now" hides it for good.
 
 Names follow one rule everywhere: the **real name** if the person gave one, otherwise their **username**.
 

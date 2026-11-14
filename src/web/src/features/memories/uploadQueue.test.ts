@@ -66,6 +66,22 @@ describe('uploadQueue — runner', () => {
     expect(vi.mocked(addMedia).mock.calls[0][3].blob).toBe(file)
   })
 
+  // Lever: drop `restored: s.facts` from the runner - the label never reaches the seal (ADR 0130 decision 9).
+  it('hands a file\'s facts on as what is sealed at birth, and none for a file without', async () => {
+    vi.mocked(addMedia).mockResolvedValue({ blobId: 'b', mediaId: 'm' })
+    const transport = vi.fn(async () => ({ blobId: 'b', mediaId: 'g' }))
+    const { batches } = useUploadQueue()
+    const facts = { trackName: 'Ridge', trackActivity: 'hiking' }
+    enqueueUploads(TARGET, [{ ...sel(png('a.gpx')), facts }, sel(png('b.png'))], { label: '2' })
+    enqueueUploads({ key: 'guest', upload: transport }, [{ ...sel(png('c.gpx')), facts }], { label: '1' })
+    await vi.waitFor(() => expect(batches.value.flatMap((b) => b.files).every((f) => f.status === 'done')).toBe(true))
+
+    const byName = Object.fromEntries(vi.mocked(addMedia).mock.calls.map((c) => [c[3].name, c[5]?.restored]))
+    expect(byName).toEqual({ 'a.gpx': facts, 'b.png': undefined })
+    // a guest's transport gets the same option, so its upload seals the label too
+    expect((transport.mock.calls[0] as unknown[])[1]).toMatchObject({ restored: facts })
+  })
+
   it('records the mediaId addMedia returns on the settled file (cr-0074 reconcile key)', async () => {
     vi.mocked(addMedia).mockResolvedValue({ blobId: 'b', mediaId: 'media-xyz' })
     const { batches } = useUploadQueue()
@@ -264,6 +280,13 @@ describe('uploadQueue — Safari file-selection helpers', () => {
     expect(isSupportedMediaFile(new File([], 'IMG_0001.HEIC', { type: '' }))).toBe(true)
     expect(isSupportedMediaFile(new File([], 'clip.MOV', { type: '' }))).toBe(true)
     expect(isSupportedMediaFile(new File([], 'notes.txt', { type: '' }))).toBe(false)
+  })
+
+  // ADR 0135 decision 2: music is added from the Music tab only; the gallery's pickers and drop keep refusing audio.
+  it('refuses audio, by its type and by its extension', () => {
+    for (const [name, type] of [['song.mp3', 'audio/mpeg'], ['song.m4a', 'audio/mp4'], ['song.wav', ''], ['song.mp3', ''], ['song.flac', '']]) {
+      expect(isSupportedMediaFile(new File([], name, { type })), `${name} ${type}`).toBe(false)
+    }
   })
 
   it('infers a media type from the extension when the MIME is empty', () => {

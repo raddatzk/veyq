@@ -162,6 +162,12 @@ render, asserts — deriving every anchor from the source rather than listing it
        its query. The compose recipe's half is `validate_compose_posture.py` assertion 6. The positive control: every
        render with `garage.enabled` has such a container, or the level is checked by nobody; and a render without it
        has none (ADR 0064: off, the chart renders none of Garage's objects).
+  xxix.**Each of the bundled store's claims takes its own `storageClass`, else the shared one.** Every render with
+       `garage.enabled` is rendered once more with the shared class and `data`'s own set to two probe names: the
+       store's `data` claim template carries `data`'s, and `meta` and `snapshots` carry the shared one. The split is
+       what lets the object blocks sit on a network share while `meta`'s LMDB stays on a local class (LMDB rules
+       out remote filesystems); a template that reads only the shared key moves `meta` along with `data`, and one
+       that drops the fallback leaves `meta` on the cluster's default class although the operator named one.
 
 The app container is recognised the way the compose guards recognise the app service: an image whose
 repository is `veyq` — never `veyq-admin` or any other veyq-namespaced sibling — with the datasource
@@ -207,6 +213,10 @@ every render, and it was bitten by injection (the env removed from the template,
 (xix) and (xxvii) became conditional on `garage.enabled` when the bundled store turned opt-in on this target (ADR 0064,
 inbox #521); each direction was bitten by injection — the StatefulSet, the app's hint and the gate's hint each
 rendered unconditionally, the app's hint dropped where on, and no `ci/` file left turning it on.
+(xxix) came with the per-claim store classes (2026-11-13) — no incident: an operator asked to put the store's blocks
+on a Hetzner Storage Box over SMB, and the one shared class would have taken `meta`'s LMDB there too. It was bitten by
+injection both ways: the template reading only the shared key (`data` on the shared class) and the fallback dropped
+(`meta` and `snapshots` on no class).
 
 **Its limits — what a green run does NOT prove.** It renders the chart; it never installs it. So it proves what
 the manifests say and nothing about a cluster: not that a StorageClass exists for the claim, not that the
@@ -676,6 +686,31 @@ def check_store_log(tag: str, garage: bool, rendered: list[dict]) -> None:
         elif levels & VERBOSE_LEVELS:
             errors.append(f"(xxvii) {tag}: the store container sets RUST_LOG={rust_log} — {sorted(levels & VERBOSE_LEVELS)} "
                           f"logs every request with the peer's address (ADR 0092 § 5)")
+
+
+PROBE_SHARED_CLASS, PROBE_DATA_CLASS = "veyq-probe-shared", "veyq-probe-net"
+
+
+def check_store_claims(tag: str, values_file: pathlib.Path) -> None:
+    """(xxix) the store's `data` claim takes its own storageClass; `meta` and `snapshots` fall back to the shared one."""
+    probe = ["--set", f"garage.persistence.storageClass={PROBE_SHARED_CLASS}",
+             "--set", f"garage.persistence.data.storageClass={PROBE_DATA_CLASS}"]
+    rendered = render(values_file, probe)
+    if not rendered:
+        errors.append(f"(xxix) {tag}: the render with {' '.join(probe)} failed, so the store's claim classes are unchecked")
+        return
+    stores = [o for o in objects(rendered)
+              if any(STORE_IMAGE.search(str(c.get("image") or "")) for c in every_container(pod_spec(o)))]
+    templates = {(t.get("metadata") or {}).get("name"): (t.get("spec") or {}).get("storageClassName")
+                 for o in stores for t in (o.get("spec") or {}).get("volumeClaimTemplates") or []}
+    want = {"meta": PROBE_SHARED_CLASS, "data": PROBE_DATA_CLASS, "snapshots": PROBE_SHARED_CLASS}
+    for claim, cls in want.items():
+        if claim not in templates:
+            errors.append(f"(xxix) {tag}: the store has no `{claim}` claim template — its class is checked by nobody")
+        elif templates[claim] != cls:
+            errors.append(f"(xxix) {tag}: with {' '.join(probe)} the store's `{claim}` claim has class "
+                          f"{templates[claim]!r}, not {cls!r} — each claim takes its own class, else the shared one, "
+                          f"so `data` can sit on a network share while `meta`'s LMDB stays local")
 
 
 def check_admin_channel(tag: str, rendered: list[dict], policy_enabled: bool, ingress_from: list,
@@ -1165,6 +1200,8 @@ def check(values_file: pathlib.Path) -> list[dict]:
             errors.append(f"(xxv) {tag}: flipping backup.enabled did not flip the gate — the switch renders nothing different")
     check_client_port(tag, values, rendered)
     check_store_log(tag, garage, rendered)
+    if first and garage:
+        check_store_claims(tag, values_file)
     (garage_on if garage else garage_off).add(tag)
 
     if not first:
@@ -1366,5 +1403,6 @@ print(
     f"httproutes/listenersets with nothing on gateways; the PROXY protocol on exactly with the probes on the admin "
     f"listener, in {', '.join(sorted(proxy_rendered))}, and a port source outside the enum refused; the backup gate on the tools image where on — the named claim, "
     f"never the config-secret claim, the app's release as its target — nothing of it where off, and no install that makes neither choice; the daily prune of every capture past B on that claim alone, and none where off; "
-    f"the bundled store's objects and hint only with garage.enabled (on in {', '.join(sorted(garage_on))}), its RUST_LOG below info"
+    f"the bundled store's objects and hint only with garage.enabled (on in {', '.join(sorted(garage_on))}), its RUST_LOG below info, "
+    f"each of its claims on its own storageClass else the shared one"
 )

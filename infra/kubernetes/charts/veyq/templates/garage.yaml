@@ -121,7 +121,7 @@ spec:
         name: meta
       spec:
         accessModes: [ReadWriteOnce]
-        {{- with .Values.garage.persistence.storageClass }}
+        {{- with (.Values.garage.persistence.meta.storageClass | default .Values.garage.persistence.storageClass) }}
         storageClassName: {{ . }}
         {{- end }}
         resources:
@@ -131,7 +131,7 @@ spec:
         name: data
       spec:
         accessModes: [ReadWriteOnce]
-        {{- with .Values.garage.persistence.storageClass }}
+        {{- with (.Values.garage.persistence.data.storageClass | default .Values.garage.persistence.storageClass) }}
         storageClassName: {{ . }}
         {{- end }}
         resources:
@@ -141,7 +141,7 @@ spec:
         name: snapshots
       spec:
         accessModes: [ReadWriteOnce]
-        {{- with .Values.garage.persistence.storageClass }}
+        {{- with (.Values.garage.persistence.snapshots.storageClass | default .Values.garage.persistence.storageClass) }}
         storageClassName: {{ . }}
         {{- end }}
         resources:

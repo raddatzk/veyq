@@ -63,6 +63,9 @@ an application owns and how the two meet — is [Applications](../../apps/README
   last editor of every sealed field group — name, meta, note, icon — as an opaque `user:{id}` / `share:{identityId}`,
   from the authenticated caller, served to no client; a guest's take-back erases only a placeholder its own identity
   named and no link is rooted on, ADR 0080 decision 6.)
+- [en.platform.audio-player](enablers/en.platform.audio-player.md) — **planned** (ADR 0135 decisions 6–8: core's
+  one audio player — an application hands it a queue, core plays it shuffled, endless and crossfading in a bar below the
+  shell's footer that plays on across pages; it is handed URLs, never a key)
 - [en.platform.field-key](enablers/en.platform.field-key.md) — **built** (ADR 0093 § 9: every text or icon field — a
   node's name and meta, a medium's metadata, a bucket's, a guest's or a share's name, a share's note, a member's name
   and picture — seals under `K_field`, derived per write from the key it belongs under, so one key opens one revision

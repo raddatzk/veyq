@@ -49,6 +49,11 @@ export function normalizeMediaMeta(m: RawMediaMeta): MediaMeta {
     gpsLng: finiteNum(m.gpsLng),
     placeName: cleanStr(m.placeName),
     placeLevel: cleanStr(m.placeLevel),
+    trackName: cleanStr(m.trackName),
+    trackActivity: cleanStr(m.trackActivity),
+    durationMs: finiteNum(m.durationMs),
+    trimStartMs: finiteNum(m.trimStartMs),
+    trimEndMs: finiteNum(m.trimEndMs),
   }
 }
 

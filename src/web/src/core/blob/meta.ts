@@ -46,6 +46,13 @@ export const MIME_TO_EXT: Readonly<Record<string, string>> = {
   'video/quicktime': 'mov',
   'video/webm': 'webm',
   'video/x-matroska': 'mkv',
+  // the audio containers `sniff.ts` `sniffStream` names, which a music track (ADR 0135) is typed by
+  'audio/mpeg': 'mp3',
+  'audio/mp4': 'm4a',
+  'audio/aac': 'aac',
+  'audio/ogg': 'ogg',
+  'audio/wav': 'wav',
+  'audio/flac': 'flac',
 }
 
 /** Whether `name` ends in an extension: a dot after at least one other character, then 1–16 characters that are no

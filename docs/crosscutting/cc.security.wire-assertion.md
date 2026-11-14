@@ -151,7 +151,7 @@ capability is never read as a leaked canary.
   is not met fails by name; zero raw hits on its own proves nothing. The dump is retained as
   `.e2e-out/<stamp>/database-<tag>.sql`.
 - **Two exemptions, both derived and printed with what they exempted.** *The mailbox*, for a token the recording
-  shows the suite first read out of a mail — member-invite and recovery secrets, whose channel *is* mail
+  shows the suite first read out of a mail — mailed member-invite and recovery secrets, whose channel *is* mail
   ([ADR 0049](../decisions/0049-email-delivery-boundary.md), [ADR 0054](../decisions/0054-password-recovery-two-factor-release.md));
   every other token in a mail is a hit. *A presigned URL in the store's own request log*: the store is its verifier
   and logs the URI it was handed; the capability expires with the presign TTL, and the same URL is swept everywhere
