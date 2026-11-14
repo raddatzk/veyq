@@ -1,7 +1,8 @@
 # UC: Add a member to the shared Tenant space
 
 - **ID:** uc.spaces.add-member
-- **Primary actor:** Tenant **Owner** (invites); the **invitee** (joins with the code the owner passed on).
+- **Primary actor:** Tenant **Owner** (invites); the **invitee** (joins with the code the owner passed on, or from a
+  link that carries it).
 - **Goal:** give another person access to the shared **Tenant** space — the owner invites them, and the invitee
   joins holding the tenant key at once, with nobody else's device involved, operator-blind
   ([ADR 0111](../../../decisions/0111-an-invitee-grants-itself-a-rotator-re-keys-its-own-scopes-and-a-key-chain-anchors-trust.md)
@@ -9,11 +10,13 @@
 - **Preconditions:** The owner holds the TENANT grant (born cold at activation, [ADR 0006](../../../decisions/0006-cold-tenant-scope-birth.md))
   and invites from an **unlocked vault**: the invite holds a grant of the tenant's current epoch key, which only a
   key-holder can wrap. The tenant can send mail ([ADR 0055](../../../decisions/0055-mail-is-a-precondition-not-a-capability.md)),
-  and the owner has a way outside veyq to pass the invitee a code (a message, in person).
+  for either way ([ADR 0129](../../../decisions/0129-a-member-invite-is-mailed-or-handed-over-as-a-link.md) decision 3), and the owner has a way outside veyq to pass the invitee a code, or the
+  link itself (a message, their own mail, in person).
 - **Postconditions (success):** The invited person is a **member** of the tenant holding a **TENANT grant** they
   wrapped to their own identity, and a **join record** in their tenant profile — so they open the shared space at
   once. The server saw the invite's public key, the owner's signature over it, opaque grant ciphertext and the
-  sealed join record — never the scope key, the invite's private key or the code.
+  sealed join record — never the scope key, the invite's private key or the code, and of a link invite (A5) not the
+  sealed part either.
 
 This use-case is the tenant consumer of the grant-distribution primitive
 ([ADR 0020](../../../decisions/0020-grant-distribution-invite-wrap.md)); a group add wraps directly instead
@@ -21,7 +24,8 @@ This use-case is the tenant consumer of the grant-distribution primitive
 
 ## Main flow
 
-1. The owner opens **"add member"** and enters the person's **email**. Their client makes the invite a
+1. The owner opens **Invite member**, chooses **Invite by email** (the dialog opens on **Share a link**, A5) and enters
+   the person's **email**. Their client makes the invite a
    **placeholder member** ([ADR 0111](../../../decisions/0111-an-invitee-grants-itself-a-rotator-re-keys-its-own-scopes-and-a-key-chain-anchors-trust.md)
    decision 1): it mints an **invite key** from a fresh 32-byte seed, **signs** its public half with the owner's
    identity (statement `invite-key` over tenant, invite, the key's hash and the expiry, which is the instance's
@@ -36,8 +40,8 @@ This use-case is the tenant consumer of the grant-distribution primitive
    own lifetime within a minute (`422 invite_expiry_invalid`), as the owner's signature over the invite key is its
    caller's (`422 invite_signature_invalid`); it stores the public key, the signature, the signer's key as it signed and
    the grant on the invite row — the grant a second time as the invite's **anchor** (ADR 0111 decision 19) — mints the **single-use** token (hashed), and **mails** `…/tenant/accept#<token>.<sealed>`
-   to the address — keeping no copy of the sealed part. Mail is the **only** channel: the response carries no
-   secret ([ADR 0055](../../../decisions/0055-mail-is-a-precondition-not-a-capability.md)). A tenant with no
+   to the address — keeping no copy of the sealed part. This operation's only channel is mail: its response carries
+   no secret ([ADR 0055](../../../decisions/0055-mail-is-a-precondition-not-a-capability.md)). A tenant with no
    sendable mail settings is **refused** (`503 mail_unavailable`) before anything is minted.
 3. The owner passes the **code** on themselves, never by email.
 4. The invitee opens the link and types the code. The preview serves the invite with the owner's whole key chain,
@@ -107,16 +111,36 @@ sequenceDiagram
   identity ([uc.account.rotate-keys](../../account/use-cases/uc.account.rotate-keys.md) E3), and the newcomer reaches
   that key through the owner's chain from the head in the link — the step signed by the old identity **and** the old
   Secret-Key proof key. The invite keeps working; anything the owner's retired key signs is refused.
-- **E1 — the invite is expired, revoked or already consumed:** a generic failure that points at whoever invited;
-  the token is single-use, and an ended invite holds no key and no grant.
-- **E2 — the operator against the invite:** it mails the link, so it holds the sealed part and may guess offline —
+- **A5 — the owner shares a link instead** ([ADR 0129](../../../decisions/0129-a-member-invite-is-mailed-or-handed-over-as-a-link.md) decisions 1, 2 and 6). **Share a link**, the dialog's first
+  way, asks for no address. The client builds the invite as in step 1, always under a generated code, and posts it
+  without address or sealed part (`createMemberInviteLink`); the server runs step 2's checks, mail as a precondition
+  and the tenant's invite budget, sends **nothing**, and answers the single-use token to this owner only. The client
+  writes `…/tenant/accept#<token>.<sealed>.<code>` on its own origin and shows it once inside an editable message (the
+  space's name, the link, its expiry, "works once"), to copy, hand to the system share sheet where the browser has one,
+  or open in the owner's mail program, beside the warning that whoever has the link can join. Several link invites may
+  be open at once, and a mailed invite supersedes none of them. The link opens without a code prompt and the page
+  strips its fragment; steps 4–6 follow, with three differences: a new account **types its address**, which starts
+  unconfirmed and is sent its confirmation mail at once (the client signs in with the password it already holds and
+  asks once; a failure there is not the join's,
+  [uc.account.confirm-email-address](../../account/use-cases/uc.account.confirm-email-address.md)); **any** account of
+  the instance may sign in instead, its address confirmation left as it was; and an account already a member is
+  refused `409 already_member`, decided under the tenant's lock before the invite is spent, so the link stays good for
+  the one it was meant for. A register that sends an address for a mailed invite, or none for a link one, is
+  `422 invite_kind_email_mismatch`.
+- **E1 — the invite is expired, revoked or already consumed:** a failure that points at whoever invited; the token
+  is single-use, and an ended invite holds no key and no grant. A consumed one says so (`410 invite_redeemed`, "already
+  been used — tell whoever invited you"), apart from a revoked or expired one (`410 invite_no_longer_valid`), so a
+  link someone else took first is noticed — detection, not prevention; a suspended tenant's invites all answer
+  `invite_no_longer_valid`. The preview tells them apart until the terminal-invite purge drops the row.
+- **E2 — the operator against the invite:** it mails a mailed invite's link, so it holds the sealed part and may guess offline —
   against a 50-bit code behind Argon2id at the production profile. It cannot swap the owner's key or the invite key,
   because the owner's head sits inside the seal and the invitee derives the invite key itself, nor hand the newcomer
   a tenant key of its own, which links to no anchor. A password the owner chose is only as strong as that password.
   Self-hosted makes it moot. What it can still do is ADR 0111 § What stays open's: with a party that held the
   anchor's epoch, plant a later one for an invite someone other than the owner carried; with a thief of the owner's
   retired key, withhold the owner's securing step from a new account, whose join record then reads as an anomaly to
-  every co-member.
+  every co-member. A link invite's sealed part and code never reach it, which leaves it nothing to guess; the link is
+  a bearer credential in the channel the owner chose instead (ADR 0129 § Consequences).
 - **E3 — the member's grant won't unwrap** (corrupt / identity rotated without re-wrap): the member can't open
   the tenant → surfaced as an error; the scope row is **not** self-deleted (a blind operator must not force a
   wipe), matching [en.spaces.tenant-scope](../enablers/en.spaces.tenant-scope.md) E3.
@@ -130,7 +154,7 @@ sequenceDiagram
 
 - **Operator-blind.** The server stores the invite's public key, the owner's signature and the signer's key as it
   signed, opaque grants (the anchor among them), the sealed join record and who rooted it. The invite's private key
-  and the code never reach it; the sealed part of the link is mailed and dropped.
+  and the code never reach it; the sealed part of a mailed link is mailed and dropped, a link invite's never sent.
 - **Member identity ([en.spaces.member-identity](../enablers/en.spaces.member-identity.md), cr-0083).** Each
   member shows a per-tenant **`username`** (plaintext handle, chosen at join, unique in the tenant) and their
   **real name sealed under a field key derived from its own value key, whose wrap `K_tenant` holds** — decrypted on-device by any member, never seen by the server;
@@ -155,8 +179,8 @@ sequenceDiagram
   trust).
 - **Inviting is owner-only.** Only a tenant OWNER mints, re-issues or revokes a member invite (`403
   not_tenant_owner`); a member never hands the key to someone the owner did not invite.
-- **Delivery result, never silent (cr-email-invite-send-hardening).** The mint reports how the invite went. On
-  a member invite only **SENT** is reachable: no sendable mailer is refused up front, and a send that errors is
+- **Delivery result, never silent (cr-email-invite-send-hardening).** The mailed mint reports how the invite went
+  (a link mint sends nothing and reports no delivery). On a mailed member invite only **SENT** is reachable: no sendable mailer is refused up front, and a send that errors is
   `503 mail_send_failed` with the invite **revoked again** — there is no copy-link to hand a survivor to, so a
   live token nobody can reach would be worse than no invite ([ADR 0055](../../../decisions/0055-mail-is-a-precondition-not-a-capability.md) §6).
   A failed **re-issue** therefore leaves the invitee with no live invite at all, since the supersede already
@@ -177,15 +201,16 @@ sequenceDiagram
 - **Anti-bombing rate limit (cr-email-invite-send-hardening).** Once mail is a real channel, repeated invites to
   one address are **rate-limited** — per-(tenant, recipient) as the primary guard and per-tenant as a volume cap
   (429 + `Retry-After`, no invite minted). It is enforced in the handler on the tenant-owner member paths (the
-  per-IP auth limiter can't key on a recipient); the re-issue loop against one address is the sharpest vector.
+  per-IP auth limiter can't key on a recipient); the re-issue loop against one address is the sharpest vector. A link
+  mint or re-issue has no recipient and spends the per-tenant bucket alone.
 - **Additive only.** This use-case only **adds** a member. Removal is
   [uc.spaces.remove-tenant-member](uc.spaces.remove-tenant-member.md); revoking an open invite is
   [uc.spaces.manage-member-invites](uc.spaces.manage-member-invites.md).
 
 ## User impact
 
-You let someone into your shared space with an email invitation and a code you pass on yourself, and they are in at
-once, so the server never holds what opens the invitation.
+You let someone into your shared space with a link you hand over yourself, or with an email invitation and a code
+you pass on, and they are in at once, so the server never holds what opens the invitation.
 
 ## Related
 
@@ -198,7 +223,8 @@ once, so the server never holds what opens the invitation.
   (the invite as a placeholder member, the self-grant and the join record), [ADR 0020](../../../decisions/0020-grant-distribution-invite-wrap.md)
   (grant distribution), [ADR 0007](../../../decisions/0007-membership-role-grant-relation.md) (role vs. grant),
   [ADR 0006](../../../decisions/0006-cold-tenant-scope-birth.md) (the owner's cold-born grant),
-  [ADR 0055](../../../decisions/0055-mail-is-a-precondition-not-a-capability.md) (mail as the only channel)
+  [ADR 0055](../../../decisions/0055-mail-is-a-precondition-not-a-capability.md) (mail as a precondition),
+  [ADR 0129](../../../decisions/0129-a-member-invite-is-mailed-or-handed-over-as-a-link.md) (the two ways: mailed, or a link the owner hands over)
 - Sibling use-case: [uc.spaces.switch-spaces](uc.spaces.switch-spaces.md) (the member switches Personal ↔ Tenant),
   [uc.spaces.manage-member-invites](uc.spaces.manage-member-invites.md) (re-issue and revoke),
   [uc.admin.create-tenant](../../admin/use-cases/uc.admin.create-tenant.md) (the owner invite this member invite extends)

@@ -65,7 +65,7 @@ object AppKinds {
 
     /**
      * Whether a node of [kind] downloads as its own content rather than the web's ZIP (a Depot file: the file itself, under
-     * its own name, ADR 0130's Consequences); every other kind downloads the ZIP of it with everything under it.
+     * its own name, ADR 0136's Consequences); every other kind downloads the ZIP of it with everything under it.
      */
     fun downloadsItself(kind: String): Boolean = kind == FILE
 
@@ -255,7 +255,7 @@ object AppKinds {
      */
     fun copiesByOpenModel(kind: String): Boolean = kind == PotSession.KIND
 
-    /** Whether an object of [kind] can be chosen as the place for files shared to veyq (ADR 0132 decision 1): a Pot. */
+    /** Whether an object of [kind] can be chosen as the place for files shared to veyq (ADR 0138 decision 1): a Pot. */
     fun takesShared(kind: String): Boolean = kind == PotSession.KIND
 
     private const val FOLDER = "FOLDER"

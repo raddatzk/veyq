@@ -30,7 +30,7 @@ import java.time.temporal.ChronoUnit
 import java.util.UUID
 
 /**
- * A member invite as a **link** (ADR 0129, cr-member-invite-as-a-link phase 2): bound to nobody, sent nowhere, its token
+ * A member invite as a **link** (ADR 0129): bound to nobody, sent nowhere, its token
  * answered to the owner who minted it; refused without sendable mail; spending the tenant's budget only; coexisting with
  * other open invites; accepted by any account but a member's, registering the typed address unconfirmed — while a mailed
  * redemption still confirms its address; re-issued and revoked; and a consumed invite's preview telling itself apart.

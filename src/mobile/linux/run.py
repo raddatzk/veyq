@@ -22,7 +22,7 @@ Verbs:
                              (`:bridge:generateBindings`) and the samples its round trip reads (`WireTest`), the words'
                              gettext catalogs and Rust (`generate_words.py --gettext`), the theme
                              (`generate_theme.py --gtk`) — links the bridge's library, and proves the app in the GNOME
-                             SDK it ships on (ADR 0133 decision 4): flatpak-builder builds the Flatpak's modules before
+                             SDK it ships on (ADR 0139 decision 4): flatpak-builder builds the Flatpak's modules before
                              the app (`--stop-at`, from its cache), and in that build directory, as the app's module
                              would, `cargo clippy --locked --all-targets -- -D warnings`, `cargo test --locked` (all but
                              SANDBOX_SKIPS) and `cargo build --locked` run. The pinned runtime as `flatpak` installs it;
@@ -51,7 +51,7 @@ Verbs:
                              instead of the session (no sign-in, no server).
   lock                       `cargo update`: writes Cargo.lock anew from Cargo.toml (the one way it changes).
   flatpak [--arch aarch64|x86_64]
-                             the Flatpak bundle (ADR 0133): the bridge's release library and everything `build`
+                             the Flatpak bundle (ADR 0139): the bridge's release library and everything `build`
                              generates, the crates by `cargo vendor --locked`, the metainfo and the manifest filled from
                              `flatpak/` with the id (src/mobile/desktop-identity.json), the version (the tree's, as the
                              pipeline counts it) and the commit's date; then, in the image of `flatpak/Containerfile`
@@ -67,7 +67,7 @@ Verbs:
                              `dbus-run-session` and `gtk4-broadwayd`, both the runtime's), waits until it logs `session
                              SignIn`, and uninstalls it with its data.
   inputs [--arch aarch64|x86_64]...
-                             what `flatpak` builds outside the sandbox, alone (ADR 0133 decision 4): the bridge's release
+                             what `flatpak` builds outside the sandbox, alone (ADR 0139 decision 4): the bridge's release
                              library for each architecture named (default both), the bridge's Rust and the samples its
                              round trip reads, the words and the theme, at their paths in this tree. CI's `app-inputs`
                              runs it on macOS and hands the files to `flatpak --prebuilt`.
@@ -105,7 +105,7 @@ import repo_layout  # noqa: E402
 
 HERE = repo_layout.MOBILE_LINUX
 IMAGE = "veyq-linux-dev"
-# The Linux app's id (ADR 0133 decision 12): its GApplication id, its D-Bus name, its Flatpak's id. Defined only there.
+# The Linux app's id (ADR 0139 decision 12): its GApplication id, its D-Bus name, its Flatpak's id. Defined only there.
 APP_ID = json.loads((repo_layout.MOBILE / "desktop-identity.json").read_text())["appId"]
 # What Kotlin/Native defines in a shared library beside its @CName functions: its C API's entry (`lib<name>_symbols`),
 # two of its runtime's, and the ELF init/fini (read with `nm -D --defined-only` on 2026-11-10, Kotlin 2.4.21).
@@ -273,7 +273,7 @@ def cargo(docker_platform: str, lib_dir: Path, script: str, docker_args: list[st
 
 
 def build() -> int:
-    """The app proved in the SDK it ships on (ADR 0133 decision 4): the Flatpak's modules before the app built by
+    """The app proved in the SDK it ships on (ADR 0139 decision 4): the Flatpak's modules before the app built by
     flatpak-builder (`--stop-at`, from its cache), then clippy, the tests and the build in that build directory."""
     docker_platform, target = arch()
     flatpak_arch = {"linux/arm64": "aarch64", "linux/amd64": "x86_64"}[docker_platform]
@@ -394,7 +394,7 @@ def lock() -> int:
                         writable={repo_layout.MOBILE_LINUX: "/veyq/src"}, volumes={"veyq-linux-cargo": "/veyq/cargo"})
 
 
-# ---- the Flatpak (ADR 0133) ----
+# ---- the Flatpak (ADR 0139) ----
 
 FLATPAK = HERE / "flatpak"
 # the local tag of flatpak/Containerfile's build (pinned there by digest), as IMAGE is the Containerfile's beside it
@@ -628,7 +628,7 @@ def main() -> None:
     r.add_argument("--no-secret-service", action="store_true",
                    help="no session bus and no kept home: nothing is kept, every start signs in")
     verbs.add_parser("lock", help="cargo update: write Cargo.lock anew")
-    f = verbs.add_parser("flatpak", help="build the Flatpak bundle in the pinned GNOME SDK (ADR 0133)")
+    f = verbs.add_parser("flatpak", help="build the Flatpak bundle in the pinned GNOME SDK (ADR 0139)")
     f.add_argument("--arch", choices=sorted(FLATPAK_ARCHES), help="default: this host's architecture")
     f.add_argument("--prebuilt", action="store_true", help="take the library and sources `inputs` left in this tree")
     f.add_argument("--smoke", action="store_true", help="install the bundle, start it headless to its sign-in, uninstall")

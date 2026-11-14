@@ -21,9 +21,18 @@ name: Release
 # Jobs, each with only what it writes:
 #   check     contents: write (listing a draft needs push access; it writes nothing), packages: read
 #             — scripts/promote.py decides; every refusal is named in the run and, by `refused`, in the draft's notes.
-#   promote   packages: write, id-token: write — the snapshot's indexes get `<version>`, the release signature, the
-#             chart packaged as `<version>` from the snapshot's commit, and the release files, produced from that
-#             commit, checked against the attested asset set and signed.
+#   apps      packages: read — the desktop apps' packages the plan names, pulled by digest (ADR 0139 decision 10).
+#   msix-sign contents: read, and the GitHub environment `msix-signing`, whose secrets are the release's MSIX signer
+#             (the project's own `CN=veyq` certificate, decisions 7 and 12) — the one job that receives it: it signs the
+#             staged MSIX on Windows and refuses unless the payload and the block map are the tested ones and the
+#             signer is the certificate committed as src/mobile/windows/veyq.cer (scripts/msix_sign.py). No registry,
+#             no OIDC token beside the key.
+#   promote   packages: write, id-token: write — the snapshot's indexes and app packages get `<version>`, the release
+#             signature, the chart packaged as `<version>` from the snapshot's commit, and the release files, produced
+#             from that commit with the app files beside them, checked against the plan and signed.
+# A snapshot whose commit stages no app package (from before ADR 0139) is released without any: `apps` and `msix-sign`
+# then run and skip every step (a job-level `if` would skip `promote` behind them, validate_release_identity.py
+# assertion 16).
 #   publish   contents: write — the git tag `v<version>`, the draft moved onto it with every file, the draft
 #             published LAST, then the snapshot's tag removed.
 #   channels  packages: write — `<major>` and, from `main`, `latest`, only after the release is published.
@@ -65,6 +74,7 @@ jobs:
       release_id: ${{ steps.check.outputs.release_id }}
       latest: ${{ steps.check.outputs.latest }}
       chart: ${{ steps.check.outputs.chart }}
+      apps: ${{ steps.check.outputs.apps }}
     steps:
       - name: Check out repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -130,11 +140,131 @@ jobs:
           if-no-files-found: warn
           retention-days: 30
 
+  # The desktop apps' packages the plan names, pulled by the digests `check` verified as the snapshot's (ADR 0139
+  # decision 10): ORAS checks each file against its manifest, and the job refuses anything but exactly the three files
+  # of the version. Read only; the MSIX goes to `msix-sign`, every file to `promote`.
+  apps:
+    name: Pull the snapshot's app packages
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    needs: check
+    permissions:
+      contents: read
+      packages: read
+    # ORAS at checks.yml's `apps-stage` pin (validate_release_identity.py holds every copy equal).
+    env:
+      APPS: ${{ needs.check.outputs.apps }}
+      ORAS_VERSION: "1.3.6"
+      ORAS_SHA256: 66fb0ad7206f3f6fa77ed5b552049d364ccf4b50b1684554f731f76302b52ca0
+    steps:
+      - name: Fetch the decision
+        if: env.APPS == 'true'
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: promotion
+          path: ${{ runner.temp }}/promotion
+
+      - name: Install ORAS
+        if: env.APPS == 'true'
+        run: |
+          set -euo pipefail
+          tarball="oras_${ORAS_VERSION}_linux_amd64.tar.gz"
+          curl -fsSL -o "${RUNNER_TEMP}/${tarball}" "https://github.com/oras-project/oras/releases/download/v${ORAS_VERSION}/${tarball}"
+          echo "${ORAS_SHA256}  ${RUNNER_TEMP}/${tarball}" | sha256sum -c -
+          mkdir -p "${RUNNER_TEMP}/oras"
+          tar -xzf "${RUNNER_TEMP}/${tarball}" -C "${RUNNER_TEMP}/oras" oras
+          "${RUNNER_TEMP}/oras/oras" version
+
+      - name: Pull the packages by digest
+        if: env.APPS == 'true'
+        env:
+          REGISTRY: ghcr.io/${{ github.repository_owner }}
+          VERSION: ${{ needs.check.outputs.version }}
+          ACTOR: ${{ github.actor }}
+          TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          oras() { "${RUNNER_TEMP}/oras/oras" "$@"; }
+          printf '%s' "$TOKEN" | oras login ghcr.io --username "$ACTOR" --password-stdin
+          mkdir -p "${RUNNER_TEMP}/apps"
+          for platform in $(jq -r '.apps | keys[]' "${RUNNER_TEMP}/promotion/plan.json"); do
+            digest="$(jq -r --arg p "$platform" '.apps[$p]' "${RUNNER_TEMP}/promotion/plan.json")"
+            oras pull -o "${RUNNER_TEMP}/apps" "${REGISTRY}/veyq-apps@${digest}"
+          done
+          found="$(find "${RUNNER_TEMP}/apps" -maxdepth 1 -type f -printf '%f\n' | LC_ALL=C sort | tr '\n' ' ')"
+          wanted="$(jq -r '.app_layers | keys[]' "${RUNNER_TEMP}/promotion/plan.json" | LC_ALL=C sort | tr '\n' ' ')"
+          if [[ "$found" != "$wanted" ]]; then
+            echo "the snapshot's packages pulled as '${found}', the plan names '${wanted}'" >&2
+            exit 1
+          fi
+          echo "pulled ${found}of ${VERSION}"
+
+      - name: Keep the packages
+        if: env.APPS == 'true'
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: app-packages
+          path: ${{ runner.temp }}/apps/
+          if-no-files-found: error
+          retention-days: 30
+
+  # The release's Windows signature (ADR 0139 decision 7): the staged, unsigned MSIX signed with the project's own
+  # certificate, whose PFX and password are the secrets of the environment `msix-signing` and reach this job alone
+  # (decision 12; making them and the environment's protection rules are the owner's, infra/README.md § Cutting a
+  # release). scripts/msix_sign.py takes signtool from the build's pinned NuGet package, writes the PFX for the one
+  # call and deletes it, and refuses unless signing added only the signature and changed no payload byte and no byte of
+  # AppxBlockMap.xml, and unless the signer is the certificate committed as src/mobile/windows/veyq.cer (subject
+  # `msixPublisher`). It holds no registry token and no OIDC token: the key meets nothing else that writes.
+  msix-sign:
+    name: Sign the MSIX with the release's certificate
+    runs-on: windows-latest
+    timeout-minutes: 15
+    needs:
+      - check
+      - apps
+    environment: msix-signing
+    permissions:
+      contents: read
+    env:
+      APPS: ${{ needs.check.outputs.apps }}
+      VERSION: ${{ needs.check.outputs.version }}
+    steps:
+      - name: Check out repository
+        if: env.APPS == 'true'
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Fetch the staged packages
+        if: env.APPS == 'true'
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: app-packages
+          path: ${{ runner.temp }}/apps
+
+      - name: Sign the MSIX, holding its payload and its signer
+        if: env.APPS == 'true'
+        env:
+          VEYQ_MSIX_PFX_BASE64: ${{ secrets.MSIX_PFX_BASE64 }}
+          VEYQ_MSIX_PFX_PASSWORD: ${{ secrets.MSIX_PFX_PASSWORD }}
+          PYTHONUTF8: "1"
+        run: python scripts/msix_sign.py sign --msix "$env:RUNNER_TEMP\apps\veyq-$env:VERSION-x64.msix" --out "$env:RUNNER_TEMP\signed"
+
+      - name: Keep the signed MSIX and its certificate
+        if: env.APPS == 'true'
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: app-msix-signed
+          path: ${{ runner.temp }}/signed/
+          if-no-files-found: error
+          retention-days: 30
+
   promote:
     name: Name, sign and package the release (no build)
     runs-on: ubuntu-latest
     timeout-minutes: 15
-    needs: check
+    needs:
+      - check
+      - apps
+      - msix-sign
     permissions:
       contents: read
       packages: write
@@ -143,6 +273,9 @@ jobs:
       REGISTRY: ghcr.io/${{ github.repository_owner }}
       VERSION: ${{ needs.check.outputs.version }}
       COMMIT: ${{ needs.check.outputs.commit }}
+      APPS: ${{ needs.check.outputs.apps }}
+      ORAS_VERSION: "1.3.6"
+      ORAS_SHA256: 66fb0ad7206f3f6fa77ed5b552049d364ccf4b50b1684554f731f76302b52ca0
     steps:
       - name: Check out repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -218,6 +351,57 @@ jobs:
             cosign sign --yes "${REGISTRY}/${image}@${digest}"
           done
 
+      # The desktop apps' packages get their release names the same way (ADR 0139 decision 10): `<version>-<platform>`
+      # on exactly the artifact `check` verified as the snapshot's, read back, then signed under the release identity.
+      # No channel: a person takes a package from its release, never by `<major>` or `latest`.
+      - name: Install ORAS
+        if: env.APPS == 'true'
+        run: |
+          set -euo pipefail
+          tarball="oras_${ORAS_VERSION}_linux_amd64.tar.gz"
+          curl -fsSL -o "${RUNNER_TEMP}/${tarball}" "https://github.com/oras-project/oras/releases/download/v${ORAS_VERSION}/${tarball}"
+          echo "${ORAS_SHA256}  ${RUNNER_TEMP}/${tarball}" | sha256sum -c -
+          mkdir -p "${RUNNER_TEMP}/oras"
+          tar -xzf "${RUNNER_TEMP}/${tarball}" -C "${RUNNER_TEMP}/oras" oras
+          "${RUNNER_TEMP}/oras/oras" version
+
+      - name: Name and sign the release's app packages (keyless)
+        if: env.APPS == 'true'
+        env:
+          ACTOR: ${{ github.actor }}
+          TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          oras() { "${RUNNER_TEMP}/oras/oras" "$@"; }
+          printf '%s' "$TOKEN" | oras login ghcr.io --username "$ACTOR" --password-stdin
+          for platform in $(jq -r '.apps | keys[]' "${RUNNER_TEMP}/promotion/plan.json"); do
+            digest="$(jq -r --arg p "$platform" '.apps[$p]' "${RUNNER_TEMP}/promotion/plan.json")"
+            oras tag "${REGISTRY}/veyq-apps@${digest}" "${VERSION}-${platform}"
+            got="$(oras manifest fetch --descriptor "${REGISTRY}/veyq-apps:${VERSION}-${platform}" | jq -r .digest)"
+            if [[ "$got" != "$digest" ]]; then
+              echo "${REGISTRY}/veyq-apps:${VERSION}-${platform} is ${got}, not the snapshot's ${digest}" >&2
+              exit 1
+            fi
+            echo "Signing ${REGISTRY}/veyq-apps@${digest} (${platform})"
+            cosign sign --yes "${REGISTRY}/veyq-apps@${digest}"
+          done
+
+      # The files the release attaches beside its recipe: the two Flatpak bundles as staged, the MSIX as `msix-sign`
+      # signed it, and the certificate it was signed with.
+      - name: Fetch the app packages
+        if: env.APPS == 'true'
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: app-packages
+          path: ${{ runner.temp }}/apps
+
+      - name: Fetch the signed MSIX
+        if: env.APPS == 'true'
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: app-msix-signed
+          path: ${{ runner.temp }}/msix-signed
+
       # The chart from the snapshot's commit as `<version>` (ADR 0064): its `appVersion` is the image tag its values
       # default to, so the release's chart names the release's images. Kept when a promotion of this snapshot that failed
       # half-way pushed it already (`check` refused it otherwise).
@@ -257,9 +441,11 @@ jobs:
           cosign sign --yes "${CHART}@${DIGEST}"
 
       # The release as files (ADR 0096 decision 3), produced by the snapshot commit's own producer with the three images
-      # by `<version>@<digest>`; scripts/promote.py holds them to the plan — the asset set the lanes installed, the
-      # digests, the major entry the tools image bakes — and only then are `veyqctl` and the manifest signed, into the
-      # bundle names the producer reserves. Nothing touches the manifest after its signature.
+      # by `<version>@<digest>` and the app files beside them, listed under `apps` (ADR 0139 decision 8); scripts/promote.py
+      # holds them to the plan — the asset set the lanes installed, the digests, the major entry the tools image bakes,
+      # the app files the snapshot staged — and only then are `veyqctl` and the manifest signed, into the bundle names
+      # the producer reserves, and each app file into its own `<name>.bundle`. Nothing touches the manifest after its
+      # signature.
       - name: Produce and sign the release's files
         env:
           UNSCHEDULED_MAJOR: ${{ inputs.unscheduled_major }}
@@ -271,12 +457,22 @@ jobs:
           tools="${REGISTRY}/veyq-tools:${VERSION}@$(jq -r '.digests["veyq-tools"]' "${RUNNER_TEMP}/promotion/plan.json")"
           unscheduled=""
           if [[ "$UNSCHEDULED_MAJOR" == "true" ]]; then unscheduled="--unscheduled"; fi
+          apps=()
+          if [[ "$APPS" == "true" ]]; then
+            for file in "${RUNNER_TEMP}/apps/veyq-${VERSION}-x86_64.flatpak" "${RUNNER_TEMP}/apps/veyq-${VERSION}-aarch64.flatpak" \
+                "${RUNNER_TEMP}/msix-signed/veyq-${VERSION}-x64.msix" "${RUNNER_TEMP}/msix-signed/veyq.cer"; do
+              apps+=(--app-file "$file")
+            done
+          fi
           "${RUNNER_TEMP}/venv/bin/python" "${RUNNER_TEMP}/snapshot/scripts/release_assets.py" "$out" \
-            --app "$app" --admin "$admin" --tools "$tools" ${unscheduled:+"$unscheduled"}
+            --app "$app" --admin "$admin" --tools "$tools" ${unscheduled:+"$unscheduled"} ${apps[@]+"${apps[@]}"}
           "${RUNNER_TEMP}/venv/bin/python" scripts/promote.py assets --dir "${out}/v${VERSION}" \
             --plan "${RUNNER_TEMP}/promotion/plan.json" --registry "$REGISTRY"
           cosign sign-blob --yes --bundle "${out}/v${VERSION}/veyqctl.bundle" "${out}/v${VERSION}/veyqctl"
           cosign sign-blob --yes --bundle "${out}/v${VERSION}/manifest.json.bundle" "${out}/v${VERSION}/manifest.json"
+          for name in $(jq -r '(.apps // {}) | keys[]' "${out}/v${VERSION}/manifest.json"); do
+            cosign sign-blob --yes --bundle "${out}/v${VERSION}/${name}.bundle" "${out}/v${VERSION}/${name}"
+          done
 
       - name: Keep the release's files
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
@@ -340,15 +536,23 @@ jobs:
           issuer="$(python3 scripts/promote.py release-identity | sed -n 's/^issuer=//p')"
           identity="$(python3 scripts/promote.py release-identity | sed -n 's/^identity=//p')"
           files="${RUNNER_TEMP}/files"
-          for blob in manifest.json veyqctl; do
+          cosign verify-blob --bundle "${files}/manifest.json.bundle" --certificate-oidc-issuer "$issuer" \
+            --certificate-identity-regexp "$identity" "${files}/manifest.json"
+          # every app file (ADR 0139 decision 8) as a person will check it: its own bundle, and its sha256 under `apps`
+          for blob in veyqctl $(jq -r '(.apps // {}) | keys[]' "${files}/manifest.json"); do
             cosign verify-blob --bundle "${files}/${blob}.bundle" --certificate-oidc-issuer "$issuer" \
               --certificate-identity-regexp "$identity" "${files}/${blob}"
           done
-          listed="$(jq -r '.assets | keys[]' "${files}/manifest.json" | sort)"
-          present="$(find "$files" -maxdepth 1 -type f -printf '%f\n' \
-            | grep -vx -e manifest.json -e manifest.json.bundle -e veyqctl.bundle | sort)"
+          jq -r '(.apps // {}) | to_entries[] | "\(.value)  \(.key)"' "${files}/manifest.json" > "${RUNNER_TEMP}/apps.sha256"
+          if [[ -s "${RUNNER_TEMP}/apps.sha256" ]]; then
+            (cd "$files" && sha256sum --check --strict "${RUNNER_TEMP}/apps.sha256")
+          fi
+          listed="$( { jq -r '.assets | keys[]' "${files}/manifest.json"
+                       jq -r '(.apps // {}) | keys[] | ., . + ".bundle"' "${files}/manifest.json"
+                       printf '%s\n' manifest.json manifest.json.bundle veyqctl.bundle; } | sort)"
+          present="$(find "$files" -maxdepth 1 -type f -printf '%f\n' | sort)"
           if [[ "$listed" != "$present" ]]; then
-            echo "the files are not the manifest's assets: listed [${listed//$'\n'/ }], present [${present//$'\n'/ }]" >&2
+            echo "the files are not the manifest's assets and apps with their bundles: listed [${listed//$'\n'/ }], present [${present//$'\n'/ }]" >&2
             exit 1
           fi
 
@@ -498,11 +702,14 @@ jobs:
     timeout-minutes: 5
     needs:
       - check
+      - apps
+      - msix-sign
       - promote
       - publish
     if: >-
       always() && needs.publish.outputs.published != 'true'
-      && (needs.check.result == 'failure' || needs.promote.result == 'failure' || needs.publish.result == 'failure')
+      && (needs.check.result == 'failure' || needs.apps.result == 'failure' || needs.msix-sign.result == 'failure'
+          || needs.promote.result == 'failure' || needs.publish.result == 'failure')
     permissions:
       contents: write # the draft's notes, and the git tag `v<version>` this run pushed before it failed
     env:
@@ -513,6 +720,8 @@ jobs:
       MODE: ${{ needs.publish.outputs.mode }}
       NEW_ID: ${{ needs.publish.outputs.release_id }}
       CHECK: ${{ needs.check.result }}
+      APPS: ${{ needs.apps.result }}
+      SIGN: ${{ needs.msix-sign.result }}
       PROMOTE: ${{ needs.promote.result }}
       PUBLISH: ${{ needs.publish.result }}
       RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
@@ -555,10 +764,12 @@ jobs:
           reason="${dir}/refusal.txt"
           if [[ ! -s "$reason" ]]; then
             failed=check
+            if [[ "$APPS" == failure ]]; then failed=apps; fi
+            if [[ "$SIGN" == failure ]]; then failed=msix-sign; fi
             if [[ "$PROMOTE" == failure ]]; then failed=promote; fi
             if [[ "$PUBLISH" == failure ]]; then failed=publish; fi
-            printf 'the %s job failed (check %s, promote %s, publish %s); its log says where. Nothing was published.\n' \
-              "$failed" "$CHECK" "$PROMOTE" "$PUBLISH" > "${RUNNER_TEMP}/reason.txt"
+            printf 'the %s job failed (check %s, apps %s, msix-sign %s, promote %s, publish %s); its log says where. Nothing was published.\n' \
+              "$failed" "$CHECK" "$APPS" "$SIGN" "$PROMOTE" "$PUBLISH" > "${RUNNER_TEMP}/reason.txt"
             reason="${RUNNER_TEMP}/reason.txt"
           fi
           for id in $(jq -r '.[]' "${dir}/notify.json"); do

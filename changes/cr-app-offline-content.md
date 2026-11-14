@@ -3,12 +3,12 @@ id: cr-app-offline-content
 title: Content kept on the device as ciphertext — a bounded cache of what was viewed and "Available offline" — opened offline on the native apps
 status: planned
 satisfies: []
-adrs: ["0047", "0058", "0005", "0012", "0081", "0123", "0130", "0131", "0105"]
+adrs: ["0047", "0058", "0005", "0012", "0081", "0123", "0136", "0137", "0105"]
 invariants:
   - "operator-blind E2EE: the device keeps only ciphertext as the server sent it (blob frames, sealed listings, wraps), each entry sealed again under a key of this account on this device; never plaintext, never a token, never a presigned URL; decrypted only in memory on view"
   - "no plaintext at rest but where the person saves it (ADR 0047's Consequences, every app) — unchanged; what changes is that the apps now keep CIPHERTEXT by choice (a pin) or as a bounded cache, stated as such"
   - "the device's key material is untouched by a missing server wrap (ADR 0058, uc.account.trust-device E1); a wrap the server stopped serving ends the local copy and the store at the next online resume — the escalation still lands once the device is reachable"
-  - "every rule is the core's (ADR 0130 decisions 1 and 2); the bridge carries sizes and states, never a key, seal or token (SecretFreeSchemaTest)"
+  - "every rule is the core's (ADR 0136 decisions 1 and 2); the bridge carries sizes and states, never a key, seal or token (SecretFreeSchemaTest)"
   - "no word in an app but from src/mobile/words/words.json; each app follows its platform's guideline (ADR 0123 decision 9)"
   - "the web is unchanged: it keeps nothing (no Cache Storage, no IndexedDB of content)"
 ---
@@ -38,7 +38,7 @@ account wipe the store.
 
 - **Read first:** ADR 0047 (its last two Consequences, the apps' rule), ADR 0058 (decisions 3 and 4, the escalation's
   floor), ADR 0005 §9 (one convenience wrap per device), ADR 0012 (`K_blob` per blob under the node key), ADR 0081 (a
-  scope's tree revision as `ETag`), ADR 0130, ADR 0131; `src/mobile/CLAUDE.md` whole, especially § Nothing on disk the
+  scope's tree revision as `ETag`), ADR 0136, ADR 0137; `src/mobile/CLAUDE.md` whole, especially § Nothing on disk the
   app did not choose and § Secrets on screen; `docs/crosscutting/security-model.md` § What a trusted device rests on,
   per platform; `docs/crosscutting/native-apps.md`; `uc.account.trust-device` (E1, the anti-withholding rule).
 - **Sibling CRs:** `cr-app-account-settings` (planned at refine, phase 1 done) builds the Settings page this CR's
@@ -129,7 +129,7 @@ pin is the person's choice, the automatic tier is bounded by a limit the person 
 ### D3 — Where the store lives, and what the platform adds
 
 The host names the directory at start, as it names the device store's path today, and the core does all reading and
-writing (ADR 0131 decision 3's line); `blob/Files.kt` gains `createDirectory`, `rename`, `sync` and `freeBytes` per
+writing (ADR 0137 decision 3's line); `blob/Files.kt` gains `createDirectory`, `rename`, `sync` and `freeBytes` per
 `posixMain`/`mingwMain`/`jvmMain`.
 
 | Platform | Directory | The platform's own protection |
@@ -268,7 +268,7 @@ removed last). R10's paths are where it is wired; `TrustMarks` stay as they are 
 ## Phases
 
 - [ ] **1 the ADR and the docs it changes** — the next free ADR number at phase 1 (`ls docs/decisions | tail -2`;
-  `0134` at refine), titled for D1/D4 ("The apps keep content as ciphertext, sealed to the device, by choice or within
+  `0140` at refine), titled for D1/D4 ("The apps keep content as ciphertext, sealed to the device, by choice or within
   a limit; an unlock opens it offline"), holding D1–D11 and their rejected options; ADR 0047's last Consequences point
   at it (plaintext rule unchanged, ciphertext kept by choice or bounded); ADR 0058's Consequences add that the
   escalation reaches a device's store at its next contact (D4); `src/mobile/CLAUDE.md` § Nothing on disk the app did not

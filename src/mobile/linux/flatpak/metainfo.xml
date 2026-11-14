@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<!-- The Linux app's AppStream metainfo (ADR 0133 decision 5). `run.py flatpak` fills @APP_ID@ (desktop-identity.json),
+<!-- The Linux app's AppStream metainfo (ADR 0139 decision 5). `run.py flatpak` fills @APP_ID@ (desktop-identity.json),
      @VERSION@ (the tree's <major>.<minor>, as the pipeline counts it) and @DATE@ (the commit's date, not the build's),
      and the manifest installs the result; `appstreamcli validate` holds it. -->
 <component type="desktop-application">

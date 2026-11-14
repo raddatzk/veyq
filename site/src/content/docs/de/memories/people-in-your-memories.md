@@ -40,8 +40,8 @@ eine Person öffnen, um alle Erinnerungen zu sehen, an denen sie beteiligt war.
   Buchstabens überall, wo du im Bereich vorkommst: in der Kopfzeile einer Erinnerung, in der Liste der Personen, in der
   Mitgliederliste und in deinem Profil. Du kannst es jederzeit entfernen, dann kehrt der Buchstabe zurück. In den Profilen
   anderer gibt es nichts zu bearbeiten – ihr Bild ändert nur die Person selbst. Schon beim Annehmen der Einladung kannst
-  du ein Bild wählen. Hast du dort Name und Bild übersprungen, bietet ein kleiner Hinweis nach dem ersten Entsperren an,
-  sie zu ergänzen; „Jetzt nicht“ blendet ihn dauerhaft aus.
+  du ein Bild wählen. Hast du dort Name und Bild übersprungen, bietet ein kleiner Hinweis nach dem ersten Entsperren an
+  (sobald deine E-Mail-Adresse bestätigt ist, falls sie das noch muss), sie zu ergänzen; „Jetzt nicht“ blendet ihn dauerhaft aus.
 
 Für Namen gilt überall dieselbe Regel: der **echte Name**, wenn die Person ihn angegeben hat, sonst ihr **Benutzername**.
 

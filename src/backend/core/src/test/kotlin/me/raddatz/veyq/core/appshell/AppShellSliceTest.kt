@@ -203,14 +203,14 @@ class AppShellSliceTest {
 
         /** `src/test/resources/META-INF/resources/content-security-policy.txt`, without its trailing newline. */
         const val FIXTURE_POLICY =
-            "default-src 'self'; frame-ancestors 'none'; img-src 'self'; connect-src 'self'; form-action 'self'"
+            "default-src 'self'; frame-ancestors 'none'; frame-src 'none'; img-src 'self'; connect-src 'self'; form-action 'self'"
 
         /** The fixture's policy as served on a new instance: the seeded external services (ADR 0088 decision 7), the map
          *  tiles in `img-src`, the geocoder, the breach check and the exchange rates in `connect-src`
          *  (`ExternalServicesSliceTest` moves them), and `https:` last, `core.share-embedding` being on by default (ADR 0121,
          *  `AppShellShareEmbeddingSliceTest` moves it). */
         const val SERVED_POLICY =
-            "default-src 'self'; frame-ancestors 'none'; img-src 'self' https://tile.openstreetmap.org; " +
+            "default-src 'self'; frame-ancestors 'none'; frame-src 'none'; img-src 'self' https://tile.openstreetmap.org; " +
                 "connect-src 'self' https://nominatim.openstreetmap.org https://api.pwnedpasswords.com https://api.frankfurter.dev https:; " +
                 "form-action 'self'"
     }

@@ -1,4 +1,4 @@
-//! The core, reached through libveyq.so's six functions (ADR 0130 decision 5; ADR 0123's Consequences, the bridge): the
+//! The core, reached through libveyq.so's six functions (ADR 0136 decision 5; ADR 0123's Consequences, the bridge): the
 //! wire's types ([wire], generated from the core's serial descriptors and bridge.h, never written here), a safe wrapper
 //! over the functions, and the host function — the one way the core asks the device for something (its store).
 //!
@@ -82,7 +82,7 @@ pub fn call_blocking(call: &Call) -> Result<Answered, Unreadable> {
     call_blocking_with(call, None)
 }
 
-/// [call_blocking] with [inbound] beside the call's JSON (ADR 0131 decision 1's inward half: a scan's camera frame,
+/// [call_blocking] with [inbound] beside the call's JSON (ADR 0137 decision 1's inward half: a scan's camera frame,
 /// `Scan.Frame`), which the core copies before `veyq_call` returns.
 pub fn call_blocking_with(call: &Call, inbound: Option<&[u8]>) -> Result<Answered, Unreadable> {
     send_call(call, inbound).recv_blocking().unwrap_or_else(|_| unreachable!("the answer's sender is dropped only after it sent"))
@@ -265,7 +265,7 @@ mod tests {
         eprintln!("{read} samples read back");
     }
 
-    /// ADR 0131 decision 1: the payload beside an answer is copied before the callback returns — the core's buffer may
+    /// ADR 0137 decision 1: the payload beside an answer is copied before the callback returns — the core's buffer may
     /// be gone right after — and NULL is no payload, while an empty one is still one (an empty range).
     #[test]
     fn an_answers_payload_is_copied_before_the_callback_returns() {

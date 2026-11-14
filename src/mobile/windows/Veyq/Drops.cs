@@ -1,6 +1,6 @@
 // Drag and drop onto a level and onto a folder's row (ADR 0123's Consequences, the Windows app's Depot whole), Fluent's way: the level's scroller and each
 // folder's row take dropped storage items (Explorer's files and folders) as a copy, the row under the pointer highlighted
-// as a list's hovered row is; what was dropped is sorted by DropSort and handed to the core by path (ADR 0131 decision 3:
+// as a list's hovered row is; what was dropped is sorted by DropSort and handed to the core by path (ADR 0137 decision 3:
 // the core opens and reads each at offsets, nothing of a file crosses). A dropped veyq download is uploaded as the file
 // it is (until import is built, native-apps § Open).
 using System;
@@ -68,6 +68,9 @@ internal sealed record Drops(UploadLevel Level, Action<bool, string> Say)
                     deferral.Complete();
                 }
                 Log.Write($"dropped onto {level.Label}: {sorted.Files.Count} files, {sorted.Folders.Count} folders, {sorted.Refused.Count} refused");
+                // where each dropped path lies and what the file system says of it, never the path itself: a drop the
+                // core cannot read says why in the log (the packaged app's drop, 2026-11-13)
+                foreach (var path in sorted.Files.Concat(sorted.Folders)) Log.Write($"a dropped path: {DropSort.Facts(path)}");
                 foreach (var name in sorted.Refused) Say(false, Words.DepotDropNotLocal(name));
                 foreach (var call in DropSort.Calls(level, sorted))
                 {

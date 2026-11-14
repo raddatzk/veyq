@@ -344,6 +344,34 @@ check(refused(snapshot.staged_verdict, staged_digests, foreign, dict(staged_dige
       "a lane record of other bytes is published")
 check(refused(snapshot.staged_verdict, staged_digests, [], dict(staged_digests), ARCHS), "no lane record is published")
 
+# ---- the desktop apps' packages (ADR 0139 decision 10) ------------------------------------------------------------
+app_digests = {p: "sha256:" + c * 64 for p, c in zip(snapshot.APP_PLATFORMS, "abc")}
+with tempfile.TemporaryDirectory(prefix="snapshot_selftest_apps_") as tmp:
+    apps_dir = pathlib.Path(tmp)
+    for platform, digest in app_digests.items():
+        (apps_dir / platform).write_text(digest + "\n")
+    check(snapshot.read_app_digests(apps_dir) == app_digests, "the app digests the run kept are not read as staged")
+    (apps_dir / "msix-arm64").write_text(D1)
+    check(refused(snapshot.read_app_digests, apps_dir), "an app platform the snapshot does not know is published")
+    (apps_dir / "msix-arm64").unlink()
+    (apps_dir / "flatpak-aarch64").unlink()
+    check(refused(snapshot.read_app_digests, apps_dir), "a snapshot without one platform's package is published")
+    (apps_dir / "flatpak-aarch64").write_text("latest")
+    check(refused(snapshot.read_app_digests, apps_dir), "an app digest that is no digest is published")
+    check(refused(snapshot.read_app_digests, apps_dir / "absent"), "no app digests at all is published")
+check(not refused(snapshot.staged_apps_verdict, app_digests, dict(app_digests)), "the staged app packages are refused")
+check(refused(snapshot.staged_apps_verdict, app_digests, {**app_digests, "msix-x64": D2}),
+      "a moved app staging tag is published")
+check(refused(snapshot.staged_apps_verdict, app_digests, {**app_digests, "flatpak-x86_64": None}),
+      "a deleted app staging tag is published")
+artifact = json.dumps({"mediaType": "application/vnd.oci.image.manifest.v1+json",
+                       "artifactType": snapshot.APP_ARTIFACT_TYPE, "layers": [{"digest": D3}]})
+pushed = "sha256:" + hashlib.sha256(artifact.encode()).hexdigest()
+check(snapshot.decide("veyq-apps", {"0.3-SNAPSHOT-msix-x64": artifact, f"sha-{SHA}-msix-x64": None}, {pushed}) is True,
+      "an app package's own half-published snapshot name is refused")
+check(refused(snapshot.decide, "veyq-apps", {"0.3-SNAPSHOT-msix-x64": artifact}, {D4}),
+      "an app package's snapshot name naming another push is replaced")
+
 if failures:
     print("SNAPSHOT SELFTEST FAILED:")
     for message in failures:
@@ -353,4 +381,4 @@ print("snapshot selftest OK: the asset-set hash ignores what differs between pro
       "the predicates refuse a missing, extra, failed, foreign or inconsistent leg; a snapshot name holds only its build; "
       "only the newest, wholly green push run of Checks of HEAD — or of its newest tested ancestor, when every commit after "
       "it changes only what Checks ignores, within the walk's bound — is published from, under that commit's name and "
-      "version, and only the bytes it staged and tested")
+      "version, and only the bytes it staged and tested — the app packages included")

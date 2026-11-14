@@ -1,4 +1,4 @@
-// The core, reached through veyq.dll's six functions (ADR 0130 decision 5; ADR 0123's Consequences, the bridge): the
+// The core, reached through veyq.dll's six functions (ADR 0136 decision 5; ADR 0123's Consequences, the bridge): the
 // wire's types (Veyq.Bridge.Wire, generated from the core's serial descriptors and bridge.h, never written here), a safe
 // wrapper over the functions, and the host function — the one way the core asks the device for something (its store).
 //
@@ -50,7 +50,7 @@ public static unsafe class Core
     private static readonly List<GCHandle> Kept = [];
 
     /// <summary>
-    /// What draws an Emergency Kit file the core asks for (<c>Pdf.Pages</c>, <c>Pdf.Page</c>, <c>Picture.Luma</c>; ADR 0130
+    /// What draws an Emergency Kit file the core asks for (<c>Pdf.Pages</c>, <c>Pdf.Page</c>, <c>Picture.Luma</c>; ADR 0136
     /// decision 1: the platform draws, the core decides): the app's, set before the core starts; null for a request it
     /// does not draw. Its task's payload (a drawing's luminance) goes beside the reply and is zeroed once the core copied
     /// it. Without one, every such request is answered failed.
@@ -98,7 +98,7 @@ public static unsafe class Core
     public static Task<(Answer Answer, byte[]? Payload)> CallAsync(Call call) => CallAsync(call, null);
 
     /// <summary>
-    /// <see cref="CallAsync(Call)"/> with <paramref name="inbound"/> beside the call's JSON (ADR 0131 decision 1's inward
+    /// <see cref="CallAsync(Call)"/> with <paramref name="inbound"/> beside the call's JSON (ADR 0137 decision 1's inward
     /// half: a scan's camera frame, <c>Scan.Frame</c>), which the core copies before <c>veyq_call</c> returns. Null is no
     /// payload; an empty array an empty one.
     /// </summary>

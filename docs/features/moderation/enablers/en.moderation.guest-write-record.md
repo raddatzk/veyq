@@ -76,6 +76,13 @@ Run docs say. Each guest-write resource
 resolves it once per request and hands it down; `GuestWriteRecordedTest` holds that every resource operation taking a
 guest's write credential does so or is listed as exempt with its reason.
 
+**Decided, not built: a journal's writing session** ([ADR 0093](../../../decisions/0093-a-report-opens-one-window-for-the-moderator-and-a-hold-copies-never-blocks.md)
+§ 10, [ADR 0133](../../../decisions/0133-a-memorys-journal-is-a-sealed-crdt-log-whose-snapshots-only-members-write.md)
+decision 7). A `READ_WRITE` guest's journal updates arrive about once a second, so they enter one row per session —
+one share identity, one journal, one address, port and `Origin`, ended by 15 minutes without an update or by a change
+of any of the three — holding its first and last time and its count of updates, its expiry counted from the last. The
+row's columns, the update that extends it and its place in the table are the build's (`cr-live-journal`).
+
 ## No switch: wherever a guest may write
 
 The record has no switch of its own (ADR 0093 § 10, ADR 0088 decision 14): a row exists only where a link lets a guest

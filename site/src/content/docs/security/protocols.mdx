@@ -226,7 +226,7 @@ never received. See [Known limitations](/security/known-limitations/).
 **Purpose.** Give a new person a shared scope's key without the server ever holding it, without making them wait for
 another member's device, and without letting the server swap a key unnoticed
 ([ADR 0111](https://github.com/raddatzk/veyq/blob/main/docs/decisions/0111-an-invitee-grants-itself-a-rotator-re-keys-its-own-scopes-and-a-key-chain-anchors-trust.md)
-decisions 1–5, [ADR 0020](https://github.com/raddatzk/veyq/blob/main/docs/decisions/0020-grant-distribution-invite-wrap.md),
+decisions 1–5, [ADR 0129](https://github.com/raddatzk/veyq/blob/main/docs/decisions/0129-a-member-invite-is-mailed-or-handed-over-as-a-link.md), [ADR 0020](https://github.com/raddatzk/veyq/blob/main/docs/decisions/0020-grant-distribution-invite-wrap.md),
 [ADR 0028](https://github.com/raddatzk/veyq/blob/main/docs/decisions/0028-identity-authenticity-tofu-verification.md)).
 An invite is a **placeholder member**: it holds a key the owner signed and a grant wrapped to that key, and the
 invitee replaces it with its own identity.
@@ -247,16 +247,21 @@ server.
    the seed, the owner's **key-chain head** (section 7) and the owner's account id (`invite-link` version 2). The link is
    `https://<domain>/tenant/accept#<token>.<sealed>`: `token` is the server's single-use invite secret, `sealed` the
    mode, the KDF parameters and the seal. The owner's screen shows the code once, and the owner passes it on outside
-   veyq. **The seal is mandatory**: the server mails the link (mail is the only channel), so an unsealed link would
-   hand the invite to the operator.
+   veyq. **The seal is mandatory**: a mailed invite's link passes through the server's mail, so an unsealed link would
+   hand the invite to the operator. **An invite as a link**, the owner's other way, is minted by a separate operation:
+   the client posts the invite without an address or the sealed part, always under a generated code, the server
+   answers the token to that client alone and sends nothing, and the client writes
+   `https://<origin>/tenant/accept#<token>.<sealed>.<code>` for the owner to hand over in a channel of their choosing.
+   The server never receives that link's sealed part or code; the seal guards nothing against whoever holds the link,
+   which is a bearer credential, and is kept so there is one link format and one opening path.
 3. **What the server keeps.** The invite public key, the owner's signature, the owner's identity key as it signed,
    the grant and the expiry, on the invite row, and the same grant a second time as the invite's **anchor**. Before it mints (or re-sends), it verifies the owner's signature over
    the invite key under the identity key it stores for the caller (`400 invalid_request` otherwise), so a session
    without the owner's unlocked vault, such as one from a phished password, mints no invite. It checks that the grant
    is of the tenant's current epoch under the tenant's lock (`409 stale_epoch`), that the grant names the invite key
    (`409 recipient_key_not_current`), and that the signed expiry matches its own invite lifetime within a minute, in
-   whole seconds. It mails the link with the sealed part appended
-   and keeps no copy of that part; the invite secret is stored only as a hash. Accepting, revoking, re-sending or
+   whole seconds. It mails a mailed invite's link with the sealed part appended
+   and keeps no copy of that part; the invite secret is stored only as a hash. Mail is a precondition of both ways. Accepting, revoking, re-sending or
    expiring the invite clears its key, signature, grant and anchor in the same statement; re-sending is a new invite
    with a new key, link and code.
 4. **Every rotation carries every open invite.** The client that rotates the tenant reads the open invites (keys,
@@ -268,7 +273,8 @@ server.
    owner who secures their account re-signs their open invites with the new key in the same publish (section 7), so
    the invites keep working. A pending invite still redeems: its
    newcomer joins one epoch behind and is brought current by grant delivery (step 9).
-5. **The invitee checks before it trusts.** On the link's page the invitee types the code. The server's preview
+5. **The invitee checks before it trusts.** On the link's page the invitee types the code, unless the link carries
+   it. The server's preview
    serves the invite with the owner's whole key chain, the anchor and the tenant's succession statements above the
    anchor's epoch. The client opens the seal (a wrong code does not open it) and requires: the invite key derived from the
    seed to equal the served one, and the account in the seal to be the served owner; the owner's chain to pass
@@ -282,7 +288,9 @@ server.
    its pin with that chain. Any mismatch stops the accept with *This invitation can’t be checked*, before anything is
    sent.
 6. **The invitee grants itself.** It registers (its identity is born on its device, section 1) or signs in with
-   password and Secret Key. Its client opens the invite grant with the invite key, seals that epoch key to its own
+   password and Secret Key. A mailed invite names the account's address; a link invite names none, so its newcomer
+   types an address, which no mail has proven yet and so starts unconfirmed, or signs in with any account of the
+   instance, and an account already a member is refused (`409 already_member`). Its client opens the invite grant with the invite key, seals that epoch key to its own
    identity (a self-grant naming the digest of that identity), and signs an `invite-accept` proof with the invite key
    over the invite, its account and its identity's digest, and names the digest of the owner key its join record
    carries. The server verifies the proof under the stored invite key (`403 invite_proof_invalid`) and that the named
@@ -353,6 +361,7 @@ sequenceDiagram
   S->>S: signed by the caller's key? epoch current?<br>grant names the invite key? expiry matches the lifetime?<br>keep the grant as the anchor
   S-->>I: link #token.sealed by mail (no copy of the sealed part kept)
   O-->>I: out of band: the code
+  Note over O,I: as a link, the owner hands over token, sealed part and code in one link, and nothing is mailed
   I->>S: preview (token)
   S-->>I: invite key, owner's key chain and signature,<br>anchor, grant, succession statements
   I->>I: open seal with the code, derived key = served key,<br>chain passes the sealed head, signatures verify,<br>statements lead from the anchor to the grant
@@ -362,11 +371,11 @@ sequenceDiagram
   I-->>O: out of band: compare safety numbers (QR or digits)
 `} />
 
-**What the server learns.** Invite metadata (recipient address, role, send time, expiry), the invite public key, the
+**What the server learns.** Invite metadata (a mailed invite's recipient address, role, send time, expiry), the invite public key, the
 owner's signature and identity key, the invite's grant and anchor ciphertext, identity public keys, each membership's
 granted epoch, the sealed join records, who rooted each join and the owner's endorsement of it, each account's key
-chain (section 7), and when a worker declines a delivery. It holds the link's sealed part while it mails
-it. Of a verification it sees the address — which member verified which, in which tenant — and when it was written,
+chain (section 7), and when a worker declines a delivery. It holds a mailed link's sealed part while it mails
+it, and never a link invite's. Of a verification it sees the address — which member verified which, in which tenant — and when it was written,
 never its content. It never sees the code, a scope key or a pin.
 
 **What it cannot do.**
@@ -401,6 +410,9 @@ never its content. It never sees the code, a scope key or a pin.
   ([ADR 0111](https://github.com/raddatzk/veyq/blob/main/docs/decisions/0111-an-invitee-grants-itself-a-rotator-re-keys-its-own-scopes-and-a-key-chain-anchors-trust.md)
   § What stays open). Before it mints an invite, the server checks that the invite key carries the caller's own owner signature, so a stolen owner password without the unlocked vault cannot invite an account of the attacker's.
 - **Who verified whom.** The server sees the address of every verification row.
+- **An invite as a link is a bearer credential.** Whoever reads it in the channel the owner chose can join first.
+  The real invitee is then told the link was already used (`410 invite_redeemed`): detection, not prevention. A taker
+  who names themselves like the invitee is caught only so, or by comparing safety numbers.
 - **A revoked or expired invite keeps what it was granted.** The tenant does not rotate on removal
   ([ADR 0025](https://github.com/raddatzk/veyq/blob/main/docs/decisions/0025-forward-secrecy-policy-per-scope.md)),
   so a link and its code still open the tenant keys it was granted — useful only with a dump taken before the

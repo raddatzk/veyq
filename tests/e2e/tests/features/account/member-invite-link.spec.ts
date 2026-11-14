@@ -1,4 +1,4 @@
-// A member invite handed over as a link (ADR 0129, cr-member-invite-as-a-link phase 3), in a browser:
+// A member invite handed over as a link (ADR 0129), in a browser:
 //
 //   1. A tenant of its own ("E2E Link", born as safety-number-qr.spec.ts births "E2E Safety"): the Server Owner creates
 //      it for a fresh owner, who points its mail at the run's relay — mail stays a precondition for inviting at all
@@ -130,7 +130,13 @@ test.afterAll(async () => {
 
 test(
   'an owner creates an invite link — the code in it, nothing mailed — and its holder registers with an address it types',
-  { tag: '@uc.spaces.add-member:member-invite-and-onboard' },
+  {
+    tag: [
+      '@uc.spaces.add-member:invite-as-a-link',
+      '@uc.spaces.add-member:a-link-joins-whoever-opens-it',
+      '@uc.account.confirm-email-address:unconfirmed-account-banner',
+    ],
+  },
   async () => {
     // The Server Owner creates the tenant for a fresh account and copies its invite link.
     const fresh = freshOwner(`e2e.${stack().domain}`)
@@ -248,7 +254,7 @@ test(
 
 test(
   'whoever opens the same link after it was used is told so, to tell whoever invited them',
-  { tag: '@uc.spaces.add-member:member-invite-and-onboard' },
+  { tag: '@uc.spaces.add-member:a-redeemed-link-says-so' },
   async () => {
     const tab = latecomer.page
     await tab.goto(inviteLink)

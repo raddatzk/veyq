@@ -1,14 +1,14 @@
-# ADR 0133 — The desktop apps ship as a Flatpak bundle and an MSIX, built in Checks and promoted with the release
+# ADR 0139 — The desktop apps ship as a Flatpak bundle and an MSIX, built in Checks and promoted with the release
 
 - Status: Accepted
-- Built: partly (not built: decision 8; of decision 10, the snapshot's, the retention's and the promotion's part — Checks' four jobs are written, their first GitHub run owed, and with it the x86_64 bundle of decision 1; of decision 7, the release's signing job — a copy is signed by `run.py package --sign`)
+- Built: partly (written, none of it run yet: decision 10's Checks jobs, its first GitHub run owed and with it the x86_64 bundle of decision 1; the snapshot's, the retention's and the promotion's part with decision 8's `apps`; decision 7's signing job, whose signer — the certificate and the environment's secrets — is the owner's step before the first release that carries a package)
 - Date: 2026-11-13
 - Model: [native-apps](../crosscutting/native-apps.md)
 
 ## Context
 
 The Linux app (GTK 4 and libadwaita in Rust, `src/mobile/linux`) and the Windows app (WinUI 3 in C#, `src/mobile/windows`)
-([ADR 0130](0130-an-apps-logic-is-the-kotlin-cores-each-platform-draws-only-its-own-ui.md) decisions 4 and 5) ran only
+([ADR 0136](0136-an-apps-logic-is-the-kotlin-cores-each-platform-draws-only-its-own-ui.md) decisions 4 and 5) ran only
 from a developer's build: Linux in a Fedora container under Broadway or in the test VM's session, Windows unpackaged and
 copied onto the VM. Neither could be handed to a person. Each needs a package a person installs, built from this
 repository, carried by a release and verifiable without a store — and each platform's package format brings its own
@@ -68,7 +68,7 @@ What constrains the choice:
    --locked` output — cargo's own command, checked against `Cargo.lock`'s checksums, no generator tool added. The app's
    module then runs, inside `org.gnome.Sdk//51` with `rust-stable`, `cargo clippy --locked -- -D warnings`, `cargo test
    --locked` (all but what a build's sandbox cannot run, each named in `run.py` with why) and `cargo build --release
-   --locked`: the app is built and tested against the runtime it ships on (ADR 0130
+   --locked`: the app is built and tested against the runtime it ships on (ADR 0136
    decision 4). `run.py build` proves the app in that SDK; the Fedora container stays the environment of `run.py run`'s
    Broadway passes and `run.py test`'s core binary — a pass's environment, not the proof of the app.
 
@@ -106,6 +106,16 @@ What constrains the choice:
    (which hashes every payload file) is byte-identical to the staged one's — so the release's MSIX carries the tested
    payload. **The signer is an input, never a file in the tree:** a PFX and its password as secrets of a GitHub
    environment only the signing job names, or a cloud signer's `signtool /dlib` arguments — the same step either way.
+   **Which signer is expected is the tree's, though** (refined while building it, 2026-11-13): the certificate's public
+   half is committed as `src/mobile/windows/veyq.cer`, and the job (`scripts/msix_sign.py sign`) refuses unless that
+   certificate's subject is the publisher and the signed package's one signer is that certificate — so a secret
+   swapped without a reviewed commit signs nothing, and a rotation is a commit. It also refuses unless signing added
+   exactly `AppxSignature.p7x` and `AppxMetadata/CodeIntegrity.cat`, rewrote nothing but `[Content_Types].xml`, and
+   left `AppxBlockMap.xml` and every payload file byte-identical (what signing does, measured on a pair the VM signed).
+   signtool comes from the build's pinned `Microsoft.Windows.SDK.BuildTools`, its `.nupkg` held to a measured
+   SHA-256, not from the runner's Windows SDK. The signature carries **no timestamp**: no timestamp authority is in
+   the release's path, so a released package installs while its certificate is valid — the certificate's validity is
+   the packages' installable life, and a rotation comes before it ends.
    **The release's signer is the project's own self-signed certificate**, subject `CN=veyq` (decision 12; the owner,
    2026-11-13): its PFX and password are that environment's secrets. A self-builder signs with their own (`run.py package --sign <pfx>`, the password from the environment). The
    manifest's `Publisher` must equal the certificate's subject, so it is a build input defaulting to the release's; a
@@ -145,7 +155,15 @@ What constrains the choice:
     write (refined while building it, 2026-11-13; `validate_release_identity.py` holds it); the snapshot names and signs them, staging retention deletes their staging tags with the images', and the
     promotion verifies the snapshot signature, re-tags and signs under the release identity, pulls the files, signs the
     MSIX (decision 7), writes `apps` into the manifest before the manifest is signed, `cosign sign-blob`s each package
-    and attaches them. A pull request builds and smoke-runs all three and stages nothing.
+    and attaches them. A pull request builds and smoke-runs all three and stages nothing. **As built** (2026-11-13): the
+    snapshot names each artifact `<version>-SNAPSHOT-<platform>` and `sha-<commit>-<platform>` (ORAS tags the manifest
+    `apps-stage` pushed, after `scripts/snapshot.py` held the staging tags to the run's `app-digests` and refused a name
+    another run took) and signs it by digest; a release names it `<version>-<platform>` — no channel: a person takes a
+    package from its release. The promotion runs `check` (which verifies the packages as the snapshot's and refuses,
+    before any write, when the signer's certificate is not committed), then `apps` (pulls them by digest, read only),
+    then `msix-sign` on Windows, then `promote` — the Windows signature before the names and the files, so the manifest
+    is produced and signed once, after every byte it lists exists. A snapshot of a commit whose checks.yml has no
+    `apps-stage` is released without packages.
 
 11. **One command per platform, the same in CI and on a developer's machine.** `python3 src/mobile/linux/run.py flatpak
     [--arch x86_64|aarch64]` — the Kotlin and generation steps on the host, then flatpak-builder in a container pinned by
@@ -173,8 +191,8 @@ What constrains the choice:
     **The release carries that public half as a file of its own, `veyq.cer`,** checked like a package (decision 8):
     listed by sha256 under the manifest's `apps` and given a `cosign sign-blob` bundle, so a person verifies the
     certificate they are about to trust against the release identity before trusting it — not built, with the
-    promotion. The certificate itself is made with the release's signing environment (an owner step), never in the
-    tree. Android's and Apple's identifiers are decided with their own distribution.
+    promotion. The certificate is made by its owner, with the release's signing environment; its key and password
+    are never in the tree, its public half is (decision 7: the tree's pin of the signer). Android's and Apple's identifiers are decided with their own distribution.
 
 ## Consequences
 
@@ -182,8 +200,11 @@ What constrains the choice:
   guard, then the MSIX, then CI's three jobs, then the release's snapshot, signing and promotion, then the site's
   *Install the app* page. What each measured lands in [native-apps](../crosscutting/native-apps.md) and ADR 0123's
   Consequences (the Linux app, the Windows app).
-- **Owed by a person, not this record:** the release certificate (`CN=veyq`, decision 12) and the signing
-  environment's secrets that hold it — an owner step before the first release that carries a package.
+- **Owed by a person, not this record:** the release certificate (`CN=veyq`, decision 12): made, its public half
+  committed as `src/mobile/windows/veyq.cer`, its PFX and password stored as the secrets `MSIX_PFX_BASE64` and
+  `MSIX_PFX_PASSWORD` of the GitHub environment `msix-signing`, whose protection rules allow `main` and `release/*`
+  only — the steps in `infra/README.md` § Cutting a release. Until then a promotion of a snapshot that staged packages
+  is refused at `check`, by name, before it writes anything.
 - **One central dependency:** a Flatpak desktop fetches the GNOME runtime from Flathub. It is said where the bundle is
   offered, with the offline way around it.
 - **What the docs site says.** [Install the app](../../site/src/content/docs/getting-started/install-the-app.mdx) (EN and

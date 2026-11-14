@@ -9,7 +9,13 @@
 // signed-in app as § 5 DDG asks of a provider identification and DSA Art. 14(1) of the terms. Above the route sits the
 // donation banner as a member's (uc.platform.support-the-project, ADR 0124) — on the signed-in app only, never on the
 // public or plain layouts' login, invite, join and recovery pages — and above it, while the account's address is
-// unconfirmed, the banner that says so and cannot be dismissed (ADR 0129 decision 5), on the same pages only.
+// unconfirmed, the banner that says so and cannot be dismissed (ADR 0129 decision 5), on the same pages only. While it
+// stands — and until its read has answered — the donation banner and the finish-your-profile prompt wait (owner
+// 2026-11-13): one notice at a time, the one that asks the member to act; they appear as before once the address is
+// confirmed or cannot be read. The banner's read is the only one (`unconfirmedAddress.ts`). Below the footer sits core's
+// audio bar (`core/audio/AudioBar.vue`, ADR 0135 decision 8), mounted here once so the music outlives every change of page,
+// and only while the session is signed in and unlocked: a lock unmounts it, which stops the player and releases every
+// source it opened (a sign-out or a tenant switch loads a new document).
 import { computed, watch } from 'vue'
 import { RouterView, useRoute } from 'vue-router'
 import { useI18n } from 'vue-i18n'
@@ -26,7 +32,9 @@ import FinishProfilePrompt from '../../features/account/profile/FinishProfilePro
 import OperatorIdentification from '../../core/operator/OperatorIdentification.vue'
 import DonationBanner from '../../core/project/DonationBanner.vue'
 import UnconfirmedEmailBanner from '../../features/account/email/UnconfirmedEmailBanner.vue'
+import { unconfirmedAddress } from '../../features/account/email/unconfirmedAddress'
 import ShortcutsDialog from '../../core/shortcuts/ShortcutsDialog.vue'
+import AudioBar from '../../core/audio/AudioBar.vue'
 
 const route = useRoute()
 const { serverState } = useServerState()
@@ -42,6 +50,10 @@ const plainLayout = computed(() => route.meta.layout === 'plain')
 // A page of running text in the public shell — the terms and the privacy notice (`meta.reading`) — reads at a text
 // measure, not in the sign-in card's 460 px column, which wrapped it every six words.
 const readingLayout = computed(() => route.meta.reading === true)
+// The audio bar lives as long as the signed-in, unlocked session: never on a page a locked or signed-out browser shows.
+const audioBarOn = computed(() => session.accessToken !== null && vaultState.unlocked)
+// The other notices wait for the banner's answer and show only on a confirmed (or unreadable) address.
+const otherNoticesOn = computed(() => unconfirmedAddress.value === null)
 
 // Only the home enters a scope (from its #fragment), so an app page loaded straight — a reload on /settings — would run
 // with none: no tenant sections, no terms gate, no tenant capabilities. Such a page gets the token-less tenant home,
@@ -73,13 +85,14 @@ watch(needsScope, (needs) => { if (needs) void enterScope(TENANT_SCOPE) }, { imm
     <div class="app-workspace">
       <main class="content">
         <UnconfirmedEmailBanner />
-        <DonationBanner member />
-        <FinishProfilePrompt />
+        <DonationBanner v-if="otherNoticesOn" member />
+        <FinishProfilePrompt v-if="otherNoticesOn" />
         <RouterView />
       </main>
       <footer class="app-operator-footer">
         <OperatorIdentification />
       </footer>
+      <AudioBar v-if="audioBarOn" />
     </div>
     <!-- The keyboard shortcut overview (uc.platform.keyboard-shortcuts): `?` and the account menu open it; the member's
          shell only, as a share page has none. -->

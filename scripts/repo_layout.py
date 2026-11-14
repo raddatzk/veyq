@@ -36,8 +36,15 @@ MOBILE_ANDROID = MOBILE / "android"
 MOBILE_APPLE = MOBILE / "apple"
 # The Linux app (ADR 0123's Consequences, the Linux app): a Cargo package, built and run in a container by its `run.py`.
 MOBILE_LINUX = MOBILE / "linux"
-# The Windows app (ADR 0130 decision 5): driven on a Windows host from this one by its `run.py`.
+# The Windows app (ADR 0136 decision 5): driven on a Windows host from this one by its `run.py`.
 MOBILE_WINDOWS = MOBILE / "windows"
+# The desktop packages' outward identity (ADR 0139 decision 12): the Flatpak's app id and the MSIX's Publisher.
+DESKTOP_IDENTITY = MOBILE / "desktop-identity.json"
+# The public half of the certificate that signs a released MSIX (ADR 0139 decisions 7 and 12): the tree's pin of the
+# signer, committed by its owner when the certificate is made — never its key. scripts/msix_sign.py signs only as it.
+MSIX_CERTIFICATE = MOBILE_WINDOWS / "veyq.cer"
+# The Windows build's central NuGet pins: Microsoft.Windows.SDK.BuildTools, whose signtool signs the release's MSIX.
+WINDOWS_PACKAGES_PROPS = MOBILE_WINDOWS / "Directory.Packages.props"
 # The web client's WebP encoder (ADR 0127): libwebp built by us, in a directory of its own inside the surface that ships it.
 WEBP_ENCODER = WEB / "webp-encoder"
 # Every surface, for the guards that iterate them.

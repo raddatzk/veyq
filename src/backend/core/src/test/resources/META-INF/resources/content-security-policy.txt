@@ -1,1 +1,1 @@
-default-src 'self'; frame-ancestors 'none'; img-src 'self'; connect-src 'self'; form-action 'self'
+default-src 'self'; frame-ancestors 'none'; frame-src 'none'; img-src 'self'; connect-src 'self'; form-action 'self'

@@ -1,6 +1,6 @@
 // The uploads (ADR 0123's Consequences, the Windows app's Depot whole), Fluent's way: files and a folder picked through Windows' own pickers
 // (FileOpenPicker, FolderPicker, owned by the window as the save picker is) and handed to the core by their paths — the
-// core opens and reads each at offsets a frame at a time (Upload.Files, Upload.Folder; ADR 0131 decision 3), so nothing of
+// core opens and reads each at offsets a frame at a time (Upload.Files, Upload.Folder; ADR 0137 decision 3), so nothing of
 // a file crosses and none is held whole —, a file's Replace chosen before its picker opens (File.ChooseReplace,
 // Upload.Replace), and the queue as an AppBarButton in the content's CommandBar while it lists anything: its label the
 // core's one line, its Flyout each batch with its items, their progress, Cancel and Retry, Cancel all and a finished
@@ -230,9 +230,12 @@ internal sealed class Uploads : IDisposable
             WinRT.Interop.InitializeWithWindow.Initialize(picker, WinRT.Interop.WindowNative.GetWindowHandle(_window));
             var picked = await picker.PickMultipleFilesAsync();
             if (picked is null || picked.Count == 0) return;
-            var paths = picked.Select(f => f.Path).Where(p => !string.IsNullOrEmpty(p)).ToList();
-            Log.Write($"upload files: {paths.Count} picked");
-            var (answer, _) = await Core.CallAsync(new Call.UploadFiles { scopeId = level.ScopeId, parentId = level.ParentId, label = level.Label, paths = paths });
+            // sorted as a drop is: a picked file with no local path (a phone's, a cloud's) said by name, never left out unsaid
+            var sorted = DropSort.Sort(picked.Select(f => new DroppedItem(f.Name, f.Path, false)));
+            Log.Write($"upload files: {sorted.Files.Count} picked, {sorted.Refused.Count} refused");
+            foreach (var name in sorted.Refused) say(false, Words.DepotDropNotLocal(name));
+            if (sorted.Files.Count == 0) return;
+            var (answer, _) = await Core.CallAsync(new Call.UploadFiles { scopeId = level.ScopeId, parentId = level.ParentId, label = level.Label, paths = sorted.Files.ToList() });
             Queued(answer, "Upload.Files", say);
         }
         catch (Exception e)
@@ -294,10 +297,14 @@ internal sealed class Uploads : IDisposable
     {
         switch (answer)
         {
-            case Answer.Queued { count: var count }:
-                Log.Write($"{what}: {count} queued");
+            case Answer.Queued { count: var count, notice: var n }:
+                // what did not read is the core's to say (Notices.notRead): never dropped unsaid, as a drop the packaged
+                // app queued nothing for was (2026-11-13)
+                Log.Write($"{what}: {count} queued{(n is null ? "" : $", said {n.msg}")}");
+                if (n is not null) say(false, Said.Notice(n));
                 break;
             case Answer.Said { notice: { } n }:
+                Log.Write($"{what}: said {n.msg}");
                 say(false, Said.Notice(n));
                 break;
             default:

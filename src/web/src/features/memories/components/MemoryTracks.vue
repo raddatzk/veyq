@@ -1,0 +1,435 @@
+<script setup lang="ts">
+// A Memory's Map tab (uc.memory.tracks, ADR 0130 decision 4): its photos' GPS as dots and its GPX tracks as lines on one map,
+// the tracks listed under it. A track is a medium (decision 1), handed in as `tracks` by the gallery's listing; this view
+// reads each one's original through the session's loader only while it is on screen (`useMemoryTracks`), so a member and a
+// share guest see the same tab, with the actions the detail's rights grant (`canAdd`, `canRemove`, `canDownload`,
+// `canReport`) - nothing here checks a role.
+//
+// The map follows every map's three states (uc.memory.place A5): no map on this server, the consent prompt, the map with
+// its *Turn map services off*. Without a map the list, the numbers, the download, the removal and the add stay (decision 6).
+// Adding checks each picked file on the device (`checkGpxFile`: size, a GPX track, the node's 50), names a refused one in a
+// toast, and asks a name and an activity for each accepted one (`TrackUploadDialog`, decision 9) before it hands them, each
+// with its label, to the detail, which sends them through the one upload queue and seals the label at birth (`add`).
+// Cancelling that dialog adds nothing.
+//
+// A row's Edit (decision 9, the old application's dialog) names the track and gives it an activity, drawn as its line's
+// dash and shown above its name. The detail hands the write in as `editLabel` only where a medium's meta may be edited
+// (`editMeta` and the source's `mediaMeta` door: a member who may write, never a guest); it seals the label into the
+// track's listed tier and throws `MetaConflictError` when a peer's label came first, which the dialog then shows.
+import { computed, nextTick, ref, watch } from 'vue'
+import { useI18n } from 'vue-i18n'
+import VeyqButton from '../../../shared/ui/VeyqButton.vue'
+import VeyqCheckbox from '../../../shared/ui/VeyqCheckbox.vue'
+import VeyqIcon from '../../../shared/ui/VeyqIcon.vue'
+import VeyqMenu from '../../../shared/ui/VeyqMenu.vue'
+import type { VeyqMenuItem } from '../../../shared/ui/menu'
+import { useMapConfig } from '../../../shared/state/useMapConfig'
+import { useToast } from '../../../shared/state/useToast'
+import { SaveTooLarge, isSaveCancelled } from '../../../shared/saveStream'
+import { effectiveCapturedAt, type MediaItem } from '../media'
+import { WORLD_VIEW, type LatLng } from '../memoryLocation'
+import type { MediaLoaders } from '../source'
+import { downloadOriginal, originalDownloadName } from '../download'
+import { checkGpxFile, isGpxFile, trackName, GPX_MEDIA_TYPE } from '../track/gpx'
+import { trackFacts } from '../track/trackFacts'
+import { useMemoryTracks, type TrackEntry } from '../track/useMemoryTracks'
+import { activityDash, trackLabelOf, type TrackLabel } from '../track/trackLabel'
+import { MetaConflictError } from '../../../core/node/sealedMetaWrite'
+import MemoryMap, { type MapTrack } from './MemoryMap.vue'
+import MapConsentPrompt from './MapConsentPrompt.vue'
+import TrackEditDialog from './TrackEditDialog.vue'
+import TrackUploadDialog from './TrackUploadDialog.vue'
+
+const props = defineProps<{
+  scopeId: string
+  nodeId: string
+  memoryName: string
+  memoryKey: Uint8Array | null
+  /** The node's tracks (`useMediaGalleryLive`'s `tracks`). */
+  tracks: readonly MediaItem[]
+  /** The Memory's photos' GPS (`useMemoryLocation`'s `gpsPoints`). */
+  photoPoints: readonly LatLng[]
+  /** The tab is on screen: tracks are read only then. */
+  active: boolean
+  loaders: MediaLoaders
+  canAdd: boolean
+  /** Whether the track `mediaId` may be removed here (a member's any, a guest's own). */
+  canRemove: (mediaId: string) => boolean
+  canDownload: boolean
+  canReport: boolean
+  /** Asked before the picker opens: false when the session must get ready first (a guest names itself). */
+  pickReady?: () => boolean
+  /** Seal a track's name and activity (decision 9). Absent: no Edit. Throws `MetaConflictError` when a peer's came first. */
+  editLabel?: (item: MediaItem, label: TrackLabel) => Promise<void>
+}>()
+const emit = defineEmits<{
+  /** Files checked as tracks, each with the label asked for it, for the upload queue. */
+  add: [tracks: { file: File; label: TrackLabel }[]]
+  remove: [item: MediaItem]
+  report: [item: MediaItem]
+}>()
+
+const { t, locale } = useI18n()
+const toast = useToast()
+const { mapsOffered, mapsAvailable, tileUrl, tileAttribution, tileMaxZoom } = useMapConfig()
+
+const tracksModel = useMemoryTracks({
+  scopeId: () => props.scopeId,
+  nodeId: () => props.nodeId,
+  memoryKey: () => props.memoryKey,
+  tracks: () => props.tracks,
+  active: () => props.active,
+  original: (item, key) => props.loaders.original(item, key),
+  blobMeta: (item, key) => props.loaders.blobMeta(item, key),
+  capturedAt: (item, key) => effectiveCapturedAt(props.loaders.meta(item, key)),
+  label: (item, key) => trackLabelOf(props.loaders.meta(item, key)),
+})
+const { entries, hidden, selected, setShown, select } = tracksModel
+
+/** A track's name as listed: its own, its file's, else its place in the list. */
+function nameOf(entry: TrackEntry, index: number): string {
+  return entry.name ?? t('memory.tracks.unnamed', { n: index + 1 })
+}
+
+const mapTracks = computed<MapTrack[]>(() =>
+  entries.value.flatMap((entry, index) => {
+    if (!entry.lines || hidden.value.has(entry.mediaId)) return []
+    const name = nameOf(entry, index)
+    return [{
+      id: entry.mediaId, color: entry.color, dash: activityDash(entry.activity), lines: entry.lines, label: name,
+      startLabel: t('memory.tracks.start', { name }), endLabel: t('memory.tracks.end', { name }),
+    }]
+  }),
+)
+/** Everything the map frames: the shown tracks and the photos. */
+const framed = computed<LatLng[]>(() => [...mapTracks.value.flatMap((track) => track.lines.flat()), ...props.photoPoints])
+const hasPlaces = computed(() => framed.value.length > 0)
+const showMap = computed(() => props.active && mapsAvailable.value && hasPlaces.value)
+
+const map = ref<InstanceType<typeof MemoryMap> | null>(null)
+/** Frame the selected track, else everything shown. */
+async function frame() {
+  await nextTick()
+  const chosen = selected.value ? mapTracks.value.find((track) => track.id === selected.value) : null
+  map.value?.fitPoints(chosen ? chosen.lines.flat() : framed.value)
+}
+// The map frames what it shows once it is there and whenever a track is read, shown, hidden or chosen - never on a photo's
+// dot alone moving, so a member's pan is not undone by the live list.
+watch([showMap, () => mapTracks.value.length, selected], () => {
+  if (showMap.value) void frame()
+})
+
+// --- add ---------------------------------------------------------------------------------------------------------
+const fileInput = ref<HTMLInputElement | null>(null)
+const checking = ref(false)
+/** The accepted files the add's dialog asks a label for; null while it is closed. */
+const labelling = ref<{ file: File; fallbackName: string | null }[] | null>(null)
+function pick() {
+  if (!props.canAdd || !props.memoryKey) return
+  if (props.pickReady && !props.pickReady()) return
+  fileInput.value?.click()
+}
+async function onPicked() {
+  const input = fileInput.value
+  if (!input) return
+  const files = Array.from(input.files ?? [])
+  input.value = ''
+  if (files.length === 0) return
+  checking.value = true
+  try {
+    const accepted: { file: File; fallbackName: string | null }[] = []
+    for (const file of files) {
+      const verdict = isGpxFile(file)
+        ? await checkGpxFile(file, props.tracks.length + accepted.length)
+        : { problem: 'invalid' as const }
+      if ('problem' in verdict) toast.error(t(`memory.tracks.problem.${verdict.problem}`, { name: file.name }))
+      else accepted.push({
+        file: file.type === GPX_MEDIA_TYPE ? file : new File([file], file.name, { type: GPX_MEDIA_TYPE, lastModified: file.lastModified }),
+        fallbackName: trackName(verdict.track, file.name),
+      })
+    }
+    if (accepted.length) labelling.value = accepted
+  } finally {
+    checking.value = false
+  }
+}
+// Files picked on one node are never added to another: a move to another page drops the open dialog.
+watch(() => props.nodeId, () => { labelling.value = null })
+function addLabelled(labels: TrackLabel[]) {
+  const files = labelling.value
+  labelling.value = null
+  if (files) emit('add', files.map(({ file }, i) => ({ file, label: labels[i] ?? { name: null, activity: null } })))
+}
+
+// --- a row's menu ------------------------------------------------------------------------------------------------
+const rowMenu = ref<InstanceType<typeof VeyqMenu> | null>(null)
+const menuFor = ref<TrackEntry | null>(null)
+function openRowMenu(event: Event, entry: TrackEntry) {
+  menuFor.value = entry
+  rowMenu.value?.toggle(event)
+}
+const rowMenuItems = computed<VeyqMenuItem[]>(() => {
+  const entry = menuFor.value
+  if (!entry) return []
+  return [
+    { key: 'edit', label: t('memory.tracks.edit'), icon: 'pencil', visible: !!props.editLabel, command: () => openEdit(entry) },
+    { key: 'download', label: t('memory.tracks.download'), icon: 'download', visible: props.canDownload, command: () => void download(entry) },
+    { key: 'report', label: t('report.action'), icon: 'flag', visible: props.canReport, command: () => emit('report', entry.item) },
+    { key: 'remove', label: t('memory.tracks.remove'), icon: 'trash', visible: props.canRemove(entry.mediaId), command: () => emit('remove', entry.item) },
+  ]
+})
+function hasRowActions(entry: TrackEntry): boolean {
+  return !!props.editLabel || props.canDownload || props.canReport || props.canRemove(entry.mediaId)
+}
+
+// --- a row's Edit: its name and activity (decision 9) -----------------------------------------------------------------
+const editing = ref<TrackEntry | null>(null)
+const editSaving = ref(false)
+const editError = ref<'conflict' | 'failed' | null>(null)
+const editDialog = ref<InstanceType<typeof TrackEditDialog> | null>(null)
+function openEdit(entry: TrackEntry) {
+  editError.value = null
+  editing.value = entry
+}
+async function saveEdit(label: TrackLabel) {
+  const entry = editing.value
+  const write = props.editLabel
+  if (!entry || !write || editSaving.value) return
+  editSaving.value = true
+  editError.value = null
+  try {
+    await write(entry.item, label)
+    editing.value = null
+  } catch (e) {
+    editError.value = e instanceof MetaConflictError ? 'conflict' : 'failed'
+    if (e instanceof MetaConflictError) {
+      // the detail patched the track with the peer's tier: show theirs in the fields
+      await nextTick()
+      const now = entries.value.find((it) => it.mediaId === entry.mediaId)
+      if (now) {
+        editing.value = now
+        editDialog.value?.reset({ name: now.ownName, activity: now.activity })
+      }
+    }
+  } finally {
+    editSaving.value = false
+  }
+}
+
+async function download(entry: TrackEntry) {
+  const key = props.memoryKey
+  if (!key) return
+  try {
+    await downloadOriginal(props.loaders.chunk(entry.item, key), originalDownloadName(props.loaders.blobMeta(entry.item, key), props.memoryName, 0))
+  } catch (e) {
+    if (e instanceof SaveTooLarge) toast.error(t('media.downloadTooLarge'))
+    else if (!isSaveCancelled(e)) toast.error(t('memory.tracks.downloadFailed'))
+  }
+}
+
+function factsOf(entry: TrackEntry): string {
+  return entry.stats ? trackFacts(entry.stats, locale.value, t).join(' · ') : ''
+}
+</script>
+
+<template>
+  <div class="memory-tracks">
+    <div v-if="canAdd" class="memory-tracks-toolbar">
+      <input
+        ref="fileInput"
+        type="file"
+        multiple
+        accept=".gpx,application/gpx+xml"
+        class="memory-tracks-file"
+        tabindex="-1"
+        aria-hidden="true"
+        data-testid="track-file-input"
+        @change="onPicked"
+      />
+      <VeyqButton
+        :label="t('memory.tracks.add')"
+        icon="upload"
+        variant="secondary"
+        appearance="outlined"
+        :loading="checking"
+        :disabled="!memoryKey"
+        data-testid="track-add"
+        @click="pick"
+      />
+    </div>
+
+    <!-- the map: nothing on this server, the consent offer, nothing to show yet, or the photos and the shown tracks -->
+    <div v-if="!mapsOffered" class="memory-tracks-panel">
+      <VeyqIcon name="map" class="memory-tracks-panel-icon" />
+      <p>{{ t('memory.place.mapsNotOffered') }}</p>
+    </div>
+    <MapConsentPrompt v-else-if="!mapsAvailable" :heading-level="2" />
+    <div v-else-if="!hasPlaces" class="memory-tracks-panel">
+      <VeyqIcon name="map-marker" class="memory-tracks-panel-icon" />
+      <p>{{ t('memory.tracks.nothingOnTheMap') }}</p>
+    </div>
+    <MemoryMap
+      v-else-if="showMap"
+      ref="map"
+      :tile-url="tileUrl"
+      :attribution="tileAttribution"
+      :max-zoom="tileMaxZoom"
+      :center="WORLD_VIEW.center"
+      :zoom="WORLD_VIEW.zoom"
+      :dots="photoPoints.slice()"
+      :tracks="mapTracks"
+      :selected-track="selected"
+      @select-track="select"
+    />
+
+    <h2 class="memory-tracks-title">{{ t('memory.tracks.title') }}</h2>
+    <p v-if="entries.length === 0" class="veyq-empty memory-tracks-empty">
+      {{ canAdd ? t('memory.tracks.emptyHint') : t('memory.tracks.empty') }}
+    </p>
+    <ul v-else class="memory-tracks-list" data-testid="track-list">
+      <li
+        v-for="(entry, index) in entries"
+        :key="entry.mediaId"
+        class="memory-track"
+        :class="{ 'is-selected': selected === entry.mediaId }"
+        data-testid="track-row"
+      >
+        <VeyqCheckbox
+          :model-value="!hidden.has(entry.mediaId)"
+          :disabled="entry.status !== 'ready'"
+          :aria-label="t('memory.tracks.show', { name: nameOf(entry, index) })"
+          @update:model-value="(v: boolean) => setShown(entry.mediaId, v)"
+        />
+        <!-- the line as the map draws it: the track's colour and its activity's dash -->
+        <svg class="memory-track-swatch" viewBox="0 0 28 8" aria-hidden="true" data-testid="track-swatch">
+          <line x1="2" y1="4" x2="26" y2="4" :stroke="entry.color" stroke-width="4" stroke-linecap="round" :stroke-dasharray="activityDash(entry.activity)" />
+        </svg>
+        <button type="button" class="memory-track-main" :disabled="entry.status !== 'ready'" @click="select(entry.mediaId)">
+          <span v-if="entry.activity" class="memory-track-activity" data-testid="track-activity">{{ t(`memory.tracks.activity.${entry.activity}`) }}</span>
+          <span class="memory-track-name">{{ nameOf(entry, index) }}</span>
+          <span v-if="entry.status === 'loading'" class="memory-track-facts">{{ t('memory.tracks.loading') }}</span>
+          <span v-else-if="entry.status === 'failed'" class="memory-track-facts is-failed">{{ t('memory.tracks.unreadable') }}</span>
+          <span v-else class="memory-track-facts">{{ factsOf(entry) }}</span>
+        </button>
+        <button
+          v-if="hasRowActions(entry)"
+          type="button"
+          class="veyq-icon-button memory-track-more"
+          :aria-label="t('memory.tracks.actions', { name: nameOf(entry, index) })"
+          :title="t('memory.tracks.actions', { name: nameOf(entry, index) })"
+          data-testid="track-more"
+          @click="openRowMenu($event, entry)"
+        >
+          <VeyqIcon name="ellipsis-h" />
+        </button>
+      </li>
+    </ul>
+    <VeyqMenu ref="rowMenu" :items="rowMenuItems" />
+    <TrackEditDialog
+      v-if="editing && editLabel"
+      ref="editDialog"
+      :label="{ name: editing.ownName, activity: editing.activity }"
+      :fallback-name="editing.fileTrackName"
+      :saving="editSaving"
+      :error="editError"
+      @save="saveEdit"
+      @close="editing = null"
+    />
+    <TrackUploadDialog v-if="labelling" :files="labelling" @add="addLabelled" @close="labelling = null" />
+  </div>
+</template>
+
+<style scoped>
+.memory-tracks {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+.memory-tracks-toolbar {
+  display: flex;
+  justify-content: flex-end;
+}
+.memory-tracks-file {
+  display: none;
+}
+.memory-tracks-panel {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 2rem 1rem;
+  border: 1px dashed var(--app-line);
+  border-radius: var(--app-radius);
+  color: var(--app-muted);
+  text-align: center;
+}
+.memory-tracks-panel-icon {
+  font-size: 1.75rem;
+}
+.memory-tracks-title {
+  margin: 0.5rem 0 0;
+  font-size: 1rem;
+}
+.memory-tracks-empty {
+  margin: 0;
+}
+.memory-tracks-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+.memory-track {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.5rem 0.75rem;
+  border: 1px solid var(--app-line);
+  border-radius: var(--app-radius);
+}
+.memory-track.is-selected {
+  border-color: var(--app-accent);
+}
+.memory-track-swatch {
+  flex: none;
+  width: 1.75rem;
+  height: 0.5rem;
+}
+.memory-track-main {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.15rem;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-align: start;
+  cursor: pointer;
+}
+.memory-track-main:disabled {
+  cursor: default;
+}
+.memory-track-activity {
+  color: var(--app-muted);
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+.memory-track-name {
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+.memory-track-facts {
+  color: var(--app-muted);
+  font-size: 0.875rem;
+}
+.memory-track-facts.is-failed {
+  color: var(--app-danger);
+}
+</style>

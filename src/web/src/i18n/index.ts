@@ -5,6 +5,17 @@ import { createI18n } from 'vue-i18n'
 export type SupportedLocale = 'en' | 'de'
 
 const en = {
+  // Core's audio player (en.platform.audio-player): the bar below the footer.
+  audio: {
+    bar: 'Music',
+    previous: 'Previous',
+    next: 'Next',
+    play: 'Play',
+    pause: 'Pause',
+    close: 'Close',
+    progress: 'Position in {title}',
+    nothingPlays: 'None of these tracks can be played in this browser.',
+  },
   common: { email: 'Email', password: 'Password', cancel: 'Cancel', save: 'Save', create: 'Create', close: 'Close', done: 'Done', show: 'Show', hide: 'Hide', undo: 'Undo', more: 'More', zoom: 'Zoom', unreachable: 'This server can’t be reached right now. Please try again.' },
   export: {
     action: 'Download',
@@ -2284,6 +2295,16 @@ const en = {
 }
 
 const de: typeof en = {
+  audio: {
+    bar: 'Musik',
+    previous: 'Zurück',
+    next: 'Weiter',
+    play: 'Abspielen',
+    pause: 'Pausieren',
+    close: 'Schließen',
+    progress: 'Position in {title}',
+    nothingPlays: 'Keiner dieser Titel kann in diesem Browser abgespielt werden.',
+  },
   common: { email: 'E-Mail', password: 'Passwort', cancel: 'Abbrechen', save: 'Speichern', create: 'Erstellen', close: 'Schließen', done: 'Fertig', show: 'Anzeigen', hide: 'Verbergen', undo: 'Rückgängig', more: 'Mehr', zoom: 'Zoom', unreachable: 'Dieser Server ist gerade nicht erreichbar. Bitte erneut versuchen.' },
   export: {
     action: 'Herunterladen',

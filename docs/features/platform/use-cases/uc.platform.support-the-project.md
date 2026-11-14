@@ -39,6 +39,10 @@
 - **A4 — The member's profile cannot be read.** The banner shows (as for a guest); dismissing it still writes the
   account's flag, and a write that fails leaves the browser's dismissal in place.
 - **A5 — No switch.** The banner shows on every instance; neither the Server Owner nor a space owner can turn it off.
+- **A6 — The member's address is unconfirmed.** While the unconfirmed-address banner stands
+  ([uc.account.confirm-email-address](../../account/use-cases/uc.account.confirm-email-address.md)), and until its read
+  has answered, the member's banner waits; it shows as above once the address is confirmed or cannot be read. A
+  newcomer meets one notice at a time, the one that asks them to act (owner 2026-11-13). A guest's banner never waits.
 
 ## User impact
 

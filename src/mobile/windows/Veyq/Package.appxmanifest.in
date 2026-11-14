@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- The MSIX's manifest (ADR 0133 decision 6): a template. `windows/run.py package` fills each @…@ — the identity from
+<!-- The MSIX's manifest (ADR 0139 decision 6): a template. `windows/run.py package` fills each @…@ — the identity from
      src/mobile/desktop-identity.json, the version from the tree (`<major>.<minor>.0.0`), the device family's versions
      from the project's TargetPlatformMinVersion and TargetPlatformVersion — into src/mobile/build/generated/msix/, which
      the package build reads; this file is never built as it is. Capabilities: what the app needs and nothing more —

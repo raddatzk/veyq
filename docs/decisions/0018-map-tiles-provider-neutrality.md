@@ -80,4 +80,5 @@ opt-in.**
 - **Limitation (honest).** With tiles enabled, the tile server learns the viewport tiles + client IP — a
   *consented, non-veyq* boundary, distinct from the operator-blind invariant.
 - **One consent for every map.** The same two-stage consent (off / tiles+geocoding) serves the set-location editor,
-  a level's and a person's map and the photo panel's alike, and each of them withdraws it.
+  a level's and a person's map, the photo panel's and a Memory's Map tab with its tracks (ADR 0130) alike, and each of them
+  withdraws it.

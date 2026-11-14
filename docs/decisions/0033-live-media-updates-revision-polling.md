@@ -78,8 +78,8 @@ on a change the client pulls a keyset delta + reconciles deletes against the ret
    cadence is about 20 s. The conditional read, the delta merge and the cursor are core's too, so an application
    supplies only its fetch and its reducer. It stops when the Memory closes; a poll still in flight then writes
    nothing, and a tick never overlaps the previous one. With the delta, even an active upload is cheap per poll. A few
-   seconds of latency is fine for a photo grid; **long-poll / a push channel** (sub-second, shared later with #6 live
-   journal) is a deferred upgrade.
+   seconds of latency is fine for a photo grid; the push channel is for the lists a person edits with others
+   ([ADR 0134](0134-core-pushes-a-lists-new-position-to-the-clients-that-edit-it-on-a-stream.md)).
 
 6. **The first load is the same keyset, in pages.** A list read without `since` is not special: it is a delta from the
    beginning. Every read takes a `limit` up to a fixed cap (the contract states it) and answers `more` when rows remain
@@ -205,10 +205,12 @@ add/edit never carries the O(N) id-set, and nothing does per idle tick.
   active upload (the primary live case) — the keyset delta exists precisely to avoid this.
 - **Rejected — a counter table per application, or a generic table keyed by a list name:** each application would
   re-implement the first-bump race and the erasure ordering (the bug that bought the lock-order tests), and nothing
-  would stop one from forgetting. A node holds one list today (a node's kind decides which application owns it), so a
-  second list in one node would add a `list` column to the key — not built until a kind needs it.
+  would stop one from forgetting. A node held one list until a Memory's journal became its second
+  ([ADR 0133](0133-a-memorys-journal-is-a-sealed-crdt-log-whose-snapshots-only-members-write.md) decision 3), which adds
+  a list key to the counter (not built yet).
 - **Rejected — a count-only or `max(updated_at)`-only signal:** a count misses a net-zero delete+add; a max misses
   a delete of a non-newest media. The counter (bumped on *every* mutation) + the id-set reconcile cover both.
 - **Rejected (deferred) — WebSocket/SSE push:** lower latency, but more infra and a **held per-viewer connection
-  is a stronger presence signal** to the operator than a coarse poll; folded into a later push channel shared with
-  #6 (live journal co-edit).
+  is a stronger presence signal** to the operator than a coarse poll. The push came with the live journal, for the lists
+  a person edits with others only ([ADR 0134](0134-core-pushes-a-lists-new-position-to-the-clients-that-edit-it-on-a-stream.md));
+  the gallery stays on this poll.

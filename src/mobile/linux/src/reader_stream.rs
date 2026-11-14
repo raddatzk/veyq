@@ -1,4 +1,4 @@
-//! A medium's plaintext as a seekable `gio::InputStream` (ADR 0131 decision 2; ADR 0123's Consequences, the Linux app's Depot whole): GTK's media file reads it
+//! A medium's plaintext as a seekable `gio::InputStream` (ADR 0137 decision 2; ADR 0123's Consequences, the Linux app's Depot whole): GTK's media file reads it
 //! (`gtk::MediaFile::for_input_stream`, GStreamer's `giostreamsrc` beneath, measured 2026-11-12) in ranges from its own
 //! streaming thread, and each range comes from the core's reader (`Reader.Read`), only the frames it needs decrypted there.
 //! Nothing of the medium is written anywhere (ADR 0047); this side holds one window of at most [WINDOW] bytes it read last.

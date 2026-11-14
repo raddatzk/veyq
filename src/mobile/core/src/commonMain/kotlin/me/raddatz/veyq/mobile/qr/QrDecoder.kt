@@ -26,7 +26,7 @@ class QrFrame(val width: Int, val height: Int, val rowStride: Int, val luminance
 }
 
 /**
- * The one QR reader of every app (ADR 0130 decision 1): ZXing's QR path ported to common Kotlin, so a frame an attacker
+ * The one QR reader of every app (ADR 0136 decision 1): ZXing's QR path ported to common Kotlin, so a frame an attacker
  * points the camera at is parsed by memory-safe code in the process that holds the Master Key.
  */
 object QrDecoder {

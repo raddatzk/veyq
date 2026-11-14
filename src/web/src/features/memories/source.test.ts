@@ -25,7 +25,7 @@ vi.mock('./media', async (orig) => {
   const real = await orig<typeof import('./media')>()
   const names = [
     'openGrid', 'openLightbox', 'openOriginal', 'openBlob', 'chunkProvider', 'loadMediaExif', 'listMediaPages', 'deleteMedia',
-    'restoreMedia', 'listTrash', 'purgeMedia', 'setMediaMeta', 'backfillPlaceName',
+    'restoreMedia', 'listTrash', 'purgeMedia', 'setMediaMeta', 'backfillPlaceName', 'setTrackLabel',
     'listBuckets', 'createBucket', 'renameBucket', 'deleteBucket', 'moveBucketMedia',
   ] as const
   return { ...real, ...Object.fromEntries(names.map((n) => [n, vi.fn(async () => ({ notModified: true }))])) }
@@ -305,6 +305,7 @@ describe("the member's source is today's calls, with its scope", () => {
     ['nodeMeta.write', () => src.nodeMeta!.write('n', key, state, edit), writeNodeMeta, [S, 'n', key, state, edit, undefined, metaOpts]],
     ['mediaMeta.set', () => src.mediaMeta!.set(item, key, { id: 'n', epoch: 2 }, 5), media.setMediaMeta, [S, item, key, 2, 5, metaOpts]],
     ['mediaMeta.backfillPlace', () => src.mediaMeta!.backfillPlace(item, key, { id: 'n', epoch: 2 }, 'Rom', 'city'), media.backfillPlaceName, [S, item, key, 2, 'Rom', 'city', metaOpts]],
+    ['mediaMeta.setTrackLabel', () => src.mediaMeta!.setTrackLabel(item, key, { id: 'n', epoch: 2 }, { name: 'Ridge', activity: 'hiking' }), media.setTrackLabel, [S, item, key, 2, { name: 'Ridge', activity: 'hiking' }, metaOpts]],
     ['marks.load', () => src.marks!.load('n', scopeKey), loadItemFavoritesFor, [S, 'n', scopeKey]],
     ['marks.toggle', () => src.marks!.toggle('m-1', 'n', scopeKey), toggleItemFavorite, ['m-1', S, 'n', scopeKey]],
     ['buckets.list', () => src.buckets!.list('n'), media.listBuckets, [S, 'n']],

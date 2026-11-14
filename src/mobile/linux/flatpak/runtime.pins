@@ -1,4 +1,4 @@
-# The Flathub commits a Flatpak build of the Linux app installs (ADR 0133 decision 2), one line each:
+# The Flathub commits a Flatpak build of the Linux app installs (ADR 0139 decision 2), one line each:
 # `<id>/<arch>/<branch> <commit>`. `run.py flatpak` installs each ref and moves it to this commit
 # (`flatpak update --commit=`); the manifest names only the branch. validate_build_input_pins.py (check 7) holds the
 # Platform's and the Sdk's branch to the manifest's `runtime-version` and every commit to 64 hex, for both architectures.

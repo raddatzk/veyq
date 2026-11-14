@@ -60,7 +60,7 @@ export function registerMemories(registry: Registry): void {
     detail: MemoryDetailHost, icon: 'images' as const, list, createDialog: MemoryNodeDialog, shareDialog: ShareDialog,
     // The header's priority (owner, 2026-10-23, ADR 0110): what is first a button. Delete and report are always the ⋯ menu's
     // last entries. Core draws the header; `MemoryDetail` contributes its actions, facts and banner.
-    header: { order: ['favorite', 'upload', 'share', 'download', 'banner', 'move', 'copy'] },
+    header: { order: ['favorite', 'upload', 'share', 'music', 'download', 'banner', 'move', 'copy'] },
     // Both carry a cover (inbox #411: core's action, dialog, upload and display), set only by an upload in core's dialog. A
     // picked image equal to a gallery medium's original shares that medium's PREVIEW instead of being stored again.
     cover: { findStored: findStoredCover },
