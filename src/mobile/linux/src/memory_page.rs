@@ -124,7 +124,9 @@ impl MemoryPage {
         let grid = gtk::Fixed::builder().hexpand(true).build();
         grid.update_property(&[gtk::accessible::Property::Label(&words::app_memories())]);
         column.append(&grid);
-        let root = gtk::ScrolledWindow::builder().hscrollbar_policy(gtk::PolicyType::Never).vexpand(true).child(&column).build();
+        // External, not Never: the grid's rows are as wide as the width they were laid out at, and Never would hand that width on as
+        // the page's minimum — the window could not shrink, so it never laid out anew (measured in Broadway, 2026-11-14)
+        let root = gtk::ScrolledWindow::builder().hscrollbar_policy(gtk::PolicyType::External).vexpand(true).child(&column).build();
         let inner = Rc::new(Inner {
             node: node.clone(),
             root,

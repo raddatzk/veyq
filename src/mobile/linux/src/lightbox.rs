@@ -220,6 +220,8 @@ impl Inner {
         // keys: ← → page, + - 0 zoom, Escape back
         let shortcuts = gtk::ShortcutController::new();
         shortcuts.set_scope(gtk::ShortcutScope::Managed);
+        // before the picture's scroll, which would take ← and → for itself (measured: ← did not page in the bubble phase)
+        shortcuts.set_propagation_phase(gtk::PropagationPhase::Capture);
         let add = |trigger: &str, f: Step| {
             let weak = Rc::downgrade(this);
             let action = gtk::CallbackAction::new(move |_, _| {
