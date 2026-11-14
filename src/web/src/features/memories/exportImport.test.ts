@@ -120,6 +120,18 @@ describe('exportMemoryContent', () => {
     expect(validateMemoryContent(c)).toBeNull()
   })
 
+  // ADR 0135 decision 4: a music track's measured facts travel as its `audio`, and an import seals them again at birth.
+  // `it.fails` until the client writes and reads the field (cr-background-music-from-own-audio phase 2 turns it into `it`).
+  it.fails('exports a music track\'s length and trimmed span as its `audio`', async () => {
+    vi.mocked(listMediaPages).mockResolvedValue({ notModified: false, items: [item('m1')], mediaRevision: 1, deleteRevision: 0, mediaIds: null, cursor: null })
+    vi.mocked(originalBlobMeta).mockImplementation(() => ({ v: 1, type: 'audio/mpeg', name: 'Song.mp3', modifiedAt: 5 }))
+    vi.mocked(unsealMeta).mockImplementation(() => ({ v: 1, capturedAt: 1_000, durationMs: 183_204, trimStartMs: 420, trimEndMs: 181_000 }) as never)
+    const c = (await exportMemoryContent(exportCtx({}).ctx))!
+    const [song] = c.media as { audio?: unknown }[]
+    expect(song.audio).toEqual({ durationMs: 183_204, trimStartMs: 420, trimEndMs: 181_000 })
+    expect(validateMemoryContent(c)).toBeNull()
+  })
+
   it('an uploaded cover travels as a payload of its own, read through the session\'s source', async () => {
     vi.mocked(openBlob).mockResolvedValue(new Uint8Array([1, 2, 3]))
     const ref = { blobId: 'c', chunkCount: 1, byteSize: 3, wrappedBlobKey: 'k' }
@@ -379,6 +391,14 @@ describe('importMemoryContent', () => {
     const plain = { file: { path: 'data/n3/u.gpx', size: 1, mediaType: 'application/gpx+xml' }, name: 'u.gpx', track: { name: '  ' } }
     await importMemoryContent(MEMORY_KIND)(ctx(node({ media: [track, plain] })))
     expect(vi.mocked(addMedia).mock.calls.map((c) => c[5]?.restored)).toEqual([{ trackName: 'Gipfeltour', trackActivity: 'cycling' }, {}])
+  })
+
+  // ADR 0135 decision 4: the import seals a track's `audio` into its listed tier at birth. `it.fails` until phase 2 of
+  // cr-background-music-from-own-audio reads the field.
+  it.fails('restores a music track\'s length and trimmed span at birth, beside the rest of its facts', async () => {
+    const song = { file: { path: 'data/n3/s.mp3', size: 1, mediaType: 'audio/mpeg' }, name: 's.mp3', audio: { durationMs: 183_204, trimStartMs: 420, trimEndMs: 181_000 } }
+    await importMemoryContent(MEMORY_KIND)(ctx(node({ media: [song] })))
+    expect(vi.mocked(addMedia).mock.calls.map((c) => c[5]?.restored)).toEqual([{ durationMs: 183_204, trimStartMs: 420, trimEndMs: 181_000 }])
   })
 
   it('creates a chapter under its Memory with the chapter kind', async () => {
