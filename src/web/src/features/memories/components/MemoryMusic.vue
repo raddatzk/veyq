@@ -3,14 +3,15 @@
 // and lengths. A track is a medium (decision 2), handed in as `music` by the gallery's listing; its title is its file's name
 // without the extension, its length the one sealed at its upload (`audioFacts.ts`) - nothing is read of a track to list it.
 // A member and a share guest see the same tab, with the actions the detail's rights grant (`canAdd`, `canRemove`,
-// `canDownload`, `canReport`) - nothing here checks a role.
+// `canDownload`, `canReport`, and `rename` where a medium's meta may be written: never a guest) - nothing here checks a role.
+// A track's title is the name a member gave it, else its file's (`musicTrackTitle`, A7).
 //
 // Adding checks each picked file on the device, one after the other (`checkAudioFile`: its size, an audio container by its
 // bytes, its length as this browser plays it and its trim where that is cheap - one file at a time, for the memory a
 // decode costs), names a refused one in a toast
 // (E1), and hands the accepted ones with their type and facts to the detail, which sends them through the one upload queue
 // and seals the facts at birth (`add`). Pressing a track starts the node's music with it (`play`, A1).
-import { computed, ref } from 'vue'
+import { computed, nextTick, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import VeyqButton from '../../../shared/ui/VeyqButton.vue'
 import VeyqIcon from '../../../shared/ui/VeyqIcon.vue'
@@ -23,6 +24,9 @@ import type { MediaLoaders } from '../source'
 import { downloadOriginal, originalDownloadName } from '../download'
 import { checkAudioFile, formatTrackLength, musicTitle } from '../music/audio'
 import { audioFactsFrom } from '../music/audioFacts'
+import { MetaConflictError } from '../../../core/node/sealedMetaWrite'
+import { trackLabelOf } from '../track/trackLabel'
+import MusicRenameDialog from './MusicRenameDialog.vue'
 
 const props = defineProps<{
   memoryName: string
@@ -39,6 +43,9 @@ const props = defineProps<{
   playingId?: string | null
   /** Asked before the picker opens: false when the session must get ready first (a guest names itself). */
   pickReady?: () => boolean
+  /** Give a track its own name (null: its file's again), where a medium's meta may be written; throws `MetaConflictError`
+   *  when a peer renamed it first. Absent: no Rename. */
+  rename?: (item: MediaItem, name: string | null) => Promise<void>
 }>()
 const emit = defineEmits<{
   /** Files checked as music, each with the type its bytes name and its facts, for the upload queue. */
@@ -52,15 +59,19 @@ const emit = defineEmits<{
 const { t } = useI18n()
 const toast = useToast()
 
-/** A listed track: its title (its file's name, else its place in the list) and its length, where its facts say it. */
-type MusicEntry = { item: MediaItem; mediaId: string; title: string; length: string | null }
+/** A listed track: its title (its own name, else its file's, else its place in the list), the two names the title is made
+ *  of, and its length, where its facts say it. */
+type MusicEntry = { item: MediaItem; mediaId: string; title: string; ownName: string | null; fileTitle: string | null; length: string | null }
 const collator = new Intl.Collator(undefined, { numeric: true, sensitivity: 'base' })
 const entries = computed<MusicEntry[]>(() => {
   const key = props.memoryKey
   if (!key) return []
   const named = props.music.map((item) => {
-    const facts = audioFactsFrom(props.loaders.meta(item, key))
-    return { item, mediaId: item.mediaId, own: musicTitle(props.loaders.blobMeta(item, key)?.name), length: facts ? formatTrackLength(facts.durationMs) : null }
+    const meta = props.loaders.meta(item, key)
+    const facts = audioFactsFrom(meta)
+    const ownName = trackLabelOf(meta).name
+    const fileTitle = musicTitle(props.loaders.blobMeta(item, key)?.name)
+    return { item, mediaId: item.mediaId, own: ownName ?? fileTitle, ownName, fileTitle, length: facts ? formatTrackLength(facts.durationMs) : null }
   })
   named.sort((a, b) => (a.own === null ? 1 : b.own === null ? -1 : collator.compare(a.own, b.own)))
   return named.map(({ own, ...e }, i) => ({ ...e, title: own ?? t('memory.music.untitled', { n: i + 1 }) }))
@@ -105,13 +116,48 @@ const rowMenuItems = computed<VeyqMenuItem[]>(() => {
   const entry = menuFor.value
   if (!entry) return []
   return [
+    { key: 'rename', label: t('memory.music.rename'), icon: 'pencil', visible: !!props.rename, command: () => openRename(entry) },
     { key: 'download', label: t('memory.music.download'), icon: 'download', visible: props.canDownload, command: () => void download(entry) },
     { key: 'report', label: t('report.action'), icon: 'flag', visible: props.canReport, command: () => emit('report', entry.item) },
     { key: 'remove', label: t('memory.music.remove'), icon: 'trash', visible: props.canRemove(entry.mediaId), command: () => emit('remove', entry.item) },
   ]
 })
 function hasRowActions(entry: MusicEntry): boolean {
-  return props.canDownload || props.canReport || props.canRemove(entry.mediaId)
+  return !!props.rename || props.canDownload || props.canReport || props.canRemove(entry.mediaId)
+}
+
+// --- a row's Rename (A7) -----------------------------------------------------------------------------------------
+const renaming = ref<MusicEntry | null>(null)
+const renameSaving = ref(false)
+const renameError = ref<'conflict' | 'failed' | null>(null)
+const renameDialog = ref<InstanceType<typeof MusicRenameDialog> | null>(null)
+function openRename(entry: MusicEntry) {
+  renameError.value = null
+  renaming.value = entry
+}
+async function saveRename(name: string | null) {
+  const entry = renaming.value
+  const write = props.rename
+  if (!entry || !write || renameSaving.value) return
+  renameSaving.value = true
+  renameError.value = null
+  try {
+    await write(entry.item, name)
+    renaming.value = null
+  } catch (e) {
+    renameError.value = e instanceof MetaConflictError ? 'conflict' : 'failed'
+    if (e instanceof MetaConflictError) {
+      // the detail patched the track with the peer's tier: show their name in the field
+      await nextTick()
+      const now = entries.value.find((it) => it.mediaId === entry.mediaId)
+      if (now) {
+        renaming.value = now
+        renameDialog.value?.reset(now.ownName)
+      }
+    }
+  } finally {
+    renameSaving.value = false
+  }
 }
 
 async function download(entry: MusicEntry) {
@@ -190,6 +236,16 @@ async function download(entry: MusicEntry) {
       </li>
     </ul>
     <VeyqMenu ref="rowMenu" :items="rowMenuItems" />
+    <MusicRenameDialog
+      v-if="renaming"
+      ref="renameDialog"
+      :name="renaming.ownName"
+      :fallback-name="renaming.fileTitle"
+      :saving="renameSaving"
+      :error="renameError"
+      @save="saveRename"
+      @close="renaming = null"
+    />
   </div>
 </template>
 

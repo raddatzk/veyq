@@ -68,6 +68,7 @@ import { unsealMemoryParticipants } from './memoryParticipants'
 import { CHAPTER_KIND } from './kinds'
 import { trackActivityOf, trackLabelOf, type TrackActivity } from './track/trackLabel'
 import { audioKindOf, isAudioMeta } from './music/audio'
+import { isTrackMeta } from './track/gpx'
 import { audioFactsFrom, measureAudioFile, type AudioFacts } from './music/audioFacts'
 import { normalizeMemoryCover } from './memoryCover'
 import { MIME_TO_EXT } from '../../core/blob/meta'
@@ -514,15 +515,18 @@ async function addOriginal(
   ctx: ImportNodeContext, nodeId: string, nodeKey: Uint8Array, medium: ExportedMedium, ready: ReadyOriginal,
   opts: { signal?: AbortSignal; nodeEpoch: number; onProgress: (f: number) => void },
 ): Promise<{ mediaId: string }> {
-  return addMedia(ctx.scopeId, nodeId, nodeKey, ready.source, undefined, { ...opts, prepared: ready.prepared, restored: restoredFacts(medium, ready.audio) })
+  return addMedia(ctx.scopeId, nodeId, nodeKey, ready.source, undefined, { ...opts, prepared: ready.prepared, restored: restoredFacts(medium, ready.audio, ready.source) })
 }
 
 /** What a download's medium restores beside its bytes, sealed at birth (`RestoredMediaFacts`, inbox #700): its corrected
  *  capture time as an override, its place name, a track's own name and activity, and a music track's facts (`audio`, as
- *  [audioFactsOfImport] found them). A time that was not corrected is the bytes' own, read again. */
-function restoredFacts(medium: ExportedMedium, audio: AudioFacts | null): RestoredMediaFacts {
+ *  [audioFactsOfImport] found them). A time that was not corrected is the bytes' own, read again. A GPX or a music track
+ *  has no place: an archive's place name for one is left out, which also keeps room in its 512-base64 listed tier for its
+ *  own name at its longest (`media.test.ts` pins both worst cases without a place). */
+function restoredFacts(medium: ExportedMedium, audio: AudioFacts | null, source: Pick<AddMediaSource, 'mediaType' | 'name'>): RestoredMediaFacts {
   const at = medium.capturedAtCorrected ? isoToMs(medium.capturedAt) : undefined
-  const place = typeof medium.location?.place === 'string' ? medium.location.place : undefined
+  const isTrack = isAudioMeta({ type: source.mediaType }) || isTrackMeta({ type: source.mediaType, name: source.name })
+  const place = !isTrack && typeof medium.location?.place === 'string' ? medium.location.place : undefined
   const track = isObj(medium.track) ? medium.track : undefined
   return {
     ...(at !== undefined ? { capturedAtOverride: at } : {}),

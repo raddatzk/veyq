@@ -10,7 +10,7 @@ import { registerPlayback, revokePlayback, handleFromUrl } from '../../../sw/reg
 import type { MediaItem } from '../media'
 import type { MediaLoaders } from '../source'
 import { audioFactsFrom } from './audioFacts'
-import { musicTitle } from './audio'
+import { musicTrackTitle } from './audio'
 
 /** Whose queue this is: the node, in its space - what the header asks to know whether *this* node's music plays. */
 export const musicQueueKey = (scopeId: string, nodeId: string) => `memories:${scopeId}:${nodeId}`
@@ -51,7 +51,7 @@ export function musicQueue(input: MusicQueueInput): PlayerQueue {
     const mediaType = typeof blobMeta?.type === 'string' && blobMeta.type ? blobMeta.type : 'audio/mpeg'
     return {
       id: item.mediaId,
-      title: musicTitle(blobMeta?.name) ?? input.untitled(i + 1),
+      title: musicTrackTitle(input.loaders.meta(item, input.key), blobMeta?.name) ?? input.untitled(i + 1),
       ...(facts ? { startMs: facts.trimStartMs, endMs: facts.trimEndMs } : {}),
       open: () => openTrack(item, input.key, input.loaders, mediaType),
     }

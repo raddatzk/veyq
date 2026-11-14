@@ -90,8 +90,12 @@ What exists to build on, read on `main` at `8574dda3b`:
    - **Where it lives:** in the listed tier, so a re-key carries it unchanged (ADR 0109).
    - **Export:** an additive `audio` field on the medium. An import restores it, and runs the detection where the
      field is absent.
-   - **The title** is the file's name without its extension. Reading ID3 or MP4 tags is left out: it would need a
-     parser dependency for a nicety.
+   - **The title** is the name a member gave the track, else the file's name without its extension. Reading ID3 or MP4
+     tags is left out: it would need a parser dependency for a nicety.
+   - **Renaming** writes the listed tier's `trackName`, the field a GPX track's own name uses (a medium is one or the
+     other), through the same version-checked write; it is offered where a medium's meta may be written, never to a
+     guest, and an emptied name gives the file's back. An export carries it as the medium's `track.name`. A track has no
+     place, so an import leaves an archive's place name out for one, which keeps room for the name at its longest.
 5. **The playlist is the node's own music, nothing inherited.** A Chapter with no tracks has no playlist. Music started
    at its Memory plays on while the viewer opens the Chapter. Inheriting can come later (inbox #847). What plays is a
    snapshot taken when the playlist starts; starting it again picks up tracks added since.

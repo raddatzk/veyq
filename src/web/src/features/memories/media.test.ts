@@ -1438,6 +1438,29 @@ describe('setTrackLabel — a GPX track\'s own name and activity in the listed t
     expect(saved.tier!.trackName).toBe('山'.repeat(TRACK_NAME_MAX_BYTES / 3)) // whole characters, never a split one
   })
 
+  // uc.memory.background-music A7: a music track's own name is the same `trackName`, written by the same `setTrackLabel`
+  // (no activity). Worst case: every field an audio medium's tier can carry - the capture time, an import's correction, the
+  // longest source and the three facts at the largest integer a number holds (no place: an import leaves an archive's place
+  // out for a track, `restoredFacts`) - plus a name past the clamp in three-byte characters. Lever: remove the clamp in
+  // `trackLabelFields`.
+  it("renames a music track inside the 512 cap on a tier carrying every field an audio medium's holds", async () => {
+    const store = fakeStore()
+    fakeApi(mediaApi, store.api)
+    fakeApi(blobApi, store.blob)
+    const memoryKey = v1.randomBytes(32)
+    const MAX = Number.MAX_SAFE_INTEGER
+    const full = {
+      v: 1, capturedAt: FILE_DATE, capturedAtOverride: FILE_DATE + 1, capturedAtSource: 'container',
+      durationMs: MAX, trimStartMs: MAX - 2, trimEndMs: MAX - 1,
+    }
+
+    const saved = await setTrackLabel(SCOPE_ID, target(MEDIA_ID, memoryKey, full), memoryKey, 0, { name: '山'.repeat(200), activity: null })
+
+    expect(saved.wrappedMeta!.length).toBeLessThanOrEqual(512)
+    expect(saved.tier).toMatchObject({ trackName: '山'.repeat(TRACK_NAME_MAX_BYTES / 3), durationMs: MAX, trimStartMs: MAX - 2, trimEndMs: MAX - 1 })
+    expect(saved.tier!.trackActivity).toBeUndefined()
+  })
+
   // A peer's label meanwhile is a conflict (the dialog shows theirs); any other peer write is merged under ours.
   it('re-applies the label on a peer\'s other write; a peer\'s own label surfaces as a conflict', async () => {
     const memoryKey = v1.randomBytes(32)
