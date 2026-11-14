@@ -318,13 +318,12 @@ text goes straight into `DeviceLink` inside the core.
     granted.
 
   **Met:**
-  - Builds: `:android:assembleDebug` green; the macOS build (ad hoc) `BUILD SUCCEEDED` with every Swift change; the
-    iOS-simulator build compiled the Apple code before the last `DevLogin` edits (`openSettings` ambiguity fixed after,
-    re-proven only by the macOS build). `:core:jvmTest :core:macosArm64Test` green (one `DeviceLinkTest` race case,
-    phase 3's, red once at load ~250 — `count 0`: the channel's virtual-time expiry fired while the test waited on
-    `Dispatchers.Default` — green on the re-run). `:bridge:jvmTest` red twice in `DispatchTest.aReceiptIsAddedByPath…`
-    by a `TimeoutCancellationException` at load 250–290, nothing of this phase on its path (inbox-worthy if it stays red
-    on a quiet machine). Guards (`scripts/validate_*.py` but guard_gaps) green.
+  - Builds (after merging `claude/windows-cr-f6c73c` at f29a5c351): `:core:jvmTest :bridge:jvmTest :android:assembleDebug`
+    green, `:core:macosArm64Test` green on its re-run (`MoveSheetTest`'s undo window red once, nothing of this phase on
+    its path); the macOS build (ad hoc) and the iOS-simulator build (`generic/platform=iOS Simulator`,
+    `CODE_SIGNING_ALLOWED=NO`) `BUILD SUCCEEDED`; guards (`scripts/validate_*.py` but guard_gaps) green. Before the merge,
+    at load 250–290: `DeviceLinkTest`'s race case (phase 3's) red once by the channel's virtual-time expiry firing while
+    the test waited on `Dispatchers.Default`, green on its re-run; `:bridge:jvmTest`'s `DispatchTest` red by timeouts only.
   - **Android ↔ web, all four runs** (throwaway AVD `veyq_link4`, Pixel 8, API 36, virtual-scene camera, deleted after;
     the web headless system Chrome, `channel: 'chrome'`, one persistent profile, its camera a `.y4m` of the app's code;
     the app driven by `uiautomator` taps and `input swipe`, its code shot from the framebuffer):
