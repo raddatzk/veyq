@@ -1,4 +1,4 @@
-// The apps' QR writer read by the web's reader (cr-core-qr-decoder phase 2): `__fixtures__/core-pairing-code.png` is what
+// The apps' QR writer read by the web's reader (ADR 0141 decision 2): `__fixtures__/core-pairing-code.png` is what
 // the Kotlin core's `QrEncoder` + `QrPng` write for a pairing payload (its `QrPngImageTest` holds the file to that output),
 // and the web's own `jsqr` must read it, so a code a desktop shows is one the web's scanner takes. The PNG is the core's
 // 1-bit greyscale of stored deflate blocks, so `node:zlib` unpacks it with no image library.

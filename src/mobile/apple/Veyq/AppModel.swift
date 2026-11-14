@@ -454,7 +454,7 @@ final class AppModel {
         }
     }
 
-    // MARK: The account's Settings (cr-app-account-settings)
+    // MARK: The account's Settings (uc.account.sessions)
 
     /// The open Settings page's state (core's `AccountSettings`); nil while it is closed — on iOS a sheet while non-nil.
     var settings: AccountSettingsState?

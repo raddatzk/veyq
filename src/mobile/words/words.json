@@ -2920,7 +2920,7 @@
     "de": "Dieses Gerät vergisst seinen gespeicherten Schlüssel. Beim nächsten Entsperren brauchst du hier wieder deinen Secret Key. Du bleibst angemeldet, und deine anderen Geräte sind nicht betroffen."
   },
   "account_settings_sessions": {
-    "note": "the section's title, the web's (cr-app-account-settings, owner question 3)",
+    "note": "the section's title, the web's",
     "en": "Devices and sessions",
     "de": "Geräte und Sitzungen"
   },
@@ -3293,7 +3293,7 @@
     "de": "Dieses Gerät hat kein Passwort bekommen: Bleibt es nicht angemeldet, braucht es beim nächsten Mal dein Passwort und deinen Secret Key oder dein Notfall-Kit."
   },
   "account_settings_appearance": {
-    "note": "phones only: opens the system's own page for the app, where its language is chosen; the appearance follows the system (cr-app-account-settings D3)",
+    "note": "phones only: opens the system's own page for the app, where its language is chosen; the appearance follows the system",
     "en": "Appearance and language",
     "de": "Darstellung und Sprache",
     "apple_en": "Appearance and Language"
