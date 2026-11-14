@@ -9,7 +9,7 @@ import { listScopeMembers as listScopeMembersFn } from '../../features/spaces/me
 import { openScope as openScopeFn } from '../../features/spaces/scopes'
 import { openMemberName as unsealNameFn } from '../../features/account/profile/memberName'
 import { activeSpace } from '../../app/activeSpace'
-import { displayNameOf, loadScopePeople, loadTenantPeople, personNow, resetPeopleDirectory, refreshPeopleDirectory } from './directory'
+import { displayNameOf, findPerson, loadScopePeople, loadTenantPeople, personNow, personOfTokenNow, profileHash, resetPeopleDirectory, refreshPeopleDirectory, type Person } from './directory'
 import { syncAvatars as syncAvatarsFn, resetAvatars as resetAvatarsFn } from './avatarCache'
 import { ScopeKind, type ScopeMember } from '../../api/generated/scopes'
 import { openedScope, scopeMember } from '../../test/models'
@@ -85,6 +85,34 @@ describe('personNow: the roster already on the device, answered synchronously', 
     expect(personNow('gone')).toBeUndefined()
     resetPeopleDirectory()
     expect(personNow('u1')).toBeUndefined()
+  })
+})
+
+// A profile address names a member by username, an id where none can stand (ADR 0083 decision 5, amended 2026-11-14).
+describe('a profile token: a username, or a user id', () => {
+  const ANNA = 'aaaaaaaa-0000-4000-8000-000000000001'
+  const MALLORY = 'cccccccc-0000-4000-8000-000000000003'
+  const person = (userId: string, username: string): Person => ({ userId, username, realName: null, displayName: username })
+
+  it('findPerson reads an id-shaped token as the id only, any other as the exact username', () => {
+    const people = new Map([[ANNA, person(ANNA, 'anna')], [MALLORY, person(MALLORY, 'bbbbbbbb-0000-4000-8000-000000000002')]])
+    expect(findPerson(people, ANNA)?.username).toBe('anna')
+    expect(findPerson(people, ANNA.toUpperCase())).toBeUndefined() // an id in another case is no member's id, and no username either
+    expect(findPerson(people, 'anna')?.userId).toBe(ANNA)
+    expect(findPerson(people, 'Anna')).toBeUndefined()
+    expect(findPerson(people, 'bbbbbbbb-0000-4000-8000-000000000002')).toBeUndefined() // Mallory's username reads as an id
+  })
+
+  it('personOfTokenNow and profileHash answer from the roster as read: the id before it, the username after, the id again for one shaped like an id', async () => {
+    listScopeMembers.mockResolvedValue([member(ANNA, 'anna'), member(MALLORY, 'dddddddd-0000-4000-8000-000000000004')])
+    expect(personOfTokenNow('anna')).toBeUndefined()
+    expect(profileHash(ANNA)).toBe(`#people/${ANNA}`)
+    await loadTenantPeople()
+    expect(personOfTokenNow('anna')?.userId).toBe(ANNA)
+    expect(personOfTokenNow(ANNA)?.username).toBe('anna')
+    expect(profileHash(ANNA)).toBe('#people/anna')
+    expect(profileHash(MALLORY)).toBe(`#people/${MALLORY}`)
+    expect(profileHash('eeeeeeee-0000-4000-8000-000000000005')).toBe('#people/eeeeeeee-0000-4000-8000-000000000005') // a former member
   })
 })
 

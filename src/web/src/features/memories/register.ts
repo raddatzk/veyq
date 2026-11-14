@@ -101,7 +101,7 @@ export function registerMemories(registry: Registry): void {
   // guest through core's share page (inbox #401).
   app.shareBody(MEMORY_KIND, MemoryShareBody)
   app.shareBody(CHAPTER_KIND, MemoryShareBody)
-  // A person's profile (`#people/<userId>`, ADR 0083) lists the Memories they took part in: Memories' section of core's page.
+  // A person's profile (`#people/<username>`, ADR 0083) lists the Memories they took part in: Memories' section of core's page.
   app.personSection(PersonMemories)
   // A reported medium's review (uc.moderation.review-a-case A5): a medium is Memories' record, core cannot draw it.
   app.itemReview(MediumReview)

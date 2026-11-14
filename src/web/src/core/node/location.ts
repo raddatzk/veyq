@@ -21,18 +21,22 @@
 // `features/spaces/scopes.ts`). `slugify` emits only `[a-z0-9-]`, so a folder slug can never start with `~`/`@` and
 // thus never collides with a scope token.
 //
-// **A person (ADR 0083, 2026-10-13):** `#people/<userId>` is a member's profile page, not a place in the tree. It is
+// **A person (ADR 0083, 2026-10-13):** `#people/<username>` is a member's profile page, not a place in the tree. It is
 // token-less (a profile spans the scopes the viewer is in), and `people` is the platform's word at a scope root: a
 // root folder or file called "People" is numbered `people-2` ({@link segmentsOf}), and no application may claim it as a
 // route slug (`RESERVED_ROUTE_SEGMENTS`). {@link parseHash} reads it into {@link ContentLocation.person}; {@link personHash}
-// builds it. A share link never reaches it (the share page has no fragment routes of its own).
+// builds it. A share link never reaches it (the share page has no fragment routes of its own). The token after `people/`
+// is the member's username in this tenant, or their user id where no username can stand there (ADR 0083 decision 5,
+// amended 2026-11-14): a former member, whom no roster names, and a username shaped like a user id, which would read as
+// one. A token shaped like a user id ({@link isUserIdToken}) is always read as the id, so an id link - one written
+// before the amendment, or a former member's - keeps naming the person it named.
 import { type TreeNode } from './tree'
 import { slugify } from '../../shared/naming'
 import { registry } from '../applications/registry'
 import { FOLDER_KIND } from './kind'
 
 /** A personal scope token is `~<username>` (ADR 0023) — your own opens your personal scope; a foreign one is still a
- *  personal-scope token, never a profile (a person's profile is `#people/<userId>`, ADR 0083). `~me` remains a valid
+ *  personal-scope token, never a profile (a person's profile is `#people/<username>`, ADR 0083). `~me` remains a valid
  *  fallback token (it also starts with `~`). */
 export function isPersonalScope(token: string): boolean {
   return token.startsWith('~')
@@ -50,16 +54,28 @@ export type ContentLocation = {
   segments: string[]
   /** The path ended in a slash: its target is a folder ({@link resolveSlugPath}). Never set for the scope root. */
   folder: boolean
-  /** Present only for a profile fragment (`#people/<userId>`): the user id. Then `segments` is empty and `scope` the tenant's. */
+  /** Present only for a profile fragment (`#people/<token>`): the token as written - a username, or a user id
+   *  ({@link isUserIdToken}); the directory resolves it to a person. Then `segments` is empty and `scope` the tenant's. */
   person?: string
 }
 
 /** The platform's route word for a person's profile (ADR 0083); reserved at every scope root. */
 export const PEOPLE_SEGMENT = 'people'
 
-/** The fragment of a member's profile page: `#people/<userId>`. */
-export function personHash(userId: string): string {
-  return `#${PEOPLE_SEGMENT}/${encodeURIComponent(userId)}`
+/** A user id as the server mints it: a canonical UUID (`UUID.randomUUID()`, lower case). A username may take this shape
+ *  too (its pattern is `[A-Za-z0-9_.-]+`), so a profile token of it is read as an id, never looked up as a username. */
+const USER_ID_SHAPE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+
+/** A profile token that names a user by id, not by username (ADR 0083 decision 5). */
+export function isUserIdToken(token: string): boolean {
+  return USER_ID_SHAPE.test(token)
+}
+
+/** The fragment of a member's profile page: `#people/<username>` when the member's username is known and cannot be read
+ *  as an id, else `#people/<userId>` (a former member, a roster not read yet, a username shaped like an id). */
+export function personHash(userId: string, username?: string | null): string {
+  const token = username && !isUserIdToken(username) ? username : userId
+  return `#${PEOPLE_SEGMENT}/${encodeURIComponent(token)}`
 }
 
 /** Parse a `location.hash` into a scope token + path segments + the trailing-slash mark. Empty/`#`/token-less → the
@@ -166,7 +182,7 @@ const childrenOfParent = (tree: readonly TreeNode[], parentId: string | null) =>
  * tree and the in-app paths agree; it is client-side only — nothing here is stored or sealed.
  */
 export function segmentsOf(siblings: readonly TreeNode[]): Map<string, string> {
-  // A scope root also keeps the platform's `people` for the profile route (`#people/<userId>`, ADR 0083).
+  // A scope root also keeps the platform's `people` for the profile route (`#people/<username>`, ADR 0083).
   const atRoot = siblings.length > 0 && siblings.every((n) => (n.parentId ?? null) === null)
   const reserved = new Set(atRoot ? [...registry.routeSlugs(), PEOPLE_SEGMENT] : registry.routeSlugs())
   const keyOf = (group: string, plain: string) => `${group}\0${plain}`
