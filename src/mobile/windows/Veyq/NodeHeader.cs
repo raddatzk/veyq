@@ -248,11 +248,19 @@ internal sealed class NodeHeader : IDisposable
         var on = s.offline?.on == true;
         var toggle = new AppBarToggleButton { Icon = new SymbolIcon(Symbol.Download), Label = a.word is { } w ? Veyq.Said.Key(w) : a.id, IsChecked = on };
         AutomationProperties.SetAutomationId(toggle, "header:offline");
-        toggle.Click += (_, _) =>
+        // Checked/Unchecked, not Click: UI Automation's Toggle (a screen reader's) raises no Click. The core's state, not
+        // the toggle, checks it: put back at once, the next state redraws it
+        var putBack = false;
+        void Toggled(object sender, RoutedEventArgs e)
         {
-            toggle.IsChecked = on; // the core's state, not the click, checks it
+            if (putBack) return;
+            putBack = true;
+            toggle.IsChecked = on;
+            putBack = false;
             ToggleOffline();
-        };
+        }
+        toggle.Checked += Toggled;
+        toggle.Unchecked += Toggled;
         yield return toggle;
         if (s.offline?.said is { } line)
         {
