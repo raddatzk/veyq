@@ -55,6 +55,9 @@ class SessionModel<A : Connection, T : Any>(
 ) {
     /** What the model does with an account, the platform's suite and HTTP client behind it. */
     interface Door<A : Connection, T : Any> {
+        /** The process started: what a crash left half-done on this device is finished (an offline store's wipe). */
+        fun started() {}
+
         /** The platform's suite: what a kit's read checks its Secret Key with ([KitImport], [EmergencyKit]). */
         val primitives: Primitives
 
@@ -220,6 +223,7 @@ class SessionModel<A : Connection, T : Any>(
     suspend fun start(): Opened<A, T>? {
         if (started) return null
         started = true
+        door.started()
         val records = door.trusted()
         if (records.isEmpty()) {
             show(if (signInElsewhere) Gate.NeedsApp else Gate.SignIn())
@@ -719,6 +723,11 @@ class AccountDoor(
     private val client: (block: HttpClientConfig<*>.() -> Unit) -> HttpClient,
 ) : SessionModel.Door<VeyqAccount, TenantSession> {
     override fun trusted(): List<TrustedDevice> = device.trusted()
+
+    /** A wipe of an offline store a crash interrupted is finished before any account opens (ADR 0140 decision 11). */
+    override fun started() {
+        device.offline?.let { o -> runCatching { o.finishWipes() }.onFailure { println("veyq: an offline store's wipe did not finish: $it") } }
+    }
 
     override suspend fun signIn(server: String, email: String, password: String, secretKey: String): VeyqAccount =
         VeyqAccount.signIn(primitives, server, email, password, secretKey, device, client)

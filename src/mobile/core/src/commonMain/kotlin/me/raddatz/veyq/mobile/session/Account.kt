@@ -269,6 +269,7 @@ class VeyqAccount private constructor(
      */
     suspend fun signOut() {
         trusted?.takeIf { it.method == TrustedDevice.Method.DEVICE_KEY }?.let { forget(it) }
+        wipeOffline()
         runCatching { call { SessionApi(server, http).logout() } }
         masterKey.fill(0)
         http.close()
@@ -393,6 +394,15 @@ class VeyqAccount private constructor(
         device.forget(record.key)
         trusted = null
         releaseUnlockKeys()
+        wipeOffline()
+    }
+
+    /**
+     * This account's offline store on this device removed (ADR 0140 decision 11): at its sign-out (both trusts), "Stop
+     * trusting this device" and removing the device. Best effort: a wipe a crash interrupted finishes at the next start.
+     */
+    private fun wipeOffline() {
+        device.offline?.let { o -> runCatching { o.wipe(key) }.onFailure { println("veyq: the offline store was not wiped: $it") } }
     }
 
     /** The wrap deleted on the server (best effort: a wrap left behind opens only with this device's key, now gone) and

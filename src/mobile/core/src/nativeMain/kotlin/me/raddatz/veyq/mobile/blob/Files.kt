@@ -37,3 +37,25 @@ internal expect fun listDirectory(path: String): List<String>?
 
 /** What joins a directory's path and a name in it: `/`, Windows' `\`. */
 internal expect val pathSeparator: Char
+
+// The offline store's directory (ADR 0140 decision 3): a directory the app owns, named by the host at start, whose
+// files the core writes beside and renames over (`DeviceFiles`). Per platform as the calls above.
+
+/** Creates directory [path] (its parent must exist), readable by this user alone where the system has modes; true when
+ *  it exists afterwards. */
+internal expect fun createDirectory(path: String): Boolean
+
+/** Removes the empty directory [path]; true when it went. */
+internal expect fun removeDirectory(path: String): Boolean
+
+/** Renames [from] to [to], replacing a file there in one step; true when it moved. */
+internal expect fun renameFile(from: String, to: String): Boolean
+
+/** Flushes [file]'s writes through to the device (`fsync`, Windows' `FlushFileBuffers`); true when they reached it. */
+internal expect fun syncFile(file: CPointer<FILE>): Boolean
+
+/** Makes a rename in directory [path] durable where the system needs that (POSIX: the directory's own `fsync`). */
+internal expect fun syncDirectory(path: String)
+
+/** The bytes free for this user on the volume that holds [path]; null where the system does not say. */
+internal expect fun freeBytes(path: String): Long?

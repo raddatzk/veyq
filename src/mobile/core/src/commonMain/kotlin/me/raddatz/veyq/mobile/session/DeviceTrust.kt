@@ -11,6 +11,7 @@ import me.raddatz.veyq.mobile.crypto.b64
 import me.raddatz.veyq.mobile.crypto.hex
 import me.raddatz.veyq.mobile.crypto.unb64
 import me.raddatz.veyq.mobile.crypto.utf8
+import me.raddatz.veyq.mobile.offline.OfflineStores
 
 /**
  * The platform's keys that never leave this device (Android Keystore, the Apple Keychain, Windows' DPAPI and Hello, the
@@ -126,9 +127,19 @@ data class TrustedDevice(
 
 /**
  * This installation as the accounts see it: its device store (preferences), its keys, the label it names itself with
- * in the account's device register (the model's name), its id there, and the accounts it trusts.
+ * in the account's device register (the model's name), its id there, and the accounts it trusts — and [offlineRoot],
+ * the directory the host names for the accounts' offline stores (ADR 0140 decision 3), null where it names none.
  */
-class ThisDevice(val store: DeviceStore, val keys: DeviceKeys, val label: String, private val primitives: Primitives) {
+class ThisDevice(
+    val store: DeviceStore,
+    val keys: DeviceKeys,
+    val label: String,
+    private val primitives: Primitives,
+    val offlineRoot: String? = null,
+) {
+    /** The accounts' offline stores on this device, where the host named their directory. */
+    val offline: OfflineStores? by lazy { offlineRoot?.let { OfflineStores(it, store, primitives) } }
+
     /** A random id, kept outside the key stores (the web's `veyq:device-id`): it names this device in the register. */
     val id: String
         get() = store.read(ID) ?: uuid().also { store.write(ID, it) }

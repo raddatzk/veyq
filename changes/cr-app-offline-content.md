@@ -283,7 +283,7 @@ removed last). R10's paths are where it is wired; `TrustMarks` stay as they are 
   keys learns the entries' count and sizes and the store's total, never content or ids); `native-apps.md` names the
   feature as planned. · Done when: every `/usr/bin/python3 scripts/validate_*.py` but `validate_guard_gaps.py` exits 0.
 
-- [ ] **2 the store and its seal (core)** — `offline/OfflineStore` (D2), its directory calls in `blob/Files.kt` (D3), the
+- [x] **2 the store and its seal (core)** — `offline/OfflineStore` (D2), its directory calls in `blob/Files.kt` (D3), the
   wipe (D11, wired to R10's paths), `commonTest` over a temp directory; run on the JVM and macosArm64, compiled for
   Linux and Windows and run there by each `run.py test`. First: the manifest's load at 100,000 entries on the Windows
   VM (D2's stop condition). · Done when: `./gradlew :core:jvmTest :core:macosArm64Test` green and both `run.py test`
@@ -295,6 +295,30 @@ removed last). R10's paths are where it is wired; `TrustMarks` stay as they are 
   starts empty (bite: open with any key → red); (d) wipe leaves no file and a wipe interrupted after the files finishes
   at the next start (bite: remove the id first → red); (e) a torn shard write (kill between write and rename) leaves the
   previous shard readable.
+  Done 2026-11-15. **D2's measurement held:** `OfflineManifestLoadTest` (`windows/run.py test --tests
+  '*OfflineManifestLoadTest*'`, `veyq-measure:` line; 100,000 entries, 21,268 KiB in 256 shards, open = header + every
+  shard read, opened and decoded): Windows VM release test binary 173–305 ms over three runs of five (a temporary
+  `binaries.test(RELEASE)`, not kept), debug binary median 779–869 ms (one run had 1,526 and 1,931 ms outliers);
+  Linux container debug 455–463 ms; macOS debug 417–433 ms warm, 1,507 ms first; JVM 143–153 ms warm, 1,049–1,174 ms
+  first (JIT) — so no database. Built as: the common seam `blob/DeviceFiles.kt` (`Files.kt`'s `FILE` calls are
+  `nativeMain` only, so the JVM's actual is `jvmMain`'s `DeviceFiles.jvm.kt`; `Files.kt` gained `createDirectory`,
+  `removeDirectory`, `renameFile`, `syncFile`, `syncDirectory`, `freeBytes`, the last per platform since `statvfs` does
+  not commonize: Linux's is `platform.linux`'s, Apple's the file manager's); `offline/OfflineStore`,
+  `OfflineStores` (the ids in one device-store key, `veyq.offline-stores`, a wipe marked `wiping` first) and `Manifest`
+  (a binary shard codec). The key is made at the first **open**, not the first write; the orphan sweep (`sweep()`) lists
+  the whole directory and so is not part of the open. Wired: `ThisDevice(offlineRoot)` (null by default: **no host
+  names the directory yet**, so no app keeps anything), the wipe in `VeyqAccount.signOut` and `forget` (so Stop trusting
+  and removing too), `Door.started()` finishing interrupted wipes at `SessionModel.start`. Bites, each red with its
+  assertion, then green: (a) the opened frame written into the directory, and the seal skipped (seal and open the
+  identity) — `OfflineStoreTest.no_plaintext…`; (b) the logical key dropped from the aad — `an_entry_moved…` (the copy
+  into a second account's store is refused by its own `K_off` already: the account in the aad is defence in depth, not
+  bitten on its own); (c) the header's wrap key from a zero key — `a_header_under…`; (d) the id removed first —
+  `a_wipe…` here and in `OfflineWipeWiredTest`; (e) the shard written in place — `a_torn…`; and the wiring: the wipe
+  dropped from `signOut` (shown on an account with no trust left, since a remembered one's sign-out wipes through
+  `forget`) and from `forget`. For phase 3: hosts pass `offlineRoot` (D3's paths); a store a session holds open is closed
+  before a wipe; `SessionModel.add`'s duplicate connection is signed out through `VeyqAccount.signOut` and so now wipes
+  the account's store under the newer connection — decide there; `putFrames` rewrites the frame index and shard once per
+  call, so a read path batches frames; Android's first load (ART) is unmeasured.
 
 - [ ] **3 the read path, offline opening and eviction (core)** — over Memories' core screen models (built): D4's
   kept wrap and offline unlock in `VeyqAccount`/`SessionModel` (a new `Gate` state is not needed: the unlock opens an
