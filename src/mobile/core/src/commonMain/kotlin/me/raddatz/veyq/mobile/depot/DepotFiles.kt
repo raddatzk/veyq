@@ -109,6 +109,13 @@ object DepotFiles {
         return file(tenant, node, item)
     }
 
+    /** What a pin of file [node] keeps (ADR 0140 decision 9): its content, a Depot file's one tier; none while it has none. */
+    internal suspend fun pinned(tenant: TenantSession, node: OpenNode): List<me.raddatz.veyq.mobile.offline.PinBlob> {
+        val file = one(tenant, node.scopeId, node.id)?.takeIf { it.hasContent } ?: return emptyList()
+        val key = ApplicationBlobs(tenant).openKey(file.scopeId, node, file.blobId!!, ROLE, file.wrappedBlobKey ?: return emptyList()) ?: return emptyList()
+        return listOf(me.raddatz.veyq.mobile.offline.PinBlob(file.scopeId, file.blobId, file.chunkCount, file.byteSize, key))
+    }
+
     /**
      * [file]'s content read at any offset ([me.raddatz.veyq.mobile.blob.RangeReader], ADR 0047): what a player asks for is
      * served from the frames that hold it, never the whole plaintext held or written.

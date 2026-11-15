@@ -255,6 +255,23 @@ object AppKinds {
      */
     fun copiesByOpenModel(kind: String): Boolean = kind == PotSession.KIND
 
+    /**
+     * What a pin keeps of each kind (ADR 0140 decision 9, `OfflinePins`): a Memory and a chapter their media's tiles and
+     * previews and a video's original (`MemoryMedia.pinned`, never a photo's original), a Depot file its content
+     * (`DepotFiles.pinned`), a folder nothing of its own — the walk below it reaches what it holds. A Pot is not kept
+     * offline (Expenses offline is #898), nor is a kind this build does not know.
+     */
+    val pins: me.raddatz.veyq.mobile.offline.PinKinds = object : me.raddatz.veyq.mobile.offline.PinKinds {
+        override fun pinnable(kind: String): Boolean = kind == MEMORY || kind == CHAPTER || kind == FOLDER || kind == FILE
+
+        override suspend fun blobs(tenant: me.raddatz.veyq.mobile.session.TenantSession, node: me.raddatz.veyq.mobile.session.OpenNode) =
+            when (node.kind) {
+                MEMORY, CHAPTER -> me.raddatz.veyq.mobile.memories.MemoryMedia.pinned(tenant, node)
+                FILE -> me.raddatz.veyq.mobile.depot.DepotFiles.pinned(tenant, node)
+                else -> emptyList()
+            }
+    }
+
     /** Whether an object of [kind] can be chosen as the place for files shared to veyq (ADR 0138 decision 1): a Pot. */
     fun takesShared(kind: String): Boolean = kind == PotSession.KIND
 

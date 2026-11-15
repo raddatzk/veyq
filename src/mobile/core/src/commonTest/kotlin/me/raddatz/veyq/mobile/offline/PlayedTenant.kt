@@ -58,6 +58,8 @@ internal class PlayedTenant(files: DeviceFiles = deviceFiles, val clock: () -> L
     val suspended = HashSet<String>()
     /** How often the store served a frame. */
     var storeGets = 0
+    /** The network goes once the store served this many frames (a fetch cut in the middle); null: never. */
+    var cutAfterStoreGets: Int? = null
     /** Every request's path, in order. */
     val requests = mutableListOf<String>()
 
@@ -87,19 +89,21 @@ internal class PlayedTenant(files: DeviceFiles = deviceFiles, val clock: () -> L
     }
     inner class Node(val scope: Scope, val label: String, val parent: Node?, val kind: String, val name: String) {
         val id = id(label)
-        val key: ByteArray = p.randomBytes(32)
+        /** The node's key: a re-key ([rekey]) replaces it, and every wrap under it is sealed anew. */
+        var key: ByteArray = p.randomBytes(32)
         var blocked = false
         var mediaRevision = 1
         val media = mutableListOf<Medium>()
         private val binding = arrayOf("scopeId" to scope.id, "nodeId" to id, "epoch" to 0L, "placementRevision" to 0L)
-        val encryptedName: ByteArray = suite.sealField(Context("node-name", *binding), parent?.key ?: scope.key, name.encodeToByteArray())
-        val wrappedKey: ByteArray = suite.seal(Context("content-key", *binding), parent?.key ?: scope.key, key)
+        val encryptedName: ByteArray get() = suite.sealField(Context("node-name", *binding), parent?.key ?: scope.key, name.encodeToByteArray())
+        val wrappedKey: ByteArray get() = suite.seal(Context("content-key", *binding), parent?.key ?: scope.key, key)
     }
-    inner class Blob(val label: String, val plain: List<ByteArray>, role: String, ownerId: String, nodeKey: ByteArray, scopeId: String, type: String?) {
+    inner class Blob(val label: String, val plain: List<ByteArray>, private val role: String, private val ownerId: String, private val nodeKey: () -> ByteArray, private val scopeId: String, type: String?) {
         val id = id(label)
         val key: ByteArray = p.randomBytes(32)
         val frames: List<ByteArray> = plain.mapIndexed { i, f -> suite.sealFrame(key, i, plain.size, f) }
-        val wrapped: ByteArray = suite.seal(Context("blob-key", "scopeId" to scopeId, "ownerId" to ownerId, "blobId" to id, "role" to role), nodeKey, key)
+        /** `K_blob` under its node's key as it is now: a re-key re-wraps it, the blob and its frames stay (R5). */
+        val wrapped: ByteArray get() = suite.seal(Context("blob-key", "scopeId" to scopeId, "ownerId" to ownerId, "blobId" to id, "role" to role), nodeKey(), key)
         val meta: ByteArray? = type?.let { BlobMeta.seal(suite, key, it, "$id.bin", null) }
         val byteSize: Long get() = frames.sumOf { it.size.toLong() }
     }
@@ -121,8 +125,8 @@ internal class PlayedTenant(files: DeviceFiles = deviceFiles, val clock: () -> L
     /** A medium of [node] whose original is [frames] frames and whose thumbnail (where [thumbnail]) one, each with a marker. */
     fun medium(node: Node, name: String, frames: Int = 1, video: Boolean = false, thumbnail: Boolean = true): Medium {
         val mediaId = id(name)
-        val original = Blob("$name-o", (0 until frames).map { "original $name frame $it".encodeToByteArray() }, "ORIGINAL", mediaId, node.key, node.scope.id, if (video) "video/mp4" else "image/jpeg")
-        val thumb = if (thumbnail) Blob("$name-t", listOf("thumbnail $name".encodeToByteArray()), "THUMBNAIL", mediaId, node.key, node.scope.id, null) else null
+        val original = Blob("$name-o", (0 until frames).map { "original $name frame $it".encodeToByteArray() }, "ORIGINAL", mediaId, { node.key }, node.scope.id, if (video) "video/mp4" else "image/jpeg")
+        val thumb = if (thumbnail) Blob("$name-t", listOf("thumbnail $name".encodeToByteArray()), "THUMBNAIL", mediaId, { node.key }, node.scope.id, null) else null
         blobs[original.id] = original
         thumb?.let { blobs[it.id] = it }
         return Medium(node, name, original, thumb).also { node.media += it; node.mediaRevision++ }
@@ -131,6 +135,17 @@ internal class PlayedTenant(files: DeviceFiles = deviceFiles, val clock: () -> L
     fun trash(m: Medium) { m.trashed = true; m.node.mediaRevision++ }
 
     fun block(n: Node) { n.blocked = true; n.scope.revision++ }
+
+    fun unblock(n: Node) { n.blocked = false; n.scope.revision++ }
+
+    /** Node [n] trashed: gone from its scope's tree (a trashed node is `listTrashedNodes`', never `listNodes`'). */
+    fun trashNode(n: Node) { n.scope.nodes.remove(n); n.scope.revision++ }
+
+    /**
+     * Node [n] re-keyed as `NodeRekey` does it: a fresh key, its entry and every wrap under it sealed anew — each blob's
+     * `K_blob` re-wrapped, the blob, its id and its frames kept (R5) —, the tree's and the media's revisions moved.
+     */
+    fun rekey(n: Node) { n.key = p.randomBytes(32); n.scope.revision++; n.mediaRevision++ }
 
     // ---- this device
 
@@ -172,6 +187,10 @@ internal class PlayedTenant(files: DeviceFiles = deviceFiles, val clock: () -> L
         requests += path
         if (!reachable) throw IllegalStateException("the network is down")
         if (r.url.host == "store.example") {
+            if (cutAfterStoreGets?.let { storeGets >= it } == true) {
+                reachable = false
+                throw IllegalStateException("the network is down")
+            }
             val (blobId, index) = path.trim('/').split('/')
             storeGets++
             return respond(blobs.getValue(blobId).frames[index.toInt()], HttpStatusCode.OK)
